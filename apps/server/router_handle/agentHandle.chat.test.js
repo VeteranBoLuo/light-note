@@ -65,7 +65,8 @@ vi.mock('../util/aiQuota.js', () => ({
   reconcile: mocks.reconcile,
   resolveFingerprint: vi.fn((req) => String(req?.headers?.fingerprint || req?.ip || 'test')),
 }));
-vi.mock('../util/aiDocument/service.js', () => ({
+vi.mock('../util/aiDocument/service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   resolveDocumentAttachments: mocks.resolveAttachments,
 }));
 vi.mock('../util/aiMemoryService.js', () => ({
@@ -767,6 +768,146 @@ describe('agentChat 主链路', () => {
         }),
       }),
     );
+  });
+
+  it('场景A回归:挂着标签问待办,公开来源与追问上下文都不含该标签', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM tag WHERE')) return [[{ id: 'tag-1', name: '网站设计' }]];
+      return [[]];
+    });
+    const followUps = vi.mocked(await import('../util/agent/followUpSuggestions.js'));
+    followUps.storeFollowUpContext.mockReturnValue(true);
+    followUps.shouldOfferFollowUps.mockReturnValue(true);
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+      if (options?.trace?.stage === 'planner') {
+        return {
+          content: '',
+          toolCalls: [
+            semanticPlanCall({
+              requestClass: 'data_query',
+              intents: [
+                { kind: 'read', capabilityId: 'read.query_demo', goal: '查询待办', targetDescription: '待办', dependsOn: [] },
+              ],
+              toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '待办' } }],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return { content: '你当前共有 2 条待处理待办。', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+    });
+    const req = request({
+      message: '我们当前有哪些待办？',
+      stream: false,
+      contexts: [{ type: 'tag', id: 'tag-1' }],
+      attachmentIds: [],
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    const payload = res.send.mock.calls.at(-1)[0].data;
+    expect(payload.sources).toEqual([]);
+    expect(payload.evidence).toEqual([]);
+    const followUpInput = followUps.storeFollowUpContext.mock.calls.at(-1)?.[0];
+    expect((followUpInput?.sources || []).some((item) => item.title === '网站设计')).toBe(false);
+    followUps.shouldOfferFollowUps.mockReturnValue(false);
+    followUps.storeFollowUpContext.mockReturnValue(false);
+  });
+
+  it('场景B:引用笔记且回答标注编号时,公开来源恰为该笔记', async () => {
+    const noteAi = vi.mocked(await import('../util/noteAiService.js'));
+    noteAi.findOwnedNoteForAi.mockResolvedValue({ id: 'note-1', title: '产品方案' });
+    noteAi.buildNoteAiPayload.mockResolvedValue({ content: '方案正文要点' });
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+      if (options?.trace?.stage === 'planner') {
+        return {
+          content: '',
+          toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return { content: '这篇笔记的核心是方案要点。[1]', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+    });
+    const req = request({
+      message: '总结这篇笔记',
+      stream: false,
+      contexts: [{ type: 'note', id: 'note-1' }],
+      attachmentIds: [],
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    const payload = res.send.mock.calls.at(-1)[0].data;
+    expect(payload.sources.map((item) => item.id)).toEqual(['note-1']);
+    expect(payload.evidence.map((item) => item.citationKey)).toEqual(['1']);
+    expect(payload.citationAudit.citedKeys).toEqual(['1']);
+  });
+
+  it('场景D:附件未被回答引用时,来源与覆盖统计都不包含它', async () => {
+    const coverage = {
+      documents: [
+        {
+          sourceId: 'doc-1',
+          fileName: '长文档',
+          parse: {
+            metadataAvailable: true,
+            complete: true,
+            truncated: false,
+            coverageRatio: 1,
+            failedRanges: [],
+            reasons: [],
+            total: { chars: 100, pages: 1, chunks: 1 },
+            processed: { chars: 100, pages: 1, chunks: 1 },
+          },
+          selection: {
+            available: { chars: 100, chunks: 1 },
+            scanned: { chars: 100, chunks: 1 },
+            included: { chars: 100, chunks: 1 },
+          },
+        },
+      ],
+      overall: { documentCount: 1, complete: true, coverageRatio: 1 },
+    };
+    mocks.resolveAttachments.mockResolvedValue({
+      text: '\n文档材料',
+      coverage,
+      sources: [{ type: 'document', id: 'doc-1', title: '长文档', excerpt: '材料片段' }],
+    });
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+      if (options?.trace?.stage === 'planner') {
+        return {
+          content: '',
+          toolCalls: [
+            semanticPlanCall({
+              requestClass: 'data_query',
+              intents: [
+                { kind: 'read', capabilityId: 'read.query_demo', goal: '查询待办', targetDescription: '待办', dependsOn: [] },
+              ],
+              toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '待办' } }],
+            }),
+          ],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return { content: '你有 2 条待办。', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+    });
+    const req = request({ message: '我有多少条待办？', stream: false, contexts: [], attachmentIds: ['doc-1'] });
+    const res = response();
+
+    await agentChat(req, res);
+
+    const payload = res.send.mock.calls.at(-1)[0].data;
+    expect(payload.sources).toEqual([]);
+    expect(payload.coverage.documents).toEqual([]);
+    expect(payload.coverage.overall.documentCount).toBe(0);
   });
 
   it('流式待确认操作先发送确认卡事件，再以空正文终态收口', async () => {
@@ -2865,7 +3006,8 @@ describe('agentChat 主链路', () => {
         finishReason: 'tool_calls',
       })
       .mockResolvedValueOnce({
-        content: '仅基于已覆盖部分作答。',
+        // 回答标注 [1]:公开来源按引用审计过滤后,被实际引用的附件及其覆盖信息才透传
+        content: '仅基于已覆盖部分作答。[1]',
         toolCalls: [],
         usage: usage(5),
         usageStatus: 'reported',

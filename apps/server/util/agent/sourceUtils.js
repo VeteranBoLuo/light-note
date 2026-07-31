@@ -226,6 +226,26 @@ export function auditAgentCitations(content, evidence = []) {
 }
 
 /**
+ * 从候选材料中选出「回答实际引用」的公开来源与证据。
+ *
+ * 候选(candidate)= 本轮拥有过什么材料;公开(public)= 回答真正依据了什么。
+ * 两者混用是「参考来源误报」的根因:挂着旧引用问别的问题时,回答由工具产出、
+ * 与材料无关,却把全部候选列成参考来源。citedKeys 来自 auditAgentCitations
+ * (编造编号已被 removeInvalidAgentCitations 剔除),是可信的实际引用集合。
+ */
+export function selectCitedAgentGrounding({ sources, evidence, citationAudit } = {}) {
+  const citedKeys = new Set((citationAudit?.citedKeys || []).map(String));
+  const publicEvidence = (Array.isArray(evidence) ? evidence : []).filter((item) =>
+    citedKeys.has(String(item?.citationKey)),
+  );
+  const citedSourceIds = new Set(publicEvidence.map((item) => String(item.sourceId)));
+  const publicSources = (Array.isArray(sources) ? sources : []).filter((source) =>
+    citedSourceIds.has(String(source?.sourceId)),
+  );
+  return { sources: publicSources, evidence: publicEvidence };
+}
+
+/**
  * 模型偶尔会生成不存在的编号。保留结论文字供用户判断，但移除虚假的证据标记，
  * 防止它在界面上看起来像已经核验并可跳转的引用。
  */

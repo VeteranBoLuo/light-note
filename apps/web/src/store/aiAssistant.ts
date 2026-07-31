@@ -685,6 +685,30 @@ export default defineStore('aiAssistant', {
       this.persistCurrentConversation();
       return true;
     },
+    /**
+     * 发送后消费输入区材料(引用/附件默认一次性,P0-A)。
+     * 按快照身份过滤而非清空数组:创建快照到真正发送之间是异步流程,
+     * 期间用户可能又挂了新材料,不能被旧快照连带清掉。
+     * 附件在这里只是「从输入区解除挂载」,不调用删除接口 —— 服务端对象
+     * 由用户显式删除或 TTL 回收;消息里的不可变快照仍保留完整记录。
+     */
+    consumeComposerMaterials(snapshot: AiAssistantMaterialSnapshot) {
+      const sentContextKeys = new Set(snapshot.contextRefs.map((item) => `${item.type}:${item.id}`));
+      const sentAttachmentIds = new Set(snapshot.attachmentRefs.map((item) => String(item.id)));
+      this.contextRefs = this.contextRefs.filter((item) => !sentContextKeys.has(`${item.type}:${item.id}`));
+      this.attachmentRefs = this.attachmentRefs.filter((item) => !sentAttachmentIds.has(String(item.id)));
+      this.persistCurrentConversation();
+    },
+    /**
+     * 会话边界清理:待发送材料的生命周期不能长于消息历史的会话边界,
+     * 否则会话 A 挂的标签会跟着用户进入会话 B(切换云会话/跨设备恢复)。
+     */
+    detachAllComposerMaterials() {
+      if (!this.contextRefs.length && !this.attachmentRefs.length) return;
+      this.contextRefs = [];
+      this.attachmentRefs = [];
+      this.persistCurrentConversation();
+    },
     beginRequest(assistantMessageId: string): AiAssistantRequestLease {
       this.abortActiveRequest();
       this.requestEpoch += 1;

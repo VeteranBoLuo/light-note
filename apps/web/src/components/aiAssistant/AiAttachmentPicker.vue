@@ -117,7 +117,7 @@
       :max-total-size="20 * 1024 * 1024"
       @change="uploadLocal"
     >
-      <BButton size="small" :loading="busy">
+      <BButton size="small" :loading="busy" :title="t('ai.material.attachmentOnceHint')">
         <SvgIcon :src="icon.file_upload" size="14" />
         {{ t('ai.uploadFile') }}
       </BButton>

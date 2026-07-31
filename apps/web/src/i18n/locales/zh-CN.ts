@@ -2900,6 +2900,13 @@ export default {
         paragraphValue: '第 {value} 段',
       },
     },
+    material: {
+      once: '仅本次',
+      onceTooltip: '默认仅用于本次提问，发送后自动清除',
+      clearOnce: '清空本次材料',
+      attachmentOnceHint: '文件默认仅用于本次提问',
+      continueWithLastSources: '继续基于上轮来源',
+    },
     addContext: '添加资源',
     searchContext: '搜索笔记、书签、文件或标签',
     currentPage: '当前页面',

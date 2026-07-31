@@ -845,36 +845,41 @@ function buildUnavailableDocumentBlock(document, budget) {
   );
 }
 
-function aggregateCoverage(documents) {
+/**
+ * 聚合覆盖信息。输入为归一形态 {coverage, selection, sourceId, fileName}:
+ * 内部 document 与对外 coverage.documents(parse 即 coverage)都能映射到它,
+ * 避免「公开来源过滤后重算 overall」时出现第二份聚合逻辑。
+ */
+function aggregateCoverage(items) {
   const total = { chars: 0, pages: 0, chunks: 0 };
   const processed = { chars: 0, pages: 0, chunks: 0 };
   const selectionAvailable = { chars: 0, chunks: 0 };
   const selectionScanned = { chars: 0, chunks: 0 };
   const selectionIncluded = { chars: 0, chunks: 0 };
   let metadataAvailable = true;
-  let complete = documents.length > 0;
+  let complete = items.length > 0;
   let truncated = false;
   let failedRangeCount = 0;
   const limitations = [];
-  for (const document of documents) {
-    const coverage = document.coverage;
+  for (const item of items) {
+    const coverage = item.coverage;
     metadataAvailable = metadataAvailable && coverage.metadataAvailable;
     complete = complete && coverage.complete;
     truncated = truncated || coverage.truncated;
-    failedRangeCount += coverage.failedRanges.length;
-    for (const item of coverage.reasons) {
+    failedRangeCount += (coverage.failedRanges || []).length;
+    for (const reason of coverage.reasons || []) {
       limitations.push({
-        sourceId: String(document.source.id),
-        fileName: document.source.file_name,
-        code: item.code,
-        message: item.message,
+        sourceId: String(item.sourceId),
+        fileName: item.fileName,
+        code: reason.code,
+        message: reason.message,
       });
     }
     for (const unit of ['chars', 'pages', 'chunks']) {
       total[unit] += coverage.total[unit];
       processed[unit] += coverage.processed[unit];
     }
-    const selection = document.selection || emptySelection('unavailable');
+    const selection = item.selection || emptySelection('unavailable');
     selectionAvailable.chars += selection.available.chars;
     selectionAvailable.chunks += selection.available.chunks;
     selectionScanned.chars += selection.scanned.chars;
@@ -891,7 +896,7 @@ function aggregateCoverage(documents) {
     coverageRatio = ratios.length ? clampRatio(Math.min(...ratios)) : 0;
   }
   return {
-    documentCount: documents.length,
+    documentCount: items.length,
     metadataAvailable,
     total,
     processed,
@@ -923,7 +928,39 @@ function coveragePayload(documents) {
       fullDocumentClaimAllowed:
         document.coverage.metadataAvailable && document.coverage.complete && !document.coverage.truncated,
     })),
-    overall: aggregateCoverage(documents),
+    overall: aggregateCoverage(documents.map(normalizedCoverageInput)),
+  };
+}
+
+function normalizedCoverageInput(document) {
+  return {
+    coverage: document.coverage,
+    selection: document.selection,
+    sourceId: String(document.source.id),
+    fileName: document.source.file_name,
+  };
+}
+
+/**
+ * 按「公开来源保留的文档」过滤对外覆盖报告并重算 overall。
+ * 附件被引用审计过滤掉后,覆盖统计不能仍显示它,否则出现
+ * 「来源 1 个,覆盖统计却显示 2 份文件」的自相矛盾。
+ */
+export function selectDocumentCoverage(coverage, keepSourceIds) {
+  if (!coverage || !Array.isArray(coverage.documents)) return coverage;
+  const keep = new Set([...(keepSourceIds || [])].map(String));
+  const documents = coverage.documents.filter((document) => keep.has(String(document.sourceId)));
+  if (documents.length === coverage.documents.length) return coverage;
+  return {
+    documents,
+    overall: aggregateCoverage(
+      documents.map((document) => ({
+        coverage: document.parse,
+        selection: document.selection,
+        sourceId: document.sourceId,
+        fileName: document.fileName,
+      })),
+    ),
   };
 }
 

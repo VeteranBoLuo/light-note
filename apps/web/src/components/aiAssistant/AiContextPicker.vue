@@ -6,13 +6,23 @@
         :key="`${item.type}:${item.id}`"
         size="small"
         class="ai-context-chip"
-        :title="item.title"
+        :title="`${item.title} · ${t('ai.material.onceTooltip')}`"
         :aria-label="t('ai.contextLens.removeMaterial')"
         @click="remove(item)"
       >
         <SvgIcon :src="resourceIcon(item.type)" size="12" aria-hidden="true" />
         <span class="ai-context-chip__title">{{ item.title }}</span>
+        <span class="ai-context-chip__once">{{ t('ai.material.once') }}</span>
         <SvgIcon class="ai-context-chip__x" :src="icon.common.close" size="10" aria-hidden="true" />
+      </BButton>
+      <!-- 一次性语义下发送即消费;此按钮是「发送前反悔」的辅助操作 -->
+      <BButton
+        size="small"
+        class="ai-context-clear"
+        :title="t('ai.material.onceTooltip')"
+        @click="clearAll"
+      >
+        {{ t('ai.material.clearOnce') }}
       </BButton>
     </div>
     <BPopover v-model:open="open" trigger="click" placement="top-left" overlay-class-name="ai-context-popover">
@@ -139,6 +149,9 @@
     emit('update:modelValue', [...props.modelValue, item]);
     open.value = false;
   }
+  function clearAll() {
+    emit('update:modelValue', []);
+  }
   function remove(item: AiResourceContext) {
     emit(
       'update:modelValue',
@@ -186,6 +199,26 @@
     background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
     color: var(--primary-color);
     font-weight: 500;
+  }
+  .ai-context-chip__once {
+    flex: 0 0 auto;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+    font-size: 10px;
+    line-height: 16px;
+    opacity: 0.85;
+  }
+  /* 清空是「撤销选择」而非材料本身:中性描边,与主色 chips 区分 */
+  .ai-context-chips :deep(.ai-context-clear) {
+    border: 1px solid color-mix(in srgb, var(--text-color) 18%, transparent);
+    background: transparent;
+    color: var(--desc-color);
+    font-weight: 400;
+  }
+  .ai-context-chips :deep(.ai-context-clear:hover) {
+    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 40%, transparent);
+    color: var(--danger-color, #e5484d);
   }
   .ai-context-chip__title {
     max-width: 140px;

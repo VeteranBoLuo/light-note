@@ -68,7 +68,7 @@ import {
 } from '../util/agent/interactionStore.js';
 import { createToolResolutionInteraction, resolveAgentInteractionAction } from '../util/agent/interactionResolvers.js';
 import * as aiQuota from '../util/aiQuota.js';
-import { resolveDocumentAttachments } from '../util/aiDocument/service.js';
+import { resolveDocumentAttachments, selectDocumentCoverage } from '../util/aiDocument/service.js';
 import { getPlannerMaxTokens, parseToolCallArguments } from '../util/agent/toolArguments.js';
 import { buildNoteAiPayload, findOwnedNoteForAi } from '../util/noteAiService.js';
 import {
@@ -78,6 +78,7 @@ import {
 } from '../util/agent/followUpSuggestions.js';
 import {
   auditAgentCitations,
+  selectCitedAgentGrounding,
   dedupeAgentSources,
   removeInvalidAgentCitations,
   resolveToolSources,
@@ -856,6 +857,9 @@ function buildAgentEvidenceBundle(rawSources, requestId) {
         resourceId,
       });
     }
+    // 标签是检索范围而非内容证据:不给引用编号,也就永远不会成为「参考来源」。
+    // 它仍保留在候选集合里,供 scope 与用户消息侧的快照展示使用。
+    if (resourceType === 'tag') continue;
     const excerpt = String(source.excerpt || '')
       .trim()
       .slice(0, 800);
@@ -2357,8 +2361,11 @@ export async function agentChat(req, res) {
     // 不再请求模型生成“最终回复”：模型即使读到“尚未执行”也可能把意图误说成结果，
     // 造成用户看到“已完成”但服务端从未写入的严重误导。
     const pendingUserAction = confirmations.length > 0 || interactions.length > 0;
+    // candidate = 本轮拥有过的材料(供 citationGuide 编号与模型引用);
+    // public = 回答实际引用的材料(citedKeys 过滤,见 selectCitedAgentGrounding)。
+    // 两者必须分开:候选直接对外上报,就会把挂着的旧引用误标成「参考来源」。
     const evidenceBundle = buildAgentEvidenceBundle(sources, requestId);
-    const uniqueSources = evidenceBundle.sources;
+    const candidateSources = evidenceBundle.sources;
     const evidence = evidenceBundle.evidence;
     let citationAudit = auditAgentCitations('', evidence);
     let followUpAvailable = false;
@@ -2449,7 +2456,7 @@ export async function agentChat(req, res) {
       const finalSystemContent = session.lastTool
         ? `${finalPrompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
         : finalPrompt;
-      const citationGuide = buildCitationGuide(evidence, uniqueSources);
+      const citationGuide = buildCitationGuide(evidence, candidateSources);
       // Final 阶段不再携带 OpenAI 工具协议消息。它们在没有 tools 定义的请求中仍会
       // 诱导部分模型续写 tool_calls/DSML，并最终触发格式泄漏保护。工具结果改为明确
       // 标记的只读资料，保留事实依据，同时与工具协议彻底隔离。
@@ -2556,28 +2563,43 @@ export async function agentChat(req, res) {
           question: message,
           answer: finalContent,
           tools: usedTools,
-          sources: uniqueSources,
+          // 追问建议只能基于「回答实际引用」的来源:旧引用若被全量传入,
+          // 问待办也会生成「提取这些笔记中的待办」这类跑偏建议。
+          sources: selectCitedAgentGrounding({ sources: candidateSources, evidence, citationAudit }).sources,
           locale,
         });
     }
+
+    // ---- 公开来源:回答真正依据了什么(与「本轮带了什么材料」分离)----
+    // citationAudit 此刻已是终值(deterministic/确认卡分支为空审计 → 公开集合自然为空)。
+    const publicGrounding = selectCitedAgentGrounding({ sources: candidateSources, evidence, citationAudit });
+    const publicSources = publicGrounding.sources;
+    const publicEvidence = publicGrounding.evidence;
+    // 覆盖报告与公开文档来源保持一致,否则会出现「来源 1 个,覆盖统计 2 份文件」。
+    const publicCoverage = selectDocumentCoverage(
+      resolvedAttachments.coverage,
+      publicSources.filter((source) => source.resourceType === 'document').map((source) => source.resourceId),
+    );
 
     // ---- 输出 ----
     if (stream) {
       // 模型和证据聚合已经完成；此后即使传输断开，也不再取消已完成结果，只完成快照持久化。
       responseGenerationFinished = true;
       // lifecycle 会在 socket 已关闭时停止实际 write，但仍聚合并保存终态，供客户端恢复。
-      if (uniqueSources.length) {
+      if (publicSources.length) {
         sseLifecycle?.send('sources', {
-          sources: uniqueSources,
-          evidence,
+          sources: publicSources,
+          evidence: publicEvidence,
           citationAudit,
-          coverage: resolvedAttachments.coverage,
+          coverage: publicCoverage,
         });
       }
-      if (evidence.length) sseLifecycle?.send('citations', { evidence, citationAudit });
-      if (resolvedAttachments.coverage?.documents?.length) {
-        sseLifecycle?.send('coverage', { coverage: resolvedAttachments.coverage });
+      if (publicEvidence.length) sseLifecycle?.send('citations', { evidence: publicEvidence, citationAudit });
+      if (publicCoverage?.documents?.length) {
+        sseLifecycle?.send('coverage', { coverage: publicCoverage });
       }
+      // response.completed 是权威终态:显式携带公开来源,前端以替换(而非合并)落地,
+      // 中间事件一旦发过错误候选也能被终态纠正。
       await sseLifecycle?.complete({
         snapshotAnswer: finalContent,
         answer: finalContent,
@@ -2596,7 +2618,9 @@ export async function agentChat(req, res) {
         usage: totalUsage,
         usageStatus: trace.usageStatus,
         followUpAvailable,
-        coverage: resolvedAttachments.coverage,
+        sources: publicSources,
+        evidence: publicEvidence,
+        coverage: publicCoverage,
         citationAudit,
       });
       res.removeListener('close', onClientClose);
@@ -2607,10 +2631,10 @@ export async function agentChat(req, res) {
           sessionId: getSessionId(session),
           confirmations,
           interactions,
-          sources: uniqueSources,
-          evidence,
+          sources: publicSources,
+          evidence: publicEvidence,
           citationAudit,
-          coverage: resolvedAttachments.coverage,
+          coverage: publicCoverage,
           usage: totalUsage,
           requestId,
           followUpAvailable,

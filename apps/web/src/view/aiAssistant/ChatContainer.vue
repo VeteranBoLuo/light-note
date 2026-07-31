@@ -51,7 +51,7 @@
             :streaming="isLoading && index === messages.length - 1"
           />
           <AiSourceCards
-            v-if="message.sources?.length || message.evidence?.length || message.coverage"
+            v-if="message.sources?.length || message.evidence?.length || messageCoverage(message)"
             :sources="message.sources || []"
             :evidence="message.evidence || []"
             :coverage="messageCoverage(message)"
@@ -116,6 +116,15 @@
             @recommendation-click="handleRecommendationClick"
           />
         </Transition>
+        <BButton
+          v-if="canContinueWithLastSources"
+          size="small"
+          class="continue-sources-btn"
+          :title="t('ai.material.onceTooltip')"
+          @click="continueWithLastSources"
+        >
+          {{ t('ai.material.continueWithLastSources') }}
+        </BButton>
       </div>
 
       <!-- 「回答范围」条已整块移除:联网检索未上线只剩占位,已选材料在输入区 @添加资源 的 chips 里即可查看/移除(桌面+移动一致) -->
@@ -804,6 +813,8 @@
     temporarySession.value = false;
     aiAssistant.setCloudConversationId(cloudConversation.id);
     aiAssistant.clearCloudConversationRecovery();
+    // 待发送材料随会话边界失效:会话 A 挂的引用不能跟进会话 B
+    aiAssistant.detachAllComposerMaterials();
     lineageConversationId.value = cloudConversation.id;
     persistHistory();
     resetScrollState();
@@ -1677,6 +1688,10 @@
 
     if (options.clearComposer !== false) {
       userInput.value = '';
+      // 引用/附件默认一次性:本条消息已保存不可变快照,输入区随发送消费掉同批材料
+      // (按快照身份过滤,异步期间新挂的材料不受影响)。重放/重生成走 materialSnapshot
+      // 且 clearComposer:false,不会动当前输入区。
+      if (!options.materialSnapshot) aiAssistant.consumeComposerMaterials(materialSnapshot);
     }
     await nextTick();
     if (!aiAssistant.isRequestCurrent(requestLease)) return;
@@ -1869,6 +1884,14 @@
           }
 
           if (currentMsg && data.event === 'response.completed') {
+            // 终态是权威结果:公开来源以「替换」落地,中间事件发过的候选来源一并被纠正
+            if (Array.isArray(data.sources)) {
+              currentMsg.sources = data.sources;
+              const knownSourceIds = new Set(data.sources.map((item: AiSource) => item.sourceId));
+              currentMsg.evidence = (Array.isArray(data.evidence) ? data.evidence : []).filter((item) =>
+                knownSourceIds.has(item.sourceId),
+              );
+            }
             if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
             if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
@@ -1979,8 +2002,6 @@
         const current = messages.value.find((item) => item.id === aiMessage.id);
         if (current) current.content = current.content ? `${current.content}\n\n${errText}` : errText;
       }
-      // @资源改为粘性(与本地上传文件一致):回答后不再自动清除,chip 保留在输入框、每轮继续随请求携带,
-      // 后端每轮重新注入正文 → AI 后续轮持续可见;用户可手动移除。输入框文本仍在发送前清空(见 clearComposer 分支)。
     } catch (error: any) {
       // 旧请求的异常，不再修改当前消息
       if (!aiAssistant.isRequestCurrent(requestLease)) return;
@@ -2171,11 +2192,51 @@
     persistHistory();
   }
 
+  /**
+   * 上一轮回答「实际引用」的材料(公开来源 ∩ 父消息快照),构造成一次性快照。
+   * 材料默认一次性后,连续追问不再靠全局粘性,而是显式继承真正被用过的那部分:
+   * 问待办的回答没有引用旧标签,追问也就不会把它带回来。
+   */
+  function buildFollowUpMaterialSnapshot(): AiAssistantMaterialSnapshot | null {
+    const assistant = latestAssistantMessage.value;
+    if (!assistant?.sources?.length) return null;
+    const parent = messages.value.find((item) => item.id === assistant.parentMessageId);
+    if (!parent) return null;
+    const usedKeys = new Set(
+      assistant.sources.map((source) => `${source.resourceType || source.type}:${source.resourceId || source.id}`),
+    );
+    const contextRefs = (parent.contextRefs || []).filter((ref) => usedKeys.has(`${ref.type}:${ref.id}`));
+    const attachmentRefs = (parent.attachmentRefs || []).filter((item) => usedKeys.has(`document:${item.id}`));
+    if (!contextRefs.length && !attachmentRefs.length) return null;
+    return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs);
+  }
+
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
+  // 推荐追问自动继承上一回答实际引用的材料(仅这一次,不写回输入区)。
   const handleRecommendationClick = createQuickQuestionDispatcher({
     isBusy: () => isLoading.value,
-    send: (question) => sendMessage({ inputText: question }),
+    send: (question) => {
+      const inherited = buildFollowUpMaterialSnapshot();
+      return sendMessage({ inputText: question, ...(inherited ? { materialSnapshot: inherited } : {}) });
+    },
   });
+
+  // 「继续基于上轮来源」:手动追问的显式入口 —— 把上轮实际引用的材料恢复为
+  // 一次性材料放回输入区(可见、可删),不做任何关键词猜测式的自动继承。
+  const canContinueWithLastSources = computed(
+    () =>
+      !isLoading.value &&
+      !contexts.value.length &&
+      !attachments.value.length &&
+      Boolean(buildFollowUpMaterialSnapshot()),
+  );
+  function continueWithLastSources() {
+    const inherited = buildFollowUpMaterialSnapshot();
+    if (!inherited) return;
+    contexts.value = inherited.contextRefs.map((item) => ({ ...item }));
+    attachments.value = inherited.attachmentRefs.map((item) => ({ ...item }));
+    chatInputRef.value?.focus();
+  }
 
   // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）
   const handleEditMessage = (content: string, attachedContexts: AiResourceContext[] = []) => {
@@ -2424,6 +2485,15 @@
     box-sizing: border-box;
     overflow: hidden;
     background: var(--background-color);
+  }
+
+  .recommendation-dock .continue-sources-btn {
+    flex: 0 0 auto;
+    margin-left: auto;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 6%, transparent);
+    color: var(--primary-color);
+    font-size: 12px;
   }
 
   .ai-recommendation-fade-enter-active,

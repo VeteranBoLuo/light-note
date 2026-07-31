@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   auditAgentCitations,
+  selectCitedAgentGrounding,
   dedupeAgentSources,
   normalizeAgentSource,
   normalizeSourceUrl,
@@ -207,5 +208,43 @@ describe('AI 来源标准化', () => {
     expect(sanitized).toContain('合法连写 [1][2]。');
     expect(sanitized).not.toContain('[3]');
     expect(sanitized).not.toContain('[4]');
+  });
+});
+
+describe('selectCitedAgentGrounding:公开来源 = 回答实际引用', () => {
+  const sources = [
+    { sourceId: 'note:n1', type: 'note', title: '产品方案' },
+    { sourceId: 'note:n2', type: 'note', title: '会议纪要' },
+  ];
+  const evidence = [
+    { sourceId: 'note:n1', citationKey: '1', excerpt: 'a' },
+    { sourceId: 'note:n1', citationKey: '2', excerpt: 'b' },
+    { sourceId: 'note:n2', citationKey: '3', excerpt: 'c' },
+  ];
+
+  it('只保留被引用编号对应的来源与证据', () => {
+    const out = selectCitedAgentGrounding({ sources, evidence, citationAudit: { citedKeys: ['3'] } });
+    expect(out.sources.map((item) => item.sourceId)).toEqual(['note:n2']);
+    expect(out.evidence.map((item) => item.citationKey)).toEqual(['3']);
+  });
+
+  it('同一来源多条证据,任一被引用即保留来源', () => {
+    const out = selectCitedAgentGrounding({ sources, evidence, citationAudit: { citedKeys: ['2'] } });
+    expect(out.sources.map((item) => item.sourceId)).toEqual(['note:n1']);
+  });
+
+  it('没有任何引用时公开集合为空(纯工具/闲聊/材料无关回答)', () => {
+    const out = selectCitedAgentGrounding({ sources, evidence, citationAudit: { citedKeys: [] } });
+    expect(out.sources).toEqual([]);
+    expect(out.evidence).toEqual([]);
+  });
+
+  it('citedKeys 不存在的编号不产生来源(编造编号已被上游剔除,兜底不放行)', () => {
+    const out = selectCitedAgentGrounding({ sources, evidence, citationAudit: { citedKeys: ['9'] } });
+    expect(out.sources).toEqual([]);
+  });
+
+  it('缺省入参安全返回空集合', () => {
+    expect(selectCitedAgentGrounding()).toEqual({ sources: [], evidence: [] });
   });
 });

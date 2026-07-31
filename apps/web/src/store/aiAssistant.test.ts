@@ -15,6 +15,65 @@ const identity = (
   adminContextId = `${subjectUserId}-context`,
 ): AiAssistantIdentity => ({ actorUserId, subjectUserId, adminContextMode, adminContextId });
 
+describe('材料生命周期:默认一次性(P0-A/B)', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  const ctx = (id: string) => ({ type: 'note' as const, id, title: `笔记${id}` });
+  const attachment = (id: string) => ({ id, fileName: `${id}.pdf`, status: 'ready' }) as never;
+
+  it('发送后按快照消费输入区材料,消息快照独立于输入区', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(identity('u1', 'u1', 'self' as never, ''), '你好');
+    store.contextRefs = [ctx('n1')];
+    store.attachmentRefs = [attachment('a1')];
+    const snapshot = createAiAssistantMaterialSnapshot(store.contextRefs, store.attachmentRefs);
+
+    store.consumeComposerMaterials(snapshot);
+
+    expect(store.contextRefs).toEqual([]);
+    expect(store.attachmentRefs).toEqual([]);
+    expect(snapshot.contextRefs.map((item) => item.id)).toEqual(['n1']);
+    expect(snapshot.attachmentRefs.map((item) => item.id)).toEqual(['a1']);
+  });
+
+  it('只消费快照中的同批材料:异步期间新增的不受影响', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(identity('u1', 'u1', 'self' as never, ''), '你好');
+    store.contextRefs = [ctx('n1')];
+    const snapshot = createAiAssistantMaterialSnapshot(store.contextRefs, []);
+    // 快照创建后、消费前,用户又挂了 n2
+    store.contextRefs = [...store.contextRefs, ctx('n2')];
+
+    store.consumeComposerMaterials(snapshot);
+
+    expect(store.contextRefs.map((item) => item.id)).toEqual(['n2']);
+  });
+
+  it('重放旧消息的快照不影响当前输入区(调用方不消费即不消费)', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(identity('u1', 'u1', 'self' as never, ''), '你好');
+    store.contextRefs = [ctx('n-new')];
+    // 重新生成走 materialSnapshot + clearComposer:false,不调用 consume —— 输入区原样
+    expect(store.contextRefs.map((item) => item.id)).toEqual(['n-new']);
+  });
+
+  it('detachAllComposerMaterials 清空待发送材料(会话切换边界)', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(identity('u1', 'u1', 'self' as never, ''), '你好');
+    store.contextRefs = [ctx('n1')];
+    store.attachmentRefs = [attachment('a1')];
+
+    store.detachAllComposerMaterials();
+
+    expect(store.contextRefs).toEqual([]);
+    expect(store.attachmentRefs).toEqual([]);
+  });
+});
+
 describe('aiAssistant store', () => {
   beforeEach(() => {
     vi.useRealTimers();

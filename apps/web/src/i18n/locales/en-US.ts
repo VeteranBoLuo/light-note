@@ -2976,6 +2976,13 @@ export default {
         paragraphValue: 'Paragraph {value}',
       },
     },
+    material: {
+      once: 'This turn only',
+      onceTooltip: 'Used only for this question by default; cleared after sending',
+      clearOnce: 'Clear materials',
+      attachmentOnceHint: 'Files apply to this question only by default',
+      continueWithLastSources: 'Continue with last sources',
+    },
     addContext: 'Add context',
     searchContext: 'Search notes, bookmarks, files, or tags',
     currentPage: 'Current page',
