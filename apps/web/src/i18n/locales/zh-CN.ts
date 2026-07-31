@@ -402,6 +402,7 @@ export default {
     todoDescription: '说明',
     todoMentionHint: '输入 @ 可关联书签、笔记或文件',
     todoResourceRefs: '已关联资料（{count}）',
+    todoAddResource: '添加资源',
     todoResourceRefsLimit: '单条待办最多关联 {count} 个参考资料',
     todoResourceRefsTitle: '参考资料',
     todoResourceUnavailable: '已不可用',

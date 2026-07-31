@@ -28,11 +28,24 @@
       <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
     </label>
 
-    <section v-if="resourceRefs.length" class="todo-resource-refs">
-      <span class="todo-resource-refs__label">
-        {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
-      </span>
-      <div class="todo-resource-refs__list">
+    <BModal
+      v-model:visible="resourcePickerVisible"
+      :title="t('inbox.todoAddResource')"
+      width="460px"
+      :show-footer="false"
+    >
+      <ResourceMentionPicker @select="applyMentionSelection" @close="resourcePickerVisible = false" />
+    </BModal>
+
+    <section class="todo-resource-refs">
+      <div class="todo-resource-refs__head">
+        <span class="todo-resource-refs__label">
+          {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
+        </span>
+        <!-- 输入 @ 是快捷方式,显式按钮同时承担可发现性与无障碍入口(方案 5.6) -->
+        <BButton size="small" @click="openResourcePicker">@ {{ t('inbox.todoAddResource') }}</BButton>
+      </div>
+      <div v-if="resourceRefs.length" class="todo-resource-refs__list">
         <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
           <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
           <span class="todo-resource-chip__title">{{ ref.title }}</span>
@@ -186,6 +199,8 @@
   } from '@/api/todoApi';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
+  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
@@ -250,6 +265,7 @@
     const query = mentionQuery.value;
     if (query) form.description = replaceMentionQuery(form.description, query);
     closeMention();
+    resourcePickerVisible.value = false;
     const key = `${item.type}:${item.id}`;
     if (resourceRefs.value.some((ref) => `${ref.type}:${ref.id}` === key)) return;
     if (resourceRefs.value.length >= MAX_RESOURCE_REFS) {
@@ -266,6 +282,13 @@
         available: true,
       },
     ];
+  }
+
+  const resourcePickerVisible = ref(false);
+
+  function openResourcePicker() {
+    closeMention();
+    resourcePickerVisible.value = true;
   }
 
   function removeResourceRef(target: TodoResourceRefView) {
@@ -727,6 +750,13 @@
   .todo-resource-refs {
     display: grid;
     gap: 6px;
+  }
+
+  .todo-resource-refs__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
   }
 
   .todo-resource-refs__label {

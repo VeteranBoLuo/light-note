@@ -410,6 +410,7 @@ export default {
     todoDescription: 'Description',
     todoMentionHint: 'Type @ to link a bookmark, note, or file',
     todoResourceRefs: 'Linked resources ({count})',
+    todoAddResource: 'Add resource',
     todoResourceRefsLimit: 'A todo can link at most {count} resources',
     todoResourceRefsTitle: 'Reference',
     todoResourceUnavailable: 'Unavailable',
