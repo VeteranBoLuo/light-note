@@ -1358,8 +1358,18 @@
       padding: 8px 10px 0;
     }
 
+    /* 顶栏在 SearchCenter 里位于页面容器之外、天然贴边；这里它在 .inbox-page 之内，
+       必须去掉上内边距并用负 margin 抵消左右，否则两个分区的顶栏会错位。 */
     .inbox-page--mobile-resources {
-      padding: 6px 12px 0;
+      padding: 0 12px;
+    }
+
+    .inbox-page--mobile-resources > .resource-center-topbar {
+      margin: 0 -12px;
+    }
+
+    .inbox-page--mobile-resources .section-switcher {
+      margin-top: 6px;
     }
 
     .inbox-page--mobile-resources .section-switcher {
