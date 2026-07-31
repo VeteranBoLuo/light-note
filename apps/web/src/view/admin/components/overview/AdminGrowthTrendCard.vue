@@ -26,7 +26,7 @@
         </dl>
       </header>
 
-      <div class="growth-trend__chart" @mouseleave="setHover(panel.key, null)">
+      <div class="growth-trend__chart" @mouseleave="clearHover">
         <div class="growth-trend__axis" aria-hidden="true">
           <span v-for="(tick, index) in panel.ticks" :key="index">{{ formatTick(tick) }}</span>
         </div>
@@ -43,10 +43,10 @@
               vector-effect="non-scaling-stroke"
             />
             <line
-              v-if="hoverOf(panel.key) !== null"
+              v-if="hoverIndex !== null"
               class="growth-trend__hover-line"
-              :x1="hoverX(panel.key)"
-              :x2="hoverX(panel.key)"
+              :x1="hoverX"
+              :x2="hoverX"
               y1="0"
               y2="42"
               vector-effect="non-scaling-stroke"
@@ -80,33 +80,33 @@
           </svg>
 
           <!-- 圆点走 HTML 层:SVG 非等比拉伸会把圆压成椭圆 -->
-          <template v-if="hoverOf(panel.key) !== null">
+          <template v-if="hoverIndex !== null">
             <span
               v-for="series in panel.series"
               :key="`dot-${series.key}`"
               class="growth-trend__dot"
-              :style="dotStyle(panel.key, series.values[hoverOf(panel.key)!] || 0, panel.axisMax, series.colorVar)"
+              :style="dotStyle(series.values[hoverIndex!] || 0, panel.axisMax, series.colorVar)"
             ></span>
           </template>
 
           <div
-            v-if="hoverOf(panel.key) !== null"
+            v-if="hoverIndex !== null && activePanelKey === panel.key"
             class="growth-trend__tooltip"
-            :class="`is-${tooltipAnchor(panel.key).align}`"
-            :style="{ left: `${tooltipAnchor(panel.key).left}%` }"
+            :class="`is-${tooltipAnchor.align}`"
+            :style="{ left: `${tooltipAnchor.left}%` }"
           >
-            <strong>{{ days[hoverOf(panel.key)!]?.label }}</strong>
+            <strong>{{ days[hoverIndex!]?.label }}</strong>
             <span v-for="series in panel.series" :key="`tip-${series.key}`">
               <i :style="{ background: `var(${series.colorVar})` }"></i>
               {{ series.label }}
-              <b>{{ series.values[hoverOf(panel.key)!] || 0 }}</b>
+              <b>{{ series.values[hoverIndex!] || 0 }}</b>
             </span>
           </div>
         </div>
       </div>
 
       <div class="growth-trend__x">
-        <span v-for="(day, index) in days" :key="index" :class="{ 'is-active': hoverOf(panel.key) === index }">
+        <span v-for="(day, index) in days" :key="index" :class="{ 'is-active': hoverIndex === index }">
           {{ day.label }}
         </span>
       </div>
@@ -130,29 +130,30 @@
 
   const props = defineProps<{ trend?: AdminTrendDay[] | null }>();
 
-  // 两个面板各自维护 hover:共享一份状态会让悬浮其中一个时,另一个也弹出 tooltip
-  const hoverState = ref<Record<string, number | null>>({});
+  // 两个面板共享同一条时间轴:悬浮索引联动,便于对比同一天的用户与内容变化。
+  // 但 tooltip 只在鼠标所在的面板显示,避免同时弹两个气泡。
+  const hoverIndex = ref<number | null>(null);
+  const activePanelKey = ref<string | null>(null);
 
-  function hoverOf(panelKey: string) {
-    return hoverState.value[panelKey] ?? null;
+  function setHover(panelKey: string, index: number) {
+    hoverIndex.value = index;
+    activePanelKey.value = panelKey;
   }
 
-  function setHover(panelKey: string, index: number | null) {
-    hoverState.value = { ...hoverState.value, [panelKey]: index };
+  function clearHover() {
+    hoverIndex.value = null;
+    activePanelKey.value = null;
   }
   const days = computed(() => normalizeTrendDays(props.trend));
   const labels = computed(() => days.value.map((day) => day.label));
   const hitAreas = computed(() => buildHitAreas(days.value.length));
-  function hoverX(panelKey: string) {
+  const hoverX = computed(() => {
     const count = days.value.length;
-    const index = hoverOf(panelKey);
-    if (index === null || count <= 1) return 50;
-    return (index / (count - 1)) * 100;
-  }
+    if (hoverIndex.value === null || count <= 1) return 50;
+    return (hoverIndex.value / (count - 1)) * 100;
+  });
 
-  function tooltipAnchor(panelKey: string) {
-    return resolveTooltipAnchor(hoverOf(panelKey) ?? 0, days.value.length);
-  }
+  const tooltipAnchor = computed(() => resolveTooltipAnchor(hoverIndex.value ?? 0, days.value.length));
 
   // 用户与内容量级差异大,拆两个面板各自定轴,而不是共用一根 Y 轴或做双轴
   const panels = computed(() => {
@@ -195,10 +196,10 @@
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
   }
 
-  function dotStyle(panelKey: string, value: number, axisMax: number, colorVar: string) {
+  function dotStyle(value: number, axisMax: number, colorVar: string) {
     const ratio = Math.max(0, Number(value) || 0) / Math.max(1, axisMax);
     return {
-      left: `${hoverX(panelKey)}%`,
+      left: `${hoverX.value}%`,
       top: `${(1 - ratio) * 100}%`,
       background: `var(${colorVar})`,
     };
