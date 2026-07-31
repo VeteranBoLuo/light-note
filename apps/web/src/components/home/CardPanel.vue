@@ -215,7 +215,10 @@
       return;
     }
     if (action === 'addInbox') {
-      addResourcesToInbox([{ resourceType: 'bookmark', resourceId: String(item.id) }], '书签');
+      // 接口成功即本地打标,避免为一个徽标重新拉取列表
+      void addResourcesToInbox([{ resourceType: 'bookmark', resourceId: String(item.id) }], '书签').then((ok) => {
+        if (ok) item.isPending = true;
+      });
       return;
     }
     if (action === 'edit') {

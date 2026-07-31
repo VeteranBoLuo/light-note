@@ -24,6 +24,13 @@ export default defineStore('todo', {
     loading: false,
     loadFailed: false,
     status: 'all' as TodoFilterStatus,
+    /**
+     * 实际用于查询的状态口径。
+     * 「待处理」的全部页签会以 preserveStatus 传入 pending(页签仍高亮「全部」),
+     * 此时 status 保持 all;后续 setCompleted/reorder 等无参刷新若沿用 status,
+     * 会把已完成待办重新拉进列表,故单独记录真实请求口径。
+     */
+    effectiveStatus: 'all' as TodoFilterStatus,
     sort: 'smart' as TodoSort,
     keyword: '',
     ownerId: '',
@@ -37,6 +44,7 @@ export default defineStore('todo', {
       this.pendingTotal = 0;
       this.total = 0;
       this.status = 'all';
+      this.effectiveStatus = 'all';
       this.sort = 'smart';
       this.keyword = '';
       this.loadFailed = false;
@@ -55,8 +63,9 @@ export default defineStore('todo', {
     async refreshList(
       options: { status?: TodoFilterStatus; keyword?: string; sort?: TodoSort; preserveStatus?: boolean } = {},
     ) {
-      const requestStatus = options.status || this.status;
+      const requestStatus = options.status || this.effectiveStatus || this.status;
       if (options.status && !options.preserveStatus) this.status = options.status;
+      this.effectiveStatus = requestStatus;
       if (options.keyword !== undefined) this.keyword = options.keyword;
       if (options.sort) this.sort = options.sort;
       const requestId = ++this.requestId;

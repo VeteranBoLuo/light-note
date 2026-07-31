@@ -157,12 +157,14 @@
 </script>
 
 <style scoped lang="less">
+  /* 日历视图直接贴在滚动容器顶沿,补出与列表视图一致的上留白 */
   .todo-calendar-head {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    padding-top: 10px;
   }
   .todo-calendar-head :deep(.b_btn) {
     min-width: 36px;

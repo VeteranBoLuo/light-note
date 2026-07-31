@@ -615,8 +615,11 @@
     updateScrollFade();
     return refreshed;
   }
+  // 「全部」里待办与待整理资源混排时,两者各按自己的规则排序会让顺序无法理解
+  // (新上传的文件会插到两条待办中间)。改为分层:先列要做的待办(按紧急度),
+  // 再列待整理资源(按收集时间倒序),同层内部再按时间排。
   function actionRank(action: any) {
-    if (action.actionType !== 'todo') return 3;
+    if (action.actionType !== 'todo') return 4;
     const due = action.item.dueAt ? parseServerDate(action.item.dueAt).getTime() : 0;
     if (due && due < Date.now()) return 0;
     if (due && new Date(due).toDateString() === new Date().toDateString()) return 1;

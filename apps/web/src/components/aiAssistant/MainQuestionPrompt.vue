@@ -136,11 +136,14 @@
     color: var(--resource-note-color);
   }
 
+  /* 暗色下原本用页面同色底 + 无边框,芯片看起来像纯文字;改为可见的卡片底 + 描边 */
   [data-theme='night'] .recommendation-item {
-    background: var(--background-color);
-    color: var(--desc-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
+    border: 1px solid color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color));
+    color: var(--text-color);
     &:hover {
-      color: var(--text-color);
+      background: color-mix(in srgb, var(--primary-color) 18%, var(--card-background));
+      border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
     }
   }
 

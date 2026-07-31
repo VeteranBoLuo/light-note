@@ -28,7 +28,12 @@
             <SvgIcon :src="icon.ai.conversations" size="17" aria-hidden="true" />
           </BButton>
         </BTooltip>
-        <BButton size="small" :loading="newConversationSubmitting" @click="clearConversation">
+        <BButton
+          class="ai-header-actions-new"
+          size="small"
+          :loading="newConversationSubmitting"
+          @click="clearConversation"
+        >
           {{ t('ai.newConversation') }}
         </BButton>
         <BTooltip
@@ -665,6 +670,16 @@
       width: 44px;
       min-width: 44px;
       height: 44px;
+    }
+  }
+
+  /* 窄屏头部动作位紧张:「新的对话」收紧内边距并允许压缩,避免被挤出可视区 */
+  @media (max-width: 480px) {
+    .ai-header-actions-new {
+      min-width: 0;
+      padding: 0 8px;
+      font-size: 12px;
+      white-space: nowrap;
     }
   }
 

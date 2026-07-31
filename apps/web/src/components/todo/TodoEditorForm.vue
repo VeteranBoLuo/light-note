@@ -731,12 +731,12 @@
     position: relative;
   }
 
-  /* 建议浮层贴说明框上沿弹出,不遮挡正在输入的文字 */
+  /* 说明框位于弹框上部,向上弹会被 BModal 内容区裁掉,故改为向下展开 */
   .todo-mention-layer {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: calc(100% + 6px);
+    top: calc(100% + 6px);
     z-index: 20;
   }
 
