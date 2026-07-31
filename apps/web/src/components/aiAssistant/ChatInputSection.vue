@@ -29,13 +29,19 @@
           class="text-input"
         />
         <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
-        <div v-if="mentionQuery" class="ai-mention-layer">
+        <div
+          v-if="mentionQuery"
+          v-show="mentionHasResults"
+          class="ai-mention-layer"
+          :style="mentionAnchorStyle"
+        >
           <ResourcePickerPanel
             ref="mentionPanel"
             :show-search="false"
             :keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
+            @results-count="mentionHasResults = $event > 0"
           />
         </div>
       </div>
@@ -115,6 +121,7 @@
     type MentionQuery,
   } from '@/utils/resourceMentionTrigger';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
+  import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
@@ -211,9 +218,34 @@
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  // 搜不到结果就整块不显示(与 Claude 一致);面板仍挂载着继续搜,
+  // 所以从 @test123 退回 @test 时会自动重新出现,不必删到只剩 @
+  const mentionHasResults = ref(false);
+
+  // 浮层锚定在触发它的 @ 上:只在打开时算一次,输入框长高/换行都不会让它漂走
+  const mentionAnchor = ref<{ left: number; bottom: number } | null>(null);
+  const mentionAnchorStyle = computed(() =>
+    mentionAnchor.value
+      ? { left: `${mentionAnchor.value.left}px`, bottom: `${mentionAnchor.value.bottom}px` }
+      : undefined,
+  );
+
+  function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
+    const wrap = target?.closest('.text-input-wrap') as HTMLElement | null;
+    if (!target || !wrap) return;
+    const caret = getTextareaCaretRect(target, query.start);
+    const offset = toAnchorOffset(caret, wrap);
+    mentionAnchor.value = {
+      left: Math.max(0, offset.left),
+      // 浮层在 @ 所在行的上方展开
+      bottom: wrap.offsetHeight - offset.top + 6,
+    };
+  }
 
   function closeMention() {
     mentionQuery.value = null;
+    mentionAnchor.value = null;
+    mentionHasResults.value = false;
   }
 
   // 点击外部 / Esc 关闭走统一实现;输入框本身不算外部,否则刚打完 @ 就被关掉
@@ -225,13 +257,18 @@
 
   function syncMentionQuery(target: HTMLTextAreaElement | HTMLInputElement | null) {
     if (!target || typeof target.selectionStart !== 'number') return closeMention();
-    mentionQuery.value = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+    const next = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+    const isNewMention = !mentionQuery.value || mentionQuery.value.start !== next?.start;
+    mentionQuery.value = next;
+    if (!next) return closeMention();
+    // 同一个 @ 继续输入时保持原位,换了触发点才重新锚定
+    if (isNewMention) void nextTick(() => updateMentionAnchor(target as HTMLTextAreaElement, next));
   }
 
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
     // 面板没有搜索框,焦点始终留在输入框,键盘导航由这里转发
-    if (mentionQuery.value) {
+    if (mentionQuery.value && mentionHasResults.value) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
@@ -359,11 +396,11 @@
   /* @ 选择面板贴输入框上沿弹出,避免遮挡正在输入的文字 */
   .ai-mention-layer {
     position: absolute;
+    /* left / bottom 由锚点计算写入内联样式,固定在触发的 @ 上 */
     left: 0;
-    /* 宽度跟随面板本身,不要拉满输入框 */
+    bottom: calc(100% + 6px);
     width: max-content;
     max-width: 100%;
-    bottom: calc(100% + 6px);
     z-index: 20;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;

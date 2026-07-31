@@ -935,7 +935,7 @@ export default {
   note: {
     title: 'Note Library',
     subtitle: 'Browse and search your notes, then switch between card and list views as needed.',
-    visibleCount: '{visible} of {total} notes',
+    visibleCount: '{total} notes',
     allNote: 'All Notes',
     newNote: 'New Note',
     noTagNote: 'Untagged Notes',

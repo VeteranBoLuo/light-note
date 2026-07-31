@@ -16,7 +16,12 @@
           @keydown="handleMentionKeydown"
         />
         <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
-        <div v-if="mentionQuery" class="todo-mention-layer">
+        <div
+          v-if="mentionQuery"
+          v-show="mentionHasResults"
+          class="todo-mention-layer"
+          :style="mentionAnchorStyle"
+        >
           <ResourcePickerPanel
             ref="mentionPanel"
             :allowed-types="['bookmark', 'note', 'file']"
@@ -24,6 +29,7 @@
             :keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
+            @results-count="mentionHasResults = $event > 0"
           />
         </div>
       </div>
@@ -209,6 +215,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
+  import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
 
@@ -235,10 +242,31 @@
   const resourceRefs = ref<TodoResourceRefView[]>([]);
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  // 搜不到结果就整块不显示;面板仍挂载继续搜,退回能匹配的词时自动重现
+  const mentionHasResults = ref(false);
   const MAX_RESOURCE_REFS = 10;
+
+  // 浮层锚定在触发它的 @ 上:只在打开时算一次,继续输入不会让它漂走
+  const mentionAnchor = ref<{ left: number; top: number } | null>(null);
+  const mentionAnchorStyle = computed(() =>
+    mentionAnchor.value
+      ? { left: `${mentionAnchor.value.left}px`, top: `${mentionAnchor.value.top}px` }
+      : undefined,
+  );
+
+  function updateMentionAnchor(target: HTMLTextAreaElement | null, query: MentionQuery) {
+    const field = target?.closest('.todo-description-field') as HTMLElement | null;
+    if (!target || !field) return;
+    const caret = getTextareaCaretRect(target, query.start);
+    const offset = toAnchorOffset(caret, field);
+    // 说明框在弹框上部,浮层在 @ 所在行的下方展开
+    mentionAnchor.value = { left: Math.max(0, offset.left), top: offset.top + offset.lineHeight + 6 };
+  }
 
   function closeMention() {
     mentionQuery.value = null;
+    mentionAnchor.value = null;
+    mentionHasResults.value = false;
   }
 
   // 点击外部 / Esc 关闭走统一实现
@@ -251,7 +279,7 @@
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
     // 面板没有搜索框,焦点留在说明框,键盘导航由这里转发
-    if (mentionQuery.value) {
+    if (mentionQuery.value && mentionHasResults.value) {
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
         mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
@@ -271,7 +299,11 @@
     }
     window.setTimeout(() => {
       if (!target || typeof target.selectionStart !== 'number') return closeMention();
-      mentionQuery.value = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+      const next = resolveMentionQuery(String(target.value ?? ''), target.selectionStart);
+      const isNewMention = !mentionQuery.value || mentionQuery.value.start !== next?.start;
+      mentionQuery.value = next;
+      if (!next) return closeMention();
+      if (isNewMention) void nextTick(() => updateMentionAnchor(target, next));
     }, 0);
   }
 
@@ -757,10 +789,10 @@
   .todo-mention-layer {
     position: absolute;
     left: 0;
-    /* 宽度跟随面板本身,不要拉满说明框导致右侧一大片空白 */
+    /* left / top 由锚点计算写入内联样式,固定在触发的 @ 上 */
+    top: calc(100% + 6px);
     width: max-content;
     max-width: 100%;
-    top: calc(100% + 6px);
     z-index: 20;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;

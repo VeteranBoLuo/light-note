@@ -15,7 +15,12 @@
       @keydown.esc="emit('close')"
     />
 
-    <div class="resource-picker-panel__results" role="listbox">
+    <div
+      class="resource-picker-panel__results auto-hide-scrollbar"
+      :class="{ 'is-scrolling': scrolling }"
+      role="listbox"
+      @scroll="onScroll"
+    >
       <template v-for="group in groups" :key="group.type">
         <div class="resource-picker-panel__group">{{ typeLabel(group.type) }}</div>
         <BButton
@@ -48,6 +53,7 @@
     type ResourcePickerItem,
     type ResourcePickerType,
   } from '@/composables/useResourcePickerSearch';
+  import { useAutoHideScrollbar } from '@/composables/useAutoHideScrollbar';
 
   /**
    * 全站唯一的资源选择面板。
@@ -67,9 +73,10 @@
     }>(),
     { keyword: '', showSearch: true, autoFocus: true },
   );
-  const emit = defineEmits<{ select: [value: ResourcePickerItem]; close: [] }>();
+  const emit = defineEmits<{ select: [value: ResourcePickerItem]; close: []; 'results-count': [value: number] }>();
 
   const { t } = useI18n();
+  const { scrolling, onScroll } = useAutoHideScrollbar();
   const innerKeyword = ref('');
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
   const { results, loading, activeIndex, search, searchNow, moveActive, reset } = useResourcePickerSearch({
@@ -119,6 +126,12 @@
     },
   );
 
+  watch(
+    () => results.value.length,
+    (count) => emit('results-count', count),
+    { immediate: true },
+  );
+
   onBeforeUnmount(reset);
 
   defineExpose({ chooseActive, moveActive });
@@ -152,6 +165,36 @@
 
   .resource-picker-panel:not(.is-inline) .resource-picker-panel__results {
     margin-top: 8px;
+  }
+
+  /* 滚动条默认隐形,hover 或滚动中才显现,停止后淡出 */
+  .auto-hide-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.25s ease;
+  }
+
+  .auto-hide-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .auto-hide-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: transparent;
+    transition: background-color 0.25s ease;
+  }
+
+  .auto-hide-scrollbar:hover,
+  .auto-hide-scrollbar.is-scrolling {
+    scrollbar-color: color-mix(in srgb, var(--text-color) 26%, transparent) transparent;
+  }
+
+  .auto-hide-scrollbar:hover::-webkit-scrollbar-thumb,
+  .auto-hide-scrollbar.is-scrolling::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--text-color) 26%, transparent);
   }
 
   .resource-picker-panel__group {

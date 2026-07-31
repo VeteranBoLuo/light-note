@@ -920,7 +920,7 @@ export default {
   note: {
     title: '笔记库',
     subtitle: '集中浏览与检索沉淀内容，在卡片和列表之间快速切换。',
-    visibleCount: '当前 {visible} / 共 {total} 篇',
+    visibleCount: '共 {total} 篇',
     allNote: '全部笔记',
     newNote: '新建笔记',
     noTagNote: '无标签笔记',

@@ -9,9 +9,7 @@
     @title-click="resetNoteLibrary"
   >
     <template #meta>
-      <span class="note-count-chip">{{
-        $t('note.visibleCount', { visible: visibleDragNoteList.length, total: noteTotal })
-      }}</span>
+      <span class="note-count-chip">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
     </template>
 
     <template #actions>
