@@ -2,9 +2,20 @@ import html2canvas from 'html2canvas';
 import JsPDF from 'jspdf';
 
 // 常量定义
-const A4_WIDTH_PT = 595.28; // A4 宽度 (pt)
-const A4_HEIGHT_PT = 841.89; // A4 高度 (pt)
-const DEFAULT_SCALE = window.devicePixelRatio * 2;
+/** 各纸张的 [宽, 高](pt)。原实现无论 format 传什么都按 A4 算尺寸,这里一并纠正。 */
+const PAGE_SIZE_PT = {
+  a4: [595.28, 841.89],
+  a3: [841.89, 1190.55],
+  letter: [612, 792],
+} as const;
+/** 1pt = 1/72 inch,CSS 1px = 1/96 inch */
+const PT_TO_CSS_PX = 96 / 72;
+/**
+ * 固定渲染倍率,不跟随 devicePixelRatio:
+ * Retina(dpr=2)会得到 4 倍图、普通屏只有 2 倍图,同一篇笔记的清晰度与文件体积
+ * 在不同电脑上差一倍(实测 4.1MB vs 2MB)。2 倍图对 A4 约 178 DPI,打印足够。
+ */
+const DEFAULT_SCALE = 2;
 const DEFAULT_QUALITY = 1.0;
 /** 为避开文字允许向上回退的最大比例(相对每页可容纳高度)。回退越多越不会截字,但页尾留白也越多。 */
 const MAX_CUT_BACKTRACK_RATIO = 0.22;
@@ -33,6 +44,51 @@ interface PDFOptions {
  */
 export function forcePdfLightTheme(clonedDocument: Document) {
   clonedDocument.documentElement?.setAttribute('data-theme', 'day');
+}
+
+/**
+ * 渲染期间把目标元素宽度固定为「纸张内容宽」,结束后恢复。
+ *
+ * html2canvas 渲染的是元素在当前设备上的真实布局:窗口越宽,同一段文字换行越少、
+ * 长图越矮;而放置时又把长图等比缩到纸宽,于是同一篇笔记在 14 寸 Mac 上是 2 页、
+ * 在 2560 宽屏上被压成半页(字也随之小一半)。
+ *
+ * 把渲染宽度固定成纸张内容宽后,1 CSS px 恰好对应 0.75pt:排版、页数、字号
+ * 在所有设备上一致,且与屏幕 100% 缩放时看到的一样。
+ * 用 border-box 锁定外框宽度,避免元素自身 padding 把内容顶出纸面。
+ */
+export function withPrintWidth<T>(target: HTMLElement, widthPx: number, run: () => Promise<T>): Promise<T> {
+  const style = target.style;
+  const saved = {
+    width: style.getPropertyValue('width'),
+    widthPriority: style.getPropertyPriority('width'),
+    minWidth: style.getPropertyValue('min-width'),
+    minWidthPriority: style.getPropertyPriority('min-width'),
+    maxWidth: style.getPropertyValue('max-width'),
+    maxWidthPriority: style.getPropertyPriority('max-width'),
+    flex: style.getPropertyValue('flex'),
+    flexPriority: style.getPropertyPriority('flex'),
+    boxSizing: style.getPropertyValue('box-sizing'),
+    boxSizingPriority: style.getPropertyPriority('box-sizing'),
+  };
+  const px = `${widthPx}px`;
+  style.setProperty('box-sizing', 'border-box', 'important');
+  style.setProperty('width', px, 'important');
+  style.setProperty('min-width', px, 'important');
+  style.setProperty('max-width', px, 'important');
+  // 父级是 flex 容器时,flex-basis/grow 会把宽度重新拉回去
+  style.setProperty('flex', '0 0 auto', 'important');
+  return run().finally(() => {
+    const restore = (prop: string, value: string, priority: string) => {
+      if (value) style.setProperty(prop, value, priority);
+      else style.removeProperty(prop);
+    };
+    restore('box-sizing', saved.boxSizing, saved.boxSizingPriority);
+    restore('width', saved.width, saved.widthPriority);
+    restore('min-width', saved.minWidth, saved.minWidthPriority);
+    restore('max-width', saved.maxWidth, saved.maxWidthPriority);
+    restore('flex', saved.flex, saved.flexPriority);
+  });
 }
 
 /**
@@ -154,28 +210,33 @@ export async function generatePDF(title: string, selector: string, options: PDFO
     const orientation = options.orientation ?? 'p';
     const format = options.format ?? 'a4';
 
-    // 生成 canvas(渲染期间原文档 zoom 归一,克隆文档固定浅色主题)
-    const canvas = await withNormalizedZoom(() =>
-      html2canvas(target, {
-        scale,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#FFFFFF',
-        onclone: (clonedDocument: Document) => {
-          forcePdfLightTheme(clonedDocument);
-          replacePdfCheckboxes(clonedDocument);
-        },
-      }),
+    // 先算纸张与内容区尺寸:渲染宽度要按它来固定,才能做到设备无关
+    const [shortEdge, longEdge] = PAGE_SIZE_PT[format];
+    const pageWidth = orientation === 'l' ? longEdge : shortEdge;
+    const pageHeight = orientation === 'l' ? shortEdge : longEdge;
+    const contentWidth = pageWidth - margins * 2;
+    const contentHeight = pageHeight - margins * 2;
+    // 纸张内容宽换算成 CSS 像素:按此宽度渲染,放置时缩放比恰为 1
+    const printWidthPx = Math.round(contentWidth * PT_TO_CSS_PX);
+
+    // 生成 canvas(渲染期间固定元素宽度 + 原文档 zoom 归一,克隆文档固定浅色主题)
+    const canvas = await withPrintWidth(target, printWidthPx, () =>
+      withNormalizedZoom(() =>
+        html2canvas(target, {
+          scale,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#FFFFFF',
+          onclone: (clonedDocument: Document) => {
+            forcePdfLightTheme(clonedDocument);
+            replacePdfCheckboxes(clonedDocument);
+          },
+        }),
+      ),
     );
 
     // 创建 PDF 实例
     const pdf = new JsPDF(orientation, 'pt', format);
-
-    // 计算页面尺寸
-    const pageWidth = orientation === 'l' ? A4_HEIGHT_PT : A4_WIDTH_PT;
-    const pageHeight = orientation === 'l' ? A4_WIDTH_PT : A4_HEIGHT_PT;
-    const contentWidth = pageWidth - margins * 2;
-    const contentHeight = pageHeight - margins * 2;
 
     // 计算图像尺寸
     const imgWidth = contentWidth;

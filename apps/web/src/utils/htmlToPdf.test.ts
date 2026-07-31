@@ -82,36 +82,36 @@ describe('findBlankRowInBand', () => {
  * 分页循环的端到端行为(jsdom 无 canvas 实现，因此 mock 掉 html2canvas / jsPDF)。
  * 关注三件容易出严重问题的事：不死循环、切点落在空白行、图像不被拉伸。
  */
-describe('generatePDF 分页', () => {
-  const addImage = vi.fn();
-  const addPage = vi.fn();
-  const save = vi.fn();
-  let sourceCanvas: { width: number; height: number; getContext: () => unknown };
+const addImage = vi.fn();
+const addPage = vi.fn();
+const save = vi.fn();
+let sourceCanvas: { width: number; height: number; getContext: () => unknown };
 
-  /** 造一个假的长图 canvas：blankRows 里的绝对行号为纯白背景，其余视为文字。 */
-  function fakeCanvas(width: number, height: number, blankRows: Set<number>) {
-    return {
-      width,
-      height,
-      getContext: () => ({
-        getImageData: (_x: number, top: number, w: number, h: number) => {
-          const data = new Uint8ClampedArray(w * h * 4);
-          for (let row = 0; row < h; row += 1) {
-            const value = blankRows.has(top + row) ? 255 : 10;
-            for (let px = 0; px < w; px += 1) {
-              const i = (row * w + px) * 4;
-              data[i] = value;
-              data[i + 1] = value;
-              data[i + 2] = value;
-              data[i + 3] = 255;
-            }
+/** 造一个假的长图 canvas：blankRows 里的绝对行号为纯白背景，其余视为文字。 */
+function fakeCanvas(width: number, height: number, blankRows: Set<number>) {
+  return {
+    width,
+    height,
+    getContext: () => ({
+      getImageData: (_x: number, top: number, w: number, h: number) => {
+        const data = new Uint8ClampedArray(w * h * 4);
+        for (let row = 0; row < h; row += 1) {
+          const value = blankRows.has(top + row) ? 255 : 10;
+          for (let px = 0; px < w; px += 1) {
+            const i = (row * w + px) * 4;
+            data[i] = value;
+            data[i + 1] = value;
+            data[i + 2] = value;
+            data[i + 3] = 255;
           }
-          return { data, width: w, height: h };
-        },
-      }),
-    };
-  }
+        }
+        return { data, width: w, height: h };
+      },
+    }),
+  };
+}
 
+describe('generatePDF 分页', () => {
   beforeEach(() => {
     addImage.mockClear();
     addPage.mockClear();
@@ -205,5 +205,84 @@ describe('withNormalizedZoom / forcePdfLightTheme', () => {
     cloned.documentElement.setAttribute('data-theme', 'night');
     forcePdfLightTheme(cloned);
     expect(cloned.documentElement.getAttribute('data-theme')).toBe('day');
+  });
+});
+
+describe('withPrintWidth:导出结果与设备宽度/分辨率无关', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('渲染期间锁定外框宽度，结束后完整恢复原内联样式（含异常路径）', async () => {
+    const { withPrintWidth } = await import('./htmlToPdf');
+    document.body.innerHTML = '<div id="t" style="width: 50%; max-width: 900px; flex: 1 1 auto"></div>';
+    const el = document.getElementById('t') as HTMLElement;
+
+    let during = '';
+    await withPrintWidth(el, 730, async () => {
+      during = [
+        el.style.getPropertyValue('width'),
+        el.style.getPropertyValue('min-width'),
+        el.style.getPropertyValue('max-width'),
+        el.style.getPropertyValue('box-sizing'),
+        el.style.getPropertyPriority('width'),
+      ].join('|');
+    });
+    expect(during).toBe('730px|730px|730px|border-box|important');
+    // 恢复后回到原样：不残留 min-width / box-sizing，也不改变原有 width
+    expect(el.style.getPropertyValue('width')).toBe('50%');
+    expect(el.style.getPropertyValue('max-width')).toBe('900px');
+    expect(el.style.getPropertyValue('min-width')).toBe('');
+    expect(el.style.getPropertyValue('box-sizing')).toBe('');
+    expect(el.style.getPropertyValue('flex')).toBe('1 1 auto');
+
+    await expect(
+      withPrintWidth(el, 730, async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
+    // 导出失败也必须恢复，不能把用户的布局永久改宽
+    expect(el.style.getPropertyValue('width')).toBe('50%');
+    expect(el.style.getPropertyValue('min-width')).toBe('');
+  });
+
+  it('窄屏与宽屏渲染出的长图，产出的页数与放置尺寸完全一致', async () => {
+    // 同一篇笔记：窄容器换行多（高图）、宽容器换行少（矮图）。固定渲染宽度后，
+    // html2canvas 拿到的源宽度必然是纸张内容宽，两台电脑得到同一份 canvas 几何。
+    const contentWidthPt = 595.28 - 24 * 2;
+    const printWidthPx = Math.round(contentWidthPt * (96 / 72));
+    // scale 固定为 2，与 devicePixelRatio 无关
+    const expectedCanvasWidth = printWidthPx * 2;
+
+    const captured: number[] = [];
+    for (const dpr of [1, 2, 3]) {
+      const original = window.devicePixelRatio;
+      Object.defineProperty(window, 'devicePixelRatio', { value: dpr, configurable: true });
+      sourceCanvas = fakeCanvas(expectedCanvasWidth, 4000, new Set());
+      document.body.innerHTML = '<div id="pdf-target">note</div>';
+      vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,stub');
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        drawImage: vi.fn(),
+      } as unknown as CanvasRenderingContext2D);
+      addImage.mockClear();
+      vi.resetModules();
+      vi.doMock('html2canvas', () => ({ default: vi.fn(async () => sourceCanvas) }));
+      vi.doMock('jspdf', () => ({
+        default: class {
+          addImage = addImage;
+          addPage = addPage;
+          save = save;
+        },
+      }));
+      const { generatePDF } = await import('./htmlToPdf');
+      await generatePDF('一致性', '#pdf-target');
+      captured.push(addImage.mock.calls.length);
+      // 放置宽度恒为纸张内容宽，缩放比 1:1（不再随窗口宽度忽大忽小）
+      expect(addImage.mock.calls[0][4]).toBeCloseTo(contentWidthPt, 2);
+      Object.defineProperty(window, 'devicePixelRatio', { value: original, configurable: true });
+      vi.restoreAllMocks();
+    }
+    // 三种 devicePixelRatio 下页数一致
+    expect(new Set(captured).size).toBe(1);
   });
 });
