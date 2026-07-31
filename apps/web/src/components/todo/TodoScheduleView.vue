@@ -33,7 +33,7 @@
           class="todo-calendar-item"
           :class="[`is-priority-${item.priority}`, todoStateClass(item)]"
           :title="calendarItemTitle(item)"
-          @click="$emit('edit', item)"
+          @click.stop="activateCalendarItem(day, item)"
         >
           <span class="todo-calendar-item__main">
             <time :datetime="item.dueAt || undefined">{{ dueTime(item) }}</time>
@@ -106,10 +106,12 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
 
   const props = defineProps<{ items: TodoItem[]; view: 'agenda' | 'calendar' }>();
-  defineEmits<{ edit: [item: TodoItem] }>();
+  const emit = defineEmits<{ edit: [item: TodoItem] }>();
+  const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const selectedDayKey = ref('');
@@ -169,6 +171,17 @@
 
   function selectDay(day: { key: string }) {
     selectedDayKey.value = selectedDayKey.value === day.key ? '' : day.key;
+  }
+  /**
+   * 窄屏格子只放得下截断的标题,点它应该先展开当天详情看清楚,而不是直接弹编辑框;
+   * 桌面格子信息完整,保持点条目即编辑。
+   */
+  function activateCalendarItem(day: { key: string }, item: TodoItem) {
+    if (bookmark.isMobile) {
+      selectedDayKey.value = day.key;
+      return;
+    }
+    emit('edit', item);
   }
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
