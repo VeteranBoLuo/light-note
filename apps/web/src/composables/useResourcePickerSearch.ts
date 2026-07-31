@@ -34,6 +34,35 @@ export function resourceItemKey(item: Pick<ResourcePickerItem, 'type' | 'id'>) {
   return `${item.type}:${item.id}`;
 }
 
+/**
+ * 按类型轮转取样。
+ * 搜索接口是按类型分段返回的(书签在前),直接截断会让选择器里只剩书签;
+ * 轮转能保证书签/笔记/文件/标签各露出几条,同类内部保持接口给的顺序(即最新的在前)。
+ */
+export function interleaveByType<T extends { type: string }>(items: T[], limit: number): T[] {
+  const max = Math.max(0, Number(limit) || 0);
+  if (!max) return [];
+  const buckets = new Map<string, T[]>();
+  items.forEach((item) => {
+    const list = buckets.get(item.type);
+    if (list) list.push(item);
+    else buckets.set(item.type, [item]);
+  });
+  const picked: T[] = [];
+  for (let round = 0; picked.length < max; round += 1) {
+    let addedThisRound = false;
+    for (const list of buckets.values()) {
+      const candidate = list[round];
+      if (!candidate) continue;
+      picked.push(candidate);
+      addedThisRound = true;
+      if (picked.length >= max) break;
+    }
+    if (!addedThisRound) break;
+  }
+  return picked;
+}
+
 export function useResourcePickerSearch(options: UseResourcePickerSearchOptions = {}) {
   const allowedTypes = options.allowedTypes?.length ? options.allowedTypes : DEFAULT_TYPES;
   const limit = Math.max(1, Number(options.limit) || 12);
@@ -75,8 +104,8 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
           if (!item.id || !item.title || seen.has(key) || excluded.has(key)) return false;
           seen.add(key);
           return true;
-        })
-        .slice(0, limit);
+        });
+      results.value = interleaveByType(results.value, limit);
       activeIndex.value = 0;
     } catch {
       // 选择器里的搜索失败按空态处理:全局错误提示会打断用户正在输入的动作

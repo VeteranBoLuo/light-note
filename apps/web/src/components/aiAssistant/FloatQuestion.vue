@@ -254,9 +254,23 @@
       : aiTriggerTitle.value,
   );
 
+  function isAssistantInputFocused() {
+    const active = document.activeElement as HTMLElement | null;
+    return Boolean(active?.closest?.('.input-section'));
+  }
+
+  /**
+   * 全屏抽屉打开时布局要多走几帧(尺寸与内容区重排),单次 rAF 可能早于输入框挂载,
+   * 表现为「非全屏能自动聚焦、全屏不能」。补两次延时重试,已聚焦则跳过。
+   */
   function focusAssistantInput() {
+    const tryFocus = () => {
+      if (!isAssistantInputFocused()) aiAssistantRef.value?.focusInput?.();
+    };
     nextTick(() => {
-      window.requestAnimationFrame(() => aiAssistantRef.value?.focusInput?.());
+      window.requestAnimationFrame(tryFocus);
+      window.setTimeout(tryFocus, 120);
+      window.setTimeout(tryFocus, 320);
     });
   }
 

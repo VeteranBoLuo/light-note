@@ -15,13 +15,10 @@
         @mouseenter="activeIndex = index"
         @click="choose(item)"
       >
-        <span class="resource-mention-suggestions__icon" :class="`is-${item.type}`">
-          <SvgIcon :src="resourceIcon(item.type)" size="16" aria-hidden="true" />
+        <span class="resource-mention-suggestions__type" :style="{ color: typeColor(item.type) }">
+          {{ typeLabel(item.type) }}
         </span>
-        <span class="resource-mention-suggestions__copy">
-          <strong>{{ item.title }}</strong>
-          <small>{{ typeLabel(item.type) }}</small>
-        </span>
+        <strong class="resource-mention-suggestions__title">{{ item.title }}</strong>
       </BButton>
       <div v-if="!results.length" class="resource-mention-suggestions__empty">
         {{ query.trim() ? t('note.resourceMention.empty') : t('note.resourceMention.emptyHint') }}
@@ -38,8 +35,7 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon';
+  import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
   import { useResourcePickerSearch } from '@/composables/useResourcePickerSearch';
   import type { ResourceRef, ResourceRefType } from '@/utils/noteResourceRefs';
 
@@ -57,11 +53,10 @@
     debounceMs: 180,
   });
 
-  function resourceIcon(type: ResourceRefType) {
-    if (type === 'note') return icon.resource.note;
-    if (type === 'file') return icon.resource.file;
-    return icon.resource.bookmark;
-  }
+  const typeColor = (type: ResourceRefType) => {
+    const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
+    return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
+  };
 
   function typeLabel(type: ResourceRefType) {
     return t(`ai.sourceTypes.${type}`);
@@ -137,50 +132,21 @@
     }
   }
 
-  .resource-mention-suggestions__icon {
-    display: grid;
-    width: 24px;
-    height: 24px;
+  /* 与全站统一的资源面板同一视觉:彩色类型标签 + 单行标题 */
+  .resource-mention-suggestions__type {
     flex: 0 0 auto;
-    place-items: center;
-    border-radius: 7px;
-    color: var(--resource-note-color, var(--primary-color));
-    background: color-mix(in srgb, var(--resource-note-color, var(--primary-color)) 12%, transparent);
-
-    &.is-bookmark {
-      color: var(--resource-bookmark-color, var(--primary-color));
-      background: color-mix(in srgb, var(--resource-bookmark-color, var(--primary-color)) 12%, transparent);
-    }
-
-    &.is-file {
-      color: var(--resource-file-color, var(--primary-color));
-      background: color-mix(in srgb, var(--resource-file-color, var(--primary-color)) 12%, transparent);
-    }
+    font-size: 12px;
+    font-weight: 600;
   }
 
-  .resource-mention-suggestions__copy {
-    display: grid;
+  .resource-mention-suggestions__title {
     min-width: 0;
-    gap: 1px;
-    line-height: 1.25;
-
-    strong,
-    small {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    strong {
-      color: var(--text-color);
-      font-size: 13px;
-      font-weight: 600;
-    }
-
-    small {
-      color: var(--desc-color);
-      font-size: 11px;
-    }
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 500;
   }
 
   .resource-mention-suggestions__empty {

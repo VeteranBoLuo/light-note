@@ -347,6 +347,9 @@
   .ai-mention-layer {
     position: absolute;
     left: 0;
+    /* 宽度跟随面板本身,不要拉满输入框 */
+    width: max-content;
+    max-width: 100%;
     bottom: calc(100% + 6px);
     z-index: 20;
     border: 1px solid var(--card-border-color);

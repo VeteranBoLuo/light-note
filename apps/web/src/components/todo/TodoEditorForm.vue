@@ -744,7 +744,9 @@
   .todo-mention-layer {
     position: absolute;
     left: 0;
-    right: 0;
+    /* 宽度跟随面板本身,不要拉满说明框导致右侧一大片空白 */
+    width: max-content;
+    max-width: 100%;
     top: calc(100% + 6px);
     z-index: 20;
     border: 1px solid var(--card-border-color);
