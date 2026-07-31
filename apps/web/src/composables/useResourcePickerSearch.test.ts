@@ -1,39 +1,52 @@
 import { describe, expect, it } from 'vitest';
-import { interleaveByType, resourceItemKey } from './useResourcePickerSearch';
+import { resourceItemKey, takePerType } from './useResourcePickerSearch';
 
 const item = (type: string, id: string) => ({ type, id, title: `${type}-${id}` });
 
 describe('useResourcePickerSearch', () => {
-  it('按类型轮转,避免结果被单一类型占满', () => {
-    // 搜索接口按类型分段返回:书签在前,直接截断会只剩书签
+  it('按书签→笔记→文件的固定顺序分组,不与其它类型混排', () => {
+    // 搜索接口按类型分段返回,直接截断会只剩书签;这里要保证三类都露出
+    const rows = [
+      item('bookmark', 'b1'),
+      item('bookmark', 'b2'),
+      item('note', 'n1'),
+      item('file', 'f1'),
+    ];
+    expect(takePerType(rows, { perType: 5 }).map((row) => row.id)).toEqual(['b1', 'b2', 'n1', 'f1']);
+  });
+
+  it('每类最多取 perType 条', () => {
     const rows = [
       item('bookmark', 'b1'),
       item('bookmark', 'b2'),
       item('bookmark', 'b3'),
       item('note', 'n1'),
       item('note', 'n2'),
-      item('file', 'f1'),
     ];
-    expect(interleaveByType(rows, 4).map((row) => row.id)).toEqual(['b1', 'n1', 'f1', 'b2']);
+    expect(takePerType(rows, { perType: 2 }).map((row) => row.id)).toEqual(['b1', 'b2', 'n1', 'n2']);
   });
 
-  it('同类内部保持接口给的顺序', () => {
+  it('同类内部保持接口给的顺序(最新在前)', () => {
     const rows = [item('note', 'n1'), item('note', 'n2'), item('note', 'n3')];
-    expect(interleaveByType(rows, 3).map((row) => row.id)).toEqual(['n1', 'n2', 'n3']);
+    expect(takePerType(rows, { perType: 5 }).map((row) => row.id)).toEqual(['n1', 'n2', 'n3']);
   });
 
-  it('某类耗尽后继续用剩下的类型填满', () => {
-    const rows = [item('bookmark', 'b1'), item('bookmark', 'b2'), item('bookmark', 'b3'), item('note', 'n1')];
-    expect(interleaveByType(rows, 4).map((row) => row.id)).toEqual(['b1', 'n1', 'b2', 'b3']);
+  it('order 之外的类型追加在末尾,不丢结果', () => {
+    const rows = [item('tag', 't1'), item('bookmark', 'b1')];
+    expect(takePerType(rows, { perType: 5 }).map((row) => row.id)).toEqual(['b1', 't1']);
   });
 
-  it('结果不足 limit 时全部返回,不补空', () => {
-    expect(interleaveByType([item('note', 'n1')], 5)).toHaveLength(1);
+  it('按 order 限定类型顺序', () => {
+    const rows = [item('bookmark', 'b1'), item('note', 'n1'), item('file', 'f1')];
+    expect(takePerType(rows, { perType: 5, order: ['file', 'note', 'bookmark'] }).map((row) => row.id)).toEqual([
+      'f1',
+      'n1',
+      'b1',
+    ]);
   });
 
-  it('limit 为 0 或空输入返回空数组', () => {
-    expect(interleaveByType([item('note', 'n1')], 0)).toEqual([]);
-    expect(interleaveByType([], 5)).toEqual([]);
+  it('空输入返回空数组', () => {
+    expect(takePerType([], { perType: 5 })).toEqual([]);
   });
 
   it('资源 key 由类型与 ID 组成', () => {

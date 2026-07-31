@@ -22,6 +22,8 @@ export interface UseResourcePickerSearchOptions {
   allowedTypes?: ResourcePickerType[];
   /** 单次返回上限 */
   limit?: number;
+  /** 每种类型最多展示几条 */
+  perType?: number;
   /** 输入防抖毫秒数 */
   debounceMs?: number;
   /** 需要排除的条目(通常是已选中项),返回 `${type}:${id}` 集合 */
@@ -34,14 +36,18 @@ export function resourceItemKey(item: Pick<ResourcePickerItem, 'type' | 'id'>) {
   return `${item.type}:${item.id}`;
 }
 
+/** 分组展示时的每类条数上限 */
+export const DEFAULT_PER_TYPE = 5;
+
 /**
- * 按类型轮转取样。
- * 搜索接口是按类型分段返回的(书签在前),直接截断会让选择器里只剩书签;
- * 轮转能保证书签/笔记/文件/标签各露出几条,同类内部保持接口给的顺序(即最新的在前)。
+ * 按类型取样并按固定顺序排列(书签 → 笔记 → 文件 → 其它)。
+ * 结果保持扁平以便键盘线性导航,由展示层按 type 切分成分组标题。
+ * 不做轮转:混排看着乱,分组更易扫读。
  */
-export function interleaveByType<T extends { type: string }>(items: T[], limit: number): T[] {
-  const max = Math.max(0, Number(limit) || 0);
-  if (!max) return [];
+export function takePerType<T extends { type: string }>(
+  items: T[],
+  { perType = DEFAULT_PER_TYPE, order = DEFAULT_TYPES as readonly string[] } = {},
+): T[] {
   const buckets = new Map<string, T[]>();
   items.forEach((item) => {
     const list = buckets.get(item.type);
@@ -49,23 +55,21 @@ export function interleaveByType<T extends { type: string }>(items: T[], limit: 
     else buckets.set(item.type, [item]);
   });
   const picked: T[] = [];
-  for (let round = 0; picked.length < max; round += 1) {
-    let addedThisRound = false;
-    for (const list of buckets.values()) {
-      const candidate = list[round];
-      if (!candidate) continue;
-      picked.push(candidate);
-      addedThisRound = true;
-      if (picked.length >= max) break;
-    }
-    if (!addedThisRound) break;
-  }
+  order.forEach((type) => {
+    const list = buckets.get(type);
+    if (list) picked.push(...list.slice(0, perType));
+  });
+  // order 之外的类型(例如标签)追加在后面,不丢结果
+  buckets.forEach((list, type) => {
+    if (!order.includes(type)) picked.push(...list.slice(0, perType));
+  });
   return picked;
 }
 
 export function useResourcePickerSearch(options: UseResourcePickerSearchOptions = {}) {
   const allowedTypes = options.allowedTypes?.length ? options.allowedTypes : DEFAULT_TYPES;
   const limit = Math.max(1, Number(options.limit) || 12);
+  const perType = Math.max(1, Number(options.perType) || DEFAULT_PER_TYPE);
   const debounceMs = Math.max(0, Number(options.debounceMs ?? 280));
 
   const results = ref<ResourcePickerItem[]>([]);
@@ -105,7 +109,7 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
           seen.add(key);
           return true;
         });
-      results.value = interleaveByType(results.value, limit);
+      results.value = takePerType(results.value, { perType, order: allowedTypes });
       activeIndex.value = 0;
     } catch {
       // 选择器里的搜索失败按空态处理:全局错误提示会打断用户正在输入的动作

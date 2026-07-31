@@ -64,11 +64,13 @@
     >
       <span aria-hidden="true"></span>
       <template #content>
-        <ResourceMentionSuggestions
+        <ResourcePickerPanel
           ref="inlineMentionSuggestionsRef"
-          :query="inlineMentionQuery"
+          :allowed-types="['bookmark', 'note', 'file']"
+          :show-search="false"
+          :keyword="inlineMentionQuery"
           @select="insertInlineResourceMention"
-          @open-full="openFullMentionPicker"
+          @close="closeInlineMention"
         />
       </template>
     </BPopover>
@@ -160,7 +162,6 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
-  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
   import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
@@ -914,29 +915,6 @@
       top: markerRect.top - textarea.scrollTop,
       height: markerRect.height || Number.parseFloat(style.lineHeight) || 20,
     };
-  }
-
-  function openFullMentionPicker() {
-    const editor = editorRef.value;
-    const selection = htmlMentionSelection;
-    // 全量搜索会使焦点离开 iframe。先将正在输入的 @查询 固化成带标记的选区，
-    // 避免后续从弹窗选中资源时只剩已经失效的原始 DOM Range。
-    if (
-      currentType.value === 'html' &&
-      editor &&
-      selection &&
-      !selection.markerId &&
-      selectionIsExactTinyMceMention(editor, selection.range, selection.text)
-    ) {
-      htmlMentionSelection = captureTinyMceMentionSelection(editor, selection.range);
-    }
-    mentionPickerVisible.value = true;
-    inlineMentionVisible.value = false;
-  }
-
-  function closeInlineMention() {
-    if (!inlineMentionVisible.value) return;
-    inlineMentionVisible.value = false;
   }
 
   function closeMentionPicker() {

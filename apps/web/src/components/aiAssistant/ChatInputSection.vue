@@ -31,7 +31,9 @@
         <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
         <div v-if="mentionQuery" ref="mentionLayer" class="ai-mention-layer">
           <ResourcePickerPanel
-            :initial-keyword="mentionQuery.keyword"
+            ref="mentionPanel"
+            :show-search="false"
+            :keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
           />
@@ -208,6 +210,7 @@
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionLayer = ref<HTMLElement | null>(null);
+  const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
 
   function closeMention() {
     mentionQuery.value = null;
@@ -231,10 +234,24 @@
 
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
-    if (mentionQuery.value && event.key === 'Escape') {
-      event.preventDefault();
-      closeMention();
-      return;
+    // 面板没有搜索框,焦点始终留在输入框,键盘导航由这里转发
+    if (mentionQuery.value) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionPanel.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
     }
     // 键入后光标才更新,放到下一帧再解析;选择器内部的键盘导航由它自己处理
     window.setTimeout(() => syncMentionQuery(target), 0);

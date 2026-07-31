@@ -18,8 +18,10 @@
         <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
         <div v-if="mentionQuery" ref="mentionLayer" class="todo-mention-layer">
           <ResourcePickerPanel
+            ref="mentionPanel"
             :allowed-types="['bookmark', 'note', 'file']"
-            :initial-keyword="mentionQuery.keyword"
+            :show-search="false"
+            :keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
             @close="closeMention"
           />
@@ -232,6 +234,7 @@
   const resourceRefs = ref<TodoResourceRefView[]>([]);
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionLayer = ref<HTMLElement | null>(null);
+  const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
   const MAX_RESOURCE_REFS = 10;
 
   function closeMention() {
@@ -251,10 +254,24 @@
 
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
-    if (mentionQuery.value && event.key === 'Escape') {
-      event.preventDefault();
-      closeMention();
-      return;
+    // 面板没有搜索框,焦点留在说明框,键盘导航由这里转发
+    if (mentionQuery.value) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        mentionPanel.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (event.key === 'Enter' && !event.isComposing) {
+        event.preventDefault();
+        event.stopPropagation();
+        mentionPanel.value?.chooseActive();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMention();
+        return;
+      }
     }
     window.setTimeout(() => {
       if (!target || typeof target.selectionStart !== 'number') return closeMention();
