@@ -1442,6 +1442,10 @@ export default {
     },
   },
   common: {
+    retry: 'Reload',
+    requestFailed: 'Could not load content',
+    requestFailedDescription: 'The service is temporarily unavailable. Please try again.',
+    requestIdLabel: 'Request ID',
     detail: 'Detail',
     edit: 'Edit',
     copyLink: 'Copy link',

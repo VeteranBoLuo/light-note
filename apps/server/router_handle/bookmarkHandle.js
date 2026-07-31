@@ -375,10 +375,6 @@ export const updateTag = async (req, res) => {
     // 更新tag表
     const updateTagSql = `UPDATE tag SET ? WHERE id = ?`;
     const [updateResult] = await connection.query(updateTagSql, [snakeCaseKeys(mergeExistingProperties(params)), id]);
-    // 相关标签已改为按共同资源自动推导:不再写入手工关系。
-    // 顺带清理该标签的历史手工关系,让口径逐步收敛到自动推导。
-    const deleteAssociationsSql = `DELETE FROM tag_relations WHERE tag_id = ? OR related_tag_id = ?`;
-    await connection.query(deleteAssociationsSql, [id, id]);
 
     // 只要传了bookmarkList，就需要重新处理
     if (bookmarkList !== undefined) {

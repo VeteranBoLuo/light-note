@@ -1265,10 +1265,6 @@ export const batchDeleteResources = async (req, res) => {
         );
       } else if (type === 'tag') {
         await connection.query(`DELETE FROM resource_tag_relations WHERE tag_id IN (${placeholders})`, validIds);
-        await connection.query(
-          `DELETE FROM tag_relations WHERE tag_id IN (${placeholders}) OR related_tag_id IN (${placeholders})`,
-          [...validIds, ...validIds],
-        );
         [result] = await connection.query(
           `DELETE FROM tag
            WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,

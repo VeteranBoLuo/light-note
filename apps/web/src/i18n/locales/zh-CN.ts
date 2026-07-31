@@ -1419,6 +1419,10 @@ export default {
     },
   },
   common: {
+    retry: '重新加载',
+    requestFailed: '内容加载失败',
+    requestFailedDescription: '服务暂时不可用，请稍后重试。',
+    requestIdLabel: '请求编号',
     detail: '详情',
     edit: '编辑',
     copyLink: '复制链接',
