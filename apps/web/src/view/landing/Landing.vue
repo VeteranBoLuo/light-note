@@ -95,7 +95,7 @@
                     <span>{{ t('landing.brandShort') }} · {{ previewItems[previewIndex]?.label }}</span>
                   </div>
                 </div>
-                <div class="mockup-carousel">
+                <div class="mockup-carousel" :style="{ '--preview-aspect': currentPreviewAspect }">
                   <div class="mockup-slides" :style="{ transform: `translateX(-${previewIndex * 100}%)` }">
                     <div
                       v-for="(item, itemIndex) in previewItems"
@@ -418,34 +418,47 @@
   const submitting = ref(false);
   const startingApp = ref(false);
 
+  // 桌面截图是 2940x1846，移动端预览是就地生成的 1:1 舞台。
+  // 比例跟着每张预览走，窄屏才不会让宽截图在为 1:1 设计的容器里留出大片空白。
+  const DESKTOP_SHOT_ASPECT = '2940 / 1846';
+  const MOBILE_STAGE_ASPECT = '1.16 / 1';
   const previewItems = computed(() => [
     {
       key: 'bookmark',
       label: t('landing.tabBookmark'),
       png: '/screenshots/bookmark.png',
+      aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'note',
       label: t('landing.tabNote'),
       png: '/screenshots/note1.png',
+      aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'cloud',
       label: t('landing.tabCloud'),
       png: '/screenshots/cloud-space.png',
+      aspect: DESKTOP_SHOT_ASPECT,
     },
     {
       key: 'mobile',
       label: t('landing.tabMobile'),
       // public 静态资源不会由 Vite 自动生成内容哈希；图片替换后同步更新版本，避免浏览器继续展示旧图。
       png: '/screenshots/mobile.png?v=a04898845ef1',
+      aspect: MOBILE_STAGE_ASPECT,
     },
     {
       key: 'co-build',
       label: t('landing.tabCoBuild'),
       png: '/screenshots/require.png',
+      aspect: DESKTOP_SHOT_ASPECT,
     },
   ]);
+
+  const currentPreviewAspect = computed(
+    () => previewItems.value[previewIndex.value]?.aspect || MOBILE_STAGE_ASPECT,
+  );
   const navLabels = computed(() => [
     t('landing.navCover'),
     t('landing.navCore'),
@@ -2019,9 +2032,21 @@
     }
     .mockup-carousel {
       order: 2;
-      aspect-ratio: 1.16 / 1;
+      /* 比例跟随当前预览：宽截图按自身比例撑高，移动端舞台保持 1.16:1 */
+      aspect-ratio: var(--preview-aspect, 1.16 / 1);
+      transition: aspect-ratio 0.32s ease;
       background: #11111a;
       border-top: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mockup-carousel {
+        transition: none;
+      }
+    }
+
+    .mockup-screen img {
+      object-position: center;
     }
     .mockup-screen {
       background: #11111a;

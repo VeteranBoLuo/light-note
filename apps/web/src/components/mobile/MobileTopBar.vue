@@ -1,32 +1,41 @@
 <template>
-  <header class="mobile-top-bar">
+  <header v-if="!activeBinding?.ownTopBar" class="mobile-top-bar">
     <BButton
       class="mobile-top-bar__brand"
-      :aria-label="t('mobileNavigation.backToResources')"
-      :title="t('mobileNavigation.backToResources')"
-      @click="goToResources"
+      :aria-label="t('mobileNavigation.backToToday')"
+      :title="t('mobileNavigation.backToToday')"
+      @click="goToToday"
       v-click-log="{ module: '移动端导航', operation: '返回资料首页' }"
     >
       <img src="/favicon.svg?v=7" width="25" height="25" alt="" />
       <span>{{ t('navigation.title') }}</span>
     </BButton>
 
-    <div v-if="showSearch" class="mobile-top-bar__search">
-      <BInput
-        id="mobile-top-search-input"
-        v-model:value="searchValue"
-        :placeholder="searchLabel"
-        height="34px"
-        clearable
-        @enter="submitSearch"
-      >
-        <template #prefix>
-          <SvgIcon :src="icon.navigation.search" size="16" aria-hidden="true" />
-        </template>
-      </BInput>
-    </div>
+    <!-- 移动端只保留这一个文本搜索入口:它始终是全局搜索,不再按页面变成局部搜索框。
+         各资源页的关键词过滤已下沉到页面自身的筛选区。 -->
+    <BButton
+      v-if="showSearch"
+      class="mobile-top-bar__search"
+      :aria-label="t('globalSearch.trigger')"
+      @click="openGlobalSearch"
+      v-click-log="{ module: '全局搜索', operation: '打开移动端全局搜索' }"
+    >
+      <SvgIcon :src="icon.navigation.search" size="16" aria-hidden="true" />
+      <span>{{ t('globalSearch.trigger') }}</span>
+    </BButton>
 
     <div v-if="showActions" class="mobile-top-bar__actions">
+      <!-- AI 等自带标题区的页面不放完整搜索框,只给一个放大镜打开同一个搜索层 -->
+      <BButton
+        v-if="!showSearch"
+        class="mobile-top-bar__action"
+        :aria-label="t('globalSearch.trigger')"
+        :title="t('globalSearch.trigger')"
+        @click="openGlobalSearch"
+        v-click-log="{ module: '全局搜索', operation: '打开移动端全局搜索' }"
+      >
+        <SvgIcon :src="icon.navigation.search" size="19" aria-hidden="true" />
+      </BButton>
       <BButton
         v-if="
           activeBinding?.onAuxiliaryAction &&
@@ -53,7 +62,7 @@
       </BButton>
       <!-- 原「更多」菜单(书签管理/标签管理/回收站/设置)与「我的」页完全重复,改为移动端此前缺失的通知入口。
            NotificationBell 是多根组件(浮层+两个弹框),class 不会继承到按钮上,必须包一层容器再穿透。 -->
-      <div v-if="showMoreMenu && user.role !== 'visitor'" class="mobile-top-bar__bell">
+      <div v-if="showNotification && user.role !== 'visitor'" class="mobile-top-bar__bell">
         <NotificationBell />
       </div>
     </div>
@@ -61,60 +70,44 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import NotificationBell from '@/components/notification/NotificationBell.vue';
   import icon from '@/config/icon';
-  import { getMobileResourceEntryPath } from '@/composables/useMobileNavigationState';
+  import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
+  import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { useUserStore } from '@/store';
 
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const { t } = useI18n();
-  const fallbackSearchValue = ref('');
+  const { openSearch } = useMobileGlobalSearch();
 
   const activeBinding = computed(() => getMobileTopBarBinding(route.name));
-  const showSearch = computed(() => activeBinding.value?.showSearch !== false);
-  const showMoreMenu = computed(() => activeBinding.value?.showMoreMenu !== false);
+  const showSearch = computed(() => activeBinding.value?.searchMode !== 'icon');
+  const showNotification = computed(() => activeBinding.value?.showNotification !== false);
   const showActions = computed(() =>
-    Boolean(activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showMoreMenu.value),
+    Boolean(!showSearch.value || activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showNotification.value),
   );
-  const searchValue = computed({
-    get: () => activeBinding.value?.getSearchValue?.() ?? fallbackSearchValue.value,
-    set: (value: string | number | undefined) => {
-      const normalizedValue = String(value || '');
-      if (activeBinding.value?.setSearchValue) {
-        activeBinding.value.setSearchValue(normalizedValue);
-        activeBinding.value.onSearchInput?.(normalizedValue);
-        return;
-      }
-      fallbackSearchValue.value = normalizedValue;
-    },
-  });
-  const searchLabel = computed(() => {
-    if (activeBinding.value?.searchPlaceholder) return activeBinding.value.searchPlaceholder();
-    return t('mobileNavigation.globalSearch');
-  });
   const addLabel = computed(() => activeBinding.value?.addLabel?.() || t('common.add'));
 
-  function goToResources() {
-    const target = getMobileResourceEntryPath(user.preferences);
-    if (route.path !== target) router.push(target);
+  /**
+   * Logo 固定回「今日」——移动端每天的第一站。
+   *
+   * 移动端不提供「默认首页」设置（那一项只对桌面端有意义），所以这里不读账号偏好；
+   * 「回到最近浏览的资料页签」由底部「资料」入口承担。
+   */
+  function goToToday() {
+    if (route.path !== MOBILE_TODAY_PATH) void router.push(MOBILE_TODAY_PATH);
   }
 
-  function submitSearch() {
-    if (activeBinding.value?.onSearchEnter) {
-      activeBinding.value.onSearchEnter();
-      return;
-    }
-    const keyword = fallbackSearchValue.value.trim();
-    router.push({ path: '/search', query: keyword ? { q: keyword } : undefined });
+  function openGlobalSearch() {
+    openSearch();
   }
 
   function runAdd() {
@@ -199,12 +192,28 @@
 
   .mobile-top-bar__search {
     min-width: 0;
+    height: 36px;
+    padding: 0 12px;
     flex: 1 1 auto;
+    justify-content: flex-start;
+    gap: 7px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--workspace-panel-bg-color) !important;
+    font-size: 13px;
+    font-weight: 400;
   }
 
-  .mobile-top-bar__search :deep(.b-input) {
-    border-radius: 10px;
-    font-size: 13px;
+  .mobile-top-bar__search span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .mobile-top-bar__search:active {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, transparent);
   }
 
   .mobile-top-bar__bell {

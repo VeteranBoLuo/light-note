@@ -16,7 +16,7 @@ vi.mock('@/i18n', () => ({
   },
 }));
 
-import { clearGlobalSearchCache, fetchGlobalSearch } from './search.ts';
+import { clearGlobalSearchCache, fetchGlobalSearch, fetchGlobalSearchSuggestions } from './search.ts';
 
 describe('fetchGlobalSearch cache policy', () => {
   beforeEach(() => {
@@ -156,10 +156,91 @@ describe('fetchGlobalSearch cache policy', () => {
       includeMetadata: false,
     });
     expect(initial.nextCursor).toEqual({ type: 'note', offset: 0 });
-    expect(initial.typeTotals).toEqual({ bookmark: 40, note: 20, file: 0, tag: 0 });
+    expect(initial.typeTotals).toEqual({ bookmark: 40, note: 20, file: 0, tag: 0, todo: 0 });
     expect(appended.items).toHaveLength(20);
     expect(appended.nextCursor).toBeNull();
     expect(appended.typeTotals).toBeUndefined();
     expect(appended.tagOptions).toBeUndefined();
+  });
+
+  it('默认调用不请求待办，避免资源选择器等既有调用方突然拿到行动对象', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
+    await fetchGlobalSearch('备案', 10);
+    const body = mocks.apiBasePost.mock.calls[0]?.[1];
+    expect(body.types).toBeUndefined();
+    expect(body.todoStatus).toBeUndefined();
+  });
+
+  it('只有显式声明 todo 时才下发待办筛选条件', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
+    await fetchGlobalSearch('备案', 10, false, {
+      types: ['bookmark', 'todo'],
+      todoStatus: 'pending',
+      todoPriority: [2, 0],
+      todoDue: 'overdue',
+    });
+    const body = mocks.apiBasePost.mock.calls[0]?.[1];
+    expect(body.types).toEqual(['bookmark', 'todo']);
+    expect(body.todoStatus).toBe('pending');
+    expect(body.todoPriority).toEqual([0, 2]);
+    expect(body.todoDue).toBe('overdue');
+  });
+
+  it('未选中待办时丢弃待办筛选条件，不污染缓存键', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
+    await fetchGlobalSearch('备案', 10, false, { types: ['bookmark'], todoStatus: 'pending' });
+    const body = mocks.apiBasePost.mock.calls[0]?.[1];
+    expect(body.todoStatus).toBeUndefined();
+  });
+});
+
+describe('fetchGlobalSearchSuggestions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearGlobalSearchCache();
+  });
+
+  it('使用轻量 suggest 模式，默认覆盖含待办的全部类型', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 200, data: { items: [], hasMore: false } });
+    await fetchGlobalSearchSuggestions('备案');
+
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/search/global',
+      {
+        keyword: '备案',
+        types: ['bookmark', 'file', 'note', 'tag', 'todo'],
+        mode: 'suggest',
+        includeMetadata: false,
+      },
+      expect.objectContaining({ silent: true }),
+    );
+  });
+
+  it('空关键词直接返回空结果，不发请求', async () => {
+    const res = await fetchGlobalSearchSuggestions('   ');
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
+    expect(res).toEqual({ keyword: '', items: [], hasMore: false });
+  });
+
+  it('同关键词短时间内复用缓存，清缓存后重新请求', async () => {
+    mocks.apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { items: [{ id: 't1', type: 'todo', title: '提交备案' }], hasMore: true },
+    });
+
+    const first = await fetchGlobalSearchSuggestions('备案');
+    const cached = await fetchGlobalSearchSuggestions('备案');
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+    expect(cached.items).toEqual(first.items);
+    expect(cached.hasMore).toBe(true);
+
+    clearGlobalSearchCache();
+    await fetchGlobalSearchSuggestions('备案');
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(2);
+  });
+
+  it('服务端失败时抛错，不把网络故障伪装成没有结果', async () => {
+    mocks.apiBasePost.mockResolvedValue({ status: 500, msg: '统一搜索暂时不可用', requestId: 'req-1' });
+    await expect(fetchGlobalSearchSuggestions('备案')).rejects.toThrow('统一搜索暂时不可用');
   });
 });

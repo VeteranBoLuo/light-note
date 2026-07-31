@@ -1,4 +1,10 @@
-export type MobileShellSection = 'resources' | 'todo' | 'ai' | 'search' | 'profile';
+/**
+ * 底部一级模块。
+ *
+ * 「搜索」不再占底部位置——它已升级为覆盖全部模块的顶栏全局搜索；
+ * 腾出的位置给「今日」，也就是每天打开轻笺的第一站。
+ */
+export type MobileShellSection = 'today' | 'resources' | 'todo' | 'ai' | 'profile';
 export type MobileResourcePath = '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
 export type MobileResourceInboxTab = 'all' | 'bookmark' | 'note' | 'file';
 
@@ -12,12 +18,12 @@ export interface MobileResourceNavigationItem {
 export interface MobileBottomNavigationItem {
   key: MobileShellSection;
   labelKey:
+    | 'mobileNavigation.today'
     | 'mobileNavigation.resources'
     | 'mobileNavigation.todo'
     | 'mobileNavigation.ai'
-    | 'mobileNavigation.search'
     | 'mobileNavigation.profile';
-  path?: '/inbox' | '/ai' | '/search' | '/personCenter';
+  path?: '/workbenches' | '/inbox' | '/ai' | '/personCenter';
 }
 
 export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[] = [
@@ -47,13 +53,17 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
   },
 ] as const;
 
+// AI 保持中间强调位；今日在首位，因为它是每天进入轻笺后处理事情的第一站
 export const MOBILE_BOTTOM_NAVIGATION: readonly MobileBottomNavigationItem[] = [
+  { key: 'today', labelKey: 'mobileNavigation.today', path: '/workbenches' },
   { key: 'resources', labelKey: 'mobileNavigation.resources' },
-  { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
   { key: 'ai', labelKey: 'mobileNavigation.ai', path: '/ai' },
-  { key: 'search', labelKey: 'mobileNavigation.search', path: '/search' },
+  { key: 'todo', labelKey: 'mobileNavigation.todo', path: '/inbox' },
   { key: 'profile', labelKey: 'mobileNavigation.profile', path: '/personCenter' },
 ] as const;
+
+/** 今日路径：底部一级入口与顶栏 Logo 共用 */
+export const MOBILE_TODAY_PATH = '/workbenches' as const;
 
 export const MOBILE_RESOURCE_INBOX_TABS: readonly MobileResourceInboxTab[] = ['all', 'bookmark', 'note', 'file'];
 

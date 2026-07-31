@@ -47,6 +47,8 @@ export function getLastMobileResourcePath(fallback: string): MobileResourcePath 
 }
 
 export function getMobileResourceEntryPath(preferences?: UserPreferences | null): MobileResourcePath {
+  // 首页偏好可能是「今日」，那是底部另一个一级入口而不是资料页签；
+  // getLastMobileResourcePath 会把这类非资料路径兜底成书签。
   return getLastMobileResourcePath(getMobileHomePath(preferences));
 }
 

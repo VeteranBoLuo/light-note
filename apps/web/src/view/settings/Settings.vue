@@ -131,6 +131,7 @@
           </div>
 
           <div class="fields">
+            <!-- 只对桌面端有意义：移动端 Logo 固定回「今日」，不读这项偏好 -->
             <div v-if="!bookmark.isMobile && !isGuestUser()" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.defaultHome') }}</span>
@@ -583,7 +584,7 @@
                 @change="set('aiEnabled', $event)"
               />
             </div>
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.defaultFullscreen') }}</span>
                 <span class="field-desc">{{ t('settings.ai.defaultFullscreenDescription') }}</span>
@@ -605,7 +606,7 @@
                 @change="set('aiCloudHistory', $event)"
               />
             </div>
-            <div class="field">
+            <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.ai.rememberDrawerWidth') }}</span>
                 <span class="field-desc">{{ t('settings.ai.rememberDrawerWidthDescription') }}</span>
@@ -753,7 +754,7 @@
     postAndroidOpenLegalDocument,
     type AndroidLegalDocument,
   } from '@/utils/androidBridge.ts';
-  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -822,7 +823,10 @@
     pageRef.value?.removeEventListener('scroll', onPageScroll);
   });
   const user = useUserStore();
-  const selectedHomePage = computed(() => getHomePagePreference(user.preferences));
+  // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
+  const selectedHomePage = computed(() =>
+    bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),
+  );
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
   const pwaStateLabel = computed(() =>
     installState.value === 'installed'
@@ -985,13 +989,18 @@
     { v: 'medium', label: t('settings.uiScaleMedium') },
     { v: 'large', label: t('settings.uiScaleLarge') },
   ]);
-  const homeOpts = computed(() => [
-    { v: 'workbench', label: t('settings.home.workbench') },
-    { v: 'resourceCenter', label: t('settings.home.resourceCenter') },
-    { v: 'bookmark', label: t('settings.home.bookmark') },
-    { v: 'noteLibrary', label: t('settings.home.noteLibrary') },
-    { v: 'cloudSpace', label: t('settings.home.cloudSpace') },
-  ]);
+  // 同一个偏好值 workbench：桌面端是「工作台」，移动端是「今日」
+  const homeOpts = computed(() => {
+    const options = [
+      { v: 'workbench', label: bookmark.isMobile ? t('settings.home.today') : t('settings.home.workbench') },
+      { v: 'resourceCenter', label: t('settings.home.resourceCenter') },
+      { v: 'bookmark', label: t('settings.home.bookmark') },
+      { v: 'noteLibrary', label: t('settings.home.noteLibrary') },
+      { v: 'cloudSpace', label: t('settings.home.cloudSpace') },
+    ];
+    // 资源中心在移动端是二级页面，不能作为默认首页
+    return bookmark.isMobile ? options.filter((option) => option.v !== 'resourceCenter') : options;
+  });
   const bookmarkOpenOpts = computed(() => [
     { v: 'newTab', label: t('settings.bookmarkOpenNew') },
     { v: 'current', label: t('settings.bookmarkOpenCurrent') },

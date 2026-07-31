@@ -8,8 +8,14 @@
  */
 import { ref } from 'vue';
 import { fetchGlobalSearch, type SearchResultItem } from '@/api/search';
+import { isResourceSearchType, type ResourceSearchType } from '@/utils/globalSearchTypes';
 
-export type ResourcePickerType = 'bookmark' | 'note' | 'file' | 'tag';
+/**
+ * 选择器只接受资料对象。
+ * 待办属于 GlobalSearchType 而不是 ResourceSearchType，因此它能被全局搜索找到，
+ * 但在类型层面就进不了 @提及、AI 上下文和待办参考资料的候选集。
+ */
+export type ResourcePickerType = ResourceSearchType;
 
 export interface ResourcePickerItem {
   type: ResourcePickerType;
@@ -97,7 +103,11 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
       if (currentRequest !== requestId) return;
       const seen = new Set<string>();
       results.value = (data?.items || [])
-        .filter((item: SearchResultItem) => allowedTypes.includes(item.type as ResourcePickerType))
+        // 双重过滤：先排除非资料类型（待办），再按调用方允许的类型收敛
+        .filter(
+          (item: SearchResultItem) =>
+            isResourceSearchType(item.type) && allowedTypes.includes(item.type as ResourcePickerType),
+        )
         .map((item: SearchResultItem) => ({
           type: item.type as ResourcePickerType,
           id: String(item.id || ''),

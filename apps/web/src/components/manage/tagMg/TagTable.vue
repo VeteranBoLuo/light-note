@@ -654,8 +654,12 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobile) router.push('/personCenter');
-    else router.back();
+    // 同 backRouterPage：管理页从各自的资料页进入，不能固定跳个人中心
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    void router.push('/manage/tagMg');
   }
 
   watch([keyword, activeFilter, sortMode, viewMode], resetResultScroll);

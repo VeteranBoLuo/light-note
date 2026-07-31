@@ -1,16 +1,24 @@
 import { apiBasePost } from '@/http/request.ts';
 import i18n from '@/i18n';
+import {
+  GLOBAL_SEARCH_TYPES,
+  RESOURCE_SEARCH_TYPES,
+  type GlobalSearchType,
+  type ResourceSearchType,
+} from '@/utils/globalSearchTypes';
 
-export type SearchType = 'bookmark' | 'note' | 'file' | 'tag';
+/** 历史别名：资料四类。待办请显式使用 GlobalSearchType。 */
+export type SearchType = ResourceSearchType;
+export type { GlobalSearchType };
 
 export interface SearchCursor {
-  type: SearchType | 'all';
+  type: GlobalSearchType | 'all';
   offset: number;
 }
 
 export interface SearchResultItem {
   id: string;
-  type: SearchType;
+  type: GlobalSearchType;
   title: string;
   description: string;
   extra?: string;
@@ -21,11 +29,17 @@ export interface SearchResultItem {
   tags?: Array<{ id: string; name: string }>;
   matchReason?: 'title_exact' | 'title_prefix' | 'title' | 'tag' | 'url' | 'description' | 'content' | string;
   snippet?: string;
+  /** 以下字段仅待办结果返回 */
+  status?: 'pending' | 'completed';
+  priority?: 0 | 1 | 2;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  referenceCount?: number;
   raw?: any;
 }
 
 export interface SearchGroup {
-  type: SearchType;
+  type: GlobalSearchType;
   label: string;
   items: SearchResultItem[];
 }
@@ -35,19 +49,19 @@ export interface GlobalSearchResponse {
   items: SearchResultItem[];
   groups: SearchGroup[];
   total: number;
-  typeTotals?: Partial<Record<SearchType, number>>;
+  typeTotals?: Partial<Record<GlobalSearchType, number>>;
   tagOptions?: string[];
   page?: number;
   pageSize?: number;
   hasMore?: boolean;
-  hasMoreByType?: Partial<Record<SearchType, boolean>>;
+  hasMoreByType?: Partial<Record<GlobalSearchType, boolean>>;
   nextCursor?: SearchCursor | null;
 }
 
 export interface GlobalSearchQuery {
   page?: number;
-  type?: SearchType | 'all';
-  types?: SearchType[];
+  type?: GlobalSearchType | 'all';
+  types?: GlobalSearchType[];
   sort?: 'relevance' | 'updated' | 'name';
   date?: 'all' | '7d' | '30d' | '365d';
   tags?: string[];
@@ -55,11 +69,16 @@ export interface GlobalSearchQuery {
   paginationMode?: 'perType' | 'ordered';
   cursor?: SearchCursor | null;
   includeMetadata?: boolean;
+  /** 以下待办条件只有在 types 显式包含 todo 时才生效 */
+  todoStatus?: 'all' | 'pending' | 'completed';
+  todoPriority?: Array<0 | 1 | 2>;
+  todoDue?: 'all' | 'overdue' | 'today' | '7d' | 'none';
 }
 
 export interface BatchResourceItem {
   id: string;
-  type: SearchType;
+  /** 批量操作只接受资料对象，待办不参与资源批量语义 */
+  type: ResourceSearchType;
 }
 
 const emptySearchResult: GlobalSearchResponse = {
@@ -72,6 +91,7 @@ const emptySearchResult: GlobalSearchResponse = {
     note: 0,
     file: 0,
     tag: 0,
+    todo: 0,
   },
   tagOptions: [],
   page: 1,
@@ -82,21 +102,21 @@ const emptySearchResult: GlobalSearchResponse = {
     note: false,
     file: false,
     tag: false,
+    todo: false,
   },
   nextCursor: null,
 };
 
 const cache = new Map<string, GlobalSearchResponse>();
-const SEARCH_TYPES: SearchType[] = ['bookmark', 'note', 'file', 'tag'];
 
 function normalizeSearchCursor(value: unknown): SearchCursor | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const raw = value as Partial<SearchCursor>;
-  if (raw.type !== 'all' && !SEARCH_TYPES.includes(raw.type as SearchType)) return null;
+  if (raw.type !== 'all' && !GLOBAL_SEARCH_TYPES.includes(raw.type as GlobalSearchType)) return null;
   const offset = Number(raw.offset);
   if (!Number.isFinite(offset) || offset < 0) return null;
   return {
-    type: raw.type as SearchType | 'all',
+    type: raw.type as GlobalSearchType | 'all',
     offset: Math.floor(offset),
   };
 }
@@ -112,8 +132,9 @@ export async function fetchGlobalSearch(
   const paginationMode = query.paginationMode === 'ordered' ? 'ordered' : 'perType';
   const normalizedCursor = normalizeSearchCursor(query.cursor);
   const normalizedTypes = [...new Set(query.types || [])]
-    .filter((type) => SEARCH_TYPES.includes(type))
+    .filter((type) => GLOBAL_SEARCH_TYPES.includes(type))
     .sort();
+  const includesTodo = normalizedTypes.includes('todo');
   const normalizedQuery = {
     type: query.type || 'all',
     ...(normalizedTypes.length ? { types: normalizedTypes } : {}),
@@ -124,6 +145,14 @@ export async function fetchGlobalSearch(
       .filter(Boolean)
       .sort(),
     untagged: query.untagged === true,
+    // 待办条件只在显式搜索待办时下发，避免污染既有资源调用方的缓存键
+    ...(includesTodo
+      ? {
+          todoStatus: query.todoStatus || 'all',
+          todoPriority: [...(query.todoPriority || [])].sort(),
+          todoDue: query.todoDue || 'all',
+        }
+      : {}),
     ...(paginationMode === 'ordered'
       ? {
           paginationMode: 'ordered' as const,
@@ -194,8 +223,76 @@ export async function fetchGlobalSearch(
   return data;
 }
 
+export interface GlobalSearchSuggestResponse {
+  keyword: string;
+  items: SearchResultItem[];
+  hasMore: boolean;
+}
+
+interface SuggestCacheEntry {
+  at: number;
+  data: GlobalSearchSuggestResponse;
+}
+
+// 快捷搜索按“账号 + 语言 + 关键词 + 类型”短缓存；资源写操作会调用 clearGlobalSearchCache 一并失效
+const SUGGEST_CACHE_TTL = 30_000;
+const suggestCache = new Map<string, SuggestCacheEntry>();
+
+/**
+ * 快捷全局搜索：结果已在服务端做过相关度排序与类型均衡（最多 8 条、单类型最多 3 条）。
+ * 不返回 typeTotals / tagOptions / 分页，保证每次输入的请求足够轻。
+ */
+export async function fetchGlobalSearchSuggestions(
+  keyword: string,
+  options: { types?: GlobalSearchType[]; sourceType?: GlobalSearchType | ''; signal?: AbortSignal } = {},
+): Promise<GlobalSearchSuggestResponse> {
+  const normalizedKeyword = keyword.trim();
+  if (!normalizedKeyword) return { keyword: '', items: [], hasMore: false };
+
+  const locale = i18n.global.locale.value;
+  const types = [...new Set(options.types || GLOBAL_SEARCH_TYPES)]
+    .filter((type) => GLOBAL_SEARCH_TYPES.includes(type))
+    .sort();
+  // 来源页只是弱排序信号，但会改变结果顺序，因此必须进缓存键
+  const sourceType = GLOBAL_SEARCH_TYPES.includes(options.sourceType as GlobalSearchType)
+    ? (options.sourceType as GlobalSearchType)
+    : '';
+  const cacheKey = `${locale}::${normalizedKeyword}::${types.join(',')}::${sourceType}`;
+  const cached = suggestCache.get(cacheKey);
+  if (cached && Date.now() - cached.at < SUGGEST_CACHE_TTL) return cached.data;
+
+  const res = await apiBasePost(
+    '/api/search/global',
+    {
+      keyword: normalizedKeyword,
+      types,
+      mode: 'suggest',
+      includeMetadata: false,
+      ...(sourceType ? { sourceType } : {}),
+    },
+    { signal: options.signal, silent: true },
+  );
+
+  if (res.status !== 200) {
+    const error = new Error(String(res.msg || i18n.global.t('common.requestFailedDescription'))) as Error & {
+      requestId?: string;
+    };
+    error.requestId = String(res.requestId || '');
+    throw error;
+  }
+
+  const data: GlobalSearchSuggestResponse = {
+    keyword: String(res.data?.keyword || normalizedKeyword),
+    items: Array.isArray(res.data?.items) ? res.data.items : [],
+    hasMore: Boolean(res.data?.hasMore),
+  };
+  suggestCache.set(cacheKey, { at: Date.now(), data });
+  return data;
+}
+
 export function clearGlobalSearchCache() {
   cache.clear();
+  suggestCache.clear();
 }
 
 export function batchDeleteSearchResources(items: BatchResourceItem[]) {

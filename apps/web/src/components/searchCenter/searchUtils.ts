@@ -1,4 +1,5 @@
-import type { SearchResultItem, SearchType } from '@/api/search.ts';
+import type { SearchResultItem } from '@/api/search.ts';
+import type { GlobalSearchType } from '@/utils/globalSearchTypes';
 
 export type ResourceSort = 'relevance' | 'updated' | 'name';
 export type ResourceView = 'card' | 'list';
@@ -188,14 +189,16 @@ export function collectTagOptions(items: DisplaySearchItem[]): string[] {
 }
 
 export function buildTypeBuckets(items: DisplaySearchItem[]) {
-  const buckets: Record<SearchType, DisplaySearchItem[]> = {
+  const buckets: Record<GlobalSearchType, DisplaySearchItem[]> = {
     bookmark: [],
     note: [],
     file: [],
     tag: [],
+    todo: [],
   };
   items.forEach((item) => {
-    buckets[item.type].push(item);
+    // 服务端协议变化时不能因为多出一个未知类型就整页崩掉
+    buckets[item.type]?.push(item);
   });
   return buckets;
 }

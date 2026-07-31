@@ -4,10 +4,15 @@ export type ThemePreference = 'day' | 'night' | 'system';
 export type LanguagePreference = 'zh-CN' | 'en-US';
 export type HomePagePreference = 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace';
 export type ApplicationHomePreference = Exclude<HomePagePreference, 'landing'>;
-export type MobileHomePreference = Extract<HomePagePreference, 'bookmark' | 'noteLibrary' | 'cloudSpace'>;
+// 移动端「今日」已是底部一级入口，因此 workbench 也可以作为移动默认首页；
+// resourceCenter 仍不可以——它在移动端是二级页面。
+export type MobileHomePreference = Extract<
+  HomePagePreference,
+  'workbench' | 'bookmark' | 'noteLibrary' | 'cloudSpace'
+>;
 // '/manage/tagMg' 不作为可选默认首页,仅作为移动端「回到最近资料页签」的合法落点。
 export type AppHomePath = '/workbenches' | '/search' | '/home' | '/noteLibrary' | '/cloudSpace' | '/manage/tagMg';
-export type MobileHomePath = Extract<AppHomePath, '/home' | '/noteLibrary' | '/cloudSpace'>;
+export type MobileHomePath = Extract<AppHomePath, '/workbenches' | '/home' | '/noteLibrary' | '/cloudSpace'>;
 
 export interface UserPreferences {
   theme?: ThemePreference | string;
@@ -29,7 +34,8 @@ export interface UserPreferences {
 }
 
 export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'bookmark';
-export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'bookmark';
+// 移动端默认进入「今日」——它是每天打开轻笺后处理事情的第一站
+export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'workbench';
 
 /**
  * `landing` 只作为历史账号可能返回的旧值保留，不再属于应用默认首页。
@@ -66,9 +72,19 @@ export function getDesktopHomePath(preferences?: UserPreferences | null): AppHom
   return '/workbenches';
 }
 
+/**
+ * 直接读原始偏好，不经过 `getHomePagePreference` 的桌面兜底——
+ * 后者会把「没设置过」归一成书签，导致移动端默认值永远用不上。
+ * 未设置、历史 `landing` 和移动端不支持的 `resourceCenter` 都落到今日。
+ */
 export function getMobileHomePreference(preferences?: UserPreferences | null): MobileHomePreference {
-  const homePage = getHomePagePreference(preferences);
-  if (homePage === 'bookmark' || homePage === 'noteLibrary' || homePage === 'cloudSpace') {
+  const homePage = preferences?.homePage;
+  if (
+    homePage === 'workbench' ||
+    homePage === 'bookmark' ||
+    homePage === 'noteLibrary' ||
+    homePage === 'cloudSpace'
+  ) {
     return homePage;
   }
   return DEFAULT_MOBILE_HOME_PAGE;
@@ -76,6 +92,9 @@ export function getMobileHomePreference(preferences?: UserPreferences | null): M
 
 export function getMobileHomePath(preferences?: UserPreferences | null): MobileHomePath {
   const homePage = getMobileHomePreference(preferences);
+  if (homePage === 'workbench') {
+    return '/workbenches';
+  }
   if (homePage === 'noteLibrary') {
     return '/noteLibrary';
   }
@@ -88,6 +107,9 @@ export function getMobileHomePath(preferences?: UserPreferences | null): MobileH
 export function isMobileHomeRoute(routeName: unknown, preferences?: UserPreferences | null): boolean {
   const name = String(routeName || '');
   const homePage = getMobileHomePreference(preferences);
+  if (homePage === 'workbench') {
+    return name === 'workbenches';
+  }
   if (homePage === 'bookmark') {
     return name === 'home' || name.startsWith('home:');
   }

@@ -117,24 +117,10 @@
           ></div>
         </div>
         <div class="person-menu">
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/workbenches')"
-            v-click-log="{ module: '个人中心', operation: '打开工作台' }"
-          >
-            <span class="person-menu-item-title">{{ $t('workbench.title') }}</span>
-            <span class="person-menu-item-des">
-              {{ inbox.actionTotal || '' }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
-          </div>
-          <div v-if="canUseQuickCapture" class="person-menu-item" @click="openQuickCapture">
-            <span class="person-menu-item-title">{{ $t('inbox.quickCapture') }}</span>
-            <span class="person-menu-item-des">
-              {{ inbox.actionTotal || '' }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
-          </div>
+          <!-- 「工作台」入口已随移动端「今日」上线移除:底部一级入口就是同一个页面,
+               不能长期并存两个入口。快速添加同样重复(今日页快速记录 + 顶栏加号),
+               书签管理在书签页顶部已有按钮。资源中心保留:底部搜索位让给今日后,
+               它是「浏览全部资源 / 待整理」除搜索层「查看全部」外的唯一入口。 -->
           <div
             class="person-menu-item"
             @click="goToProfileModule('/search')"
@@ -144,16 +130,6 @@
             <span class="person-menu-item-des"
               >{{ $t('personCenter.resourceCenterDesc')
               }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
-          <!-- 标签已是资料区一等页签,此处不再重复入口 -->
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/manage/bookmarkMg')"
-            v-click-log="{ module: '个人中心', operation: `书签管理` }"
-          >
-            <span class="person-menu-item-title">{{ $t('bookmarkMg.title') }}</span>
-            <span class="person-menu-item-des"
-              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
           ></div>
           <div
             class="person-menu-item"
@@ -210,16 +186,14 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
-  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
   import userApi from '@/api/userApi.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { useI18n } from 'vue-i18n';
-  import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
-  import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { frameVariant } from '@/config/growthFrames';
@@ -231,7 +205,6 @@
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
-  const inbox = inboxStore();
   const menuVisible = ref(false);
   const userVisible = ref(false);
 
@@ -241,7 +214,6 @@
     const id = growthInfo.value?.equippedFrame;
     return frameVariant(id) ? id : null;
   });
-  const canUseQuickCapture = computed(() => Boolean(user.id) && user.role !== 'visitor');
   const isAndroidApp = isLightNoteAndroidApp();
   const { canPrompt, isStandalone, openGuide } = usePwaInstall();
   const pwaEntryDescription = computed(() =>
@@ -252,8 +224,7 @@
         : t('pwa.addToHomeScreen'),
   );
   useMobileTopBar(['personCenter'], {
-    showSearch: false,
-    showMoreMenu: false,
+    searchMode: 'icon',
   });
   onMounted(() => {
     loadGrowth();
@@ -269,12 +240,6 @@
 
   function handlePwaEntry() {
     openGuide('person-center');
-  }
-
-  function openQuickCapture() {
-    if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
-    recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
-    inbox.openQuickCapture();
   }
 
   function handleExitLogin() {

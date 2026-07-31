@@ -32,6 +32,7 @@
         <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
       </template>
       <template v-else>
+        <!-- 移动端不放第二个文本搜索框：找笔记统一走顶栏全局搜索，这里只保留标签筛选 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
           <TagFilterSelector :all-tags="visibleNoteTags" />
           <BButton
@@ -667,13 +668,7 @@
   }
 
   useMobileTopBar(['noteLibrary'], {
-    getSearchValue: () => searchValue.value,
-    setSearchValue: (value) => {
-      if (hasCheck.value) exitBatch();
-      searchValue.value = value;
-    },
-    onSearchEnter: applyNoteSearchImmediately,
-    searchPlaceholder: () => t('note.searchNote'),
+    searchSourceType: 'note',
     onAdd: showNewNotePicker,
     addLabel: () => t('note.newNote'),
   });

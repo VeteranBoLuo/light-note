@@ -47,16 +47,17 @@
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
 
   const bottomIcons = {
+    today: icon.common.calendar,
     resources: icon.navigation.portal,
     todo: icon.noteDetail.toolbar.todo,
     ai: icon.ai.ask,
-    search: icon.navigation.search,
     profile: icon.navigation.user,
   } as const;
 
   function isItemActive(key: MobileShellSection) {
     if (route.name === 'inbox') {
-      return key === (isMobileResourceInboxTab(route.query.tab) ? 'search' : 'todo');
+      // 待整理是资料处理而不是待办：/inbox?tab=all|bookmark|note|file 归「资料」
+      return key === (isMobileResourceInboxTab(route.query.tab) ? 'resources' : 'todo');
     }
     return route.meta.mobileShell === key;
   }

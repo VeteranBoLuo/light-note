@@ -29,6 +29,7 @@
         </div>
       </BCard>
 
+      <!-- 移动端不放第二个文本搜索框：找标签统一走顶栏全局搜索，这里只保留结构化筛选 -->
       <div ref="filterRowRef" class="mobile-filter-row no-scrollbar" :aria-label="t('tagManage.filtersTitle')">
         <BButton
           v-for="filter in filters"
@@ -131,11 +132,7 @@
 
   // 顶栏搜索/新建接管原页内搜索框与页头按钮,与书签/笔记/云空间页签保持一致的操作位。
   useMobileTopBar(['tagMg'], {
-    getSearchValue: () => keyword.value,
-    setSearchValue: (value) => {
-      keyword.value = value;
-    },
-    searchPlaceholder: () => t('tagManage.searchPlaceholder'),
+    searchSourceType: 'tag',
     onAdd: () => router.push('/manage/editTag/add'),
     addLabel: () => t('tagManage.createTag'),
   });

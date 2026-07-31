@@ -476,18 +476,29 @@
   }
 
   @media (max-width: 767px) {
+    /* 内容与操作保持同一行：换行会让每张卡片凭空高出一整行、右侧留下大片空白，
+       也让左侧的图标和标题看起来贴在卡片上部。按钮改用紧凑尺寸腾出标题宽度。 */
     .today-action-row {
-      flex-wrap: wrap;
-      padding: 10px 12px;
+      min-height: 56px;
+      padding: 9px 12px;
+      gap: 8px;
     }
 
-    .today-action-row__main {
-      flex: 1 1 calc(100% - 80px);
+    .today-action-row__meta {
+      gap: 6px;
+      overflow: hidden;
+      white-space: nowrap;
     }
 
     .today-action-row__actions {
-      width: 100%;
-      justify-content: flex-end;
+      gap: 6px;
+    }
+
+    .today-action-row__actions :deep(.b_btn) {
+      height: 30px;
+      min-height: 30px;
+      padding: 0 9px;
+      font-size: 12px;
     }
   }
 </style>

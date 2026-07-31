@@ -1,5 +1,28 @@
 <template>
   <div class="search-center-route">
+    <!-- 完整搜索页接管顶栏：共享顶栏的全局搜索按钮在这里会变成第二个搜索入口，
+         所以本页用自己的「返回 + 唯一输入框 + 取消」，输入框直接驱动结果。 -->
+    <header v-if="bookmark.isMobile" class="search-own-topbar">
+      <BButton class="search-own-topbar__back" :aria-label="t('common.back')" @click="leaveSearchPage">
+        <SvgIcon :src="icon.noteDetail.back" size="19" aria-hidden="true" />
+      </BButton>
+      <BInput
+        id="mobile-search-page-input"
+        class="search-own-topbar__input"
+        :value="queryState.keyword"
+        :placeholder="t('globalSearch.placeholder')"
+        height="38px"
+        clearable
+        @update:value="onMobileSearchKeyword"
+        @enter="submitSearch"
+      >
+        <template #prefix>
+          <SvgIcon :src="icon.navigation.search" size="15" aria-hidden="true" />
+        </template>
+      </BInput>
+      <BButton class="search-own-topbar__cancel" @click="leaveSearchPage">{{ t('globalSearch.cancel') }}</BButton>
+    </header>
+
     <ResourcePageShell
       class="search-center-shell"
       :title="t('resourceCenter.title')"
@@ -68,29 +91,8 @@
         </BCard>
 
         <section class="search-layout">
-          <BCard
-            v-if="bookmark.isMobile"
-            ref="typeFilterRef"
-            as="aside"
-            variant="card"
-            padding="12px"
-            class="type-filter"
-          >
-            <BButton
-              v-for="item in typeFilters"
-              :key="item.value"
-              class="filter-item"
-              :class="{ active: isTypeFilterActive(item.value) }"
-              :data-search-type="item.value"
-              @click="selectActiveType(item.value)"
-              v-click-log="{ module: '资源中心', operation: `筛选搜索类型【${item.label}】` }"
-            >
-              <span class="filter-dot" :class="`filter-dot--${item.value}`"></span>
-              <span>{{ item.label }}</span>
-              <span class="filter-count">{{ item.count }}</span>
-            </BButton>
-          </BCard>
-
+          <!-- 移动端不放一排类型 Tab：用户搜索时先看最佳匹配，而不是先决定类型。
+               类型收进底部筛选抽屉，这里只保留一行类型数量作为结果概览。 -->
           <BCard as="main" variant="card" padding="16px" class="result-panel">
             <div class="result-toolbar result-toolbar--summary">
               <div class="result-heading">
@@ -452,6 +454,24 @@
       @close="mobileFilterVisible = false"
     >
       <div class="mobile-filter-drawer">
+        <div class="mobile-filter-section">
+          <span class="mobile-filter-label">{{ t('resourceCenter.typeFilter') }}</span>
+          <div class="mobile-filter-types">
+            <BButton
+              v-for="type in SEARCH_CENTER_TYPE_LIST"
+              :key="type"
+              class="mobile-filter-type"
+              :class="{ active: isTypeSelected(type) }"
+              :aria-pressed="isTypeSelected(type)"
+              @click="toggleTypeFilter(type)"
+            >
+              <span class="filter-dot" :class="`filter-dot--${type}`" aria-hidden="true"></span>
+              <span>{{ getSearchTypeLabel(t, type) }}</span>
+              <span class="filter-count">{{ summaryTotals[type] || 0 }}</span>
+            </BButton>
+          </div>
+        </div>
+
         <div class="mobile-filter-field">
           <span class="mobile-filter-label">{{ t('resourceCenter.sort.label') }}</span>
           <BSelect
@@ -471,6 +491,41 @@
             @change="applyQueryState('筛选时间范围')"
           />
         </div>
+
+        <!-- 只在选中待办时出现：待办不属于标签体系，也不该在纯资源筛选里占位 -->
+        <template v-if="isTypeSelected('todo')">
+          <div class="mobile-filter-section">
+            <span class="mobile-filter-label">{{ t('resourceCenter.todoStatus') }}</span>
+            <div class="mobile-filter-types">
+              <BButton
+                v-for="option in todoStatusOptions"
+                :key="option.value"
+                class="mobile-filter-type"
+                :class="{ active: queryState.todoStatus === option.value }"
+                :aria-pressed="queryState.todoStatus === option.value"
+                @click="setTodoStatus(option.value)"
+              >
+                {{ option.label }}
+              </BButton>
+            </div>
+          </div>
+
+          <div class="mobile-filter-section">
+            <span class="mobile-filter-label">{{ t('inbox.todoPriority') }}</span>
+            <div class="mobile-filter-types">
+              <BButton
+                v-for="option in todoPriorityOptions"
+                :key="option.value"
+                class="mobile-filter-type"
+                :class="{ active: queryState.todoPriority.includes(option.value) }"
+                :aria-pressed="queryState.todoPriority.includes(option.value)"
+                @click="toggleTodoPriority(option.value)"
+              >
+                {{ option.label }}
+              </BButton>
+            </div>
+          </div>
+        </template>
 
         <div class="mobile-filter-section">
           <span class="mobile-filter-label">{{ t('resourceCenter.resourceState') }}</span>
@@ -551,15 +606,15 @@
     type ResourceSort,
     type ResourceView,
   } from '@/components/searchCenter/searchUtils.ts';
-  import { getSearchTypeLabel, SEARCH_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
+  import { getSearchTypeLabel, SEARCH_CENTER_TYPE_LIST } from '@/components/searchCenter/searchMeta.ts';
+  import { isResourceSearchType, type GlobalSearchType } from '@/utils/globalSearchTypes';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
-  import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { resolveMobileTypeFilterScrollLeft } from '@/components/searchCenter/mobileTypeFilterScroll';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
 
@@ -583,27 +638,30 @@
   const tagSearch = ref('');
   const showLoadingSkeleton = ref(false);
   let skeletonTimer: number | null = null;
-  const typeFilterRef = ref<{ $el?: Element } | null>(null);
   const resultScrollRef = ref<HTMLElement | null>(null);
   const resultLoadSentinel = ref<HTMLElement | null>(null);
   let resultLoadObserver: IntersectionObserver | null = null;
   let requestSeq = 0;
-  const summaryTotals = ref<Record<SearchType, number>>({
+  const summaryTotals = ref<Record<GlobalSearchType, number>>({
     bookmark: 0,
     note: 0,
     file: 0,
     tag: 0,
+    todo: 0,
   });
 
   const queryState = reactive<{
     keyword: string;
-    type: SearchType | 'all';
-    types: SearchType[];
+    type: GlobalSearchType | 'all';
+    types: GlobalSearchType[];
     sort: ResourceSort;
     view: ResourceView;
     tags: string[];
     date: ResourceDate;
     untagged: boolean;
+    // 待办专属条件，只在选中待办时下发
+    todoStatus: 'all' | 'pending' | 'completed';
+    todoPriority: Array<0 | 1 | 2>;
   }>({
     keyword: '',
     type: 'all',
@@ -616,6 +674,8 @@
     tags: [],
     date: 'all',
     untagged: false,
+    todoStatus: 'all',
+    todoPriority: [],
   });
 
   const viewState = reactive<{
@@ -680,7 +740,10 @@
   const allVisibleItems = computed(() =>
     interleavedItems.value.length ? interleavedItems.value : visibleGroups.value.flatMap((group) => group.items),
   );
-  const selectableVisibleItems = computed(() => allVisibleItems.value);
+  // 待办可被搜索到，但不参与资源批量加标签 / 加入待整理 / 批量删除
+  const selectableVisibleItems = computed(() =>
+    allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
+  );
   const allVisibleSelected = computed(
     () =>
       selectableVisibleItems.value.length > 0 &&
@@ -696,14 +759,17 @@
     const keyword = tagSearch.value.trim().toLocaleLowerCase();
     return keyword ? tagOptions.value.filter((tag) => tag.toLocaleLowerCase().includes(keyword)) : tagOptions.value;
   });
-  const selectedTypes = computed<SearchType[]>(() =>
-    queryState.types.length ? queryState.types : [...SEARCH_TYPE_LIST],
+  const selectedTypes = computed<GlobalSearchType[]>(() =>
+    queryState.types.length ? queryState.types : [...SEARCH_CENTER_TYPE_LIST],
   );
   const hasActiveAdvancedFilters = computed(
     () =>
       queryState.tags.length > 0 ||
       queryState.date !== 'all' ||
       queryState.untagged ||
+      queryState.types.length > 0 ||
+      queryState.todoStatus !== 'all' ||
+      queryState.todoPriority.length > 0 ||
       queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance'),
   );
   const mobileActiveFilterCount = computed(
@@ -711,6 +777,10 @@
       queryState.tags.length +
       Number(queryState.date !== 'all') +
       Number(queryState.untagged) +
+      // 类型 Tab 已收进抽屉，类型与待办条件都要计入「筛选 N」角标
+      Number(queryState.types.length > 0) +
+      Number(queryState.todoStatus !== 'all') +
+      Number(queryState.todoPriority.length > 0) +
       Number(queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance')),
   );
 
@@ -723,7 +793,7 @@
       label: t('resourceCenter.types.allResults'),
       count: Object.values(summaryTotals.value).reduce((sum, count) => sum + Number(count || 0), 0),
     },
-    ...SEARCH_TYPE_LIST.map((type) => ({
+    ...SEARCH_CENTER_TYPE_LIST.map((type) => ({
       value: type,
       label: getSearchTypeLabel(t, type),
       count: summaryTotals.value[type],
@@ -744,7 +814,15 @@
       count: filteredResultTotal.value,
     };
   });
-  const mobileResultSubtitle = computed(() => t('resourceCenter.totalCount', { count: filteredResultTotal.value }));
+  // 类型 Tab 移入抽屉后，这里承担「结果总数 + 各类型数量」的概览职责
+  const mobileResultSubtitle = computed(() => {
+    const total = t('resourceCenter.totalCount', { count: filteredResultTotal.value });
+    const breakdown = selectedTypes.value
+      .filter((type) => Number(summaryTotals.value[type] || 0) > 0)
+      .map((type) => `${getSearchTypeLabel(t, type)} ${summaryTotals.value[type]}`)
+      .join(' · ');
+    return breakdown ? `${total} · ${breakdown}` : total;
+  });
   function menuForSearchItem(item: DisplaySearchItem) {
     const deleteItem = {
       key: 'delete',
@@ -760,16 +838,64 @@
     ];
   }
 
-  function isTypeFilterActive(type: SearchType | 'all') {
+  function isTypeFilterActive(type: GlobalSearchType | 'all') {
     return type === 'all' ? queryState.types.length === 0 : queryState.types.includes(type);
   }
 
-  function parseTypes(value: unknown): SearchType[] {
+  // 抽屉里的类型是多选：空数组表示全选（与 URL 协议一致），
+  // 取消最后一个会让结果永远为空，因此忽略这次点击而不是清空。
+  function isTypeSelected(type: GlobalSearchType) {
+    return queryState.types.length === 0 || queryState.types.includes(type);
+  }
+
+  const todoStatusOptions = computed(
+    () =>
+      [
+        { value: 'all' as const, label: t('resourceCenter.todoStatusAll') },
+        { value: 'pending' as const, label: t('inbox.todoPending') },
+        { value: 'completed' as const, label: t('inbox.todoCompleted') },
+      ] as const,
+  );
+
+  const todoPriorityOptions = computed(
+    () =>
+      [
+        { value: 0 as const, label: t('inbox.todoPriority0') },
+        { value: 1 as const, label: t('inbox.todoPriority1') },
+        { value: 2 as const, label: t('inbox.todoPriority2') },
+      ] as const,
+  );
+
+  function setTodoStatus(status: 'all' | 'pending' | 'completed') {
+    if (queryState.todoStatus === status) return;
+    queryState.todoStatus = status;
+    applyQueryState('筛选待办状态');
+  }
+
+  function toggleTodoPriority(priority: 0 | 1 | 2) {
+    const selected = new Set(queryState.todoPriority);
+    if (selected.has(priority)) selected.delete(priority);
+    else selected.add(priority);
+    queryState.todoPriority = ([0, 1, 2] as const).filter((item) => selected.has(item));
+    applyQueryState('筛选待办优先级');
+  }
+
+  function toggleTypeFilter(type: GlobalSearchType) {
+    const selected = new Set(queryState.types.length ? queryState.types : SEARCH_CENTER_TYPE_LIST);
+    if (selected.has(type)) selected.delete(type);
+    else selected.add(type);
+    const next = SEARCH_CENTER_TYPE_LIST.filter((item) => selected.has(item));
+    if (!next.length) return;
+    queryState.types = next.length === SEARCH_CENTER_TYPE_LIST.length ? [] : next;
+    applyQueryState('筛选资源类型');
+  }
+
+  function parseTypes(value: unknown): GlobalSearchType[] {
     const raw = Array.isArray(value) ? String(value[0] || '') : String(value || '');
     const types = [...new Set(raw.split(',').map((item) => item.trim()))].filter((item) =>
-      SEARCH_TYPE_LIST.includes(item as SearchType),
-    ) as SearchType[];
-    return types.length === SEARCH_TYPE_LIST.length ? [] : SEARCH_TYPE_LIST.filter((type) => types.includes(type));
+      SEARCH_CENTER_TYPE_LIST.includes(item as GlobalSearchType),
+    ) as GlobalSearchType[];
+    return types.length === SEARCH_CENTER_TYPE_LIST.length ? [] : SEARCH_CENTER_TYPE_LIST.filter((type) => types.includes(type));
   }
 
   function parseSort(value: unknown): ResourceSort {
@@ -814,7 +940,7 @@
 
   function normalizeItemType(input: unknown): SearchType | null {
     const raw = String(input || '').trim();
-    if (SEARCH_TYPE_LIST.includes(raw as SearchType)) return raw as SearchType;
+    if (SEARCH_CENTER_TYPE_LIST.includes(raw as GlobalSearchType)) return raw as GlobalSearchType;
     return null;
   }
 
@@ -930,6 +1056,10 @@
         date: queryState.date,
         tags: queryState.tags,
         untagged: queryState.untagged,
+        // 待办条件只在选中待办时随请求下发，避免污染纯资源查询的缓存键
+        ...(selectedTypes.value.includes('todo')
+          ? { todoStatus: queryState.todoStatus, todoPriority: queryState.todoPriority }
+          : {}),
         paginationMode: 'ordered',
         cursor: append ? viewState.nextCursor : null,
         includeMetadata: !append,
@@ -948,6 +1078,7 @@
           note: Number(res.typeTotals.note || 0),
           file: Number(res.typeTotals.file || 0),
           tag: Number(res.typeTotals.tag || 0),
+          todo: Number(res.typeTotals.todo || 0),
         };
       }
       const validSelection = new Set(viewState.rawItems.map((item) => getItemSelectionKey(item)));
@@ -1023,7 +1154,7 @@
     syncQueryNow();
   }
 
-  function setActiveType(type: SearchType | 'all') {
+  function setActiveType(type: GlobalSearchType | 'all') {
     if (type === 'all') {
       queryState.types = [];
     } else if (!queryState.types.length) {
@@ -1032,39 +1163,15 @@
       const next = queryState.types.filter((item) => item !== type);
       queryState.types = next.length ? next : [];
     } else {
-      queryState.types = SEARCH_TYPE_LIST.filter((item) => [...queryState.types, type].includes(item));
-      if (queryState.types.length === SEARCH_TYPE_LIST.length) queryState.types = [];
+      queryState.types = SEARCH_CENTER_TYPE_LIST.filter((item) => [...queryState.types, type].includes(item));
+      if (queryState.types.length === SEARCH_CENTER_TYPE_LIST.length) queryState.types = [];
     }
     queryState.type = queryState.types.length === 1 ? queryState.types[0] : 'all';
     selectedIds.value = [];
     applyQueryState(`筛选搜索类型【${getSearchTypeLabel(t, type)}】`);
   }
 
-  function scrollMobileTypeFilter(type: SearchType | 'all') {
-    if (!bookmark.isMobile) return;
-    nextTick(() => {
-      const container = typeFilterRef.value?.$el;
-      if (!(container instanceof HTMLElement)) return;
-      const target = container.querySelector<HTMLElement>(`[data-search-type="${type}"]`);
-      const left = resolveMobileTypeFilterScrollLeft(type, {
-        maxScroll: Math.max(0, container.scrollWidth - container.clientWidth),
-        viewportWidth: container.clientWidth,
-        activeOffsetLeft: target?.offsetLeft || 0,
-        activeWidth: target?.offsetWidth || 0,
-      });
-      container.scrollTo({
-        left,
-        behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
-      });
-    });
-  }
-
-  function selectActiveType(type: SearchType | 'all') {
-    setActiveType(type);
-    scrollMobileTypeFilter(type);
-  }
-
-  function selectDesktopType(type: SearchType | 'all') {
+  function selectDesktopType(type: GlobalSearchType | 'all') {
     setActiveType(type);
     desktopTypeMenuOpen.value = false;
   }
@@ -1103,6 +1210,9 @@
     queryState.tags = [];
     queryState.date = 'all';
     queryState.untagged = false;
+    queryState.types = [];
+    queryState.todoStatus = 'all';
+    queryState.todoPriority = [];
     queryState.sort = (user.preferences.resourceSort as ResourceSort) || 'relevance';
     selectedIds.value = [];
     applyQueryState('清空筛选');
@@ -1355,24 +1465,29 @@
     });
   }
 
-  useMobileTopBar(['searchCenter'], {
-    getSearchValue: () => queryState.keyword,
-    setSearchValue: (value) => {
-      queryState.keyword = value;
-    },
-    onSearchInput: syncQueryDebounced,
-    onSearchEnter: submitSearch,
-    searchPlaceholder: () => t('resourceCenter.searchPlaceholder'),
-  });
+  function onMobileSearchKeyword(value: string | number | undefined) {
+    queryState.keyword = String(value ?? '');
+    syncQueryDebounced();
+  }
+
+  // 本页自带顶栏，通知共享顶栏整体让位，避免同屏出现两个搜索入口
+  useMobileTopBar(['searchCenter'], { ownTopBar: true });
+
+  // 完整搜索页是二级页面：返回发起搜索的来源页，没有历史时回落资料首页
+  function leaveSearchPage() {
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    void router.push('/home');
+  }
+
 
   // 打开资源中心自动聚焦搜索框(移动端不主动聚焦,避免一进页面就弹出软键盘)。
   onMounted(() => {
     void setupResultLoadObserver();
-    if (bookmark.isMobile) {
-      scrollMobileTypeFilter(queryState.type);
-    } else {
-      focusSearchInput();
-    }
+    // 移动端类型 Tab 已移入筛选抽屉，不再需要横向滚动定位；也不主动聚焦，避免一进页面就弹软键盘
+    if (!bookmark.isMobile) focusSearchInput();
   });
 
   onBeforeUnmount(() => {
@@ -1389,6 +1504,46 @@
     height: 100%;
     min-height: 0;
     box-sizing: border-box;
+  }
+
+  /* 完整搜索页专用顶栏：占位与共享 MobileTopBar 一致（56px），
+     其下的 ResourcePageShell 需要相应让出高度。 */
+  .search-own-topbar {
+    height: 56px;
+    padding: 0 8px 0 4px;
+    box-sizing: border-box;
+    flex: 0 0 56px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .search-own-topbar__back {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    padding: 0;
+    border-radius: 11px;
+    color: var(--text-color);
+    background: transparent !important;
+  }
+
+  .search-own-topbar__input {
+    min-width: 0;
+    flex: 1 1 auto;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .search-own-topbar__cancel {
+    flex: 0 0 auto;
+    height: 38px;
+    padding: 0 8px;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 13px;
   }
 
   .search-page {
@@ -1569,19 +1724,10 @@
     align-items: start;
   }
 
-  .type-filter,
   .result-panel {
     --b-card-border-color: var(--search-border-color);
 
     border-radius: 20px;
-  }
-
-  .type-filter {
-    --b-card-background: var(--search-card-bg);
-    --b-card-shadow: var(--surface-card-shadow);
-
-    position: sticky;
-    top: 0;
   }
 
   .filter-item {
@@ -1662,6 +1808,10 @@
 
   .filter-dot--tag {
     background: var(--resource-tag-color);
+  }
+
+  .filter-dot--todo {
+    background: var(--primary-color);
   }
 
   .result-panel {
@@ -2203,15 +2353,6 @@
       overflow: hidden;
     }
 
-    .type-filter {
-      position: static;
-      align-self: start;
-      max-height: 100%;
-      padding: 10px;
-      border-radius: 16px;
-      overflow: auto;
-    }
-
     .filter-item {
       height: auto;
       min-height: 38px;
@@ -2529,13 +2670,6 @@
       width: 100%;
     }
 
-    .type-filter {
-      position: static;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-    }
-
     .tag-filter-wrap {
       grid-template-columns: 1fr;
       gap: 6px;
@@ -2561,6 +2695,17 @@
 
     .search-page-topbar {
       margin-bottom: 8px;
+    }
+
+    /* 页面自带 56px 顶栏后，正文容器不能再按整屏高度撑开 */
+    .search-center-route {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .search-center-route .search-center-shell {
+      min-height: 0;
+      flex: 1 1 auto;
     }
 
     .section-switcher {
@@ -2819,34 +2964,6 @@
     overflow: hidden;
   }
 
-  .search-page--mobile .type-filter {
-    --b-card-background: transparent;
-    --b-card-shadow: none;
-
-    width: 100%;
-    flex: 0 0 auto;
-    position: static;
-    padding: 1px 0 4px !important;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-    touch-action: pan-x;
-    -webkit-overflow-scrolling: touch;
-    padding-inline: 10px 18px !important;
-    mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 24px), transparent);
-  }
-
-  .search-page--mobile .type-filter::-webkit-scrollbar {
-    display: none;
-  }
-
   .search-page--mobile .filter-item {
     width: auto;
     min-width: max-content;
@@ -2894,17 +3011,20 @@
     box-shadow: none;
   }
 
+  /* 类型 Tab 移入抽屉后，这一行要承载「总数 + 各类型数量」；
+     与工具按钮挤在同一行会把统计截断，因此让统计独占一行。 */
   .search-page--mobile .result-toolbar--summary {
     flex: 0 0 auto;
-    min-height: 40px;
     padding: 4px 0 7px;
     flex-direction: row;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
   .search-page--mobile .result-heading {
+    width: 100%;
     min-width: 0;
-    flex: 1 1 auto;
+    flex: 1 1 100%;
     display: flex;
     align-items: baseline;
     flex-direction: row;
@@ -3110,6 +3230,38 @@
     flex-wrap: wrap;
     gap: 8px;
     overflow-y: auto;
+  }
+
+  /* 类型筛选：两列多选，取代原来占一整行的类型 Tab */
+  .mobile-filter-types {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .mobile-filter-type {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 0 10px;
+    gap: 7px;
+    justify-content: flex-start;
+    border: 1px solid var(--search-border-color);
+    border-radius: 10px;
+    color: var(--text-color);
+    background: var(--card-background) !important;
+    font-size: 13px;
+  }
+
+  .mobile-filter-type.active {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background)) !important;
+  }
+
+  .mobile-filter-type .filter-count {
+    margin-left: auto;
+    color: var(--desc-color);
+    font-size: 11px;
   }
 
   .mobile-filter-footer {

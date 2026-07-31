@@ -398,6 +398,12 @@
     color: var(--resource-tag-color);
   }
 
+  /* 待办是行动对象，没有资源语义色，沿用品牌主色 */
+  .type-pill--todo {
+    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
+    color: var(--primary-color);
+  }
+
   .item-extra {
     flex: 1;
     min-width: 0;

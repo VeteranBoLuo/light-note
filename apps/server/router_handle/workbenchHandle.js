@@ -96,32 +96,42 @@ async function queryWeeklyStats(userId) {
 
 // 今日行动条目仅取有限数量,完整列表仍由 /inbox 页面承担;
 // 任一子查询失败都降级为空数组,不拖垮工作台其余统计。
-async function queryTodayActionItems(userId) {
+async function queryTodayActionItems(userId, limits = {}) {
+  const {
+    overdue: overdueLimit = 3,
+    dueToday: dueTodayLimit = 5,
+    inbox: inboxLimit = 5,
+    // 今日页的摘要要显示真实数量，不能把「最多取 3 条」当成「只有 3 条逾期」
+    includeTotal = false,
+  } = limits;
   const [overdue, dueToday, inbox] = await Promise.all([
     listTodoPage(pool, userId, {
       status: 'pending',
       due: 'overdue',
       sort: 'due',
-      limit: 3,
-      includeTotal: false,
+      limit: overdueLimit,
+      includeTotal,
     }).catch(() => null),
     listTodoPage(pool, userId, {
       status: 'pending',
       due: 'today',
       sort: 'due',
-      limit: 5,
-      includeTotal: false,
+      limit: dueTodayLimit,
+      includeTotal,
     }).catch(() => null),
-    listInboxResources(pool, { userId, limit: 5, view: 'summary', includeTotal: false }).catch(() => null),
+    listInboxResources(pool, { userId, limit: inboxLimit, view: 'summary', includeTotal: false }).catch(() => null),
   ]);
   return {
     overdueTodos: overdue?.items || [],
     dueTodayTodos: dueToday?.items || [],
     inboxItems: inbox?.items || [],
+    // includeTotal=false 时 listTodoPage 用返回条数兜底，此处只在显式请求时才当作权威总数
+    overdueTotal: includeTotal ? Number(overdue?.total || 0) : null,
+    dueTodayTotal: includeTotal ? Number(dueToday?.total || 0) : null,
   };
 }
 
-async function queryTodaySummary(userId) {
+async function queryTodaySummary(userId, actionLimits) {
   const [[rows], todoPendingTotal, actionItems] = await Promise.all([
     pool.query(
       `
@@ -134,7 +144,7 @@ async function queryTodaySummary(userId) {
       [userId, userId],
     ),
     queryTodoPendingCount(pool, userId),
-    queryTodayActionItems(userId),
+    queryTodayActionItems(userId, actionLimits),
   ]);
   const row = rows[0] || {};
   const inboxPendingTotal = Number(row.inboxPendingTotal || 0);
@@ -309,6 +319,98 @@ async function queryRecentFiles(userId) {
   );
   return rows.map(formatFileRecord);
 }
+
+/**
+ * 今日页「继续处理」：最近编辑的笔记与最近上传的文件，按活跃时间合并后取前几条。
+ *
+ * 不复用桌面工作台的近期列表——那两个查询各取 10 条并 JOIN 标签、生成文件签名地址，
+ * 而今日页只需要标题和一个可跳转的 ID。高频书签依赖 operation_logs 的 LIKE 聚合，
+ * 成本高且语义上属于「常用」而不是「上次做到哪」，第一版不纳入。
+ */
+async function queryTodayContinueItems(userId, limit = 2) {
+  const [noteRows, fileRows] = await Promise.all([
+    pool
+      .query(
+        `SELECT id, title, COALESCE(update_time, create_time) AS activeAt
+         FROM note
+         WHERE create_by = ? AND del_flag = 0
+         ORDER BY COALESCE(update_time, create_time) DESC
+         LIMIT ?`,
+        [userId, limit],
+      )
+      .catch(() => [[]]),
+    pool
+      .query(
+        `SELECT id, file_name AS fileName, create_time AS activeAt
+         FROM files
+         WHERE create_by = ? AND del_flag = 0
+         ORDER BY create_time DESC
+         LIMIT ?`,
+        [userId, limit],
+      )
+      .catch(() => [[]]),
+  ]);
+
+  const notes = (noteRows[0] || []).map((item) => ({
+    type: 'note',
+    id: String(item.id || ''),
+    title: String(item.title || ''),
+    activeAt: item.activeAt,
+    route: `/noteLibrary/${item.id}`,
+  }));
+  const files = (fileRows[0] || []).map((item) => ({
+    type: 'file',
+    id: String(item.id || ''),
+    title: String(item.fileName || ''),
+    activeAt: item.activeAt,
+    route: `/cloudSpace?fileId=${encodeURIComponent(String(item.id || ''))}`,
+  }));
+
+  return [...notes, ...files]
+    .filter((item) => item.id && item.title)
+    .sort((a, b) => new Date(b.activeAt || 0).getTime() - new Date(a.activeAt || 0).getTime())
+    .slice(0, limit);
+}
+
+/**
+ * 移动端「今日」轻量聚合。
+ *
+ * 移动端今日只回答「我今天先做什么、有哪些资料还没整理」，不展示资源总量、
+ * 增长趋势、文件类型分布、常用标签和最近更新，所以不能复用完整工作台接口——
+ * 那个接口会额外跑趋势、饼图、排行和最近列表共 8 组查询。
+ */
+export const getWorkbenchToday = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
+
+    const [today, continueItems] = await Promise.all([
+      queryTodaySummary(userId, { overdue: 3, dueToday: 4, inbox: 3, includeTotal: true }),
+      queryTodayContinueItems(userId, 2),
+    ]);
+
+    res.send(
+      resultData({
+        generatedAt: new Date().toISOString(),
+        counts: {
+          overdue: Number(today.overdueTotal || 0),
+          dueToday: Number(today.dueTodayTotal || 0),
+          todoPending: today.todoPendingTotal,
+          inbox: today.inboxPendingTotal,
+          unreadNotification: today.unreadNotificationTotal,
+          action: today.actionTotal,
+        },
+        overdueTodos: today.overdueTodos,
+        dueTodayTodos: today.dueTodayTodos,
+        inboxItems: today.inboxItems,
+        continueItems,
+      }),
+    );
+  } catch (error) {
+    console.error('获取今日聚合数据失败:', error);
+    res.send(resultData(null, 500, '获取今日数据失败'));
+  }
+};
 
 export const getWorkbenchSummary = async (req, res) => {
   try {

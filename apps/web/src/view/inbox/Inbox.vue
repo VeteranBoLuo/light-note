@@ -17,6 +17,8 @@
 
     <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
       <template v-if="isMobileTodoPrimary">
+        <!-- 移动端待办不放第二个文本搜索框：查找待办统一走顶栏全局搜索，
+             这里只保留状态、排序、视图等结构化筛选。 -->
         <BTabs
           v-if="todoView === 'list'"
           v-model:active-tab="todo.status"
@@ -319,7 +321,6 @@
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
   let resizeObserver: ResizeObserver | null = null;
-  let mobileInboxSearchTimer = 0;
 
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
@@ -484,20 +485,13 @@
     const requestedTodoId = String(route.query.todoId || '');
     if (isMobileTodoPrimary.value) todo.status = requestedTodoId ? 'all' : 'pending';
     await refreshList();
-    const requestedTodo = requestedTodoId ? todo.items.find((item) => item.id === requestedTodoId) : null;
-    if (requestedTodo) {
-      openTodoEditor(requestedTodo);
-      const query = { ...route.query };
-      delete query.todoId;
-      router.replace({ query });
-    }
+    await openRequestedTodo(requestedTodoId, { listReady: true });
     if (scrollContainer.value) {
       resizeObserver = new ResizeObserver(updateScrollFade);
       resizeObserver.observe(scrollContainer.value);
     }
   });
   onBeforeUnmount(() => {
-    window.clearTimeout(mobileInboxSearchTimer);
     resizeObserver?.disconnect();
     window.clearTimeout(todoUndoTimer);
   });
@@ -543,6 +537,28 @@
     });
   });
 
+  /**
+   * 定位并打开指定待办。
+   *
+   * 从全局搜索点待办结果时组件通常已经挂载，只有路由 query 变化，
+   * 因此不能只在 onMounted 里处理，否则地址变了却要刷新才弹出编辑框。
+   */
+  async function openRequestedTodo(todoId: string, options: { listReady?: boolean } = {}) {
+    if (!todoId) return;
+    let requestedTodo = todo.items.find((item) => item.id === todoId);
+    if (!requestedTodo && !options.listReady) {
+      // 目标可能是已完成待办，默认的「未完成」筛选会让它落在列表之外
+      if (isMobileTodoPrimary.value || inbox.filterType === 'todo') todo.status = 'all';
+      await refreshList();
+      requestedTodo = todo.items.find((item) => item.id === todoId);
+    }
+    if (!requestedTodo) return;
+    openTodoEditor(requestedTodo);
+    const query = { ...route.query };
+    delete query.todoId;
+    void router.replace({ query });
+  }
+
   watch(
     () => route.query.tab,
     async (tab, previousTab) => {
@@ -552,9 +568,18 @@
       inbox.filterType = nextFilter;
       inbox.keyword = '';
       todo.keyword = '';
-      if (nextFilter === 'todo') todo.status = 'pending';
+      // 带 todoId 进来时要能定位已完成待办，不能强制回到「未完成」
+      if (nextFilter === 'todo') todo.status = route.query.todoId ? 'all' : 'pending';
       else inbox.sort = 'newest';
       await refreshList(true);
+    },
+  );
+
+  // 声明在 tab watch 之后：先完成视图切换，再定位并打开目标待办
+  watch(
+    () => route.query.todoId,
+    (value) => {
+      void openRequestedTodo(String(value || ''));
     },
   );
 
@@ -574,18 +599,8 @@
     inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
   }
 
-  function setMobileInboxKeyword(value: string) {
-    inbox.keyword = value;
-    window.clearTimeout(mobileInboxSearchTimer);
-    mobileInboxSearchTimer = window.setTimeout(search, 220);
-  }
-
   useMobileTopBar(['inbox'], {
-    getSearchValue: () => inbox.keyword,
-    setSearchValue: setMobileInboxKeyword,
-    onSearchEnter: search,
-    searchPlaceholder: () =>
-      isMobileTodoPrimary.value ? t('inbox.todoSearchPlaceholder') : t('inbox.resourceSearchPlaceholder'),
+    searchSourceType: 'todo',
     onAdd: () => {
       if (isMobileTodoPrimary.value) openTodoEditor();
       else openCapture();
@@ -1373,7 +1388,13 @@
       align-items: flex-start;
       gap: 8px;
     }
+    /* 「全选当前 N 项」被右侧按钮挤压后会断成两行，这里不允许它压缩换行 */
+    .inbox-batch > :deep(.b-checkbox) {
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
     .inbox-batch__actions {
+      min-width: 0;
       flex-wrap: wrap;
       justify-content: flex-end;
     }

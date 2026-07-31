@@ -6,6 +6,7 @@
       <slot />
     </main>
     <MobileBottomNav v-if="showBottomNav && !keyboardOpen" />
+    <MobileGlobalSearchOverlay />
   </div>
   <slot v-else />
 </template>
@@ -16,6 +17,7 @@
   import MobileResourceTabs from '@/components/mobile/MobileResourceTabs.vue';
   import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
+  import MobileGlobalSearchOverlay from '@/components/globalSearch/MobileGlobalSearchOverlay.vue';
   import { getMobileResourcePath } from '@/config/mobileNavigation';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
 

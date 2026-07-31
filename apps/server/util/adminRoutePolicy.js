@@ -134,6 +134,8 @@ declare(ADMIN_POLICIES.READ, 'search', [
   ['POST', '/search/global'],
   ['POST', '/search/batchResourceTagWorkspace'],
   ['POST', '/workbench/summary'],
+  // 移动端「今日」轻量聚合，与工作台概览同属只读
+  ['POST', '/workbench/today'],
 ]);
 
 declare(ADMIN_POLICIES.READ, 'inbox', [

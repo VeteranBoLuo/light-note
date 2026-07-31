@@ -7,9 +7,17 @@ import { removeInboxRelations } from '../util/resourceInbox.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 
+// 资源类型与全局搜索类型必须分开:待办只能被搜索到,不进资源选择器、标签操作和待整理。
+// 未显式声明 types 的历史调用方(资源选择器、提及选择器、桌面下拉)继续只拿到资源四类。
 const SEARCH_TYPES = ['bookmark', 'note', 'file', 'tag'];
+const GLOBAL_SEARCH_TYPES = [...SEARCH_TYPES, 'todo'];
 const BATCH_EDITABLE_TYPES = ['bookmark', 'note', 'file'];
 const BATCH_DELETE_TYPES = ['bookmark', 'note', 'file', 'tag'];
+// 快捷搜索层:总量与单类型上限,避免一种类型占满最佳匹配
+const SUGGEST_TOTAL_LIMIT = 8;
+const SUGGEST_PER_TYPE_LIMIT = 3;
+const TODO_STATUSES = ['pending', 'completed'];
+const TODO_DUE_FILTERS = ['overdue', 'today', '7d', 'none'];
 // 单次批量操作保持为一笔短事务，既覆盖管理页常见的大批量操作，也避免超长 IN 查询拖慢数据库。
 const MAX_BATCH_DELETE_ITEMS = 1000;
 const RESOURCE_OWNER_SQL = {
@@ -24,12 +32,14 @@ const TYPE_LABELS = {
     note: '笔记',
     file: '文件',
     tag: '标签',
+    todo: '待办',
   },
   'en-US': {
     bookmark: 'Bookmarks',
     note: 'Notes',
     file: 'Files',
     tag: 'Tags',
+    todo: 'Todos',
   },
 };
 
@@ -44,6 +54,15 @@ const SEARCH_TEXTS = {
     cloudFile: '云空间文件',
     tagDescription: '查看该标签下关联的书签与内容',
     relatedBookmarks: '{count} 个关联内容',
+    unnamedTodo: '未命名待办',
+    todoPending: '未完成',
+    todoCompleted: '已完成',
+    todoOverdue: '已逾期',
+    todoNoDue: '无截止时间',
+    todoPriorityLow: '低优先级',
+    todoPriorityNormal: '中优先级',
+    todoPriorityHigh: '高优先级',
+    todoReferences: '参考资料 {count}',
   },
   'en-US': {
     unnamedBookmark: 'Untitled Bookmark',
@@ -55,6 +74,15 @@ const SEARCH_TEXTS = {
     cloudFile: 'Cloud file',
     tagDescription: 'View bookmarks and content associated with this tag',
     relatedBookmarks: '{count} related items',
+    unnamedTodo: 'Untitled Todo',
+    todoPending: 'Pending',
+    todoCompleted: 'Completed',
+    todoOverdue: 'Overdue',
+    todoNoDue: 'No due date',
+    todoPriorityLow: 'Low priority',
+    todoPriorityNormal: 'Normal priority',
+    todoPriorityHigh: 'High priority',
+    todoReferences: '{count} references',
   },
 };
 
@@ -135,15 +163,17 @@ function normalizeSearchOffset(value) {
   return Math.min(Math.floor(parsed), 10_000_000);
 }
 
-function normalizeSearchType(value) {
+function normalizeSearchType(value, allowedTypes = GLOBAL_SEARCH_TYPES) {
   const type = toText(value);
-  return SEARCH_TYPES.includes(type) ? type : 'all';
+  return allowedTypes.includes(type) ? type : 'all';
 }
 
+// 只有调用方显式声明 types 时才可能包含待办;缺省仍是资源四类,
+// 因此资源选择器、提及选择器和桌面搜索下拉不会因为本次改动突然多出待办。
 function normalizeSearchTypes(value, legacyType) {
   const values = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
-  const selected = [...new Set(values.map(normalizeSearchType).filter((type) => type !== 'all'))];
-  if (selected.length) return SEARCH_TYPES.filter((type) => selected.includes(type));
+  const selected = [...new Set(values.map((item) => normalizeSearchType(item)).filter((type) => type !== 'all'))];
+  if (selected.length) return GLOBAL_SEARCH_TYPES.filter((type) => selected.includes(type));
   const legacy = normalizeSearchType(legacyType);
   return legacy === 'all' ? [...SEARCH_TYPES] : [legacy];
 }
@@ -174,13 +204,16 @@ function searchItemRelevance(item, keyword) {
     .map((tag) => toText(tag?.name || tag))
     .join(' ')
     .toLowerCase();
-  if (title === query) return { score: 100, reason: 'title_exact' };
-  if (title.startsWith(query)) return { score: 80, reason: 'title_prefix' };
-  if (title.includes(query)) return { score: 60, reason: 'title' };
-  if (tags.includes(query)) return { score: 50, reason: 'tag' };
-  if (url.includes(query)) return { score: 40, reason: 'url' };
-  if (description.includes(query)) return { score: 30, reason: 'description' };
-  return { score: 10, reason: 'content' };
+  // 未完成待办只在同一匹配档位内轻微提前(档位间隔 10 以上),
+  // 不会让低相关度的未完成待办压过标题完全匹配的已完成待办。
+  const pending = item.type === 'todo' && toText(item.status) === 'pending' ? 2 : 0;
+  if (title === query) return { score: 100 + pending, reason: 'title_exact' };
+  if (title.startsWith(query)) return { score: 80 + pending, reason: 'title_prefix' };
+  if (title.includes(query)) return { score: 60 + pending, reason: 'title' };
+  if (tags.includes(query)) return { score: 50 + pending, reason: 'tag' };
+  if (url.includes(query)) return { score: 40 + pending, reason: 'url' };
+  if (description.includes(query)) return { score: 30 + pending, reason: 'description' };
+  return { score: 10 + pending, reason: 'content' };
 }
 
 async function queryRelevantSearchItems({ userId, options, lang, offset, pageSize, selectedTypes = SEARCH_TYPES }) {
@@ -280,7 +313,7 @@ function buildSearchOrder({ sort, keyword, titleColumn, updatedColumn, fallbackO
 
 function groupItems(items, lang) {
   const labels = TYPE_LABELS[normalizeLang(lang)];
-  return SEARCH_TYPES.map((type) => ({
+  return GLOBAL_SEARCH_TYPES.map((type) => ({
     type,
     label: labels[type],
     items: items.filter((item) => item.type === type),
@@ -784,11 +817,148 @@ async function queryTags(userId, options, lang, includeItems, includeTotal = tru
   };
 }
 
+function normalizeTodoStatus(value) {
+  const status = toText(value);
+  return TODO_STATUSES.includes(status) ? status : 'all';
+}
+
+// 三个优先级全选与不筛选等价，统一收敛成空数组以省掉一次 IN 条件
+function normalizeTodoPriorities(value) {
+  if (!Array.isArray(value)) return [];
+  const selected = [...new Set(value.map((item) => Number(item)).filter((item) => [0, 1, 2].includes(item)))];
+  return selected.length === 3 ? [] : selected.sort();
+}
+
+function normalizeTodoDue(value) {
+  const due = toText(value);
+  return TODO_DUE_FILTERS.includes(due) ? due : 'all';
+}
+
+function buildTodoDueCondition(due) {
+  if (due === 'overdue') return "t.due_at IS NOT NULL AND t.due_at < NOW() AND t.status = 'pending'";
+  if (due === 'today') return 't.due_at IS NOT NULL AND DATE(t.due_at) = CURDATE()';
+  if (due === '7d') return 't.due_at IS NOT NULL AND t.due_at >= NOW() AND t.due_at < DATE_ADD(CURDATE(), INTERVAL 8 DAY)';
+  if (due === 'none') return 't.due_at IS NULL';
+  return '';
+}
+
+function formatTodoDueText(dueAt) {
+  if (!dueAt) return '';
+  const date = dueAt instanceof Date ? dueAt : new Date(dueAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return formatDateTime(date).slice(0, 16);
+}
+
+function buildTodoExtra(item, text) {
+  const parts = [];
+  const isPending = toText(item.status) !== 'completed';
+  const dueText = formatTodoDueText(item.due_at);
+  const overdue = isPending && item.due_at && new Date(item.due_at).getTime() < Date.now();
+  parts.push(overdue ? text.todoOverdue : isPending ? text.todoPending : text.todoCompleted);
+  parts.push(dueText || text.todoNoDue);
+  if (Number(item.priority) === 2) parts.push(text.todoPriorityHigh);
+  else if (Number(item.priority) === 0) parts.push(text.todoPriorityLow);
+  const referenceCount = Number(item.reference_count || 0);
+  if (referenceCount > 0) parts.push(formatText(text.todoReferences, { count: referenceCount }));
+  return parts.filter(Boolean).join(' · ');
+}
+
+// 待办只按 user_id + del_flag 归属过滤;它是行动对象而非资料对象,
+// 因此不参与标签筛选、无标签筛选和任何资源批量语义。
+async function queryTodos(userId, options, lang, includeItems, includeTotal = true) {
+  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+  const todoStatus = normalizeTodoStatus(options.todoStatus);
+  const todoPriorities = normalizeTodoPriorities(options.todoPriorities);
+  const todoDue = normalizeTodoDue(options.todoDue);
+  const where = ['t.user_id = ?', 't.del_flag = 0'];
+  const params = [userId];
+  if (keyword) {
+    const like = buildLike(keyword);
+    where.push('(t.title LIKE ? OR t.description LIKE ?)');
+    params.push(like, like);
+  }
+  // 按标签或无标签筛选时待办整体退出结果，而不是被当成"无标签资源"混进来
+  if (tagNames.length || untagged) where.push('1 = 0');
+  if (todoStatus !== 'all') {
+    where.push('t.status = ?');
+    params.push(todoStatus);
+  }
+  if (todoPriorities.length) {
+    where.push(`t.priority IN (${todoPriorities.map(() => '?').join(', ')})`);
+    params.push(...todoPriorities);
+  }
+  const dueCondition = buildTodoDueCondition(todoDue);
+  if (dueCondition) where.push(dueCondition);
+  const dateCondition = buildDateCondition('t.update_time', date);
+  if (dateCondition) where.push(dateCondition);
+  const whereSql = where.join(' AND ');
+  const countPromise = includeTotal
+    ? pool.query(`SELECT COUNT(*) AS total FROM todo_items t WHERE ${whereSql}`, params)
+    : null;
+
+  let rows = [];
+  if (includeItems) {
+    const order = buildSearchOrder({
+      sort,
+      keyword,
+      titleColumn: 't.title',
+      updatedColumn: 't.update_time',
+      // 未完成优先只在同一相关度档位内生效，紧接着才是截止时间与更新时间
+      fallbackOrder: "(t.status = 'pending') DESC, t.due_at IS NULL ASC, t.due_at ASC, t.update_time DESC",
+      idColumn: 't.id',
+    });
+    const [result] = await pool.query(
+      `
+        SELECT
+          t.id,
+          t.title,
+          t.description,
+          t.status,
+          t.priority,
+          t.due_at,
+          t.completed_at,
+          t.update_time,
+          (
+            SELECT COUNT(*)
+            FROM todo_resource_refs r
+            WHERE r.todo_id = t.id AND r.user_id = ?
+          ) AS reference_count
+        FROM todo_items t
+        WHERE ${whereSql}
+        ORDER BY ${order.sql}
+        LIMIT ? OFFSET ?
+      `,
+      [userId, ...params, ...order.params, pageSize, offset],
+    );
+    rows = result;
+  }
+  const [totalRows] = countPromise ? await countPromise : [[]];
+  const text = getSearchText(lang);
+  return {
+    total: Number(totalRows?.[0]?.total || 0),
+    items: rows.map((item) => ({
+      id: toText(item.id),
+      type: 'todo',
+      title: toText(item.title) || text.unnamedTodo,
+      description: buildSnippet(toText(item.description), keyword),
+      extra: buildTodoExtra(item, text),
+      status: toText(item.status) === 'completed' ? 'completed' : 'pending',
+      priority: Number(item.priority ?? 1),
+      dueAt: item.due_at ? formatDateTime(new Date(item.due_at)) : null,
+      completedAt: item.completed_at ? formatDateTime(new Date(item.completed_at)) : null,
+      referenceCount: Number(item.reference_count || 0),
+      route: `/inbox?tab=todo&todoId=${encodeURIComponent(toText(item.id))}`,
+      raw: item,
+    })),
+  };
+}
+
 const SEARCH_QUERY_BY_TYPE = {
   bookmark: queryBookmarks,
   note: queryNotes,
   file: queryFiles,
   tag: queryTags,
+  todo: queryTodos,
 };
 
 async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, cursor, pageSize }) {
@@ -838,8 +1008,71 @@ async function queryOrderedSearchItems({ userId, options, lang, selectedTypes, c
   };
 }
 
+// 快捷层做轻度类型均衡：先按相关度排序，再限制单类型条数，
+// 其他类型没有匹配时用超出上限的高相关结果补足总数，同类型内部保持原相关度顺序。
+function diversifySuggestItems(rankedItems, totalLimit, perTypeLimit) {
+  const picked = [];
+  const overflow = [];
+  const countByType = new Map();
+  rankedItems.forEach((item) => {
+    const used = countByType.get(item.type) || 0;
+    if (picked.length < totalLimit && used < perTypeLimit) {
+      countByType.set(item.type, used + 1);
+      picked.push(item);
+      return;
+    }
+    overflow.push(item);
+  });
+  for (const item of overflow) {
+    if (picked.length >= totalLimit) break;
+    picked.push(item);
+  }
+  return picked;
+}
+
+/**
+ * 当前页面只影响排序，不改变搜索范围：在待办页搜索时待办稍微靠前，
+ * 但仍然展示书签、笔记、文件和标签。加权值必须小于相关度档位间隔（10），
+ * 否则会变成事实上的局部搜索。
+ */
+const SOURCE_TYPE_BOOST = 3;
+
+// 快捷搜索：只取少量候选、不统计 typeTotals/tagOptions，保证每次输入的请求足够轻
+async function querySuggestItems({ userId, options, lang, selectedTypes, sourceType }) {
+  const candidateLimit = 10;
+  const results = await Promise.all(
+    selectedTypes.map((type) =>
+      SEARCH_QUERY_BY_TYPE[type](
+        userId,
+        { ...options, pageSize: candidateLimit, offset: 0 },
+        lang,
+        true,
+        false,
+      ),
+    ),
+  );
+  const ranked = results
+    .flatMap((result) => result.items)
+    .map((item, index) => {
+      const relevance = searchItemRelevance(item, options.keyword);
+      return {
+        ...item,
+        matchReason: relevance.reason,
+        snippet: item.description || '',
+        _score: relevance.score + (sourceType && item.type === sourceType ? SOURCE_TYPE_BOOST : 0),
+        _stableIndex: index,
+      };
+    })
+    .sort((a, b) => b._score - a._score || a._stableIndex - b._stableIndex);
+  const picked = diversifySuggestItems(ranked, SUGGEST_TOTAL_LIMIT, SUGGEST_PER_TYPE_LIMIT);
+  return {
+    items: picked.map(({ _score, _stableIndex, ...item }) => item),
+    hasMore: ranked.length > picked.length,
+  };
+}
+
 function buildOrderedHasMoreByType(typeTotals, selectedTypes, nextCursor) {
-  const result = Object.fromEntries(SEARCH_TYPES.map((type) => [type, false]));
+  const result = Object.fromEntries(GLOBAL_SEARCH_TYPES.map((type) => [type, false]));
   if (!nextCursor) return result;
   if (selectedTypes.length === 1) {
     const selectedType = selectedTypes[0];
@@ -849,7 +1082,7 @@ function buildOrderedHasMoreByType(typeTotals, selectedTypes, nextCursor) {
   }
 
   const cursorIndex = selectedTypes.indexOf(nextCursor.type);
-  SEARCH_TYPES.forEach((type, index) => {
+  GLOBAL_SEARCH_TYPES.forEach((type) => {
     const selectedIndex = selectedTypes.indexOf(type);
     if (selectedIndex < 0 || selectedIndex < cursorIndex) return;
     if (selectedIndex === cursorIndex) {
@@ -879,6 +1112,7 @@ export const globalSearch = async (req, res) => {
     if (!userId) return res.send(resultData(null, 400, '缺少用户信息'));
 
     const keyword = toText(req.body?.keyword || req.body?.filters?.keyword).slice(0, 200);
+    const mode = req.body?.mode === 'suggest' ? 'suggest' : 'full';
     const paginationMode = req.body?.paginationMode === 'ordered' ? 'ordered' : 'perType';
     const page = normalizePage(req.body?.page ?? req.body?.currentPage);
     const pageSize = normalizeLimit(
@@ -897,7 +1131,25 @@ export const globalSearch = async (req, res) => {
       date: normalizeSearchDate(req.body?.date),
       tagNames: normalizeSearchTagNames(req.body?.tags),
       untagged: req.body?.untagged === true || String(req.body?.untagged || '') === '1',
+      todoStatus: req.body?.todoStatus,
+      todoPriorities: req.body?.todoPriority ?? req.body?.todoPriorities,
+      todoDue: req.body?.todoDue,
     };
+
+    if (mode === 'suggest') {
+      // 只接受合法资源/待办类型，未知值按无来源处理
+      const rawSourceType = toText(req.body?.sourceType);
+      const sourceType = GLOBAL_SEARCH_TYPES.includes(rawSourceType) ? rawSourceType : '';
+      const suggest = await querySuggestItems({ userId, options, lang, selectedTypes, sourceType });
+      return res.send(
+        resultData({
+          keyword,
+          items: suggest.items,
+          groups: groupItems(suggest.items, lang),
+          hasMore: suggest.hasMore,
+        }),
+      );
+    }
 
     if (paginationMode === 'ordered') {
       const cursor = normalizeOrderedCursor(req.body?.cursor, selectedTypes);
@@ -928,6 +1180,10 @@ export const globalSearch = async (req, res) => {
             queryNotes(userId, options, lang, false),
             queryFiles(userId, options, lang, false),
             queryTags(userId, options, lang, false),
+            // 待办统计只在调用方显式请求待办时才执行，既有资源调用方不承担这次查询
+            selectedTypes.includes('todo')
+              ? queryTodos(userId, options, lang, false)
+              : Promise.resolve({ total: 0, items: [] }),
             querySearchTagOptions(userId),
           ])
         : Promise.resolve(null);
@@ -942,12 +1198,13 @@ export const globalSearch = async (req, res) => {
         hasMore: Boolean(orderedResult.nextCursor),
       };
       if (metadata) {
-        const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = metadata;
+        const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions] = metadata;
         const typeTotals = {
           bookmark: bookmarkResult.total,
           note: noteResult.total,
           file: fileResult.total,
           tag: tagResult.total,
+          todo: todoResult.total,
         };
         Object.assign(response, {
           total: Object.values(typeTotals).reduce((sum, count) => sum + Number(count || 0), 0),
@@ -959,11 +1216,15 @@ export const globalSearch = async (req, res) => {
       return res.send(resultData(response));
     }
 
-    const [bookmarkResult, noteResult, fileResult, tagResult, tagOptions] = await Promise.all([
+    const [bookmarkResult, noteResult, fileResult, tagResult, todoResult, tagOptions] = await Promise.all([
       queryBookmarks(userId, options, lang, selectedTypes.includes('bookmark')),
       queryNotes(userId, options, lang, selectedTypes.includes('note')),
       queryFiles(userId, options, lang, selectedTypes.includes('file')),
       queryTags(userId, options, lang, selectedTypes.includes('tag')),
+      // 同 ordered 模式：未显式请求待办时完全不查 todo_items
+      selectedTypes.includes('todo')
+        ? queryTodos(userId, options, lang, true)
+        : Promise.resolve({ total: 0, items: [] }),
       querySearchTagOptions(userId),
     ]);
     const resultMap = {
@@ -971,11 +1232,12 @@ export const globalSearch = async (req, res) => {
       note: noteResult,
       file: fileResult,
       tag: tagResult,
+      todo: todoResult,
     };
-    const items = SEARCH_TYPES.flatMap((type) => resultMap[type].items);
-    const typeTotals = Object.fromEntries(SEARCH_TYPES.map((type) => [type, resultMap[type].total]));
+    const items = GLOBAL_SEARCH_TYPES.flatMap((type) => resultMap[type].items);
+    const typeTotals = Object.fromEntries(GLOBAL_SEARCH_TYPES.map((type) => [type, resultMap[type].total]));
     const hasMoreByType = Object.fromEntries(
-      SEARCH_TYPES.map((type) => [
+      GLOBAL_SEARCH_TYPES.map((type) => [
         type,
         selectedTypes.includes(type) && page * pageSize < resultMap[type].total,
       ]),

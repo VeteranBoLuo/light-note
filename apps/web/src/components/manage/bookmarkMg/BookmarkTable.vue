@@ -876,11 +876,13 @@
   }
 
   function handleToBack() {
-    if (bookmark.isMobile) {
-      router.push('/personCenter');
-    } else {
+    // 「我的 → 书签管理」入口已随移动端今日改版移除，入口只剩书签页顶部按钮，
+    // 因此移动端也必须回到来源页，不能再固定跳个人中心。
+    if (window.history.length > 1) {
       router.back();
+      return;
     }
+    void router.push('/home');
   }
 
   // ── 批量删除 ──

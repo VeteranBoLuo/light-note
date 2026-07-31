@@ -10,6 +10,8 @@
       @title-click="resetBookmarkView"
     >
       <template #actions>
+        <!-- 移动端不放第二个文本搜索框：找书签统一走顶栏全局搜索，
+             这里只保留标签筛选等结构化入口。桌面端仍有自己的搜索框。 -->
         <div v-if="!bookmark.isMobile" class="bookmark-search-action">
           <BInput
             v-model:value="bookmarkSearchInput"
@@ -152,13 +154,7 @@
   }
 
   useMobileTopBar(['home', 'home:id', 'home:search'], {
-    getSearchValue: () => bookmarkSearchInput.value,
-    setSearchValue: (value) => {
-      bookmarkSearchInput.value = value;
-    },
-    onSearchInput: handleBookmarkSearchInput,
-    onSearchEnter: handleBookmarkSearch,
-    searchPlaceholder: () => t('home.searchBookmark'),
+    searchSourceType: 'bookmark',
     onAdd: openAddBookmark,
     addLabel: () => t('navigation.newBookmark'),
   });

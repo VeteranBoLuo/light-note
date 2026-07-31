@@ -74,6 +74,7 @@
           {{ t('inbox.complete') }}
         </BButton>
       </div>
+      <!-- 移动端不放第二个文本搜索框：找文件统一走顶栏全局搜索，这里只保留文件夹与类型筛选 -->
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
         <div ref="mobileFolderListRef" class="mobile-folder-list">
           <div
@@ -238,13 +239,7 @@
   }
 
   useMobileTopBar(['cloudSpace'], {
-    getSearchValue: () => cloud.searchFileName,
-    setSearchValue: (value) => {
-      cloud.searchFileName = value;
-    },
-    onSearchInput: onCloudSearchInput,
-    onSearchEnter: () => cloud.queryFieldList(),
-    searchPlaceholder: () => t('cloudSpace.searchFile'),
+    searchSourceType: 'file',
     onAdd: () => handleBtnGroup.value?.openFileDialog(),
     addLabel: () => t('cloudSpace.uploadFile'),
   });

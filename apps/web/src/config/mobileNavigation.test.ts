@@ -23,7 +23,16 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual(['resources', 'todo', 'ai', 'search', 'profile']);
+    // 今日在首位、AI 居中保持强调；搜索不再占底部位置，已升级为顶栏全局能力
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
+      'today',
+      'resources',
+      'ai',
+      'todo',
+      'profile',
+    ]);
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
   });
 
   it('拒绝把详情页或任意字符串当成资料根路径', () => {
@@ -41,25 +50,36 @@ describe('移动端导航配置', () => {
     expect(isMobileResourceInboxTab(undefined)).toBe(false);
   });
 
-  it('按当前路由绑定顶部搜索和新增动作，并在离开后清理', () => {
+  it('按当前路由绑定顶部动作，并在离开后清理', () => {
     const add = vi.fn();
     const unregister = registerMobileTopBarBinding(['noteLibrary'], {
-      showSearch: false,
-      showMoreMenu: false,
-      getSearchValue: () => '方案',
+      searchMode: 'icon',
+      showNotification: false,
       onAdd: add,
     });
     try {
       expect(getMobileTopBarBinding('noteLibrary')).toMatchObject({
-        showSearch: false,
-        showMoreMenu: false,
+        searchMode: 'icon',
+        showNotification: false,
       });
-      expect(getMobileTopBarBinding('noteLibrary')?.getSearchValue?.()).toBe('方案');
       getMobileTopBarBinding('noteLibrary')?.onAdd?.();
       expect(add).toHaveBeenCalledOnce();
     } finally {
       unregister();
     }
     expect(getMobileTopBarBinding('noteLibrary')).toBeNull();
+  });
+
+  it('顶栏绑定不再代理页面局部搜索', () => {
+    const unregister = registerMobileTopBarBinding(['cloudSpace'], { onAdd: () => {} });
+    try {
+      const binding = getMobileTopBarBinding('cloudSpace') as Record<string, unknown> | null;
+      // 顶栏只承载全局搜索；页面关键词过滤下沉到各自筛选区，不得再从顶栏取值回填
+      ['getSearchValue', 'setSearchValue', 'onSearchInput', 'onSearchEnter', 'searchPlaceholder'].forEach((key) => {
+        expect(binding?.[key]).toBeUndefined();
+      });
+    } finally {
+      unregister();
+    }
   });
 });

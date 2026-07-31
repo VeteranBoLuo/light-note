@@ -80,13 +80,24 @@
           :aria-label="t('inbox.todoPriority')"
           @change="changePriority"
         />
-        <BPopover trigger="click" placement="bottom-right">
+        <BPopover
+          trigger="click"
+          placement="bottom-right"
+          :open="openMenu === 'snooze'"
+          @update:open="(visible: boolean) => setMenu('snooze', visible)"
+        >
           <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
           <template #content>
             <div class="todo-snooze-menu">
-              <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
-              <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
-              <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'tenMinutes'))">
+                {{ t('inbox.todoSnoozeTenMinutes') }}
+              </BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'tomorrow'))">
+                {{ t('inbox.todoSnoozeTomorrow') }}
+              </BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'nextWeek'))">
+                {{ t('inbox.todoSnoozeNextWeek') }}
+              </BButton>
             </div>
           </template>
         </BPopover>
@@ -114,29 +125,52 @@
           :aria-label="t('inbox.todoPriority')"
           @change="changePriority"
         />
-        <BPopover trigger="click" placement="top-left">
+        <BPopover
+          trigger="click"
+          placement="top-left"
+          :open="openMenu === 'snooze'"
+          @update:open="(visible: boolean) => setMenu('snooze', visible)"
+        >
           <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
           <template #content>
             <div class="todo-snooze-menu">
-              <BButton @click="$emit('snooze', 'tenMinutes')">{{ t('inbox.todoSnoozeTenMinutes') }}</BButton>
-              <BButton @click="$emit('snooze', 'tomorrow')">{{ t('inbox.todoSnoozeTomorrow') }}</BButton>
-              <BButton @click="$emit('snooze', 'nextWeek')">{{ t('inbox.todoSnoozeNextWeek') }}</BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'tenMinutes'))">
+                {{ t('inbox.todoSnoozeTenMinutes') }}
+              </BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'tomorrow'))">
+                {{ t('inbox.todoSnoozeTomorrow') }}
+              </BButton>
+              <BButton @click="runMenuAction(() => emit('snooze', 'nextWeek'))">
+                {{ t('inbox.todoSnoozeNextWeek') }}
+              </BButton>
             </div>
           </template>
         </BPopover>
-        <BPopover trigger="click" placement="top-right">
+        <BPopover
+          trigger="click"
+          placement="top-right"
+          :open="openMenu === 'more'"
+          @update:open="(visible: boolean) => setMenu('more', visible)"
+        >
           <BButton size="small" :disabled="disabled">{{ t('common.more') }}</BButton>
           <template #content>
             <div class="todo-mobile-action-menu">
-              <BButton :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+              <BButton :disabled="disabled" @click="runMenuAction(() => emit('edit'))">
+                {{ t('inbox.editTodo') }}
+              </BButton>
               <BButton
                 :disabled="disabled"
                 v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-                @click="$emit('add-to-calendar')"
+                @click="runMenuAction(() => emit('add-to-calendar'))"
               >
                 {{ t('inbox.addToCalendar') }}
               </BButton>
-              <BButton type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
+              <BButton
+                type="danger"
+                :loading="deleting"
+                :disabled="disabled"
+                @click="runMenuAction(() => emit('delete'))"
+              >
                 {{ t('inbox.deleteTodo') }}
               </BButton>
             </div>
@@ -158,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -188,6 +222,20 @@
   }>();
   const { t, locale } = useI18n();
   const router = useRouter();
+
+  // 「稍后」与「更多」菜单受控：点菜单项后必须先收起菜单，
+  // 否则编辑弹框打开时菜单还浮在弹框上面。桌面与移动同时只显示一套操作区，可共用状态。
+  const openMenu = ref<'snooze' | 'more' | ''>('');
+
+  function setMenu(key: 'snooze' | 'more', visible: boolean) {
+    openMenu.value = visible ? key : '';
+  }
+
+  function runMenuAction(action: () => void) {
+    openMenu.value = '';
+    action();
+  }
+
   const overdue = computed(
     () =>
       props.item.status === 'pending' &&

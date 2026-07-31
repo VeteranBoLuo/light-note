@@ -1,7 +1,6 @@
 // noinspection JSUnusedGlobalSymbols
 
 import { Ref } from 'vue';
-import bookmark from '@/store/bookmark';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API
@@ -291,11 +290,13 @@ export function openPage(url, newPage: boolean = true) {
 import router from '@/router';
 
 export function backRouterPage() {
-  if (bookmark().isMobileDevice) {
-    router.push('/personCenter');
-  } else {
+  // 「我的 → 书签管理 / 标签管理」入口已随移动端「今日」改版移除，这些管理页
+  // 现在从各自的资料页进入，固定跳个人中心会把用户带离来源页。
+  if (window.history.length > 1) {
     router.back();
+    return;
   }
+  void router.push('/home');
 }
 
 export function formatStorageSize(mb: number): string {
