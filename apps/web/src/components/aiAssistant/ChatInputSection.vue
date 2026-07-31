@@ -28,13 +28,12 @@
           ref="textInput"
           class="text-input"
         />
-        <!-- 输入 @ 时的资源建议:笔记/书签进上下文,云文件交给附件适配器 -->
-        <div v-if="mentionQuery" class="ai-mention-layer">
-          <ResourceMentionSuggestions
-            ref="mentionSuggestions"
-            :query="mentionQuery.keyword"
+        <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
+        <div v-if="mentionQuery" ref="mentionLayer" class="ai-mention-layer">
+          <ResourceMentionPicker
+            :initial-keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
-            @open-full="closeMention"
+            @close="closeMention"
           />
         </div>
       </div>
@@ -99,7 +98,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref, nextTick, watch, computed } from 'vue';
+  import { onBeforeUnmount, onMounted, ref, nextTick, watch, computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import TranslationToggle from './TranslationToggle.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -107,7 +106,7 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
-  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
+  import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
   import {
     replaceMentionQuery,
     resolveMentionQuery,
@@ -208,11 +207,22 @@
 
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
   const mentionQuery = ref<MentionQuery | null>(null);
-  const mentionSuggestions = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  const mentionLayer = ref<HTMLElement | null>(null);
 
   function closeMention() {
     mentionQuery.value = null;
   }
+
+  // 点击浮层之外即关闭:选择器自带搜索框,不能只靠选中资源才收起
+  function handleDocumentPointerDown(event: PointerEvent) {
+    if (!mentionQuery.value) return;
+    const target = event.target as Node | null;
+    if (target && mentionLayer.value?.contains(target)) return;
+    closeMention();
+  }
+
+  onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown, true));
+  onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown, true));
 
   function syncMentionQuery(target: HTMLTextAreaElement | HTMLInputElement | null) {
     if (!target || typeof target.selectionStart !== 'number') return closeMention();
@@ -221,30 +231,12 @@
 
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
-    if (mentionQuery.value) {
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        mentionSuggestions.value?.moveActive(1);
-        return;
-      }
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        mentionSuggestions.value?.moveActive(-1);
-        return;
-      }
-      if (event.key === 'Enter' && !event.isComposing) {
-        event.preventDefault();
-        event.stopPropagation();
-        mentionSuggestions.value?.chooseActive();
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMention();
-        return;
-      }
+    if (mentionQuery.value && event.key === 'Escape') {
+      event.preventDefault();
+      closeMention();
+      return;
     }
-    // 键入后光标才更新,放到下一帧再解析
+    // 键入后光标才更新,放到下一帧再解析;选择器内部的键盘导航由它自己处理
     window.setTimeout(() => syncMentionQuery(target), 0);
   }
 

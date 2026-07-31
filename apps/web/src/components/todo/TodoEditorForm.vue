@@ -15,13 +15,12 @@
           :placeholder="t('inbox.todoDescriptionPlaceholder')"
           @keydown="handleMentionKeydown"
         />
-        <!-- 说明保持纯文本:@ 只负责触发选择,结果落成下方结构化 Chips -->
-        <div v-if="mentionQuery" class="todo-mention-layer">
-          <ResourceMentionSuggestions
-            ref="mentionSuggestions"
-            :query="mentionQuery.keyword"
+        <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
+        <div v-if="mentionQuery" ref="mentionLayer" class="todo-mention-layer">
+          <ResourceMentionPicker
+            :initial-keyword="mentionQuery.keyword"
             @select="applyMentionSelection"
-            @open-full="closeMention"
+            @close="closeMention"
           />
         </div>
       </div>
@@ -182,7 +181,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, reactive, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
@@ -198,7 +197,6 @@
     TodoResourceRefView,
   } from '@/api/todoApi';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import ResourceMentionSuggestions from '@/components/noteLibrary/detail/ResourceMentionSuggestions.vue';
   import ResourceMentionPicker from '@/components/noteLibrary/detail/ResourceMentionPicker.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
@@ -227,32 +225,30 @@
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
   const mentionQuery = ref<MentionQuery | null>(null);
-  const mentionSuggestions = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
+  const mentionLayer = ref<HTMLElement | null>(null);
   const MAX_RESOURCE_REFS = 10;
 
   function closeMention() {
     mentionQuery.value = null;
   }
 
+  // 点击浮层之外即关闭:选择器自带搜索框,不能只靠选中资源才收起
+  function handleDocumentPointerDown(event: PointerEvent) {
+    if (!mentionQuery.value) return;
+    const target = event.target as Node | null;
+    if (target && mentionLayer.value?.contains(target)) return;
+    closeMention();
+  }
+
+  onMounted(() => document.addEventListener('pointerdown', handleDocumentPointerDown, true));
+  onBeforeUnmount(() => document.removeEventListener('pointerdown', handleDocumentPointerDown, true));
+
   function handleMentionKeydown(event: KeyboardEvent) {
     const target = event.target as HTMLTextAreaElement | null;
-    if (mentionQuery.value) {
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        mentionSuggestions.value?.moveActive(event.key === 'ArrowDown' ? 1 : -1);
-        return;
-      }
-      if (event.key === 'Enter' && !event.isComposing) {
-        event.preventDefault();
-        event.stopPropagation();
-        mentionSuggestions.value?.chooseActive();
-        return;
-      }
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMention();
-        return;
-      }
+    if (mentionQuery.value && event.key === 'Escape') {
+      event.preventDefault();
+      closeMention();
+      return;
     }
     window.setTimeout(() => {
       if (!target || typeof target.selectionStart !== 'number') return closeMention();

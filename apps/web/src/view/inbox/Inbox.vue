@@ -197,7 +197,12 @@
             </section>
           </div>
           <div v-else class="inbox-list">
+            <!-- 「全部」把待办与待整理资源混在一起时,加分组标题让顺序可读 -->
             <template v-for="action in actionItems" :key="action.key">
+              <div v-if="action.groupLabel" class="inbox-list__group-label">
+                <strong>{{ action.groupLabel }}</strong>
+                <span>{{ action.groupCount }}</span>
+              </div>
               <InboxItem
                 v-if="action.actionType === 'resource'"
                 :item="action.item"
@@ -434,9 +439,25 @@
     }));
     if (inbox.filterType !== 'all' || isMobileResourceInbox.value) return resources;
     const todos = todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
-    return [...resources, ...todos].sort(
+    const sorted = [...resources, ...todos].sort(
       (left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left),
     );
+    // 排序已保证待办在前、资源在后,这里只需给每段的首项挂上标题
+    const todoCount = todos.length;
+    const resourceCount = resources.length;
+    let seenTodo = false;
+    let seenResource = false;
+    return sorted.map((action) => {
+      if (action.actionType === 'todo' && !seenTodo) {
+        seenTodo = true;
+        return { ...action, groupLabel: t('inbox.groupTodo'), groupCount: todoCount };
+      }
+      if (action.actionType === 'resource' && !seenResource) {
+        seenResource = true;
+        return { ...action, groupLabel: t('inbox.groupPending'), groupCount: resourceCount };
+      }
+      return action;
+    });
   });
 
   watch(
@@ -1171,6 +1192,32 @@
   }
   .inbox-loading {
     min-height: 100%;
+  }
+  .inbox-list__group-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 4px;
+    color: var(--desc-color);
+    font-size: 13px;
+
+    strong {
+      color: var(--text-color);
+      font-weight: 600;
+    }
+
+    span {
+      min-width: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+      color: var(--primary-color);
+      font-size: 12px;
+      text-align: center;
+    }
+  }
+  .inbox-list__group-label:first-child {
+    margin-top: 0;
   }
   .inbox-list {
     display: flex;

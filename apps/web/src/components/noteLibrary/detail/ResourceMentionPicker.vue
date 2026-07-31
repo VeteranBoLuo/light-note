@@ -60,6 +60,11 @@
 
   type BInputExpose = { focus?: () => void };
 
+  // initialKeyword:从输入框 @ 后面的字带过来,省得用户在这里重新输一遍
+  const props = withDefaults(defineProps<{ initialKeyword?: string; autoFocus?: boolean }>(), {
+    initialKeyword: '',
+    autoFocus: true,
+  });
   const emit = defineEmits<{ select: [value: ResourceMentionItem]; close: [] }>();
   const { t } = useI18n();
   const keyword = ref('');
@@ -95,12 +100,12 @@
   }
 
   onMounted(async () => {
-    keyword.value = '';
+    keyword.value = props.initialKeyword || '';
     reset();
     await nextTick();
-    keywordInputRef.value?.focus?.();
-    // 打开即展示最近资源,不必等用户输入
-    void searchNow('');
+    if (props.autoFocus) keywordInputRef.value?.focus?.();
+    // 打开即展示结果(带初始词则直接搜),不必等用户输入
+    void searchNow(keyword.value);
   });
 
   watch(keyword, (value) => search(String(value || '')));

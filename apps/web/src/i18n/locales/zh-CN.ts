@@ -400,6 +400,8 @@ export default {
     todoTitle: '标题',
     todoTitlePlaceholder: '输入需要完成的事情',
     todoDescription: '说明',
+    groupTodo: '待办',
+    groupPending: '待整理',
     todoMentionHint: '输入 @ 可关联书签、笔记或文件',
     todoResourceRefs: '已关联资料（{count}）',
     todoAddResource: '添加资源',

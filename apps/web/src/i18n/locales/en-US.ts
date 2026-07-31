@@ -408,6 +408,8 @@ export default {
     todoTitle: 'Title',
     todoTitlePlaceholder: 'What needs to be done?',
     todoDescription: 'Description',
+    groupTodo: 'Todos',
+    groupPending: 'To organize',
     todoMentionHint: 'Type @ to link a bookmark, note, or file',
     todoResourceRefs: 'Linked resources ({count})',
     todoAddResource: 'Add resource',
