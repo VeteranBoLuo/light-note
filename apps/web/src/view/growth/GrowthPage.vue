@@ -140,8 +140,8 @@
       !!recap.value &&
       ((recap.value.weekly?.length || 0) > 0 || recap.value.onThisDay.length > 0 || recap.value.buried.length > 0),
   );
-  const pendingGrowthTaskCount = computed(() => growthTasks.value?.tasks.filter((task) => !task.completed).length ?? 0);
-  const showGrowthTasks = computed(() => !growthTasks.value || pendingGrowthTaskCount.value > 0);
+  const activeGrowthTaskCount = computed(() => growthTasks.value?.tasks.filter((task) => !task.claimed).length ?? 0);
+  const showGrowthTasks = computed(() => !growthTasks.value || activeGrowthTaskCount.value > 0);
   const showRecap = computed(() => hasRecap.value);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
 

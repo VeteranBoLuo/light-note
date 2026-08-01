@@ -36,7 +36,7 @@ async function withTransaction(res, callback, { afterCommit } = {}) {
     if (afterCommit) {
       Promise.resolve()
         .then(() => afterCommit(data))
-        .catch((error) => console.warn('[todo] 成长任务旁路发放失败 code=%s', error?.code || 'UNKNOWN'));
+        .catch((error) => console.warn('[todo] 成长任务状态同步失败 code=%s', error?.code || 'UNKNOWN'));
     }
     return res.send(resultData(data));
   } catch (error) {

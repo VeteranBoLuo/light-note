@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../db/index.js', () => ({
   default: { query: vi.fn() },
 }));
+vi.mock('./growthTaskSchema.js', () => ({ ensureGrowthTaskSchema: vi.fn() }));
 
 import pool from '../db/index.js';
 import { getGrowthTasks } from './growthTaskService.js';
@@ -22,6 +23,7 @@ describe('growthTaskService', () => {
           rewardExp: 50,
           status: 'completed',
           completedAt: '2026-08-01 10:00:00',
+          claimedAt: null,
         },
         {
           taskKey: 'first_note',
@@ -30,6 +32,7 @@ describe('growthTaskService', () => {
           rewardExp: 50,
           status: 'pending',
           completedAt: null,
+          claimedAt: null,
         },
       ],
       [],
@@ -44,7 +47,10 @@ describe('growthTaskService', () => {
           rewardExp: 50,
           status: 'completed',
           completed: true,
+          claimed: false,
+          claimable: true,
           completedAt: '2026-08-01 10:00:00',
+          claimedAt: null,
         },
         {
           taskKey: 'first_note',
@@ -53,12 +59,18 @@ describe('growthTaskService', () => {
           rewardExp: 50,
           status: 'pending',
           completed: false,
+          claimed: false,
+          claimable: false,
           completedAt: null,
+          claimedAt: null,
         },
       ],
       totalCount: 2,
       completedCount: 1,
+      claimedCount: 0,
+      claimableCount: 1,
       remainingCount: 1,
+      activeCount: 2,
     });
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('LEFT JOIN user_growth_tasks'), ['user-1']);
     expect(pool.query.mock.calls[0][0]).toContain('WHERE gt.enabled = 1');
@@ -71,7 +83,10 @@ describe('growthTaskService', () => {
       tasks: [],
       totalCount: 0,
       completedCount: 0,
+      claimedCount: 0,
+      claimableCount: 0,
       remainingCount: 0,
+      activeCount: 0,
     });
     expect(pool.query.mock.calls[0][1]).toEqual([null]);
   });

@@ -218,29 +218,48 @@ export interface GrowthTask {
   rewardExp: number;
   status: 'pending' | 'completed' | string;
   completed: boolean;
+  claimed: boolean;
+  claimable: boolean;
   completedAt: string | null;
+  claimedAt: string | null;
 }
 
 export interface GrowthTasksData {
   tasks: GrowthTask[];
   totalCount: number;
   completedCount: number;
+  claimedCount: number;
+  claimableCount: number;
   remainingCount: number;
+  activeCount: number;
 }
 
 const RETIRED_GROWTH_TASK_KEYS = new Set(['first_review']);
 
 // 兼容前后端滚动更新：旧后端进程可能短暂返回已退役任务，前端仍需按当前产品口径收敛计数与展示。
 function normalizeGrowthTasks(data: GrowthTasksData): GrowthTasksData {
-  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(
-    (task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey),
-  );
+  const tasks = (Array.isArray(data.tasks) ? data.tasks : [])
+    .filter((task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey))
+    .map((task) => {
+      // 滚动发布期间旧后端没有 claimed 字段；旧流程的 completed 已自动发奖，因此按已领取兼容。
+      const claimed = typeof task.claimed === 'boolean' ? task.claimed : Boolean(task.completed);
+      return {
+        ...task,
+        claimed,
+        claimable: typeof task.claimable === 'boolean' ? task.claimable : Boolean(task.completed && !claimed),
+        claimedAt: task.claimedAt || null,
+      };
+    });
   const completedCount = tasks.filter((task) => task.completed).length;
+  const claimedCount = tasks.filter((task) => task.claimed).length;
   return {
     tasks,
     totalCount: tasks.length,
     completedCount,
+    claimedCount,
+    claimableCount: tasks.filter((task) => task.claimable).length,
     remainingCount: tasks.length - completedCount,
+    activeCount: tasks.length - claimedCount,
   };
 }
 
@@ -398,6 +417,24 @@ export function useGrowth() {
     });
     growthTasksRequest = request;
     return request;
+  }
+
+  // 一次性成长任务只在用户主动点击后领取；成功后同步任务领取态与全局成长快照。
+  async function claimGrowthTask(taskKey: string) {
+    const uid = useUserStore().id || 'visitor';
+    const res = await growthApi.claimGrowthTask(taskKey);
+    if (res?.status === 200 && res.data?.ok) {
+      // 领取请求返回期间若切换了账号，只把响应交给原调用方，不得覆盖新账号缓存。
+      if ((useUserStore().id || 'visitor') !== uid) return res;
+      if (res.data.growth) {
+        ownerId = uid;
+        growth.value = res.data.growth as Growth;
+        loadedOnce = true;
+      }
+      await Promise.all([loadGrowthTasks(true), res.data.growth ? Promise.resolve(growth.value) : load(true)]);
+      syncPointsToViews();
+    }
+    return res;
   }
 
   // 段位表:15 级只在首次拉取一次(内容基本不变)
@@ -611,6 +648,7 @@ export function useGrowth() {
     loadRanks,
     loadDashboard,
     loadGrowthTasks,
+    claimGrowthTask,
     doCheckin,
     claimDailyBonus,
     useProtectCard,

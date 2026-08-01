@@ -312,7 +312,7 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
       const { completeGrowthTask } = await import('./growthTaskCompletion.js');
       await completeGrowthTask(userId, kind === 'note' ? 'first_note' : 'first_bookmark', { userRole });
     } catch (error) {
-      console.warn('[growth] 首次成长任务发放失败 code=%s', stableAgentErrorCode(error));
+      console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
     }
   }
   // 当日第 N 条衰减

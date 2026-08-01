@@ -282,6 +282,7 @@ declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
   ['POST', '/growth/checkin'],
   ['POST', '/growth/useProtectCard'],
   ['POST', '/growth/claimDailyBonus'],
+  ['POST', '/growth/tasks/claim'],
   ['POST', '/growth/shop/buy'],
   ['POST', '/growth/item/use'],
   ['POST', '/growth/equipTitle'],

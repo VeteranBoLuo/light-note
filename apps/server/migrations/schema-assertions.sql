@@ -252,7 +252,8 @@ FROM (
   SELECT 'growth_tasks', 'reward_exp', 'growth_tasks.reward_exp' UNION ALL
   SELECT 'growth_tasks', 'enabled', 'growth_tasks.enabled' UNION ALL
   SELECT 'user_growth_tasks', 'status', 'user_growth_tasks.status' UNION ALL
-  SELECT 'user_growth_tasks', 'completed_at', 'user_growth_tasks.completed_at'
+  SELECT 'user_growth_tasks', 'completed_at', 'user_growth_tasks.completed_at' UNION ALL
+  SELECT 'user_growth_tasks', 'claimed_at', 'user_growth_tasks.claimed_at'
 ) expected
 LEFT JOIN information_schema.columns actual
   ON actual.table_schema=DATABASE()

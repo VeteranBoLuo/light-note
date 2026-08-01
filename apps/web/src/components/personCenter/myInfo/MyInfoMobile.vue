@@ -56,6 +56,7 @@
   import { backRouterPage } from '@/utils/common';
   import { recordOperation } from '@/api/commonApi.ts';
   import PassConfigDlg from './PassConfigDlg.vue';
+  import { useGrowth } from '@/composables/useGrowth.ts';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const saving = ref(false);
@@ -63,6 +64,7 @@
   const visible = <Ref<boolean>>defineModel('visible');
 
   const bookmark = bookmarkStore();
+  const { loadGrowthTasks } = useGrowth();
   const { t } = useI18n();
   function uploadImg() {
     const input = document.createElement('input');
@@ -119,6 +121,7 @@
         message.success(t('myInfo.saveSuccess'));
         const userPromise = await userApi.getUserInfoById({ id: user.id });
         user.setUserInfo(userPromise.data);
+        await loadGrowthTasks(true);
         visible.value = false;
       }
     } catch (err) {

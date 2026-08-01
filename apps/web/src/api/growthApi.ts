@@ -21,6 +21,9 @@ export const getDashboard = () => apiBaseGet('/api/growth/dashboard');
 // 成长任务定义与当前账号完成状态(PR2；页面展示在后续阶段接入)
 export const getGrowthTasks = () => apiBaseGet('/api/growth/tasks');
 
+// 成长任务达成后手动领取经验
+export const claimGrowthTask = (taskKey: string) => apiBasePost('/api/growth/tasks/claim', { taskKey });
+
 // 实时本周成长周报(前端「查看大图」用)
 export const getWeeklyReport = () => apiBaseGet('/api/growth/weeklyReport');
 
@@ -95,6 +98,7 @@ export default {
   getRanks,
   getDashboard,
   getGrowthTasks,
+  claimGrowthTask,
   getWeeklyReport,
   adminGetUserGrowth,
   adminAdjustGrowth,

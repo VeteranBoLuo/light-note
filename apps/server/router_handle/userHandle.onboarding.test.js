@@ -40,7 +40,7 @@ vi.mock('../util/logExclude.js', () => ({
 
 // common.js↔router↔handler 循环依赖：先加载 common.js，与现有 handler 测试保持一致。
 await import('../util/common.js');
-const { handleUserDatabaseOperation, registerUser } = await import('./userHandle.js');
+const { handleUserDatabaseOperation, registerUser, saveUserInfo } = await import('./userHandle.js');
 
 function mockRes() {
   const res = {};
@@ -161,6 +161,27 @@ describe('新用户示例数据接入注册流程', () => {
     );
     expect(warn).toHaveBeenCalledWith('[register] 示例数据初始化失败 code=%s', 'NEW_USER_SEED_FAILED');
     warn.mockRestore();
+  });
+
+  it('保存真实头像会先同步成长任务达成状态，再返回成功', async () => {
+    query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await saveUserInfo(
+      {
+        user: { id: 'user-1', role: 'user' },
+        body: { id: 'user-1', alias: '新用户', email: 'new@example.com', headPicture: 'data:image/png;base64,abc' },
+      },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledWith(
+      'update user set ? where id=?',
+      [expect.objectContaining({ head_picture: 'data:image/png;base64,abc' }), 'user-1'],
+    );
+    expect(completeGrowthTask).toHaveBeenCalledWith('user-1', 'profile_avatar', { userRole: 'user' });
+    expect(completeGrowthTask.mock.invocationCallOrder[0]).toBeLessThan(res.send.mock.invocationCallOrder[0]);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
   it('GitHub 仅在首次建号时初始化示例数据', async () => {

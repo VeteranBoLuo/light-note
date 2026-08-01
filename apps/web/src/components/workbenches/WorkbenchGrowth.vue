@@ -74,7 +74,7 @@
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth: g, load, doCheckin } = useGrowth();
+  const { growth: g, load, loadGrowthTasks, doCheckin } = useGrowth();
   const checking = ref(false);
   const claimable = ref(0);
   const claiming = ref(false);
@@ -95,16 +95,18 @@
       const res = await apiBasePost('/api/growth/claimAll');
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
-          message.success(t('growth.claimAllOk', { n: res.data.points }));
+          message.success(t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }));
           recordOperation({
             module: '工作台',
-            operation: `一键领取成长奖励（${res.data.claimed} 项,+${res.data.points} 积分）`,
+            operation: `一键领取成长奖励（${res.data.claimed} 项,经验+${res.data.exp || 0},积分+${
+              res.data.points || 0
+            }）`,
           });
         } else {
           message.info(t('growth.claimAllNone'));
         }
         claimable.value = 0;
-        load(true);
+        await Promise.all([load(true), loadGrowthTasks(true)]);
       }
     } catch (error) {
       console.error('一键领取失败:', error);

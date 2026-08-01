@@ -153,7 +153,7 @@
   const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
   const claimingDailyGrowth = ref(false);
-  const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.completed)));
+  const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
 
   async function claimDailyGrowth() {
     if (growthReadOnly.value || claimingDailyGrowth.value) return;

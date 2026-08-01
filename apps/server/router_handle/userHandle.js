@@ -684,7 +684,7 @@ export const getUserList = (req, res) => {
   }
 };
 
-export const saveUserInfo = (req, res) => {
+export const saveUserInfo = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const targetId = req.body.id || req.user?.id;
@@ -719,24 +719,24 @@ export const saveUserInfo = (req, res) => {
     if (typeof finalBody.email === 'string') {
       finalBody.email = normalizeEmail(finalBody.email);
     }
-    pool
-      .query('update user set ? where id=?', [finalBody, id])
-      .then(([result]) => {
-        res.send(resultData(result));
-        // “完善个人形象”只认真实头像，不把昵称更新与成长任务重复计算。
-        // 响应之后 fire-and-forget,不阻塞、不影响资料保存结果。
-        const headPicture = typeof finalBody.head_picture === 'string' ? finalBody.head_picture.trim() : '';
-        if (!isRoot && headPicture) {
-          completeGrowthTask(id, 'profile_avatar', { userRole: req.user?.role }).catch((e) =>
-            console.warn('[growth] 头像成长任务发放失败 code=%s', stableAgentErrorCode(e)),
-          );
-        }
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)); // 设置状态码为500
-      });
+    const [result] = await pool.query('update user set ? where id=?', [finalBody, id]);
+
+    // “完善个人形象”只认真实头像，不把昵称更新与成长任务重复计算。
+    // 在响应前等待达成状态写入，确保关闭资料弹窗后立即刷新成长任务时不会读到旧状态；
+    // 达成只记录状态，经验仍须用户在成长任务卡片上主动领取。
+    const headPicture = typeof finalBody.head_picture === 'string' ? finalBody.head_picture.trim() : '';
+    if (!isRoot && headPicture) {
+      try {
+        await completeGrowthTask(id, 'profile_avatar', { userRole: req.user?.role });
+      } catch (error) {
+        console.warn('[growth] 头像成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
+      }
+    }
+
+    return res.send(resultData(result));
   } catch (e) {
-    res.send(resultData(null, 400, L(req, '客户端请求异常：', 'Bad request: ') + e)); // 设置状态码为400
+    console.error('[user] 保存个人信息失败 code=%s', String(e?.code || 'SAVE_USER_INFO_FAILED'));
+    return res.send(resultData(null, 500, L(req, '保存个人信息失败，请稍后重试', 'Failed to save profile')));
   }
 };
 
@@ -1150,9 +1150,11 @@ export const handleUserDatabaseOperation = async (githubUser, req) => {
   // GitHub 首次注册直接持久化头像，补齐“设置头像”成长任务。示例资源仍由种子服务直写，
   // 不经过资源创建奖励钩子，因此不会推进成长任务、每日/每周任务、经验或成就。
   if (String(githubUser.avatar_url || '').trim()) {
-    completeGrowthTask(githubUserId, 'profile_avatar', { userRole: 'user' }).catch((error) =>
-      console.warn('[growth] GitHub 头像成长任务补全失败 code=%s', stableAgentErrorCode(error)),
-    );
+    try {
+      await completeGrowthTask(githubUserId, 'profile_avatar', { userRole: 'user' });
+    } catch (error) {
+      console.warn('[growth] GitHub 头像成长任务补全失败 code=%s', stableAgentErrorCode(error));
+    }
   }
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0

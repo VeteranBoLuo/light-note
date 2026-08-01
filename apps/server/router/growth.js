@@ -6,6 +6,7 @@ const router = express.Router();
 router.get('/me', growthHandle.getMyGrowth);
 router.get('/dashboard', growthHandle.getDashboard);
 router.get('/tasks', growthHandle.getGrowthTasksHandle);
+router.post('/tasks/claim', growthHandle.claimGrowthTaskHandle);
 router.get('/heatmap', growthHandle.getHeatmap);
 router.get('/ranks', growthHandle.getRanks);
 router.post('/checkin', growthHandle.doCheckin);

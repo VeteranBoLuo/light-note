@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   user: { id: 'user-a' },
   getMyGrowth: vi.fn(),
+  getGrowthTasks: vi.fn(),
+  claimGrowthTask: vi.fn(),
 }));
 
 vi.mock('@/store', () => ({
@@ -12,6 +14,8 @@ vi.mock('@/store', () => ({
 vi.mock('@/api/growthApi.ts', () => ({
   default: {
     getMyGrowth: mocks.getMyGrowth,
+    getGrowthTasks: mocks.getGrowthTasks,
+    claimGrowthTask: mocks.claimGrowthTask,
   },
 }));
 
@@ -47,6 +51,8 @@ describe('useGrowth load', () => {
     resetGrowth();
     mocks.user.id = 'user-a';
     mocks.getMyGrowth.mockReset();
+    mocks.getGrowthTasks.mockReset();
+    mocks.claimGrowthTask.mockReset();
   });
 
   it('合并同一账号同时发起的成长请求', async () => {
@@ -123,5 +129,73 @@ describe('useGrowth load', () => {
     oldResponse.resolve({ status: 200, data: growth(1) });
     await expect(oldRequest).resolves.toBeNull();
     expect(useGrowth().growth.value).toEqual(newData);
+  });
+
+  it('达成但未领取的成长任务保持可领取，并兼容旧接口已自动发奖的数据', async () => {
+    mocks.getGrowthTasks.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        tasks: [
+          {
+            taskKey: 'profile_avatar',
+            titleKey: 'growth.tasks.profileAvatar.title',
+            descriptionKey: 'growth.tasks.profileAvatar.description',
+            rewardExp: 50,
+            status: 'completed',
+            completed: true,
+            claimed: false,
+            claimable: true,
+            completedAt: '2026-08-01 10:00:00',
+            claimedAt: null,
+          },
+          {
+            taskKey: 'first_note',
+            titleKey: 'growth.tasks.firstNote.title',
+            descriptionKey: 'growth.tasks.firstNote.description',
+            rewardExp: 50,
+            status: 'completed',
+            completed: true,
+            completedAt: '2026-08-01 09:00:00',
+          },
+        ],
+      },
+    });
+
+    const tasks = await useGrowth().loadGrowthTasks(true);
+
+    expect(tasks?.tasks[0]).toMatchObject({ claimed: false, claimable: true });
+    expect(tasks?.tasks[1]).toMatchObject({ claimed: true, claimable: false });
+    expect(tasks).toMatchObject({ completedCount: 2, claimedCount: 1, claimableCount: 1, activeCount: 1 });
+  });
+
+  it('手动领取后刷新任务状态与成长快照', async () => {
+    const claimedGrowth = growth(5);
+    mocks.claimGrowthTask.mockResolvedValueOnce({ status: 200, data: { ok: true, growth: claimedGrowth } });
+    mocks.getGrowthTasks.mockResolvedValueOnce({
+      status: 200,
+      data: {
+        tasks: [
+          {
+            taskKey: 'profile_avatar',
+            titleKey: 'growth.tasks.profileAvatar.title',
+            descriptionKey: 'growth.tasks.profileAvatar.description',
+            rewardExp: 50,
+            status: 'completed',
+            completed: true,
+            claimed: true,
+            claimable: false,
+            completedAt: '2026-08-01 10:00:00',
+            claimedAt: '2026-08-01 10:01:00',
+          },
+        ],
+      },
+    });
+
+    await useGrowth().claimGrowthTask('profile_avatar');
+
+    expect(mocks.claimGrowthTask).toHaveBeenCalledWith('profile_avatar');
+    expect(mocks.getGrowthTasks).toHaveBeenCalledTimes(1);
+    expect(useGrowth().growth.value).toEqual(claimedGrowth);
+    expect(useGrowth().growthTasks.value?.activeCount).toBe(0);
   });
 });
