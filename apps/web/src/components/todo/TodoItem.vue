@@ -83,8 +83,8 @@
         <BPopover
           trigger="click"
           placement="bottom-right"
-          :open="openMenu === 'snooze'"
-          @update:open="(visible: boolean) => setMenu('snooze', visible)"
+          :open="openMenu === 'desktopSnooze'"
+          @update:open="(visible: boolean) => setMenu('desktopSnooze', visible)"
         >
           <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
           <template #content>
@@ -223,11 +223,17 @@
   const { t, locale } = useI18n();
   const router = useRouter();
 
-  // 「稍后」与「更多」菜单受控：点菜单项后必须先收起菜单，
-  // 否则编辑弹框打开时菜单还浮在弹框上面。桌面与移动同时只显示一套操作区，可共用状态。
-  const openMenu = ref<'snooze' | 'more' | ''>('');
+  /**
+   * 「稍后」与「更多」菜单受控：点菜单项后必须先收起菜单，否则编辑弹框打开时
+   * 菜单还浮在弹框上面。
+   *
+   * 桌面与移动两套操作区必须用不同的 key：非当前端的那套只是 display:none，
+   * 组件仍然存在，而 BPopover 的浮层 teleport 到 body、不受父元素隐藏影响，
+   * 共用 key 会让两个浮层同时打开，隐藏那套因为锚点不可见而飘到左上角。
+   */
+  const openMenu = ref<'snooze' | 'desktopSnooze' | 'more' | ''>('');
 
-  function setMenu(key: 'snooze' | 'more', visible: boolean) {
+  function setMenu(key: 'snooze' | 'desktopSnooze' | 'more', visible: boolean) {
     openMenu.value = visible ? key : '';
   }
 

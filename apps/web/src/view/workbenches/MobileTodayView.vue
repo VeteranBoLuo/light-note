@@ -51,6 +51,8 @@
     </section>
 
     <TodayActionSection
+      :todo-total="counts.overdue + counts.dueToday"
+      :inbox-total="counts.inbox"
       :overdue-todos="overdueTodos"
       :due-today-todos="dueTodayTodos"
       :inbox-items="inboxItems"

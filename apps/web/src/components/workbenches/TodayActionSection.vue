@@ -12,7 +12,7 @@
       <div v-if="localTodos.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.todoGroup') }}</strong>
-          <span>{{ localTodos.length }}</span>
+          <span>{{ todoCount }}</span>
         </header>
         <div class="today-actions__rows">
           <article v-for="todo in localTodos" :key="todo.id" class="today-action-row">
@@ -45,7 +45,7 @@
       <div v-if="localInbox.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.inboxGroup') }}</strong>
-          <span>{{ localInbox.length }}</span>
+          <span>{{ inboxCount }}</span>
         </header>
         <div class="today-actions__rows">
           <article v-for="item in localInbox" :key="inboxKey(item)" class="today-action-row">
@@ -112,6 +112,13 @@
   }
 
   const props = defineProps<{
+    /**
+     * 权威总数。明细数组是被服务端上限截断的（待整理最多 3 条、待办最多 7 条），
+     * 用它的 length 当分组数量会让计数停在上限上不再变化。
+     * 不传时回落到数组长度，保持旧调用方行为。
+     */
+    todoTotal?: number;
+    inboxTotal?: number;
     overdueTodos: TodoItem[];
     dueTodayTodos: TodoItem[];
     inboxItems: WorkbenchInboxItem[];
@@ -150,6 +157,24 @@
   });
   const localInbox = computed(() =>
     props.inboxItems.filter((item) => item.resourceId && !removedInboxKeys.value.has(inboxKey(item))),
+  );
+
+  /**
+   * 分组数量用权威总数减去本轮本地已处理的条数。
+   *
+   * 明细被服务端上限截断，直接用数组长度会让数字停在上限；
+   * 而只用权威总数又会在本地完成一条后不减少——两者结合才既准确又即时。
+   */
+  function resolveGroupCount(total: number | undefined, removed: number, visible: number) {
+    if (total == null) return visible;
+    return Math.max(visible, total - removed);
+  }
+
+  const todoCount = computed(() =>
+    resolveGroupCount(props.todoTotal, removedTodoIds.value.size, localTodos.value.length),
+  );
+  const inboxCount = computed(() =>
+    resolveGroupCount(props.inboxTotal, removedInboxKeys.value.size, localInbox.value.length),
   );
 
   function markOverdue(fromOverdueGroup: boolean) {

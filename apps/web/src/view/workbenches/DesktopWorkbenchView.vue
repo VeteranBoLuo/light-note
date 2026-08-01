@@ -78,7 +78,10 @@
         </div>
       </section>
 
+      <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
+           不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
       <TodayActionSection
+        :inbox-total="todayStats.inboxPendingTotal"
         :overdue-todos="todayOverdueTodos"
         :due-today-todos="todayDueTodos"
         :inbox-items="todayInboxItems"
