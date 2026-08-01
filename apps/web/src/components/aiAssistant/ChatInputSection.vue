@@ -18,40 +18,91 @@
       <div v-else class="mobile-context-actions">
         <BButton
           class="mobile-context-toggle"
-          :aria-label="t(mobileActionsOpen ? 'ai.mobileCollapseActions' : 'ai.mobileExpandActions')"
-          :title="t(mobileActionsOpen ? 'ai.mobileCollapseActions' : 'ai.mobileExpandActions')"
+          :aria-label="t('ai.material.mobileTitle')"
+          :title="t('ai.material.mobileTitle')"
           :aria-expanded="mobileActionsOpen"
-          @click="mobileActionsOpen = !mobileActionsOpen"
+          aria-haspopup="dialog"
+          @click="mobileActionsOpen = true"
         >
-          <SvgIcon :src="icon.common.add" size="17" aria-hidden="true" />
+          <span class="mobile-context-toggle__icon">
+            <SvgIcon :src="icon.common.plus" size="15" aria-hidden="true" />
+          </span>
+          <span class="mobile-context-toggle__label">{{ t('ai.material.mobileAdd') }}</span>
+          <span v-if="selectedMaterialCount" class="mobile-context-toggle__count" aria-hidden="true">
+            {{ selectedMaterialCount }}
+          </span>
         </BButton>
-        <div v-if="mobileActionsOpen" class="mobile-context-panel">
-          <AiContextPicker
-            :model-value="contexts"
-            @update:model-value="$emit('update:contexts', $event)"
-            @file-selected="attachSelectedCloudFile"
-          />
-          <AiAttachmentPicker
-            ref="attachmentPicker"
-            :model-value="attachments"
-            :prepare-action-fn="prepareAttachmentActionFn"
-            @update:model-value="$emit('update:attachments', $event)"
-            @prompt="applyAttachmentPrompt"
-          />
-          <BUpload
-            :multiple="false"
-            raw-file
-            accept=".png,.jpg,.jpeg,.webp"
-            :max-total-size="20 * 1024 * 1024"
-            @change="uploadMobileImage"
-          >
-            <BButton size="small" :title="t('ai.uploadImage')">
-              <SvgIcon :src="icon.file_upload" size="14" />
-              {{ t('ai.uploadImage') }}
-            </BButton>
-          </BUpload>
-        </div>
       </div>
+      <BDrawer
+        v-if="isMobile"
+        :open="mobileActionsOpen"
+        :title="t('ai.material.mobileTitle')"
+        placement="bottom"
+        height="auto"
+        body-padding="12px 16px max(18px, env(safe-area-inset-bottom))"
+        @close="mobileActionsOpen = false"
+      >
+        <div class="mobile-context-drawer">
+          <div class="mobile-context-drawer__intro">
+            <span>{{ t('ai.material.once') }}</span>
+            <p>{{ t('ai.material.onceTooltip') }}</p>
+          </div>
+          <div class="mobile-material-action-list">
+            <AiContextPicker
+              :model-value="contexts"
+              @update:model-value="$emit('update:contexts', $event)"
+              @file-selected="attachSelectedCloudFile"
+            >
+              <template #trigger>
+                <BButton class="mobile-material-action-card mobile-material-action-card--resource">
+                  <span class="mobile-material-action-card__icon">
+                    <SvgIcon :src="icon.ai.materials" size="21" aria-hidden="true" />
+                  </span>
+                  <span class="mobile-material-action-card__copy">
+                    <strong>{{ t('ai.addContext') }}</strong>
+                    <small>{{ t('ai.material.contextDescription') }}</small>
+                  </span>
+                  <SvgIcon
+                    class="mobile-material-action-card__arrow"
+                    :src="icon.arrow_right"
+                    size="15"
+                    aria-hidden="true"
+                  />
+                </BButton>
+              </template>
+            </AiContextPicker>
+            <AiAttachmentPicker
+              ref="attachmentPicker"
+              :model-value="attachments"
+              :prepare-action-fn="prepareAttachmentActionFn"
+              @update:model-value="$emit('update:attachments', $event)"
+              @prompt="applyAttachmentPrompt"
+            >
+              <template #trigger="{ busy }">
+                <BButton
+                  class="mobile-material-action-card mobile-material-action-card--file"
+                  :loading="busy"
+                  :title="t('ai.material.attachmentOnceHint')"
+                >
+                  <span class="mobile-material-action-card__icon">
+                    <SvgIcon :src="icon.file_upload" size="20" aria-hidden="true" />
+                  </span>
+                  <span class="mobile-material-action-card__copy">
+                    <strong>{{ t('ai.uploadFile') }}</strong>
+                    <small>{{ t('ai.material.fileDescription') }}</small>
+                  </span>
+                  <SvgIcon
+                    class="mobile-material-action-card__arrow"
+                    :src="icon.arrow_right"
+                    size="15"
+                    aria-hidden="true"
+                  />
+                </BButton>
+              </template>
+            </AiAttachmentPicker>
+          </div>
+        </div>
+      </BDrawer>
       <div class="text-input-wrap">
         <BInput
           v-model:value="inputValue"
@@ -150,7 +201,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
-  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
@@ -212,6 +263,7 @@
   const attachmentBlocked = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
   );
+  const selectedMaterialCount = computed(() => props.contexts.length + props.attachments.length);
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {
@@ -364,12 +416,6 @@
     void attachmentPicker.value?.uploadPastedImage(image);
   }
 
-  function uploadMobileImage(files: File[]) {
-    const file = files?.[0];
-    if (!file) return;
-    void attachmentPicker.value?.uploadPastedImage(file);
-  }
-
   function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {
     return attachmentPicker.value?.openAction(toolName, args) || false;
   }
@@ -386,6 +432,13 @@
     () => props.modelValue,
     () => {
       nextTick(adjustTextareaHeight);
+    },
+  );
+
+  watch(
+    () => props.isMobile,
+    (isMobile) => {
+      if (!isMobile) mobileActionsOpen.value = false;
     },
   );
 
@@ -612,7 +665,7 @@
     white-space: nowrap;
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 767px) {
     .input-section {
       padding: 0.25rem 0.625rem calc(0.4rem + env(safe-area-inset-bottom));
     }
@@ -623,58 +676,262 @@
     }
 
     .context-actions {
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 4px;
-      margin-bottom: 4px;
-    }
-
-    .context-actions {
       display: none;
     }
 
     .mobile-context-actions {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       width: 100%;
       min-width: 0;
       margin-bottom: 4px;
+      overflow: hidden;
     }
 
     .mobile-context-toggle {
-      flex: 0 0 32px;
-      width: 32px;
-      height: 32px !important;
-      padding: 0 !important;
-      border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--primary-color) 8%, transparent);
-      color: var(--primary-color);
-    }
-
-    .mobile-context-panel {
-      display: flex;
-      flex: 1 1 auto;
-      min-width: 0;
-      flex-wrap: wrap;
-      align-items: flex-start;
-      gap: 4px;
-      margin-left: 5px;
-    }
-
-    .mobile-context-panel :deep(.ai-context-picker),
-    .mobile-context-panel :deep(.ai-attachment-picker),
-    .mobile-context-panel :deep(.b-upload-trigger) {
-      min-width: 0;
+      display: inline-flex;
+      flex: 0 0 auto;
+      gap: 7px;
+      width: max-content;
       max-width: 100%;
+      height: 36px !important;
+      padding: 4px 8px 4px 5px !important;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color));
+      border-radius: 12px;
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--primary-color) 15%, var(--card-background)),
+        color-mix(in srgb, var(--primary-color) 6%, var(--card-background))
+      );
+      color: var(--primary-color);
+      box-shadow: 0 8px 20px -16px color-mix(in srgb, var(--primary-color) 72%, transparent);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1;
     }
 
-    .mobile-context-panel :deep(.ai-attachment-picker.has-attachment) {
-      flex: 1 1 100%;
+    .mobile-context-toggle__icon {
+      display: grid;
+      flex: 0 0 26px;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--primary-color);
+      color: white;
+      box-shadow: 0 5px 12px -7px color-mix(in srgb, var(--primary-color) 86%, transparent);
     }
 
+    .mobile-context-toggle__label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
 
-    .context-actions :deep(.b_btn),
+    .mobile-context-toggle__count {
+      display: grid;
+      flex: 0 0 auto;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      place-items: center;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
+      color: var(--primary-color);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .mobile-context-drawer {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+      overflow-x: hidden;
+    }
+
+    .mobile-context-drawer__intro {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-width: 0;
+      padding: 8px 10px;
+      border: 1px solid var(--surface-divider-color);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--primary-color) 5%, var(--surface-panel-bg));
+    }
+
+    .mobile-context-drawer__intro > span {
+      flex: 0 0 auto;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background));
+      color: var(--primary-color);
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 16px;
+    }
+
+    .mobile-context-drawer__intro p {
+      min-width: 0;
+      margin: 0;
+      color: var(--desc-color);
+      font-size: 12px;
+      line-height: 17px;
+    }
+
+    .mobile-material-action-list {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .mobile-material-action-list :deep(.ai-context-picker),
+    .mobile-material-action-list :deep(.ai-attachment-picker),
+    .mobile-material-action-list :deep(.b-popover-trigger),
+    .mobile-material-action-list :deep(.b-upload-trigger) {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .mobile-material-action-list :deep(.ai-context-picker),
+    .mobile-material-action-list :deep(.ai-attachment-picker) {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-material-action-list :deep(.ai-context-chips) {
+      padding: 8px;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--surface-border-color));
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--primary-color) 5%, var(--surface-panel-bg));
+    }
+
+    .mobile-material-action-list :deep(.mobile-material-action-card) {
+      --material-accent: var(--primary-color);
+
+      position: relative;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr) 16px;
+      gap: 11px;
+      justify-content: stretch;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      height: auto;
+      min-height: 76px;
+      padding: 10px 12px 10px 10px;
+      overflow: hidden;
+      border: 1px solid color-mix(in srgb, var(--material-accent) 22%, var(--surface-border-color));
+      border-radius: 14px;
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--material-accent) 9%, var(--card-background)),
+        var(--card-background) 72%
+      );
+      color: var(--text-color);
+      line-height: normal;
+      text-align: left;
+      white-space: normal;
+      box-shadow: 0 12px 24px -22px color-mix(in srgb, var(--material-accent) 72%, transparent);
+      transition:
+        transform 0.16s ease,
+        border-color 0.16s ease,
+        box-shadow 0.16s ease;
+    }
+
+    .mobile-material-action-list :deep(.mobile-material-action-card--file) {
+      --material-accent: var(--resource-file-color);
+    }
+
+    .mobile-material-action-card__icon {
+      display: grid;
+      width: 42px;
+      height: 42px;
+      place-items: center;
+      align-self: center;
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--material-accent) 14%, var(--card-background));
+      color: var(--material-accent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--material-accent) 13%, transparent);
+    }
+
+    .mobile-material-action-card__copy {
+      display: grid;
+      min-width: 0;
+      align-content: center;
+      gap: 3px;
+    }
+
+    .mobile-material-action-card__copy strong,
+    .mobile-material-action-card__copy small {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .mobile-material-action-card__copy strong {
+      color: var(--text-color);
+      font-size: 14px;
+      font-weight: 650;
+      line-height: 19px;
+      white-space: nowrap;
+    }
+
+    .mobile-material-action-card__copy small {
+      display: -webkit-box;
+      color: var(--desc-color);
+      font-size: 11px;
+      line-height: 16px;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+
+    .mobile-material-action-card__arrow {
+      align-self: center;
+      color: color-mix(in srgb, var(--material-accent) 72%, var(--desc-color));
+      opacity: 0.7;
+    }
+
+    .mobile-material-action-list :deep(.mobile-material-action-card .btn-spinner) {
+      position: absolute;
+      z-index: 1;
+      left: 24px;
+      margin: 0;
+      color: var(--material-accent);
+      transform: translateX(-50%);
+    }
+
+    .mobile-material-action-list :deep(.mobile-material-action-card.loading) .mobile-material-action-card__icon {
+      opacity: 0;
+    }
+
+    .mobile-material-action-list :deep(.mobile-material-action-card:active) {
+      transform: scale(0.99);
+    }
+
+    @media (hover: hover) {
+      .mobile-context-toggle:hover {
+        border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
+        background: linear-gradient(
+          135deg,
+          color-mix(in srgb, var(--primary-color) 19%, var(--card-background)),
+          color-mix(in srgb, var(--primary-color) 9%, var(--card-background))
+        );
+      }
+
+      .mobile-material-action-list :deep(.mobile-material-action-card:hover) {
+        z-index: 1;
+        border-color: color-mix(in srgb, var(--material-accent) 42%, var(--surface-border-color));
+        box-shadow: 0 14px 28px -20px color-mix(in srgb, var(--material-accent) 55%, transparent);
+        transform: translateY(-1px);
+      }
+    }
+
     .input-actions :deep(.b_btn) {
       min-height: 32px !important;
       height: 32px !important;

@@ -115,12 +115,15 @@
       raw-file
       accept=".txt,.md,.markdown,.csv,.pdf,.docx,.png,.jpg,.jpeg,.webp"
       :max-total-size="20 * 1024 * 1024"
+      :disabled="busy"
       @change="uploadLocal"
     >
-      <BButton size="small" :loading="busy" :title="t('ai.material.attachmentOnceHint')">
-        <SvgIcon :src="icon.file_upload" size="14" />
-        {{ t('ai.uploadFile') }}
-      </BButton>
+      <slot name="trigger" :busy="busy">
+        <BButton size="small" :loading="busy" :title="t('ai.material.attachmentOnceHint')">
+          <SvgIcon :src="icon.file_upload" size="14" />
+          {{ t('ai.uploadFile') }}
+        </BButton>
+      </slot>
     </BUpload>
   </div>
 </template>
@@ -155,6 +158,7 @@
     modelValue: AiAttachment[];
     prepareActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
   }>();
+  defineSlots<{ trigger(props: { busy: boolean }): unknown }>();
   const emit = defineEmits<{
     'update:modelValue': [value: AiAttachment[]];
     prompt: [value: string];

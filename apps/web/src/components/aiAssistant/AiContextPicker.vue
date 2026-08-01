@@ -26,7 +26,9 @@
       </BButton>
     </div>
     <BPopover v-model:open="open" trigger="click" placement="top-left" overlay-class-name="ai-context-popover">
-      <BButton size="small">@ {{ t('ai.addContext') }}</BButton>
+      <slot name="trigger">
+        <BButton size="small" class="ai-context-trigger">@ {{ t('ai.addContext') }}</BButton>
+      </slot>
       <template #content>
         <div class="ai-context-panel">
           <BInput v-model:value="keyword" :placeholder="t('ai.searchContext')" clearable @enter="searchNow" />
@@ -77,6 +79,7 @@
   }
 
   const props = defineProps<{ modelValue: AiResourceContext[] }>();
+  defineSlots<{ trigger(): unknown }>();
   const emit = defineEmits<{
     'update:modelValue': [value: AiResourceContext[]];
     fileSelected: [value: AiResourceContext];
@@ -298,29 +301,43 @@
     }
   }
 
-  @media (max-width: 600px) {
-    .ai-context-picker,
-    .ai-context-chips {
-      max-width: none;
-      flex: 0 0 auto;
-      flex-wrap: nowrap;
-    }
-
+  @media (max-width: 767px) {
     .ai-context-picker {
-      gap: 4px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
     .ai-context-chips {
-      gap: 4px;
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
+      flex-wrap: wrap;
+      gap: 6px;
     }
 
-    .ai-context-picker :deep(.b_btn) {
+    .ai-context-picker :deep(.ai-context-trigger),
+    .ai-context-chips :deep(.b_btn) {
       height: 36px;
       min-height: 36px;
+      max-width: 100%;
+      min-width: 0;
+    }
+
+    .ai-context-chips :deep(.ai-context-chip) {
+      flex: 0 1 auto;
+    }
+
+    .ai-context-chips :deep(.ai-context-clear) {
+      flex: 0 0 auto;
     }
 
     .ai-context-chip__title {
-      max-width: 112px;
+      max-width: min(46vw, 180px);
     }
   }
 </style>
