@@ -62,12 +62,14 @@
                   <div v-if="n.type === 'todo_reminder'" class="nt-todo-actions">
                     <BButton
                       size="small"
+                      type="primary"
+                      class="nt-todo-action nt-todo-action--complete"
                       :loading="completingTodoId === String(parseMeta(n.meta).todoId || '')"
                       @click.stop="completeReminderTodo(n)"
                     >
                       {{ t('notification.todoComplete') }}
                     </BButton>
-                    <BButton size="small" @click.stop="openReminderTodo(n)">
+                    <BButton size="small" class="nt-todo-action nt-todo-action--open" @click.stop="openReminderTodo(n)">
                       {{ t('notification.todoOpen') }}
                     </BButton>
                   </div>
@@ -600,6 +602,37 @@
     font-size: 11px;
     color: var(--desc-color);
     opacity: 0.8;
+  }
+  .notification-popover .nt-todo-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .notification-popover .nt-todo-action {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 0;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 7px;
+    line-height: 26px;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .notification-popover .nt-todo-action--complete {
+    border: 1px solid var(--primary-color);
+    box-shadow: none;
+  }
+  .notification-popover .nt-todo-action--open {
+    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
+    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+    color: var(--primary-color);
+  }
+  .notification-popover .nt-todo-action--open:hover {
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
   }
   .notification-popover .nt-more {
     width: 100%;

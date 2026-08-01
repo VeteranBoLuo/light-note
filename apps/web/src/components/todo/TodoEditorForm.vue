@@ -16,12 +16,7 @@
           @keydown="handleMentionKeydown"
         />
         <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
-        <div
-          v-if="mentionQuery"
-          v-show="mentionHasResults"
-          class="todo-mention-layer"
-          :style="mentionAnchorStyle"
-        >
+        <div v-if="mentionQuery" v-show="mentionHasResults" class="todo-mention-layer" :style="mentionAnchorStyle">
           <ResourcePickerPanel
             ref="mentionPanel"
             :allowed-types="['bookmark', 'note', 'file']"
@@ -62,11 +57,7 @@
         <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
           <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
           <span class="todo-resource-chip__title">{{ ref.title }}</span>
-          <BButton
-            class="todo-resource-chip__remove"
-            :aria-label="t('common.delete')"
-            @click="removeResourceRef(ref)"
-          >
+          <BButton class="todo-resource-chip__remove" :aria-label="t('common.delete')" @click="removeResourceRef(ref)">
             ×
           </BButton>
         </span>
@@ -133,13 +124,13 @@
         {{ recurrenceValidationMessage }}
       </p>
     </section>
-    <section class="todo-reminder-editor">
+    <section ref="reminderEditorRef" class="todo-reminder-editor">
       <div class="todo-reminder-editor__title">
         <div>
           <strong>{{ t('inbox.todoReminder') }}</strong>
           <small>{{ t('inbox.todoReminderHint') }}</small>
         </div>
-        <BSelect v-model:value="form.reminderMode" :options="reminderModeOptions" />
+        <BSelect v-model:value="form.reminderMode" :options="reminderModeOptions" @change="handleReminderModeChange" />
       </div>
       <template v-if="form.reminderMode !== 'none'">
         <div class="todo-reminder-editor__channels">
@@ -222,6 +213,7 @@
   const props = withDefaults(
     defineProps<{
       item?: TodoItem | null;
+      initialValues?: Partial<Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>>;
       saving?: boolean;
       resetKey?: number;
       /** 抽屉形态下把「取消 / 保存」吸在底部，避免长表单滚动后找不到提交按钮 */
@@ -229,6 +221,7 @@
     }>(),
     {
       item: null,
+      initialValues: () => ({}),
       saving: false,
       resetKey: 0,
       stickyActions: false,
@@ -240,6 +233,7 @@
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
+  const reminderEditorRef = ref<HTMLElement | null>(null);
 
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
@@ -384,10 +378,7 @@
     if (!form.dueAt) return t('inbox.todoRecurrenceNeedsDue');
     const interval = Number(form.recurrenceInterval);
     if (!Number.isInteger(interval) || interval < 1 || interval > 365) return t('inbox.todoRecurrenceIntervalInvalid');
-    if (
-      form.recurrenceEndAt &&
-      new Date(form.recurrenceEndAt).getTime() <= new Date(form.dueAt).getTime()
-    ) {
+    if (form.recurrenceEndAt && new Date(form.recurrenceEndAt).getTime() <= new Date(form.dueAt).getTime()) {
       return t('inbox.todoRecurrenceEndInvalid');
     }
     return '';
@@ -438,7 +429,7 @@
   );
 
   watch(
-    () => [props.item, props.resetKey] as const,
+    () => [props.item, props.initialValues, props.resetKey] as const,
     () => reset(),
     { immediate: true },
   );
@@ -450,13 +441,23 @@
     },
   );
 
+  async function handleReminderModeChange(mode: 'none' | 'once' | 'repeat') {
+    if (mode === 'none') return;
+    await nextTick();
+    reminderEditorRef.value?.scrollIntoView({
+      behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'nearest',
+    });
+  }
+
   function reset() {
-    form.title = props.item?.title || '';
-    form.description = props.item?.description || '';
+    const initialValues = props.item ? null : props.initialValues;
+    form.title = props.item?.title ?? initialValues?.title ?? '';
+    form.description = props.item?.description ?? initialValues?.description ?? '';
     resourceRefs.value = [...(props.item?.resourceRefs || [])];
     closeMention();
-    form.priority = props.item?.priority ?? 1;
-    form.dueAt = toTodoLocalInput(props.item?.dueAt);
+    form.priority = props.item?.priority ?? initialValues?.priority ?? 1;
+    form.dueAt = toTodoLocalInput(props.item?.dueAt ?? initialValues?.dueAt);
     const reminder = props.item?.reminder;
     form.reminderMode = reminder?.mode || (props.item?.reminderAt ? 'once' : 'none');
     form.reminderStartAt = toTodoLocalInput(reminder?.startAt || props.item?.reminderAt);
@@ -471,8 +472,9 @@
     form.recurrenceFrequency = props.item?.recurrence?.frequency || 'none';
     form.recurrenceInterval = props.item?.recurrence?.interval || 1;
     form.recurrenceEndAt = toTodoLocalInput(props.item?.recurrence?.endAt);
-    checklistItems.value = props.item?.checklist?.length
-      ? props.item.checklist.map((item) => ({ ...item }))
+    const initialChecklist = props.item?.checklist || initialValues?.checklist;
+    checklistItems.value = initialChecklist?.length
+      ? initialChecklist.map((item) => ({ ...item }))
       : [createChecklistItem()];
   }
 
@@ -573,7 +575,7 @@
   .todo-editor-form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     color: var(--text-color);
   }
   .todo-editor-form label {
@@ -581,6 +583,54 @@
     flex-direction: column;
     gap: 6px;
     font-size: 13px;
+    font-weight: 500;
+  }
+
+  .todo-editor-form :deep(.b-input),
+  .todo-editor-form :deep(.b-textarea) {
+    border: 1px solid color-mix(in srgb, var(--text-color) 16%, var(--surface-border-color)) !important;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 78%, var(--card-background)) !important;
+    transition:
+      border-color 0.18s ease,
+      box-shadow 0.18s ease,
+      background-color 0.18s ease;
+  }
+
+  .todo-editor-form :deep(.b-input:hover),
+  .todo-editor-form :deep(.b-textarea:hover) {
+    border-color: color-mix(in srgb, var(--primary-color) 48%, var(--surface-border-color)) !important;
+  }
+
+  .todo-editor-form :deep(.b-input:focus-visible),
+  .todo-editor-form :deep(.b-textarea:focus) {
+    border-color: var(--primary-color) !important;
+    background: var(--card-background) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 13%, transparent) !important;
+  }
+
+  .todo-editor-form :deep(.select-trigger),
+  .todo-editor-form :deep(.b-datetime-trigger) {
+    min-height: 40px;
+    border: 1px solid color-mix(in srgb, var(--text-color) 16%, var(--surface-border-color)) !important;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--bl-input-noBorder-bg-color) 78%, var(--card-background)) !important;
+  }
+
+  .todo-editor-form :deep(.select-trigger:hover),
+  .todo-editor-form :deep(.b-datetime-trigger:hover) {
+    border-color: color-mix(in srgb, var(--primary-color) 48%, var(--surface-border-color)) !important;
+  }
+
+  .todo-editor-form > label:first-child :deep(.b-input) {
+    height: 44px;
+    border-color: color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color)) !important;
+    border-radius: 10px;
+    font-size: 15px;
+  }
+  .todo-editor-form > label:nth-child(2) :deep(.b-textarea) {
+    min-height: 104px;
+    border-radius: 10px;
   }
   .todo-reminder-editor__interval-field {
     display: flex;
@@ -592,9 +642,9 @@
     display: grid;
     gap: 9px;
     padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--card-border-color));
+    border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--primary-color) 3%, var(--background-color));
+    background: var(--workspace-panel-bg-color);
   }
   .todo-recurrence-editor > div:first-child {
     display: grid;
@@ -614,9 +664,9 @@
     flex-direction: column;
     gap: 9px;
     padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--card-border-color));
+    border: 1px solid var(--surface-border-color);
     border-radius: 12px;
-    background: color-mix(in srgb, var(--primary-color) 4%, var(--background-color));
+    background: var(--workspace-panel-bg-color);
   }
   .todo-checklist-editor__header {
     display: flex;
@@ -672,13 +722,10 @@
     flex-direction: column;
     gap: 11px;
     padding: 13px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 12%, var(--card-border-color));
+    border: 1px solid var(--surface-border-color);
     border-radius: 14px;
-    background: linear-gradient(
-      130deg,
-      color-mix(in srgb, var(--primary-color) 5%, var(--background-color)),
-      var(--background-color)
-    );
+    background: var(--workspace-panel-bg-color);
+    scroll-margin-bottom: 76px;
   }
   .todo-reminder-editor__title {
     display: flex;
@@ -736,12 +783,13 @@
   /* 负 margin 抵消抽屉 body 的内边距，让底栏通栏压住滚动内容 */
   .todo-editor-form__actions.is-sticky {
     position: sticky;
-    bottom: -14px;
+    bottom: calc(-1 * var(--todo-editor-sticky-gutter, 14px));
     z-index: 1;
-    margin: 4px -14px -14px;
-    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    margin: 4px calc(-1 * var(--todo-editor-sticky-gutter, 14px)) calc(-1 * var(--todo-editor-sticky-gutter, 14px));
+    padding: 12px var(--todo-editor-sticky-gutter, 14px) calc(12px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
     background: var(--card-background);
+    box-shadow: 0 -8px 20px color-mix(in srgb, var(--text-color) 6%, transparent);
   }
 
   .todo-editor-form__actions.is-sticky .b_btn {
@@ -828,6 +876,10 @@
   .todo-resource-refs {
     display: grid;
     gap: 6px;
+    padding: 11px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
   }
 
   .todo-resource-refs__head {

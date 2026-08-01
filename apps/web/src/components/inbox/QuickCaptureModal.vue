@@ -1,57 +1,97 @@
 <template>
-  <!-- 移动端用底部抽屉：切到「待办」时内容会变长，固定 92dvh 并让操作区吸底；
-       书签/笔记/文件内容不多，高度交给 auto 自适应。桌面端保持原有弹框。 -->
+  <!-- 快速添加只承担低成本捕获；待办的完整字段转交独立抽屉。 -->
   <component :is="shellComponent" v-bind="shellProps" @close="close" @update:visible="syncVisible">
     <div class="capture-modal" @paste="handlePaste">
-      <p class="capture-hint">{{ captureHint }}</p>
-      <div v-if="!successText && pendingCount > 0" class="capture-pending">
-        <span>{{ t(pendingSummaryKey, { count: pendingCount }) }}</span>
-        <BButton size="small" @click="goInbox">
-          {{ t(captureType === 'todo' ? 'inbox.viewTodos' : 'inbox.organizeNow') }}
-        </BButton>
+      <div class="capture-intro">
+        <span class="capture-intro__eyebrow">{{ t('inbox.quickCaptureEyebrow') }}</span>
+        <p>{{ captureHint }}</p>
       </div>
-      <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="handleTypeChange" />
+      <BTabs
+        v-model:active-tab="captureType"
+        class="capture-tabs"
+        :options="typeOptions"
+        variant="segment"
+        @change="handleTypeChange"
+      />
 
       <template v-if="!successText">
-        <TodoEditorForm
-          v-if="captureType === 'todo'"
-          :saving="submitting"
-          :sticky-actions="bookmark.isMobile"
-          :reset-key="todoFormKey"
-          @submit="submitTodo"
-          @cancel="close"
-        />
-
-        <template v-else-if="captureType !== 'file'">
-          <BInput
-            v-model:value="content"
-            type="textarea"
-            :rows="captureType === 'bookmark' ? 3 : 8"
-            :maxlength="60000"
-            :placeholder="capturePlaceholder"
-            @input="detectType"
+        <section class="capture-workspace" :class="`is-${captureType}`">
+          <QuickTodoForm
+            v-if="captureType === 'todo'"
+            :saving="submitting"
+            :reset-key="todoFormKey"
+            @submit="submitTodo"
+            @details="openTodoDetails"
           />
-          <div v-if="captureType === 'bookmark' && content" class="detected-type">
-            {{ validUrl ? t('inbox.detectedBookmark') : t('inbox.invalidUrl') }}
-          </div>
-        </template>
+          <template v-else>
+            <div class="capture-panel-intro">
+              <strong>{{ capturePanelTitle }}</strong>
+              <span>{{ capturePanelHint }}</span>
+            </div>
 
-        <div v-else class="file-capture" @dragover.prevent @drop.prevent="handleDrop">
-          <BUpload :multiple="true" :raw-file="true" :max-total-size="200 * 1024 * 1024" @change="selectFiles">
-            <BButton>{{ t('inbox.chooseFiles') }}</BButton>
-          </BUpload>
-          <span>{{ t('inbox.dropFiles') }}</span>
-          <div v-if="files.length" class="file-list">
-            <span v-for="file in files" :key="`${file.name}:${file.size}`">{{ file.name }}</span>
-          </div>
-        </div>
+            <template v-if="captureType !== 'file'">
+              <BInput
+                v-model:value="content"
+                type="textarea"
+                :rows="captureType === 'bookmark' ? 3 : 7"
+                :maxlength="60000"
+                :placeholder="capturePlaceholder"
+                @input="detectType"
+              />
+              <div v-if="captureType === 'bookmark' && content" class="detected-type">
+                {{ validUrl ? t('inbox.detectedBookmark') : t('inbox.invalidUrl') }}
+              </div>
+            </template>
 
-        <div v-if="captureType !== 'todo'" class="capture-actions" :class="{ 'is-sticky': bookmark.isMobile }">
-          <BButton @click="close">{{ t('common.cancel') }}</BButton>
-          <BButton type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
-            {{ t('inbox.collect') }}
-          </BButton>
-        </div>
+            <div v-else class="file-capture" @dragover.prevent @drop.prevent="handleDrop">
+              <div class="file-capture__dropzone">
+                <BUpload :multiple="true" :raw-file="true" :max-total-size="MAX_FILE_TOTAL_SIZE" @change="selectFiles">
+                  <BButton>{{ t('inbox.chooseFiles') }}</BButton>
+                </BUpload>
+                <span>{{ t('inbox.dropOrPasteFiles') }}</span>
+                <kbd>{{ t('inbox.pasteShortcut') }}</kbd>
+              </div>
+              <div v-if="files.length" class="file-selection">
+                <div class="file-selection__header">
+                  <div>
+                    <strong>{{ t('inbox.selectedFiles', { count: files.length }) }}</strong>
+                    <span>{{ formatFileSize(totalFileSize) }}</span>
+                  </div>
+                  <BButton size="small" @click="clearFiles">{{ t('inbox.clearSelectedFiles') }}</BButton>
+                </div>
+                <div class="file-list">
+                  <div v-for="(file, index) in files" :key="selectedFileKey(file)" class="file-list__item">
+                    <span class="file-list__icon">
+                      <SvgIcon :src="icon.resource.file" size="18" aria-hidden="true" />
+                    </span>
+                    <span class="file-list__content">
+                      <span class="file-list__name" :title="file.name">{{ file.name }}</span>
+                      <span class="file-list__meta">
+                        {{ formatFileSize(file.size) }}
+                        <span v-if="isPastedFile(file)" class="file-list__source">{{ t('inbox.fromClipboard') }}</span>
+                      </span>
+                    </span>
+                    <BButton
+                      size="small"
+                      class="file-list__remove"
+                      :aria-label="t('inbox.removeSelectedFile', { name: file.name })"
+                      @click="removeFile(index)"
+                    >
+                      <SvgIcon :src="icon.common.close" size="14" aria-hidden="true" />
+                    </BButton>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="capture-actions" :class="{ 'is-sticky': bookmark.isMobile }">
+              <BButton @click="close">{{ t('common.cancel') }}</BButton>
+              <BButton type="primary" :loading="submitting" :disabled="!canSubmit" @click="submit">
+                {{ t('inbox.collect') }}
+              </BButton>
+            </div>
+          </template>
+        </section>
       </template>
 
       <div v-else class="capture-success">
@@ -64,6 +104,13 @@
       </div>
     </div>
   </component>
+
+  <TodoEditorModal
+    v-model:visible="todoDetailsVisible"
+    :initial-values="todoDraft"
+    @saved="afterDetailedTodoSaved"
+    @closed="closeAfterTodoDetails"
+  />
 </template>
 
 <script setup lang="ts">
@@ -76,7 +123,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
-  import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import QuickTodoForm from '@/components/todo/QuickTodoForm.vue';
+  import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -95,6 +144,9 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { createTodo, type TodoPayload } from '@/api/todoApi';
   import type { ActionCaptureType } from '@/store/inbox';
+  import icon from '@/config/icon';
+
+  const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{ captured: [] }>();
@@ -105,27 +157,25 @@
   const todo = todoStore();
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
 
-  const shellTitle = computed(() =>
-    captureType.value === 'todo' ? t('inbox.createTodo') : t('inbox.quickCapture'),
-  );
+  const shellTitle = computed(() => t('inbox.quickCapture'));
+  const quickShellVisible = computed(() => visible.value === true && !todoDetailsVisible.value);
   const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
   const shellProps = computed(() =>
     bookmark.isMobile
       ? {
-          open: visible.value === true,
+          open: quickShellVisible.value,
           title: shellTitle.value,
           placement: 'bottom' as const,
-          // 待办表单很长，固定高度并吸底；其余类型内容不多，交给 auto 自适应
-          height: captureType.value === 'todo' ? '92dvh' : 'auto',
+          height: 'auto',
           bodyPadding: '14px',
-          maskClosable: captureType.value !== 'todo' && !submitting.value,
+          maskClosable: !submitting.value,
         }
       : {
-          visible: visible.value,
+          visible: quickShellVisible.value,
           title: shellTitle.value,
           showFooter: false,
-          width: captureType.value === 'todo' ? 'min(680px, 94vw)' : 'min(560px, 92vw)',
-          maskClosable: captureType.value !== 'todo' && !submitting.value,
+          width: 'min(620px, 92vw)',
+          maskClosable: !submitting.value,
         },
   );
 
@@ -133,17 +183,15 @@
     visible.value = next;
   }
 
-  // 快速添加里的提示与「前往整理」目标保持同一业务边界：资源只统计待整理资源，待办只统计未完成待办。
-  const pendingCount = computed(() => (captureType.value === 'todo' ? todo.pendingTotal : inbox.pendingTotal));
-  const pendingSummaryKey = computed(() =>
-    captureType.value === 'todo' ? 'inbox.todoPendingSummary' : 'inbox.pendingSummary',
-  );
   const content = ref('');
   const files = ref<File[]>([]);
+  const pastedFileKeys = new Set<string>();
   const submitting = ref(false);
   const successText = ref('');
   const manualType = ref(false);
   const todoFormKey = ref(0);
+  const todoDetailsVisible = ref(false);
+  const todoDraft = ref<Partial<Pick<TodoPayload, 'title' | 'priority' | 'dueAt'>> | undefined>();
   const capturedResource = ref<{ type: ActionCaptureType; id?: string; title?: string } | null>(null);
 
   const typeOptions = computed(() =>
@@ -155,6 +203,8 @@
   const captureHint = computed(() =>
     captureType.value === 'todo' ? t('inbox.todoCaptureHint') : t('inbox.captureHint'),
   );
+  const capturePanelTitle = computed(() => t(`inbox.quickCapturePanels.${captureType.value}.title`));
+  const capturePanelHint = computed(() => t(`inbox.quickCapturePanels.${captureType.value}.hint`));
   const capturePlaceholder = computed(() =>
     captureType.value === 'bookmark' ? t('inbox.urlPlaceholder') : t('inbox.textPlaceholder'),
   );
@@ -166,6 +216,7 @@
         Boolean(content.value.trim()) &&
         (captureType.value !== 'bookmark' || validUrl.value),
   );
+  const totalFileSize = computed(() => files.value.reduce((sum, file) => sum + file.size, 0));
 
   watch(visible, (value) => {
     if (value) {
@@ -200,8 +251,27 @@
     captureType.value = detectInboxCaptureType(content.value);
   }
 
-  function selectFiles(value: File[]) {
-    files.value = value;
+  function selectedFileKey(file: File) {
+    return `${file.name}:${file.size}:${file.lastModified}`;
+  }
+
+  function addFiles(value: File[], source: 'picker' | 'drop' | 'clipboard' = 'picker') {
+    if (!value.length) return;
+    const seenKeys = new Set(files.value.map(selectedFileKey));
+    const additions = value.filter((file) => {
+      const key = selectedFileKey(file);
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+    if (!additions.length) return;
+    const nextTotalSize = totalFileSize.value + additions.reduce((sum, file) => sum + file.size, 0);
+    if (nextTotalSize > MAX_FILE_TOTAL_SIZE) {
+      message.warning(t('common.maxTotalSize', { n: MAX_FILE_TOTAL_SIZE / (1024 * 1024) }));
+      return;
+    }
+    if (source === 'clipboard') additions.forEach((file) => pastedFileKeys.add(selectedFileKey(file)));
+    files.value = [...files.value, ...additions];
     captureType.value = 'file';
     manualType.value = true;
     successText.value = '';
@@ -209,14 +279,35 @@
   }
 
   function handleDrop(event: DragEvent) {
-    selectFiles(Array.from(event.dataTransfer?.files || []));
+    addFiles(Array.from(event.dataTransfer?.files || []), 'drop');
   }
 
   function handlePaste(event: ClipboardEvent) {
     const pastedFiles = Array.from(event.clipboardData?.files || []);
     if (!pastedFiles.length) return;
     event.preventDefault();
-    selectFiles(pastedFiles);
+    addFiles(pastedFiles, 'clipboard');
+  }
+
+  function isPastedFile(file: File) {
+    return pastedFileKeys.has(selectedFileKey(file));
+  }
+
+  function removeFile(index: number) {
+    const target = files.value[index];
+    if (target) pastedFileKeys.delete(selectedFileKey(target));
+    files.value = files.value.filter((_, fileIndex) => fileIndex !== index);
+  }
+
+  function clearFiles() {
+    files.value = [];
+    pastedFileKeys.clear();
+  }
+
+  function formatFileSize(bytes: number) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
   }
 
   async function collectBookmark() {
@@ -300,6 +391,7 @@
       recordOperation(operation);
       content.value = '';
       files.value = [];
+      pastedFileKeys.clear();
       manualType.value = false;
       if (router.currentRoute.value.path.startsWith('/inbox')) {
         await Promise.all([inbox.refreshList(), todo.refreshList()]);
@@ -342,6 +434,33 @@
     }
   }
 
+  function openTodoDetails(payload: TodoPayload) {
+    todoDraft.value = {
+      title: payload.title,
+      priority: payload.priority,
+      dueAt: payload.dueAt,
+    };
+    todoDetailsVisible.value = true;
+  }
+
+  async function afterDetailedTodoSaved(result: { id: string; title: string }) {
+    capturedResource.value = { type: 'todo', id: result.id, title: result.title };
+    recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
+    if (router.currentRoute.value.path.startsWith('/inbox')) {
+      await Promise.all([inbox.refreshList(), todo.refreshList()]);
+    } else {
+      await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
+    }
+    emit('captured');
+    todoDetailsVisible.value = false;
+    visible.value = false;
+  }
+
+  function closeAfterTodoDetails() {
+    todoDetailsVisible.value = false;
+    visible.value = false;
+  }
+
   function goInbox() {
     visible.value = false;
     router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile));
@@ -366,10 +485,13 @@
   function reset() {
     content.value = '';
     files.value = [];
+    pastedFileKeys.clear();
     submitting.value = false;
     successText.value = '';
     capturedResource.value = null;
     manualType.value = false;
+    todoDetailsVisible.value = false;
+    todoDraft.value = undefined;
     captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
   }
 
@@ -383,60 +505,190 @@
   .capture-modal {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 16px;
     min-width: 0;
   }
-  .capture-hint {
+
+  .capture-intro {
+    display: grid;
+    gap: 5px;
+    padding: 12px 14px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 14%, var(--surface-border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--card-background));
+  }
+
+  .capture-intro__eyebrow {
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .capture-intro p {
     margin: 0;
     color: var(--desc-color);
     font-size: 13px;
+    line-height: 1.55;
   }
-  .capture-pending {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 9px 11px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+
+  .capture-tabs :deep(.tab-container) {
+    width: 100%;
+  }
+
+  .capture-tabs :deep(.tab) {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+
+  .capture-workspace {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: var(--surface-card-shadow);
+  }
+
+  .capture-panel-intro {
+    display: grid;
+    gap: 4px;
+  }
+
+  .capture-panel-intro strong {
     color: var(--text-color);
-    font-size: 13px;
+    font-size: 15px;
   }
-  .capture-pending span {
-    min-width: 0;
-  }
-  .capture-pending :deep(.b_btn) {
-    flex: 0 0 auto;
+
+  .capture-panel-intro span {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
   }
   .detected-type {
     color: var(--desc-color);
     font-size: 12px;
   }
   .file-capture {
-    min-height: 150px;
-    border: 1px dashed var(--card-border-color);
-    border-radius: 10px;
+    display: grid;
+    gap: 12px;
+  }
+  .file-capture__dropzone {
+    min-height: 112px;
+    border: 1px dashed color-mix(in srgb, var(--primary-color) 28%, var(--card-border-color));
+    border-radius: 12px;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     color: var(--desc-color);
     padding: 18px;
     box-sizing: border-box;
+    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--card-background));
+  }
+  .file-capture__dropzone > span {
+    font-size: 12px;
+  }
+  .file-capture__dropzone kbd {
+    padding: 3px 7px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 6px;
+    background: var(--workspace-panel-bg-color);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: 11px;
+    line-height: 1;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--text-color) 10%, transparent);
+  }
+  .file-selection {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .file-selection__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .file-selection__header > div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+  .file-selection__header strong {
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  .file-selection__header span {
+    color: var(--desc-color);
+    font-size: 11px;
   }
   .file-list {
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--text-color);
+    display: grid;
+    gap: 6px;
+    max-height: 186px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
-  .file-list span {
+  .file-list__item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    padding: 8px 9px;
+    border-radius: 9px;
+    background: var(--card-background);
+  }
+  .file-list__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--file-color, #ff8a00) 10%, var(--card-background));
+    color: var(--file-color, #ff8a00);
+  }
+  .file-list__content {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+  .file-list__name {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .file-list__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+  .file-list__source {
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+    color: var(--primary-color);
+  }
+  .file-list__remove {
+    color: var(--desc-color);
+  }
+  .file-list__remove:hover {
+    color: var(--danger-color, #e5484d);
   }
   .capture-success {
     display: flex;
@@ -444,8 +696,9 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border-radius: 8px;
-    background: rgba(46, 204, 113, 0.1);
+    border: 1px solid color-mix(in srgb, var(--message-success-color) 28%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--message-success-color) 10%, var(--card-background));
     color: var(--text-color);
   }
   .capture-success__actions {
@@ -473,10 +726,19 @@
   :deep(.b-textarea) {
     resize: vertical;
     min-height: 82px;
+    border-color: var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background) !important;
   }
   @media (max-width: 767px) {
-    .capture-pending {
-      align-items: flex-start;
+    .capture-intro {
+      padding: 10px 12px;
+    }
+    .capture-workspace {
+      padding: 13px;
+    }
+    .capture-tabs :deep(.tab) {
+      min-height: 40px;
     }
     .capture-success {
       align-items: flex-start;

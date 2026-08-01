@@ -106,9 +106,12 @@
             <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
 
             <div v-if="summaryLoading" class="content-list content-list--loading">
-              <div v-for="index in 3" :key="`content-skeleton-${index}`" class="content-skeleton-row">
+              <div v-for="index in 5" :key="`content-skeleton-${index}`" class="content-skeleton-row">
                 <span class="skeleton-block skeleton-row-icon"></span>
-                <span class="skeleton-block skeleton-row-main"></span>
+                <span class="content-skeleton-copy">
+                  <span class="skeleton-block content-skeleton-title"></span>
+                  <span class="skeleton-block content-skeleton-subtitle"></span>
+                </span>
                 <span class="skeleton-block skeleton-row-meta"></span>
               </div>
             </div>
@@ -137,8 +140,30 @@
         </div>
       </section>
 
+      <section v-if="growthSectionLoading" class="growth-task-grid growth-task-grid--loading" aria-hidden="true">
+        <article v-for="panel in 2" :key="`growth-panel-skeleton-${panel}`" class="panel-card growth-panel-skeleton">
+          <div class="growth-panel-skeleton__header">
+            <span class="skeleton-block growth-panel-skeleton__title"></span>
+            <span class="skeleton-block growth-panel-skeleton__count"></span>
+          </div>
+          <span class="skeleton-block growth-panel-skeleton__bar"></span>
+          <span class="skeleton-block growth-panel-skeleton__hint"></span>
+          <div class="growth-panel-skeleton__list">
+            <span v-for="row in panel === 1 ? 3 : 2" :key="row" class="growth-panel-skeleton__row">
+              <span class="skeleton-block growth-panel-skeleton__marker"></span>
+              <span class="growth-panel-skeleton__copy">
+                <span class="skeleton-block"></span>
+                <span class="skeleton-block"></span>
+              </span>
+              <span class="skeleton-block growth-panel-skeleton__action"></span>
+            </span>
+          </div>
+          <span class="skeleton-block growth-panel-skeleton__footer"></span>
+        </article>
+      </section>
+
       <section
-        v-if="showDailyGrowthTasks || showGrowthTasks"
+        v-else-if="showDailyGrowthTasks || showGrowthTasks"
         class="growth-task-grid"
         :class="{ 'growth-task-grid--single': !showDailyGrowthTasks || !showGrowthTasks }"
         :aria-label="t('growth.pageTitle')"
@@ -391,13 +416,25 @@
   const user = useUserStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
-  const { growth, dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
+  const {
+    growth,
+    dashboard,
+    dashboardLoading,
+    growthTasks,
+    growthTasksLoading,
+    loadDashboard,
+    loadGrowthTasks,
+    claimDailyBonus,
+  } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
+  const growthSectionLoading = computed(
+    () => (dashboardLoading.value && !dashboard.value) || (growthTasksLoading.value && !growthTasks.value),
+  );
 
   async function claimDailyGrowth() {
     if (growthReadOnly.value || claimingDailyGrowth.value) return;
@@ -1305,6 +1342,101 @@
 
   .today-growth-panel {
     height: 100%;
+    min-height: 250px;
+  }
+
+  .growth-task-grid--loading {
+    min-height: 250px;
+  }
+
+  .growth-panel-skeleton {
+    min-height: 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+  }
+
+  .growth-panel-skeleton__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .growth-panel-skeleton__title {
+    width: 86px;
+    height: 14px;
+  }
+
+  .growth-panel-skeleton__count {
+    width: 46px;
+    height: 12px;
+  }
+
+  .growth-panel-skeleton__bar {
+    width: 100%;
+    height: 6px;
+    border-radius: 999px;
+  }
+
+  .growth-panel-skeleton__hint {
+    width: 128px;
+    height: 10px;
+  }
+
+  .growth-panel-skeleton__list {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .growth-panel-skeleton__row {
+    min-height: 34px;
+    padding: 5px 10px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--primary-color) 3%, var(--background-color));
+  }
+
+  .growth-panel-skeleton__marker {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+  }
+
+  .growth-panel-skeleton__copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: grid;
+    gap: 5px;
+  }
+
+  .growth-panel-skeleton__copy .skeleton-block:first-child {
+    width: 42%;
+    height: 11px;
+  }
+
+  .growth-panel-skeleton__copy .skeleton-block:last-child {
+    width: 68%;
+    height: 8px;
+  }
+
+  .growth-panel-skeleton__action {
+    width: 58px;
+    height: 24px;
+    flex: 0 0 auto;
+  }
+
+  .growth-panel-skeleton__footer {
+    width: 116px;
+    height: 24px;
   }
 
   .summary-card {
@@ -1745,26 +1877,38 @@
   }
 
   .content-list--loading {
-    gap: 2px;
+    gap: 0;
   }
 
   .content-skeleton-row {
-    height: 48px;
-    padding: 0 9px;
+    height: 38px;
+    padding: 0 7px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .skeleton-row-icon {
-    width: 31px;
-    height: 31px;
+    width: 26px;
+    height: 26px;
     flex: 0 0 auto;
   }
 
-  .skeleton-row-main {
-    width: 45%;
-    height: 12px;
+  .content-skeleton-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: grid;
+    gap: 4px;
+  }
+
+  .content-skeleton-title {
+    width: min(62%, 180px);
+    height: 10px;
+  }
+
+  .content-skeleton-subtitle {
+    width: min(38%, 110px);
+    height: 7px;
   }
 
   .skeleton-row-meta {

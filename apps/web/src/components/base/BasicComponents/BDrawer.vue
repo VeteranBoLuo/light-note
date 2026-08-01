@@ -291,6 +291,7 @@
   ].join(',');
 
   function handleKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented) return;
     if (event.key === 'Escape' && props.keyboard && (!props.modal || isTopModalLayer(drawerLayer))) {
       event.preventDefault();
       handleClose();
@@ -314,6 +315,15 @@
       event.preventDefault();
       first.focus();
     }
+  }
+
+  // 下拉框、日期选择器等浮层会 Teleport 到 body，焦点可能暂时离开 drawer panel。
+  // 在 document 兜底监听 Escape，确保抽屉仍可退出；若内层浮层已消费 Escape，则不重复关闭抽屉。
+  function handleDocumentKeydown(event: KeyboardEvent) {
+    if (event.defaultPrevented || !props.open || !props.modal || event.key !== 'Escape' || !props.keyboard) return;
+    if (!isTopModalLayer(drawerLayer)) return;
+    event.preventDefault();
+    handleClose();
   }
 
   function clampWidth(value: number) {
@@ -344,8 +354,7 @@
     // 记录拖拽起点与起始宽度,之后按位移增量调整 —— 不在按下时改宽度(避免"按一下就跳变/闪一下")
     syncLayoutViewportWidth();
     resizeStartX = event.clientX;
-    resizeStartWidth =
-      currentWidth.value || clampWidth(Number.parseFloat(panelWidth.value) || resolvedMinWidth.value);
+    resizeStartWidth = currentWidth.value || clampWidth(Number.parseFloat(panelWidth.value) || resolvedMinWidth.value);
     document.body.classList.add('b-drawer-is-resizing');
     window.addEventListener('pointermove', handleResizeMove);
     window.addEventListener('pointerup', stopResize);
@@ -408,6 +417,7 @@
   onMounted(() => {
     syncLayoutViewportWidth();
     window.addEventListener('resize', syncLayoutViewportWidth);
+    document.addEventListener('keydown', handleDocumentKeydown);
   });
 
   onBeforeUnmount(() => {
@@ -418,6 +428,7 @@
     stopResize();
     unbindOutside();
     window.removeEventListener('resize', syncLayoutViewportWidth);
+    document.removeEventListener('keydown', handleDocumentKeydown);
   });
 </script>
 

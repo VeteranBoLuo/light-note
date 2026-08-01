@@ -12,10 +12,28 @@
     </header>
 
     <div v-if="loading" class="today-actions__content today-actions__loading">
-      <div v-for="index in 3" :key="`today-action-skeleton-${index}`" class="today-actions__skeleton-row">
-        <span class="skeleton-block skeleton-row-icon"></span>
-        <span class="skeleton-block skeleton-row-main"></span>
-        <span class="skeleton-block skeleton-row-meta"></span>
+      <div class="today-actions__skeleton-group">
+        <div class="today-actions__skeleton-head">
+          <span class="skeleton-block skeleton-group-title"></span>
+          <span class="skeleton-block skeleton-group-count"></span>
+        </div>
+        <div class="today-actions__skeleton-rows">
+          <div
+            v-for="index in contained ? 5 : 3"
+            :key="`today-action-skeleton-${index}`"
+            class="today-actions__skeleton-row"
+          >
+            <span class="skeleton-block skeleton-row-icon"></span>
+            <span class="skeleton-row-copy">
+              <span class="skeleton-block skeleton-row-title"></span>
+              <span class="skeleton-block skeleton-row-subtitle"></span>
+            </span>
+            <span class="skeleton-row-actions">
+              <span class="skeleton-block skeleton-row-button"></span>
+              <span class="skeleton-block skeleton-row-button skeleton-row-button--wide"></span>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -379,7 +397,7 @@
   }
 
   .today-actions--contained .today-actions__loading {
-    padding: 12px;
+    padding: 0;
     box-sizing: border-box;
   }
 
@@ -547,19 +565,53 @@
   }
 
   .today-actions__loading {
-    display: grid;
+    display: block;
+  }
+
+  .today-actions__skeleton-group {
+    overflow: hidden;
+    border: 1px solid var(--card-border-color);
+    border-radius: 14px;
+    background: var(--menu-body-bg-color, var(--background-color));
+  }
+
+  .today-actions--contained .today-actions__skeleton-group {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .today-actions__skeleton-head {
+    display: flex;
+    align-items: center;
     gap: 8px;
+    min-height: 33px;
+    padding: 8px 14px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+  }
+
+  .skeleton-group-title {
+    width: 52px;
+    height: 12px;
+  }
+
+  .skeleton-group-count {
+    width: 24px;
+    height: 18px;
+    border-radius: 999px;
   }
 
   .today-actions__skeleton-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 48px;
-    padding: 8px 14px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 12px;
+    height: 48px;
+    padding: 5px 14px;
     box-sizing: border-box;
+  }
+
+  .today-actions__skeleton-row + .today-actions__skeleton-row {
+    border-top: 1px solid var(--surface-divider-color, var(--card-border-color));
   }
 
   .skeleton-block {
@@ -569,20 +621,42 @@
   }
 
   .skeleton-row-icon {
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     flex: 0 0 auto;
   }
 
-  .skeleton-row-main {
-    height: 14px;
+  .skeleton-row-copy {
+    min-width: 0;
     flex: 1 1 auto;
+    display: grid;
+    gap: 5px;
   }
 
-  .skeleton-row-meta {
-    width: 84px;
-    height: 14px;
+  .skeleton-row-title {
+    width: min(58%, 460px);
+    height: 12px;
+  }
+
+  .skeleton-row-subtitle {
+    width: min(22%, 150px);
+    height: 9px;
+  }
+
+  .skeleton-row-actions {
+    display: flex;
+    gap: 8px;
     flex: 0 0 auto;
+  }
+
+  .skeleton-row-button {
+    width: 48px;
+    height: 24px;
+    border-radius: 6px;
+  }
+
+  .skeleton-row-button--wide {
+    width: 66px;
   }
 
   @keyframes today-skeleton-pulse {

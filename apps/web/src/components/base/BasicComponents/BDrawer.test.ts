@@ -105,6 +105,39 @@ describe('BDrawer compositor cleanup', () => {
     expect(document.activeElement).toBe(document.body);
   });
 
+  it('closes with Escape when focus is inside a teleported child outside the drawer panel', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const onClose = vi.fn();
+    const host = document.createElement('div');
+    const teleportedInput = document.createElement('input');
+    document.body.append(host, teleportedInput);
+    const app = createApp({
+      setup() {
+        return () => h(BDrawer, { open: true, title: 'Editor drawer', onClose });
+      },
+    });
+    app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+      teleportedInput.remove();
+    };
+
+    await nextTick();
+    await nextTick();
+    teleportedInput.focus();
+    teleportedInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await nextTick();
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('supports a non-modal resizable sidecar without stealing focus', async () => {
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
       callback(0);
