@@ -25,7 +25,14 @@
               class="dom-hover"
               @click="zoomImage"
             />
-            <svg-icon v-else img-id="viewUserImg" @click="zoomImage" size="40" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+            <svg-icon
+              v-else
+              img-id="viewUserImg"
+              @click="zoomImage"
+              size="40"
+              :src="user.headPicture || icon.navigation.user"
+              class="dom-hover"
+            />
           </div>
           <div class="user-meta">
             <div class="user-name-row">
@@ -132,12 +139,17 @@
       @mouseleave="handleTriggerMouseLeave"
     >
       <!-- 佩戴头像框:关掉父级 clip,由框做圆环、内部头像单独裁圆,避免被裁 -->
-      <AvatarFramePreview v-if="equippedFrameId" :frame-id="equippedFrameId" :src="user.headPicture || icon.navigation.user" :size="30" />
+      <AvatarFramePreview
+        v-if="equippedFrameId"
+        :frame-id="equippedFrameId"
+        :src="user.headPicture || icon.navigation.user"
+        :size="30"
+      />
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
-    <my-info v-if="userVisible" v-model:visible="userVisible" />
   </BPopover>
+  <my-info v-if="userVisible" v-model:visible="userVisible" />
 </template>
 
 <script setup lang="ts">
@@ -184,6 +196,7 @@
   const badgeTier = computed(() => tierOf(growthInfo.value?.level || 1));
   onMounted(() => {
     loadGrowth(); // 游客也拉取(后端返回 Lv.1),让游客也看到等级 → 点击去成长页是转化钩子
+    window.addEventListener('light-note:open-profile', openProfileFromGrowth);
   });
   // 每次展开个人中心面板都强制拉最新成长:升级是后端异步发生的,确保徽章等级/红点及时刷新
   watch(
@@ -433,8 +446,14 @@
     menuVisible.value = false;
   }
 
+  function openProfileFromGrowth() {
+    userVisible.value = true;
+    menuVisible.value = false;
+  }
+
   onBeforeUnmount(() => {
     clearCloseTimer();
+    window.removeEventListener('light-note:open-profile', openProfileFromGrowth);
   });
 </script>
 

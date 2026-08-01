@@ -1,12 +1,34 @@
-import { getGrowth, getGrowthDashboard, getActivityHeatmap, claimDailyQuestBonus, claimAchievement, checkin, useProtectCard, adminAdjustGrowth, RANKS, markNoticesRead } from '../util/growth.js';
+import {
+  getGrowth,
+  getGrowthDashboard,
+  getActivityHeatmap,
+  claimDailyQuestBonus,
+  claimAchievement,
+  checkin,
+  useProtectCard,
+  adminAdjustGrowth,
+  RANKS,
+  markNoticesRead,
+} from '../util/growth.js';
 import { buildWeeklyReport } from '../util/weeklyReport.js';
-import { resultData } from '../util/common.js';
+import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
-import { SHOP_ITEMS, getOwnedCosmetics, buyItem, equipTitle, equipFrame, getPointsLog, getPointsOverview, adminGrantPoints, getUserPointsDetail } from '../util/points.js';
+import {
+  SHOP_ITEMS,
+  getOwnedCosmetics,
+  buyItem,
+  equipTitle,
+  equipFrame,
+  getPointsLog,
+  getPointsOverview,
+  adminGrantPoints,
+  getUserPointsDetail,
+} from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
 import { getRecap } from '../util/recap.js';
+import { getGrowthTasks } from '../util/growthTaskService.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -98,6 +120,19 @@ export const getDashboard = async (req, res) => {
   }
 };
 
+// GET /growth/tasks —— 成长任务定义与当前账号完成状态；游客只返回待完成预览，不读取共享游客成长记录
+export const getGrowthTasksHandle = async (req, res) => {
+  try {
+    const subject = req.resourceUser || req.user || {};
+    const userId = subject.role === 'visitor' ? null : subject.id || null;
+    const data = await getGrowthTasks(userId);
+    res.send(resultData(data));
+  } catch (error) {
+    console.error('获取成长任务失败:', error);
+    res.send(resultData(null, 500, L(req, '获取成长任务失败', 'Failed to load growth tasks')));
+  }
+};
+
 // GET /growth/heatmap —— 知识活动热力图(贡献格子);只读,游客返回空;支持 ?year=YYYY
 export const getHeatmap = async (req, res) => {
   try {
@@ -179,7 +214,8 @@ export const getShop = async (req, res) => {
         minLevel: it.minLevel || 0,
         bonusTokens: it.bonusTokens || 0,
         owned: isOwned,
-        equipped: (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
+        equipped:
+          (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
         canBuy: !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
       };
@@ -248,7 +284,10 @@ export const getClaimable = async (req, res) => {
   try {
     const userId = req.user?.id;
     if (!userId || req.user?.role === 'visitor') return res.send(resultData({ count: 0 }));
-    const [dash, wk] = await Promise.all([getGrowthDashboard(userId, { userRole: req.user.role }), getWeeklyChallenges(userId)]);
+    const [dash, wk] = await Promise.all([
+      getGrowthDashboard(userId, { userRole: req.user.role }),
+      getWeeklyChallenges(userId),
+    ]);
     const count = (dash.claimableCount || 0) + (wk.claimableCount || 0);
     res.send(resultData({ count, achievements: dash.claimableCount || 0, weekly: wk.claimableCount || 0 }));
   } catch (error) {
@@ -296,7 +335,7 @@ export const getRecapHandle = async (req, res) => {
     res.send(resultData(await getRecap(userId)));
   } catch (error) {
     console.error('获取回顾失败:', error);
-    res.send(resultData(null, 500, '获取回顾失败: ' + error.message));
+    res.send(resultData(null, 500, L(req, '获取回顾失败', 'Failed to load recap')));
   }
 };
 

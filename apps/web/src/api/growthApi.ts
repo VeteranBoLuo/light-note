@@ -18,13 +18,20 @@ export const getRanks = () => apiBaseGet('/api/growth/ranks');
 // 成长看板(成就墙/统计/今日任务/时间线)
 export const getDashboard = () => apiBaseGet('/api/growth/dashboard');
 
+// 成长任务定义与当前账号完成状态(PR2；页面展示在后续阶段接入)
+export const getGrowthTasks = () => apiBaseGet('/api/growth/tasks');
+
 // 实时本周成长周报(前端「查看大图」用)
 export const getWeeklyReport = () => apiBaseGet('/api/growth/weeklyReport');
 
 // 后台成长运营(root):查目标用户成长 + 调整(发经验/设等级/送补签卡)
 export const adminGetUserGrowth = (userId: string) => apiBasePost('/api/growth/admin/userGrowth', { userId });
-export const adminAdjustGrowth = (payload: { userId: string; expDelta?: number; setLevel?: number | null; cardDelta?: number }) =>
-  apiBasePost('/api/growth/admin/adjust', payload);
+export const adminAdjustGrowth = (payload: {
+  userId: string;
+  expDelta?: number;
+  setLevel?: number | null;
+  cardDelta?: number;
+}) => apiBasePost('/api/growth/admin/adjust', payload);
 
 // 标记升级通知已读(查看成长页后)
 export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
@@ -58,20 +65,27 @@ export const claimAchievement = (key: string) => apiBasePost('/api/growth/achiev
 export const getRecap = () => apiBaseGet('/api/growth/recap');
 
 // 知识活动热力图(贡献格子);year 可选,默认当前年
-export const getHeatmap = (year?: number) => apiBaseGet(year ? `/api/growth/heatmap?year=${year}` : '/api/growth/heatmap');
+export const getHeatmap = (year?: number) =>
+  apiBaseGet(year ? `/api/growth/heatmap?year=${year}` : '/api/growth/heatmap');
 
 // 每周挑战:进度 + 领取
 export const getWeekly = () => apiBaseGet('/api/growth/weekly');
 export const claimWeekly = (key: string) => apiBasePost('/api/growth/weekly/claim', { key });
 
 // 积分明细(分页)
-export const getPointsLog = (limit = 30, offset = 0) => apiBaseGet(`/api/growth/points/log?limit=${limit}&offset=${offset}`);
+export const getPointsLog = (limit = 30, offset = 0) =>
+  apiBaseGet(`/api/growth/points/log?limit=${limit}&offset=${offset}`);
 
 // —— root 积分运营 ——
 export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
 export const adminUserPoints = (userId: string) => apiBasePost('/api/growth/admin/userPoints', { userId });
-export const adminGrantPoints = (payload: { userId: string; points?: number; cards?: number; storageMb?: number; note?: string }) =>
-  apiBasePost('/api/growth/admin/grantPoints', payload);
+export const adminGrantPoints = (payload: {
+  userId: string;
+  points?: number;
+  cards?: number;
+  storageMb?: number;
+  note?: string;
+}) => apiBasePost('/api/growth/admin/grantPoints', payload);
 
 export default {
   getMyGrowth,
@@ -80,6 +94,7 @@ export default {
   useProtectCard,
   getRanks,
   getDashboard,
+  getGrowthTasks,
   getWeeklyReport,
   adminGetUserGrowth,
   adminAdjustGrowth,

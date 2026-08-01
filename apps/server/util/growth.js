@@ -199,12 +199,12 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     const eventId = ins.insertId;
 
     // 2. 日 EXP 硬顶:当日已发放合计(含刚插入的 0)→ 截断本次发放量
-    // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):首次成就、升级里程碑、手动。
+    // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):成长任务、升级里程碑、手动。
     // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
-    // profile_done 与 first_own_resource 同属一次性成就(幂等、非刷点),一并豁免日顶,保证必得
+    // growth_task 属于一次性成长奖励(幂等、非刷点),豁免日顶,保证必得
     // daily_quest(今日任务奖励)不豁免日顶:与日上限口径一致,达 200/日后不再增发(用户反馈:不应超上限)
     const capExempt =
-      source === 'first_own_resource' || source === 'milestone' || source === 'manual' || source === 'profile_done';
+      source === 'growth_task' || source === 'milestone' || source === 'manual';
     let used = 0;
     if (!capExempt) {
       const [[sumRow]] = await c.query(
@@ -306,11 +306,15 @@ export function hashRef(str) {
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole) || userRole === 'root') return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
-  // 首次创建该类资源 +30(一次性成就,uk_resource(user,'first_own_resource',kind) 幂等)
-  // await 让首次与衰减顺序到账(awardCreate 整体已在 handler 里 fire-and-forget,不阻塞创建响应)
-  await grantExp(userId, 'first_own_resource', { refId: kind, amount: 30, userRole }).catch((e) =>
-    console.warn('[growth] 首次资源奖励发放失败 code=%s', stableAgentErrorCode(e)),
-  );
+  // 首次笔记/书签已迁移为成长任务；文件没有对应首批任务，不再额外发同类一次性奖励。
+  if (kind === 'note' || kind === 'bookmark') {
+    try {
+      const { completeGrowthTask } = await import('./growthTaskCompletion.js');
+      await completeGrowthTask(userId, kind === 'note' ? 'first_note' : 'first_bookmark', { userRole });
+    } catch (error) {
+      console.warn('[growth] 首次成长任务发放失败 code=%s', stableAgentErrorCode(error));
+    }
+  }
   // 当日第 N 条衰减
   const [[row]] = await pool.query(
     `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND create_time >= CURDATE()`,
@@ -388,7 +392,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     const [[dRow]] = await pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
        WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
-         AND source NOT IN ('first_own_resource', 'milestone', 'manual', 'profile_done')`,
+         AND source NOT IN ('growth_task', 'first_own_resource', 'milestone', 'manual', 'profile_done')`,
       [userId],
     );
     dailyExp = Number(dRow.s || 0);
@@ -430,20 +434,21 @@ export async function getGrowth(userId, { userRole = null } = {}) {
 // ============================================================================
 
 // 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值;reward=解锁后可领的积分。
-// reward 按难度递增:首次类 20;中阶 50~120;高阶 150~250;里程碑级 500~600。领取幂等由 points_log(reason='achievement', ref=key)保证,无需额外表。
+// reward 按长期积累难度递增:中阶 50~120;高阶 150~250;里程碑级 500~600。
+// 领取幂等由 points_log(reason='achievement', ref=key)保证,无需额外表。
 export const ACHIEVEMENTS = [
-  { key: 'first_checkin', group: 'checkin', metric: 'totalCheckins', target: 1, reward: 20 },
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
   { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
   { key: 'checkin_50', group: 'checkin', metric: 'totalCheckins', target: 50, reward: 80 },
   { key: 'checkin_100', group: 'checkin', metric: 'totalCheckins', target: 100, reward: 150 },
-  { key: 'first_bookmark', group: 'create', metric: 'bookmarkCount', target: 1, reward: 20 },
   { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50, reward: 80 },
   { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200, reward: 200 },
-  { key: 'first_note', group: 'create', metric: 'noteCount', target: 1, reward: 20 },
   { key: 'note_20', group: 'create', metric: 'noteCount', target: 20, reward: 60 },
   { key: 'note_50', group: 'create', metric: 'noteCount', target: 50, reward: 120 },
-  { key: 'first_file', group: 'create', metric: 'fileCount', target: 1, reward: 20 },
+  { key: 'todo_100', group: 'action', metric: 'completedTodoCount', target: 100, reward: 150 },
+  { key: 'todo_1000', group: 'action', metric: 'completedTodoCount', target: 1000, reward: 500 },
+  { key: 'organize_100', group: 'organize', metric: 'organizedResourceCount', target: 100, reward: 150 },
+  { key: 'organize_1000', group: 'organize', metric: 'organizedResourceCount', target: 1000, reward: 500 },
   { key: 'level_5', group: 'level', metric: 'level', target: 5, reward: 100 },
   { key: 'level_10', group: 'level', metric: 'level', target: 10, reward: 250 },
   { key: 'level_15', group: 'level', metric: 'level', target: 15, reward: 600 },
@@ -650,6 +655,8 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     noteCount: 0,
     fileCount: 0,
     tagCount: 0,
+    completedTodoCount: 0,
+    organizedResourceCount: 0,
     weekExp: 0,
     checkinDays: [],
   };
@@ -686,6 +693,15 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
               SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id = t.user_id AND osr.resource_type = 'tag' AND osr.resource_id = t.id
             )) AS tagCount,
+        (SELECT COUNT(*) FROM todo_items td
+          WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed') AS completedTodoCount,
+        (SELECT COUNT(*) FROM resource_inbox ri
+          WHERE ri.user_id = ? AND ri.status = 'completed'
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+                AND osr.resource_id = ri.resource_id
+            )) AS organizedResourceCount,
         (SELECT create_time FROM user WHERE id = ?) AS createTime,
         (SELECT MIN(b.create_time) FROM bookmark b
           WHERE b.user_id = ? AND b.del_flag = 0
@@ -699,12 +715,14 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
               SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
             )) AS firstNote`,
-      [userId, userId, userId, userId, userId, userId, userId],
+      [userId, userId, userId, userId, userId, userId, userId, userId, userId],
     );
     stats.bookmarkCount = Number(row.bookmarkCount || 0);
     stats.noteCount = Number(row.noteCount || 0);
     stats.fileCount = Number(row.fileCount || 0);
     stats.tagCount = Number(row.tagCount || 0);
+    stats.completedTodoCount = Number(row.completedTodoCount || 0);
+    stats.organizedResourceCount = Number(row.organizedResourceCount || 0);
     const joinTimes = [row.createTime, row.firstBookmark, row.firstNote]
       .filter(Boolean)
       .map((d) => new Date(d).getTime())

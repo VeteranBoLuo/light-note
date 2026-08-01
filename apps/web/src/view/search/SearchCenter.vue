@@ -69,7 +69,7 @@
               <BButton
                 class="search-header-icon-btn graph-entry"
                 :aria-label="t('resourceCenter.knowledgeGraph')"
-                @click="$router.push('/graph')"
+                @click="$router.push({ path: '/manage/tagMg', query: { view: 'map' } })"
                 v-click-log="{ module: '资源中心', operation: '进入知识地图' }"
               >
                 <svg-icon :src="icon.ai.internet" size="17" aria-hidden="true" />
@@ -480,41 +480,6 @@
           />
         </div>
 
-        <!-- 只在选中待办时出现：待办不属于标签体系，也不该在纯资源筛选里占位 -->
-        <template v-if="isTypeSelected('todo')">
-          <div class="mobile-filter-section">
-            <span class="mobile-filter-label">{{ t('resourceCenter.todoStatus') }}</span>
-            <div class="mobile-filter-types">
-              <BButton
-                v-for="option in todoStatusOptions"
-                :key="option.value"
-                class="mobile-filter-type"
-                :class="{ active: queryState.todoStatus === option.value }"
-                :aria-pressed="queryState.todoStatus === option.value"
-                @click="setTodoStatus(option.value)"
-              >
-                {{ option.label }}
-              </BButton>
-            </div>
-          </div>
-
-          <div class="mobile-filter-section">
-            <span class="mobile-filter-label">{{ t('inbox.todoPriority') }}</span>
-            <div class="mobile-filter-types">
-              <BButton
-                v-for="option in todoPriorityOptions"
-                :key="option.value"
-                class="mobile-filter-type"
-                :class="{ active: queryState.todoPriority.includes(option.value) }"
-                :aria-pressed="queryState.todoPriority.includes(option.value)"
-                @click="toggleTodoPriority(option.value)"
-              >
-                {{ option.label }}
-              </BButton>
-            </div>
-          </div>
-        </template>
-
         <div class="mobile-filter-section">
           <span class="mobile-filter-label">{{ t('resourceCenter.resourceState') }}</span>
           <BButton
@@ -649,9 +614,6 @@
     tags: string[];
     date: ResourceDate;
     untagged: boolean;
-    // 待办专属条件，只在选中待办时下发
-    todoStatus: 'all' | 'pending' | 'completed';
-    todoPriority: Array<0 | 1 | 2>;
   }>({
     keyword: '',
     type: 'all',
@@ -664,8 +626,6 @@
     tags: [],
     date: 'all',
     untagged: false,
-    todoStatus: 'all',
-    todoPriority: [],
   });
 
   const viewState = reactive<{
@@ -730,7 +690,7 @@
   const allVisibleItems = computed(() =>
     interleavedItems.value.length ? interleavedItems.value : visibleGroups.value.flatMap((group) => group.items),
   );
-  // 待办可被搜索到，但不参与资源批量加标签 / 加入待整理 / 批量删除
+  // 资源中心数据域固定为书签、笔记、文件和标签。
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
   );
@@ -758,8 +718,6 @@
       queryState.date !== 'all' ||
       queryState.untagged ||
       queryState.types.length > 0 ||
-      queryState.todoStatus !== 'all' ||
-      queryState.todoPriority.length > 0 ||
       queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance'),
   );
   const mobileActiveFilterCount = computed(
@@ -767,10 +725,8 @@
       queryState.tags.length +
       Number(queryState.date !== 'all') +
       Number(queryState.untagged) +
-      // 类型 Tab 已收进抽屉，类型与待办条件都要计入「筛选 N」角标
+      // 类型 Tab 已收进抽屉，类型条件计入「筛选 N」角标
       Number(queryState.types.length > 0) +
-      Number(queryState.todoStatus !== 'all') +
-      Number(queryState.todoPriority.length > 0) +
       Number(queryState.sort !== ((user.preferences.resourceSort as ResourceSort) || 'relevance')),
   );
 
@@ -781,7 +737,10 @@
     {
       value: 'all' as const,
       label: t('resourceCenter.types.allResults'),
-      count: Object.values(summaryTotals.value).reduce((sum, count) => sum + Number(count || 0), 0),
+      count: SEARCH_CENTER_TYPE_LIST.reduce(
+        (sum, type) => sum + Number(summaryTotals.value[type] || 0),
+        0,
+      ),
     },
     ...SEARCH_CENTER_TYPE_LIST.map((type) => ({
       value: type,
@@ -836,38 +795,6 @@
   // 取消最后一个会让结果永远为空，因此忽略这次点击而不是清空。
   function isTypeSelected(type: GlobalSearchType) {
     return queryState.types.length === 0 || queryState.types.includes(type);
-  }
-
-  const todoStatusOptions = computed(
-    () =>
-      [
-        { value: 'all' as const, label: t('resourceCenter.todoStatusAll') },
-        { value: 'pending' as const, label: t('inbox.todoPending') },
-        { value: 'completed' as const, label: t('inbox.todoCompleted') },
-      ] as const,
-  );
-
-  const todoPriorityOptions = computed(
-    () =>
-      [
-        { value: 0 as const, label: t('inbox.todoPriority0') },
-        { value: 1 as const, label: t('inbox.todoPriority1') },
-        { value: 2 as const, label: t('inbox.todoPriority2') },
-      ] as const,
-  );
-
-  function setTodoStatus(status: 'all' | 'pending' | 'completed') {
-    if (queryState.todoStatus === status) return;
-    queryState.todoStatus = status;
-    applyQueryState('筛选待办状态');
-  }
-
-  function toggleTodoPriority(priority: 0 | 1 | 2) {
-    const selected = new Set(queryState.todoPriority);
-    if (selected.has(priority)) selected.delete(priority);
-    else selected.add(priority);
-    queryState.todoPriority = ([0, 1, 2] as const).filter((item) => selected.has(item));
-    applyQueryState('筛选待办优先级');
   }
 
   function toggleTypeFilter(type: GlobalSearchType) {
@@ -1017,7 +944,9 @@
     const directItems = Array.isArray(res.items) ? res.items : [];
     const groupItems = Array.isArray(res.groups) ? res.groups.flatMap((group: any) => group?.items || []) : [];
     const rawMergedItems = (directItems.length ? directItems : groupItems).map((item) => normalizeSearchItem(item));
-    return rawMergedItems.filter(Boolean) as SearchResultItem[];
+    return (rawMergedItems.filter(Boolean) as SearchResultItem[]).filter((item) =>
+      SEARCH_CENTER_TYPE_LIST.includes(item.type),
+    );
   }
 
   async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false) {
@@ -1046,10 +975,6 @@
         date: queryState.date,
         tags: queryState.tags,
         untagged: queryState.untagged,
-        // 待办条件只在选中待办时随请求下发，避免污染纯资源查询的缓存键
-        ...(selectedTypes.value.includes('todo')
-          ? { todoStatus: queryState.todoStatus, todoPriority: queryState.todoPriority }
-          : {}),
         paginationMode: 'ordered',
         cursor: append ? viewState.nextCursor : null,
         includeMetadata: !append,
@@ -1068,7 +993,7 @@
           note: Number(res.typeTotals.note || 0),
           file: Number(res.typeTotals.file || 0),
           tag: Number(res.typeTotals.tag || 0),
-          todo: Number(res.typeTotals.todo || 0),
+          todo: 0,
         };
       }
       const validSelection = new Set(viewState.rawItems.map((item) => getItemSelectionKey(item)));
@@ -1201,8 +1126,6 @@
     queryState.date = 'all';
     queryState.untagged = false;
     queryState.types = [];
-    queryState.todoStatus = 'all';
-    queryState.todoPriority = [];
     queryState.sort = (user.preferences.resourceSort as ResourceSort) || 'relevance';
     selectedIds.value = [];
     applyQueryState('清空筛选');

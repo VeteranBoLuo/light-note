@@ -1,6 +1,12 @@
 import { getWeeklyChallenges } from '../../weeklyChallenge.js';
 
-const LABEL = { wk_bookmark: '本周收藏书签', wk_note: '本周记录笔记', wk_checkin: '本周签到' };
+const LABEL = {
+  wk_bookmark: '本周收藏书签',
+  wk_note: '本周记录笔记',
+  wk_checkin: '本周签到',
+  wk_todo: '本周完成待办',
+  wk_organize: '本周整理资源',
+};
 
 // 本周挑战进度(只读)。
 export default {

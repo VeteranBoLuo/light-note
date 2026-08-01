@@ -138,6 +138,8 @@ describe('newUserSeedService', () => {
     });
     expect(noteInserts.map(([, [row]]) => row.type).sort()).toEqual(['html', 'markdown']);
     expect(relationInserts.flatMap(([, [values]]) => values).every((row) => row[4] === 'onboarding')).toBe(true);
+    const allSeedSql = connection.query.mock.calls.map(([sql]) => compactSql(sql)).join('\n');
+    expect(allSeedSql).not.toMatch(/growth_events|user_growth_tasks|points_log|user_growth\b/i);
   });
 
   it('欢迎笔记幂等标记已存在时不重复写入', async () => {

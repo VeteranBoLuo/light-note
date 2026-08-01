@@ -1,7 +1,7 @@
 <template>
   <footer class="input-section">
     <div class="input-container">
-      <div class="context-actions">
+      <div v-if="!isMobile" class="context-actions">
         <AiContextPicker
           :model-value="contexts"
           @update:model-value="$emit('update:contexts', $event)"
@@ -14,6 +14,43 @@
           @update:model-value="$emit('update:attachments', $event)"
           @prompt="applyAttachmentPrompt"
         />
+      </div>
+      <div v-else class="mobile-context-actions">
+        <BButton
+          class="mobile-context-toggle"
+          :aria-label="t(mobileActionsOpen ? 'ai.mobileCollapseActions' : 'ai.mobileExpandActions')"
+          :title="t(mobileActionsOpen ? 'ai.mobileCollapseActions' : 'ai.mobileExpandActions')"
+          :aria-expanded="mobileActionsOpen"
+          @click="mobileActionsOpen = !mobileActionsOpen"
+        >
+          <SvgIcon :src="icon.common.add" size="17" aria-hidden="true" />
+        </BButton>
+        <div v-if="mobileActionsOpen" class="mobile-context-panel">
+          <AiContextPicker
+            :model-value="contexts"
+            @update:model-value="$emit('update:contexts', $event)"
+            @file-selected="attachSelectedCloudFile"
+          />
+          <AiAttachmentPicker
+            ref="attachmentPicker"
+            :model-value="attachments"
+            :prepare-action-fn="prepareAttachmentActionFn"
+            @update:model-value="$emit('update:attachments', $event)"
+            @prompt="applyAttachmentPrompt"
+          />
+          <BUpload
+            :multiple="false"
+            raw-file
+            accept=".png,.jpg,.jpeg,.webp"
+            :max-total-size="20 * 1024 * 1024"
+            @change="uploadMobileImage"
+          >
+            <BButton size="small" :title="t('ai.uploadImage')">
+              <SvgIcon :src="icon.file_upload" size="14" />
+              {{ t('ai.uploadImage') }}
+            </BButton>
+          </BUpload>
+        </div>
       </div>
       <div class="text-input-wrap">
         <BInput
@@ -113,6 +150,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
@@ -127,6 +165,7 @@
   import type { AiAttachment } from '@/api/aiAttachmentApi';
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
+  import icon from '@/config/icon';
 
   const { t } = useI18n();
 
@@ -152,6 +191,8 @@
     (e: 'update:contexts', value: AiResourceContext[]): void;
     (e: 'update:attachments', value: AiAttachment[]): void;
   }>();
+
+  const mobileActionsOpen = ref(false);
 
   const textInput = ref<{ focus: () => void } | null>(null);
   const attachmentPicker = ref<{
@@ -323,6 +364,12 @@
     void attachmentPicker.value?.uploadPastedImage(image);
   }
 
+  function uploadMobileImage(files: File[]) {
+    const file = files?.[0];
+    if (!file) return;
+    void attachmentPicker.value?.uploadPastedImage(file);
+  }
+
   function openAttachmentAction(toolName: AiAttachmentDirectActionName, args: Record<string, unknown> = {}) {
     return attachmentPicker.value?.openAction(toolName, args) || false;
   }
@@ -393,6 +440,10 @@
     width: 100%;
     min-width: 0;
     margin-bottom: 6px;
+  }
+
+  .mobile-context-actions {
+    display: none;
   }
 
   /* 「@ 添加资源」「上传文件」是入口按钮:默认灰底在浅色下像原生 button、暗色下又与输入区同色。
@@ -576,6 +627,50 @@
       align-items: center;
       gap: 4px;
       margin-bottom: 4px;
+    }
+
+    .context-actions {
+      display: none;
+    }
+
+    .mobile-context-actions {
+      display: flex;
+      align-items: flex-start;
+      width: 100%;
+      min-width: 0;
+      margin-bottom: 4px;
+    }
+
+    .mobile-context-toggle {
+      flex: 0 0 32px;
+      width: 32px;
+      height: 32px !important;
+      padding: 0 !important;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 25%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+      color: var(--primary-color);
+    }
+
+    .mobile-context-panel {
+      display: flex;
+      flex: 1 1 auto;
+      min-width: 0;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 4px;
+      margin-left: 5px;
+    }
+
+    .mobile-context-panel :deep(.ai-context-picker),
+    .mobile-context-panel :deep(.ai-attachment-picker),
+    .mobile-context-panel :deep(.b-upload-trigger) {
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .mobile-context-panel :deep(.ai-attachment-picker.has-attachment) {
+      flex: 1 1 100%;
     }
 
 

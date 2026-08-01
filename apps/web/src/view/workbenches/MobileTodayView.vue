@@ -16,18 +16,50 @@
       <BButton size="small" :loading="loading" @click="loadToday">{{ t('common.retry') }}</BButton>
     </div>
 
-    <section class="mobile-today__summary" :aria-label="t('workbench.panel.todaySummary')">
-      <BButton
-        v-for="item in summaryItems"
-        :key="item.key"
-        class="mobile-today__summary-item"
-        :class="`is-${item.key}`"
-        @click="openSummaryItem(item.key)"
-        v-click-log="{ module: '今日', operation: `查看${item.label}` }"
-      >
-        <strong>{{ item.value }}</strong>
-        <span>{{ item.label }}</span>
-      </BButton>
+    <section class="mobile-today__pending" :aria-label="t('workbench.panel.todaySummary')">
+      <div class="mobile-today__pending-head">
+        <strong>{{ t('workbench.panel.todaySummary') }}</strong>
+        <span>{{ t('workbench.panel.todaySummaryHint') }}</span>
+      </div>
+      <div class="mobile-today__summary">
+        <BButton
+          v-for="item in summaryItems"
+          :key="item.key"
+          class="mobile-today__summary-item"
+          :class="`is-${item.key}`"
+          @click="openSummaryItem(item.key)"
+          v-click-log="{ module: '今日', operation: `查看${item.label}` }"
+        >
+          <strong>{{ item.value }}</strong>
+          <span>{{ item.label }}</span>
+        </BButton>
+      </div>
+      <div class="mobile-today__pending-details">
+        <TodayActionSection
+          :todo-total="counts.overdue + counts.dueToday"
+          :inbox-total="counts.inbox"
+          :overdue-todos="overdueTodos"
+          :due-today-todos="dueTodayTodos"
+          :inbox-items="inboxItems"
+          :loading="loading"
+          :show-header="false"
+          @refresh="loadToday"
+        />
+      </div>
+    </section>
+
+    <section v-if="showDailyGrowthTasks" class="mobile-today__growth">
+      <DailyQuests
+        :quests="dailyGrowthQuests"
+        :bonus="dailyGrowthBonus"
+        :claiming="claimingDailyGrowth"
+        :read-only="growthReadOnly"
+        @claim="claimDailyGrowth"
+      />
+    </section>
+
+    <section v-if="showGrowthTasks" class="mobile-today__growth">
+      <GrowthTasks :data="growthTasks" compact :max-visible="3" show-view-all @view="openGrowthTasks" />
     </section>
 
     <section class="mobile-today__capture">
@@ -49,16 +81,6 @@
         </BButton>
       </div>
     </section>
-
-    <TodayActionSection
-      :todo-total="counts.overdue + counts.dueToday"
-      :inbox-total="counts.inbox"
-      :overdue-todos="overdueTodos"
-      :due-today-todos="dueTodayTodos"
-      :inbox-items="inboxItems"
-      :loading="loading"
-      @refresh="loadToday"
-    />
 
     <section v-if="continueItems.length" class="mobile-today__continue">
       <div class="mobile-today__continue-head">
@@ -87,12 +109,15 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onActivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
+  import DailyQuests from '@/components/growth/DailyQuests.vue';
+  import GrowthTasks from '@/components/growth/GrowthTasks.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import { inboxStore, useUserStore } from '@/store';
@@ -100,6 +125,8 @@
   import type { TodoItem } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useGrowth } from '@/composables/useGrowth.ts';
+  import { recordOperation } from '@/api/commonApi';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -120,6 +147,43 @@
   const router = useRouter();
   const inbox = inboxStore();
   const user = useUserStore();
+  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
+  const growthReadOnly = computed(() => Boolean(user.adminContext));
+  const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
+  const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
+  const claimingDailyGrowth = ref(false);
+  const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.completed)));
+
+  async function claimDailyGrowth() {
+    if (growthReadOnly.value || claimingDailyGrowth.value) return;
+    claimingDailyGrowth.value = true;
+    try {
+      const res = await claimDailyBonus();
+      if (res?.status === 200 && res.data?.ok) {
+        if (res.data.already) {
+          message.info(t('growth.questClaimedAlready'));
+        } else if (res.data.capped) {
+          message.info(t('growth.questCapped'));
+        } else {
+          const points = res.data.pointsEarned || 0;
+          message.success(
+            points > 0
+              ? t('growth.questClaimOkPts', { n: res.data.expGained, p: points })
+              : t('growth.questClaimOk', { n: res.data.expGained }),
+          );
+          recordOperation({
+            module: '工作台',
+            operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${points}）`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('今日领取每日奖励失败:', error);
+    } finally {
+      claimingDailyGrowth.value = false;
+    }
+  }
 
   const loading = ref(false);
   const loadFailed = ref(false);
@@ -199,6 +263,10 @@
     goToTodo(key === 'inbox' ? 'all' : 'todo');
   }
 
+  function openGrowthTasks() {
+    void router.push({ path: '/growth', hash: '#growth-tasks' });
+  }
+
   function continueMeta(item: TodayContinueItem) {
     const typeLabel = t(`resourceCenter.types.${item.type}`);
     if (!item.activeAt) return typeLabel;
@@ -264,7 +332,16 @@
     },
   );
 
-  onMounted(loadToday);
+  onMounted(() => {
+    void loadToday();
+    void loadDashboard();
+    void loadGrowthTasks();
+  });
+
+  onActivated(() => {
+    if (dashboard.value) void loadDashboard();
+    if (growthTasks.value) void loadGrowthTasks(true);
+  });
 </script>
 
 <style scoped lang="less">
@@ -280,6 +357,39 @@
 
   .mobile-today__head {
     margin-bottom: 14px;
+  }
+
+  .mobile-today__growth {
+    margin: 12px 0;
+    padding: 13px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--menu-body-bg-color, var(--background-color));
+  }
+
+  .mobile-today__pending {
+    margin-bottom: 14px;
+    padding: 12px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--card-background);
+    box-shadow: 0 8px 24px -22px color-mix(in srgb, var(--primary-color) 60%, transparent);
+  }
+
+  .mobile-today__pending-head {
+    display: grid;
+    gap: 3px;
+    margin-bottom: 10px;
+  }
+
+  .mobile-today__pending-head strong {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .mobile-today__pending-head span {
+    color: var(--desc-color);
+    font-size: 11px;
   }
 
   .mobile-today__date {
@@ -309,10 +419,13 @@
   }
 
   .mobile-today__summary {
-    margin-bottom: 14px;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .mobile-today__pending-details {
+    margin-top: 10px;
   }
 
   .mobile-today__summary-item {
@@ -515,5 +628,4 @@
     font-size: 12px;
     line-height: 1.3;
   }
-
 </style>

@@ -5,8 +5,10 @@
     <div class="capture-modal" @paste="handlePaste">
       <p class="capture-hint">{{ captureHint }}</p>
       <div v-if="!successText && pendingCount > 0" class="capture-pending">
-        <span>{{ t('inbox.pendingSummary', { count: pendingCount }) }}</span>
-        <BButton size="small" @click="goInbox">{{ t('inbox.organizeNow') }}</BButton>
+        <span>{{ t(pendingSummaryKey, { count: pendingCount }) }}</span>
+        <BButton size="small" @click="goInbox">
+          {{ t(captureType === 'todo' ? 'inbox.viewTodos' : 'inbox.organizeNow') }}
+        </BButton>
       </div>
       <BTabs v-model:active-tab="captureType" :options="typeOptions" @change="handleTypeChange" />
 
@@ -131,14 +133,11 @@
     visible.value = next;
   }
 
-  /**
-   * 「还有 N 项待处理」只统计待整理资源。
-   *
-   * actionTotal 是「待整理 + 待办」的合计：PC 端两者同在待处理页，合并计数说得通；
-   * 移动端已经拆成「资料 → 待整理」和底部「待办」两个入口，这里的「前往整理」也只
-   * 通向待整理，把待办算进来会让数字对不上眼前的列表。
-   */
-  const pendingCount = computed(() => (bookmark.isMobile ? inbox.pendingTotal : inbox.actionTotal));
+  // 快速添加里的提示与「前往整理」目标保持同一业务边界：资源只统计待整理资源，待办只统计未完成待办。
+  const pendingCount = computed(() => (captureType.value === 'todo' ? todo.pendingTotal : inbox.pendingTotal));
+  const pendingSummaryKey = computed(() =>
+    captureType.value === 'todo' ? 'inbox.todoPendingSummary' : 'inbox.pendingSummary',
+  );
   const content = ref('');
   const files = ref<File[]>([]);
   const submitting = ref(false);

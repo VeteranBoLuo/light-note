@@ -368,7 +368,7 @@
   }
 
   function openTagManager() {
-    router.push('/manage/tagMg');
+    router.push({ path: '/manage/tagMg', query: { view: 'list' } });
   }
 
   function openResource(node: TagGraphNode) {

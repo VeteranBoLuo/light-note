@@ -7,6 +7,8 @@ export const WEEKLY_CHALLENGES = [
   { key: 'wk_bookmark', metric: 'bookmark', target: 5, reward: 40 },
   { key: 'wk_note', metric: 'note', target: 3, reward: 50 },
   { key: 'wk_checkin', metric: 'checkin', target: 5, reward: 60 },
+  { key: 'wk_todo', metric: 'todo', target: 5, reward: 50 },
+  { key: 'wk_organize', metric: 'organize', target: 5, reward: 50 },
 ];
 
 async function currentWeekKey() {
@@ -14,7 +16,7 @@ async function currentWeekKey() {
   return String(r.wk);
 }
 
-// 本周进度:书签/笔记(本周创建数)、签到(本周去重签到天数)
+// 本周进度:资源创建、签到、完成待办与整理资源。
 async function weekProgress(userId) {
   const [[r]] = await pool.query(
     `SELECT
@@ -30,8 +32,19 @@ async function weekProgress(userId) {
             SELECT 1 FROM onboarding_seed_resources osr
             WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
           )) AS note,
-      (SELECT COUNT(DISTINCT day) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)) AS checkin`,
-    [userId, userId, userId],
+      (SELECT COUNT(DISTINCT day) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND YEARWEEK(create_time, 1) = YEARWEEK(CURDATE(), 1)) AS checkin,
+      (SELECT COUNT(*) FROM todo_items td
+        WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed'
+          AND YEARWEEK(td.update_time, 1) = YEARWEEK(CURDATE(), 1)) AS todo,
+      (SELECT COUNT(*) FROM resource_inbox ri
+        WHERE ri.user_id = ? AND ri.status = 'completed'
+          AND YEARWEEK(ri.complete_time, 1) = YEARWEEK(CURDATE(), 1)
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+              AND osr.resource_id = ri.resource_id
+          )) AS organize`,
+    [userId, userId, userId, userId, userId],
   );
   return r;
 }

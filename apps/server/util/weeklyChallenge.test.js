@@ -17,13 +17,13 @@ describe('weeklyChallenge 示例资源隔离', () => {
   it('每周书签与笔记进度不统计注册时自动生成的示例', async () => {
     query
       .mockResolvedValueOnce([[{ wk: 202630 }]])
-      .mockResolvedValueOnce([[{ bookmark: 0, note: 0, checkin: 0 }]])
+      .mockResolvedValueOnce([[{ bookmark: 0, note: 0, checkin: 0, todo: 0, organize: 0 }]])
       .mockResolvedValueOnce([[]]);
 
     const result = await getWeeklyChallenges('user-1');
 
     const progressSql = String(query.mock.calls[1][0]);
-    expect(progressSql.match(/onboarding_seed_resources/g)).toHaveLength(2);
+    expect(progressSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
     expect(result.challenges.find((challenge) => challenge.metric === 'bookmark')).toMatchObject({
       cur: 0,
       done: false,

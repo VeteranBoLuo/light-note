@@ -41,13 +41,13 @@ CREATE TABLE `api_logs` (
 DROP TABLE IF EXISTS `bookmark`;
 CREATE TABLE `bookmark` (
   `id` varchar(255) NOT NULL DEFAULT '0',
-  `name` varchar(255) NOT NULL,
+  `name` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `user_id` varchar(255) NOT NULL,
-  `url` varchar(255) DEFAULT NULL,
-  `description` varchar(255) DEFAULT NULL,
+  `url` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
+  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP,
   `del_flag` int(11) DEFAULT '0' COMMENT '1删除 0存在',
-  `icon_url` longtext COMMENT '图标地址',
+  `icon_url` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci COMMENT '图标地址',
   `sort` int(11) NOT NULL DEFAULT '0',
   `deleted_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,

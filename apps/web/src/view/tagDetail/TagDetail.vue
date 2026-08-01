@@ -79,23 +79,27 @@
         </div>
       </div>
 
-      <div v-if="!bookmark.isMobile" class="view-switch">
-        <b-button
+      <div class="view-switch" role="tablist" :aria-label="t('tagGraph.viewMode.label')">
+        <BButton
           class="view-switch-btn"
           :class="{ active: viewMode === 'card' }"
+          role="tab"
+          :aria-selected="viewMode === 'card'"
           size="small"
           @click="setViewMode('card')"
         >
-          {{ t('tagGraph.viewMode.card') }}
-        </b-button>
-        <b-button
+          {{ t('tagGraph.viewMode.list') }}
+        </BButton>
+        <BButton
           class="view-switch-btn"
           :class="{ active: viewMode === 'graph' }"
+          role="tab"
+          :aria-selected="viewMode === 'graph'"
           size="small"
           @click="setViewMode('graph')"
         >
-          {{ t('tagGraph.viewMode.graph') }}
-        </b-button>
+          {{ t('tagGraph.viewMode.map') }}
+        </BButton>
       </div>
 
       <section v-if="viewMode === 'graph'" class="tag-graph-section tag-graph-section--full">
@@ -114,12 +118,12 @@
             @canvas-click="activeGraphNode = null"
           >
             <template #actions>
-              <b-button size="small" @click="toggleGraphResources">
+              <BButton size="small" @click="toggleGraphResources">
                 {{ graphFilters.includeResources ? t('tagGraph.hideOverview') : t('tagGraph.showOverview') }}
-              </b-button>
-              <b-button size="small" type="primary" @click="resetGraphView">
+              </BButton>
+              <BButton size="small" type="primary" @click="resetGraphView">
                 {{ t('tagGraph.reset') }}
-              </b-button>
+              </BButton>
             </template>
           </TagGraphCanvas>
           <TagGraphPanel
@@ -581,7 +585,6 @@
   }
 
   function setViewMode(mode: 'graph' | 'card') {
-    if (bookmark.isMobile) return;
     viewMode.value = mode;
     localStorage.setItem(TAG_DETAIL_VIEW_MODE_KEY, mode);
     updatePreference({ tagView: mode }).catch(() => {}); // 记忆到偏好:跨设备 + 设置页可改
@@ -694,10 +697,6 @@
   );
 
   function restorePreferredViewMode() {
-    if (bookmark.isMobile) {
-      viewMode.value = 'card';
-      return;
-    }
     const saved = user.preferences.tagView || localStorage.getItem(TAG_DETAIL_VIEW_MODE_KEY);
     viewMode.value = saved === 'graph' ? 'graph' : 'card';
   }
@@ -1173,10 +1172,6 @@
     .tag-graph-layout {
       grid-template-columns: minmax(0, 1fr);
       min-height: 0;
-    }
-
-    .tag-graph-layout :deep(.tag-graph-canvas) {
-      display: none;
     }
 
     .tag-detail-container--graph {

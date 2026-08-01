@@ -74,8 +74,16 @@
           </div>
 
           <div
+            :style="{ color: isTodoRoute ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.todo"
+            @click="router.push({ path: '/inbox', query: { tab: 'todo' } })"
+            >{{ $t('navigation.todo') }}</div
+          >
+          <div
             :style="{
-              color: route.path.includes('/search') || route.path.includes('/inbox') ? '#615ced' : '',
+              color:
+                !isTodoRoute && (route.path.includes('/search') || route.path.includes('/inbox')) ? '#615ced' : '',
             }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
@@ -131,6 +139,7 @@
       route.path.includes('/securityCenter') ||
       route.path.includes('/notificationCenter'),
   );
+  const isTodoRoute = computed(() => route.path === '/inbox' && String(route.query?.tab || '') === 'todo');
 
   const adminMenuOptions = computed(() => [
     {

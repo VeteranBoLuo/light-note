@@ -10,6 +10,7 @@ const connection = {
 };
 const getConnection = vi.fn(() => connection);
 const ensureNotVisitor = vi.fn(() => true);
+const triggerResourceCreateEffects = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
@@ -29,6 +30,7 @@ vi.mock('../util/resourceInbox.js', () => ({
   removeInboxRelations: vi.fn(),
 }));
 vi.mock('../util/services/noteService.js', () => ({ createNote: vi.fn() }));
+vi.mock('../util/services/resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
 vi.mock('../util/services/tagService.js', () => ({ createTag: vi.fn() }));
 vi.mock('../util/noteImages.js', () => ({
   cleanupOrphanNoteImages: vi.fn(),
@@ -123,6 +125,15 @@ describe('uploadNoteImage 归属与事务', () => {
     expect(connection.release).toHaveBeenCalledTimes(1);
     const sent = lastSent(res);
     expect(sent.data.noteId).toBe('server-generated-id');
+    expect(triggerResourceCreateEffects).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'u1',
+        userRole: 'user',
+        resourceType: 'note',
+        resourceId: 'server-generated-id',
+        suppressUserRewards: undefined,
+      }),
+    );
     expect(unlinkSpy).not.toHaveBeenCalled();
   });
 

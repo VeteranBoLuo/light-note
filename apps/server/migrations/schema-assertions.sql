@@ -234,3 +234,61 @@ WHERE NOT EXISTS (
      AND constraint_name='fk_todo_resource_refs_todo'
      AND constraint_type='FOREIGN KEY'
 );
+
+-- 18) 成长任务数据模型必须存在（PR2；期望 0 行）
+SELECT '[18] missing_growth_task_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'growth_tasks' t UNION ALL
+  SELECT 'user_growth_tasks'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+-- 19) 成长任务关键列与索引必须存在（PR2；期望 0 行）
+SELECT '[19] missing_growth_task_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'growth_tasks' tab, 'task_key' col, 'growth_tasks.task_key' n UNION ALL
+  SELECT 'growth_tasks', 'reward_exp', 'growth_tasks.reward_exp' UNION ALL
+  SELECT 'growth_tasks', 'enabled', 'growth_tasks.enabled' UNION ALL
+  SELECT 'user_growth_tasks', 'status', 'user_growth_tasks.status' UNION ALL
+  SELECT 'user_growth_tasks', 'completed_at', 'user_growth_tasks.completed_at'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[19] missing_growth_task_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'growth_tasks' tn, 'uk_growth_tasks_task_key' ix UNION ALL
+  SELECT 'growth_tasks', 'idx_growth_tasks_enabled_order' UNION ALL
+  SELECT 'user_growth_tasks', 'idx_user_growth_tasks_status'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 20) 书签用户内容字段必须支持完整 Unicode（期望 0 行）
+SELECT '[20] bookmark_content_charset' AS check_name,
+  CONCAT(
+    expected.col,
+    ' 实际=',
+    IFNULL(CONCAT(actual.character_set_name, '/', actual.collation_name), '缺失')
+  ) AS detail
+FROM (
+  SELECT 'name' col, 'utf8mb4' charset_name, 'utf8mb4_general_ci' collation_name UNION ALL
+  SELECT 'description', 'utf8mb4', 'utf8mb4_general_ci' UNION ALL
+  SELECT 'url', 'utf8mb4', 'utf8mb4_general_ci' UNION ALL
+  SELECT 'icon_url', 'utf8mb4', 'utf8mb4_general_ci'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='bookmark'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL
+   OR NOT (actual.character_set_name <=> expected.charset_name)
+   OR NOT (actual.collation_name <=> expected.collation_name);

@@ -68,7 +68,17 @@
           </div>
         </div>
       </div>
-      <div v-else class="chart-empty">{{ t('workbench.chart.empty', '暂无数据') }}</div>
+      <div v-else class="chart-empty chart-empty--file">
+        <span class="chart-empty__icon" aria-hidden="true">
+          <SvgIcon :src="icon.resource.file" size="24" />
+        </span>
+        <strong>{{ t('workbench.chart.fileEmptyTitle') }}</strong>
+        <span>{{ t('workbench.chart.fileEmptyDesc') }}</span>
+        <BButton type="primary" size="small" class="chart-empty__action" @click="emit('openFiles')">
+          <SvgIcon :src="icon.file_upload" size="15" aria-hidden="true" />
+          {{ t('workbench.chart.fileEmptyAction') }}
+        </BButton>
+      </div>
     </div>
   </div>
 </template>
@@ -76,6 +86,9 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
 
   interface TrendItem {
@@ -95,6 +108,7 @@
     trendData: TrendItem[];
     fileTypeData: FileTypeItem[];
   }>();
+  const emit = defineEmits<{ openFiles: [] }>();
 
   const { t } = useI18n();
   const cardThemeClass = computed(() => (props.themeKey === 'night' ? 'chart-card--night' : 'chart-card--day'));
@@ -1043,16 +1057,60 @@
     margin-top: 10px;
     flex: 1;
     border-radius: 10px;
-    border: 1px dashed var(--bl-input-noBorder-bg-color);
-    background-color: var(--bl-input-noBorder-bg-color);
+    border: 1px dashed color-mix(in srgb, var(--primary-color) 15%, var(--card-border-color));
+    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--menu-body-bg-color));
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 7px;
+    padding: 18px;
+    box-sizing: border-box;
     font-size: 12px;
     color: var(--desc-color);
-    opacity: 0.9;
     position: relative;
     z-index: 1;
+  }
+
+  .chart-empty--file {
+    border-style: solid;
+    background:
+      radial-gradient(
+        circle at 50% 38%,
+        color-mix(in srgb, var(--resource-file-color, #ff8a00) 9%, transparent),
+        transparent 43%
+      ),
+      color-mix(in srgb, var(--resource-file-color, #ff8a00) 2.5%, var(--menu-body-bg-color));
+  }
+
+  .chart-empty__icon {
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    color: var(--resource-file-color, #ff8a00);
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 11%, transparent);
+    box-shadow: 0 12px 24px -18px color-mix(in srgb, var(--resource-file-color, #ff8a00) 70%, transparent);
+  }
+
+  .chart-empty--file strong {
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .chart-empty--file > span:not(.chart-empty__icon) {
+    max-width: 280px;
+    line-height: 1.5;
+    text-align: center;
+  }
+
+  .chart-empty__action {
+    margin-top: 3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 
   .chart-skeleton {

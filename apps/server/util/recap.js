@@ -5,6 +5,31 @@ import pool from '../db/index.js';
 // - buried:90 天前创建、随机取几条(尘封回顾)
 // 纯派生查询,不新增表。ORDER BY RAND() 在个人级数据量下开销可忽略。
 
+const recapText = (expression) => `CONVERT(${expression} USING utf8mb4) COLLATE utf8mb4_unicode_ci`;
+
+// bookmark / note 是历史表，字符串字段可能使用不同 collation。UNION 前统一转换，
+// 否则部分旧库会直接报 Illegal mix of collations，导致整个回顾卡片不可用。
+function buildRecapUnion(bookmarkCondition, noteCondition, orderBy, limit) {
+  return `(SELECT
+      ${recapText("'bookmark'")} AS type,
+      ${recapText('id')} AS id,
+      ${recapText('name')} AS title,
+      ${recapText('url')} AS url,
+      create_time
+    FROM bookmark
+    WHERE user_id = ? AND del_flag = 0 AND ${bookmarkCondition})
+    UNION ALL
+    (SELECT
+      ${recapText("'note'")} AS type,
+      ${recapText('id')} AS id,
+      ${recapText('title')} AS title,
+      ${recapText('NULL')} AS url,
+      create_time
+    FROM note
+    WHERE create_by = ? AND del_flag = 0 AND ${noteCondition})
+    ORDER BY ${orderBy} LIMIT ${limit}`;
+}
+
 function fmt(rows) {
   return rows.map((r) => ({
     type: r.type,
@@ -20,39 +45,37 @@ export async function getRecap(userId) {
 
   const [[weekly], [onDay], [buried]] = await Promise.all([
     pool.query(
-      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
-          WHERE user_id = ? AND del_flag = 0
-            AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY))
-       UNION ALL
-       (SELECT 'note' AS type, id, title, NULL AS url, create_time FROM note
-          WHERE create_by = ? AND del_flag = 0
-            AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY))
-       ORDER BY create_time DESC LIMIT 20`,
+      buildRecapUnion(
+        'create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
+        'create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
+        'create_time DESC',
+        20,
+      ),
       [userId, userId],
     ),
     pool.query(
-      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
-        WHERE user_id = ? AND del_flag = 0
-          AND MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
-          AND YEAR(create_time) < YEAR(CURDATE()))
-     UNION ALL
-     (SELECT 'note' AS type, id, title, NULL AS url, create_time FROM note
-        WHERE create_by = ? AND del_flag = 0
-          AND MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
-          AND YEAR(create_time) < YEAR(CURDATE()))
-     ORDER BY create_time DESC LIMIT 12`,
+      buildRecapUnion(
+        `MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
+          AND YEAR(create_time) < YEAR(CURDATE())`,
+        `MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
+          AND YEAR(create_time) < YEAR(CURDATE())`,
+        'create_time DESC',
+        12,
+      ),
       [userId, userId],
     ),
     pool.query(
-      `(SELECT 'bookmark' AS type, id, name AS title, url, create_time FROM bookmark
-        WHERE user_id = ? AND del_flag = 0 AND create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY))
-     UNION ALL
-     (SELECT 'note' AS type, id, title, NULL AS url, create_time FROM note
-        WHERE create_by = ? AND del_flag = 0 AND create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY))
-     ORDER BY RAND() LIMIT 6`,
+      buildRecapUnion(
+        'create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY)',
+        'create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY)',
+        'RAND()',
+        6,
+      ),
       [userId, userId],
     ),
   ]);
 
   return { weekly: fmt(weekly), onThisDay: fmt(onDay), buried: fmt(buried) };
 }
+
+export { buildRecapUnion };

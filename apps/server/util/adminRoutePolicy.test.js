@@ -126,6 +126,7 @@ describe('adminRoutePolicyMiddleware', () => {
     for (const path of [
       '/growth/me',
       '/growth/dashboard',
+      '/growth/tasks',
       '/growth/ranks',
       '/growth/weeklyReport',
       '/growth/points/log',

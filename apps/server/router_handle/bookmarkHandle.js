@@ -40,6 +40,7 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
+import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 // ── 全局 ──────────────────────────────────────────────────
 const MAX_EXCEL_BOOKMARK_IMPORT_ITEMS = 1000;
 
@@ -834,7 +835,17 @@ export const delBookmark = async (req, res) => {
 export const getCommonBookmarks = async (req, res) => {
   try {
     const [result] = await pool.query(
-      "SELECT b.id, b.url, REPLACE(ol.operation, '点击书签卡片', '') AS name, COUNT(*) as count FROM `operation_logs` ol LEFT JOIN bookmark b ON b.user_id = ol.create_by AND b.name = REPLACE(ol.operation, '点击书签卡片', '') AND b.del_flag = 0 WHERE ol.create_by = ? AND ol.operation LIKE '点击书签卡片%' GROUP BY ol.operation, b.id, b.url ORDER BY count DESC LIMIT 10",
+      `SELECT b.id, b.url, REPLACE(ol.operation, '点击书签卡片', '') AS name, COUNT(*) AS count
+         FROM operation_logs ol
+         LEFT JOIN bookmark b
+           ON b.user_id = ol.create_by
+          AND CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_general_ci =
+              CONVERT(REPLACE(ol.operation, '点击书签卡片', '') USING utf8mb4) COLLATE utf8mb4_general_ci
+          AND b.del_flag = 0
+        WHERE ol.create_by = ? AND ol.operation LIKE '点击书签卡片%'
+        GROUP BY ol.operation, b.id, b.url
+        ORDER BY count DESC
+        LIMIT 10`,
       [req.user.id],
     );
     res.send(
@@ -941,6 +952,9 @@ function finishBookmarkImport(req, userId, stats) {
   }
   // 批量导入整批只发一次固定经验(防按条刷;grantExp 内日顶 200 仍兜底)
   if (stats.createdBookmarks > 0 && !req.suppressUserRewards) {
+    completeGrowthTask(userId, 'first_bookmark', { userRole: req.user.role }).catch((e) =>
+      console.warn('[growth] 首个书签成长任务补全失败 code=%s', stableAgentErrorCode(e)),
+    );
     grantExp(userId, 'bookmark_import', {
       refId: `import_${userId}_${Date.now()}`,
       amount: 15,

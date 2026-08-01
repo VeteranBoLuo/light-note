@@ -29,6 +29,7 @@ import {
   RANKS,
   MAX_LEVEL,
   MAKEUP_WINDOW_DAYS,
+  ACHIEVEMENTS,
   useProtectCard,
   getGrowthDashboard,
   getActivityHeatmap,
@@ -99,6 +100,17 @@ describe('rankOf 越界钳制', () => {
     expect(rankOf(15).name).toBe('文圣');
     expect(rankOf(0).name).toBe('蒙童');
     expect(rankOf(99).name).toBe('文圣');
+  });
+});
+
+describe('成就体系职责', () => {
+  it('不再把首次体验和首次创建行为作为长期成就', () => {
+    const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
+    const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
+
+    expect(keys).toHaveLength(19);
+    expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
+    expect(ACHIEVEMENTS.every((achievement) => achievement.target > 1)).toBe(true);
   });
 });
 

@@ -21,6 +21,9 @@ vi.mock('../util/auth.js', async () => {
   return { ...actual, ensureNotVisitor };
 });
 
+const completeGrowthTask = vi.fn(async () => ({ completed: true }));
+vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
+
 const extractOwnedResourceRefs = vi.fn(() => []);
 const syncNoteResourceRefs = vi.fn(async () => ({ inserted: 0, updated: 0, deleted: 0 }));
 vi.mock('../util/services/noteReferenceService.js', () => ({ extractOwnedResourceRefs, syncNoteResourceRefs }));
@@ -55,6 +58,7 @@ describe('importData 引用同步接入(N0 · P0-1)', () => {
     );
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();
+    expect(completeGrowthTask).toHaveBeenCalledWith('u1', 'first_note', { userRole: 'user' });
   });
 
   it('导入无站内链接的笔记 → 不同步(旧/越权 id 由解析或校验自然过滤)', async () => {

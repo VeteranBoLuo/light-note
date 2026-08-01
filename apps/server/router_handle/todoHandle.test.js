@@ -27,6 +27,7 @@ vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
+vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask: vi.fn(async () => ({})) }));
 vi.mock('../util/services/todoService.js', () => ({
   createTodo: createTodoItem,
   updateTodo: updateTodoItem,

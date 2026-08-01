@@ -1,6 +1,17 @@
 <template>
-  <section class="today-actions" :aria-label="t('workbench.today.actionsTitle')">
-    <div v-if="loading" class="today-actions__loading">
+  <section
+    class="today-actions"
+    :class="{ 'today-actions--contained': contained }"
+    :aria-label="t('workbench.today.actionsTitle')"
+  >
+    <header v-if="showHeader" class="today-actions__header">
+      <div class="today-actions__heading">
+        <strong>{{ t('workbench.today.actionsTitle') }}</strong>
+        <span>{{ t('workbench.today.actionsHint') }}</span>
+      </div>
+    </header>
+
+    <div v-if="loading" class="today-actions__content today-actions__loading">
       <div v-for="index in 3" :key="`today-action-skeleton-${index}`" class="today-actions__skeleton-row">
         <span class="skeleton-block skeleton-row-icon"></span>
         <span class="skeleton-block skeleton-row-main"></span>
@@ -8,7 +19,7 @@
       </div>
     </div>
 
-    <template v-else>
+    <div v-else class="today-actions__content">
       <div v-if="localTodos.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.todoGroup') }}</strong>
@@ -60,11 +71,7 @@
               <BButton size="small" :disabled="mutatingInboxKey === inboxKey(item)" @click="openInboxItem(item)">
                 {{ t('inbox.organize') }}
               </BButton>
-              <BButton
-                size="small"
-                :loading="mutatingInboxKey === inboxKey(item)"
-                @click="completeInboxItem(item)"
-              >
+              <BButton size="small" :loading="mutatingInboxKey === inboxKey(item)" @click="completeInboxItem(item)">
                 {{ t('inbox.complete') }}
               </BButton>
             </div>
@@ -76,7 +83,7 @@
         <strong>{{ t('workbench.today.allDoneTitle') }}</strong>
         <span>{{ t('workbench.today.allDoneDesc') }}</span>
       </div>
-    </template>
+    </div>
 
     <TodoEditorModal v-model:visible="todoEditorVisible" :item="editingTodo" @saved="afterTodoSaved" />
   </section>
@@ -111,19 +118,24 @@
     dueLabel: string;
   }
 
-  const props = defineProps<{
-    /**
-     * 权威总数。明细数组是被服务端上限截断的（待整理最多 3 条、待办最多 7 条），
-     * 用它的 length 当分组数量会让计数停在上限上不再变化。
-     * 不传时回落到数组长度，保持旧调用方行为。
-     */
-    todoTotal?: number;
-    inboxTotal?: number;
-    overdueTodos: TodoItem[];
-    dueTodayTodos: TodoItem[];
-    inboxItems: WorkbenchInboxItem[];
-    loading?: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      /**
+       * 权威总数。明细数组是被服务端上限截断的（待整理最多 3 条、待办最多 7 条），
+       * 用它的 length 当分组数量会让计数停在上限上不再变化。
+       * 不传时回落到数组长度，保持旧调用方行为。
+       */
+      todoTotal?: number;
+      inboxTotal?: number;
+      overdueTodos: TodoItem[];
+      dueTodayTodos: TodoItem[];
+      inboxItems: WorkbenchInboxItem[];
+      loading?: boolean;
+      showHeader?: boolean;
+      contained?: boolean;
+    }>(),
+    { showHeader: true, contained: false },
+  );
   const emit = defineEmits<{ refresh: [] }>();
 
   const { t, locale } = useI18n();
@@ -227,6 +239,7 @@
         recordOperation({ module: '工作台', operation: '今日行动完成待办' });
         message.success(t('workbench.today.todoCompleted'));
         void inbox.refreshCount();
+        emit('refresh');
       } else {
         message.error(t('workbench.today.actionFailed'));
       }
@@ -246,6 +259,7 @@
         removedTodoIds.value = new Set([...removedTodoIds.value, item.id]);
         recordOperation({ module: '工作台', operation: '今日行动稍后待办' });
         message.success(t('inbox.todoSnoozed'));
+        emit('refresh');
       } else {
         message.error(t('inbox.todoSnoozeFailed'));
       }
@@ -292,6 +306,7 @@
         recordOperation({ module: '工作台', operation: '今日行动完成整理' });
         message.success(t('workbench.today.inboxCompleted'));
         void inbox.refreshCount();
+        emit('refresh');
       } else {
         message.error(t('workbench.today.actionFailed'));
       }
@@ -307,6 +322,87 @@
   .today-actions {
     display: grid;
     gap: 12px;
+  }
+
+  .today-actions__content {
+    display: grid;
+    gap: 12px;
+  }
+
+  /* 桌面工作台使用单一紧凑外框；条目在 contained 模式下采用明确行高，
+     让 5 条摘要完整显示且不产生内部滚动。 */
+  .today-actions--contained {
+    width: 100%;
+    min-height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--menu-body-bg-color, var(--background-color));
+  }
+
+  .today-actions--contained .today-actions__content {
+    flex: 1 1 auto;
+    display: block;
+    overflow: visible;
+  }
+
+  .today-actions--contained .today-actions__group {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .today-actions--contained .today-actions__group + .today-actions__group {
+    border-top: 1px solid color-mix(in srgb, var(--primary-color) 13%, var(--card-border-color));
+  }
+
+  .today-actions--contained .today-actions__group-head {
+    padding-block: 8px;
+  }
+
+  .today-actions--contained .today-action-row {
+    height: 48px;
+    min-height: 48px;
+    padding-block: 5px;
+  }
+
+  .today-actions--contained .today-actions__empty {
+    min-height: 100%;
+    box-sizing: border-box;
+    align-content: center;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .today-actions--contained .today-actions__loading {
+    padding: 12px;
+    box-sizing: border-box;
+  }
+
+  .today-actions__header {
+    display: flex;
+    align-items: baseline;
+    padding: 0 2px 1px;
+  }
+
+  .today-actions__heading {
+    display: grid;
+    gap: 3px;
+  }
+
+  .today-actions__header strong {
+    color: var(--text-color);
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .today-actions__header span {
+    color: var(--desc-color);
+    font-size: 12px;
   }
 
   .today-actions__group {

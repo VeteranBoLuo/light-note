@@ -23,6 +23,7 @@ import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearc
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
+import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -92,6 +93,14 @@ export const uploadNoteImage = async (req, res) => {
     } finally {
       connection.release();
     }
+    triggerResourceCreateEffects({
+      request: req,
+      userId,
+      userRole: req.user.role,
+      resourceType: 'note',
+      resourceId: noteData.id,
+      suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
+    });
     res.send(resultData({ url: fileUrl, noteId: noteData.id }));
   } catch (e) {
     // 登记失败(归属查询/写库/事务回滚)统一丢弃已落盘文件,不留孤儿

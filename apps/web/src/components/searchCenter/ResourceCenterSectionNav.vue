@@ -42,18 +42,16 @@
     if (!bookmark.isMobile) return 'inbox';
     return isMobileResourceInboxTab(route.query.tab) ? 'inbox' : 'resources';
   });
-  const displayCountValue = computed(() => (bookmark.isMobile ? inbox.pendingTotal : inbox.actionTotal));
+  const displayCountValue = computed(() => inbox.pendingTotal);
   const displayInboxCount = computed(() => (displayCountValue.value > 99 ? '99+' : String(displayCountValue.value)));
-  const inboxSectionLabel = computed(() =>
-    bookmark.isMobile ? t('resourceCenter.sections.pendingResources') : t('resourceCenter.sections.inbox'),
-  );
+  const inboxSectionLabel = computed(() => t('resourceCenter.sections.pendingResources'));
 
   function goTo(path: '/search' | '/inbox') {
     const target = path === '/inbox' && bookmark.isMobile ? { path, query: { tab: 'all' } } : path;
     if (router.resolve(target).fullPath === route.fullPath) return;
     recordOperation({
       module: '资源中心',
-      operation: path === '/inbox' ? (bookmark.isMobile ? '切换待整理视图' : '切换待处理视图') : '切换全部资源视图',
+      operation: path === '/inbox' ? '切换待整理视图' : '切换全部资源视图',
     });
     // 同级分区切换不产生历史记录，否则返回键要按很多次才能离开资源中心
     router.replace(target);

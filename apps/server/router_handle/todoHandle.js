@@ -15,6 +15,7 @@ import {
   snoozeTodo as snoozeTodoItem,
   updateTodo as updateTodoItem,
 } from '../util/services/todoService.js';
+import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
@@ -25,13 +26,18 @@ function sendTodoError(res, error) {
   return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
 }
 
-async function withTransaction(res, callback) {
+async function withTransaction(res, callback, { afterCommit } = {}) {
   let connection;
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
     const data = await callback(connection);
     await connection.commit();
+    if (afterCommit) {
+      Promise.resolve()
+        .then(() => afterCommit(data))
+        .catch((error) => console.warn('[todo] 成长任务旁路发放失败 code=%s', error?.code || 'UNKNOWN'));
+    }
     return res.send(resultData(data));
   } catch (error) {
     if (connection) await connection.rollback();
@@ -73,7 +79,9 @@ export async function countTodo(req, res) {
 
 export async function createTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
-  return withTransaction(res, (connection) => createTodoItem(connection, req.user.id, req.body || {}));
+  return withTransaction(res, (connection) => createTodoItem(connection, req.user.id, req.body || {}), {
+    afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+  });
 }
 
 export async function updateTodo(req, res) {

@@ -9,7 +9,7 @@ import {
   L,
   reqLang,
 } from '../util/common.js';
-import { grantExp } from '../util/growth.js';
+import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 import request from '../http/request.js';
 import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
 import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
@@ -723,11 +723,12 @@ export const saveUserInfo = (req, res) => {
       .query('update user set ? where id=?', [finalBody, id])
       .then(([result]) => {
         res.send(resultData(result));
-        // 完善个人资料激励:本次更新涉及昵称或头像时一次性 +20(profile_done 幂等,只发一次)。
-        // 响应之后 fire-and-forget,不阻塞、不影响保存结果。
-        if (!isRoot && (finalBody.alias || finalBody.head_picture)) {
-          grantExp(id, 'profile_done', { refId: 'profile', amount: 20, userRole: req.user?.role }).catch((e) =>
-            console.warn('[growth] 完善资料奖励发放失败 code=%s', stableAgentErrorCode(e)),
+        // “完善个人形象”只认真实头像，不把昵称更新与成长任务重复计算。
+        // 响应之后 fire-and-forget,不阻塞、不影响资料保存结果。
+        const headPicture = typeof finalBody.head_picture === 'string' ? finalBody.head_picture.trim() : '';
+        if (!isRoot && headPicture) {
+          completeGrowthTask(id, 'profile_avatar', { userRole: req.user?.role }).catch((e) =>
+            console.warn('[growth] 头像成长任务发放失败 code=%s', stableAgentErrorCode(e)),
           );
         }
       })
@@ -1145,6 +1146,14 @@ export const handleUserDatabaseOperation = async (githubUser, req) => {
 
   // 仅 GitHub 首次建号执行；已有 GitHub 账号登录、按邮箱绑定旧账号都不会重复初始化。
   const samplesReady = await initializeNewUserSamples(githubUserId, req);
+
+  // GitHub 首次注册直接持久化头像，补齐“设置头像”成长任务。示例资源仍由种子服务直写，
+  // 不经过资源创建奖励钩子，因此不会推进成长任务、每日/每周任务、经验或成就。
+  if (String(githubUser.avatar_url || '').trim()) {
+    completeGrowthTask(githubUserId, 'profile_avatar', { userRole: 'user' }).catch((error) =>
+      console.warn('[growth] GitHub 头像成长任务补全失败 code=%s', stableAgentErrorCode(error)),
+    );
+  }
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
   const ghSignupSource = normalizeConversionSource(req.body?.signupSource); // 前端 GithubCallBack 透传的来源(走白名单归一)
@@ -1564,6 +1573,20 @@ export const importData = async (req, res) => {
     stat.files.skipped = Array.isArray(data.files) ? data.files.length : 0;
 
     await connection.commit();
+    if (!req.suppressUserRewards) {
+      const completionJobs = [];
+      if (stat.bookmarks.added > 0) {
+        completionJobs.push(completeGrowthTask(userId, 'first_bookmark', { userRole: req.user.role }));
+      }
+      if (stat.notes.added > 0) {
+        completionJobs.push(completeGrowthTask(userId, 'first_note', { userRole: req.user.role }));
+      }
+      Promise.allSettled(completionJobs).then((results) => {
+        if (results.some((result) => result.status === 'rejected')) {
+          console.warn('[growth] 账号导入成长任务补全失败');
+        }
+      });
+    }
     res.send(resultData({ ...stat, preflight }));
   } catch (e) {
     await connection.rollback();

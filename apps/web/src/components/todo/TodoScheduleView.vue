@@ -251,7 +251,9 @@
     background: var(--background-color);
   }
   .todo-calendar-day > span {
-    display: block;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     margin-bottom: 4px;
     color: var(--desc-color);
     font-size: 11px;
@@ -260,7 +262,16 @@
     opacity: 0.42;
   }
   .todo-calendar-day.is-today {
-    border-color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--primary-color) 36%, var(--surface-border-color, var(--card-border-color)));
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+  }
+
+  .todo-calendar-day.is-today > span::after {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    content: '';
   }
   .todo-calendar-item {
     display: block;
@@ -318,7 +329,12 @@
   }
   .todo-calendar-day.is-selected {
     border-color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 7%, var(--background-color));
+    background: color-mix(in srgb, var(--primary-color) 13%, var(--background-color));
+  }
+
+  .todo-calendar-day.is-selected > span {
+    color: var(--primary-color);
+    font-weight: 700;
   }
   .todo-calendar-day.has-items {
     cursor: pointer;

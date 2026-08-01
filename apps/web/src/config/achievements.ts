@@ -6,18 +6,18 @@
 
 // 成就 key → emoji 图标
 export const ACHIEVEMENT_ICONS: Record<string, string> = {
-  first_checkin: '📅',
   streak_7: '🔥',
   streak_30: '⚡',
   checkin_50: '📌',
   checkin_100: '🏛️',
-  first_bookmark: '🔖',
   bookmark_50: '📚',
   bookmark_200: '🗂️',
-  first_note: '✍️',
   note_20: '📝',
   note_50: '📖',
-  first_file: '📁',
+  todo_100: '✅',
+  todo_1000: '🏁',
+  organize_100: '🧹',
+  organize_1000: '🗃️',
   level_5: '🎓',
   level_10: '🏅',
   level_15: '👑',
@@ -28,5 +28,5 @@ export const ACHIEVEMENT_ICONS: Record<string, string> = {
 };
 
 // 分组展示顺序
-export const ACHIEVEMENT_GROUPS = ['checkin', 'create', 'level', 'tenure'] as const;
+export const ACHIEVEMENT_GROUPS = ['checkin', 'create', 'action', 'organize', 'level', 'tenure'] as const;
 export type AchievementGroup = (typeof ACHIEVEMENT_GROUPS)[number];

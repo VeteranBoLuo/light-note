@@ -10,6 +10,7 @@ import { generateWeeklyReports } from './util/weeklyReport.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
+import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
@@ -86,6 +87,7 @@ ensureNotificationTable().catch((err) => console.error('通知表初始化失败
 // 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
 await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureGrowthTaskSchema().catch((err) => console.error('成长任务表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureFeatureRequestTables().catch((err) =>

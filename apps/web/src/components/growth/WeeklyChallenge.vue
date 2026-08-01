@@ -44,7 +44,13 @@
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const { weekly, loadWeekly, claimWeekly } = useGrowth();
 
-  const ICONS: Record<string, string> = { wk_bookmark: '📚', wk_note: '📝', wk_checkin: '📅' };
+  const ICONS: Record<string, string> = {
+    wk_bookmark: '📚',
+    wk_note: '📝',
+    wk_checkin: '📅',
+    wk_todo: '✅',
+    wk_organize: '🧹',
+  };
   const challenges = computed(() => weekly.value?.challenges || []);
 
   function nameOf(key: string) {

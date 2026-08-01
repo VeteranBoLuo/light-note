@@ -61,6 +61,8 @@ export interface GrowthStats {
   noteCount: number;
   fileCount: number;
   tagCount: number;
+  completedTodoCount: number;
+  organizedResourceCount: number;
   weekExp: number;
   checkinDays: string[];
 }
@@ -204,8 +206,42 @@ export interface RecapItem {
 }
 
 export interface RecapData {
+  weekly?: RecapItem[];
   onThisDay: RecapItem[];
   buried: RecapItem[];
+}
+
+export interface GrowthTask {
+  taskKey: string;
+  titleKey: string;
+  descriptionKey: string;
+  rewardExp: number;
+  status: 'pending' | 'completed' | string;
+  completed: boolean;
+  completedAt: string | null;
+}
+
+export interface GrowthTasksData {
+  tasks: GrowthTask[];
+  totalCount: number;
+  completedCount: number;
+  remainingCount: number;
+}
+
+const RETIRED_GROWTH_TASK_KEYS = new Set(['first_review']);
+
+// 兼容前后端滚动更新：旧后端进程可能短暂返回已退役任务，前端仍需按当前产品口径收敛计数与展示。
+function normalizeGrowthTasks(data: GrowthTasksData): GrowthTasksData {
+  const tasks = (Array.isArray(data.tasks) ? data.tasks : []).filter(
+    (task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey),
+  );
+  const completedCount = tasks.filter((task) => task.completed).length;
+  return {
+    tasks,
+    totalCount: tasks.length,
+    completedCount,
+    remainingCount: tasks.length - completedCount,
+  };
 }
 
 // 模块级单例:头像徽章、成长卡、段位路线共享同一份数据,一次拉取多处复用(不为此建重 store)
@@ -217,15 +253,20 @@ const inventory = ref<Inventory | null>(null);
 const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
 const recap = ref<RecapData | null>(null);
+const growthTasks = ref<GrowthTasksData | null>(null);
 const loading = ref(false);
 const dashboardLoading = ref(false);
 const shopLoading = ref(false);
 const lotteryLoading = ref(false);
+const growthTasksLoading = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
 let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
+let growthTasksOwnerId: string | null = null; // 成长任务缓存单独归属，避免影响成长快照缓存
 let growthRequest: Promise<Growth | null> | null = null;
 let growthRequestOwnerId: string | null = null;
+let growthTasksRequest: Promise<GrowthTasksData | null> | null = null;
+let growthTasksRequestOwnerId: string | null = null;
 let growthRequestVersion = 0;
 
 // 登出/切换账号时作废用户成长缓存(ranks 段位表全局通用,与账号无关,不清)
@@ -237,12 +278,17 @@ export function resetGrowth() {
   lottery.value = null;
   weekly.value = null;
   recap.value = null;
+  growthTasks.value = null;
   loadedOnce = false;
   ownerId = null;
+  growthTasksOwnerId = null;
   growthRequest = null;
   growthRequestOwnerId = null;
+  growthTasksRequest = null;
+  growthTasksRequestOwnerId = null;
   growthRequestVersion += 1;
   loading.value = false;
+  growthTasksLoading.value = false;
 }
 
 // 积分余额单一事实源是 growth.points;商店/抽奖各自缓存了余额副本,
@@ -262,6 +308,11 @@ export function useGrowth() {
       growth.value = null;
       loadedOnce = false;
       ownerId = uid;
+      growthTasks.value = null;
+      growthTasksOwnerId = null;
+      growthTasksRequest = null;
+      growthTasksRequestOwnerId = null;
+      growthTasksLoading.value = false;
     }
     if (loadedOnce && !force) return growth.value;
     // 多个首屏组件会同时读取成长信息。在同账号请求仍在进行时直接复用，
@@ -311,6 +362,42 @@ export function useGrowth() {
       dashboardLoading.value = false;
     }
     return dashboard.value;
+  }
+
+  // 成长任务定义与完成状态:成长页和“今日”摘要共享同一份短缓存/在途请求。
+  async function loadGrowthTasks(force = false) {
+    const uid = useUserStore().id || 'visitor';
+    if (growthTasksOwnerId !== uid) {
+      growthTasks.value = null;
+      growthTasksOwnerId = uid;
+      growthTasksRequest = null;
+      growthTasksRequestOwnerId = null;
+      growthTasksLoading.value = false;
+    }
+    if (growthTasks.value && !force) return growthTasks.value;
+    if (growthTasksRequest && growthTasksRequestOwnerId === uid) return growthTasksRequest;
+
+    growthTasksLoading.value = true;
+    growthTasksRequestOwnerId = uid;
+    const request = Promise.resolve().then(async () => {
+      try {
+        const res = await growthApi.getGrowthTasks();
+        if (growthTasksRequestOwnerId === uid && res?.status === 200 && res.data) {
+          growthTasks.value = normalizeGrowthTasks(res.data as GrowthTasksData);
+        }
+      } catch (err) {
+        console.warn('加载成长任务失败:', err);
+      } finally {
+        if (growthTasksRequest === request) {
+          growthTasksRequest = null;
+          growthTasksRequestOwnerId = null;
+          growthTasksLoading.value = false;
+        }
+      }
+      return growthTasks.value;
+    });
+    growthTasksRequest = request;
+    return request;
   }
 
   // 段位表:15 级只在首次拉取一次(内容基本不变)
@@ -514,13 +601,16 @@ export function useGrowth() {
     lottery,
     weekly,
     recap,
+    growthTasks,
     loading,
     dashboardLoading,
     shopLoading,
     lotteryLoading,
+    growthTasksLoading,
     load,
     loadRanks,
     loadDashboard,
+    loadGrowthTasks,
     doCheckin,
     claimDailyBonus,
     useProtectCard,

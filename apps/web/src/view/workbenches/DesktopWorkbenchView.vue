@@ -76,100 +76,150 @@
             <strong>{{ item.value }}</strong>
           </BButton>
         </div>
+        <div class="today-summary-body">
+          <div class="today-summary-details">
+            <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
+                 不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
+            <TodayActionSection
+              :inbox-total="todayStats.inboxPendingTotal"
+              :overdue-todos="todayOverdueTodos"
+              :due-today-todos="todayDueTodos"
+              :inbox-items="todayInboxItems"
+              :loading="summaryLoading"
+              :show-header="false"
+              contained
+              @refresh="fetchWorkbenchSummary"
+            />
+          </div>
+
+          <article class="today-continue">
+            <div class="panel-header today-continue__header">
+              <div>
+                <h2>{{ t('workbench.panel.continueWorking') }}</h2>
+                <p>{{ t('workbench.panel.continueHint') }}</p>
+              </div>
+              <BButton size="small" class="quiet-button" @click="openActiveCollection">
+                {{ t('workbench.panel.viewAll') }}
+              </BButton>
+            </div>
+
+            <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
+
+            <div v-if="summaryLoading" class="content-list content-list--loading">
+              <div v-for="index in 3" :key="`content-skeleton-${index}`" class="content-skeleton-row">
+                <span class="skeleton-block skeleton-row-icon"></span>
+                <span class="skeleton-block skeleton-row-main"></span>
+                <span class="skeleton-block skeleton-row-meta"></span>
+              </div>
+            </div>
+            <div v-else-if="activeContinueItems.length" class="content-list">
+              <BButton
+                v-for="item in activeContinueItems"
+                :key="item.key"
+                class="content-row"
+                @click="openContinueItem(item)"
+              >
+                <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
+                  <SvgIcon :src="item.icon" size="18" />
+                </span>
+                <span class="content-row-main">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.description }}</span>
+                </span>
+                <span class="content-row-meta">{{ item.meta }}</span>
+              </BButton>
+            </div>
+            <div v-else class="compact-empty compact-empty--continue">
+              <strong>{{ t('workbench.empty.continueTitle') }}</strong>
+              <span>{{ t('workbench.empty.continueDesc') }}</span>
+            </div>
+          </article>
+        </div>
       </section>
 
-      <!-- 只传待整理总数：summary 接口的 todoPendingTotal 是「全部未完成」，
-           不是这里展示的「逾期 + 今天」，传错反而误导；待办计数回落到明细条数。 -->
-      <TodayActionSection
-        :inbox-total="todayStats.inboxPendingTotal"
-        :overdue-todos="todayOverdueTodos"
-        :due-today-todos="todayDueTodos"
-        :inbox-items="todayInboxItems"
-        :loading="summaryLoading"
-        @refresh="fetchWorkbenchSummary"
-      />
+      <section
+        v-if="showDailyGrowthTasks || showGrowthTasks"
+        class="growth-task-grid"
+        :class="{ 'growth-task-grid--single': !showDailyGrowthTasks || !showGrowthTasks }"
+        :aria-label="t('growth.pageTitle')"
+      >
+        <article v-if="showDailyGrowthTasks" class="panel-card today-growth-panel">
+          <DailyQuests
+            :quests="dailyGrowthQuests"
+            :bonus="dailyGrowthBonus"
+            :claiming="claimingDailyGrowth"
+            :read-only="growthReadOnly"
+            @claim="claimDailyGrowth"
+          />
+        </article>
 
-      <section class="summary-grid" :aria-label="t('workbench.panel.resourceOverview')">
-        <template v-if="summaryLoading">
-          <div v-for="index in 4" :key="`summary-skeleton-${index}`" class="summary-card summary-skeleton">
-            <span class="skeleton-block skeleton-icon"></span>
-            <span class="skeleton-block skeleton-label"></span>
-            <span class="skeleton-block skeleton-value"></span>
-            <span class="skeleton-block skeleton-meta"></span>
-          </div>
-        </template>
-        <RouterLink
-          v-for="card in summaryCards"
-          v-else
-          :key="card.key"
-          :to="card.to"
-          class="summary-card"
-          :class="`summary-card--${card.key}`"
-          @click="recordSummaryNavigation(card.label)"
-        >
-          <div class="summary-icon">
-            <SvgIcon :src="card.icon" size="22" />
-          </div>
-          <div class="summary-copy">
-            <div class="summary-topline">
-              <span class="summary-label">{{ card.label }}</span>
-              <span class="summary-weekly">+{{ card.weekly }} {{ card.weeklyLabel }}</span>
-            </div>
-            <strong class="summary-value">{{ card.value }}</strong>
-            <template v-if="card.key === 'cloud'">
-              <div class="storage-track" aria-hidden="true">
-                <span :style="{ width: `${storagePercent}%` }"></span>
-              </div>
-              <span class="summary-meta">{{ card.meta }}</span>
-            </template>
-            <span v-else class="summary-meta">{{ card.meta }}</span>
-          </div>
-        </RouterLink>
+        <article v-if="showGrowthTasks" class="panel-card today-growth-panel">
+          <GrowthTasks :data="growthTasks" compact :max-visible="2" show-view-all @view="openGrowthTasks" />
+        </article>
       </section>
 
       <section class="primary-grid">
-        <article class="panel-card continue-panel">
-          <div class="panel-header">
-            <div>
-              <h2>{{ t('workbench.panel.continueWorking') }}</h2>
-              <p>{{ t('workbench.panel.continueHint') }}</p>
+        <section class="summary-grid" :aria-label="t('workbench.panel.resourceOverview')">
+          <template v-if="summaryLoading">
+            <div v-for="index in 4" :key="`summary-skeleton-${index}`" class="summary-card summary-skeleton">
+              <div class="summary-skeleton__header">
+                <span class="skeleton-block skeleton-icon"></span>
+                <span class="skeleton-block skeleton-label"></span>
+              </div>
+              <span class="skeleton-block skeleton-value"></span>
+              <div class="summary-skeleton__stats">
+                <span class="skeleton-block skeleton-stat"></span>
+                <span class="skeleton-block skeleton-stat"></span>
+              </div>
+              <span class="skeleton-block skeleton-meta"></span>
             </div>
-            <BButton size="small" class="quiet-button" @click="openActiveCollection">
-              {{ t('workbench.panel.viewAll') }}
-            </BButton>
-          </div>
-
-          <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
-
-          <div v-if="summaryLoading" class="content-list content-list--loading">
-            <div v-for="index in 5" :key="`content-skeleton-${index}`" class="content-skeleton-row">
-              <span class="skeleton-block skeleton-row-icon"></span>
-              <span class="skeleton-block skeleton-row-main"></span>
-              <span class="skeleton-block skeleton-row-meta"></span>
+          </template>
+          <RouterLink
+            v-for="card in summaryCards"
+            v-else
+            :key="card.key"
+            :to="card.to"
+            class="summary-card"
+            :class="`summary-card--${card.key}`"
+            @click="recordSummaryNavigation(card.label)"
+          >
+            <div class="summary-card__header">
+              <span class="summary-icon">
+                <SvgIcon :src="card.icon" size="22" />
+              </span>
+              <span class="summary-heading-copy">
+                <strong class="summary-label">{{ card.label }}</strong>
+                <span class="summary-meta">{{ card.meta }}</span>
+              </span>
+              <span class="summary-arrow" aria-hidden="true">
+                <SvgIcon :src="icon.arrow_right" size="16" />
+              </span>
             </div>
-          </div>
-          <div v-else-if="activeContinueItems.length" class="content-list">
-            <BButton
-              v-for="item in activeContinueItems"
-              :key="item.key"
-              class="content-row"
-              @click="openContinueItem(item)"
-            >
-              <span class="content-row-icon" :class="`content-row-icon--${item.type}`">
-                <SvgIcon :src="item.icon" size="18" />
-              </span>
-              <span class="content-row-main">
-                <strong>{{ item.title }}</strong>
-                <span>{{ item.description }}</span>
-              </span>
-              <span class="content-row-meta">{{ item.meta }}</span>
-            </BButton>
-          </div>
-          <div v-else class="compact-empty">
-            <strong>{{ t('workbench.empty.continueTitle') }}</strong>
-            <span>{{ t('workbench.empty.continueDesc') }}</span>
-          </div>
-        </article>
+
+            <div class="summary-card__metric">
+              <strong class="summary-value">
+                <span>{{ card.value.toLocaleString() }}</span>
+                <small>{{ card.unit }}</small>
+              </strong>
+              <div class="summary-stats">
+                <span v-for="stat in card.stats" :key="stat.label" class="summary-stat">
+                  <small>{{ stat.label }}</small>
+                  <strong>{{ stat.value }}</strong>
+                </span>
+              </div>
+            </div>
+
+            <div class="summary-progress">
+              <div class="summary-progress__track" aria-hidden="true">
+                <span :style="{ width: `${card.progress}%` }"></span>
+              </div>
+              <div class="summary-progress__footer">
+                <span>{{ card.progressLabel }}</span>
+                <strong>{{ t('workbench.summary.openModule') }}</strong>
+              </div>
+            </div>
+          </RouterLink>
+        </section>
 
         <aside class="side-column">
           <article class="panel-card quick-create-panel">
@@ -212,6 +262,7 @@
           :theme-key="user.currentTheme || 'day'"
           :trend-data="trendChartData"
           :file-type-data="fileTypeChartData"
+          @open-files="openQuickCapture('file')"
         />
       </section>
 
@@ -295,16 +346,12 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, defineAsyncComponent, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, onActivated, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request.ts';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
-  import {
-    listUpdateLogs,
-    updateLogMarkdownSummaryItems,
-    type UpdateLogItem,
-  } from '@/api/updateLogApi.ts';
+  import { listUpdateLogs, updateLogMarkdownSummaryItems, type UpdateLogItem } from '@/api/updateLogApi.ts';
   import { cloudSpaceStore, inboxStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -312,6 +359,9 @@
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
   import WorkbenchCharts from '@/components/workbenches/WorkbenchCharts.vue';
   import WorkbenchGrowth from '@/components/workbenches/WorkbenchGrowth.vue';
+  import DailyQuests from '@/components/growth/DailyQuests.vue';
+  import GrowthTasks from '@/components/growth/GrowthTasks.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon.ts';
   import { CLOUD_FILE_CATEGORY_LABEL_KEY } from '@/constants/cloudFileCategory.ts';
   import { formatStorageSize } from '@/utils/common.ts';
@@ -341,7 +391,43 @@
   const user = useUserStore();
   const cloud = cloudSpaceStore();
   const inbox = inboxStore();
-  const { growth } = useGrowth();
+  const { growth, dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
+  const growthReadOnly = computed(() => Boolean(user.adminContext));
+  const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
+  const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
+  const claimingDailyGrowth = ref(false);
+  const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.completed)));
+
+  async function claimDailyGrowth() {
+    if (growthReadOnly.value || claimingDailyGrowth.value) return;
+    claimingDailyGrowth.value = true;
+    try {
+      const res = await claimDailyBonus();
+      if (res?.status === 200 && res.data?.ok) {
+        if (res.data.already) {
+          message.info(t('growth.questClaimedAlready'));
+        } else if (res.data.capped) {
+          message.info(t('growth.questCapped'));
+        } else {
+          const points = res.data.pointsEarned || 0;
+          message.success(
+            points > 0
+              ? t('growth.questClaimOkPts', { n: res.data.expGained, p: points })
+              : t('growth.questClaimOk', { n: res.data.expGained }),
+          );
+          recordOperation({
+            module: '工作台',
+            operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${points}）`,
+          });
+        }
+      }
+    } catch (error) {
+      console.error('工作台领取每日奖励失败:', error);
+    } finally {
+      claimingDailyGrowth.value = false;
+    }
+  }
 
   const loadingWorkbench = ref(true);
   const loadingUpdateLogs = ref(true);
@@ -385,14 +471,37 @@
     return Math.min(100, Number(((cloud.usedSpace / maxSpaceMb.value) * 100).toFixed(1)));
   });
 
+  const primaryResourceTotal = computed(
+    () => workbenchCounts.value.bookmarkTotal + workbenchCounts.value.noteTotal + workbenchCounts.value.fileTotal,
+  );
+  const summaryTopTag = computed(() => hotTagTable.value[0] || null);
+
+  function resourceShare(value: number) {
+    if (!primaryResourceTotal.value) return 0;
+    return Math.min(100, Math.round((Number(value || 0) / primaryResourceTotal.value) * 100));
+  }
+
   const summaryCards = computed(() => [
     {
       key: 'bookmark',
       label: t('workbench.summary.bookmarkTotal'),
       value: workbenchCounts.value.bookmarkTotal,
-      weekly: Number(weeklyStats.value.bookmark || 0),
-      weeklyLabel: t('workbench.summary.weeklyAdded'),
+      unit: t('workbench.summary.itemUnit'),
       meta: t('workbench.summary.bookmarkMeta'),
+      stats: [
+        {
+          label: t('workbench.summary.weeklyAdded'),
+          value: `+${Number(weeklyStats.value.bookmark || 0)}`,
+        },
+        {
+          label: t('workbench.summary.resourceShare'),
+          value: `${resourceShare(workbenchCounts.value.bookmarkTotal)}%`,
+        },
+      ],
+      progress: resourceShare(workbenchCounts.value.bookmarkTotal),
+      progressLabel: t('workbench.summary.resourceShareDetail', {
+        percent: resourceShare(workbenchCounts.value.bookmarkTotal),
+      }),
       icon: icon.resource.bookmark,
       to: '/home',
     },
@@ -400,9 +509,22 @@
       key: 'note',
       label: t('workbench.summary.noteTotal'),
       value: workbenchCounts.value.noteTotal,
-      weekly: Number(weeklyStats.value.note || 0),
-      weeklyLabel: t('workbench.summary.weeklyUpdated'),
+      unit: t('workbench.summary.itemUnit'),
       meta: t('workbench.summary.noteMeta'),
+      stats: [
+        {
+          label: t('workbench.summary.weeklyUpdated'),
+          value: `+${Number(weeklyStats.value.note || 0)}`,
+        },
+        {
+          label: t('workbench.summary.resourceShare'),
+          value: `${resourceShare(workbenchCounts.value.noteTotal)}%`,
+        },
+      ],
+      progress: resourceShare(workbenchCounts.value.noteTotal),
+      progressLabel: t('workbench.summary.resourceShareDetail', {
+        percent: resourceShare(workbenchCounts.value.noteTotal),
+      }),
       icon: icon.resource.note,
       to: '/noteLibrary',
     },
@@ -410,9 +532,20 @@
       key: 'cloud',
       label: t('workbench.summary.cloudOverview'),
       value: workbenchCounts.value.fileTotal,
-      weekly: Number(weeklyStats.value.file || 0),
-      weeklyLabel: t('workbench.summary.weeklyUploaded'),
-      meta: t('workbench.summary.cloudOverviewExtra', {
+      unit: t('workbench.summary.fileUnit'),
+      meta: t('workbench.summary.cloudMeta'),
+      stats: [
+        {
+          label: t('workbench.summary.weeklyUploaded'),
+          value: `+${Number(weeklyStats.value.file || 0)}`,
+        },
+        {
+          label: t('workbench.summary.storageUsage'),
+          value: `${storagePercent.value}%`,
+        },
+      ],
+      progress: storagePercent.value,
+      progressLabel: t('workbench.summary.cloudOverviewExtra', {
         used: formatStorageSize(cloud.usedSpace),
         total: formatStorageSize(maxSpaceMb.value),
         percent: storagePercent.value,
@@ -424,9 +557,25 @@
       key: 'tag',
       label: t('workbench.summary.tagTotal'),
       value: workbenchCounts.value.tagTotal,
-      weekly: Number(weeklyStats.value.tag || 0),
-      weeklyLabel: t('workbench.summary.weeklyAdded'),
+      unit: t('workbench.summary.itemUnit'),
       meta: t('workbench.summary.tagMeta'),
+      stats: [
+        {
+          label: t('workbench.summary.weeklyAdded'),
+          value: `+${Number(weeklyStats.value.tag || 0)}`,
+        },
+        {
+          label: t('workbench.summary.mostUsedTag'),
+          value: summaryTopTag.value?.name || t('workbench.summary.noTopTag'),
+        },
+      ],
+      progress: resourceShare(Number(summaryTopTag.value?.resourceTotal || 0)),
+      progressLabel: summaryTopTag.value
+        ? t('workbench.summary.topTagDetail', {
+            name: summaryTopTag.value.name,
+            count: Number(summaryTopTag.value.resourceTotal || 0),
+          })
+        : t('workbench.summary.noTagRelations'),
       icon: icon.resource.tag,
       to: '/manage/tagMg',
     },
@@ -472,36 +621,38 @@
     }));
   });
 
-  const quickCreateActions = computed(() => [
-    {
-      key: 'bookmark',
-      type: 'bookmark' as ActionCaptureType,
-      label: t('workbench.actions.addBookmark.label'),
-      desc: t('workbench.actions.addBookmark.desc'),
-      icon: icon.resource.bookmark,
-    },
-    {
-      key: 'note',
-      type: 'note' as ActionCaptureType,
-      label: t('workbench.actions.addNote.label'),
-      desc: t('workbench.actions.addNote.desc'),
-      icon: icon.resource.note,
-    },
-    {
-      key: 'file',
-      type: 'file' as ActionCaptureType,
-      label: t('workbench.actions.uploadFile.label'),
-      desc: t('workbench.actions.uploadFile.quickDesc'),
-      icon: icon.resource.file,
-    },
-    {
-      key: 'todo',
-      type: 'todo' as ActionCaptureType,
-      label: t('workbench.actions.addTodo.label'),
-      desc: t('workbench.actions.addTodo.desc'),
-      icon: icon.noteDetail.toolbar.todo,
-    },
-  ].sort((a, b) => Number(quickActionUsage.value[b.key] || 0) - Number(quickActionUsage.value[a.key] || 0)));
+  const quickCreateActions = computed(() =>
+    [
+      {
+        key: 'bookmark',
+        type: 'bookmark' as ActionCaptureType,
+        label: t('workbench.actions.addBookmark.label'),
+        desc: t('workbench.actions.addBookmark.desc'),
+        icon: icon.resource.bookmark,
+      },
+      {
+        key: 'note',
+        type: 'note' as ActionCaptureType,
+        label: t('workbench.actions.addNote.label'),
+        desc: t('workbench.actions.addNote.desc'),
+        icon: icon.resource.note,
+      },
+      {
+        key: 'file',
+        type: 'file' as ActionCaptureType,
+        label: t('workbench.actions.uploadFile.label'),
+        desc: t('workbench.actions.uploadFile.quickDesc'),
+        icon: icon.resource.file,
+      },
+      {
+        key: 'todo',
+        type: 'todo' as ActionCaptureType,
+        label: t('workbench.actions.addTodo.label'),
+        desc: t('workbench.actions.addTodo.desc'),
+        icon: icon.noteDetail.toolbar.todo,
+      },
+    ].sort((a, b) => Number(quickActionUsage.value[b.key] || 0) - Number(quickActionUsage.value[a.key] || 0)),
+  );
 
   const todaySummaryItems = computed(() => [
     {
@@ -598,6 +749,10 @@
       operation: key === 'todo' ? '从今日待处理查看未完成待办' : '从今日待处理查看待整理资源',
     });
     router.push({ path: '/inbox', query: { tab } });
+  }
+
+  function openGrowthTasks() {
+    void router.push({ path: '/growth', hash: '#growth-tasks' });
   }
 
   function openQuickCapture(type: ActionCaptureType) {
@@ -735,7 +890,7 @@
       inbox.resetForOwner(user.id || 'visitor');
     }
     try {
-      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs()]);
+      await Promise.allSettled([fetchWorkbenchSummary(), fetchUpdateLogs(), loadDashboard(), loadGrowthTasks(true)]);
       if (user.id && user.role !== 'visitor') {
         // 待处理数量以导航角标共用的计数接口为最终口径，避免工作台与快速添加显示不一致。
         await inbox.refreshCount();
@@ -759,6 +914,13 @@
     () => init(),
     { immediate: true },
   );
+
+  onActivated(() => {
+    if (initializedOwner.value) {
+      void loadDashboard();
+      void loadGrowthTasks(true);
+    }
+  });
 </script>
 
 <style lang="less" scoped>
@@ -925,11 +1087,7 @@
     z-index: 1;
     inset: 0 0 auto;
     height: 3px;
-    background: linear-gradient(
-      90deg,
-      var(--primary-color),
-      color-mix(in srgb, var(--primary-color) 38%, transparent)
-    );
+    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 38%, transparent));
   }
 
   .today-summary-heading {
@@ -1006,6 +1164,54 @@
     border-left: 3px solid color-mix(in srgb, var(--primary-color) 55%, transparent);
   }
 
+  .today-summary-body {
+    --today-work-area-height: 280px;
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+    align-items: stretch;
+    gap: 10px;
+    padding: 0 10px 10px;
+  }
+
+  .today-summary-details {
+    min-width: 0;
+    height: var(--today-work-area-height);
+    display: flex;
+  }
+
+  .today-summary-details :deep(.today-actions) {
+    gap: 0;
+  }
+
+  .today-continue {
+    min-width: 0;
+    height: var(--today-work-area-height);
+    padding: 8px 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--menu-body-bg-color, var(--background-color));
+  }
+
+  .today-continue__header {
+    margin-bottom: 4px;
+  }
+
+  .today-continue__header p {
+    display: none;
+  }
+
+  .today-continue :deep(.tab-container) {
+    margin-bottom: 4px;
+  }
+
+  .today-continue :deep(.is-pill .tab) {
+    min-height: 30px;
+    padding: 4px 8px;
+  }
+
   .today-summary-item {
     --today-accent: var(--primary-color);
     width: 100%;
@@ -1079,35 +1285,69 @@
   }
 
   .summary-grid {
+    min-width: 0;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: minmax(176px, 1fr);
     gap: 12px;
+  }
+
+  .growth-task-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .growth-task-grid--single {
+    grid-template-columns: 1fr;
+  }
+
+  .today-growth-panel {
+    height: 100%;
   }
 
   .summary-card {
     --summary-accent: var(--primary-color);
     position: relative;
+    isolation: isolate;
+    overflow: hidden;
     min-width: 0;
-    min-height: 112px;
-    padding: 15px;
+    min-height: 176px;
+    padding: 16px;
     box-sizing: border-box;
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
+    flex-direction: column;
+    gap: 14px;
     border: 1px solid color-mix(in srgb, var(--summary-accent) 20%, var(--card-border-color));
     border-radius: 14px;
     color: var(--text-color);
     text-decoration: none;
-    background: linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--summary-accent) 5%, var(--menu-body-bg-color)),
-      var(--menu-body-bg-color)
-    );
+    background:
+      radial-gradient(
+        circle at 100% 115%,
+        color-mix(in srgb, var(--summary-accent) 10%, transparent) 0 84px,
+        transparent 85px
+      ),
+      linear-gradient(
+        145deg,
+        color-mix(in srgb, var(--summary-accent) 7%, var(--menu-body-bg-color)),
+        var(--menu-body-bg-color) 62%
+      );
     box-shadow: 0 10px 26px -24px color-mix(in srgb, var(--summary-accent) 80%, transparent);
     transition:
       transform 0.18s ease,
       border-color 0.18s ease,
       box-shadow 0.18s ease;
+  }
+
+  .summary-card::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--summary-accent), transparent 88%);
   }
 
   .summary-card:hover {
@@ -1133,10 +1373,10 @@
   }
 
   .summary-icon {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     flex: 0 0 auto;
-    border-radius: 11px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1144,75 +1384,182 @@
     background: color-mix(in srgb, var(--summary-accent) 10%, var(--menu-body-bg-color));
   }
 
-  .summary-copy {
-    flex: 1;
+  .summary-card__header {
     min-width: 0;
-  }
-
-  .summary-topline {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 11px;
+  }
+
+  .summary-heading-copy {
+    min-width: 0;
+    flex: 1 1 auto;
+    display: grid;
+    gap: 3px;
+  }
+
+  .summary-arrow {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+    color: var(--summary-accent);
+    background: color-mix(in srgb, var(--summary-accent) 8%, transparent);
+    transition: transform 0.18s ease;
+  }
+
+  .summary-card:hover .summary-arrow {
+    transform: translateX(2px);
   }
 
   .summary-label {
     min-width: 0;
-    color: var(--desc-color);
-    font-size: 12px;
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 700;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  .summary-weekly {
-    flex: 0 0 auto;
-    padding: 3px 7px;
-    border-radius: 999px;
-    color: var(--summary-accent);
-    background: color-mix(in srgb, var(--summary-accent) 9%, transparent);
+  .summary-meta {
+    min-width: 0;
+    color: var(--desc-color);
     font-size: 10.5px;
-    font-weight: 650;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary-card__metric {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
   }
 
   .summary-value {
-    display: block;
-    margin-top: 5px;
-    font-size: 26px;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .summary-value > span {
+    color: var(--text-color);
+    font-size: 30px;
     line-height: 1.1;
-    font-weight: 760;
+    font-weight: 780;
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.025em;
   }
 
-  .summary-meta {
-    display: block;
-    margin-top: 7px;
+  .summary-value small {
     color: var(--desc-color);
-    font-size: 11.5px;
-    line-height: 1.25;
+    font-size: 10.5px;
+    font-weight: 500;
     white-space: nowrap;
+  }
+
+  .summary-stats {
+    min-width: min(210px, 56%);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .summary-stat {
+    min-width: 0;
+    padding: 7px 8px;
+    display: grid;
+    gap: 2px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--summary-accent) 6%, var(--menu-body-bg-color));
+  }
+
+  .summary-stat small,
+  .summary-stat strong {
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .storage-track {
-    height: 4px;
-    margin-top: 7px;
-    border-radius: 999px;
+  .summary-stat small {
+    color: var(--desc-color);
+    font-size: 9.5px;
+  }
+
+  .summary-stat strong {
+    color: var(--summary-accent);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
+  .summary-progress {
+    margin-top: auto;
+    display: grid;
+    gap: 7px;
+  }
+
+  .summary-progress__track {
+    height: 5px;
     overflow: hidden;
-    background: color-mix(in srgb, var(--card-border-color) 56%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--card-border-color) 58%, transparent);
   }
 
-  .storage-track span {
+  .summary-progress__track span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--summary-accent);
+    background: linear-gradient(
+      90deg,
+      var(--summary-accent),
+      color-mix(in srgb, var(--summary-accent) 58%, var(--menu-body-bg-color))
+    );
+  }
+
+  .summary-progress__footer {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 10px;
+  }
+
+  .summary-progress__footer span {
+    min-width: 0;
+    color: var(--desc-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .summary-progress__footer strong {
+    flex: 0 0 auto;
+    color: var(--summary-accent);
+    font-weight: 700;
   }
 
   .summary-skeleton {
     pointer-events: none;
+  }
+
+  .summary-skeleton__header {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .summary-skeleton__stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
   }
 
   .skeleton-block {
@@ -1229,34 +1576,29 @@
   }
 
   .skeleton-icon {
-    width: 38px;
-    height: 38px;
+    width: 40px;
+    height: 40px;
     flex: 0 0 auto;
   }
 
-  .skeleton-label,
-  .skeleton-value,
-  .skeleton-meta {
-    position: absolute;
-    left: 65px;
-  }
-
   .skeleton-label {
-    top: 16px;
-    width: 34%;
-    height: 11px;
+    width: 36%;
+    height: 13px;
   }
 
   .skeleton-value {
-    top: 38px;
-    width: 22%;
-    height: 25px;
+    width: 25%;
+    height: 30px;
+  }
+
+  .skeleton-stat {
+    height: 38px;
   }
 
   .skeleton-meta {
-    top: 78px;
-    width: 52%;
-    height: 10px;
+    width: 78%;
+    height: 7px;
+    margin-top: auto;
   }
 
   .primary-grid {
@@ -1315,24 +1657,19 @@
     background: color-mix(in srgb, var(--primary-color) 7%, var(--menu-body-bg-color));
   }
 
-  .continue-panel {
-    min-height: 344px;
-  }
-
-  .continue-panel :deep(.tab-container) {
-    margin-bottom: 8px;
-  }
-
   .content-list {
+    min-height: 0;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .content-row {
     width: 100%;
-    height: 50px;
-    padding: 0 9px;
-    gap: 10px;
+    height: 38px;
+    padding: 0 7px;
+    gap: 8px;
     justify-content: flex-start;
     border-radius: 9px;
     line-height: 1.2;
@@ -1344,8 +1681,8 @@
   }
 
   .content-row-icon {
-    width: 31px;
-    height: 31px;
+    width: 26px;
+    height: 26px;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
@@ -1711,6 +2048,11 @@
     min-height: 132px;
   }
 
+  .compact-empty--continue {
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
   @keyframes workbench-skeleton {
     0% {
       background-position: 200% 0;
@@ -1721,10 +2063,6 @@
   }
 
   @media (max-width: 1180px) {
-    .summary-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
     .primary-grid {
       grid-template-columns: 1fr;
     }
@@ -1737,6 +2075,23 @@
 
     .quick-create-panel {
       height: 100%;
+    }
+  }
+
+  @media (max-width: 1050px) {
+    .today-summary-body,
+    .growth-task-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .today-summary-body {
+      --today-work-area-height: 280px;
+    }
+
+    .today-summary-details,
+    .today-continue {
+      height: auto;
+      min-height: var(--today-work-area-height);
     }
   }
 

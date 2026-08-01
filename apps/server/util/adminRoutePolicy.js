@@ -266,6 +266,7 @@ declare(ADMIN_POLICIES.BACKGROUND_WRITE, 'notification', [
 declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/me'],
   ['GET', '/growth/dashboard'],
+  ['GET', '/growth/tasks'],
   ['GET', '/growth/ranks'],
   ['GET', '/growth/weeklyReport'],
   ['GET', '/growth/shop'],

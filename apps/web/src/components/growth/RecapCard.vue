@@ -4,6 +4,20 @@
       <div class="rc-title">🕰️ {{ t('growth.recapTitle') }}</div>
     </div>
 
+    <div v-if="weekly.length" class="rc-section">
+      <div class="rc-sec-head">
+        <span class="rc-sec-title">🪴 {{ t('growth.recapRecent') }}</span>
+        <span class="rc-sec-sub">{{ t('growth.recapRecentSub') }}</span>
+      </div>
+      <div class="rc-list">
+        <div v-for="it in weekly" :key="it.type + it.id" class="rc-item dom-hover" @click="open(it)">
+          <span class="rc-item-icon">{{ it.type === 'note' ? '📝' : '🔖' }}</span>
+          <span class="rc-item-title">{{ it.title }}</span>
+          <span class="rc-item-year">{{ dateOf(it.time) }}</span>
+        </div>
+      </div>
+    </div>
+
     <div v-if="onThisDay.length" class="rc-section">
       <div class="rc-sec-head">
         <span class="rc-sec-title">📅 {{ t('growth.recapOnThisDay') }}</span>
@@ -31,6 +45,11 @@
         </div>
       </div>
     </div>
+
+    <div v-if="!allItems.length" class="rc-empty">
+      <strong>{{ t('growth.recapEmptyTitle') }}</strong>
+      <span>{{ t('growth.recapEmptyDesc') }}</span>
+    </div>
   </div>
 </template>
 
@@ -45,8 +64,10 @@
   const router = useRouter();
   const { recap, loadRecap } = useGrowth();
 
+  const weekly = computed(() => recap.value?.weekly || []);
   const onThisDay = computed(() => recap.value?.onThisDay || []);
   const buried = computed(() => recap.value?.buried || []);
+  const allItems = computed(() => [...weekly.value, ...onThisDay.value, ...buried.value]);
 
   function yearOf(v: string) {
     const d = new Date(v);
@@ -139,5 +160,21 @@
     font-size: 11.5px;
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
+  }
+  .rc-empty {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 12px 10px;
+    border-radius: 9px;
+    background: color-mix(in srgb, var(--primary-color) 5%, transparent);
+  }
+  .rc-empty strong {
+    font-size: 13px;
+    color: var(--text-color);
+  }
+  .rc-empty span {
+    font-size: 12px;
+    color: var(--desc-color);
   }
 </style>

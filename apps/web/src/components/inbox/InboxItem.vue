@@ -1,6 +1,12 @@
 <template>
   <article :class="['inbox-item', `inbox-item--${item.resourceType}`]">
-    <BCheckbox :model-value="selected" :disabled="disabled" @update:model-value="$emit('select', $event)" />
+    <BCheckbox
+      v-if="selectable"
+      :model-value="selected"
+      :disabled="disabled"
+      @update:model-value="$emit('select', $event)"
+    />
+    <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
     <div class="inbox-item__body" @click="$emit('open')">
       <div class="inbox-item__meta">
         <span class="inbox-item__type">{{ t(`inbox.${item.resourceType}`) }}</span>
@@ -29,13 +35,17 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import type { InboxItem } from '@/api/inboxApi';
 
-  const props = defineProps<{
-    item: InboxItem;
-    selected: boolean;
-    completing?: boolean;
-    deleting?: boolean;
-    disabled?: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      item: InboxItem;
+      selected: boolean;
+      completing?: boolean;
+      deleting?: boolean;
+      disabled?: boolean;
+      selectable?: boolean;
+    }>(),
+    { selectable: true },
+  );
   defineEmits<{ select: [selected: boolean]; open: []; complete: []; delete: [] }>();
   const { t, locale } = useI18n();
   const plainSummary = computed(() => {
@@ -96,6 +106,12 @@
   .inbox-item__body {
     min-width: 0;
     cursor: pointer;
+  }
+
+  .inbox-item__select-placeholder {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 18px;
   }
   .inbox-item__meta {
     display: flex;

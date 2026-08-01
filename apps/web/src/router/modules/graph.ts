@@ -10,7 +10,7 @@ const graphRouter: RouteRecordRaw = {
   },
   path: '/graph',
   name: 'globalGraph',
-  component: () => import('@/view/graph/GlobalGraph.vue'),
+  redirect: { path: '/manage/tagMg', query: { view: 'map' } },
 };
 
 export default graphRouter;

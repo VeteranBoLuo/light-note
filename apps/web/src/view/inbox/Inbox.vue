@@ -12,38 +12,76 @@
       v-if="isMobileResourceInbox"
       :keyword="inbox.keyword"
       input-id="mobile-inbox-page-input"
+      :title="t('inbox.mobilePendingTitle')"
+      compact-title
+      show-menu
+      :selection-mode="resourceSelectionMode"
+      :selected-count="selectedItems.length"
       :create-label="t('inbox.quickCapture')"
       @update:keyword="setMobileInboxKeyword"
       @submit="search"
       @back="leaveResourceInbox"
       @create="openCapture"
+      @batch="enterResourceSelection"
+      @sort="toggleMobileResourceSort"
+      @filter="cycleMobileResourceFilter"
+      @cancel-selection="leaveResourceSelection"
+      @complete-selected="completeSelected"
+      @delete-selected="confirmDelete(selectedItems, true)"
     />
 
-    <ResourceCenterSectionNav v-if="!bookmark.isMobile || isMobileResourceInbox" class="section-switcher" />
     <header v-if="!bookmark.isMobile" class="inbox-hero">
-      <div>
-        <h1>{{ t('inbox.title') }}</h1>
-        <p>{{ t('inbox.subtitle') }}</p>
+      <div class="inbox-hero__heading">
+        <div class="inbox-hero__title-row">
+          <span class="inbox-hero__accent" aria-hidden="true"></span>
+          <h1>{{ isTodoFocused ? t('inbox.todoPageTitle') : t('inbox.title') }}</h1>
+        </div>
+        <p>{{ isTodoFocused ? t('inbox.todoPageSubtitle') : t('inbox.subtitle') }}</p>
       </div>
-      <BButton type="primary" @click="openTodoEditor()">{{ t('inbox.createTodo') }}</BButton>
+      <BButton v-if="isTodoFocused" type="primary" @click="openTodoEditor()">{{ t('inbox.createTodo') }}</BButton>
     </header>
 
+    <ResourceCenterSectionNav
+      v-if="!isTodoFocused && (!bookmark.isMobile || isMobileResourceInbox)"
+      class="section-switcher"
+    />
+
     <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
-      <template v-if="isMobileTodoPrimary">
-        <!-- 移动端待办不放第二个文本搜索框：查找待办统一走顶栏全局搜索，
-             这里只保留状态、排序、视图等结构化筛选。 -->
-        <BTabs
-          v-if="todoView === 'list'"
-          v-model:active-tab="todo.status"
-          :options="todoStatusTabOptions"
-          variant="pill"
-          @change="changeTodoStatus"
-        />
-        <BSelect class="mobile-todo-sort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
+      <template v-if="isTodoFocused">
+        <template v-if="isMobileTodoPrimary">
+          <!-- 移动端待办不放第二个文本搜索框：查找待办统一走顶栏全局搜索，
+               这里只保留状态、排序、视图等结构化筛选。 -->
+          <BTabs
+            v-if="todoView === 'list'"
+            v-model:active-tab="todo.status"
+            :options="todoStatusTabOptions"
+            variant="pill"
+            @change="changeTodoStatus"
+          />
+          <BSelect class="mobile-todo-sort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
+        </template>
+        <template v-else>
+          <BTabs
+            v-if="todoView === 'list'"
+            v-model:active-tab="todo.status"
+            :options="todoStatusTabOptions"
+            variant="pill"
+            @change="changeTodoStatus"
+          />
+          <div class="inbox-toolbar__right inbox-toolbar__right--todo">
+            <BInput
+              v-model:value="inbox.keyword"
+              :placeholder="t('inbox.todoSearchPlaceholder')"
+              clearable
+              @enter="search"
+            />
+            <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+          </div>
+        </template>
       </template>
       <template v-else>
         <BTabs v-model:active-tab="inbox.filterType" :options="filterOptions" variant="pill" @change="changeFilter" />
-        <div class="inbox-toolbar__right" :class="{ 'has-status': inbox.filterType === 'todo' }">
+        <div class="inbox-toolbar__right">
           <BInput
             v-if="!bookmark.isMobile"
             v-model:value="inbox.keyword"
@@ -52,13 +90,6 @@
             @enter="search"
           />
           <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
-          <BTabs
-            v-if="inbox.filterType === 'todo' && todoView === 'list'"
-            v-model:active-tab="todo.status"
-            :options="todoStatusTabOptions"
-            variant="pill"
-            @change="search"
-          />
         </div>
       </template>
     </section>
@@ -124,7 +155,10 @@
       <BButton size="small" :aria-label="t('common.close')" @click="clearTodoUndo">{{ t('common.close') }}</BButton>
     </section>
 
-    <section v-if="inbox.filterType !== 'todo' && inbox.items.length" class="inbox-batch">
+    <section
+      v-if="inbox.filterType !== 'todo' && inbox.items.length && (!isMobileResourceInbox || resourceSelectionMode)"
+      class="inbox-batch"
+    >
       <BCheckbox
         :model-value="allItemsSelected"
         :indeterminate="someItemsSelected"
@@ -213,15 +247,12 @@
             </section>
           </div>
           <div v-else class="inbox-list">
-            <!-- 「全部」把待办与待整理资源混在一起时,加分组标题让顺序可读 -->
+            <!-- 资源中心只展示资源；待办由独立工作区承载。 -->
             <template v-for="action in actionItems" :key="action.key">
-              <div v-if="action.groupLabel" class="inbox-list__group-label">
-                <strong>{{ action.groupLabel }}</strong>
-                <span>{{ action.groupCount }}</span>
-              </div>
               <InboxItem
                 v-if="action.actionType === 'resource'"
                 :item="action.item"
+                :selectable="!isMobileResourceInbox || resourceSelectionMode"
                 :selected="inbox.selectedKeys.includes(inbox.resourceKey(action.item))"
                 :completing="completingKey === inbox.resourceKey(action.item)"
                 :deleting="deletingKey === inbox.resourceKey(action.item)"
@@ -326,6 +357,7 @@
     value === 'agenda' || value === 'calendar' ? value : 'list';
   const todoView = ref<TodoView>(normalizeTodoView(user.preferences.todoView));
   const todoSelectionMode = ref(false);
+  const resourceSelectionMode = ref(false);
   const selectedTodoIds = ref<string[]>([]);
   const todoBatchMutating = ref(false);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
@@ -340,6 +372,13 @@
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
   const isTodoFocused = computed(() => isMobileTodoPrimary.value || inbox.filterType === 'todo');
+
+  function resolveRequestedFilter(value: unknown) {
+    const tab = String(value || '');
+    if (tab === 'todo') return 'todo' as const;
+    if (isMobileResourceInboxTab(tab)) return tab;
+    return bookmark.isMobile ? ('todo' as const) : ('all' as const);
+  }
 
   const selectedItems = computed(() =>
     inbox.items.filter((item) => inbox.selectedKeys.includes(inbox.resourceKey(item))),
@@ -361,19 +400,15 @@
   const pageLoading = computed(() => {
     if (isMobileTodoPrimary.value) return todo.loading;
     if (isMobileResourceInbox.value) return inbox.loading;
-    return inbox.loading || todo.loading;
+    return inbox.filterType === 'todo' ? todo.loading : inbox.loading;
   });
   const pageLoadFailed = computed(() => {
     if (isMobileTodoPrimary.value) return todo.loadFailed;
     if (isMobileResourceInbox.value) return inbox.loadFailed;
-    return inbox.filterType === 'todo'
-      ? todo.loadFailed
-      : inbox.filterType === 'all'
-        ? inbox.loadFailed || todo.loadFailed
-        : inbox.loadFailed;
+    return inbox.filterType === 'todo' ? todo.loadFailed : inbox.loadFailed;
   });
   const isInboxGloballyEmpty = computed(() =>
-    isMobileResourceInbox.value ? inbox.pendingTotal === 0 : inbox.actionTotal === 0,
+    inbox.filterType === 'todo' ? todo.pendingTotal === 0 : inbox.pendingTotal === 0,
   );
   const currentTypeLabel = computed(() =>
     inbox.filterType === 'all' ? t('inbox.all') : t(`inbox.${inbox.filterType}`),
@@ -393,12 +428,12 @@
     if (isInboxGloballyEmpty.value) return t('inbox.emptyDesc');
     if (inbox.filterType === 'all') {
       return t('inbox.filterEmptyDesc', {
-        count: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
+        count: inbox.pendingTotal,
       });
     }
     return t('inbox.typeEmptyDesc', {
       type: currentTypeLabel.value,
-      count: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
+      count: inbox.pendingTotal,
     });
   });
   const emptyStateAction = computed(() => {
@@ -408,18 +443,16 @@
   });
 
   const filterOptions = computed(() => {
-    const resourceOptions = [
+    return [
       {
         key: 'all',
         label: t('inbox.all'),
-        badge: isMobileResourceInbox.value ? inbox.pendingTotal : inbox.actionTotal,
+        badge: inbox.pendingTotal,
       },
       { key: 'bookmark', label: t('inbox.bookmark'), badge: inbox.typeTotals.bookmark },
       { key: 'note', label: t('inbox.note'), badge: inbox.typeTotals.note },
       { key: 'file', label: t('inbox.file'), badge: inbox.typeTotals.file },
     ];
-    if (isMobileResourceInbox.value) return resourceOptions;
-    return [...resourceOptions, { key: 'todo', label: t('inbox.todo'), badge: todo.pendingTotal }];
   });
   const sortOptions = computed(() =>
     inbox.filterType === 'todo'
@@ -454,27 +487,8 @@
       key: inbox.resourceKey(item),
       item,
     }));
-    if (inbox.filterType !== 'all' || isMobileResourceInbox.value) return resources;
-    const todos = todo.items.map((item) => ({ actionType: 'todo' as const, key: `todo:${item.id}`, item }));
-    const sorted = [...resources, ...todos].sort(
-      (left, right) => actionRank(left) - actionRank(right) || actionTime(right) - actionTime(left),
-    );
-    // 排序已保证待办在前、资源在后,这里只需给每段的首项挂上标题
-    const todoCount = todos.length;
-    const resourceCount = resources.length;
-    let seenTodo = false;
-    let seenResource = false;
-    return sorted.map((action) => {
-      if (action.actionType === 'todo' && !seenTodo) {
-        seenTodo = true;
-        return { ...action, groupLabel: t('inbox.groupTodo'), groupCount: todoCount };
-      }
-      if (action.actionType === 'resource' && !seenResource) {
-        seenResource = true;
-        return { ...action, groupLabel: t('inbox.groupPending'), groupCount: resourceCount };
-      }
-      return action;
-    });
+    // 资源中心的“全部”只展示资源；待办拥有独立的列表 / 议程 / 日历工作区，避免跨域混排和误操作。
+    return resources;
   });
 
   watch(
@@ -483,6 +497,7 @@
       todoView.value = normalizeTodoView(user.preferences.todoView);
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
+      resourceSelectionMode.value = false;
       syncRequestedMobileMode();
       await refreshList();
     },
@@ -491,14 +506,11 @@
   onMounted(async () => {
     inbox.resetForOwner(user.id || 'visitor');
     todo.resetForOwner(user.id || 'visitor');
-    const requestedTab = String(route.query.tab || '');
-    if (bookmark.isMobile) {
-      syncRequestedMobileMode();
-    } else if (['all', 'bookmark', 'note', 'file', 'todo'].includes(requestedTab)) {
-      inbox.filterType = requestedTab as any;
-    }
+    resourceSelectionMode.value = false;
+    if (bookmark.isMobile) syncRequestedMobileMode();
+    else inbox.filterType = resolveRequestedFilter(route.query.tab);
     const requestedTodoId = String(route.query.todoId || '');
-    if (isMobileTodoPrimary.value) todo.status = requestedTodoId ? 'all' : 'pending';
+    if (isTodoFocused.value) todo.status = requestedTodoId ? 'all' : 'pending';
     await refreshList();
     await openRequestedTodo(requestedTodoId, { listReady: true });
     if (scrollContainer.value) {
@@ -577,15 +589,19 @@
   watch(
     () => route.query.tab,
     async (tab, previousTab) => {
-      if (!bookmark.isMobile || tab === previousTab) return;
-      const nextFilter = isMobileResourceInboxTab(tab) ? tab : 'todo';
+      if (tab === previousTab) return;
+      const nextFilter = resolveRequestedFilter(tab);
       if (inbox.filterType === nextFilter) return;
       inbox.filterType = nextFilter;
       inbox.keyword = '';
       todo.keyword = '';
       // 带 todoId 进来时要能定位已完成待办，不能强制回到「未完成」
       if (nextFilter === 'todo') todo.status = route.query.todoId ? 'all' : 'pending';
-      else inbox.sort = 'newest';
+      else {
+        inbox.sort = 'newest';
+        resourceSelectionMode.value = false;
+        inbox.selectedKeys = [];
+      }
       await refreshList(true);
     },
   );
@@ -600,7 +616,7 @@
 
   function syncRequestedMobileMode() {
     if (!bookmark.isMobile) return;
-    inbox.filterType = isMobileResourceInboxTab(route.query.tab) ? route.query.tab : 'todo';
+    inbox.filterType = resolveRequestedFilter(route.query.tab);
     if (inbox.filterType === 'todo') {
       if (!route.query.todoId) todo.status = 'pending';
     } else {
@@ -612,6 +628,35 @@
     if (blockGuestWrite('inbox-capture', t('inbox.guestPrompt'))) return;
     recordOperation(OPERATION_LOG_MAP.inbox.openCapture);
     inbox.openQuickCapture(inbox.filterType === 'all' ? 'note' : inbox.filterType);
+  }
+
+  function setMobileInboxKeyword(value: string) {
+    inbox.keyword = value;
+  }
+
+  function enterResourceSelection() {
+    if (!isMobileResourceInbox.value) return;
+    resourceSelectionMode.value = true;
+    inbox.selectedKeys = [];
+  }
+
+  function leaveResourceSelection() {
+    resourceSelectionMode.value = false;
+    inbox.selectedKeys = [];
+  }
+
+  async function toggleMobileResourceSort() {
+    if (!isMobileResourceInbox.value) return;
+    inbox.sort = inbox.sort === 'newest' ? 'oldest' : 'newest';
+    await refreshList(true);
+  }
+
+  async function cycleMobileResourceFilter() {
+    if (!isMobileResourceInbox.value) return;
+    const filters = ['all', 'bookmark', 'note', 'file'];
+    const currentIndex = Math.max(0, filters.indexOf(inbox.filterType));
+    inbox.filterType = filters[(currentIndex + 1) % filters.length] as any;
+    await changeFilter();
   }
 
   useMobileTopBar(['inbox'], {
@@ -668,18 +713,9 @@
       refreshed = await todo.refreshList();
       inboxCountsReady = await inbox.refreshCount();
     } else if (inbox.filterType === 'all') {
-      if (isMobileResourceInbox.value) {
-        const inboxRefreshed = await inbox.refreshList();
-        refreshed = inboxRefreshed;
-        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
-      } else {
-        const [inboxRefreshed, todoRefreshed] = await Promise.all([
-          inbox.refreshList(),
-          todo.refreshList({ status: 'pending', keyword: inbox.keyword, preserveStatus: true }),
-        ]);
-        refreshed = inboxRefreshed && todoRefreshed;
-        inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
-      }
+      const inboxRefreshed = await inbox.refreshList();
+      refreshed = inboxRefreshed;
+      inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
     } else {
       const inboxRefreshed = await inbox.refreshList();
       refreshed = inboxRefreshed;
@@ -690,23 +726,6 @@
     if (resetScroll && scrollContainer.value) scrollContainer.value.scrollTop = 0;
     updateScrollFade();
     return refreshed;
-  }
-  // 「全部」里待办与待整理资源混排时,两者各按自己的规则排序会让顺序无法理解
-  // (新上传的文件会插到两条待办中间)。改为分层:先列要做的待办(按紧急度),
-  // 再列待整理资源(按收集时间倒序),同层内部再按时间排。
-  function actionRank(action: any) {
-    if (action.actionType !== 'todo') return 4;
-    const due = action.item.dueAt ? parseServerDate(action.item.dueAt).getTime() : 0;
-    if (due && due < Date.now()) return 0;
-    if (due && new Date(due).toDateString() === new Date().toDateString()) return 1;
-    return action.item.priority === 2 ? 2 : 3;
-  }
-  function actionTime(action: any) {
-    const value = action.actionType === 'todo' ? action.item.updatedAt : action.item.collectedAt;
-    return parseServerDate(value || 0).getTime() || 0;
-  }
-  function parseServerDate(value: string | number) {
-    return new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
   }
   function syncTodoGroups() {
     const keys: TodoGroupKey[] =
@@ -863,6 +882,7 @@
       if (completed) {
         recordOperation({ ...OPERATION_LOG_MAP.inbox.completeBatch, operation: `批量整理完成【${completed}项】` });
         message.success(t('inbox.completedCount', { count: completed }));
+        if (isMobileResourceInbox.value) leaveResourceSelection();
         await nextTick(updateScrollFade);
       }
     } finally {
@@ -907,6 +927,7 @@
       clearGlobalSearchCache();
       message.success(t('inbox.deleteSuccess', { count: affected }));
       await refreshList();
+      if (isMobileResourceInbox.value && isBatch) leaveResourceSelection();
     } catch {
       message.error(t('inbox.deleteFailed'));
     } finally {
@@ -1021,22 +1042,44 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    padding: 16px 24px;
+    padding: 18px clamp(16px, 1.6vw, 40px) 24px;
     box-sizing: border-box;
     color: var(--text-color);
   }
   .section-switcher {
-    margin-bottom: 12px;
+    min-height: 34px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
     flex-shrink: 0;
     align-self: flex-start;
   }
   .inbox-hero {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: 20px;
-    margin: 0 0 18px;
+    align-items: center;
+    min-height: 54px;
+    gap: 12px;
+    margin: 0 0 14px;
     flex-shrink: 0;
+  }
+  .inbox-hero__heading {
+    min-width: 0;
+    flex: 1;
+  }
+  .inbox-hero__title-row {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .inbox-hero__accent {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--desc-color);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--desc-color) 10%, transparent);
   }
   .todo-workspace-toolbar {
     display: flex;
@@ -1122,21 +1165,26 @@
     min-height: 18px;
     gap: 10px;
   }
-  .inbox-back-btn {
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
-    padding: 0;
-    border-radius: 10px;
-    flex: 0 0 auto;
-  }
-  h1 {
-    margin: 0 0 6px;
-    font-size: 28px;
+  .inbox-hero h1 {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: clamp(22px, 2vw, 28px);
+    font-weight: 750;
+    line-height: 1.2;
+    letter-spacing: -0.025em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .inbox-hero p {
-    margin: 0;
+    margin: 5px 0 0 17px;
+    overflow: hidden;
     color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .inbox-toolbar {
     display: flex;
@@ -1166,8 +1214,8 @@
     gap: 8px;
     flex-shrink: 0;
   }
-  .inbox-toolbar__right.has-status {
-    grid-template-columns: minmax(180px, 250px) 130px auto;
+  .inbox-toolbar__right--todo {
+    grid-template-columns: minmax(180px, 250px) 130px;
   }
   .inbox-batch {
     display: flex;
@@ -1248,32 +1296,6 @@
   .inbox-loading {
     min-height: 100%;
   }
-  .inbox-list__group-label {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin-top: 4px;
-    color: var(--desc-color);
-    font-size: 13px;
-
-    strong {
-      color: var(--text-color);
-      font-weight: 600;
-    }
-
-    span {
-      min-width: 20px;
-      padding: 0 6px;
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-      color: var(--primary-color);
-      font-size: 12px;
-      text-align: center;
-    }
-  }
-  .inbox-list__group-label:first-child {
-    margin-top: 0;
-  }
   .inbox-list {
     display: flex;
     flex-direction: column;
@@ -1322,8 +1344,7 @@
       align-items: stretch;
       flex-direction: column;
     }
-    .inbox-toolbar__right,
-    .inbox-toolbar__right.has-status {
+    .inbox-toolbar__right {
       width: 100%;
       grid-template-columns: minmax(0, 1fr) 130px auto;
     }
@@ -1368,18 +1389,15 @@
     }
 
     .inbox-page--mobile-resources .section-switcher {
-      margin-top: 6px;
-    }
-
-    .inbox-page--mobile-resources .section-switcher {
       width: 100%;
+      margin-top: 6px;
       margin-bottom: 8px;
     }
 
     .inbox-hero {
       align-items: center;
     }
-    h1 {
+    .inbox-hero h1 {
       font-size: 22px;
     }
     .inbox-toolbar {
@@ -1419,12 +1437,6 @@
     .inbox-toolbar__right {
       grid-template-columns: 1fr 110px;
       margin-top: 0;
-    }
-    .inbox-toolbar__right.has-status {
-      grid-template-columns: 1fr 1fr;
-    }
-    .inbox-toolbar__right.has-status > :first-child {
-      grid-column: 1 / -1;
     }
     .inbox-batch {
       align-items: flex-start;

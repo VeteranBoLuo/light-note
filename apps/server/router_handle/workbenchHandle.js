@@ -232,7 +232,8 @@ async function queryCommonBookmarks(userId) {
       FROM operation_logs ol
       LEFT JOIN bookmark b
         ON b.user_id = ol.create_by
-        AND b.name = REPLACE(ol.operation, '点击书签卡片', '')
+        AND CONVERT(b.name USING utf8mb4) COLLATE utf8mb4_general_ci =
+            CONVERT(REPLACE(ol.operation, '点击书签卡片', '') USING utf8mb4) COLLATE utf8mb4_general_ci
         AND b.del_flag = 0
       WHERE ol.create_by = ? AND ol.operation LIKE '点击书签卡片%'
       GROUP BY ol.operation, b.id, b.url

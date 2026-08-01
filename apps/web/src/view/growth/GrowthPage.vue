@@ -22,6 +22,10 @@
         <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
       </section>
 
+      <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel">
+        <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
+      </section>
+
       <section id="growth-heatmap" class="growth-panel">
         <ActivityHeatmap ref="heatmapRef" />
       </section>
@@ -78,8 +82,8 @@
         <GrowthTimeline :items="timeline" />
       </section>
 
-      <!-- 情感回顾不抢占日常成长首屏，放在记录流之后按需浏览。 -->
-      <section v-if="hasRecap" class="growth-panel">
+      <!-- 情感回顾不抢占每日任务首屏，放在记录流之后按需浏览。 -->
+      <section v-if="showRecap" id="growth-recap" class="growth-panel">
         <RecapCard />
       </section>
     </div>
@@ -89,10 +93,11 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
+  import GrowthTasks from '@/components/growth/GrowthTasks.vue';
   import ActivityHeatmap from '@/components/growth/ActivityHeatmap.vue';
   import DailyQuests from '@/components/growth/DailyQuests.vue';
   import GrowthStats from '@/components/growth/GrowthStats.vue';
@@ -115,12 +120,38 @@
   import { useUserStore } from '@/store';
 
   const { t } = useI18n();
+  const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const isAdminContext = computed(() => Boolean(user.adminContext));
-  const { growth, dashboard, recap, loadDashboard, loadRecap, claimDailyBonus, claimAchievement } = useGrowth();
-  const hasRecap = computed(() => !!recap.value && (recap.value.onThisDay.length > 0 || recap.value.buried.length > 0));
+  const {
+    growth,
+    dashboard,
+    recap,
+    growthTasks,
+    loadDashboard,
+    loadGrowthTasks,
+    loadRecap,
+    claimDailyBonus,
+    claimAchievement,
+  } = useGrowth();
+  const hasRecap = computed(
+    () =>
+      !!recap.value &&
+      ((recap.value.weekly?.length || 0) > 0 || recap.value.onThisDay.length > 0 || recap.value.buried.length > 0),
+  );
+  const pendingGrowthTaskCount = computed(() => growthTasks.value?.tasks.filter((task) => !task.completed).length ?? 0);
+  const showGrowthTasks = computed(() => !growthTasks.value || pendingGrowthTaskCount.value > 0);
+  const showRecap = computed(() => hasRecap.value);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
+
+  function scrollToHash() {
+    const targetId = route.hash.replace(/^#/, '');
+    if (!targetId) return;
+    void nextTick(() => {
+      document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
 
   function refreshHeatmap() {
     void heatmapRef.value?.reload();
@@ -136,6 +167,8 @@
     noteCount: 0,
     fileCount: 0,
     tagCount: 0,
+    completedTodoCount: 0,
+    organizedResourceCount: 0,
     weekExp: 0,
     checkinDays: [] as string[],
   };
@@ -204,8 +237,23 @@
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
-    loadRecap(); // 那年今日/尘封回顾(有内容才在页尾展示)
+    loadGrowthTasks(true); // 成长任务由资源创建和资料更新旁路完成，进页时强制同步
+    loadRecap(); // 最近沉淀/那年今日/尘封回顾
+    scrollToHash();
   });
+
+  onActivated(() => {
+    // 从笔记库、书签或待办返回时，资源旁路完成可能已经更新了一次性任务状态。
+    void loadGrowthTasks(true);
+    void loadRecap();
+    scrollToHash();
+  });
+
+  // 工作台「查看全部成长任务」会带 hash；页面被 keep-alive 时也要响应同页 hash 变化。
+  watch(
+    () => route.hash,
+    () => scrollToHash(),
+  );
 
   const claimingAch = ref<string | null>(null);
   async function onClaimAchievement(key: string) {
@@ -320,6 +368,7 @@
     border-radius: 16px;
     background: var(--workbench-subcard-bg);
     padding: 20px;
+    scroll-margin-top: 18px;
     box-shadow:
       0 1px 2px rgba(0, 0, 0, 0.03),
       0 12px 28px -22px rgba(30, 35, 70, 0.35);
@@ -343,7 +392,7 @@
   .growth-admin-notice span {
     color: var(--desc-color);
   }
-  /* 今日任务 + 数据统计:大屏并排,窄屏堆叠 */
+  /* 每日任务 + 数据统计:大屏并排,窄屏堆叠 */
   .growth-row {
     display: flex;
     gap: 18px;

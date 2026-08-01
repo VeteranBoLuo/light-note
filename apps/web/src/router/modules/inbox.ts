@@ -5,7 +5,7 @@ const inboxRouter: RouteRecordRaw = {
   path: '/inbox',
   name: 'inbox',
   meta: {
-    title: '待处理',
+    title: '待整理',
     keepAlive: true,
     requireAuth: true,
     roles: ALL_ROLES,

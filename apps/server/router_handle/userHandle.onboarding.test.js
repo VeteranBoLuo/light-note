@@ -6,6 +6,7 @@ const seedNewUserCloudFile = vi.fn();
 const createNotification = vi.fn();
 const issueLoginSession = vi.fn();
 const recordConversionEvent = vi.fn();
+const completeGrowthTask = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { query, getConnection: vi.fn() } }));
 vi.mock('../util/services/newUserSeedService.js', () => ({
@@ -29,6 +30,7 @@ vi.mock('../util/conversion.js', () => ({
   recordFirstOwnResource: vi.fn(),
   normalizeConversionSource: vi.fn((source) => source || 'unknown'),
 }));
+vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
 vi.mock('../util/logExclude.js', () => ({
   isSelfTraffic: vi.fn(() => true),
   listLogExclude: vi.fn(),
@@ -59,6 +61,8 @@ describe('新用户示例数据接入注册流程', () => {
     createNotification.mockReset();
     issueLoginSession.mockReset();
     recordConversionEvent.mockReset();
+    completeGrowthTask.mockReset();
+    completeGrowthTask.mockResolvedValue({ completed: true });
     seedNewUserWorkspaceData.mockResolvedValue({ created: true, folderId: 42 });
     seedNewUserCloudFile.mockResolvedValue({ created: true, id: 7, folderId: 42 });
     createNotification.mockResolvedValue(undefined);
@@ -97,6 +101,7 @@ describe('新用户示例数据接入注册流程', () => {
       lang: 'en-US',
       folderId: 42,
     });
+    expect(completeGrowthTask).not.toHaveBeenCalled();
     expect(seedNewUserWorkspaceData.mock.invocationCallOrder[0]).toBeLessThan(
       issueLoginSession.mock.invocationCallOrder[0],
     );
@@ -145,6 +150,7 @@ describe('新用户示例数据接入注册流程', () => {
     );
 
     expect(seedNewUserCloudFile).not.toHaveBeenCalled();
+    expect(completeGrowthTask).not.toHaveBeenCalled();
     expect(issueLoginSession).toHaveBeenCalledTimes(1);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
     expect(createNotification).toHaveBeenCalledWith(
@@ -190,6 +196,7 @@ describe('新用户示例数据接入注册流程', () => {
       lang: 'en-US',
       folderId: 42,
     });
+    expect(completeGrowthTask).toHaveBeenCalledWith(createdUserId, 'profile_avatar', { userRole: 'user' });
   });
 
   it('GitHub 已有账号登录时不重复初始化', async () => {
