@@ -199,6 +199,11 @@ public final class PrivacyConsentActivity extends Activity {
 
     private void openMainExperience() {
         Intent intent = new Intent(this, MainActivity.class);
+        // 同意后让 MainActivity 成为全新的任务根；之后桌面图标只会恢复这一任务，
+        // 不会再次创建隐私入口和 WebView Activity。
+        intent.addFlags(
+            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
+        );
         startActivity(intent);
         finish();
     }

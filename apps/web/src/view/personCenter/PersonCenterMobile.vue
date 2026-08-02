@@ -50,6 +50,7 @@
       <div
         class="person-menu-scroll"
         :class="{ 'person-menu-scroll--mobile': bookmark.isMobile, 'no-scrollbar': bookmark.isMobile }"
+        :data-mobile-primary-scroll="bookmark.isMobile ? '' : null"
       >
         <div class="person-menu">
           <div class="person-menu-item" @click="goToProfileModule('/myInfo')">

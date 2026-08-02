@@ -4,12 +4,15 @@ import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
@@ -88,6 +91,8 @@ public final class MainActivity extends Activity {
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
     private boolean resolvedNightTheme;
+    private boolean backNavigationPending;
+    private OnBackInvokedCallback backInvokedCallback;
     private final Runnable launchTimeout = this::hideLaunchOverlay;
     private final Runnable webAppReadyFallback = this::hideLaunchOverlay;
     private final Runnable fileChooserReadyFallback = this::hideFileChooserOverlay;
@@ -95,6 +100,12 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!PrivacyConsentStore.isAccepted(this)) {
+            startActivity(new Intent(this, PrivacyConsentActivity.class));
+            finish();
+            return;
+        }
+        registerSystemBackCallback();
         resolvedNightTheme = WindowInsetsSupport.isNightMode(this);
         setContentView(createContentView());
         if (WebViewSupport.isUnsupportedWebView(webView)) {
@@ -107,6 +118,24 @@ public final class MainActivity extends Activity {
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(WebViewSupport.HOME_URL);
         }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // singleTask 从桌面恢复时只更新启动 Intent，保留现有 WebView、路由和滚动状态。
+        setIntent(intent);
+    }
+
+    private void registerSystemBackCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            return;
+        }
+        backInvokedCallback = this::handleBackNavigation;
+        getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+            OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+            backInvokedCallback
+        );
     }
 
     private View createContentView() {
@@ -809,17 +838,26 @@ public final class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        handleBackNavigation();
+    }
+
+    private void handleBackNavigation() {
+        if (backNavigationPending) {
+            return;
+        }
         if (unsupportedWebView) {
-            super.onBackPressed();
+            finish();
         } else if (errorView.getVisibility() == View.VISIBLE) {
             errorView.setVisibility(View.GONE);
             webView.loadUrl(WebViewSupport.HOME_URL);
         } else {
+            backNavigationPending = true;
             webView.evaluateJavascript(
                 "(function(){try{return Boolean(window.history.state&&window.history.state.__lnMobileOverlayId)?'overlay':document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
                 state -> {
+                    backNavigationPending = false;
                     if ("\"root\"".equals(state)) {
-                        // 一级导航返回只把任务移到后台，不结束进程，也不在底栏页面间回退。
+                        // 一级导航返回只把完整任务移到后台；singleTask 桌面入口会恢复同一实例。
                         moveTaskToBack(true);
                     } else if (webView.canGoBack()) {
                         webView.goBack();
@@ -833,6 +871,10 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && backInvokedCallback != null) {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(backInvokedCallback);
+            backInvokedCallback = null;
+        }
         cancelPendingFileChooserLaunch();
         if (launchOverlay != null) {
             launchOverlay.removeCallbacks(launchTimeout);

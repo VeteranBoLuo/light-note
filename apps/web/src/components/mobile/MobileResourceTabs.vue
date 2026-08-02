@@ -32,7 +32,7 @@
   const route = useRoute();
   const router = useRouter();
   const { t } = useI18n();
-  const { saveResourceScroll, scrollCurrentResourceToTop, setLastMobileResourcePath } = useMobileNavigationState();
+  const { scrollCurrentResourceToTop, setLastMobileResourcePath } = useMobileNavigationState();
 
   const resourceIcons = {
     bookmark: icon.resource.bookmark,
@@ -48,7 +48,6 @@
       scrollCurrentResourceToTop();
       return;
     }
-    saveResourceScroll(activePath.value);
     setLastMobileResourcePath(path);
     router.push(path);
   }

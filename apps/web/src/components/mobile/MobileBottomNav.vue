@@ -24,7 +24,7 @@
 </template>
 
 <script setup lang="ts">
-  import { watch } from 'vue';
+  import { nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -44,7 +44,7 @@
   const user = useUserStore();
   const inbox = inboxStore();
   const { t } = useI18n();
-  const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
+  const { resetMobilePrimaryScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
 
   const bottomIcons = {
     today: icon.common.calendar,
@@ -62,13 +62,11 @@
     return route.meta.mobileShell === key;
   }
 
-  function activate(item: MobileBottomNavigationItem) {
+  async function activate(item: MobileBottomNavigationItem) {
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
       scrollCurrentResourceToTop();
       return;
     }
-    saveResourceScroll(route.meta.mobileShell === 'resources' ? getMobileResourcePathFromRoute() : null);
-
     const target =
       item.key === 'resources'
         ? getMobileResourceEntryPath()
@@ -76,14 +74,10 @@
           ? { path: '/inbox', query: { tab: 'todo' } }
           : item.path;
     // 一级导航切换不应堆叠浏览历史；否则 Android 返回手势会在底栏页面间倒退。
-    if (target && router.resolve(target).fullPath !== route.fullPath) router.replace(target);
-  }
-
-  function getMobileResourcePathFromRoute() {
-    if (route.name === 'noteLibrary') return '/noteLibrary' as const;
-    if (route.name === 'cloudSpace') return '/cloudSpace' as const;
-    if (['home', 'home:id', 'home:search'].includes(String(route.name || ''))) return '/home' as const;
-    return null;
+    if (!target || router.resolve(target).fullPath === route.fullPath) return;
+    await router.replace(target);
+    await nextTick();
+    window.requestAnimationFrame(resetMobilePrimaryScroll);
   }
 
   watch(
