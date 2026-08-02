@@ -130,9 +130,10 @@
               class="preview-image"
               :style="{
                 transform: `translate(${imagePosition.x}px, ${imagePosition.y}px) scale(${scale}) rotate(${rotate}deg)`,
-                cursor: scale > 1 ? 'grab' : 'default',
+                cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default',
                 userSelect: 'none',
               }"
+              draggable="false"
               @load="onImageLoad"
               @error="onError"
               @click="previewImage"
@@ -141,6 +142,10 @@
               @mousemove="drag"
               @mouseup="stopDrag"
               @mouseleave="stopDrag"
+              @touchstart="startTouch"
+              @touchmove="moveTouch"
+              @touchend="endTouch"
+              @touchcancel="endTouch"
             />
           </div>
 
@@ -340,6 +345,13 @@
   const isDragging = ref(false);
   const dragStart = ref({ x: 0, y: 0 });
   const imagePosition = ref({ x: 0, y: 0 });
+  const MIN_IMAGE_SCALE = 0.1;
+  const MAX_IMAGE_SCALE = 5;
+  let touchGesture: 'pan' | 'pinch' | null = null;
+  let pinchStartDistance = 0;
+  let pinchStartScale = 1;
+  let pinchStartCenter = { x: 0, y: 0 };
+  let pinchStartPosition = { x: 0, y: 0 };
   const textContent = ref('');
   const wrapText = ref(true);
   const pdfBlobUrl = ref<string>('');
@@ -804,6 +816,7 @@
     rotate.value = 0; // 重置旋转角度
     scale.value = 1; // 重置缩放
     imagePosition.value = { x: 0, y: 0 }; // 重置位置
+    resetTouchGesture();
     if (previewHistoryActive.value) {
       history.back();
       return;
@@ -824,17 +837,19 @@
   }
 
   function zoomIn() {
-    scale.value = Math.min(scale.value * 1.2, 5); // 最大5倍
+    scale.value = Math.min(scale.value * 1.2, MAX_IMAGE_SCALE);
   }
 
   function zoomOut() {
-    scale.value = Math.max(scale.value / 1.2, 0.1); // 最小0.1倍
+    scale.value = Math.max(scale.value / 1.2, MIN_IMAGE_SCALE);
+    if (scale.value <= 1) imagePosition.value = { x: 0, y: 0 };
   }
 
   function resetZoom() {
     scale.value = 1;
     rotate.value = 0;
     imagePosition.value = { x: 0, y: 0 };
+    resetTouchGesture();
   }
 
   function handleImageDblClick() {
@@ -878,6 +893,100 @@
 
   function stopDrag() {
     isDragging.value = false;
+  }
+
+  function getTouchPoint(touch: Touch) {
+    return { x: touch.clientX, y: touch.clientY };
+  }
+
+  function getTouchCenter(touches: TouchList) {
+    const first = getTouchPoint(touches[0]);
+    const second = getTouchPoint(touches[1]);
+    return {
+      x: (first.x + second.x) / 2,
+      y: (first.y + second.y) / 2,
+    };
+  }
+
+  function getTouchDistance(touches: TouchList) {
+    const first = getTouchPoint(touches[0]);
+    const second = getTouchPoint(touches[1]);
+    return Math.hypot(second.x - first.x, second.y - first.y);
+  }
+
+  function resetTouchGesture() {
+    touchGesture = null;
+    pinchStartDistance = 0;
+    isDragging.value = false;
+  }
+
+  function startTouch(e: TouchEvent) {
+    if (previewType.value !== 'image') return;
+    if (e.touches.length >= 2) {
+      touchGesture = 'pinch';
+      pinchStartDistance = getTouchDistance(e.touches);
+      pinchStartScale = scale.value;
+      pinchStartCenter = getTouchCenter(e.touches);
+      pinchStartPosition = { ...imagePosition.value };
+      isDragging.value = false;
+      e.preventDefault();
+      return;
+    }
+
+    if (e.touches.length === 1 && scale.value > 1) {
+      const point = getTouchPoint(e.touches[0]);
+      touchGesture = 'pan';
+      dragStart.value = {
+        x: point.x - imagePosition.value.x,
+        y: point.y - imagePosition.value.y,
+      };
+      isDragging.value = true;
+      e.preventDefault();
+    }
+  }
+
+  function moveTouch(e: TouchEvent) {
+    if (previewType.value !== 'image') return;
+    if (e.touches.length >= 2) {
+      if (touchGesture !== 'pinch' || pinchStartDistance <= 0) startTouch(e);
+      const distanceRatio = getTouchDistance(e.touches) / pinchStartDistance;
+      const center = getTouchCenter(e.touches);
+      scale.value = Math.min(Math.max(pinchStartScale * distanceRatio, MIN_IMAGE_SCALE), MAX_IMAGE_SCALE);
+      imagePosition.value = {
+        x: pinchStartPosition.x + center.x - pinchStartCenter.x,
+        y: pinchStartPosition.y + center.y - pinchStartCenter.y,
+      };
+      if (scale.value <= 1) imagePosition.value = { x: 0, y: 0 };
+      isDragging.value = false;
+      e.preventDefault();
+      return;
+    }
+
+    if (e.touches.length === 1 && touchGesture === 'pan' && isDragging.value) {
+      const point = getTouchPoint(e.touches[0]);
+      imagePosition.value = {
+        x: point.x - dragStart.value.x,
+        y: point.y - dragStart.value.y,
+      };
+      e.preventDefault();
+    }
+  }
+
+  function endTouch(e: TouchEvent) {
+    if (e.touches.length === 0) {
+      resetTouchGesture();
+      return;
+    }
+
+    if (e.touches.length === 1 && touchGesture === 'pinch') {
+      const point = getTouchPoint(e.touches[0]);
+      touchGesture = scale.value > 1 ? 'pan' : null;
+      isDragging.value = scale.value > 1;
+      dragStart.value = {
+        x: point.x - imagePosition.value.x,
+        y: point.y - imagePosition.value.y,
+      };
+    }
   }
 
   function getFileTypeName(type: string) {
@@ -1230,6 +1339,7 @@
             max-height: 100%;
             object-fit: contain;
             border-radius: 4px;
+            touch-action: none;
             box-shadow: 0 10px 30px color-mix(in srgb, #000 14%, transparent);
           }
         }

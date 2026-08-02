@@ -221,7 +221,7 @@
     { key: 'inbox' as const, label: t('workbench.mobileToday.inbox'), value: counts.value.inbox },
   ]);
 
-  // 移动端快速添加只覆盖书签/笔记/文件；待办按既有约定从待办模块新建
+  // 四类快速记录共用同一快速添加抽屉，待办先走轻量表单，需要时再展开完整详情。
   const captureActions = computed(() => [
     {
       key: 'note' as const,
@@ -231,7 +231,7 @@
     },
     {
       key: 'todo' as const,
-      type: null,
+      type: 'todo' as ActionCaptureType,
       label: t('workbench.mobileToday.captureTodo'),
       icon: icon.noteDetail.toolbar.todo,
     },
@@ -281,10 +281,7 @@
 
   function runCapture(action: { type: ActionCaptureType | null }) {
     if (blockGuestWrite('today-capture', t('inbox.guestPrompt'))) return;
-    if (!action.type) {
-      goToTodo('todo');
-      return;
-    }
+    if (!action.type) return;
     inbox.openQuickCapture(action.type);
   }
 

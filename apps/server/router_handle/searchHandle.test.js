@@ -28,7 +28,7 @@ vi.mock('../util/bookmarkIconService.js', () => ({
   cleanupBookmarkIconFiles: mocks.cleanupBookmarkIconFiles,
 }));
 
-const { batchDeleteResources, globalSearch } = await import('./searchHandle.js');
+const { batchDeleteResources, globalSearch, previewBatchSelection } = await import('./searchHandle.js');
 
 function createResponse() {
   return { send: vi.fn() };
@@ -112,6 +112,90 @@ describe('batchDeleteResources', () => {
 
     expect(mocks.pool.getConnection).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith({ data: null, status: 400, msg: '单次最多删除 1000 项资源' });
+  });
+
+  it('按当前筛选解析全部匹配资源后执行删除', async () => {
+    const connection = createConnection();
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'bookmark-1' }, { id: 'bookmark-2' }]])
+      .mockResolvedValueOnce([[{ id: 'bookmark-1' }, { id: 'bookmark-2' }]])
+      .mockResolvedValueOnce([
+        [
+          { id: 'bookmark-1', iconUrl: null },
+          { id: 'bookmark-2', iconUrl: null },
+        ],
+      ])
+      .mockResolvedValueOnce([{ affectedRows: 2 }]);
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    const res = createResponse();
+
+    await batchDeleteResources(
+      {
+        user: { id: 'user-1' },
+        body: {
+          selection: {
+            mode: 'allMatching',
+            query: { keyword: '项目', types: ['bookmark'], date: '7d', tags: ['工作'] },
+            excludedItems: [],
+          },
+        },
+      },
+      res,
+    );
+
+    expect(connection.query.mock.calls[0][0]).toContain('SELECT b.id AS id FROM bookmark b');
+    expect(connection.query.mock.calls[0][0]).toContain('selected_tag.name IN (?)');
+    expect(connection.query.mock.calls[0][0]).toContain('b.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    expect(connection.beginTransaction).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: 200,
+      data: { requestedItemCount: 2, validItemCount: 2, affectedItemCount: 2 },
+    });
+  });
+});
+
+describe('previewBatchSelection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('返回全部匹配范围的分类型数量，并排除用户取消的条目', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const normalizedSql = String(sql);
+      if (normalizedSql.includes('SELECT b.id AS id FROM bookmark b')) {
+        return [[{ id: 'bookmark-1' }, { id: 'bookmark-2' }]];
+      }
+      if (normalizedSql.includes('SELECT n.id AS id FROM note n')) return [[{ id: 'note-1' }]];
+      return [[]];
+    });
+    const res = createResponse();
+
+    await previewBatchSelection(
+      {
+        user: { id: 'user-1' },
+        body: {
+          selection: {
+            mode: 'allMatching',
+            query: { keyword: '项目', types: ['bookmark', 'note'] },
+            excludedItems: [{ type: 'bookmark', id: 'bookmark-2' }],
+          },
+        },
+      },
+      res,
+    );
+
+    expect(res.send).toHaveBeenCalledWith({
+      status: 200,
+      msg: '',
+      data: {
+        mode: 'allMatching',
+        total: 2,
+        typeCounts: { bookmark: 1, note: 1, file: 0, tag: 0 },
+        editableCount: 2,
+        inboxCount: 2,
+        deleteCount: 2,
+      },
+    });
   });
 });
 

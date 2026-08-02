@@ -1204,7 +1204,7 @@
   .today-summary-body {
     --today-work-area-height: 280px;
     display: grid;
-    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.6fr);
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
     align-items: stretch;
     gap: 10px;
     padding: 0 10px 10px;
@@ -1324,6 +1324,7 @@
   .summary-grid {
     min-width: 0;
     display: grid;
+    grid-column: span 2;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-auto-rows: minmax(176px, 1fr);
     gap: 12px;
@@ -1735,13 +1736,14 @@
 
   .primary-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) clamp(330px, 28vw, 460px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     align-items: stretch;
   }
 
   .side-column {
     min-width: 0;
+    grid-column: span 1;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2209,6 +2211,11 @@
   @media (max-width: 1180px) {
     .primary-grid {
       grid-template-columns: 1fr;
+    }
+
+    .summary-grid,
+    .side-column {
+      grid-column: auto;
     }
 
     .side-column {

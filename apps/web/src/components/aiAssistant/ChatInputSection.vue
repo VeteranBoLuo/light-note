@@ -696,8 +696,11 @@
       max-width: 100%;
       height: 36px !important;
       padding: 4px 8px 4px 5px !important;
-      border: 1px solid color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color));
+      /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
+      border: 1px solid var(--card-border-color);
+      border-color: color-mix(in srgb, var(--primary-color) 34%, var(--card-border-color));
       border-radius: 12px;
+      background: var(--card-background);
       background: linear-gradient(
         135deg,
         color-mix(in srgb, var(--primary-color) 15%, var(--card-background)),
@@ -916,7 +919,9 @@
 
     @media (hover: hover) {
       .mobile-context-toggle:hover {
-        border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
+        border-color: var(--primary-color);
+        border-color: color-mix(in srgb, var(--primary-color) 48%, var(--card-border-color));
+        background: var(--card-background);
         background: linear-gradient(
           135deg,
           color-mix(in srgb, var(--primary-color) 19%, var(--card-background)),

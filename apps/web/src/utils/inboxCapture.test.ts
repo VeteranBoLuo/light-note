@@ -55,9 +55,9 @@ describe('inboxCapture', () => {
     expect(buildCaptureFileMeta(files)).toEqual([{ fileName: '中文.txt', fileType: 'text/plain', fileSize: 3 }]);
   });
 
-  it('移动端快速添加不提供待办，并把旧的待办入口安全回退到笔记', () => {
-    expect(getAvailableQuickCaptureTypes(true)).toEqual(['bookmark', 'note', 'file']);
-    expect(normalizeQuickCaptureType('todo', true)).toBe('note');
+  it('桌面端和移动端快速添加都提供待办', () => {
+    expect(getAvailableQuickCaptureTypes(true)).toEqual(['bookmark', 'note', 'file', 'todo']);
+    expect(normalizeQuickCaptureType('todo', true)).toBe('todo');
     expect(getAvailableQuickCaptureTypes(false)).toContain('todo');
     expect(normalizeQuickCaptureType('todo', false)).toBe('todo');
   });

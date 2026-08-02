@@ -3,7 +3,7 @@ import { resultData, formatDateTime } from '../util/common.js';
 import { resolveFileCategory } from '../util/fileCategory.js';
 import { normalizeTagIds, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { removeInboxRelations } from '../util/resourceInbox.js';
+import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
 
@@ -20,6 +20,7 @@ const TODO_STATUSES = ['pending', 'completed'];
 const TODO_DUE_FILTERS = ['overdue', 'today', '7d', 'none'];
 // 单次批量操作保持为一笔短事务，既覆盖管理页常见的大批量操作，也避免超长 IN 查询拖慢数据库。
 const MAX_BATCH_DELETE_ITEMS = 1000;
+const BATCH_CHUNK_SIZE = 200;
 const RESOURCE_OWNER_SQL = {
   bookmark: `SELECT id FROM bookmark WHERE user_id = ? AND del_flag = 0 AND id IN ({ids})`,
   note: `SELECT id FROM note WHERE create_by = ? AND del_flag = 0 AND id IN ({ids})`,
@@ -355,30 +356,6 @@ function normalizeBatchAction(value) {
   return value === 'remove' ? 'remove' : value === 'add' ? 'add' : '';
 }
 
-function normalizeBatchItems(items = []) {
-  if (!Array.isArray(items)) return [];
-  const merged = new Map();
-  items.forEach((item) => {
-    const type = toText(item?.type);
-    const id = toText(item?.id);
-    if (!BATCH_EDITABLE_TYPES.includes(type) || !id) return;
-    merged.set(`${type}:${id}`, { type, id });
-  });
-  return Array.from(merged.values());
-}
-
-function normalizeBatchDeleteItems(items = []) {
-  if (!Array.isArray(items)) return [];
-  const merged = new Map();
-  items.forEach((item) => {
-    const type = toText(item?.type);
-    const id = toText(item?.id);
-    if (!BATCH_DELETE_TYPES.includes(type) || !id) return;
-    merged.set(`${type}:${id}`, { type, id });
-  });
-  return Array.from(merged.values());
-}
-
 async function queryValidResourceIds(connection, { userId, type, ids = [] }) {
   if (!ids.length || !RESOURCE_OWNER_SQL[type]) return [];
   const placeholders = ids.map(() => '?').join(',');
@@ -472,8 +449,8 @@ function appendResourceTagFilters({ where, params, alias, resourceType, tagNames
   }
 }
 
-async function queryBookmarks(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
+function buildBookmarkSearchFilter(userId, options) {
+  const { keyword, tagNames, untagged, date } = options;
   const where = ['b.user_id = ?', 'b.del_flag = 0'];
   const params = [userId];
   const like = buildLike(keyword);
@@ -509,7 +486,194 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
   });
   const dateCondition = buildDateCondition('b.create_time', date);
   if (dateCondition) where.push(dateCondition);
-  const whereSql = where.join(' AND ');
+  return { fromSql: 'bookmark b', idColumn: 'b.id', whereSql: where.join(' AND '), params };
+}
+
+function buildNoteSearchFilter(userId, options) {
+  const { keyword, tagNames, untagged, date } = options;
+  const where = ['n.create_by = ?', 'n.del_flag = 0'];
+  const params = [userId];
+  const like = buildLike(keyword);
+  if (keyword) {
+    where.push(`
+      (
+        n.title LIKE ?
+        OR n.content LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM resource_tag_relations keyword_rel
+          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
+          WHERE keyword_rel.resource_type = 'note'
+            AND keyword_rel.resource_id = n.id
+            AND keyword_rel.user_id = ?
+            AND keyword_tag.user_id = ?
+            AND keyword_tag.del_flag = 0
+            AND keyword_tag.name LIKE ?
+        )
+      )
+    `);
+    params.push(like, like, userId, userId, like);
+  }
+  appendResourceTagFilters({
+    where,
+    params,
+    alias: 'n',
+    resourceType: 'note',
+    tagNames,
+    untagged,
+    userId,
+  });
+  const dateCondition = buildDateCondition('COALESCE(n.update_time, n.create_time)', date);
+  if (dateCondition) where.push(dateCondition);
+  return { fromSql: 'note n', idColumn: 'n.id', whereSql: where.join(' AND '), params };
+}
+
+function buildFileSearchFilter(userId, options) {
+  const { keyword, tagNames, untagged, date } = options;
+  const where = ['files.create_by = ?', 'files.del_flag = 0'];
+  const params = [userId];
+  const like = buildLike(keyword);
+  if (keyword) {
+    where.push(`
+      (
+        files.file_name LIKE ?
+        OR files.file_type LIKE ?
+        OR folders.name LIKE ?
+        OR EXISTS (
+          SELECT 1
+          FROM resource_tag_relations keyword_rel
+          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
+          WHERE keyword_rel.resource_type = 'file'
+            AND keyword_rel.resource_id = files.id
+            AND keyword_rel.user_id = ?
+            AND keyword_tag.user_id = ?
+            AND keyword_tag.del_flag = 0
+            AND keyword_tag.name LIKE ?
+        )
+      )
+    `);
+    params.push(like, like, like, userId, userId, like);
+  }
+  appendResourceTagFilters({
+    where,
+    params,
+    alias: 'files',
+    resourceType: 'file',
+    tagNames,
+    untagged,
+    userId,
+  });
+  const dateCondition = buildDateCondition('files.create_time', date);
+  if (dateCondition) where.push(dateCondition);
+  return {
+    fromSql: 'files LEFT JOIN folders ON files.folder_id = folders.id',
+    idColumn: 'files.id',
+    whereSql: where.join(' AND '),
+    params,
+  };
+}
+
+function buildTagSearchFilter(userId, options) {
+  const { keyword, tagNames, untagged, date } = options;
+  const where = ['t.user_id = ?', 't.del_flag = 0'];
+  const params = [userId];
+  if (keyword) {
+    where.push('t.name LIKE ?');
+    params.push(buildLike(keyword));
+  }
+  if (tagNames.length) {
+    where.push(`t.name IN (${tagNames.map(() => '?').join(', ')})`);
+    params.push(...tagNames);
+  }
+  if (untagged) where.push('1 = 0');
+  const dateCondition = buildDateCondition('t.create_time', date);
+  if (dateCondition) where.push(dateCondition);
+  return { fromSql: 'tag t', idColumn: 't.id', whereSql: where.join(' AND '), params };
+}
+
+const SEARCH_FILTER_BY_TYPE = {
+  bookmark: buildBookmarkSearchFilter,
+  note: buildNoteSearchFilter,
+  file: buildFileSearchFilter,
+  tag: buildTagSearchFilter,
+};
+
+function normalizeSelectionItems(items, allowedTypes) {
+  if (!Array.isArray(items)) return [];
+  const merged = new Map();
+  items.forEach((item) => {
+    const type = toText(item?.type);
+    const id = toText(item?.id);
+    if (!allowedTypes.includes(type) || !id) return;
+    merged.set(`${type}:${id}`, { type, id });
+  });
+  return Array.from(merged.values());
+}
+
+function normalizeSelectionQuery(value = {}) {
+  const query = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  return {
+    keyword: toText(query.keyword).slice(0, 200),
+    types: normalizeSearchTypes(query.types, query.type).filter((type) => SEARCH_TYPES.includes(type)),
+    sort: normalizeSearchSort(query.sort),
+    date: normalizeSearchDate(query.date),
+    tagNames: normalizeSearchTagNames(query.tags),
+    untagged: query.untagged === true || String(query.untagged || '') === '1',
+  };
+}
+
+function summarizeSelectionItems(items) {
+  const typeCounts = Object.fromEntries(SEARCH_TYPES.map((type) => [type, 0]));
+  items.forEach((item) => {
+    if (typeCounts[item.type] !== undefined) typeCounts[item.type] += 1;
+  });
+  return {
+    total: items.length,
+    typeCounts,
+    editableCount: typeCounts.bookmark + typeCounts.note + typeCounts.file,
+    inboxCount: typeCounts.bookmark + typeCounts.note + typeCounts.file,
+    deleteCount: items.length,
+  };
+}
+
+async function resolveBatchSelection(db, { userId, body, allowedTypes }) {
+  const selection = body?.selection;
+  if (selection?.mode !== 'allMatching') {
+    return {
+      mode: 'explicit',
+      items: normalizeSelectionItems(body?.items || selection?.items, allowedTypes),
+    };
+  }
+
+  const query = normalizeSelectionQuery(selection.query);
+  const selectedTypes = query.types.filter((type) => allowedTypes.includes(type));
+  const excluded = new Set(
+    normalizeSelectionItems(selection.excludedItems, allowedTypes).map((item) => `${item.type}:${item.id}`),
+  );
+  const items = [];
+  for (const type of selectedTypes) {
+    const filter = SEARCH_FILTER_BY_TYPE[type](userId, query);
+    const [rows] = await db.query(
+      `SELECT ${filter.idColumn} AS id FROM ${filter.fromSql} WHERE ${filter.whereSql}`,
+      filter.params,
+    );
+    rows.forEach((row) => {
+      const id = toText(row.id);
+      if (id && !excluded.has(`${type}:${id}`)) items.push({ type, id });
+    });
+  }
+  return { mode: 'allMatching', items, query };
+}
+
+function chunkItems(items, size = BATCH_CHUNK_SIZE) {
+  const chunks = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+async function queryBookmarks(userId, options, lang, includeItems, includeTotal = true) {
+  const { keyword, sort, pageSize, offset } = options;
+  const { whereSql, params } = buildBookmarkSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM bookmark b WHERE ${whereSql}`, params)
     : null;
@@ -567,42 +731,8 @@ async function queryBookmarks(userId, options, lang, includeItems, includeTotal 
 }
 
 async function queryNotes(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
-  const where = ['n.create_by = ?', 'n.del_flag = 0'];
-  const params = [userId];
-  const like = buildLike(keyword);
-  if (keyword) {
-    where.push(`
-      (
-        n.title LIKE ?
-        OR n.content LIKE ?
-        OR EXISTS (
-          SELECT 1
-          FROM resource_tag_relations keyword_rel
-          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
-          WHERE keyword_rel.resource_type = 'note'
-            AND keyword_rel.resource_id = n.id
-            AND keyword_rel.user_id = ?
-            AND keyword_tag.user_id = ?
-            AND keyword_tag.del_flag = 0
-            AND keyword_tag.name LIKE ?
-        )
-      )
-    `);
-    params.push(like, like, userId, userId, like);
-  }
-  appendResourceTagFilters({
-    where,
-    params,
-    alias: 'n',
-    resourceType: 'note',
-    tagNames,
-    untagged,
-    userId,
-  });
-  const dateCondition = buildDateCondition('COALESCE(n.update_time, n.create_time)', date);
-  if (dateCondition) where.push(dateCondition);
-  const whereSql = where.join(' AND ');
+  const { keyword, sort, pageSize, offset } = options;
+  const { whereSql, params } = buildNoteSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM note n WHERE ${whereSql}`, params)
     : null;
@@ -658,43 +788,8 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
 }
 
 async function queryFiles(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
-  const where = ['files.create_by = ?', 'files.del_flag = 0'];
-  const params = [userId];
-  const like = buildLike(keyword);
-  if (keyword) {
-    where.push(`
-      (
-        files.file_name LIKE ?
-        OR files.file_type LIKE ?
-        OR folders.name LIKE ?
-        OR EXISTS (
-          SELECT 1
-          FROM resource_tag_relations keyword_rel
-          INNER JOIN tag keyword_tag ON keyword_tag.id = keyword_rel.tag_id
-          WHERE keyword_rel.resource_type = 'file'
-            AND keyword_rel.resource_id = files.id
-            AND keyword_rel.user_id = ?
-            AND keyword_tag.user_id = ?
-            AND keyword_tag.del_flag = 0
-            AND keyword_tag.name LIKE ?
-        )
-      )
-    `);
-    params.push(like, like, like, userId, userId, like);
-  }
-  appendResourceTagFilters({
-    where,
-    params,
-    alias: 'files',
-    resourceType: 'file',
-    tagNames,
-    untagged,
-    userId,
-  });
-  const dateCondition = buildDateCondition('files.create_time', date);
-  if (dateCondition) where.push(dateCondition);
-  const whereSql = where.join(' AND ');
+  const { keyword, sort, pageSize, offset } = options;
+  const { whereSql, params } = buildFileSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(
         `SELECT COUNT(*) AS total FROM files LEFT JOIN folders ON files.folder_id = folders.id WHERE ${whereSql}`,
@@ -757,21 +852,8 @@ async function queryFiles(userId, options, lang, includeItems, includeTotal = tr
 }
 
 async function queryTags(userId, options, lang, includeItems, includeTotal = true) {
-  const { keyword, tagNames, untagged, date, sort, pageSize, offset } = options;
-  const where = ['t.user_id = ?', 't.del_flag = 0'];
-  const params = [userId];
-  if (keyword) {
-    where.push('t.name LIKE ?');
-    params.push(buildLike(keyword));
-  }
-  if (tagNames.length) {
-    where.push(`t.name IN (${tagNames.map(() => '?').join(', ')})`);
-    params.push(...tagNames);
-  }
-  if (untagged) where.push('1 = 0');
-  const dateCondition = buildDateCondition('t.create_time', date);
-  if (dateCondition) where.push(dateCondition);
-  const whereSql = where.join(' AND ');
+  const { keyword, sort, pageSize, offset } = options;
+  const { whereSql, params } = buildTagSearchFilter(userId, options);
   const countPromise = includeTotal
     ? pool.query(`SELECT COUNT(*) AS total FROM tag t WHERE ${whereSql}`, params)
     : null;
@@ -837,7 +919,8 @@ function normalizeTodoDue(value) {
 function buildTodoDueCondition(due) {
   if (due === 'overdue') return "t.due_at IS NOT NULL AND t.due_at < NOW() AND t.status = 'pending'";
   if (due === 'today') return 't.due_at IS NOT NULL AND DATE(t.due_at) = CURDATE()';
-  if (due === '7d') return 't.due_at IS NOT NULL AND t.due_at >= NOW() AND t.due_at < DATE_ADD(CURDATE(), INTERVAL 8 DAY)';
+  if (due === '7d')
+    return 't.due_at IS NOT NULL AND t.due_at >= NOW() AND t.due_at < DATE_ADD(CURDATE(), INTERVAL 8 DAY)';
   if (due === 'none') return 't.due_at IS NULL';
   return '';
 }
@@ -1042,13 +1125,7 @@ async function querySuggestItems({ userId, options, lang, selectedTypes, sourceT
   const candidateLimit = 10;
   const results = await Promise.all(
     selectedTypes.map((type) =>
-      SEARCH_QUERY_BY_TYPE[type](
-        userId,
-        { ...options, pageSize: candidateLimit, offset: 0 },
-        lang,
-        true,
-        false,
-      ),
+      SEARCH_QUERY_BY_TYPE[type](userId, { ...options, pageSize: candidateLimit, offset: 0 }, lang, true, false),
     ),
   );
   const ranked = results
@@ -1155,8 +1232,7 @@ export const globalSearch = async (req, res) => {
       const cursor = normalizeOrderedCursor(req.body?.cursor, selectedTypes);
       const includeMetadata = req.body?.includeMetadata !== false;
       const useGlobalRelevance = Boolean(keyword) && options.sort === 'relevance' && selectedTypes.length > 1;
-      const relevanceOffset =
-        req.body?.cursor?.type === 'all' ? normalizeSearchOffset(req.body.cursor.offset) : 0;
+      const relevanceOffset = req.body?.cursor?.type === 'all' ? normalizeSearchOffset(req.body.cursor.offset) : 0;
       const orderedItemsPromise = useGlobalRelevance
         ? queryRelevantSearchItems({
             userId,
@@ -1263,6 +1339,28 @@ export const globalSearch = async (req, res) => {
   }
 };
 
+export const previewBatchSelection = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) return res.send(resultData(null, 401, '请先登录'));
+    const resolved = await resolveBatchSelection(pool, {
+      userId,
+      body: req.body,
+      allowedTypes: BATCH_DELETE_TYPES,
+    });
+    if (!resolved.items.length) return res.send(resultData(null, 400, '当前筛选下没有可批量处理的资源'));
+    return res.send(
+      resultData({
+        mode: resolved.mode,
+        ...summarizeSelectionItems(resolved.items),
+      }),
+    );
+  } catch (error) {
+    console.error('[search] batch selection preview failed code=%s', String(error?.code || 'BATCH_PREVIEW_FAILED'));
+    return res.send(resultData(null, 500, '无法准备批量选择，请稍后重试'));
+  }
+};
+
 export const batchUpdateResourceTags = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
@@ -1274,17 +1372,21 @@ export const batchUpdateResourceTags = async (req, res) => {
 
     const action = normalizeBatchAction(req.body?.action);
     const tagIds = normalizeTagIds(req.body?.tagIds || []);
-    const items = normalizeBatchItems(req.body?.items || []);
 
     if (!action) {
       return res.send(resultData(null, 400, '缺少有效操作类型'));
     }
-    if (!items.length) {
-      return res.send(resultData(null, 400, '未选择可编辑资源'));
-    }
     if (!tagIds.length) {
       return res.send(resultData(null, 400, '请至少选择一个标签'));
     }
+
+    const selection = await resolveBatchSelection(connection, {
+      userId,
+      body: req.body,
+      allowedTypes: BATCH_EDITABLE_TYPES,
+    });
+    const items = selection.items;
+    if (!items.length) return res.send(resultData(null, 400, '未选择可编辑资源'));
 
     await connection.beginTransaction();
     const validTagIds = await validateUserTags(connection, { tagIds, userId });
@@ -1303,23 +1405,38 @@ export const batchUpdateResourceTags = async (req, res) => {
     for (const type of BATCH_EDITABLE_TYPES) {
       const requestedIds = grouped[type];
       if (!requestedIds.length) continue;
-      const validIds = await queryValidResourceIds(connection, { userId, type, ids: requestedIds });
+      const validIds = [];
+      for (const requestedChunk of chunkItems(requestedIds)) {
+        validIds.push(...(await queryValidResourceIds(connection, { userId, type, ids: requestedChunk })));
+      }
       validItemCount += validIds.length;
       const totalPairs = validIds.length * validTagIds.length;
       let affected = 0;
       let existed = 0;
 
       if (totalPairs > 0) {
-        existed = await queryExistingRelationCount(connection, {
-          userId,
-          type,
-          resourceIds: validIds,
-          tagIds: validTagIds,
-        });
-        if (action === 'add') {
-          affected = await insertRelations(connection, { userId, type, resourceIds: validIds, tagIds: validTagIds });
-        } else {
-          affected = await removeRelations(connection, { userId, type, resourceIds: validIds, tagIds: validTagIds });
+        for (const validChunk of chunkItems(validIds)) {
+          existed += await queryExistingRelationCount(connection, {
+            userId,
+            type,
+            resourceIds: validChunk,
+            tagIds: validTagIds,
+          });
+          if (action === 'add') {
+            affected += await insertRelations(connection, {
+              userId,
+              type,
+              resourceIds: validChunk,
+              tagIds: validTagIds,
+            });
+          } else {
+            affected += await removeRelations(connection, {
+              userId,
+              type,
+              resourceIds: validChunk,
+              tagIds: validTagIds,
+            });
+          }
         }
       }
 
@@ -1370,7 +1487,12 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
       return res.send(resultData(null, 401, '请先登录'));
     }
 
-    const items = normalizeBatchItems(req.body?.items || []);
+    const selection = await resolveBatchSelection(connection, {
+      userId,
+      body: req.body,
+      allowedTypes: BATCH_EDITABLE_TYPES,
+    });
+    const items = selection.items;
     if (!items.length) {
       return res.send(resultData(null, 400, '未选择可编辑资源'));
     }
@@ -1384,40 +1506,46 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
 
     const resourceTagsMap = {};
     const tagDedup = new Map();
+    const previewItemKeys = new Set(items.slice(0, 100).map((item) => `${item.type}:${item.id}`));
 
     for (const type of BATCH_EDITABLE_TYPES) {
       const requestedIds = grouped[type];
       if (!requestedIds.length) continue;
-      const validIds = await queryValidResourceIds(connection, { userId, type, ids: requestedIds });
+      const validIds = [];
+      for (const requestedChunk of chunkItems(requestedIds)) {
+        validIds.push(...(await queryValidResourceIds(connection, { userId, type, ids: requestedChunk })));
+      }
       if (!validIds.length) continue;
-      const placeholders = validIds.map(() => '?').join(',');
-      const [rows] = await connection.query(
-        `
-          SELECT
-            r.resource_id AS resourceId,
-            t.id AS tagId,
-            t.name AS tagName
-          FROM resource_tag_relations r
-          INNER JOIN tag t ON t.id = r.tag_id
-          WHERE r.user_id = ?
-            AND r.resource_type = ?
-            AND r.resource_id IN (${placeholders})
-            AND t.user_id = ?
-            AND t.del_flag = 0
-          ORDER BY t.sort, t.create_time DESC
-        `,
-        [userId, type, ...validIds, userId],
-      );
+      for (const validChunk of chunkItems(validIds)) {
+        const placeholders = validChunk.map(() => '?').join(',');
+        const [rows] = await connection.query(
+          `
+            SELECT
+              r.resource_id AS resourceId,
+              t.id AS tagId,
+              t.name AS tagName
+            FROM resource_tag_relations r
+            INNER JOIN tag t ON t.id = r.tag_id
+            WHERE r.user_id = ?
+              AND r.resource_type = ?
+              AND r.resource_id IN (${placeholders})
+              AND t.user_id = ?
+              AND t.del_flag = 0
+            ORDER BY t.sort, t.create_time DESC
+          `,
+          [userId, type, ...validChunk, userId],
+        );
 
-      rows.forEach((row) => {
-        const key = `${type}:${toText(row.resourceId)}`;
-        if (!resourceTagsMap[key]) resourceTagsMap[key] = [];
-        const tagItem = { id: toText(row.tagId), name: toText(row.tagName) };
-        resourceTagsMap[key].push(tagItem);
-        if (tagItem.id && !tagDedup.has(tagItem.id)) {
-          tagDedup.set(tagItem.id, tagItem);
-        }
-      });
+        rows.forEach((row) => {
+          const key = `${type}:${toText(row.resourceId)}`;
+          const tagItem = { id: toText(row.tagId), name: toText(row.tagName) };
+          if (previewItemKeys.has(key)) {
+            if (!resourceTagsMap[key]) resourceTagsMap[key] = [];
+            resourceTagsMap[key].push(tagItem);
+          }
+          if (tagItem.id && !tagDedup.has(tagItem.id)) tagDedup.set(tagItem.id, tagItem);
+        });
+      }
     }
 
     const [allTags] = await connection.query(
@@ -1432,7 +1560,10 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
 
     res.send(
       resultData({
-        items,
+        items: items.slice(0, 100),
+        selectionMode: selection.mode,
+        selectionSummary: summarizeSelectionItems(items),
+        itemsTruncated: items.length > 100,
         resourceTagsMap,
         selectedResourceTags: Array.from(tagDedup.values()),
         allTags: allTags.map((tag) => ({ id: toText(tag.id), name: toText(tag.name) })),
@@ -1445,6 +1576,41 @@ export const getBatchResourceTagWorkspace = async (req, res) => {
   }
 };
 
+export const batchAddResourcesToInbox = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user?.id;
+  if (!userId) return res.send(resultData(null, 401, '请先登录'));
+  const connection = await pool.getConnection();
+  try {
+    const selection = await resolveBatchSelection(connection, {
+      userId,
+      body: req.body,
+      allowedTypes: BATCH_EDITABLE_TYPES,
+    });
+    if (!selection.items.length) return res.send(resultData(null, 400, '未选择可加入待整理的资源'));
+
+    await connection.beginTransaction();
+    const totals = { added: 0, reopened: 0, ignored: 0 };
+    for (const itemChunk of chunkItems(selection.items, 50)) {
+      const result = await enqueueResources(connection, {
+        userId,
+        source: 'manual',
+        items: itemChunk.map((item) => ({ resourceType: item.type, resourceId: item.id })),
+      });
+      totals.added += Number(result?.added || 0);
+      totals.reopened += Number(result?.reopened || 0);
+      totals.ignored += Number(result?.ignored || 0);
+    }
+    await connection.commit();
+    return res.send(resultData({ ...totals, requestedItemCount: selection.items.length }));
+  } catch (error) {
+    await connection.rollback();
+    return res.send(resultData(null, 500, '批量加入待整理失败'));
+  } finally {
+    connection.release();
+  }
+};
+
 export const batchDeleteResources = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const userId = req.user?.id;
@@ -1452,21 +1618,24 @@ export const batchDeleteResources = async (req, res) => {
     return res.send(resultData(null, 401, '请先登录'));
   }
 
-  const rawItems = req.body?.items;
-  if (!Array.isArray(rawItems) || rawItems.length === 0) {
+  const querySelection = req.body?.selection?.mode === 'allMatching';
+  const rawItems = req.body?.items || req.body?.selection?.items;
+  if (!querySelection && (!Array.isArray(rawItems) || rawItems.length === 0)) {
     return res.send(resultData(null, 400, '未选择可删除资源'));
   }
-  if (rawItems.length > MAX_BATCH_DELETE_ITEMS) {
+  if (!querySelection && rawItems.length > MAX_BATCH_DELETE_ITEMS) {
     return res.send(resultData(null, 400, `单次最多删除 ${MAX_BATCH_DELETE_ITEMS} 项资源`));
-  }
-
-  const items = normalizeBatchDeleteItems(rawItems);
-  if (!items.length) {
-    return res.send(resultData(null, 400, '未选择可删除资源'));
   }
 
   const connection = await pool.getConnection();
   try {
+    const selection = await resolveBatchSelection(connection, {
+      userId,
+      body: req.body,
+      allowedTypes: BATCH_DELETE_TYPES,
+    });
+    const items = selection.items;
+    if (!items.length) return res.send(resultData(null, 400, '未选择可删除资源'));
     const grouped = {
       bookmark: [],
       note: [],
@@ -1486,68 +1655,64 @@ export const batchDeleteResources = async (req, res) => {
       const requestedIds = grouped[type];
       if (!requestedIds.length) continue;
 
-      const validIds = await queryValidResourceIds(connection, { userId, type, ids: requestedIds });
-      validItemCount += validIds.length;
-      if (!validIds.length) {
-        typeStats.push({
-          type,
-          requestedCount: requestedIds.length,
-          validCount: 0,
-          affectedItemCount: 0,
-        });
-        continue;
+      let typeValidCount = 0;
+      let typeAffectedCount = 0;
+      for (const requestedChunk of chunkItems(requestedIds)) {
+        const validIds = await queryValidResourceIds(connection, { userId, type, ids: requestedChunk });
+        typeValidCount += validIds.length;
+        if (!validIds.length) continue;
+        const placeholders = validIds.map(() => '?').join(',');
+        let result = { affectedRows: 0 };
+        if (type === 'bookmark') {
+          const [bookmarkRows] = await connection.query(
+            `SELECT id, icon_url AS iconUrl
+             FROM bookmark
+             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
+            [...validIds, userId],
+          );
+          bookmarkIconsToCleanup.push(...(bookmarkRows || []));
+          [result] = await connection.query(
+            `UPDATE bookmark SET del_flag = 1, deleted_at = NOW(), icon_url = NULL
+             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
+            [...validIds, userId],
+          );
+        } else if (type === 'note') {
+          [result] = await connection.query(
+            `UPDATE note SET del_flag = 1, deleted_at = NOW()
+             WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
+            [...validIds, userId],
+          );
+        } else if (type === 'file') {
+          [result] = await connection.query(
+            `UPDATE files SET del_flag = 1, deleted_at = NOW()
+             WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
+            [...validIds, userId],
+          );
+        } else if (type === 'tag') {
+          await connection.query(`DELETE FROM resource_tag_relations WHERE tag_id IN (${placeholders})`, validIds);
+          [result] = await connection.query(
+            `DELETE FROM tag
+             WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
+            [...validIds, userId],
+          );
+        }
+
+        if (type !== 'tag') {
+          await removeInboxRelations(connection, {
+            userId,
+            items: validIds.map((id) => ({ resourceType: type, resourceId: String(id) })),
+          });
+        }
+        typeAffectedCount += Number(result?.affectedRows || 0);
       }
 
-      const placeholders = validIds.map(() => '?').join(',');
-      let result = { affectedRows: 0 };
-      if (type === 'bookmark') {
-        const [bookmarkRows] = await connection.query(
-          `SELECT id, icon_url AS iconUrl
-           FROM bookmark
-           WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-          [...validIds, userId],
-        );
-        bookmarkIconsToCleanup.push(...(bookmarkRows || []));
-        [result] = await connection.query(
-          `UPDATE bookmark SET del_flag = 1, deleted_at = NOW(), icon_url = NULL
-           WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-          [...validIds, userId],
-        );
-      } else if (type === 'note') {
-        [result] = await connection.query(
-          `UPDATE note SET del_flag = 1, deleted_at = NOW()
-           WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
-          [...validIds, userId],
-        );
-      } else if (type === 'file') {
-        [result] = await connection.query(
-          `UPDATE files SET del_flag = 1, deleted_at = NOW()
-           WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
-          [...validIds, userId],
-        );
-      } else if (type === 'tag') {
-        await connection.query(`DELETE FROM resource_tag_relations WHERE tag_id IN (${placeholders})`, validIds);
-        [result] = await connection.query(
-          `DELETE FROM tag
-           WHERE id IN (${placeholders}) AND user_id = ? AND del_flag = 0`,
-          [...validIds, userId],
-        );
-      }
-
-      if (type !== 'tag') {
-        await removeInboxRelations(connection, {
-          userId,
-          items: validIds.map((id) => ({ resourceType: type, resourceId: String(id) })),
-        });
-      }
-
-      const affected = Number(result?.affectedRows || 0);
-      affectedItemCount += affected;
+      validItemCount += typeValidCount;
+      affectedItemCount += typeAffectedCount;
       typeStats.push({
         type,
         requestedCount: requestedIds.length,
-        validCount: validIds.length,
-        affectedItemCount: affected,
+        validCount: typeValidCount,
+        affectedItemCount: typeAffectedCount,
       });
     }
 

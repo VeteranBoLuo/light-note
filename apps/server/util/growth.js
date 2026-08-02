@@ -304,7 +304,7 @@ export function hashRef(str) {
  * @param {string} refId 判重键:书签传 url 的 hashRef,笔记/文件传各自主键
  */
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
-  if (isVisitorGrowthActor(userId, userRole) || userRole === 'root') return { granted: 0, skipped: true };
+  if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
   // 首次笔记/书签已迁移为成长任务；文件没有对应首批任务，不再额外发同类一次性奖励。
   if (kind === 'note' || kind === 'bookmark') {
@@ -315,6 +315,8 @@ export async function awardCreate(userId, kind, refId, { userRole = null } = {})
       console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
     }
   }
+  // root 不进入经验账本，但上面的成长任务完成事实仍需正常记录并自动收口。
+  if (userRole === 'root') return { granted: 0, skipped: true };
   // 当日第 N 条衰减
   const [[row]] = await pool.query(
     `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND create_time >= CURDATE()`,

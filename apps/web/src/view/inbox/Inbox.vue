@@ -2,6 +2,7 @@
   <main
     class="inbox-page"
     :class="{
+      'inbox-page--todo-focused': isTodoFocused,
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
     }"
@@ -195,7 +196,7 @@
     </section>
 
     <section class="inbox-content" :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade }">
-      <div ref="scrollContainer" class="inbox-scroll" @scroll="updateScrollFade">
+      <div ref="scrollContainer" class="inbox-scroll" @scroll="handleInboxScroll">
         <BLoading :loading="pageLoading" class="inbox-loading">
           <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
             <div class="inbox-empty__icon">!</div>
@@ -215,9 +216,14 @@
           </div>
           <TodoScheduleView
             v-else-if="isTodoFocused && todoView !== 'list'"
+            ref="scheduleViewRef"
             :items="todo.items"
             :view="todoView"
+            :swipe-enabled="bookmark.isMobile"
+            :disabled="hasPendingOperation || todoBatchMutating"
+            :deleting-id="deletingTodoId"
             @edit="openTodoEditor"
+            @delete="confirmDeleteTodo"
           />
           <div v-else-if="isTodoFocused" class="todo-group-list">
             <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
@@ -234,6 +240,10 @@
                   :selected="selectedTodoIds.includes(item.id)"
                   :disabled="hasPendingOperation || todoBatchMutating"
                   :deleting="deletingTodoId === item.id"
+                  :swipe-enabled="bookmark.isMobile"
+                  :swipe-open="openSwipeTodoId === item.id"
+                  @swipe-start="beginTodoSwipe(item.id)"
+                  @update:swipe-open="updateTodoSwipe(item.id, $event)"
                   @select="toggleTodoSelected(item.id, $event)"
                   @toggle-complete="toggleTodo(item, $event)"
                   @update-checklist="updateTodoChecklist(item, $event)"
@@ -267,6 +277,10 @@
                 :item="action.item"
                 :disabled="hasPendingOperation"
                 :deleting="deletingTodoId === action.item.id"
+                :swipe-enabled="bookmark.isMobile"
+                :swipe-open="openSwipeTodoId === action.item.id"
+                @swipe-start="beginTodoSwipe(action.item.id)"
+                @update:swipe-open="updateTodoSwipe(action.item.id, $event)"
                 @toggle-complete="toggleTodo(action.item, $event)"
                 @update-checklist="updateTodoChecklist(action.item, $event)"
                 @edit="openTodoEditor(action.item)"
@@ -326,12 +340,7 @@
     TodoSort,
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import {
-    todoGroupKey,
-    todoSnoozeAt,
-    type TodoGroupKey,
-    type TodoSnoozePreset,
-  } from '@/utils/todoPlanning';
+  import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
 
   const { t } = useI18n();
@@ -352,9 +361,10 @@
   const exportingCalendar = ref(false);
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
+  const openSwipeTodoId = ref('');
+  const scheduleViewRef = ref<{ closeSwipe: () => void } | null>(null);
   type TodoView = 'list' | 'agenda' | 'calendar';
-  const normalizeTodoView = (value: unknown): TodoView =>
-    value === 'agenda' || value === 'calendar' ? value : 'list';
+  const normalizeTodoView = (value: unknown): TodoView => (value === 'agenda' || value === 'calendar' ? value : 'list');
   const todoView = ref<TodoView>(normalizeTodoView(user.preferences.todoView));
   const todoSelectionMode = ref(false);
   const resourceSelectionMode = ref(false);
@@ -542,6 +552,7 @@
     },
   );
   watch(todoView, (view) => {
+    openSwipeTodoId.value = '';
     void nextTick(() => {
       if (!scrollContainer.value) return;
       scrollContainer.value.scrollTop = 0;
@@ -757,6 +768,7 @@
       : selectedTodoIds.value.filter((value) => value !== id);
   }
   function toggleTodoSelectionMode() {
+    openSwipeTodoId.value = '';
     todoSelectionMode.value = !todoSelectionMode.value;
     if (!todoSelectionMode.value) selectedTodoIds.value = [];
   }
@@ -835,6 +847,18 @@
     }
     showTopFade.value = element.scrollTop > 3;
     showBottomFade.value = element.scrollTop + element.clientHeight < element.scrollHeight - 3;
+  }
+  function handleInboxScroll() {
+    openSwipeTodoId.value = '';
+    scheduleViewRef.value?.closeSwipe();
+    updateScrollFade();
+  }
+  function beginTodoSwipe(id: string) {
+    openSwipeTodoId.value = id;
+  }
+  function updateTodoSwipe(id: string, open: boolean) {
+    if (open) openSwipeTodoId.value = id;
+    else if (openSwipeTodoId.value === id) openSwipeTodoId.value = '';
   }
   function toggleSelected(item: InboxItemType, selected: boolean) {
     const key = inbox.resourceKey(item);
@@ -936,6 +960,8 @@
     }
   }
   function openTodoEditor(item: TodoItemType | null = null) {
+    openSwipeTodoId.value = '';
+    scheduleViewRef.value?.closeSwipe();
     editingTodo.value = item;
     todoEditorVisible.value = true;
   }
@@ -966,6 +992,7 @@
   }
   function confirmDeleteTodo(item: TodoItemType) {
     if (hasPendingOperation.value) return;
+    openSwipeTodoId.value = '';
     Alert.alert({
       title: t('inbox.deleteTodo'),
       content: t('inbox.deleteTodoConfirm', { name: item.title }),
@@ -1046,6 +1073,9 @@
     box-sizing: border-box;
     color: var(--text-color);
   }
+  .inbox-page--todo-focused {
+    --primary-color: var(--todo-accent-color, #0ea5e9);
+  }
   .section-switcher {
     min-height: 34px;
     margin-bottom: 8px;
@@ -1080,6 +1110,10 @@
     border-radius: 999px;
     background: var(--desc-color);
     box-shadow: 0 0 0 5px color-mix(in srgb, var(--desc-color) 10%, transparent);
+  }
+  .inbox-page--todo-focused .inbox-hero__accent {
+    background: var(--todo-accent-color, #0ea5e9);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--todo-accent-color, #0ea5e9) 10%, transparent);
   }
   .todo-workspace-toolbar {
     display: flex;

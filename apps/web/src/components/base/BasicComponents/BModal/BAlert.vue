@@ -1,8 +1,8 @@
 <template>
-  <Teleport to="body" v-if="bookmark.isMobile">
+  <Teleport to="body" v-if="isMobileLayout">
     <div class="bAlert-bg">
       <!-- 移动端弹框:正常 flex 流(不再用 .row-center 绝对定位——它把标题限成 50% 宽度导致无谓换行、正文脱流);
-           高度自适应内容,底部按钮永远横排(flex:1) -->
+           高度自适应内容,底部按钮自适应等分并允许长文案换行。 -->
       <div class="bAlert bAlert--mobile" :class="{ out: isExit }">
         <div class="bAlert-m-body">
           <slot name="title">
@@ -76,11 +76,17 @@
 <script lang="ts" setup>
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import bAlert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import { computed, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import DOMPurify from 'dompurify';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
-  import { bookmarkStore } from '@/store';
   import i18n from '@/i18n';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import {
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
   const $t = i18n.global.t;
 
   interface ButtonItem {
@@ -89,7 +95,7 @@
     function?: () => void;
   }
 
-  const bookmark = bookmarkStore();
+  const isMobileLayout = useMobileLayout();
   const props = withDefaults(
     defineProps<{
       title: string;
@@ -110,7 +116,10 @@
   // 保留 <br>/<div> 等良性格式,剥离 <script>/onerror 等脚本与事件处理器。
   const safeContent = computed(() => DOMPurify.sanitize(String(props.content || '')));
   const isExit = ref(false);
-  function obClose(time = 200) {
+  let historyHandle: MobileOverlayHistoryHandle | null = null;
+  let pendingHistoryAction: (() => void) | null = null;
+
+  function performClose(time = 200) {
     isExit.value = true;
     const timer = setTimeout(() => {
       bAlert.destroy();
@@ -118,14 +127,46 @@
     }, time);
   }
 
+  function closeFromMobileHistory() {
+    historyHandle = null;
+    const action = pendingHistoryAction;
+    pendingHistoryAction = null;
+    if (action) action();
+    else performClose();
+  }
+
+  function runAfterHistory(action: () => void) {
+    pendingHistoryAction = action;
+    if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
+    historyHandle = null;
+    pendingHistoryAction = null;
+    action();
+  }
+
+  function obClose(time = 200) {
+    runAfterHistory(() => performClose(time));
+  }
+
   function onOk() {
-    bAlert.onOk();
+    runAfterHistory(() => bAlert.onOk());
   }
 
   function btnFunc(func) {
-    obClose(0);
-    func();
+    runAfterHistory(() => {
+      bAlert.destroy();
+      func();
+    });
   }
+
+  onMounted(() => {
+    if (isMobileLayout.value) historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
+  });
+
+  onBeforeUnmount(() => {
+    pendingHistoryAction = null;
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
+  });
 </script>
 
 <style scoped lang="less">
@@ -173,9 +214,9 @@
     }
   }
 
-  /* 移动端样式绑到 .bAlert--mobile(与 HTML 分支同源 bookmark.isMobile),不再用 @media (max-width:767px):
+  /* 移动端样式绑到 .bAlert--mobile(与 HTML 分支同源 isMobileLayout),不再用 @media (max-width:767px):
      此前 HTML 用 JS innerWidth<768 门控、CSS 用媒体查询门控,界面缩放(html zoom)/断点边界会分叉 →「移动标记+桌面样式」按钮错位。
-     高度自适应(不再固定 160px),标题正文正常流(不再 .row-center 绝对定位),底部按钮永远横排。 */
+     高度自适应(不再固定 160px),标题正文正常流(不再 .row-center 绝对定位),底部按钮不撑破弹框。 */
   .bAlert.bAlert--mobile {
     width: min(78%, 320px);
     top: 45%;
@@ -212,13 +253,24 @@
   .bAlert--mobile .bAlert-m-footer {
     display: flex;
     align-items: stretch;
+    min-width: 0;
     border-top: 1px solid var(--phone-menu-item-border-color);
   }
   .bAlert--mobile .btn {
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 44px;
+    height: auto;
+    padding: 8px 6px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    height: 44px;
-    line-height: 44px;
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     &:not(:last-child) {
       border-right: 1px solid var(--phone-menu-item-border-color);
     }

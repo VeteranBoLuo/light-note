@@ -4,8 +4,6 @@
     :subtitle="$t('bookmarkMg.subtitle')"
     accent="bookmark"
     layout="workspace"
-    show-back
-    @back="handleToBack"
   >
     <template #actions>
       <BButton v-if="selectedRows.length > 0" @click="openSelectedBookmarksInAi">
@@ -502,20 +500,8 @@
       </section>
 
       <div class="hidden-upload">
-        <BUpload
-          ref="importFileInput"
-          accept=".xlsx"
-          :multiple="false"
-          raw-file
-          @change="handleExcelFiles"
-        />
-        <BUpload
-          ref="importHTMLFileInput"
-          accept=".html,.htm"
-          :multiple="false"
-          raw-file
-          @change="handleHtmlFiles"
-        />
+        <BUpload ref="importFileInput" accept=".xlsx" :multiple="false" raw-file @change="handleExcelFiles" />
+        <BUpload ref="importHTMLFileInput" accept=".html,.htm" :multiple="false" raw-file @change="handleHtmlFiles" />
       </div>
 
       <ActionCardModal
@@ -873,16 +859,6 @@
 
   function handleDeleteTag(bookmarkItem: BookmarkInterface) {
     confirmDeleteBookmark(bookmarkItem);
-  }
-
-  function handleToBack() {
-    // 「我的 → 书签管理」入口已随移动端今日改版移除，入口只剩书签页顶部按钮，
-    // 因此移动端也必须回到来源页，不能再固定跳个人中心。
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-    void router.push('/home');
   }
 
   // ── 批量删除 ──

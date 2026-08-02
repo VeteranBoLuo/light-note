@@ -67,8 +67,16 @@
   import icon from '@/config/icon.ts';
   import { getRootZoom } from '@/utils/zoom';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import {
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
 
   const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
 
   const props = withDefaults(
     defineProps<{
@@ -91,6 +99,7 @@
       resizeLabel?: string;
       bodyPadding?: string;
       closeOnClickOutside?: boolean;
+      historyClosable?: boolean;
     }>(),
     {
       title: '',
@@ -110,6 +119,7 @@
       maxWidth: 720,
       resizeLabel: '',
       closeOnClickOutside: false,
+      historyClosable: true,
     },
   );
 
@@ -135,6 +145,7 @@
   let layerAcquired = false;
   let resizeStartX = 0;
   let resizeStartWidth = 0;
+  let historyHandle: MobileOverlayHistoryHandle | null = null;
 
   const clearOpenFrame = () => {
     if (openFrame === null) return;
@@ -221,6 +232,26 @@
     { immediate: true },
   );
 
+  function closeFromMobileHistory() {
+    historyHandle = null;
+    emit('close');
+  }
+
+  watch(
+    () => [props.open, isMobileLayout.value, props.historyClosable] as const,
+    ([isOpen, isMobile, historyClosable]) => {
+      if (isOpen && isMobile && historyClosable) {
+        if (!historyHandle) historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
+        return;
+      }
+      if (historyHandle) {
+        releaseMobileOverlayHistory(historyHandle);
+        historyHandle = null;
+      }
+    },
+    { immediate: true },
+  );
+
   const panelWidth = computed(() => {
     const w = props.width;
     return isNumeric(w) ? `${w}px` : w;
@@ -278,6 +309,8 @@
   }
 
   function handleClose() {
+    if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
+    historyHandle = null;
     emit('close');
   }
 
@@ -421,6 +454,8 @@
   });
 
   onBeforeUnmount(() => {
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
     if (layerAcquired) releaseModalLayer(drawerLayer);
     clearOpenFrame();
     clearSettleTimer();

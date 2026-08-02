@@ -184,6 +184,27 @@ describe('新用户示例数据接入注册流程', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
+  it('root 保存头像也同步任务事实，由成长服务自动收口且不发奖励', async () => {
+    query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await saveUserInfo(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: { id: 'root-1', alias: '站长', email: 'root@example.com', headPicture: 'avatar-data' },
+      },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledWith(
+      'update user set ? where id=?',
+      [expect.objectContaining({ head_picture: 'avatar-data' }), 'root-1'],
+    );
+    expect(completeGrowthTask).toHaveBeenCalledWith('root-1', 'profile_avatar', { userRole: 'root' });
+    expect(completeGrowthTask.mock.invocationCallOrder[0]).toBeLessThan(res.send.mock.invocationCallOrder[0]);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
   it('GitHub 仅在首次建号时初始化示例数据', async () => {
     let createdUserId = '';
     query.mockImplementation(async (sql, params) => {

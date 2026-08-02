@@ -81,6 +81,32 @@ export interface BatchResourceItem {
   type: ResourceSearchType;
 }
 
+export interface BatchSelectionQuery {
+  keyword: string;
+  types: ResourceSearchType[];
+  sort: 'relevance' | 'updated' | 'name';
+  date: 'all' | '7d' | '30d' | '365d';
+  tags: string[];
+  untagged: boolean;
+}
+
+export type BatchSelection =
+  | { mode: 'explicit'; items: BatchResourceItem[] }
+  | {
+      mode: 'allMatching';
+      query: BatchSelectionQuery;
+      excludedItems: BatchResourceItem[];
+    };
+
+export interface BatchSelectionSummary {
+  mode: 'explicit' | 'allMatching';
+  total: number;
+  typeCounts: Record<ResourceSearchType, number>;
+  editableCount: number;
+  inboxCount: number;
+  deleteCount: number;
+}
+
 const emptySearchResult: GlobalSearchResponse = {
   keyword: '',
   items: [],
@@ -131,9 +157,7 @@ export async function fetchGlobalSearch(
   const locale = i18n.global.locale.value;
   const paginationMode = query.paginationMode === 'ordered' ? 'ordered' : 'perType';
   const normalizedCursor = normalizeSearchCursor(query.cursor);
-  const normalizedTypes = [...new Set(query.types || [])]
-    .filter((type) => GLOBAL_SEARCH_TYPES.includes(type))
-    .sort();
+  const normalizedTypes = [...new Set(query.types || [])].filter((type) => GLOBAL_SEARCH_TYPES.includes(type)).sort();
   const includesTodo = normalizedTypes.includes('todo');
   const normalizedQuery = {
     type: query.type || 'all',
@@ -295,6 +319,17 @@ export function clearGlobalSearchCache() {
   suggestCache.clear();
 }
 
-export function batchDeleteSearchResources(items: BatchResourceItem[]) {
-  return apiBasePost('/api/search/batchDeleteResources', { items });
+export function previewSearchBatchSelection(selection: BatchSelection) {
+  return apiBasePost('/api/search/batchSelectionPreview', { selection });
+}
+
+export function batchAddSearchResourcesToInbox(selection: BatchSelection) {
+  return apiBasePost('/api/search/batchAddResourcesToInbox', { selection });
+}
+
+export function batchDeleteSearchResources(itemsOrSelection: BatchResourceItem[] | BatchSelection) {
+  return apiBasePost(
+    '/api/search/batchDeleteResources',
+    Array.isArray(itemsOrSelection) ? { items: itemsOrSelection } : { selection: itemsOrSelection },
+  );
 }

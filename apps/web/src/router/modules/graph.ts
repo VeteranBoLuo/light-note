@@ -10,7 +10,7 @@ const graphRouter: RouteRecordRaw = {
   },
   path: '/graph',
   name: 'globalGraph',
-  redirect: { path: '/manage/tagMg', query: { view: 'map' } },
+  redirect: { path: '/search', query: { section: 'map' } },
 };
 
 export default graphRouter;

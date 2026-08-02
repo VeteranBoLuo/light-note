@@ -132,6 +132,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'file', [['POST', '/file/hermesBacku
 
 declare(ADMIN_POLICIES.READ, 'search', [
   ['POST', '/search/global'],
+  ['POST', '/search/batchSelectionPreview'],
   ['POST', '/search/batchResourceTagWorkspace'],
   ['POST', '/workbench/summary'],
   // 移动端「今日」轻量聚合，与工作台概览同属只读
@@ -166,6 +167,7 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'search', [
   ['POST', '/search/batchUpdateResourceTags'],
+  ['POST', '/search/batchAddResourcesToInbox'],
   ['POST', '/search/batchDeleteResources'],
 ]);
 

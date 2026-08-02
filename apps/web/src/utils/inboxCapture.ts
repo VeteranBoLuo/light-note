@@ -6,12 +6,12 @@ export type QuickCaptureType = InboxCaptureType | 'todo';
 const RESOURCE_CAPTURE_TYPES: readonly InboxCaptureType[] = ['bookmark', 'note', 'file'];
 const ALL_CAPTURE_TYPES: readonly QuickCaptureType[] = [...RESOURCE_CAPTURE_TYPES, 'todo'];
 
-export function getAvailableQuickCaptureTypes(isMobile: boolean): readonly QuickCaptureType[] {
-  return isMobile ? RESOURCE_CAPTURE_TYPES : ALL_CAPTURE_TYPES;
+export function getAvailableQuickCaptureTypes(_isMobile: boolean): readonly QuickCaptureType[] {
+  return ALL_CAPTURE_TYPES;
 }
 
-export function normalizeQuickCaptureType(type: QuickCaptureType, isMobile: boolean): QuickCaptureType {
-  return isMobile && type === 'todo' ? 'note' : type;
+export function normalizeQuickCaptureType(type: QuickCaptureType, _isMobile: boolean): QuickCaptureType {
+  return type;
 }
 
 export function getQuickCaptureInboxTarget(type: QuickCaptureType, isMobile: boolean) {

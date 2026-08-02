@@ -102,6 +102,65 @@ async function disableRetiredGrowthTasks() {
   ]);
 }
 
+// root 不参与成长奖励，但任务状态仍必须反映真实业务事实，否则工作台会永久展示无法领取的任务。
+// 该修复只处理 root，并把满足条件的任务直接收口为已领取，因此可以在每次启动时安全幂等执行。
+async function reconcileRootGrowthTasks() {
+  await pool.query(
+    `INSERT INTO user_growth_tasks (user_id, task_key, status, completed_at, claimed_at)
+     SELECT user_id, task_key, 'completed', completed_at, completed_at
+     FROM (
+       SELECT u.id AS user_id, 'profile_avatar' AS task_key,
+              COALESCE(u.create_time, CURRENT_TIMESTAMP) AS completed_at
+       FROM \`user\` u
+       WHERE COALESCE(TRIM(u.head_picture), '') <> ''
+         AND COALESCE(u.del_flag, 0) = 0
+         AND u.role = 'root'
+       UNION ALL
+       SELECT n.create_by AS user_id, 'first_note' AS task_key, MIN(n.create_time) AS completed_at
+       FROM note n
+       INNER JOIN \`user\` u ON u.id = n.create_by
+       WHERE n.del_flag = 0
+         AND COALESCE(u.del_flag, 0) = 0
+         AND u.role = 'root'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM onboarding_seed_resources osr
+           WHERE osr.user_id = n.create_by
+             AND osr.resource_type = 'note'
+             AND osr.resource_id = n.id
+         )
+       GROUP BY n.create_by
+       UNION ALL
+       SELECT b.user_id, 'first_bookmark' AS task_key, MIN(b.create_time) AS completed_at
+       FROM bookmark b
+       INNER JOIN \`user\` u ON u.id = b.user_id
+       WHERE b.del_flag = 0
+         AND COALESCE(u.del_flag, 0) = 0
+         AND u.role = 'root'
+         AND NOT EXISTS (
+           SELECT 1
+           FROM onboarding_seed_resources osr
+           WHERE osr.user_id = b.user_id
+             AND osr.resource_type = 'bookmark'
+             AND osr.resource_id = b.id
+         )
+       GROUP BY b.user_id
+       UNION ALL
+       SELECT t.user_id, 'first_todo' AS task_key, MIN(t.create_time) AS completed_at
+       FROM todo_items t
+       INNER JOIN \`user\` u ON u.id = t.user_id
+       WHERE t.del_flag = 0
+         AND COALESCE(u.del_flag, 0) = 0
+         AND u.role = 'root'
+       GROUP BY t.user_id
+     ) root_tasks
+     ON DUPLICATE KEY UPDATE
+       status = 'completed',
+       completed_at = COALESCE(completed_at, VALUES(completed_at)),
+       claimed_at = COALESCE(claimed_at, VALUES(claimed_at))`,
+  );
+}
+
 // 迁移前已经完成过的激活动作只补齐状态，不重新发放经验；这样新任务不会与旧账本重复奖励。
 async function backfillHistoricalGrowthTasks() {
   await pool.query(
@@ -159,6 +218,7 @@ export function ensureGrowthTaskSchema() {
       const claimedAtColumnAdded = await ensureGrowthTaskClaimedAtColumn();
       await seedGrowthTasks();
       await disableRetiredGrowthTasks();
+      await reconcileRootGrowthTasks();
       // 历史回填只在旧表首次升级到手动领取模型时执行。若每次启动都跑，未来某次业务钩子
       // 临时失败后会把新达成任务误当历史任务并直接标记已领取。
       if (!userStateTableExisted || claimedAtColumnAdded) await backfillHistoricalGrowthTasks();
@@ -177,4 +237,5 @@ export {
   disableRetiredGrowthTasks,
   ensureGrowthTaskClaimedAtColumn,
   growthTaskStateTableExists,
+  reconcileRootGrowthTasks,
 };

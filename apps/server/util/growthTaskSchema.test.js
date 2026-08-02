@@ -27,7 +27,7 @@ describe('growthTaskSchema', () => {
       .mockResolvedValue([[], []]);
     await ensureGrowthTaskSchema();
 
-    expect(pool.query).toHaveBeenCalledTimes(9);
+    expect(pool.query).toHaveBeenCalledTimes(10);
     expect(pool.query.mock.calls[0][0]).toContain('information_schema.tables');
     expect(pool.query.mock.calls[1][0]).toContain('CREATE TABLE IF NOT EXISTS growth_tasks');
     expect(pool.query.mock.calls[2][0]).toContain('CREATE TABLE IF NOT EXISTS user_growth_tasks');
@@ -41,14 +41,22 @@ describe('growthTaskSchema', () => {
       expect.stringContaining('UPDATE growth_tasks SET enabled = 0'),
       ['first_review'],
     ]);
-    expect(pool.query.mock.calls[8][0]).toContain('INSERT IGNORE INTO user_growth_tasks');
-    expect(pool.query.mock.calls[8][0]).toContain('claimed_at');
+    expect(pool.query.mock.calls[8][0]).toContain('INSERT INTO user_growth_tasks');
+    expect(pool.query.mock.calls[8][0]).toContain("u.role = 'root'");
+    expect(pool.query.mock.calls[8][0]).toContain('ON DUPLICATE KEY UPDATE');
+    expect(pool.query.mock.calls[8][0]).toContain('claimed_at = COALESCE(claimed_at, VALUES(claimed_at))');
     expect(pool.query.mock.calls[8][0]).toContain("'profile_avatar' AS task_key");
-    expect(pool.query.mock.calls[8][0]).toContain("COALESCE(TRIM(u.head_picture), '') <> ''");
-    expect(pool.query.mock.calls[8][0]).not.toContain('u.update_time');
-    expect(pool.query.mock.calls[8][0]).not.toContain("source = 'profile_done'");
-    expect(pool.query.mock.calls[8][0]).toContain('FROM note');
-    expect(pool.query.mock.calls[8][0]).toContain('FROM bookmark');
-    expect(pool.query.mock.calls[8][0]).toContain('onboarding_seed_resources');
+    expect(pool.query.mock.calls[8][0]).toContain("'first_note' AS task_key");
+    expect(pool.query.mock.calls[8][0]).toContain("'first_bookmark' AS task_key");
+    expect(pool.query.mock.calls[8][0]).toContain("'first_todo' AS task_key");
+    expect(pool.query.mock.calls[9][0]).toContain('INSERT IGNORE INTO user_growth_tasks');
+    expect(pool.query.mock.calls[9][0]).toContain('claimed_at');
+    expect(pool.query.mock.calls[9][0]).toContain("'profile_avatar' AS task_key");
+    expect(pool.query.mock.calls[9][0]).toContain("COALESCE(TRIM(u.head_picture), '') <> ''");
+    expect(pool.query.mock.calls[9][0]).not.toContain('u.update_time');
+    expect(pool.query.mock.calls[9][0]).not.toContain("source = 'profile_done'");
+    expect(pool.query.mock.calls[9][0]).toContain('FROM note');
+    expect(pool.query.mock.calls[9][0]).toContain('FROM bookmark');
+    expect(pool.query.mock.calls[9][0]).toContain('onboarding_seed_resources');
   });
 });

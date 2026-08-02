@@ -64,6 +64,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { routeNavigationLoading } from '@/router';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -75,6 +76,10 @@
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
+  provide(
+    MOBILE_LAYOUT_CONTEXT,
+    computed(() => bookmark.isMobile),
+  );
   const isAndroidApp = isLightNoteAndroidApp();
   const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;

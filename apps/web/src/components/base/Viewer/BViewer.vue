@@ -3,12 +3,19 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { bookmarkStore } from '@/store';
   import Viewer from 'viewerjs';
   import 'viewerjs/dist/viewer.css';
+  import {
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
   const bookmark = bookmarkStore();
   const viewSrc = ref();
+  let currentViewer: Viewer | null = null;
+  let historyHandle: MobileOverlayHistoryHandle | null = null;
 
   watch(
     () => bookmark.viewerKey,
@@ -18,6 +25,10 @@
   );
 
   function newView() {
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
+    currentViewer?.destroy();
+    currentViewer = null;
     viewSrc.value = `${bookmark.viewer.src}`;
     nextTick(() => {
       const viewer = new Viewer(document.getElementById('viewImage'), {
@@ -26,7 +37,10 @@
         toolbar: false,
         ...bookmark.viewer.options,
         hidden() {
+          if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+          historyHandle = null;
           viewer.destroy();
+          if (currentViewer === viewer) currentViewer = null;
           viewSrc.value = '';
         },
         viewed(e) {
@@ -35,9 +49,23 @@
           e.detail.image.style.maxHeight = '200px';
         },
       });
+      currentViewer = viewer;
+      if (bookmark.isMobile) {
+        historyHandle = registerMobileOverlayHistory(() => {
+          historyHandle = null;
+          viewer.hide();
+        });
+      }
       viewer.show();
     });
   }
+
+  onBeforeUnmount(() => {
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
+    currentViewer?.destroy();
+    currentViewer = null;
+  });
 </script>
 
 <style>

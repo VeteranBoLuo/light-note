@@ -28,12 +28,8 @@ describe('growthTaskCompletion', () => {
     grantExp.mockResolvedValue({ granted: 50, duplicated: false });
   });
 
-  it('游客、root 和未知任务不写库', async () => {
+  it('游客和未知任务不写库', async () => {
     await expect(completeGrowthTask('visitor', 'first_note', { userRole: 'visitor' })).resolves.toEqual({
-      completed: false,
-      skipped: 'read_only_actor',
-    });
-    await expect(completeGrowthTask('root-1', 'first_note', { userRole: 'root' })).resolves.toEqual({
       completed: false,
       skipped: 'read_only_actor',
     });
@@ -42,6 +38,31 @@ describe('growthTaskCompletion', () => {
       skipped: 'unknown_task',
     });
     expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('root 记录完成事实并自动收口为已领取，但不产生经验奖励', async () => {
+    connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await expect(completeGrowthTask('root-1', 'profile_avatar', { userRole: 'root' })).resolves.toEqual({
+      completed: true,
+      duplicated: false,
+      taskKey: 'profile_avatar',
+      rewardExp: 0,
+      claimed: true,
+    });
+
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('ON DUPLICATE KEY UPDATE'), [
+      'root-1',
+      'profile_avatar',
+      null,
+      null,
+    ]);
+    expect(grantExp).not.toHaveBeenCalled();
+    await expect(claimGrowthTask('root-1', 'profile_avatar', { userRole: 'root' })).resolves.toEqual({
+      ok: false,
+      reason: 'read_only_actor',
+    });
+    expect(pool.getConnection).toHaveBeenCalledTimes(1);
   });
 
   it('首次达成只写任务状态，不自动发放经验', async () => {

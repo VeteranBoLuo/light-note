@@ -16,7 +16,9 @@
       <section class="batch-layout">
         <BCard as="article" variant="card" padding="16px" class="panel">
           <div class="panel-title">{{ t('resourceCenter.batch.selectedResources') }}</div>
-          <div class="panel-subtitle">{{ t('resourceCenter.batch.selectedCount', { count: items.length }) }}</div>
+          <div class="panel-subtitle">{{
+            t('resourceCenter.batch.selectedCount', { count: selectedResourceCount })
+          }}</div>
           <div class="summary-row">
             <span
               v-for="entry in typeSummary"
@@ -29,7 +31,7 @@
               <span class="summary-chip-count">{{ entry.count }}</span>
             </span>
           </div>
-          <div class="item-list">
+          <div v-if="selection?.mode === 'explicit'" class="item-list">
             <div v-for="item in items" :key="`${item.type}:${item.id}`" class="item-row">
               <div class="item-main">
                 <span class="item-type-badge" :class="`item-type-badge--${item.type}`">{{
@@ -51,6 +53,12 @@
                 <span v-else class="item-tags-value item-tags-value--empty">-</span>
               </div>
             </div>
+            <div v-if="itemsTruncated" class="empty-tip">
+              {{ t('resourceCenter.batch.previewItemsTruncated', { count: selectedResourceCount }) }}
+            </div>
+          </div>
+          <div v-else class="empty-tip">
+            {{ t('resourceCenter.batch.allMatchingWorkspaceHint', { count: selectedResourceCount }) }}
           </div>
         </BCard>
 
@@ -74,7 +82,9 @@
 
           <div class="preview-box">
             <div class="preview-title">{{ t('resourceCenter.batch.previewTitle') }}</div>
-            <div class="preview-line">{{ t('resourceCenter.batch.previewResources', { count: items.length }) }}</div>
+            <div class="preview-line">{{
+              t('resourceCenter.batch.previewResources', { count: selectedResourceCount })
+            }}</div>
             <div class="preview-line">{{
               t('resourceCenter.batch.previewTags', { count: selectedTagIds.length })
             }}</div>
@@ -94,10 +104,9 @@
   import { useRoute, useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
-  import { clearGlobalSearchCache } from '@/api/search.ts';
+  import { clearGlobalSearchCache, type BatchSelection, type SearchType } from '@/api/search.ts';
   import { useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi.ts';
-  import type { SearchType } from '@/api/search.ts';
   import { getSearchTypeLabel } from '@/components/searchCenter/searchMeta.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
@@ -123,6 +132,10 @@
   const user = useUserStore();
 
   const items = ref<BatchItem[]>([]);
+  const selection = ref<BatchSelection | null>(null);
+  const selectedResourceCount = ref(0);
+  const selectionTypeCounts = ref<Record<SearchType, number>>({ bookmark: 0, note: 0, file: 0, tag: 0 });
+  const itemsTruncated = ref(false);
   const tagList = ref<TagItem[]>([]);
   const selectedResourceTags = ref<TagItem[]>([]);
   const resourceTagsMap = ref<Record<string, TagItem[]>>({});
@@ -143,30 +156,39 @@
   );
 
   const typeSummary = computed(() =>
-    EDITABLE_TYPES.map((type) => ({
-      type,
-      count: items.value.filter((item) => item.type === type).length,
-    })).filter((entry) => entry.count > 0),
+    EDITABLE_TYPES.map((type) => ({ type, count: Number(selectionTypeCounts.value[type] || 0) })).filter(
+      (entry) => entry.count > 0,
+    ),
   );
-  const previewRelationCount = computed(() => items.value.length * selectedTagIds.value.length);
+  const previewRelationCount = computed(() => selectedResourceCount.value * selectedTagIds.value.length);
   const displayTagList = computed(() => (mode.value === 'remove' ? selectedResourceTags.value : tagList.value));
 
-  function loadItemsFromStorage() {
+  function loadBatchStateFromStorage() {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return [];
+      const rawItems = Array.isArray(parsed) ? parsed : parsed?.items;
+      if (!Array.isArray(rawItems)) return null;
       const unique = new Map<string, BatchItem>();
-      parsed.forEach((item) => {
+      rawItems.forEach((item) => {
         const type = String(item?.type || '').trim() as SearchType;
         const id = String(item?.id || '').trim();
         const title = String(item?.title || '').trim();
         if (!EDITABLE_TYPES.includes(type) || !id) return;
         unique.set(`${type}:${id}`, { type, id, title });
       });
-      return Array.from(unique.values());
+      const normalizedItems = Array.from(unique.values());
+      const normalizedSelection: BatchSelection = parsed?.selection || {
+        mode: 'explicit',
+        items: normalizedItems.map((item) => ({ id: item.id, type: item.type })),
+      };
+      return {
+        items: normalizedItems,
+        selection: normalizedSelection,
+        selectedCount: Number(parsed?.selectedCount || normalizedItems.length),
+      };
     } catch (error) {
-      return [];
+      return null;
     }
   }
 
@@ -181,7 +203,7 @@
 
   async function loadWorkspaceData() {
     const workspaceRes = await apiBasePost('/api/search/batchResourceTagWorkspace', {
-      items: items.value.map((item) => ({ id: item.id, type: item.type })),
+      selection: selection.value,
     });
     if (workspaceRes.status !== 200) {
       message.error(workspaceRes.msg || t('resourceCenter.batch.submitFailed'));
@@ -192,6 +214,14 @@
     );
     tagList.value = mapTagItems(Array.isArray(workspaceRes.data?.allTags) ? workspaceRes.data.allTags : []);
     resourceTagsMap.value = workspaceRes.data?.resourceTagsMap || {};
+    selectedResourceCount.value = Number(workspaceRes.data?.selectionSummary?.editableCount || 0);
+    selectionTypeCounts.value = {
+      bookmark: Number(workspaceRes.data?.selectionSummary?.typeCounts?.bookmark || 0),
+      note: Number(workspaceRes.data?.selectionSummary?.typeCounts?.note || 0),
+      file: Number(workspaceRes.data?.selectionSummary?.typeCounts?.file || 0),
+      tag: 0,
+    };
+    itemsTruncated.value = Boolean(workspaceRes.data?.itemsTruncated);
     items.value = Array.isArray(workspaceRes.data?.items)
       ? workspaceRes.data.items.map((item: any) => ({
           id: String(item.id || '').trim(),
@@ -230,7 +260,7 @@
   }
 
   async function submitBatch() {
-    if (!items.value.length) {
+    if (!selection.value || !selectedResourceCount.value) {
       message.warning(t('resourceCenter.batch.noSelection'));
       return;
     }
@@ -244,7 +274,7 @@
       const res = await apiBasePost('/api/search/batchUpdateResourceTags', {
         action: mode.value,
         tagIds: selectedTagIds.value,
-        items: items.value.map((item) => ({ id: item.id, type: item.type })),
+        selection: selection.value,
       });
       if (res.status !== 200) {
         message.error(res.msg || t('resourceCenter.batch.submitFailed'));
@@ -256,8 +286,8 @@
         module: '资源中心',
         operation:
           mode.value === 'add'
-            ? `批量加标签成功【资源${items.value.length}个，关系新增${affected}条】`
-            : `批量移除标签成功【资源${items.value.length}个，关系移除${affected}条】`,
+            ? `批量加标签成功【资源${selectedResourceCount.value}个，关系新增${affected}条】`
+            : `批量移除标签成功【资源${selectedResourceCount.value}个，关系移除${affected}条】`,
       });
       message.success(t('resourceCenter.batch.submitSuccess', { affected, skipped }));
       sessionStorage.removeItem(STORAGE_KEY);
@@ -276,12 +306,15 @@
   }
 
   onMounted(async () => {
-    items.value = loadItemsFromStorage();
-    if (!items.value.length) {
+    const stored = loadBatchStateFromStorage();
+    if (!stored?.selection || !stored.selectedCount) {
       message.warning(t('resourceCenter.batch.noSelection'));
       router.replace('/search');
       return;
     }
+    items.value = stored.items;
+    selection.value = stored.selection;
+    selectedResourceCount.value = stored.selectedCount;
     const ok = await loadWorkspaceData();
     if (!ok) {
       router.replace('/search');

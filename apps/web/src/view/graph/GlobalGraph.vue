@@ -9,7 +9,17 @@
           <span v-if="stats.truncated" class="km-warning">{{ t('knowledgeMap.truncated') }}</span>
         </p>
       </div>
-      <div class="km-stats" :aria-label="t('knowledgeMap.overview')">
+      <div v-if="bookmark.isMobile" class="km-mobile-overview" :aria-label="t('knowledgeMap.overview')">
+        <span>
+          <strong>{{ stats.tagCount }}</strong>
+          <small>{{ t('knowledgeMap.stats.tags') }}</small>
+        </span>
+        <span>
+          <strong>{{ stats.taggedResourceCount }}</strong>
+          <small>{{ t('knowledgeMap.stats.tagged') }}</small>
+        </span>
+      </div>
+      <div v-else class="km-stats" :aria-label="t('knowledgeMap.overview')">
         <div class="km-stat km-stat--tag">
           <strong>{{ stats.tagCount }}</strong>
           <span>{{ t('knowledgeMap.stats.tags') }}</span>
@@ -42,11 +52,19 @@
           </template>
         </BInput>
       </div>
-      <BSelect v-model:value="minSharedCount" class="km-select km-select--strength" :options="strengthOptions" />
-      <BButton class="km-toggle" :class="{ active: hideIsolated }" @click="hideIsolated = !hideIsolated">
-        {{ t('knowledgeMap.hideIsolated') }}
-      </BButton>
-      <BButton class="km-reset" @click="resetMap">{{ t('knowledgeMap.reset') }}</BButton>
+      <template v-if="bookmark.isMobile">
+        <BButton class="km-filter-trigger" @click="mobileFilterVisible = true">
+          <SvgIcon :src="icon.cloudSpace.filter" size="16" />
+          {{ t('common.filter') }}
+        </BButton>
+      </template>
+      <template v-else>
+        <BSelect v-model:value="minSharedCount" class="km-select km-select--strength" :options="strengthOptions" />
+        <BButton class="km-toggle" :class="{ active: hideIsolated }" @click="hideIsolated = !hideIsolated">
+          {{ t('knowledgeMap.hideIsolated') }}
+        </BButton>
+        <BButton class="km-reset" @click="resetMap">{{ t('knowledgeMap.reset') }}</BButton>
+      </template>
     </section>
 
     <section class="km-content">
@@ -86,7 +104,7 @@
         </div>
       </div>
 
-      <aside class="km-panel">
+      <aside v-if="!bookmark.isMobile" class="km-panel">
         <template v-if="activeNode">
           <div class="km-panel-head">
             <div class="km-panel-kicker"> <span class="km-panel-dot"></span>{{ t('knowledgeMap.focusedTopic') }} </div>
@@ -102,11 +120,11 @@
           <section class="km-panel-section">
             <div class="km-section-title">
               <span>{{ t('knowledgeMap.relatedTopics') }}</span>
-              <small>{{ activeRelatedTags.length }}</small>
+              <small>{{ focusRelatedTags.length }}</small>
             </div>
-            <div v-if="activeRelatedTags.length" class="km-related-list">
+            <div v-if="focusRelatedTags.length" class="km-related-list">
               <BButton
-                v-for="item in activeRelatedTags"
+                v-for="item in focusRelatedTags"
                 :key="item.node.id"
                 class="km-related-item"
                 @click="selectNode(item.node)"
@@ -115,7 +133,7 @@
                 <small>{{ t('knowledgeMap.sharedCount', { count: item.sharedCount }) }}</small>
               </BButton>
             </div>
-            <div v-else class="km-section-empty">{{ t('knowledgeMap.noRelatedTopics') }}</div>
+            <div v-else-if="!focusLoading" class="km-section-empty">{{ t('knowledgeMap.noRelatedTopics') }}</div>
           </section>
 
           <section class="km-panel-section km-resource-section">
@@ -178,6 +196,98 @@
         </template>
       </aside>
     </section>
+
+    <BDrawer
+      :open="mobileFilterVisible"
+      :title="t('knowledgeMap.mobileFiltersTitle')"
+      placement="bottom"
+      height="min(48dvh, 390px)"
+      body-padding="18px"
+      @close="mobileFilterVisible = false"
+    >
+      <div class="km-mobile-filters">
+        <label>{{ t('knowledgeMap.relationshipStrength') }}</label>
+        <BSelect v-model:value="minSharedCount" :options="strengthOptions" />
+        <BButton class="km-toggle" :class="{ active: hideIsolated }" @click="hideIsolated = !hideIsolated">
+          {{ t('knowledgeMap.hideIsolated') }}
+        </BButton>
+        <div class="km-mobile-filter-actions">
+          <BButton @click="resetMobileFilters">{{ t('knowledgeMap.reset') }}</BButton>
+          <BButton type="primary" @click="mobileFilterVisible = false">{{ t('common.confirm') }}</BButton>
+        </div>
+      </div>
+    </BDrawer>
+
+    <BDrawer
+      :open="mobileTopicDrawerOpen"
+      :title="activeNode?.label || t('knowledgeMap.focusedTopic')"
+      placement="bottom"
+      height="min(78dvh, 720px)"
+      body-padding="0"
+      @close="mobileTopicDrawerOpen = false"
+    >
+      <div v-if="activeNode" class="km-mobile-topic-drawer">
+        <div class="km-mobile-topic-summary">
+          <span class="km-panel-dot"></span>
+          <span>{{ t('knowledgeMap.resourceCount', { count: activeResourceCount }) }}</span>
+          <span>{{ t('knowledgeMap.relatedTopicCount', { count: focusRelatedTags.length }) }}</span>
+        </div>
+
+        <div class="km-mobile-topic-tabs">
+          <BTabs v-model:active-tab="resourceType" variant="pill" :options="mobileResourceTypeOptions" />
+        </div>
+
+        <div class="km-mobile-topic-body">
+          <section class="km-mobile-topic-section">
+            <div class="km-section-title">
+              <span>{{ t('knowledgeMap.recentResources') }}</span>
+              <small>{{ filteredFocusResources.length }}</small>
+            </div>
+            <BLoading v-if="focusLoading" :loading="true" inline :title="t('knowledgeMap.loadingResources')" />
+            <div v-else-if="filteredFocusResources.length" class="km-resource-list">
+              <BButton
+                v-for="resource in filteredFocusResources"
+                :key="resource.id"
+                class="km-resource-item km-mobile-resource-item"
+                @click="openResource(resource)"
+              >
+                <span class="km-resource-type" :class="`km-resource-type--${resource.type}`"></span>
+                <span class="km-resource-main">
+                  <strong>{{ resource.label }}</strong>
+                  <small>{{ t(`knowledgeMap.resourceTypes.${resource.type}`) }}</small>
+                </span>
+                <span class="km-resource-arrow">→</span>
+              </BButton>
+            </div>
+            <div v-else class="km-section-empty">{{ t('knowledgeMap.noResources') }}</div>
+          </section>
+
+          <section class="km-mobile-topic-section">
+            <div class="km-section-title">
+              <span>{{ t('knowledgeMap.relatedTopics') }}</span>
+              <small>{{ focusRelatedTags.length }}</small>
+            </div>
+            <div v-if="focusRelatedTags.length" class="km-related-list">
+              <BButton
+                v-for="item in focusRelatedTags"
+                :key="item.node.id"
+                class="km-related-item km-mobile-related-item"
+                @click="selectNode(item.node)"
+              >
+                <span>{{ item.node.label }}</span>
+                <small>{{ t('knowledgeMap.sharedCount', { count: item.sharedCount }) }}</small>
+              </BButton>
+            </div>
+            <div v-else-if="!focusLoading" class="km-section-empty">{{ t('knowledgeMap.noRelatedTopics') }}</div>
+          </section>
+
+          <div class="km-mobile-topic-actions">
+            <BButton type="primary" @click="viewTagResources">{{ t('knowledgeMap.viewResources') }}</BButton>
+            <BButton @click="openTagDetail">{{ t('knowledgeMap.openTag') }}</BButton>
+          </div>
+        </div>
+      </div>
+    </BDrawer>
   </div>
 </template>
 
@@ -189,8 +299,11 @@
   import { bookmarkStore } from '@/store';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import {
     fetchGlobalGraph,
@@ -203,6 +316,20 @@
   import GlobalGraphCanvas from './GlobalGraphCanvas.vue';
 
   type ResourceFilter = GraphResourceType | 'all';
+  type FocusRelatedTag = { node: TagGraphNode; sharedCount: number };
+  type FocusStats = {
+    relatedTagCount: number;
+    bookmarkCount: number;
+    noteCount: number;
+    fileCount: number;
+  };
+
+  const emptyFocusStats = (): FocusStats => ({
+    relatedTagCount: 0,
+    bookmarkCount: 0,
+    noteCount: 0,
+    fileCount: 0,
+  });
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -227,8 +354,12 @@
   const hideIsolated = ref(true);
   const activeNode = ref<TagGraphNode | null>(null);
   const focusResources = ref<TagGraphNode[]>([]);
+  const focusRelatedTags = ref<FocusRelatedTag[]>([]);
+  const focusStats = ref<FocusStats>(emptyFocusStats());
   const focusLoading = ref(false);
   const resourceType = ref<ResourceFilter>('all');
+  const mobileTopicDrawerOpen = ref(false);
+  const mobileFilterVisible = ref(false);
   let focusRequestSequence = 0;
 
   const strengthOptions = computed(() => [
@@ -242,6 +373,13 @@
     { value: 'note', label: t('knowledgeMap.resourceTypes.note') },
     { value: 'file', label: t('knowledgeMap.resourceTypes.file') },
   ]);
+  const mobileResourceTypeOptions = computed(() =>
+    resourceTypeOptions.value.map((item) => ({
+      key: item.value,
+      label: item.label,
+      badge: resourceTypeCount(item.value),
+    })),
+  );
 
   const rankedNodes = computed(() =>
     [...nodes.value].sort(
@@ -274,28 +412,20 @@
     const ids = new Set(displayNodes.value.map((node) => node.id));
     return thresholdEdges.value.filter((edge) => ids.has(edge.source) && ids.has(edge.target));
   });
-  const nodeById = computed(() => new Map(nodes.value.map((node) => [node.id, node])));
-  const activeRelatedTags = computed(() => {
-    if (!activeNode.value) return [];
-    return displayEdges.value
-      .filter((edge) => edge.source === activeNode.value?.id || edge.target === activeNode.value?.id)
-      .map((edge) => ({
-        node: nodeById.value.get(edge.source === activeNode.value?.id ? edge.target : edge.source),
-        sharedCount: Number(edge.sharedCount || Math.max(1, Number(edge.weight || 1) - 1)),
-      }))
-      .filter((item): item is { node: TagGraphNode; sharedCount: number } => Boolean(item.node))
-      .sort((a, b) => b.sharedCount - a.sharedCount)
-      .slice(0, 10);
-  });
   const filteredFocusResources = computed(() =>
     focusResources.value
       .filter((node) => resourceType.value === 'all' || node.type === resourceType.value)
-      .slice(0, 18),
+      .slice(0, resourceType.value === 'all' ? 18 : 50),
   );
+  const activeResourceCount = computed(() => {
+    const globalCount = Number(activeNode.value?.meta?.resourceCount ?? activeNode.value?.meta?.relatedCount);
+    if (Number.isFinite(globalCount)) return globalCount;
+    return focusStats.value.bookmarkCount + focusStats.value.noteCount + focusStats.value.fileCount;
+  });
   const mobileNodes = computed(() => overviewNodes.value.slice(0, 100));
   const canvasSummary = computed(() => {
     if (activeNode.value) {
-      return t('knowledgeMap.focusSummary', { name: activeNode.value.label, count: activeRelatedTags.value.length });
+      return t('knowledgeMap.focusSummary', { name: activeNode.value.label, count: focusRelatedTags.value.length });
     }
     return t('knowledgeMap.canvasSummary', { shown: displayNodes.value.length, total: stats.value.tagCount });
   });
@@ -305,21 +435,50 @@
     return thresholdEdges.value.filter((edge) => edge.source === nodeId || edge.target === nodeId).length;
   }
 
+  function resourceTypeCount(type: ResourceFilter) {
+    if (type === 'all') return activeResourceCount.value;
+    const countByType: Record<GraphResourceType, number> = {
+      bookmark: focusStats.value.bookmarkCount,
+      note: focusStats.value.noteCount,
+      file: focusStats.value.fileCount,
+    };
+    const count = countByType[type];
+    return count >= 50 ? '50+' : count;
+  }
+
+  function extractRelatedTags(node: TagGraphNode, graphNodes: TagGraphNode[], graphEdges: TagGraphEdge[]) {
+    const relatedNodes = new Map(
+      graphNodes.filter((item) => item.type === 'tag' && item.rawId !== node.rawId).map((item) => [item.id, item]),
+    );
+    return graphEdges
+      .filter((edge) => edge.type === 'tag-tag' && (edge.source === node.id || edge.target === node.id))
+      .map((edge) => ({
+        node: relatedNodes.get(edge.source === node.id ? edge.target : edge.source),
+        sharedCount: Number(edge.sharedCount || 0),
+      }))
+      .filter((item): item is FocusRelatedTag => Boolean(item.node))
+      .sort((a, b) => b.sharedCount - a.sharedCount);
+  }
+
   async function loadFocusResources(node: TagGraphNode) {
     const requestId = ++focusRequestSequence;
     focusLoading.value = true;
     focusResources.value = [];
+    focusRelatedTags.value = [];
+    focusStats.value = emptyFocusStats();
     try {
       const res = await fetchTagGraph({
         tagId: node.rawId,
         includeResources: true,
         resourceTypes: ['bookmark', 'note', 'file'],
-        limitRelatedTags: 1,
-        limitPerResourceType: 18,
+        limitRelatedTags: 12,
+        limitPerResourceType: 50,
       });
       if (requestId !== focusRequestSequence || activeNode.value?.id !== node.id) return;
       if (res.status === 200 && res.data) {
         focusResources.value = (res.data.nodes || []).filter((item) => item.type !== 'tag');
+        focusRelatedTags.value = extractRelatedTags(node, res.data.nodes || [], res.data.edges || []);
+        focusStats.value = { ...emptyFocusStats(), ...(res.data.stats || {}) };
       }
     } finally {
       if (requestId === focusRequestSequence) focusLoading.value = false;
@@ -330,15 +489,22 @@
     if (!node || node.type !== 'tag') return;
     activeNode.value = node;
     resourceType.value = 'all';
-    loadFocusResources(node);
+    if (bookmark.isMobile) {
+      mobileFilterVisible.value = false;
+      mobileTopicDrawerOpen.value = true;
+    }
+    void loadFocusResources(node);
   }
 
   function clearFocus() {
     focusRequestSequence += 1;
     activeNode.value = null;
     focusResources.value = [];
+    focusRelatedTags.value = [];
+    focusStats.value = emptyFocusStats();
     focusLoading.value = false;
     resourceType.value = 'all';
+    mobileTopicDrawerOpen.value = false;
   }
 
   function focusFirstSearchResult() {
@@ -354,13 +520,21 @@
     canvasRef.value?.resetView();
   }
 
+  function resetMobileFilters() {
+    minSharedCount.value = 2;
+    hideIsolated.value = true;
+  }
+
   function viewTagResources() {
     if (!activeNode.value) return;
+    mobileTopicDrawerOpen.value = false;
     router.push({ path: '/search', query: { tags: activeNode.value.label } });
   }
 
   function openTagDetail() {
-    if (activeNode.value) router.push(`/tag/${activeNode.value.rawId}`);
+    if (!activeNode.value) return;
+    mobileTopicDrawerOpen.value = false;
+    router.push(`/tag/${activeNode.value.rawId}`);
   }
 
   function viewUntaggedResources() {
@@ -368,19 +542,24 @@
   }
 
   function openTagManager() {
-    router.push({ path: '/manage/tagMg', query: { view: 'list' } });
+    router.push('/manage/tagMg');
   }
 
   function openResource(node: TagGraphNode) {
     if (node.type === 'bookmark' && node.meta?.url) {
+      mobileTopicDrawerOpen.value = false;
       openBookmarkUrl(node.meta.url);
       return;
     }
     if (node.type === 'note') {
+      mobileTopicDrawerOpen.value = false;
       router.push(`/noteLibrary/${node.rawId}`);
       return;
     }
-    if (node.type === 'file') router.push({ path: '/cloudSpace', query: { fileName: node.label } });
+    if (node.type === 'file') {
+      mobileTopicDrawerOpen.value = false;
+      router.push({ path: '/cloudSpace', query: { fileName: node.label } });
+    }
   }
 
   onMounted(async () => {
@@ -451,6 +630,31 @@
     flex: 0 0 auto;
   }
 
+  .km-mobile-overview {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 9px;
+    color: var(--sub-text-color);
+    font-size: 12px;
+
+    span {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-size: 16px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    small {
+      font-size: inherit;
+    }
+  }
+
   .km-stat {
     display: flex;
     align-items: baseline;
@@ -507,10 +711,15 @@
   }
 
   .km-toggle,
-  .km-reset {
+  .km-reset,
+  .km-filter-trigger {
     height: 38px;
     line-height: 38px;
     padding: 0 13px;
+  }
+
+  .km-filter-trigger {
+    gap: 6px;
   }
 
   .km-toggle.active {
@@ -806,6 +1015,112 @@
     font-size: 12px;
   }
 
+  .km-mobile-filters {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+
+    label {
+      color: var(--sub-text-color);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .km-toggle {
+      width: 100%;
+    }
+  }
+
+  .km-mobile-filter-actions,
+  .km-mobile-topic-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+
+    :deep(.b_btn) {
+      width: 100%;
+    }
+  }
+
+  .km-mobile-topic-drawer {
+    min-height: 100%;
+    background: var(--background-color);
+  }
+
+  .km-mobile-topic-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px 8px;
+    color: var(--sub-text-color);
+    font-size: 12px;
+
+    span:last-child {
+      margin-left: auto;
+    }
+  }
+
+  .km-mobile-topic-tabs {
+    position: sticky;
+    z-index: 2;
+    top: 0;
+    overflow-x: auto;
+    padding: 8px 16px 10px;
+    border-bottom: 1px solid var(--card-border-color);
+    background: color-mix(in srgb, var(--background-color) 96%, transparent);
+
+    :deep(.tab-container) {
+      width: max-content;
+    }
+  }
+
+  .km-mobile-topic-body {
+    padding: 2px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .km-mobile-topic-section {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--card-border-color);
+  }
+
+  .km-mobile-resource-item {
+    min-height: 50px;
+    padding: 9px 11px;
+    border-color: transparent;
+    background: var(--card-background);
+  }
+
+  .km-resource-main {
+    display: flex;
+    min-width: 0;
+    flex: 1;
+    flex-direction: column;
+
+    strong {
+      overflow: hidden;
+      font-size: 13px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    small {
+      color: var(--sub-text-color);
+      font-size: 10px;
+    }
+  }
+
+  .km-mobile-related-item {
+    min-height: 44px;
+    padding: 9px 11px;
+    border-color: transparent;
+    background: color-mix(in srgb, var(--resource-tag-color) 6%, var(--card-background));
+  }
+
+  .km-mobile-topic-actions {
+    padding-top: 16px;
+  }
+
   .knowledge-map-page--mobile {
     height: auto;
     min-height: 100%;
@@ -815,48 +1130,33 @@
       display: block;
     }
 
-    .km-stats {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      margin-top: 10px;
+    .km-heading h1 {
+      font-size: 20px;
     }
 
-    .km-stat {
-      min-width: 0;
+    .km-heading p {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
     }
 
     .km-toolbar {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      display: flex;
     }
 
     .km-search {
-      grid-column: 1 / -1;
-      width: 100%;
+      width: auto;
+      flex: 1;
     }
 
-    .km-select,
-    .km-select--strength {
-      width: 100%;
-    }
-
-    .km-select--strength {
-      grid-column: 1 / -1;
-    }
-
-    .km-toggle,
-    .km-reset {
-      width: 100%;
+    .km-filter-trigger {
+      flex: 0 0 auto;
     }
 
     .km-content {
       display: flex;
       flex-direction: column;
-      overflow: visible;
-    }
-
-    .km-panel {
-      max-height: none;
       overflow: visible;
     }
   }

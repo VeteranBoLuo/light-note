@@ -15,6 +15,8 @@ vi.mock('./items.js', () => ({
 vi.mock('./notification.js', () => ({
   createNotification: vi.fn(),
 }));
+const completeGrowthTask = vi.fn();
+vi.mock('./growthTaskCompletion.js', () => ({ completeGrowthTask }));
 
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
@@ -33,6 +35,7 @@ import {
   useProtectCard,
   getGrowthDashboard,
   getActivityHeatmap,
+  awardCreate,
 } from './growth.js';
 
 afterEach(() => vi.useRealTimers());
@@ -111,6 +114,21 @@ describe('成就体系职责', () => {
     expect(keys).toHaveLength(19);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
     expect(ACHIEVEMENTS.every((achievement) => achievement.target > 1)).toBe(true);
+  });
+});
+
+describe('root 成长任务事实', () => {
+  it('创建首条内容时记录任务完成态，但不进入经验账本', async () => {
+    vi.clearAllMocks();
+    completeGrowthTask.mockResolvedValueOnce({ completed: true, claimed: true, rewardExp: 0 });
+
+    await expect(awardCreate('root-1', 'note', 'note-1', { userRole: 'root' })).resolves.toEqual({
+      granted: 0,
+      skipped: true,
+    });
+
+    expect(completeGrowthTask).toHaveBeenCalledWith('root-1', 'first_note', { userRole: 'root' });
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });
 

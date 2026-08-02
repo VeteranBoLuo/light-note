@@ -141,6 +141,60 @@ async function mountPdfPreview() {
   return { fileUrl };
 }
 
+async function mountImagePreview() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({
+    setup() {
+      return () =>
+        h(FilePreview, {
+          visible: true,
+          fileInfo: {
+            id: 'image-1',
+            fileName: 'preview.png',
+            fileType: 'image/png',
+            fileUrl: 'https://files.example/preview.png?signature=test',
+            category: 'image',
+          },
+        });
+    },
+  });
+  app.mount(host);
+  await nextTick();
+
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  return document.body.querySelector<HTMLImageElement>('.preview-image')!;
+}
+
+function dispatchTouch(
+  image: HTMLImageElement,
+  type: 'touchstart' | 'touchmove' | 'touchend',
+  touches: Array<{ clientX: number; clientY: number }>,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  // jsdom 没有原生 TouchList；组件通过下标访问 TouchList，这里补齐同样的形状，
+  // 避免测试夹具和真实移动端事件的行为不一致。
+  const touchList = Object.assign(
+    {
+      0: touches[0],
+      1: touches[1],
+      length: touches.length,
+    },
+    {
+      item(index: number) {
+        return touches[index] ?? null;
+      },
+    },
+  ) as unknown as TouchList;
+  Object.defineProperty(event, 'touches', { configurable: true, value: touchList });
+  Object.defineProperty(event, 'changedTouches', { configurable: true, value: touchList });
+  image.dispatchEvent(event);
+  return event;
+}
+
 describe('FilePreview HTML sandbox', () => {
   it('loads HTML directly in an isolated iframe instead of injecting it into the app DOM', async () => {
     const { fileUrl } = await mountHtmlPreview();
@@ -252,5 +306,31 @@ describe('FilePreview PDF preview', () => {
     cleanup?.();
     cleanup = undefined;
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:https://boluo66.top/html-preview');
+  });
+});
+
+describe('FilePreview mobile image gestures', () => {
+  it('supports pinch zoom and pans the enlarged image with one finger', async () => {
+    const image = await mountImagePreview();
+
+    const pinchStart = dispatchTouch(image, 'touchstart', [
+      { clientX: 100, clientY: 100 },
+      { clientX: 200, clientY: 100 },
+    ]);
+    const pinchMove = dispatchTouch(image, 'touchmove', [
+      { clientX: 80, clientY: 100 },
+      { clientX: 220, clientY: 100 },
+    ]);
+    await nextTick();
+
+    expect(pinchStart.defaultPrevented).toBe(true);
+    expect(pinchMove.defaultPrevented).toBe(true);
+    expect(image.getAttribute('style')).toContain('scale(1.4)');
+
+    dispatchTouch(image, 'touchend', [{ clientX: 150, clientY: 150 }]);
+    dispatchTouch(image, 'touchmove', [{ clientX: 180, clientY: 190 }]);
+    await nextTick();
+
+    expect(image.getAttribute('style')).toContain('translate(30px, 40px)');
   });
 });

@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { createPinia } from 'pinia';
 import BDrawer from './BDrawer.vue';
+import { bookmarkStore } from '@/store';
+import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } from '@/utils/mobileOverlayHistory';
 
 let cleanup: (() => void) | undefined;
 
@@ -11,6 +14,9 @@ afterEach(() => {
   document.querySelectorAll('.b-drawer-wrapper').forEach((element) => element.remove());
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  resetMobileOverlayHistoryForTests();
+  window.history.replaceState({}, '', '/');
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
   document.documentElement.style.zoom = '';
   Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: 0 });
 });
@@ -31,6 +37,7 @@ describe('BDrawer compositor cleanup', () => {
         return () => h(BDrawer, { open: true, title: 'Test drawer' });
       },
     });
+    app.use(createPinia());
     app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
     app.mount(host);
     cleanup = () => {
@@ -78,6 +85,7 @@ describe('BDrawer compositor cleanup', () => {
           );
       },
     });
+    app.use(createPinia());
     app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
     app.mount(host);
     cleanup = () => {
@@ -121,6 +129,7 @@ describe('BDrawer compositor cleanup', () => {
         return () => h(BDrawer, { open: true, title: 'Editor drawer', onClose });
       },
     });
+    app.use(createPinia());
     app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
     app.mount(host);
     cleanup = () => {
@@ -165,6 +174,7 @@ describe('BDrawer compositor cleanup', () => {
           });
       },
     });
+    app.use(createPinia());
     app.use(
       createI18n({
         legacy: false,
@@ -216,6 +226,7 @@ describe('BDrawer compositor cleanup', () => {
           });
       },
     });
+    app.use(createPinia());
     app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
     app.mount(host);
     cleanup = () => {
@@ -257,6 +268,7 @@ describe('BDrawer compositor cleanup', () => {
           });
       },
     });
+    app.use(createPinia());
     app.use(
       createI18n({
         legacy: false,
@@ -294,5 +306,46 @@ describe('BDrawer compositor cleanup', () => {
     expect(panel?.style.width).toBe('360px');
     expect(panel?.style.minWidth).toBe('360px');
     expect(separator?.getAttribute('aria-valuemax')).toBe('360');
+  });
+
+  it('uses mobile history back to close the drawer before changing routes', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    window.history.replaceState({}, '', '/inbox');
+
+    const open = ref(true);
+    const onClose = vi.fn(() => {
+      open.value = false;
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () => h(BDrawer, { open: open.value, title: 'Todo editor', onClose });
+      },
+    });
+    const pinia = createPinia();
+    app.use(pinia);
+    app.use(createI18n({ legacy: false, locale: 'en', messages: { en: { common: { close: 'Close' } } } }));
+    app.mount(host);
+    bookmarkStore(pinia).screenWidth = 390;
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    await nextTick();
+    expect(typeof window.history.state?.[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toBe('string');
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await nextTick();
+
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(open.value).toBe(false);
   });
 });

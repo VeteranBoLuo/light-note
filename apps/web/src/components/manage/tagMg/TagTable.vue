@@ -5,8 +5,6 @@
       :subtitle="t('tagManage.subtitle')"
       accent="tag"
       layout="workspace"
-      show-back
-      @back="handleToBack"
     >
       <template #actions>
         <BButton
@@ -15,9 +13,6 @@
           @click="$router.push({ path: '/manage/editTag/add' })"
         >
           {{ t('tagManage.createTag') }}
-        </BButton>
-        <BButton @click="handleToBack" v-click-log="{ module: '标签管理', operation: '返回' }">
-          {{ t('common.back') }}
         </BButton>
       </template>
       <div
@@ -651,15 +646,6 @@
         }
       },
     });
-  }
-
-  function handleToBack() {
-    // 同 backRouterPage：管理页从各自的资料页进入，不能固定跳个人中心
-    if (window.history.length > 1) {
-      router.back();
-      return;
-    }
-    void router.push('/manage/tagMg');
   }
 
   watch([keyword, activeFilter, sortMode, viewMode], resetResultScroll);

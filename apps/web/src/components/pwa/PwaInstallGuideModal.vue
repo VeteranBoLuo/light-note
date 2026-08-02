@@ -141,18 +141,16 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { bookmarkStore } from '@/store';
   import { usePwaInstall, type PwaGuidePlatform } from '@/composables/usePwaInstall';
 
   const { t, te } = useI18n();
-  const bookmark = bookmarkStore();
   const {
     canPrompt,
     detectedBrowser,
@@ -234,39 +232,7 @@
     { immediate: true },
   );
 
-  // 移动端返回手势(左滑/右滑/系统返回键)优先关闭本弹窗,而不是后退到下层真实页面。
-  // 手法与 FilePreview 全屏预览一致:打开时占一条历史,popstate 时关弹窗,主动关闭时再消费掉这条历史。
-  const backHistoryActive = ref(false);
-
-  function handleGuidePopState() {
-    // 系统返回已弹出占位历史,这里只需关闭弹窗,不再回退路由
-    if (backHistoryActive.value && guideVisible.value) {
-      backHistoryActive.value = false;
-      guideVisible.value = false;
-    }
-  }
-
-  watch(guideVisible, (visible) => {
-    if (visible) {
-      // 仅移动端拦截返回手势;桌面端保持 ESC / 遮罩 / 关闭按钮,不占用浏览器前进后退
-      if (bookmark.isMobile && !backHistoryActive.value) {
-        history.pushState({ pwaGuide: true }, '');
-        backHistoryActive.value = true;
-      }
-    } else if (backHistoryActive.value) {
-      // 关闭按钮、遮罩、一键安装成功等主动关闭:消费掉占位历史,保持历史栈干净
-      backHistoryActive.value = false;
-      history.back();
-    }
-  });
-
-  onMounted(() => {
-    window.addEventListener('popstate', handleGuidePopState);
-  });
-
-  onBeforeUnmount(() => {
-    window.removeEventListener('popstate', handleGuidePopState);
-  });
+  // 移动端返回键与边缘返回手势由 BModal 统一接管，避免与其他嵌套浮层重复压入历史占位。
 
   async function installDirectly() {
     const result = await requestInstall(guideSource.value);

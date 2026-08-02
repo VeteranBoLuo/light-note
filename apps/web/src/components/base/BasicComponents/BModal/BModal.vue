@@ -47,8 +47,16 @@
   import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import {
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
 
   const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
   const props = withDefaults(
     defineProps<{
       title: string;
@@ -62,6 +70,7 @@
       /** 内容区附加类名:用于弹框自行接管滚动(如左右分栏各自滚动),避免深层 CSS 覆盖 */
       contentClass?: string;
       maskClass?: string;
+      historyClosable?: boolean;
     }>(),
     {
       title: '',
@@ -71,6 +80,7 @@
       top: '50%',
       width: 'auto',
       height: 'auto',
+      historyClosable: true,
     },
   );
   const visible = defineModel('visible');
@@ -80,10 +90,15 @@
   const modalTitleId = `b-modal-title-${getCurrentInstance()?.uid ?? Math.random().toString(36).slice(2)}`;
   const modalLayer = Symbol('b-modal');
   let layerAcquired = false;
+  let closeTimer: number | null = null;
+  let historyHandle: MobileOverlayHistoryHandle | null = null;
   const attrs = useAttrs();
-  function handleClose() {
+
+  function performClose() {
+    if (closeTimer !== null || isOut.value) return;
     isOut.value = true;
-    const timer = setTimeout(() => {
+    closeTimer = window.setTimeout(() => {
+      closeTimer = null;
       isOut.value = false;
       // 检查父组件是否监听了 'close' 事件
       if (attrs.onClose) {
@@ -91,8 +106,18 @@
       } else {
         visible.value = false;
       }
-      clearTimeout(timer);
     }, 200);
+  }
+
+  function closeFromMobileHistory() {
+    historyHandle = null;
+    performClose();
+  }
+
+  function handleClose() {
+    if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
+    historyHandle = null;
+    performClose();
   }
   // 点遮罩背景关闭:用 @click.self,只在点到遮罩本身(而非弹框内容)时触发。
   // 不再用 document mouseup + closest('.modal-view') 判定 —— 那会把 Teleport 到 body 的浮层
@@ -154,7 +179,26 @@
     { immediate: true },
   );
 
+  watch(
+    () => [visible.value === true, isMobileLayout.value, props.historyClosable] as const,
+    ([isVisible, isMobile, historyClosable]) => {
+      if (isVisible && isMobile && historyClosable) {
+        if (!historyHandle) historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
+        return;
+      }
+      if (historyHandle) {
+        releaseMobileOverlayHistory(historyHandle);
+        historyHandle = null;
+      }
+    },
+    { immediate: true },
+  );
+
   onBeforeUnmount(() => {
+    if (closeTimer !== null) window.clearTimeout(closeTimer);
+    closeTimer = null;
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
     document.removeEventListener('keydown', clickEsc);
     if (layerAcquired) releaseModalLayer(modalLayer);
   });
@@ -255,8 +299,12 @@
   }
 
   @keyframes mask-in {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 
   @keyframes in-animation {

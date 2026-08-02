@@ -57,22 +57,31 @@
       <p v-if="!selectedDay.items.length" class="todo-calendar-daylist__empty">
         {{ t('inbox.todoDayEmpty') }}
       </p>
-      <BButton
+      <MobileSwipeDelete
         v-for="item in selectedDay.items"
         :key="item.id"
-        class="todo-calendar-dayitem"
-        :class="todoStateClass(item)"
-        @click="$emit('edit', item)"
+        class="todo-calendar-dayitem-swipe"
+        :enabled="swipeEnabled"
+        :open="openSwipeId === item.id"
+        :disabled="disabled"
+        :loading="deletingId === item.id"
+        :label="t('inbox.deleteTodo')"
+        allow-interactive-start
+        @swipe-start="beginSwipe(item.id)"
+        @update:open="updateSwipe(item.id, $event)"
+        @delete="deleteFromSwipe(item)"
       >
-        <span class="todo-calendar-dayitem__priority" :class="`is-priority-${item.priority}`"></span>
-        <span class="todo-calendar-dayitem__content">
-          <strong>{{ item.title }}</strong>
-          <span class="todo-calendar-dayitem__meta">
-            <small>{{ dueTime(item) }}</small>
-            <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
+        <BButton class="todo-calendar-dayitem" :class="todoStateClass(item)" @click="$emit('edit', item)">
+          <span class="todo-calendar-dayitem__priority" :class="`is-priority-${item.priority}`"></span>
+          <span class="todo-calendar-dayitem__content">
+            <strong>{{ item.title }}</strong>
+            <span class="todo-calendar-dayitem__meta">
+              <small>{{ dueTime(item) }}</small>
+              <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
+            </span>
           </span>
-        </span>
-      </BButton>
+        </BButton>
+      </MobileSwipeDelete>
     </section>
 
     <div v-else class="todo-agenda">
@@ -81,40 +90,68 @@
           <strong>{{ entry.day }}</strong>
           <span>{{ entry.time }}</span>
         </time>
-        <BButton
-          class="todo-agenda-card"
-          :class="todoStateClass(entry.item)"
-          @click="$emit('edit', entry.item)"
+        <MobileSwipeDelete
+          class="todo-agenda-card-swipe"
+          :enabled="swipeEnabled"
+          :open="openSwipeId === entry.item.id"
+          :disabled="disabled"
+          :loading="deletingId === entry.item.id"
+          :label="t('inbox.deleteTodo')"
+          allow-interactive-start
+          @swipe-start="beginSwipe(entry.item.id)"
+          @update:open="updateSwipe(entry.item.id, $event)"
+          @delete="deleteFromSwipe(entry.item)"
         >
-          <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
-          <span class="todo-agenda-card__content">
-            <strong>{{ entry.item.title }}</strong>
-            <span class="todo-agenda-card__meta">
-              <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
-              <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
+          <BButton class="todo-agenda-card" :class="todoStateClass(entry.item)" @click="$emit('edit', entry.item)">
+            <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
+            <span class="todo-agenda-card__content">
+              <strong>{{ entry.item.title }}</strong>
+              <span class="todo-agenda-card__meta">
+                <small :class="todoStateClass(entry.item)">{{ todoStateLabel(entry.item) }}</small>
+                <small>{{ t(`inbox.todoPriority${entry.item.priority}`) }}</small>
+              </span>
             </span>
-          </span>
-        </BButton>
+          </BButton>
+        </MobileSwipeDelete>
       </article>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
 
-  const props = defineProps<{ items: TodoItem[]; view: 'agenda' | 'calendar' }>();
-  const emit = defineEmits<{ edit: [item: TodoItem] }>();
+  const props = defineProps<{
+    items: TodoItem[];
+    view: 'agenda' | 'calendar';
+    swipeEnabled?: boolean;
+    disabled?: boolean;
+    deletingId?: string;
+  }>();
+  const emit = defineEmits<{ edit: [item: TodoItem]; delete: [item: TodoItem] }>();
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const selectedDayKey = ref('');
+  const openSwipeId = ref('');
+
+  watch(
+    () => [props.disabled, props.items.map((item) => item.id).join(',')],
+    () => {
+      if (props.disabled || !props.items.some((item) => item.id === openSwipeId.value)) openSwipeId.value = '';
+    },
+  );
+  watch(
+    () => props.view,
+    () => (openSwipeId.value = ''),
+  );
 
   const parseDate = (value: string) => new Date(String(value).replace(' ', 'T'));
   const monthLabel = computed(() =>
@@ -170,8 +207,24 @@
   );
 
   function selectDay(day: { key: string }) {
+    openSwipeId.value = '';
     selectedDayKey.value = selectedDayKey.value === day.key ? '' : day.key;
   }
+  function beginSwipe(id: string) {
+    openSwipeId.value = id;
+  }
+  function updateSwipe(id: string, open: boolean) {
+    if (open) openSwipeId.value = id;
+    else if (openSwipeId.value === id) openSwipeId.value = '';
+  }
+  function deleteFromSwipe(item: TodoItem) {
+    openSwipeId.value = '';
+    emit('delete', item);
+  }
+  function closeSwipe() {
+    openSwipeId.value = '';
+  }
+  defineExpose({ closeSwipe });
   /**
    * 窄屏格子只放得下截断的标题,点它应该先展开当天详情看清楚,而不是直接弹编辑框;
    * 桌面格子信息完整,保持点条目即编辑。
@@ -383,6 +436,16 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 4%, transparent) !important;
     text-align: left;
+  }
+  .todo-calendar-dayitem-swipe,
+  .todo-agenda-card-swipe {
+    width: 100%;
+  }
+  .todo-calendar-dayitem-swipe {
+    --swipe-border-radius: 10px;
+  }
+  .todo-agenda-card-swipe {
+    --swipe-border-radius: 10px;
   }
   .todo-calendar-dayitem__priority {
     width: 3px;
