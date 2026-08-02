@@ -1,5 +1,5 @@
 <template>
-  <div class="growth-page">
+  <div ref="growthPageRef" class="growth-page">
     <div class="growth-container">
       <header class="growth-hero">
         <BButton class="growth-back" @click="goBack">
@@ -127,6 +127,7 @@
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import growthApi from '@/api/growthApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
 
   type MobileGrowthSection = 'overview' | 'tasks' | 'achievements' | 'assets';
 
@@ -136,6 +137,8 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const activeMobileSection = ref<MobileGrowthSection>('overview');
+  const growthPageRef = ref<HTMLElement | null>(null);
+  let preserveNextMobileSectionScroll = false;
   const mobileSectionOptions = computed(() => [
     { key: 'overview', label: t('growth.mobileTabOverview') },
     { key: 'tasks', label: t('growth.mobileTabTasks') },
@@ -178,7 +181,11 @@
     const targetId = route.hash.replace(/^#/, '');
     if (!targetId) return;
     const targetSection = sectionForHash(route.hash);
-    if (bookmark.isMobile && targetSection) activeMobileSection.value = targetSection;
+    if (bookmark.isMobile && targetSection && activeMobileSection.value !== targetSection) {
+      // 带 hash 的入口需要继续定位到目标卡片，不能被普通 Tab 切换的回顶逻辑覆盖。
+      preserveNextMobileSectionScroll = true;
+      activeMobileSection.value = targetSection;
+    }
     void nextTick(() => {
       document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -285,6 +292,17 @@
     () => route.hash,
     () => scrollToHash(),
   );
+
+  watch(activeMobileSection, () => {
+    if (!bookmark.isMobile) return;
+    if (preserveNextMobileSectionScroll) {
+      preserveNextMobileSectionScroll = false;
+      return;
+    }
+    // 成长页四个分段共用同一个滚动容器；切换内容后必须回到页面起点，
+    // 不能把上一分段的滚动位置带进结构和高度完全不同的新分段。
+    void nextTick(() => resetMobileScrollElement(growthPageRef.value));
+  });
 
   const claimingAch = ref<string | null>(null);
   async function onClaimAchievement(key: string) {

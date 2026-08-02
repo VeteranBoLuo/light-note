@@ -7,7 +7,7 @@
   -->
   <div
     class="mobile-today"
-    data-mobile-primary-scroll
+    data-mobile-resource-scroll
     @touchstart.passive="startPullRefresh"
     @touchmove="movePullRefresh"
     @touchend.passive="finishPullRefresh"

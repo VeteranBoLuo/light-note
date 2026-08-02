@@ -6,6 +6,8 @@ import { getMobileHomePath, type UserPreferences } from '@/utils/preferences';
 // 重开 App / 新标签页回到书签，避免上次停在标签页后就再也回不到默认入口。
 const LAST_RESOURCE_STORAGE_KEY = 'ln-mobile-last-resource';
 const lastMobileResourcePath = ref<MobileResourcePath | null>(readStoredResourcePath());
+const resourceScrollPositions = new Map<MobileResourcePath, number>();
+const nonPersistentScrollPaths = new Set<MobileResourcePath>(['/noteLibrary']);
 
 function readStoredResourcePath(): MobileResourcePath | null {
   try {
@@ -26,6 +28,12 @@ function findResourceScrollElement(): HTMLElement | null {
       return style.display !== 'none' && style.visibility !== 'hidden' && element.getClientRects().length > 0;
     }) || null
   );
+}
+
+export function resetMobileScrollElement(element: HTMLElement | null) {
+  if (!element) return false;
+  element.scrollTop = 0;
+  return true;
 }
 
 function setLastMobileResourcePath(path: MobileResourcePath) {
@@ -58,14 +66,27 @@ export function getMobileResourceEntryPath(): MobileResourcePath {
   return getLastMobileResourcePath('/home');
 }
 
-function resetResourceScroll(path: MobileResourcePath | null) {
+function saveResourceScroll(path: MobileResourcePath | null) {
+  if (!path) return;
+  if (nonPersistentScrollPaths.has(path)) {
+    resourceScrollPositions.delete(path);
+    return;
+  }
+  const element = findResourceScrollElement();
+  if (element) resourceScrollPositions.set(path, element.scrollTop);
+}
+
+function restoreResourceScroll(path: MobileResourcePath | null) {
   if (!path) return false;
+  if (nonPersistentScrollPaths.has(path)) {
+    return resetMobileScrollElement(findResourceScrollElement());
+  }
+  const top = resourceScrollPositions.get(path);
+  if (top == null) return false;
   const element = findResourceScrollElement();
   if (!element) return false;
-  // 不跨资料 Tab 记忆滚动位置。每个 Tab 都从自己的顶部开始，避免把上一页的阅读位置
-  // 带到结构完全不同的书签、笔记、云空间或标签页面。
-  element.scrollTop = 0;
-  return true;
+  element.scrollTop = top;
+  return Math.abs(element.scrollTop - top) <= 1;
 }
 
 function scrollCurrentResourceToTop() {
@@ -76,22 +97,7 @@ function scrollCurrentResourceToTop() {
 }
 
 function resetCurrentResourceScroll() {
-  const element = findResourceScrollElement();
-  if (element) element.scrollTop = 0;
-}
-
-function resetMobilePrimaryScroll() {
-  const shell = document.querySelector<HTMLElement>('.mobile-app-shell__content');
-  if (!shell) return;
-  const candidates = [
-    shell,
-    ...Array.from(
-      shell.querySelectorAll<HTMLElement>('[data-mobile-primary-scroll], [data-mobile-resource-scroll]'),
-    ),
-  ];
-  candidates.forEach((element) => {
-    element.scrollTop = 0;
-  });
+  resetMobileScrollElement(findResourceScrollElement());
 }
 
 export function useMobileNavigationState() {
@@ -100,9 +106,9 @@ export function useMobileNavigationState() {
     getLastMobileResourcePath,
     rememberResourceFromRoute,
     setLastMobileResourcePath,
-    resetResourceScroll,
+    saveResourceScroll,
+    restoreResourceScroll,
     scrollCurrentResourceToTop,
     resetCurrentResourceScroll,
-    resetMobilePrimaryScroll,
   };
 }

@@ -202,12 +202,7 @@
     </section>
 
     <section class="inbox-content" :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade }">
-      <div
-        ref="scrollContainer"
-        class="inbox-scroll"
-        :data-mobile-primary-scroll="bookmark.isMobile ? '' : null"
-        @scroll="handleInboxScroll"
-      >
+      <div ref="scrollContainer" class="inbox-scroll" @scroll="handleInboxScroll">
         <BLoading :loading="pageLoading" class="inbox-loading">
           <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
             <div class="inbox-empty__icon">!</div>

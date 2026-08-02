@@ -13,11 +13,12 @@
 
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { useRoute } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import MobileResourceTabs from '@/components/mobile/MobileResourceTabs.vue';
   import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
   import MobileGlobalSearchOverlay from '@/components/globalSearch/MobileGlobalSearchOverlay.vue';
+  import { getMobileResourcePath } from '@/config/mobileNavigation';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
 
   const props = defineProps<{
@@ -27,9 +28,11 @@
   }>();
 
   const route = useRoute();
+  const router = useRouter();
   const keyboardOpen = ref(false);
-  const { rememberResourceFromRoute, resetResourceScroll } = useMobileNavigationState();
-  const scrollResetTimers = new Set<number>();
+  const { rememberResourceFromRoute, restoreResourceScroll, saveResourceScroll } = useMobileNavigationState();
+  const restoreTimers = new Set<number>();
+  let removeBeforeGuard: (() => void) | undefined;
 
   function updateKeyboardState() {
     const viewport = window.visualViewport;
@@ -46,23 +49,23 @@
     document.documentElement.dataset.lightNotePrimaryRoot = String(props.enabled && props.showBottomNav);
   }
 
-  function clearScrollResetTimers() {
-    scrollResetTimers.forEach((timer) => window.clearTimeout(timer));
-    scrollResetTimers.clear();
+  function clearRestoreTimers() {
+    restoreTimers.forEach((timer) => window.clearTimeout(timer));
+    restoreTimers.clear();
   }
 
-  function scheduleResourceScrollReset(routeName: unknown) {
-    clearScrollResetTimers();
+  function scheduleScrollRestore(routeName: unknown) {
+    clearRestoreTimers();
     const path = rememberResourceFromRoute(routeName);
     if (!path) return;
     nextTick(() => {
       window.requestAnimationFrame(() => {
-        if (resetResourceScroll(path)) return;
+        if (restoreResourceScroll(path)) return;
         const timer = window.setTimeout(() => {
-          resetResourceScroll(path);
-          scrollResetTimers.delete(timer);
+          restoreResourceScroll(path);
+          restoreTimers.delete(timer);
         }, 80);
-        scrollResetTimers.add(timer);
+        restoreTimers.add(timer);
       });
     });
   }
@@ -70,7 +73,7 @@
   watch(
     () => route.fullPath,
     () => {
-      if (props.enabled) scheduleResourceScrollReset(route.name);
+      if (props.enabled) scheduleScrollRestore(route.name);
     },
     { immediate: true },
   );
@@ -81,10 +84,14 @@
     updateKeyboardState();
     window.visualViewport?.addEventListener('resize', updateKeyboardState);
     window.addEventListener('resize', updateKeyboardState);
+    removeBeforeGuard = router.beforeEach((_to, from) => {
+      if (props.enabled) saveResourceScroll(getMobileResourcePath(from.name));
+    });
   });
 
   onBeforeUnmount(() => {
-    clearScrollResetTimers();
+    clearRestoreTimers();
+    removeBeforeGuard?.();
     window.visualViewport?.removeEventListener('resize', updateKeyboardState);
     window.removeEventListener('resize', updateKeyboardState);
     delete document.documentElement.dataset.lightNotePrimaryRoot;
