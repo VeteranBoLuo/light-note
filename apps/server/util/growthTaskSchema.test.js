@@ -44,7 +44,9 @@ describe('growthTaskSchema', () => {
     expect(pool.query.mock.calls[8][0]).toContain('INSERT INTO user_growth_tasks');
     expect(pool.query.mock.calls[8][0]).toContain("u.role = 'root'");
     expect(pool.query.mock.calls[8][0]).toContain('ON DUPLICATE KEY UPDATE');
-    expect(pool.query.mock.calls[8][0]).toContain('claimed_at = COALESCE(claimed_at, VALUES(claimed_at))');
+    expect(pool.query.mock.calls[8][0]).toContain(
+      'claimed_at = COALESCE(user_growth_tasks.claimed_at, VALUES(claimed_at))',
+    );
     expect(pool.query.mock.calls[8][0]).toContain("'profile_avatar' AS task_key");
     expect(pool.query.mock.calls[8][0]).toContain("'first_note' AS task_key");
     expect(pool.query.mock.calls[8][0]).toContain("'first_bookmark' AS task_key");

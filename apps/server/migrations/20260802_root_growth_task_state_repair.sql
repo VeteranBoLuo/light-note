@@ -51,5 +51,5 @@ FROM (
 ) AS `root_tasks`
 ON DUPLICATE KEY UPDATE
   `status` = 'completed',
-  `completed_at` = COALESCE(`completed_at`, VALUES(`completed_at`)),
-  `claimed_at` = COALESCE(`claimed_at`, VALUES(`claimed_at`));
+  `completed_at` = COALESCE(`user_growth_tasks`.`completed_at`, VALUES(`completed_at`)),
+  `claimed_at` = COALESCE(`user_growth_tasks`.`claimed_at`, VALUES(`claimed_at`));
