@@ -174,6 +174,7 @@
       box-shadow 0.2s,
       transform 0.2s,
       border-color 0.2s;
+    min-width: 0;
   }
   .inbox-item::before {
     position: absolute;
@@ -246,9 +247,10 @@
   }
   .inbox-item__actions {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-end;
     gap: 8px;
+    min-width: max-content;
   }
   .inbox-item__actions--mobile {
     display: none;

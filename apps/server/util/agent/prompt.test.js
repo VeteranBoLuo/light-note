@@ -20,7 +20,10 @@ describe('buildPlannerPrompt', () => {
     const prompt = buildPlannerPrompt(tools, 'root', { phase: 'final' });
 
     expect(prompt).toContain('当前阶段：最终回答');
-    expect(prompt).toContain('约 800 个中文字符');
+    expect(prompt).toContain('回答篇幅服从问题复杂度');
+    expect(prompt).toContain('应保留完成回答所需的内容');
+    expect(prompt).toContain('城市与省份');
+    expect(prompt).toContain('只能给条件化建议');
     expect(prompt).not.toContain('- **query_notes**');
     expect(prompt).not.toContain('- **query_users**');
   });

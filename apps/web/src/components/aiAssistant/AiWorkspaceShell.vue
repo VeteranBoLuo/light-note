@@ -1,7 +1,11 @@
 <template>
   <section class="ai-workspace-shell" :class="`is-${activeMode}`">
     <div class="ai-workspace-shell__surface">
-      <ChatContainer ref="chatRef" @source-navigate="emit('source-navigate')" />
+      <ChatContainer
+        ref="chatRef"
+        :suppress-scroll-prompt="suppressScrollPrompt"
+        @source-navigate="emit('source-navigate')"
+      />
     </div>
   </section>
 </template>
@@ -14,6 +18,15 @@
   // 工作台只有「问答」一种界面,不需要模式切换 UI;组件退化为 ChatContainer 的薄壳,
   // 仅保留 activeMode/switchMode 供全屏偏好(mode-change)与 change-set 打开等既有对接使用。
   export type AiWorkspaceMode = 'ask' | 'organize';
+
+  withDefaults(
+    defineProps<{
+      suppressScrollPrompt?: boolean;
+    }>(),
+    {
+      suppressScrollPrompt: false,
+    },
+  );
 
   const emit = defineEmits<{
     'source-navigate': [];

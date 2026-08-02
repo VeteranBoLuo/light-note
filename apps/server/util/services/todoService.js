@@ -16,11 +16,12 @@ const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已
 const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
   due_at AS dueAt, recurrence_rule AS recurrenceRule,
   completed_at AS completedAt, update_time AS updatedAt`;
-// 工作台今日行动流的时间窗筛选:overdue=已逾期,today=今天内到期(含已过时刻)。
+// 工作台今日行动流的时间窗筛选：逾期与前端列表统一按“当前时刻”判断；
+// today 只包含今天尚未到期的任务，避免同一条待办同时计入两个摘要。
 const DUE_FILTERS = new Set(['overdue', 'today']);
 const DUE_SQL = Object.freeze({
-  overdue: 'due_at IS NOT NULL AND due_at < CURDATE()',
-  today: 'due_at IS NOT NULL AND due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)',
+  overdue: 'due_at IS NOT NULL AND due_at < NOW()',
+  today: 'due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)',
 });
 const SORT_SQL = Object.freeze({
   smart: `CASE

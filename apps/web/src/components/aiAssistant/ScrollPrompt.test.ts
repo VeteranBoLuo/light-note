@@ -7,6 +7,16 @@ import zhCN from '@/i18n/locales/zh-CN';
 import scrollPromptSource from './ScrollPrompt.vue?raw';
 
 const androidCompatStyles = readFileSync(resolve(process.cwd(), 'src/assets/css/android-webview-compat.less'), 'utf8');
+const chatContainerSource = readFileSync(resolve(process.cwd(), 'src/view/aiAssistant/ChatContainer.vue'), 'utf8');
+const workspaceShellSource = readFileSync(
+  resolve(process.cwd(), 'src/components/aiAssistant/AiWorkspaceShell.vue'),
+  'utf8',
+);
+const mobileWorkspaceSource = readFileSync(resolve(process.cwd(), 'src/view/aiAssistant/MobileAiWorkspace.vue'), 'utf8');
+const floatQuestionSource = readFileSync(
+  resolve(process.cwd(), 'src/components/aiAssistant/FloatQuestion.vue'),
+  'utf8',
+);
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<span class="svg-icon-stub" aria-hidden="true"></span>' },
@@ -57,6 +67,21 @@ describe('ScrollPrompt', () => {
     expect(scrollPromptSource).toMatch(
       /\.prompt-icon\.is-loading \.loading-spinner\s*\{[\s\S]*?border:\s*2px solid rgba\(97, 92, 237, 0\.14\);/,
     );
+    expect(scrollPromptSource).not.toContain('position: sticky');
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?width:\s*0;/);
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?height:\s*0;/);
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?flex:\s*0 0 0;/);
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?pointer-events:\s*none;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?position:\s*absolute;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?bottom:\s*8px;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?pointer-events:\s*auto;/);
+    expect(scrollPromptSource).not.toMatch(/\.scroll-prompt\s*\{[\s\S]*?z-index:/);
+    expect(chatContainerSource).toMatch(/<\/main>\s*[\s\S]*?<ScrollPrompt/);
+    expect(chatContainerSource).toContain('v-if="showScrollToBottom && !suppressScrollPrompt"');
+    expect(workspaceShellSource).toContain(':suppress-scroll-prompt="suppressScrollPrompt"');
+    expect(mobileWorkspaceSource).toContain(':suppress-scroll-prompt="historyVisible"');
+    expect(floatQuestionSource).toContain(':suppress-scroll-prompt="Boolean(activePanel)"');
+    expect(chatContainerSource).toMatch(/\.messages-container\s*\{[\s\S]*?min-height:\s*0;/);
     expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?flex:\s*0 0 44px;/);
     expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?border:\s*0;/);
     expect(androidCompatStyles).toMatch(

@@ -75,7 +75,8 @@
         : item.key === 'todo'
           ? { path: '/inbox', query: { tab: 'todo' } }
           : item.path;
-    if (target && router.resolve(target).fullPath !== route.fullPath) router.push(target);
+    // 一级导航切换不应堆叠浏览历史；否则 Android 返回手势会在底栏页面间倒退。
+    if (target && router.resolve(target).fullPath !== route.fullPath) router.replace(target);
   }
 
   function getMobileResourcePathFromRoute() {

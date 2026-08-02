@@ -44,6 +44,11 @@
     keyboardOpen.value = obscuredHeight > 120 || viewport.height / window.innerHeight < 0.75;
   }
 
+  function syncPrimaryRootState() {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.lightNotePrimaryRoot = String(props.enabled && props.showBottomNav);
+  }
+
   function clearRestoreTimers() {
     restoreTimers.forEach((timer) => window.clearTimeout(timer));
     restoreTimers.clear();
@@ -73,6 +78,8 @@
     { immediate: true },
   );
 
+  watch(() => [props.enabled, props.showBottomNav, route.fullPath], syncPrimaryRootState, { immediate: true });
+
   onMounted(() => {
     updateKeyboardState();
     window.visualViewport?.addEventListener('resize', updateKeyboardState);
@@ -87,6 +94,7 @@
     removeBeforeGuard?.();
     window.visualViewport?.removeEventListener('resize', updateKeyboardState);
     window.removeEventListener('resize', updateKeyboardState);
+    delete document.documentElement.dataset.lightNotePrimaryRoot;
   });
 </script>
 

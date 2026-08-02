@@ -29,20 +29,23 @@
 </script>
 
 <style scoped lang="less">
-  /* 智能滚动提示 - 重新设计为浮动定位，不占用布局空间 */
+  /* 零占位锚点：只浮动圆形按钮，不生成整行空白或背景条。 */
   .scroll-prompt {
-    position: sticky;
-    bottom: 1rem;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: center;
-    z-index: 10;
+    position: relative;
+    width: 0;
+    height: 0;
+    min-height: 0;
+    flex: 0 0 0;
+    align-self: center;
+    pointer-events: none;
     animation: slideInUp 0.3s ease;
   }
 
   .prompt-icon {
-    position: relative;
+    position: absolute;
+    bottom: 8px;
+    left: 50%;
+    transform: translateX(-50%);
     width: 36px;
     min-width: 36px;
     height: 36px;
@@ -53,6 +56,7 @@
     background: var(--card-background);
     color: var(--text-color);
     box-shadow: 0 4px 14px rgba(97, 92, 237, 0.18);
+    pointer-events: auto;
   }
 
   .loading-spinner {

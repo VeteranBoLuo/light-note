@@ -1424,7 +1424,7 @@
     }
   }
   .table-batch-actions {
-    margin: 8px 10px 0;
+    margin: 8px 10px;
     padding: 8px 10px;
     gap: 8px;
     flex-shrink: 0;
@@ -1567,7 +1567,9 @@
       opacity: 0;
       position: absolute;
       right: 8px;
+      z-index: 1;
       gap: 10px;
+      flex-wrap: nowrap;
       transition: opacity 0.2s;
       div {
         cursor: pointer;
@@ -1609,7 +1611,8 @@
     white-space: nowrap;
   }
   .file-label {
-    width: calc(100% - 100px);
+    // 桌面端固定为下载、重命名、标签和更多四个操作预留空间，待整理角标不能压到按钮上。
+    width: calc(100% - 140px);
     cursor: pointer;
     gap: 8px;
     color: var(--text-color);
@@ -1782,7 +1785,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 14px 0;
+    padding: 10px 14px;
   }
   .card-toolbar .batch-actions {
     flex-shrink: 0;

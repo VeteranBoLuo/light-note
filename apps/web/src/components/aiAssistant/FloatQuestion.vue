@@ -71,6 +71,7 @@
         <AiWorkspaceShell
           ref="aiAssistantRef"
           class="ai-drawer-main"
+          :suppress-scroll-prompt="Boolean(activePanel)"
           @source-navigate="handleSourceNavigate"
           @mode-change="handleModeChange"
         />

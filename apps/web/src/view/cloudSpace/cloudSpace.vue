@@ -787,10 +787,10 @@
   .mobile-folder-item {
     max-width: 140px;
     min-width: fit-content;
-    min-height: 40px;
-    padding: 8px 12px;
+    min-height: 32px;
+    padding: 5px 10px;
     box-sizing: border-box;
-    border-radius: 999px;
+    border-radius: 9px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
     background: var(--menu-body-bg-color);
     color: var(--text-color);
@@ -870,7 +870,7 @@
 
     .mobile-folder-item {
       font-size: 12px;
-      padding: 8px 10px;
+      padding: 5px 9px;
       max-width: 120px;
     }
 

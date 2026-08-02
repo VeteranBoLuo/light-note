@@ -339,7 +339,7 @@ describe('todoService', () => {
     expect(result.items).toEqual([]);
     const [sql, params] = connection.query.mock.calls[0];
     expect(sql).toContain("status = ?");
-    expect(sql).toContain('due_at IS NOT NULL AND due_at < CURDATE()');
+    expect(sql).toContain('due_at IS NOT NULL AND due_at < NOW()');
     expect(params).toEqual(['user-4', 'pending', 4, 0]);
   });
 
@@ -355,7 +355,7 @@ describe('todoService', () => {
     });
 
     const [sql] = connection.query.mock.calls[0];
-    expect(sql).toContain('due_at >= CURDATE() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
+    expect(sql).toContain('due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
   });
 
   it('拒绝未知的 due 筛选取值', async () => {

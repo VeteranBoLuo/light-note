@@ -341,11 +341,13 @@
   .today-actions {
     display: grid;
     gap: 12px;
+    min-width: 0;
   }
 
   .today-actions__content {
     display: grid;
     gap: 12px;
+    min-width: 0;
   }
 
   /* 桌面工作台使用单一紧凑外框；条目在 contained 模式下采用明确行高，
@@ -549,7 +551,9 @@
     display: grid;
     justify-items: center;
     gap: 4px;
+    min-width: 0;
     padding: 22px 14px;
+    box-sizing: border-box;
     border: 1px dashed var(--card-border-color);
     border-radius: 14px;
     text-align: center;
@@ -567,16 +571,15 @@
 
   .today-actions--compact-empty .today-actions__empty {
     padding: 10px 12px;
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     justify-items: start;
-    align-items: center;
-    column-gap: 8px;
+    gap: 3px;
     text-align: left;
 
     span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      min-width: 0;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }
   }
 

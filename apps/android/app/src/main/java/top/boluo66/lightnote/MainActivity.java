@@ -814,10 +814,20 @@ public final class MainActivity extends Activity {
         } else if (errorView.getVisibility() == View.VISIBLE) {
             errorView.setVisibility(View.GONE);
             webView.loadUrl(WebViewSupport.HOME_URL);
-        } else if (webView.canGoBack()) {
-            webView.goBack();
         } else {
-            super.onBackPressed();
+            webView.evaluateJavascript(
+                "(function(){try{return Boolean(window.history.state&&window.history.state.__lnMobileOverlayId)?'overlay':document.documentElement.dataset.lightNotePrimaryRoot==='true'?'root':'page';}catch(error){return 'page';}})();",
+                state -> {
+                    if ("\"root\"".equals(state)) {
+                        // 一级导航返回只把任务移到后台，不结束进程，也不在底栏页面间回退。
+                        moveTaskToBack(true);
+                    } else if (webView.canGoBack()) {
+                        webView.goBack();
+                    } else {
+                        moveTaskToBack(true);
+                    }
+                }
+            );
         }
     }
 

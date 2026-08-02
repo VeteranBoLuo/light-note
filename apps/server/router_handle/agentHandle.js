@@ -83,7 +83,7 @@ import {
   removeInvalidAgentCitations,
   resolveToolSources,
 } from '../util/agent/sourceUtils.js';
-import { generateFinalReply } from '../util/agent/finalReply.js';
+import { generateFinalReply, resolveFinalReplyTemperature } from '../util/agent/finalReply.js';
 import { AgentToolPolicyError, enforceToolPolicy, normalizeRegisteredTool } from '../util/agent/toolPolicy.js';
 import { decideDirectAgentRoute } from '../util/agent/directRoute.js';
 import {
@@ -2494,12 +2494,13 @@ export async function agentChat(req, res) {
             },
           ];
       const finalStartedAt = Date.now();
-      // 查询结果、引用证据和动作回执属于事实回答。即使用户选择“创意”风格，也不能让高温
-      // 破坏工具事实或诱发重复退化；无工具的创作/闲聊仍保留用户选择的风格温度。
+      // 长度由问题复杂度决定，不再用低 token 上限压缩普通回答。
+      // 温度按语义收敛：事实、比较和建议保持稳定，只有明确创作请求保留发散风格。
       const groundedFinalReply = usedTools.length > 0 || evidence.length > 0 || verifyExecutionClaims;
-      const finalReplyTemperature = groundedFinalReply
-        ? Math.min(Number.isFinite(styleTemperature) ? styleTemperature : 0.3, 0.6)
-        : styleTemperature;
+      const finalReplyTemperature = resolveFinalReplyTemperature(message, styleTemperature, {
+        grounded: groundedFinalReply,
+        translation: enableTranslation,
+      });
       sseLifecycle?.stage('responding');
       const finalReply = await generateFinalReply({
         messages: finalMessages,

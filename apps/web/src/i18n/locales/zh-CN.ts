@@ -823,6 +823,9 @@ export default {
       captureTodo: '待办',
       continueTitle: '继续处理',
       continueHint: '接着上次的内容',
+      pullToRefresh: '下拉刷新',
+      releaseToRefresh: '松开刷新',
+      refreshing: '正在刷新…',
     },
     empty: {
       continueTitle: '还没有可继续的内容',

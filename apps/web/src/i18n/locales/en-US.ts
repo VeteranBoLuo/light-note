@@ -837,6 +837,9 @@ export default {
       captureTodo: 'Todo',
       continueTitle: 'Pick up where you left off',
       continueHint: 'Recent notes and files',
+      pullToRefresh: 'Pull to refresh',
+      releaseToRefresh: 'Release to refresh',
+      refreshing: 'Refreshing…',
     },
     empty: {
       continueTitle: 'Nothing to resume yet',

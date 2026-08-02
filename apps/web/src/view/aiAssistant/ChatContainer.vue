@@ -97,13 +97,14 @@
             />
           </div>
         </template>
-        <!-- 智能滚动提示  -->
-        <ScrollPrompt
-          v-if="showScrollToBottom"
-          :is-loading="isLoading"
-          @scroll-to-bottom-click="handleScrollToBottomClick"
-        />
       </main>
+
+      <!-- 零占位浮动锚点：仅圆形按钮悬浮，不生成整行背景条。 -->
+      <ScrollPrompt
+        v-if="showScrollToBottom && !suppressScrollPrompt"
+        :is-loading="isLoading"
+        @scroll-to-bottom-click="handleScrollToBottomClick"
+      />
 
       <!-- 回答后的快捷提问固定在输入区上方，不再异步撑高消息滚动区。 -->
       <div v-if="showRecommendationDock" class="recommendation-dock">
@@ -258,6 +259,15 @@
   import { toAiMemoryInfluenceActivity } from '@/utils/aiMemoryInfluence';
   import { scrollIntoContainer } from '@/utils/zoom';
   import { decideAiConversationContinuity, type AiConversationRecency } from '@/utils/aiConversationContinuity';
+
+  withDefaults(
+    defineProps<{
+      suppressScrollPrompt?: boolean;
+    }>(),
+    {
+      suppressScrollPrompt: false,
+    },
+  );
 
   const { t, locale } = useI18n();
 
@@ -2466,6 +2476,7 @@
 
   .messages-container {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     overscroll-behavior-y: contain;
     overflow-anchor: none;
@@ -2576,18 +2587,6 @@
       padding: 0.65rem 0.625rem;
     }
 
-    /* 移动端调整滚动提示位置 */
-    .scroll-prompt {
-      bottom: 80px;
-      right: 15px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .scroll-prompt {
-      bottom: 70px;
-      right: 10px;
-    }
   }
 
   @media (prefers-reduced-motion: reduce) {

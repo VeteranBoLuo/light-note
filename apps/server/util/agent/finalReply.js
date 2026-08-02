@@ -5,14 +5,18 @@ const DEFAULT_FALLBACK = '抱歉，无法处理该请求。';
 const LEAK_RETRY_INSTRUCTION =
   '刚才的回答格式无效。现在只能基于已经提供的对话与工具结果直接给出最终答复，禁止输出、描述或尝试任何工具调用、XML、DSML、函数名和内部协议标记。';
 const QUALITY_RETRY_INSTRUCTION =
-  '刚才的回答因截断、重复或格式异常未通过质量检查。请重新回答用户原始问题：只依据已经提供的事实资料，结论只说一次，使用简短完整的句子，不要自问自答、反复解释、添加结束标记或编造数据。若没有查到数据，用一句话如实说明。';
+  '刚才的回答因截断、重复或语义退化未通过质量检查。请重新回答用户原始问题：只依据已经提供的事实资料，完整保留解决问题所需的内容，使用连贯、完整的句子；不要自问自答、重复结论、无意义续写、添加结束标记或编造数据。若没有查到数据，请如实说明。';
 const QUALITY_FALLBACK = '抱歉，本次回答生成异常，请重新生成。';
 const INVALID_FINISH_REASONS = new Set(['length', 'max_tokens', 'content_filter']);
 const MAX_UNBROKEN_SEGMENT_LENGTH = 480;
 const MAX_CJK_UNBROKEN_SEGMENT_LENGTH = 260;
 const MAX_ABSOLUTE_CONTENT_LENGTH = 12_000;
-const MIN_RUNAWAY_INSPECTION_LENGTH = 800;
-const STREAM_QUALITY_CHECK_STEP = 48;
+const MIN_RUNAWAY_INSPECTION_LENGTH = 420;
+const MIN_REPETITION_INSPECTION_LENGTH = 500;
+const STREAM_QUALITY_CHECK_STEP = 32;
+const STREAM_QUALITY_HOLDBACK_LENGTH = 320;
+const EXPLICIT_CREATIVE_PATTERN =
+  /写(?:一首|首|一篇|篇|一个|个)?[^。！？\n]{0,16}(?:诗|歌词|故事|小说|文案|剧本|段子)|创作|续写|改写|润色|脑洞|角色扮演|仿写|creative\s+writing|write\s+(?:a\s+)?(?:poem|story|script|copy)/iu;
 
 function emptyUsage() {
   return { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
@@ -38,7 +42,7 @@ function normalizedForRepetition(content) {
 function hasExcessiveRepeatedShingles(content) {
   // 代码、长哈希和机器生成文本允许结构性重复；质量门禁只判断用户可读正文。
   const normalized = normalizedForRepetition(proseOutsideCodeFences(content));
-  if (normalized.length < 800) return false;
+  if (normalized.length < MIN_REPETITION_INSPECTION_LENGTH) return false;
   const size = 12;
   const step = 4;
   const counts = new Map();
@@ -76,6 +80,35 @@ function hasUnbrokenRunaway(content) {
     });
 }
 
+function hasFragmentedHanTail(content) {
+  const prose = proseOutsideCodeFences(content).trim();
+  if (prose.length < MIN_RUNAWAY_INSPECTION_LENGTH) return false;
+  const tailSegments = prose
+    .split(/[。！？!?；;\n]/u)
+    .filter(Boolean)
+    .slice(-2);
+  return tailSegments.some((segment) => {
+    const compact = segment.replace(/[\s\p{P}\p{S}]/gu, '');
+    const han = compact.match(/\p{Script=Han}/gu) || [];
+    if (han.length < 48 || han.length > 110 || han.length / Math.max(compact.length, 1) < 0.9) return false;
+    const uniqueRatio = new Set(han).size / han.length;
+    const connectiveCount = (han.join('').match(/[的了是在有和与及为把被而也就都不这那可会到从对将让]/gu) || []).length;
+    return uniqueRatio >= 0.72 && connectiveCount / han.length <= 0.08;
+  });
+}
+
+/**
+ * 回答长度交给问题本身决定；这里只控制生成随机性。
+ * 事实、建议、比较与翻译使用稳定温度，只有明确创作请求才保留用户选择的发散度。
+ */
+export function resolveFinalReplyTemperature(message, styleTemperature, { grounded = false, translation = false } = {}) {
+  const configured = Number.isFinite(styleTemperature) ? styleTemperature : null;
+  if (translation) return Math.min(configured ?? 0.3, 0.3);
+  if (grounded) return Math.min(configured ?? 0.3, 0.6);
+  if (EXPLICIT_CREATIVE_PATTERN.test(String(message || ''))) return configured ?? undefined;
+  return Math.min(configured ?? 0.7, 0.7);
+}
+
 /**
  * 最终回答的通用质量门禁。
  *
@@ -95,6 +128,7 @@ export function inspectFinalReplyQuality(content, finishReason) {
   }
   if (text.length > MAX_ABSOLUTE_CONTENT_LENGTH) issues.push('too_long');
   if (hasUnbrokenRunaway(text)) issues.push('unbroken_runaway');
+  if (hasFragmentedHanTail(text)) issues.push('fragmented_han_tail');
   if (hasExcessiveRepeatedShingles(text)) issues.push('repetitive');
   if (looksLikeLeakedToolCall(text)) issues.push('tool_protocol_leak');
   return { valid: issues.length === 0, issues };
@@ -141,7 +175,7 @@ export async function generateFinalReply({
     const retryResponse = await requestAi([...messages, { role: 'user', content: reasonInstruction }], {
       toolChoice: 'none',
       signal,
-      maxTokens: Math.min(maxTokens, 900),
+      maxTokens,
       temperature: Math.min(Number.isFinite(temperature) ? temperature : 0.3, 0.2),
       trace: { ...trace, stage: 'final_quality_retry' },
     });
@@ -177,6 +211,16 @@ export async function generateFinalReply({
   }
 
   let lastStreamQualityCheckAt = 0;
+  let publishedLength = 0;
+  const publishVerifiedStreamContent = (flushAll = false) => {
+    const publishUntil = flushAll
+      ? content.length
+      : Math.max(0, content.length - STREAM_QUALITY_HOLDBACK_LENGTH);
+    if (publishUntil <= publishedLength) return;
+    const verifiedChunk = content.slice(publishedLength, publishUntil);
+    publishedLength = publishUntil;
+    if (verifiedChunk) onDelta(verifiedChunk);
+  };
   const streamResult = await requestAiStream(messages, {
     temperature,
     maxTokens,
@@ -194,7 +238,9 @@ export async function generateFinalReply({
     onDelta: (chunk) => {
       if (!chunk) return;
       content += chunk;
-      onDelta(chunk);
+      // 不立即公开最新尾段：先给滚动质量门禁一个观察窗口。
+      // 正常回答结束时完整冲刷；异常时尾部乱码不会进入用户可见正文。
+      publishVerifiedStreamContent();
     },
   });
   apiCalls += 1;
@@ -205,7 +251,7 @@ export async function generateFinalReply({
   const streamQuality = inspectFinalReplyQuality(content, streamResult.finishReason);
   qualityIssues = [...new Set([...progressiveQualityIssues, ...streamQuality.issues])];
   if (streamResult.leakedToolCall || streamResult.consumerStopped || !streamQuality.valid) {
-    const hadVisibleStreamContent = Boolean(content);
+    const hadVisibleStreamContent = publishedLength > 0;
     const retryContent = await retryInvalidReply(
       streamResult.leakedToolCall || streamQuality.issues.includes('tool_protocol_leak')
         ? LEAK_RETRY_INSTRUCTION
@@ -216,6 +262,8 @@ export async function generateFinalReply({
     content = retryContent;
     // 已经公开过异常前缀时不再把恢复正文追加在其后；终态快照会整体替换。
     if (!hadVisibleStreamContent) onDelta(retryContent);
+  } else {
+    publishVerifiedStreamContent(true);
   }
 
   if (!content) {

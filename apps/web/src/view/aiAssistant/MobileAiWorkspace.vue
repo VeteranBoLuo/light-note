@@ -1,6 +1,10 @@
 <template>
   <main class="mobile-ai-workspace">
-    <AiWorkspaceShell ref="workspaceRef" class="mobile-ai-workspace__body" />
+    <AiWorkspaceShell
+      ref="workspaceRef"
+      class="mobile-ai-workspace__body"
+      :suppress-scroll-prompt="historyVisible"
+    />
     <transition name="mobile-ai-history">
       <section
         v-if="historyVisible"

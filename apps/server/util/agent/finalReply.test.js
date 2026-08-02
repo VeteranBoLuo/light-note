@@ -12,7 +12,8 @@ vi.mock('./deepseekClient.js', () => ({
   looksLikeLeakedToolCall: mocks.looksLikeLeakedToolCall,
 }));
 
-const { generateFinalReply, inspectFinalReplyProgress, inspectFinalReplyQuality } = await import('./finalReply.js');
+const { generateFinalReply, inspectFinalReplyProgress, inspectFinalReplyQuality, resolveFinalReplyTemperature } =
+  await import('./finalReply.js');
 
 const RUNAWAY_CHINESE_SAMPLE = `
 前半段仍然可以正常阅读。深圳适合短途城市和海滨体验，四川更适合时间充裕、偏好自然与人文的旅行者。你可以先按假期长度、预算和同行人来选择，三天左右优先深圳，一周以上优先四川。
@@ -45,13 +46,15 @@ const NORMAL_LONG_CHINESE_SAMPLE = [
   '在没有更多条件时，我会把深圳定义为轻松短途方案，把四川定义为内容更丰富但准备要求更高的长途方案。',
 ].join('\n');
 
+const FRAGMENTED_TAIL_SAMPLE = `${NORMAL_LONG_CHINESE_SAMPLE}\n简画毕白常红依言志主示标收极理给订随途程体显界终区我许繁然故全窄来生卷置本目无居间上送端承获展策循归照随形候落起收。`;
+
 describe('generateFinalReply', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.looksLikeLeakedToolCall.mockReturnValue(false);
   });
 
-  it('把供应商的多个真实增量原样推送给调用方', async () => {
+  it('短回答先经过尾部质量窗口，再完整推送给调用方', async () => {
     mocks.stream.mockImplementation(async (_messages, options) => {
       options.onDelta('第一段');
       options.onDelta('第二段');
@@ -71,7 +74,7 @@ describe('generateFinalReply', () => {
       onDelta: (chunk) => chunks.push(chunk),
     });
 
-    expect(chunks).toEqual(['第一段', '第二段']);
+    expect(chunks).toEqual(['第一段第二段']);
     expect(result).toEqual(
       expect.objectContaining({
         content: '第一段第二段',
@@ -112,7 +115,7 @@ describe('generateFinalReply', () => {
       expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('禁止输出') })]),
       expect.objectContaining({ toolChoice: 'none' }),
     );
-    expect(chunks).toEqual(['临时前缀']);
+    expect(chunks).toEqual(['恢复后的回答']);
     expect(result).toEqual(
       expect.objectContaining({
         content: '恢复后的回答',
@@ -145,7 +148,7 @@ describe('generateFinalReply', () => {
     expect(result.qualityRetried).toBe(true);
   });
 
-  it('输出被模型上限截断时自动以低温短回答重试', async () => {
+  it('输出被模型上限截断时自动低温重试，但不压缩回答预算', async () => {
     mocks.request
       .mockResolvedValueOnce({
         content: '重复说明'.repeat(500),
@@ -170,7 +173,7 @@ describe('generateFinalReply', () => {
     });
     expect(mocks.request.mock.calls[1][1]).toMatchObject({
       toolChoice: 'none',
-      maxTokens: 900,
+      maxTokens: 2200,
       temperature: 0.2,
     });
   });
@@ -194,12 +197,29 @@ describe('generateFinalReply', () => {
     expect(inspectFinalReplyProgress(NORMAL_LONG_CHINESE_SAMPLE)).toEqual({ valid: true, issues: [] });
   });
 
-  it('流式回答退化时在异常增量公开前熔断，并用低温短回答恢复', async () => {
-    const firstChunk = RUNAWAY_CHINESE_SAMPLE.slice(0, 620);
-    const runawayChunk = RUNAWAY_CHINESE_SAMPLE.slice(620);
+  it('识别有标点回答末尾退化成随机汉字碎片', () => {
+    expect(inspectFinalReplyQuality(FRAGMENTED_TAIL_SAMPLE, 'stop')).toMatchObject({
+      valid: false,
+      issues: expect.arrayContaining(['fragmented_han_tail']),
+    });
+  });
+
+  it('事实与建议类回答降低随机性，只有明确创作请求保留发散温度', () => {
+    expect(resolveFinalReplyTemperature('你觉得深圳和四川哪个适合旅游', 1.5)).toBe(0.7);
+    expect(resolveFinalReplyTemperature('总结我的资料', 1.5, { grounded: true })).toBe(0.6);
+    expect(resolveFinalReplyTemperature('翻译这段文字', 1.5, { translation: true })).toBe(0.3);
+    expect(resolveFinalReplyTemperature('写一个科幻故事', 1.5)).toBe(1.5);
+    expect(resolveFinalReplyTemperature('解释一下相对论', undefined)).toBe(0.7);
+  });
+
+  it('流式回答退化时保留异常尾部、提前熔断，并用低温完整重答恢复', async () => {
+    const safePrefix = NORMAL_LONG_CHINESE_SAMPLE.slice(0, 430);
+    const runawayTail = '乱答无据硬接词序错位意思破碎'.repeat(28);
     mocks.stream.mockImplementation(async (_messages, options) => {
       let content = '';
-      for (const delta of [firstChunk, runawayChunk]) {
+      const source = `${safePrefix}${runawayTail}`;
+      for (let index = 0; index < source.length; index += 48) {
+        const delta = source.slice(index, index + 48);
         const candidate = `${content}${delta}`;
         const stopReason = options.shouldStop?.({ content: candidate, delta });
         if (stopReason) {
@@ -232,17 +252,45 @@ describe('generateFinalReply', () => {
       onDelta: (chunk) => chunks.push(chunk),
     });
 
-    expect(chunks).toEqual([firstChunk]);
+    const visiblePrefix = chunks.join('');
+    expect(safePrefix.startsWith(visiblePrefix)).toBe(true);
+    expect(visiblePrefix).not.toContain('乱答无据');
     expect(result).toMatchObject({
       content: '短途城市体验选深圳；时间充裕、偏爱自然人文选四川。',
       apiCalls: 2,
       qualityRetried: true,
-      qualityIssues: expect.arrayContaining(['unbroken_runaway']),
+      qualityIssues: expect.arrayContaining(['repetitive']),
       usageStatus: 'missing',
     });
     expect(mocks.request).toHaveBeenCalledWith(
-      expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('重复或格式异常') })]),
-      expect.objectContaining({ toolChoice: 'none', maxTokens: 900, temperature: 0.2 }),
+      expect.arrayContaining([expect.objectContaining({ content: expect.stringContaining('语义退化') })]),
+      expect.objectContaining({ toolChoice: 'none', maxTokens: 2200, temperature: 0.2 }),
     );
+  });
+
+  it('正常长回答不因尾部隔离被截断', async () => {
+    mocks.stream.mockImplementation(async (_messages, options) => {
+      for (let index = 0; index < NORMAL_LONG_CHINESE_SAMPLE.length; index += 137) {
+        options.onDelta(NORMAL_LONG_CHINESE_SAMPLE.slice(index, index + 137));
+      }
+      return {
+        content: NORMAL_LONG_CHINESE_SAMPLE,
+        leakedToolCall: false,
+        usage: { promptTokens: 20, completionTokens: 900, totalTokens: 920 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const chunks = [];
+
+    const result = await generateFinalReply({
+      messages: [{ role: 'user', content: '请完整比较两个目的地' }],
+      stream: true,
+      onDelta: (chunk) => chunks.push(chunk),
+    });
+
+    expect(chunks.join('')).toBe(NORMAL_LONG_CHINESE_SAMPLE);
+    expect(result.content).toBe(NORMAL_LONG_CHINESE_SAMPLE);
+    expect(result.qualityRetried).toBe(false);
   });
 });
