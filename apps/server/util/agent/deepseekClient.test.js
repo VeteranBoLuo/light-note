@@ -211,6 +211,41 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
       leakedToolCall: true,
     });
   });
+
+  it('消费方质量熔断会在异常增量公开前取消 Provider 流', async () => {
+    delete process.env.AGENT_LLM_PROVIDER;
+    process.env.DEEPSEEK_API_KEY = 'test-key';
+    const cancel = vi.fn();
+    const encoder = new TextEncoder();
+    const sse = [
+      `data: {"choices":[{"delta":{"content":"${'正常前缀。'.repeat(10)}"},"finish_reason":null}]}`,
+      `data: {"choices":[{"delta":{"content":"${'异常续写'.repeat(12)}"},"finish_reason":null}]}`,
+      '',
+    ].join('\n');
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(sse));
+      },
+      cancel,
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(body, { status: 200 }));
+    const chunks = [];
+
+    const result = await requestDeepSeekStream([{ role: 'user', content: 'hi' }], {
+      onDelta: (chunk) => chunks.push(chunk),
+      shouldStop: ({ content }) => (content.includes('异常续写') ? 'unbroken_runaway' : false),
+    });
+
+    expect(chunks.join('')).not.toContain('异常续写');
+    expect(cancel).toHaveBeenCalledWith('unbroken_runaway');
+    expect(result).toMatchObject({
+      content: chunks.join(''),
+      consumerStopped: true,
+      consumerStopReason: 'unbroken_runaway',
+      finishReason: 'consumer_stop',
+      usageStatus: 'missing',
+    });
+  });
 });
 
 describe('looksLikeLeakedToolCall(工具调用协议泄漏检测)', () => {

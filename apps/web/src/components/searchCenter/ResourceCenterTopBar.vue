@@ -28,7 +28,7 @@
       class="resource-center-topbar__input"
       :value="keyword"
       :placeholder="placeholder || t('globalSearch.placeholder')"
-      height="38px"
+      height="44px"
       clearable
       @update:value="(next: string | number | undefined) => emit('update:keyword', String(next ?? ''))"
       @enter="emit('submit')"
@@ -38,7 +38,7 @@
       </template>
     </BInput>
 
-    <div v-if="selectionMode" class="resource-center-topbar__selection-actions">
+    <div v-if="selectionMode && selectionVariant === 'inbox'" class="resource-center-topbar__selection-actions">
       <BButton
         size="small"
         type="primary"
@@ -59,32 +59,20 @@
       </BButton>
     </div>
     <BPopover
-      v-else-if="showMenu"
+      v-else-if="showMenu && !selectionMode"
       v-model:open="menuOpen"
       trigger="click"
       placement="bottom-right"
       overlay-class-name="resource-center-menu-popover"
     >
-      <BButton
-        class="resource-center-topbar__menu"
-        :aria-label="t('inbox.mobileMenu')"
-        :title="t('inbox.mobileMenu')"
-      >
-        <SvgIcon :src="icon.navigation.menu" size="19" aria-hidden="true" />
+      <BButton class="resource-center-topbar__menu" :aria-label="t('inbox.mobileMenu')" :title="t('inbox.mobileMenu')">
+        <SvgIcon :src="icon.common.more" size="19" aria-hidden="true" />
       </BButton>
       <template #content>
         <div class="resource-center-topbar__menu-content">
-          <BInput
-            :id="`${inputId}-menu-search`"
-            :value="keyword"
-            :placeholder="placeholder || t('globalSearch.placeholder')"
-            clearable
-            @update:value="(next: string | number | undefined) => emit('update:keyword', String(next ?? ''))"
-            @enter="submitAndClose"
-          />
           <BButton @click="emitMenu('create')">{{ createLabel || t('inbox.quickCapture') }}</BButton>
-          <BButton @click="emitMenu('batch')">{{ t('inbox.mobileBatchSelect') }}</BButton>
-          <BButton @click="emitMenu('sort')">{{ t('inbox.mobileSort') }}</BButton>
+          <BButton v-if="allowBatch" @click="emitMenu('batch')">{{ t('inbox.mobileBatchSelect') }}</BButton>
+          <BButton v-if="allowSort" @click="emitMenu('sort')">{{ t('inbox.mobileSort') }}</BButton>
           <BButton @click="emitMenu('filter')">{{ t('inbox.mobileFilter') }}</BButton>
         </div>
       </template>
@@ -121,8 +109,22 @@
       showMenu?: boolean;
       selectionMode?: boolean;
       selectedCount?: number;
+      selectionVariant?: 'inbox' | 'basic';
+      allowBatch?: boolean;
+      allowSort?: boolean;
     }>(),
-    { placeholder: '', createLabel: '', title: '', compactTitle: false, showMenu: false, selectionMode: false, selectedCount: 0 },
+    {
+      placeholder: '',
+      createLabel: '',
+      title: '',
+      compactTitle: false,
+      showMenu: false,
+      selectionMode: false,
+      selectedCount: 0,
+      selectionVariant: 'inbox',
+      allowBatch: true,
+      allowSort: true,
+    },
   );
 
   const emit = defineEmits<{
@@ -145,11 +147,6 @@
     menuOpen.value = false;
     emit(event);
   }
-
-  function submitAndClose() {
-    menuOpen.value = false;
-    emit('submit');
-  }
 </script>
 
 <style scoped lang="less">
@@ -166,9 +163,9 @@
   }
 
   .resource-center-topbar__back {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;
@@ -205,8 +202,8 @@
   }
 
   .resource-center-topbar__selection-actions :deep(.b_btn) {
-    height: 30px;
-    padding: 0 7px;
+    height: 40px;
+    padding: 0 9px;
     font-size: 11px;
   }
 
@@ -216,9 +213,9 @@
   }
 
   .resource-center-topbar__action {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;
@@ -227,9 +224,9 @@
   }
 
   .resource-center-topbar__menu {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     flex: 0 0 auto;
     border-radius: 11px;

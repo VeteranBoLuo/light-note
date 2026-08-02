@@ -109,6 +109,7 @@
           :clear-key="clearSelectionKey"
           @preview-file="previewFile"
           @move-field="moveField"
+          @exit-batch="toggleBatchMode"
         />
       </div>
     </div>
@@ -122,6 +123,13 @@
       @prev="previewPrevFile"
       @next="previewNextFile"
       @close="closePreview"
+    />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobilePageActionsOpen"
+      :title="t('common.more')"
+      :actions="mobilePageActions"
+      @action="handleMobilePageAction"
     />
   </ResourcePageShell>
 </template>
@@ -152,6 +160,7 @@
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { apiBasePost } from '@/http/request';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -215,6 +224,14 @@
 
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
   const batchMode = ref(false);
+  const mobilePageActionsOpen = ref(false);
+  const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'batch',
+      label: t(batchMode.value ? 'cloudSpace.exitBatch' : 'cloudSpace.batchAction'),
+      icon: icon.filterPanel.check,
+    },
+  ]);
   // 视图优先取用户偏好(设置页「云空间视图」/ 跨设备),再回退本浏览器独立缓存,最后卡片——与标签详情/资源中心对齐。
   // user 偏好在 App.vue setup 阶段已从 localStorage 早恢复,本路由组件 setup 时已就绪。
   const viewMode = ref<'card' | 'table'>(
@@ -240,6 +257,15 @@
 
   useMobileTopBar(['cloudSpace'], {
     searchSourceType: 'file',
+    onAuxiliaryAction: () => {
+      if (batchMode.value) {
+        toggleBatchMode();
+        return;
+      }
+      mobilePageActionsOpen.value = true;
+    },
+    auxiliaryActionLabel: () => t(batchMode.value ? 'cloudSpace.exitBatch' : 'common.more'),
+    auxiliaryActionIcon: () => (batchMode.value ? icon.common.close : icon.common.more),
     onAdd: () => handleBtnGroup.value?.openFileDialog(),
     addLabel: () => t('cloudSpace.uploadFile'),
   });
@@ -375,6 +401,10 @@
       clearSelectionKey.value += 1;
     }
   };
+
+  function handleMobilePageAction(action: MobilePageActionItem) {
+    if (action.key === 'batch') toggleBatchMode();
+  }
 
   const onUploadFiles = ({ files, folderId }) => {
     handleBtnGroup.value?.uploadFiles(files, folderId);
@@ -750,13 +780,16 @@
     gap: 8px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 0 0 6px;
+    padding: 0 24px 6px 0;
+    box-shadow: inset -20px 0 16px -18px color-mix(in srgb, var(--text-color) 46%, transparent);
   }
 
   .mobile-folder-item {
     max-width: 140px;
     min-width: fit-content;
-    padding: 4px 12px;
+    min-height: 40px;
+    padding: 8px 12px;
+    box-sizing: border-box;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 78%, transparent);
     background: var(--menu-body-bg-color);
@@ -837,7 +870,7 @@
 
     .mobile-folder-item {
       font-size: 12px;
-      padding: 4px 10px;
+      padding: 8px 10px;
       max-width: 120px;
     }
 

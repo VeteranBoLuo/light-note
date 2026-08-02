@@ -31,7 +31,7 @@ export const MOBILE_RESOURCE_NAVIGATION: readonly MobileResourceNavigationItem[]
     key: 'bookmark',
     path: '/home',
     labelKey: 'navigation.bookmark',
-    routeNames: ['home', 'home:id', 'home:search'],
+    routeNames: ['home', 'home:id', 'home:search', 'bookmarkMg'],
   },
   {
     key: 'note',

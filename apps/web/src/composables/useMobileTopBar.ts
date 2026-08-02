@@ -9,6 +9,9 @@ import type { GlobalSearchType } from '@/utils/globalSearchTypes';
  * （宽框 / 图标），但都打开同一个 GlobalSearchOverlay。
  */
 export interface MobileTopBarBinding {
+  /** 二级页面标题；与 onBack 同时提供时，顶栏切换为「返回 + 标题」形态。 */
+  title?: () => string;
+  onBack?: () => void;
   /**
    * 搜索入口形态：
    * - `wide`（默认）：宽全局搜索框，用于今日、资料、待办

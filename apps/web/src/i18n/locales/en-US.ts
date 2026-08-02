@@ -914,6 +914,7 @@ export default {
     deleteConfirmTrash: 'Delete {type} "{name}"? It will be moved to the trash.',
     subtitle:
       'Search bookmarks, notes, cloud files, and tags together to quickly find the content you keep in LightNote.',
+    searchFieldLabel: 'Search',
     searchPlaceholder: 'Search bookmarks / notes / files / tags',
     continueSearch: 'Continue searching...',
     mobileTrigger: 'Search bookmarks / notes / files',
@@ -1967,6 +1968,10 @@ export default {
     wrEmpty: 'No activity yet this week — start with one entry!',
     pageTitle: 'My Growth',
     pageSubtitle: 'Level, check-in and perks — your footprint in Light Note',
+    mobileTabOverview: 'Overview',
+    mobileTabTasks: 'Tasks',
+    mobileTabAchievements: 'Awards',
+    mobileTabAssets: 'Assets',
     adminContextTitle: 'Admin view mode',
     adminContextNotice:
       'You are viewing the target account’s growth data. Check-ins, make-ups, claims, point spending, draws, item use, and cosmetics are account entitlements and cannot be performed in either admin preview or content maintenance.',

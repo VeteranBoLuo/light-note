@@ -1,9 +1,18 @@
 <template>
-  <ResourcePageShell :title="title" :subtitle="subtitle" accent="bookmark" show-back @back="backRouterPage">
-    <template #actions>
-      <BButton type="primary" @click="$emit('add')" v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn">
-        {{ $t('common.add') }}
-      </BButton>
+  <ResourcePageShell
+    :title="title"
+    :subtitle="subtitle"
+    accent="bookmark"
+    :show-header="showHeader"
+    :show-back="showHeader"
+    @back="backRouterPage"
+  >
+    <template v-if="showActions" #actions>
+      <slot name="actions" :data-list="dataList">
+        <BButton type="primary" @click="$emit('add')" v-click-log="OPERATION_LOG_MAP.bookmarkMg.toAddBtn">
+          {{ $t('common.add') }}
+        </BButton>
+      </slot>
     </template>
     <BCard variant="panel" padding="12px" class="edit-list-container">
       <BInput
@@ -51,6 +60,8 @@
             variant="card"
             padding="0 10px"
             class="list-item flex-align-center"
+            :class="{ 'is-selected': selectedKeys.includes(String(item.id || item.name)) }"
+            @click="$emit('item-click', item)"
           >
             <slot name="item" :data="item" />
           </BCard>
@@ -116,10 +127,23 @@
       type: Array as PropType<Record<string, any>[]>,
       default: () => [],
     },
+    selectedKeys: {
+      type: Array as PropType<string[]>,
+      default: () => [],
+    },
+    showActions: {
+      type: Boolean,
+      default: true,
+    },
+    showHeader: {
+      type: Boolean,
+      default: true,
+    },
   });
   defineEmits<{
     (event: 'add'): void;
     (event: 'retry'): void;
+    (event: 'item-click', item: Record<string, any>): void;
   }>();
   const searchValue = ref('');
   const hasSearch = computed(() => Boolean(searchValue.value.trim()));
@@ -171,6 +195,12 @@
     height: 44px;
     flex: 0 0 auto;
     border-radius: 10px;
+
+    &.is-selected {
+      --b-card-background: color-mix(in srgb, var(--resource-bookmark-color) 6%, var(--card-background));
+      --b-card-border-color: color-mix(in srgb, var(--resource-bookmark-color) 62%, var(--surface-border-color));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent);
+    }
   }
 
   .phone-list-skeleton {

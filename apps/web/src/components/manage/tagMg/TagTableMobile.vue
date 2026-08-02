@@ -54,6 +54,24 @@
         <BSelect v-model:value="sortMode" class="mobile-sort" :options="sortOptions" />
       </div>
 
+      <div v-if="selectionMode" class="mobile-tag-batch-toolbar">
+        <span>{{ t('tagManage.batchSelected', { count: selectedIds.length }) }}</span>
+        <div>
+          <BButton class="mobile-tag-batch-button" @click="toggleSelectAll">
+            {{ t(allVisibleSelected ? 'tagManage.batchDeselectAll' : 'tagManage.batchSelectAll') }}
+          </BButton>
+          <BButton
+            type="danger"
+            class="mobile-tag-batch-button"
+            :disabled="!selectedIds.length"
+            :loading="mutating"
+            @click="handleBatchDelete"
+          >
+            {{ t('tagManage.batchDelete') }}
+          </BButton>
+        </div>
+      </div>
+
       <div v-if="visibleTags.length" class="mobile-tag-list">
         <BCard
           v-for="tag in visibleTags"
@@ -63,11 +81,14 @@
           interactive
           padding="0"
           class="mobile-tag-card"
-          :class="{ 'mobile-tag-card--empty': !getTotalResourceCount(tag) }"
+          :class="{
+            'mobile-tag-card--empty': !getTotalResourceCount(tag),
+            'is-selected': selectedIds.includes(String(tag.id)),
+          }"
           role="button"
           tabindex="0"
-          @click="openTagDetail(tag.id)"
-          @keydown.enter="openTagDetail(tag.id)"
+          @click="handleTagClick(tag)"
+          @keydown.enter="handleTagClick(tag)"
         >
           <div class="mobile-tag-head">
             <div class="mobile-tag-identity">
@@ -80,6 +101,13 @@
                 <span>{{ t('tagManage.resourceTotal', { count: getTotalResourceCount(tag) }) }}</span>
               </div>
             </div>
+            <BCheckbox
+              v-if="selectionMode"
+              :checked="selectedIds.includes(String(tag.id))"
+              :aria-label="tag.name"
+              @click.stop
+              @update:checked="toggleSelection(tag.id)"
+            />
           </div>
 
           <!-- 只展示非零类型:多数标签只挂一两类资源,显示「书签 0 · 笔记 0」纯属噪音 -->
@@ -111,6 +139,12 @@
       </div>
     </div>
   </b-loading>
+  <MobilePageActionsDrawer
+    v-model:open="mobilePageActionsOpen"
+    :title="t('common.more')"
+    :actions="mobilePageActions"
+    @action="handleMobilePageAction"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -122,17 +156,50 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import icon from '@/config/icon';
+  import { batchDeleteSearchResources, clearGlobalSearchCache } from '@/api/search';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import { recordOperation } from '@/api/commonApi';
   import { getTotalResourceCount, type TagFilterValue, type TagRecord, useTagManage } from './useTagManage';
 
   const { t } = useI18n();
   const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
+  const selectionMode = ref(false);
+  const selectedIds = ref<string[]>([]);
+  const mutating = ref(false);
+  const mobilePageActionsOpen = ref(false);
+  const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'batch',
+      label: t('tagManage.batchSelect'),
+      icon: icon.filterPanel.check,
+    },
+  ]);
+  const allVisibleSelected = computed(
+    () =>
+      visibleTags.value.length > 0 &&
+      visibleTags.value.every((tag) => selectedIds.value.includes(String(tag.id))),
+  );
 
   // 顶栏搜索/新建接管原页内搜索框与页头按钮,与书签/笔记/云空间页签保持一致的操作位。
   useMobileTopBar(['tagMg'], {
     searchSourceType: 'tag',
+    onAuxiliaryAction: () => {
+      if (selectionMode.value) {
+        exitSelection();
+        return;
+      }
+      mobilePageActionsOpen.value = true;
+    },
+    auxiliaryActionLabel: () => t(selectionMode.value ? 'tagManage.batchCancel' : 'common.more'),
+    auxiliaryActionIcon: () => (selectionMode.value ? icon.common.close : icon.common.more),
     onAdd: () => router.push('/manage/editTag/add'),
     addLabel: () => t('tagManage.createTag'),
   });
@@ -170,6 +237,92 @@
 
   function openTagDetail(id: string) {
     router.push({ path: `/tag/${id}` });
+  }
+
+  function handleTagClick(tag: TagRecord) {
+    if (selectionMode.value) {
+      toggleSelection(tag.id);
+      return;
+    }
+    openTagDetail(tag.id);
+  }
+
+  function toggleSelection(id: string | number) {
+    const key = String(id);
+    selectedIds.value = selectedIds.value.includes(key)
+      ? selectedIds.value.filter((item) => item !== key)
+      : [...selectedIds.value, key];
+  }
+
+  function enterSelection() {
+    selectedIds.value = [];
+    selectionMode.value = true;
+  }
+
+  function exitSelection() {
+    selectedIds.value = [];
+    selectionMode.value = false;
+  }
+
+  function toggleSelectAll() {
+    const visibleIds = visibleTags.value.map((tag) => String(tag.id));
+    if (allVisibleSelected.value) {
+      selectedIds.value = selectedIds.value.filter((id) => !visibleIds.includes(id));
+      return;
+    }
+    selectedIds.value = [...new Set([...selectedIds.value, ...visibleIds])];
+  }
+
+  function handleMobilePageAction(action: MobilePageActionItem) {
+    if (action.key === 'batch') enterSelection();
+  }
+
+  function handleBatchDelete() {
+    if (blockGuestWrite('delete-tag')) return;
+    const ids = [...selectedIds.value];
+    if (!ids.length) {
+      message.warning(t('tagManage.batchDeleteNoSelection'));
+      return;
+    }
+    Alert.alert({
+      title: t('tagManage.batchDeleteConfirmTitle'),
+      content: t('tagManage.batchDeleteConfirmContent', { count: ids.length }),
+      async onOk() {
+        mutating.value = true;
+        try {
+          const res = await batchDeleteSearchResources(ids.map((id) => ({ id, type: 'tag' })));
+          if (Number(res?.status) !== 200) {
+            message.error(res?.msg || t('tagManage.batchDeleteFailed'));
+            return;
+          }
+          const successCount = Number(res?.data?.affectedItemCount || 0);
+          const skippedCount = Number(res?.data?.invalidItemCount || 0);
+          if (!successCount) {
+            message.warning(t('tagManage.batchDeleteNoChanges'));
+            return;
+          }
+          recordOperation({
+            module: '标签管理',
+            operation:
+              skippedCount > 0
+                ? `批量删除标签部分成功【${successCount}成功/${skippedCount}跳过】`
+                : `批量删除标签成功【${successCount}个】`,
+          });
+          message[skippedCount > 0 ? 'warning' : 'success'](
+            skippedCount > 0
+              ? t('tagManage.batchDeletePartial', { count: successCount, skipped: skippedCount })
+              : t('tagManage.batchDeleteSuccess', { count: successCount }),
+          );
+          clearGlobalSearchCache();
+          exitSelection();
+          await reload();
+        } catch {
+          message.error(t('tagManage.batchDeleteFailed'));
+        } finally {
+          mutating.value = false;
+        }
+      },
+    });
   }
 
   const filterRowRef = ref<HTMLElement | null>(null);
@@ -310,12 +463,15 @@
     display: flex;
     gap: 7px;
     margin: 11px 0 0;
-    padding-bottom: 7px;
+    padding: 0 24px 7px 0;
     overflow-x: auto;
+    box-shadow: inset -20px 0 16px -18px color-mix(in srgb, var(--text-color) 46%, transparent);
   }
 
   .mobile-filter {
     flex-shrink: 0;
+    min-height: 40px;
+    padding-inline: 12px;
     gap: 6px;
     border-radius: 999px;
     background: transparent;
@@ -399,6 +555,32 @@
     gap: 9px;
   }
 
+  .mobile-tag-batch-toolbar {
+    min-height: 48px;
+    margin-bottom: 10px;
+    padding: 6px 8px 6px 12px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 24%, var(--mobile-tag-border));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--resource-tag-color) 7%, var(--mobile-tag-card-bg));
+    color: var(--sub-text-color);
+    font-size: 12px;
+
+    > div {
+      display: flex;
+      gap: 5px;
+    }
+  }
+
+  .mobile-tag-batch-button {
+    min-height: 40px;
+    padding-inline: 10px;
+  }
+
   .mobile-tag-card {
     --b-card-background: var(--mobile-tag-card-bg);
     --b-card-border-color: var(--mobile-tag-border);
@@ -414,6 +596,12 @@
     &:active {
       transform: scale(0.995);
       border-color: color-mix(in srgb, var(--resource-tag-color) 30%, var(--mobile-tag-border));
+    }
+
+    &.is-selected {
+      --b-card-border-color: color-mix(in srgb, var(--resource-tag-color) 68%, var(--mobile-tag-border));
+      --b-card-background: color-mix(in srgb, var(--resource-tag-color) 6%, var(--mobile-tag-card-bg));
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-tag-color) 14%, transparent);
     }
   }
 

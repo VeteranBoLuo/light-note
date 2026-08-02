@@ -1,7 +1,7 @@
 <template>
   <section
     class="today-actions"
-    :class="{ 'today-actions--contained': contained }"
+    :class="{ 'today-actions--contained': contained, 'today-actions--compact-empty': compactEmpty }"
     :aria-label="t('workbench.today.actionsTitle')"
   >
     <header v-if="showHeader" class="today-actions__header">
@@ -151,8 +151,9 @@
       loading?: boolean;
       showHeader?: boolean;
       contained?: boolean;
+      compactEmpty?: boolean;
     }>(),
-    { showHeader: true, contained: false },
+    { showHeader: true, contained: false, compactEmpty: false },
   );
   const emit = defineEmits<{ refresh: [] }>();
 
@@ -561,6 +562,21 @@
     span {
       color: var(--desc-color);
       font-size: 12px;
+    }
+  }
+
+  .today-actions--compact-empty .today-actions__empty {
+    padding: 10px 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+    justify-items: start;
+    align-items: center;
+    column-gap: 8px;
+    text-align: left;
+
+    span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   }
 

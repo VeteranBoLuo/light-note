@@ -31,6 +31,11 @@ const manageRouter: RouteRecordRaw = {
       path: 'bookmarkMg',
       name: 'bookmarkMg',
       component: () => import('@/view/manage/BookmarkMg.vue'),
+      meta: {
+        mobileShell: 'resources',
+        mobileTopSwitcher: false,
+        mobileBottomNav: true,
+      },
     },
     {
       name: 'bookmarkEditMg',

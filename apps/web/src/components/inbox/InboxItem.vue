@@ -1,38 +1,87 @@
 <template>
-  <article :class="['inbox-item', `inbox-item--${item.resourceType}`]">
-    <BCheckbox
-      v-if="selectable"
-      :model-value="selected"
-      :disabled="disabled"
-      @update:model-value="$emit('select', $event)"
-    />
-    <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
-    <div class="inbox-item__body" @click="$emit('open')">
-      <div class="inbox-item__meta">
-        <span class="inbox-item__type">{{ t(`inbox.${item.resourceType}`) }}</span>
-        <span>{{ formatTime(item.collectedAt) }}</span>
+  <MobileSwipeActions
+    :actions="swipeActions"
+    :enabled="swipeEnabled && !selectionMode"
+    :open="swipeOpen"
+    :disabled="disabled"
+    @swipe-start="emit('swipe-start')"
+    @update:open="emit('update:swipe-open', $event)"
+    @action="handleSwipeAction"
+  >
+    <article
+      :class="[
+        'inbox-item',
+        `inbox-item--${item.resourceType}`,
+        { 'inbox-item--selection': selectionMode, 'inbox-item--selected': selected },
+      ]"
+    >
+      <BCheckbox
+        v-if="selectable"
+        :model-value="selected"
+        :disabled="disabled"
+        :aria-label="item.title || t('inbox.untitled')"
+        @update:model-value="emit('select', $event)"
+      />
+      <span v-else class="inbox-item__select-placeholder" aria-hidden="true"></span>
+      <div class="inbox-item__body" @click="handleBodyClick">
+        <div class="inbox-item__meta">
+          <span class="inbox-item__type">{{ t(`inbox.${item.resourceType}`) }}</span>
+          <span>{{ formatTime(item.collectedAt) }}</span>
+        </div>
+        <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
+        <p v-if="plainSummary">{{ plainSummary }}</p>
+        <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
       </div>
-      <h3 :title="item.title">{{ item.title || t('inbox.untitled') }}</h3>
-      <p v-if="plainSummary">{{ plainSummary }}</p>
-      <span v-if="item.resourceType === 'bookmark'" class="inbox-item__detail">{{ item.detail }}</span>
-    </div>
-    <div class="inbox-item__actions">
-      <BButton size="small" @click="$emit('open')">{{ t('inbox.organize') }}</BButton>
-      <BButton size="small" type="primary" :loading="completing" :disabled="disabled" @click="$emit('complete')">
-        {{ t('inbox.complete') }}
-      </BButton>
-      <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
-        {{ t('inbox.deleteResource') }}
-      </BButton>
-    </div>
-  </article>
+      <div class="inbox-item__actions inbox-item__actions--desktop">
+        <BButton size="small" @click="emit('open')">{{ t('inbox.organize') }}</BButton>
+        <BButton size="small" type="primary" :loading="completing" :disabled="disabled" @click="emit('complete')">
+          {{ t('inbox.complete') }}
+        </BButton>
+        <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="emit('delete')">
+          {{ t('inbox.deleteResource') }}
+        </BButton>
+      </div>
+      <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
+        <BPopover v-model:open="mobileMenuOpen" trigger="click" placement="bottom-right">
+          <BButton class="inbox-item__more" :aria-label="t('common.more')" :title="t('common.more')">
+            <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
+          </BButton>
+          <template #content>
+            <div class="inbox-item__mobile-menu">
+              <BButton @click="runMobileAction(() => emit('open'))">{{ t('inbox.organize') }}</BButton>
+              <BButton
+                type="primary"
+                :loading="completing"
+                :disabled="disabled"
+                @click="runMobileAction(() => emit('complete'))"
+              >
+                {{ t('inbox.complete') }}
+              </BButton>
+              <BButton
+                type="danger"
+                :loading="deleting"
+                :disabled="disabled"
+                @click="runMobileAction(() => emit('delete'))"
+              >
+                {{ t('inbox.deleteResource') }}
+              </BButton>
+            </div>
+          </template>
+        </BPopover>
+      </div>
+    </article>
+  </MobileSwipeActions>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobileSwipeActions, { type MobileSwipeActionItem } from '@/components/mobile/MobileSwipeActions.vue';
+  import icon from '@/config/icon';
   import type { InboxItem } from '@/api/inboxApi';
 
   const props = withDefaults(
@@ -43,11 +92,40 @@
       deleting?: boolean;
       disabled?: boolean;
       selectable?: boolean;
+      selectionMode?: boolean;
+      swipeEnabled?: boolean;
+      swipeOpen?: boolean;
     }>(),
-    { selectable: true },
+    { selectable: true, selectionMode: false, swipeEnabled: false, swipeOpen: false },
   );
-  defineEmits<{ select: [selected: boolean]; open: []; complete: []; delete: [] }>();
+  const emit = defineEmits<{
+    select: [selected: boolean];
+    open: [];
+    complete: [];
+    delete: [];
+    'swipe-start': [];
+    'update:swipe-open': [open: boolean];
+  }>();
   const { t, locale } = useI18n();
+  const mobileMenuOpen = ref(false);
+  const swipeActions = computed<MobileSwipeActionItem[]>(() => [
+    {
+      key: 'complete',
+      label: t('inbox.complete'),
+      icon: icon.filterPanel.check,
+      tone: 'success',
+      loading: props.completing,
+      disabled: props.disabled,
+    },
+    {
+      key: 'delete',
+      label: t('inbox.deleteResource'),
+      icon: icon.table_delete,
+      tone: 'danger',
+      loading: props.deleting,
+      disabled: props.disabled,
+    },
+  ]);
   const plainSummary = computed(() => {
     const node = document.createElement('div');
     node.innerHTML = props.item.summary || '';
@@ -57,6 +135,21 @@
     value
       ? new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
       : '';
+
+  function handleBodyClick() {
+    if (props.selectionMode) emit('select', !props.selected);
+    else emit('open');
+  }
+
+  function handleSwipeAction(action: MobileSwipeActionItem) {
+    if (action.key === 'complete') emit('complete');
+    else if (action.key === 'delete') emit('delete');
+  }
+
+  function runMobileAction(action: () => void) {
+    mobileMenuOpen.value = false;
+    action();
+  }
 </script>
 
 <style scoped lang="less">
@@ -157,15 +250,51 @@
     justify-content: flex-end;
     gap: 8px;
   }
+  .inbox-item__actions--mobile {
+    display: none;
+  }
+  .inbox-item--selected {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--card-border-color));
+  }
   @media (max-width: 767px) {
     .inbox-item {
       grid-template-columns: auto minmax(0, 1fr);
       align-items: start;
       padding: 13px;
     }
-    .inbox-item__actions {
-      grid-column: 2;
-      justify-content: flex-end;
+    .inbox-item__actions--desktop {
+      display: none;
     }
+    .inbox-item__actions--mobile {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: block;
+    }
+    .inbox-item__more {
+      width: 36px;
+      min-width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 10px;
+      color: var(--desc-color);
+      background: transparent !important;
+    }
+    .inbox-item__body {
+      padding-right: 34px;
+    }
+    .inbox-item--selection .inbox-item__body {
+      padding-right: 0;
+    }
+  }
+
+  .inbox-item__mobile-menu {
+    display: grid;
+    min-width: 168px;
+    gap: 6px;
+  }
+  .inbox-item__mobile-menu :deep(.b_btn) {
+    width: 100%;
+    justify-content: flex-start;
   }
 </style>

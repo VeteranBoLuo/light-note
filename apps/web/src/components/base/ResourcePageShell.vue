@@ -10,7 +10,7 @@
       },
     ]"
   >
-    <header class="resource-page-header">
+    <header v-if="showHeader" class="resource-page-header">
       <BButton
         v-if="showBack"
         class="resource-page-back"
@@ -69,6 +69,7 @@
       showBack?: boolean;
       titleActionable?: boolean;
       compactMobileHeading?: boolean;
+      showHeader?: boolean;
     }>(),
     {
       subtitle: '',
@@ -77,6 +78,7 @@
       showBack: false,
       titleActionable: false,
       compactMobileHeading: false,
+      showHeader: true,
     },
   );
 
@@ -275,9 +277,9 @@
     }
 
     .resource-page-back {
-      width: 40px;
-      min-width: 40px;
-      height: 40px;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
       border-radius: 10px;
       background: transparent;
 
@@ -289,7 +291,7 @@
     }
 
     .resource-page-title-row {
-      min-height: 40px;
+      min-height: 44px;
     }
 
     .resource-page-accent {

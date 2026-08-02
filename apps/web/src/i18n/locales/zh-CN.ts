@@ -899,6 +899,7 @@ export default {
     deleteConfirmUnbind: '请确认是否要删除{type}【{name}】？删除后会解除与资源的绑定。',
     deleteConfirmTrash: '请确认是否要删除{type}【{name}】？删除后会移入回收站。',
     subtitle: '集中检索书签、笔记、云文件和标签，快速定位你在轻笺里沉淀的内容。',
+    searchFieldLabel: '搜索内容',
     searchPlaceholder: '搜索书签 / 笔记 / 文件 / 标签',
     continueSearch: '继续搜索...',
     mobileTrigger: '搜索书签 / 笔记 / 文件',
@@ -1939,6 +1940,10 @@ export default {
     wrEmpty: '本周还没有新动态,记录一条开始你的一周吧~',
     pageTitle: '我的成长',
     pageSubtitle: '等级、签到与权益，记录你在轻笺的沉淀',
+    mobileTabOverview: '概览',
+    mobileTabTasks: '任务',
+    mobileTabAchievements: '成就',
+    mobileTabAssets: '资产',
     adminContextTitle: '管理员查看模式',
     adminContextNotice:
       '当前展示的是目标账号的成长数据。签到、补签、领奖、积分兑换、抽奖、使用物品和佩戴装扮属于账号权益，管理员只读预览和内容代管均不可代办。',

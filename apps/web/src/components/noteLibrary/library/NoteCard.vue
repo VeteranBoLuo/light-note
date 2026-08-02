@@ -1,7 +1,7 @@
 <template>
   <div
-    @click="router.push(`/noteLibrary/${note.id}`)"
-    @keydown.enter="router.push(`/noteLibrary/${note.id}`)"
+    @click="handleCardClick"
+    @keydown.enter.self="handleCardClick"
     class="note-card"
     :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode }"
     role="button"
@@ -36,7 +36,7 @@
       <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
-    <div v-if="!bookmark.isMobile" class="note-select-control">
+    <div v-if="!bookmark.isMobile || batchMode" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
     <div v-else-if="!batchMode" class="note-mobile-actions" @click.stop>
@@ -150,6 +150,14 @@
   function openTagDetail(tag) {
     if (!tag?.id) return;
     router.push(`/tag/${tag.id}`);
+  }
+
+  function handleCardClick() {
+    if (props.batchMode) {
+      props.note.isCheck = !props.note.isCheck;
+      return;
+    }
+    router.push(`/noteLibrary/${props.note.id}`);
   }
 </script>
 
@@ -379,11 +387,11 @@
   }
 
   @media (max-width: 1023px) {
-    /* 触控目标:30px「更多」按钮在手机上偏小,放大到 36px */
+    /* 触控目标按移动端最小热区处理。 */
     .note-more-button {
-      width: 36px;
-      min-width: 36px;
-      height: 36px;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
     }
     .note-card {
       border-color: var(--surface-border-color) !important;

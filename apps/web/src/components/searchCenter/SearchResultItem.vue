@@ -413,6 +413,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 
   .item-title {
@@ -426,6 +427,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-height: 22px;
+    overflow-wrap: anywhere;
   }
 
   .item-desc {
@@ -440,6 +442,8 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     min-height: calc(1.55em * 2);
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .match-reason {
@@ -479,6 +483,8 @@
 
   .meta-line-value {
     margin-left: 4px;
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   .meta-line-value--empty {

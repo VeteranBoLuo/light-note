@@ -1,6 +1,18 @@
 <template>
   <header v-if="!ownTopBar" class="mobile-top-bar">
+    <template v-if="isSecondary">
+      <BButton
+        class="mobile-top-bar__back"
+        :aria-label="t('common.back')"
+        :title="t('common.back')"
+        @click="activeBinding?.onBack?.()"
+      >
+        <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
+      </BButton>
+      <h1 class="mobile-top-bar__title">{{ secondaryTitle }}</h1>
+    </template>
     <BButton
+      v-else
       class="mobile-top-bar__brand"
       :aria-label="t('mobileNavigation.backToToday')"
       :title="t('mobileNavigation.backToToday')"
@@ -27,7 +39,7 @@
     <div v-if="showActions" class="mobile-top-bar__actions">
       <!-- AI 等自带标题区的页面不放完整搜索框,只给一个放大镜打开同一个搜索层 -->
       <BButton
-        v-if="!showSearch"
+        v-if="!showSearch && !isSecondary"
         class="mobile-top-bar__action"
         :aria-label="t('globalSearch.trigger')"
         :title="t('globalSearch.trigger')"
@@ -94,7 +106,9 @@
     const value = activeBinding.value?.ownTopBar;
     return typeof value === 'function' ? value() : Boolean(value);
   });
-  const showSearch = computed(() => activeBinding.value?.searchMode !== 'icon');
+  const isSecondary = computed(() => Boolean(activeBinding.value?.title && activeBinding.value?.onBack));
+  const secondaryTitle = computed(() => activeBinding.value?.title?.() || '');
+  const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
   const showActions = computed(() =>
     Boolean(!showSearch.value || activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showNotification.value),
@@ -156,6 +170,29 @@
     flex: 0 0 auto;
   }
 
+  .mobile-top-bar__back {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 11px;
+    color: var(--text-color);
+    background: transparent !important;
+  }
+
+  .mobile-top-bar__title {
+    min-width: 0;
+    margin: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 18px;
+    font-weight: 720;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .mobile-top-bar__actions {
     margin-left: auto;
     flex: 0 0 auto;
@@ -165,9 +202,9 @@
   }
 
   .mobile-top-bar__action {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     border-radius: 11px;
     color: var(--text-color);
@@ -195,7 +232,7 @@
 
   .mobile-top-bar__search {
     min-width: 0;
-    height: 36px;
+    height: 40px;
     padding: 0 12px;
     flex: 1 1 auto;
     justify-content: flex-start;
@@ -225,11 +262,11 @@
     align-items: center;
   }
 
-  /* 通知铃铛对齐顶栏 38px 动作位;BButton 默认态自带底色,需与其它顶栏动作一样保持透明 */
+  /* 通知铃铛与其余顶栏动作统一 44px 触控区。 */
   .mobile-top-bar__bell :deep(.nt-bell) {
-    width: 38px;
-    min-width: 38px;
-    height: 38px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
     padding: 0;
     border-radius: 11px;
     color: var(--text-color);
@@ -247,4 +284,3 @@
     }
   }
 </style>
-

@@ -57,11 +57,29 @@
         v-for="item in getBookList"
         :key="item.id"
         :data-bookmark-id="item.id"
-        :class="{ 'card-locate-hl': locateId === item.id }"
+        class="bookmark-card-wrap"
+        :class="{
+          'card-locate-hl': locateId === item.id,
+          'bookmark-card-wrap--selected': batchMode && selectedIds.includes(String(item.id)),
+        }"
       >
-        <RightMenu :menu="menuFor(item)" @select="rightMenuClick($event, item)">
+        <BCheckbox
+          v-if="batchMode"
+          class="bookmark-card-checkbox"
+          :checked="selectedIds.includes(String(item.id))"
+          :aria-label="item.name"
+          @update:checked="emit('toggle-selection', String(item.id))"
+        />
+        <RightMenu v-if="!batchMode" :menu="menuFor(item)" @select="rightMenuClick($event, item)">
           <TagCard :cardInfo="item" />
         </RightMenu>
+        <TagCard
+          v-else
+          :cardInfo="item"
+          selection-mode
+          :selected="selectedIds.includes(String(item.id))"
+          @select="emit('toggle-selection', String(item.id))"
+        />
       </div>
     </VueDraggable>
     <div
@@ -103,13 +121,25 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { buildResourceSortMove, hasResourceOrderChanged } from '@/utils/resourcePagination';
   const bookmark = bookmarkStore();
   const route = useRoute();
   const { t } = useI18n();
   const { addResourcesToInbox } = useInboxEnqueue();
+  withDefaults(
+    defineProps<{
+      batchMode?: boolean;
+      selectedIds?: string[];
+    }>(),
+    {
+      batchMode: false,
+      selectedIds: () => [],
+    },
+  );
   const emit = defineEmits<{
     'load-more': [];
+    'toggle-selection': [id: string];
   }>();
   const loadMoreSentinel = ref<HTMLElement | null>(null);
   const isDragging = ref(false);
@@ -385,6 +415,21 @@
     gap: 14px;
     align-content: start;
   }
+  .bookmark-card-wrap {
+    position: relative;
+    min-width: 0;
+  }
+  .bookmark-card-checkbox {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 4;
+  }
+  .bookmark-card-wrap--selected :deep(.card-body) {
+    border-color: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 64%, var(--card-border-color));
+    background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 6%, var(--card-background));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-bookmark-color, #615ced) 18%, transparent);
+  }
 
   .bookmark-load-sentinel {
     min-height: 24px;
@@ -581,6 +626,12 @@
       padding: 14px 12px 10px;
       font-size: 11px;
       gap: 6px;
+    }
+  }
+
+  @media (min-width: 520px) and (max-width: 767px) {
+    .card-panel {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

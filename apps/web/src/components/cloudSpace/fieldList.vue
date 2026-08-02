@@ -1,8 +1,45 @@
 <template>
   <div class="field-list">
-    <div v-if="viewMode === 'card' && batchMode" class="card-toolbar">
+    <section v-if="batchMode && bookmark.isMobile" class="mobile-batch-toolbar">
+      <div class="mobile-batch-summary">
+        <BCheckbox
+          :indeterminate="indeterminate"
+          :checked="selectAll"
+          @change="(checked: boolean) => onToggleSelectAll({ target: { checked } })"
+          class="batch-select-all"
+        />
+        <span class="selected-count">{{ $t('cloudSpace.selectedCount', { count: selectedRows.length }) }}</span>
+        <BButton size="small" class="mobile-batch-exit" @click="emit('exitBatch')">
+          {{ $t('cloudSpace.exitBatch') }}
+        </BButton>
+      </div>
+      <div class="mobile-batch-actions">
+        <BButton :disabled="!hasSelection" @click="openSelectedFilesInAi">
+          <SvgIcon :src="icon.ai.ask" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.aiUseSelected') }}
+        </BButton>
+        <BButton type="danger" :disabled="!hasSelection" @click="handleBatchDelete">
+          <SvgIcon :src="icon.table_delete" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchDelete') }}
+        </BButton>
+        <BButton
+          class="mobile-batch-move"
+          :disabled="!hasSelection"
+          @click="handleBatchMove"
+          v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
+        >
+          <SvgIcon :src="icon.cloudSpace.moveFile" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchMove') }}
+        </BButton>
+        <BButton :disabled="!hasSelection" :loading="batchDownloadLoading" @click="handleBatchDownload">
+          <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
+          {{ $t('cloudSpace.batchDownload') }}
+        </BButton>
+      </div>
+    </section>
+    <div v-if="viewMode === 'card' && batchMode && !bookmark.isMobile" class="card-toolbar">
       <div class="batch-actions">
-        <b-space :size="10">
+        <BSpace :size="10">
           <BCheckbox
             v-if="viewMode === 'card'"
             :indeterminate="indeterminate"
@@ -15,18 +52,19 @@
             <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
             {{ $t('cloudSpace.aiUseSelected') }}
           </BButton>
-          <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-          <b-button
+          <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
+          <BButton
             size="small"
             type="primary"
             @click="handleBatchMove"
             v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-            >{{ $t('cloudSpace.batchMove') }}</b-button
           >
-          <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+            {{ $t('cloudSpace.batchMove') }}
+          </BButton>
+          <BButton size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
             {{ $t('cloudSpace.batchDownload') }}
-          </b-button>
-        </b-space>
+          </BButton>
+        </BSpace>
       </div>
     </div>
     <div
@@ -44,7 +82,7 @@
       >
         <div class="file-card-cover">
           <span v-if="batchMode" class="card-checkbox" @click.stop>
-            <b-checkbox
+            <BCheckbox
               :checked="selectedRows.includes(item.id)"
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
@@ -186,7 +224,7 @@
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
-    <div v-if="viewMode === 'table' && batchMode" class="batch-actions table-batch-actions">
+    <div v-if="viewMode === 'table' && batchMode && !bookmark.isMobile" class="batch-actions table-batch-actions">
       <BCheckbox
         :indeterminate="indeterminate"
         :checked="selectAll"
@@ -197,17 +235,18 @@
         <SvgIcon :src="icon.ai.ask" size="14" aria-hidden="true" />
         {{ $t('cloudSpace.aiUseSelected') }}
       </BButton>
-      <b-button size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</b-button>
-      <b-button
+      <BButton size="small" type="danger" @click="handleBatchDelete">{{ $t('cloudSpace.batchDelete') }}</BButton>
+      <BButton
         size="small"
         type="primary"
         @click="handleBatchMove"
         v-click-log="{ module: '云空间', operation: '点击批量移动文件' }"
-        >{{ $t('cloudSpace.batchMove') }}</b-button
       >
-      <b-button size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
+        {{ $t('cloudSpace.batchMove') }}
+      </BButton>
+      <BButton size="small" type="success" :loading="batchDownloadLoading" @click="handleBatchDownload">
         {{ $t('cloudSpace.batchDownload') }}
-      </b-button>
+      </BButton>
     </div>
     <div
       v-if="viewMode === 'table'"
@@ -219,9 +258,11 @@
         class="field-item"
         :class="{
           'field-item-draggable': canDragFile(item),
+          'field-item--batch': batchMode,
           'field-item--selected': batchMode && selectedRows.includes(item.id),
         }"
         :draggable="canDragFile(item)"
+        @click="onListRowClick(item)"
         @dragstart="onFileDragStart($event, item)"
         @dragend="onFileDragEnd"
         v-for="item in cloud.fileList"
@@ -229,19 +270,14 @@
       >
         <div class="flex-align-center" :style="{ position: 'relative', width: fieldNameWidth }">
           <span v-if="batchMode" class="row-checkbox" @click.stop>
-            <b-checkbox
+            <BCheckbox
               :checked="selectedRows.includes(item.id)"
               @update:checked="(val: boolean) => toggleRow(item.id, val)"
             />
           </span>
-          <div
-            v-if="!item.isRename"
-            class="file-label flex-align-center"
-            @click="emit('previewFile', item)"
-            v-click-log="{ module: '云空间', operation: `预览文件【${item.fileName}】` }"
-          >
+          <div v-if="!item.isRename" class="file-label flex-align-center" @click.stop="onFileLabelClick(item)">
             <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(item)]" size="20" style="min-width: 20px" />
-            <span style="width: 100%" class="text-hidden">{{ item.fileName }}</span>
+            <span class="file-name text-hidden">{{ item.fileName }}</span>
             <InboxPendingBadge v-if="item.isPending" />
           </div>
           <b-input
@@ -284,8 +320,8 @@
               </div>
             </template>
           </b-input>
-          <div class="flex-align-center handle-btn" v-if="!item.isRename">
-            <BTooltip :title="$t('cloudSpace.download')">
+          <div v-if="!item.isRename && !batchMode" class="flex-align-center handle-btn" @click.stop>
+            <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.download')">
               <svg-icon
                 class="download-icon"
                 :src="icon.cloudSpace.download"
@@ -302,7 +338,7 @@
                 v-click-log="{ module: '云空间', operation: `编辑文件名【${item.fileName}】` }"
               />
             </BTooltip>
-            <BTooltip :title="$t('cloudSpace.relateTags')">
+            <BTooltip v-if="!bookmark.isMobile" :title="$t('cloudSpace.relateTags')">
               <svg-icon
                 class="download-icon"
                 :src="icon.manage_categoryBtn_tag"
@@ -321,6 +357,16 @@
                         label: $t('common.reName'),
                         icon: icon.cloudSpace.rename,
                         function: () => openRenameModal(item),
+                      },
+                      {
+                        label: $t('cloudSpace.download'),
+                        icon: icon.cloudSpace.download,
+                        function: () => handleDownloadFile(item),
+                      },
+                      {
+                        label: $t('cloudSpace.relateTags'),
+                        icon: icon.manage_categoryBtn_tag,
+                        function: () => openTagDialog(item),
                       },
                     ]
                   : []),
@@ -563,7 +609,7 @@
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
   const { t } = useI18n();
-  const emit = defineEmits(['previewFile', 'moveField']);
+  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch']);
 
   // 首屏空状态引导:复用 CloudFolder 的隐藏上传 input(桌面端);移动端则靠拖拽/上方入口
   function triggerUpload() {
@@ -618,6 +664,25 @@
     } else {
       emit('previewFile', item);
     }
+  };
+
+  const onListRowClick = (item: any) => {
+    if (!bookmark.isMobile) return;
+    if (batchMode.value) {
+      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      return;
+    }
+    recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
+    emit('previewFile', item);
+  };
+
+  const onFileLabelClick = (item: any) => {
+    if (bookmark.isMobile && batchMode.value) {
+      toggleRow(item.id, !selectedRows.value.includes(item.id));
+      return;
+    }
+    recordOperation({ module: '云空间', operation: `预览文件【${item.fileName}】` });
+    emit('previewFile', item);
   };
 
   async function openFilesInAi(files: any[]) {
@@ -1367,6 +1432,52 @@
     border-radius: 10px;
     background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 6%, var(--menu-body-bg-color));
   }
+  .mobile-batch-toolbar {
+    margin: 8px 10px 0;
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+    flex-shrink: 0;
+    border: 1px solid color-mix(in srgb, var(--resource-file-color, #ff8a00) 18%, var(--surface-border-color));
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 6%, var(--card-background));
+  }
+  .mobile-batch-summary {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mobile-batch-summary .selected-count {
+    min-width: 0;
+    flex: 1;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 20px;
+    white-space: nowrap;
+  }
+  .mobile-batch-exit {
+    flex: 0 0 auto;
+  }
+  .mobile-batch-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .mobile-batch-actions :deep(.b_btn) {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    height: auto;
+    padding: 8px 10px;
+    gap: 6px;
+    line-height: 20px;
+  }
+  .mobile-batch-move {
+    color: #fff;
+    border-color: var(--resource-file-color, #ff8a00);
+    background: var(--resource-file-color, #ff8a00);
+  }
   .download-progress-floating {
     position: absolute;
     top: 12px;
@@ -1469,6 +1580,11 @@
       cursor: grabbing;
     }
   }
+  @container (min-width: 480px) {
+    .mobile-batch-actions {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
   .edit-file-input {
     width: min(400px, calc(100% - 120px));
 
@@ -1498,6 +1614,10 @@
     gap: 8px;
     color: var(--text-color);
     font-weight: 520;
+  }
+  .file-name {
+    min-width: 0;
+    flex: 1 1 auto;
   }
   .row-checkbox {
     margin-right: 10px;
@@ -1607,6 +1727,25 @@
     }
     .edit-file-input {
       width: calc(100% - 92px);
+    }
+  }
+  @media (max-width: 767px) {
+    .file-label {
+      width: calc(100% - 38px);
+    }
+    .field-item--batch .file-label {
+      width: 100%;
+    }
+    .file-label :deep(.inbox-pending-badge) {
+      margin-left: auto;
+    }
+    .field-item--selected {
+      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 4%, var(--card-background));
+      box-shadow: inset 2px 0 0 color-mix(in srgb, var(--resource-file-color, #ff8a00) 55%, transparent);
+
+      &:hover {
+        background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 5%, var(--card-background));
+      }
     }
   }
   .file-tags-cell {

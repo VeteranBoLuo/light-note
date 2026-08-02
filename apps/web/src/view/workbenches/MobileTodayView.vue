@@ -43,23 +43,10 @@
           :inbox-items="inboxItems"
           :loading="loading"
           :show-header="false"
+          compact-empty
           @refresh="loadToday"
         />
       </div>
-    </section>
-
-    <section v-if="showDailyGrowthTasks" class="mobile-today__growth">
-      <DailyQuests
-        :quests="dailyGrowthQuests"
-        :bonus="dailyGrowthBonus"
-        :claiming="claimingDailyGrowth"
-        :read-only="growthReadOnly"
-        @claim="claimDailyGrowth"
-      />
-    </section>
-
-    <section v-if="showGrowthTasks" class="mobile-today__growth">
-      <GrowthTasks :data="growthTasks" compact :max-visible="3" show-view-all @view="openGrowthTasks" />
     </section>
 
     <section class="mobile-today__capture">
@@ -102,6 +89,20 @@
           <small>{{ continueMeta(item) }}</small>
         </span>
       </BButton>
+    </section>
+
+    <section v-if="showDailyGrowthTasks" class="mobile-today__growth">
+      <DailyQuests
+        :quests="dailyGrowthQuests"
+        :bonus="dailyGrowthBonus"
+        :claiming="claimingDailyGrowth"
+        :read-only="growthReadOnly"
+        @claim="claimDailyGrowth"
+      />
+    </section>
+
+    <section v-if="showGrowthTasks" class="mobile-today__growth">
+      <GrowthTasks :data="growthTasks" compact :max-visible="3" show-view-all @view="openGrowthTasks" />
     </section>
 
     <!-- 不放「查看全部待办」：底部导航已有待办一级入口，这里重复只会占位 -->

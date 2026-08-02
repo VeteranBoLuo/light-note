@@ -13,23 +13,62 @@
     </template>
 
     <template #actions>
-      <template v-if="hasCheck">
+      <template v-if="batchMode">
         <span class="note-batch-summary">{{ $t('note.selectedCount', { count: selectedVisibleCount }) }}</span>
-        <BButton class="note-action-button" @click="toggleSelectAllVisible">
-          {{ allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent') }}
-        </BButton>
-        <BButton class="note-action-button" @click="openSelectedNotesAi('organize')">
-          <SvgIcon :src="icon.ai.organize" size="16" />
-          {{ $t('ai.entry.organizeSelected') }}
-        </BButton>
-        <BButton class="note-action-button" @click="openBatchTags('add')">{{ $t('note.batchAddTags') }}</BButton>
-        <BButton class="note-action-button" @click="openBatchTags('remove')">{{ $t('note.batchRemoveTags') }}</BButton>
-        <BButton class="note-action-button" @click="exportSelectedNotes">{{ $t('note.batchExport') }}</BButton>
-        <BButton type="danger" class="note-action-button" @click="batchDeleteNote">
-          <SvgIcon :src="icon.noteDetail.delete" size="16" />
-          {{ $t('note.deleteSelected') }}
-        </BButton>
-        <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
+        <template v-if="bookmark.isMobile">
+          <BButton
+            class="note-action-button note-batch-icon-button"
+            :aria-label="allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent')"
+            :title="allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent')"
+            @click="toggleSelectAllVisible"
+          >
+            <SvgIcon :src="allVisibleChecked ? icon.common.close : icon.filterPanel.check" size="17" />
+          </BButton>
+          <BButton
+            class="note-action-button note-batch-icon-button"
+            :disabled="!selectedVisibleCount"
+            :aria-label="$t('common.more')"
+            :title="$t('common.more')"
+            @click="mobileBatchActionsOpen = true"
+          >
+            <SvgIcon :src="icon.common.more" size="17" />
+          </BButton>
+          <BButton
+            class="note-action-button note-batch-icon-button"
+            :aria-label="$t('note.exitBatch')"
+            :title="$t('note.exitBatch')"
+            @click="exitBatch"
+          >
+            <SvgIcon :src="icon.common.close" size="17" />
+          </BButton>
+        </template>
+        <template v-else>
+          <BButton class="note-action-button" @click="toggleSelectAllVisible">
+            {{ allVisibleChecked ? $t('note.unselectAllCurrent') : $t('note.selectAllCurrent') }}
+          </BButton>
+          <BButton
+            class="note-action-button"
+            :disabled="!selectedVisibleCount"
+            @click="openSelectedNotesAi('organize')"
+          >
+            <SvgIcon :src="icon.ai.organize" size="16" />
+            {{ $t('ai.entry.organizeSelected') }}
+          </BButton>
+          <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openBatchTags('add')">{{
+            $t('note.batchAddTags')
+          }}</BButton>
+          <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openBatchTags('remove')">{{
+            $t('note.batchRemoveTags')
+          }}</BButton>
+          <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="exportSelectedNotes">{{
+            $t('note.batchExport')
+          }}</BButton>
+          <BButton type="danger" class="note-action-button" :disabled="!selectedVisibleCount" @click="batchDeleteNote">
+            <SvgIcon :src="icon.noteDetail.delete" size="16" />
+            {{ $t('note.deleteSelected') }}
+          </BButton>
+          <BButton class="note-action-button" @click="exitBatch">{{ $t('note.exitBatch') }}</BButton>
+        </template>
       </template>
       <template v-else>
         <!-- 移动端不放第二个文本搜索框：找笔记统一走顶栏全局搜索，这里只保留标签筛选 -->
@@ -116,7 +155,7 @@
         >
           <note-card
             :note="note"
-            :batch-mode="hasCheck"
+            :batch-mode="batchMode"
             @nodeTypeChange="handleNodeTypeChange"
             @action="handleNoteCardAction($event, note)"
           />
@@ -209,6 +248,20 @@
       :note="activeTagNote"
       @saveTag="handleNoteTagsSaved"
     />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobilePageActionsOpen"
+      :title="t('common.more')"
+      :actions="mobilePageActions"
+      @action="handleMobilePageAction"
+    />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileBatchActionsOpen"
+      :title="t('note.selectedCount', { count: selectedVisibleCount })"
+      :actions="mobileBatchActions"
+      @action="handleMobileBatchAction"
+    />
   </ResourcePageShell>
 </template>
 
@@ -242,6 +295,7 @@
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import {
     RESOURCE_LIST_PAGE_SIZE,
@@ -282,6 +336,9 @@
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);
+  const batchMode = ref(false);
+  const mobilePageActionsOpen = ref(false);
+  const mobileBatchActionsOpen = ref(false);
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -323,7 +380,8 @@
   }
   const orderedBuiltinTemplates = computed(() =>
     [...BUILTIN_NOTE_TEMPLATES].sort(
-      (a, b) => Number(templateUsage.value[`builtin:${b.key}`] || 0) - Number(templateUsage.value[`builtin:${a.key}`] || 0),
+      (a, b) =>
+        Number(templateUsage.value[`builtin:${b.key}`] || 0) - Number(templateUsage.value[`builtin:${a.key}`] || 0),
     ),
   );
   const orderedMyTemplates = computed(() =>
@@ -650,6 +708,7 @@
   watch(
     [debouncedSearch, () => router.currentRoute.value.query.tag, () => router.currentRoute.value.query._rt],
     () => {
+      if (batchMode.value) exitBatch();
       void reloadNotes();
       if (bookmark.isMobile) {
         nextTick(() => {
@@ -669,6 +728,15 @@
 
   useMobileTopBar(['noteLibrary'], {
     searchSourceType: 'note',
+    onAuxiliaryAction: () => {
+      if (batchMode.value) {
+        exitBatch();
+        return;
+      }
+      mobilePageActionsOpen.value = true;
+    },
+    auxiliaryActionLabel: () => t(batchMode.value ? 'note.exitBatch' : 'common.more'),
+    auxiliaryActionIcon: () => (batchMode.value ? icon.common.close : icon.common.more),
     onAdd: showNewNotePicker,
     addLabel: () => t('note.newNote'),
   });
@@ -709,6 +777,46 @@
   });
 
   const selectedVisibleCount = computed(() => viewNoteList.value.filter((data) => data.isCheck === true).length);
+  const mobilePageActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'batch',
+      label: t(batchMode.value ? 'note.exitBatch' : 'inbox.mobileBatchSelect'),
+      icon: icon.filterPanel.check,
+    },
+  ]);
+  const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'ai',
+      label: t('ai.entry.organizeSelected'),
+      icon: icon.ai.organize,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'addTags',
+      label: t('note.batchAddTags'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'removeTags',
+      label: t('note.batchRemoveTags'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'export',
+      label: t('note.batchExport'),
+      icon: icon.cloudSpace.download,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'delete',
+      label: t('note.deleteSelected'),
+      icon: icon.noteDetail.delete,
+      danger: true,
+      disabled: selectedVisibleCount.value < 1,
+    },
+  ]);
 
   function openSelectedNotesAi(intent: AiAssistantIntent) {
     const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
@@ -724,7 +832,6 @@
       })),
     });
   }
-  const hasCheck = computed(() => selectedVisibleCount.value > 0);
   const allVisibleChecked = computed(
     () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,
   );
@@ -737,9 +844,32 @@
   }
 
   function exitBatch() {
+    batchMode.value = false;
+    mobileBatchActionsOpen.value = false;
     noteList.value.forEach((data) => {
       data.isCheck = false;
     });
+  }
+
+  function enterBatch() {
+    noteList.value.forEach((data) => {
+      data.isCheck = false;
+    });
+    batchMode.value = true;
+  }
+
+  function handleMobilePageAction(action: MobilePageActionItem) {
+    if (action.key !== 'batch') return;
+    if (batchMode.value) exitBatch();
+    else enterBatch();
+  }
+
+  function handleMobileBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'ai') openSelectedNotesAi('organize');
+    else if (action.key === 'addTags') openBatchTags('add');
+    else if (action.key === 'removeTags') openBatchTags('remove');
+    else if (action.key === 'export') void exportSelectedNotes();
+    else if (action.key === 'delete') batchDeleteNote();
   }
 
   function getSelectedNotes() {
@@ -795,19 +925,18 @@
   function batchDeleteNote() {
     if (blockGuestWrite('delete-note')) return;
     const delIds = viewNoteList.value.filter((data) => data.isCheck).map((item) => item.id) || [];
+    if (!delIds.length) return;
     Alert.alert({
       title: t('common.defaultTitle'),
       content: t('note.deleteSelectedConfirm'),
-      onOk() {
-        apiBasePost('/api/note/delNote', {
-          ids: delIds,
-        }).then((res) => {
-          if (res.status === 200) {
-            recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${delIds.length}篇】` });
-            message.success(t('common.deleteSuccess'));
-            init();
-          }
-        });
+      async onOk() {
+        const res = await apiBasePost('/api/note/delNote', { ids: delIds });
+        if (res.status === 200) {
+          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${delIds.length}篇】` });
+          message.success(t('common.deleteSuccess'));
+          exitBatch();
+          await init();
+        }
       },
     });
   }
@@ -1479,6 +1608,12 @@
       height: 34px;
     }
 
+    .note-batch-icon-button {
+      width: 34px;
+      min-width: 34px;
+      padding: 0;
+    }
+
     .note-mobile-actions .note-ai-button {
       width: 100%;
       min-width: 0;
@@ -1494,6 +1629,13 @@
     .note-mobile-actions .note-ai-button:active {
       color: var(--resource-note-color, #00a884);
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
+    }
+  }
+
+
+  @media (min-width: 520px) and (max-width: 767px) {
+    .note-library-body {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

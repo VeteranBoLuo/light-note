@@ -7,17 +7,17 @@
       'inbox-page--mobile-resources': isMobileResourceInbox,
     }"
   >
-    <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一组件；
+    <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一常驻搜索入口；
          待办是底部一级入口，继续使用共享顶栏（带 Logo）。 -->
     <ResourceCenterTopBar
       v-if="isMobileResourceInbox"
       :keyword="inbox.keyword"
       input-id="mobile-inbox-page-input"
-      :title="t('inbox.mobilePendingTitle')"
-      compact-title
       show-menu
       :selection-mode="resourceSelectionMode"
       :selected-count="selectedItems.length"
+      :allow-batch="inbox.items.length > 0"
+      :allow-sort="inbox.items.length > 0"
       :create-label="t('inbox.quickCapture')"
       @update:keyword="setMobileInboxKeyword"
       @submit="search"
@@ -59,7 +59,13 @@
             variant="pill"
             @change="changeTodoStatus"
           />
-          <BSelect class="mobile-todo-sort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
+          <BSelect
+            v-if="todo.items.length || pageLoading"
+            class="mobile-todo-sort"
+            v-model:value="todo.sort"
+            :options="sortOptions"
+            @change="search"
+          />
         </template>
         <template v-else>
           <BTabs
@@ -105,7 +111,7 @@
         variant="pill"
       />
       <BButton
-        v-if="todoView === 'list' && !todoSelectionMode"
+        v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
         class="todo-workspace-toolbar__select"
         size="small"
         @click="toggleTodoSelectionMode"
@@ -267,6 +273,11 @@
                 :completing="completingKey === inbox.resourceKey(action.item)"
                 :deleting="deletingKey === inbox.resourceKey(action.item)"
                 :disabled="hasPendingOperation"
+                :selection-mode="resourceSelectionMode"
+                :swipe-enabled="bookmark.isMobile"
+                :swipe-open="openSwipeResourceKey === inbox.resourceKey(action.item)"
+                @swipe-start="beginResourceSwipe(action.item)"
+                @update:swipe-open="updateResourceSwipe(action.item, $event)"
                 @select="toggleSelected(action.item, $event)"
                 @open="openResource(action.item)"
                 @complete="completeOne(action.item)"
@@ -362,6 +373,7 @@
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
   const openSwipeTodoId = ref('');
+  const openSwipeResourceKey = ref('');
   const scheduleViewRef = ref<{ closeSwipe: () => void } | null>(null);
   type TodoView = 'list' | 'agenda' | 'calendar';
   const normalizeTodoView = (value: unknown): TodoView => (value === 'agenda' || value === 'calendar' ? value : 'list');
@@ -647,11 +659,13 @@
 
   function enterResourceSelection() {
     if (!isMobileResourceInbox.value) return;
+    openSwipeResourceKey.value = '';
     resourceSelectionMode.value = true;
     inbox.selectedKeys = [];
   }
 
   function leaveResourceSelection() {
+    openSwipeResourceKey.value = '';
     resourceSelectionMode.value = false;
     inbox.selectedKeys = [];
   }
@@ -850,15 +864,26 @@
   }
   function handleInboxScroll() {
     openSwipeTodoId.value = '';
+    openSwipeResourceKey.value = '';
     scheduleViewRef.value?.closeSwipe();
     updateScrollFade();
   }
   function beginTodoSwipe(id: string) {
+    openSwipeResourceKey.value = '';
     openSwipeTodoId.value = id;
   }
   function updateTodoSwipe(id: string, open: boolean) {
     if (open) openSwipeTodoId.value = id;
     else if (openSwipeTodoId.value === id) openSwipeTodoId.value = '';
+  }
+  function beginResourceSwipe(item: InboxItemType) {
+    openSwipeTodoId.value = '';
+    openSwipeResourceKey.value = inbox.resourceKey(item);
+  }
+  function updateResourceSwipe(item: InboxItemType, open: boolean) {
+    const key = inbox.resourceKey(item);
+    if (open) openSwipeResourceKey.value = key;
+    else if (openSwipeResourceKey.value === key) openSwipeResourceKey.value = '';
   }
   function toggleSelected(item: InboxItemType, selected: boolean) {
     const key = inbox.resourceKey(item);
@@ -885,6 +910,7 @@
   async function completeOne(item: InboxItemType) {
     if (hasPendingOperation.value || blockGuestWrite('inbox-complete', t('inbox.guestPrompt'))) return;
     completingKey.value = inbox.resourceKey(item);
+    openSwipeResourceKey.value = '';
     try {
       const completed = await inbox.complete([item]);
       if (completed) {
@@ -915,6 +941,7 @@
   }
   function confirmDelete(items: InboxItemType[], batchAction = false) {
     if (!items.length || hasPendingOperation.value || blockGuestWrite('inbox-delete', t('inbox.guestPrompt'))) return;
+    openSwipeResourceKey.value = '';
     Alert.alert({
       title: t('inbox.deleteConfirmTitle'),
       content:

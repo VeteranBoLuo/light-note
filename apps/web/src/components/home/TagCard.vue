@@ -1,14 +1,20 @@
 <template>
   <div
     class="card-body"
-    :class="{ 'has-top-badge': isTop, 'has-pending-badge': cardInfo.isPending }"
-    role="link"
+    :class="{
+      'has-top-badge': isTop,
+      'has-pending-badge': cardInfo.isPending,
+      'is-selection-mode': selectionMode,
+      'is-selected': selected,
+    }"
+    :role="selectionMode ? 'button' : 'link'"
+    :aria-pressed="selectionMode ? selected : undefined"
     tabindex="0"
     @click="toNewPage"
     @keydown.enter="toNewPage"
     @keydown.space.prevent="toNewPage"
   >
-    <div v-if="isTop || cardInfo.isPending" class="card-status-badges">
+    <div v-if="!selectionMode && (isTop || cardInfo.isPending)" class="card-status-badges">
       <span v-if="isTop" class="card-top-badge">{{ $t('common.pin') }}</span>
       <InboxPendingBadge v-if="cardInfo.isPending" />
     </div>
@@ -27,7 +33,7 @@
       </div>
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
-    <div class="footer-tag">
+    <div v-if="!selectionMode" class="footer-tag">
       <div
         class="common-tag tag-detail-chip"
         @click.stop="handleToTagPage(tag)"
@@ -57,6 +63,14 @@
 
   const bookmark = bookmarkStore();
   const props = defineProps({
+    selectionMode: {
+      type: Boolean,
+      default: false,
+    },
+    selected: {
+      type: Boolean,
+      default: false,
+    },
     cardInfo: {
       type: Object as () => {
         id?: string;
@@ -79,6 +93,9 @@
       }),
     },
   });
+  const emit = defineEmits<{
+    select: [];
+  }>();
 
   const isTop = computed(() => !!(props.cardInfo as any).isTop);
   const displayDomain = computed(() => {
@@ -90,6 +107,10 @@
   });
 
   function toNewPage() {
+    if (props.selectionMode) {
+      emit('select');
+      return;
+    }
     openBookmarkUrl(props.cardInfo.url);
     recordOperation({ module: '首页', operation: `点击书签卡片【${props.cardInfo.name}】` });
   }
@@ -105,7 +126,6 @@
     if (!tag?.id) return;
     router.push(`/tag/${tag.id}`);
   }
-
 </script>
 
 <style lang="less" scoped>
@@ -246,11 +266,11 @@
   }
 
   @media (max-width: 1023px) {
-    /* 触控目标:18px 圆点在手机上过小且误触代价高(进详情页),放大到 32px */
+    /* 标签详情是独立跳转，触控区按移动端最小热区处理。 */
     .tag-detail-corner {
-      width: 32px;
-      min-width: 32px;
-      height: 32px;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
     }
     .card-body {
       height: 154px;

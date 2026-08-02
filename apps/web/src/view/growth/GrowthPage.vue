@@ -18,19 +18,27 @@
         <span>{{ t('growth.adminContextNotice') }}</span>
       </div>
 
-      <section class="growth-panel">
+      <BTabs
+        v-if="bookmark.isMobile"
+        v-model:active-tab="activeMobileSection"
+        class="growth-mobile-tabs"
+        variant="segment"
+        :options="mobileSectionOptions"
+      />
+
+      <section v-if="showGrowthSection('overview')" class="growth-panel">
         <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
       </section>
 
-      <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel">
+      <section v-if="showGrowthSection('tasks') && showGrowthTasks" id="growth-tasks" class="growth-panel">
         <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
       </section>
 
-      <section id="growth-heatmap" class="growth-panel">
+      <section v-if="showGrowthSection('achievements')" id="growth-heatmap" class="growth-panel">
         <ActivityHeatmap ref="heatmapRef" />
       </section>
 
-      <div class="growth-row">
+      <div v-if="showGrowthSection('overview')" class="growth-row">
         <section v-if="questsEnabled" class="growth-panel growth-panel--flex">
           <DailyQuests
             :quests="quests"
@@ -46,27 +54,27 @@
       </div>
 
       <!-- 周挑战与每日任务的等级上限规则不同：管理员/满级账号仍可查看周挑战。 -->
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('tasks')" class="growth-panel">
         <WeeklyChallenge :read-only="isAdminContext" />
       </section>
 
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('assets')" class="growth-panel">
         <PointsShop :read-only="isAdminContext" />
       </section>
 
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('assets')" class="growth-panel">
         <LotteryDraw :read-only="isAdminContext" />
       </section>
 
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('assets')" class="growth-panel">
         <MyInventory :read-only="isAdminContext" />
       </section>
 
-      <section v-if="streakMilestones.length" class="growth-panel">
+      <section v-if="showGrowthSection('achievements') && streakMilestones.length" class="growth-panel">
         <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
       </section>
 
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('achievements')" class="growth-panel">
         <AchievementWall
           :achievements="achievements"
           :unlocked-count="dashboard?.unlockedCount || 0"
@@ -78,12 +86,12 @@
         />
       </section>
 
-      <section class="growth-panel">
+      <section v-if="showGrowthSection('achievements')" class="growth-panel">
         <GrowthTimeline :items="timeline" />
       </section>
 
       <!-- 情感回顾不抢占每日任务首屏，放在记录流之后按需浏览。 -->
-      <section v-if="showRecap" id="growth-recap" class="growth-panel">
+      <section v-if="showGrowthSection('achievements') && showRecap" id="growth-recap" class="growth-panel">
         <RecapCard />
       </section>
     </div>
@@ -110,6 +118,7 @@
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -117,12 +126,22 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import growthApi from '@/api/growthApi.ts';
-  import { useUserStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
+
+  type MobileGrowthSection = 'overview' | 'tasks' | 'achievements' | 'assets';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
+  const activeMobileSection = ref<MobileGrowthSection>('overview');
+  const mobileSectionOptions = computed(() => [
+    { key: 'overview', label: t('growth.mobileTabOverview') },
+    { key: 'tasks', label: t('growth.mobileTabTasks') },
+    { key: 'achievements', label: t('growth.mobileTabAchievements') },
+    { key: 'assets', label: t('growth.mobileTabAssets') },
+  ]);
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
     growth,
@@ -145,9 +164,21 @@
   const showRecap = computed(() => hasRecap.value);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
 
+  function sectionForHash(hash: string): MobileGrowthSection | null {
+    if (hash === '#growth-tasks') return 'tasks';
+    if (hash === '#growth-heatmap' || hash === '#growth-recap') return 'achievements';
+    return null;
+  }
+
+  function showGrowthSection(section: MobileGrowthSection) {
+    return !bookmark.isMobile || activeMobileSection.value === section;
+  }
+
   function scrollToHash() {
     const targetId = route.hash.replace(/^#/, '');
     if (!targetId) return;
+    const targetSection = sectionForHash(route.hash);
+    if (bookmark.isMobile && targetSection) activeMobileSection.value = targetSection;
     void nextTick(() => {
       document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
@@ -402,12 +433,34 @@
     flex: 1 1 0;
     min-width: 0;
   }
-  @media (max-width: 720px) {
+  @media (max-width: 767px) {
     .growth-page {
       padding: 18px 12px 36px;
     }
     .growth-container {
       gap: 12px;
+    }
+    .growth-mobile-tabs {
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 12px;
+      background: var(--background-color);
+      box-shadow: 0 7px 18px -18px color-mix(in srgb, var(--text-color) 55%, transparent);
+    }
+    .growth-mobile-tabs :deep(.tab) {
+      min-width: 0;
+      min-height: 44px;
+      padding: 0 8px;
+      flex: 1 1 25%;
+      justify-content: center;
+      line-height: 44px;
+    }
+    .growth-back,
+    .growth-report-btn {
+      min-height: 44px !important;
     }
     .growth-title {
       font-size: 21px;

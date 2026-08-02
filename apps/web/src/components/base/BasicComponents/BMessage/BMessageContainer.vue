@@ -167,6 +167,19 @@
       gap: 6px;
     }
 
+    /* 写操作引导和被动浏览提示均占用底部安全区，消息统一叠在提示卡上方。 */
+    body:has(.guest-nudge) .b-message-container {
+      bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 166px);
+    }
+
+    body:has(.guest-browse-nudge) .b-message-container {
+      bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 78px);
+    }
+
+    body:has(.guest-nudge):has(.guest-browse-nudge) .b-message-container {
+      bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 230px);
+    }
+
     .b-message-item {
       width: max-content;
       min-width: min(180px, calc(100vw - 24px));

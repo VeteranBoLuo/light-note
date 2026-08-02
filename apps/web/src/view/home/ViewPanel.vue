@@ -1,7 +1,12 @@
 <template>
   <div class="view-panel" id="view-panel" :data-mobile-resource-scroll="bookmark.isMobile ? null : ''">
     <TagInfo />
-    <CardPanel @load-more="emit('load-more')" />
+    <CardPanel
+      :batch-mode="batchMode"
+      :selected-ids="selectedIds"
+      @load-more="emit('load-more')"
+      @toggle-selection="emit('toggle-selection', $event)"
+    />
   </div>
 </template>
 
@@ -11,8 +16,13 @@
   import { bookmarkStore } from '@/store';
 
   const bookmark = bookmarkStore();
+  defineProps<{
+    batchMode?: boolean;
+    selectedIds?: string[];
+  }>();
   const emit = defineEmits<{
     'load-more': [];
+    'toggle-selection': [id: string];
   }>();
 </script>
 

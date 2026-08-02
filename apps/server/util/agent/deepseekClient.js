@@ -238,6 +238,8 @@ export async function requestDeepSeek(messages, options = {}) {
  * @param {DeepSeekMessage[]} messages
  * @param {Object} options
  * @param {(chunk: string) => void} options.onDelta - 每个文本增量回调
+ * @param {(payload: { content: string, delta: string }) => (string|boolean|null|undefined)} [options.shouldStop]
+ *   消费方的流式熔断器；返回 true 或稳定原因码时，在该增量公开前取消上游流
  * @param {AbortSignal} [options.signal]
  * @returns {Promise<{ content: string, leakedToolCall: boolean }>}
  */
@@ -289,10 +291,31 @@ export async function requestDeepSeekStream(messages, options = {}) {
     let fullContent = '';
     let pendingContent = '';
     let leakedToolCall = false;
+    let consumerStopReason = null;
     const usage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
     let finishReason = null;
 
-    while (true) {
+    const normalizeConsumerStopReason = (value) => {
+      if (value === true) return 'consumer_requested';
+      if (typeof value !== 'string') return null;
+      return value.trim().slice(0, 64) || null;
+    };
+    const emitSafeContent = (safeContent) => {
+      if (!safeContent) return true;
+      const candidateContent = `${fullContent}${safeContent}`;
+      const stopReason = normalizeConsumerStopReason(
+        options.shouldStop?.({ content: candidateContent, delta: safeContent }),
+      );
+      if (stopReason) {
+        consumerStopReason = stopReason;
+        return false;
+      }
+      fullContent = candidateContent;
+      options.onDelta(safeContent);
+      return true;
+    };
+
+    providerStream: while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value?.byteLength) continue;
@@ -336,13 +359,10 @@ export async function requestDeepSeekStream(messages, options = {}) {
         const leakedAt = findLeakedToolCallStart(pendingContent);
         if (leakedAt >= 0) {
           const safePrefix = pendingContent.slice(0, leakedAt);
-          if (safePrefix) {
-            fullContent += safePrefix;
-            options.onDelta(safePrefix);
-          }
+          if (safePrefix && !emitSafeContent(safePrefix)) break providerStream;
           pendingContent = '';
           leakedToolCall = true;
-          continue;
+          break providerStream;
         }
 
         // 保留短尾巴以识别被 SSE 分片拆开的 <｜｜DSML... / invoke name= 标记。
@@ -351,24 +371,27 @@ export async function requestDeepSeekStream(messages, options = {}) {
         if (pendingContent.length > LEAK_GUARD_TAIL) {
           const safeContent = pendingContent.slice(0, -LEAK_GUARD_TAIL);
           pendingContent = pendingContent.slice(-LEAK_GUARD_TAIL);
-          fullContent += safeContent;
-          options.onDelta(safeContent);
+          if (!emitSafeContent(safeContent)) break providerStream;
         }
       }
     }
-    if (!leakedToolCall && pendingContent) {
-      fullContent += pendingContent;
-      options.onDelta(pendingContent);
+    if (consumerStopReason || leakedToolCall) {
+      // 熔断发生在正常 Provider 终态之前；主动 cancel 才能真正停止上游生成与后续计费。
+      await reader.cancel(consumerStopReason || 'tool_protocol_leak').catch(() => {});
+    } else if (!leakedToolCall && pendingContent) {
+      emitSafeContent(pendingContent);
     }
 
     return {
       content: fullContent,
       leakedToolCall,
+      consumerStopped: Boolean(consumerStopReason),
+      consumerStopReason,
       usage,
       usageStatus: usage.totalTokens > 0 ? 'reported' : 'missing',
       provider: cfg.name,
       model: getModel(cfg),
-      finishReason,
+      finishReason: consumerStopReason ? 'consumer_stop' : finishReason,
     };
   } finally {
     // fetch 建连阶段抛错同样必须清理；旧实现只覆盖 reader 循环，会留下一个多余计时器。

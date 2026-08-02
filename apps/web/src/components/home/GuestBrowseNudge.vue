@@ -2,8 +2,12 @@
   <transition name="nudge-slide">
     <div v-if="visible" class="guest-browse-nudge">
       <span class="guest-browse-nudge__text">{{ $t('home.guestNudgeText') }}</span>
-      <button class="guest-browse-nudge__cta" @click="register">{{ $t('home.freeRegister') }}</button>
-      <button class="guest-browse-nudge__close" :aria-label="$t('common.close')" @click="dismiss">×</button>
+      <BButton class="guest-browse-nudge__cta" type="primary" @click="register">
+        {{ $t('home.freeRegister') }}
+      </BButton>
+      <BButton class="guest-browse-nudge__close" :aria-label="$t('common.close')" @click="dismiss">
+        <SvgIcon :src="icon.common.close" size="16" aria-hidden="true" />
+      </BButton>
     </div>
   </transition>
 </template>
@@ -11,6 +15,9 @@
 <script setup lang="ts">
   import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
 
   // 游客被动浏览软触发:停留够久或滚动够多后,一次会话弹一次注册软邀请,把「看完就走」的游客接进转化闭环
   const SESSION_KEY = 'ln_browse_nudge';
@@ -128,12 +135,11 @@
   }
   .guest-browse-nudge__cta {
     flex: 0 0 auto;
-    border: 0;
-    cursor: pointer;
+    min-height: 40px;
     font-size: 13px;
     font-weight: 500;
     color: #fff;
-    background: #615ced;
+    background: var(--primary-color);
     padding: 6px 14px;
     border-radius: 999px;
     transition: opacity 0.2s;
@@ -143,13 +149,13 @@
   }
   .guest-browse-nudge__close {
     flex: 0 0 auto;
-    border: 0;
-    background: transparent;
-    cursor: pointer;
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    background: transparent !important;
     color: var(--text-color);
     opacity: 0.5;
-    font-size: 18px;
-    line-height: 1;
   }
   .guest-browse-nudge__close:hover {
     opacity: 0.85;

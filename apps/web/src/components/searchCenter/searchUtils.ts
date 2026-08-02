@@ -202,3 +202,14 @@ export function buildTypeBuckets(items: DisplaySearchItem[]) {
   });
   return buckets;
 }
+
+/** 资源中心展示层使用的分组结果，保持筛选器顺序并隐藏空分组。 */
+export function buildVisibleGroups(items: DisplaySearchItem[], selectedTypes: GlobalSearchType[]) {
+  const buckets = buildTypeBuckets(items);
+  return selectedTypes
+    .map((type) => ({
+      type,
+      items: buckets[type],
+    }))
+    .filter((group) => group.items.length);
+}

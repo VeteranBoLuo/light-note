@@ -5,10 +5,19 @@
       v-if="bookmark.isMobile"
       :keyword="queryState.keyword"
       input-id="mobile-search-page-input"
+      show-menu
+      :selection-mode="batchMode"
+      selection-variant="basic"
+      :selected-count="selectedCount"
+      :allow-sort="false"
+      :create-label="t('inbox.quickCapture')"
       @update:keyword="onMobileSearchKeyword"
       @submit="submitSearch"
       @back="leaveSearchPage"
       @create="inbox.openQuickCapture()"
+      @batch="toggleBatchMode"
+      @filter="mobileFilterVisible = true"
+      @cancel-selection="exitBatchMode"
     />
 
     <ResourcePageShell
@@ -204,9 +213,6 @@
                     <SvgIcon :src="icon.ai.ask" size="15" aria-hidden="true" />
                     <span>AI</span>
                   </BButton>
-                  <BButton class="mobile-toolbar-btn" @click="toggleBatchMode">
-                    {{ batchMode ? t('resourceCenter.batch.exit') : t('resourceCenter.batch.enter') }}
-                  </BButton>
                 </div>
                 <div v-else class="toolbar-actions">
                   <BButton
@@ -301,14 +307,25 @@
                   </BButton>
                 </div>
                 <div class="batch-actions">
-                  <b-button :disabled="allMatchingActive || !selectedCount" @click="openSearchAi('organize')">
-                    <SvgIcon :src="icon.ai.organize" size="15" />
-                    {{ t('ai.entry.organizeSelected') }}
-                  </b-button>
-                  <b-button @click="batchAddToInbox">{{ t('inbox.addExisting') }}</b-button>
-                  <b-button type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</b-button>
-                  <b-button type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</b-button>
-                  <b-button type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</b-button>
+                  <BButton
+                    v-if="bookmark.isMobile"
+                    class="mobile-batch-actions-button"
+                    :disabled="!selectedCount"
+                    @click="mobileBatchActionsOpen = true"
+                  >
+                    <SvgIcon :src="icon.common.more" size="16" />
+                    {{ t('common.more') }}
+                  </BButton>
+                  <template v-else>
+                    <BButton :disabled="allMatchingActive || !selectedCount" @click="openSearchAi('organize')">
+                      <SvgIcon :src="icon.ai.organize" size="15" />
+                      {{ t('ai.entry.organizeSelected') }}
+                    </BButton>
+                    <BButton @click="batchAddToInbox">{{ t('inbox.addExisting') }}</BButton>
+                    <BButton type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</BButton>
+                    <BButton type="primary" @click="batchRemoveTag">{{ t('resourceCenter.batch.removeTag') }}</BButton>
+                    <BButton type="danger" @click="batchDelete">{{ t('resourceCenter.batch.delete') }}</BButton>
+                  </template>
                 </div>
               </section>
 
@@ -331,31 +348,6 @@
                       <div class="result-sk-line result-sk-line--meta2"></div>
                     </div>
                   </div>
-                </div>
-
-                <div
-                  v-else-if="interleavedItems.length"
-                  class="result-grid"
-                  :class="{ 'result-grid--list': effectiveView === 'list' }"
-                >
-                  <RightMenu
-                    v-for="item in interleavedItems"
-                    :key="`${item.type}-${item.id}`"
-                    :menu="menuForSearchItem(item)"
-                    @select="handleItemMenu($event, item)"
-                  >
-                    <SearchResultItem
-                      :item="item"
-                      :type-label="getSearchTypeLabel(t, item.type)"
-                      :keyword="queryState.keyword"
-                      :selected="isItemSelected(item)"
-                      :selectable="batchMode"
-                      :view="effectiveView"
-                      :compact="bookmark.isMobile"
-                      @open="openItem(item)"
-                      @toggle-select="toggleSelect(item)"
-                    />
-                  </RightMenu>
                 </div>
 
                 <template v-else-if="visibleGroups.length">
@@ -464,6 +456,25 @@
       @close="mobileFilterVisible = false"
     >
       <div class="mobile-filter-drawer">
+        <div class="mobile-filter-field mobile-filter-search">
+          <label class="mobile-filter-label" for="mobile-filter-search-input">
+            {{ t('resourceCenter.searchFieldLabel') }}
+          </label>
+          <BInput
+            id="mobile-filter-search-input"
+            v-model:value="queryState.keyword"
+            :placeholder="t('resourceCenter.searchPlaceholder')"
+            height="40px"
+            clearable
+            @input="syncQueryDebounced"
+            @enter="submitSearch"
+          >
+            <template #prefix>
+              <SvgIcon :src="icon.navigation.search" size="15" aria-hidden="true" />
+            </template>
+          </BInput>
+        </div>
+
         <div class="mobile-filter-section">
           <span class="mobile-filter-label">{{ t('resourceCenter.typeFilter') }}</span>
           <div class="mobile-filter-types">
@@ -537,6 +548,13 @@
         </div>
       </div>
     </BDrawer>
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileBatchActionsOpen"
+      :title="t('resourceCenter.batch.selectedCount', { count: selectedCount })"
+      :actions="mobileBatchActions"
+      @action="handleMobileBatchAction"
+    />
   </div>
 </template>
 
@@ -574,7 +592,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import SearchResultItemComp from '@/components/searchCenter/SearchResultItem.vue';
   import {
-    buildTypeBuckets,
+    buildVisibleGroups,
     collectTagOptions,
     mapDisplayItems,
     type DisplaySearchItem,
@@ -589,6 +607,7 @@
   import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import ResourceCenterSectionNav from '@/components/searchCenter/ResourceCenterSectionNav.vue';
   import ResourceCenterTopBar from '@/components/searchCenter/ResourceCenterTopBar.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
@@ -613,6 +632,7 @@
   const syncTimer = ref<number | null>(null);
   const isRouteApplying = ref(false);
   const mobileFilterVisible = ref(false);
+  const mobileBatchActionsOpen = ref(false);
   const desktopTypeMenuOpen = ref(false);
   const batchMode = ref(false);
   const tagSearch = ref('');
@@ -698,26 +718,10 @@
     () => viewState.loading && (!viewState.rawItems.length || showLoadingSkeleton.value),
   );
 
-  const typeBuckets = computed(() => buildTypeBuckets(mappedItems.value));
+  // 搜索结果始终按资源类型分组；每组内部沿用服务端返回的相关度/排序顺序，避免搜索后丢失分组标题。
+  const visibleGroups = computed(() => buildVisibleGroups(mappedItems.value, selectedTypes.value));
 
-  const visibleGroups = computed(() => {
-    if (queryState.keyword.trim() && selectedTypes.value.length > 1 && queryState.sort === 'relevance') return [];
-    return selectedTypes.value
-      .map((type) => ({
-        type,
-        items: typeBuckets.value[type],
-      }))
-      .filter((group) => group.items.length);
-  });
-
-  const interleavedItems = computed(() =>
-    queryState.keyword.trim() && selectedTypes.value.length > 1 && queryState.sort === 'relevance'
-      ? mappedItems.value
-      : [],
-  );
-  const allVisibleItems = computed(() =>
-    interleavedItems.value.length ? interleavedItems.value : visibleGroups.value.flatMap((group) => group.items),
-  );
+  const allVisibleItems = computed(() => visibleGroups.value.flatMap((group) => group.items));
   // 资源中心数据域固定为书签、笔记、文件和标签。
   const selectableVisibleItems = computed(() =>
     allVisibleItems.value.filter((item) => isResourceSearchType(item.type)),
@@ -728,6 +732,39 @@
       ? Math.max(0, Number(allMatchingSummary.value?.total || 0) - excludedSelectionIds.value.length)
       : selectedIds.value.length,
   );
+  const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'ai',
+      label: t('ai.entry.organizeSelected'),
+      icon: icon.ai.organize,
+      disabled: allMatchingActive.value || selectedCount.value < 1,
+    },
+    {
+      key: 'inbox',
+      label: t('inbox.addExisting'),
+      icon: icon.contextMenu.inbox,
+      disabled: selectedCount.value < 1,
+    },
+    {
+      key: 'addTag',
+      label: t('resourceCenter.batch.addTag'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: selectedCount.value < 1,
+    },
+    {
+      key: 'removeTag',
+      label: t('resourceCenter.batch.removeTag'),
+      icon: icon.manage_categoryBtn_tag,
+      disabled: selectedCount.value < 1,
+    },
+    {
+      key: 'delete',
+      label: t('resourceCenter.batch.delete'),
+      icon: icon.table_delete,
+      danger: true,
+      disabled: selectedCount.value < 1,
+    },
+  ]);
   const tagOptions = computed(() => {
     const options = viewState.tagOptions.length ? viewState.tagOptions : collectTagOptions(mappedItems.value);
     const selected = new Set(queryState.tags);
@@ -1214,6 +1251,21 @@
     if (!batchMode.value) clearBatchSelection();
   }
 
+  function exitBatchMode() {
+    if (!batchMode.value) return;
+    batchMode.value = false;
+    mobileBatchActionsOpen.value = false;
+    clearBatchSelection();
+  }
+
+  function handleMobileBatchAction(action: MobilePageActionItem) {
+    if (action.key === 'ai') openSearchAi('organize');
+    else if (action.key === 'inbox') void batchAddToInbox();
+    else if (action.key === 'addTag') batchAddTag();
+    else if (action.key === 'removeTag') batchRemoveTag();
+    else if (action.key === 'delete') void batchDelete();
+  }
+
   function selectionItemFromKey(key: string): BatchResourceItem | null {
     const separator = key.indexOf(':');
     if (separator <= 0) return null;
@@ -1243,9 +1295,7 @@
     if (allMatchingActive.value) return buildAllMatchingSelection();
     return {
       mode: 'explicit',
-      items: selectedIds.value
-        .map(selectionItemFromKey)
-        .filter((item): item is BatchResourceItem => Boolean(item)),
+      items: selectedIds.value.map(selectionItemFromKey).filter((item): item is BatchResourceItem => Boolean(item)),
     };
   }
 
@@ -1311,9 +1361,7 @@
     const selectedTagCount = allMatchingActive.value
       ? Math.max(0, Number(allMatchingSummary.value?.typeCounts?.tag || 0) - excludedTagCount)
       : selectedIds.value.filter((id) => id.startsWith('tag:')).length;
-    const editableCount = allMatchingActive.value
-      ? selectedCount.value - selectedTagCount
-      : selectedItems.length;
+    const editableCount = allMatchingActive.value ? selectedCount.value - selectedTagCount : selectedItems.length;
     if (!editableCount) {
       message.warning(t('resourceCenter.batch.onlyResourceSupported'));
       return;
@@ -2876,9 +2924,9 @@
 
     .tag-chip {
       flex: 0 0 auto;
-      height: 26px;
-      min-height: 26px;
-      padding: 0 9px;
+      height: 40px;
+      min-height: 40px;
+      padding: 0 12px;
       line-height: 1;
     }
 
@@ -2962,7 +3010,7 @@
   .search-page--mobile .filter-item {
     width: auto;
     min-width: max-content;
-    height: 34px;
+    height: 40px;
     flex: 0 0 auto;
     padding: 0 11px;
     display: inline-flex;
@@ -3045,9 +3093,9 @@
   }
 
   .search-page--mobile .mobile-toolbar-btn {
-    min-width: 34px;
-    height: 34px;
-    min-height: 34px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
     padding: 0 9px;
     gap: 4px;
     border: 1px solid var(--search-border-color);
@@ -3059,7 +3107,7 @@
   }
 
   .search-page--mobile .mobile-toolbar-btn--icon {
-    width: 34px;
+    width: 40px;
     padding: 0;
   }
 
@@ -3116,23 +3164,14 @@
     width: auto;
     flex: 1 1 auto;
     display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
-    scrollbar-width: none;
-  }
-
-  .search-page--mobile .batch-actions::-webkit-scrollbar {
-    display: none;
+    justify-content: flex-end;
   }
 
   .search-page--mobile .batch-actions :deep(.b_btn) {
-    width: auto;
-    min-width: max-content;
-    height: 30px;
-    flex: 0 0 auto;
+    min-width: 88px;
+    height: 32px;
     padding: 0 9px;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .search-page--mobile .result-scroll-area {
@@ -3218,6 +3257,15 @@
 
   .mobile-filter-select {
     width: 100%;
+  }
+
+  .mobile-filter-search {
+    padding-bottom: 2px;
+  }
+
+  .mobile-filter-search :deep(.b-input) {
+    border-radius: 10px;
+    font-size: 13px;
   }
 
   .mobile-filter-toggle {
