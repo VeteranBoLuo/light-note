@@ -1,0 +1,155 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createApp, h, nextTick, provide, ref } from 'vue';
+import { createI18n } from 'vue-i18n';
+import { LANDING_AUTH_CONTEXT } from './landingAuth.ts';
+
+const mocks = vi.hoisted(() => ({
+  routerPush: vi.fn(() => Promise.resolve()),
+  recordOperation: vi.fn(() => Promise.resolve()),
+  retryAuth: vi.fn(() => Promise.resolve()),
+  user: {
+    id: '',
+    role: 'visitor',
+    preferences: { theme: 'day' },
+  },
+  bookmark: {
+    isMobile: false,
+    openAuthModal: vi.fn(),
+  },
+}));
+
+vi.mock('vue-router', async (importOriginal) => {
+  const original = await importOriginal<typeof import('vue-router')>();
+  return {
+    ...original,
+    useRouter: () => ({ push: mocks.routerPush }),
+  };
+});
+
+vi.mock('@/store', () => ({
+  useUserStore: () => mocks.user,
+  bookmarkStore: () => mocks.bookmark,
+}));
+
+vi.mock('@/utils/authStorage.ts', () => ({
+  hasLoggedInBefore: () => true,
+}));
+
+vi.mock('@/api/commonApi.ts', () => ({
+  recordOperation: mocks.recordOperation,
+}));
+
+vi.mock('@/http/request', () => ({
+  apiBasePost: vi.fn(),
+}));
+
+vi.mock('@/utils/conversion', () => ({
+  trackConversion: vi.fn(),
+}));
+
+vi.mock('@/composables/usePwaInstall', () => ({
+  usePwaInstall: () => ({
+    isStandalone: ref(false),
+    openGuide: vi.fn(),
+  }),
+}));
+
+vi.mock('@/utils/androidBridge', () => ({
+  isLightNoteAndroidApp: () => false,
+}));
+
+vi.mock('@/utils/appRuntime.ts', () => ({
+  resolveLightNoteRuntime: () => 'browser',
+}));
+
+vi.mock('@/utils/mobileLandingVisit.ts', () => ({
+  markMobileLandingVisited: vi.fn(),
+}));
+
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
+  default: { name: 'SvgIconStub', template: '<span />' },
+}));
+
+vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
+  default: { name: 'BModalStub', template: '<div><slot /></div>' },
+}));
+
+const { default: Landing } = await import('./Landing.vue');
+
+let cleanup: (() => void) | undefined;
+let canvasContextSpy: ReturnType<typeof vi.spyOn> | undefined;
+
+beforeEach(() => {
+  const context = {
+    clearRect: vi.fn(),
+    beginPath: vi.fn(),
+    arc: vi.fn(),
+    fill: vi.fn(),
+    moveTo: vi.fn(),
+    lineTo: vi.fn(),
+    stroke: vi.fn(),
+    fillStyle: '',
+    strokeStyle: '',
+  } as unknown as CanvasRenderingContext2D;
+  canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
+  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
+});
+
+async function mountLanding() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const authStatus = ref<'pending'>('pending');
+  const app = createApp({
+    setup() {
+      provide(LANDING_AUTH_CONTEXT, {
+        status: authStatus,
+        retry: mocks.retryAuth,
+      });
+      return () => h(Landing);
+    },
+  });
+  app.use(
+    createI18n({
+      legacy: false,
+      locale: 'zh-CN',
+      messages: { 'zh-CN': {} },
+      missingWarn: false,
+      fallbackWarn: false,
+    }),
+  );
+  app.directive('click-log', {});
+  app.mount(host);
+  await nextTick();
+
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+  return host;
+}
+
+afterEach(() => {
+  cleanup?.();
+  cleanup = undefined;
+  canvasContextSpy?.mockRestore();
+  canvasContextSpy = undefined;
+  vi.unstubAllGlobals();
+  mocks.routerPush.mockClear();
+  mocks.recordOperation.mockClear();
+});
+
+describe('Landing CTA', () => {
+  it('近期登录用户在身份恢复完成前首次点击也能进入应用', async () => {
+    const host = await mountLanding();
+    const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.ctaEnterApp'),
+    );
+
+    expect(enterButton).not.toBeUndefined();
+    enterButton?.click();
+    await nextTick();
+
+    expect(mocks.routerPush).toHaveBeenCalledWith('/app');
+  });
+});

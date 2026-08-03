@@ -482,7 +482,8 @@
   function goRegister(source: string) {
     bookmark.openAuthModal('注册', source);
   }
-  // 已登录用户统一进入 /app，再由稳定应用入口按设备与首页偏好分发。
+  // 统一进入 /app，再由稳定应用入口按设备与首页偏好分发。
+  // 「进入」可能来自本机近期登录记录，此时 Pinia 身份仍在恢复；不能再用 isLoggedIn 二次拦截。
   function enterApp() {
     router.push('/app');
   }
@@ -520,7 +521,7 @@
     goRegister(source);
   }
   function handleEnterApp() {
-    if (!isLoggedIn.value) return;
+    if (landingCtaMode.value !== 'enter') return;
     void recordOperation(LANDING_OPERATION_LOG.enter);
     enterApp();
   }
