@@ -5,6 +5,7 @@ import useUserStore from '@/store/useUser';
 import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
 import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
 import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
+import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -31,14 +32,6 @@ interface ApiResponse {
   msg: string;
   data: any;
   requestId?: string;
-}
-
-interface QueryData {
-  pageSize?: number;
-  currentPage?: number;
-  level?: number;
-  order?: { [key: string]: 'DESC' | 'ASC' };
-  filters?: any;
 }
 
 type RequestOptions = AxiosRequestConfig & {
@@ -320,13 +313,7 @@ export const apiQueryPost = async (
   const res = await request({
     url,
     method: 'post',
-    data: {
-      pageSize: data?.pageSize ?? 10,
-      currentPage: data?.currentPage ?? 1,
-      level: data?.level ?? 0,
-      filters: data?.filters ?? {},
-      order: data?.order ?? {},
-    },
+    data: buildQueryRequestData(data),
     ...options,
   });
   return handleErrorResponse(res.data);
