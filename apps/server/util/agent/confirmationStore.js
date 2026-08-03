@@ -10,6 +10,7 @@ const EXECUTION_TTL_SECONDS = 5 * 60;
 const ACTION_LOCK_PREFIX = 'agent:action-lock:';
 const ACTION_LOCK_TTL_SECONDS = TTL_SECONDS + 60;
 const ACTION_SUCCESS_COOLDOWN_SECONDS = TTL_SECONDS;
+const MAX_PRIVATE_CONTEXT_BYTES = 64 * 1024;
 const IDEMPOTENT_ATTACHMENT_TOOLS = new Set(['create_image_note']);
 const FINALIZE_ACTION_LOCK_SCRIPT = `
 if redis.call('GET', KEYS[1]) ~= ARGV[1] then
@@ -169,6 +170,23 @@ export class ToolConfirmationError extends Error {
   }
 }
 
+function normalizePrivateContext(value) {
+  if (value == null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '操作确认私有上下文格式无效。');
+  }
+  let serialized;
+  try {
+    serialized = JSON.stringify(value);
+  } catch {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '操作确认私有上下文无法序列化。');
+  }
+  if (!serialized || Buffer.byteLength(serialized, 'utf8') > MAX_PRIVATE_CONTEXT_BYTES) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '操作确认私有上下文超过保存上限。');
+  }
+  return JSON.parse(serialized);
+}
+
 export function publicToolConfirmation(token, confirmation, expiresIn = TTL_SECONDS) {
   return {
     token,
@@ -197,6 +215,7 @@ export async function createToolConfirmation({
   token: suppliedToken,
   replaceToken,
   replaceConfirmationId,
+  privateContext,
 }) {
   const token = suppliedToken || crypto.randomBytes(32).toString('base64url');
   if (!/^[A-Za-z0-9_-]{40,}$/.test(token)) {
@@ -216,6 +235,7 @@ export async function createToolConfirmation({
     args,
     context: { ...context, sessionId },
   });
+  const normalizedPrivateContext = normalizePrivateContext(privateContext);
   const confirmation = {
     id: confirmationId,
     ownerHash: ownerHash(ownerKey),
@@ -234,6 +254,7 @@ export async function createToolConfirmation({
     expiresAt,
     actionLockKey,
     idempotencyKey,
+    ...(normalizedPrivateContext ? { privateContext: normalizedPrivateContext } : {}),
   };
   const serialized = JSON.stringify(confirmation);
   if (replaceToken) {

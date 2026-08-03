@@ -20,13 +20,28 @@ function semanticPlanCall(plan, index) {
   };
 }
 
+function noteDraftCall(draft, index) {
+  return {
+    id: `replay-note-draft-${index + 1}`,
+    type: 'function',
+    function: {
+      name: 'submit_note_draft',
+      arguments: JSON.stringify(draft || {}),
+    },
+  };
+}
+
 export function buildReplayProviderResponses(steps = []) {
   return steps.map((step, index) => ({
     content: String(step.content || ''),
-    toolCalls: step.plan ? [semanticPlanCall(step.plan, index)] : [],
+    toolCalls: step.plan
+      ? [semanticPlanCall(step.plan, index)]
+      : step.draft
+        ? [noteDraftCall(step.draft, index)]
+        : [],
     usage: usage(Number(step.totalTokens || 1)),
     usageStatus: 'reported',
-    finishReason: step.plan ? 'tool_calls' : 'stop',
+    finishReason: step.plan || step.draft ? 'tool_calls' : 'stop',
   }));
 }
 

@@ -289,7 +289,7 @@ export function createAiAssistantMaterialSnapshot(
 const MATERIAL_ANAPHORIC_PATTERN =
   /(?:这个|那个|这些|那些|它们?|刚才|刚刚|上面|前面|之前|上述|前述|基于(?:它|这个|那个|上述|前述)|\b(?:this|that|these|those|it|they|above|previous|earlier)\b)/i;
 const MATERIAL_FOLLOW_UP_COMMAND_PATTERN =
-  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|写(?:得|的)?(?:(?:太|有点|比较)?(?:短|少|简略)|(?:长|多|详细|完整|丰富)(?:一|点|些)?)|(?:太|有点|比较)?(?:短|少|简略)|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更(?:长|详细|完整|丰富)(?:一点|些)?|再(?:长|详细|完整|丰富)(?:一点|些)?|不够(?:长|详细|完整|丰富)|扩写|润色|continue\b|expand\b|regenerate\b|rewrite\b|longer\b|more\s+detail\b)/i;
+  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|写(?:得|的)?(?:(?:太|有点|比较)?(?:短|少|简略)|(?:长|多|详细|完整|丰富)(?:一|点|些)?)|(?:太|有点|比较)?(?:短|少|简略)|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更(?:长|详细|完整|丰富)(?:一点|些)?|再(?:长|详细|完整|丰富)(?:一点|些)?|不够(?:长|详细|完整|丰富)|扩写|改写|优化(?:一下)?|润色|continue\b|expand\b|regenerate\b|rewrite\b|longer\b|more\s+detail\b)/i;
 
 export interface AiAssistantDraftRefinementReference {
   confirmationId: string;
@@ -304,7 +304,8 @@ export function shouldAutoInheritAiAssistantMaterials(input: string) {
 
 /**
  * “太短了，写长一点”只能改写当前会话里仍待确认的 create_note 草稿。
- * 客户端仅发送不可预测令牌和 ID；正文由服务端从确认存储读取，避免旧页面或篡改参数伪造草稿。
+ * 客户端仅发送不可预测令牌和 ID；旧正文及原材料稳定引用由服务端从确认存储读取并重新校验，
+ * 避免旧页面或篡改参数替换本轮改写所依据的材料。
  */
 export function resolveAiAssistantPendingNoteDraftRefinement(
   messages: AiAssistantMessage[],

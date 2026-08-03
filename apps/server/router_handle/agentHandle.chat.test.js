@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   settleSessionAction: vi.fn(),
   shouldContinueToolPlanning: vi.fn(() => false),
   prepareTodoStatus: vi.fn(),
+  buildNoteAiPayload: vi.fn(),
+  findOwnedNoteForAi: vi.fn(),
   findOwnedTodoForAi: vi.fn(),
   looksLikeLeakedToolCall: vi.fn(() => false),
   parseLeakedToolCalls: vi.fn(() => []),
@@ -78,7 +80,10 @@ vi.mock('../util/aiMemoryService.js', () => ({
   getActiveAiMemoriesForPrompt: mocks.getActiveAiMemoriesForPrompt,
   createAiMemoryCandidate: mocks.createAiMemoryCandidate,
 }));
-vi.mock('../util/noteAiService.js', () => ({ buildNoteAiPayload: vi.fn(), findOwnedNoteForAi: vi.fn() }));
+vi.mock('../util/noteAiService.js', () => ({
+  buildNoteAiPayload: mocks.buildNoteAiPayload,
+  findOwnedNoteForAi: mocks.findOwnedNoteForAi,
+}));
 vi.mock('../util/services/todoService.js', () => ({ findOwnedTodoForAi: mocks.findOwnedTodoForAi }));
 vi.mock('../util/agent/followUpSuggestions.js', () => ({
   getFollowUpSuggestions: vi.fn(),
@@ -357,11 +362,10 @@ describe('agentChat 主链路', () => {
       confirmation: { ...input, id: 'confirmation-1' },
       expiresIn: 300,
     }));
-    mocks.publicToolConfirmation.mockImplementation((token, confirmation, expiresIn) => ({
-      ...confirmation,
-      token,
-      expiresIn,
-    }));
+    mocks.publicToolConfirmation.mockImplementation((token, confirmation, expiresIn) => {
+      const { privateContext: _privateContext, ...publicConfirmation } = confirmation || {};
+      return { ...publicConfirmation, token, expiresIn };
+    });
     mocks.inspectToolConfirmationExecution.mockReset();
     mocks.prepareTodoStatus.mockImplementation(async (args) => {
       if (!args.keyword && !args.todoId) {
@@ -375,6 +379,9 @@ describe('agentChat 主链路', () => {
         targetTitle: args.keyword || args.todoId,
       };
     });
+    mocks.findOwnedNoteForAi.mockResolvedValue(null);
+    mocks.buildNoteAiPayload.mockImplementation(async ({ note }) => ({ content: String(note?.content || '') }));
+    mocks.findOwnedTodoForAi.mockResolvedValue(null);
   });
 
   it('高置信普通问答跳过 Planner，并完整发送新旧 SSE 生命周期事件', async () => {
@@ -507,7 +514,7 @@ describe('agentChat 主链路', () => {
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('这是网页摘要。');
   });
 
-  it('单个书签生成笔记走专用草稿协议，不再进入通用 Semantic Planner', async () => {
+  it('书签生成笔记走统一材料草稿协议，不再进入通用 Semantic Planner', async () => {
     mocks.poolQuery.mockImplementation(async (sql) => {
       if (String(sql).includes('FROM bookmark b')) {
         return [
@@ -528,7 +535,7 @@ describe('agentChat 主链路', () => {
     mocks.requestAi.mockResolvedValueOnce({
       content: '',
       toolCalls: [
-        toolCall('submit_bookmark_note_draft', {
+        toolCall('submit_note_draft', {
           title: 'TypeORM 使用笔记',
           content: `# TypeORM\n\n${'整理后的正文。'.repeat(80)}`,
         }),
@@ -553,7 +560,7 @@ describe('agentChat 主链路', () => {
     expect(mocks.toolExecute).not.toHaveBeenCalled();
     expect(mocks.requestAi).toHaveBeenCalledOnce();
     expect(mocks.requestAi.mock.calls[0][1]).toMatchObject({
-      toolChoice: { type: 'function', function: { name: 'submit_bookmark_note_draft' } },
+      toolChoice: { type: 'function', function: { name: 'submit_note_draft' } },
     });
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -568,11 +575,140 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('只有书签且网页无快照、读取失败时明确提示补充材料，不凭标题和链接编造笔记', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '受限网页',
+              url: 'https://restricted.example/article',
+              snapshot_content: '',
+              description: '',
+              content: 'https://restricted.example/article',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.toolExecute.mockResolvedValueOnce({ error: 'READ_FAILED', message: '网站拒绝读取' });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请分析这个书签的内容，生成一篇笔记。',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('没有返回足够的可读正文'),
+      confirmations: [],
+    });
+  });
+
+  it('书签读取失败但同轮还有可读文件时，继续使用其余可靠材料生成笔记', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '受限网页',
+              url: 'https://restricted.example/article',
+              snapshot_content: '',
+              description: '',
+              content: 'https://restricted.example/article',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.toolExecute.mockResolvedValueOnce({ error: 'READ_FAILED', message: '网站拒绝读取' });
+    mocks.resolveAttachments.mockResolvedValueOnce({
+      text: '\n\n[document:source-1:0]\n文件中的可靠正文。'.repeat(30),
+      sources: [
+        {
+          type: 'document',
+          id: 'source-1',
+          documentId: 'source-1',
+          fileId: 'file-1',
+          title: '补充材料.pdf',
+        },
+      ],
+      coverage: {
+        documents: [{ sourceId: 'source-1', status: 'ready', selection: { included: { chars: 600 } } }],
+        overall: { documentCount: 1, complete: true },
+      },
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '根据可读文件整理的笔记',
+          content: `# 整理结果\n\n${'文件内容分析。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(30),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请综合这个书签和文件生成一篇笔记。',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: ['source-1'],
+      }),
+      res,
+    );
+
+    expect(mocks.toolExecute).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('文件中的可靠正文');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        privateContext: expect.objectContaining({ attachmentIds: ['source-1'] }),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('笔记草稿已准备好'),
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+    });
+  });
+
   it('“写长一点”读取服务端旧草稿并用新确认原子替换旧确认', async () => {
     const oldToken = 'o'.repeat(43);
     const oldContent = '旧正文。'.repeat(80);
-    mocks.poolQuery.mockImplementation(async (sql) => {
+    mocks.poolQuery.mockImplementation(async (sql, params = []) => {
       if (String(sql).includes('FROM bookmark b')) {
+        const requestedId = String(params[1] || '');
+        if (requestedId === 'bookmark-evil') {
+          return [
+            [
+              {
+                id: 'bookmark-evil',
+                title: '客户端伪造的新材料',
+                url: 'https://evil.example',
+                snapshot_content: '不应进入改写上下文。'.repeat(80),
+                description: '',
+                content: '不应进入改写上下文。'.repeat(80),
+              },
+            ],
+          ];
+        }
         return [
           [
             {
@@ -595,12 +731,19 @@ describe('agentChat 主链路', () => {
         sessionId: 'session-1',
         toolName: 'create_note',
         args: { title: '旧标题', content: oldContent },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '请根据这个书签生成笔记',
+          contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+          attachmentIds: [],
+        },
       },
     });
     mocks.requestAi.mockResolvedValueOnce({
       content: '',
       toolCalls: [
-        toolCall('submit_bookmark_note_draft', {
+        toolCall('submit_note_draft', {
           title: '扩写后的标题',
           content: `${oldContent}\n\n${'新增分析。'.repeat(80)}`,
         }),
@@ -616,7 +759,7 @@ describe('agentChat 主链路', () => {
         message: '太短了，重新写长一点、更详细一点。',
         stream: true,
         sessionId: 'session-1',
-        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        contexts: [{ type: 'bookmark', id: 'bookmark-evil' }],
         attachmentIds: [],
         draftRefinement: {
           confirmationId: 'old-confirmation',
@@ -627,11 +770,16 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.inspectToolConfirmationExecution).toHaveBeenCalledWith(oldToken, 'user:user-1', 'session-1');
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('网页存档');
+    expect(mocks.requestAi.mock.calls[0][0][1].content).not.toContain('客户端伪造的新材料');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         replaceToken: oldToken,
         replaceConfirmationId: 'old-confirmation',
         args: expect.objectContaining({ title: '扩写后的标题' }),
+        privateContext: expect.objectContaining({
+          contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+        }),
       }),
     );
     expect(mocks.settleSessionAction).toHaveBeenCalledWith(
@@ -1409,11 +1557,10 @@ describe('agentChat 主链路', () => {
     expect(payload?.data?.response).not.toMatch(/已完成|成功/);
   });
 
-  it('明确创建笔记时允许两轮受限语义修复，避免 Provider 偶发漏计划或误选不可用能力', async () => {
-    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+  it('明确创建笔记时使用统一草稿协议，并对 Provider 漏协议做一次有界修复', async () => {
     mocks.requestAi
       .mockResolvedValueOnce({
-        content: '漏掉结构化计划',
+        content: '漏掉结构化草稿协议',
         toolCalls: [],
         usage: usage(2),
         usageStatus: 'reported',
@@ -1422,43 +1569,9 @@ describe('agentChat 主链路', () => {
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'todo.status.set',
-                goal: '误选不可用能力',
-                targetDescription: '当前内容',
-                dependsOn: [],
-              },
-            ],
-          }),
-        ],
-        usage: usage(2),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      })
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '创建网页摘要笔记',
-                targetDescription: '网页摘要',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              {
-                toolName: 'create_note',
-                arguments: { title: '网页摘要', content: '根据网页内容整理的正文' },
-              },
-            ],
+          toolCall('submit_note_draft', {
+            title: '网页摘要',
+            content: '# 网页摘要\n\n根据用户提供的正文整理出的测试笔记。',
           }),
         ],
         usage: usage(3),
@@ -1477,112 +1590,306 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
-    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
-    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_semantic_repair_2');
-    expect(mocks.requestAi.mock.calls[2][0].at(-1).content).toContain('note.create');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft');
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('note_draft_repair');
+    expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
   });
 
-  it('明确要求根据书签生成笔记时，普通对话计划必须重判为 create_note 确认', async () => {
-    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
-    mocks.requestAi
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'conversation',
-            intents: [],
-            toolCalls: [],
-          }),
-        ],
-        usage: usage(2),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      })
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '根据所选书签创建笔记',
-                targetDescription: 'Mac8K - Mac 软件下载安装站',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              {
-                toolName: 'create_note',
-                arguments: {
-                  title: 'Mac8K - Mac 软件下载安装站',
-                  content: '# Mac8K - Mac 软件下载安装站\n\n根据书签内容整理的笔记。',
-                },
-              },
-            ],
-          }),
-        ],
-        usage: usage(3),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      });
+  it('引用笔记生成新笔记时读取服务端正文，并把稳定引用写入确认私有上下文', async () => {
+    mocks.findOwnedNoteForAi.mockResolvedValueOnce({
+      id: 'note-1',
+      title: 'Redis 学习记录',
+      content: 'Redis 是内存数据结构存储。'.repeat(60),
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: 'Redis 学习笔记',
+          content: `# Redis\n\n${'整理后的正文。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(3),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
     const res = response();
 
     await agentChat(
       request({
-        message: '请分析这个书签的内容，生成一篇笔记。',
+        message: '请根据这个笔记生成一篇更完整的新笔记。',
         stream: false,
-        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        contexts: [{ type: 'note', id: 'note-1' }],
         attachmentIds: [],
       }),
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
-    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
-    expect(mocks.requestAi.mock.calls[1][0].at(-1).content).toContain('note.create');
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('Redis 是内存数据结构存储');
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateContext: expect.objectContaining({
+          sourceMessage: '请根据这个笔记生成一篇更完整的新笔记。',
+          contextRefs: [{ type: 'note', id: 'note-1' }],
+          attachmentIds: [],
+        }),
+      }),
+    );
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
-      response: '',
+      response: expect.stringContaining('笔记草稿已准备好'),
       confirmations: [expect.objectContaining({ toolName: 'create_note' })],
     });
   });
 
-  it('明确生成笔记连续被误判为普通对话时失败关闭，不再返回普通正文', async () => {
-    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
-    const conversationPlan = () => ({
+  it('引用待办生成笔记时包含最新状态、说明与子待办', async () => {
+    mocks.findOwnedTodoForAi.mockResolvedValueOnce({
+      id: 'todo-1',
+      title: '发布轻笺新版',
+      status: 'pending',
+      priority: 3,
+      dueAt: '2026-08-06 20:00:00',
+      updatedAt: '2026-08-04 10:00:00',
+      description: '发布前完成回归测试',
+      checklist: [
+        { text: '执行服务端测试', done: true },
+        { text: '检查移动端', done: false },
+      ],
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '轻笺新版发布记录',
+          content: `# 发布记录\n\n${'待办整理内容。'.repeat(60)}`,
+        }),
+      ],
+      usage: usage(3),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请根据这个待办生成一篇发布记录笔记。',
+        stream: false,
+        contexts: [{ type: 'todo', id: 'todo-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const prompt = mocks.requestAi.mock.calls[0][0][1].content;
+    expect(prompt).toContain('发布前完成回归测试');
+    expect(prompt).toContain('[已完成] 执行服务端测试');
+    expect(prompt).toContain('[待处理] 检查移动端');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateContext: expect.objectContaining({ contextRefs: [{ type: 'todo', id: 'todo-1' }] }),
+      }),
+    );
+  });
+
+  it('文件附件生成笔记时保存附件来源 ID，后续可由服务端重新解析', async () => {
+    mocks.resolveAttachments.mockResolvedValueOnce({
+      text: '\n\n[document:source-1:0 第 1 页]\n文件完整正文：统一材料工作流设计。'.repeat(20),
+      sources: [
+        {
+          type: 'document',
+          id: 'source-1',
+          documentId: 'source-1',
+          fileId: 'file-1',
+          title: '统一材料方案.pdf',
+        },
+      ],
+      coverage: { documents: [], overall: { documentCount: 1, complete: true } },
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '统一材料工作流',
+          content: `# 统一材料工作流\n\n${'文件整理内容。'.repeat(60)}`,
+        }),
+      ],
+      usage: usage(3),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请根据这个文件生成一篇详细笔记。',
+        stream: false,
+        contexts: [],
+        attachmentIds: ['source-1'],
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('文件完整正文');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateContext: expect.objectContaining({ contextRefs: [], attachmentIds: ['source-1'] }),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.entityRefs).toEqual([
+      { type: 'file', id: 'file-1', title: '统一材料方案.pdf' },
+    ]);
+  });
+
+  it('书签、笔记、待办、文件与粘贴文本可以混合生成同一篇笔记', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '产品文档',
+              url: 'https://example.com/docs',
+              snapshot_content: '书签快照正文。'.repeat(60),
+              description: '产品说明',
+              content: '书签快照正文。'.repeat(60),
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.findOwnedNoteForAi.mockResolvedValueOnce({
+      id: 'note-1',
+      title: '讨论记录',
+      content: '笔记中的讨论结论。'.repeat(40),
+    });
+    mocks.findOwnedTodoForAi.mockResolvedValueOnce({
+      id: 'todo-1',
+      title: '后续行动',
+      status: 'pending',
+      priority: 2,
+      description: '完成统一工作流',
+      checklist: [],
+    });
+    mocks.resolveAttachments.mockResolvedValueOnce({
+      text: '\n\n[document:source-1:0]\n文件中的验收标准。'.repeat(30),
+      sources: [{ type: 'document', id: 'source-1', documentId: 'source-1', title: '验收标准.pdf' }],
+      coverage: { documents: [], overall: { documentCount: 1, complete: true } },
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '统一材料方案总结',
+          content: `# 方案总结\n\n${'综合整理内容。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+    const message = '请综合这些材料生成笔记。下面的补充文字：还要说明后续风险与验收方式。';
+
+    await agentChat(
+      request({
+        message,
+        stream: false,
+        contexts: [
+          { type: 'bookmark', id: 'bookmark-1' },
+          { type: 'note', id: 'note-1' },
+          { type: 'todo', id: 'todo-1' },
+        ],
+        attachmentIds: ['source-1'],
+      }),
+      res,
+    );
+
+    const prompt = mocks.requestAi.mock.calls[0][0][1].content;
+    expect(prompt).toContain('书签快照正文');
+    expect(prompt).toContain('笔记中的讨论结论');
+    expect(prompt).toContain('完成统一工作流');
+    expect(prompt).toContain('文件中的验收标准');
+    expect(prompt).toContain('后续风险与验收方式');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateContext: expect.objectContaining({
+          sourceMessage: message,
+          contextRefs: [
+            { type: 'bookmark', id: 'bookmark-1' },
+            { type: 'note', id: 'note-1' },
+            { type: 'todo', id: 'todo-1' },
+          ],
+          attachmentIds: ['source-1'],
+        }),
+      }),
+    );
+  });
+
+  it('直接粘贴文本生成笔记时不要求额外引用资源', async () => {
+    const pastedText = 'Redis 通过内存数据结构提供高性能读写，并可结合持久化机制保存数据。'.repeat(20);
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: 'Redis 基础笔记',
+          content: `# Redis\n\n${'文本整理内容。'.repeat(60)}`,
+        }),
+      ],
+      usage: usage(3),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: `请把下面文字整理成一篇笔记：${pastedText}`,
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain(pastedText.slice(0, 120));
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateContext: expect.objectContaining({ contextRefs: [], attachmentIds: [] }),
+      }),
+    );
+  });
+
+  it('统一草稿协议连续两次缺失时失败关闭，不创建半截确认卡', async () => {
+    const invalidDraftResponse = () => ({
       content: '',
       toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [], toolCalls: [] })],
       usage: usage(2),
       usageStatus: 'reported',
       finishReason: 'tool_calls',
     });
-    mocks.requestAi
-      .mockResolvedValueOnce(conversationPlan())
-      .mockResolvedValueOnce(conversationPlan())
-      .mockResolvedValueOnce(conversationPlan());
+    mocks.requestAi.mockResolvedValueOnce(invalidDraftResponse()).mockResolvedValueOnce(invalidDraftResponse());
     const res = response();
 
     await agentChat(
       request({
-        message: '请分析这个书签的内容，生成一篇笔记。',
+        message: '请创建一篇笔记，标题为测试，正文为测试内容。',
         stream: false,
-        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        contexts: [],
         attachmentIds: [],
       }),
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
-      response: expect.stringMatching(/没有生成可核验的确认/),
+      response: expect.stringMatching(/没有生成完整可确认的笔记草稿/),
       confirmations: [],
-      actionPolicy: { resolution: 'unverified', capabilityIds: ['note.create'], executed: false },
     });
   });
 

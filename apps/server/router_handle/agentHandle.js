@@ -111,11 +111,13 @@ import {
   resolveAiMemoryPromptResource,
 } from '../util/agent/memoryRuntime.js';
 import {
-  generateBookmarkNoteDraft,
-  isBookmarkNoteDraftRefinement,
-  isBookmarkNoteDraftRequest,
-  normalizeBookmarkNoteDraftRefinement,
-} from '../util/agent/bookmarkNoteDraft.js';
+  createNoteDraftPrivateContext,
+  generateNoteDraft,
+  isNoteDraftRefinement,
+  isNoteDraftRequest,
+  normalizeNoteDraftPrivateContext,
+  normalizeNoteDraftRefinement,
+} from '../util/agent/noteDraft.js';
 
 // ============================================================
 // 工具注册中心（Map-based，扩展只需 registerTool）
@@ -541,6 +543,7 @@ async function createPendingWriteConfirmation({
   token,
   replaceToken,
   replaceConfirmationId,
+  privateContext,
 }) {
   const policy = await enforceToolPolicy({
     registry: toolRegistry,
@@ -574,6 +577,7 @@ async function createPendingWriteConfirmation({
     token,
     replaceToken,
     replaceConfirmationId,
+    privateContext,
   });
   return publicToolConfirmation(pending.token, pending.confirmation, pending.expiresIn);
 }
@@ -745,7 +749,7 @@ async function resolveUser(keyword) {
 
 async function resolveResourceContexts(userId, contexts, question = '') {
   if (!Array.isArray(contexts) || contexts.length === 0) {
-    return { text: '', sources: [], entities: [], scopeResourceIds: [], allowedWebUrls: [] };
+    return { text: '', sources: [], entities: [], materials: [], scopeResourceIds: [], allowedWebUrls: [] };
   }
   const normalized = [];
   const seen = new Set();
@@ -761,6 +765,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
   const blocks = [];
   const sources = [];
   const entities = [];
+  const materials = [];
   const scopeResourceIds = [];
   const scopeKeys = new Set();
   const allowedWebUrls = new Set();
@@ -898,6 +903,13 @@ async function resolveResourceContexts(userId, contexts, question = '') {
           }
         : {}),
     });
+    materials.push({
+      type: item.type,
+      id: String(row.id),
+      title: String(row.title || '未命名'),
+      url: sourceUrl ? String(sourceUrl) : '',
+      content: boundedContent,
+    });
   }
   return {
     text: blocks.length
@@ -905,8 +917,234 @@ async function resolveResourceContexts(userId, contexts, question = '') {
       : '',
     sources,
     entities,
+    materials,
     scopeResourceIds,
     allowedWebUrls: [...allowedWebUrls],
+  };
+}
+
+function noteDraftAttachmentIds(resolvedAttachments) {
+  const seen = new Set();
+  const ids = [];
+  for (const source of Array.isArray(resolvedAttachments?.sources) ? resolvedAttachments.sources : []) {
+    const id = String(source?.documentId || source?.id || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+    if (ids.length >= 5) break;
+  }
+  return ids;
+}
+
+function noteDraftContextRefs(resolvedContexts) {
+  return (Array.isArray(resolvedContexts?.entities) ? resolvedContexts.entities : [])
+    .map((item) => ({ type: String(item?.type || ''), id: String(item?.id || '') }))
+    .filter((item) => item.type && item.id)
+    .slice(0, 5);
+}
+
+function extractPastedNoteDraftText(message) {
+  const text = String(message || '').trim();
+  const fenced = text.match(/```(?:\w+)?\s*\n([\s\S]+?)\n```/);
+  if (String(fenced?.[1] || '').trim().length >= 20) return String(fenced[1]).trim();
+  const marked = text.match(
+    /(?:以下|下面|下方|这段|粘贴的)(?:内容|文字|文本|资料|信息)?\s*(?:是|为)?\s*[：:]\s*([\s\S]+)$/i,
+  );
+  const markedText = String(marked?.[1] || '').trim();
+  if (markedText) return markedText;
+  return text.length >= 240 ? text : '';
+}
+
+function buildNoteDraftMaterials(resolvedContexts, resolvedAttachments, sourceMessage) {
+  const materials = (Array.isArray(resolvedContexts?.materials) ? resolvedContexts.materials : []).map((item) => ({
+    ...item,
+  }));
+  const attachmentText = String(resolvedAttachments?.text || '').trim();
+  if (attachmentText) {
+    const attachmentSources = Array.isArray(resolvedAttachments?.sources) ? resolvedAttachments.sources : [];
+    materials.push({
+      type: 'document',
+      id: noteDraftAttachmentIds(resolvedAttachments).join(','),
+      title:
+        attachmentSources
+          .map((item) => String(item?.title || '').trim())
+          .filter(Boolean)
+          .join('、') || '用户选择的文件',
+      content: attachmentText,
+    });
+  }
+  const originalText = String(sourceMessage || '').trim();
+  if (originalText) {
+    materials.push({
+      type: 'text',
+      id: '',
+      title: '用户原始输入',
+      content: originalText,
+    });
+  }
+  return materials;
+}
+
+function hasReadableNoteDraftAttachment(resolvedAttachments) {
+  const documents = Array.isArray(resolvedAttachments?.coverage?.documents)
+    ? resolvedAttachments.coverage.documents
+    : [];
+  if (
+    documents.some(
+      (document) =>
+        document?.status === 'ready' && Number(document?.selection?.included?.chars || 0) > 0,
+    )
+  ) {
+    return true;
+  }
+  const text = String(resolvedAttachments?.text || '').trim();
+  return Boolean(text) && !text.includes('当前没有可用于总结或问答的可靠文字');
+}
+
+function noteDraftAttachmentEntitySources(resolvedAttachments) {
+  return (Array.isArray(resolvedAttachments?.sources) ? resolvedAttachments.sources : [])
+    .filter((item) => item?.fileId)
+    .map((item) => ({
+      type: 'file',
+      id: String(item.fileId),
+      title: String(item.title || '未命名文件'),
+    }));
+}
+
+async function hydrateNoteDraftBookmarks({
+  materials,
+  entities,
+  req,
+  identity,
+  contentScope,
+  question,
+  signal,
+  sseLifecycle,
+}) {
+  const entityById = new Map(
+    (Array.isArray(entities) ? entities : [])
+      .filter((item) => item?.type === 'bookmark')
+      .map((item) => [String(item.id), item]),
+  );
+  const bookmarkIndexes = [];
+  const output = (Array.isArray(materials) ? materials : []).map((item, index) => {
+    if (item?.type !== 'bookmark') return { ...item };
+    bookmarkIndexes.push(index);
+    return { ...item };
+  });
+  if (!bookmarkIndexes.length) return { materials: output, toolRecords: [], unreadableBookmarkCount: 0 };
+
+  const startedAt = Date.now();
+  const results = await mapWithConcurrency(
+    bookmarkIndexes,
+    2,
+    async (materialIndex, readIndex) => {
+      const material = output[materialIndex];
+      const entity = entityById.get(String(material.id)) || {};
+      const snapshotContent = String(entity.snapshotContent || '').trim();
+      const description = String(entity.description || '').trim();
+      const url = String(entity.url || material.url || '').trim();
+      if (snapshotContent.length >= 180) {
+        return {
+          materialIndex,
+          readable: true,
+          material: {
+            ...material,
+            url,
+            content: [
+              description ? `书签描述：${description}` : '',
+              `网页存档正文：\n${snapshotContent}`,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          },
+          toolRecord: null,
+        };
+      }
+      if (!url) {
+        return {
+          materialIndex,
+          readable: description.length >= 180,
+          material: {
+            ...material,
+            content: [description ? `书签描述：${description}` : '', '网页链接缺失，无法读取正文。']
+              .filter(Boolean)
+              .join('\n'),
+          },
+          toolRecord: null,
+        };
+      }
+
+      const round = readIndex + 1;
+      sseLifecycle?.stage('tool_execution', { round });
+      sseLifecycle?.send('tool_start', { tool: 'read_url', round });
+      const readResult = await executeTool(
+        'read_url',
+        { url },
+        toolRuntimeContext(req, identity, {
+          signal,
+          allowedToolNames: new Set(['read_url']),
+          suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+          question,
+          agentContentScope: contentScope,
+          includeRawResult: true,
+        }),
+      );
+      sseLifecycle?.send('tool_result', { tool: 'read_url', status: readResult.status, round });
+      const raw = readResult.raw || {};
+      const readableText = String(raw.text || '').trim();
+      const readable = readResult.status === 'success' && readableText.length >= 180;
+      return {
+        materialIndex,
+        readable: readable || description.length >= 180,
+        material: readable
+          ? {
+              ...material,
+              title: String(raw.title || material.title || '未命名书签'),
+              url: String(raw.url || url),
+              content: [
+                raw.description ? `网页描述：${raw.description}` : '',
+                raw.siteName ? `站点：${raw.siteName}` : '',
+                `网页正文：\n${readableText}`,
+              ]
+                .filter(Boolean)
+                .join('\n'),
+            }
+          : {
+              ...material,
+              url,
+              content: [
+                description ? `书签描述：${description}` : '',
+                `网页正文读取失败：${String(readResult.error || 'EMPTY_CONTENT').slice(0, 120)}`,
+              ]
+                .filter(Boolean)
+                .join('\n'),
+            },
+        toolRecord: {
+          name: 'read_url',
+          status: readResult.status,
+          params: { url },
+          error: readResult.error,
+          dataSummary: readResult.dataSummary,
+          summary: readResult.summary,
+          round,
+        },
+      };
+    },
+    signal,
+  );
+  let unreadableBookmarkCount = 0;
+  const toolRecords = [];
+  for (const result of results) {
+    output[result.materialIndex] = result.material;
+    if (!result.readable) unreadableBookmarkCount += 1;
+    if (result.toolRecord) toolRecords.push(result.toolRecord);
+  }
+  return {
+    materials: output,
+    toolRecords,
+    unreadableBookmarkCount,
+    toolMs: Date.now() - startedAt,
   };
 }
 
@@ -1369,9 +1607,17 @@ export async function agentChat(req, res) {
       return;
     }
 
+    const normalizedDraftRefinement = normalizeNoteDraftRefinement(draftRefinement);
+    const refinementRequested = !enableTranslation && normalizedDraftRefinement && isNoteDraftRefinement(message);
+    // 改写只接受确认存储里的权威材料引用。客户端为了展示而续带的 context/attachment
+    // 不参与本轮解析，既不能替换原材料，也不能用无效引用阻断原草稿恢复。
+    const requestContexts = refinementRequested ? [] : contexts;
+    const requestAttachmentIds = refinementRequested ? [] : attachmentIds;
     const requestContextTypes = [
-      ...(Array.isArray(contexts) ? contexts : []).map((item) => String(item?.type || '')).filter(Boolean),
-      ...(Array.isArray(attachmentIds) && attachmentIds.length ? ['file'] : []),
+      ...(Array.isArray(requestContexts) ? requestContexts : [])
+        .map((item) => String(item?.type || ''))
+        .filter(Boolean),
+      ...(Array.isArray(requestAttachmentIds) && requestAttachmentIds.length ? ['file'] : []),
     ];
     // 旧规则不再决定查询、动作或具体能力，只在 Semantic Planner 缺失结构化计划时
     // 作为高召回风险传感器使用；命中后也只能失败关闭，不能据此选择并执行工具。
@@ -1379,8 +1625,8 @@ export async function agentChat(req, res) {
       ? { kind: 'none', resolution: 'none', capabilities: [], toolNames: [], reason: 'translation' }
       : resolveAgentActionIntent({ message, contextTypes: requestContextTypes });
 
-    // 附件和资源归属先于 AI 额度占位校验：无权、过期或仍在解析的附件应尽早失败，
-    // 不能因为尚未发生模型调用就消耗用户额度。
+    // 初次生成的附件和资源归属先于 AI 额度占位校验；草稿改写不解析客户端续带材料，
+    // 而是在确认令牌校验后恢复服务端私有引用并重新校验归属。
     const [resolvedContexts, resolvedAttachments] = enableTranslation
       ? [
           { text: '', sources: [] },
@@ -1388,10 +1634,10 @@ export async function agentChat(req, res) {
         ]
       : await raceWithSignal(
           Promise.all([
-            resolveResourceContexts(userId, contexts, message),
+            resolveResourceContexts(userId, requestContexts, message),
             resolveDocumentAttachments({
               userId,
-              sourceIds: attachmentIds,
+              sourceIds: requestAttachmentIds,
               question: message,
             }),
           ]),
@@ -1444,16 +1690,11 @@ export async function agentChat(req, res) {
       return;
     }
 
-    // “单个已选书签 → 生成笔记”是目标、资料和写入工具都已确定的任务。
-    // 直接走专用读取 + 草稿协议，避免把几十个无关能力交给通用 Semantic Planner 后出现漏读、
-    // 计划缺失或把“写长一点”误当成一轮全新问答。旧草稿改写必须携带本机待确认令牌，
-    // 服务端再按 owner/session 读取权威参数，绝不相信客户端回传的正文。
-    const normalizedDraftRefinement = normalizeBookmarkNoteDraftRefinement(draftRefinement);
-    const refinementRequested =
-      !enableTranslation && normalizedDraftRefinement && isBookmarkNoteDraftRefinement(message);
-    const bookmarkDraftRequested =
-      !enableTranslation && !attachmentIds.length && isBookmarkNoteDraftRequest(message, resolvedContexts.entities);
-    if (bookmarkDraftRequested || refinementRequested) {
+    // 明确且单一的“材料 → 创建笔记”任务走统一草稿协议。材料可以是书签、笔记、文件、
+    // 待办、混合引用或用户直接粘贴的文本；网页只在缺少快照时补读。旧草稿改写必须携带
+    // 待确认令牌，服务端再从确认存储恢复稳定引用并重新校验归属，绝不相信客户端回传的正文或材料。
+    const noteDraftRequested = !enableTranslation && isNoteDraftRequest(message, legacyIntentSuspicion);
+    if (noteDraftRequested || refinementRequested) {
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
       memoryInfluence = buildAiMemoryNotUsedInfluence(
         dedicatedMemoryMode === 'temporary'
@@ -1464,13 +1705,15 @@ export async function agentChat(req, res) {
               ? 'admin_context'
               : 'disabled',
       );
-      trace.route = refinementRequested ? 'bookmark_note_refinement' : 'bookmark_note_draft';
-      trace.taskType = refinementRequested ? 'bookmark_note_refinement' : 'bookmark_note_draft';
-      trace.selectedTools = ['read_url', 'create_note'];
+      trace.route = refinementRequested ? 'note_draft_refinement' : 'note_draft';
+      trace.taskType = refinementRequested ? 'note_draft_refinement' : 'note_draft';
+      trace.selectedTools = ['create_note'];
       const usedTools = [];
       usedToolsForLog = usedTools;
-      const entityRefs = buildAgentEntityRefs(resolvedContexts.sources);
-      const selectedBookmark = (resolvedContexts.entities || []).find((item) => item.type === 'bookmark') || null;
+      let effectiveContexts = resolvedContexts;
+      let effectiveAttachments = resolvedAttachments;
+      let sourceMessage = message;
+      let privateContext = null;
       let previousConfirmation = null;
       let confirmation = null;
       let routeResponse = '';
@@ -1505,6 +1748,27 @@ export async function agentChat(req, res) {
             );
           }
           previousConfirmation = inspected.confirmation;
+          privateContext = normalizeNoteDraftPrivateContext(previousConfirmation.privateContext);
+          if (!privateContext) {
+            throw new ToolConfirmationError(
+              'TOOL_CONFIRMATION_CONTEXT_MISSING',
+              '原草稿没有可恢复的材料上下文，请重新发起生成。',
+              409,
+            );
+          }
+          sourceMessage = privateContext.sourceMessage;
+          const materialQuestion = [sourceMessage, message].filter(Boolean).join('\n');
+          [effectiveContexts, effectiveAttachments] = await raceWithSignal(
+            Promise.all([
+              resolveResourceContexts(userId, privateContext.contextRefs, materialQuestion),
+              resolveDocumentAttachments({
+                userId,
+                sourceIds: privateContext.attachmentIds,
+                question: materialQuestion,
+              }),
+            ]),
+            agentAbortController.signal,
+          );
         } catch (error) {
           routeStatus = 'confirmation_stale';
           routeError = stableAgentErrorCode(error);
@@ -1512,92 +1776,92 @@ export async function agentChat(req, res) {
             .toLowerCase()
             .startsWith('en')
             ? 'That draft is no longer pending. Please generate a new note draft from the referenced material.'
-            : '上一版草稿已过期、已处理或状态发生变化，请重新引用资料生成笔记。';
+            : '上一版草稿已过期、已处理，或原材料已不可用，请重新选择材料生成笔记。';
         }
       }
 
-      let sourceText = '';
-      if (!routeResponse && selectedBookmark) {
-        const snapshotContent = String(selectedBookmark?.snapshotContent || '').trim();
-        const bookmarkDescription = String(selectedBookmark?.description || '').trim();
-        if (snapshotContent.length >= 180) {
-          sourceText = [
-            `网页标题：${selectedBookmark.title || '未命名书签'}`,
-            selectedBookmark.url ? `网页链接：${selectedBookmark.url}` : '',
-            bookmarkDescription ? `书签描述：${bookmarkDescription}` : '',
-            `网页存档正文：\n${snapshotContent}`,
-          ]
-            .filter(Boolean)
-            .join('\n');
-        } else if (selectedBookmark?.url) {
-          sseLifecycle?.stage('tool_execution', { round: 1 });
-          sseLifecycle?.send('tool_start', { tool: 'read_url', round: 1 });
-          const readStartedAt = Date.now();
-          const readResult = await executeTool(
-            'read_url',
-            { url: selectedBookmark.url },
-            toolRuntimeContext(req, identity, {
-              signal: agentAbortController.signal,
-              allowedToolNames: new Set(['read_url']),
-              suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
-              question: message,
-              agentContentScope: contentScope,
-              includeRawResult: true,
-            }),
-          );
-          trace.toolMs = Date.now() - readStartedAt;
-          usedTools.push({
-            name: 'read_url',
-            status: readResult.status,
-            params: { url: selectedBookmark.url },
-            error: readResult.error,
-            dataSummary: readResult.dataSummary,
-            summary: readResult.summary,
-            round: 1,
-          });
-          sseLifecycle?.send('tool_result', { tool: 'read_url', status: readResult.status, round: 1 });
-          const raw = readResult.raw || {};
-          const readableText = String(raw.text || '').trim();
-          if (readResult.status === 'success' && readableText.length >= 180) {
-            sourceText = [
-              `网页标题：${raw.title || selectedBookmark.title || '未命名书签'}`,
-              `网页链接：${raw.url || selectedBookmark.url}`,
-              raw.description ? `网页描述：${raw.description}` : '',
-              raw.siteName ? `站点：${raw.siteName}` : '',
-              `网页正文：\n${readableText}`,
-            ]
-              .filter(Boolean)
-              .join('\n');
-          } else if (!refinementRequested) {
-            routeStatus = 'bookmark_read_failed';
-            routeError = String(readResult.error || 'EMPTY_CONTENT');
-            routeResponse = String(locale || '')
-              .toLowerCase()
-              .startsWith('en')
-              ? 'I still have the bookmark reference, but the site did not provide readable article content. Try again later, save a page snapshot, or paste/upload the article text before generating the note.'
-              : '我仍然记得这条书签，但该网站这次没有返回可用正文（可能限制抓取、需要登录或响应超时）。你可以稍后重试、先保存网页快照，或粘贴/上传正文后再生成笔记。';
-          }
-        } else if (!refinementRequested) {
-          routeStatus = 'bookmark_read_failed';
-          routeError = 'BOOKMARK_URL_MISSING';
+      let materials = buildNoteDraftMaterials(effectiveContexts, effectiveAttachments, sourceMessage);
+      if (!routeResponse) {
+        const effectiveContentScope = normalizeAgentContentScope(scope, effectiveContexts, sourceMessage);
+        const hydrated = await hydrateNoteDraftBookmarks({
+          materials,
+          entities: effectiveContexts.entities,
+          req,
+          identity,
+          contentScope: effectiveContentScope,
+          question: [sourceMessage, message].filter(Boolean).join('\n'),
+          signal: agentAbortController.signal,
+          sseLifecycle,
+        });
+        materials = hydrated.materials;
+        usedTools.push(...hydrated.toolRecords);
+        if (hydrated.toolRecords.length) trace.selectedTools = ['read_url', 'create_note'];
+        if (hydrated.toolMs != null) trace.toolMs = hydrated.toolMs;
+
+        const bookmarkCount = materials.filter((item) => item.type === 'bookmark').length;
+        const hasIndependentMaterial = materials.some(
+          (item) =>
+            ['note', 'todo'].includes(item.type) &&
+            !String(item.content || '').includes('(笔记正文为空)') &&
+            String(item.content || '').trim().length > 0,
+        );
+        const hasReadableBookmark = bookmarkCount > hydrated.unreadableBookmarkCount;
+        const hasReadableAttachment = hasReadableNoteDraftAttachment(effectiveAttachments);
+        const hasPastedText = extractPastedNoteDraftText(sourceMessage).length >= 20;
+        if (
+          bookmarkCount > 0 &&
+          hydrated.unreadableBookmarkCount >= bookmarkCount &&
+          !hasIndependentMaterial &&
+          !hasReadableAttachment &&
+          !hasPastedText
+        ) {
+          routeStatus = 'material_read_failed';
+          routeError = 'BOOKMARK_CONTENT_UNAVAILABLE';
           routeResponse = String(locale || '')
             .toLowerCase()
             .startsWith('en')
-            ? 'This bookmark has no readable URL or saved page snapshot, so I cannot generate a factual note from it.'
-            : '这条书签没有可读取的链接或网页快照，暂时无法据实生成内容笔记。';
+            ? 'The bookmark references are still available, but none of the selected sites returned enough readable content. Try again later, save a page snapshot, or add pasted text, notes, todos, or files before generating the note.'
+            : '所选书签引用仍然有效，但这些网站这次都没有返回足够的可读正文。你可以稍后重试、先保存网页快照，或同时加入粘贴文本、笔记、待办或文件后再生成。';
+        }
+        const selectedExternalCount =
+          (Array.isArray(effectiveContexts.entities) ? effectiveContexts.entities.length : 0) +
+          noteDraftAttachmentIds(effectiveAttachments).length;
+        if (
+          !routeResponse &&
+          selectedExternalCount > 0 &&
+          !hasReadableBookmark &&
+          !hasIndependentMaterial &&
+          !hasReadableAttachment &&
+          !hasPastedText
+        ) {
+          routeStatus = 'material_read_failed';
+          routeError = 'NOTE_DRAFT_MATERIAL_UNAVAILABLE';
+          routeResponse = String(locale || '')
+            .toLowerCase()
+            .startsWith('en')
+            ? 'The selected materials do not currently contain reliable readable text. Wait for file parsing, choose materials with content, or paste the text before generating the note.'
+            : '所选材料目前没有可可靠读取的正文。请等待文件解析完成、改选有内容的材料，或直接粘贴正文后再生成笔记。';
         }
       }
+
+      if (!privateContext) {
+        privateContext = createNoteDraftPrivateContext({
+          sourceMessage,
+          contextRefs: noteDraftContextRefs(effectiveContexts),
+          attachmentIds: noteDraftAttachmentIds(effectiveAttachments),
+        });
+      }
+      const entityRefs = buildAgentEntityRefs([
+        ...(effectiveContexts.sources || []),
+        ...noteDraftAttachmentEntitySources(effectiveAttachments),
+      ]);
 
       if (!routeResponse) {
         try {
           sseLifecycle?.stage('preparing_answer', { route: trace.route });
           const draftStartedAt = Date.now();
-          const draft = await generateBookmarkNoteDraft({
-            bookmark: selectedBookmark || {
-              title: previousConfirmation?.args?.title || '待改写笔记',
-              url: '',
-            },
-            sourceText,
+          const draft = await generateNoteDraft({
+            materials,
             instruction: message,
             previousDraft: previousConfirmation?.args || null,
             signal: agentAbortController.signal,
@@ -1625,6 +1889,7 @@ export async function agentChat(req, res) {
             session,
             replaceToken: previousConfirmation ? normalizedDraftRefinement.confirmationToken : undefined,
             replaceConfirmationId: previousConfirmation?.id,
+            privateContext,
           });
           await recordPendingActionBatch(session, {
             batchId: requestId,
@@ -1664,8 +1929,8 @@ export async function agentChat(req, res) {
             : String(locale || '')
                   .toLowerCase()
                   .startsWith('en')
-              ? 'The page was read, but a complete note draft could not be prepared. No note was created; please try again.'
-              : '网页资料已经读取，但这次没有生成完整可确认的笔记草稿；没有创建任何笔记，请稍后重试。';
+              ? 'The materials were loaded, but a complete note draft could not be prepared. No note was created; please try again.'
+              : '材料已经读取，但这次没有生成完整可确认的笔记草稿；没有创建任何笔记，请稍后重试。';
         }
       }
 

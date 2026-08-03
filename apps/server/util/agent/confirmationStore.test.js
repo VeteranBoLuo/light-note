@@ -47,6 +47,57 @@ describe('agent confirmationStore', () => {
     expect(JSON.parse(raw).toolName).toBe('create_note');
   });
 
+  it('私有材料上下文只保存在 Redis，不会进入公开确认数据', async () => {
+    const privateContext = {
+      kind: 'note_draft_materials',
+      version: 1,
+      sourceMessage: '根据材料生成笔记',
+      contextRefs: [{ type: 'note', id: 'note-1' }],
+      attachmentIds: ['source-1'],
+    };
+    const result = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '测试' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+      privateContext,
+    });
+
+    const stored = JSON.parse(redis.setEx.mock.calls[0][2]);
+    expect(stored.privateContext).toEqual(privateContext);
+    expect(result.confirmation).not.toHaveProperty('privateContext');
+    redis.get.mockResolvedValueOnce(null).mockResolvedValueOnce(redis.setEx.mock.calls[0][2]);
+    await expect(inspectToolConfirmationExecution(result.token, 'user:u1', 'session-1')).resolves.toMatchObject({
+      state: 'ready',
+      confirmation: { privateContext },
+    });
+  });
+
+  it('私有上下文可容纳聊天入口允许的中文长文本，但拒绝异常超大载荷', async () => {
+    await expect(
+      createToolConfirmation({
+        ownerKey: 'user:u1',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '长文本' },
+        context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+        privateContext: { sourceMessage: '文'.repeat(12_000) },
+      }),
+    ).resolves.toBeTruthy();
+
+    await expect(
+      createToolConfirmation({
+        ownerKey: 'user:u1',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '异常载荷' },
+        context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+        privateContext: { sourceMessage: 'x'.repeat(70 * 1024) },
+      }),
+    ).rejects.toMatchObject({ code: 'TOOL_CONFIRMATION_INVALID' });
+  });
+
   it('公开确认数据携带绝对过期时间，供本机刷新后恢复倒计时', async () => {
     const result = await createToolConfirmation({
       ownerKey: 'user:u1',

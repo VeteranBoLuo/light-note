@@ -67,7 +67,9 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
     labels: { zh: '创建笔记', en: 'create a note' },
     actionPatterns: [
       /(?:创建|新建|写|起草|生成).{0,12}(?:图片)?(?:笔记|文档)|(?:图片)?(?:笔记|文档).{0,12}(?:创建|新建|写|生成)/i,
+      /(?:整理|转(?:换)?|保存|产出)(?:成|为)?\s*(?:一篇|一份|一个)?\s*(?:markdown\s*)?(?:笔记|文档)/i,
       /(?:create|draft|write).{0,20}(?:note|document)|(?:note|document).{0,20}(?:create|draft)/i,
+      /(?:turn|convert|organize|save).{0,24}(?:into|as)?\s+(?:a\s+)?(?:note|document)/i,
     ],
     unlessPatterns: [/(?:图片笔记|图文笔记|image\s+note)/i],
     operationPatterns: [CREATE_PATTERN],

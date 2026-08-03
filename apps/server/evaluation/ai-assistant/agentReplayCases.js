@@ -1,42 +1,6 @@
-const createNotePlan = {
-  requestClass: 'data_action',
-  intents: [
-    {
-      kind: 'write',
-      capabilityId: 'note.create',
-      goal: '创建合成测试笔记',
-      targetDescription: '合成网页摘要',
-      dependsOn: [],
-    },
-  ],
-  toolCalls: [
-    {
-      toolName: 'create_note',
-      arguments: { title: '合成网页摘要', content: '这是完全合成的测试正文。' },
-    },
-  ],
-};
-
 export const AGENT_REPLAY_CASES = Object.freeze([
   {
-    id: 'provider-missing-plan-then-create-note',
-    request: {
-      message: '请创建一篇笔记，标题为合成网页摘要，正文为测试内容',
-      stream: false,
-      contexts: [],
-      attachmentIds: [],
-      selectedTools: ['create_note'],
-    },
-    providerSteps: [{ content: '漏掉结构化计划' }, { plan: createNotePlan }],
-    expected: {
-      providerCalls: 2,
-      requiredStages: ['planner', 'planner_semantic_repair_1'],
-      confirmations: 1,
-      responseExcludes: ['已创建成功', '(ID:', '（ID:'],
-    },
-  },
-  {
-    id: 'provider-wrong-capability-then-create-note',
+    id: 'provider-missing-note-draft-protocol-then-repair',
     request: {
       message: '请创建一篇笔记，标题为合成网页摘要，正文为测试内容',
       stream: false,
@@ -45,26 +9,32 @@ export const AGENT_REPLAY_CASES = Object.freeze([
       selectedTools: ['create_note'],
     },
     providerSteps: [
-      { content: '漏掉结构化计划' },
-      {
-        plan: {
-          requestClass: 'data_action',
-          intents: [
-            {
-              kind: 'write',
-              capabilityId: 'todo.status.set',
-              goal: '误选不可用能力',
-              targetDescription: '合成目标',
-              dependsOn: [],
-            },
-          ],
-        },
-      },
-      { plan: createNotePlan },
+      { content: '漏掉结构化草稿协议' },
+      { draft: { title: '合成网页摘要', content: '这是完全合成的测试正文。' } },
     ],
     expected: {
-      providerCalls: 3,
-      requiredStages: ['planner', 'planner_semantic_repair_1', 'planner_semantic_repair_2'],
+      providerCalls: 2,
+      requiredStages: ['note_draft', 'note_draft_repair'],
+      confirmations: 1,
+      responseExcludes: ['已创建成功', '(ID:', '（ID:'],
+    },
+  },
+  {
+    id: 'provider-incomplete-note-draft-then-repair',
+    request: {
+      message: '请创建一篇笔记，标题为合成网页摘要，正文为测试内容',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      selectedTools: ['create_note'],
+    },
+    providerSteps: [
+      { draft: { title: '只有标题' } },
+      { draft: { title: '合成网页摘要', content: '这是修复后的完整合成测试正文。' } },
+    ],
+    expected: {
+      providerCalls: 2,
+      requiredStages: ['note_draft', 'note_draft_repair'],
       confirmations: 1,
       responseExcludes: ['当前账号或访问模式不能使用', '已创建成功', '(ID:', '（ID:'],
     },

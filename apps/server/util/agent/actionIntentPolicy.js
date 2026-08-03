@@ -40,6 +40,8 @@ const ENGLISH_POLITE_MUTATION =
   /^(?:can|could|would)\s+you\s+(?:please\s+)?(?:help\s+me\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
 const ENGLISH_DESIRE_MUTATION =
   /^i\s+(?:want|need|would\s+like)\s+(?:you\s+to\s+|to\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+const EXPLICIT_NOTE_CREATION_COMMAND =
+  /(?:(?:创建|新建|写|起草|生成)(?!过?的).{0,16}(?:笔记|文档)|(?:整理|转(?:换)?|保存|产出)(?:成|为)?\s*(?:一篇|一份|一个)?\s*(?:markdown\s*)?(?:笔记|文档)|\b(?:create|draft|write|generate|turn|convert)\b.{0,28}\b(?:note|document)\b)/i;
 const LEADING_MUTATION_CONNECTOR =
   /^(?:(?:并且|然后|接着|随后|之后|后再|同时|再|并|[，,；;：:])|(?:and\s+then|then|and))\s*/i;
 const GENERAL_CHINESE_HOW_TO_PREFIX =
@@ -171,7 +173,18 @@ export function resolveAgentActionIntent({ message, contextTypes = [] } = {}) {
   if (!text) {
     return { kind: 'none', resolution: 'none', capabilities: [], toolNames: [], reason: 'empty' };
   }
-  if (isReadOnlyActionSpeechAct(text)) {
+  const hasExplicitNarrowAction =
+    !TRAILING_MUTATION_QUESTION.test(text) &&
+    (COMMAND_MARKER.test(text) ||
+      DIRECT_MUTATION_PREFIX.test(text) ||
+      ENGLISH_DIRECT_MUTATION_PREFIX.test(text) ||
+      CHINESE_OBJECT_MUTATION.test(text) ||
+      CHINESE_DESIRE_MUTATION.test(text) ||
+      CHINESE_POLITE_MUTATION.test(text) ||
+      ENGLISH_POLITE_MUTATION.test(text) ||
+      ENGLISH_DESIRE_MUTATION.test(text)) &&
+    EXPLICIT_NOTE_CREATION_COMMAND.test(text);
+  if (isReadOnlyActionSpeechAct(text) && !hasExplicitNarrowAction) {
     return { kind: 'query', resolution: 'none', capabilities: [], toolNames: [], reason: 'read_only_speech_act' };
   }
 

@@ -174,6 +174,10 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
       confirmationId: 'confirmation-1',
       confirmationToken: 'a'.repeat(43),
     });
+    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '优化一下')).toEqual({
+      confirmationId: 'confirmation-1',
+      confirmationToken: 'a'.repeat(43),
+    });
     expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '今天天气怎么样')).toBeNull();
 
     const newerUnrelatedAction = [
