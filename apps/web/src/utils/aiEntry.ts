@@ -1,5 +1,5 @@
 import type { AiAttachment } from '@/api/aiAttachmentApi';
-import type { SearchType } from '@/api/search';
+import type { GlobalSearchType } from '@/api/search';
 
 export const AI_ASSISTANT_OPEN_EVENT = 'light-note:open-ai';
 export const AI_ASSISTANT_VISIBILITY_EVENT = 'light-note:ai-visibility';
@@ -16,7 +16,7 @@ export type AiAssistantIntent =
   | 'create_note';
 
 export interface AiAssistantContextRef {
-  type: SearchType;
+  type: GlobalSearchType;
   id: string;
   title: string;
 }
@@ -42,7 +42,7 @@ function normalizedContexts(value: unknown): AiAssistantContextRef[] {
       (item): item is AiAssistantContextRef =>
         Boolean(item) &&
         typeof item === 'object' &&
-        ['note', 'bookmark', 'file', 'tag'].includes(String((item as AiAssistantContextRef).type)) &&
+        ['note', 'bookmark', 'file', 'tag', 'todo'].includes(String((item as AiAssistantContextRef).type)) &&
         Boolean(String((item as AiAssistantContextRef).id || '').trim()),
     )
     .slice(0, 5)

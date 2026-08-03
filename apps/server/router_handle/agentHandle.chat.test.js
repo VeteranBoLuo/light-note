@@ -25,6 +25,7 @@ const mocks = vi.hoisted(() => ({
   settleSessionAction: vi.fn(),
   shouldContinueToolPlanning: vi.fn(() => false),
   prepareTodoStatus: vi.fn(),
+  findOwnedTodoForAi: vi.fn(),
   looksLikeLeakedToolCall: vi.fn(() => false),
   parseLeakedToolCalls: vi.fn(() => []),
 }));
@@ -77,6 +78,7 @@ vi.mock('../util/aiMemoryService.js', () => ({
   createAiMemoryCandidate: mocks.createAiMemoryCandidate,
 }));
 vi.mock('../util/noteAiService.js', () => ({ buildNoteAiPayload: vi.fn(), findOwnedNoteForAi: vi.fn() }));
+vi.mock('../util/services/todoService.js', () => ({ findOwnedTodoForAi: mocks.findOwnedTodoForAi }));
 vi.mock('../util/agent/followUpSuggestions.js', () => ({
   getFollowUpSuggestions: vi.fn(),
   shouldOfferFollowUps: vi.fn(() => false),
@@ -967,6 +969,65 @@ describe('agentChat 主链路', () => {
     expect(payload.sources.map((item) => item.id)).toEqual(['note-1']);
     expect(payload.evidence.map((item) => item.citationKey)).toEqual(['1']);
     expect(payload.citationAudit.citedKeys).toEqual(['1']);
+  });
+
+  it('明确引用待办时按 owner 重新读取最新状态、说明与子待办，并形成稳定来源', async () => {
+    mocks.findOwnedTodoForAi.mockResolvedValue({
+      id: 'todo-1',
+      title: '整理发票',
+      description: '按月份归档',
+      checklist: [
+        { id: 'child-1', text: '下载电子票', done: true },
+        { id: 'child-2', text: '提交报销', done: false },
+      ],
+      priority: 2,
+      status: 'pending',
+      dueAt: '2026-08-05 18:00:00',
+      completedAt: null,
+      updatedAt: '2026-08-03 22:00:00',
+    });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      if (options?.trace?.stage === 'planner') {
+        return {
+          content: '',
+          toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return {
+        content: '这条待办尚未完成，仍需提交报销。[1]',
+        toolCalls: [],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '继续分析刚才那个待办',
+        stream: false,
+        contexts: [{ type: 'todo', id: 'todo-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.findOwnedTodoForAi).toHaveBeenCalledWith(expect.anything(), 'user-1', 'todo-1');
+    const plannerPrompt = mocks.requestAi.mock.calls[0][0]
+      .map((message) => String(message?.content || ''))
+      .join('\n');
+    expect(plannerPrompt).toContain('[todo:todo-1]');
+    expect(plannerPrompt).toContain('提交报销');
+    const payload = res.send.mock.calls.at(-1)[0].data;
+    expect(payload.sources).toEqual([
+      expect.objectContaining({ id: 'todo-1', type: 'todo', title: '整理发票', target: 'todo-inbox' }),
+    ]);
+    expect(payload.entityRefs).toEqual([{ id: 'todo-1', type: 'todo', title: '整理发票' }]);
+    expect(payload.evidence).toEqual([expect.objectContaining({ citationKey: '1' })]);
   });
 
   it('场景D:附件未被回答引用时,来源与覆盖统计都不包含它', async () => {

@@ -419,7 +419,9 @@ function resolveExplicitTarget(source: AiSource): AiSourceNavigation | null {
   if (source.target === 'knowledge-admin')
     return source.id ? internal('/knowledgeBase', { article: source.id }) : { kind: 'none' };
   if (source.target === 'tag-detail') return source.id ? internal(`/tag/${source.id}`) : { kind: 'none' };
-  if (source.target === 'todo-inbox') return internal('/inbox');
+  if (source.target === 'todo-inbox') {
+    return source.id ? internal('/inbox', { tab: 'todo', todoId: source.id }) : internal('/inbox', { tab: 'todo' });
+  }
   if (source.target === 'web-url' || source.target === 'temporary-document') return external(source.url);
   return { kind: 'none' };
 }
@@ -451,7 +453,9 @@ export function resolveAiSourceNavigation(source: AiSource): AiSourceNavigation 
   }
   if (source.type === 'tag') return source.id ? internal(`/tag/${source.id}`) : { kind: 'none' };
   if (source.type === 'folder') return source.id ? internal('/cloudSpace', { folderId: source.id }) : { kind: 'none' };
-  if (source.type === 'todo') return internal('/inbox');
+  if (source.type === 'todo') {
+    return source.id ? internal('/inbox', { tab: 'todo', todoId: source.id }) : internal('/inbox', { tab: 'todo' });
+  }
   if (source.type === 'web') return external(source.url);
   return { kind: 'none' };
 }

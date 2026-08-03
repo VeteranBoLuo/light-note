@@ -1,15 +1,32 @@
-import type { AiAgentInteractionSettlement, AiToolConfirmationSettlement } from '@/types/aiAgent';
+import type {
+  AiAgentInteraction,
+  AiAgentInteractionSettlement,
+  AiToolConfirmation,
+  AiToolConfirmationSettlement,
+  AiToolConfirmationSettlementStatus,
+} from '@/types/aiAgent';
+
+export interface AiConversationActionSettlement {
+  confirmationId: string;
+  toolName: string;
+  status: AiToolConfirmationSettlementStatus;
+  summary: string;
+  settledAt: string;
+}
 
 export interface AiConversationStateMessage {
   role?: string;
   content?: string;
   sources?: unknown[];
+  confirmations?: AiToolConfirmation[];
+  interactions?: AiAgentInteraction[];
   transient?: boolean;
   transientGroupId?: string;
   pendingConfirmationIds?: string[];
   pendingInteractionIds?: string[];
   confirmationSucceeded?: boolean;
   persistAfterConfirmationSettlement?: boolean;
+  actionSettlements?: AiConversationActionSettlement[];
 }
 
 /**
@@ -130,9 +147,8 @@ function releaseConversationGroupIfSettled<T extends AiConversationStateMessage>
 }
 
 /**
- * 确认卡只负责自身展示状态，会话层负责移除对应的 pending ID。
- * 结构化快捷动作只有确认成功后才转为可持久化消息；取消、修改、失败和过期都保持瞬态，
- * 避免刷新后留下无法继续操作的“确认已准备”幽灵消息。
+ * 会话层在结算时同时移除 pending ID 与对应确认卡，避免刷新后恢复已经失效的令牌。
+ * 自然语言触发的动作会把安全终态回执写入历史；结构化快捷动作仍只有确认成功后才释放整组瞬态消息。
  */
 export function settleConversationConfirmation<T extends AiConversationStateMessage>(
   messages: T[],
@@ -144,6 +160,19 @@ export function settleConversationConfirmation<T extends AiConversationStateMess
   target.pendingConfirmationIds = (target.pendingConfirmationIds || []).filter(
     (id) => id !== settlement.confirmationId,
   );
+  target.confirmations = (target.confirmations || []).filter(
+    (confirmation) => confirmation.id !== settlement.confirmationId,
+  );
+  target.actionSettlements = [
+    ...(target.actionSettlements || []).filter((item) => item.confirmationId !== settlement.confirmationId),
+    {
+      confirmationId: settlement.confirmationId,
+      toolName: settlement.toolName,
+      status: settlement.status,
+      summary: settlement.summary,
+      settledAt: new Date().toISOString(),
+    },
+  ];
   if (settlement.status === 'confirmed') target.confirmationSucceeded = true;
 
   if (
@@ -165,6 +194,7 @@ export function settleConversationInteraction<T extends AiConversationStateMessa
   const target = messages[messageIndex];
   if (!target) return;
   target.pendingInteractionIds = (target.pendingInteractionIds || []).filter((id) => id !== settlement.interactionId);
+  target.interactions = (target.interactions || []).filter((interaction) => interaction.id !== settlement.interactionId);
   if (
     !['advanced', 'resolved'].includes(settlement.status) &&
     settlement.summary &&

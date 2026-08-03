@@ -35,6 +35,21 @@ describe('read_url', () => {
     ).rejects.toThrow('URL_SCOPE_FORBIDDEN');
   });
 
+  it('允许读取服务端从所引用书签中恢复的 URL', async () => {
+    await expect(
+      readUrl.prepareArgs(
+        { url: 'https://example.com/docs' },
+        {
+          question: '继续分析刚才那个书签',
+          agentContentScope: {
+            externalWeb: false,
+            allowedWebUrls: ['https://example.com/docs'],
+          },
+        },
+      ),
+    ).resolves.toEqual({ url: 'https://example.com/docs' });
+  });
+
   it('保留广泛联网开关对其他有效 URL 的授权', async () => {
     await expect(
       readUrl.prepareArgs(

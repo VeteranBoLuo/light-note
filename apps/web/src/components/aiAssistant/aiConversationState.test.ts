@@ -66,7 +66,22 @@ describe('aiConversationState', () => {
   });
 
   it('自然语言触发的待确认消息同样不写历史，结算后才允许保存', () => {
-    const messages = [{ content: '把图片保存为测试.png' }, { content: '即将保存文件' }];
+    const messages = [
+      { content: '把图片保存为测试.png' },
+      {
+        content: '即将保存文件',
+        confirmations: [
+          {
+            id: 'confirm-1',
+            token: 'token-1',
+            sessionId: 'session-1',
+            toolName: 'save_attachment_to_cloud',
+            args: {},
+            expiresIn: 120,
+          },
+        ],
+      },
+    ];
     markConversationConfirmationPending(messages, 0, 1, 'confirm-1', 'agent-action:1');
     expect(messages.filter(shouldPersistConversationMessage)).toHaveLength(0);
 
@@ -78,6 +93,12 @@ describe('aiConversationState', () => {
     });
     expect(messages.filter(shouldPersistConversationMessage)).toHaveLength(2);
     expect(messages[1].content).toBe('即将保存文件\n\n已取消操作');
+    expect(messages[1].confirmations).toEqual([]);
+    expect(messages[1].actionSettlements?.[0]).toMatchObject({
+      confirmationId: 'confirm-1',
+      status: 'cancelled',
+      summary: '已取消操作',
+    });
   });
 
   it('同轮多个确认全部结算后才持久化，任一成功即可保留整轮', () => {

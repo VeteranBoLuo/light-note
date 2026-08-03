@@ -1,6 +1,6 @@
 import { stableAgentErrorCode } from './logSafety.js';
 
-const SOURCE_TYPES = new Set(['note', 'bookmark', 'file', 'knowledge', 'document', 'tag', 'folder', 'web']);
+const SOURCE_TYPES = new Set(['note', 'bookmark', 'file', 'knowledge', 'document', 'tag', 'folder', 'todo', 'web']);
 
 const SOURCE_TARGETS = new Set([
   'note-detail',
@@ -12,6 +12,7 @@ const SOURCE_TARGETS = new Set([
   'help-article',
   'knowledge-admin',
   'tag-detail',
+  'todo-inbox',
   'web-url',
   'temporary-document',
 ]);
@@ -25,6 +26,7 @@ const TARGETS_REQUIRING_ID = new Set([
   'help-article',
   'knowledge-admin',
   'tag-detail',
+  'todo-inbox',
 ]);
 
 function boundedText(value, maxLength) {
@@ -98,6 +100,7 @@ function inferTarget(type, url) {
   if (type === 'bookmark') return url ? 'bookmark-url' : 'bookmark-edit';
   if (type === 'file') return 'cloud-file';
   if (type === 'tag') return 'tag-detail';
+  if (type === 'todo') return 'todo-inbox';
   if (type === 'folder') return 'cloud-folder';
   if (type === 'web') return 'web-url';
   return undefined;

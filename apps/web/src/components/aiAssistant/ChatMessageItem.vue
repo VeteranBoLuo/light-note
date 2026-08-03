@@ -178,7 +178,7 @@
     role: 'user' | 'assistant';
     content: string;
     timestamp: Date;
-    contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag'; id: string; title: string }>;
+    contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
     toolEvents?: AiToolStatusItem[];
     sources?: AiSource[];
     evidence?: AiEvidenceReference[];
@@ -300,6 +300,7 @@
     if (type === 'note') return icon.resource.note;
     if (type === 'file') return icon.resource.file;
     if (type === 'tag') return icon.resource.tag;
+    if (type === 'todo') return icon.contextMenu.inbox;
     return icon.resource.bookmark;
   };
 
@@ -465,6 +466,10 @@
 
   .user-context-chip.is-tag {
     --context-color: var(--resource-tag-color);
+  }
+
+  .user-context-chip.is-todo {
+    --context-color: var(--todo-accent-color);
   }
 
   .user-context-chip__icon {

@@ -56,7 +56,11 @@ describe('resolveAiSourceNavigation', () => {
       { path: '/knowledgeBase', query: { article: 'internal-id' } },
     ],
     ['标签详情', { type: 'tag', id: 'tag-id', title: 'AI', target: 'tag-detail' }, '/tag/tag-id'],
-    ['待办收件箱', { type: 'todo', id: 'todo-id', title: '待处理', target: 'todo-inbox' }, '/inbox'],
+    [
+      '待办收件箱',
+      { type: 'todo', id: 'todo-id', title: '待处理', target: 'todo-inbox' },
+      { path: '/inbox', query: { tab: 'todo', todoId: 'todo-id' } },
+    ],
   ];
 
   it.each(internalCases)('%s使用明确的站内语义路由', (_label, source, target) => {
@@ -165,7 +169,7 @@ describe('resolveAiSourceNavigation', () => {
   it('兼容未携带明确 target 的旧待办来源', () => {
     expect(resolveAiSourceNavigation({ type: 'todo', id: 'todo-id', title: '待处理' })).toEqual({
       kind: 'internal',
-      target: '/inbox',
+      target: { path: '/inbox', query: { tab: 'todo', todoId: 'todo-id' } },
     });
   });
 

@@ -3063,7 +3063,7 @@ export default {
     expandSources: '展开来源',
     collapseSources: '收起来源',
     viewAllSources: '全部 {count} 个',
-    attachedResources: '引用资源',
+    attachedResources: '引用内容',
     attachedFiles: '上传文件',
     sourceTypes: {
       note: '笔记',

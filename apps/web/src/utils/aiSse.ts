@@ -14,6 +14,7 @@ export interface AiSseEvent {
   confirmation?: AiToolConfirmation;
   interaction?: AiAgentInteraction;
   sources?: any[];
+  entityRefs?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown>;
   citationAudit?: {

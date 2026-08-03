@@ -778,6 +778,43 @@ export async function snoozeTodo(connection, userId, id, targetAt) {
   return { id, scheduledAt };
 }
 
+/**
+ * AI 显式引用待办时的精确读取入口。只接受稳定 ID 并重新校验 owner；
+ * 返回待办正文与清单，但不返回提醒邮箱等不需要进入模型的敏感字段。
+ */
+export async function findOwnedTodoForAi(db, userId, todoId) {
+  const ownerId = String(userId || '').trim();
+  const id = String(todoId || '').trim();
+  if (!ownerId || !id || id.length > 64) return null;
+  const [rows] = await db.query(
+    `SELECT id, title, description, checklist, priority, status,
+            due_at AS dueAt, completed_at AS completedAt,
+            recurrence_rule AS recurrence, update_time AS updatedAt
+       FROM todo_items
+      WHERE id = ? AND user_id = ? AND del_flag = 0
+      LIMIT 1`,
+    [id, ownerId],
+  );
+  const row = rows?.[0];
+  if (!row) return null;
+  return {
+    id: String(row.id),
+    title: String(row.title || '未命名待办'),
+    description: String(row.description || ''),
+    checklist: parseChecklist(row.checklist).map((item) => ({
+      id: String(item?.id || ''),
+      text: String(item?.text || ''),
+      done: Boolean(item?.done),
+    })),
+    priority: Number(row.priority || 0),
+    status: row.status === 'completed' ? 'completed' : 'pending',
+    dueAt: row.dueAt || null,
+    completedAt: row.completedAt || null,
+    recurrence: parseJsonObject(row.recurrence),
+    updatedAt: row.updatedAt || null,
+  };
+}
+
 function normalizeTodoListOptions(input = {}) {
   const status = String(input.status || 'all').toLowerCase();
   const sort = String(input.sort || 'smart').toLowerCase();

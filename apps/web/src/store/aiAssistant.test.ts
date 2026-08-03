@@ -3,8 +3,10 @@ import { createPinia, setActivePinia } from 'pinia';
 import useAiAssistantStore, {
   buildAiAssistantDomainKey,
   createAiAssistantMaterialSnapshot,
+  resolveAiAssistantFollowUpMaterialSnapshot,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
+  shouldAutoInheritAiAssistantMaterials,
   type AiAssistantIdentity,
 } from './aiAssistant';
 
@@ -71,6 +73,88 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
 
     expect(store.contextRefs).toEqual([]);
     expect(store.attachmentRefs).toEqual([]);
+  });
+
+  it('明确承接上一轮时继承实际使用的资源，但普通新问题不自动粘住材料', () => {
+    const messages = [
+      {
+        id: 'user-1',
+        role: 'user' as const,
+        content: '分析这个书签',
+        timestamp: new Date(),
+        contextRefs: [{ type: 'bookmark' as const, id: 'bookmark-1', title: '示例书签' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '分析结果',
+        timestamp: new Date(),
+        parentMessageId: 'user-1',
+        sources: [{ type: 'bookmark', id: 'bookmark-1', title: '示例书签' }],
+      },
+    ];
+
+    expect(shouldAutoInheritAiAssistantMaterials('不够详细，重新生成')).toBe(true);
+    expect(shouldAutoInheritAiAssistantMaterials('今天天气怎么样')).toBe(false);
+    expect(shouldAutoInheritAiAssistantMaterials('请详细介绍深圳旅游')).toBe(false);
+    expect(shouldAutoInheritAiAssistantMaterials('补充一个新的待办')).toBe(false);
+    expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs).toEqual([
+      { type: 'bookmark', id: 'bookmark-1', title: '示例书签' },
+    ]);
+  });
+
+  it('确认操作结算轮即使没有普通来源，也能恢复父消息的原始引用', () => {
+    const messages = [
+      {
+        id: 'user-1',
+        role: 'user' as const,
+        content: '根据书签创建笔记',
+        timestamp: new Date(),
+        contextRefs: [{ type: 'bookmark' as const, id: 'bookmark-1', title: '示例书签' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '已取消操作',
+        timestamp: new Date(),
+        parentMessageId: 'user-1',
+        persistAfterConfirmationSettlement: true,
+        actionSettlements: [
+          {
+            confirmationId: 'confirm-1',
+            toolName: 'create_note',
+            status: 'cancelled' as const,
+            summary: '已取消操作',
+            settledAt: new Date().toISOString(),
+          },
+        ],
+      },
+    ];
+
+    expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs[0]?.id).toBe('bookmark-1');
+  });
+
+  it('把服务端工具返回的待办来源转成稳定追问锚点', () => {
+    const messages = [
+      {
+        id: 'user-1',
+        role: 'user' as const,
+        content: '我有哪些待办',
+        timestamp: new Date(),
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '你有一条待办',
+        timestamp: new Date(),
+        parentMessageId: 'user-1',
+        entityRefs: [{ type: 'todo' as const, id: 'todo-1', title: '整理发票' }],
+      },
+    ];
+
+    expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs).toEqual([
+      { type: 'todo', id: 'todo-1', title: '整理发票' },
+    ]);
   });
 });
 
@@ -169,6 +253,46 @@ describe('aiAssistant store', () => {
 
     expect(store.messages).toHaveLength(1);
     expect(store.messages[0].content).toBe('你好');
+  });
+
+  it('旧缓存中已经结算但仍残留令牌时不再恢复幽灵确认卡', () => {
+    const self = identity('u1', 'u1', 'self', '');
+    localStorage.setItem(
+      buildAiAssistantDomainKey(self),
+      JSON.stringify({
+        version: 3,
+        identity: self,
+        messages: [
+          {
+            id: 'assistant-settled',
+            role: 'assistant',
+            content: '已取消操作',
+            timestamp: new Date().toISOString(),
+            transient: false,
+            pendingConfirmationIds: [],
+            confirmations: [
+              {
+                id: 'settled-confirmation',
+                token: 'stale-token',
+                sessionId: 'session-1',
+                toolName: 'create_note',
+                args: { title: '不应再执行' },
+                expiresIn: 120,
+                expiresAt: new Date(Date.now() + 120_000).toISOString(),
+              },
+            ],
+          },
+        ],
+        sessionId: 'session-1',
+      }),
+    );
+    const store = useAiAssistantStore();
+
+    store.switchConversation(self, '你好');
+
+    expect(store.messages[0].content).toBe('已取消操作');
+    expect(store.messages[0].confirmations).toEqual([]);
+    expect(store.messages[0].pendingConfirmationIds).toEqual([]);
   });
 
   it('用 actor、subject、adminContextMode、adminContextId 四维键隔离会话', () => {
@@ -466,12 +590,14 @@ describe('aiAssistant store', () => {
       content: '操作完成',
       timestamp: new Date(),
       confirmations: [{ token: 'TOP_SECRET_TOKEN' } as any],
+      entityRefs: [{ type: 'todo', id: 'todo-1', title: '整理发票' }],
     });
     store.isLoading = true;
     store.persistCurrentConversation();
 
     const raw = localStorage.getItem(buildAiAssistantDomainKey(subjectA)) || '';
     expect(raw).toContain('待发送');
+    expect(raw).toContain('todo-1');
     expect(raw).not.toContain('TOP_SECRET_TOKEN');
     expect(raw).not.toContain('isLoading');
   });

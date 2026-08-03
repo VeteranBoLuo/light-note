@@ -60,10 +60,19 @@ export function hasExplicitWebUrl(message) {
 
 /**
  * externalWeb 允许未来的广泛联网能力；关闭时，read_url 只能访问用户本轮原话中
- * 明确出现的 URL。边界检查允许中文紧跟链接，也避免把更长域名或路径的前缀误授权。
+ * 明确出现的 URL，或由服务端按用户资源归属校验后精确加入 allowedUrls 的书签链接。
+ * 边界检查允许中文紧跟链接，也避免把更长域名或路径的前缀误授权。
  */
-export function isAgentUrlAllowedByScope({ message, url, externalWeb = false } = {}) {
+export function isAgentUrlAllowedByScope({ message, url, externalWeb = false, allowedUrls = [] } = {}) {
   if (externalWeb === true) return Boolean(normalizeCandidateUrl(url));
+  const normalizedTarget = normalizeCandidateUrl(url);
+  if (
+    normalizedTarget &&
+    Array.isArray(allowedUrls) &&
+    allowedUrls.some((allowedUrl) => normalizeCandidateUrl(allowedUrl) === normalizedTarget)
+  ) {
+    return true;
+  }
   const text = String(message || '');
   return candidateLiterals(url).some((literal) => containsBoundedLiteral(text, literal));
 }

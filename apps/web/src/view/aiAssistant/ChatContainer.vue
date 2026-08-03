@@ -187,7 +187,9 @@
     promoteConversationInteractionToConfirmation,
     settleConversationConfirmation,
     settleConversationInteraction,
+    shouldPersistConversationMessage,
     shouldShowAiMessageSources,
+    type AiConversationActionSettlement,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
   import { shouldUseAiCloudHistory } from '@/components/aiAssistant/aiUiContracts';
@@ -248,8 +250,10 @@
     buildAiAssistantRuntimeIdentityKey,
     createAiAssistantMaterialSnapshot,
     createAiAssistantMessageId,
+    resolveAiAssistantFollowUpMaterialSnapshot,
     resolveAiAssistantRequestEdgeStatus,
     resolveAiAssistantIdentity,
+    shouldAutoInheritAiAssistantMaterials,
     type AiAssistantMaterialSnapshot,
     type AiAssistantMessage,
     type AiAssistantRequestLease,
@@ -964,10 +968,51 @@
     };
   }
 
+  function normalizeCloudActionSettlements(value: unknown): AiConversationActionSettlement[] {
+    if (!Array.isArray(value)) return [];
+    const statuses = new Set(['confirmed', 'cancelled', 'editing', 'failed', 'expired']);
+    return value
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          Boolean(String((item as Record<string, unknown>).confirmationId || '').trim()) &&
+          Boolean(String((item as Record<string, unknown>).toolName || '').trim()) &&
+          statuses.has(String((item as Record<string, unknown>).status || '')) &&
+          Boolean(String((item as Record<string, unknown>).settledAt || '').trim()),
+      )
+      .slice(-20)
+      .map((item) => ({
+        confirmationId: String(item.confirmationId).slice(0, 128),
+        toolName: String(item.toolName).slice(0, 64),
+        status: String(item.status) as AiConversationActionSettlement['status'],
+        summary: String(item.summary || '').slice(0, 500),
+        settledAt: String(item.settledAt || ''),
+      }));
+  }
+
+  function normalizeCloudEntityRefs(value: unknown): AiResourceContext[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          ['bookmark', 'note', 'file', 'tag', 'todo'].includes(String(item.type)) &&
+          Boolean(String(item.id || '').trim()),
+      )
+      .slice(0, 5)
+      .map((item) => ({
+        type: String(item.type) as AiResourceContext['type'],
+        id: String(item.id).slice(0, 255),
+        title: String(item.title || '').slice(0, 255),
+      }));
+  }
+
   function cloudMessageToLocal(cloudMessage: AiCloudMessage): ChatMessage | null {
     if (cloudMessage.role !== 'user' && cloudMessage.role !== 'assistant') return null;
     const contexts = (cloudMessage.contextRefs || [])
-      .filter((item) => item && ['bookmark', 'note', 'file', 'tag'].includes(String(item.type)))
+      .filter((item) => item && ['bookmark', 'note', 'file', 'tag', 'todo'].includes(String(item.type)))
       .map((item) => ({
         type: item.type as AiResourceContext['type'],
         id: String(item.id),
@@ -1007,6 +1052,8 @@
       requestId: cloudMessage.requestId || undefined,
       traceId: cloudMessage.traceId || undefined,
       recovered: cloudMessage.modelMeta?.recovered === true,
+      entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
+      actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
       terminal:
         cloudMessage.modelMeta?.terminal && typeof cloudMessage.modelMeta.terminal === 'object'
@@ -1303,6 +1350,15 @@
     const sources = (chatMessage.sources || []).map(localSourceToCloud);
     const knownSourceIds = new Set(sources.map((source) => source.sourceId));
     const evidence = (chatMessage.evidence || []).filter((item) => knownSourceIds.has(item.sourceId));
+    const modelMeta = {
+      ...(chatMessage.recovered
+        ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
+        : {}),
+      ...(chatMessage.actionSettlements?.length
+        ? { actionSettlements: chatMessage.actionSettlements.slice(-20) }
+        : {}),
+      ...(chatMessage.entityRefs?.length ? { entityRefs: chatMessage.entityRefs.slice(0, 5) } : {}),
+    };
     try {
       const saved = await saveAiCloudMessage(cloudConversationId, {
         requestId: chatMessage.requestId || `assistant:${chatMessage.id}`,
@@ -1314,9 +1370,7 @@
         status,
         activity: chatMessage.activity || [],
         coverage: chatMessage.coverage || null,
-        modelMeta: chatMessage.recovered
-          ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
-          : null,
+        modelMeta: Object.keys(modelMeta).length ? modelMeta : null,
         sources,
         evidence,
       });
@@ -1620,8 +1674,17 @@
     hasAnswerStarted.value = false;
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
+    const autoInheritedMaterialSnapshot =
+      !options.materialSnapshot &&
+      !contexts.value.length &&
+      !attachments.value.length &&
+      shouldAutoInheritAiAssistantMaterials(inputText)
+        ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
+        : null;
     const materialSnapshot =
-      options.materialSnapshot || createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
+      options.materialSnapshot ||
+      autoInheritedMaterialSnapshot ||
+      createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
     const contextSnapshot = materialSnapshot.contextRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
@@ -1903,6 +1966,7 @@
               );
             }
             if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
+            currentMsg.entityRefs = normalizeCloudEntityRefs(data.entityRefs);
             if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }
@@ -2208,17 +2272,7 @@
    * 问待办的回答没有引用旧标签,追问也就不会把它带回来。
    */
   function buildFollowUpMaterialSnapshot(): AiAssistantMaterialSnapshot | null {
-    const assistant = latestAssistantMessage.value;
-    if (!assistant?.sources?.length) return null;
-    const parent = messages.value.find((item) => item.id === assistant.parentMessageId);
-    if (!parent) return null;
-    const usedKeys = new Set(
-      assistant.sources.map((source) => `${source.resourceType || source.type}:${source.resourceId || source.id}`),
-    );
-    const contextRefs = (parent.contextRefs || []).filter((ref) => usedKeys.has(`${ref.type}:${ref.id}`));
-    const attachmentRefs = (parent.attachmentRefs || []).filter((item) => usedKeys.has(`document:${item.id}`));
-    if (!contextRefs.length && !attachmentRefs.length) return null;
-    return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs);
+    return resolveAiAssistantFollowUpMaterialSnapshot(messages.value);
   }
 
   // 常见问题与回答后的推荐项是一键提问；附件提示词仍由 ChatInputSection 负责回填并允许修改。
@@ -2312,9 +2366,39 @@
     }
   };
 
+  async function persistSettledAgentActionMessage(index: number) {
+    const target = messages.value[index];
+    if (!target || !shouldPersistConversationMessage(target) || !cloudHistoryEnabled()) return;
+    let parent = target.parentMessageId
+      ? messages.value.find(
+          (item) =>
+            item.role === 'user' &&
+            (item.id === target.parentMessageId || item.cloudId === target.parentMessageId),
+        )
+      : null;
+    if (!parent) {
+      for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+        if (messages.value[cursor]?.role === 'user') {
+          parent = messages.value[cursor];
+          break;
+        }
+      }
+    }
+    if (!parent?.cloudId || !conversationId.value) return;
+    target.parentMessageId = parent.cloudId;
+    await persistCloudAssistantMessage(
+      aiAssistant.runtimeIdentityKey,
+      conversationId.value,
+      target,
+      target.terminal?.status === 'failed' ? 'failed' : 'completed',
+    );
+    persistHistory();
+  }
+
   const handleInteractionSettled = (index: number, settlement: AiAgentInteractionSettlement) => {
     settleConversationInteraction(messages.value, index, settlement);
     persistHistory();
+    void persistSettledAgentActionMessage(index);
   };
 
   const handleConfirmationEdit = (confirmation: AiToolConfirmation) => {
@@ -2330,6 +2414,7 @@
   const handleConfirmationSettled = (index: number, settlement: AiToolConfirmationSettlement) => {
     settleConversationConfirmation(messages.value, index, settlement);
     persistHistory();
+    void persistSettledAgentActionMessage(index);
   };
 
   // 重新生成保留旧答案，并用原消息的不可变材料快照创建同一版本组的新分支。

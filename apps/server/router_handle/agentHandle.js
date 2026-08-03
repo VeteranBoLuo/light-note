@@ -72,6 +72,7 @@ import * as aiQuota from '../util/aiQuota.js';
 import { resolveDocumentAttachments, selectDocumentCoverage } from '../util/aiDocument/service.js';
 import { getPlannerMaxTokens, parseToolCallArguments } from '../util/agent/toolArguments.js';
 import { buildNoteAiPayload, findOwnedNoteForAi } from '../util/noteAiService.js';
+import { findOwnedTodoForAi } from '../util/services/todoService.js';
 import {
   getFollowUpSuggestions,
   shouldOfferFollowUps,
@@ -724,13 +725,15 @@ async function resolveUser(keyword) {
 }
 
 async function resolveResourceContexts(userId, contexts, question = '') {
-  if (!Array.isArray(contexts) || contexts.length === 0) return { text: '', sources: [], scopeResourceIds: [] };
+  if (!Array.isArray(contexts) || contexts.length === 0) {
+    return { text: '', sources: [], scopeResourceIds: [], allowedWebUrls: [] };
+  }
   const normalized = [];
   const seen = new Set();
   for (const item of contexts.slice(0, 5)) {
     const type = String(item?.type || '');
     const id = String(item?.id || '').trim();
-    if (!['bookmark', 'note', 'file', 'tag'].includes(type) || !id || id.length > 255) continue;
+    if (!['bookmark', 'note', 'file', 'tag', 'todo'].includes(type) || !id || id.length > 255) continue;
     const key = `${type}:${id}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -740,11 +743,13 @@ async function resolveResourceContexts(userId, contexts, question = '') {
   const sources = [];
   const scopeResourceIds = [];
   const scopeKeys = new Set();
+  const allowedWebUrls = new Set();
   let remainingBudget = 12_000;
   for (let itemIndex = 0; itemIndex < normalized.length; itemIndex += 1) {
     const item = normalized[itemIndex];
     let rows = [];
     let notePayload = null;
+    let todoPayload = null;
     if (item.type === 'bookmark') {
       [rows] = await pool.query(
         `SELECT b.id, b.name AS title, b.url,
@@ -777,6 +782,9 @@ async function resolveResourceContexts(userId, contexts, question = '') {
          WHERE id = ? AND create_by = ? AND del_flag = 0`,
         [item.id, userId],
       );
+    } else if (item.type === 'todo') {
+      todoPayload = await findOwnedTodoForAi(pool, userId, item.id);
+      if (todoPayload) rows = [todoPayload];
     } else {
       [rows] = await pool.query('SELECT id, name AS title FROM tag WHERE id = ? AND user_id = ? AND del_flag = 0', [
         item.id,
@@ -785,7 +793,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     }
     const row = rows[0];
     if (!row) continue;
-    if (['bookmark', 'note', 'file'].includes(item.type)) {
+    if (['bookmark', 'note', 'file', 'todo'].includes(item.type)) {
       const scopeKey = `${item.type}:${row.id}`;
       if (!scopeKeys.has(scopeKey)) {
         scopeKeys.add(scopeKey);
@@ -810,6 +818,22 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     const content =
       item.type === 'file'
         ? `文件类型：${row.file_type || '未知'}；大小：${Number(row.file_size || 0)} bytes`
+        : item.type === 'todo'
+          ? [
+              `状态：${todoPayload.status === 'completed' ? '已完成' : '待处理'}`,
+              `优先级：${Number(todoPayload.priority || 0)}`,
+              `截止时间：${todoPayload.dueAt || '未设置'}`,
+              todoPayload.completedAt ? `完成时间：${todoPayload.completedAt}` : '',
+              todoPayload.updatedAt ? `更新时间：${todoPayload.updatedAt}` : '',
+              todoPayload.description ? `说明：${todoPayload.description}` : '说明：无',
+              todoPayload.checklist?.length
+                ? `子待办：\n${todoPayload.checklist
+                    .map((entry, index) => `${index + 1}. [${entry.done ? '已完成' : '待处理'}] ${entry.text}`)
+                    .join('\n')}`
+                : '子待办：无',
+            ]
+              .filter(Boolean)
+              .join('\n')
         : item.type === 'tag'
           ? '用户选择的标签上下文'
           : item.type === 'note'
@@ -817,8 +841,10 @@ async function resolveResourceContexts(userId, contexts, question = '') {
             : plainText(row.content || row.url || '').slice(0, 12000);
     const boundedContent = content.slice(0, Math.max(0, remainingBudget));
     remainingBudget = Math.max(0, remainingBudget - boundedContent.length);
-    blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${boundedContent}`);
+    const bookmarkUrlLine = item.type === 'bookmark' && row.url ? `\n当前链接：${row.url}` : '';
+    blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}${bookmarkUrlLine}\n${boundedContent}`);
     const sourceUrl = item.type === 'bookmark' ? row.url : undefined;
+    if (sourceUrl) allowedWebUrls.add(String(sourceUrl));
     sources.push({
       type: item.type,
       id: String(row.id),
@@ -834,6 +860,8 @@ async function resolveResourceContexts(userId, contexts, question = '') {
               : 'bookmark-edit'
             : item.type === 'file'
               ? 'cloud-file'
+              : item.type === 'todo'
+                ? 'todo-inbox'
               : 'tag-detail',
     });
   }
@@ -843,6 +871,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
       : '',
     sources,
     scopeResourceIds,
+    allowedWebUrls: [...allowedWebUrls],
   };
 }
 
@@ -854,18 +883,24 @@ const BROAD_PERSONAL_CONTENT_TOOLS = new Set([
   'analyze_resource_images',
   'query_files',
   'query_tags',
+  'query_todos',
 ]);
 
 function normalizeAgentContentScope(rawScope, resolvedContexts, message) {
   const mode = rawScope?.mode === 'workspace' ? 'workspace' : 'selected';
-  const resourceIds = Array.isArray(resolvedContexts?.scopeResourceIds)
+  const entityRefs = Array.isArray(resolvedContexts?.scopeResourceIds)
     ? resolvedContexts.scopeResourceIds.map((item) => ({ type: String(item.type), id: String(item.id) }))
     : [];
+  const resourceIds = entityRefs.filter((item) => ['bookmark', 'note', 'file'].includes(item.type));
   return {
     mode,
+    entityRefs,
     resourceIds,
     externalWeb: rawScope?.externalWeb === true,
     explicitUrlRead: hasExplicitWebUrl(message),
+    allowedWebUrls: Array.isArray(resolvedContexts?.allowedWebUrls)
+      ? resolvedContexts.allowedWebUrls.map((url) => String(url)).filter(Boolean).slice(0, 5)
+      : [],
   };
 }
 
@@ -929,6 +964,23 @@ function buildAgentEvidenceBundle(rawSources, requestId) {
     });
   }
   return { sources: [...sourceById.values()], evidence };
+}
+
+function buildAgentEntityRefs(rawSources) {
+  const allowedTypes = new Set(['bookmark', 'note', 'file', 'tag', 'todo']);
+  const seen = new Set();
+  const refs = [];
+  for (const source of Array.isArray(rawSources) ? rawSources : []) {
+    const type = String(source?.type || source?.resourceType || '');
+    const id = String(source?.resourceId || source?.id || '').trim();
+    if (!allowedTypes.has(type) || !id) continue;
+    const key = `${type}:${id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push({ type, id: id.slice(0, 255), title: String(source?.title || '').slice(0, 255) });
+    if (refs.length >= 5) break;
+  }
+  return refs;
 }
 
 function buildCitationGuide(evidence, sources) {
@@ -1434,8 +1486,11 @@ export async function agentChat(req, res) {
           });
     if (contentScope.mode === 'selected') {
       selectedTools = selectedTools.filter((tool) => !BROAD_PERSONAL_CONTENT_TOOLS.has(tool.name));
+      if (contentScope.entityRefs.length && !contentScope.resourceIds.length) {
+        selectedTools = selectedTools.filter((tool) => tool.name !== 'search_content');
+      }
     }
-    if (!contentScope.externalWeb && !contentScope.explicitUrlRead) {
+    if (!contentScope.externalWeb && !contentScope.explicitUrlRead && !contentScope.allowedWebUrls.length) {
       selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
     }
     trace.selectedTools = selectedTools.map((tool) => tool.name);
@@ -1453,11 +1508,14 @@ export async function agentChat(req, res) {
     });
     const scopePrompt =
       contentScope.mode === 'selected'
-        ? `本轮个人知识检索被服务端严格限制在用户显式选择的 ${contentScope.resourceIds.length} 个资源内；不得尝试读取范围外的笔记、书签或文件。`
+        ? `本轮个人内容读取被服务端严格限制在用户显式选择的 ${contentScope.entityRefs.length} 个实体内；不得尝试读取范围外的笔记、书签、文件或待办。`
         : '本轮允许检索当前用户的个人知识空间，但仍必须遵守资源归属与工具权限。';
+    const webScopePrompt = contentScope.allowedWebUrls.length
+      ? `用户本轮引用的书签包含 ${contentScope.allowedWebUrls.length} 个由服务端按资源 ID 重新校验得到的链接；只有在问题需要网页正文时才使用 read_url，且只能读取这些链接。`
+      : '';
     const prompt = memoryPrompt
-      ? `${promptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
-      : `${promptBase}\n\n${scopePrompt}`;
+      ? `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}\n\n---\n\n${memoryPrompt}`
+      : `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}`;
     // 只把「最近一次成功工具调用」放 system,帮助理解省略式追问(如「那第二个呢」);
     // 对话历史不再塞进 system 的 JSON 块,而是作为真实多轮消息注入(见下方 messages),模型才真有记忆。
     const systemContent = session.lastTool
@@ -1540,6 +1598,7 @@ export async function agentChat(req, res) {
     const confirmations = [];
     const interactions = [];
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
+    const toolEntitySources = [];
     let finalContent = '';
     let apiCalls = 0;
     let remainingToolResultBudget = 24000;
@@ -1703,7 +1762,10 @@ export async function agentChat(req, res) {
             );
           }
 
-          if (Array.isArray(result.sources)) sources.push(...result.sources);
+          if (Array.isArray(result.sources)) {
+            sources.push(...result.sources);
+            toolEntitySources.push(...result.sources);
+          }
           usedTools.push({
             name: tc.function.name,
             status: result.status,
@@ -2672,6 +2734,9 @@ export async function agentChat(req, res) {
     const publicGrounding = selectCitedAgentGrounding({ sources: candidateSources, evidence, citationAudit });
     const publicSources = publicGrounding.sources;
     const publicEvidence = publicGrounding.evidence;
+    // 公开来源继续只展示真实引用项；跨轮锚点额外保留本轮成功工具返回的稳定实体 ID，
+    // 避免模型漏写引用编号时“刚才第二个待办”失去目标。只返回安全 type/id/title，不返回工具原始数据。
+    const entityRefs = buildAgentEntityRefs([...publicSources, ...toolEntitySources]);
     // 覆盖报告与公开文档来源保持一致,否则会出现「来源 1 个,覆盖统计 2 份文件」。
     const publicCoverage = selectDocumentCoverage(
       resolvedAttachments.coverage,
@@ -2686,6 +2751,7 @@ export async function agentChat(req, res) {
       if (publicSources.length) {
         sseLifecycle?.send('sources', {
           sources: publicSources,
+          entityRefs,
           evidence: publicEvidence,
           citationAudit,
           coverage: publicCoverage,
@@ -2716,6 +2782,7 @@ export async function agentChat(req, res) {
         usageStatus: trace.usageStatus,
         followUpAvailable,
         sources: publicSources,
+        entityRefs,
         evidence: publicEvidence,
         coverage: publicCoverage,
         citationAudit,
@@ -2729,6 +2796,7 @@ export async function agentChat(req, res) {
           confirmations,
           interactions,
           sources: publicSources,
+          entityRefs,
           evidence: publicEvidence,
           citationAudit,
           coverage: publicCoverage,

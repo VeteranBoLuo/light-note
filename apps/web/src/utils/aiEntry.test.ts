@@ -28,6 +28,17 @@ describe('aiEntry', () => {
     });
   });
 
+  it('AI 专用入口允许待办实体，但仍拒绝未知类型', () => {
+    expect(
+      normalizeAiAssistantLaunchPayload({
+        contextRefs: [
+          { type: 'todo', id: 'todo-1', title: '整理发票' },
+          { type: 'unknown', id: 'unknown-1', title: '未知对象' },
+        ],
+      }).contextRefs,
+    ).toEqual([{ type: 'todo', id: 'todo-1', title: '整理发票' }]);
+  });
+
   it('丢弃未知入口标识，避免把自由文本带入埋点', () => {
     expect(normalizeAiAssistantLaunchPayload({ surface: 'private note title' }).surface).toBeUndefined();
   });

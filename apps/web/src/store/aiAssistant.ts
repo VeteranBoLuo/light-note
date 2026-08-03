@@ -1,14 +1,15 @@
 import { defineStore } from 'pinia';
 import type { AiAttachment } from '@/api/aiAttachmentApi';
 import type { AiSource } from '@/components/aiAssistant/aiSourceNavigation';
-import type { SearchType } from '@/api/search';
+import type { GlobalSearchType } from '@/api/search';
 import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
+import type { AiConversationActionSettlement } from '@/components/aiAssistant/aiConversationState';
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 
 interface AiResourceContext {
-  type: SearchType;
+  type: GlobalSearchType;
   id: string;
   title: string;
 }
@@ -51,6 +52,8 @@ export interface AiAssistantMessage {
   confirmations?: AiToolConfirmation[];
   interactions?: AiAgentInteraction[];
   sources?: AiSource[];
+  /** 服务端返回的安全实体锚点；只含 type/id/title，用于明确承接式追问。 */
+  entityRefs?: AiResourceContext[];
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown> | null;
   citationAudit?: { citedKeys: string[]; invalidKeys: string[]; verifiedCitationCount: number; evidenceCount: number };
@@ -82,6 +85,8 @@ export interface AiAssistantMessage {
   pendingInteractionIds?: string[];
   confirmationSucceeded?: boolean;
   persistAfterConfirmationSettlement?: boolean;
+  /** 不含令牌和执行参数的安全结算结果，可写入本地与云端历史。 */
+  actionSettlements?: AiConversationActionSettlement[];
   recommendations?: string[];
   recommendationReady?: boolean;
   recommendationPending?: boolean;
@@ -281,6 +286,98 @@ export function createAiAssistantMaterialSnapshot(
   };
 }
 
+const MATERIAL_ANAPHORIC_PATTERN =
+  /(?:这个|那个|这些|那些|它们?|刚才|刚刚|上面|前面|之前|上述|前述|基于(?:它|这个|那个|上述|前述)|\b(?:this|that|these|those|it|they|above|previous|earlier)\b)/i;
+const MATERIAL_FOLLOW_UP_COMMAND_PATTERN =
+  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更详细(?:一点|些)?|再详细(?:一点|些)?|不够(?:详细|完整)|continue\b|expand\b|regenerate\b|rewrite\b|more\s+detail\b)/i;
+
+/** 只在用户明确承接上一轮材料时自动续用，避免把一次引用永久变成整段会话的隐式粘性材料。 */
+export function shouldAutoInheritAiAssistantMaterials(input: string) {
+  const normalized = String(input || '').trim();
+  return MATERIAL_ANAPHORIC_PATTERN.test(normalized) || MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(normalized);
+}
+
+/**
+ * 从最新助手回答实际使用过的来源反查父级用户消息材料。
+ * 确认类回答可能没有形成普通来源，此时仅对同一动作轮回退到其父消息的原始材料。
+ */
+export function resolveAiAssistantFollowUpMaterialSnapshot(
+  messages: AiAssistantMessage[],
+): AiAssistantMaterialSnapshot | null {
+  let assistantIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index]?.role === 'assistant') {
+      assistantIndex = index;
+      break;
+    }
+  }
+  if (assistantIndex < 0) return null;
+  const assistant = messages[assistantIndex];
+  let parentIndex = assistant.parentMessageId
+    ? messages.findIndex(
+        (message) =>
+          message.role === 'user' &&
+          (message.id === assistant.parentMessageId || message.cloudId === assistant.parentMessageId),
+      )
+    : -1;
+  if (parentIndex < 0) {
+    for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+      if (messages[index]?.role === 'user') {
+        parentIndex = index;
+        break;
+      }
+    }
+  }
+  if (parentIndex < 0) return null;
+  const parent = messages[parentIndex];
+  const parentContexts = parent.contextRefs || parent.contexts || [];
+  const parentAttachments = parent.attachmentRefs || [];
+
+  const supportedEntityTypes = new Set<GlobalSearchType>(['bookmark', 'note', 'file', 'tag', 'todo']);
+  const parentContextMap = new Map(parentContexts.map((item) => [`${item.type}:${item.id}`, item]));
+  const sourceContextRefs = [
+    ...(assistant.entityRefs || []),
+    ...(assistant.sources || []).map((source) => ({
+      type: source.type,
+      id: source.resourceId || source.id,
+      title: source.title,
+    })),
+  ]
+    .map((source) => {
+      const type = String(source.type || '') as GlobalSearchType;
+      const id = String(source.id || '').trim();
+      if (!supportedEntityTypes.has(type) || !id) return null;
+      const parentContext = parentContextMap.get(`${type}:${id}`);
+      return {
+        type,
+        id,
+        title: String(source.title || parentContext?.title || '').slice(0, 255),
+      };
+    })
+    .filter((item): item is AiResourceContext => Boolean(item));
+  const contextRefs = sourceContextRefs.filter(
+    (item, index, all) => all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
+  );
+  const sourceKeys = new Set(
+    (assistant.sources || [])
+      .map((source) => `${source.type}:${source.resourceId || source.id}`)
+      .filter((key) => !key.endsWith(':')),
+  );
+  let attachmentRefs = parentAttachments.filter(
+    (item) => sourceKeys.has(`document:${item.id}`) || sourceKeys.has(`file:${item.fileId || item.id}`),
+  );
+
+  const isSettledActionRound = Boolean(
+    assistant.persistAfterConfirmationSettlement || assistant.actionSettlements?.length,
+  );
+  if (!contextRefs.length && !attachmentRefs.length && isSettledActionRound) {
+    contextRefs.push(...parentContexts);
+    attachmentRefs = parentAttachments;
+  }
+  if (!contextRefs.length && !attachmentRefs.length) return null;
+  return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs);
+}
+
 function safeCloneArray<T>(value: unknown): T[] {
   if (!Array.isArray(value)) return [];
   try {
@@ -297,7 +394,7 @@ function normalizeContextRefs(value: unknown) {
       (item): item is AiResourceContext =>
         Boolean(item) &&
         typeof item === 'object' &&
-        ['bookmark', 'note', 'file', 'tag'].includes(String((item as AiResourceContext).type)) &&
+        ['bookmark', 'note', 'file', 'tag', 'todo'].includes(String((item as AiResourceContext).type)) &&
         Boolean(String((item as AiResourceContext).id || '').trim()),
     )
     .slice(0, 5)
@@ -339,6 +436,28 @@ function normalizePendingConfirmations(value: unknown): AiToolConfirmation[] {
   });
 }
 
+function normalizeActionSettlements(value: unknown): AiConversationActionSettlement[] {
+  if (!Array.isArray(value)) return [];
+  const allowedStatuses = new Set(['confirmed', 'cancelled', 'editing', 'failed', 'expired']);
+  return safeCloneArray<AiConversationActionSettlement>(value)
+    .filter(
+      (item) =>
+        item &&
+        String(item.confirmationId || '').trim() &&
+        String(item.toolName || '').trim() &&
+        allowedStatuses.has(String(item.status)) &&
+        String(item.settledAt || '').trim(),
+    )
+    .slice(-20)
+    .map((item) => ({
+      confirmationId: String(item.confirmationId).slice(0, 128),
+      toolName: String(item.toolName).slice(0, 64),
+      status: item.status,
+      summary: String(item.summary || '').slice(0, 500),
+      settledAt: String(item.settledAt),
+    }));
+}
+
 function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
@@ -347,13 +466,18 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   if (!content) return null;
   const contextRefs = normalizeContextRefs(raw.contextRefs || raw.contexts);
   const attachmentRefs = normalizeAttachmentRefs(raw.attachmentRefs);
-  const confirmations = normalizePendingConfirmations(raw.confirmations);
-  const confirmationIds = new Set(confirmations.map((confirmation) => confirmation.id));
-  const pendingConfirmationIds = Array.isArray(raw.pendingConfirmationIds)
+  const rawPendingConfirmationIds = Array.isArray(raw.pendingConfirmationIds)
     ? raw.pendingConfirmationIds
         .map((id) => String(id || '').trim())
-        .filter((id) => id && confirmationIds.has(id))
+        .filter(Boolean)
     : [];
+  const pendingIdSet = new Set(rawPendingConfirmationIds);
+  // 终态确认卡必须从可操作集合中移除。兼容旧缓存中“pending ID 已清、令牌仍残留”的幽灵卡。
+  const confirmations = normalizePendingConfirmations(raw.confirmations).filter((confirmation) =>
+    pendingIdSet.has(confirmation.id),
+  );
+  const confirmationIds = new Set(confirmations.map((confirmation) => confirmation.id));
+  const pendingConfirmationIds = rawPendingConfirmationIds.filter((id) => confirmationIds.has(id));
   return {
     id: normalizeIdentityPart(raw.id, createAiAssistantMessageId(raw.role)),
     parentMessageId: typeof raw.parentMessageId === 'string' ? raw.parentMessageId : undefined,
@@ -387,6 +511,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
         : undefined,
     contexts: normalizeContextRefs(raw.contexts || raw.contextRefs),
     contextRefs: freezeSnapshotItems(contextRefs),
+    entityRefs: normalizeContextRefs(raw.entityRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
     confirmations,
     transient: raw.transient === true,
@@ -394,6 +519,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     pendingConfirmationIds,
     confirmationSucceeded: raw.confirmationSucceeded === true,
     persistAfterConfirmationSettlement: raw.persistAfterConfirmationSettlement === true,
+    actionSettlements: normalizeActionSettlements(raw.actionSettlements),
     toolEvents: safeCloneArray<AiToolStatusItem>(raw.toolEvents),
     recommendations: Array.isArray(raw.recommendations)
       ? raw.recommendations
@@ -413,6 +539,8 @@ function shouldPersistMessage(message: AiAssistantMessage, activePendingGroups: 
 }
 
 function serializeMessage(message: AiAssistantMessage): Record<string, unknown> {
+  const pendingConfirmationIds = [...new Set(message.pendingConfirmationIds || [])];
+  const pendingIdSet = new Set(pendingConfirmationIds);
   return {
     id: message.id,
     parentMessageId: message.parentMessageId,
@@ -435,13 +563,17 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     toolEvents: safeCloneArray<AiToolStatusItem>(message.toolEvents),
     contexts: normalizeContextRefs(message.contexts || message.contextRefs),
     contextRefs: normalizeContextRefs(message.contextRefs || message.contexts),
+    entityRefs: normalizeContextRefs(message.entityRefs),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
-    confirmations: normalizePendingConfirmations(message.confirmations),
+    confirmations: normalizePendingConfirmations(message.confirmations).filter((confirmation) =>
+      pendingIdSet.has(confirmation.id),
+    ),
     transient: Boolean(message.transient),
     transientGroupId: message.transientGroupId,
-    pendingConfirmationIds: [...new Set(message.pendingConfirmationIds || [])],
+    pendingConfirmationIds,
     confirmationSucceeded: Boolean(message.confirmationSucceeded),
     persistAfterConfirmationSettlement: Boolean(message.persistAfterConfirmationSettlement),
+    actionSettlements: normalizeActionSettlements(message.actionSettlements),
     recommendations: (message.recommendations || [])
       .map((item) => String(item || '').trim())
       .filter(Boolean)

@@ -68,12 +68,12 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { fetchGlobalSearch, type SearchResultItem, type SearchType } from '@/api/search';
+  import { fetchGlobalSearch, type GlobalSearchType, type SearchResultItem } from '@/api/search';
   import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
 
   export interface AiResourceContext {
-    type: SearchType;
+    type: GlobalSearchType;
     id: string;
     title: string;
   }
@@ -94,15 +94,17 @@
 
   // 推导逻辑与 @ 浮层共用,避免两处口径漂移
   const currentPageContext = useCurrentPageResource();
-  const typeLabel = (type: SearchType) => t(`ai.sourceTypes.${type}`);
-  const typeColor = (type: SearchType) => {
+  const typeLabel = (type: GlobalSearchType) => t(`ai.sourceTypes.${type}`);
+  const typeColor = (type: GlobalSearchType) => {
+    if (type === 'todo') return 'var(--todo-accent-color)';
     const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
     return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
   };
-  function resourceIcon(type: SearchType) {
+  function resourceIcon(type: GlobalSearchType) {
     if (type === 'note') return icon.resource.note;
     if (type === 'file') return icon.resource.file;
     if (type === 'tag') return icon.resource.tag;
+    if (type === 'todo') return icon.contextMenu.inbox;
     return icon.resource.bookmark;
   }
   const selected = (item: AiResourceContext) =>

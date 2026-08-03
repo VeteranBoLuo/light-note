@@ -31,6 +31,7 @@ export default {
         message: ctx.question,
         url,
         externalWeb: ctx.agentContentScope?.externalWeb === true,
+        allowedUrls: ctx.agentContentScope?.allowedWebUrls,
       })
     ) {
       throw new Error('URL_SCOPE_FORBIDDEN: 只能读取你在本轮消息中明确提供的网页链接。');

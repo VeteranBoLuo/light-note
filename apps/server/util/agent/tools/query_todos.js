@@ -71,6 +71,18 @@ export default {
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'todo', id: item.id }));
   },
+  toSources(raw) {
+    return (Array.isArray(raw?.items) ? raw.items : []).map((item) => {
+      const checklist = item.checklistProgress || { completed: 0, total: 0 };
+      return {
+        type: 'todo',
+        id: String(item.id || ''),
+        title: item.title || '未命名待办',
+        target: 'todo-inbox',
+        excerpt: `${item.status === 'completed' ? '已完成' : '待处理'}；${PRIORITY_LABELS[item.priority] || '普通优先级'}；截止：${formatTime(item.dueAt)}；清单：${checklist.completed}/${checklist.total}`,
+      };
+    });
+  },
   transform(raw, args = {}) {
     const items = raw?.items || [];
     if (!items.length) {

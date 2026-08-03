@@ -41,6 +41,23 @@ describe('AI 来源标准化', () => {
     ).toHaveLength(2);
   });
 
+  it('接受带稳定 ID 的待办来源并固定导航到待办入口', () => {
+    expect(
+      normalizeAgentSource({
+        type: 'todo',
+        id: 'todo-1',
+        title: '整理发票',
+        excerpt: '待处理；清单：1/2',
+      }),
+    ).toEqual({
+      type: 'todo',
+      id: 'todo-1',
+      title: '整理发票',
+      excerpt: '待处理；清单：1/2',
+      target: 'todo-inbox',
+    });
+  });
+
   it('云文档缺少真实 fileId 时保留静态来源，不把文档 ID 误当成文件 ID', () => {
     expect(
       normalizeAgentSource({

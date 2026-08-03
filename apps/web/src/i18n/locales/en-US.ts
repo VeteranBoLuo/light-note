@@ -3145,7 +3145,7 @@ export default {
     expandSources: 'Show sources',
     collapseSources: 'Hide sources',
     viewAllSources: 'All {count}',
-    attachedResources: 'Attached resources',
+    attachedResources: 'Referenced items',
     attachedFiles: 'Uploaded files',
     sourceTypes: {
       note: 'Note',

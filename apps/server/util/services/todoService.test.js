@@ -4,6 +4,7 @@ import {
   batchSetTodoStatus,
   createTodo,
   deleteTodo,
+  findOwnedTodoForAi,
   listTodoPage,
   listTodos,
   nextRecurrenceAt,
@@ -24,6 +25,44 @@ describe('todoService', () => {
   it('拒绝空标题，且不执行数据库写入', async () => {
     await expect(createTodo(connection, 'user-1', { title: '   ' })).rejects.toThrow('待办标题不能为空');
     expect(connection.query).not.toHaveBeenCalled();
+  });
+
+  it('按 owner 和稳定 ID 为 AI 读取最新待办正文与子待办，不暴露提醒邮箱', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'todo-1',
+          title: '整理发票',
+          description: '按月份归档',
+          checklist: JSON.stringify([
+            { id: 'child-1', text: '下载电子票', done: true },
+            { id: 'child-2', text: '提交报销', done: false },
+          ]),
+          priority: 2,
+          status: 'pending',
+          dueAt: '2026-08-05 18:00:00',
+          completedAt: null,
+          recurrence: null,
+          updatedAt: '2026-08-03 22:00:00',
+        },
+      ],
+    ]);
+
+    const result = await findOwnedTodoForAi(connection, 'user-1', 'todo-1');
+
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('WHERE id = ? AND user_id = ?'), [
+      'todo-1',
+      'user-1',
+    ]);
+    expect(result).toMatchObject({
+      id: 'todo-1',
+      description: '按月份归档',
+      checklist: [
+        { id: 'child-1', text: '下载电子票', done: true },
+        { id: 'child-2', text: '提交报销', done: false },
+      ],
+    });
+    expect(result).not.toHaveProperty('email');
   });
 
   it('创建带提醒的待办时写入待办和提醒计划', async () => {

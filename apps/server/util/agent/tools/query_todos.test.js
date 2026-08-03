@@ -86,4 +86,33 @@ describe('query_todos 工具', () => {
       { type: 'todo', id: 'todo-2' },
     ]);
   });
+
+  it('把查询结果转换为可跨轮继承的待办来源，但不带说明或提醒邮箱', () => {
+    const sources = tool.toSources({
+      items: [
+        {
+          id: 'todo-1',
+          title: '整理发票',
+          status: 'pending',
+          priority: 2,
+          dueAt: '2026-08-05 18:00:00',
+          checklistProgress: { completed: 1, total: 2 },
+          description: '不应进入来源摘要',
+          email: 'private@example.com',
+        },
+      ],
+    });
+
+    expect(sources).toEqual([
+      expect.objectContaining({
+        type: 'todo',
+        id: 'todo-1',
+        title: '整理发票',
+        target: 'todo-inbox',
+        excerpt: expect.stringContaining('清单：1/2'),
+      }),
+    ]);
+    expect(JSON.stringify(sources)).not.toContain('private@example.com');
+    expect(JSON.stringify(sources)).not.toContain('不应进入来源摘要');
+  });
 });

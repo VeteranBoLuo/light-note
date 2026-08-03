@@ -57,4 +57,21 @@ describe('Agent 网页访问范围', () => {
       false,
     );
   });
+
+  it('允许读取服务端按用户书签 ID 重新校验得到的精确链接', () => {
+    expect(
+      isAgentUrlAllowedByScope({
+        message: '继续详细分析刚才那个书签',
+        url: 'https://example.com/docs',
+        allowedUrls: ['https://example.com/docs'],
+      }),
+    ).toBe(true);
+    expect(
+      isAgentUrlAllowedByScope({
+        message: '继续详细分析刚才那个书签',
+        url: 'https://example.com/admin',
+        allowedUrls: ['https://example.com/docs'],
+      }),
+    ).toBe(false);
+  });
 });
