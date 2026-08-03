@@ -48,4 +48,10 @@ describe('Agent create_note', () => {
     );
     expect(result).toEqual({ id: 'note-1', title: '日报', type: 'markdown' });
   });
+
+  it('用户可见成功回执不暴露内部资源 ID', () => {
+    const summary = createNoteTool.transform({ id: 'note-internal-id', title: '日报', type: 'markdown' });
+    expect(summary).toBe('✅ 笔记「日报」已创建成功');
+    expect(summary).not.toContain('note-internal-id');
+  });
 });

@@ -45,6 +45,10 @@ describe('aiEntry', () => {
     window.removeEventListener(AI_ASSISTANT_OPEN_EVENT, listener);
   });
 
+  it('保留书签生成笔记入口的专用预填意图', () => {
+    expect(normalizeAiAssistantLaunchPayload({ suggestedIntent: 'create_note' }).suggestedIntent).toBe('create_note');
+  });
+
   it('同步 AI 工作区显隐状态给移动端导航', () => {
     const listener = vi.fn();
     window.addEventListener(AI_ASSISTANT_VISIBILITY_EVENT, listener);

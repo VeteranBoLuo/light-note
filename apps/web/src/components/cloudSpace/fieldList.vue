@@ -153,9 +153,9 @@
                   function: () => openFilesInAi([item]),
                 },
                 {
-                  label: $t('inbox.addExisting'),
-                  icon: icon.common.more,
-                  function: () => addFileToInbox(item),
+                  label: item.isPending ? $t('inbox.removeExisting') : $t('inbox.addExisting'),
+                  icon: icon.contextMenu.inbox,
+                  function: () => toggleFileInbox(item),
                 },
                 {
                   label: $t('common.delete'),
@@ -381,9 +381,9 @@
                   function: () => emit('moveField', [item]),
                 },
                 {
-                  label: $t('inbox.addExisting'),
-                  icon: icon.common.more,
-                  function: () => addFileToInbox(item),
+                  label: item.isPending ? $t('inbox.removeExisting') : $t('inbox.addExisting'),
+                  icon: icon.contextMenu.inbox,
+                  function: () => toggleFileInbox(item),
                 },
                 {
                   label: $t('common.delete'),
@@ -619,7 +619,7 @@
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
-  const { addResourcesToInbox } = useInboxEnqueue();
+  const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();
   const viewMode = computed(() => props.viewMode ?? 'table');
 
@@ -631,10 +631,13 @@
     }
   }
 
-  async function addFileToInbox(file: any) {
-    const ok = await addResourcesToInbox([{ resourceType: 'file', resourceId: String(file.id) }], '云空间');
-    // 接口已确认入列,直接本地打标即可,不必为了一个徽标重新拉取整页文件
-    if (ok) file.isPending = true;
+  async function toggleFileInbox(file: any) {
+    const resource = [{ resourceType: 'file' as const, resourceId: String(file.id) }];
+    const ok = file.isPending
+      ? await removeResourcesFromInbox(resource, '云空间')
+      : await addResourcesToInbox(resource, '云空间');
+    // 接口已确认状态变更,直接本地更新徽标和菜单,不必重新拉取整页文件
+    if (ok) file.isPending = !file.isPending;
   }
   const selectedRows = ref<string[]>([]);
   const selectAll = ref(false);

@@ -320,7 +320,7 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const { resetCurrentResourceScroll } = useMobileNavigationState();
-  const { addResourcesToInbox } = useInboxEnqueue();
+  const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
@@ -508,10 +508,12 @@
     gotoNewNote({ type: template.type, templateId: template.id });
   }
 
-  async function addNoteToInbox(note: any) {
-    // 接口成功即本地打标,避免为一个徽标重新拉取列表
-    const ok = await addResourcesToInbox([{ resourceType: 'note', resourceId: String(note.id) }], '笔记库');
-    if (ok) note.isPending = true;
+  async function toggleNoteInbox(note: any) {
+    const resource = [{ resourceType: 'note' as const, resourceId: String(note.id) }];
+    const ok = note.isPending
+      ? await removeResourcesFromInbox(resource, '笔记库')
+      : await addResourcesToInbox(resource, '笔记库');
+    if (ok) note.isPending = !note.isPending;
   }
   function menuForNote(note: any) {
     return [
@@ -521,7 +523,11 @@
         icon: note.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
       },
       { key: 'relateTags', label: t('note.relateTags'), icon: icon.manage_categoryBtn_tag },
-      { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+      {
+        key: 'toggleInbox',
+        label: note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
+        icon: icon.contextMenu.inbox,
+      },
       { key: 'note-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -589,11 +595,11 @@
   function handleNoteMenuSelect(action: string, note: any) {
     if (action === 'toggleTop') toggleNoteTop(note);
     else if (action === 'relateTags') openNoteTagConfig(note);
-    else if (action === 'addInbox') addNoteToInbox(note);
+    else if (action === 'toggleInbox') toggleNoteInbox(note);
     else if (action === 'delete') deleteSingleNote(note);
   }
 
-  function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'addInbox' | 'delete', note: any) {
+  function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete', note: any) {
     handleNoteMenuSelect(action, note);
   }
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));

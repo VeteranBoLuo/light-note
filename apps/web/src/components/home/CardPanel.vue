@@ -123,10 +123,11 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { buildResourceSortMove, hasResourceOrderChanged } from '@/utils/resourcePagination';
+  import { openAiAssistant } from '@/utils/aiEntry';
   const bookmark = bookmarkStore();
   const route = useRoute();
   const { t } = useI18n();
-  const { addResourcesToInbox } = useInboxEnqueue();
+  const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   withDefaults(
     defineProps<{
       batchMode?: boolean;
@@ -221,7 +222,12 @@
       },
       { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
       { key: 'copyLink', label: t('common.copyLink'), icon: icon.cloudSpace.preview.copy },
-      { key: 'addInbox', label: t('inbox.addExisting'), icon: icon.contextMenu.inbox },
+      { key: 'generateNote', label: t('ai.generateNoteFromBookmark'), icon: icon.ai.ask },
+      {
+        key: 'toggleInbox',
+        label: item.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
+        icon: icon.contextMenu.inbox,
+      },
       { key: 'bookmark-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -244,10 +250,21 @@
       message.success(t('common.linkCopied'));
       return;
     }
-    if (action === 'addInbox') {
-      // 接口成功即本地打标,避免为一个徽标重新拉取列表
-      void addResourcesToInbox([{ resourceType: 'bookmark', resourceId: String(item.id) }], '书签').then((ok) => {
-        if (ok) item.isPending = true;
+    if (action === 'generateNote') {
+      openAiAssistant({
+        contextRefs: [{ type: 'bookmark', id: String(item.id), title: String(item.name || item.url || '') }],
+        suggestedIntent: 'create_note',
+        surface: 'bookmark_manage',
+      });
+      return;
+    }
+    if (action === 'toggleInbox') {
+      const resource = [{ resourceType: 'bookmark' as const, resourceId: String(item.id) }];
+      const operation = item.isPending
+        ? removeResourcesFromInbox(resource, '书签')
+        : addResourcesToInbox(resource, '书签');
+      void operation.then((ok) => {
+        if (ok) item.isPending = !item.isPending;
       });
       return;
     }

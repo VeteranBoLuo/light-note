@@ -138,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useAiAssistantStore, useUserStore } from '@/store';
   import { storeToRefs } from 'pinia';
@@ -188,7 +188,10 @@
   const isOpen = ref(false);
   watch(isOpen, (open) => {
     setAiAssistantVisibility(open);
-    if (!open) window.dispatchEvent(new CustomEvent('light-note:close-ai-overlays'));
+    if (!open) {
+      clearFocusSchedule();
+      window.dispatchEvent(new CustomEvent('light-note:close-ai-overlays'));
+    }
   });
   const isMaximized = ref(false);
   const newConversationSubmitting = ref(false);
@@ -255,7 +258,25 @@
       : aiTriggerTitle.value,
   );
 
+  let focusAnimationFrame: number | null = null;
+  let focusRetryTimers: number[] = [];
+  let focusScheduleVersion = 0;
+  let isComponentUnmounted = false;
+
+  function clearFocusSchedule() {
+    focusScheduleVersion += 1;
+    if (focusAnimationFrame !== null) {
+      if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(focusAnimationFrame);
+      }
+      focusAnimationFrame = null;
+    }
+    focusRetryTimers.forEach((timerId) => window.clearTimeout(timerId));
+    focusRetryTimers = [];
+  }
+
   function isAssistantInputFocused() {
+    if (typeof document === 'undefined') return false;
     const active = document.activeElement as HTMLElement | null;
     return Boolean(active?.closest?.('.input-section'));
   }
@@ -265,13 +286,19 @@
    * 表现为「非全屏能自动聚焦、全屏不能」。补两次延时重试,已聚焦则跳过。
    */
   function focusAssistantInput() {
+    clearFocusSchedule();
+    const scheduleVersion = focusScheduleVersion;
     const tryFocus = () => {
+      if (isComponentUnmounted || scheduleVersion !== focusScheduleVersion || !isOpen.value) return;
       if (!isAssistantInputFocused()) aiAssistantRef.value?.focusInput?.();
     };
     nextTick(() => {
-      window.requestAnimationFrame(tryFocus);
-      window.setTimeout(tryFocus, 120);
-      window.setTimeout(tryFocus, 320);
+      if (isComponentUnmounted || scheduleVersion !== focusScheduleVersion || !isOpen.value) return;
+      focusAnimationFrame = window.requestAnimationFrame(() => {
+        focusAnimationFrame = null;
+        tryFocus();
+      });
+      focusRetryTimers = [window.setTimeout(tryFocus, 120), window.setTimeout(tryFocus, 320)];
     });
   }
 
@@ -517,6 +544,11 @@
     document.addEventListener('keydown', handleKeydown);
     window.addEventListener('light-note:close-ai', handleCloseAi);
     window.addEventListener(AI_ASSISTANT_OPEN_EVENT, handleOpenAi);
+  });
+
+  onBeforeUnmount(() => {
+    isComponentUnmounted = true;
+    clearFocusSchedule();
   });
 
   onUnmounted(() => {

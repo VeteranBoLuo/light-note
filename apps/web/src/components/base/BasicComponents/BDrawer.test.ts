@@ -223,6 +223,7 @@ describe('BDrawer compositor cleanup', () => {
             title: 'Bottom filters',
             placement: 'bottom',
             height: '60dvh',
+            zIndex: 960,
           });
       },
     });
@@ -237,6 +238,8 @@ describe('BDrawer compositor cleanup', () => {
     await nextTick();
     await nextTick();
     const panel = document.querySelector<HTMLElement>('.b-drawer-panel');
+    const wrapper = document.querySelector<HTMLElement>('.b-drawer-wrapper');
+    expect(wrapper?.style.zIndex).toBe('960');
     expect(panel?.classList.contains('b-drawer-panel--bottom')).toBe(true);
     expect(panel?.style.width).toBe('100%');
     expect(panel?.style.height).toBe('60dvh');

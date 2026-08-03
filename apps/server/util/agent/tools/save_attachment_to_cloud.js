@@ -118,8 +118,8 @@ export default {
     const location = raw.folderName ? `文件夹“${raw.folderName}”` : '云空间根目录';
     const folderPrefix = raw.folderCreated ? `已新建文件夹“${raw.folderName}”，` : '';
     return raw.alreadySaved
-      ? `文件“${raw.fileName}”已经在${location}中（ID: ${raw.id}），无需重复保存。`
-      : `✅ ${folderPrefix}文件“${raw.fileName}”已保存到${location}（ID: ${raw.id}）。`;
+      ? `文件“${raw.fileName}”已经在${location}中，无需重复保存。`
+      : `✅ ${folderPrefix}文件“${raw.fileName}”已保存到${location}。`;
   },
   summarize(raw) {
     if (raw.alreadySaved) return `文件“${raw.fileName}”原本就在云空间`;

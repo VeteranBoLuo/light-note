@@ -1143,6 +1143,77 @@ describe('agentChat 主链路', () => {
     expect(payload?.data?.response).not.toMatch(/已完成|成功/);
   });
 
+  it('明确创建笔记时允许两轮受限语义修复，避免 Provider 偶发漏计划或误选不可用能力', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '漏掉结构化计划',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'todo.status.set',
+                goal: '误选不可用能力',
+                targetDescription: '当前内容',
+                dependsOn: [],
+              },
+            ],
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '创建网页摘要笔记',
+                targetDescription: '网页摘要',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'create_note',
+                arguments: { title: '网页摘要', content: '根据网页内容整理的正文' },
+              },
+            ],
+          }),
+        ],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({ message: '请创建一篇笔记，标题为网页摘要，正文为测试内容', stream: false, contexts: [], attachmentIds: [] }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
+    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_semantic_repair_2');
+    expect(mocks.requestAi.mock.calls[2][0].at(-1).content).toContain('note.create');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
+  });
+
   it('未支持的删除请求由 AI 语义识别、服务端能力目录确定性拦截', async () => {
     mocks.requestAi.mockResolvedValueOnce({
       content: '',

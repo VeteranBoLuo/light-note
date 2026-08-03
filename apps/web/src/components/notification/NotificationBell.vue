@@ -519,7 +519,9 @@
     top: 8px;
     right: 8px;
     width: 22px;
+    min-width: 22px;
     height: 22px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -528,7 +530,8 @@
     background: transparent;
     color: var(--desc-color);
     cursor: pointer;
-    opacity: 0.72;
+    opacity: 1;
+    z-index: 1;
     transition:
       opacity 0.15s,
       color 0.15s,

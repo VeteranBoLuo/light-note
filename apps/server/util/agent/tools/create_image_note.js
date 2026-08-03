@@ -98,7 +98,7 @@ export default {
     });
   },
   transform(raw) {
-    return `✅ 图片笔记“${raw.title}”已创建成功（ID: ${raw.id}）。`;
+    return `✅ 图片笔记“${raw.title}”已创建成功。`;
   },
   summarize(raw) {
     return `图片笔记“${raw.title}”创建成功`;

@@ -6,7 +6,14 @@ export const AI_ASSISTANT_VISIBILITY_EVENT = 'light-note:ai-visibility';
 let aiAssistantVisible = false;
 
 export type AiAssistantIntent =
-  'ask' | 'find' | 'summarize' | 'compare' | 'organize' | 'extract_todos' | 'find_related';
+  | 'ask'
+  | 'find'
+  | 'summarize'
+  | 'compare'
+  | 'organize'
+  | 'extract_todos'
+  | 'find_related'
+  | 'create_note';
 
 export interface AiAssistantContextRef {
   type: SearchType;
@@ -66,6 +73,7 @@ export function normalizeAiAssistantLaunchPayload(value: unknown): AiAssistantLa
     'organize',
     'extract_todos',
     'find_related',
+    'create_note',
   ]);
   const intent = intents.has(raw.suggestedIntent as AiAssistantIntent)
     ? (raw.suggestedIntent as AiAssistantIntent)

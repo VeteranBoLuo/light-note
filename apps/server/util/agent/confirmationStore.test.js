@@ -47,6 +47,19 @@ describe('agent confirmationStore', () => {
     expect(JSON.parse(raw).toolName).toBe('create_note');
   });
 
+  it('公开确认数据携带绝对过期时间，供本机刷新后恢复倒计时', async () => {
+    const result = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '测试' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+    });
+
+    expect(Date.parse(result.confirmation.expiresAt)).toBeGreaterThan(Date.now());
+    expect(Date.parse(result.confirmation.expiresAt)).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
+  });
+
   it('笔记创建的动作幂等键跨确认令牌保持稳定，其他写操作不改变既有语义', async () => {
     const input = {
       ownerKey: 'user:u1',

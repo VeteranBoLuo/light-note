@@ -161,7 +161,24 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
 });
 
 const MAX_SEMANTIC_PLAN_COMPLETION_ATTEMPTS = 2;
-const MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS = 1;
+const MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS = 2;
+
+function expectedEnabledSemanticCapabilityIds(intent, catalog) {
+  if (intent?.kind !== 'action' || intent?.resolution !== 'enabled') return [];
+  const catalogById = new Map((catalog || []).map((entry) => [entry.id, entry]));
+  return [
+    ...new Set(
+      (intent.capabilities || [])
+        .map((capability) => String(capability?.id || '').trim())
+        .filter((id) => id && catalogById.get(id)?.status === 'enabled'),
+    ),
+  ];
+}
+
+function shouldRepairSemanticPlan(plan, adjudicated, expectedCapabilityIds = []) {
+  if (!plan || adjudicated?.resolution === 'semantic_conflict') return true;
+  return adjudicated?.resolution === 'forbidden_context' && expectedCapabilityIds.length > 0;
+}
 
 function normalizeTranslationConfig(config = {}) {
   const source = Object.hasOwn(TRANSLATION_LANGUAGE_NAMES, config?.source) ? config.source : 'auto';
@@ -712,9 +729,11 @@ async function resolveResourceContexts(userId, contexts, question = '') {
     let notePayload = null;
     if (item.type === 'bookmark') {
       [rows] = await pool.query(
-        `SELECT id, name AS title, url, LEFT(COALESCE(description, ?), 2000) AS content
-         FROM bookmark
-         WHERE id = ? AND user_id = ? AND del_flag = 0`,
+        `SELECT b.id, b.name AS title, b.url,
+                LEFT(COALESCE(NULLIF(s.content, ''), NULLIF(b.description, ''), b.url, ?), 12000) AS content
+         FROM bookmark b
+         LEFT JOIN bookmark_snapshot s ON s.bookmark_id = b.id AND s.user_id = b.user_id
+         WHERE b.id = ? AND b.user_id = ? AND b.del_flag = 0`,
         ['', item.id, userId],
       );
     } else if (item.type === 'note') {
@@ -777,7 +796,7 @@ async function resolveResourceContexts(userId, contexts, question = '') {
           ? '用户选择的标签上下文'
           : item.type === 'note'
             ? String(row.content || '(笔记正文为空)')
-            : plainText(row.content || row.url || '').slice(0, 2000);
+            : plainText(row.content || row.url || '').slice(0, 12000);
     const boundedContent = content.slice(0, Math.max(0, remainingBudget));
     remainingBudget = Math.max(0, remainingBudget - boundedContent.length);
     blocks.push(`[${item.type}:${row.id}] ${row.title || '未命名'}\n${boundedContent}`);
@@ -1768,19 +1787,31 @@ export async function agentChat(req, res) {
         toolCalls: parsedSemantic.toolCalls,
         catalog: semanticCatalog,
       });
+      const expectedCapabilityIds = expectedEnabledSemanticCapabilityIds(legacyIntentSuspicion, semanticCatalog);
       trace.semanticPlanInitialSource = parsedSemantic.source;
       trace.semanticPlanInitialResolution = semanticPlan ? adjudicated.resolution : 'semantic_plan_missing';
 
       // 完整语义计划缺失或计划内部自相矛盾时，不能凭关键词替模型选择能力，也不能直接
-      // 执行任何工具。仅进行一次同权限、同完整能力目录的 AI 语义重判；重判结果仍需经过
-      // 完整协议解析和服务端裁决。恢复供应商失败不会把整次请求升级成 500，而是保留原始
-      // 安全裁决；超时/客户端中止仍向外传播。
-      if (!semanticPlan || adjudicated.resolution === 'semantic_conflict') {
-        for (let attempt = 1; attempt <= MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS; attempt += 1) {
+      // 执行任何工具。普通异常仅进行一次同权限重判；若高召回传感器能精确命中已启用动作，
+      // 最多再给一次定向纠偏机会。每轮仍须经过完整协议解析和服务端裁决，传感器本身不能
+      // 选择工具或绕过权限。恢复供应商失败不会把请求升级成 500；超时/客户端中止仍传播。
+      if (shouldRepairSemanticPlan(semanticPlan, adjudicated, expectedCapabilityIds)) {
+        const repairAttempts = expectedCapabilityIds.length ? MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS : 1;
+        for (let attempt = 1; attempt <= repairAttempts; attempt += 1) {
+          const repairInstruction = [
+            SEMANTIC_REPAIR_ROUND_INSTRUCTION,
+            expectedCapabilityIds.length
+              ? `服务端动作传感器确认用户明确请求了已启用能力：${expectedCapabilityIds.join(
+                  ', ',
+                )}。请重新核对原始请求和当前能力目录；不要把已启用能力误判为 unavailable，也不要省略完成请求所需的前置读取能力。`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n');
           const repairMessages = [
             { role: 'system', content: systemContent },
             ...messages.slice(1),
-            { role: 'user', content: SEMANTIC_REPAIR_ROUND_INSTRUCTION },
+            { role: 'user', content: repairInstruction },
           ];
           const repairStartedAt = Date.now();
           try {
@@ -1823,7 +1854,10 @@ export async function agentChat(req, res) {
                 resolution: repairedSemantic.plan ? repairedDecision.resolution : 'semantic_plan_missing',
               },
             ];
-            if (repairedSemantic.plan) {
+            if (
+              repairedSemantic.plan &&
+              !shouldRepairSemanticPlan(repairedSemantic.plan, repairedDecision, expectedCapabilityIds)
+            ) {
               parsedSemantic = repairedSemantic;
               semanticPlan = repairedSemantic.plan;
               adjudicated = repairedDecision;

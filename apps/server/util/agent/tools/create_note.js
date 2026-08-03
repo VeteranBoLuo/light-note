@@ -81,7 +81,7 @@ export default {
   },
   transform(raw) {
     if (raw.error) return `创建失败：${raw.message}`;
-    return `✅ 笔记「${raw.title}」已创建成功（ID: ${raw.id}）`;
+    return `✅ 笔记「${raw.title}」已创建成功`;
   },
   summarize(raw) {
     if (raw.error) return `创建笔记失败：${raw.message}`;

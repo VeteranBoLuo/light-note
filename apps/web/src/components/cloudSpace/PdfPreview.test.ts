@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
+import { createI18n } from 'vue-i18n';
 import PdfPreview from './PdfPreview.vue';
+import zhCN from '@/i18n/locales/zh-CN';
 
 const pdfMocks = vi.hoisted(() => ({
   workerOptions: { workerSrc: '' },
@@ -24,10 +26,7 @@ class ImmediateIntersectionObserver implements IntersectionObserver {
   constructor(private readonly callback: IntersectionObserverCallback) {}
 
   observe(target: Element) {
-    this.callback(
-      [{ target, isIntersecting: true } as IntersectionObserverEntry],
-      this,
-    );
+    this.callback([{ target, isIntersecting: true } as IntersectionObserverEntry], this);
   }
 
   disconnect() {}
@@ -47,6 +46,8 @@ class PassiveResizeObserver implements ResizeObserver {
 let cleanup: (() => void) | undefined;
 
 beforeEach(() => {
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1024 });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, value: 768 });
   pdfMocks.workerOptions.workerSrc = '';
   pdfMocks.getDocument.mockReset();
   vi.stubGlobal('IntersectionObserver', ImmediateIntersectionObserver);
@@ -70,7 +71,7 @@ describe('PdfPreview', () => {
       cleanup: cleanupPage,
     }));
     const destroyDocument = vi.fn(async () => undefined);
-    const documentProxy = { numPages: 1, getPage, destroy: destroyDocument };
+    const documentProxy = { numPages: 3, getPage, destroy: destroyDocument };
     const destroyLoadingTask = vi.fn(async () => undefined);
     pdfMocks.getDocument.mockReturnValue({
       promise: Promise.resolve(documentProxy),
@@ -80,7 +81,12 @@ describe('PdfPreview', () => {
     const pdfBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]).buffer;
     const fetchMock = vi.fn(async () => ({ ok: true, arrayBuffer: async () => pdfBytes }));
     vi.stubGlobal('fetch', fetchMock);
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({} as CanvasRenderingContext2D);
+    const drawImage = vi.fn();
+    const renderContext = {} as CanvasRenderingContext2D;
+    const visibleContext = { drawImage } as unknown as CanvasRenderingContext2D;
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(function () {
+      return this.isConnected ? visibleContext : renderContext;
+    });
 
     const host = document.createElement('div');
     document.body.append(host);
@@ -97,13 +103,14 @@ describe('PdfPreview', () => {
           });
       },
     });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
     app.mount(host);
     cleanup = () => {
       app.unmount();
       host.remove();
     };
 
-    await vi.waitFor(() => expect(render).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(render).toHaveBeenCalled());
     await vi.waitFor(() => expect(renderedCount).toBe(1));
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -118,10 +125,57 @@ describe('PdfPreview', () => {
     expect(getPage).toHaveBeenCalledWith(1);
     expect(render).toHaveBeenCalledWith(
       expect.objectContaining({
-        canvasContext: expect.any(Object),
+        canvasContext: renderContext,
         background: '#ffffff',
       }),
     );
+    expect(drawImage).toHaveBeenCalled();
     expect(host.querySelector('.pdf-preview__page')?.getAttribute('data-rendered')).toBe('true');
+    expect(host.querySelectorAll('.pdf-preview__page')).toHaveLength(3);
+    expect(host.querySelector('.pdf-preview__pages')?.classList.contains('is-single')).toBe(true);
+    expect(host.querySelector('.pdf-preview__sidebar')).not.toBeNull();
+    expect(host.querySelector('[aria-label="连续滚动"]')).toBeNull();
+    expect(host.querySelector('[aria-label="适合页面"]')?.classList.contains('is-active')).toBe(true);
+    expect(host.querySelector('[aria-label="适合宽度"]')?.classList.contains('is-active')).toBe(false);
+
+    const zoomInButton = host.querySelector<HTMLButtonElement>('[aria-label="放大（Ctrl + 滚轮）"]');
+    zoomInButton?.click();
+    await vi.waitFor(() => expect(host.textContent).toContain('120%'));
+
+    const singlePageButton = host.querySelector<HTMLButtonElement>('[aria-label="单页视图"]');
+    singlePageButton?.click();
+    await vi.waitFor(() => expect(host.querySelectorAll('.pdf-preview__page')).toHaveLength(3));
+
+    const firstCanvas = host.querySelector<HTMLCanvasElement>('.pdf-preview__canvas');
+    const canvasWidthBeforeModeChange = firstCanvas?.width;
+    host.querySelector<HTMLButtonElement>('[aria-label="双页视图"]')?.click();
+    expect(firstCanvas?.width).toBe(canvasWidthBeforeModeChange);
+    expect(firstCanvas?.width).not.toBe(1);
+    await vi.waitFor(() => {
+      const pageNumbers = Array.from(host.querySelectorAll<HTMLElement>('.pdf-preview__page')).map((page) =>
+        page.getAttribute('data-page-number'),
+      );
+      expect(pageNumbers).toEqual(['1', '2', '3']);
+      expect(host.querySelector('.pdf-preview__pages')?.classList.contains('is-spread')).toBe(true);
+    });
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => {
+      expect(host.querySelector('[aria-label="适合页面"]')).toBeNull();
+      expect(host.querySelector('[aria-label="适合宽度"]')).toBeNull();
+      expect(host.querySelector('[aria-label="单页视图"]')).toBeNull();
+      expect(host.querySelector('.pdf-preview__view-controls')).toBeNull();
+      expect(host.querySelector('[aria-label="顺时针旋转"]')).not.toBeNull();
+    });
+
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 820 });
+    window.dispatchEvent(new Event('resize'));
+    await vi.waitFor(() => {
+      expect(host.querySelector('[aria-label="适合页面"]')).not.toBeNull();
+      expect(host.querySelector('[aria-label="适合宽度"]')).not.toBeNull();
+      expect(host.querySelector('[aria-label="单页视图"]')).not.toBeNull();
+    });
   });
 });

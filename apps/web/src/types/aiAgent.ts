@@ -20,6 +20,7 @@ export interface AiToolConfirmation {
   expiresIn: number;
   riskLevel?: 'low' | 'medium' | 'high';
   preview?: AiToolConfirmationPreview;
+  expiresAt?: string;
 }
 
 export interface AiToolActionReceipt {

@@ -81,6 +81,96 @@ describe('aiAssistant store', () => {
     setActivePinia(createPinia());
   });
 
+  it('刷新后恢复仍在有效期内的本机确认卡，并保留同一瞬态提问', () => {
+    const self = identity('u1', 'u1', 'self', '');
+    const expiresAt = new Date(Date.now() + 120_000).toISOString();
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    store.sessionId = 'session-1';
+    store.messages = [
+      {
+        id: 'user-pending',
+        role: 'user',
+        content: '生成一篇笔记',
+        timestamp: new Date(),
+        transient: true,
+        transientGroupId: 'group-1',
+      },
+      {
+        id: 'assistant-pending',
+        role: 'assistant',
+        content: '请确认创建笔记',
+        timestamp: new Date(),
+        transient: true,
+        transientGroupId: 'group-1',
+        pendingConfirmationIds: ['confirmation-1'],
+        confirmations: [
+          {
+            id: 'confirmation-1',
+            token: 'confirmation-token',
+            sessionId: 'session-1',
+            toolName: 'create_note',
+            args: { title: '测试笔记' },
+            expiresIn: 120,
+            expiresAt,
+          },
+        ],
+      },
+    ];
+    store.persistCurrentConversation();
+
+    setActivePinia(createPinia());
+    const restored = useAiAssistantStore();
+    restored.switchConversation(self, '你好');
+
+    expect(restored.messages.map((item) => item.id)).toEqual(['user-pending', 'assistant-pending']);
+    expect(restored.messages[1].confirmations?.[0]).toMatchObject({
+      id: 'confirmation-1',
+      expiresAt,
+    });
+    expect(restored.sessionId).toBe('session-1');
+  });
+
+  it('不恢复已经过期的确认卡和对应瞬态消息', () => {
+    const self = identity('u1', 'u1', 'self', '');
+    localStorage.setItem(
+      buildAiAssistantDomainKey(self),
+      JSON.stringify({
+        version: 3,
+        identity: self,
+        messages: [
+          {
+            id: 'assistant-expired',
+            role: 'assistant',
+            content: '请确认创建笔记',
+            timestamp: new Date().toISOString(),
+            transient: true,
+            transientGroupId: 'expired-group',
+            pendingConfirmationIds: ['expired-confirmation'],
+            confirmations: [
+              {
+                id: 'expired-confirmation',
+                token: 'expired-token',
+                sessionId: 'session-1',
+                toolName: 'create_note',
+                args: { title: '过期笔记' },
+                expiresIn: 0,
+                expiresAt: new Date(Date.now() - 1_000).toISOString(),
+              },
+            ],
+          },
+        ],
+        sessionId: 'session-1',
+      }),
+    );
+    const store = useAiAssistantStore();
+
+    store.switchConversation(self, '你好');
+
+    expect(store.messages).toHaveLength(1);
+    expect(store.messages[0].content).toBe('你好');
+  });
+
   it('用 actor、subject、adminContextMode、adminContextId 四维键隔离会话', () => {
     const self = resolveAiAssistantIdentity({ id: 'root-user', adminContext: null });
     const readonlyA = resolveAiAssistantIdentity({

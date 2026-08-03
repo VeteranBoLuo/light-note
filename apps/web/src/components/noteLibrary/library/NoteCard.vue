@@ -68,7 +68,7 @@
   const { t } = useI18n();
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
-    action: [action: 'toggleTop' | 'relateTags' | 'addInbox' | 'delete'];
+    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete'];
   }>();
 
   const mobileMenuOptions = computed(() => [
@@ -83,9 +83,9 @@
       function: () => emit('action', 'relateTags'),
     },
     {
-      label: t('inbox.addExisting'),
+      label: props.note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
       icon: icon.contextMenu.inbox,
-      function: () => emit('action', 'addInbox'),
+      function: () => emit('action', 'toggleInbox'),
     },
     { divider: true },
     {

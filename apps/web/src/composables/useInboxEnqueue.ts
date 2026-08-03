@@ -1,5 +1,5 @@
 import { useI18n } from 'vue-i18n';
-import { enqueueInbox, type InboxResourceRef } from '@/api/inboxApi';
+import { completeInbox, enqueueInbox, type InboxResourceRef } from '@/api/inboxApi';
 import { recordOperation } from '@/api/commonApi';
 import message from '@/components/base/BasicComponents/BMessage/BMessage';
 import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -35,5 +35,28 @@ export function useInboxEnqueue() {
     }
   }
 
-  return { addResourcesToInbox };
+  async function removeResourcesFromInbox(items: InboxResourceRef[], operationModule: string) {
+    if (!items.length) return false;
+    if (blockGuestWrite('inbox-complete', t('inbox.guestPrompt'))) return false;
+
+    try {
+      const res = await completeInbox(items);
+      if (res.status !== 200) {
+        message.error(res.msg || t('inbox.removeFailed'));
+        return false;
+      }
+      const changed = Number(res.data?.completed || 0);
+      message.success(t('inbox.removedFromPending'));
+      if (changed > 0) {
+        recordOperation({ module: operationModule, operation: `取消待整理【${changed}项】` });
+      }
+      await inbox.refreshCount();
+      return true;
+    } catch {
+      message.error(t('inbox.removeFailed'));
+      return false;
+    }
+  }
+
+  return { addResourcesToInbox, removeResourcesFromInbox };
 }

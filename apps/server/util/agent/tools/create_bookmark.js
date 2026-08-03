@@ -96,7 +96,7 @@ export default {
   transform(raw) {
     if (raw.error) return `收藏失败:${raw.message}`;
     const tagPart = raw.tags?.length ? `,标签:${raw.tags.join('、')}` : '';
-    return `✅ 已收藏书签「${raw.name}」${tagPart}(ID: ${raw.id})`;
+    return `✅ 已收藏书签「${raw.name}」${tagPart}`;
   },
   summarize(raw) {
     if (raw.error) return `收藏书签失败:${raw.message}`;

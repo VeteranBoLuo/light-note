@@ -3,6 +3,7 @@
     <div
       v-if="localVisible"
       class="b-drawer-wrapper"
+      :style="zIndex !== undefined ? { zIndex } : undefined"
       :class="{
         'is-entered': entered,
         'is-settled': settled,
@@ -100,6 +101,7 @@
       bodyPadding?: string;
       closeOnClickOutside?: boolean;
       historyClosable?: boolean;
+      zIndex?: number;
     }>(),
     {
       title: '',

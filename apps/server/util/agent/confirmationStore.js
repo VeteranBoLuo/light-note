@@ -172,6 +172,8 @@ export function publicToolConfirmation(token, confirmation, expiresIn = TTL_SECO
     riskLevel: confirmation.riskLevel,
     preview: confirmation.preview,
     expiresIn,
+    expiresAt:
+      confirmation.expiresAt || new Date(Date.now() + Math.max(0, Number(expiresIn || 0)) * 1000).toISOString(),
   };
 }
 

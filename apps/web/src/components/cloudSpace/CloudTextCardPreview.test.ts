@@ -125,9 +125,10 @@ describe('CloudTextCardPreview', () => {
       category: 'text',
     });
 
-    const documentPreview = host.querySelector<HTMLElement>('.cloud-text-card-preview__document');
+    const documentPreview = await waitForSelector<HTMLElement>(host, '.cloud-text-card-preview__document');
     const checkbox = documentPreview?.querySelector<HTMLInputElement>('input[type="checkbox"]');
 
+    expect(documentPreview).not.toBeNull();
     expect(documentPreview?.querySelector('h1')?.textContent).toBe('开发修复计划');
     expect(documentPreview?.textContent).not.toContain('# 开发修复计划');
     expect(documentPreview?.querySelector('a')?.hasAttribute('href')).toBe(false);

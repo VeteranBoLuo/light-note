@@ -61,7 +61,7 @@ export default {
   transform(raw) {
     if (raw.error) return `写入失败：${raw.message}`;
     if (raw.action === 'updated') return `✅ 知识「${raw.title}」已更新`;
-    return `✅ 知识「${raw.title}」已创建成功（ID: ${raw.id}）`;
+    return `✅ 知识「${raw.title}」已创建成功`;
   },
   summarize(raw) {
     if (raw.error) return `写入知识库失败：${raw.message}`;

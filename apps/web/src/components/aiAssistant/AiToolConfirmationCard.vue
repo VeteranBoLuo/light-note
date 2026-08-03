@@ -138,7 +138,10 @@
   const processExpanded = ref(false);
   const titleId = `ai-confirmation-title-${props.confirmation.id}`;
   const processDetailsId = `ai-confirmation-process-${props.confirmation.id}`;
-  let expiresAt = Date.now() + Math.max(0, Number(props.confirmation.expiresIn || 0)) * 1000;
+  const persistedExpiresAt = Date.parse(String(props.confirmation.expiresAt || ''));
+  let expiresAt = Number.isFinite(persistedExpiresAt)
+    ? persistedExpiresAt
+    : Date.now() + Math.max(0, Number(props.confirmation.expiresIn || 0)) * 1000;
   const retryWindowMs = 5 * 60 * 1000;
   const remainingSeconds = ref(Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)));
   let countdownTimer: number | null = null;
@@ -406,7 +409,6 @@
     padding: 8px;
     overflow: auto;
     border-radius: 8px;
-    background: var(--menu-item-h-bg-color);
     white-space: pre-wrap;
     word-break: break-word;
   }

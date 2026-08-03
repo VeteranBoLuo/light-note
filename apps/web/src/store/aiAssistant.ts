@@ -323,6 +323,22 @@ function normalizeTimestamp(value: unknown) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+function normalizePendingConfirmations(value: unknown): AiToolConfirmation[] {
+  const now = Date.now();
+  return safeCloneArray<AiToolConfirmation>(value).filter((confirmation) => {
+    const expiresAt = Date.parse(String(confirmation?.expiresAt || ''));
+    return Boolean(
+      confirmation &&
+        String(confirmation.token || '').trim() &&
+        String(confirmation.id || '').trim() &&
+        String(confirmation.sessionId || '').trim() &&
+        String(confirmation.toolName || '').trim() &&
+        Number.isFinite(expiresAt) &&
+        expiresAt > now,
+    );
+  });
+}
+
 function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
@@ -331,6 +347,13 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   if (!content) return null;
   const contextRefs = normalizeContextRefs(raw.contextRefs || raw.contexts);
   const attachmentRefs = normalizeAttachmentRefs(raw.attachmentRefs);
+  const confirmations = normalizePendingConfirmations(raw.confirmations);
+  const confirmationIds = new Set(confirmations.map((confirmation) => confirmation.id));
+  const pendingConfirmationIds = Array.isArray(raw.pendingConfirmationIds)
+    ? raw.pendingConfirmationIds
+        .map((id) => String(id || '').trim())
+        .filter((id) => id && confirmationIds.has(id))
+    : [];
   return {
     id: normalizeIdentityPart(raw.id, createAiAssistantMessageId(raw.role)),
     parentMessageId: typeof raw.parentMessageId === 'string' ? raw.parentMessageId : undefined,
@@ -365,6 +388,12 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
     contexts: normalizeContextRefs(raw.contexts || raw.contextRefs),
     contextRefs: freezeSnapshotItems(contextRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
+    confirmations,
+    transient: raw.transient === true,
+    transientGroupId: typeof raw.transientGroupId === 'string' ? raw.transientGroupId : undefined,
+    pendingConfirmationIds,
+    confirmationSucceeded: raw.confirmationSucceeded === true,
+    persistAfterConfirmationSettlement: raw.persistAfterConfirmationSettlement === true,
     toolEvents: safeCloneArray<AiToolStatusItem>(raw.toolEvents),
     recommendations: Array.isArray(raw.recommendations)
       ? raw.recommendations
@@ -377,13 +406,10 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   };
 }
 
-function shouldPersistMessage(message: AiAssistantMessage) {
-  return Boolean(
-    message.content &&
-    !message.transient &&
-    !message.pendingConfirmationIds?.length &&
-    !message.pendingInteractionIds?.length,
-  );
+function shouldPersistMessage(message: AiAssistantMessage, activePendingGroups: Set<string>) {
+  if (!message.content || message.pendingInteractionIds?.length) return false;
+  if (!message.transient && !message.pendingConfirmationIds?.length) return true;
+  return Boolean(message.transientGroupId && activePendingGroups.has(message.transientGroupId));
 }
 
 function serializeMessage(message: AiAssistantMessage): Record<string, unknown> {
@@ -410,6 +436,12 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     contexts: normalizeContextRefs(message.contexts || message.contextRefs),
     contextRefs: normalizeContextRefs(message.contextRefs || message.contexts),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
+    confirmations: normalizePendingConfirmations(message.confirmations),
+    transient: Boolean(message.transient),
+    transientGroupId: message.transientGroupId,
+    pendingConfirmationIds: [...new Set(message.pendingConfirmationIds || [])],
+    confirmationSucceeded: Boolean(message.confirmationSucceeded),
+    persistAfterConfirmationSettlement: Boolean(message.persistAfterConfirmationSettlement),
     recommendations: (message.recommendations || [])
       .map((item) => String(item || '').trim())
       .filter(Boolean)
@@ -582,6 +614,15 @@ export default defineStore('aiAssistant', {
     },
     persistCurrentConversation() {
       if (!this.initialized || !this.identity || typeof localStorage === 'undefined') return;
+      const activePendingGroups = new Set<string>(
+        this.messages
+          .filter(
+            (message) =>
+              message.pendingConfirmationIds?.length && normalizePendingConfirmations(message.confirmations).length,
+          )
+          .map((message) => String(message.transientGroupId || '').trim())
+          .filter(Boolean),
+      );
       const payload: AiAssistantPersistedState = {
         version: 3,
         identity: {
@@ -593,7 +634,9 @@ export default defineStore('aiAssistant', {
         draft: this.draft,
         contextRefs: normalizeContextRefs(this.contextRefs),
         attachmentRefs: normalizeAttachmentRefs(this.attachmentRefs),
-        messages: this.messages.filter(shouldPersistMessage).map(serializeMessage),
+        messages: this.messages
+          .filter((message) => shouldPersistMessage(message, activePendingGroups))
+          .map(serializeMessage),
         scrollTop: Math.max(0, Number(this.scrollTop || 0)),
         shouldFollowMessages: Boolean(this.shouldFollowMessages),
         showScrollToBottom: Boolean(this.showScrollToBottom),
@@ -639,9 +682,18 @@ export default defineStore('aiAssistant', {
         readPersistedState(normalizedIdentity) ||
         readLegacyV2SelfConversation(normalizedIdentity) ||
         readLegacySelfConversation(normalizedIdentity);
-      const restoredMessages = (persisted?.messages || [])
+      const restoredCandidates = (persisted?.messages || [])
         .map(normalizePersistedMessage)
         .filter((item): item is AiAssistantMessage => Boolean(item));
+      const activePendingGroups = new Set<string>(
+        restoredCandidates
+          .filter((item) => item.pendingConfirmationIds?.length && item.confirmations?.length)
+          .map((item) => String(item.transientGroupId || '').trim())
+          .filter(Boolean),
+      );
+      const restoredMessages = restoredCandidates.filter(
+        (item) => !item.transient || activePendingGroups.has(String(item.transientGroupId || '').trim()),
+      );
       const fallbackGreeting: AiAssistantMessage = {
         id: createAiAssistantMessageId('assistant'),
         role: 'assistant',
