@@ -16,6 +16,7 @@ import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
 import { lookup as dnsLookup } from 'node:dns';
+import { load } from 'cheerio';
 
 const FETCH_TIMEOUT = 8000; // 8s：服务器 1 核，不宜久等
 const LIVENESS_TIMEOUT = 12000; // 死活探测用更宽松超时:宁可慢也别误判成死链
@@ -24,7 +25,8 @@ const MAX_REDIRECTS = 3;
 const BODY_TEXT_LIMIT = 2000; // 正文摘录上限，够 LLM 判断即可，避免 prompt 过长
 // 统一用浏览器 UA(抓正文 + 探活):爬虫 UA(如 LightNoteBot)会被知乎等反爬站直接 403,反而抓不到正文;
 // 浏览器 UA 命中率更高(个别站如 CSDN 对无 cookie 的浏览器 UA 反而更严,属可接受的个别情况)。
-const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const BROWSER_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 
 /** 判断 IPv4/IPv6 是否属于内网或保留网段（SSRF 防护） */
 function isPrivateIp(ip) {
@@ -38,13 +40,20 @@ function isPrivateIp(ip) {
     if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true; // 172.16.0.0/12
     if (p[0] === 192 && p[1] === 168) return true; // 192.168.0.0/16
     if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true; // 100.64.0.0/10 CGNAT
+    if (p[0] === 192 && p[1] === 0 && (p[2] === 0 || p[2] === 2)) return true; // IETF/TEST-NET-1
+    if (p[0] === 192 && p[1] === 88 && p[2] === 99) return true; // 已废弃 6to4 relay anycast
+    if (p[0] === 198 && (p[1] === 18 || p[1] === 19)) return true; // 基准测试 198.18.0.0/15
+    if (p[0] === 198 && p[1] === 51 && p[2] === 100) return true; // TEST-NET-2
+    if (p[0] === 203 && p[1] === 0 && p[2] === 113) return true; // TEST-NET-3
+    if (p[0] >= 224) return true; // 组播及保留地址
     return false;
   }
   if (type === 6) {
     const v = ip.toLowerCase();
     if (v === '::1' || v === '::') return true; // loopback / 未指定
     if (v.startsWith('fc') || v.startsWith('fd')) return true; // fc00::/7 ULA
-    if (v.startsWith('fe80')) return true; // link-local
+    if (/^fe[89ab]/.test(v)) return true; // fe80::/10 link-local
+    if (v.startsWith('ff') || v === '2001:db8' || v.startsWith('2001:db8:')) return true; // 组播 / 文档保留地址
     const mapped = v.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/); // IPv4-mapped
     if (mapped) return isPrivateIp(mapped[1]);
     return false;
@@ -115,14 +124,104 @@ function extractTitle(html) {
   return m ? decodeEntities(m[1]).replace(/\s+/g, ' ').trim() : '';
 }
 
-/** 去脚本/样式/标签，得到正文纯文本（截断） */
-function extractBodyText(html, limit = BODY_TEXT_LIMIT) {
-  let s = html
-    .replace(/<(script|style|noscript|template|svg)[\s\S]*?<\/\1>/gi, ' ')
-    .replace(/<head[\s\S]*?<\/head>/i, ' ')
-    .replace(/<[^>]+>/g, ' ');
-  s = decodeEntities(s).replace(/\s+/g, ' ').trim();
-  return s.slice(0, limit);
+const READABLE_CANDIDATE_SELECTORS = [
+  'article',
+  'main',
+  '[role="main"]',
+  '[itemprop="articleBody"]',
+  '.article-content',
+  '.article_content',
+  '.post-content',
+  '.post_content',
+  '.entry-content',
+  '.markdown-body',
+  '#article_content',
+  '#articleContent',
+  '#content',
+];
+const READABLE_NOISE_SELECTOR = [
+  'script',
+  'style',
+  'noscript',
+  'template',
+  'svg',
+  'canvas',
+  'nav',
+  'header',
+  'footer',
+  'aside',
+  'form',
+  'button',
+  '[aria-hidden="true"]',
+  '.advertisement',
+  '.ads',
+  '.sidebar',
+  '.comments',
+  '.comment-list',
+  '.related-posts',
+].join(',');
+const READABLE_BLOCK_SELECTOR = 'p,li,blockquote,pre,h1,h2,h3,h4,h5,h6,section,div,table,tr';
+
+function normalizeReadableText(value) {
+  return String(value || '')
+    .replace(/\r/g, '')
+    .replace(/[\t\f\v ]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function readableCandidate($, element) {
+  const node = $(element).clone();
+  node.find(READABLE_NOISE_SELECTOR).remove();
+  node.find('br').replaceWith('\n');
+  node.find(READABLE_BLOCK_SELECTOR).each((_, block) => {
+    $(block).append('\n');
+  });
+  const text = normalizeReadableText(node.text());
+  const linkTextLength = normalizeReadableText(node.find('a').text()).length;
+  const paragraphCount = node.find('p').length;
+  const linkDensity = text.length ? linkTextLength / text.length : 1;
+  return {
+    text,
+    score: text.length * Math.max(0.15, 1 - linkDensity * 0.85) + paragraphCount * 40,
+  };
+}
+
+/**
+ * 先从 article/main/常见正文容器中选择信息密度最高的候选，再回退 body。
+ * 避免旧实现把导航、登录框和页脚排在真正正文前面，截 2000 字后反而没有文章内容。
+ */
+export function extractReadableBodyText(html, limit = BODY_TEXT_LIMIT) {
+  const boundedLimit = Math.max(0, Number(limit) || BODY_TEXT_LIMIT);
+  if (!boundedLimit) return '';
+  try {
+    const $ = load(String(html || ''));
+    $(READABLE_NOISE_SELECTOR).remove();
+    const candidates = [];
+    const seen = new Set();
+    for (const selector of READABLE_CANDIDATE_SELECTORS) {
+      $(selector).each((_, element) => {
+        if (seen.has(element)) return;
+        seen.add(element);
+        const candidate = readableCandidate($, element);
+        if (candidate.text.length >= 80) candidates.push(candidate);
+      });
+    }
+    // 只在没有明确正文容器时使用整个 body；否则页面上大量推荐卡片可能仅凭长度
+    // 压过 article/main，让正文预算再次被非文章内容占满。
+    if (!candidates.length) {
+      candidates.push(readableCandidate($, $('body').get(0) || $.root().get(0)));
+    }
+    candidates.sort((a, b) => b.score - a.score || b.text.length - a.text.length);
+    return String(candidates[0]?.text || '').slice(0, boundedLimit);
+  } catch {
+    const plain = String(html || '')
+      .replace(/<(script|style|noscript|template|svg)[\s\S]*?<\/\1>/gi, ' ')
+      .replace(/<head[\s\S]*?<\/head>/i, ' ')
+      .replace(/<[^>]+>/g, ' ');
+    return decodeEntities(plain).replace(/\s+/g, ' ').trim().slice(0, boundedLimit);
+  }
 }
 
 /** 探测响应编码：优先 HTTP header，其次 HTML <meta charset>（国内站点常见 GBK） */
@@ -170,6 +269,9 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
   if (target.protocol !== 'http:' && target.protocol !== 'https:') {
     return { ok: false, reason: 'UNSUPPORTED_PROTOCOL' };
   }
+  if (target.username || target.password) {
+    return { ok: false, reason: 'URL_CREDENTIALS_FORBIDDEN' };
+  }
   // 字面 IP 形式的 host 先同步预判（域名解析与重定向的内网阻断交给 guardedLookup）。
   // IPv6 字面量在 URL.hostname 里带方括号（如 [::1]），且 Node 直连字面 IP 时会跳过
   // 自定义 DNS lookup，因此这里必须剥掉方括号后同步判定，不能只依赖 guardedLookup。
@@ -214,6 +316,17 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) {
       return { ok: false, reason: 'BLOCKED_HOST' };
     }
+    const status = Number(e?.response?.status || 0);
+    if (status === 401 || status === 403) return { ok: false, reason: 'ACCESS_DENIED' };
+    if (status === 404 || status === 410) return { ok: false, reason: 'NOT_FOUND' };
+    if (status === 429) return { ok: false, reason: 'RATE_LIMITED' };
+    if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || String(e?.message || '').includes('timeout')) {
+      return { ok: false, reason: 'TIMEOUT' };
+    }
+    if (e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN') return { ok: false, reason: 'DNS_FAILED' };
+    if (['CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'].includes(e?.code)) {
+      return { ok: false, reason: 'TLS_FAILED' };
+    }
     return { ok: false, reason: 'FETCH_FAILED' };
   }
 
@@ -226,7 +339,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
   const description = metaDesc || ogDesc;
   const siteName = extractMeta(html, 'og:site_name');
   const keywords = extractMeta(html, 'keywords');
-  const bodyText = extractBodyText(html, bodyLimit);
+  const bodyText = extractReadableBodyText(html, bodyLimit);
 
   // 什么都没抓到（SPA 空壳等）→ 视为失败，让调用方降级
   if (!title && !description && !bodyText) {
@@ -266,7 +379,11 @@ export async function checkUrlLiveness(rawUrl, { timeout = LIVENESS_TIMEOUT } = 
       httpAgent,
       httpsAgent,
       responseType: 'stream',
-      headers: { 'User-Agent': BROWSER_UA, Accept: 'text/html,*/*;q=0.8', 'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8' },
+      headers: {
+        'User-Agent': BROWSER_UA,
+        Accept: 'text/html,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      },
     });
     const code = resp.status;
     resp.data?.destroy?.(); // 拿到状态码即丢弃响应体,不下载

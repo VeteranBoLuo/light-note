@@ -92,6 +92,7 @@ export interface AiAgentRecoverySnapshot {
   sessionId: string;
   answer: string;
   sources: Array<Record<string, unknown>>;
+  entityRefs?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
   citations: AiEvidence[];
   evidence: AiEvidence[];
   citationAudit: {
@@ -338,8 +339,7 @@ export const listAiConversations = (
     cursor?: string;
     limit?: number;
   } = {},
-) =>
-  post<{ items: AiConversationSummary[]; nextCursor: string | null }>('/api/chat/conversations/list', input);
+) => post<{ items: AiConversationSummary[]; nextCursor: string | null }>('/api/chat/conversations/list', input);
 
 export const getAiConversation = (conversationId: string, messageLimit = 100) =>
   post<AiConversation>('/api/chat/conversations/get', { conversationId, messageLimit });

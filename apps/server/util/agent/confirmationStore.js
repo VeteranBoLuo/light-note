@@ -42,6 +42,14 @@ end
 redis.call('SETEX', KEYS[1], tonumber(ARGV[3]), ARGV[2])
 return 1
 `;
+const REPLACE_CONFIRMATION_SCRIPT = `
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+  return 0
+end
+redis.call('SETEX', KEYS[2], tonumber(ARGV[3]), ARGV[2])
+redis.call('DEL', KEYS[1])
+return 1
+`;
 const STORED_TOKEN_KEY = Symbol('storedTokenKey');
 const STORED_TOKEN_RAW = Symbol('storedTokenRaw');
 const EXECUTION_KEY = Symbol('executionKey');
@@ -187,10 +195,18 @@ export async function createToolConfirmation({
   riskLevel,
   preview,
   token: suppliedToken,
+  replaceToken,
+  replaceConfirmationId,
 }) {
   const token = suppliedToken || crypto.randomBytes(32).toString('base64url');
   if (!/^[A-Za-z0-9_-]{40,}$/.test(token)) {
     throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '操作确认令牌格式无效。');
+  }
+  if (replaceToken && !/^[A-Za-z0-9_-]{40,}$/.test(String(replaceToken))) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '待替换的操作确认令牌格式无效。');
+  }
+  if (replaceToken && String(replaceToken) === token) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '新旧操作确认令牌不能相同。');
   }
   const expiresAt = new Date(Date.now() + TTL_SECONDS * 1000).toISOString();
   const confirmationId = crypto.randomUUID();
@@ -219,7 +235,48 @@ export async function createToolConfirmation({
     actionLockKey,
     idempotencyKey,
   };
-  await redisClient.setEx(tokenKey(token), TTL_SECONDS, JSON.stringify(confirmation));
+  const serialized = JSON.stringify(confirmation);
+  if (replaceToken) {
+    const previousKey = tokenKey(String(replaceToken));
+    const previousRaw = await redisClient.get(previousKey);
+    if (!previousRaw) {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_EXPIRED', '原操作确认已过期或已经使用，请重新发起。', 410);
+    }
+    const previous = parseConfirmation(previousRaw, ownerKey, sessionId);
+    const previousExpiresAt = Date.parse(previous.expiresAt);
+    if (!Number.isFinite(previousExpiresAt) || previousExpiresAt <= Date.now()) {
+      await redisClient.del(previousKey);
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_EXPIRED', '原操作确认已过期，请重新发起。', 410);
+    }
+    if (previous.toolName !== toolName) {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '待替换的操作类型与新操作不一致。');
+    }
+    if (replaceConfirmationId && previous.id !== String(replaceConfirmationId)) {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '待替换的操作确认与当前草稿不一致。');
+    }
+    if (typeof redisClient.eval !== 'function') {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_UNAVAILABLE', '安全确认服务暂不可用，请稍后重试。', 503);
+    }
+    let replaced;
+    try {
+      replaced = await redisClient.eval(REPLACE_CONFIRMATION_SCRIPT, {
+        keys: [previousKey, tokenKey(token)],
+        arguments: [previousRaw, serialized, String(TTL_SECONDS)],
+      });
+    } catch (error) {
+      console.warn('[Agent] confirmation replacement failed code=%s', stableAgentErrorCode(error));
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_UNAVAILABLE', '安全确认服务暂不可用，请稍后重试。', 503);
+    }
+    if (Number(replaced) !== 1) {
+      throw new ToolConfirmationError(
+        'TOOL_CONFIRMATION_CONFLICT',
+        '原草稿状态已经变化，没有生成新的确认操作，请刷新后重试。',
+        409,
+      );
+    }
+  } else {
+    await redisClient.setEx(tokenKey(token), TTL_SECONDS, serialized);
+  }
   return {
     token,
     expiresIn: TTL_SECONDS,

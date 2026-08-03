@@ -4,6 +4,7 @@ import useAiAssistantStore, {
   buildAiAssistantDomainKey,
   createAiAssistantMaterialSnapshot,
   resolveAiAssistantFollowUpMaterialSnapshot,
+  resolveAiAssistantPendingNoteDraftRefinement,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
   shouldAutoInheritAiAssistantMaterials,
@@ -132,6 +133,82 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
     ];
 
     expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs[0]?.id).toBe('bookmark-1');
+  });
+
+  it('待确认草稿轮也会继承父消息材料，并返回服务端可校验的草稿引用', () => {
+    const messages = [
+      {
+        id: 'user-1',
+        role: 'user' as const,
+        content: '根据书签创建笔记',
+        timestamp: new Date(),
+        contextRefs: [{ type: 'bookmark' as const, id: 'bookmark-1', title: '示例书签' }],
+      },
+      {
+        id: 'assistant-1',
+        role: 'assistant' as const,
+        content: '笔记草稿已准备好',
+        timestamp: new Date(),
+        parentMessageId: 'user-1',
+        pendingConfirmationIds: ['confirmation-1'],
+        confirmations: [
+          {
+            id: 'confirmation-1',
+            token: 'a'.repeat(43),
+            sessionId: 'session-1',
+            toolName: 'create_note',
+            args: { title: '示例笔记', content: '旧正文' },
+            expiresIn: 300,
+            expiresAt: new Date(Date.now() + 300_000).toISOString(),
+          },
+        ],
+      },
+    ];
+
+    expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs[0]?.id).toBe('bookmark-1');
+    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '太短了，重新写长一点')).toEqual({
+      confirmationId: 'confirmation-1',
+      confirmationToken: 'a'.repeat(43),
+    });
+    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '写的太少了，详细一点')).toEqual({
+      confirmationId: 'confirmation-1',
+      confirmationToken: 'a'.repeat(43),
+    });
+    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '今天天气怎么样')).toBeNull();
+
+    const newerUnrelatedAction = [
+      ...messages,
+      {
+        id: 'assistant-2',
+        role: 'assistant' as const,
+        content: '待办操作待确认',
+        timestamp: new Date(),
+        pendingConfirmationIds: ['confirmation-2'],
+        confirmations: [
+          {
+            id: 'confirmation-2',
+            token: 'b'.repeat(43),
+            sessionId: 'session-1',
+            toolName: 'set_todo_status',
+            args: { todoId: 'todo-1', status: 'completed' },
+            expiresIn: 300,
+            expiresAt: new Date(Date.now() + 300_000).toISOString(),
+          },
+        ],
+      },
+    ];
+    expect(resolveAiAssistantPendingNoteDraftRefinement(newerUnrelatedAction, '重写一下')).toBeNull();
+
+    const newerNormalReply = [
+      ...messages,
+      {
+        id: 'assistant-3',
+        role: 'assistant' as const,
+        content: '这是随后产生的一条普通回答。',
+        timestamp: new Date(),
+      },
+    ];
+    expect(resolveAiAssistantPendingNoteDraftRefinement(newerNormalReply, '重写一下')).toBeNull();
   });
 
   it('把服务端工具返回的待办来源转成稳定追问锚点', () => {

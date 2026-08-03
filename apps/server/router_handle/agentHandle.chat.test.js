@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   matchAgentWriteActionToolNames: vi.fn(() => []),
   createToolConfirmation: vi.fn(),
   publicToolConfirmation: vi.fn(),
+  inspectToolConfirmationExecution: vi.fn(),
   recordPendingActionBatch: vi.fn(),
   recordPendingActionBatchById: vi.fn(),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
@@ -182,7 +183,7 @@ vi.mock('../util/agent/confirmationStore.js', () => {
     claimToolConfirmationExecution: vi.fn(),
     createToolConfirmation: mocks.createToolConfirmation,
     finalizeToolConfirmationAction: vi.fn(),
-    inspectToolConfirmationExecution: vi.fn(),
+    inspectToolConfirmationExecution: mocks.inspectToolConfirmationExecution,
     publicToolConfirmation: mocks.publicToolConfirmation,
     rejectToolConfirmation: vi.fn(),
     settleToolConfirmationExecution: vi.fn(),
@@ -361,6 +362,7 @@ describe('agentChat 主链路', () => {
       token,
       expiresIn,
     }));
+    mocks.inspectToolConfirmationExecution.mockReset();
     mocks.prepareTodoStatus.mockImplementation(async (args) => {
       if (!args.keyword && !args.todoId) {
         const error = new Error('请提供待办 ID 或足够具体的标题。');
@@ -503,6 +505,147 @@ describe('agentChat 主链路', () => {
       expect.objectContaining({ question: 'https://uuye.163.com这个链接是干嘛的？' }),
     );
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('这是网页摘要。');
+  });
+
+  it('单个书签生成笔记走专用草稿协议，不再进入通用 Semantic Planner', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: 'TypeORM 官方文档',
+              url: 'https://typeorm.io',
+              snapshot_content: 'TypeORM 是一个 ORM。'.repeat(80),
+              description: 'TypeORM 官方文档',
+              content: 'TypeORM 是一个 ORM。'.repeat(80),
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_bookmark_note_draft', {
+          title: 'TypeORM 使用笔记',
+          content: `# TypeORM\n\n${'整理后的正文。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(30),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请分析这个书签的内容，生成一篇笔记。',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.selectAgentTools).not.toHaveBeenCalled();
+    expect(mocks.toolExecute).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][1]).toMatchObject({
+      toolChoice: { type: 'function', function: { name: 'submit_bookmark_note_draft' } },
+    });
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: expect.objectContaining({ title: 'TypeORM 使用笔记' }),
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('笔记草稿已准备好'),
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+      entityRefs: [{ type: 'bookmark', id: 'bookmark-1', title: 'TypeORM 官方文档' }],
+    });
+  });
+
+  it('“写长一点”读取服务端旧草稿并用新确认原子替换旧确认', async () => {
+    const oldToken = 'o'.repeat(43);
+    const oldContent = '旧正文。'.repeat(80);
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '示例书签',
+              url: 'https://example.com',
+              snapshot_content: '网页存档。'.repeat(80),
+              description: '',
+              content: '网页存档。'.repeat(80),
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'old-confirmation',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '旧标题', content: oldContent },
+      },
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_bookmark_note_draft', {
+          title: '扩写后的标题',
+          content: `${oldContent}\n\n${'新增分析。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(40),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '太短了，重新写长一点、更详细一点。',
+        stream: true,
+        sessionId: 'session-1',
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+        draftRefinement: {
+          confirmationId: 'old-confirmation',
+          confirmationToken: oldToken,
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.inspectToolConfirmationExecution).toHaveBeenCalledWith(oldToken, 'user:user-1', 'session-1');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replaceToken: oldToken,
+        replaceConfirmationId: 'old-confirmation',
+        args: expect.objectContaining({ title: '扩写后的标题' }),
+      }),
+    );
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmationId: 'old-confirmation', state: 'cancelled' }),
+    );
+    expect(mocks.recordPendingActionBatch.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.settleSessionAction.mock.invocationCallOrder[0],
+    );
+    const events = sseEvents(res);
+    expect(events.some((event) => event.event === 'tool_confirmation_replaced')).toBe(true);
+    expect(events.some((event) => event.event === 'tool_confirmation')).toBe(true);
+    expect(events.find((event) => event.event === 'response.completed')?.entityRefs).toEqual([
+      { type: 'bookmark', id: 'bookmark-1', title: '示例书签' },
+    ]);
   });
 
   it('翻译模式隔离历史与知识助手提示，只向模型发送待翻译文本', async () => {
@@ -1017,9 +1160,7 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.findOwnedTodoForAi).toHaveBeenCalledWith(expect.anything(), 'user-1', 'todo-1');
-    const plannerPrompt = mocks.requestAi.mock.calls[0][0]
-      .map((message) => String(message?.content || ''))
-      .join('\n');
+    const plannerPrompt = mocks.requestAi.mock.calls[0][0].map((message) => String(message?.content || '')).join('\n');
     expect(plannerPrompt).toContain('[todo:todo-1]');
     expect(plannerPrompt).toContain('提交报销');
     const payload = res.send.mock.calls.at(-1)[0].data;

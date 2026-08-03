@@ -289,12 +289,49 @@ export function createAiAssistantMaterialSnapshot(
 const MATERIAL_ANAPHORIC_PATTERN =
   /(?:这个|那个|这些|那些|它们?|刚才|刚刚|上面|前面|之前|上述|前述|基于(?:它|这个|那个|上述|前述)|\b(?:this|that|these|those|it|they|above|previous|earlier)\b)/i;
 const MATERIAL_FOLLOW_UP_COMMAND_PATTERN =
-  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更详细(?:一点|些)?|再详细(?:一点|些)?|不够(?:详细|完整)|continue\b|expand\b|regenerate\b|rewrite\b|more\s+detail\b)/i;
+  /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|写(?:得|的)?(?:(?:太|有点|比较)?(?:短|少|简略)|(?:长|多|详细|完整|丰富)(?:一|点|些)?)|(?:太|有点|比较)?(?:短|少|简略)|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更(?:长|详细|完整|丰富)(?:一点|些)?|再(?:长|详细|完整|丰富)(?:一点|些)?|不够(?:长|详细|完整|丰富)|扩写|润色|continue\b|expand\b|regenerate\b|rewrite\b|longer\b|more\s+detail\b)/i;
+
+export interface AiAssistantDraftRefinementReference {
+  confirmationId: string;
+  confirmationToken: string;
+}
 
 /** 只在用户明确承接上一轮材料时自动续用，避免把一次引用永久变成整段会话的隐式粘性材料。 */
 export function shouldAutoInheritAiAssistantMaterials(input: string) {
   const normalized = String(input || '').trim();
   return MATERIAL_ANAPHORIC_PATTERN.test(normalized) || MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(normalized);
+}
+
+/**
+ * “太短了，写长一点”只能改写当前会话里仍待确认的 create_note 草稿。
+ * 客户端仅发送不可预测令牌和 ID；正文由服务端从确认存储读取，避免旧页面或篡改参数伪造草稿。
+ */
+export function resolveAiAssistantPendingNoteDraftRefinement(
+  messages: AiAssistantMessage[],
+  input: string,
+): AiAssistantDraftRefinementReference | null {
+  if (!MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(String(input || '').trim())) return null;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    // 只允许承接最近一条助手回答。若草稿后已经产生过普通回答，“重写”更可能指向
+    // 新回答，不能越过它去改动更早仍未过期的确认卡。
+    if (!message.pendingConfirmationIds?.length) return null;
+    const pendingIds = new Set(message.pendingConfirmationIds);
+    const confirmation = [...(message.confirmations || [])]
+      .reverse()
+      .find(
+        (item) =>
+          item.toolName === 'create_note' &&
+          pendingIds.has(item.id) &&
+          (!item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now())),
+      );
+    // 更晚的待确认轮优先级最高；它不是笔记草稿时不得越过它去改写更早的旧卡。
+    if (!confirmation) return null;
+    if (!confirmation.id || !/^[A-Za-z0-9_-]{40,}$/.test(String(confirmation.token || ''))) return null;
+    return { confirmationId: confirmation.id, confirmationToken: confirmation.token };
+  }
+  return null;
 }
 
 /**
@@ -356,7 +393,8 @@ export function resolveAiAssistantFollowUpMaterialSnapshot(
     })
     .filter((item): item is AiResourceContext => Boolean(item));
   const contextRefs = sourceContextRefs.filter(
-    (item, index, all) => all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
+    (item, index, all) =>
+      all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
   );
   const sourceKeys = new Set(
     (assistant.sources || [])
@@ -367,10 +405,13 @@ export function resolveAiAssistantFollowUpMaterialSnapshot(
     (item) => sourceKeys.has(`document:${item.id}`) || sourceKeys.has(`file:${item.fileId || item.id}`),
   );
 
-  const isSettledActionRound = Boolean(
-    assistant.persistAfterConfirmationSettlement || assistant.actionSettlements?.length,
+  const isActionRound = Boolean(
+    assistant.pendingConfirmationIds?.length ||
+    assistant.pendingInteractionIds?.length ||
+    assistant.persistAfterConfirmationSettlement ||
+    assistant.actionSettlements?.length,
   );
-  if (!contextRefs.length && !attachmentRefs.length && isSettledActionRound) {
+  if (!contextRefs.length && !attachmentRefs.length && isActionRound) {
     contextRefs.push(...parentContexts);
     attachmentRefs = parentAttachments;
   }
@@ -426,12 +467,12 @@ function normalizePendingConfirmations(value: unknown): AiToolConfirmation[] {
     const expiresAt = Date.parse(String(confirmation?.expiresAt || ''));
     return Boolean(
       confirmation &&
-        String(confirmation.token || '').trim() &&
-        String(confirmation.id || '').trim() &&
-        String(confirmation.sessionId || '').trim() &&
-        String(confirmation.toolName || '').trim() &&
-        Number.isFinite(expiresAt) &&
-        expiresAt > now,
+      String(confirmation.token || '').trim() &&
+      String(confirmation.id || '').trim() &&
+      String(confirmation.sessionId || '').trim() &&
+      String(confirmation.toolName || '').trim() &&
+      Number.isFinite(expiresAt) &&
+      expiresAt > now,
     );
   });
 }
@@ -467,9 +508,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   const contextRefs = normalizeContextRefs(raw.contextRefs || raw.contexts);
   const attachmentRefs = normalizeAttachmentRefs(raw.attachmentRefs);
   const rawPendingConfirmationIds = Array.isArray(raw.pendingConfirmationIds)
-    ? raw.pendingConfirmationIds
-        .map((id) => String(id || '').trim())
-        .filter(Boolean)
+    ? raw.pendingConfirmationIds.map((id) => String(id || '').trim()).filter(Boolean)
     : [];
   const pendingIdSet = new Set(rawPendingConfirmationIds);
   // 终态确认卡必须从可操作集合中移除。兼容旧缓存中“pending ID 已清、令牌仍残留”的幽灵卡。

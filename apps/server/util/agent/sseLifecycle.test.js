@@ -113,13 +113,18 @@ describe('Agent SSE lifecycle', () => {
       coverage: { overall: { complete: false, coverageRatio: 0.6 } },
       citationAudit: { evidenceCount: 1, verifiedCitationCount: 1 },
     });
-    await lifecycle.complete({ snapshotAnswer: '基于材料的最终答案', output: { session_id: 's4' } });
+    await lifecycle.complete({
+      snapshotAnswer: '基于材料的最终答案',
+      output: { session_id: 's4' },
+      entityRefs: [{ type: 'note', id: 'note-1', title: '测试笔记' }],
+    });
 
     const snapshot = onTerminal.mock.calls[0][0].snapshot;
     expect(snapshot).toEqual(
       expect.objectContaining({
         answer: '基于材料的最终答案',
         sources: [expect.objectContaining({ sourceId: 'note:1' })],
+        entityRefs: [{ type: 'note', id: 'note-1', title: '测试笔记' }],
         evidence: [expect.objectContaining({ evidenceRef: 'ev-1' })],
         citations: [expect.objectContaining({ citationKey: '1' })],
         coverage: { overall: { complete: false, coverageRatio: 0.6 } },

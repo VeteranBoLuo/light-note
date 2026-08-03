@@ -251,6 +251,7 @@
     createAiAssistantMaterialSnapshot,
     createAiAssistantMessageId,
     resolveAiAssistantFollowUpMaterialSnapshot,
+    resolveAiAssistantPendingNoteDraftRefinement,
     resolveAiAssistantRequestEdgeStatus,
     resolveAiAssistantIdentity,
     shouldAutoInheritAiAssistantMaterials,
@@ -365,10 +366,7 @@
   async function revealOlderMessages() {
     const container = messagesContainer.value;
     const previousHeight = container?.scrollHeight || 0;
-    visibleMessageCount.value = Math.min(
-      messages.value.length,
-      visibleMessageCount.value + MESSAGE_WINDOW_STEP,
-    );
+    visibleMessageCount.value = Math.min(messages.value.length, visibleMessageCount.value + MESSAGE_WINDOW_STEP);
     await nextTick();
     if (container) container.scrollTop += container.scrollHeight - previousHeight;
   }
@@ -1354,9 +1352,7 @@
       ...(chatMessage.recovered
         ? { recovered: true, stage: chatMessage.stage || null, terminal: chatMessage.terminal || null }
         : {}),
-      ...(chatMessage.actionSettlements?.length
-        ? { actionSettlements: chatMessage.actionSettlements.slice(-20) }
-        : {}),
+      ...(chatMessage.actionSettlements?.length ? { actionSettlements: chatMessage.actionSettlements.slice(-20) } : {}),
       ...(chatMessage.entityRefs?.length ? { entityRefs: chatMessage.entityRefs.slice(0, 5) } : {}),
     };
     try {
@@ -1674,6 +1670,10 @@
     hasAnswerStarted.value = false;
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
+    const draftRefinement =
+      !options.materialSnapshot && !contexts.value.length && !attachments.value.length
+        ? resolveAiAssistantPendingNoteDraftRefinement(messages.value, inputText)
+        : null;
     const autoInheritedMaterialSnapshot =
       !options.materialSnapshot &&
       !contexts.value.length &&
@@ -1886,6 +1886,26 @@
             }
           }
 
+          if (data.event === 'tool_confirmation_replaced') {
+            const replacedId = String(data.confirmationId || '').trim();
+            const replacedIndex = messages.value.findIndex(
+              (item) =>
+                item.role === 'assistant' &&
+                item.pendingConfirmationIds?.includes(replacedId) &&
+                item.confirmations?.some((confirmation) => confirmation.id === replacedId),
+            );
+            if (replacedIndex >= 0) {
+              settleConversationConfirmation(messages.value, replacedIndex, {
+                confirmationId: replacedId,
+                toolName: String(data.toolName || 'create_note'),
+                status: 'editing',
+                summary: t('ai.confirmationDraftReplaced'),
+              });
+              persistHistory();
+              void persistSettledAgentActionMessage(replacedIndex);
+            }
+          }
+
           if (data.event === 'interaction_required' && data.interaction) {
             const currentMsg = messages.value[aiMessageIndex];
             if (currentMsg) {
@@ -2015,6 +2035,7 @@
           history: historyForRequest,
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
+          ...(draftRefinement ? { draftRefinement } : {}),
           scope: {
             mode: scopeMode.value,
             externalWeb: false,
@@ -2372,8 +2393,7 @@
     let parent = target.parentMessageId
       ? messages.value.find(
           (item) =>
-            item.role === 'user' &&
-            (item.id === target.parentMessageId || item.cloudId === target.parentMessageId),
+            item.role === 'user' && (item.id === target.parentMessageId || item.cloudId === target.parentMessageId),
         )
       : null;
     if (!parent) {
@@ -2671,7 +2691,6 @@
     .messages-container {
       padding: 0.65rem 0.625rem;
     }
-
   }
 
   @media (prefers-reduced-motion: reduce) {

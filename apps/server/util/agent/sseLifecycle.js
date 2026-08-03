@@ -45,6 +45,7 @@ export function createAgentSseLifecycle({
     sessionId: String(sessionId || '').trim(),
     answer: '',
     sources: [],
+    entityRefs: [],
     citations: [],
     evidence: [],
     citationAudit: null,
@@ -112,6 +113,16 @@ export function createAgentSseLifecycle({
     }
     if (event === 'coverage' && payload.coverage != null) {
       snapshot.coverage = cloneSerializable(payload.coverage, null);
+    }
+    if (event === 'response.completed') {
+      if (Array.isArray(payload.sources)) snapshot.sources = cloneSerializable(payload.sources, []);
+      if (Array.isArray(payload.entityRefs)) snapshot.entityRefs = cloneSerializable(payload.entityRefs, []);
+      if (Array.isArray(payload.evidence)) {
+        snapshot.evidence = cloneSerializable(payload.evidence, []);
+        snapshot.citations = cloneSerializable(payload.evidence, []);
+      }
+      if (payload.coverage != null) snapshot.coverage = cloneSerializable(payload.coverage, null);
+      if (payload.citationAudit != null) snapshot.citationAudit = cloneSerializable(payload.citationAudit, null);
     }
     if (event === 'stage.changed' && payload.stage) {
       stage = String(payload.stage);

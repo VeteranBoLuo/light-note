@@ -6,6 +6,7 @@ export interface AiRecoveryMessageTarget {
   content: string;
   requestId?: string;
   sources?: AiSource[];
+  entityRefs?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
   evidence?: AiEvidence[];
   coverage?: Record<string, unknown> | null;
   citationAudit?: {
@@ -96,6 +97,13 @@ export function applyAiRecoverySnapshot(target: AiRecoveryMessageTarget, snapsho
   target.content = typeof snapshot.answer === 'string' ? snapshot.answer : '';
   target.requestId = String(snapshot.requestId || target.requestId || '').trim() || undefined;
   target.sources = cloneRecordArray(snapshot.sources) as unknown as AiSource[];
+  target.entityRefs = cloneRecordArray(snapshot.entityRefs)
+    .map((item) => ({
+      type: String(item.type || '') as 'bookmark' | 'note' | 'file' | 'tag' | 'todo',
+      id: String(item.id || '').trim(),
+      title: String(item.title || '').slice(0, 255),
+    }))
+    .filter((item) => ['bookmark', 'note', 'file', 'tag', 'todo'].includes(item.type) && Boolean(item.id));
   const evidence = cloneEvidence(snapshot.evidence);
   target.evidence = evidence.length ? evidence : cloneEvidence(snapshot.citations);
   target.coverage = snapshot.coverage && typeof snapshot.coverage === 'object' ? { ...snapshot.coverage } : null;

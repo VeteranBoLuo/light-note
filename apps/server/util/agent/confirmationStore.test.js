@@ -60,6 +60,87 @@ describe('agent confirmationStore', () => {
     expect(Date.parse(result.confirmation.expiresAt)).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000);
   });
 
+  it('原子替换待确认草稿，不留下两个同时可执行的令牌', async () => {
+    const original = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '旧草稿', content: '旧正文' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+    });
+    const originalRaw = redis.setEx.mock.calls[0][2];
+    redis.get.mockResolvedValueOnce(originalRaw);
+    redis.eval.mockResolvedValueOnce(1);
+
+    const replacement = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '新草稿', content: '更完整的新正文' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+      replaceToken: original.token,
+      replaceConfirmationId: original.confirmation.id,
+    });
+
+    expect(replacement.confirmation.args.title).toBe('新草稿');
+    expect(redis.setEx).toHaveBeenCalledTimes(1);
+    expect(redis.eval).toHaveBeenCalledWith(
+      expect.stringContaining("redis.call('SETEX'"),
+      expect.objectContaining({
+        keys: [expect.stringMatching(/^agent:confirm:/), expect.stringMatching(/^agent:confirm:/)],
+        arguments: [originalRaw, expect.stringContaining('更完整的新正文'), '300'],
+      }),
+    );
+  });
+
+  it('替换期间原令牌被执行时失败关闭，不签发并行新确认', async () => {
+    const original = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '旧草稿' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+    });
+    redis.get.mockResolvedValueOnce(redis.setEx.mock.calls[0][2]);
+    redis.eval.mockResolvedValueOnce(0);
+
+    await expect(
+      createToolConfirmation({
+        ownerKey: 'user:u1',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '新草稿' },
+        context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+        replaceToken: original.token,
+        replaceConfirmationId: original.confirmation.id,
+      }),
+    ).rejects.toMatchObject({ code: 'TOOL_CONFIRMATION_CONFLICT' });
+  });
+
+  it('不允许将待确认操作替换成另一种工具', async () => {
+    const original = await createToolConfirmation({
+      ownerKey: 'user:u1',
+      sessionId: 'session-1',
+      toolName: 'create_note',
+      args: { title: '旧草稿' },
+      context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+    });
+    redis.get.mockResolvedValueOnce(redis.setEx.mock.calls[0][2]);
+
+    await expect(
+      createToolConfirmation({
+        ownerKey: 'user:u1',
+        sessionId: 'session-1',
+        toolName: 'create_bookmark',
+        args: { url: 'https://example.com' },
+        context: { resourceUserId: 'u1', resourceUserRole: 'user' },
+        replaceToken: original.token,
+        replaceConfirmationId: original.confirmation.id,
+      }),
+    ).rejects.toMatchObject({ code: 'TOOL_CONFIRMATION_INVALID' });
+    expect(redis.eval).not.toHaveBeenCalled();
+  });
+
   it('笔记创建的动作幂等键跨确认令牌保持稳定，其他写操作不改变既有语义', async () => {
     const input = {
       ownerKey: 'user:u1',

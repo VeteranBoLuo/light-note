@@ -3025,6 +3025,7 @@ export default {
     confirmationRemaining: '{seconds} seconds remaining; can only be used once',
     confirmationRemainingCompact: 'Confirmation expires in {seconds}s',
     confirmationExpired: 'Confirmation expired. Please start the operation again.',
+    confirmationDraftReplaced: 'A revised draft is ready. This version has been replaced.',
     confirmationContentPreview: {
       title: 'Content preview',
       showSource: 'View Markdown source',

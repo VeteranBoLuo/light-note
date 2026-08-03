@@ -2948,6 +2948,7 @@ export default {
     confirmationRemaining: '剩余 {seconds} 秒，仅可使用一次',
     confirmationRemainingCompact: '确认有效期：剩余 {seconds} 秒',
     confirmationExpired: '确认已过期，请重新发起操作',
+    confirmationDraftReplaced: '已按你的新要求生成草稿，这一版已被替换。',
     confirmationContentPreview: {
       title: '正文预览',
       showSource: '查看 Markdown 原文',

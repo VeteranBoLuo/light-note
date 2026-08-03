@@ -9,6 +9,7 @@ function snapshot(overrides: Partial<AiAgentRecoverySnapshot> = {}): AiAgentReco
     sessionId: 'session-1',
     answer: '权威完整答案',
     sources: [{ type: 'note', id: 'note-1', title: '来源一' }],
+    entityRefs: [{ type: 'bookmark', id: 'bookmark-1', title: '原始书签' }],
     citations: [],
     evidence: [
       {
@@ -87,6 +88,7 @@ describe('AI stream terminal recovery', () => {
       content: '权威完整答案',
       requestId: 'request-1',
       sources: [{ type: 'note', id: 'note-1', title: '来源一' }],
+      entityRefs: [{ type: 'bookmark', id: 'bookmark-1', title: '原始书签' }],
       evidence: [{ evidenceRef: 'evidence-1' }],
       coverage: { complete: true },
       activity: [
