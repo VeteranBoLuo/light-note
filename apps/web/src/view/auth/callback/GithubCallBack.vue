@@ -9,54 +9,65 @@
         <span style="--i: 3" class="cube-span"></span>
       </div>
     </div>
-    <b style="color: #ccc">{{ status === 200 ? 'github登录校验中...' : `登录失败，${time}秒后将会返回首页` }} </b>
-    <BButton class="callback-back" @click="goBack">返回</BButton>
+    <b class="callback-status">{{ status === 200 ? t('auth.githubCallbackChecking') : errorMessage }}</b>
+    <span v-if="status !== 200 && requestId" class="callback-request-id">
+      {{ t('auth.githubCallbackRequestId', { requestId }) }}
+    </span>
+    <div class="callback-actions">
+      <template v-if="status !== 200">
+        <BButton type="primary" :loading="restarting" @click="restartGithubOAuth">
+          {{ t('auth.githubCallbackRetry') }}
+        </BButton>
+        <BButton @click="goEmailLogin">{{ t('auth.githubCallbackEmailLogin') }}</BButton>
+      </template>
+      <BButton v-else class="callback-back" @click="goBack">{{ t('common.back') }}</BButton>
+    </div>
   </div>
 </template>
 
 <script setup>
   import { onBeforeUnmount, onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost, apiBaseGet } from '@/http/request';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationEntryPath, getRuntimePostRegistrationPath } from '@/utils/appEntry.ts';
-  import { consumeGithubOAuthFlow } from '@/utils/githubOAuth.ts';
+  import {
+    consumeGithubOAuthFlow,
+    createGithubAuthorizationUrl,
+    rememberGithubOAuthFlow,
+  } from '@/utils/githubOAuth.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
   const router = useRouter();
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const oauthFlow = consumeGithubOAuthFlow();
   const status = ref(200);
-  const time = ref(3);
+  const errorMessage = ref('');
+  const requestId = ref('');
+  const restarting = ref(false);
   // 用户点「返回」离开本页后:中止换票请求、不再弹提示/跳转,避免邮箱登录成功后又收到迟到的「GitHub 认证失败」。
   const abortController = new AbortController();
   let disposed = false;
-  let countdownTimer = 0;
-  let redirectTimer = 0;
 
   onBeforeUnmount(() => {
     disposed = true;
     abortController.abort();
-    if (countdownTimer) window.clearInterval(countdownTimer);
-    if (redirectTimer) window.clearTimeout(redirectTimer);
   });
 
   function toHome() {
     router.push('/');
   }
 
-  function scheduleFailureRedirect() {
+  function showFailure(messageText, supportRequestId = '') {
     status.value = 500;
-    countdownTimer = window.setInterval(() => {
-      time.value = time.value - 1;
-    }, 1000);
-    redirectTimer = window.setTimeout(() => {
-      toHome();
-    }, 2500);
+    errorMessage.value = messageText || t('auth.githubCallbackFailed');
+    requestId.value = supportRequestId;
   }
   function getAuthenticatedEntryPath(preferences = {}) {
     if (oauthFlow === 'register') {
@@ -64,18 +75,52 @@
     }
     return getRuntimeApplicationEntryPath(preferences, window.innerWidth);
   }
+  function wait(ms) {
+    return new Promise((resolve) => window.setTimeout(resolve, ms));
+  }
+
+  async function submitGithubCallback(code, state) {
+    let transportRetryUsed = false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const cRes = await apiBasePost(
+          '/api/user/github',
+          { code, state },
+          {
+            silent: true,
+            signal: abortController.signal,
+          },
+        );
+        if (disposed) return null;
+        if (cRes.data?.retryable && attempt < 2) {
+          await wait(900 + attempt * 700);
+          continue;
+        }
+        return cRes;
+      } catch (error) {
+        if (disposed || error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return null;
+        // 仅重试本站回调请求；后端的 completed 状态会恢复会话，绝不会再次向 GitHub 重放授权码。
+        if (!transportRetryUsed) {
+          transportRetryUsed = true;
+          await wait(1000);
+          continue;
+        }
+        throw error;
+      }
+    }
+    return null;
+  }
+
   onMounted(async () => {
     const code = router.currentRoute.value.query.code;
     const state = router.currentRoute.value.query.state;
     // code/state 必须成对存在；state 还会由后端结合一次性 Redis 挑战和 HttpOnly Cookie 校验。
     if (typeof code !== 'string' || typeof state !== 'string' || !code || !state) {
-      status.value = 500;
-      toHome();
+      showFailure(t('auth.githubCallbackInvalid'));
       return;
     }
-    // 一次性锁:GitHub 的 authorization code 只能用一次,重发第二次必在换 token 处失败报 500,
-    // 造成"其实已注册/登录成功却显示登录失败",还会多出一条 /api/user/github 的 api 日志。
-    // 用 sessionStorage 按 code 去重,刷新 / 浏览器后退 / dev HMR 重进都不再重发。
+    // 页面级一次性锁：刷新 / 浏览器后退 / dev HMR 重挂载时不再开启一条新的回调流程。
+    // 当前挂载内的本站请求恢复由 submitGithubCallback 控制，后端 completed 状态保证不会重放 GitHub code。
     const lockKey = `gh_oauth_handled:${code}`;
     if (sessionStorage.getItem(lockKey)) {
       toHome();
@@ -85,12 +130,8 @@
     // 立刻抹掉 URL 上的 code,让刷新 / 后退无 code 可重放(同路由仅去 query,不会重挂载本组件)
     router.replace({ path: '/auth/callback' }).catch(() => {});
     try {
-      // 发送 code 给后端换取 Token。silent:错误提示由本页自行控制,防止离开本页后全局 toast 迟到弹出。
-      const cRes = await apiBasePost('/api/user/github', { code, state }, {
-        silent: true,
-        signal: abortController.signal,
-      });
-      if (disposed) return;
+      const cRes = await submitGithubCallback(code, state);
+      if (disposed || !cRes) return;
       status.value = cRes.status;
       if (cRes.status === 200) {
         markLoggedIn();
@@ -122,16 +163,38 @@
         if (disposed) return;
         await router.replace(getAuthenticatedEntryPath(finalPrefs));
       } else {
-        message.error(cRes.msg || `github授权失败，请尝试重新授权或者通过账号密码手动登录`);
-        scheduleFailureRedirect();
+        const failureMessage = cRes.msg || t('auth.githubCallbackFailed');
+        message.error(failureMessage);
+        showFailure(failureMessage, String(cRes.data?.requestId || ''));
       }
     } catch (e) {
       // 主动中止(用户已离开本页)不提示、不跳转。
       if (disposed || e?.code === 'ERR_CANCELED' || e?.name === 'CanceledError') return;
-      message.error(`github授权报错：${e}，请尝试重新授权或者通过账号密码手动登录`);
-      scheduleFailureRedirect();
+      const failureMessage = t('auth.githubCallbackNetworkFailed');
+      message.error(failureMessage);
+      showFailure(failureMessage);
     }
   });
+
+  async function restartGithubOAuth() {
+    if (restarting.value) return;
+    restarting.value = true;
+    try {
+      const flow = oauthFlow || 'login';
+      const authorizationUrl = await createGithubAuthorizationUrl({ flow });
+      rememberGithubOAuthFlow(flow);
+      window.location.href = authorizationUrl;
+    } catch {
+      message.error(t('auth.githubStartFailed'));
+      restarting.value = false;
+    }
+  }
+
+  async function goEmailLogin() {
+    await router.push('/');
+    bookmark.openAuthModal('登录', 'github_callback');
+  }
+
   function goBack() {
     router.push('/');
   }
@@ -145,6 +208,23 @@
     gap: 30px;
     align-items: center;
     justify-content: center;
+  }
+
+  .callback-status {
+    color: var(--sub-text-color);
+    text-align: center;
+  }
+
+  .callback-request-id {
+    margin-top: -18px;
+    color: var(--disabled-text-color);
+    font-size: 12px;
+  }
+
+  .callback-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
   }
 
   /* From Uiverse.io by andrew-demchenk0 */

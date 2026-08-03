@@ -6,17 +6,26 @@ const redisClient = {
     redisValues.set(key, value);
     return 'OK';
   }),
-  getDel: vi.fn(async (key) => {
-    const value = redisValues.get(key) || null;
-    redisValues.delete(key);
-    return value;
+  get: vi.fn(async (key) => redisValues.get(key) || null),
+  eval: vi.fn(async (_script, { keys, arguments: args }) => {
+    const current = redisValues.get(keys[0]) || null;
+    if (!current) return null;
+    if (current !== args[0]) return current;
+    redisValues.set(keys[0], args[1]);
+    return args[1];
   }),
 };
 
 vi.mock('./redisClient.js', () => ({ default: redisClient }));
 
-const { GITHUB_OAUTH_CONSENT_VERSION, consumeGitHubOAuthChallenge, createGitHubOAuthChallenge, readGitHubOAuthNonce } =
-  await import('./githubOAuthState.js');
+const {
+  GITHUB_OAUTH_CONSENT_VERSION,
+  completeGitHubOAuthChallenge,
+  consumeGitHubOAuthChallenge,
+  createGitHubOAuthChallenge,
+  failGitHubOAuthChallenge,
+  readGitHubOAuthNonce,
+} = await import('./githubOAuthState.js');
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -60,34 +69,65 @@ describe('GitHub OAuth 单独同意与 state 校验', () => {
     expect(challenge.redirectUri).toBe('https://boluo66.top/auth/callback');
   });
 
-  it('正确的 state 与 HttpOnly cookie nonce 只能消费一次', async () => {
+  it('正确的 state 与 HttpOnly cookie nonce 只能认领一次', async () => {
     const challenge = await createGitHubOAuthChallenge({
       consentVersion: GITHUB_OAUTH_CONSENT_VERSION,
       flow: 'login',
     });
     const state = new URL(challenge.authorizationUrl).searchParams.get('state');
 
-    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce })).resolves.toMatchObject({
+    const code = 'github-code-1';
+    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code })).resolves.toMatchObject({
       consentVersion: GITHUB_OAUTH_CONSENT_VERSION,
       flow: 'login',
+      recovered: false,
       codeVerifier: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
       redirectUri: 'https://boluo66.top/auth/callback',
     });
-    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce })).rejects.toMatchObject({
-      code: 'GITHUB_OAUTH_STATE_EXPIRED',
+    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code })).rejects.toMatchObject({
+      code: 'GITHUB_OAUTH_IN_PROGRESS',
     });
   });
 
-  it('nonce 不匹配时拒绝授权，且挑战不会留给重放', async () => {
+  it('nonce 不匹配时拒绝授权，但不会被第三方仅凭 state 烧毁挑战', async () => {
     const challenge = await createGitHubOAuthChallenge({
       consentVersion: GITHUB_OAUTH_CONSENT_VERSION,
     });
     const state = new URL(challenge.authorizationUrl).searchParams.get('state');
 
-    await expect(consumeGitHubOAuthChallenge({ state, nonce: 'x'.repeat(43) })).rejects.toMatchObject({
+    await expect(
+      consumeGitHubOAuthChallenge({ state, nonce: 'x'.repeat(43), code: 'github-code-2' }),
+    ).rejects.toMatchObject({
       code: 'GITHUB_OAUTH_STATE_INVALID',
     });
-    expect(redisValues.size).toBe(0);
+    expect(redisValues.size).toBe(1);
+  });
+
+  it('完成后的重复回调恢复 userId，不会再次换取 GitHub token', async () => {
+    const challenge = await createGitHubOAuthChallenge({ consentVersion: GITHUB_OAUTH_CONSENT_VERSION });
+    const state = new URL(challenge.authorizationUrl).searchParams.get('state');
+    const code = 'github-code-completed';
+
+    await consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code });
+    await expect(completeGitHubOAuthChallenge({ state, code, userId: 'user-1' })).resolves.toBe(true);
+    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code })).resolves.toMatchObject({
+      recovered: true,
+      userId: 'user-1',
+    });
+  });
+
+  it('换票或下游失败后要求重新发起授权', async () => {
+    const challenge = await createGitHubOAuthChallenge({ consentVersion: GITHUB_OAUTH_CONSENT_VERSION });
+    const state = new URL(challenge.authorizationUrl).searchParams.get('state');
+    const code = 'github-code-failed';
+
+    await consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code });
+    await expect(
+      failGitHubOAuthChallenge({ state, code, errorCode: 'GITHUB_OAUTH_TOKEN_RESULT_UNKNOWN' }),
+    ).resolves.toBe(true);
+    await expect(consumeGitHubOAuthChallenge({ state, nonce: challenge.nonce, code })).rejects.toMatchObject({
+      code: 'GITHUB_OAUTH_RESTART_REQUIRED',
+    });
   });
 
   it('未提交当前同意版本时不创建挑战', async () => {

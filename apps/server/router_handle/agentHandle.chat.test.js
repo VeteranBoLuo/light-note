@@ -1235,7 +1235,7 @@ describe('agentChat 主链路', () => {
 
     await agentChat(
       request({
-        message: '请创建一篇笔记，标题为网页摘要，正文为测试内容',
+        message: '分析内容，生成一份笔记',
         stream: false,
         contexts: [],
         attachmentIds: [],

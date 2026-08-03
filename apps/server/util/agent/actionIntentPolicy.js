@@ -19,7 +19,11 @@ const STATE_FILTER_RESOURCE =
 const ENGLISH_STATE_FILTER_RESOURCE =
   /\b(?:created|added|saved|uploaded|updated|deleted|removed|restored|completed|archived|synced|pending)\b.{0,30}\b(?:notes?|documents?|bookmarks?|links?|attachments?|files?|tags?|trash|todos?|tasks?|reminders?|notifications?|inbox\s+items?|knowledge\s+base)\b/i;
 const QUERY_THEN_MUTATION =
-  /(?:并且|然后|接着|随后|之后|后再|同时|再|并)\s*(?:请|帮我|替我|给我)?\s*(?:(?:把|将)[^，。！？,.!?]{0,24})?(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|设置|更改|删除|删掉|移除|清除|清空|销毁|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)|\b(?:and\s+then|then|and)\b.{0,30}\b(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+  /(?:并且|然后|接着|随后|之后|后再|同时|再|并)\s*(?:请|帮我|替我|给我)?\s*(?:(?:把|将)[^，。！？,.!?]{0,24})?(?:创建|新建|新增|添加|生成|起草|写入|写|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|设置|更改|删除|删掉|移除|清除|清空|销毁|恢复|还原|完成|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)|\b(?:and\s+then|then|and)\b.{0,30}\b(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
+const PUNCTUATION_THEN_NOTE_CREATION =
+  /[，,；;：:]\s*(?:请|帮我|替我|给我)?\s*(?:(?:把|将)[^，。！？,.!?]{0,24})?(?:创建|新建|新增|生成|起草|写入|写(?:成|为)?)\s*[^，。！？,.!?]{0,16}(?:笔记|文档)/i;
+const TRAILING_MUTATION_QUESTION =
+  /(?:是什么|有哪些|有什么|有多少|多少(?:个|条|项|篇|份)?|哪(?:些|个|条|项|篇|份)|怎么(?:操作|做|使用)?|如何|怎样|为什么|从哪里|在哪里|在哪|哪里|是否(?:支持|可以)?|是不是|有没有|能否|能不能|可不可以|建议|方法|教程|步骤|入口|功能|了吗|了么|没有|没成功)(?:呢|吗)?[？?]?$/i;
 const DIRECT_MUTATION_PREFIX =
   /^(?:请|麻烦|帮我|替我|给我|为我|现在|立即|直接|执行|去)?\s*(?:把|将)?\s*(?:创建|新建|新增|添加|写入|收藏|保存|上传|修改|更新|编辑|重命名|改名|移动|归档|置顶|关联|解绑|替换|整理|设置|更改|删除(?!的)|删掉|移除(?!的)|清除|清空|销毁|注销|恢复|还原|完成(?!的)|重新打开|标记|关闭|开启|启用|禁用|分享|发布|发送|同步|合并|领取|补发|重置)/i;
 const ENGLISH_DIRECT_MUTATION_PREFIX =
@@ -36,7 +40,8 @@ const ENGLISH_POLITE_MUTATION =
   /^(?:can|could|would)\s+you\s+(?:please\s+)?(?:help\s+me\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
 const ENGLISH_DESIRE_MUTATION =
   /^i\s+(?:want|need|would\s+like)\s+(?:you\s+to\s+|to\s+)?(?:create|add|save|upload|update|edit|rename|move|archive|pin|link|replace|set|delete|remove|clear|erase|restore|recover|complete|reopen|mark|disable|enable|share|publish|send|sync|merge|grant|reset)\b/i;
-const LEADING_MUTATION_CONNECTOR = /^(?:(?:并且|然后|接着|随后|之后|后再|同时|再|并)|(?:and\s+then|then|and))\s*/i;
+const LEADING_MUTATION_CONNECTOR =
+  /^(?:(?:并且|然后|接着|随后|之后|后再|同时|再|并|[，,；;：:])|(?:and\s+then|then|and))\s*/i;
 const GENERAL_CHINESE_HOW_TO_PREFIX =
   /^(?:怎么|如何|怎样|从哪里|在哪里|在哪|为什么|什么是|是否支持|支不支持|能否|能不能|可不可以|是否可以|可以在轻笺里)/i;
 const GENERAL_ENGLISH_HOW_TO_PREFIX =
@@ -70,9 +75,10 @@ function normalizeContextTypes(contextTypes) {
 }
 
 function extractTrailingMutationClause(text) {
-  const match = QUERY_THEN_MUTATION.exec(text);
+  const match = QUERY_THEN_MUTATION.exec(text) || PUNCTUATION_THEN_NOTE_CREATION.exec(text);
   if (!match || !Number.isInteger(match.index)) return '';
-  return text.slice(match.index).replace(LEADING_MUTATION_CONNECTOR, '').trim();
+  const clause = text.slice(match.index).replace(LEADING_MUTATION_CONNECTOR, '').trim();
+  return TRAILING_MUTATION_QUESTION.test(clause) ? '' : clause;
 }
 
 function isExplicitMutationSpeechAct(text, contextTypes = []) {

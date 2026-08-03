@@ -11,8 +11,8 @@ import {
 } from '../util/common.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 import request from '../http/request.js';
-import { fetchWithTimeout, validateQueryParams } from '../util/request.js';
-import { fetchGitHubTokenRacing } from '../util/githubOAuth.js';
+import { validateQueryParams } from '../util/request.js';
+import { fetchGitHubApiJson, fetchGitHubTokenSafely, GitHubOAuthError } from '../util/githubOAuth.js';
 import { createNotification } from '../util/notification.js';
 import { verifyPassword, hashPassword, validatePassword } from '../util/password.js';
 import { sendTrackedEmail } from '../util/emailDelivery.js';
@@ -65,8 +65,10 @@ import {
   sendAccountDeletionCode,
 } from '../util/accountDeletion.js';
 import {
+  completeGitHubOAuthChallenge,
   consumeGitHubOAuthChallenge,
   createGitHubOAuthChallenge,
+  failGitHubOAuthChallenge,
   githubOAuthCookieOptions,
   GITHUB_OAUTH_NONCE_COOKIE,
   readGitHubOAuthNonce,
@@ -616,7 +618,9 @@ export const getUserList = async (req, res) => {
     const cursorMode = isAdminCursorRequest(req.body);
     const legacy = cursorMode ? null : validateQueryParams(req.body);
     const filters = snakeCaseKeys(req.body?.filters || legacy?.filters || {});
-    const key = String(filters?.key || '').trim().slice(0, 200);
+    const key = String(filters?.key || '')
+      .trim()
+      .slice(0, 200);
     const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
     const currentPage = cursorMode ? 1 : legacy.currentPage;
     const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
@@ -628,8 +632,12 @@ export const getUserList = async (req, res) => {
     const operator = sortOrder === 'asc' ? '>' : '<';
     const scope = adminCursorScope('users', [key, sortField, sortOrder]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
-    const cursorFilter = cursor ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))` : '';
-    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const cursorFilter = cursor
+      ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))`
+      : '';
+    const cursorParams = cursor
+      ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
+      : [];
     const take = cursorMode ? pageSize + 1 : pageSize;
     // 用户列表头像只用于 30px 左右的缩略展示，不能把历史 Base64 原图带进排序接口。
     // 外部头像地址保留；较大的内嵌头像交给列表使用默认头像，详情接口仍保留完整头像。
@@ -759,10 +767,9 @@ export const saveUserInfo = async (req, res) => {
     ) {
       // 兼容旧客户端编辑昵称时原样带回历史大头像：相同内容视为未变更，不重复写入；新大图直接拒绝。
       const submittedDigest = crypto.createHash('sha256').update(submittedHeadPicture).digest('hex');
-      const [[existingAvatar]] = await pool.query(
-        'SELECT SHA2(head_picture, 256) AS digest FROM user WHERE id = ?',
-        [id],
-      );
+      const [[existingAvatar]] = await pool.query('SELECT SHA2(head_picture, 256) AS digest FROM user WHERE id = ?', [
+        id,
+      ]);
       if (existingAvatar?.digest === submittedDigest) {
         delete finalBody.head_picture;
       } else {
@@ -770,11 +777,7 @@ export const saveUserInfo = async (req, res) => {
           resultData(
             null,
             413,
-            L(
-              req,
-              '头像图片过大，请压缩后再上传',
-              'Avatar image is too large. Please compress it before uploading.',
-            ),
+            L(req, '头像图片过大，请压缩后再上传', 'Avatar image is too large. Please compress it before uploading.'),
           ),
         );
       }
@@ -826,6 +829,7 @@ export const deleteUserById = (req, res) => {
 };
 
 export const startGithubOAuth = async (req, res) => {
+  const requestId = crypto.randomUUID();
   try {
     const challenge = await createGitHubOAuthChallenge({
       consentVersion: req.body?.consentVersion,
@@ -842,11 +846,15 @@ export const startGithubOAuth = async (req, res) => {
   } catch (error) {
     const status = Number.isInteger(error?.status) ? error.status : 500;
     if (status >= 500) {
-      console.error('[github-oauth] authorization start failed code=%s', stableAgentErrorCode(error));
+      console.error(
+        '[github-oauth] start failed requestId=%s stage=CHALLENGE_CREATE code=%s',
+        requestId,
+        String(error?.code || 'GITHUB_OAUTH_START_FAILED'),
+      );
     }
     return res.send(
       resultData(
-        { code: String(error?.code || 'GITHUB_OAUTH_START_FAILED') },
+        { code: String(error?.code || 'GITHUB_OAUTH_START_FAILED'), requestId },
         status,
         status < 500 ? error.message : L(req, 'GitHub 登录暂不可用，请使用邮箱登录', 'GitHub sign-in is unavailable.'),
       ),
@@ -856,12 +864,16 @@ export const startGithubOAuth = async (req, res) => {
 
 export const github = async (req, res) => {
   const { code, state } = req.body || {};
-  // 无论回调是否完整都清除浏览器侧 nonce；有效挑战在 Redis 中仍会按 TTL 自动失效。
-  res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
-  if (!code || !state) {
+  const requestId = crypto.randomUUID();
+  const startedAt = Date.now();
+  let stage = 'CALLBACK_VALIDATE';
+  let challengeClaimed = false;
+  let challengeCompleted = false;
+  if (typeof code !== 'string' || typeof state !== 'string' || !code.trim() || !state.trim()) {
+    res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
     return res.send(
       resultData(
-        { code: 'GITHUB_OAUTH_CALLBACK_INVALID' },
+        { code: 'GITHUB_OAUTH_CALLBACK_INVALID', requestId },
         400,
         L(req, 'GitHub 授权参数不完整，请重新发起登录', 'GitHub authorization data is incomplete.'),
       ),
@@ -870,58 +882,126 @@ export const github = async (req, res) => {
 
   try {
     const nonce = readGitHubOAuthNonce(req);
-    const consent = await consumeGitHubOAuthChallenge({ state, nonce });
+    stage = 'STATE_VALIDATE';
+    const consent = await consumeGitHubOAuthChallenge({ state, nonce, code });
     req.body.signupSource = consent.signupSource;
 
-    // 1. 用 code 换取 GitHub Token
-    const tokenData = await fetchGitHubToken(code, {
-      codeVerifier: consent.codeVerifier,
-      redirectUri: consent.redirectUri,
-    });
-    if (!tokenData.access_token) throw new Error('Failed to obtain access token');
+    let user;
+    let githubUser = null;
+    let tokenRoute = null;
+    if (consent.recovered) {
+      stage = 'ACCOUNT_RECOVER';
+      const [users] = await pool.query('SELECT * FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [consent.userId]);
+      user = users[0];
+      if (!user) {
+        throw new GitHubOAuthError('GITHUB_OAUTH_RECOVERY_USER_MISSING', 'GitHub 登录恢复记录已失效', {
+          stage,
+          status: 400,
+        });
+      }
+      challengeCompleted = true;
+    } else {
+      challengeClaimed = true;
+      stage = 'TOKEN_EXCHANGE';
+      const tokenData = await fetchGitHubToken(code, {
+        codeVerifier: consent.codeVerifier,
+        redirectUri: consent.redirectUri,
+      });
+      tokenRoute = tokenData.route;
 
-    // 2. 获取基础用户信息和邮箱信息
-    const [baseUser, email] = await Promise.all([
-      getGitHubUser(tokenData.access_token),
-      getGitHubEmail(tokenData.access_token), // 单独获取邮箱
-    ]);
-    const safeEmail = normalizeEmail(email) || `${baseUser.login}@users.noreply.github.com`;
-    // 合并用户对象
-    const githubUser = { ...baseUser, email: safeEmail };
+      stage = 'PROFILE_FETCH';
+      const [baseUser, email] = await Promise.all([
+        getGitHubUser(tokenData.access_token),
+        getGitHubEmail(tokenData.access_token),
+      ]);
+      const safeEmail = normalizeEmail(email) || `${baseUser.login}@users.noreply.github.com`;
+      githubUser = { ...baseUser, email: safeEmail, emailMissing: !email };
 
-    // 3. 数据库操作（查找/创建用户）
-    const user = await handleUserDatabaseOperation(githubUser, req);
+      stage = 'ACCOUNT_BIND';
+      user = await handleUserDatabaseOperation(githubUser, req);
+      try {
+        challengeCompleted = await completeGitHubOAuthChallenge({ state, code, userId: user.id });
+        if (!challengeCompleted) {
+          console.warn(
+            '[github-oauth] completion cache missed requestId=%s stage=STATE_COMPLETE code=GITHUB_OAUTH_STATE_COMPLETE_MISSED',
+            requestId,
+          );
+        }
+      } catch (error) {
+        console.warn(
+          '[github-oauth] completion cache failed requestId=%s stage=STATE_COMPLETE code=%s',
+          requestId,
+          String(error?.code || 'GITHUB_OAUTH_STATE_COMPLETE_FAILED'),
+        );
+      }
+    }
+
+    stage = 'SESSION_ISSUE';
     const sid = await issueLoginSession(req, res, user, true);
+    // 成功后保留短时 nonce Cookie 到原 TTL：若响应正文在途中丢失，浏览器可凭 completed 状态恢复本站会话。
+    // 新一轮 OAuth 会覆盖该随机 Cookie，Redis 完成记录则会在 5 分钟后先行失效。
     await recordServerOperation(req, {
       module: '账号与隐私',
       operation: `GitHub 跨境授权同意【${consent.consentVersion}/${consent.flow}】`,
       userId: user.id,
     }).catch((error) => console.warn('[github-oauth] consent audit failed code=%s', stableAgentErrorCode(error)));
 
-    res.send(
+    console.info(
+      '[github-oauth] callback success requestId=%s stage=COMPLETED elapsedMs=%d recovered=%s route=%s routeLatencyMs=%s',
+      requestId,
+      Date.now() - startedAt,
+      consent.recovered ? '1' : '0',
+      tokenRoute?.ip || '-',
+      tokenRoute?.latencyMs ?? '-',
+    );
+    return res.send(
       resultData({
         ...{ sid },
+        requestId,
         user_info: {
           id: user.id,
           alias: user.alias,
           head_picture: user.head_picture,
           role: user.role ?? 'user',
         },
-        requires_email: !githubUser.email, // 标识是否需要补全邮箱
+        requires_email: Boolean(githubUser?.emailMissing),
       }),
     );
   } catch (error) {
-    const isStateError = String(error?.code || '').startsWith('GITHUB_OAUTH_STATE_');
-    const status = isStateError ? 400 : 500;
-    const logger = isStateError ? console.warn : console.error;
-    logger('[github-oauth] callback failed code=%s', stableAgentErrorCode(error));
-    res.send(
+    const declaredErrorCode = String(error?.code || '');
+    const isOAuthDomainError = declaredErrorCode.startsWith('GITHUB_OAUTH_');
+    const errorCode = isOAuthDomainError ? declaredErrorCode : `GITHUB_OAUTH_${stage}_FAILED`;
+    if (challengeClaimed && !challengeCompleted) {
+      await failGitHubOAuthChallenge({ state, code, errorCode }).catch(() => false);
+    }
+    const retryableLocalCallback =
+      errorCode === 'GITHUB_OAUTH_IN_PROGRESS' || (challengeCompleted && stage === 'SESSION_ISSUE');
+    if (!retryableLocalCallback) {
+      res.clearCookie(GITHUB_OAUTH_NONCE_COOKIE, githubOAuthCookieOptions(0));
+    }
+    const status = isOAuthDomainError && Number.isInteger(error?.status) ? error.status : 500;
+    const logger = status >= 500 ? console.error : console.warn;
+    logger(
+      '[github-oauth] callback failed requestId=%s stage=%s code=%s upstreamStatus=%s providerCode=%s elapsedMs=%d',
+      requestId,
+      String(error?.stage || stage),
+      errorCode,
+      error?.upstreamStatus ?? '-',
+      error?.providerCode || '-',
+      Date.now() - startedAt,
+    );
+    const upstreamUnavailable = ['TOKEN_CONNECT', 'TOKEN_EXCHANGE', 'PROFILE_FETCH'].includes(
+      String(error?.stage || stage),
+    );
+    return res.send(
       resultData(
-        { code: String(error?.code || 'GITHUB_OAUTH_FAILED') },
+        { code: errorCode, requestId, retryable: retryableLocalCallback },
         status,
-        isStateError
+        status < 500 && isOAuthDomainError
           ? error.message
-          : L(req, 'GitHub 认证失败，请重新授权或使用邮箱登录', 'GitHub authentication failed.'),
+          : upstreamUnavailable
+            ? L(req, 'GitHub 网络暂时不稳定，请重新授权或使用邮箱登录', 'GitHub is temporarily unreachable.')
+            : L(req, 'GitHub 认证失败，请重新授权或使用邮箱登录', 'GitHub authentication failed.'),
       ),
     );
   }
@@ -1071,27 +1151,14 @@ export const revokeSession = async (req, res) => {
 };
 
 // --- 工具函数 ---
-// 国内服务器连 GitHub(github.com / api.github.com)经常抖动/超时。
-// 对网络错误与超时重试(带小退避);HTTP 错误状态由 fetchWithTimeout 正常返回、不会进入重试。
-const retry = async (fn, attempts = 3, label = '') => {
-  let lastErr;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastErr = e;
-      console.warn(`[GitHub] ${label} 第 ${i + 1}/${attempts} 次失败: ${e.message}`);
-      if (i < attempts - 1) await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-    }
-  }
-  throw lastErr;
-};
-
 const fetchGitHubToken = async (code, { codeVerifier, redirectUri } = {}) => {
   const clientId = String(process.env.GITHUB_CLIENT_ID || '').trim();
   const clientSecret = String(process.env.GITHUB_CLIENT_SECRET || '').trim();
   if (!clientId || !clientSecret || !codeVerifier || !redirectUri) {
-    throw new Error('GitHub OAuth configuration is incomplete');
+    throw new GitHubOAuthError('GITHUB_OAUTH_NOT_CONFIGURED', 'GitHub 登录配置不完整', {
+      stage: 'TOKEN_EXCHANGE',
+      status: 503,
+    });
   }
   const params = new URLSearchParams();
   params.append('client_id', clientId);
@@ -1100,124 +1167,145 @@ const fetchGitHubToken = async (code, { codeVerifier, redirectUri } = {}) => {
   params.append('redirect_uri', redirectUri);
   params.append('code_verifier', codeVerifier);
 
-  try {
-    // 多 IP 竞速换 token:绕过 GFW 对 github.com 单个 DNS IP 的间歇性 TCP 封锁(详见 util/githubOAuth.js)。
-    // 只要一组 github.com 官方 IP 里当下有任一可达即成功;api.github.com(取用户/邮箱)另走、通常正常。
-    return await fetchGitHubTokenRacing(params.toString());
-  } catch (error) {
-    console.error('fetchGitHubToken Error:', error.message);
-    throw error;
-  }
+  // 先做无副作用的 HTTPS 选路，再且仅再提交一次授权码，避免响应丢失后换 IP 重放 code。
+  return fetchGitHubTokenSafely(params.toString());
 };
 
 const getGitHubUser = async (accessToken) => {
-  const response = await retry(
-    () =>
-      fetchWithTimeout(
-        'https://api.github.com/user',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'User-Agent': 'MyApp',
-          },
-        },
-        8000, // 原来是裸 fetch,无超时会挂死
-      ),
-    3,
-    'user',
-  );
-
-  if (!response.ok) {
-    throw new Error(`GitHub API error: ${response.statusText}`);
+  const user = await fetchGitHubApiJson('/user', accessToken, { attempts: 3, timeoutMs: 6500 });
+  if (!user?.id || !String(user?.login || '').trim()) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_PROFILE_INVALID', 'GitHub 用户信息不完整', {
+      stage: 'PROFILE_FETCH',
+      status: 503,
+    });
   }
-  return response.json();
+  return user;
 };
 
-// 新增：专门获取邮箱的API调用
-const getGitHubEmail = async (accessToken, retries = 2) => {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      const response = await fetchWithTimeout(
-        'https://api.github.com/user/emails',
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            Accept: 'application/vnd.github.v3+json',
-          },
-        },
-        5000, // 5秒超时
-      );
+const getGitHubEmail = async (accessToken) => {
+  try {
+    const emails = await fetchGitHubApiJson('/user/emails', accessToken, { attempts: 2, timeoutMs: 5000 });
+    if (!Array.isArray(emails)) return null;
+    const primaryEmail = emails.find((email) => email?.primary && email?.verified);
+    return normalizeEmail(primaryEmail?.email) || null;
+  } catch (error) {
+    console.warn(
+      '[github-oauth] email fetch degraded code=%s',
+      String(error?.code || 'GITHUB_OAUTH_EMAIL_UNAVAILABLE'),
+    );
+    return null;
+  }
+};
 
-      if (!response.ok) continue; // 重试
-
-      const emails = await response.json();
-      const primaryEmail = emails.find((e) => e.primary && e.verified);
-      return primaryEmail?.email || null;
-    } catch (error) {
-      if (attempt === retries) {
-        console.warn('Fallback to no-reply email after retries');
-        return null; // 由调用方统一降级
+export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRetry = true } = {}) => {
+  const safeEmail = normalizeEmail(githubUser.email) || `${githubUser.login}@users.noreply.github.com`;
+  const githubId = String(githubUser.id);
+  const connection = await pool.getConnection();
+  let user;
+  let createdUserId = '';
+  let shouldRetryDuplicate = false;
+  try {
+    await connection.beginTransaction();
+    const [existingByGithub] = await connection.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1 FOR UPDATE`, [
+      githubId,
+    ]);
+    if (existingByGithub.length > 0) {
+      user = existingByGithub[0];
+      // 兼容清理历史版本曾分配的固定 GitHub 初始密码；仅在用户再次通过 GitHub 证明身份后轮换。
+      if (
+        user.login_type === 'github' &&
+        typeof user.password === 'string' &&
+        user.password &&
+        verifyPassword('123456', user.password)
+      ) {
+        const rotatedPassword = hashPassword(crypto.randomBytes(32).toString('base64url'));
+        await connection.query(`UPDATE user SET password = ?, password_method = 'scrypt' WHERE id = ?`, [
+          rotatedPassword,
+          user.id,
+        ]);
+        user = { ...user, password: rotatedPassword, password_method: 'scrypt' };
+      }
+    } else {
+      const [existingByEmail] = await connection.query(`SELECT * FROM user WHERE email = ? LIMIT 1 FOR UPDATE`, [
+        safeEmail,
+      ]);
+      if (existingByEmail.length > 0) {
+        const existingGithubId = String(existingByEmail[0].github_id || '');
+        if (existingGithubId && existingGithubId !== githubId) {
+          throw new GitHubOAuthError('GITHUB_OAUTH_EMAIL_CONFLICT', '该邮箱已绑定其他 GitHub 账号，请使用邮箱登录', {
+            stage: 'ACCOUNT_BIND',
+            status: 409,
+          });
+        }
+        await connection.query(
+          `UPDATE user SET github_id = ?, login_type = 'github' WHERE id = ? AND (github_id IS NULL OR github_id = ?)`,
+          [githubId, existingByEmail[0].id, githubId],
+        );
+        const [updatedUser] = await connection.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [
+          existingByEmail[0].id,
+        ]);
+        user = updatedUser[0];
+      } else {
+        createdUserId = generateUUID();
+        // GitHub 账号没有可用于邮箱登录的初始密码，使用不可预测随机值，用户可在登录后主动设置密码。
+        const githubHashedPassword = hashPassword(crypto.randomBytes(32).toString('base64url'));
+        const defaultPreferences = JSON.stringify({
+          theme: 'day',
+          noteViewMode: 'card',
+          homePage: 'bookmark',
+          lang: detectLangFromReq(req),
+        });
+        await connection.query(
+          `INSERT INTO user
+            (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
+           VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'user', ?)`,
+          [
+            createdUserId,
+            safeEmail,
+            githubId,
+            githubUser.avatar_url,
+            githubHashedPassword,
+            githubUser.login,
+            defaultPreferences,
+          ],
+        );
+        const [createdUsers] = await connection.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [createdUserId]);
+        user = createdUsers[0];
       }
     }
-  }
-};
-
-export const handleUserDatabaseOperation = async (githubUser, req) => {
-  // 邮箱降级策略：使用GitHub提供的备用邮箱格式
-  const safeEmail = normalizeEmail(githubUser.email) || `${githubUser.login}@users.noreply.github.com`;
-  // 1. 优先使用github_id查询
-  const [existingByGithub] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
-  if (existingByGithub.length > 0) return existingByGithub[0];
-
-  // 2. 使用邮箱查询现有账户
-  const [existingByEmail] = await pool.query(`SELECT * FROM user WHERE email = ? LIMIT 1`, [safeEmail]);
-
-  if (existingByEmail.length > 0) {
-    // 绑定GitHub ID到现有账户
-    await pool.query(`UPDATE user SET github_id = ?, login_type = 'github' WHERE id = ?`, [
-      githubUser.id,
-      existingByEmail[0].id,
-    ]);
-
-    // 返回更新后的完整用户数据
-    const [updatedUser] = await pool.query(`SELECT * FROM user WHERE id = ? LIMIT 1`, [existingByEmail[0].id]);
-    return updatedUser[0];
+    if (!user?.id) {
+      throw new GitHubOAuthError('GITHUB_OAUTH_ACCOUNT_RESULT_INVALID', 'GitHub 账号处理结果异常', {
+        stage: 'ACCOUNT_BIND',
+        status: 500,
+      });
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    if (error?.code === 'ER_DUP_ENTRY' && duplicateRetry) {
+      shouldRetryDuplicate = true;
+    } else {
+      throw error;
+    }
+  } finally {
+    connection.release();
   }
 
-  // 3. 创建新用户
-  const githubUserId = generateUUID();
-  const githubHashedPassword = hashPassword('123456');
-  // 与邮箱注册对齐:role 服务端写死 'user'(缺失会让新用户 role=null → 全站 403 无权限),并给默认 preferences
-  const defaultPreferences = JSON.stringify({
-    theme: 'day',
-    noteViewMode: 'card',
-    homePage: 'bookmark',
-    lang: detectLangFromReq(req),
-  });
-  await pool.query(
-    `INSERT INTO user
-      (id, email, github_id, login_type, head_picture, password, password_method, alias, role, preferences)
-     VALUES (?, ?, ?, 'github', ?, ?, 'scrypt', ?, 'user', ?)`,
-    [
-      githubUserId,
-      safeEmail,
-      githubUser.id,
-      githubUser.avatar_url,
-      githubHashedPassword,
-      githubUser.login,
-      defaultPreferences,
-    ],
-  );
-  const [result] = await pool.query(`SELECT * FROM user WHERE github_id = ? LIMIT 1`, [githubUser.id]);
+  // 先释放当前连接再重试，避免并发唯一键冲突时占着连接等待连接池中的下一条连接。
+  if (shouldRetryDuplicate) {
+    return handleUserDatabaseOperation(githubUser, req, { duplicateRetry: false });
+  }
+
+  if (!createdUserId) return user;
 
   // 仅 GitHub 首次建号执行；已有 GitHub 账号登录、按邮箱绑定旧账号都不会重复初始化。
-  const samplesReady = await initializeNewUserSamples(githubUserId, req);
+  const samplesReady = await initializeNewUserSamples(createdUserId, req);
 
   // GitHub 首次注册直接持久化头像，补齐“设置头像”成长任务。示例资源仍由种子服务直写，
   // 不经过资源创建奖励钩子，因此不会推进成长任务、每日/每周任务、经验或成就。
   if (String(githubUser.avatar_url || '').trim()) {
     try {
-      await completeGrowthTask(githubUserId, 'profile_avatar', { userRole: 'user' });
+      await completeGrowthTask(createdUserId, 'profile_avatar', { userRole: 'user' });
     } catch (error) {
       console.warn('[growth] GitHub 头像成长任务补全失败 code=%s', stableAgentErrorCode(error));
     }
@@ -1225,15 +1313,14 @@ export const handleUserDatabaseOperation = async (githubUser, req) => {
 
   // 转化漏斗:GitHub 新注册也要记 register(邮箱注册在 registerUser 已记),否则漏斗「注册成功」恒为 0
   const ghSignupSource = normalizeConversionSource(req.body?.signupSource); // 前端 GithubCallBack 透传的来源(走白名单归一)
-  recordConversionEvent(req, 'register', ghSignupSource, { userId: githubUserId, visitorType: 'user' });
+  recordConversionEvent(req, 'register', ghSignupSource, { userId: createdUserId, visitorType: 'user' });
 
   // 欢迎通知(fire-and-forget):GitHub 新注册与邮箱注册对齐
-  createNotification(githubUserId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
+  createNotification(createdUserId, buildWelcomeNotification(detectLangFromReq(req), samplesReady)).catch((e) =>
     console.warn('[register] GitHub 欢迎通知发送失败 code=%s', stableAgentErrorCode(e)),
   );
 
-  // 返回新插入的完整用户数据
-  return result[0];
+  return user;
 };
 
 // 修改密码或者设置密码configPassword
@@ -1407,14 +1494,7 @@ export const exportData = async (req, res) => {
         restorePolicy: {
           restorable: ['tags', 'bookmarks', 'notes'],
           exportOnly: ['files', 'ai'],
-          excluded: [
-            'fileContents',
-            'noteImages',
-            'bookmarkSnapshots',
-            'credentials',
-            'sessions',
-            'temporaryIndexes',
-          ],
+          excluded: ['fileContents', 'noteImages', 'bookmarkSnapshots', 'credentials', 'sessions', 'temporaryIndexes'],
         },
         account: acct ? { alias: acct.alias, email: acct.email } : null,
         counts: {
@@ -1475,7 +1555,11 @@ export const importData = async (req, res) => {
       resultData(
         { errorCode: 'BACKUP_ITEM_LIMIT_EXCEEDED' },
         413,
-        L(req, '备份中的可恢复记录超过 50000 条，请拆分后重试', 'The backup contains more than 50,000 restorable items'),
+        L(
+          req,
+          '备份中的可恢复记录超过 50000 条，请拆分后重试',
+          'The backup contains more than 50,000 restorable items',
+        ),
       ),
     );
   }

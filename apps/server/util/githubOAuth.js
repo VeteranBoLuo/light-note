@@ -1,17 +1,15 @@
-import net from 'node:net';
+import dns from 'node:dns/promises';
 import https from 'node:https';
+import net from 'node:net';
 
-/**
- * GitHub OAuth token 交换的「多 IP 竞速」实现。
- *
- * 背景:code→token 只能走 github.com,而国内服务器到 github.com 常被 GFW 间歇性 TCP 封锁
- * (SYN 被丢、connect 超时),同一 DNS IP 反复重试无用。api.github.com 是另一 IP 段、通常正常。
- * 策略:硬编码一组 github.com 官方 IP,先并发 TCP 探测出「当下可达」的 IP,再用它发 token 请求
- * (TLS SNI / HTTP Host 仍为 github.com,证书按 github.com 校验)。只要任一 IP 当下通即成功。
- *
- * IP 若整体失效,可从 https://api.github.com/meta 的 web 段刷新(api.github.com 一般可达)。
- */
-const GITHUB_HOST_IPS = [
+const GITHUB_HOST = 'github.com';
+const TOKEN_PATH = '/login/oauth/access_token';
+const DEFAULT_PROBE_TIMEOUT_MS = 2800;
+const DEFAULT_TOKEN_TIMEOUT_MS = 8000;
+
+// DNS 在部分网络环境下偶发只返回不可达地址，因此保留一组最近验证过的 GitHub Web 地址作为兜底。
+// 可通过 GITHUB_OAUTH_HOST_IPS 追加运维侧验证过的地址；授权码仍只会向最终选中的一个地址提交一次。
+const FALLBACK_GITHUB_HOST_IPS = [
   '140.82.121.4',
   '140.82.121.3',
   '140.82.116.3',
@@ -22,73 +20,127 @@ const GITHUB_HOST_IPS = [
   '20.205.243.166',
 ];
 
-// 并发 TCP 探测,返回当下可连通的 IP。
-// 关键:一旦有 IP 连通,只再等 200ms 收集其余快速可达的 IP 就立即返回,不再傻等被 GFW 丢包的 IP
-// 走完整个 timeout —— 原来用 Promise.all 每次登录都要等最慢的 IP 耗满 3s,是"转半天"里稳定的固定开销。
-// 若所有 IP 都失败,则在全部超时后返回空数组(上层据此抛错)。
-function probeReachableIps(ips, port = 443, timeoutMs = 3000) {
-  return new Promise((resolve) => {
-    const good = [];
-    let pending = ips.length;
-    let settled = false;
-    const done = () => {
-      if (settled) return;
-      settled = true;
-      resolve(good.slice());
-    };
-    ips.forEach((ip) => {
-      const sock = net.connect({ host: ip, port });
-      const finish = (ok) => {
-        sock.destroy();
-        if (ok) good.push(ip);
-        if (ok && good.length === 1) setTimeout(done, 200); // 首个连通后仅再等 200ms 收备用 IP
-        if (--pending === 0) done(); // 全部有结果(含全失败)时兜底返回
-      };
-      sock.setTimeout(timeoutMs);
-      sock.once('connect', () => finish(true));
-      sock.once('timeout', () => finish(false));
-      sock.once('error', () => finish(false));
-    });
-  });
+export class GitHubOAuthError extends Error {
+  constructor(code, message, { stage = 'UNKNOWN', status = 503, upstreamStatus, providerCode, cause } = {}) {
+    super(message, cause ? { cause } : undefined);
+    this.name = 'GitHubOAuthError';
+    this.code = code;
+    this.stage = stage;
+    this.status = status;
+    this.upstreamStatus = upstreamStatus;
+    this.providerCode = /^[A-Za-z0-9_.-]{1,80}$/.test(String(providerCode || '')) ? String(providerCode) : undefined;
+  }
 }
 
-// 通过指定 IP 向 github.com 发 HTTPS 请求(servername/Host 固定 github.com)
-function httpsRequestViaIp(ip, { method, path, headers, body }, timeoutMs = 6000) {
+function configuredFallbackIps() {
+  const configured = String(process.env.GITHUB_OAUTH_HOST_IPS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => net.isIP(value));
+  return [...new Set([...configured, ...FALLBACK_GITHUB_HOST_IPS])];
+}
+
+async function resolveGitHubIpv4() {
+  try {
+    let timeout;
+    const records = await Promise.race([
+      dns.lookup(GITHUB_HOST, { all: true, family: 4, verbatim: true }),
+      new Promise((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('dns timeout')), 1200);
+      }),
+    ]).finally(() => clearTimeout(timeout));
+    return records.map((record) => record.address).filter((value) => net.isIPv4(value));
+  } catch {
+    return [];
+  }
+}
+
+function httpsRequestViaIp(ip, { method, path, headers, body }, timeoutMs) {
   return new Promise((resolve, reject) => {
     const req = https.request(
       {
         host: ip,
-        servername: 'github.com', // TLS SNI —— 证书仍按 github.com 校验
+        servername: GITHUB_HOST,
         port: 443,
         method,
         path,
-        headers: { Host: 'github.com', ...headers },
+        headers: { Host: GITHUB_HOST, ...headers },
         timeout: timeoutMs,
       },
       (res) => {
-        let data = '';
-        res.on('data', (c) => (data += c));
-        res.on('end', () => resolve({ status: res.statusCode, body: data }));
+        const chunks = [];
+        let size = 0;
+        res.on('data', (chunk) => {
+          size += chunk.length;
+          if (size <= 64 * 1024) chunks.push(chunk);
+        });
+        res.on('end', () => {
+          if (size > 64 * 1024) {
+            reject(new Error('GitHub response is too large'));
+            return;
+          }
+          resolve({
+            status: Number(res.statusCode || 0),
+            headers: res.headers,
+            body: Buffer.concat(chunks).toString('utf8'),
+          });
+        });
+        res.once('error', reject);
       },
     );
     req.once('timeout', () => req.destroy(new Error('timeout')));
     req.once('error', reject);
-    if (body) req.write(body);
-    req.end();
+    req.end(body || undefined);
   });
 }
 
+async function probeGitHubIp(ip, timeoutMs = DEFAULT_PROBE_TIMEOUT_MS) {
+  const startedAt = Date.now();
+  const response = await httpsRequestViaIp(
+    ip,
+    {
+      method: 'HEAD',
+      path: TOKEN_PATH,
+      headers: { 'User-Agent': 'light-note-oauth-health' },
+    },
+    timeoutMs,
+  );
+  if (!response.status || response.status >= 500) throw new Error('GitHub endpoint is unhealthy');
+  return { ip, latencyMs: Date.now() - startedAt };
+}
+
 /**
- * 多 IP 竞速换取 GitHub OAuth token。
- * @param {string} bodyStr application/x-www-form-urlencoded 的请求体(含 client_id/secret/code)
- * @returns {Promise<object>} GitHub 返回的 token JSON(含 access_token)
+ * 在提交一次性授权码之前完成线路选择。探测请求不携带 code，不会消费 OAuth 授权。
  */
-export async function fetchGitHubTokenRacing(bodyStr) {
-  const reachable = await probeReachableIps(GITHUB_HOST_IPS);
-  if (!reachable.length) {
-    throw new Error('Request timed out'); // 全部 IP 当下不可达(与旧文案保持一致,便于上层识别)
+export async function selectGitHubTokenEndpoint({ resolveIps = resolveGitHubIpv4, probeIp = probeGitHubIp } = {}) {
+  const resolved = await resolveIps();
+  const candidates = [...new Set([...resolved, ...configuredFallbackIps()])];
+  if (!candidates.length) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_ROUTE_UNAVAILABLE', 'GitHub 登录线路暂不可用', {
+      stage: 'TOKEN_CONNECT',
+    });
   }
 
+  try {
+    // 所有候选同时做无副作用的完整 HTTPS 探测，最先成功的线路即为本次唯一换票线路。
+    return await Promise.any(candidates.map((ip) => probeIp(ip)));
+  } catch (cause) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_ROUTE_UNAVAILABLE', 'GitHub 登录线路暂不可用', {
+      stage: 'TOKEN_CONNECT',
+      cause,
+    });
+  }
+}
+
+/**
+ * 安全换取 GitHub OAuth token：先选路，再且仅再提交一次授权码。
+ * 请求发出后的超时结果具有不确定性，绝不换 IP 重放同一个 code。
+ */
+export async function fetchGitHubTokenSafely(
+  bodyStr,
+  { selectEndpoint = selectGitHubTokenEndpoint, requestViaIp = httpsRequestViaIp } = {},
+) {
+  const endpoint = await selectEndpoint();
   const headers = {
     Accept: 'application/json',
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -96,23 +148,106 @@ export async function fetchGitHubTokenRacing(bodyStr) {
     'User-Agent': 'light-note',
   };
 
-  let lastErr;
-  for (const ip of reachable) {
+  let response;
+  try {
+    response = await requestViaIp(
+      endpoint.ip,
+      { method: 'POST', path: TOKEN_PATH, headers, body: bodyStr },
+      DEFAULT_TOKEN_TIMEOUT_MS,
+    );
+  } catch (cause) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_TOKEN_RESULT_UNKNOWN', 'GitHub 响应超时，请重新发起授权', {
+      stage: 'TOKEN_EXCHANGE',
+      cause,
+    });
+  }
+
+  let data;
+  try {
+    data = JSON.parse(response.body);
+  } catch (cause) {
+    throw new GitHubOAuthError('GITHUB_OAUTH_TOKEN_RESPONSE_INVALID', 'GitHub 返回了无效响应', {
+      stage: 'TOKEN_EXCHANGE',
+      cause,
+    });
+  }
+  if (response.status === 200 && data?.access_token) {
+    return { ...data, route: { ip: endpoint.ip, latencyMs: endpoint.latencyMs } };
+  }
+
+  const githubError = String(data?.error || '');
+  const rejected = ['bad_verification_code', 'incorrect_client_credentials', 'redirect_uri_mismatch'].includes(
+    githubError,
+  );
+  throw new GitHubOAuthError(
+    rejected ? 'GITHUB_OAUTH_CODE_REJECTED' : 'GITHUB_OAUTH_TOKEN_EXCHANGE_FAILED',
+    rejected ? 'GitHub 授权已失效，请重新发起授权' : 'GitHub 暂时无法完成认证',
+    {
+      stage: 'TOKEN_EXCHANGE',
+      status: rejected ? 400 : 503,
+      upstreamStatus: response.status,
+      providerCode: githubError || undefined,
+    },
+  );
+}
+
+function retryDelayMs(response, attempt) {
+  const retryAfterHeader = response?.headers?.get?.('retry-after');
+  const retryAfter = retryAfterHeader == null || retryAfterHeader === '' ? Number.NaN : Number(retryAfterHeader);
+  if (Number.isFinite(retryAfter) && retryAfter >= 0) return Math.min(retryAfter * 1000, 2500);
+  return 300 * 2 ** attempt + Math.floor(Math.random() * 120);
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 读取 GitHub API。仅重试可安全重放的 GET，并覆盖网络异常、限流和瞬时 5xx。
+ */
+export async function fetchGitHubApiJson(
+  path,
+  accessToken,
+  { attempts = 3, timeoutMs = 6500, fetchImpl = globalThis.fetch, waitImpl = wait } = {},
+) {
+  let lastResponse;
+  let lastCause;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const { status, body } = await httpsRequestViaIp(
-        ip,
-        { method: 'POST', path: '/login/oauth/access_token', headers, body: bodyStr },
-        6000,
-      );
-      const data = JSON.parse(body);
-      if (status === 200 && data.access_token) return data;
-      // 已收到 GitHub 响应但无 token(code 无效/已用):code 一次性,换 IP 也无意义,直接失败
-      throw new Error(`GitHub token 交换失败: ${status} ${data.error_description || data.error || body.slice(0, 120)}`);
-    } catch (e) {
-      lastErr = e;
-      if (String(e.message).includes('token 交换失败')) throw e; // 请求已到达 GitHub,不再换 IP
-      console.warn(`[GitHub] token via ${ip} 失败: ${e.message}`); // TCP/超时 → 换下一个可达 IP
+      const response = await fetchImpl(`https://api.github.com${path}`, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'light-note',
+        },
+      });
+      lastResponse = response;
+      if (response.ok) return await response.json();
+
+      const rateLimited403 =
+        response.status === 403 &&
+        (response.headers?.get?.('x-ratelimit-remaining') === '0' || Boolean(response.headers?.get?.('retry-after')));
+      const retryable = response.status === 429 || rateLimited403 || [500, 502, 503, 504].includes(response.status);
+      if (!retryable || attempt === attempts - 1) break;
+      await waitImpl(retryDelayMs(response, attempt));
+    } catch (cause) {
+      lastCause = cause;
+      if (attempt === attempts - 1) break;
+      await waitImpl(300 * 2 ** attempt + Math.floor(Math.random() * 120));
+    } finally {
+      clearTimeout(timeout);
     }
   }
-  throw lastErr || new Error('Request timed out');
+
+  throw new GitHubOAuthError('GITHUB_OAUTH_API_UNAVAILABLE', 'GitHub 用户信息暂时不可用', {
+    stage: 'PROFILE_FETCH',
+    status: lastResponse?.status === 401 ? 400 : 503,
+    upstreamStatus: lastResponse?.status,
+    cause: lastCause,
+  });
 }
