@@ -19,9 +19,10 @@ import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
-  const clientError = /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标|重复任务|请选择|顺序|发生变化/.test(
-    message,
-  );
+  const clientError =
+    /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标|重复任务|请选择|顺序|发生变化/.test(
+      message,
+    );
   if (!clientError) console.error('[todo] 请求失败:', message);
   return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
 }
@@ -48,7 +49,8 @@ async function withTransaction(res, callback, { afterCommit } = {}) {
 }
 
 export async function listTodo(req, res) {
-  if (!req.user?.id || req.user.role === 'visitor') {
+  // 游客只读共享示例待办；写入接口仍统一由 ensureNotVisitor 拦截。
+  if (!req.user?.id) {
     return res.send(resultData({ items: [], total: 0, pendingTotal: 0 }));
   }
   try {
@@ -69,8 +71,7 @@ export async function listTodo(req, res) {
 
 export async function countTodo(req, res) {
   try {
-    const pendingTotal =
-      !req.user?.id || req.user.role === 'visitor' ? 0 : await queryTodoPendingCount(pool, req.user.id);
+    const pendingTotal = !req.user?.id ? 0 : await queryTodoPendingCount(pool, req.user.id);
     return res.send(resultData({ pendingTotal }));
   } catch (error) {
     return sendTodoError(res, error);
@@ -160,7 +161,5 @@ export async function snoozeTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const id = String(req.body?.id || '').trim();
   if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
-  return withTransaction(res, (connection) =>
-    snoozeTodoItem(connection, req.user.id, id, req.body?.targetAt),
-  );
+  return withTransaction(res, (connection) => snoozeTodoItem(connection, req.user.id, id, req.body?.targetAt));
 }

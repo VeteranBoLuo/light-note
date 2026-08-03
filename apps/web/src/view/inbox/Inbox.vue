@@ -39,7 +39,9 @@
         </div>
         <p>{{ isTodoFocused ? t('inbox.todoPageSubtitle') : t('inbox.subtitle') }}</p>
       </div>
-      <BButton v-if="isTodoFocused" type="primary" @click="openTodoEditor()">{{ t('inbox.createTodo') }}</BButton>
+      <BButton v-if="isTodoFocused && !isVisitorTodoReadOnly" type="primary" @click="openTodoEditor()">
+        {{ t('inbox.createTodo') }}
+      </BButton>
     </header>
 
     <ResourceCenterSectionNav
@@ -111,7 +113,7 @@
         variant="pill"
       />
       <BButton
-        v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
+        v-if="todoView === 'list' && !isVisitorTodoReadOnly && !todoSelectionMode && (todo.items.length || pageLoading)"
         class="todo-workspace-toolbar__select"
         size="small"
         @click="toggleTodoSelectionMode"
@@ -120,7 +122,10 @@
       </BButton>
     </section>
 
-    <section v-if="isTodoFocused && todoView === 'list' && todoSelectionMode" class="todo-list-toolbar">
+    <section
+      v-if="isTodoFocused && !isVisitorTodoReadOnly && todoView === 'list' && todoSelectionMode"
+      class="todo-list-toolbar"
+    >
       <BCheckbox
         :model-value="selectedTodoIds.length === todo.items.length"
         :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
@@ -218,7 +223,9 @@
             <div class="inbox-empty__icon">{{ isInboxGloballyEmpty ? '✓' : '0' }}</div>
             <h2>{{ emptyStateTitle }}</h2>
             <p>{{ emptyStateDesc }}</p>
-            <BButton type="primary" @click="handleEmptyStateAction">{{ emptyStateAction }}</BButton>
+            <BButton v-if="!(isTodoFocused && isVisitorTodoReadOnly)" type="primary" @click="handleEmptyStateAction">
+              {{ emptyStateAction }}
+            </BButton>
           </div>
           <TodoScheduleView
             v-else-if="isTodoFocused && todoView !== 'list'"
@@ -226,7 +233,8 @@
             :items="todo.items"
             :view="todoView"
             :swipe-enabled="bookmark.isMobile"
-            :disabled="hasPendingOperation || todoBatchMutating"
+            :disabled="hasPendingOperation || todoBatchMutating || isVisitorTodoReadOnly"
+            :read-only="isVisitorTodoReadOnly"
             :deleting-id="deletingTodoId"
             @edit="openTodoEditor"
             @delete="confirmDeleteTodo"
@@ -245,6 +253,7 @@
                   :selectable="todoSelectionMode"
                   :selected="selectedTodoIds.includes(item.id)"
                   :disabled="hasPendingOperation || todoBatchMutating"
+                  :read-only="isVisitorTodoReadOnly"
                   :deleting="deletingTodoId === item.id"
                   :swipe-enabled="bookmark.isMobile"
                   :swipe-open="openSwipeTodoId === item.id"
@@ -287,6 +296,7 @@
                 v-else
                 :item="action.item"
                 :disabled="hasPendingOperation"
+                :read-only="isVisitorTodoReadOnly"
                 :deleting="deletingTodoId === action.item.id"
                 :swipe-enabled="bookmark.isMobile"
                 :swipe-open="openSwipeTodoId === action.item.id"
@@ -394,6 +404,7 @@
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
   const isTodoFocused = computed(() => isMobileTodoPrimary.value || inbox.filterType === 'todo');
+  const isVisitorTodoReadOnly = computed(() => user.role === 'visitor' && !user.visitorWorkspace);
 
   function resolveRequestedFilter(value: unknown) {
     const tab = String(value || '');
@@ -987,6 +998,7 @@
     }
   }
   function openTodoEditor(item: TodoItemType | null = null) {
+    if (isVisitorTodoReadOnly.value) return;
     openSwipeTodoId.value = '';
     scheduleViewRef.value?.closeSwipe();
     editingTodo.value = item;

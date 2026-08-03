@@ -43,8 +43,17 @@ vi.mock('../util/services/todoService.js', () => ({
   snoozeTodo: snoozeTodoItem,
 }));
 
-const { batchRestoreTodo, batchStatusTodo, completeTodo, createTodo, listTodo, reorderTodo, restoreTodo, snoozeTodo } =
-  await import('./todoHandle.js');
+const {
+  batchRestoreTodo,
+  batchStatusTodo,
+  completeTodo,
+  countTodo,
+  createTodo,
+  listTodo,
+  reorderTodo,
+  restoreTodo,
+  snoozeTodo,
+} = await import('./todoHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
 
@@ -79,11 +88,23 @@ describe('todoHandle', () => {
     expect(setTodoStatus).toHaveBeenCalledWith(connection, 'u2', 'todo-1', 'completed');
   });
 
-  it('游客列表返回空数据且不查询待办表', async () => {
+  it('游客列表只读查询共享示例待办', async () => {
     const res = mockRes();
+    const items = [{ id: 'visitor-todo-1', title: '示例待办', status: 'pending' }];
+    listTodos.mockResolvedValueOnce(items);
+    queryTodoPendingCount.mockResolvedValueOnce(1);
     await listTodo({ user: { id: 'visitor', role: 'visitor' }, body: {} }, res);
-    expect(listTodos).not.toHaveBeenCalled();
-    expect(res.send).toHaveBeenCalledWith({ data: { items: [], total: 0, pendingTotal: 0 }, status: 200, msg: '' });
+    expect(listTodos).toHaveBeenCalledWith(expect.anything(), 'visitor', { status: 'all', sort: 'smart', keyword: '' });
+    expect(queryTodoPendingCount).toHaveBeenCalledWith(expect.anything(), 'visitor');
+    expect(res.send).toHaveBeenCalledWith({ data: { items, total: 1, pendingTotal: 1 }, status: 200, msg: '' });
+  });
+
+  it('游客待办数量只读查询共享示例数据', async () => {
+    const res = mockRes();
+    queryTodoPendingCount.mockResolvedValueOnce(3);
+    await countTodo({ user: { id: 'visitor', role: 'visitor' } }, res);
+    expect(queryTodoPendingCount).toHaveBeenCalledWith(expect.anything(), 'visitor');
+    expect(res.send).toHaveBeenCalledWith({ data: { pendingTotal: 3 }, status: 200, msg: '' });
   });
 
   it('待处理列表默认查询全部完成状态', async () => {
