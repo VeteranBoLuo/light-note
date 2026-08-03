@@ -175,9 +175,17 @@ function expectedEnabledSemanticCapabilityIds(intent, catalog) {
   ];
 }
 
+function missingExpectedSemanticCapabilityIds(plan, expectedCapabilityIds = []) {
+  if (!expectedCapabilityIds.length) return [];
+  const plannedCapabilityIds = new Set((plan?.intents || []).map((intent) => intent.capabilityId));
+  return expectedCapabilityIds.filter((capabilityId) => !plannedCapabilityIds.has(capabilityId));
+}
+
 function shouldRepairSemanticPlan(plan, adjudicated, expectedCapabilityIds = []) {
   if (!plan || adjudicated?.resolution === 'semantic_conflict') return true;
-  return adjudicated?.resolution === 'forbidden_context' && expectedCapabilityIds.length > 0;
+  if (!expectedCapabilityIds.length) return false;
+  if (missingExpectedSemanticCapabilityIds(plan, expectedCapabilityIds).length > 0) return true;
+  return ['forbidden_context', 'unverified'].includes(adjudicated?.resolution);
 }
 
 function normalizeTranslationConfig(config = {}) {
@@ -1898,6 +1906,24 @@ export async function agentChat(req, res) {
             break;
           }
         }
+      }
+
+      // 高召回动作传感器只用于校验“模型是否遗漏了明确、已启用的写能力”，不会替模型
+      // 生成参数或直接执行工具。若受限重判后仍把明确写请求当成普通对话/查询，必须失败
+      // 关闭，不能继续进入 Final Reply 并用一段普通回答冒充已请求的产品操作。
+      const missingExpectedCapabilityIds = missingExpectedSemanticCapabilityIds(semanticPlan, expectedCapabilityIds);
+      if (semanticPlan && missingExpectedCapabilityIds.length > 0) {
+        const missingExpectedCapabilities = missingExpectedCapabilityIds
+          .map((capabilityId) => semanticCatalog.find((entry) => entry.id === capabilityId))
+          .filter(Boolean);
+        adjudicated = {
+          state: 'blocked',
+          resolution: 'unverified',
+          plan: semanticPlan,
+          capabilities: missingExpectedCapabilities,
+          toolCalls: [],
+          writeToolNames: missingExpectedCapabilities.flatMap((capability) => capability.toolNames || []),
+        };
       }
 
       // Provider 偶尔会正确声明多个读取 intent，却漏掉其中一个或全部内嵌 toolCalls。

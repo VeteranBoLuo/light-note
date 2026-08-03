@@ -1283,6 +1283,107 @@ describe('agentChat 主链路', () => {
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
   });
 
+  it('明确要求根据书签生成笔记时，普通对话计划必须重判为 create_note 确认', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'conversation',
+            intents: [],
+            toolCalls: [],
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '根据所选书签创建笔记',
+                targetDescription: 'Mac8K - Mac 软件下载安装站',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'create_note',
+                arguments: {
+                  title: 'Mac8K - Mac 软件下载安装站',
+                  content: '# Mac8K - Mac 软件下载安装站\n\n根据书签内容整理的笔记。',
+                },
+              },
+            ],
+          }),
+        ],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请分析这个书签的内容，生成一篇笔记。',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner_semantic_repair_1');
+    expect(mocks.requestAi.mock.calls[1][0].at(-1).content).toContain('note.create');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: '',
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+    });
+  });
+
+  it('明确生成笔记连续被误判为普通对话时失败关闭，不再返回普通正文', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+    const conversationPlan = () => ({
+      content: '',
+      toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [], toolCalls: [] })],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce(conversationPlan())
+      .mockResolvedValueOnce(conversationPlan())
+      .mockResolvedValueOnce(conversationPlan());
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请分析这个书签的内容，生成一篇笔记。',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringMatching(/没有生成可核验的确认/),
+      confirmations: [],
+      actionPolicy: { resolution: 'unverified', capabilityIds: ['note.create'], executed: false },
+    });
+  });
+
   it.each(AGENT_REPLAY_CASES)('真实 Agent 主链回放：$id', async (replayCase) => {
     const result = await runAgentReplayCase(replayCase, {
       setProviderResponses(responses) {

@@ -91,16 +91,18 @@ describe('Agent 动作意图安全策略', () => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({ kind: 'query', resolution: 'none' });
   });
 
-  it.each(['分析内容，生成一份笔记', '分析一下这个网页的内容，生成一份笔记', '总结这条书签并生成笔记'])(
-    '%s 不能被前半句的只读动词吞掉后半句写动作',
-    (message) => {
-      expect(resolveAgentActionIntent({ message, contextTypes: ['bookmark'] })).toMatchObject({
-        kind: 'action',
-        resolution: 'enabled',
-        toolNames: expect.arrayContaining(['create_note']),
-      });
-    },
-  );
+  it.each([
+    '分析内容，生成一份笔记',
+    '分析一下这个网页的内容，生成一份笔记',
+    '总结这条书签并生成笔记',
+    '请分析这个书签的内容，生成一篇笔记。',
+  ])('%s 不能被前半句的只读动词吞掉后半句写动作', (message) => {
+    expect(resolveAgentActionIntent({ message, contextTypes: ['bookmark'] })).toMatchObject({
+      kind: 'action',
+      resolution: 'enabled',
+      toolNames: expect.arrayContaining(['create_note']),
+    });
+  });
 
   it.each([
     '分析已创建的笔记，修改时间是什么？',

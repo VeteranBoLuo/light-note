@@ -224,6 +224,10 @@
   @media (max-width: 960px) {
     .admin-data-page {
       padding-bottom: 0;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
     }
 
     .admin-data-page__surface {

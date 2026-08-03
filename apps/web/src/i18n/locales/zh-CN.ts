@@ -2948,6 +2948,12 @@ export default {
     confirmationRemaining: '剩余 {seconds} 秒，仅可使用一次',
     confirmationRemainingCompact: '确认有效期：剩余 {seconds} 秒',
     confirmationExpired: '确认已过期，请重新发起操作',
+    confirmationContentPreview: {
+      title: '正文预览',
+      showSource: '查看 Markdown 原文',
+      showRendered: '查看渲染效果',
+      truncated: '渲染预览仅展示前 {count} 字；Markdown 原文和实际写入仍保留完整正文',
+    },
     confirmationProcess: {
       show: '查看处理记录',
       hide: '收起处理记录',

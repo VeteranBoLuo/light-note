@@ -21,6 +21,7 @@
           <dd>{{ detail.value }}</dd>
         </template>
       </dl>
+      <AiNoteConfirmationPreview v-if="status === 'pending'" :confirmation="confirmation" />
       <pre v-if="argsText">{{ argsText }}</pre>
       <BButton
         v-if="status === 'pending'"
@@ -123,6 +124,7 @@
     AiToolConfirmationSettlementStatus,
   } from '@/types/aiAgent';
   import { resolveSucceededActionReceipt } from './confirmationReceipt';
+  import AiNoteConfirmationPreview from './AiNoteConfirmationPreview.vue';
 
   const props = defineProps<{ confirmation: AiToolConfirmation }>();
   const emit = defineEmits<{
@@ -206,6 +208,7 @@
       props.confirmation.preview,
   );
   const argsText = computed(() => {
+    if (props.confirmation.toolName === 'create_note') return '';
     if (displayPreview.value?.details?.length) return '';
     const text = JSON.stringify(props.confirmation.args || {}, null, 2);
     return text === '{}' ? '' : text.slice(0, 1200);

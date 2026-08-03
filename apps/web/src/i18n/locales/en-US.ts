@@ -3025,6 +3025,13 @@ export default {
     confirmationRemaining: '{seconds} seconds remaining; can only be used once',
     confirmationRemainingCompact: 'Confirmation expires in {seconds}s',
     confirmationExpired: 'Confirmation expired. Please start the operation again.',
+    confirmationContentPreview: {
+      title: 'Content preview',
+      showSource: 'View Markdown source',
+      showRendered: 'View rendered preview',
+      truncated:
+        'The rendered preview shows the first {count} characters; the Markdown source and saved note remain complete.',
+    },
     confirmationProcess: {
       show: 'View processing record',
       hide: 'Hide processing record',

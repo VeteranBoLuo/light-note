@@ -317,6 +317,8 @@
   }
   .ai-evaluation__run-head {
     min-width: 0;
+    min-height: 52px;
+    height: auto;
     display: grid;
     grid-template-columns:
       minmax(64px, 76px)
@@ -333,6 +335,8 @@
     border: 0;
     background: transparent;
     color: var(--text-color);
+    line-height: 1.45;
+    white-space: normal;
     text-align: left;
     cursor: pointer;
   }
@@ -402,17 +406,62 @@
     color: var(--danger-color, #dc2626);
   }
   @media (max-width: 760px) {
+    :deep(.admin-data-page__surface) {
+      gap: 16px;
+    }
+    :deep(.admin-data-page__toolbar-main) {
+      gap: 8px;
+    }
     .ai-evaluation__suite-select,
     .ai-evaluation__depth-select,
     .ai-evaluation__round-select {
       width: 100%;
     }
+    .ai-evaluation__runs {
+      flex: 0 0 auto;
+      overflow: visible;
+      padding-bottom: calc(20px + env(safe-area-inset-bottom));
+    }
     .ai-evaluation__run-head {
-      grid-template-columns: 72px 1fr;
-      gap: 8px 12px;
+      grid-template-columns: minmax(64px, auto) minmax(0, 1fr);
+      gap: 6px 12px;
+      min-height: 0;
+      padding: 12px;
+      align-items: start;
+    }
+    .ai-evaluation__run-head > strong {
+      text-align: right;
+    }
+    .ai-evaluation__run-head > :nth-child(3) {
+      grid-column: 1 / -1;
+      color: var(--sub-text-color);
+    }
+    .ai-evaluation__run-head > :nth-child(4),
+    .ai-evaluation__run-head > :nth-child(6) {
+      color: var(--sub-text-color);
+    }
+    .ai-evaluation__run-head > :nth-child(5),
+    .ai-evaluation__run-head > :nth-child(7) {
+      text-align: right;
+    }
+    .ai-evaluation__run-head > strong,
+    .ai-evaluation__run-head > span,
+    .ai-evaluation__run-head > time {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .ai-evaluation__details {
+      padding: 0 12px 12px;
     }
     .ai-evaluation__case {
-      grid-template-columns: 20px 1fr auto;
+      grid-template-columns: 20px minmax(0, 1fr) auto;
+    }
+    .ai-evaluation__case > strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
+    .ai-evaluation__safety {
+      grid-column: 2 / -1;
     }
   }
   @media (min-width: 761px) and (max-width: 1180px) {
