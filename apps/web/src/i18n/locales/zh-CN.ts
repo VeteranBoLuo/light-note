@@ -1481,7 +1481,7 @@ export default {
     admin: '后台管理',
     help: '帮助中心',
     resourceCenter: '资源中心',
-    resourceCenterDesc: '统一查找书签、笔记、文件和标签',
+    resourceCenterDesc: '查找全部资料',
     feedback: '意见反馈',
     changelog: '更新日志',
     themeMode: '主题模式',

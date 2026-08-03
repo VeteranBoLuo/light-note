@@ -287,18 +287,23 @@
               variant="card"
               padding="18px"
               class="bookmark-card"
-              :class="{ 'is-selected': selectedRows.includes(bookmarkItem.id) }"
+              :class="{
+                'is-selected': selectedRows.includes(bookmarkItem.id),
+                'is-selection-mode': cardSelectionActive,
+              }"
+              @click="handleBookmarkCardClick(bookmarkItem.id)"
             >
+              <BCheckbox
+                v-if="cardSelectionActive"
+                class="bookmark-selection-checkbox"
+                :checked="selectedRows.includes(bookmarkItem.id)"
+                :aria-label="bookmarkItem.name"
+                @click.stop
+                @keydown.stop
+                @change="toggleBookmarkSelection(bookmarkItem.id)"
+              />
               <div class="bookmark-card__head">
                 <div class="bookmark-identity">
-                  <BCheckbox
-                    v-if="cardSelectionMode || selectedRows.length > 0"
-                    class="bookmark-selection-checkbox"
-                    :checked="selectedRows.includes(bookmarkItem.id)"
-                    @click.stop
-                    @keydown.stop
-                    @change="toggleBookmarkSelection(bookmarkItem.id)"
-                  />
                   <BookmarkFavicon
                     :bookmark-id="bookmarkItem.id"
                     :src="bookmarkItem.iconUrl"
@@ -322,7 +327,7 @@
                         type="snapshot"
                         :label="$t('bookmarkMg.badgeArchived')"
                         :tooltip="$t('bookmarkMg.badgeArchivedHint')"
-                        @click="openSnap(bookmarkItem.id)"
+                        @click.stop="openSnap(bookmarkItem.id)"
                         v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSnapshot"
                       />
                       <BookmarkCapabilityBadge
@@ -330,14 +335,14 @@
                         type="summary"
                         :label="$t('bookmarkMg.badgeSummary')"
                         :tooltip="$t('bookmarkMg.badgeSummaryHint')"
-                        @click="openSnap(bookmarkItem.id)"
+                        @click.stop="openSnap(bookmarkItem.id)"
                         v-click-log="OPERATION_LOG_MAP.bookmarkMg.viewSummary"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div class="bookmark-actions">
+                <div v-if="!cardSelectionActive" class="bookmark-actions" @click.stop>
                   <BButton
                     class="bookmark-ai-action"
                     :aria-label="$t('bookmarkMg.aiUseBookmark')"
@@ -609,6 +614,7 @@
   };
   const viewMode = ref<'card' | 'table'>('card');
   const cardSelectionMode = ref(false);
+  const cardSelectionActive = computed(() => cardSelectionMode.value || selectedRows.value.length > 0);
   const tableSearchValue = ref('');
   type ImportStage = 'idle' | 'reading' | 'importing' | 'refreshing';
   const importStage = ref<ImportStage>('idle');
@@ -648,6 +654,11 @@
     if (selected.has(id)) selected.delete(id);
     else selected.add(id);
     selectedRows.value = Array.from(selected);
+  }
+
+  function handleBookmarkCardClick(id: string) {
+    if (!cardSelectionActive.value) return;
+    toggleBookmarkSelection(id);
   }
 
   function openBookmarksInAi(items: BookmarkInterface[]) {
@@ -1612,7 +1623,12 @@
 
     &.is-selected {
       border-color: var(--resource-bookmark-color);
+      background: color-mix(in srgb, var(--resource-bookmark-color) 4%, var(--bm-card-bg));
       box-shadow: 0 0 0 2px color-mix(in srgb, var(--resource-bookmark-color) 18%, transparent);
+    }
+
+    &.is-selection-mode {
+      cursor: pointer;
     }
   }
 
@@ -1621,6 +1637,10 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .bookmark-card.is-selection-mode .bookmark-card__head {
+    padding-right: 34px;
   }
 
   .bookmark-identity {
@@ -1632,8 +1652,14 @@
   }
 
   .bookmark-selection-checkbox {
-    flex: 0 0 auto;
-    margin: -4px 0 0 -4px;
+    position: absolute;
+    z-index: 2;
+    top: 12px;
+    right: 12px;
+    margin: 0;
+    border-radius: 8px;
+    background: var(--bm-card-bg);
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--text-color) 14%, transparent);
   }
 
   .bookmark-meta {

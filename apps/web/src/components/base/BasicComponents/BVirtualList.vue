@@ -1,12 +1,16 @@
 <template>
-  <div ref="scrollerRef" class="b-virtual-list" :style="virtualStyle" @scroll.passive="handleScroll">
-    <div
-      v-for="entry in visibleItems"
-      :key="entry.item?.[props.itemKey] ?? entry.index"
-      class="b-virtual-list__item"
-      :style="itemStyle"
-    >
-      <slot :item="entry.item" :index="entry.index" />
+  <div ref="scrollerRef" class="b-virtual-list" @scroll.passive="handleScroll">
+    <div class="b-virtual-list__sizer" :style="sizerStyle">
+      <div class="b-virtual-list__window" :style="windowStyle">
+        <div
+          v-for="entry in visibleItems"
+          :key="entry.item?.[props.itemKey] ?? entry.index"
+          class="b-virtual-list__item"
+          :style="itemStyle"
+        >
+          <slot :item="entry.item" :index="entry.index" />
+        </div>
+      </div>
     </div>
     <div v-if="props.loading" class="b-virtual-list__loading">
       <BLoading inline :loading="true" :title="props.loadingText" />
@@ -41,10 +45,16 @@
   const visibleItems = computed(() =>
     props.items.slice(start.value, end.value).map((item, offset) => ({ item, index: start.value + offset })),
   );
-  const virtualStyle = computed(() => ({
+  const sizerStyle = computed(() => {
+    const itemCount = props.items.length;
+    const totalHeight = itemCount
+      ? itemCount * Math.max(1, props.itemHeight) + Math.max(0, itemCount - 1) * Math.max(0, props.gap)
+      : 0;
+    return { height: `${totalHeight}px` };
+  });
+  const windowStyle = computed(() => ({
     gap: `${Math.max(0, props.gap)}px`,
-    paddingTop: `${start.value * pitch.value}px`,
-    paddingBottom: `${Math.max(0, props.items.length - end.value) * pitch.value}px`,
+    transform: `translateY(${start.value * pitch.value}px)`,
   }));
   const itemStyle = computed(() => ({ height: `${Math.max(1, props.itemHeight)}px` }));
 
@@ -108,6 +118,23 @@
     flex-direction: column;
   }
 
+  .b-virtual-list__sizer {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  .b-virtual-list__window {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: flex;
+    flex-direction: column;
+    will-change: transform;
+  }
+
   .b-virtual-list__item {
     flex: 0 0 auto;
     min-width: 0;
@@ -117,6 +144,7 @@
 
   .b-virtual-list__loading {
     min-height: 32px;
+    margin-top: 8px;
     display: flex;
     align-items: center;
     justify-content: center;

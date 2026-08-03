@@ -1504,7 +1504,7 @@ export default {
     admin: 'Admin',
     help: 'Help Center',
     resourceCenter: 'Resource Center',
-    resourceCenterDesc: 'Search bookmarks, notes, files, and tags',
+    resourceCenterDesc: 'Find all resources',
     feedback: 'Feedback',
     changelog: 'Changelog',
     themeMode: 'Theme Mode',

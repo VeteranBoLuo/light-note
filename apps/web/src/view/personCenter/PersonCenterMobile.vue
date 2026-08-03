@@ -73,11 +73,7 @@
         </div>
         <div class="person-menu">
           <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
-          <BButton
-            v-if="!isAndroidApp"
-            class="person-menu-item person-menu-item--button"
-            @click="handlePwaEntry"
-          >
+          <BButton v-if="!isAndroidApp" class="person-menu-item person-menu-item--button" @click="handlePwaEntry">
             <span class="person-menu-item-title">{{ $t('pwa.install') }}</span>
             <span class="person-menu-item-des">
               {{ pwaEntryDescription }}
@@ -127,10 +123,17 @@
             v-click-log="{ module: '个人中心', operation: `资源中心` }"
           >
             <span class="person-menu-item-title">{{ $t('personCenter.resourceCenter') }}</span>
-            <span class="person-menu-item-des"
-              >{{ $t('personCenter.resourceCenterDesc')
-              }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
+            <span class="person-menu-item-des">
+              <span class="person-menu-item-des-text">{{ $t('personCenter.resourceCenterDesc') }}</span>
+              <svg-icon
+                class="person-menu-item-arrow"
+                color="#999fa8"
+                style="rotate: 180deg"
+                :src="icon.arrow_left"
+                size="14"
+              />
+            </span>
+          </div>
           <div
             class="person-menu-item"
             @click="goToProfileModule('/ptrash')"
@@ -318,15 +321,29 @@
 
     .person-menu-item-title {
       font-size: 16px;
+      flex: 0 0 auto;
     }
 
     .person-menu-item-des {
+      min-width: 0;
+      margin-left: 16px;
       color: #999fa8;
       font-size: 14px;
       display: flex;
       align-items: center;
       gap: 5px;
       line-height: 100%;
+    }
+
+    .person-menu-item-des-text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .person-menu-item-arrow {
+      flex: 0 0 auto;
     }
   }
 

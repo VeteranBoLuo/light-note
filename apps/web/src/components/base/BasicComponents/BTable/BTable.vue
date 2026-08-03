@@ -38,43 +38,57 @@
       ref="tableBodyRef"
       class="table-body"
       :class="{ 'is-virtual': props.virtual }"
-      :style="virtualBodyStyle"
       @scroll.passive="handleBodyScroll"
     >
-      <template v-for="entry in renderedRows" :key="entry.item[props.rowKey] ?? entry.index">
-        <div
-          class="table-row"
-          :class="{ 'is-clickable': props.rowClickable }"
-          :style="[gridStyle, virtualRowStyle]"
-          @click="handleRowClick(entry.item, entry.index)"
-        >
-          <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
-            <BCheckbox
-              :checked="isRowSelected(entry.item)"
-              @change="(checked) => handleRowSelectChange(entry.item, checked)"
-            />
-          </div>
-          <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
-            <slot name="bodyCell" :text="entry.item[col.key]" :record="entry.item" :index="entry.index" :column="col">
-              <BTooltip v-if="col.ellipsis !== false" :title="String(entry.item[col.key] ?? '')">
-                <span class="cell-text">{{ entry.item[col.key] }}</span>
-              </BTooltip>
-              <template v-else>{{ entry.item[col.key] }}</template>
-            </slot>
-          </div>
+      <div class="table-row-sizer" :class="{ 'is-virtual': props.virtual }" :style="virtualSizerStyle">
+        <div class="table-row-window" :class="{ 'is-virtual': props.virtual }" :style="virtualWindowStyle">
+          <template v-for="entry in renderedRows" :key="entry.item[props.rowKey] ?? entry.index">
+            <div
+              class="table-row"
+              :class="{ 'is-clickable': props.rowClickable }"
+              :style="[gridStyle, virtualRowStyle]"
+              @click="handleRowClick(entry.item, entry.index)"
+            >
+              <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
+                <BCheckbox
+                  :checked="isRowSelected(entry.item)"
+                  @change="(checked) => handleRowSelectChange(entry.item, checked)"
+                />
+              </div>
+              <div
+                v-for="col in props.columns"
+                :key="col.key"
+                class="table-cell"
+                :style="{ width: col.width || 'auto' }"
+              >
+                <slot
+                  name="bodyCell"
+                  :text="entry.item[col.key]"
+                  :record="entry.item"
+                  :index="entry.index"
+                  :column="col"
+                >
+                  <BTooltip v-if="col.ellipsis !== false" :title="String(entry.item[col.key] ?? '')">
+                    <span class="cell-text">{{ entry.item[col.key] }}</span>
+                  </BTooltip>
+                  <template v-else>{{ entry.item[col.key] }}</template>
+                </slot>
+              </div>
+            </div>
+            <div
+              v-if="
+                !props.virtual &&
+                props.expandedRows?.length &&
+                entry.item[props.rowKey] != null &&
+                props.expandedRows.includes(entry.item[props.rowKey])
+              "
+              class="table-expand-row"
+            >
+              <slot name="expandedRow" :record="entry.item" />
+            </div>
+          </template>
         </div>
-        <div
-          v-if="
-            !props.virtual &&
-            props.expandedRows?.length &&
-            entry.item[props.rowKey] != null &&
-            props.expandedRows.includes(entry.item[props.rowKey])
-          "
-          class="table-expand-row"
-        >
-          <slot name="expandedRow" :record="entry.item" />
-        </div>
-      </template>
+      </div>
       <div v-if="props.loading" class="table-loading">
         <BLoading inline :loading="true" :title="props.loadingText" />
       </div>
@@ -259,14 +273,17 @@
       index: startIndex.value + offset,
     })),
   );
-  const virtualBodyStyle = computed(() => {
+  const virtualSizerStyle = computed(() => {
     if (!props.virtual) return undefined;
-    const bottomRows = Math.max(0, sortedData.value.length - endIndex.value);
+    const rowCount = sortedData.value.length;
+    const totalHeight = rowCount ? rowCount * Math.max(1, props.rowHeight) + Math.max(0, rowCount - 1) * rowGap : 0;
     return {
-      paddingTop: `${startIndex.value * rowPitch.value}px`,
-      paddingBottom: `${bottomRows * rowPitch.value}px`,
+      height: `${totalHeight}px`,
     };
   });
+  const virtualWindowStyle = computed(() =>
+    props.virtual ? { transform: `translateY(${startIndex.value * rowPitch.value}px)` } : undefined,
+  );
   const virtualRowStyle = computed(() =>
     props.virtual
       ? { height: `${Math.max(1, props.rowHeight)}px`, minHeight: `${Math.max(1, props.rowHeight)}px` }
@@ -432,7 +449,6 @@
   .table-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
     overflow-y: auto;
     min-height: 100px;
     max-height: 100%;
@@ -453,6 +469,32 @@
     max-height: none;
   }
 
+  .table-row-sizer {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+  }
+
+  .table-row-sizer.is-virtual {
+    position: relative;
+  }
+
+  .table-row-window {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .table-row-window.is-virtual {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    will-change: transform;
+  }
+
   .table-row {
     display: grid;
     min-height: 40px;
@@ -468,6 +510,7 @@
 
   .table-loading {
     min-height: 32px;
+    margin-top: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
