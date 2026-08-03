@@ -123,6 +123,7 @@ public final class MainActivity extends Activity {
             finish();
             return;
         }
+        disableSystemSplashExitAnimation();
         registerSystemBackCallback();
         resolvedNightTheme = WindowInsetsSupport.isNightMode(this);
         setContentView(createContentView());
@@ -136,6 +137,15 @@ public final class MainActivity extends Activity {
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
             webView.loadUrl(WebViewSupport.HOME_URL);
         }
+    }
+
+    private void disableSystemSplashExitAnimation() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            return;
+        }
+        // Activity 首帧已经由同背景、同标识的原生等待层完整覆盖；系统层直接移除，
+        // 避免 Android 12+ 默认退出动画与等待层后续淡出叠加成一次亮度闪烁。
+        getSplashScreen().setOnExitAnimationListener(splashScreenView -> splashScreenView.remove());
     }
 
     @Override
