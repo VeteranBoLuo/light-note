@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateLiveSmokeAttempt, parseLiveSmokeArgs, runLiveSmokeSuite } from './liveSmokeRunner.js';
+import {
+  buildLiveSmokeReport,
+  evaluateLiveSmokeAttempt,
+  parseLiveSmokeArgs,
+  runLiveSmokeSuite,
+} from './liveSmokeRunner.js';
 import { FULL_LIVE_SMOKE_CASES } from './liveSmokeCases.js';
 
 describe('DeepSeek 小型冒烟 Runner', () => {
@@ -28,6 +33,38 @@ describe('DeepSeek 小型冒烟 Runner', () => {
   it('CLI 只接受 quick/full 两种受控测试集', () => {
     expect(parseLiveSmokeArgs(['--suite', 'full', '--repeat', '1'])).toMatchObject({ suite: 'full', repeat: 1 });
     expect(() => parseLiveSmokeArgs(['--suite', 'unknown'])).toThrow('SUITE_NOT_SUPPORTED');
+  });
+
+  it('阶段性报告会累计已完成用例和 Token，但不会提前判整套通过', () => {
+    const report = buildLiveSmokeReport({
+      suiteId: 'quick',
+      totalCases: 6,
+      provider: { provider: 'deepseek', model: 'synthetic-model' },
+      results: [
+        {
+          id: 'synthetic-case',
+          safetyCritical: false,
+          passedAttempts: 1,
+          totalAttempts: 1,
+          passRate: 1,
+          attempts: [
+            {
+              passed: true,
+              capabilities: [],
+              tools: [],
+              errors: [],
+              durationMs: 10,
+              usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
+            },
+          ],
+        },
+      ],
+    });
+    expect(report).toMatchObject({
+      passed: false,
+      progress: { completedCases: 1, totalCases: 6 },
+      usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10, durationMs: 10 },
+    });
   });
 
   it('依赖任务会拒绝同轮提前创建笔记', () => {

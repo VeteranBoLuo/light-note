@@ -45,6 +45,39 @@ export function evaluateLiveSmokeAttempt(smokeCase, parsed) {
   return { passed: errors.length === 0, capabilities, tools, errors };
 }
 
+function summarizeUsage(results) {
+  return results.reduce(
+    (total, result) => {
+      result.attempts.forEach((attempt) => {
+        total.promptTokens += attempt.usage.promptTokens;
+        total.completionTokens += attempt.usage.completionTokens;
+        total.totalTokens += attempt.usage.totalTokens;
+        total.durationMs += attempt.durationMs;
+      });
+      return total;
+    },
+    { promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: 0 },
+  );
+}
+
+export function buildLiveSmokeReport({ suiteId, totalCases, provider, results }) {
+  const completedCases = results.length;
+  const passed =
+    completedCases === totalCases &&
+    results.every((result) => (result.safetyCritical ? result.passRate === 1 : result.passRate >= 0.5));
+  return {
+    passed,
+    dryRun: false,
+    suite: suiteId,
+    provider,
+    usage: summarizeUsage(results),
+    results,
+    progress: { completedCases, totalCases },
+    // 本 Runner 只把工具 JSON Schema 交给 Planner，从未调用任何 tool.execute。
+    execution: { mode: 'plan_only', toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
+  };
+}
+
 export async function runLiveSmokeSuite(options) {
   const suite = getLiveSmokeSuite(options.suite || 'quick');
   if (!options.live) {
@@ -77,6 +110,7 @@ export async function runLiveSmokeSuite(options) {
     semanticCatalog: catalog,
     semanticCatalogText: semanticPlanner.formatSemanticCapabilityCatalog(catalog),
   });
+  const provider = getActiveProviderInfo('deepseek');
   const results = [];
   for (const smokeCase of suite.cases) {
     const attempts = [];
@@ -118,30 +152,13 @@ export async function runLiveSmokeSuite(options) {
       passRate: passedAttempts / attempts.length,
       attempts,
     });
+    if (typeof options.onProgress === 'function') {
+      await options.onProgress(
+        buildLiveSmokeReport({ suiteId: suite.id, totalCases: suite.cases.length, provider, results }),
+      );
+    }
   }
-  const passed = results.every((result) => (result.safetyCritical ? result.passRate === 1 : result.passRate >= 0.5));
-  const usage = results.reduce(
-    (total, result) => {
-      result.attempts.forEach((attempt) => {
-        total.promptTokens += attempt.usage.promptTokens;
-        total.completionTokens += attempt.usage.completionTokens;
-        total.totalTokens += attempt.usage.totalTokens;
-        total.durationMs += attempt.durationMs;
-      });
-      return total;
-    },
-    { promptTokens: 0, completionTokens: 0, totalTokens: 0, durationMs: 0 },
-  );
-  return {
-    passed,
-    dryRun: false,
-    suite: suite.id,
-    provider: getActiveProviderInfo('deepseek'),
-    usage,
-    results,
-    // 本 Runner 只把工具 JSON Schema 交给 Planner，从未调用任何 tool.execute。
-    execution: { mode: 'plan_only', toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
-  };
+  return buildLiveSmokeReport({ suiteId: suite.id, totalCases: suite.cases.length, provider, results });
 }
 
 export function formatLiveSmokeText(report) {

@@ -32,7 +32,7 @@ describe('AI 冒烟异步运行服务', () => {
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[{ released: 1 }]]);
-    mocks.runSuite.mockResolvedValueOnce({
+    const completedReport = {
       passed: true,
       provider: { provider: 'deepseek', model: 'synthetic-model' },
       usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
@@ -55,6 +55,12 @@ describe('AI 冒烟异步运行服务', () => {
           ],
         },
       ],
+      progress: { completedCases: 1, totalCases: 1 },
+      execution: { mode: 'plan_only', toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
+    };
+    mocks.runSuite.mockImplementationOnce(async (options) => {
+      await options.onProgress(completedReport);
+      return completedReport;
     });
 
     await expect(
@@ -66,10 +72,19 @@ describe('AI 冒烟异步运行服务', () => {
       caseCount: 37,
     });
     await vi.waitFor(() => expect(mocks.release).toHaveBeenCalledOnce());
-    expect(mocks.runSuite).toHaveBeenCalledWith({ live: true, suite: 'full', repeat: 1, format: 'json' });
-    const resultWrite = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('result_json'));
-    expect(resultWrite?.[1]).toContain(15);
-    expect(JSON.stringify(resultWrite?.[1])).not.toContain('synthetic prompt');
+    expect(mocks.runSuite).toHaveBeenCalledWith(
+      expect.objectContaining({
+        live: true,
+        suite: 'full',
+        repeat: 1,
+        format: 'json',
+        onProgress: expect.any(Function),
+      }),
+    );
+    const resultWrites = mocks.poolQuery.mock.calls.filter(([sql]) => String(sql).includes('result_json'));
+    expect(resultWrites).toHaveLength(2);
+    expect(resultWrites[0]?.[1]).toContain(15);
+    expect(JSON.stringify(resultWrites)).not.toContain('synthetic prompt');
   });
 
   it('拒绝未登记的测试集且不会访问数据库', async () => {

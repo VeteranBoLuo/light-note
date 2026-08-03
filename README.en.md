@@ -8,11 +8,11 @@
 <h1 align="center">📦 轻笺 · LightNote</h1>
 
 <p align="center">
-  <b>A free online workspace for bookmarks, notes, and cloud files</b>
+  <b>A free online workspace for bookmarks, notes, tasks, and cloud files</b>
   <br>
-  <sub>Bookmarks · Notes · Cloud files · AI assistant · Cross-device sync</sub>
+  <sub>Bookmarks · Notes · Cloud files · Tasks · AI assistant · Cross-device sync</sub>
   <br>
-  <sub>免费的书签、笔记与云文件管理平台</sub>
+  <sub>免费的书签、笔记、待办与云文件管理平台</sub>
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
 ❝ Quick notes scattered across Apple Notes, Notion, local txt → **can't find any of them** ❞  
 ❝ Work files arriving over chat, shuffled through cloud drives → **endless back-and-forth** ❞  
 
-**LightNote puts them all in one place.** Bookmarks auto-fetched, notes jotted on the fly, files stored in the cloud — all tied together by unified tags.  
+**LightNote puts them all in one place.** Bookmarks are auto-fetched, notes captured on the fly, files stored in the cloud, and tasks kept on schedule — with unified tags connecting your materials.
 Open it in your browser and get started. The hosted service is currently **free to use**, with no deployment required.
 
 <p align="center">
@@ -75,8 +75,18 @@ Keep files organized by folder and type, with upload, search, online preview, dr
 
 ---
 
+**✅ Task management**
+
+Turn saved material into next actions. Switch between list, agenda, and calendar views; set priorities, due times, one-time or recurring reminders, recurring tasks, and checklists; and link bookmarks, notes, and files.
+
+<p align="center">
+  <img src="apps/web/public/screenshots/todo.png" alt="Task management" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
 **🔍 Global search**  
-Search bookmarks, notes, tags, and files across every module at once — keyword + tag filtering, found in seconds.
+Search bookmarks, notes, files, tags, and tasks across every module at once — keyword + tag filtering, found in seconds.
 
 <p align="center">
   <img src="apps/web/public/screenshots/search.png" alt="Global search" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -85,7 +95,7 @@ Search bookmarks, notes, tags, and files across every module at once — keyword
 ---
 
 **🤖 AI assistant**  
-Built-in conversational AI that can call tools to look up your bookmarks, notes, and growth data — with web search, deep thinking, and streaming responses.
+Built-in conversational AI that can call tools to look up your bookmarks, notes, tasks, and growth data — with web search, deep thinking, and streaming responses.
 
 <p align="center">
   <img src="apps/web/public/screenshots/ai-chat.png" alt="AI assistant" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -114,6 +124,7 @@ See user suggestions, developer replies, and real progress in public. Follow wha
 | Bookmarks | ✅ tags + search | ❌ too heavy | ✅ | ✅ |
 | Note writing | ✅ rich text + Markdown | ✅ | ❌ | ❌ |
 | File storage | ✅ cloud + preview | ❌ paid | ❌ | ❌ |
+| Task planning | ✅ list + agenda + calendar | ✅ | ❌ | ❌ |
 | Unified tags | ✅ **cross-type** | ⚠️ per module | ✅ | ❌ |
 | Hosted plan | 🆓 **free to use** | 💰 $10/mo | 💰 ¥10/mo | 💰 $3+/mo |
 | Feel | ⚡ **light & fast** | ❌ slow | ✅ fast | ✅ fast |

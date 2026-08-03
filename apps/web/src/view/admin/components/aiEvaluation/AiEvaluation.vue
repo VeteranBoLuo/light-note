@@ -242,20 +242,38 @@
     text-align: center;
   }
   .ai-evaluation__runs {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
     display: grid;
+    grid-auto-rows: max-content;
+    align-content: start;
     gap: 10px;
     padding-bottom: 20px;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
   .ai-evaluation__run {
+    min-width: 0;
     overflow: hidden;
     border: 1px solid var(--card-border-color);
     border-radius: 12px;
     background: var(--card-background);
   }
   .ai-evaluation__run-head {
+    min-width: 0;
     display: grid;
-    grid-template-columns: 76px minmax(180px, 1fr) repeat(5, auto);
-    gap: 16px;
+    grid-template-columns:
+      minmax(64px, 76px)
+      minmax(140px, 1fr)
+      minmax(112px, 150px)
+      minmax(76px, 108px)
+      minmax(76px, 108px)
+      minmax(56px, 76px)
+      minmax(132px, 168px);
+    gap: 10px;
     align-items: center;
     width: 100%;
     padding: 14px 16px;
@@ -264,6 +282,16 @@
     color: var(--text-color);
     text-align: left;
     cursor: pointer;
+  }
+  .ai-evaluation__run-head > * {
+    min-width: 0;
+  }
+  .ai-evaluation__run-head > strong,
+  .ai-evaluation__run-head > span,
+  .ai-evaluation__run-head > time {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .ai-evaluation__status {
     color: var(--desc-color);
@@ -308,6 +336,16 @@
     }
     .ai-evaluation__case {
       grid-template-columns: 20px 1fr auto;
+    }
+  }
+  @media (min-width: 761px) and (max-width: 1180px) {
+    .ai-evaluation__run-head {
+      grid-template-columns: 72px minmax(140px, 1fr) repeat(2, minmax(80px, auto));
+    }
+    .ai-evaluation__run-head > :nth-child(5),
+    .ai-evaluation__run-head > :nth-child(6),
+    .ai-evaluation__run-head > :nth-child(7) {
+      white-space: normal;
     }
   }
 </style>

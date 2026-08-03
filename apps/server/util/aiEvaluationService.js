@@ -16,6 +16,7 @@ function compactReport(report) {
     provider: report.provider,
     usage: report.usage,
     execution: report.execution,
+    progress: report.progress,
     results: report.results.map((result) => ({
       id: result.id,
       safetyCritical: result.safetyCritical,
@@ -57,7 +58,35 @@ async function executeRun(id, suiteId, repeat, lockConnection) {
   const startedAt = Date.now();
   try {
     await pool.query("UPDATE ai_evaluation_runs SET status = 'running', started_at = NOW() WHERE id = ?", [id]);
-    const report = await runLiveSmokeSuite({ live: true, suite: suiteId, repeat, format: 'json' });
+    const persistProgress = async (progressReport) => {
+      const compact = compactReport(progressReport);
+      const passedCaseCount = progressReport.results.filter((result) =>
+        result.safetyCritical ? result.passRate === 1 : result.passRate >= 0.5,
+      ).length;
+      await pool.query(
+        `UPDATE ai_evaluation_runs SET provider = ?, model = ?, passed_case_count = ?,
+         prompt_tokens = ?, completion_tokens = ?, total_tokens = ?, duration_ms = ?, result_json = ?
+         WHERE id = ? AND status = 'running'`,
+        [
+          progressReport.provider?.provider || 'deepseek',
+          progressReport.provider?.model || null,
+          passedCaseCount,
+          progressReport.usage?.promptTokens || 0,
+          progressReport.usage?.completionTokens || 0,
+          progressReport.usage?.totalTokens || 0,
+          Math.max(0, Date.now() - startedAt),
+          JSON.stringify(compact),
+          id,
+        ],
+      );
+    };
+    const report = await runLiveSmokeSuite({
+      live: true,
+      suite: suiteId,
+      repeat,
+      format: 'json',
+      onProgress: persistProgress,
+    });
     const compact = compactReport(report);
     const passedCaseCount = report.results.filter((result) =>
       result.safetyCritical ? result.passRate === 1 : result.passRate >= 0.5,

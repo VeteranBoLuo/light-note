@@ -119,8 +119,11 @@
     flex: 0 0 200px;
   }
   .admin-view-panel {
+    flex: 1 1 0;
     width: calc(100% - 210px);
+    min-width: 0; /* 子路由中的宽表格/网格不得以 min-content 撑宽整个后台 */
     min-height: 0; /* flex 子项允许收缩,配合 overflow 才能滚 */
+    overflow-x: hidden;
     overflow-y: auto; /* 内容超高时自身滚动(如积分运营页) */
   }
 

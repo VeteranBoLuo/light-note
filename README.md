@@ -8,11 +8,11 @@
 <h1 align="center">📦 轻笺 · LightNote</h1>
 
 <p align="center">
-  <b>免费的书签、笔记与云文件管理平台</b>
+  <b>免费的书签、笔记、待办与云文件管理平台</b>
   <br>
-  <sub>书签 · 笔记 · 云文件 · AI 助手 · 跨设备同步</sub>
+  <sub>书签 · 笔记 · 云文件 · 待办 · AI 助手 · 跨设备同步</sub>
   <br>
-  <sub>A free online workspace for bookmarks, notes, cloud files and AI-assisted organization.</sub>
+  <sub>A free online workspace for bookmarks, notes, tasks, cloud files and AI-assisted organization.</sub>
 </p>
 
 <p align="center">
@@ -36,7 +36,7 @@
 ❝ 随手记的笔记散落在备忘录、Notion、本地 txt → **找不到** ❞  
 ❝ 工作文件在微信发来、网盘传去 → **来回倒腾** ❞  
 
-**轻笺把它们放到一个地方。** 书签自动抓取、笔记随手记录、文件云端存储，统一标签串联。  
+**轻笺把它们放到一个地方。** 书签自动抓取、笔记随手记录、文件云端存储、待办按计划推进，统一标签串联资料。
 浏览器打开就能用，当前提供**免费在线使用**，不需要自行部署。
 
 <p align="center">
@@ -75,8 +75,18 @@
 
 ---
 
+**✅ 待办管理**
+
+把收藏的资料变成下一步行动。支持列表、议程和日历三种视图，可设置优先级、截止时间、单次或周期提醒、重复任务与简易清单，并能关联书签、笔记和文件。
+
+<p align="center">
+  <img src="apps/web/public/screenshots/todo.png" alt="待办管理" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
+</p>
+
+---
+
 **🔍 全局搜索**  
-书签、笔记、标签、文件跨模块统一搜，关键词 + 标签联合过滤，几秒定位。
+书签、笔记、文件、标签和待办跨模块统一搜，关键词 + 标签联合过滤，几秒定位。
 
 <p align="center">
   <img src="apps/web/public/screenshots/search.png" alt="全局搜索" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -85,7 +95,7 @@
 ---
 
 **🤖 AI 助手**  
-内置对话式 AI，可调用工具帮你查询书签、笔记、成长数据，支持联网搜索、深度思考与流式响应。
+内置对话式 AI，可调用工具帮你查询书签、笔记、待办和成长数据，支持联网搜索、深度思考与流式响应。
 
 <p align="center">
   <img src="apps/web/public/screenshots/ai-chat.png" alt="AI 助手" width="70%" style="border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.15)" />
@@ -114,6 +124,7 @@
 | 书签管理 | ✅ 标签+搜索 | ❌ 太重 | ✅ | ✅ |
 | 笔记书写 | ✅ 富文本 + Markdown | ✅ | ❌ | ❌ |
 | 文件存储 | ✅ 云端+预览 | ❌ 付费 | ❌ | ❌ |
+| 待办规划 | ✅ 列表 + 议程 + 日历 | ✅ | ❌ | ❌ |
 | 统一标签 | ✅ **跨类型** | ⚠️ 分模块 | ✅ | ❌ |
 | 在线版 | 🆓 **免费使用** | 💰 $10/月 | 💰 ¥10/月 | 💰 $3+/月 |
 | 体验 | ⚡ **轻量快速** | ❌ 慢 | ✅ 快 | ✅ 快 |
