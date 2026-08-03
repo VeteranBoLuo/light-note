@@ -85,7 +85,7 @@
           ><div style="color: var(--text-color)">{{ selectedRecord.ip || '-' }}</div></div
         >
         <div
-          ><div style="font-size: 12px; color: var(--desc-color)">最近活跃</div
+          ><div style="font-size: 12px; color: var(--desc-color)">最近在线</div
           ><div style="color: var(--text-color)">{{ selectedRecord.lastActiveTime || '-' }}</div></div
         >
         <div
@@ -236,13 +236,16 @@
   ];
 
   function saveUserInfo() {
-    userApi.updateUserInfo(editData.value).then((res) => {
-      if (res.status) {
-        message.success('保存成功');
-        editVisible.value = false;
-        void reload();
-      }
-    });
+    const record = editData.value || {};
+    userApi
+      .updateUserInfo({ id: record.id, alias: record.alias, email: record.email, role: record.role })
+      .then((res) => {
+        if (res.status) {
+          message.success('保存成功');
+          editVisible.value = false;
+          void reload();
+        }
+      });
   }
   onMounted(() => {
     void reload();

@@ -14,6 +14,8 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import PhoneMenu from '@/components/base/phoneComponents/PhoneMenu/PhoneMenu.vue';
   import router from '@/router';
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const menuList = [
@@ -65,6 +67,12 @@
         title: 'AI 回答反馈',
         icon: icon.ai.feedbackDown,
         url: '/aiFeedback',
+      },
+      {
+        id: 'aiEvaluation',
+        title: t('aiEvaluationAdmin.title'),
+        icon: icon.userCenter.log,
+        url: '/aiEvaluation',
       },
       {
         id: 'conversion',

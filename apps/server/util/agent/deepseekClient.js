@@ -67,8 +67,8 @@ const PROVIDERS = {
   },
 };
 
-function getProviderConfig() {
-  const name = process.env.AGENT_LLM_PROVIDER || 'deepseek';
+function getProviderConfig(providerOverride) {
+  const name = providerOverride || process.env.AGENT_LLM_PROVIDER || 'deepseek';
   const cfg = PROVIDERS[name];
   if (!cfg) throw new Error(`未知的 AGENT_LLM_PROVIDER: ${name}（可选 ${Object.keys(PROVIDERS).join('/')}）`);
   return { name, ...cfg };
@@ -119,8 +119,8 @@ export function getActiveProviderPricing() {
   return { provider: cfg.name, price: cfg.price };
 }
 
-export function getActiveProviderInfo() {
-  const cfg = getProviderConfig();
+export function getActiveProviderInfo(providerOverride) {
+  const cfg = getProviderConfig(providerOverride);
   return {
     provider: cfg.name,
     model: getModel(cfg),
@@ -176,7 +176,7 @@ function combineSignals(signals) {
  * @returns {Promise<DeepSeekResult>}
  */
 export async function requestDeepSeek(messages, options = {}) {
-  const cfg = getProviderConfig();
+  const cfg = getProviderConfig(options.providerOverride);
   const apiKey = getApiKey(cfg);
   const providerFetch = getProviderFetch();
   const body = {
@@ -244,7 +244,7 @@ export async function requestDeepSeek(messages, options = {}) {
  * @returns {Promise<{ content: string, leakedToolCall: boolean }>}
  */
 export async function requestDeepSeekStream(messages, options = {}) {
-  const cfg = getProviderConfig();
+  const cfg = getProviderConfig(options.providerOverride);
   const apiKey = getApiKey(cfg);
   const providerFetch = getProviderFetch();
 

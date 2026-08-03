@@ -19,6 +19,7 @@ import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
 import { globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
+import { ensureAiEvaluationSchema } from './util/aiEvaluationSchema.js';
 import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
 import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
 import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
@@ -94,6 +95,7 @@ ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );
 ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureAiEvaluationSchema().catch((err) => console.error('AI 评测数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 startAiConversationRetentionScheduler().catch((err) =>
   console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );

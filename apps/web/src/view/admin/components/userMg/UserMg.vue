@@ -74,7 +74,7 @@
           ><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div
         >
         <div
-          ><label>最近活跃</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
+          ><label>最近在线</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
         >
         <div
           ><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div
@@ -173,7 +173,7 @@
       { title: '昵称', key: 'alias', width: '150px' },
       { title: '邮箱', key: 'email', width: '1fr' },
       { title: 'IP', key: 'ip', width: '150px' },
-      { title: '最近活跃', key: 'lastActiveTime', width: '1fr', sortable: true },
+      { title: '最近在线', key: 'lastActiveTime', width: '1fr', sortable: true },
       { title: '注册时间', key: 'createTime', width: '1fr' },
       { title: '操作', key: 'operation', width: '190px' },
     ];
@@ -281,13 +281,16 @@
   ];
 
   function saveUserInfo() {
-    userApi.updateUserInfo(editData.value).then((res) => {
-      if (res.status) {
-        message.success('保存成功');
-        editVisible.value = false;
-        void resetList();
-      }
-    });
+    const record = editData.value || {};
+    userApi
+      .updateUserInfo({ id: record.id, alias: record.alias, email: record.email, role: record.role })
+      .then((res) => {
+        if (res.status) {
+          message.success('保存成功');
+          editVisible.value = false;
+          void resetList();
+        }
+      });
   }
 
   // 发通知能力已收拢至独立「通知中心」模块(顶部管理 → 通知中心),此处不再内联,避免功能散落。

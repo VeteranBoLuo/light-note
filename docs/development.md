@@ -264,7 +264,7 @@ try {
 - AI 单测在 `NODE_ENV=test` 下不得加载真实 `.env`，不得建立真实 DB/Redis/Provider 或外网连接；通过注入 adapter、mock pool 和受控夹具覆盖失败路径。
 - 至少覆盖 owner A → B → A、readonly 写阻断、schema 外参数、并发额度、重复请求、SSE 缺终态/断线恢复、记忆影响元数据去敏与临时会话禁用、假引用、长文档后半部、Change Set 冲突/撤销和临时数据过期。
 - 离线黄金集只能使用不可回推真实用户的合成材料。静态 Runner 通过不等于自然语言质量通过；真实发布还需要人工引用蕴含抽检和预发布任务验收。
-- AI 黄金矩阵变更必须同时通过生成器 `--check` 和 `eval:ai-assistant`；两步已是 CI 阻断项，禁止改为 `continue-on-error` 或只在本地手工运行。静态 CI 不调用网络、模型或数据库，真实 Agent adapter/回放应作为独立层接入，不能污染确定性门槛。
+- AI 黄金矩阵变更必须同时通过生成器 `--check` 和 `eval:ai-assistant`；确定性 Agent 回放和 AI 关键 UI E2E 同样是 CI 阻断项。以上门禁禁止 `continue-on-error`，且不得调用真实 Provider。DeepSeek 冒烟提供 6 条快速集和 37 条完整集，只能由 Root 在后台手动触发或开发者显式执行 `--live`，不得进入 CI、部署脚本或定时任务；执行层只验证规划，工具执行数恒为 0，不得读写用户业务数据，结果不得保存完整问题/回答，仅可写入独立评测运行记录。
 - 引用评测须把“引用键存在/定位成功”和“证据是否支持对应主张”分开记录；语义支持度只能来自完全合成的受控事实或人工标注，不允许用字符串包含、关键词重合或同源 ID 自动判定蕴含。
 - AI 数据库迁移、环境变量、schema assertions、灰度和回滚步骤见 `docs/plan/ai-assistant-rollout-runbook.md`。
 - 用新唯一索引替换旧唯一索引时，先按新索引的归一化表达式做重复键 preflight，再 `ADD UNIQUE`，确认成功后才 `DROP` 旧索引；顺序不可反转。迁移后 assertion 要同时证明新索引列序/唯一性正确且旧索引已移除，不能只检查脚本退出码。

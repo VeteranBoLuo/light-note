@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { createNotification } from './notification.js';
 import { sendTrackedEmail } from './emailDelivery.js';
+import { formatTodoDueAt, normalizeTodoLocale } from './todoDateFormat.js';
 
 const POLL_INTERVAL_MS = 60 * 1000;
 const BATCH_SIZE = 50;
@@ -106,13 +107,36 @@ async function claimReminder(id) {
     }
     await connection.query("UPDATE todo_reminders SET status = 'processing', update_time = NOW() WHERE id = ?", [id]);
     await connection.commit();
-    return { ...reminder, todo: todoRows[0] };
+    return { ...reminder, locale: normalizeTodoLocale(preferences.lang), todo: todoRows[0] };
   } catch (error) {
     await connection.rollback().catch(() => {});
     throw error;
   } finally {
     connection.release();
   }
+}
+
+export function buildTodoReminderEmail(reminder, siteUrl = process.env.SITE_URL || 'https://boluo66.top') {
+  const locale = normalizeTodoLocale(reminder?.locale);
+  const english = locale === 'en-US';
+  const title = String(reminder?.todo?.title || '');
+  const description = reminder?.todo?.description ? String(reminder.todo.description).slice(0, 1000) : '';
+  const dueAt = formatTodoDueAt(reminder?.todo?.dueAt, locale);
+  const link = `/inbox?tab=todo&todoId=${encodeURIComponent(reminder?.todoId || '')}`;
+  const cleanSiteUrl = String(siteUrl).replace(/\/$/, '');
+  const lines = english
+    ? ['Your Light Note todo reminder is due.', '', `Todo: ${title}`]
+    : ['你设置的待办提醒已到时间。', '', `待办：${title}`];
+  if (description) lines.push(english ? `Description: ${description}` : `说明：${description}`);
+  if (dueAt) lines.push(english ? `Due: ${dueAt}` : `截止时间：${dueAt}`);
+  lines.push(
+    '',
+    `${english ? 'Open Light Note “Inbox” to handle it: ' : '打开轻笺“待处理”查看：'}${cleanSiteUrl}${link}`,
+  );
+  return {
+    subject: `${english ? 'Light Note todo reminder: ' : '轻笺待办提醒：'}${title.slice(0, 120)}`,
+    text: lines.join('\n'),
+  };
 }
 
 async function deliverReminder(reminder) {
@@ -129,18 +153,17 @@ async function deliverReminder(reminder) {
   }
   if (reminder.channel === 'email') {
     if (!reminder.targetEmail) throw new Error('邮件提醒缺少收件地址');
-    const dueText = reminder.todo.dueAt ? `\n截止时间：${String(reminder.todo.dueAt)}` : '';
-    const description = reminder.todo.description ? `\n说明：${String(reminder.todo.description).slice(0, 1000)}` : '';
     const siteUrl = String(process.env.SITE_URL || 'https://boluo66.top').replace(/\/$/, '');
+    const email = buildTodoReminderEmail(reminder, siteUrl);
     await sendTrackedEmail({
       emailType: 'todo_reminder',
       userId: reminder.userId,
       recipient: reminder.targetEmail,
-      subject: `轻笺待办提醒：${String(reminder.todo.title || '').slice(0, 120)}`,
+      subject: email.subject,
       businessType: 'todo',
       businessId: reminder.todoId,
       attemptNo: Number(reminder.retryCount || 0) + 1,
-      text: `你设置的待办提醒已到时间。\n\n待办：${String(reminder.todo.title || '')}${description}${dueText}\n\n打开轻笺“待处理”查看：${siteUrl}${link}`,
+      text: email.text,
     });
     return;
   }

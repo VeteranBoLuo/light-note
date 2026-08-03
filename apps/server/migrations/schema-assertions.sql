@@ -8,6 +8,7 @@ SELECT '[1] missing_table' AS check_name, expected.t AS detail FROM (
   UNION ALL SELECT 'ai_content_generations' UNION ALL SELECT 'ai_change_sets' UNION ALL SELECT 'ai_change_items'
   UNION ALL SELECT 'ai_memories' UNION ALL SELECT 'ai_response_events'
   UNION ALL SELECT 'ai_product_events' UNION ALL SELECT 'ai_token_reservations'
+  UNION ALL SELECT 'ai_evaluation_runs'
 ) expected
 LEFT JOIN information_schema.tables a ON a.table_schema=DATABASE() AND a.table_name=expected.t
 WHERE a.table_name IS NULL;

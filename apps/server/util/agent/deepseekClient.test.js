@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
   getActiveProviderPricing,
+  getActiveProviderInfo,
   getNoteAssistMaxTokens,
   requestDeepSeek,
   requestDeepSeekStream,
@@ -25,6 +26,12 @@ describe('Agent LLM 供应商切换(AGENT_LLM_PROVIDER)', () => {
   it('AGENT_LLM_PROVIDER=qwen 时单价切换为 0.2/2', () => {
     process.env.AGENT_LLM_PROVIDER = 'qwen';
     expect(getActiveProviderPricing()).toEqual({ provider: 'qwen', price: { input: 0.2, output: 2 } });
+  });
+
+  it('显式 providerOverride 只作用于当前调用，不改写全局供应商', () => {
+    process.env.AGENT_LLM_PROVIDER = 'qwen';
+    expect(getActiveProviderInfo('deepseek').provider).toBe('deepseek');
+    expect(getActiveProviderInfo().provider).toBe('qwen');
   });
 
   it('未知的 AGENT_LLM_PROVIDER 取值应报错,而不是静默回退', () => {

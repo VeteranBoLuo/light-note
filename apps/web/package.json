@@ -15,6 +15,7 @@
     "prettier": "prettier --write",
     "typecheck": "tsc --noEmit --skipLibCheck",
     "test": "vitest run",
+    "test:e2e:ai": "node e2e/ai-critical-flow.e2e.mjs",
     "test:watch": "vitest",
     "sql": "node src/sql/index.ts",
     "websocket": "node src/http/websocket.ts"

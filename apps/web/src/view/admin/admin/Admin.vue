@@ -20,7 +20,9 @@
   import { onMounted, ref } from 'vue';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
+  import { useI18n } from 'vue-i18n';
 
+  const { t } = useI18n();
   const checkId = ref('operationLog');
   const bookmark = bookmarkStore();
   const viewOptions = ref([
@@ -68,6 +70,11 @@
       id: 'aiFeedback',
       title: 'AI 回答反馈',
       icon: icon.ai.feedbackDown,
+    },
+    {
+      id: 'aiEvaluation',
+      title: t('aiEvaluationAdmin.title'),
+      icon: icon.userCenter.log,
     },
     {
       id: 'conversion',

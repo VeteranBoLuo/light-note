@@ -1,6 +1,6 @@
-# 轻笺 AI 助手离线黄金评测
+# 轻笺 AI 助手评测
 
-本目录提供 AI 助手产品能力黄金矩阵与确定性回归骨架。它只读取仓库文件，不加载 `.env`，不连接数据库、Redis 或模型供应商，也不访问网络。
+本目录提供三层 AI 助手回归能力。离线黄金矩阵与确定性 Agent 回放不加载 `.env`，不连接数据库、Redis、模型供应商或网络；真实 DeepSeek 冒烟是独立的人工触发层，不进入提交、CI 或上线门禁。
 
 ## 目录内容
 
@@ -10,6 +10,8 @@
 - `citationSemanticEvaluator.js`：把回答中的主张与受控 evidence 绑定，基于夹具/人工 `supportsClaim` 标注输出支持、冲突和证据不足结果；不使用关键词重合冒充自然语言蕴含。
 - `runner.js`：黄金集 lint、JSON/JSONL 结果读取和发布门槛检查。
 - `schema.test.js` / `runner.test.js`：隐私声明、覆盖分布、严格校验和安全失败回归。
+- `agentReplayAdapter.js` / `agentReplayCases.js`：把声明式 Provider 回放计划接入真实 `agentChat` 主链，覆盖计划修复、能力纠错、确认和显式 URL 读取；测试全程使用合成输入和 mock Provider。
+- `liveSmokeCases.js` / `liveSmokeRunner.js`：提供 6 条快速集与 37 条完整集；完整集覆盖全部 34 个普通用户工具，并验证普通对话、依赖顺序和永久删除边界。两套测试都只检查 DeepSeek 返回的结构化计划和工具选择，工具执行数恒为 0，不读写用户业务数据；CLI 默认 dry-run，只有显式 `--live` 才会消耗 Token。
 
 黄金集保留原 70 条 Ask / Organize 核心任务，并新增 198 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
 
@@ -67,6 +69,21 @@ node apps/server/evaluation/ai-assistant/generate-golden-tasks.js --check
 ```bash
 pnpm --filter server run eval:ai-assistant --format json
 ```
+
+检查真实冒烟配置但不调用模型：
+
+```bash
+pnpm --filter server run smoke:ai-assistant
+```
+
+受控排障时可显式选择快速集或完整集：
+
+```bash
+pnpm --filter server run smoke:ai-assistant -- --suite quick --live --repeat 2
+pnpm --filter server run smoke:ai-assistant -- --suite full --live --repeat 1
+```
+
+真实调用必须由 Root 在“后台管理 → AI 问答测试”选择测试集并二次确认后手动触发。后台按 1～5 轮执行、互斥运行并记录用例通过率、耗时和 Token；只保存能力、工具名、稳定错误、零工具执行证明与统计，不保存完整问题或回答，终态记录保留 90 天。测试不访问书签、笔记、文件、待办等用户业务数据；仅测试运行记录会写入独立评测表。CLI 的 `--live` 仅用于开发者受控排障，不属于发布步骤。
 
 对适配后的完整结果做回归：
 
@@ -128,4 +145,4 @@ Runner 接受 JSON 数组或每行一条的 JSONL。适配器只应输出结构�
 5. 每个非 Ask 能力任务至少包含一个对应领域状态信号；新增能力不能只靠通用 `owner_domain_validated` 凑覆盖。
 6. 自动规则只负责路由、权限、来源存在性、定位、确认、幂等和可观察生命周期事实；答案有用性和引用是否真正蕴含主张仍需人工抽检。
 
-建议把适配器放在 CI 或受控离线回放层，而不是让这个 Runner 直接调用线上 Agent。这样测试环境的“零外部连接”边界可以保持可审计。
+确定性回放与关键 UI E2E 是 CI 阻断项，且必须保持零 Provider 调用。真实 DeepSeek 冒烟只能人工触发；不得把 `--live` 命令加入 CI、部署脚本或定时任务。

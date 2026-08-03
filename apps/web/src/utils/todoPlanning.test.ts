@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dueForTodoGroup, todoGroupKey, todoSnoozeAt, toTodoLocalInput } from './todoPlanning';
+import { dueForTodoGroup, formatTodoDateTime, todoGroupKey, todoSnoozeAt, toTodoLocalInput } from './todoPlanning';
 
 describe('todoPlanning', () => {
   const now = new Date(2026, 6, 30, 16, 30);
@@ -29,5 +29,22 @@ describe('todoPlanning', () => {
   it('编辑服务端 DATETIME 时保持原墙上时间，不重复叠加时区偏移', () => {
     expect(toTodoLocalInput('2026-07-30 18:25:00')).toBe('2026-07-30T18:25');
     expect(toTodoLocalInput('2026-07-30T18:25')).toBe('2026-07-30T18:25');
+  });
+
+  it('待办列表使用今天、明天和同年日期的日常格式', () => {
+    const labels = { today: '今天', tomorrow: '明天' };
+    expect(formatTodoDateTime('2026-07-30 09:00:00', 'zh-CN', { relative: true, now, relativeLabels: labels })).toBe(
+      '今天 09:00',
+    );
+    expect(
+      formatTodoDateTime('2026-07-31 09:00:00', 'zh-CN', { relative: true, now, relativeLabels: labels }),
+    ).toBe('明天 09:00');
+    expect(formatTodoDateTime('2026-08-02 09:00:00', 'zh-CN', { relative: true, includeYear: false, now })).toBe(
+      '8月2日（周日）09:00',
+    );
+  });
+
+  it('英文格式与邮件使用同样的常见写法', () => {
+    expect(formatTodoDateTime('2026-08-02 09:00:00', 'en-US', { now })).toBe('Sun, Aug 2, 2026, 9:00 AM');
   });
 });

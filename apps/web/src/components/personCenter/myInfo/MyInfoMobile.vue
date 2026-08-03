@@ -2,9 +2,19 @@
   <CommonContainer :title="t('myInfo.title')">
     <div class="home-container">
       <div style="width: 100%" class="flex-justify-center">
-        <div class="user_icon" @click="uploadImg" v-click-log="{ module: '我的信息', operation: `上传头像` }">
-          <svg-icon :src="headPicture || icon.navigation.user" :size="bookmark.isMobile ? 80 : 100" />
-        </div>
+        <BUpload
+          accept="image/*"
+          :multiple="false"
+          :max-total-size="MAX_AVATAR_FILE_SIZE"
+          raw-file
+          @change="handleAvatarChange"
+        >
+          <template #default>
+            <div class="user_icon" v-click-log="{ module: '我的信息', operation: `上传头像` }">
+              <svg-icon :src="headPicture || icon.navigation.user" :size="bookmark.isMobile ? 80 : 100" />
+            </div>
+          </template>
+        </BUpload>
       </div>
       <div class="home-user-body">
         <div class="flex-align-center" style="gap: 20px">
@@ -57,8 +67,11 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import PassConfigDlg from './PassConfigDlg.vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
+  import { compressAvatarFile } from '@/utils/compressAvatar.ts';
   const user = useUserStore();
   const headPicture = ref<string>('');
+  const avatarChanged = ref(false);
   const saving = ref(false);
   const configPassVisible = ref(false);
   const visible = <Ref<boolean>>defineModel('visible');
@@ -66,32 +79,18 @@
   const bookmark = bookmarkStore();
   const { loadGrowthTasks } = useGrowth();
   const { t } = useI18n();
-  function uploadImg() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
+  const MAX_AVATAR_FILE_SIZE = 5000 * 1024;
 
-    input.addEventListener('change', function (event: any) {
-      const file = event.target.files[0]; // 获取用户选择的文件
-      if (file) {
-        // 检查文件大小是否超过5M
-        const maxFileSize = 5000 * 1024;
-        if (file.size > maxFileSize) {
-          message.warning(t('myInfo.imageSizeLimit'));
-          return; // 如果文件过大，终止函数执行
-        }
-        const reader = new FileReader(); // 创建FileReader对象
-        reader.onload = function (e) {
-          const base64 = e.target.result; // 直接获取Base64编码的字符串
-          headPicture.value = base64.toString();
-        };
-        reader.onerror = function (error) {
-          console.error('Error reading file:', error);
-        };
-        reader.readAsDataURL(file); // 读取文件内容，结果为Base64编码的字符串
-      }
-    });
-    input.click(); // 触发文件选择对话框
+  async function handleAvatarChange(files: File[]) {
+    const file = files?.[0];
+    if (!file) return;
+    try {
+      headPicture.value = await compressAvatarFile(file);
+      avatarChanged.value = true;
+    } catch (error) {
+      console.error('头像压缩失败:', error);
+      message.error(t('myInfo.imageProcessingFailed'));
+    }
   }
 
   function handleConfigPassword() {
@@ -110,17 +109,20 @@
     }
     saving.value = true;
     try {
-      const res = await userApi.updateUserInfo({
+      const payload: { id: string; alias: string; email: string; headPicture?: string } = {
         id: user.id,
         headPicture: headPicture.value,
         alias: userData.value.alias,
         email: userData.value.email,
-      });
+      };
+      if (!avatarChanged.value) delete payload.headPicture;
+      const res = await userApi.updateUserInfo(payload);
       if (res.status === 200) {
         recordOperation({ module: '我的信息', operation: '保存个人信息成功' });
         message.success(t('myInfo.saveSuccess'));
         const userPromise = await userApi.getUserInfoById({ id: user.id });
         user.setUserInfo(userPromise.data);
+        avatarChanged.value = false;
         await loadGrowthTasks(true);
         visible.value = false;
       }

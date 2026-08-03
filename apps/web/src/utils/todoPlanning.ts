@@ -2,10 +2,75 @@ import type { TodoItem } from '@/api/todoApi';
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
 export type TodoSnoozePreset = 'tenMinutes' | 'tomorrow' | 'nextWeek';
+export type TodoDateFormatOptions = {
+  relative?: boolean;
+  includeYear?: boolean;
+  now?: Date;
+  relativeLabels?: {
+    today: string;
+    tomorrow: string;
+  };
+};
 
 export function parseTodoDate(value: string | number | Date) {
   if (value instanceof Date) return new Date(value);
   return new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
+}
+
+function normalizeTodoLocale(locale: string) {
+  return String(locale || '').toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN';
+}
+
+function dateKey(date: Date) {
+  return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function clockLabel(date: Date, locale: 'zh-CN' | 'en-US') {
+  const minute = String(date.getMinutes()).padStart(2, '0');
+  if (locale === 'en-US') {
+    const period = date.getHours() >= 12 ? 'PM' : 'AM';
+    const hour = date.getHours() % 12 || 12;
+    return `${hour}:${minute} ${period}`;
+  }
+  return `${String(date.getHours()).padStart(2, '0')}:${minute}`;
+}
+
+function absoluteTodoDateLabel(date: Date, locale: 'zh-CN' | 'en-US', includeYear: boolean, now: Date) {
+  const clock = clockLabel(date, locale);
+  const sameYear = date.getFullYear() === now.getFullYear();
+  const withYear = includeYear || !sameYear;
+  if (locale === 'en-US') {
+    const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
+    const datePart = new Intl.DateTimeFormat(locale, {
+      year: withYear ? 'numeric' : undefined,
+      month: 'short',
+      day: 'numeric',
+    }).format(date);
+    return `${weekday}, ${datePart}, ${clock}`;
+  }
+  const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
+  const datePart = `${withYear ? `${date.getFullYear()}年` : ''}${date.getMonth() + 1}月${date.getDate()}日`;
+  return `${datePart}（${weekday}）${clock}`;
+}
+
+export function formatTodoDateTime(
+  value: string | number | Date | null | undefined,
+  locale = 'zh-CN',
+  options: TodoDateFormatOptions = {},
+) {
+  if (value === null || value === undefined || value === '') return '';
+  const date = parseTodoDate(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const normalizedLocale = normalizeTodoLocale(locale);
+  const now = options.now instanceof Date && Number.isFinite(options.now.getTime()) ? options.now : new Date();
+  if (options.relative && options.relativeLabels) {
+    if (dateKey(date) === dateKey(now)) return `${options.relativeLabels.today} ${clockLabel(date, normalizedLocale)}`;
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    if (dateKey(date) === dateKey(tomorrow)) {
+      return `${options.relativeLabels.tomorrow} ${clockLabel(date, normalizedLocale)}`;
+    }
+  }
+  return absoluteTodoDateLabel(date, normalizedLocale, options.includeYear !== false, now);
 }
 
 export function localTodoDateTime(date: Date) {

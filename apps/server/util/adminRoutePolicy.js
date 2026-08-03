@@ -386,6 +386,8 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/getAiFeedback'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverview'],
+  ['POST', '/aiEvaluation/runs'],
+  ['POST', '/aiEvaluation/runs/start'],
   ['POST', '/notification/send'],
   ['POST', '/notification/admin/stats'],
   ['POST', '/notification/admin/list'],

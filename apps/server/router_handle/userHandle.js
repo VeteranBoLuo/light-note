@@ -83,6 +83,8 @@ const isActiveIpBan = (ipReputation) => {
 
 // 邮箱作为账号标识时统一去除首尾空白；服务端兜底，避免绕过前端直接写入“看起来相同”的新账号。
 const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
+// 列表头像允许保留较清晰的内嵌图，但不允许把数 MB 的原图带入 50 条首屏响应。
+const MAX_INLINE_AVATAR_BYTES = 1024 * 1024;
 
 const queryUserInfoById = async (id) => {
   const [result] = await pool.query(
@@ -629,9 +631,16 @@ export const getUserList = async (req, res) => {
     const cursorFilter = cursor ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))` : '';
     const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
     const take = cursorMode ? pageSize + 1 : pageSize;
-
+    // 用户列表头像只用于 30px 左右的缩略展示，不能把历史 Base64 原图带进排序接口。
+    // 外部头像地址保留；较大的内嵌头像交给列表使用默认头像，详情接口仍保留完整头像。
     const [rows] = await pool.query(
-      `SELECT u.id, u.alias, u.email, u.head_picture, u.phone_number, u.role, u.ip,
+      `SELECT u.id, u.alias, u.email,
+              CASE
+                WHEN u.head_picture LIKE 'http://%' OR u.head_picture LIKE 'https://%' THEN u.head_picture
+                WHEN OCTET_LENGTH(u.head_picture) <= ${MAX_INLINE_AVATAR_BYTES} THEN u.head_picture
+                ELSE NULL
+              END AS head_picture,
+              u.phone_number, u.role, u.ip,
               u.create_time, u.last_active_time, u.del_flag
        FROM user u
        WHERE u.del_flag = 0
@@ -743,6 +752,36 @@ export const saveUserInfo = async (req, res) => {
         finalBody[field] = filteredBody[field];
       }
     });
+    const submittedHeadPicture = typeof finalBody.head_picture === 'string' ? finalBody.head_picture.trim() : '';
+    if (
+      /^data:image\//i.test(submittedHeadPicture) &&
+      Buffer.byteLength(submittedHeadPicture, 'utf8') > MAX_INLINE_AVATAR_BYTES
+    ) {
+      // 兼容旧客户端编辑昵称时原样带回历史大头像：相同内容视为未变更，不重复写入；新大图直接拒绝。
+      const submittedDigest = crypto.createHash('sha256').update(submittedHeadPicture).digest('hex');
+      const [[existingAvatar]] = await pool.query(
+        'SELECT SHA2(head_picture, 256) AS digest FROM user WHERE id = ?',
+        [id],
+      );
+      if (existingAvatar?.digest === submittedDigest) {
+        delete finalBody.head_picture;
+      } else {
+        return res.send(
+          resultData(
+            null,
+            413,
+            L(
+              req,
+              '头像图片过大，请压缩后再上传',
+              'Avatar image is too large. Please compress it before uploading.',
+            ),
+          ),
+        );
+      }
+    }
+    if (!Object.keys(finalBody).length) {
+      return res.send(resultData({ affectedRows: 0 }));
+    }
     if (typeof finalBody.email === 'string') {
       finalBody.email = normalizeEmail(finalBody.email);
     }

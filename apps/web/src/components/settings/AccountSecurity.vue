@@ -39,7 +39,7 @@
       <div v-for="s in sessions" :key="s.id" class="sess-item" :class="{ 'is-current': s.current }">
         <div class="sess-main">
           <span class="sess-device">{{ parseUA(s.userAgent) }}</span>
-          <span class="sess-meta">{{ s.ip || '未知 IP' }} · 最近活跃 {{ fmt(s.lastActiveTime) }}</span>
+          <span class="sess-meta">{{ s.ip || '未知 IP' }} · 最近在线 {{ fmt(s.lastActiveTime) }}</span>
         </div>
         <span v-if="s.current" class="sess-badge">本机</span>
         <span v-else class="sess-revoke dom-hover" @click="revokeOne(s.id)">下线</span>

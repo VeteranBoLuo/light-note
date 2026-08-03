@@ -32,7 +32,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import type { TodoItem } from '@/api/todoApi';
-  import { parseWallClock } from '@/utils/ics';
+  import { formatTodoDateTime } from '@/utils/todoPlanning';
 
   const props = defineProps<{ item: TodoItem | null; exporting?: boolean }>();
   const visible = defineModel<boolean>('visible');
@@ -53,11 +53,8 @@
   ]);
 
   const dueText = computed(() => {
-    if (!props.item?.dueAt || !parseWallClock(props.item.dueAt)) return '';
-    const date = new Date(String(props.item.dueAt).replace(' ', 'T'));
-    if (!Number.isFinite(date.getTime())) return '';
-    const time = new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
-    return t('inbox.todoDue', { time });
+    const time = formatTodoDateTime(props.item?.dueAt, locale.value);
+    return time ? t('inbox.todoDue', { time }) : '';
   });
 
   watch(visible, (value) => {

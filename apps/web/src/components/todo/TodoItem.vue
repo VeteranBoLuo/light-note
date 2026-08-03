@@ -208,6 +208,7 @@
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
+  import { formatTodoDateTime, parseTodoDate } from '@/utils/todoPlanning';
 
   const props = defineProps<{
     item: TodoItem;
@@ -256,15 +257,21 @@
     () =>
       props.item.status === 'pending' &&
       Boolean(props.item.dueAt) &&
-      parseDate(props.item.dueAt as string).getTime() < Date.now(),
+      parseTodoDate(props.item.dueAt as string).getTime() < Date.now(),
   );
   const priorityLabel = computed(() => t(`inbox.todoPriority${props.item.priority}`));
   const completedChecklistCount = computed(() => props.item.checklist.filter((check) => check.done).length);
   const dueLabel = computed(() => {
     if (!props.item.dueAt) return '';
-    const date = parseDate(props.item.dueAt);
-    if (!Number.isFinite(date.getTime())) return '';
-    const value = new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+    const value = formatTodoDateTime(props.item.dueAt, locale.value, {
+      relative: true,
+      includeYear: false,
+      relativeLabels: {
+        today: t('inbox.todoToday'),
+        tomorrow: t('inbox.todoTomorrow'),
+      },
+    });
+    if (!value) return '';
     return overdue.value ? t('inbox.todoOverdue', { time: value }) : t('inbox.todoDue', { time: value });
   });
   const reminderLabel = computed(() => {
@@ -316,9 +323,6 @@
   function changePriority(value: unknown) {
     const priority = Number(value);
     if (priority === 0 || priority === 1 || priority === 2) emit('update-priority', priority);
-  }
-  function parseDate(value: string) {
-    return new Date(String(value).replace(' ', 'T'));
   }
 </script>
 

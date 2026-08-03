@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { runAgentReplayCase } from '../evaluation/ai-assistant/agentReplayAdapter.js';
+import { AGENT_REPLAY_CASES } from '../evaluation/ai-assistant/agentReplayCases.js';
 
 const mocks = vi.hoisted(() => ({
   poolQuery: vi.fn(),
@@ -854,7 +856,13 @@ describe('agentChat 主链路', () => {
             semanticPlanCall({
               requestClass: 'data_query',
               intents: [
-                { kind: 'read', capabilityId: 'read.query_demo', goal: '查询待办', targetDescription: '待办', dependsOn: [] },
+                {
+                  kind: 'read',
+                  capabilityId: 'read.query_demo',
+                  goal: '查询待办',
+                  targetDescription: '待办',
+                  dependsOn: [],
+                },
               ],
               toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '待办' } }],
             }),
@@ -864,7 +872,13 @@ describe('agentChat 主链路', () => {
           finishReason: 'tool_calls',
         };
       }
-      return { content: '你当前共有 2 条待处理待办。', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+      return {
+        content: '你当前共有 2 条待处理待办。',
+        toolCalls: [],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
     });
     const req = request({
       message: '我们当前有哪些待办？',
@@ -899,7 +913,13 @@ describe('agentChat 主链路', () => {
           finishReason: 'tool_calls',
         };
       }
-      return { content: '这篇笔记的核心是方案要点。[1]', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+      return {
+        content: '这篇笔记的核心是方案要点。[1]',
+        toolCalls: [],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
     });
     const req = request({
       message: '总结这篇笔记',
@@ -955,7 +975,13 @@ describe('agentChat 主链路', () => {
             semanticPlanCall({
               requestClass: 'data_query',
               intents: [
-                { kind: 'read', capabilityId: 'read.query_demo', goal: '查询待办', targetDescription: '待办', dependsOn: [] },
+                {
+                  kind: 'read',
+                  capabilityId: 'read.query_demo',
+                  goal: '查询待办',
+                  targetDescription: '待办',
+                  dependsOn: [],
+                },
               ],
               toolCalls: [{ toolName: 'query_demo', arguments: { keyword: '待办' } }],
             }),
@@ -965,7 +991,13 @@ describe('agentChat 主链路', () => {
           finishReason: 'tool_calls',
         };
       }
-      return { content: '你有 2 条待办。', toolCalls: [], usage: usage(3), usageStatus: 'reported', finishReason: 'stop' };
+      return {
+        content: '你有 2 条待办。',
+        toolCalls: [],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
     });
     const req = request({ message: '我有多少条待办？', stream: false, contexts: [], attachmentIds: ['doc-1'] });
     const res = response();
@@ -1202,7 +1234,12 @@ describe('agentChat 主链路', () => {
     const res = response();
 
     await agentChat(
-      request({ message: '请创建一篇笔记，标题为网页摘要，正文为测试内容', stream: false, contexts: [], attachmentIds: [] }),
+      request({
+        message: '请创建一篇笔记，标题为网页摘要，正文为测试内容',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+      }),
       res,
     );
 
@@ -1212,6 +1249,37 @@ describe('agentChat 主链路', () => {
     expect(mocks.requestAi.mock.calls[2][0].at(-1).content).toContain('note.create');
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
+  });
+
+  it.each(AGENT_REPLAY_CASES)('真实 Agent 主链回放：$id', async (replayCase) => {
+    const result = await runAgentReplayCase(replayCase, {
+      setProviderResponses(responses) {
+        mocks.requestAi.mockReset();
+        responses.forEach((providerResponse) => mocks.requestAi.mockResolvedValueOnce(providerResponse));
+      },
+      async invokeAgent(body) {
+        const selectedTools = new Set(body.selectedTools || []);
+        mocks.selectAgentTools.mockImplementation((registry) =>
+          [...selectedTools].map((toolName) => registry.get(toolName)).filter(Boolean),
+        );
+        mocks.toolExecute.mockResolvedValue({ value: '合成网页内容' });
+        const res = response();
+        await agentChat(request(body), res);
+        return { res, selectedTools };
+      },
+      observe({ res, selectedTools }) {
+        const payload = res.send.mock.calls.at(-1)?.[0]?.data || {};
+        return {
+          response: payload.response,
+          confirmations: payload.confirmations,
+          providerStages: mocks.requestAi.mock.calls.map(([, options]) => options?.trace?.stage).filter(Boolean),
+          executedTools: mocks.toolExecute.mock.calls.length ? [...selectedTools] : [],
+        };
+      },
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.passed).toBe(true);
   });
 
   it('未支持的删除请求由 AI 语义识别、服务端能力目录确定性拦截', async () => {

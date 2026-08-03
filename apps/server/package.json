@@ -13,6 +13,7 @@
     "repair:bookmark-icons": "node scripts/requeueBrokenBookmarkIconJobs.js",
     "check:ocr": "node scripts/checkOcrRuntime.js",
     "eval:ai-assistant": "node evaluation/ai-assistant/runner.js",
+    "smoke:ai-assistant": "node evaluation/ai-assistant/liveSmokeRunner.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
