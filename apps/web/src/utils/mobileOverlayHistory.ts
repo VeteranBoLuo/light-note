@@ -16,6 +16,7 @@ interface MobileOverlayHistoryEntry extends MobileOverlayHistoryHandle {
   onBack: () => void;
   state: 'active' | 'closing' | 'released';
   fallbackTimer: number | null;
+  releaseWaiters: Set<() => void>;
 }
 
 const entries: MobileOverlayHistoryEntry[] = [];
@@ -34,6 +35,13 @@ function clearFallback(entry: MobileOverlayHistoryEntry) {
   entry.fallbackTimer = null;
 }
 
+function resolveReleaseWaiters(entry: MobileOverlayHistoryEntry) {
+  if (!entry.releaseWaiters.size) return;
+  const waiters = [...entry.releaseWaiters];
+  entry.releaseWaiters.clear();
+  waiters.forEach((resolve) => resolve());
+}
+
 function syncListener() {
   if (typeof window === 'undefined') return;
   if (entries.length && !listening) {
@@ -49,18 +57,29 @@ function syncListener() {
 
 function invokeEntry(entry: MobileOverlayHistoryEntry) {
   clearFallback(entry);
-  if (entry.state === 'released') return;
+  if (entry.state === 'released') {
+    resolveReleaseWaiters(entry);
+    return;
+  }
   entry.state = 'released';
-  entry.onBack();
+  try {
+    entry.onBack();
+  } finally {
+    resolveReleaseWaiters(entry);
+  }
 }
 
 function removeEntry(entry: MobileOverlayHistoryEntry, invoke: boolean) {
   const index = entries.findIndex((candidate) => candidate.id === entry.id);
   if (index >= 0) entries.splice(index, 1);
   clearFallback(entry);
-  if (invoke && entry.state !== 'released') {
-    entry.state = 'released';
-    entry.onBack();
+  try {
+    if (invoke && entry.state !== 'released') {
+      entry.state = 'released';
+      entry.onBack();
+    }
+  } finally {
+    resolveReleaseWaiters(entry);
   }
   syncListener();
 }
@@ -102,6 +121,7 @@ export function registerMobileOverlayHistory(onBack: () => void): MobileOverlayH
     onBack,
     state: 'active',
     fallbackTimer: null,
+    releaseWaiters: new Set(),
   };
 
   try {
@@ -118,6 +138,25 @@ export function registerMobileOverlayHistory(onBack: () => void): MobileOverlayH
   entries.push(entry);
   syncListener();
   return { id: entry.id };
+}
+
+/**
+ * 等待当前最上层浮层的 history 占位完成释放。
+ *
+ * 选择弹框内容后需要跳转路由时，应先取得这个 Promise，再把弹框的
+ * v-model 设为 false，最后 await 后跳转。这样 BModal/BDrawer 触发的
+ * history.back() 不会与 router.push() 竞争并把新页面弹回去。
+ * 当前没有统一管理的浮层占位时会立即完成。
+ */
+export function waitForCurrentMobileOverlayHistoryRelease(): Promise<void> {
+  if (typeof window === 'undefined') return Promise.resolve();
+  const currentId = readOverlayId();
+  if (!currentId) return Promise.resolve();
+  const entry = entries.find((candidate) => candidate.id === currentId);
+  if (!entry) return Promise.resolve();
+  return new Promise((resolve) => {
+    entry.releaseWaiters.add(resolve);
+  });
 }
 
 /**
@@ -163,7 +202,10 @@ export function releaseMobileOverlayHistory(handle: MobileOverlayHistoryHandle |
 
 /** 仅供单元测试清理模块级状态。 */
 export function resetMobileOverlayHistoryForTests() {
-  entries.splice(0).forEach(clearFallback);
+  entries.splice(0).forEach((entry) => {
+    clearFallback(entry);
+    resolveReleaseWaiters(entry);
+  });
   if (typeof window !== 'undefined' && listening) window.removeEventListener('popstate', handlePopState, true);
   listening = false;
   sequence = 0;

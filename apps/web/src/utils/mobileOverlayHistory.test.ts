@@ -5,6 +5,7 @@ import {
   releaseMobileOverlayHistory,
   requestMobileOverlayHistoryClose,
   resetMobileOverlayHistoryForTests,
+  waitForCurrentMobileOverlayHistoryRelease,
 } from './mobileOverlayHistory';
 
 describe('mobileOverlayHistory', () => {
@@ -54,6 +55,30 @@ describe('mobileOverlayHistory', () => {
 
     expect(window.history.back).toHaveBeenCalledOnce();
     expect(close).not.toHaveBeenCalled();
+  });
+
+  it('外部关闭浮层后才允许继续执行路由跳转', async () => {
+    const handle = registerMobileOverlayHistory(vi.fn())!;
+    const navigate = vi.fn();
+    const released = waitForCurrentMobileOverlayHistoryRelease().then(navigate);
+
+    releaseMobileOverlayHistory(handle);
+    await Promise.resolve();
+    expect(navigate).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await released;
+    expect(navigate).toHaveBeenCalledOnce();
+  });
+
+  it('当前没有浮层占位时不阻塞后续操作', async () => {
+    const navigate = vi.fn();
+
+    await waitForCurrentMobileOverlayHistoryRelease();
+    navigate();
+
+    expect(navigate).toHaveBeenCalledOnce();
+    expect(window.history.back).not.toHaveBeenCalled();
   });
 
   it('弹出其他自管历史层并落回当前占位时，不误关底层浮层', () => {
