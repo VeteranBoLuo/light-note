@@ -113,6 +113,20 @@ vi.mock('../util/agent/tools/index.js', () => ({
       summarize: (raw) => `详情:${raw.value}`,
     },
     {
+      name: 'read_url',
+      description: '读取用户明确提供的网页链接',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string' } },
+        required: ['url'],
+      },
+      requireRoot: false,
+      timeoutMs: 1000,
+      execute: mocks.toolExecute,
+      transform: (raw) => `网页:${raw.value}`,
+      summarize: (raw) => `网页:${raw.value}`,
+    },
+    {
       name: 'set_todo_status',
       description: '修改一条待办状态',
       parameters: {
@@ -431,6 +445,60 @@ describe('agentChat 主链路', () => {
     expect(mocks.requestAi).not.toHaveBeenCalled();
     expect(mocks.requestAiStream).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('请粘贴需要读取或总结的网页链接。');
+  });
+
+  it('关闭广泛联网时仍向显式 URL 请求开放只读网页工具', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('read_url')].filter(Boolean));
+    mocks.requestAi.mockImplementation(async (_messages, options = {}) => {
+      if (options?.trace?.stage === 'planner') {
+        return {
+          content: '',
+          toolCalls: [
+            semanticPlanCall({
+              requestClass: 'data_query',
+              intents: [
+                {
+                  kind: 'read',
+                  capabilityId: 'read.read_url',
+                  goal: '读取用户提供的网页',
+                  targetDescription: 'https://uuye.163.com',
+                  dependsOn: [],
+                },
+              ],
+              toolCalls: [{ toolName: 'read_url', arguments: { url: 'https://uuye.163.com' } }],
+            }),
+          ],
+          usage: usage(1),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      return {
+        content: '这是网页摘要。',
+        toolCalls: [],
+        usage: usage(1),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: 'https://uuye.163.com这个链接是干嘛的？',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'selected', externalWeb: false },
+      }),
+      res,
+    );
+
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { url: 'https://uuye.163.com' },
+      expect.objectContaining({ question: 'https://uuye.163.com这个链接是干嘛的？' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toBe('这是网页摘要。');
   });
 
   it('翻译模式隔离历史与知识助手提示，只向模型发送待翻译文本', async () => {

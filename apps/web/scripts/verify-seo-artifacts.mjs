@@ -62,7 +62,7 @@ async function main() {
 
   const manifest = JSON.parse(manifestText);
   assert(manifest.id === '/', 'PWA id 必须保持 /，避免被识别为新的应用');
-  assert(manifest.start_url === '/app', 'PWA start_url 必须使用 /app');
+  assert(manifest.start_url === '/app?source=pwa', 'PWA start_url 必须使用带来源标记的 /app 入口');
 
   assert(!/^Disallow:\s*\/admin\s*$/imu.test(robotsText), 'robots.txt 不应屏蔽 /admin，否则爬虫看不到 noindex');
   assert(/^Disallow:\s*\/api\/\s*$/imu.test(robotsText), 'robots.txt 必须继续屏蔽 /api/');
@@ -102,7 +102,7 @@ async function main() {
   assert(!/googlebot|baiduspider|bingbot/i.test(rootHtml), '根官网不得按搜索引擎 UA 分流');
 
   console.log(
-    '✅ SEO 产物校验通过：根官网可索引且无爬虫 UA 分流，移动首访守卫存在，通用 SPA 保持 noindex，PWA 使用 /app',
+    '✅ SEO 产物校验通过：根官网可索引且无爬虫 UA 分流，移动首访守卫存在，通用 SPA 保持 noindex，PWA 使用带来源标记的 /app',
   );
 }
 

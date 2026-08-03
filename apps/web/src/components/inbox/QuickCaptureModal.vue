@@ -4,7 +4,21 @@
     <div class="capture-modal" @paste="handlePaste">
       <div class="capture-intro">
         <span class="capture-intro__eyebrow">{{ t('inbox.quickCaptureEyebrow') }}</span>
-        <p>{{ captureHint }}</p>
+        <div class="capture-intro__description">
+          <p>{{ captureHint }}</p>
+          <BButton
+            v-if="!bookmark.isMobile"
+            size="small"
+            class="capture-intro__inbox-link"
+            v-click-log="OPERATION_LOG_MAP.inbox.openInboxFromCapture"
+            @click="goResourceInbox"
+          >
+            <span>{{ t('inbox.goToInbox') }}</span>
+            <span v-if="inbox.pendingTotal > 0" class="capture-intro__pending-count">
+              {{ displayPendingTotal }}
+            </span>
+          </BButton>
+        </div>
       </div>
       <BTabs
         v-model:active-tab="captureType"
@@ -145,6 +159,7 @@
   import { createTodo, type TodoPayload } from '@/api/todoApi';
   import type { ActionCaptureType } from '@/store/inbox';
   import icon from '@/config/icon';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
@@ -217,6 +232,9 @@
         (captureType.value !== 'bookmark' || validUrl.value),
   );
   const totalFileSize = computed(() => files.value.reduce((sum, file) => sum + file.size, 0));
+  const displayPendingTotal = computed(() =>
+    inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal),
+  );
 
   watch(visible, (value) => {
     if (value) {
@@ -461,9 +479,18 @@
     visible.value = false;
   }
 
-  function goInbox() {
+  async function goInbox() {
+    await closeCurrentMobileOverlayThen(
+      () => {
+        visible.value = false;
+      },
+      () => router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile)),
+    );
+  }
+
+  function goResourceInbox() {
     visible.value = false;
-    router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile));
+    void router.push('/inbox');
   }
 
   function continueCapture() {
@@ -472,14 +499,22 @@
     if (captureType.value === 'todo') todoFormKey.value += 1;
   }
 
-  function openCapturedResource() {
+  async function openCapturedResource() {
     const resource = capturedResource.value;
     if (!resource) return;
-    visible.value = false;
-    if (resource.type === 'todo') router.push({ path: '/inbox', query: { tab: 'todo', todoId: resource.id } });
-    else if (resource.type === 'bookmark' && resource.id) router.push(`/manage/editBookmark/${resource.id}`);
-    else if (resource.type === 'note' && resource.id) router.push(`/noteLibrary/${resource.id}`);
-    else router.push({ path: '/cloudSpace', query: resource.title ? { fileName: resource.title } : {} });
+    await closeCurrentMobileOverlayThen(
+      () => {
+        visible.value = false;
+      },
+      () => {
+        if (resource.type === 'todo') {
+          return router.push({ path: '/inbox', query: { tab: 'todo', todoId: resource.id } });
+        }
+        if (resource.type === 'bookmark' && resource.id) return router.push(`/manage/editBookmark/${resource.id}`);
+        if (resource.type === 'note' && resource.id) return router.push(`/noteLibrary/${resource.id}`);
+        return router.push({ path: '/cloudSpace', query: resource.title ? { fileName: resource.title } : {} });
+      },
+    );
   }
 
   function reset() {
@@ -531,6 +566,43 @@
     color: var(--desc-color);
     font-size: 13px;
     line-height: 1.55;
+  }
+
+  .capture-intro__description {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .capture-intro__description p {
+    min-width: 0;
+  }
+
+  .capture-intro__inbox-link {
+    flex: 0 0 auto;
+    gap: 5px;
+    padding: 0 8px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, transparent) !important;
+    background: color-mix(in srgb, var(--primary-color) 7%, transparent);
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .capture-intro__inbox-link:hover {
+    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  }
+
+  .capture-intro__pending-count {
+    min-width: 18px;
+    padding: 1px 5px;
+    border-radius: 999px;
+    background: var(--primary-color);
+    color: var(--primary-contrast-color, #fff);
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
   }
 
   .capture-tabs :deep(.tab-container) {

@@ -305,6 +305,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     fetchGlobalGraph,
     fetchTagGraph,
@@ -525,16 +526,26 @@
     hideIsolated.value = true;
   }
 
-  function viewTagResources() {
+  async function viewTagResources() {
     if (!activeNode.value) return;
-    mobileTopicDrawerOpen.value = false;
-    router.push({ path: '/search', query: { tags: activeNode.value.label } });
+    const tag = activeNode.value.label;
+    await closeCurrentMobileOverlayThen(
+      () => {
+        mobileTopicDrawerOpen.value = false;
+      },
+      () => router.push({ path: '/search', query: { tags: tag } }),
+    );
   }
 
-  function openTagDetail() {
+  async function openTagDetail() {
     if (!activeNode.value) return;
-    mobileTopicDrawerOpen.value = false;
-    router.push(`/tag/${activeNode.value.rawId}`);
+    const tagId = activeNode.value.rawId;
+    await closeCurrentMobileOverlayThen(
+      () => {
+        mobileTopicDrawerOpen.value = false;
+      },
+      () => router.push(`/tag/${tagId}`),
+    );
   }
 
   function viewUntaggedResources() {
@@ -545,20 +556,32 @@
     router.push('/manage/tagMg');
   }
 
-  function openResource(node: TagGraphNode) {
+  async function openResource(node: TagGraphNode) {
     if (node.type === 'bookmark' && node.meta?.url) {
-      mobileTopicDrawerOpen.value = false;
-      openBookmarkUrl(node.meta.url);
+      await closeCurrentMobileOverlayThen(
+        () => {
+          mobileTopicDrawerOpen.value = false;
+        },
+        () => openBookmarkUrl(node.meta.url),
+      );
       return;
     }
     if (node.type === 'note') {
-      mobileTopicDrawerOpen.value = false;
-      router.push(`/noteLibrary/${node.rawId}`);
+      await closeCurrentMobileOverlayThen(
+        () => {
+          mobileTopicDrawerOpen.value = false;
+        },
+        () => router.push(`/noteLibrary/${node.rawId}`),
+      );
       return;
     }
     if (node.type === 'file') {
-      mobileTopicDrawerOpen.value = false;
-      router.push({ path: '/cloudSpace', query: { fileName: node.label } });
+      await closeCurrentMobileOverlayThen(
+        () => {
+          mobileTopicDrawerOpen.value = false;
+        },
+        () => router.push({ path: '/cloudSpace', query: { fileName: node.label } }),
+      );
     }
   }
 

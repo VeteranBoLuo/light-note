@@ -108,7 +108,7 @@
           v-model:value="inputValue"
           type="textarea"
           submit-on-enter
-          @enter="handleSend"
+          @enter="handleComposerEnter"
           @paste="handlePaste"
           @keydown="handleMentionKeydown"
           :placeholder="t('ai.inputPlaceholder')"
@@ -290,8 +290,17 @@
     return v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + 'k' : String(v);
   }
 
-  const handleSend = (event: KeyboardEvent) => {
+  const handleComposerEnter = (event: KeyboardEvent) => {
     if (event?.isComposing || event?.keyCode === 229) return;
+
+    // BInput 会在 textarea 内层先 emit enter，随后原生 keydown 才冒泡到下面的
+    // handleMentionKeydown。必须在这里优先消费 Enter，否则外层 preventDefault 时消息已经发送。
+    if (mentionQuery.value && mentionHasResults.value) {
+      event.preventDefault();
+      event.stopPropagation();
+      mentionPanel.value?.chooseActive();
+      return;
+    }
 
     // 如果输入为空，仅中断（不发送）
     if (!props.modelValue.trim()) {

@@ -1,4 +1,5 @@
 import { fetchWebMeta } from '../../fetchWebMeta.js';
+import { isAgentUrlAllowedByScope } from '../webAccessPolicy.js';
 
 const REASON_MSG = {
   INVALID_URL: '网址格式无效',
@@ -22,6 +23,20 @@ export default {
   },
   requireRoot: false,
   isWrite: false,
+  async prepareArgs(args, ctx) {
+    const url = String(args.url || '').trim();
+    if (!url) throw new Error('URL_REQUIRED: 网址不能为空');
+    if (
+      !isAgentUrlAllowedByScope({
+        message: ctx.question,
+        url,
+        externalWeb: ctx.agentContentScope?.externalWeb === true,
+      })
+    ) {
+      throw new Error('URL_SCOPE_FORBIDDEN: 只能读取你在本轮消息中明确提供的网页链接。');
+    }
+    return { url };
+  },
   toSources(raw) {
     if (raw?.error || !raw?.url) return [];
     return [

@@ -55,16 +55,15 @@
     </template>
 
     <BTable
+      ref="tableRef"
       fill
+      virtual
       :data="logList"
       :columns="columns"
       :row-clickable="true"
-      :pagination="true"
-      :total="total"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @page-change="onPageChange"
-      @size-change="onSizeChange"
+      :loading="loading"
+      :has-more="hasMore"
+      @load-more="loadMore"
       @row-click="onRowClick"
     />
   </AdminDataPage>
@@ -150,13 +149,12 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
 
   const { t } = useI18n();
 
-  const logList = ref([]);
-  const currentPage = ref(1);
-  const pageSize = ref(20);
-  const total = ref(0);
+  const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const todayCount = ref(0);
   const todayTokens = ref(0);
   const balance = ref<any>(null);
@@ -177,6 +175,28 @@
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
   let timer: number | null = null;
+  const {
+    items: logList,
+    total,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiBasePost('/api/common/getAgentLogs', {
+        cursor,
+        limit,
+        keyword: searchValue.value || undefined,
+        hideInternal: hideInternal.value,
+      }),
+    mapItems: (items) =>
+      items.map((item: any) => ({
+        ...item,
+        toolsUsedDisplay: formatToolsUsed(item.toolsUsed),
+      })),
+    onError: () => message.error(t('common.requestFailedDescription')),
+  });
 
   const balanceDisplay = computed(() => {
     if (balanceLoading.value && !balance.value) return t('aiMonitor.balance.loading');
@@ -220,15 +240,6 @@
     { title: '时间', key: 'createdAt', width: '1fr' },
   ];
 
-  function onPageChange(page: number) {
-    currentPage.value = page;
-    fetchLogs();
-  }
-  function onSizeChange(_: number, size: number) {
-    currentPage.value = 1;
-    pageSize.value = size;
-    fetchLogs();
-  }
   function onRowClick(record: any) {
     selectedRecord.value = record;
     detailVisible.value = true;
@@ -237,33 +248,19 @@
   function handleSearch() {
     if (timer) clearTimeout(timer);
     timer = window.setTimeout(() => {
-      currentPage.value = 1;
       fetchLogs();
     }, 500);
   }
 
   // 隐藏内部账号(root/test)开关:切换后列表与统计同步按新口径重查
   function onToggleInternal() {
-    currentPage.value = 1;
     fetchLogs();
     fetchTodaySummary();
   }
 
   function fetchLogs() {
-    apiBasePost('/api/common/getAgentLogs', {
-      keyword: searchValue.value || undefined,
-      pageSize: pageSize.value,
-      currentPage: currentPage.value,
-      hideInternal: hideInternal.value,
-    }).then((res: any) => {
-      if (res.status === 200) {
-        logList.value = (res.data.items || []).map((item: any) => ({
-          ...item,
-          toolsUsedDisplay: formatToolsUsed(item.toolsUsed),
-        }));
-        total.value = res.data.total || 0;
-      }
-    });
+    tableRef.value?.scrollToTop();
+    void reload();
   }
 
   function fetchTodaySummary() {
@@ -309,7 +306,9 @@
   function formatBalanceAmount(value: unknown, currency: unknown) {
     const amount = Number(value);
     const safeAmount = Number.isFinite(amount) ? Math.abs(amount) : 0;
-    const code = String(currency || '').trim().toUpperCase();
+    const code = String(currency || '')
+      .trim()
+      .toUpperCase();
     const symbol = code === 'CNY' ? '¥' : `${code || ''} `;
     return `${symbol}${safeAmount.toFixed(2)}`;
   }

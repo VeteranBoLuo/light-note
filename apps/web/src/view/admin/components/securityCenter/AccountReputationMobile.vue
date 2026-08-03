@@ -77,6 +77,7 @@ import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
 import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
 import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
 import { scoreColor } from './securityShared';
+import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
 const router = useRouter();
 
@@ -178,13 +179,17 @@ async function handleUnbanAccount(account: any) {
   });
 }
 
-function handleViewEvents() {
+async function handleViewEvents() {
   const record = selectedRecord.value;
   if (!record) return;
   const userId = typeof record === 'string' ? record : record?.userId;
   const label = record?.alias || record?.email || userId;
-  detailVisible.value = false;
-  router.push(`/securityEvents?userId=${encodeURIComponent(userId)}&userLabel=${encodeURIComponent(label)}`);
+  await closeCurrentMobileOverlayThen(
+    () => {
+      detailVisible.value = false;
+    },
+    () => router.push(`/securityEvents?userId=${encodeURIComponent(userId)}&userLabel=${encodeURIComponent(label)}`),
+  );
 }
 
 onMounted(() => {

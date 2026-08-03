@@ -1,4 +1,15 @@
 export default {
+  apiLog: {
+    operatingSystem: '操作系统',
+    runtime: '运行环境',
+    unknown: '未知',
+    runtimeValues: {
+      browser: '浏览器',
+      pwa: 'PWA',
+      androidApp: 'Android App',
+      unknown: '未知',
+    },
+  },
   navigation: {
     title: '轻笺',
     index: '首页',
@@ -379,6 +390,7 @@ export default {
     quickCapture: '快速添加',
     quickCaptureEyebrow: '先收集，稍后整理',
     captureHint: '选择内容类型，先保存最必要的信息；标签和位置可以稍后补充。',
+    goToInbox: '前往待整理',
     todoCaptureHint: '写下要做的事情，选择日期和优先级即可创建；其他信息可以稍后完善。',
     quickCapturePanels: {
       bookmark: {
@@ -1149,6 +1161,8 @@ export default {
       openWebsite: '打开网站',
       openNote: '查看笔记',
       openFile: '预览文件',
+      previewHere: '本页预览',
+      openInCloudSpace: '在云空间中查看',
       replaceResource: '替换引用',
     },
     resourceBacklinks: {

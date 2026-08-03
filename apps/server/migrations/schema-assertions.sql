@@ -293,3 +293,30 @@ LEFT JOIN information_schema.columns actual
 WHERE actual.column_name IS NULL
    OR NOT (actual.character_set_name <=> expected.charset_name)
    OR NOT (actual.collation_name <=> expected.collation_name);
+
+-- 21) 后台虚拟列表的活跃字段与稳定排序索引必须存在（期望 0 行）
+SELECT '[21] invalid_admin_virtual_list_column' AS check_name,
+  CONCAT('user.last_active_time=', IFNULL(CONCAT(actual.column_type, '/', actual.is_nullable, '/', actual.column_default), '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='user'
+ AND actual.column_name='last_active_time'
+WHERE actual.column_name IS NULL
+   OR actual.data_type <> 'datetime'
+   OR actual.is_nullable <> 'NO'
+   OR UPPER(IFNULL(actual.column_default, '')) NOT IN ('CURRENT_TIMESTAMP', 'CURRENT_TIMESTAMP()');
+
+SELECT '[21] missing_admin_virtual_list_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'user' tn, 'idx_user_active_list' ix UNION ALL
+  SELECT 'user', 'idx_user_created_list' UNION ALL
+  SELECT 'api_logs', 'idx_api_logs_admin_list' UNION ALL
+  SELECT 'operation_logs', 'idx_operation_logs_admin_list' UNION ALL
+  SELECT 'agent_logs', 'idx_agent_logs_admin_list'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

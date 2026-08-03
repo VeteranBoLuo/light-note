@@ -5,11 +5,15 @@ import {
   LOGIN_HISTORY_STORAGE_KEYS,
   LOGIN_HISTORY_TTL_MS,
   MOBILE_LANDING_VISIT_STORAGE_KEY,
+  PWA_LAUNCH_QUERY_KEY,
+  PWA_LAUNCH_QUERY_VALUE,
+  PWA_RUNTIME_SESSION_KEY,
 } from '../config/appEntryBootstrap';
 import { createEarlyAppEntryScript } from './earlyAppEntryBootstrap';
 
 interface ScriptExecutionOptions {
   pathname?: string;
+  search?: string;
   viewportWidth?: number;
   screenWidth?: number;
   screenHeight?: number;
@@ -22,6 +26,7 @@ interface ScriptExecutionOptions {
 
 function executeBootstrap({
   pathname = '/',
+  search = '',
   viewportWidth = 390,
   screenWidth = viewportWidth,
   screenHeight = 844,
@@ -46,10 +51,20 @@ function executeBootstrap({
       removedKeys.push(key);
     },
   };
+  const sessionValues = new Map<string, string>();
+  const sessionStorage = {
+    getItem(key: string) {
+      return sessionValues.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      sessionValues.set(key, value);
+    },
+  };
 
   vm.runInNewContext(createEarlyAppEntryScript(), {
     Date,
     Number,
+    URLSearchParams,
     document: {
       documentElement: { style },
     },
@@ -60,6 +75,7 @@ function executeBootstrap({
         height: screenHeight,
       },
       localStorage,
+      sessionStorage,
       navigator: {
         userAgent,
         standalone,
@@ -70,6 +86,7 @@ function executeBootstrap({
       LightNoteAndroid: androidBridge ? { postMessage() {} } : undefined,
       location: {
         pathname,
+        search,
         replace(target: string) {
           replacedWith = target;
         },
@@ -81,6 +98,7 @@ function executeBootstrap({
     removedKeys,
     replacedWith,
     visibility: style.visibility,
+    pwaRuntime: sessionValues.get(PWA_RUNTIME_SESSION_KEY) ?? '',
   };
 }
 
@@ -195,6 +213,20 @@ describe('首屏前移动应用入口守卫', () => {
     });
 
     expect(result.replacedWith).toBe('');
+  });
+
+  it('manifest 的 PWA 启动入口在当前窗口写入运行环境标记', () => {
+    const result = executeBootstrap({
+      pathname: '/app',
+      search: `?${PWA_LAUNCH_QUERY_KEY}=${PWA_LAUNCH_QUERY_VALUE}`,
+    });
+
+    expect(result.replacedWith).toBe('');
+    expect(result.pwaRuntime).toBe('1');
+  });
+
+  it('普通 /app 入口不会伪装成 PWA', () => {
+    expect(executeBootstrap({ pathname: '/app' }).pwaRuntime).toBe('');
   });
 
   it('localStorage 不可用时 fail-open 到公开官网', () => {

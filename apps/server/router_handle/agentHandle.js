@@ -49,6 +49,7 @@ import {
 } from '../util/agent/secondRound.js';
 import { buildAgentCapabilityOverview, isAgentCapabilityOverviewRequest } from '../util/agent/capabilityOverview.js';
 import { resolveAgentInputClarification } from '../util/agent/inputClarification.js';
+import { hasExplicitWebUrl } from '../util/agent/webAccessPolicy.js';
 import {
   acquireToolConfirmationAction,
   claimToolConfirmationExecution,
@@ -244,6 +245,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TOOL_ACTION_PENDING',
   'TYPE_REQUIRED',
   'URL_REQUIRED',
+  'URL_SCOPE_FORBIDDEN',
   'EMPTY',
   'TOO_LONG',
   'URL_TOO_LONG',
@@ -817,7 +819,7 @@ const BROAD_PERSONAL_CONTENT_TOOLS = new Set([
   'query_tags',
 ]);
 
-function normalizeAgentContentScope(rawScope, resolvedContexts) {
+function normalizeAgentContentScope(rawScope, resolvedContexts, message) {
   const mode = rawScope?.mode === 'workspace' ? 'workspace' : 'selected';
   const resourceIds = Array.isArray(resolvedContexts?.scopeResourceIds)
     ? resolvedContexts.scopeResourceIds.map((item) => ({ type: String(item.type), id: String(item.id) }))
@@ -826,6 +828,7 @@ function normalizeAgentContentScope(rawScope, resolvedContexts) {
     mode,
     resourceIds,
     externalWeb: rawScope?.externalWeb === true,
+    explicitUrlRead: hasExplicitWebUrl(message),
   };
 }
 
@@ -1266,7 +1269,7 @@ export async function agentChat(req, res) {
           ]),
           agentAbortController.signal,
         );
-    const contentScope = normalizeAgentContentScope(scope, resolvedContexts);
+    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message);
 
     // ---- AI token 前置 gate ----
     // 配额默认强制执行；只有运维显式设置 AI_GATE_ENFORCE=false 才进入观测模式。
@@ -1395,7 +1398,9 @@ export async function agentChat(req, res) {
     if (contentScope.mode === 'selected') {
       selectedTools = selectedTools.filter((tool) => !BROAD_PERSONAL_CONTENT_TOOLS.has(tool.name));
     }
-    if (!contentScope.externalWeb) selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
+    if (!contentScope.externalWeb && !contentScope.explicitUrlRead) {
+      selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
+    }
     trace.selectedTools = selectedTools.map((tool) => tool.name);
     const semanticCatalog =
       enableTranslation || (directRoute.direct && !capabilityOverviewRequested)
@@ -1551,7 +1556,7 @@ export async function agentChat(req, res) {
                 registry: toolRegistry,
                 toolName: tc.function.name,
                 args,
-                context: toolRuntimeContext(req, identity, { agentContentScope: contentScope }),
+                context: toolRuntimeContext(req, identity, { agentContentScope: contentScope, question: message }),
                 allowedToolNames,
                 phase: 'plan',
               });

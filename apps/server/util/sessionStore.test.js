@@ -9,7 +9,7 @@ vi.mock('./redisClient.js', () => ({
   default: { get: vi.fn(), expire: vi.fn(), setEx: vi.fn(), del: redisDel },
 }));
 
-const { createSession, getSessionDeviceKey, groupUserSessions } = await import('./sessionStore.js');
+const { createSession, getSessionDeviceKey, groupUserSessions, touchUserLastActive } = await import('./sessionStore.js');
 
 function createConnection() {
   return {
@@ -133,5 +133,18 @@ describe('登录设备会话归并', () => {
     ]);
 
     expect(groups).toHaveLength(2);
+  });
+});
+
+describe('用户最近活跃时间', () => {
+  it('同一进程内按五分钟窗口节流写入', async () => {
+    query.mockResolvedValue([{}]);
+
+    expect(await touchUserLastActive('activity-user-1', 1_000_000)).toBe(true);
+    expect(await touchUserLastActive('activity-user-1', 1_001_000)).toBe(false);
+    expect(await touchUserLastActive('activity-user-1', 1_301_000)).toBe(true);
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0][0]).toContain('UPDATE user SET last_active_time = NOW()');
   });
 });

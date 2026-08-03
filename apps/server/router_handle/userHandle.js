@@ -45,10 +45,19 @@ import {
 import { recordAdminContextAudit } from '../util/adminContextAudit.js';
 import { isSelfTraffic } from '../util/logExclude.js';
 import { sanitizeLogUrl, sanitizeSensitivePayload } from '../util/log.js';
+import { buildApiLogSystem } from '../util/apiLogSystem.js';
 import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  adminCursorScope,
+  adminCursorTime,
+  decodeAdminListCursor,
+  encodeAdminListCursor,
+  isAdminCursorRequest,
+  normalizeAdminListLimit,
+} from '../util/adminListCursor.js';
 import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
 import {
   processAccountDeletionRequest,
@@ -387,11 +396,11 @@ export const registerUser = async (req, res) => {
     // 不经过全局请求日志中间件，因此必须在这里单独应用自有流量白名单。
     if (!isSelfTraffic(req)) {
       try {
-        const system = JSON.stringify({
-          browser: req.headers['browser'] ?? '未知',
-          os: req.headers['os'] ?? '未知',
-          fingerprint: req.headers['fingerprint'] ?? '未知',
-        });
+        const system = JSON.stringify(
+          buildApiLogSystem(req, {
+            fingerprint: req.headers['fingerprint'] ?? '未知',
+          }),
+        );
         // 注册 body 含明文密码,落 api_logs 前必须脱敏(与全局日志中间件同一套规则)
         const requestPayload = JSON.stringify(sanitizeSensitivePayload(req.method === 'GET' ? req.query : req.body));
         const log = {
@@ -595,92 +604,110 @@ export const endAdminContext = async (req, res) => {
   });
   return res.send(resultData({ ended: true }));
 };
-export const getUserList = (req, res) => {
+export const getUserList = async (req, res) => {
   try {
     if (req.user?.role !== 'root') {
       return res.send(
         resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
       );
     }
-    const { filters, pageSize, currentPage } = validateQueryParams(req.body);
-    const key = filters.key;
-    const skip = pageSize * (currentPage - 1);
-    let sql = `
-      SELECT 
-        u.id,
-        u.alias,
-        u.email,
-        u.head_picture,
-        u.phone_number,
-        u.role,
-        u.ip,
-        u.create_time,
-        u.del_flag,
-        COALESCE(b.bookmark_count, 0) AS bookmarkTotal,
-        COALESCE(t.tag_count, 0) AS tagTotal,
-        COALESCE(n.note_count, 0) AS noteTotal,
-        COALESCE(f.storage_used, 0) AS storageUsed,
-        GREATEST(op.max_op_time, ap.max_api_time) AS lastActiveTime
-      FROM user u
-      LEFT JOIN (
-        SELECT user_id, COUNT(*) AS bookmark_count
-        FROM bookmark
-        WHERE del_flag = 0
-        GROUP BY user_id
-      ) b ON u.id = b.user_id
-      LEFT JOIN (
-        SELECT user_id, COUNT(*) AS tag_count
-        FROM tag
-        WHERE del_flag = 0
-        GROUP BY user_id
-      ) t ON u.id = t.user_id
-      LEFT JOIN (
-        SELECT create_by, COUNT(*) AS note_count
-        FROM note
-        WHERE del_flag = 0
-        GROUP BY create_by
-      ) n ON u.id = n.create_by
-      LEFT JOIN (
-        SELECT create_by, ROUND(SUM(file_size) / 1048576, 2) AS storage_used
-        FROM files
-        WHERE del_flag = 0
-        GROUP BY create_by
-      ) f ON u.id = f.create_by
-      LEFT JOIN (
-        SELECT create_by AS user_id, MAX(create_time) AS max_op_time
-        FROM operation_logs
-        WHERE del_flag = 0
-        GROUP BY create_by
-      ) op ON u.id = op.user_id
-      LEFT JOIN (
-        SELECT user_id, MAX(request_time) AS max_api_time
-        FROM api_logs
-        WHERE del_flag = 0
-        GROUP BY user_id
-      ) ap ON u.id = ap.user_id
-      WHERE u.del_flag = 0 AND (u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%'))
-      ORDER BY u.create_time DESC
-      LIMIT ? OFFSET ?
-    `;
-    pool
-      .query(sql, [key, key, pageSize, skip])
-      .then(async ([result]) => {
-        const [totalRes] = await pool.query(
-          "SELECT COUNT(*) FROM user WHERE del_flag=0 AND (alias LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))",
-          [key, key],
-        );
-        res.send(
-          resultData({
-            items: result,
-            total: totalRes[0]['COUNT(*)'],
-          }),
-        );
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, L(req, '服务器内部错误', 'Server error: ') + err)); // 设置状态码为500
+    const cursorMode = isAdminCursorRequest(req.body);
+    const legacy = cursorMode ? null : validateQueryParams(req.body);
+    const filters = snakeCaseKeys(req.body?.filters || legacy?.filters || {});
+    const key = String(filters?.key || '').trim().slice(0, 200);
+    const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
+    const currentPage = cursorMode ? 1 : legacy.currentPage;
+    const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
+    const requestedSort = req.body?.sort || {};
+    const sortField = requestedSort.field === 'lastActiveTime' ? 'lastActiveTime' : 'createTime';
+    const sortOrder = String(requestedSort.order || 'desc').toLowerCase() === 'asc' ? 'asc' : 'desc';
+    const sortColumn = sortField === 'lastActiveTime' ? 'u.last_active_time' : 'u.create_time';
+    const direction = sortOrder.toUpperCase();
+    const operator = sortOrder === 'asc' ? '>' : '<';
+    const scope = adminCursorScope('users', [key, sortField, sortOrder]);
+    const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
+    const cursorFilter = cursor ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))` : '';
+    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const take = cursorMode ? pageSize + 1 : pageSize;
+
+    const [rows] = await pool.query(
+      `SELECT u.id, u.alias, u.email, u.head_picture, u.phone_number, u.role, u.ip,
+              u.create_time, u.last_active_time, u.del_flag
+       FROM user u
+       WHERE u.del_flag = 0
+         AND (u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%'))${cursorFilter}
+       ORDER BY ${sortColumn} ${direction}, u.id ${direction}
+       LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
+      [key, key, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+    );
+    const hasMore = cursorMode && rows.length > pageSize;
+    const page = cursorMode ? rows.slice(0, pageSize) : rows;
+    const ids = page.map((row) => row.id).filter(Boolean);
+
+    if (ids.length) {
+      const placeholders = ids.map(() => '?').join(', ');
+      const [[bookmarks], [tags], [notes], [files]] = await Promise.all([
+        pool.query(
+          `SELECT user_id AS userId, COUNT(*) AS total FROM bookmark WHERE del_flag = 0 AND user_id IN (${placeholders}) GROUP BY user_id`,
+          ids,
+        ),
+        pool.query(
+          `SELECT user_id AS userId, COUNT(*) AS total FROM tag WHERE del_flag = 0 AND user_id IN (${placeholders}) GROUP BY user_id`,
+          ids,
+        ),
+        pool.query(
+          `SELECT create_by AS userId, COUNT(*) AS total FROM note WHERE del_flag = 0 AND create_by IN (${placeholders}) GROUP BY create_by`,
+          ids,
+        ),
+        pool.query(
+          `SELECT create_by AS userId, ROUND(SUM(file_size) / 1048576, 2) AS total FROM files WHERE del_flag = 0 AND create_by IN (${placeholders}) GROUP BY create_by`,
+          ids,
+        ),
+      ]);
+      const asMap = (values) => new Map(values.map((value) => [value.userId, Number(value.total || 0)]));
+      const bookmarkMap = asMap(bookmarks);
+      const tagMap = asMap(tags);
+      const noteMap = asMap(notes);
+      const fileMap = asMap(files);
+      page.forEach((row) => {
+        row.bookmarkTotal = bookmarkMap.get(row.id) || 0;
+        row.tagTotal = tagMap.get(row.id) || 0;
+        row.noteTotal = noteMap.get(row.id) || 0;
+        row.storageUsed = fileMap.get(row.id) || 0;
       });
+    }
+
+    let total;
+    if (!cursorMode || !cursor) {
+      const [totalRes] = await pool.query(
+        "SELECT COUNT(*) AS total FROM user WHERE del_flag = 0 AND (alias LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))",
+        [key, key],
+      );
+      total = Number(totalRes[0].total || 0);
+    }
+    const last = page[page.length - 1];
+    const cursorValue = last?.[sortField === 'lastActiveTime' ? 'last_active_time' : 'create_time'];
+    return res.send(
+      resultData({
+        items: page,
+        total,
+        hasMore,
+        nextCursor:
+          cursorMode && hasMore && last
+            ? encodeAdminListCursor(scope, { value: adminCursorTime(cursorValue), id: last.id })
+            : null,
+      }),
+    );
   } catch (e) {
-    res.send(resultData(null, 400, L(req, '客户端请求异常', 'Bad request: ') + e)); // 设置状态码为400
+    const status = e?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
+    console.error('[admin-list] 用户列表查询失败 code=%s', stableAgentErrorCode(e));
+    return res.send(
+      resultData(
+        null,
+        status,
+        status === 400 ? L(req, '查询游标无效', 'Invalid cursor') : L(req, '用户列表查询失败', 'Failed to query users'),
+      ),
+    );
   }
 };
 

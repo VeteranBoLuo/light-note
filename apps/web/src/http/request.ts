@@ -2,7 +2,8 @@ import axios, { AxiosRequestConfig, AxiosResponse } from 'axios';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
-import { getApiLogOsInfo, getBrowserType, getLogDeviceId, getLogFingerprint } from '@/utils/common.ts';
+import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
+import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
 import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
 
 // 常量定义
@@ -162,8 +163,9 @@ request.interceptors.request.use(
       } catch (e) {
         currentLang = 'zh-CN';
       }
-      config.headers['OS'] = getApiLogOsInfo();
+      config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
+      config.headers['X-LightNote-Runtime'] = resolveLightNoteRuntime();
       config.headers['X-Lang'] = currentLang;
       const adminContextToken = getAdminContextToken();
       if (adminContextToken) {

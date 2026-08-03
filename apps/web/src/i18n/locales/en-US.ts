@@ -1,4 +1,15 @@
 export default {
+  apiLog: {
+    operatingSystem: 'Operating system',
+    runtime: 'Runtime',
+    unknown: 'Unknown',
+    runtimeValues: {
+      browser: 'Browser',
+      pwa: 'PWA',
+      androidApp: 'Android App',
+      unknown: 'Unknown',
+    },
+  },
   navigation: {
     title: 'LightNote',
     index: 'Home',
@@ -386,6 +397,7 @@ export default {
     quickCapture: 'Quick add',
     quickCaptureEyebrow: 'Capture now, organize later',
     captureHint: 'Choose a content type and save only what matters now. Add tags and locations later.',
+    goToInbox: 'Open To organize',
     todoCaptureHint: 'Add a title, date, and priority to create quickly. Fill in the rest later.',
     quickCapturePanels: {
       bookmark: {
@@ -1167,6 +1179,8 @@ export default {
       openWebsite: 'Open website',
       openNote: 'View note',
       openFile: 'Preview file',
+      previewHere: 'Preview here',
+      openInCloudSpace: 'View in Cloud Space',
       replaceResource: 'Replace reference',
     },
     resourceBacklinks: {

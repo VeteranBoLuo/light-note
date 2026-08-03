@@ -25,21 +25,27 @@
     </template>
 
     <BTable
+      ref="tableRef"
       fill
+      virtual
       :data="logList"
       :columns="logColumns"
       :row-clickable="true"
-      :pagination="true"
-      :total="total"
-      :page-size="pageSize"
-      :current-page="currentPage"
-      @page-change="onPageChange"
-      @size-change="onSizeChange"
+      :loading="loading"
+      :has-more="hasMore"
+      @load-more="loadMore"
       @row-click="onRowClick"
     >
-      <template #bodyCell="{ text, column }">
+      <template #bodyCell="{ text, record, column }">
         <template v-if="column.key === 'system'">
-          <span :style="{ color: getOsColor(text?.os), fontSize: '12px' }">{{ text?.os || '未知' }}</span>
+          <span :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">{{
+            text?.os || t('apiLog.unknown')
+          }}</span>
+        </template>
+        <template v-else-if="column.key === 'runtime'">
+          <span :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }">{{
+            t(getApiLogRuntimeLabelKey(record.system?.runtime))
+          }}</span>
         </template>
       </template>
     </BTable>
@@ -52,7 +58,16 @@
       <div>
         请求参数：
         <pre
-          style="margin: 4px 0 0; max-height: 120px; overflow: auto; padding: 8px; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-all"
+          style="
+            margin: 4px 0 0;
+            max-height: 120px;
+            overflow: auto;
+            padding: 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-break: break-all;
+          "
           >{{ selectedRecord.req }}</pre>
       </div>
       <div>ip地址：{{ selectedRecord?.ip }}</div>
@@ -60,7 +75,8 @@
       <div>省份：{{ selectedRecord.location?.province }}</div>
       <div>城市：{{ selectedRecord.location?.city }}</div>
       <div>浏览器：{{ selectedRecord.system?.browser }}</div>
-      <div>操作系统：{{ selectedRecord.system?.os }}</div>
+      <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
+      <div>{{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime)) }}</div>
     </div>
   </BModal>
 </template>
@@ -78,11 +94,34 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
-  const logList = ref([]);
-  const loading = ref(false);
+  import { useI18n } from 'vue-i18n';
+  import { getApiLogOsColor, getApiLogRuntimeColor, getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  const { t } = useI18n();
+  const tableRef = ref<InstanceType<typeof BTable> | null>(null);
+  const searchValue = ref('');
+  const hideInternal = ref(true);
+  const {
+    items: logList,
+    total,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+    cancel,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/common/getApiLogs', {
+        cursor,
+        limit,
+        filters: { key: searchValue.value, hideInternal: hideInternal.value },
+      }),
+    onError: (_error, silent) => {
+      if (!silent) message.error(t('common.requestFailedDescription'));
+    },
+  });
   const hasLoaded = ref(false);
   const inPageActive = ref(false);
-  const requestToken = ref(0);
 
   const logColumns = computed(() => {
     return [
@@ -112,38 +151,17 @@
         width: '1fr',
       },
       {
-        title: '系统',
+        title: t('apiLog.operatingSystem'),
         key: 'system',
         width: '110px',
       },
+      {
+        title: t('apiLog.runtime'),
+        key: 'runtime',
+        width: '100px',
+      },
     ];
   });
-
-  // 常用系统各配一个有辨识度、深浅主题都可读的颜色;未知/其他保持中性灰
-  function getOsColor(os?: string): string {
-    if (!os) return '#8a919e';
-    if (os.includes('Windows')) return '#3b82f6'; // 蓝
-    if (os.includes('iOS') || os.includes('iPhone') || os.includes('iPad')) return '#0ea5e9'; // 天蓝
-    if (os.includes('macOS')) return '#8b5cf6'; // 紫
-    if (os.includes('Android')) return '#22c55e'; // 绿
-    if (os.includes('HarmonyOS') || os.includes('Harmony') || os.includes('鸿蒙')) return '#ef4444'; // 红
-    if (os.includes('Linux') || os.includes('Ubuntu')) return '#f59e0b'; // 橙
-    return '#8a919e'; // 其他/未知
-  }
-
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-
-  function onPageChange(page: number) {
-    currentPage.value = page;
-    searchApiLog();
-  }
-
-  function onSizeChange(_current: number, size: number) {
-    currentPage.value = 1;
-    pageSize.value = size;
-    searchApiLog();
-  }
 
   function clearApiLogs() {
     Alert.alert({
@@ -170,19 +188,14 @@
   function handleSearch() {
     clearSearchTimer();
     timer.value = setTimeout(() => {
-      currentPage.value = 1;
       searchApiLog({ silent: true });
     }, 300);
   }
 
-  const total = ref(0);
-  const searchValue = ref('');
   function cancelPendingRequest() {
-    requestToken.value += 1;
-    loading.value = false;
+    cancel();
   }
 
-  const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
 
@@ -191,42 +204,10 @@
     detailVisible.value = true;
   }
 
-  function searchApiLog(options: { silent?: boolean } = {}) {
-    const currentToken = ++requestToken.value;
-    loading.value = true;
-    apiQueryPost('/api/common/getApiLogs', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: searchValue.value,
-        hideInternal: hideInternal.value,
-      },
-    })
-      .then((res) => {
-        if (currentToken !== requestToken.value) {
-          return;
-        }
-        if (res.status === 200) {
-          logList.value = res.data.items;
-          total.value = res.data.total;
-          hasLoaded.value = true;
-        } else if (!options.silent) {
-          message.error(res.msg || '查询日志失败');
-        }
-      })
-      .catch((error) => {
-        if (currentToken !== requestToken.value) {
-          return;
-        }
-        if (!options.silent) {
-          message.error(error?.message || '查询日志失败');
-        }
-      })
-      .finally(() => {
-        if (currentToken === requestToken.value) {
-          loading.value = false;
-        }
-      });
+  async function searchApiLog(options: { silent?: boolean } = {}) {
+    tableRef.value?.scrollToTop();
+    const loaded = await reload(options);
+    if (loaded) hasLoaded.value = true;
   }
 
   const handleVisibilityChange = () => {

@@ -17,7 +17,13 @@
       <div class="nt-panel">
         <div class="nt-head">
           <span class="nt-title">{{ t('notification.title') }}</span>
-          <BButton v-if="unreadTotal > 0" class="nt-markall dom-hover" @click="onMarkAll">
+          <BButton
+            class="nt-markall dom-hover"
+            :disabled="unreadTotal <= 0"
+            :aria-label="t('notification.markAllRead')"
+            @click="onMarkAll"
+          >
+            <SvgIcon :src="icon.settings.notificationReadAll" size="15" aria-hidden="true" />
             {{ t('notification.markAllRead') }}
           </BButton>
         </div>
@@ -74,8 +80,13 @@
                     </BButton>
                   </div>
                 </div>
-                <BButton class="nt-del dom-hover" :title="t('notification.delete')" @click.stop="onDelete(n)">
-                  <SvgIcon :src="icon.noteDetail.delete" size="14" aria-hidden="true" />
+                <BButton
+                  class="nt-del dom-hover"
+                  :title="t('notification.delete')"
+                  :aria-label="t('notification.delete')"
+                  @click.stop="onDelete(n)"
+                >
+                  <SvgIcon :src="icon.noteDetail.delete" size="15" aria-hidden="true" />
                 </BButton>
               </div>
             </div>
@@ -408,9 +419,16 @@
     font-weight: 700;
   }
   .notification-popover .nt-markall {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 12px;
     color: var(--primary-color);
     cursor: pointer;
+  }
+  .notification-popover .nt-markall:disabled {
+    color: var(--desc-color);
+    cursor: default;
   }
   .notification-popover .nt-tabs {
     display: flex;
@@ -510,7 +528,7 @@
     background: transparent;
     color: var(--desc-color);
     cursor: pointer;
-    opacity: 0;
+    opacity: 0.72;
     transition:
       opacity 0.15s,
       color 0.15s,
@@ -627,12 +645,13 @@
     box-shadow: none;
   }
   .notification-popover .nt-todo-action--open {
-    border: 1px solid color-mix(in srgb, var(--primary-color) 22%, var(--surface-border-color));
-    background: color-mix(in srgb, var(--primary-color) 7%, var(--card-background));
+    border: 1px solid var(--notification-secondary-action-border);
+    background: var(--notification-secondary-action-bg);
+    box-shadow: none;
     color: var(--primary-color);
   }
   .notification-popover .nt-todo-action--open:hover {
-    background: color-mix(in srgb, var(--primary-color) 12%, var(--card-background));
+    background: var(--notification-secondary-action-hover-bg);
   }
   .notification-popover .nt-more {
     width: 100%;
@@ -664,6 +683,7 @@
       opacity: 1;
     }
     .notification-popover .nt-del:hover {
+      opacity: 1;
       color: #ef4444;
       background: color-mix(in srgb, #ef4444 12%, transparent);
     }

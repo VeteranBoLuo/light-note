@@ -3,6 +3,7 @@ import { resultData, formatDateTime, insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
 import { shouldSkipApiLog } from './logPolicy.js';
 import { redactSensitiveText, stableAgentErrorCode } from './agent/logSafety.js';
+import { buildApiLogSystem } from './apiLogSystem.js';
 
 // api_logs 落库前的敏感字段脱敏。对象键可能来自历史客户端或第三方 SDK，统一忽略分隔符比较，
 // 防止 access_token / access-token / accessToken 这类变体绕过；字符串中的邮箱、URL 凭据也一并清洗。
@@ -120,20 +121,20 @@ export async function logFunction(req, res, next) {
     res.on('finish', async () => {
       if (userId) {
         try {
-          const system = JSON.stringify({
-            browser: req.headers['browser'] ?? '未知',
-            os: req.headers['os'] ?? '未知',
-            fingerprint: req.headers['fingerprint'],
-            // finish 触发时 Express 已完成路由匹配；用于区分业务接口 4xx 与未知路径 404。
-            // 不存进攻方法或原始头信息，只保存布尔分类结果。
-            routeMatched: Boolean(req.route),
-            ...(isVisitorWorkspaceWrite
-              ? {
-                  adminPreview: true,
-                  targetUserId: req.user?.id || '',
-                }
-              : {}),
-          });
+          const system = JSON.stringify(
+            buildApiLogSystem(req, {
+              fingerprint: req.headers['fingerprint'],
+              // finish 触发时 Express 已完成路由匹配；用于区分业务接口 4xx 与未知路径 404。
+              // 不存进攻方法或原始头信息，只保存布尔分类结果。
+              routeMatched: Boolean(req.route),
+              ...(isVisitorWorkspaceWrite
+                ? {
+                    adminPreview: true,
+                    targetUserId: req.user?.id || '',
+                  }
+                : {}),
+            }),
+          );
           // 构造日志对象
           const log = {
             userId: userId,

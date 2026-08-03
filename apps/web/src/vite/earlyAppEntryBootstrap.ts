@@ -4,6 +4,9 @@ import {
   LOGIN_HISTORY_STORAGE_KEYS,
   LOGIN_HISTORY_TTL_MS,
   MOBILE_LANDING_VISIT_STORAGE_KEY,
+  PWA_LAUNCH_QUERY_KEY,
+  PWA_LAUNCH_QUERY_VALUE,
+  PWA_RUNTIME_SESSION_KEY,
 } from '../config/appEntryBootstrap';
 import { VIEWPORT_BREAKPOINTS } from '../config/responsive';
 
@@ -26,11 +29,25 @@ export function createEarlyAppEntryScript(): string {
     rememberedSessionKey: LOGIN_HISTORY_STORAGE_KEYS.rememberedSession,
     loginHistoryTtlMs: LOGIN_HISTORY_TTL_MS,
     mobileBreakpoint: VIEWPORT_BREAKPOINTS.mobile,
+    pwaLaunchQueryKey: PWA_LAUNCH_QUERY_KEY,
+    pwaLaunchQueryValue: PWA_LAUNCH_QUERY_VALUE,
+    pwaRuntimeSessionKey: PWA_RUNTIME_SESSION_KEY,
   });
 
   return `(function () {
   var config = ${config};
   try {
+    // manifest start_url 的来源标记只保留在本次独立窗口会话中，供 API 日志识别运行环境。
+    // 它不是身份或权限凭据；sessionStorage 不可用时继续依赖标准 display-mode 信号。
+    try {
+      if (window.location.pathname === config.appEntryPath) {
+        var launchParams = new URLSearchParams(String(window.location.search || ''));
+        if (launchParams.get(config.pwaLaunchQueryKey) === config.pwaLaunchQueryValue) {
+          window.sessionStorage.setItem(config.pwaRuntimeSessionKey, '1');
+        }
+      }
+    } catch (markerError) {}
+
     if (window.location.pathname !== '/') return;
 
     function redirectToApplication() {

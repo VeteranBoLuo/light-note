@@ -297,7 +297,7 @@
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import { waitForCurrentMobileOverlayHistoryRelease } from '@/utils/mobileOverlayHistory';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     RESOURCE_LIST_PAGE_SIZE,
     buildResourceSortMove,
@@ -366,20 +366,17 @@
       showTypePicker.value = false;
       return;
     }
-    // 移动端 BModal 会用一层 history 占位支持系统返回手势。必须先监听这层
-    // 占位释放，再关闭弹框并跳转；否则 history.back 与 router.push 竞争，
-    // 新打开的 /noteLibrary/add 会被立即弹回笔记库。
-    const overlayReleased = bookmark.isMobile
-      ? waitForCurrentMobileOverlayHistoryRelease()
-      : Promise.resolve();
-    showTypePicker.value = false;
     const usageKey = query.builtin ? `builtin:${query.builtin}` : query.templateId ? `mine:${query.templateId}` : '';
     if (usageKey) {
       templateUsage.value = { ...templateUsage.value, [usageKey]: Date.now() };
       localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
     }
-    await overlayReleased;
-    await router.push({ path: '/noteLibrary/add', query });
+    await closeCurrentMobileOverlayThen(
+      () => {
+        showTypePicker.value = false;
+      },
+      () => router.push({ path: '/noteLibrary/add', query }),
+    );
   }
   function readTemplateUsage() {
     try {

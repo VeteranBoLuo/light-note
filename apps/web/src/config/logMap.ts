@@ -78,6 +78,7 @@ export const OPERATION_LOG_MAP = {
   cloudSpace: createModule('云空间', {}),
   inbox: createModule('待处理', {
     openCapture: '打开快速添加',
+    openInboxFromCapture: '快速添加前往待整理',
     captureBookmark: '收集书签成功',
     captureNote: '收集笔记成功',
     captureFile: '收集文件成功',

@@ -1,5 +1,11 @@
 import { computed, ref, watch } from 'vue';
 import { useUserStore } from '@/store';
+import {
+  registerMobileOverlayHistory,
+  releaseMobileOverlayHistory,
+  requestMobileOverlayHistoryClose,
+  type MobileOverlayHistoryHandle,
+} from '@/utils/mobileOverlayHistory';
 
 const RECENT_LIMIT = 8;
 const RECENT_KEY_PREFIX = 'light-note:global-search-recent:';
@@ -14,7 +20,8 @@ const open = ref(false);
 const keyword = ref('');
 const recentKeywords = ref<string[]>([]);
 
-let sentinelActive = false;
+let historyHandle: MobileOverlayHistoryHandle | null = null;
+let pendingAfterClose: (() => void) | null = null;
 let boundUserKey = '';
 
 function recentStorageKey(userId: string) {
@@ -41,19 +48,18 @@ function persistRecent(userId: string) {
   }
 }
 
-function handlePopState() {
-  // 用户按下 Android 返回键：sentinel 已经出栈，这里只负责收起搜索层
-  sentinelActive = false;
-  window.removeEventListener('popstate', handlePopState);
+function closeFromMobileHistory() {
+  historyHandle = null;
   open.value = false;
   keyword.value = '';
+  const afterClose = pendingAfterClose;
+  pendingAfterClose = null;
+  afterClose?.();
 }
 
 function pushSentinel() {
-  if (sentinelActive) return;
-  sentinelActive = true;
-  window.history.pushState({ ...window.history.state, lnGlobalSearch: true }, '');
-  window.addEventListener('popstate', handlePopState);
+  if (historyHandle) return;
+  historyHandle = registerMobileOverlayHistory(closeFromMobileHistory);
 }
 
 /**
@@ -62,31 +68,14 @@ function pushSentinel() {
  * 否则 history.back() 会把刚 push 的新路由一起弹掉。
  */
 function popSentinel(afterClose?: () => void) {
-  if (!sentinelActive) {
+  if (!historyHandle) {
     afterClose?.();
     return;
   }
-  sentinelActive = false;
-  window.removeEventListener('popstate', handlePopState);
-
-  if (!afterClose) {
-    window.history.back();
-    return;
-  }
-
-  let done = false;
-  const run = () => {
-    if (done) return;
-    done = true;
-    window.removeEventListener('popstate', onPopped);
-    window.clearTimeout(timer);
-    afterClose();
-  };
-  const onPopped = () => run();
-  // 极少数情况下 sentinel 不在栈顶，back 不会触发 popstate；超时兜底保证跳转不会丢失
-  const timer = window.setTimeout(run, 150);
-  window.addEventListener('popstate', onPopped);
-  window.history.back();
+  pendingAfterClose = afterClose || null;
+  if (requestMobileOverlayHistoryClose(historyHandle)) return;
+  historyHandle = null;
+  closeFromMobileHistory();
 }
 
 export function useMobileGlobalSearch() {
@@ -113,6 +102,12 @@ export function useMobileGlobalSearch() {
 
   function closeSearch(afterClose?: () => void) {
     if (!open.value) {
+      // 首次点击已经发起 history 回退时，后续重复点击不能越过尚未释放的
+      // 占位提前跳路由；保留第一份后续动作即可。
+      if (historyHandle) {
+        if (!pendingAfterClose && afterClose) pendingAfterClose = afterClose;
+        return;
+      }
       afterClose?.();
       return;
     }
@@ -128,10 +123,11 @@ export function useMobileGlobalSearch() {
    * 会把用户从新页面弹回搜索前的页面。
    */
   function dismiss() {
-    if (sentinelActive) {
-      sentinelActive = false;
-      window.removeEventListener('popstate', handlePopState);
+    if (historyHandle) {
+      releaseMobileOverlayHistory(historyHandle);
+      historyHandle = null;
     }
+    pendingAfterClose = null;
     open.value = false;
     keyword.value = '';
   }

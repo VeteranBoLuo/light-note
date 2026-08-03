@@ -85,6 +85,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M12 3.25 19 6v5.1c0 4.45-2.85 7.45-7 9.65-4.15-2.2-7-5.2-7-9.65V6z"/><path d="M9 11.5l2 2 4-4"/></g></svg>',
     notification:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M18 9a6 6 0 0 0-12 0c0 6-2.5 8-2.5 8h17S18 15 18 9Z"/><path d="M14.25 20a2.5 2.5 0 0 1-4.5 0"/></g></svg>',
+    notificationReadAll:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="m3.5 12.5l3.5 3.5l6-6"/><path d="m10.5 15.5l2.5 2.5l7.5-8"/></g></svg>',
   },
   todo: {
     drag:
@@ -191,6 +193,10 @@ export default {
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4.75 19.25h3.4L18.6 8.8a2.15 2.15 0 0 0 0-3.05l-.35-.35a2.15 2.15 0 0 0-3.05 0L4.75 15.85v3.4Z"/><path d="m13.8 6.8 3.4 3.4M13.25 19.25h6"/></g></svg>',
   table_delete:
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4.5 7.25h15M9.25 4.25h5.5l.75 3H8.5l.75-3ZM7 7.25l.7 12h8.6l.7-12M9.75 10.5v5.75M14.25 10.5v5.75" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  table_sort_up:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 10 6" fill="none"><path d="M1 5l4-4l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  table_sort_down:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 10 6" fill="none"><path d="M1 1l4 4l4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   help_document:
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPgoJPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSJub25lIiAvPgoJPHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNMTUuNzUgMTNhLjc1Ljc1IDAgMCAwLS43NS0uNzVIOWEuNzUuNzUgMCAwIDAgMCAxLjVoNmEuNzUuNzUgMCAwIDAgLjc1LS43NW0wIDRhLjc1Ljc1IDAgMCAwLS43NS0uNzVIOWEuNzUuNzUgMCAwIDAgMCAxLjVoNmEuNzUuNzUgMCAwIDAgLjc1LS43NSIgLz4KCTxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNyAyLjI1QTIuNzUgMi43NSAwIDAgMCA0LjI1IDV2MTRBMi43NSAyLjc1IDAgMCAwIDcgMjEuNzVoMTBBMi43NSAyLjc1IDAgMCAwIDE5Ljc1IDE5VjcuOTY4YzAtLjM4MS0uMTI0LS43NTEtLjM1NC0xLjA1NWwtMi45OTgtMy45NjhhMS43NSAxLjc1IDAgMCAwLTEuMzk2LS42OTV6TTUuNzUgNWMwLS42OS41Ni0xLjI1IDEuMjUtMS4yNWg3LjI1djQuMzk3YzAgLjQxNC4zMzYuNzUuNzUuNzVoMy4yNVYxOWMwIC42OS0uNTYgMS4yNS0xLjI1IDEuMjVIN2MtLjY5IDAtMS4yNS0uNTYtMS4yNS0xLjI1eiIgY2xpcC1ydWxlPSJldmVub2RkIiAvPgo8L3N2Zz4=',
   file_upload:

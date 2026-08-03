@@ -3,10 +3,19 @@ package top.boluo66.lightnote;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -27,6 +36,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebMessageCompat;
 import androidx.webkit.SafeBrowsingResponseCompat;
 import androidx.webkit.WebResourceErrorCompat;
@@ -46,6 +58,7 @@ public final class MainActivity extends Activity {
     private static final long FILE_CHOOSER_READY_FALLBACK_MS = 3_000;
     private static final long LAUNCH_TIMEOUT_MS = 10_000;
     private static final long WEB_APP_READY_FALLBACK_MS = 1_500;
+    private static final long BACK_TO_DESKTOP_CONFIRM_WINDOW_MS = 2_000;
     private static final String THEME_OBSERVER_SCRIPT =
         "(function(){"
             + "try{"
@@ -83,6 +96,8 @@ public final class MainActivity extends Activity {
     private View statusBarBackground;
     private FrameLayout launchOverlay;
     private FrameLayout fileChooserOverlay;
+    private LinearLayout backToDesktopHint;
+    private TextView backHintTitleView;
     private ProgressBar fileChooserProgressView;
     private TextView fileChooserStatusView;
     private ValueCallback<Uri[]> fileCallback;
@@ -92,10 +107,13 @@ public final class MainActivity extends Activity {
     private boolean unsupportedWebView;
     private boolean resolvedNightTheme;
     private boolean backNavigationPending;
+    private long lastRootBackPressedAt;
+    private int backHintAnimationGeneration;
     private OnBackInvokedCallback backInvokedCallback;
     private final Runnable launchTimeout = this::hideLaunchOverlay;
     private final Runnable webAppReadyFallback = this::hideLaunchOverlay;
     private final Runnable fileChooserReadyFallback = this::hideFileChooserOverlay;
+    private final Runnable hideBackToDesktopHintTask = this::hideBackToDesktopHint;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -223,6 +241,9 @@ public final class MainActivity extends Activity {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT
         ));
+        backToDesktopHint = createBackToDesktopHint();
+        rootView.addView(backToDesktopHint, createBackToDesktopHintLayoutParams());
+        applyBackToDesktopHintInsets();
         WindowInsetsSupport.apply(
             this,
             rootView,
@@ -230,6 +251,180 @@ public final class MainActivity extends Activity {
             statusBarBackground
         );
         return rootView;
+    }
+
+    private LinearLayout createBackToDesktopHint() {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(18), dp(10), dp(18), dp(10));
+        card.setElevation(0f);
+        card.setVisibility(View.GONE);
+        card.setAlpha(0f);
+        card.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+
+        backHintTitleView = new TextView(this);
+        backHintTitleView.setText(R.string.back_to_desktop_hint_title);
+        backHintTitleView.setTextSize(14);
+        backHintTitleView.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        backHintTitleView.setIncludeFontPadding(false);
+        backHintTitleView.setGravity(Gravity.CENTER);
+        backHintTitleView.setTranslationY(-dp(1));
+        backHintTitleView.setMaxLines(1);
+        card.addView(backHintTitleView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        applyBackToDesktopHintTheme(card);
+        return card;
+    }
+
+    private FrameLayout.LayoutParams createBackToDesktopHintLayoutParams() {
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        params.leftMargin = dp(14);
+        params.rightMargin = dp(14);
+        params.bottomMargin = dp(86);
+        return params;
+    }
+
+    private void applyBackToDesktopHintInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(backToDesktopHint, (view, windowInsets) -> {
+            Insets safeArea = windowInsets.getInsets(
+                WindowInsetsCompat.Type.systemBars()
+                    | WindowInsetsCompat.Type.displayCutout()
+            );
+            ViewGroup.LayoutParams rawParams = view.getLayoutParams();
+            if (rawParams instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) rawParams;
+                params.leftMargin = safeArea.left + dp(14);
+                params.rightMargin = safeArea.right + dp(14);
+                params.bottomMargin = safeArea.bottom + dp(86);
+                view.setLayoutParams(params);
+            }
+            return windowInsets;
+        });
+    }
+
+    private GradientDrawable roundedBackground(int color, int radiusDp) {
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(color);
+        background.setCornerRadius(dp(radiusDp));
+        return background;
+    }
+
+    private void applyBackToDesktopHintTheme() {
+        applyBackToDesktopHintTheme(backToDesktopHint);
+    }
+
+    private void applyBackToDesktopHintTheme(LinearLayout card) {
+        if (card == null) return;
+        int titleColor = getColor(
+            resolvedNightTheme ? R.color.back_hint_title_night : R.color.back_hint_title_day
+        );
+        if (resolvedNightTheme) {
+            card.setPadding(dp(18), dp(10), dp(18), dp(10));
+            card.setLayerType(View.LAYER_TYPE_NONE, null);
+            card.setElevation(dp(2));
+            card.setBackground(roundedBackground(getColor(R.color.back_hint_background_night), 999));
+        } else {
+            // 使用单层模糊投影并向下轻移，避免默认 elevation 的黑色底边和同心光圈。
+            card.setPadding(dp(26), dp(18), dp(26), dp(20));
+            card.setElevation(0f);
+            card.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            card.setBackground(new SoftPillDrawable());
+        }
+        if (backHintTitleView != null) backHintTitleView.setTextColor(titleColor);
+    }
+
+    private final class SoftPillDrawable extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF pillBounds = new RectF();
+        private int drawableAlpha = 255;
+
+        @Override
+        public void draw(Canvas canvas) {
+            pillBounds.set(
+                getBounds().left + dp(9),
+                getBounds().top + dp(6),
+                getBounds().right - dp(9),
+                getBounds().bottom - dp(11)
+            );
+            paint.setColor(getColor(R.color.back_hint_background_day));
+            paint.setAlpha(drawableAlpha);
+            paint.setShadowLayer(dp(9), 0f, dp(3), 0x28707580);
+            float radius = pillBounds.height() / 2f;
+            canvas.drawRoundRect(pillBounds, radius, radius, paint);
+            paint.clearShadowLayer();
+        }
+
+        @Override
+        public void setAlpha(int alpha) {
+            drawableAlpha = alpha;
+            invalidateSelf();
+        }
+
+        @Override
+        public void setColorFilter(ColorFilter colorFilter) {
+            paint.setColorFilter(colorFilter);
+            invalidateSelf();
+        }
+
+        @Override
+        public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
+        }
+    }
+
+    private void showBackToDesktopHint() {
+        if (backToDesktopHint == null || rootView == null) return;
+        rootView.removeCallbacks(hideBackToDesktopHintTask);
+        backHintAnimationGeneration++;
+        backToDesktopHint.animate().cancel();
+        applyBackToDesktopHintTheme();
+        backToDesktopHint.bringToFront();
+        backToDesktopHint.setVisibility(View.VISIBLE);
+        backToDesktopHint.setAlpha(0f);
+        backToDesktopHint.setTranslationY(dp(14));
+        backToDesktopHint.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(190)
+            .start();
+        backToDesktopHint.announceForAccessibility(
+            getString(R.string.back_to_desktop_hint_accessibility)
+        );
+        rootView.postDelayed(hideBackToDesktopHintTask, BACK_TO_DESKTOP_CONFIRM_WINDOW_MS);
+    }
+
+    private void hideBackToDesktopHint() {
+        if (backToDesktopHint == null || backToDesktopHint.getVisibility() != View.VISIBLE) return;
+        int animationGeneration = ++backHintAnimationGeneration;
+        backToDesktopHint.animate().cancel();
+        backToDesktopHint.animate()
+            .alpha(0f)
+            .translationY(dp(8))
+            .setDuration(150)
+            .withEndAction(() -> {
+                if (animationGeneration != backHintAnimationGeneration) return;
+                backToDesktopHint.setVisibility(View.GONE);
+                backToDesktopHint.setTranslationY(0f);
+            })
+            .start();
+    }
+
+    private void hideBackToDesktopHintImmediately() {
+        if (rootView != null) rootView.removeCallbacks(hideBackToDesktopHintTask);
+        if (backToDesktopHint == null) return;
+        backHintAnimationGeneration++;
+        backToDesktopHint.animate().cancel();
+        backToDesktopHint.setVisibility(View.GONE);
+        backToDesktopHint.setAlpha(0f);
+        backToDesktopHint.setTranslationY(0f);
     }
 
     private FrameLayout createLaunchOverlay() {
@@ -504,6 +699,7 @@ public final class MainActivity extends Activity {
         }
         resolvedNightTheme = "night".equals(theme);
         applyFileChooserOverlayTheme();
+        applyBackToDesktopHintTheme();
         if (launchOverlayHidden) {
             applyResolvedWebTheme();
         }
@@ -857,16 +1053,31 @@ public final class MainActivity extends Activity {
                 state -> {
                     backNavigationPending = false;
                     if ("\"root\"".equals(state)) {
-                        // 一级导航返回只把完整任务移到后台；singleTask 桌面入口会恢复同一实例。
-                        moveTaskToBack(true);
+                        confirmMoveTaskToBackground();
                     } else if (webView.canGoBack()) {
+                        lastRootBackPressedAt = 0L;
+                        hideBackToDesktopHintImmediately();
                         webView.goBack();
                     } else {
-                        moveTaskToBack(true);
+                        confirmMoveTaskToBackground();
                     }
                 }
             );
         }
+    }
+
+    private void confirmMoveTaskToBackground() {
+        long now = SystemClock.elapsedRealtime();
+        if (lastRootBackPressedAt > 0L
+            && now - lastRootBackPressedAt <= BACK_TO_DESKTOP_CONFIRM_WINDOW_MS) {
+            lastRootBackPressedAt = 0L;
+            hideBackToDesktopHintImmediately();
+            // 只把任务移到后台；singleTask 桌面入口会恢复同一实例和 WebView 状态。
+            moveTaskToBack(true);
+            return;
+        }
+        lastRootBackPressedAt = now;
+        showBackToDesktopHint();
     }
 
     @Override

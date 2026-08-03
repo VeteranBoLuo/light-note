@@ -63,7 +63,7 @@
           :overdue-todos="overdueTodos"
           :due-today-todos="dueTodayTodos"
           :inbox-items="inboxItems"
-          :loading="loading"
+          :loading="initialTodayLoading"
           :show-header="false"
           compact-empty
           @refresh="loadToday"
@@ -71,7 +71,8 @@
       </div>
     </section>
 
-    <section class="mobile-today__capture">
+    <!-- 首屏摘要稳定后再挂载下方内容，避免骨架屏高度变化把真实卡片来回推移。 -->
+    <section v-if="todaySettled" class="mobile-today__capture">
       <div class="mobile-today__capture-head">
         <strong>{{ t('workbench.mobileToday.quickCaptureTitle') }}</strong>
         <span>{{ t('workbench.mobileToday.quickCaptureHint') }}</span>
@@ -91,7 +92,7 @@
       </div>
     </section>
 
-    <section v-if="continueItems.length" class="mobile-today__continue">
+    <section v-if="todaySettled && continueItems.length" class="mobile-today__continue">
       <div class="mobile-today__continue-head">
         <strong>{{ t('workbench.mobileToday.continueTitle') }}</strong>
         <span>{{ t('workbench.mobileToday.continueHint') }}</span>
@@ -113,7 +114,7 @@
       </BButton>
     </section>
 
-    <section v-if="showDailyGrowthTasks" class="mobile-today__growth">
+    <section v-if="todaySettled && showDailyGrowthTasks" class="mobile-today__growth">
       <DailyQuests
         :quests="dailyGrowthQuests"
         :bonus="dailyGrowthBonus"
@@ -123,7 +124,7 @@
       />
     </section>
 
-    <section v-if="showGrowthTasks" class="mobile-today__growth">
+    <section v-if="todaySettled && showGrowthTasks" class="mobile-today__growth">
       <GrowthTasks :data="growthTasks" compact :max-visible="3" show-view-all @view="openGrowthTasks" />
     </section>
 
@@ -215,12 +216,16 @@
   }
 
   const loading = ref(false);
+  const todaySettled = ref(false);
+  const initialTodayLoading = computed(() => loading.value && !todaySettled.value);
   const loadFailed = ref(false);
   const overdueTodos = ref<TodoItem[]>([]);
   const dueTodayTodos = ref<TodoItem[]>([]);
   const inboxItems = ref<TodayInboxItem[]>([]);
   const continueItems = ref<TodayContinueItem[]>([]);
   const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0 });
+  let todayRequestId = 0;
+  let currentTodayRequest: Promise<void> | null = null;
 
   const dateLabel = computed(() =>
     new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date()),
@@ -314,35 +319,46 @@
     inbox.openQuickCapture(action.type);
   }
 
-  async function loadToday() {
-    if (loading.value) return;
+  function loadToday(): Promise<void> {
+    if (currentTodayRequest) return currentTodayRequest;
+    const requestId = todayRequestId;
     loading.value = true;
     loadFailed.value = false;
-    try {
-      const res = await apiBasePost('/api/workbench/today', {}, { silent: true });
-      if (res.status !== 200) {
-        loadFailed.value = true;
-        return;
+    let request!: Promise<void>;
+    request = (async () => {
+      try {
+        const res = await apiBasePost('/api/workbench/today', {}, { silent: true });
+        if (requestId !== todayRequestId) return;
+        if (res.status !== 200) {
+          loadFailed.value = true;
+          return;
+        }
+        const data = res.data || {};
+        overdueTodos.value = Array.isArray(data.overdueTodos) ? data.overdueTodos : [];
+        dueTodayTodos.value = Array.isArray(data.dueTodayTodos) ? data.dueTodayTodos : [];
+        inboxItems.value = Array.isArray(data.inboxItems) ? data.inboxItems : [];
+        continueItems.value = Array.isArray(data.continueItems) ? data.continueItems : [];
+        counts.value = {
+          overdue: Number(data.counts?.overdue || 0),
+          dueToday: Number(data.counts?.dueToday || 0),
+          inbox: Number(data.counts?.inbox || 0),
+          todoPending: Number(data.counts?.todoPending || 0),
+        };
+        // 底部导航角标与今日摘要共用同一份计数，避免两处数字不一致
+        inbox.pendingTotal = counts.value.inbox;
+        inbox.todoPendingTotal = counts.value.todoPending;
+      } catch {
+        if (requestId === todayRequestId) loadFailed.value = true;
+      } finally {
+        if (requestId === todayRequestId) {
+          loading.value = false;
+          todaySettled.value = true;
+        }
+        if (currentTodayRequest === request) currentTodayRequest = null;
       }
-      const data = res.data || {};
-      overdueTodos.value = Array.isArray(data.overdueTodos) ? data.overdueTodos : [];
-      dueTodayTodos.value = Array.isArray(data.dueTodayTodos) ? data.dueTodayTodos : [];
-      inboxItems.value = Array.isArray(data.inboxItems) ? data.inboxItems : [];
-      continueItems.value = Array.isArray(data.continueItems) ? data.continueItems : [];
-      counts.value = {
-        overdue: Number(data.counts?.overdue || 0),
-        dueToday: Number(data.counts?.dueToday || 0),
-        inbox: Number(data.counts?.inbox || 0),
-        todoPending: Number(data.counts?.todoPending || 0),
-      };
-      // 底部导航角标与今日摘要共用同一份计数，避免两处数字不一致
-      inbox.pendingTotal = counts.value.inbox;
-      inbox.todoPendingTotal = counts.value.todoPending;
-    } catch {
-      loadFailed.value = true;
-    } finally {
-      loading.value = false;
-    }
+    })();
+    currentTodayRequest = request;
+    return request;
   }
 
   function startPullRefresh(event: TouchEvent) {
@@ -388,6 +404,10 @@
   watch(
     () => user.id,
     () => {
+      todayRequestId += 1;
+      currentTodayRequest = null;
+      loading.value = false;
+      todaySettled.value = false;
       overdueTodos.value = [];
       dueTodayTodos.value = [];
       inboxItems.value = [];
@@ -397,8 +417,10 @@
     },
   );
 
+  // 在组件首次渲染前同步进入 loading，不能先渲染一次“已清空”的短空状态。
+  void loadToday();
+
   onMounted(() => {
-    void loadToday();
     void loadDashboard();
     void loadGrowthTasks();
   });

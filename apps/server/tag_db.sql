@@ -32,7 +32,8 @@ CREATE TABLE `api_logs` (
   `request_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '用户调用接口的时间',
   `del_flag` varchar(255) NOT NULL DEFAULT '0',
   `status_code` varchar(255) DEFAULT NULL COMMENT '状态码',
-  PRIMARY KEY (`id`) USING BTREE
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_api_logs_admin_list` (`del_flag`,`request_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api日志';
 
 -- ----------------------------
@@ -288,7 +289,8 @@ CREATE TABLE `operation_logs` (
   `ip` varchar(255) CHARACTER SET utf8 DEFAULT NULL COMMENT 'ip地址',
   `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `del_flag` varchar(255) CHARACTER SET utf8 NOT NULL DEFAULT '0',
-  PRIMARY KEY (`id`) USING BTREE
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_operation_logs_admin_list` (`del_flag`,`create_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 ROW_FORMAT=DYNAMIC COMMENT='操作日志';
 
 -- ----------------------------
@@ -569,6 +571,7 @@ CREATE TABLE `user` (
   `head_picture` longtext COMMENT '头像',
   `del_flag` varchar(255) NOT NULL DEFAULT '0',
   `create_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '注册时间',
+  `last_active_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '最近一次认证活跃时间',
   `location` varchar(255) DEFAULT NULL,
   `ip` varchar(255) DEFAULT NULL,
   `github_id` varchar(40) DEFAULT NULL,
@@ -576,7 +579,9 @@ CREATE TABLE `user` (
   `login_type` enum('local','github') DEFAULT 'local',
   `preferences` json DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
-  UNIQUE KEY `github_id` (`github_id`)
+  UNIQUE KEY `github_id` (`github_id`),
+  KEY `idx_user_active_list` (`del_flag`,`last_active_time`,`id`),
+  KEY `idx_user_created_list` (`del_flag`,`create_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------

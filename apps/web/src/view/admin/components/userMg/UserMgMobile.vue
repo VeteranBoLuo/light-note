@@ -1,55 +1,56 @@
 <template>
   <CommonContainer title="用户管理" @backClick="router.push('/admin')">
-    <BTable
-      :data="userList"
-      :columns="userColumns"
-      :row-clickable="true"
-      :pagination="true"
-      :total="total"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @page-change="onPageChange"
-      @size-change="onSizeChange"
-      @row-click="onRowClick"
-    >
-      <template #bodyCell="{ column, record }">
-        <template v-if="column.key === 'operation'">
-          <b-dropdown
-            class="card-more-menu"
-            :trigger="'click'"
-            @click.stop
-            :menu-options="[
-              {
-                label: t('guest.userPreviewEntry'),
-                icon: icon.navigation.user,
-                function: () => loginAsUser(record),
-              },
-              {
-                label: t('guest.adminContextMaintainShort'),
-                icon: icon.user_admin,
-                function: () => maintainAsUser(record),
-              },
-              {
-                label: t('common.edit'),
-                icon: icon.table_edit,
-                danger: true,
-                function: () => editUser(record),
-              },
-              {
-                label: t('common.delete'),
-                icon: icon.table_delete,
-                danger: true,
-                function: () => delUser(record),
-              },
-            ]"
-          >
-            <BTooltip :title="t('common.more')">
-              <svg-icon :src="icon.common.more" size="16" class="dom-hover" />
-            </BTooltip>
-          </b-dropdown>
+    <div class="mobile-admin-table">
+      <BTable
+        fill
+        virtual
+        :data="userList"
+        :columns="userColumns"
+        :row-clickable="true"
+        :loading="loading"
+        :has-more="hasMore"
+        @load-more="loadMore"
+        @row-click="onRowClick"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'operation'">
+            <b-dropdown
+              class="card-more-menu"
+              :trigger="'click'"
+              @click.stop
+              :menu-options="[
+                {
+                  label: t('guest.userPreviewEntry'),
+                  icon: icon.navigation.user,
+                  function: () => loginAsUser(record),
+                },
+                {
+                  label: t('guest.adminContextMaintainShort'),
+                  icon: icon.user_admin,
+                  function: () => maintainAsUser(record),
+                },
+                {
+                  label: t('common.edit'),
+                  icon: icon.table_edit,
+                  danger: true,
+                  function: () => editUser(record),
+                },
+                {
+                  label: t('common.delete'),
+                  icon: icon.table_delete,
+                  danger: true,
+                  function: () => delUser(record),
+                },
+              ]"
+            >
+              <BTooltip :title="t('common.more')">
+                <svg-icon :src="icon.common.more" size="16" class="dom-hover" />
+              </BTooltip>
+            </b-dropdown>
+          </template>
         </template>
-      </template>
-    </BTable>
+      </BTable>
+    </div>
 
     <BModal
       v-if="editVisible"
@@ -129,27 +130,30 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   const { t } = useI18n();
-  const userList = ref([]);
+  const {
+    items: userList,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/user/getUserList', {
+        cursor,
+        limit,
+        filters: { key: '' },
+        sort: { field: 'createTime', order: 'desc' },
+      }),
+    onError: () => message.error(t('common.requestFailedDescription')),
+  });
 
   const userColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
     { title: '操作', key: 'operation', width: '65px' },
   ];
-
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-
-  function onPageChange(page: number) {
-    currentPage.value = page;
-    init();
-  }
-  function onSizeChange(_current: number, size: number) {
-    currentPage.value = 1;
-    pageSize.value = size;
-    init();
-  }
 
   const editData = ref();
   const editVisible = ref(false);
@@ -204,7 +208,7 @@
         userApi.deleteUserById(record.id).then((res) => {
           if (res.status === 200) {
             message.success('删除成功');
-            init();
+            void reload();
           }
         });
       },
@@ -236,29 +240,21 @@
       if (res.status) {
         message.success('保存成功');
         editVisible.value = false;
-        init();
-      }
-    });
-  }
-  const total = ref(0);
-
-  function init() {
-    apiQueryPost('/api/user/getUserList', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: '',
-      },
-    }).then((res) => {
-      if (res.status) {
-        userList.value = res.data.items;
-        total.value = res.data.total;
+        void reload();
       }
     });
   }
   onMounted(() => {
-    init();
+    void reload();
   });
 </script>
 
-<style lang="less" scoped></style>
+<style lang="less" scoped>
+  .mobile-admin-table {
+    height: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+</style>

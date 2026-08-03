@@ -1,6 +1,7 @@
 // noinspection JSUnusedGlobalSymbols
 
 import { Ref } from 'vue';
+import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API
@@ -137,21 +138,28 @@ export function getUserOsInfo() {
   return 'Other';
 }
 
-// PWA 安装后仍沿用浏览器 User-Agent，只能通过独立窗口显示模式识别。
-// 该结果仅用于 API 日志展示，不参与设备身份、登录归并或权限判断。
-export function isPwaStandaloneMode() {
-  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
-  const navigatorStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+function hasPwaRuntimeMarker() {
   try {
-    return navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
+    const launchedFromPwa =
+      new URLSearchParams(window.location.search).get(PWA_LAUNCH_QUERY_KEY) === PWA_LAUNCH_QUERY_VALUE;
+    if (launchedFromPwa) window.sessionStorage.setItem(PWA_RUNTIME_SESSION_KEY, '1');
+    return launchedFromPwa || window.sessionStorage.getItem(PWA_RUNTIME_SESSION_KEY) === '1';
   } catch {
-    return navigatorStandalone;
+    return false;
   }
 }
 
-export function getApiLogOsInfo() {
-  const os = getUserOsInfo();
-  return isPwaStandaloneMode() ? `${os}（app）` : os;
+// PWA 安装后仍沿用浏览器 User-Agent：优先读取当前窗口的启动标记，同时兼容标准独立窗口信号。
+// 该结果仅用于 API 日志展示，不参与设备身份、登录归并或权限判断。
+export function isPwaStandaloneMode() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+  const runtimeMarker = hasPwaRuntimeMarker();
+  const navigatorStandalone = Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  try {
+    return runtimeMarker || navigatorStandalone || window.matchMedia('(display-mode: standalone)').matches;
+  } catch {
+    return runtimeMarker || navigatorStandalone;
+  }
 }
 
 // fingerprint.js

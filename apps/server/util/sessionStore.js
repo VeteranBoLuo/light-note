@@ -5,7 +5,9 @@ import { stableAgentErrorCode } from './agent/logSafety.js';
 
 const CACHE_PREFIX = 'session:';
 const CACHE_TTL = 15 * 60; // Redis 缓存 15 分钟
+const USER_ACTIVITY_TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 const SESSION_DEVICE_ID_PATTERN = /^[A-Za-z0-9._:-]{16,128}$/;
+const userActivityTouches = new Map();
 
 export const createSessionId = () => crypto.randomBytes(32).toString('hex');
 
@@ -99,7 +101,32 @@ function calcSlidingExpiry(session) {
 }
 
 // 只更新 MySQL 的滑过期（fire-and-forget，缓存命中时不同步等它）
-async function renewSessionInDb(sid, renewSeconds) {
+export async function touchUserLastActive(userId, now = Date.now()) {
+  if (!userId) return false;
+  const lastTouch = userActivityTouches.get(userId) || 0;
+  if (lastTouch && now - lastTouch < USER_ACTIVITY_TOUCH_INTERVAL_MS) return false;
+  userActivityTouches.set(userId, now);
+  if (userActivityTouches.size > 5000) {
+    const cutoff = now - USER_ACTIVITY_TOUCH_INTERVAL_MS;
+    for (const [id, touchedAt] of userActivityTouches) {
+      if (touchedAt < cutoff) userActivityTouches.delete(id);
+    }
+  }
+  try {
+    await pool.query(
+      `UPDATE user SET last_active_time = NOW()
+       WHERE id = ? AND (last_active_time IS NULL OR last_active_time < DATE_SUB(NOW(), INTERVAL 5 MINUTE))`,
+      [userId],
+    );
+    return true;
+  } catch {
+    // 滚动发布期间字段尚未迁移时不能影响认证主链路。
+    userActivityTouches.delete(userId);
+    return false;
+  }
+}
+
+async function renewSessionInDb(sid, renewSeconds, userId) {
   try {
     if (renewSeconds > 0) {
       await pool.query(
@@ -112,6 +139,7 @@ async function renewSessionInDb(sid, renewSeconds) {
     } else {
       await pool.query('UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ?', [sid]);
     }
+    await touchUserLastActive(userId);
   } catch (e) {
     // 静默忽略
   }
@@ -148,7 +176,7 @@ export const getSession = async (sid) => {
       const session = JSON.parse(cached);
       const { renewSeconds } = calcSlidingExpiry(session);
       // 异步续 MySQL（不等结果）
-      renewSessionInDb(sid, renewSeconds);
+      renewSessionInDb(sid, renewSeconds, session.user_id);
       // 续 Redis TTL
       redisClient.expire(cacheKey, CACHE_TTL).catch(() => {});
       // 重新计算 expires_in_seconds（确保返回准确的剩余时间）
@@ -196,6 +224,7 @@ export const getSession = async (sid) => {
   } else {
     await pool.query('UPDATE user_sessions SET last_active_time = NOW() WHERE sid = ?', [sid]);
   }
+  await touchUserLastActive(session.user_id);
 
   // 4. 写 Redis 缓存（TTL 取缓存时间和剩余 session 时间的较小值）
   const cacheTTL = Math.min(CACHE_TTL, session.expires_in_seconds);

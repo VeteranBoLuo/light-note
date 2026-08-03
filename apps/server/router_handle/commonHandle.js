@@ -13,6 +13,15 @@ import { collectUsedImageNames } from '../util/noteImages.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { processBookmarkIcons, isBookmarkIconCheckRecent } from '../util/bookmarkIconService.js';
+import { normalizeApiLogSystem } from '../util/apiLogSystem.js';
+import {
+  adminCursorScope,
+  adminCursorTime,
+  decodeAdminListCursor,
+  encodeAdminListCursor,
+  isAdminCursorRequest,
+  normalizeAdminListLimit,
+} from '../util/adminListCursor.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -313,23 +322,36 @@ export const getApiLogs = async (req, res) => {
   // 全站 API 日志(含所有用户 IP/URL/请求体)——仅 root 运维可查,防越权信息泄露(前端已在 root 后台,后端须同门)
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
-    const { filters, pageSize, currentPage } = validateQueryParams(req.body);
-    const skip = pageSize * (currentPage - 1);
-    const { key, hide_internal: hideInternal = true } = filters;
+    const cursorMode = isAdminCursorRequest(req.body);
+    const legacy = cursorMode ? null : validateQueryParams(req.body);
+    const filters = snakeCaseKeys(req.body?.filters || legacy?.filters || {});
+    const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
+    const currentPage = cursorMode ? 1 : legacy.currentPage;
+    const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
+    const key = String(filters.key || '').trim().slice(0, 200);
+    const { hide_internal: hideInternal = true } = filters;
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
     const roleParams = hideInternal ? INTERNAL_ROLES : [];
 
     const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%') OR a.url LIKE CONCAT('%', ?, '%')) AND a.del_flag = 0`;
     // 隐藏内部账号(root/test);u.role 为 NULL(join 不到 user,如已删用户)按真实用户保留,避免误删日志
     const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
-    const whereClause = baseWhere + roleFilter;
+    const scope = adminCursorScope('api-logs', [key, hideInternal]);
+    const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
+    const cursorFilter = cursor ? ' AND (a.request_time < ? OR (a.request_time = ? AND a.id < ?))' : '';
+    const whereClause = baseWhere + roleFilter + cursorFilter;
+    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const take = cursorMode ? pageSize + 1 : pageSize;
 
     const [result] = await pool.query(
-      `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC LIMIT ? OFFSET ?`,
-      [key, key, key, key, ...roleParams, pageSize, skip],
+      `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC, a.id DESC LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
+      [key || '', key || '', key || '', key || '', ...roleParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
 
-    result.forEach((row) => {
+    const hasMore = cursorMode && result.length > pageSize;
+    const page = cursorMode ? result.slice(0, pageSize) : result;
+
+    page.forEach((row) => {
       ['req', 'system'].forEach((field) => {
         if (row[field] && typeof row[field] === 'string') {
           try {
@@ -337,21 +359,35 @@ export const getApiLogs = async (req, res) => {
           } catch (e) {}
         }
       });
+      row.system = normalizeApiLogSystem(row.system);
     });
 
-    const [totalRes] = await pool.query(
-      `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause}`,
-      [key, key, key, key, ...roleParams],
-    );
+    let total;
+    if (!cursorMode || !cursor) {
+      const countWhereClause = baseWhere + roleFilter;
+      const [totalRes] = await pool.query(
+        `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${countWhereClause}`,
+        [key || '', key || '', key || '', key || '', ...roleParams],
+      );
+      total = Number(totalRes[0].total || 0);
+    }
+    const last = page[page.length - 1];
 
     res.send(
       resultData({
-        items: result,
-        total: totalRes[0].total,
+        items: page,
+        total,
+        hasMore,
+        nextCursor:
+          cursorMode && hasMore && last
+            ? encodeAdminListCursor(scope, { value: adminCursorTime(last.request_time), id: last.id })
+            : null,
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常：' + e.message));
+    const status = e?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
+    console.error('[admin-list] API 日志查询失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '查询日志失败'));
   }
 };
 export const clearApiLogs = (req, res) => {
@@ -454,58 +490,67 @@ export const removeLogExcludeFp = async (req, res) => {
   }
 };
 
-export const getOperationLogs = (req, res) => {
+export const getOperationLogs = async (req, res) => {
   // 全站操作日志(含所有用户行为)——仅 root 运维可查,防越权信息泄露
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   try {
-    const { filters, pageSize, currentPage } = validateQueryParams(req.body);
-    const skip = pageSize * (currentPage - 1);
+    const cursorMode = isAdminCursorRequest(req.body);
+    const legacy = cursorMode ? null : validateQueryParams(req.body);
+    const filters = snakeCaseKeys(req.body?.filters || legacy?.filters || {});
+    const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
+    const currentPage = cursorMode ? 1 : legacy.currentPage;
+    const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
     const hideInternal = filters.hide_internal !== false;
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
     const roleParams = hideInternal ? INTERNAL_ROLES : [];
     const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
-    // 查询总数据条数
-    pool
-      .query(
-        `SELECT o.*, u.alias,u.email
+    const key = String(filters.key || '').trim().slice(0, 200);
+    const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%')
+OR u.email LIKE CONCAT('%', ?, '%')
+OR o.operation LIKE CONCAT('%', ?, '%')
+OR o.module LIKE CONCAT('%', ?, '%'))
+AND o.del_flag = 0${roleFilter}`;
+    const scope = adminCursorScope('operation-logs', [key, hideInternal]);
+    const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
+    const cursorFilter = cursor ? ' AND (o.create_time < ? OR (o.create_time = ? AND o.id < ?))' : '';
+    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const take = cursorMode ? pageSize + 1 : pageSize;
+    const [rows] = await pool.query(
+      `SELECT o.*, u.alias,u.email
 FROM operation_logs o
 LEFT JOIN user u ON o.create_by = u.id
-WHERE (u.alias LIKE CONCAT('%', ?, '%') 
-OR u.email LIKE CONCAT('%', ?, '%')
-OR o.operation LIKE CONCAT('%', ?, '%') 
-OR o.module LIKE CONCAT('%', ?, '%')) 
-AND o.del_flag = 0${roleFilter}
-ORDER BY o.create_time DESC
-LIMIT ? OFFSET ?;
+WHERE ${baseWhere}${cursorFilter}
+ORDER BY o.create_time DESC, o.id DESC
+LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
 `,
-        [filters.key, filters.key, filters.key, filters.key, ...roleParams, pageSize, skip],
-      )
-      .then(async ([result]) => {
-        const totalSql = `SELECT COUNT(*) FROM operation_logs o left join user u on o.create_by=u.id WHERE 
-(u.alias LIKE CONCAT('%', ?, '%') 
-OR u.email LIKE CONCAT('%', ?, '%')
-OR o.operation LIKE CONCAT('%', ?, '%') 
-OR o.module LIKE CONCAT('%', ?, '%'))
-AND o.del_flag=0${roleFilter}`;
-        const [totalRes] = await pool.query(totalSql, [
-          filters.key,
-          filters.key,
-          filters.key,
-          filters.key,
-          ...roleParams,
-        ]);
-        res.send(
-          resultData({
-            items: result,
-            total: totalRes[0]['COUNT(*)'],
-          }),
-        );
-      })
-      .catch((err) => {
-        res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-      });
+      [key, key, key, key, ...roleParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+    );
+    const hasMore = cursorMode && rows.length > pageSize;
+    const page = cursorMode ? rows.slice(0, pageSize) : rows;
+    let total;
+    if (!cursorMode || !cursor) {
+      const [totalRes] = await pool.query(
+        `SELECT COUNT(*) AS total FROM operation_logs o LEFT JOIN user u ON o.create_by = u.id WHERE ${baseWhere}`,
+        [key, key, key, key, ...roleParams],
+      );
+      total = Number(totalRes[0].total || 0);
+    }
+    const last = page[page.length - 1];
+    return res.send(
+      resultData({
+        items: page,
+        total,
+        hasMore,
+        nextCursor:
+          cursorMode && hasMore && last
+            ? encodeAdminListCursor(scope, { value: adminCursorTime(last.create_time), id: last.id })
+            : null,
+      }),
+    );
   } catch (e) {
-    res.send(resultData(null, 400, '客户端请求异常：' + e.message));
+    const status = e?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
+    console.error('[admin-list] 操作日志查询失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '查询日志失败'));
   }
 };
 
@@ -1273,9 +1318,14 @@ export const getAgentLogs = async (req, res) => {
       return res.send(resultData(null, 403, '仅管理员可查看'));
     }
 
-    const { keyword, pageSize = 20, currentPage = 1, hideInternal = true } = req.body || {};
-    const take = Math.min(Math.max(pageSize || 20, 1), 100);
-    const offset = take * (Math.max(currentPage || 1, 1) - 1);
+    const keyword = String(req.body?.keyword || '').trim().slice(0, 200);
+    const hideInternal = req.body?.hideInternal !== false;
+    const cursorMode = isAdminCursorRequest(req.body);
+    const take = cursorMode
+      ? normalizeAdminListLimit(req.body?.limit)
+      : normalizeAdminListLimit(req.body?.pageSize || 20, 20);
+    const currentPage = Math.max(Number(req.body?.currentPage || 1), 1);
+    const offset = take * (currentPage - 1);
 
     let where = '1=1';
     const params = [];
@@ -1291,27 +1341,59 @@ export const getAgentLogs = async (req, res) => {
       params.push(...INTERNAL_ROLES);
     }
 
-    const [[rows], [countRes]] = await Promise.all([
-      pool.query(
-        `SELECT a.* FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${where} ORDER BY a.created_at DESC LIMIT ? OFFSET ?`,
-        [...params, take, offset],
-      ),
-      pool.query(
-        `SELECT COUNT(*) as total FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${where}`,
-        params,
-      ),
-    ]);
+    const scope = adminCursorScope('agent-logs', [keyword, hideInternal]);
+    const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
+    if (cursor) {
+      where += ' AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))';
+      const at = new Date(adminCursorTime(cursor.value));
+      params.push(at, at, cursor.id);
+    }
 
-    res.send(
+    const queryLimit = cursorMode ? take + 1 : take;
+
+    const [rows] = await pool.query(
+      `SELECT a.* FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${where} ORDER BY a.created_at DESC, a.id DESC LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
+      [...params, queryLimit, ...(cursorMode ? [] : [offset])],
+    );
+    const hasMore = cursorMode && rows.length > take;
+    const page = cursorMode ? rows.slice(0, take) : rows;
+    let total;
+    if (!cursorMode || !cursor) {
+      const countParams = [];
+      let countWhere = '1=1';
+      if (keyword) {
+        countWhere += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ?)';
+        countParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      }
+      if (hideInternal) {
+        countWhere += ` AND (u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`;
+        countParams.push(...INTERNAL_ROLES);
+      }
+      const [countRes] = await pool.query(
+        `SELECT COUNT(*) as total FROM agent_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${countWhere}`,
+        countParams,
+      );
+      total = Number(countRes[0].total || 0);
+    }
+    const last = page[page.length - 1];
+
+    return res.send(
       resultData({
-        items: rows,
-        total: countRes[0].total,
+        items: page,
+        total,
+        hasMore,
+        nextCursor:
+          cursorMode && hasMore && last
+            ? encodeAdminListCursor(scope, { value: adminCursorTime(last.created_at), id: last.id })
+            : null,
         currentPage,
         pageSize: take,
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 500, '查询失败: ' + e.message));
+    const status = e?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
+    console.error('[admin-list] AI 调用日志查询失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '查询失败'));
   }
 };
 

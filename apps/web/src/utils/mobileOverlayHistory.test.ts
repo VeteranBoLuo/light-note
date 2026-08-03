@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  closeCurrentMobileOverlayThen,
   MOBILE_OVERLAY_HISTORY_STATE_KEY,
   registerMobileOverlayHistory,
   releaseMobileOverlayHistory,
@@ -79,6 +80,20 @@ describe('mobileOverlayHistory', () => {
 
     expect(navigate).toHaveBeenCalledOnce();
     expect(window.history.back).not.toHaveBeenCalled();
+  });
+
+  it('统一入口会先关闭并释放浮层，再执行后续导航', async () => {
+    const handle = registerMobileOverlayHistory(vi.fn())!;
+    const close = vi.fn(() => releaseMobileOverlayHistory(handle));
+    const navigate = vi.fn();
+    const task = closeCurrentMobileOverlayThen(close, navigate);
+
+    expect(close).toHaveBeenCalledOnce();
+    expect(navigate).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await task;
+    expect(navigate).toHaveBeenCalledOnce();
   });
 
   it('弹出其他自管历史层并落回当前占位时，不误关底层浮层', () => {

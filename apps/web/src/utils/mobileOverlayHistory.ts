@@ -160,6 +160,23 @@ export function waitForCurrentMobileOverlayHistoryRelease(): Promise<void> {
 }
 
 /**
+ * 关闭当前移动端浮层，等待它的 history 占位真正出栈后再执行后续动作。
+ *
+ * 路由跳转、打开外部链接等会改变页面上下文的动作统一走这里，避免调用方
+ * 把 `visible = false` 与 `router.push()` 写在同一轮事件中，导致前一次
+ * history.back() 把刚打开的目标页再次弹回去。
+ */
+export async function closeCurrentMobileOverlayThen<T>(
+  closeOverlay: () => void,
+  next: () => T | Promise<T>,
+): Promise<T> {
+  const released = waitForCurrentMobileOverlayHistoryRelease();
+  closeOverlay();
+  await released;
+  return await next();
+}
+
+/**
  * 用户主动关闭当前浮层。返回 true 表示已发起 history 回退，调用方应等待
  * 注册时的 onBack 回调再真正关闭 UI；返回 false 时调用方可立即关闭。
  */

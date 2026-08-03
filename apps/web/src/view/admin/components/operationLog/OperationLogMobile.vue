@@ -10,16 +10,15 @@
         <b-button @click="clearOperationLogs" type="primary">清空</b-button>
       </b-space>
       <BTable
+        fill
+        virtual
         style="flex: 1; min-height: 0"
         :data="logList"
         :columns="logColumns"
         :row-clickable="true"
-        :pagination="true"
-        :total="total"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        @page-change="onPageChange"
-        @size-change="onSizeChange"
+        :loading="loading"
+        :has-more="hasMore"
+        @load-more="loadMore"
         @row-click="onRowClick"
       />
     </div>
@@ -50,25 +49,32 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
-  const logList = ref([]);
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
+  const searchValue = ref('');
+  const hideInternal = ref(true); // 移动端无开关,默认隐藏内部账号(root/test);后端也默认隐藏
+  const {
+    items: logList,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/common/getOperationLogs', {
+        cursor,
+        limit,
+        filters: { key: searchValue.value, hideInternal: hideInternal.value },
+      }),
+    onError: () => message.error(t('common.requestFailedDescription')),
+  });
 
   const logColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
     { title: '操作名称', key: 'operation', width: '1fr' },
   ];
-
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-  const onPageChange = (page: number) => {
-    currentPage.value = page;
-    searchApiLog();
-  };
-  const onSizeChange = (_current: number, newPageSize: number) => {
-    pageSize.value = newPageSize;
-    currentPage.value = 1;
-    searchApiLog();
-  };
 
   function clearOperationLogs() {
     Alert.alert({
@@ -102,23 +108,8 @@
     }, 500);
   }
 
-  const total = ref(0);
-  const searchValue = ref('');
-  const hideInternal = ref(true); // 移动端无开关,默认隐藏内部账号(root/test);后端也默认隐藏
   function searchApiLog() {
-    apiQueryPost('/api/common/getOperationLogs', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: searchValue.value,
-        hideInternal: hideInternal.value,
-      },
-    }).then((res) => {
-      if (res.status === 200) {
-        logList.value = res.data.items;
-        total.value = res.data.total;
-      }
-    });
+    void reload();
   }
   onMounted(() => {
     searchApiLog();

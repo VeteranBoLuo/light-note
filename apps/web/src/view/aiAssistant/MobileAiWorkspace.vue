@@ -34,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import AiWorkspaceShell from '@/components/aiAssistant/AiWorkspaceShell.vue';
@@ -45,6 +45,13 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import icon from '@/config/icon';
   import { useAiAssistantStore } from '@/store';
+  import {
+    closeCurrentMobileOverlayThen,
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
 
   const { t } = useI18n();
   const aiAssistant = useAiAssistantStore();
@@ -54,50 +61,57 @@
     openConversation?: (conversationId: string) => Promise<void>;
   } | null>(null);
   const historyVisible = ref(false);
-  const historyBackActive = ref(false);
+  let historyHandle: MobileOverlayHistoryHandle | null = null;
   let creatingConversation = false;
 
   function closeHistory() {
+    if (historyHandle && requestMobileOverlayHistoryClose(historyHandle)) return;
+    historyHandle = null;
     historyVisible.value = false;
   }
 
-  function handleHistoryPopState() {
-    if (!historyBackActive.value || !historyVisible.value) return;
-    historyBackActive.value = false;
+  function closeHistoryFromMobileBack() {
+    historyHandle = null;
     historyVisible.value = false;
   }
 
   watch(historyVisible, (visible) => {
     if (visible) {
-      if (!historyBackActive.value) {
-        history.pushState({ mobileAiHistory: true }, '');
-        historyBackActive.value = true;
-      }
+      if (!historyHandle) historyHandle = registerMobileOverlayHistory(closeHistoryFromMobileBack);
       return;
     }
-    if (historyBackActive.value) {
-      historyBackActive.value = false;
-      history.back();
+    if (historyHandle) {
+      releaseMobileOverlayHistory(historyHandle);
+      historyHandle = null;
     }
   });
 
   async function createConversation() {
     if (creatingConversation) return;
     creatingConversation = true;
-    closeHistory();
     try {
-      const cleared = (await workspaceRef.value?.clearHistory?.()) ?? true;
-      if (cleared) message.success(t('ai.newChart'));
-      else message.warning(t('ai.newConversationCleanupFailed'));
+      await closeCurrentMobileOverlayThen(
+        () => {
+          historyVisible.value = false;
+        },
+        async () => {
+          const cleared = (await workspaceRef.value?.clearHistory?.()) ?? true;
+          if (cleared) message.success(t('ai.newChart'));
+          else message.warning(t('ai.newConversationCleanupFailed'));
+        },
+      );
     } finally {
       creatingConversation = false;
     }
   }
 
   async function openConversation(cloudConversationId: string) {
-    closeHistory();
-    await nextTick();
-    await workspaceRef.value?.openConversation?.(cloudConversationId);
+    await closeCurrentMobileOverlayThen(
+      () => {
+        historyVisible.value = false;
+      },
+      () => workspaceRef.value?.openConversation?.(cloudConversationId),
+    );
   }
 
   function handleConversationDeleted(deletedConversationId: string) {
@@ -116,12 +130,9 @@
     addLabel: () => t('ai.newConversation'),
   });
 
-  onMounted(() => {
-    window.addEventListener('popstate', handleHistoryPopState);
-  });
-
   onBeforeUnmount(() => {
-    window.removeEventListener('popstate', handleHistoryPopState);
+    if (historyHandle) releaseMobileOverlayHistory(historyHandle);
+    historyHandle = null;
   });
 </script>
 

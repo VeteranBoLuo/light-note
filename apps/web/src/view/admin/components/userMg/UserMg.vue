@@ -15,16 +15,18 @@
     </template>
 
     <BTable
+      ref="tableRef"
       fill
+      virtual
       :data="userList"
       :columns="userColumns"
       :row-clickable="true"
-      :pagination="true"
-      :total="total"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @page-change="onPageChange"
-      @size-change="onSizeChange"
+      :loading="loading"
+      :has-more="hasMore"
+      :remote-sort="true"
+      :sort="sortState"
+      @load-more="loadMore"
+      @sort-change="onSortChange"
       @row-click="onRowClick"
     >
       <template #bodyCell="{ column, record }">
@@ -133,10 +135,34 @@
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
 
   const { t } = useI18n();
 
-  const userList = ref([]);
+  const tableRef = ref<InstanceType<typeof BTable> | null>(null);
+  const searchValue = ref('');
+  const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({ key: null, order: null });
+  const {
+    items: userList,
+    total,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/user/getUserList', {
+        cursor,
+        limit,
+        filters: { key: searchValue.value },
+        sort: sortState.value.key
+          ? { field: sortState.value.key, order: sortState.value.order }
+          : { field: 'createTime', order: 'desc' },
+      }),
+    onError: (_error, silent) => {
+      if (!silent) message.error(t('common.requestFailedDescription'));
+    },
+  });
   const userColumns = computed(() => {
     return [
       {
@@ -153,21 +179,6 @@
     ];
   });
 
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-  const searchValue = ref('');
-
-  const onPageChange = (page: number) => {
-    currentPage.value = page;
-    init();
-  };
-
-  const onSizeChange = (_current: number, size: number) => {
-    currentPage.value = 1;
-    pageSize.value = size;
-    init();
-  };
-
   const timer = ref();
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
@@ -181,11 +192,19 @@
       clearTimeout(timer.value);
     }
     timer.value = setTimeout(() => {
-      init();
+      void resetList(true);
     }, 500);
   }
 
-  const total = ref(0);
+  function resetList(silent = false) {
+    tableRef.value?.scrollToTop();
+    return reload({ silent });
+  }
+
+  function onSortChange(sort: { key: string | null; order: 'asc' | 'desc' | null }) {
+    sortState.value = sort;
+    void resetList();
+  }
   const editData = ref();
   const editVisible = ref(false);
   const previewVisible = ref(false);
@@ -238,7 +257,7 @@
         userApi.deleteUserById(record.id).then((res) => {
           if (res.status === 200) {
             message.success('删除成功');
-            init();
+            void resetList();
           }
         });
       },
@@ -266,30 +285,15 @@
       if (res.status) {
         message.success('保存成功');
         editVisible.value = false;
-        init();
+        void resetList();
       }
     });
   }
 
   // 发通知能力已收拢至独立「通知中心」模块(顶部管理 → 通知中心),此处不再内联,避免功能散落。
 
-  function init() {
-    apiQueryPost('/api/user/getUserList', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: searchValue.value,
-      },
-    }).then((res) => {
-      if (res.status) {
-        userList.value = res.data.items;
-        total.value = res.data.total;
-      }
-    });
-  }
-
   onMounted(() => {
-    init();
+    void reload();
   });
 </script>
 

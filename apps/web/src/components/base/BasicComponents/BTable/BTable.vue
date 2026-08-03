@@ -17,72 +17,67 @@
           @click="col.sortable && handleSortToggle(col.key)"
           :class="{ 'is-sortable': col.sortable }"
         >
-          <svg
+          <SvgIcon
             class="sort-arrow"
-            :class="{ active: sortState.key === col.key && sortState.order === 'asc' }"
-            viewBox="0 0 10 6"
-            width="10"
-            height="6"
-          >
-            <path
-              d="M1 5l4-4 4 4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
-          <svg
+            :class="{ active: activeSort.key === col.key && activeSort.order === 'asc' }"
+            :src="icon.table_sort_up"
+            size="10"
+          />
+          <SvgIcon
             class="sort-arrow"
-            :class="{ active: sortState.key === col.key && sortState.order === 'desc' }"
-            viewBox="0 0 10 6"
-            width="10"
-            height="6"
-          >
-            <path
-              d="M1 1l4 4 4-4"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.5"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            />
-          </svg>
+            :class="{ active: activeSort.key === col.key && activeSort.order === 'desc' }"
+            :src="icon.table_sort_down"
+            size="10"
+          />
         </span>
       </div>
     </div>
 
     <!-- 表格内容 -->
-    <div class="table-body">
-      <template v-for="(item, rowIndex) in sortedData" :key="item[props.rowKey] ?? rowIndex">
+    <div
+      ref="tableBodyRef"
+      class="table-body"
+      :class="{ 'is-virtual': props.virtual }"
+      :style="virtualBodyStyle"
+      @scroll.passive="handleBodyScroll"
+    >
+      <template v-for="entry in renderedRows" :key="entry.item[props.rowKey] ?? entry.index">
         <div
           class="table-row"
           :class="{ 'is-clickable': props.rowClickable }"
-          :style="gridStyle"
-          @click="handleRowClick(item, rowIndex)"
+          :style="[gridStyle, virtualRowStyle]"
+          @click="handleRowClick(entry.item, entry.index)"
         >
           <div v-if="props.selectable" class="table-cell" style="width: 50px" @click.stop>
-            <BCheckbox :checked="isRowSelected(item)" @change="(checked) => handleRowSelectChange(item, checked)" />
+            <BCheckbox
+              :checked="isRowSelected(entry.item)"
+              @change="(checked) => handleRowSelectChange(entry.item, checked)"
+            />
           </div>
           <div v-for="col in props.columns" :key="col.key" class="table-cell" :style="{ width: col.width || 'auto' }">
-            <slot name="bodyCell" :text="item[col.key]" :record="item" :index="rowIndex" :column="col">
-              <BTooltip v-if="col.ellipsis !== false" :title="String(item[col.key] ?? '')">
-                <span class="cell-text">{{ item[col.key] }}</span>
+            <slot name="bodyCell" :text="entry.item[col.key]" :record="entry.item" :index="entry.index" :column="col">
+              <BTooltip v-if="col.ellipsis !== false" :title="String(entry.item[col.key] ?? '')">
+                <span class="cell-text">{{ entry.item[col.key] }}</span>
               </BTooltip>
-              <template v-else>{{ item[col.key] }}</template>
+              <template v-else>{{ entry.item[col.key] }}</template>
             </slot>
           </div>
         </div>
         <div
           v-if="
-            props.expandedRows?.length && item[props.rowKey] != null && props.expandedRows.includes(item[props.rowKey])
+            !props.virtual &&
+            props.expandedRows?.length &&
+            entry.item[props.rowKey] != null &&
+            props.expandedRows.includes(entry.item[props.rowKey])
           "
           class="table-expand-row"
         >
-          <slot name="expandedRow" :record="item" />
+          <slot name="expandedRow" :record="entry.item" />
         </div>
       </template>
+      <div v-if="props.loading" class="table-loading">
+        <BLoading inline :loading="true" :title="props.loadingText" />
+      </div>
     </div>
 
     <!-- 分页器 -->
@@ -99,11 +94,17 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, PropType, ref } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, PropType, ref, watch } from 'vue';
   import { Column } from '@/components/base/BasicComponents/BTable/config.ts';
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+
+  type SortOrder = 'asc' | 'desc' | null;
+  type TableSort = { key: string | null; order: SortOrder };
 
   const props = defineProps({
     data: {
@@ -154,9 +155,41 @@
       type: Boolean,
       default: false,
     },
+    virtual: {
+      type: Boolean,
+      default: false,
+    },
+    rowHeight: {
+      type: Number,
+      default: 40,
+    },
+    overscan: {
+      type: Number,
+      default: 8,
+    },
+    loading: {
+      type: Boolean,
+      default: false,
+    },
+    loadingText: {
+      type: String,
+      default: '',
+    },
+    hasMore: {
+      type: Boolean,
+      default: false,
+    },
+    remoteSort: {
+      type: Boolean,
+      default: false,
+    },
+    sort: {
+      type: Object as PropType<TableSort>,
+      default: () => ({ key: null, order: null }),
+    },
   });
 
-  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick']);
+  const emit = defineEmits(['pageChange', 'sizeChange', 'selectionChange', 'rowClick', 'loadMore', 'sortChange']);
   // 生成网格列宽样式
   const gridStyle = computed(() => {
     const columns = props.selectable
@@ -169,20 +202,25 @@
   });
 
   // 排序状态
-  const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({ key: null, order: null });
+  const sortState = ref<TableSort>({ key: null, order: null });
+  const activeSort = computed(() => (props.remoteSort ? props.sort : sortState.value));
 
   const handleSortToggle = (key: string) => {
-    if (sortState.value.key !== key) {
-      sortState.value = { key, order: 'desc' };
-    } else if (sortState.value.order === 'desc') {
-      sortState.value = { key, order: 'asc' };
+    let nextSort: TableSort;
+    if (activeSort.value.key !== key) {
+      nextSort = { key, order: 'desc' };
+    } else if (activeSort.value.order === 'desc') {
+      nextSort = { key, order: 'asc' };
     } else {
-      sortState.value = { key: null, order: null };
+      nextSort = { key: null, order: null };
     }
+    if (!props.remoteSort) sortState.value = nextSort;
+    emit('sortChange', nextSort);
   };
 
   // 排序后的数据
   const sortedData = computed(() => {
+    if (props.remoteSort) return props.data;
     const { key, order } = sortState.value;
     if (!key || !order) return props.data;
     const data = [...props.data];
@@ -200,6 +238,85 @@
     });
     return data;
   });
+
+  const tableBodyRef = ref<HTMLElement | null>(null);
+  const scrollTop = ref(0);
+  const viewportHeight = ref(0);
+  const rowGap = 8;
+  const rowPitch = computed(() => Math.max(1, props.rowHeight) + rowGap);
+  const startIndex = computed(() => {
+    if (!props.virtual) return 0;
+    return Math.max(0, Math.floor(scrollTop.value / rowPitch.value) - Math.max(0, props.overscan));
+  });
+  const endIndex = computed(() => {
+    if (!props.virtual) return sortedData.value.length;
+    const visible = Math.ceil(viewportHeight.value / rowPitch.value);
+    return Math.min(sortedData.value.length, startIndex.value + visible + Math.max(0, props.overscan) * 2);
+  });
+  const renderedRows = computed(() =>
+    sortedData.value.slice(startIndex.value, endIndex.value).map((item, offset) => ({
+      item,
+      index: startIndex.value + offset,
+    })),
+  );
+  const virtualBodyStyle = computed(() => {
+    if (!props.virtual) return undefined;
+    const bottomRows = Math.max(0, sortedData.value.length - endIndex.value);
+    return {
+      paddingTop: `${startIndex.value * rowPitch.value}px`,
+      paddingBottom: `${bottomRows * rowPitch.value}px`,
+    };
+  });
+  const virtualRowStyle = computed(() =>
+    props.virtual
+      ? { height: `${Math.max(1, props.rowHeight)}px`, minHeight: `${Math.max(1, props.rowHeight)}px` }
+      : undefined,
+  );
+
+  let resizeObserver: ResizeObserver | null = null;
+  let loadMoreQueued = false;
+  function updateViewport() {
+    viewportHeight.value = tableBodyRef.value?.clientHeight || 0;
+  }
+  function maybeLoadMore() {
+    const body = tableBodyRef.value;
+    if (!body || props.loading || !props.hasMore || loadMoreQueued) return;
+    if (body.scrollHeight - body.scrollTop - body.clientHeight > rowPitch.value * 4) return;
+    loadMoreQueued = true;
+    emit('loadMore');
+    nextTick(() => {
+      loadMoreQueued = false;
+    });
+  }
+  function handleBodyScroll() {
+    scrollTop.value = tableBodyRef.value?.scrollTop || 0;
+    maybeLoadMore();
+  }
+  function scrollToTop() {
+    if (tableBodyRef.value) tableBodyRef.value.scrollTop = 0;
+    scrollTop.value = 0;
+  }
+
+  watch(
+    () => [props.data.length, props.hasMore, props.loading],
+    () =>
+      nextTick(() => {
+        updateViewport();
+        maybeLoadMore();
+      }),
+  );
+
+  onMounted(() => {
+    updateViewport();
+    if (typeof ResizeObserver !== 'undefined' && tableBodyRef.value) {
+      resizeObserver = new ResizeObserver(updateViewport);
+      resizeObserver.observe(tableBodyRef.value);
+    }
+    maybeLoadMore();
+  });
+
+  onBeforeUnmount(() => resizeObserver?.disconnect());
+  defineExpose({ scrollToTop });
 
   // 全选状态
   const isAllSelected = computed(() => {
@@ -319,6 +436,11 @@
     overflow-y: auto;
     min-height: 100px;
     max-height: 100%;
+    box-sizing: border-box;
+  }
+
+  .table-body.is-virtual {
+    overflow-anchor: none;
   }
 
   .table-container.has-pagination:not(.is-fill) .table-body {
@@ -342,6 +464,14 @@
     &:hover {
       background-color: var(--menu-item-h-bg-color);
     }
+  }
+
+  .table-loading {
+    min-height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .table-row.is-clickable {

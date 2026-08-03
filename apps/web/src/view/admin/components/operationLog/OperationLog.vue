@@ -25,16 +25,15 @@
     </template>
 
     <BTable
+      ref="tableRef"
       fill
+      virtual
       :data="logList"
       :columns="logColumns"
       :row-clickable="true"
-      :pagination="true"
-      :total="total"
-      :current-page="currentPage"
-      :page-size="pageSize"
-      @page-change="onPageChange"
-      @size-change="onSizeChange"
+      :loading="loading"
+      :has-more="hasMore"
+      @load-more="loadMore"
       @row-click="onRowClick"
     />
   </AdminDataPage>
@@ -63,7 +62,28 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
-  const logList = ref([]);
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  import { useI18n } from 'vue-i18n';
+  const { t } = useI18n();
+  const tableRef = ref<InstanceType<typeof BTable> | null>(null);
+  const searchValue = ref('');
+  const hideInternal = ref(true);
+  const {
+    items: logList,
+    total,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/common/getOperationLogs', {
+        cursor,
+        limit,
+        filters: { key: searchValue.value, hideInternal: hideInternal.value },
+      }),
+    onError: () => message.error(t('common.requestFailedDescription')),
+  });
 
   const logColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
@@ -73,11 +93,6 @@
     { title: '时间', key: 'createTime', width: '1fr' },
   ];
 
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-  const total = ref(0);
-  const searchValue = ref('');
-  const hideInternal = ref(true);
   const timer = ref();
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
@@ -85,16 +100,6 @@
   function onRowClick(record: any) {
     selectedRecord.value = record;
     detailVisible.value = true;
-  }
-
-  function onPageChange(page: number) {
-    currentPage.value = page;
-    searchApiLog();
-  }
-  function onSizeChange(_current: number, size: number) {
-    currentPage.value = 1;
-    pageSize.value = size;
-    searchApiLog();
   }
 
   function clearOperationLogs() {
@@ -122,19 +127,8 @@
   }
 
   function searchApiLog() {
-    apiQueryPost('/api/common/getOperationLogs', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: searchValue.value,
-        hideInternal: hideInternal.value,
-      },
-    }).then((res) => {
-      if (res.status === 200) {
-        logList.value = res.data.items;
-        total.value = res.data.total;
-      }
-    });
+    tableRef.value?.scrollToTop();
+    void reload();
   }
   onMounted(() => {
     searchApiLog();

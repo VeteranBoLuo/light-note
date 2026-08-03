@@ -353,6 +353,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import icon from '@/config/icon.ts';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { recordOperation } from '@/api/commonApi.ts';
   import {
     applyAiChangeSet,
@@ -736,10 +737,15 @@
     }
   }
 
-  function openResultNote() {
+  async function openResultNote() {
     if (!reuseResult.value?.noteId) return;
-    reuseVisible.value = false;
-    void router.push(`/noteLibrary/${encodeURIComponent(reuseResult.value.noteId)}`);
+    const noteId = reuseResult.value.noteId;
+    await closeCurrentMobileOverlayThen(
+      () => {
+        reuseVisible.value = false;
+      },
+      () => router.push(`/noteLibrary/${encodeURIComponent(noteId)}`),
+    );
   }
 
   function openSecondaryAction(mode: Exclude<ReuseMode, 'create'>) {

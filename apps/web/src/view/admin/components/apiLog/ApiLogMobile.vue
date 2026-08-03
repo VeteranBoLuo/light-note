@@ -10,23 +10,17 @@
         <b-button @click="clearApiLogs" type="primary">清空</b-button>
       </b-space>
       <BTable
+        fill
+        virtual
         style="flex: 1; min-height: 0"
         :data="logList"
         :columns="logColumns"
         :row-clickable="true"
-        :pagination="true"
-        :total="total"
-        :current-page="currentPage"
-        :page-size="pageSize"
-        @page-change="onPageChange"
-        @size-change="onSizeChange"
+        :loading="loading"
+        :has-more="hasMore"
+        @load-more="loadMore"
         @row-click="onRowClick"
       >
-        <template #bodyCell="{ column, text }">
-          <template v-if="column.key === 'system'">
-            <span :style="{ color: getOsColor(text?.os), fontSize: '12px' }">{{ text?.os || '未知' }}</span>
-          </template>
-        </template>
       </BTable>
     </div>
 
@@ -54,7 +48,8 @@
         <div>省份：{{ selectedRecord.location?.province }}</div>
         <div>城市：{{ selectedRecord.location?.city }}</div>
         <div>浏览器：{{ selectedRecord.system?.browser }}</div>
-        <div>操作系统：{{ selectedRecord.system?.os }}</div>
+        <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
+        <div>{{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime)) }}</div>
       </div>
     </BModal>
   </CommonContainer>
@@ -74,37 +69,32 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  const logList = ref([]);
+  import { useI18n } from 'vue-i18n';
+  import { getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  const { t } = useI18n();
+  const searchValue = ref('');
+  const {
+    items: logList,
+    loading,
+    hasMore,
+    loadMore,
+    reload,
+  } = useAdminCursorList<any>({
+    request: (cursor, limit) =>
+      apiQueryPost('/api/common/getApiLogs', {
+        cursor,
+        limit,
+        filters: { key: searchValue.value, hideInternal: true },
+      }),
+    onError: () => message.error(t('common.requestFailedDescription')),
+  });
 
   const logColumns = [
     { title: '昵称', key: 'alias', width: '1fr' },
     { title: '邮箱', key: 'email', width: '1fr' },
     { title: '时间', key: 'requestTime', width: '1fr' },
   ];
-
-  // 常用系统各配一个有辨识度、深浅主题都可读的颜色;未知/其他保持中性灰
-  function getOsColor(os?: string): string {
-    if (!os) return '#8a919e';
-    if (os.includes('Windows')) return '#3b82f6'; // 蓝
-    if (os.includes('iOS') || os.includes('iPhone') || os.includes('iPad')) return '#0ea5e9'; // 天蓝
-    if (os.includes('Mac')) return '#8b5cf6'; // 紫
-    if (os.includes('Android')) return '#22c55e'; // 绿
-    if (os.includes('HarmonyOS') || os.includes('Harmony') || os.includes('鸿蒙')) return '#ef4444'; // 红
-    if (os.includes('Linux') || os.includes('Ubuntu')) return '#f59e0b'; // 橙
-    return '#8a919e'; // 其他/未知
-  }
-
-  const currentPage = ref<number>(1);
-  const pageSize = ref<number>(20);
-  const onPageChange = (page: number) => {
-    currentPage.value = page;
-    searchApiLog();
-  };
-  const onSizeChange = (_current: number, newPageSize: number) => {
-    pageSize.value = newPageSize;
-    currentPage.value = 1;
-    searchApiLog();
-  };
 
   function clearApiLogs() {
     Alert.alert({
@@ -138,21 +128,8 @@
     }, 500);
   }
 
-  const total = ref(0);
-  const searchValue = ref('');
   function searchApiLog() {
-    apiQueryPost('/api/common/getApiLogs', {
-      currentPage: currentPage.value,
-      pageSize: pageSize.value,
-      filters: {
-        key: searchValue.value,
-      },
-    }).then((res) => {
-      if (res.status === 200) {
-        logList.value = res.data.items;
-        total.value = res.data.total;
-      }
-    });
+    void reload();
   }
   onMounted(() => {
     searchApiLog();

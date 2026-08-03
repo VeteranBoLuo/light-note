@@ -2,6 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import FilePreview from './FilePreview.vue';
 import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview';
+import {
+  MOBILE_OVERLAY_HISTORY_STATE_KEY,
+  resetMobileOverlayHistoryForTests,
+} from '@/utils/mobileOverlayHistory';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -44,6 +48,9 @@ const createObjectUrl = vi.fn(() => 'blob:https://boluo66.top/html-preview');
 const revokeObjectUrl = vi.fn();
 
 beforeEach(() => {
+  resetMobileOverlayHistoryForTests();
+  window.history.replaceState({}, '', '/');
+  vi.spyOn(window.history, 'back').mockImplementation(() => {});
   originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
   originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL');
   originalFullscreenElement = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
@@ -73,6 +80,8 @@ afterEach(() => {
   if (originalExitFullscreen) Object.defineProperty(document, 'exitFullscreen', originalExitFullscreen);
   else delete (document as Partial<Document>).exitFullscreen;
   vi.unstubAllGlobals();
+  resetMobileOverlayHistoryForTests();
+  vi.restoreAllMocks();
 });
 
 async function mountHtmlPreview() {
@@ -310,6 +319,12 @@ describe('FilePreview PDF preview', () => {
 });
 
 describe('FilePreview mobile image gestures', () => {
+  it('uses the shared mobile overlay history marker so Android back closes the preview first', async () => {
+    await mountImagePreview();
+
+    expect(window.history.state[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toMatch(/^overlay-/);
+  });
+
   it('supports pinch zoom and pans the enlarged image with one finger', async () => {
     const image = await mountImagePreview();
 

@@ -114,18 +114,46 @@
           {{ mobileResourcePreviewStatus }}
         </p>
         <div class="resource-mention-mobile-preview__actions">
-          <BButton type="primary" :disabled="!mobileResourcePreviewCanOpen" @click="openMobileResourcePreviewTarget">
+          <template v-if="mobileResourcePreview.ref.type === 'file'">
+            <BButton
+              type="primary"
+              :loading="inlineFilePreviewLoading"
+              :disabled="!mobileResourcePreviewCanOpen"
+              @click="openReferencedFileInlinePreview"
+            >
+              {{ t('note.resourceMention.previewHere') }}
+            </BButton>
+            <BButton
+              :disabled="!mobileResourcePreviewCanOpen || inlineFilePreviewLoading"
+              @click="openMobileResourcePreviewTarget"
+            >
+              {{ t('note.resourceMention.openInCloudSpace') }}
+            </BButton>
+          </template>
+          <BButton
+            v-else
+            type="primary"
+            :disabled="!mobileResourcePreviewCanOpen"
+            @click="openMobileResourcePreviewTarget"
+          >
             {{ mobileResourcePreviewOpenLabel }}
           </BButton>
         </div>
       </div>
     </BModal>
+    <FilePreview
+      v-if="inlineFilePreviewInfo"
+      v-model:visible="inlineFilePreviewVisible"
+      :file-info="inlineFilePreviewInfo"
+      @close="closeReferencedFileInlinePreview"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
   import {
     computed,
+    defineAsyncComponent,
     nextTick,
     onBeforeUnmount,
     onMounted,
@@ -189,11 +217,19 @@
     type ResourceRef,
   } from '@/utils/noteResourceRefs';
   import type { ResolvedResourceReference } from '@/api/noteReferences';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import {
+    buildNoteReturnFocusLocation,
+    normalizeReferencedFilePreviewInfo,
+    type ReferencedFilePreviewInfo,
+  } from '@/utils/noteResourceNavigation';
   import {
     resolveAiSourceNavigation,
     type AiSource,
     type AiSourceTarget,
   } from '@/components/aiAssistant/aiSourceNavigation';
+
+  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const CODE_LANGUAGES = [
     { value: 'plaintext', text: 'Plain Text' },
@@ -347,6 +383,10 @@
   const inlineMentionQuery = ref('');
   const mobileResourcePreviewVisible = ref(false);
   const mobileResourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
+  const inlineFilePreviewVisible = ref(false);
+  const inlineFilePreviewLoading = ref(false);
+  const inlineFilePreviewInfo = ref<ReferencedFilePreviewInfo | null>(null);
+  let inlineFilePreviewRequestId = 0;
   const inlineMentionAnchorStyle = ref<Record<string, string>>({});
   const inlineMentionSuggestionsRef = ref<{ moveActive: (offset: number) => void; chooseActive: () => void } | null>(
     null,
@@ -427,7 +467,7 @@
     if (type === 'file') return t('note.resourceMention.openFile');
     return t('note.resourceMention.openNote');
   });
-  function navigateResourceRef(ref: ResourceRef) {
+  async function navigateResourceRef(ref: ResourceRef) {
     const state = resolvedResourceRef(ref);
     if (state && !state.available) {
       message.warning(t('note.resourceMention.resourceUnavailable'));
@@ -451,11 +491,9 @@
       return;
     }
     if (navigation.kind !== 'internal') return;
-    if (typeof navigation.target === 'string') {
-      void router.push(navigation.target);
-    } else {
-      void router.push(navigation.target);
-    }
+    const returnFocusLocation = buildNoteReturnFocusLocation(router.currentRoute.value, ref);
+    if (returnFocusLocation) await router.replace(returnFocusLocation);
+    await router.push(navigation.target);
   }
 
   function showMobileResourcePreview(ref: ResourceRef, anchor: HTMLAnchorElement | null) {
@@ -467,19 +505,69 @@
   }
 
   function closeMobileResourcePreview() {
+    inlineFilePreviewRequestId += 1;
+    inlineFilePreviewLoading.value = false;
     mobileResourcePreviewVisible.value = false;
     mobileResourcePreview.value = null;
   }
 
-  function openMobileResourcePreviewTarget() {
+  async function openMobileResourcePreviewTarget() {
     const preview = mobileResourcePreview.value;
     if (!preview) return;
     if (!mobileResourcePreviewCanOpen.value) {
       message.warning(mobileResourcePreviewStatus.value);
       return;
     }
-    closeMobileResourcePreview();
-    navigateResourceRef(preview.ref);
+    await closeCurrentMobileOverlayThen(closeMobileResourcePreview, () => navigateResourceRef(preview.ref));
+  }
+
+  async function openReferencedFileInlinePreview() {
+    const preview = mobileResourcePreview.value;
+    if (!preview || preview.ref.type !== 'file' || inlineFilePreviewLoading.value) return;
+    if (!mobileResourcePreviewCanOpen.value) {
+      message.warning(mobileResourcePreviewStatus.value);
+      return;
+    }
+    const expectedRefKey = resourceRefKey(preview.ref);
+    const requestId = ++inlineFilePreviewRequestId;
+    inlineFilePreviewLoading.value = true;
+    try {
+      const res = await apiBasePost('/api/file/getFileInfo', { id: preview.ref.id }, { silent: true });
+      const currentPreview = mobileResourcePreview.value;
+      // 请求期间用户可能已关闭弹框或选择了其他引用；旧响应不得重新打开预览。
+      if (
+        requestId !== inlineFilePreviewRequestId ||
+        !mobileResourcePreviewVisible.value ||
+        !currentPreview ||
+        resourceRefKey(currentPreview.ref) !== expectedRefKey
+      ) {
+        return;
+      }
+      const fileInfo =
+        res?.status === 200 ? normalizeReferencedFilePreviewInfo(res.data, { id: preview.ref.id }) : null;
+      if (!fileInfo) {
+        message.warning(t('note.resourceMention.resourceUnavailable'));
+        return;
+      }
+      await closeCurrentMobileOverlayThen(closeMobileResourcePreview, () => {
+        inlineFilePreviewInfo.value = fileInfo;
+        inlineFilePreviewVisible.value = true;
+        recordResourceMentionOperation('在笔记内预览引用文件');
+      });
+    } catch {
+      if (requestId === inlineFilePreviewRequestId) {
+        message.warning(t('note.resourceMention.resourceUnavailable'));
+      }
+    } finally {
+      if (requestId === inlineFilePreviewRequestId) {
+        inlineFilePreviewLoading.value = false;
+      }
+    }
+  }
+
+  function closeReferencedFileInlinePreview() {
+    inlineFilePreviewVisible.value = false;
+    inlineFilePreviewInfo.value = null;
   }
 
   function handleResourceRefClick(ref: ResourceRef, anchor: HTMLAnchorElement | null) {

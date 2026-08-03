@@ -309,6 +309,12 @@
     isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
   import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview.ts';
+  import {
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -358,7 +364,7 @@
   const htmlBlobUrl = ref<string>('');
   const previewRootRef = ref<HTMLElement | null>(null);
   const isHtmlFullscreen = ref(false);
-  const previewHistoryActive = ref(false);
+  let previewHistoryHandle: MobileOverlayHistoryHandle | null = null;
   const markdownContainerRef = ref<HTMLElement | null>(null);
   const markdownContent = ref('');
   let activePreviewFileId = '';
@@ -468,9 +474,12 @@
         activePreviewFileId = String(props.fileInfo.id || '');
         previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
-        if (!previewHistoryActive.value) {
-          history.pushState({ preview: true }, '');
-          previewHistoryActive.value = true;
+        if (!previewHistoryHandle) {
+          previewHistoryHandle = registerMobileOverlayHistory(() => {
+            previewHistoryHandle = null;
+            emit('update:visible', false);
+            emit('close');
+          });
         }
         await startPreview(props.fileInfo);
         return;
@@ -480,7 +489,10 @@
         activePreviewFileId = '';
         releaseHtmlBlobUrl();
         document.body.style.overflow = previousBodyOverflow;
-        previewHistoryActive.value = false;
+        if (previewHistoryHandle) {
+          releaseMobileOverlayHistory(previewHistoryHandle);
+          previewHistoryHandle = null;
+        }
       }
     },
     { immediate: true },
@@ -817,10 +829,9 @@
     scale.value = 1; // 重置缩放
     imagePosition.value = { x: 0, y: 0 }; // 重置位置
     resetTouchGesture();
-    if (previewHistoryActive.value) {
-      history.back();
-      return;
-    }
+    if (previewHistoryHandle && requestMobileOverlayHistoryClose(previewHistoryHandle)) return;
+    previewHistoryHandle = null;
+    emit('update:visible', false);
     emit('close');
   }
 
@@ -1043,20 +1054,12 @@
     }
   }
 
-  function handlePopState() {
-    if (previewHistoryActive.value && props.visible) {
-      previewHistoryActive.value = false;
-      emit('close');
-    }
-  }
-
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('wheel', handleWheel, { passive: false });
     document.addEventListener('mousedown', handleMiddleDblClick);
     document.addEventListener('selectstart', preventSelect);
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    window.addEventListener('popstate', handlePopState);
   });
 
   onUnmounted(() => {
@@ -1066,7 +1069,8 @@
     document.removeEventListener('mousedown', handleMiddleDblClick);
     document.removeEventListener('selectstart', preventSelect);
     document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    window.removeEventListener('popstate', handlePopState);
+    if (previewHistoryHandle) releaseMobileOverlayHistory(previewHistoryHandle);
+    previewHistoryHandle = null;
     document.body.style.overflow = previousBodyOverflow;
     // 清理PDF blob URL
     if (pdfBlobUrl.value) {
