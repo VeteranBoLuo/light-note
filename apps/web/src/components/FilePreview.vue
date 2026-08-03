@@ -80,13 +80,13 @@
         <!-- 文件预览内容 -->
         <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
           <!-- 1. PDF预览 -->
-          <iframe
-            v-if="previewType === 'pdf' && pdfBlobUrl"
-            :src="pdfBlobUrl"
-            :title="fileInfo.fileName"
-            class="preview-iframe"
-            @load="onLoad"
-            @error="onError"
+          <PdfPreview
+            v-if="previewType === 'pdf'"
+            :src="effectiveFileUrl"
+            :file-name="fileInfo.fileName"
+            class="preview-pdf-viewer"
+            @rendered="onRendered"
+            @error="onPdfError"
           />
 
           <!-- 1.5 HTML 交互预览：必须与轻笺页面隔离，禁止直接 v-html 注入 -->
@@ -295,6 +295,7 @@
   import { computed, defineAsyncComponent, onMounted, onUnmounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import VideoPreview from '@/components/base/VideoPreview.vue';
+  import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -360,7 +361,6 @@
   let pinchStartPosition = { x: 0, y: 0 };
   const textContent = ref('');
   const wrapText = ref(true);
-  const pdfBlobUrl = ref<string>('');
   const htmlBlobUrl = ref<string>('');
   const previewRootRef = ref<HTMLElement | null>(null);
   const isHtmlFullscreen = ref(false);
@@ -538,9 +538,7 @@
       if (['word', 'excel', 'ppt'].includes(previewType.value)) {
         await ensureOfficeStylesLoaded();
       }
-      if (previewType.value === 'pdf') {
-        await loadPdfBlob(effectiveFileUrl.value);
-      } else if (previewType.value === 'html') {
+      if (previewType.value === 'html') {
         await loadHtmlBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
@@ -587,41 +585,6 @@
       error.value = true;
       errorMessage.value = t('cloudSpace.previewPanel.textLoadFailed');
       loading.value = false;
-    }
-  }
-
-  // PDF 统一下载为 blob 后再交给 iframe。部分浏览器会把对象存储的签名地址当成附件下载，
-  // 直接赋给 src 会跳出预览或触发下载；blob URL 能稳定留在应用内预览。
-  async function loadPdfBlob(url?: string) {
-    if (!url) {
-      error.value = true;
-      errorMessage.value = t('cloudSpace.previewPanel.invalidUrl');
-      loading.value = false;
-      return;
-    }
-
-    const expectedFileId = activePreviewFileId;
-    try {
-      if (pdfBlobUrl.value) {
-        if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
-        pdfBlobUrl.value = '';
-      }
-
-      const response = await fetch(url, { mode: 'cors' });
-      if (!response.ok) {
-        throw new Error(`HTTP错误! 状态码: ${response.status}`);
-      }
-      const blob = await response.blob();
-      if (expectedFileId !== activePreviewFileId) return;
-      pdfBlobUrl.value = URL.createObjectURL(blob);
-    } catch (err) {
-      if (expectedFileId !== activePreviewFileId) return;
-      console.error('加载PDF文件失败:', err);
-      error.value = true;
-      errorMessage.value = t('cloudSpace.previewPanel.pdfLoadFailed');
-      throw err;
-    } finally {
-      if (expectedFileId === activePreviewFileId) loading.value = false;
     }
   }
 
@@ -674,6 +637,13 @@
   function onRendered() {
     loading.value = false;
     error.value = false;
+  }
+
+  function onPdfError(err: unknown) {
+    console.error('PDF 文档渲染失败:', err);
+    loading.value = false;
+    error.value = true;
+    errorMessage.value = t('cloudSpace.previewPanel.pdfLoadFailed');
   }
 
   function onOfficeError(err: any) {
@@ -819,11 +789,6 @@
   }
 
   function handleClose() {
-    // 清理PDF blob URL
-    if (pdfBlobUrl.value) {
-      if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
-      pdfBlobUrl.value = '';
-    }
     releaseHtmlBlobUrl();
     rotate.value = 0; // 重置旋转角度
     scale.value = 1; // 重置缩放
@@ -1072,11 +1037,6 @@
     if (previewHistoryHandle) releaseMobileOverlayHistory(previewHistoryHandle);
     previewHistoryHandle = null;
     document.body.style.overflow = previousBodyOverflow;
-    // 清理PDF blob URL
-    if (pdfBlobUrl.value) {
-      if (pdfBlobUrl.value.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl.value);
-      pdfBlobUrl.value = '';
-    }
     releaseHtmlBlobUrl();
     void exitHtmlFullscreen();
   });
@@ -1288,12 +1248,6 @@
         height: 100%;
         min-width: 0;
         min-height: 0;
-
-        .preview-iframe {
-          width: 100%;
-          height: 100%;
-          border: none;
-        }
 
         .html-preview-iframe {
           width: 100%;

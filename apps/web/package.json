@@ -46,6 +46,7 @@
     "jszip": "^3.10.1",
     "lodash-es": "^4.17.21",
     "marked": "^17.0.1",
+    "pdfjs-dist": "3.11.174",
     "pinia": "^2.1.7",
     "prismjs": "^1.30.0",
     "tinymce": "^8.3.2",

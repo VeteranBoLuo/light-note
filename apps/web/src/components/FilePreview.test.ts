@@ -31,6 +31,13 @@ vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
   default: { template: '<div />' },
 }));
 
+vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
+  default: {
+    props: ['src', 'fileName'],
+    template: '<div class="pdf-preview-stub" :data-src="src" :data-file-name="fileName" />',
+  },
+}));
+
 vi.mock('@/api/commonApi.ts', () => ({
   recordOperation: vi.fn(),
 }));
@@ -304,17 +311,13 @@ describe('FilePreview HTML sandbox', () => {
 });
 
 describe('FilePreview PDF preview', () => {
-  it('loads the signed URL as a blob so the browser keeps the PDF in the preview frame', async () => {
+  it('passes the signed URL to the local PDF renderer instead of relying on an iframe plugin', async () => {
     const { fileUrl } = await mountPdfPreview();
-    const iframe = document.body.querySelector<HTMLIFrameElement>('iframe.preview-iframe');
+    const preview = document.body.querySelector<HTMLElement>('.pdf-preview-stub');
 
-    expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors' });
-    expect(createObjectUrl).toHaveBeenCalledOnce();
-    expect(iframe?.getAttribute('src')).toBe('blob:https://boluo66.top/html-preview');
-
-    cleanup?.();
-    cleanup = undefined;
-    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:https://boluo66.top/html-preview');
+    expect(preview?.dataset.src).toBe(fileUrl);
+    expect(preview?.dataset.fileName).toBe('preview.pdf');
+    expect(document.body.querySelector('iframe.preview-iframe')).toBeNull();
   });
 });
 
