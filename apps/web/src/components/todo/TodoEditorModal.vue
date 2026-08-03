@@ -59,6 +59,7 @@
     saving.value = true;
     try {
       const res = props.item ? await updateTodo(props.item.id, payload) : await createTodo(payload);
+      if (res.status === 'preview') return;
       if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
       message.success(t('inbox.todoSaved'));
       emit('saved', {

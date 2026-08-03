@@ -34,7 +34,13 @@ describe('AI 冒烟异步运行服务', () => {
       .mockResolvedValueOnce([[{ released: 1 }]]);
     const completedReport = {
       passed: true,
+      depth: 'answer',
       provider: { provider: 'deepseek', model: 'synthetic-model' },
+      layers: {
+        planning: { passed: 1, failed: 0, skipped: 0 },
+        toolContract: { passed: 1, failed: 0, skipped: 0 },
+        answer: { passed: 1, failed: 0, skipped: 0 },
+      },
       usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
       results: [
         {
@@ -48,6 +54,12 @@ describe('AI 冒烟异步运行服务', () => {
               passed: true,
               capabilities: [],
               tools: [],
+              layers: {
+                planning: { status: 'passed', passed: true, errors: [] },
+                toolContract: { status: 'passed', passed: true, errors: [] },
+                answer: { status: 'passed', passed: true, errors: [], answerLength: 12 },
+              },
+              modelCalls: 2,
               errors: [],
               durationMs: 1,
               usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
@@ -56,7 +68,7 @@ describe('AI 冒烟异步运行服务', () => {
         },
       ],
       progress: { completedCases: 1, totalCases: 1 },
-      execution: { mode: 'plan_only', toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
+      execution: { mode: 'plan_contract_answer', toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
     };
     mocks.runSuite.mockImplementationOnce(async (options) => {
       await options.onProgress(completedReport);
@@ -64,12 +76,13 @@ describe('AI 冒烟异步运行服务', () => {
     });
 
     await expect(
-      service.startAiLiveSmokeRun({ triggeredBy: 'root-1', suite: 'full', repeat: 1 }),
+      service.startAiLiveSmokeRun({ triggeredBy: 'root-1', suite: 'full', repeat: 1, depth: 'answer' }),
     ).resolves.toMatchObject({
       id: 'synthetic-run-id',
       status: 'queued',
       suite: 'full',
-      caseCount: 37,
+      depth: 'answer',
+      caseCount: 39,
     });
     await vi.waitFor(() => expect(mocks.release).toHaveBeenCalledOnce());
     expect(mocks.runSuite).toHaveBeenCalledWith(
@@ -77,10 +90,12 @@ describe('AI 冒烟异步运行服务', () => {
         live: true,
         suite: 'full',
         repeat: 1,
+        depth: 'answer',
         format: 'json',
         onProgress: expect.any(Function),
       }),
     );
+    expect(mocks.connectionQuery.mock.calls[2]?.[1]?.at(-1)).toContain('"depth":"answer"');
     const resultWrites = mocks.poolQuery.mock.calls.filter(([sql]) => String(sql).includes('result_json'));
     expect(resultWrites).toHaveLength(2);
     expect(resultWrites[0]?.[1]).toContain(15);
@@ -91,6 +106,14 @@ describe('AI 冒烟异步运行服务', () => {
     await expect(
       service.startAiLiveSmokeRun({ triggeredBy: 'root-1', suite: 'unknown', repeat: 1 }),
     ).rejects.toMatchObject({ code: 'SUITE_NOT_SUPPORTED' });
+    expect(mocks.ensureSchema).not.toHaveBeenCalled();
+    expect(mocks.poolQuery).not.toHaveBeenCalled();
+  });
+
+  it('拒绝未知评测深度且不会访问数据库', async () => {
+    await expect(
+      service.startAiLiveSmokeRun({ triggeredBy: 'root-1', suite: 'quick', repeat: 1, depth: 'execute' }),
+    ).rejects.toMatchObject({ code: 'DEPTH_NOT_SUPPORTED' });
     expect(mocks.ensureSchema).not.toHaveBeenCalled();
     expect(mocks.poolQuery).not.toHaveBeenCalled();
   });

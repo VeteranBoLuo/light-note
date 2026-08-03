@@ -51,13 +51,13 @@ describe('AI 助手离线回归 runner', () => {
   it('输出稳定的数据集覆盖摘要', () => {
     expect(summarizeGoldenDataset(dataset)).toMatchObject({
       datasetId: 'light-note-ai-golden-product-matrix-v2',
-      tasks: 268,
+      tasks: 270,
       sources: 49,
-      modes: { ask: 246, organize: 22 },
+      modes: { ask: 248, organize: 22 },
       capabilities: {
         ask: 55,
         evidence_citation: 24,
-        gateway_policy: 25,
+        gateway_policy: 27,
         memory: 25,
         organize_changeset: 20,
         owner_isolation: 21,
@@ -74,8 +74,8 @@ describe('AI 助手离线回归 runner', () => {
     expect(report).toMatchObject({
       passed: true,
       errors: [],
-      evaluated: 268,
-      total: 268,
+      evaluated: 270,
+      total: 270,
       averageScore: 1,
       criticalFailures: 0,
     });
@@ -87,7 +87,7 @@ describe('AI 助手离线回归 runner', () => {
     expect(evaluateGoldenResults(dataset, sample, { allowPartial: true })).toMatchObject({
       passed: true,
       evaluated: 1,
-      total: 268,
+      total: 270,
     });
   });
 

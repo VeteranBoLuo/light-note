@@ -105,6 +105,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordAiProductEvent } from '@/api/aiTelemetry';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import AiCoverageDisclosure from './AiCoverageDisclosure.vue';
   import AiSourceList from './AiSourceList.vue';
   import {
@@ -196,10 +197,18 @@
 
   function navigateInsideApp(source: AiSource, target: string | { path: string; query?: Record<string, string> }) {
     emit('source-navigate', source);
-    void router.push(target);
+    return router.push(target);
   }
 
-  function openSource(source: AiSource, recordTelemetry = true) {
+  function executeSourceNavigation(source: AiSource, navigation: Exclude<AiSourceNavigation, { kind: 'none' }>) {
+    if (navigation.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    return navigateInsideApp(source, navigation.target);
+  }
+
+  async function openSource(source: AiSource, recordTelemetry = true) {
     const navigation: AiSourceNavigation = sourceNavigation(source);
     if (navigation.kind === 'none') return;
     if (recordTelemetry) {
@@ -209,14 +218,25 @@
         actionType: 'open',
       });
     }
-    closeSourcePanels();
+
+    // 外链必须保留当前点击产生的浏览器 user activation，避免等待异步
+    // popstate 后被移动端浏览器当作非用户触发的弹窗而拦截。
     if (navigation.kind === 'external') {
-      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      closeSourcePanels();
+      executeSourceNavigation(source, navigation);
       return;
     }
-    navigateInsideApp(source, navigation.target);
-  }
 
+    // 移动端“全部来源”位于带 history 占位的 BModal 内。必须等弹框占位
+    // 真正出栈后再导航，否则异步 history.back() 会把刚打开的目标页弹回来。
+    if (props.isMobile && mobileSourceVisible.value) {
+      await closeCurrentMobileOverlayThen(closeSourcePanels, () => executeSourceNavigation(source, navigation));
+      return;
+    }
+
+    closeSourcePanels();
+    await executeSourceNavigation(source, navigation);
+  }
 </script>
 
 <style scoped lang="less">

@@ -727,6 +727,11 @@
     }
   }
 
+  /* 选项之间留出细小的背景缝隙,避免 hover/选中态连成一整块 */
+  .select-option + .select-option {
+    margin-top: 2px;
+  }
+
   .select-option-check {
     width: 16px;
     height: 16px;

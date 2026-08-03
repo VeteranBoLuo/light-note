@@ -24,14 +24,13 @@ const todo: TodoItem = {
   resourceRefs: [],
 };
 
-function mountSchedule(view: 'agenda' | 'calendar', options: { readOnly?: boolean } = {}) {
+function mountSchedule(view: 'agenda' | 'calendar') {
   const onDelete = vi.fn();
-  const onEdit = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     setup() {
-      return () => h(TodoScheduleView, { items: [todo], view, swipeEnabled: true, ...options, onDelete, onEdit });
+      return () => h(TodoScheduleView, { items: [todo], view, swipeEnabled: true, onDelete });
     },
   });
   app.use(createPinia());
@@ -61,7 +60,7 @@ function mountSchedule(view: 'agenda' | 'calendar', options: { readOnly?: boolea
     app.unmount();
     host.remove();
   };
-  return { host, onDelete, onEdit };
+  return { host, onDelete };
 }
 
 afterEach(() => {
@@ -87,15 +86,5 @@ describe('TodoScheduleView mobile swipe delete', () => {
     host.querySelector<HTMLButtonElement>('.todo-calendar-dayitem-swipe .mobile-swipe-delete__action button')!.click();
 
     expect(onDelete).toHaveBeenCalledWith(todo);
-  });
-
-  it('只读日程不展示删除手势，也不能打开编辑', async () => {
-    const { host, onEdit } = mountSchedule('agenda', { readOnly: true });
-
-    await nextTick();
-    expect(host.querySelector('.todo-agenda-card-swipe.is-enabled')).toBeNull();
-    expect(host.querySelector<HTMLButtonElement>('.todo-agenda-card')?.disabled).toBe(true);
-    host.querySelector<HTMLButtonElement>('.todo-agenda-card')!.click();
-    expect(onEdit).not.toHaveBeenCalled();
   });
 });

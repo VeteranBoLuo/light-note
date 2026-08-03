@@ -16,6 +16,12 @@ import {
   type TodoSort,
 } from '@/api/todoApi';
 
+type TodoMutationResult = boolean | 'preview';
+
+function resolveTodoMutationResult(response: { status?: unknown }, succeeded: boolean): TodoMutationResult {
+  return response.status === 'preview' ? 'preview' : succeeded;
+}
+
 export default defineStore('todo', {
   state: () => ({
     items: [] as TodoItem[],
@@ -91,54 +97,63 @@ export default defineStore('todo', {
     },
     async setCompleted(item: TodoItem, completed: boolean) {
       const res = completed ? await completeTodo(item.id) : await reopenTodo(item.id);
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },
     async updateChecklist(item: TodoItem, checklist: TodoItem['checklist']) {
       const res = await updateTodo(item.id, { checklist });
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       item.checklist = checklist;
       return true;
     },
     async remove(item: TodoItem) {
       const res = await deleteTodo(item.id);
-      if (res.status !== 200 || !Number(res.data?.affected || 0)) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200 && Number(res.data?.affected || 0) > 0);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },
     async batchComplete(ids: string[]) {
       const res = await batchSetTodoStatus(ids, 'completed');
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },
     async batchDelete(ids: string[]) {
       const res = await batchDeleteTodos(ids);
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },
     async restoreMany(ids: string[]) {
       const uniqueIds = [...new Set(ids)];
       const res = await batchRestoreTodos(uniqueIds);
+      if (String(res.status) === 'preview') return 'preview';
       await this.refreshList();
       return res.status === 200 && Number(res.data?.affected || 0) === uniqueIds.length;
     },
     async reopenMany(ids: string[]) {
       const res = await batchSetTodoStatus(ids, 'pending', { undoCompletion: true });
+      if (String(res.status) === 'preview') return 'preview';
       await this.refreshList();
       return res.status === 200 && Number(res.data?.affected || 0) === new Set(ids).size;
     },
     async reorder(items: Array<{ id: string; dueAt?: string | null; priority: TodoItem['priority'] }>) {
       const res = await reorderTodos(items);
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },
     async snooze(item: TodoItem, targetAt: string) {
       const res = await snoozeTodo(item.id, targetAt);
-      if (res.status !== 200) return false;
+      const result = resolveTodoMutationResult(res, res.status === 200);
+      if (result !== true) return result;
       await this.refreshList();
       return true;
     },

@@ -43,10 +43,7 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
   return event;
 }
 
-function mountTodoItem(
-  item: TodoItemType = todo,
-  options: { selectable?: boolean; swipeEnabled?: boolean; readOnly?: boolean } = {},
-) {
+function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolean; swipeEnabled?: boolean } = {}) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
   const swipeOpen = ref(false);
@@ -59,7 +56,6 @@ function mountTodoItem(
           item,
           selectable: options.selectable,
           swipeEnabled: options.swipeEnabled,
-          readOnly: options.readOnly,
           swipeOpen: swipeOpen.value,
           onEdit,
           onDelete,
@@ -136,17 +132,6 @@ describe('TodoItem card editing', () => {
     const { host, onEdit } = mountTodoItem(todo, { selectable: true });
     await nextTick();
 
-    host.querySelector<HTMLElement>('.todo-item__body')!.click();
-    expect(onEdit).not.toHaveBeenCalled();
-  });
-
-  it('只读卡片不展示写操作，也不能通过正文打开编辑', async () => {
-    const { host, onEdit } = mountTodoItem(todo, { readOnly: true, swipeEnabled: true });
-    await nextTick();
-
-    expect(host.querySelector('.todo-item__actions')).toBeNull();
-    expect(host.querySelector('.mobile-swipe-delete__action')).toBeNull();
-    expect(host.querySelector<HTMLElement>('.todo-item__main-check')?.getAttribute('aria-disabled')).toBe('true');
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
     expect(onEdit).not.toHaveBeenCalled();
   });

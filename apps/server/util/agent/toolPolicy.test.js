@@ -82,6 +82,25 @@ describe('Agent Tool Policy', () => {
     ).rejects.toMatchObject({ code: 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY' });
   });
 
+  it('缺少通用必填参数时返回可识别的澄清错误，而不是普通参数失败', async () => {
+    const tool = makeTool({
+      parameters: {
+        type: 'object',
+        required: ['mode'],
+        properties: { mode: { type: 'string', enum: ['all', 'recent'] } },
+      },
+    });
+    await expect(
+      enforceToolPolicy({
+        registry: new Map([[tool.name, tool]]),
+        toolName: tool.name,
+        args: {},
+        context: context(),
+        phase: 'plan',
+      }),
+    ).rejects.toMatchObject({ code: 'TOOL_ARGUMENT_REQUIRED' });
+  });
+
   it('严格校验整数与枚举，兼容旧 admin 角色为普通 user', async () => {
     const tool = makeTool();
     const registry = new Map([[tool.name, tool]]);

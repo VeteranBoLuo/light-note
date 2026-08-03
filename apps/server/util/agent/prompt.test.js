@@ -68,6 +68,9 @@ describe('buildPlannerPrompt', () => {
     expect(prompt).toContain('询问已有状态、历史记录、统计、回顾');
     expect(prompt).toContain('planned、forbidden、unavailable 或 unknown');
     expect(prompt).toContain('dependsOn 只能引用');
+    expect(prompt).toContain('任何必需工具参数若无法从用户原话');
+    expect(prompt).toContain('requestClass=ambiguous');
+    expect(prompt).toContain('禁止为满足 schema 而臆造');
     expect(prompt).toContain('“第一条”在用户未指定排序时使用 sort=smart、limit=1');
     expect(prompt).toContain('“最后一条”等无法由当前排序与分页可靠确定的说法必须先澄清');
     expect(prompt).not.toContain('不需要工具时只输出 DIRECT_REPLY');

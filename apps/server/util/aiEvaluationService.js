@@ -14,7 +14,9 @@ function compactReport(report) {
   return {
     passed: report.passed,
     provider: report.provider,
+    depth: report.depth,
     usage: report.usage,
+    layers: report.layers,
     execution: report.execution,
     progress: report.progress,
     results: report.results.map((result) => ({
@@ -27,6 +29,9 @@ function compactReport(report) {
         passed: attempt.passed,
         capabilities: attempt.capabilities,
         tools: attempt.tools,
+        toolArguments: attempt.toolArguments,
+        layers: attempt.layers,
+        modelCalls: attempt.modelCalls,
         errors: attempt.errors,
         durationMs: attempt.durationMs,
         usage: attempt.usage,
@@ -54,7 +59,7 @@ async function releaseRunLock(connection) {
   }
 }
 
-async function executeRun(id, suiteId, repeat, lockConnection) {
+async function executeRun(id, suiteId, repeat, depth, lockConnection) {
   const startedAt = Date.now();
   try {
     await pool.query("UPDATE ai_evaluation_runs SET status = 'running', started_at = NOW() WHERE id = ?", [id]);
@@ -84,6 +89,7 @@ async function executeRun(id, suiteId, repeat, lockConnection) {
       live: true,
       suite: suiteId,
       repeat,
+      depth,
       format: 'json',
       onProgress: persistProgress,
     });
@@ -124,11 +130,16 @@ async function executeRun(id, suiteId, repeat, lockConnection) {
   }
 }
 
-export async function startAiLiveSmokeRun({ triggeredBy, suite: suiteId = 'quick', repeat = 1 }) {
+export async function startAiLiveSmokeRun({ triggeredBy, suite: suiteId = 'quick', repeat = 1, depth = 'plan' }) {
   const suite = getLiveSmokeSuite(suiteId);
   if (!Number.isInteger(repeat) || repeat < 1 || repeat > 5) {
     const error = new Error('REPEAT_OUT_OF_RANGE');
     error.code = 'REPEAT_OUT_OF_RANGE';
+    throw error;
+  }
+  if (!['plan', 'answer'].includes(depth)) {
+    const error = new Error('DEPTH_NOT_SUPPORTED');
+    error.code = 'DEPTH_NOT_SUPPORTED';
     throw error;
   }
   if (startPending || activeRunPromise) {
@@ -156,20 +167,37 @@ export async function startAiLiveSmokeRun({ triggeredBy, suite: suiteId = 'quick
       STORAGE_SUITES,
     );
     const id = generateUUID();
+    const initialResult = {
+      passed: false,
+      depth,
+      progress: { completedCases: 0, totalCases: suite.cases.length },
+      layers: {
+        planning: { passed: 0, failed: 0, skipped: 0 },
+        toolContract: { passed: 0, failed: 0, skipped: 0 },
+        answer: { passed: 0, failed: 0, skipped: 0 },
+      },
+      execution: {
+        mode: depth === 'answer' ? 'plan_contract_answer' : 'plan_contract',
+        toolsExecuted: 0,
+        businessDataReads: 0,
+        businessDataWrites: 0,
+      },
+      results: [],
+    };
     await lockConnection.query(
       `INSERT INTO ai_evaluation_runs
-       (id, suite, provider, status, repeat_count, case_count, triggered_by)
-       VALUES (?, ?, 'deepseek', 'queued', ?, ?, ?)`,
-      [id, suite.storageId, repeat, suite.cases.length, triggeredBy],
+       (id, suite, provider, status, repeat_count, case_count, triggered_by, result_json)
+       VALUES (?, ?, 'deepseek', 'queued', ?, ?, ?, ?)`,
+      [id, suite.storageId, repeat, suite.cases.length, triggeredBy, JSON.stringify(initialResult)],
     );
     const heldConnection = lockConnection;
     lockConnection = null;
-    activeRunPromise = executeRun(id, suite.id, repeat, heldConnection)
+    activeRunPromise = executeRun(id, suite.id, repeat, depth, heldConnection)
       .catch((error) => console.error('[ai-evaluation] 异步任务失败 code=%s', stableAgentErrorCode(error)))
       .finally(() => {
         activeRunPromise = null;
       });
-    return { id, suite: suite.id, status: 'queued', repeatCount: repeat, caseCount: suite.cases.length };
+    return { id, suite: suite.id, depth, status: 'queued', repeatCount: repeat, caseCount: suite.cases.length };
   } finally {
     if (lockConnection) await releaseRunLock(lockConnection);
     startPending = false;

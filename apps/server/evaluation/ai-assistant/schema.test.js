@@ -48,12 +48,12 @@ function expectedResult(task) {
 }
 
 describe('AI 助手产品能力黄金集 schema', () => {
-  it('严格校验 268 条合成任务并满足能力、来源与风险覆盖', () => {
+  it('严格校验 270 条合成任务并满足能力、来源与风险覆盖', () => {
     expect(validateGoldenDataset(dataset, GOLDEN_DATASET_LIMITS)).toEqual([]);
     expect(dataset.privacy).toMatchObject({ syntheticOnly: true, containsRealUserContent: false });
-    expect(dataset.tasks).toHaveLength(268);
+    expect(dataset.tasks).toHaveLength(270);
     expect(dataset.tasks.filter((task) => task.tags.includes('legacy-core'))).toHaveLength(70);
-    expect(dataset.tasks.filter((task) => task.tags.includes('matrix-v2'))).toHaveLength(198);
+    expect(dataset.tasks.filter((task) => task.tags.includes('matrix-v2'))).toHaveLength(200);
 
     const modes = new Set(dataset.tasks.map((task) => task.mode));
     expect(modes).toEqual(new Set(['ask', 'organize']));

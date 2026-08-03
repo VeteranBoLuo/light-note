@@ -126,6 +126,7 @@
   import BList from '@/components/base/BasicComponents/BList.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const tagName = ref('');
   const hasBookmark = (tag: TagInterface) => Array.isArray(tag.bookmarkList) && tag.bookmarkList.length > 0;
@@ -171,11 +172,11 @@
         tag.isRename = true;
         newName.value = tag.name;
       },
-      edit: () => router.push(`/manage/editTag/${tag.id}`),
+      edit: () => navigateFromMobileFilter(() => router.push(`/manage/editTag/${tag.id}`)),
       delete: () => handleDeleteTag(tag),
-      addBookmark: () => router.push(`/manage/editBookmark/add/${tag.id}`),
+      addBookmark: () => navigateFromMobileFilter(() => router.push(`/manage/editBookmark/add/${tag.id}`)),
     };
-    actions[action]?.();
+    void actions[action]?.();
   }
 
   const handleDeleteTag = (tag: TagInterface) => {
@@ -218,24 +219,30 @@
     tag.isRename = false;
   }
 
-  function handleClickTag(tag: TagInterface) {
-    bookmark.isFold = true;
+  function navigateFromMobileFilter<T>(navigate: () => T | Promise<T>) {
+    if (!bookmark.isMobile) return navigate();
+    return closeCurrentMobileOverlayThen(() => {
+      bookmark.isFold = true;
+    }, navigate);
+  }
+
+  async function handleClickTag(tag: TagInterface) {
     if (tag.id === router.currentRoute.value.params?.id) {
+      bookmark.isFold = true;
       bookmark.refreshData();
     } else {
       bookmark.type = 'normal';
-      router.push({ path: `/home/${tag.id}` }).then(() => {
-        bookmark.refreshData();
-      });
+      await navigateFromMobileFilter(() => router.push({ path: `/home/${tag.id}` }));
+      bookmark.refreshData();
     }
   }
 
-  function handleViewAll() {
-    bookmark.isFold = true;
+  async function handleViewAll() {
     bookmark.type = 'all';
     bookmark.tagData = null;
     bookmark.bookmarkSearch = '';
-    router.replace('/home').then(() => bookmark.refreshData());
+    await navigateFromMobileFilter(() => router.replace('/home'));
+    bookmark.refreshData();
   }
   function onStart() {
     document.body.style.userSelect = 'none';

@@ -84,6 +84,14 @@ describe('todo store', () => {
     expect(listTodos).toHaveBeenCalledTimes(1);
   });
 
+  it('游客写入被预览拦截时只返回 preview，不刷新列表', async () => {
+    const store = useTodoStore();
+    deleteTodo.mockResolvedValueOnce({ status: 'preview', data: null });
+
+    await expect(store.remove({ id: 'todo-visitor' } as any)).resolves.toBe('preview');
+    expect(listTodos).not.toHaveBeenCalled();
+  });
+
   it('preserveStatus 拉取后,后续无参刷新沿用真实请求口径而非页签状态', async () => {
     const store = useTodoStore();
     listTodos.mockResolvedValue({ status: 200, data: { items: [], total: 0, pendingTotal: 0 } });

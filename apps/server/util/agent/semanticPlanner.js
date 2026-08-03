@@ -286,8 +286,16 @@ export function buildSemanticPlanToolDefinition(catalog, tools = [], { dependenc
               required: ['kind', 'capabilityId', 'goal', 'targetDescription', 'dependsOn'],
             },
           },
-          needsClarification: { type: 'boolean' },
-          clarificationQuestion: { type: 'string', maxLength: MAX_CLARIFICATION_LENGTH },
+          needsClarification: {
+            type: 'boolean',
+            description:
+              '当任何会改变结果的必需目标、范围、时间、数量、位置或状态无法从用户输入、已选上下文或权威前置结果中唯一确定时必须为 true。',
+          },
+          clarificationQuestion: {
+            type: 'string',
+            maxLength: MAX_CLARIFICATION_LENGTH,
+            description: 'needsClarification=true 时只向用户追问一个最关键的缺失信息；否则为空字符串。',
+          },
           toolCalls: {
             type: 'array',
             maxItems: MAX_TOOL_CALLS,

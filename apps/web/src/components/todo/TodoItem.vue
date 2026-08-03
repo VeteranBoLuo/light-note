@@ -1,6 +1,6 @@
 <template>
   <MobileSwipeDelete
-    :enabled="swipeEnabled && !selectable && !readOnly"
+    :enabled="swipeEnabled && !selectable"
     :open="swipeOpen"
     :disabled="disabled"
     :loading="deleting"
@@ -31,7 +31,7 @@
           <BCheckbox
             class="todo-item__main-check"
             :model-value="item.status === 'completed'"
-            :disabled="disabled || readOnly"
+            :disabled="disabled"
             :aria-label="t('inbox.todoSelect', { title: item.title })"
             @click.stop
             @update:model-value="$emit('toggle-complete', $event)"
@@ -53,7 +53,7 @@
               :key="check.id"
               class="todo-checklist__item"
               :model-value="check.done"
-              :disabled="disabled || readOnly || item.status === 'completed'"
+              :disabled="disabled || item.status === 'completed'"
               @update:model-value="toggleChecklist(check.id, $event)"
             >
               <span :class="{ done: check.done }">{{ check.text }}</span>
@@ -81,7 +81,7 @@
         </section>
       </div>
       <!-- 已完成的待办只保留「取消勾选恢复」和「删除」,避免对无效动作(编辑/日历/优先级/稍后)的误操作 -->
-      <div v-if="!readOnly" class="todo-item__actions todo-item__actions--desktop">
+      <div class="todo-item__actions todo-item__actions--desktop">
         <template v-if="item.status === 'pending'">
           <BSelect
             class="todo-item__priority-select"
@@ -126,7 +126,7 @@
           {{ t('inbox.deleteTodo') }}
         </BButton>
       </div>
-      <div v-if="!readOnly" class="todo-item__actions todo-item__actions--mobile">
+      <div class="todo-item__actions todo-item__actions--mobile">
         <template v-if="item.status === 'pending'">
           <BSelect
             class="todo-item__priority-select"
@@ -213,7 +213,6 @@
   const props = defineProps<{
     item: TodoItem;
     disabled?: boolean;
-    readOnly?: boolean;
     deleting?: boolean;
     selectable?: boolean;
     selected?: boolean;
@@ -294,7 +293,7 @@
   const MAX_VISIBLE_REFS = 3;
   const visibleResourceRefs = computed(() => (props.item.resourceRefs || []).slice(0, MAX_VISIBLE_REFS));
   const hiddenResourceRefCount = computed(() => Math.max(0, (props.item.resourceRefs?.length || 0) - MAX_VISIBLE_REFS));
-  const cardEditable = computed(() => !props.selectable && !props.disabled && !props.readOnly);
+  const cardEditable = computed(() => !props.selectable && !props.disabled);
 
   function openEditorFromCard(event: MouseEvent) {
     if (!cardEditable.value) return;
@@ -590,23 +589,31 @@
   }
   .todo-snooze-menu {
     display: grid;
-    min-width: 160px;
-    padding: 6px;
-    gap: 4px;
+    width: max-content;
+    min-width: 0;
+    padding: 4px;
+    gap: 2px;
   }
   .todo-snooze-menu :deep(.b_btn) {
+    width: 100%;
     justify-content: flex-start;
-    min-height: 36px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 10px;
+    font-size: 13px;
   }
   .todo-mobile-action-menu {
     display: grid;
-    min-width: 176px;
-    padding: 6px;
-    gap: 4px;
+    width: max-content;
+    min-width: 0;
+    padding: 4px;
+    gap: 2px;
   }
   .todo-mobile-action-menu :deep(.b_btn) {
     width: 100%;
-    min-height: 40px;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 13px;
     justify-content: flex-start;
   }
   @media (pointer: coarse) {

@@ -788,6 +788,38 @@ describe('agentChat 主链路', () => {
     );
   });
 
+  it('任意工具缺少必填参数时停止自动重试并向用户请求补充', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('query_detail')].filter(Boolean));
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        semanticPlanCall({
+          requestClass: 'data_query',
+          intents: [
+            {
+              kind: 'read',
+              capabilityId: 'read.query_detail',
+              goal: '查询详情',
+              targetDescription: '用户没有说明具体目标',
+              dependsOn: [],
+            },
+          ],
+          toolCalls: [{ toolName: 'query_detail', arguments: {} }],
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(request({ message: '帮我查一下详情', stream: false, contexts: [], attachmentIds: [] }), res);
+
+    expect(mocks.toolExecute).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('我还缺少完成这次请求所需的关键信息');
+  });
+
   it('明确待办完成请求经语义计划和真实工具调用生成确认，不产生虚假的最终回复', async () => {
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
     mocks.requestAi.mockResolvedValueOnce({

@@ -61,7 +61,7 @@
         v-for="item in selectedDay.items"
         :key="item.id"
         class="todo-calendar-dayitem-swipe"
-        :enabled="swipeEnabled && !readOnly"
+        :enabled="swipeEnabled"
         :open="openSwipeId === item.id"
         :disabled="disabled"
         :loading="deletingId === item.id"
@@ -71,12 +71,7 @@
         @update:open="updateSwipe(item.id, $event)"
         @delete="deleteFromSwipe(item)"
       >
-        <BButton
-          class="todo-calendar-dayitem"
-          :class="todoStateClass(item)"
-          :disabled="readOnly"
-          @click="$emit('edit', item)"
-        >
+        <BButton class="todo-calendar-dayitem" :class="todoStateClass(item)" @click="$emit('edit', item)">
           <span class="todo-calendar-dayitem__priority" :class="`is-priority-${item.priority}`"></span>
           <span class="todo-calendar-dayitem__content">
             <strong>{{ item.title }}</strong>
@@ -97,7 +92,7 @@
         </time>
         <MobileSwipeDelete
           class="todo-agenda-card-swipe"
-          :enabled="swipeEnabled && !readOnly"
+          :enabled="swipeEnabled"
           :open="openSwipeId === entry.item.id"
           :disabled="disabled"
           :loading="deletingId === entry.item.id"
@@ -107,12 +102,7 @@
           @update:open="updateSwipe(entry.item.id, $event)"
           @delete="deleteFromSwipe(entry.item)"
         >
-          <BButton
-            class="todo-agenda-card"
-            :class="todoStateClass(entry.item)"
-            :disabled="readOnly"
-            @click="$emit('edit', entry.item)"
-          >
+          <BButton class="todo-agenda-card" :class="todoStateClass(entry.item)" @click="$emit('edit', entry.item)">
             <span class="todo-agenda-card__priority" :class="`is-priority-${entry.item.priority}`"></span>
             <span class="todo-agenda-card__content">
               <strong>{{ entry.item.title }}</strong>
@@ -143,7 +133,6 @@
     view: 'agenda' | 'calendar';
     swipeEnabled?: boolean;
     disabled?: boolean;
-    readOnly?: boolean;
     deletingId?: string;
   }>();
   const emit = defineEmits<{ edit: [item: TodoItem]; delete: [item: TodoItem] }>();

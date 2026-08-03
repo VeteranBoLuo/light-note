@@ -33,8 +33,16 @@ describe('AI 冒烟管理员接口', () => {
     mocks.poolQuery.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
     mocks.startRun.mockResolvedValueOnce({ id: 'run-1', status: 'queued', repeatCount: 2, caseCount: 6 });
     const res = response();
-    await handle.startRun({ user: { id: 'root-1', role: 'root' }, body: { suite: 'full', repeat: 2 } }, res);
-    expect(mocks.startRun).toHaveBeenCalledWith({ triggeredBy: 'root-1', suite: 'full', repeat: 2 });
+    await handle.startRun(
+      { user: { id: 'root-1', role: 'root' }, body: { suite: 'full', repeat: 2, depth: 'answer' } },
+      res,
+    );
+    expect(mocks.startRun).toHaveBeenCalledWith({
+      triggeredBy: 'root-1',
+      suite: 'full',
+      repeat: 2,
+      depth: 'answer',
+    });
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ status: 200, data: expect.objectContaining({ id: 'run-1' }) }),
     );
@@ -54,5 +62,13 @@ describe('AI 冒烟管理员接口', () => {
     const res = response();
     await handle.startRun({ user: { id: 'root-1', role: 'root' }, body: { repeat: 1 } }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 409 }));
+  });
+
+  it('未知评测深度返回 400', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+    mocks.startRun.mockRejectedValueOnce(Object.assign(new Error('depth'), { code: 'DEPTH_NOT_SUPPORTED' }));
+    const res = response();
+    await handle.startRun({ user: { id: 'root-1', role: 'root' }, body: { depth: 'execute' } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });
 });

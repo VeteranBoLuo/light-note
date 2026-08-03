@@ -245,6 +245,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TODO_STATUS_NOOP',
   'TODO_STATUS_PREVIEW_REQUIRED',
   'TODO_TARGET_REQUIRED',
+  'TOOL_ARGUMENT_REQUIRED',
   'TOOL_ARGUMENTS_INVALID',
   'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
   'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
@@ -273,6 +274,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'USER_REQUIRED',
 ]);
 const TERMINAL_DEPENDENCY_ERROR_CODES = new Set([
+  'TOOL_ARGUMENT_REQUIRED',
   'TOOL_ARGUMENTS_INVALID',
   'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY',
   'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
@@ -295,7 +297,9 @@ function publicToolError(error, fallback = '操作失败，请稍后重试。') 
   if (error?.code && PUBLIC_TOOL_ERROR_CODES.has(error.code)) {
     // 参数路径与模型臆造字段属于内部诊断信息（例如 args.completed），对用户没有修复价值，
     // 也会让产品看起来像直接暴露了函数协议。保留稳定错误码供日志定位，界面只显示场景化提示。
-    if (['TOOL_ARGUMENTS_INVALID', 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY'].includes(error.code)) {
+    if (
+      ['TOOL_ARGUMENT_REQUIRED', 'TOOL_ARGUMENTS_INVALID', 'TOOL_ARGUMENTS_ADDITIONAL_PROPERTY'].includes(error.code)
+    ) {
       return { code: error.code, message: String(fallback).slice(0, 300) };
     }
     const rawMessage = String(error.message || fallback);
@@ -310,6 +314,12 @@ function publicToolError(error, fallback = '操作失败，请稍后重试。') 
   if (match && PUBLIC_TOOL_ERROR_CODES.has(match[1])) return { code: match[1], message: match[2].slice(0, 300) };
   if (raw === 'TOOL_TIMEOUT') return { code: 'TOOL_TIMEOUT', message: '操作超时，请稍后重试。' };
   return { code: 'TOOL_EXECUTION_FAILED', message: fallback };
+}
+
+function missingRequiredParameterMessage(locale = 'zh-CN') {
+  return String(locale).toLowerCase().startsWith('en')
+    ? 'I still need one or more key details before I can continue. What target, scope, time range, quantity, location, or state should I use?'
+    : '我还缺少完成这次请求所需的关键信息。你希望使用哪个具体目标、范围、时间、数量、位置或状态条件？';
 }
 
 function publicToolErrorStatus(code, fallback = 400) {
@@ -2071,6 +2081,19 @@ export async function agentChat(req, res) {
         round: 1,
         finishReason: plannerResponse.finishReason,
       });
+      const missingRequiredParameter = results.find(
+        (item) => item.result?.status === 'error' && item.result?.error === 'TOOL_ARGUMENT_REQUIRED',
+      );
+      if (missingRequiredParameter) {
+        // JSON Schema 必填参数缺失意味着 Planner 没有从用户原话或权威上下文得到足够信息。
+        // 这不是可自动换参数重试的瞬时故障；统一退回澄清，避免模型猜默认值或编造目标。
+        semanticPolicy = {
+          state: 'clarification',
+          resolution: 'ambiguous',
+          capabilities: [],
+          message: missingRequiredParameterMessage(locale),
+        };
+      }
 
       // 工具链采用有界语义多轮。依赖任务只开放原始 Intent DAG 中已满足前置条件的
       // 下一层能力；普通查询恢复仍只开放已授权的只读工具。所有轮次都使用同一个
@@ -2128,7 +2151,7 @@ export async function agentChat(req, res) {
         ),
       ];
 
-      for (let round = 2; !deadline.softExpired && round <= maxToolRounds; round += 1) {
+      for (let round = 2; !semanticPolicy && !deadline.softExpired && round <= maxToolRounds; round += 1) {
         // 已生成的确认卡没有执行任何写入，不应阻断同一原始计划中其余依赖链继续解析；
         // 否则“创建笔记并完成第一条待办”只会静默留下前半个动作。需要用户选择的
         // interaction 才会暂停，因为选择结果可能改变后续目标。
@@ -2364,12 +2387,20 @@ export async function agentChat(req, res) {
         if (terminalDependencyFailure) {
           // 目标越界、缺失或 schema 错误不是瞬时故障。禁止让模型在同一请求里换一个
           // ID 继续试探；保留本次确定性失败说明并结束依赖链。
-          semanticPolicy = {
-            state: 'blocked',
-            resolution: 'dependency_failed',
-            capabilities: followUpCatalog,
-            message: String(terminalDependencyFailure.result.summary || '').trim(),
-          };
+          semanticPolicy =
+            terminalDependencyFailure.result.error === 'TOOL_ARGUMENT_REQUIRED'
+              ? {
+                  state: 'clarification',
+                  resolution: 'ambiguous',
+                  capabilities: followUpCatalog,
+                  message: missingRequiredParameterMessage(locale),
+                }
+              : {
+                  state: 'blocked',
+                  resolution: 'dependency_failed',
+                  capabilities: followUpCatalog,
+                  message: String(terminalDependencyFailure.result.summary || '').trim(),
+                };
           break;
         }
         // 写工具在 Agent 主请求中只负责生成一次确认/选择或返回一次可靠预检错误。

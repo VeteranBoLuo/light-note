@@ -4,16 +4,16 @@
 
 ## 目录内容
 
-- `golden-tasks.json`：268 条匿名化合成任务和 49 个合成来源夹具。
+- `golden-tasks.json`：270 条匿名化合成任务和 49 个合成来源夹具。
 - `generate-golden-tasks.js`：从 70 条核心任务和显式产品场景定义确定性重建 v2 矩阵；生成时拒绝重复 ID、重复问题和错误总数。
 - `schema.js`：严格字段 schema、枚举、跨字段约束、结果 schema 与六维评分器。
 - `citationSemanticEvaluator.js`：把回答中的主张与受控 evidence 绑定，基于夹具/人工 `supportsClaim` 标注输出支持、冲突和证据不足结果；不使用关键词重合冒充自然语言蕴含。
 - `runner.js`：黄金集 lint、JSON/JSONL 结果读取和发布门槛检查。
 - `schema.test.js` / `runner.test.js`：隐私声明、覆盖分布、严格校验和安全失败回归。
 - `agentReplayAdapter.js` / `agentReplayCases.js`：把声明式 Provider 回放计划接入真实 `agentChat` 主链，覆盖计划修复、能力纠错、确认和显式 URL 读取；测试全程使用合成输入和 mock Provider。
-- `liveSmokeCases.js` / `liveSmokeRunner.js`：提供 6 条快速集与 37 条完整集；完整集覆盖全部 34 个普通用户工具，并验证普通对话、依赖顺序和永久删除边界。两套测试都只检查 DeepSeek 返回的结构化计划和工具选择，工具执行数恒为 0，不读写用户业务数据；CLI 默认 dry-run，只有显式 `--live` 才会消耗 Token。
+- `liveSmokeCases.js` / `liveSmokeRunner.js`：提供 6 条快速集与 39 条完整集；完整集覆盖全部 34 个普通用户工具、关键 Root 只读能力、缺参澄清、依赖顺序和永久删除边界。规划模式校验 DeepSeek 语义计划与真实工具参数契约；完整回答模式还会把隔离的合成工具结果交给 DeepSeek，检查最终正文是否为空、退化、泄露内部 ID、返回通用失败提示或没有采用工具结果。两种模式都不会调用 `tool.execute`，不读写用户业务数据；CLI 默认 dry-run，只有显式 `--live` 才会消耗 Token。
 
-黄金集保留原 70 条 Ask / Organize 核心任务，并新增 198 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
+黄金集保留原 70 条 Ask / Organize 核心任务，并新增 200 条互不重复的产品生命周期场景。十个能力域分别为：Ask、Organize / Change Set、记忆、证据与引用、owner 四维隔离、配额、SSE 恢复、隐私与保留、结果复用、Gateway 与工具策略。每个能力域至少 20 条。
 
 新增场景不是正文相近的参数复制，而是分别定义可观察前置条件、预期路由/工具、禁止动作、确认与结果类型，以及状态信号。例如隐私域区分账号导出、派生数据排除、owner 域清除、schema 失败关闭、软删除撤销和有界保留清理。
 
@@ -81,9 +81,10 @@ pnpm --filter server run smoke:ai-assistant
 ```bash
 pnpm --filter server run smoke:ai-assistant -- --suite quick --live --repeat 2
 pnpm --filter server run smoke:ai-assistant -- --suite full --live --repeat 1
+pnpm --filter server run smoke:ai-assistant -- --suite quick --depth answer --live --repeat 1
 ```
 
-真实调用必须由 Root 在“后台管理 → AI 问答测试”选择测试集并二次确认后手动触发。后台按 1～5 轮执行、互斥运行；每完成一个用例就增量保存通过率、耗时、Token 和无正文结果，页面轮询时可逐条展开查看，不必等待整套结束。记录只包含能力、工具名、稳定错误、零工具执行证明与统计，不保存完整问题或回答，终态记录保留 90 天。测试不访问书签、笔记、文件、待办等用户业务数据；仅测试运行记录会写入独立评测表。CLI 的 `--live` 仅用于开发者受控排障，不属于发布步骤。
+真实调用必须由 Root 在“后台管理 → AI 问答测试”选择测试集、评测深度并二次确认后手动触发。低成本模式每条只调用一次 DeepSeek，校验规划与工具契约；完整回答模式会对无需确认的用例追加一次最终回答调用，缺参用例直接检查 Planner 的澄清问题，写操作停在服务端确认契约。后台按 1～5 轮执行、互斥运行；每完成一个用例就增量保存三层状态、通过率、耗时、Token 和无正文结果，页面轮询时可逐条展开查看，不必等待整套结束。记录只包含能力、工具名、参数、回答长度、质量信号、稳定错误和零工具执行证明，不保存完整问题、合成资料或回答正文，终态记录保留 90 天。测试不访问书签、笔记、文件、待办等用户业务数据；仅测试运行记录会写入独立评测表。CLI 的 `--live` 仅用于开发者受控排障，不属于发布步骤。
 
 对适配后的完整结果做回归：
 

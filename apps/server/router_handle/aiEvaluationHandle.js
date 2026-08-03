@@ -33,12 +33,14 @@ export async function startRun(req, res) {
     if (!userId) return;
     const repeat = Number(req.body?.repeat ?? 1);
     const suite = String(req.body?.suite || 'quick');
-    const run = await startAiLiveSmokeRun({ triggeredBy: userId, suite, repeat });
+    const depth = String(req.body?.depth || 'plan');
+    const run = await startAiLiveSmokeRun({ triggeredBy: userId, suite, repeat, depth });
     return res.send(resultData(run));
   } catch (error) {
     const code = String(error?.code || '');
     if (code === 'REPEAT_OUT_OF_RANGE') return res.send(resultData(null, 400, '执行轮数必须是 1～5'));
     if (code === 'SUITE_NOT_SUPPORTED') return res.send(resultData(null, 400, '不支持的测试集'));
+    if (code === 'DEPTH_NOT_SUPPORTED') return res.send(resultData(null, 400, '不支持的评测深度'));
     if (code === 'RUN_ALREADY_ACTIVE') return res.send(resultData(null, 409, '已有 AI 冒烟任务正在执行'));
     console.error('[ai-evaluation] 启动失败 code=%s', stableAgentErrorCode(error));
     return res.send(resultData(null, 500, 'AI 冒烟任务启动失败'));

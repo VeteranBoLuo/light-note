@@ -163,7 +163,7 @@ function validateSchema(schema, value, path = 'args') {
     const properties = schema.properties || {};
     for (const required of schema.required || []) {
       if (value?.[required] == null || value[required] === '') {
-        fail('TOOL_ARGUMENTS_INVALID', `${path}.${required} 为必填参数。`);
+        fail('TOOL_ARGUMENT_REQUIRED', `${path}.${required} 为必填参数。`);
       }
     }
     if (schema.additionalProperties === false) {
@@ -183,6 +183,18 @@ function validateSchema(schema, value, path = 'args') {
     }
     value.forEach((item, index) => validateSchema(schema.items, item, `${path}[${index}]`));
   }
+}
+
+/**
+ * 只校验公开工具参数契约，不做权限判断、参数 prepare 或工具执行。
+ * 供离线/人工评测验证 Planner 产出的参数是否真的符合当前注册工具 schema。
+ */
+export function validateToolArgumentsAgainstSchema(schema, args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) {
+    fail('TOOL_ARGUMENTS_INVALID', '工具参数必须是对象。');
+  }
+  validateSchema(closeToolSchema(schema), args);
+  return true;
 }
 
 function assertRawProperties(tool, args) {

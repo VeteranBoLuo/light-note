@@ -2,6 +2,33 @@ import pool from '../../../db/index.js';
 import { INTERNAL_ROLES } from '../../internalRoles.js';
 import { parseTimeRange } from '../timeRange.js';
 
+const RESOURCE_TYPES = Object.freeze({
+  all: { label: '资源', countColumn: 'total_count', unit: '项' },
+  bookmark: { label: '书签', countColumn: 'bookmark_count', unit: '个' },
+  note: { label: '笔记', countColumn: 'note_count', unit: '篇' },
+  file: { label: '文件', countColumn: 'file_count', unit: '个' },
+});
+
+const ALL_TIME_EXPRESSIONS = new Set([
+  '全部',
+  '所有',
+  '全量',
+  '累计',
+  '历史',
+  '当前',
+  '目前',
+  '现在',
+  '当前项目',
+  '目前项目',
+  '当前全站',
+  '目前全站',
+  '截至目前',
+  '截至现在',
+  'all',
+  'current',
+  'overall',
+]);
+
 function normalizeLimit(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return 10;
@@ -10,6 +37,7 @@ function normalizeLimit(value) {
 
 function parseRequiredTimeRange(value, fieldName) {
   const expression = String(value || '').trim();
+  if (fieldName === 'timeRange' && ALL_TIME_EXPRESSIONS.has(expression.toLowerCase())) return null;
   const time = parseTimeRange(expression);
   if (!time) {
     throw new Error(`${fieldName === 'registeredWithin' ? '用户注册' : '资源新增'}时间范围无法识别`);
@@ -17,10 +45,42 @@ function parseRequiredTimeRange(value, fieldName) {
   return time;
 }
 
+function normalizeResourceType(value) {
+  const raw = String(value || 'all')
+    .trim()
+    .toLowerCase();
+  const aliases = {
+    all: 'all',
+    total: 'all',
+    resource: 'all',
+    resources: 'all',
+    全部: 'all',
+    所有资源: 'all',
+    资源: 'all',
+    bookmark: 'bookmark',
+    bookmarks: 'bookmark',
+    书签: 'bookmark',
+    note: 'note',
+    notes: 'note',
+    笔记: 'note',
+    file: 'file',
+    files: 'file',
+    文件: 'file',
+    云空间文件: 'file',
+  };
+  const resourceType = aliases[raw];
+  if (!resourceType) throw new Error('资源排行类型不支持');
+  return resourceType;
+}
+
 function normalizeArgs(args = {}) {
+  const requestedTimeRange = String(args.timeRange || args.resourceTimeRange || args.createdWithin || '').trim();
+  if (!requestedTimeRange) throw new Error('资源排行需要明确时间范围');
+  const allTime = ALL_TIME_EXPRESSIONS.has(requestedTimeRange.toLowerCase());
   return {
-    timeRange: String(args.timeRange || args.resourceTimeRange || args.createdWithin || '昨天').trim(),
+    timeRange: allTime ? '全部' : requestedTimeRange,
     registeredWithin: String(args.registeredWithin || args.userRegisteredWithin || '').trim(),
+    resourceType: normalizeResourceType(args.resourceType),
     includeInternal: args.includeInternal === true,
     limit: normalizeLimit(args.limit),
   };
@@ -29,14 +89,21 @@ function normalizeArgs(args = {}) {
 export default {
   name: 'get_resource_creation_ranking',
   description:
-    '【管理员】按用户汇总指定时间段内实际新增的书签、笔记和云空间文件，并按总数降序排行。回答“昨天谁新增的资源最多”“本周新增内容排行榜”必须用此工具，不要改查操作日志。timeRange 表示资源创建时间；如果是在“昨天新增了哪些用户”之后追问这些新用户中谁新增资源最多，同时传 registeredWithin="昨天"限制用户注册范围。',
+    '【管理员】按用户统计书签、笔记或云空间文件排行。既支持“昨天谁新增的资源最多”“本周新增内容排行榜”等时间段新增排行，也支持“目前项目的书签数量排行”“当前笔记最多的是谁”等当前有效存量排行。resourceType 指定 all/bookmark/note/file；问当前、目前、累计或总量时必须传 timeRange="全部"。如果用户没有说明当前存量或具体新增时间范围，必须先追问时间口径，不得默认成昨天，也不得调用本工具。不要改查操作日志。如果是在“昨天新增了哪些用户”之后追问这些新用户中谁新增资源最多，同时传 registeredWithin="昨天"限制用户注册范围。',
   parameters: {
     type: 'object',
     additionalProperties: false,
+    required: ['timeRange'],
     properties: {
       timeRange: {
         type: 'string',
-        description: '资源创建时间范围，如“昨天”“今天”“本周”“最近7天”，默认“昨天”',
+        description:
+          '资源创建时间范围，如“昨天”“今天”“本周”“最近7天”；查询当前存量、目前总量或累计数量时传“全部”。用户未说明时间口径时先追问，禁止省略或猜测',
+      },
+      resourceType: {
+        type: 'string',
+        enum: ['all', 'bookmark', 'note', 'file'],
+        description: '排行资源类型：all=三类资源总数，bookmark=书签，note=笔记，file=云空间文件；默认 all',
       },
       registeredWithin: {
         type: 'string',
@@ -60,15 +127,19 @@ export default {
       ? parseRequiredTimeRange(normalized.registeredWithin, 'registeredWithin')
       : null;
 
-    const params = [
-      resourceTime.start,
-      resourceTime.end,
-      resourceTime.start,
-      resourceTime.end,
-      resourceTime.start,
-      resourceTime.end,
-    ];
+    const resourceTimeFilter = resourceTime ? 'AND create_time >= ? AND create_time <= ?' : '';
+    const params = resourceTime
+      ? [
+          resourceTime.start,
+          resourceTime.end,
+          resourceTime.start,
+          resourceTime.end,
+          resourceTime.start,
+          resourceTime.end,
+        ]
+      : [];
     const userFilters = ['u.del_flag = 0'];
+    const ranking = RESOURCE_TYPES[normalized.resourceType];
 
     if (!normalized.includeInternal) {
       userFilters.push(`(u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`);
@@ -97,8 +168,7 @@ export default {
            0 AS file_count
          FROM bookmark
          WHERE bookmark.del_flag = 0
-           AND bookmark.create_time >= ?
-           AND bookmark.create_time <= ?
+           ${resourceTimeFilter.replaceAll('create_time', 'bookmark.create_time')}
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = bookmark.user_id
@@ -114,8 +184,7 @@ export default {
            0 AS file_count
          FROM note
          WHERE note.del_flag = 0
-           AND note.create_time >= ?
-           AND note.create_time <= ?
+           ${resourceTimeFilter.replaceAll('create_time', 'note.create_time')}
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = note.create_by
@@ -131,8 +200,7 @@ export default {
            COUNT(*) AS file_count
          FROM files
          WHERE files.del_flag = 0
-           AND files.create_time >= ?
-           AND files.create_time <= ?
+           ${resourceTimeFilter.replaceAll('create_time', 'files.create_time')}
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = files.create_by
@@ -144,7 +212,8 @@ export default {
        INNER JOIN \`user\` u ON u.id = resource_counts.user_id
        WHERE ${userFilters.join(' AND ')}
        GROUP BY u.id, u.alias, u.email
-       ORDER BY total_count DESC, bookmark_count DESC, note_count DESC, file_count DESC, u.id ASC
+       HAVING ${ranking.countColumn} > 0
+       ORDER BY ${ranking.countColumn} DESC, total_count DESC, bookmark_count DESC, note_count DESC, file_count DESC, u.id ASC
        LIMIT ?`,
       params,
     );
@@ -152,6 +221,7 @@ export default {
     return {
       timeRange: normalized.timeRange,
       registeredWithin: normalized.registeredWithin || null,
+      resourceType: normalized.resourceType,
       includeInternal: normalized.includeInternal,
       items: rows.map((row) => ({
         userId: row.user_id,
@@ -166,33 +236,49 @@ export default {
   },
   transform(raw) {
     const items = raw?.items || [];
+    const resourceType = RESOURCE_TYPES[raw?.resourceType] ? raw.resourceType : 'all';
+    const ranking = RESOURCE_TYPES[resourceType];
+    const countOf = (item) => Number(item?.[ranking.countColumn.replace('_count', 'Count')] || 0);
     const cohort = raw?.registeredWithin ? `${raw.registeredWithin}注册的用户中，` : '';
+    const period =
+      raw?.timeRange === '全部'
+        ? `当前有效${ranking.label}存量`
+        : `${raw?.timeRange || '指定时间段'}${ranking.label}新增`;
     if (!items.length) {
-      return `${cohort}${raw?.timeRange || '指定时间段'}没有用户新增有效书签、笔记或文件`;
+      return `${cohort}${period}没有可排行的数据`;
     }
 
-    const topCount = items[0].totalCount;
-    const topUsers = items.filter((item) => item.totalCount === topCount);
+    const topCount = countOf(items[0]);
+    const topUsers = items.filter((item) => countOf(item) === topCount);
     const topSummary =
       topUsers.length === 1
-        ? `新增最多的是 ${topUsers[0].alias || topUsers[0].email || '未知用户'}，共 ${topCount} 项`
-        : `${topUsers.map((item) => item.alias || item.email || '未知用户').join('、')} 并列最多，各 ${topCount} 项`;
+        ? `最多的是 ${topUsers[0].alias || topUsers[0].email || '未知用户'}，共 ${topCount} ${ranking.unit}`
+        : `${topUsers.map((item) => item.alias || item.email || '未知用户').join('、')} 并列最多，各 ${topCount} ${ranking.unit}`;
     const lines = items.map((item, index) => {
       const identity = item.alias || '未设置昵称';
       const account = item.email ? ` (${item.email})` : '';
+      if (resourceType !== 'all')
+        return `${index + 1}. ${identity}${account}：${countOf(item)} ${ranking.unit}${ranking.label}`;
       return `${index + 1}. ${identity}${account}：${item.totalCount} 项（书签 ${item.bookmarkCount}、笔记 ${item.noteCount}、文件 ${item.fileCount}）`;
     });
 
-    return `${cohort}${raw.timeRange}资源新增排行：${topSummary}\n${lines.join('\n')}`;
+    return `${cohort}${period}排行：${topSummary}\n${lines.join('\n')}`;
   },
   summarize(raw) {
     const items = raw?.items || [];
-    if (!items.length) return `资源新增排行：${raw?.timeRange || '指定时间段'}无记录`;
-    const topCount = items[0].totalCount;
+    const resourceType = RESOURCE_TYPES[raw?.resourceType] ? raw.resourceType : 'all';
+    const ranking = RESOURCE_TYPES[resourceType];
+    const countKey = ranking.countColumn.replace('_count', 'Count');
+    const period =
+      raw?.timeRange === '全部'
+        ? `当前有效${ranking.label}存量`
+        : `${raw?.timeRange || '指定时间段'}${ranking.label}新增`;
+    if (!items.length) return `${period}排行：无记录`;
+    const topCount = Number(items[0]?.[countKey] || 0);
     const topNames = items
-      .filter((item) => item.totalCount === topCount)
+      .filter((item) => Number(item?.[countKey] || 0) === topCount)
       .map((item) => item.alias || item.email || '未知用户')
       .join('、');
-    return `资源新增排行：${topNames}最多，共 ${topCount} 项`;
+    return `${period}排行：${topNames}最多，共 ${topCount} ${ranking.unit}`;
   },
 };

@@ -46,6 +46,13 @@
         :options="suiteOptions"
         :disabled="hasActiveRun"
       />
+      <span class="ai-evaluation__round-label">{{ t('aiEvaluationAdmin.depthLabel') }}</span>
+      <BSelect
+        v-model:value="depth"
+        class="ai-evaluation__depth-select"
+        :options="depthOptions"
+        :disabled="hasActiveRun"
+      />
       <span class="ai-evaluation__round-label">{{ t('aiEvaluationAdmin.repeatLabel') }}</span>
       <BSelect
         v-model:value="repeat"
@@ -65,7 +72,7 @@
         <BButton class="ai-evaluation__run-head" @click="toggle(run.id)">
           <span class="ai-evaluation__status" :data-status="run.status">{{ statusLabel(run.status) }}</span>
           <strong>{{ run.model || t('aiEvaluationAdmin.defaultRunName') }}</strong>
-          <span>{{ suiteLabel(run.suite) }}</span>
+          <span>{{ suiteLabel(run.suite) }} · {{ depthLabel(run.resultJson?.depth) }}</span>
           <span>{{ t('aiEvaluationAdmin.cases', { passed: run.passedCaseCount, total: run.caseCount }) }}</span>
           <span>{{ t('aiEvaluationAdmin.tokens', { count: formatNumber(run.totalTokens) }) }}</span>
           <span>{{ formatDuration(run.durationMs) }}</span>
@@ -82,6 +89,16 @@
             <span v-if="result.safetyCritical" class="ai-evaluation__safety">{{
               t('aiEvaluationAdmin.safetyCritical')
             }}</span>
+            <div class="ai-evaluation__layers">
+              <span
+                v-for="layer in caseLayers(result)"
+                :key="layer.key"
+                class="ai-evaluation__layer"
+                :data-status="layer.status"
+              >
+                {{ layer.label }}
+              </span>
+            </div>
             <p v-for="(error, index) in caseErrors(result)" :key="index">{{ error }}</p>
           </div>
         </div>
@@ -115,7 +132,7 @@
     completionTokens: number;
     totalTokens: number;
     durationMs: number;
-    resultJson?: { results?: any[] } | null;
+    resultJson?: { depth?: 'plan' | 'answer'; results?: any[] } | null;
     errorCode?: string | null;
     startedAt?: string | null;
     finishedAt?: string | null;
@@ -127,15 +144,20 @@
   const starting = ref(false);
   const repeat = ref(1);
   const suite = ref<'quick' | 'full'>('quick');
+  const depth = ref<'plan' | 'answer'>('plan');
   const expandedIds = ref(new Set<string>());
   const repeatOptions = computed(() =>
     [1, 2, 3, 4, 5].map((value) => ({ value, label: t('aiEvaluationAdmin.repeatOption', { count: value }) })),
   );
   const suiteOptions = computed(() => [
     { value: 'quick', label: t('aiEvaluationAdmin.suiteQuick', { count: 6 }) },
-    { value: 'full', label: t('aiEvaluationAdmin.suiteFull', { count: 37 }) },
+    { value: 'full', label: t('aiEvaluationAdmin.suiteFull', { count: 39 }) },
   ]);
-  const caseCount = computed(() => (suite.value === 'full' ? 37 : 6));
+  const depthOptions = computed(() => [
+    { value: 'plan', label: t('aiEvaluationAdmin.depthPlan') },
+    { value: 'answer', label: t('aiEvaluationAdmin.depthAnswer') },
+  ]);
+  const caseCount = computed(() => (suite.value === 'full' ? 39 : 6));
   const latest = computed(() => runs.value[0] || null);
   const hasActiveRun = computed(() => runs.value.some((run) => ['queued', 'running'].includes(run.status)));
   let pollTimer: number | null = null;
@@ -145,8 +167,11 @@
   }
   function suiteLabel(value?: string) {
     return value === 'full'
-      ? t('aiEvaluationAdmin.suiteFull', { count: 37 })
+      ? t('aiEvaluationAdmin.suiteFull', { count: 39 })
       : t('aiEvaluationAdmin.suiteQuick', { count: 6 });
+  }
+  function depthLabel(value?: string) {
+    return value === 'answer' ? t('aiEvaluationAdmin.depthAnswerShort') : t('aiEvaluationAdmin.depthPlanShort');
   }
   function formatNumber(value?: number) {
     return Number(value || 0).toLocaleString('zh-CN');
@@ -165,6 +190,27 @@
     return (result.attempts || []).flatMap((attempt: any, index: number) =>
       (attempt.errors || []).map((error: string) => t('aiEvaluationAdmin.attemptError', { attempt: index + 1, error })),
     );
+  }
+  function caseLayers(result: any) {
+    const definitions = [
+      { key: 'planning', label: t('aiEvaluationAdmin.layerPlanning') },
+      { key: 'toolContract', label: t('aiEvaluationAdmin.layerToolContract') },
+      { key: 'answer', label: t('aiEvaluationAdmin.layerAnswer') },
+    ];
+    if (!(result.attempts || []).some((attempt: any) => attempt.layers)) return [];
+    return definitions.map((definition) => {
+      const attempts = (result.attempts || []).map((attempt: any) => attempt.layers?.[definition.key]).filter(Boolean);
+      const applicable = attempts.filter((layer: any) => layer.status !== 'skipped');
+      const passed = applicable.filter((layer: any) => layer.status === 'passed').length;
+      const status = !applicable.length ? 'skipped' : passed === applicable.length ? 'passed' : 'failed';
+      return {
+        key: definition.key,
+        status,
+        label: !applicable.length
+          ? t('aiEvaluationAdmin.layerSkipped', { layer: definition.label })
+          : t('aiEvaluationAdmin.layerPassed', { layer: definition.label, passed, total: applicable.length }),
+      };
+    });
   }
   function toggle(id: string) {
     const next = new Set(expandedIds.value);
@@ -193,8 +239,9 @@
       title: t('aiEvaluationAdmin.confirmTitle'),
       content: t('aiEvaluationAdmin.confirmContent', {
         suite: suiteLabel(suite.value),
+        depth: depthLabel(depth.value),
         repeat: repeat.value,
-        requests: caseCount.value * repeat.value,
+        requests: caseCount.value * repeat.value * (depth.value === 'answer' ? 2 : 1),
       }),
       okText: t('aiEvaluationAdmin.confirmOk'),
       onOk: startRun,
@@ -205,7 +252,7 @@
     try {
       const response = await apiBasePost(
         '/api/aiEvaluation/runs/start',
-        { suite: suite.value, repeat: repeat.value },
+        { suite: suite.value, repeat: repeat.value, depth: depth.value },
         { silent: true, timeout: 10000 },
       );
       if (response.status !== 200) throw new Error(response.msg || t('aiEvaluationAdmin.startFailed'));
@@ -235,6 +282,12 @@
   }
   .ai-evaluation__suite-select {
     width: 180px;
+  }
+  .ai-evaluation__depth-select {
+    width: 220px;
+  }
+  :deep(.admin-data-page__toolbar-main) {
+    flex-wrap: wrap;
   }
   .ai-evaluation__empty {
     padding: 48px;
@@ -322,6 +375,25 @@
     color: var(--danger-color, #dc2626);
     font-size: 12px;
   }
+  .ai-evaluation__layers {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .ai-evaluation__layer {
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--hover-bg-color, var(--card-background));
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .ai-evaluation__layer[data-status='passed'] {
+    color: var(--success-color, #16a34a);
+  }
+  .ai-evaluation__layer[data-status='failed'] {
+    color: var(--danger-color, #dc2626);
+  }
   .ai-evaluation__safety {
     color: var(--warning-color, #d97706);
     font-size: 12px;
@@ -330,6 +402,11 @@
     color: var(--danger-color, #dc2626);
   }
   @media (max-width: 760px) {
+    .ai-evaluation__suite-select,
+    .ai-evaluation__depth-select,
+    .ai-evaluation__round-select {
+      width: 100%;
+    }
     .ai-evaluation__run-head {
       grid-template-columns: 72px 1fr;
       gap: 8px 12px;

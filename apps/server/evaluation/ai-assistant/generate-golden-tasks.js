@@ -1990,6 +1990,28 @@ const gatewayScenarios = [
       forbiddenTools: ['query_operation_logs'],
     },
   ),
+  scenario(
+    'root-current-bookmark-count-ranking',
+    'Root 查询当前书签存量排行时使用资源聚合工具，不退化成操作日志或默认昨天新增',
+    ['gateway_tool_policy_applied', 'owner_actor_matched'],
+    {
+      message: '目前项目的书签数量排行前三的分别是谁？',
+      identity: selfIdentity('synthetic-root', 'root'),
+      requiredTools: ['get_resource_creation_ranking'],
+      forbiddenTools: ['query_operation_logs'],
+    },
+  ),
+  scenario(
+    'root-ambiguous-bookmark-ranking-clarification',
+    'Root 查询书签排行但未说明时间口径时先澄清，不默认昨天或直接执行',
+    ['gateway_tool_policy_applied', 'no_persisted_side_effect'],
+    {
+      message: '书签数量排行前三的分别是谁？',
+      identity: selfIdentity('synthetic-root', 'root'),
+      forbiddenTools: ['get_resource_creation_ranking', 'query_operation_logs'],
+      outcome: 'clarification',
+    },
+  ),
 ];
 
 const suites = [
@@ -2155,13 +2177,13 @@ assertUnique(
   tasks.map((task) => task.input.message),
   '任务 message',
 );
-if (tasks.length !== 268) throw new Error(`预期生成 268 条任务，实际 ${tasks.length} 条`);
+if (tasks.length !== 270) throw new Error(`预期生成 270 条任务，实际 ${tasks.length} 条`);
 
 const dataset = {
   schemaVersion: 2,
   datasetId: 'light-note-ai-golden-product-matrix-v2',
   description:
-    '268 条完全合成、可确定性评分的 AI 助手产品能力矩阵，覆盖问答、变更集、记忆、证据、四维 owner、配额、恢复、隐私保留、结果复用与 Gateway 策略。',
+    '270 条完全合成、可确定性评分的 AI 助手产品能力矩阵，覆盖问答、变更集、记忆、证据、四维 owner、配额、恢复、隐私保留、结果复用与 Gateway 策略。',
   privacy: {
     syntheticOnly: true,
     containsRealUserContent: false,

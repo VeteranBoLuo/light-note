@@ -39,7 +39,7 @@
         </div>
         <p>{{ isTodoFocused ? t('inbox.todoPageSubtitle') : t('inbox.subtitle') }}</p>
       </div>
-      <BButton v-if="isTodoFocused && !isVisitorTodoReadOnly" type="primary" @click="openTodoEditor()">
+      <BButton v-if="isTodoFocused" type="primary" @click="openTodoEditor()">
         {{ t('inbox.createTodo') }}
       </BButton>
     </header>
@@ -113,7 +113,7 @@
         variant="pill"
       />
       <BButton
-        v-if="todoView === 'list' && !isVisitorTodoReadOnly && !todoSelectionMode && (todo.items.length || pageLoading)"
+        v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
         class="todo-workspace-toolbar__select"
         size="small"
         @click="toggleTodoSelectionMode"
@@ -122,10 +122,7 @@
       </BButton>
     </section>
 
-    <section
-      v-if="isTodoFocused && !isVisitorTodoReadOnly && todoView === 'list' && todoSelectionMode"
-      class="todo-list-toolbar"
-    >
+    <section v-if="isTodoFocused && todoView === 'list' && todoSelectionMode" class="todo-list-toolbar">
       <BCheckbox
         :model-value="selectedTodoIds.length === todo.items.length"
         :indeterminate="selectedTodoIds.length > 0 && selectedTodoIds.length < todo.items.length"
@@ -223,9 +220,7 @@
             <div class="inbox-empty__icon">{{ isInboxGloballyEmpty ? '✓' : '0' }}</div>
             <h2>{{ emptyStateTitle }}</h2>
             <p>{{ emptyStateDesc }}</p>
-            <BButton v-if="!(isTodoFocused && isVisitorTodoReadOnly)" type="primary" @click="handleEmptyStateAction">
-              {{ emptyStateAction }}
-            </BButton>
+            <BButton type="primary" @click="handleEmptyStateAction">{{ emptyStateAction }}</BButton>
           </div>
           <TodoScheduleView
             v-else-if="isTodoFocused && todoView !== 'list'"
@@ -233,8 +228,7 @@
             :items="todo.items"
             :view="todoView"
             :swipe-enabled="bookmark.isMobile"
-            :disabled="hasPendingOperation || todoBatchMutating || isVisitorTodoReadOnly"
-            :read-only="isVisitorTodoReadOnly"
+            :disabled="hasPendingOperation || todoBatchMutating"
             :deleting-id="deletingTodoId"
             @edit="openTodoEditor"
             @delete="confirmDeleteTodo"
@@ -253,7 +247,6 @@
                   :selectable="todoSelectionMode"
                   :selected="selectedTodoIds.includes(item.id)"
                   :disabled="hasPendingOperation || todoBatchMutating"
-                  :read-only="isVisitorTodoReadOnly"
                   :deleting="deletingTodoId === item.id"
                   :swipe-enabled="bookmark.isMobile"
                   :swipe-open="openSwipeTodoId === item.id"
@@ -296,7 +289,6 @@
                 v-else
                 :item="action.item"
                 :disabled="hasPendingOperation"
-                :read-only="isVisitorTodoReadOnly"
                 :deleting="deletingTodoId === action.item.id"
                 :swipe-enabled="bookmark.isMobile"
                 :swipe-open="openSwipeTodoId === action.item.id"
@@ -404,7 +396,6 @@
   const isMobileResourceInbox = computed(() => bookmark.isMobile && isMobileResourceInboxTab(route.query.tab));
   const isMobileTodoPrimary = computed(() => bookmark.isMobile && !isMobileResourceInbox.value);
   const isTodoFocused = computed(() => isMobileTodoPrimary.value || inbox.filterType === 'todo');
-  const isVisitorTodoReadOnly = computed(() => user.role === 'visitor' && !user.visitorWorkspace);
 
   function resolveRequestedFilter(value: unknown) {
     const tab = String(value || '');
@@ -785,7 +776,8 @@
       dueAt: candidate.dueAt || null,
       priority: candidate.id === item.id ? priority : candidate.priority,
     }));
-    if (!(await todo.reorder(payload))) message.error(t('inbox.todoReorderFailed'));
+    const result = await todo.reorder(payload);
+    if (result === false) message.error(t('inbox.todoReorderFailed'));
   }
   function toggleTodoSelected(id: string, selected: boolean) {
     selectedTodoIds.value = selected
@@ -805,10 +797,11 @@
     if (!ids.length || todoBatchMutating.value) return;
     todoBatchMutating.value = true;
     try {
-      if (await todo.batchComplete(ids)) {
+      const result = await todo.batchComplete(ids);
+      if (result === true) {
         selectedTodoIds.value = [];
         showTodoUndo('complete', ids);
-      } else message.error(t('inbox.todoSaveFailed'));
+      } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       todoBatchMutating.value = false;
     }
@@ -827,10 +820,11 @@
   async function deleteSelectedTodos(ids: string[]) {
     todoBatchMutating.value = true;
     try {
-      if (await todo.batchDelete(ids)) {
+      const result = await todo.batchDelete(ids);
+      if (result === true) {
         selectedTodoIds.value = [];
         showTodoUndo('delete', ids);
-      } else message.error(t('inbox.todoSaveFailed'));
+      } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       todoBatchMutating.value = false;
     }
@@ -851,17 +845,18 @@
     try {
       const succeeded =
         action.kind === 'delete' ? await todo.restoreMany(action.ids) : await todo.reopenMany(action.ids);
-      if (succeeded) {
+      if (succeeded === true) {
         message.success(t('inbox.todoUndoSuccess'));
         clearTodoUndo();
-      } else message.warning(t('inbox.todoUndoFailed'));
+      } else if (succeeded !== 'preview') message.warning(t('inbox.todoUndoFailed'));
     } finally {
       todoUndoing.value = false;
     }
   }
   async function snoozeTodoItem(item: TodoItemType, preset: TodoSnoozePreset) {
-    if (await todo.snooze(item, todoSnoozeAt(preset))) message.success(t('inbox.todoSnoozed'));
-    else message.error(t('inbox.todoSnoozeFailed'));
+    const result = await todo.snooze(item, todoSnoozeAt(preset));
+    if (result === true) message.success(t('inbox.todoSnoozed'));
+    else if (result !== 'preview') message.error(t('inbox.todoSnoozeFailed'));
   }
   function updateScrollFade() {
     const element = scrollContainer.value;
@@ -998,7 +993,6 @@
     }
   }
   function openTodoEditor(item: TodoItemType | null = null) {
-    if (isVisitorTodoReadOnly.value) return;
     openSwipeTodoId.value = '';
     scheduleViewRef.value?.closeSwipe();
     editingTodo.value = item;
@@ -1011,11 +1005,12 @@
     if (hasPendingOperation.value || blockGuestWrite('todo-complete', t('inbox.guestPrompt'))) return;
     updatingTodoId.value = item.id;
     try {
-      if (await todo.setCompleted(item, completed)) {
+      const result = await todo.setCompleted(item, completed);
+      if (result === true) {
         await inbox.refreshCount();
         if (completed) showTodoUndo('complete', [item.id]);
         else message.success(t('inbox.todoReopenedSuccess'));
-      } else message.error(t('inbox.todoSaveFailed'));
+      } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       updatingTodoId.value = '';
     }
@@ -1024,7 +1019,8 @@
     if (hasPendingOperation.value) return;
     updatingTodoId.value = item.id;
     try {
-      if (!(await todo.updateChecklist(item, checklist))) message.error(t('inbox.todoSaveFailed'));
+      const result = await todo.updateChecklist(item, checklist);
+      if (result === false) message.error(t('inbox.todoSaveFailed'));
     } finally {
       updatingTodoId.value = '';
     }
@@ -1091,10 +1087,11 @@
   async function removeTodo(item: TodoItemType) {
     deletingTodoId.value = item.id;
     try {
-      if (await todo.remove(item)) {
+      const result = await todo.remove(item);
+      if (result === true) {
         await inbox.refreshCount();
         showTodoUndo('delete', [item.id]);
-      } else message.error(t('inbox.todoSaveFailed'));
+      } else if (result !== 'preview') message.error(t('inbox.todoSaveFailed'));
     } finally {
       deletingTodoId.value = '';
     }
