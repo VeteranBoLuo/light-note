@@ -9,6 +9,7 @@ import {
   listTodos,
   nextRecurrenceAt,
   prepareTodoStatusChange,
+  queryTodoAttentionCounts,
   reorderTodos,
   setTodoStatus,
   snoozeTodo,
@@ -400,6 +401,89 @@ describe('todoService', () => {
   it('拒绝未知的 due 筛选取值', async () => {
     await expect(listTodoPage(connection, 'user-4', { due: 'someday' })).rejects.toThrow('无效的待办筛选参数');
     expect(connection.query).not.toHaveBeenCalled();
+  });
+
+  describe('queryTodoAttentionCounts 导航角标计数', () => {
+    it('只统计未完成且未删除的待办，一次查询同时得到逾期与今天', async () => {
+      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 1, todoDueTodayTotal: 2 }]]);
+
+      const result = await queryTodoAttentionCounts(connection, 'user-9');
+
+      expect(result).toEqual({ todoOverdueTotal: 1, todoDueTodayTotal: 2, todoAttentionTotal: 3 });
+      expect(connection.query).toHaveBeenCalledTimes(1);
+      const [sql, params] = connection.query.mock.calls[0];
+      expect(sql).toContain("status = 'pending'");
+      expect(sql).toContain('del_flag = 0');
+      expect(params).toEqual(['user-9']);
+    });
+
+    /**
+     * 角标与待办列表、工作台摘要必须共用同一份日期定义。
+     * 分界点是「当前时刻」而不是「今天 00:00」：今天已过截止时间的待办算逾期，
+     * 与列表分组一致；断言这两段 SQL 与 due=overdue / due=today 完全一致。
+     */
+    it('复用列表的同一份日期边界，不另写一套 SQL', async () => {
+      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 0, todoDueTodayTotal: 0 }]]);
+      await queryTodoAttentionCounts(connection, 'user-9');
+      const [attentionSql] = connection.query.mock.calls[0];
+
+      connection.query.mockReset();
+      connection.query.mockResolvedValueOnce([[]]);
+      await listTodoPage(connection, 'user-9', { status: 'pending', due: 'overdue', includeTotal: false });
+      const [overdueSql] = connection.query.mock.calls[0];
+
+      connection.query.mockReset();
+      connection.query.mockResolvedValueOnce([[]]);
+      await listTodoPage(connection, 'user-9', { status: 'pending', due: 'today', includeTotal: false });
+      const [todaySql] = connection.query.mock.calls[0];
+
+      const OVERDUE = 'due_at IS NOT NULL AND due_at < NOW()';
+      const TODAY = 'due_at IS NOT NULL AND due_at >= NOW() AND due_at < DATE_ADD(CURDATE(), INTERVAL 1 DAY)';
+      expect(overdueSql).toContain(OVERDUE);
+      expect(todaySql).toContain(TODAY);
+      expect(attentionSql).toContain(OVERDUE);
+      expect(attentionSql).toContain(TODAY);
+    });
+
+    /**
+     * 互斥性是这个口径的正确性前提：overdue 用 `< NOW()`、today 用 `>= NOW()`，
+     * 同一条待办不可能同时落进两个 SUM，因此总数恒等于两个分项之和。
+     */
+    it('逾期与今天互斥，无日期待办被两段条件同时排除', async () => {
+      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 4, todoDueTodayTotal: 3 }]]);
+
+      const result = await queryTodoAttentionCounts(connection, 'user-9');
+      expect(result.todoAttentionTotal).toBe(result.todoOverdueTotal + result.todoDueTodayTotal);
+
+      const [sql] = connection.query.mock.calls[0];
+      // 分界点互补：一边严格早于当前时刻，另一边从当前时刻起算
+      expect(sql).toContain('due_at < NOW()');
+      expect(sql).toContain('due_at >= NOW()');
+      // 上界封在明天 00:00，未来待办不计入
+      expect(sql).toContain('DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
+      // 两段都要求有截止时间，无日期待办不进任何一档
+      expect(sql.match(/due_at IS NOT NULL/g)).toHaveLength(2);
+    });
+
+    it('没有任何待办时 SUM 返回 NULL，计数归一为 0 而不是 NaN', async () => {
+      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: null, todoDueTodayTotal: null }]]);
+
+      await expect(queryTodoAttentionCounts(connection, 'user-9')).resolves.toEqual({
+        todoOverdueTotal: 0,
+        todoDueTodayTotal: 0,
+        todoAttentionTotal: 0,
+      });
+    });
+
+    it('结果行缺失时不抛错，按 0 处理', async () => {
+      connection.query.mockResolvedValueOnce([[]]);
+
+      await expect(queryTodoAttentionCounts(connection, 'user-9')).resolves.toEqual({
+        todoOverdueTotal: 0,
+        todoDueTodayTotal: 0,
+        todoAttentionTotal: 0,
+      });
+    });
   });
 
   it('Agent 摘要分页不读取说明或提醒邮箱，并返回清单进度和下一页游标', async () => {

@@ -13,6 +13,7 @@ const completeResources = vi.fn();
 const listInboxResources = vi.fn();
 const queryPendingCount = vi.fn();
 const queryTodoPendingCount = vi.fn();
+const queryTodoAttentionCounts = vi.fn();
 const ensureNotVisitor = vi.fn(() => true);
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
@@ -28,7 +29,7 @@ vi.mock('../util/resourceInbox.js', () => ({
   normalizeInboxSource: vi.fn((source, fallback) => source || fallback),
   queryPendingCount,
 }));
-vi.mock('../util/services/todoService.js', () => ({ queryTodoPendingCount }));
+vi.mock('../util/services/todoService.js', () => ({ queryTodoPendingCount, queryTodoAttentionCounts }));
 
 const { completeInbox, countInbox, enqueueInbox, listInbox } = await import('./inboxHandle.js');
 
@@ -46,6 +47,11 @@ describe('inboxHandle 写事务', () => {
       typeTotals: { bookmark: 0, note: 1, file: 0 },
     });
     queryTodoPendingCount.mockResolvedValue(2);
+    queryTodoAttentionCounts.mockResolvedValue({
+      todoOverdueTotal: 1,
+      todoDueTodayTotal: 1,
+      todoAttentionTotal: 2,
+    });
     listInboxResources.mockResolvedValue({
       items: [{ resourceType: 'file', resourceId: '8', title: 'demo.txt' }],
       total: 1,
@@ -200,8 +206,52 @@ describe('inboxHandle 写事务', () => {
           typeTotals: { bookmark: 0, note: 1, file: 0 },
           todoPendingTotal: 2,
           actionTotal: 3,
+          todoOverdueTotal: 1,
+          todoDueTodayTotal: 1,
+          todoAttentionTotal: 2,
         },
       }),
     );
+  });
+
+  /**
+   * 「库存」口径（全部未完成，供工作台）与「注意力」口径（逾期 + 今天，供导航角标）
+   * 必须同时存在：角标要能清零，仪表盘要看全量。旧字段一并保留以兼容未更新的客户端。
+   */
+  it('同时返回库存口径与注意力口径，旧字段保持兼容', async () => {
+    queryTodoPendingCount.mockResolvedValueOnce(9);
+    queryTodoAttentionCounts.mockResolvedValueOnce({
+      todoOverdueTotal: 2,
+      todoDueTodayTotal: 1,
+      todoAttentionTotal: 3,
+    });
+    const res = mockRes();
+
+    await countInbox({ user: { id: 'u1' } }, res);
+
+    const { data } = res.send.mock.calls[0][0];
+    // 库存口径：待整理 1 + 全部未完成待办 9
+    expect(data.todoPendingTotal).toBe(9);
+    expect(data.actionTotal).toBe(10);
+    // 注意力口径独立于库存口径，且恒等于两个分项之和
+    expect(data.todoAttentionTotal).toBe(3);
+    expect(data.todoAttentionTotal).toBe(data.todoOverdueTotal + data.todoDueTodayTotal);
+    // 注意力口径不得覆盖或污染库存口径
+    expect(data.todoAttentionTotal).not.toBe(data.todoPendingTotal);
+  });
+
+  it('列表接口与角标接口共用同一计数汇聚点，口径不分叉', async () => {
+    const res = mockRes();
+    await listInbox({ user: { id: 'u1' }, body: {} }, res);
+
+    const { data } = res.send.mock.calls[0][0];
+    expect(data).toMatchObject({
+      todoPendingTotal: 2,
+      actionTotal: 3,
+      todoOverdueTotal: 1,
+      todoDueTodayTotal: 1,
+      todoAttentionTotal: 2,
+    });
+    expect(queryTodoAttentionCounts).toHaveBeenCalledWith(expect.anything(), 'u1');
   });
 });

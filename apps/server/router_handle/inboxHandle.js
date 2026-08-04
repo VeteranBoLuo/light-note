@@ -9,11 +9,26 @@ import {
   normalizeInboxSource,
   queryPendingCount,
 } from '../util/resourceInbox.js';
-import { queryTodoPendingCount } from '../util/services/todoService.js';
+import { queryTodoAttentionCounts, queryTodoPendingCount } from '../util/services/todoService.js';
 
+/**
+ * 待处理计数的唯一汇聚点：countInbox 与 listInbox 共用，避免两个接口口径分叉。
+ *
+ * `todoPendingTotal` / `actionTotal` 是「库存」口径（全部未完成），供工作台总览使用；
+ * `todoAttentionTotal` 等三个字段是「注意力」口径（逾期 + 今天），供导航角标使用。
+ * 两套口径都保留：角标需要能清零的数字，仪表盘需要看全量。
+ */
 async function withActionCounts(counts, userId) {
-  const todoPendingTotal = await queryTodoPendingCount(pool, userId);
-  return { ...counts, todoPendingTotal, actionTotal: Number(counts.pendingTotal || 0) + todoPendingTotal };
+  const [todoPendingTotal, attentionCounts] = await Promise.all([
+    queryTodoPendingCount(pool, userId),
+    queryTodoAttentionCounts(pool, userId),
+  ]);
+  return {
+    ...counts,
+    todoPendingTotal,
+    actionTotal: Number(counts.pendingTotal || 0) + todoPendingTotal,
+    ...attentionCounts,
+  };
 }
 
 function sendInboxError(res, error) {

@@ -968,3 +968,35 @@ export async function queryTodoPendingCount(db, userId) {
   );
   return Number(row?.pendingTotal || 0);
 }
+
+/**
+ * 导航「待办」注意力角标的权威计数：现在真正需要关注的待办数量。
+ *
+ * 只统计逾期与今天到期的未完成待办 —— 全部未完成数（`queryTodoPendingCount`）永远不会归零，
+ * 挂成常驻角标只会被用户学会忽略；这个口径做完今天的事就清零。
+ *
+ * 两个分项直接复用 `DUE_SQL` 里工作台与待办列表共用的同一份日期定义，不另写一套边界：
+ * 分界点是「当前时刻」而不是「今天 00:00」，因此今天已过截止时间的待办归入 overdue，
+ * 与列表分组、工作台摘要完全一致（见 docs/architecture.md 的待办章节）。
+ * 两个条件天然互斥（`< NOW()` 与 `>= NOW()`），同一条待办不会被计两次。
+ *
+ * 无日期、已完成和软删除的待办都不计入。
+ */
+export async function queryTodoAttentionCounts(db, userId) {
+  const [[row]] = await db.query(
+    `SELECT
+       SUM(CASE WHEN ${DUE_SQL.overdue} THEN 1 ELSE 0 END) AS todoOverdueTotal,
+       SUM(CASE WHEN ${DUE_SQL.today} THEN 1 ELSE 0 END) AS todoDueTodayTotal
+     FROM todo_items
+     WHERE user_id = ? AND status = 'pending' AND del_flag = 0`,
+    [userId],
+  );
+  // 无匹配行时 SUM 返回 NULL，统一归一成 0，不把「没有数据」写成 NaN
+  const todoOverdueTotal = Number(row?.todoOverdueTotal || 0);
+  const todoDueTodayTotal = Number(row?.todoDueTodayTotal || 0);
+  return {
+    todoOverdueTotal,
+    todoDueTodayTotal,
+    todoAttentionTotal: todoOverdueTotal + todoDueTodayTotal,
+  };
+}
