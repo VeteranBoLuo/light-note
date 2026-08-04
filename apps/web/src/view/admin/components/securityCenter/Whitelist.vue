@@ -344,6 +344,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   @import './securityCenter.less';
 
   .security-whitelist {
@@ -409,7 +410,7 @@
     font-size: 13px;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: @admin-bp-desktop) {
     .whitelist-ip-modal,
     .whitelist-user-toolbar {
       grid-template-columns: 1fr;

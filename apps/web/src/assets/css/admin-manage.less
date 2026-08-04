@@ -14,10 +14,8 @@
  *    不要再手写 .admin-panel 那套结构——它已退役，仅为存量页面保留过渡期。
  */
 
-// 与 VIEWPORT_BREAKPOINTS 对齐：mobile 768 / desktop 1200 / compact 1400
-@admin-bp-mobile: 768px;
-@admin-bp-desktop: 1200px;
-@admin-bp-compact: 1400px;
+// 断点变量集中在 admin-breakpoints.less（纯变量、零 CSS 产物），各页可单独引入
+@import './admin-breakpoints.less';
 
 /* ===== 指标卡：概览数字区，多页复用 ===== */
 .admin-stats {

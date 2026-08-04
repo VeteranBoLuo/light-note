@@ -329,6 +329,7 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/css/admin-breakpoints.less';
   .email-panel {
     min-width: 0;
   }
@@ -482,7 +483,7 @@
     font-size: 12px;
     line-height: 1.6;
   }
-  @media (max-width: 720px) {
+  @media (max-width: @admin-bp-mobile) {
     .email-select,
     .email-keyword,
     .email-date {

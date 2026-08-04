@@ -361,6 +361,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   .drp { position: relative; }
 
   .drp-trigger.b_btn {
@@ -502,7 +503,7 @@
     color: var(--text-color);
   }
 
-  @media (max-width: 720px) {
+  @media (max-width: @admin-bp-mobile) {
     .drp-panel {
       flex-direction: column;
       padding: 12px;

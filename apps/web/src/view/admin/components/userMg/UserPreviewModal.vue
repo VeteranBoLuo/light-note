@@ -162,6 +162,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   .preview-modal-heading {
     min-width: 0;
     flex: 1;
@@ -212,7 +213,7 @@
     border-radius: 6px;
     background: var(--background-color);
   }
-  @media (max-width: 1100px) {
+  @media (max-width: @admin-bp-desktop) {
     .preview-context-subject {
       display: none;
     }
@@ -220,7 +221,7 @@
       max-width: 34%;
     }
   }
-  @media (max-width: 768px) {
+  @media (max-width: @admin-bp-mobile) {
     .preview-context-status {
       left: 60%;
     }

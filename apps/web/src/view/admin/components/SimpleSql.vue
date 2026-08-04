@@ -334,6 +334,7 @@ async function runSql() {
 </script>
 
 <style lang="less" scoped>
+@import '@/assets/css/admin-breakpoints.less';
 .simple-sql { display: flex; flex-direction: column; height: 100%; padding: 20px; box-sizing: border-box; color: var(--text-color); overflow: hidden; }
 .glass-card { position: relative; overflow: hidden; background: color-mix(in srgb, var(--background-color) 92%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 20px; padding: 20px; backdrop-filter: blur(12px); }
 .glass-card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1px solid rgba(255,255,255,0.08); pointer-events: none; }
@@ -397,13 +398,13 @@ async function runSql() {
 .result-panel :deep(.table-row) { width: fit-content; }
 .result-panel :deep(.table-body) { max-height: none !important; overflow: visible !important; }
 .result-view { flex: 1; margin: 0; padding: 18px; background: var(--pre-bg-color); border-radius: 12px; overflow: auto; font-size: 14px; white-space: pre-wrap; line-height: 1.5; }
-@media (max-width: 1200px) {
+@media (max-width: @admin-bp-desktop) {
   .sql-main { grid-template-columns: 1fr; gap: 20px; }
   .helper-card { max-height: 500px; }
   .result-grid { grid-template-columns: 1fr; max-height: none; }
   .result-panel, .schema-panel { max-height: none; }
 }
-@media (max-width: 768px) {
+@media (max-width: @admin-bp-mobile) {
   .simple-sql { padding: 16px; }
   .console-header { flex-direction: column; align-items: flex-start; gap: 12px; }
   .sql-header-actions { width: 100%; justify-content: flex-start; }

@@ -372,6 +372,7 @@ onMounted(() => {
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
 @import './securityCenter.less';
 
 .mobile-detail {
@@ -478,7 +479,7 @@ onMounted(() => {
   font-size: 13px;
 }
 
-@media (max-width: 960px) {
+@media (max-width: @admin-bp-desktop) {
   .whitelist-modal-footer {
     align-items: flex-start;
     flex-direction: column;

@@ -390,6 +390,7 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/css/admin-breakpoints.less';
   .json-editor-page {
     display: flex;
     flex-direction: column;
@@ -517,7 +518,7 @@
     font-size: 13px;
   }
 
-  @media (max-width: 1120px) {
+  @media (max-width: @admin-bp-desktop) {
     .workbench {
       grid-template-columns: 1fr;
     }

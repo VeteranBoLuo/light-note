@@ -239,6 +239,7 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/css/admin-breakpoints.less';
   .pops {
     display: flex;
     flex-direction: column;
@@ -300,7 +301,7 @@
     grid-template-columns: 1fr 1fr;
     gap: 16px;
   }
-  @media (max-width: 720px) {
+  @media (max-width: @admin-bp-mobile) {
     .pops-cols {
       grid-template-columns: 1fr;
     }

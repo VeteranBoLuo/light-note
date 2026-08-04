@@ -136,6 +136,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   .log-search-input {
     flex: 1;
   }
@@ -149,7 +150,7 @@
     white-space: nowrap;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: @admin-bp-desktop) {
     .log-search-input {
       width: 100%;
     }

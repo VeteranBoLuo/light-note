@@ -304,6 +304,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   .log-search-input {
     flex: 1;
   }
@@ -423,7 +424,7 @@
     gap: 12px;
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: @admin-bp-desktop) {
     .user-opinion__status-filter {
       width: 100%;
     }

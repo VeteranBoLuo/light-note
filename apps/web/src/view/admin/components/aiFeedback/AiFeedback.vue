@@ -255,6 +255,7 @@
 </script>
 
 <style scoped lang="less">
+  @import '@/assets/css/admin-breakpoints.less';
   .ai-feedback__search {
     width: min(320px, 34vw);
   }
@@ -344,7 +345,7 @@
     }
   }
 
-  @media (max-width: 767px) {
+  @media (max-width: @admin-bp-mobile) {
     .ai-feedback__search,
     .ai-feedback__filter {
       width: 100%;

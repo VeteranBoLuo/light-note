@@ -555,6 +555,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-breakpoints.less';
   .nc-page {
     height: 100%;
     overflow-y: auto;
@@ -645,7 +646,7 @@
     flex: 1 1 auto;
     min-width: 0;
   }
-  @media (max-width: 1000px) {
+  @media (max-width: @admin-bp-desktop) {
     .nc-body {
       flex-direction: column;
     }

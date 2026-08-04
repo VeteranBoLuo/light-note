@@ -490,7 +490,7 @@
   .ai-evaluation__error {
     color: var(--danger-color, #dc2626);
   }
-  @media (max-width: 760px) {
+  @media (max-width: @admin-bp-mobile) {
     :deep(.admin-data-page__surface) {
       gap: 16px;
     }
@@ -549,7 +549,7 @@
       grid-column: 2 / -1;
     }
   }
-  @media (min-width: 761px) and (max-width: 1180px) {
+  @media (min-width: (@admin-bp-mobile + 1px)) and (max-width: @admin-bp-desktop) {
     .ai-evaluation__run-head {
       grid-template-columns: 72px minmax(140px, 1fr) repeat(2, minmax(80px, auto));
     }

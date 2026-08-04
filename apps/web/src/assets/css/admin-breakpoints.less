@@ -1,0 +1,16 @@
+/**
+ * 后台响应式断点的唯一事实源（纯变量，无任何选择器）。
+ *
+ * 为什么单独成文件：Less 的 @import 会把被引文件的产物复制进每个引入者的 scoped
+ * 样式。各页只为了拿断点值去 @import admin-manage.less，会把两百行公共类重复打包
+ * 十几遍。这里只有变量声明，编译后不产生任何 CSS 字节。
+ *
+ * 取值与 config/responsive.ts 的 VIEWPORT_BREAKPOINTS 一致，改动请两处同步。
+ * 三档语义（不要再引入 900/1000/1120 这类中间值）：
+ *   mobile   单列化、控件占满宽度、隐藏次要信息
+ *   desktop  多列收敛为单列（并排面板 → 上下堆叠）
+ *   compact  紧凑排版（缩小留白与字号），不改变列数
+ */
+@admin-bp-mobile: 768px;
+@admin-bp-desktop: 1200px;
+@admin-bp-compact: 1400px;
