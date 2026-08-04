@@ -4,7 +4,12 @@ import { OPERATION_LOG_MAP } from '@/config/logMap';
 import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
 export type PwaGuidePlatform = 'harmony' | 'ios' | 'android' | 'desktop';
-export type PwaInstallSource = 'landing' | 'landing-final' | 'person-center' | 'settings';
+export type PwaInstallSource =
+  | 'landing'
+  | 'landing-final'
+  | 'person-center'
+  | 'settings'
+  | 'download-android';
 export type PwaBrowserFamily =
   | 'huawei'
   | 'quark'
@@ -48,6 +53,7 @@ const INSTALL_SOURCE_LABELS: Record<PwaInstallSource, string> = {
   'landing-final': '官网底部',
   'person-center': '个人中心',
   settings: '设置',
+  'download-android': 'Android 下载页',
 };
 
 const RELIABLE_DIRECT_INSTALL_BROWSERS = new Set<PwaBrowserFamily>(['chrome', 'edge', 'opera']);

@@ -44,3 +44,8 @@ docs/plan
 docs/done
 .hermes/desktop-attachments/
 skills
+
+# 官网直发的 Android APK:1.7MB 二进制不进仓库,但要留在 public/ 里让 vite 构建带进 dist 随部署上传。
+# 换机或新环境部署前,必须先从证据包(~/Library/Application Support/Light Note/Android Releases/)
+# 把对应版本 APK 拷回此目录,否则下载页按钮 404。哈希须与 src/config/androidRelease.ts 一致。
+apps/web/public/downloads/android/*.apk

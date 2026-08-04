@@ -65,6 +65,19 @@ const PAGES = [
       description: '轻笺（Light Note）版本更新历史：书签管理、云笔记、云空间与 AI 功能的每一次迭代改进记录，持续更新。',
     },
   },
+  {
+    // Android 下载页:备案号与安装包校验信息要能被爬虫直接读到,不能只留 SPA 空壳。
+    // 构建机是桌面 UA,预渲染出的是"把地址发到手机"那个分支;首屏下载按钮属交互元素,
+    // 不影响正文可索引内容(版本、备案号、校验值、权限、安装说明均在静态 HTML 里)。
+    route: '/download/android',
+    waitSelector: '.dl-hero-title',
+    critical: false,
+    head: {
+      title: '下载轻笺 Android 版 - 官网直发 APK | 轻笺',
+      description:
+        '轻笺 Android 版官网直接下载：支持 Android 8.0 及以上，提供包名、版本、APK SHA-256 与签名证书指纹校验信息。App 备案号 蜀ICP备2026017699号-3A。',
+    },
+  },
 ];
 
 // 预渲染期间在本地直接返回的接口：构建机不是真实访客，不应产生埋点或角标查询。

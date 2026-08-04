@@ -720,6 +720,22 @@
                 <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
               </BButton>
             </div>
+            <!-- App 备案号:工信部要求 App 内显著展示,仅 APK 内显示(浏览器端页脚已有网站 ICP 备案号,两者不同不可混用) -->
+            <div v-if="isAndroidApp" class="field legal-document-field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.appFiling') }}</span>
+                <span class="field-desc">{{ t('settings.appFilingDesc') }}</span>
+              </div>
+              <a
+                class="app-filing-link"
+                :href="MIIT_QUERY_URL"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span>{{ APP_FILING_NUMBER }}</span>
+                <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+              </a>
+            </div>
           </div>
         </section>
 
@@ -755,6 +771,7 @@
     type AndroidLegalDocument,
   } from '@/utils/androidBridge.ts';
   import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
+  import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -1398,6 +1415,23 @@
     font-size: 13px;
   }
   .legal-document-link:hover {
+    opacity: 0.78;
+  }
+
+  /* App 备案号:号码本身即链接,与上方「查看全文」按钮同一视觉层级,但用等宽数字避免号码看起来歪 */
+  .app-filing-link {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 40px;
+    padding: 0 0 0 12px;
+    color: var(--primary-color);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    text-decoration: none;
+  }
+  .app-filing-link:hover {
     opacity: 0.78;
   }
 

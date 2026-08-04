@@ -66,17 +66,6 @@
         </div>
       </section>
 
-      <section class="pwa-guide__native-app">
-        <span class="pwa-guide__native-app-icon">
-          <SvgIcon :src="icon.pwa.android" size="21" aria-hidden="true" />
-        </span>
-        <div class="pwa-guide__native-app-copy">
-          <strong>{{ t('pwa.nativeAppTitle') }}</strong>
-          <span>{{ t('pwa.nativeAppDescription') }}</span>
-        </div>
-        <span class="pwa-guide__native-app-status">{{ t('pwa.nativeAppStatus') }}</span>
-      </section>
-
       <div class="pwa-guide__workspace">
         <aside class="pwa-guide__platforms">
           <span class="pwa-guide__section-label">{{ t('pwa.choosePlatform') }}</span>
@@ -123,6 +112,35 @@
           </header>
           <p class="pwa-guide__description">{{ t(`pwa.platforms.${guidePlatform}.description`) }}</p>
 
+          <!-- 能直接装 APK 的平台先给这条路:此前只讲「添加到主屏幕」,等于把更好的方式藏了。
+               鸿蒙归到这里是因为部分机型可通过卓易通兼容运行 APK,能不能装由用户自己判断。 -->
+          <template v-if="supportsApkInstall">
+            <div class="pwa-guide__method-label">
+              <span>{{ t('pwa.apkMethodTitle') }}</span>
+              <span class="pwa-guide__method-badge">{{ t('pwa.apkMethodBadge') }}</span>
+            </div>
+            <!-- 保留 href 让右键新标签、复制链接照常;普通点击接管成 SPA 路由,
+                 这样历史里留下这一跳,下载页的返回按钮才能识别出"从设置页来的"并退回原处。
+                 不用 router-link:它自带的 navigate 会和下面必须先等占位出栈的关闭流程抢跑。 -->
+            <a class="pwa-guide__apk-card" href="/download/android" @click="handleNativeAppClick">
+              <span class="pwa-guide__apk-icon">
+                <SvgIcon :src="icon.pwa.android" size="21" aria-hidden="true" />
+              </span>
+              <span class="pwa-guide__apk-copy">
+                <strong>{{ t('pwa.apkCardTitle', { version: apkVersionName }) }}</strong>
+                <small>{{ t(guidePlatform === 'harmony' ? 'pwa.apkCardDescHarmony' : 'pwa.apkCardDesc') }}</small>
+              </span>
+              <span class="pwa-guide__apk-cta">
+                {{ t('pwa.nativeAppCta') }}
+                <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+              </span>
+            </a>
+
+            <div class="pwa-guide__method-label pwa-guide__method-label--secondary">
+              <span>{{ t('pwa.webMethodTitle') }}</span>
+            </div>
+          </template>
+
           <div class="pwa-guide__steps">
             <div v-for="(step, index) in steps" :key="step" class="pwa-guide__step">
               <span class="pwa-guide__step-number">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -148,9 +166,13 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { useRouter } from 'vue-router';
   import { usePwaInstall, type PwaGuidePlatform } from '@/composables/usePwaInstall';
+  import { ANDROID_RELEASE } from '@/config/androidRelease';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const { t, te } = useI18n();
+  const router = useRouter();
   const {
     canPrompt,
     detectedBrowser,
@@ -172,6 +194,11 @@
     desktop: icon.pwa.desktop,
   };
   const benefits = ['pwa.benefitStandalone', 'pwa.benefitSynced', 'pwa.benefitAutoUpdate'];
+  const apkVersionName = ANDROID_RELEASE.versionName;
+  // iOS 装不了 APK;电脑不是 APK 的目标环境(想给手机装就切到 Android tab)。
+  const supportsApkInstall = computed(
+    () => ANDROID_RELEASE.released && (guidePlatform.value === 'android' || guidePlatform.value === 'harmony'),
+  );
   const platformOptions = computed(() =>
     platformKeys.map((key) => ({
       key,
@@ -204,17 +231,37 @@
           : 'pwa.browserFallbackHint';
     return `${platformNote} ${t(fallbackKey, { browser: detectedBrowserLabel.value })}`;
   });
+  // 这块讲的是"网页安装"那条路的能力。在能直接装 APK 的平台上,若照旧只说"请从浏览器菜单添加",
+  // 会和下方的"方式一：安装 App"打架,让人以为添加到桌面是唯一出路,所以这里改口指向下面两种方式。
   const actionTitle = computed(() => {
     if (isStandalone.value) return t('pwa.installed');
-    return canPrompt.value ? t('pwa.directAvailable') : t('pwa.manualAvailable');
+    if (canPrompt.value) return t('pwa.directAvailable');
+    return supportsApkInstall.value ? t('pwa.chooseMethod') : t('pwa.manualAvailable');
   });
   const actionDescription = computed(() => {
     if (isStandalone.value) return t('pwa.guideIntroDesc');
-    return canPrompt.value ? t('pwa.directAvailableDesc') : t('pwa.manualHint');
+    if (canPrompt.value) return t('pwa.directAvailableDesc');
+    return supportsApkInstall.value ? t('pwa.chooseMethodDesc') : t('pwa.manualHint');
   });
 
   function selectPlatform(platform: PwaGuidePlatform) {
     guidePlatform.value = platform;
+  }
+
+  // 移动端浮层在 history 里压了占位,关闭时会 history.back()。若把"关弹框"和"跳路由"写在
+  // 同一轮事件里,那次 back() 会把刚 push 的下载页直接弹回来(表现为点了没反应)。
+  // 统一走 closeCurrentMobileOverlayThen:先关弹框、等占位真正出栈,再跳转。
+  // 桌面端没有占位,它会立即 resolve,不产生额外延迟。
+  function handleNativeAppClick(event: MouseEvent) {
+    // 修饰键或非左键:保留浏览器原生的新标签/新窗口行为
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    void closeCurrentMobileOverlayThen(
+      () => {
+        guideVisible.value = false;
+      },
+      () => router.push('/download/android'),
+    );
   }
 
   function revealActivePlatform() {
@@ -271,9 +318,18 @@
     background: rgba(10, 11, 20, 0.88);
   }
 
+  /* 桌面端固定弹框高度,只让右侧详情区滚动:
+     1) 整体滚动时,切换平台还得把左侧列表滚回去才能选下一个;
+     2) 各平台步骤长短不一,高度自适应会让弹框在切 tab 时上下跳。
+     移动端窄屏分区滚动反而难用,下面的 767px 断点会整体还原成一起滚。 */
+  :global(.pwa-install-modal.modal-view) {
+    height: min(680px, calc(100% - 32px));
+  }
+
   :global(.pwa-install-modal .modal-content) {
     padding: 0;
     background: #0f101b;
+    overflow: hidden;
   }
 
   :global(.pwa-install-modal .modal-close) {
@@ -293,6 +349,10 @@
   .pwa-guide {
     --pwa-accent: #7974ff;
     --pwa-accent-soft: #aaa7ff;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
     color: #f7f7ff;
   }
 
@@ -344,6 +404,7 @@
   .pwa-guide__hero {
     position: relative;
     isolation: isolate;
+    flex: 0 0 auto;
     min-height: 184px;
     padding: 24px;
     display: grid;
@@ -531,65 +592,115 @@
     white-space: nowrap;
   }
 
-  .pwa-guide__native-app {
-    min-width: 0;
-    padding: 14px 20px;
-    display: grid;
-    grid-template-columns: 40px minmax(0, 1fr) auto;
+  /* 两种安装方式的分节标题:让"直接安装"和"添加到主屏幕"不再糊成一团 */
+  .pwa-guide__method-label {
+    display: flex;
     align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-    background: linear-gradient(90deg, rgba(97, 92, 237, 0.1), transparent 52%), #10111c;
+    gap: 8px;
+    margin: 0 0 9px;
+    color: #c9cad6;
+    font-size: 11px;
+    font-weight: 700;
   }
 
-  .pwa-guide__native-app-icon {
-    width: 40px;
-    height: 40px;
+  .pwa-guide__method-label--secondary {
+    margin-top: 18px;
+    color: #85889c;
+    font-weight: 650;
+  }
+
+  .pwa-guide__method-badge {
+    padding: 3px 7px;
+    border: 1px solid rgba(151, 147, 255, 0.28);
+    border-radius: 999px;
+    color: #b9b6ff;
+    background: rgba(97, 92, 237, 0.14);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .pwa-guide__apk-card {
+    min-width: 0;
+    padding: 12px 13px;
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    border: 1px solid rgba(151, 147, 255, 0.24);
+    border-radius: 13px;
+    background: linear-gradient(120deg, rgba(97, 92, 237, 0.16), rgba(97, 92, 237, 0.04));
+    text-decoration: none;
+    transition:
+      border-color 0.2s ease,
+      background 0.2s ease,
+      transform 0.2s ease;
+  }
+
+  .pwa-guide__apk-card:hover {
+    border-color: rgba(151, 147, 255, 0.48);
+    background: linear-gradient(120deg, rgba(97, 92, 237, 0.26), rgba(97, 92, 237, 0.08));
+    transform: translateY(-1px);
+  }
+
+  .pwa-guide__apk-icon {
+    width: 38px;
+    height: 38px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgba(151, 147, 255, 0.18);
-    border-radius: 12px;
+    border: 1px solid rgba(151, 147, 255, 0.2);
+    border-radius: 11px;
     color: #aaa7ff;
-    background: rgba(97, 92, 237, 0.12);
+    background: rgba(97, 92, 237, 0.14);
   }
 
-  .pwa-guide__native-app-copy {
+  .pwa-guide__apk-copy {
     min-width: 0;
   }
 
-  .pwa-guide__native-app-copy strong,
-  .pwa-guide__native-app-copy span {
+  .pwa-guide__apk-copy strong,
+  .pwa-guide__apk-copy small {
     display: block;
   }
 
-  .pwa-guide__native-app-copy strong {
-    color: #f0efff;
+  .pwa-guide__apk-copy strong {
+    color: #f4f3ff;
     font-size: 12px;
     line-height: 1.4;
   }
 
-  .pwa-guide__native-app-copy span {
+  .pwa-guide__apk-copy small {
     margin-top: 3px;
-    color: #85889c;
+    color: #9093a6;
     font-size: 10px;
     line-height: 1.5;
   }
 
-  .pwa-guide__native-app-status {
-    padding: 6px 10px;
-    border: 1px solid rgba(151, 147, 255, 0.18);
+  .pwa-guide__apk-cta {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 7px 12px;
     border-radius: 999px;
-    color: #b9b6ff;
-    background: rgba(97, 92, 237, 0.1);
-    font-size: 9px;
+    color: #c6c3ff;
+    background: rgba(97, 92, 237, 0.22);
+    font-size: 10px;
     font-weight: 700;
     line-height: 1.2;
     white-space: nowrap;
   }
 
+  .pwa-guide__apk-card:hover .pwa-guide__apk-cta {
+    color: #ffffff;
+    background: rgba(97, 92, 237, 0.4);
+  }
+
   .pwa-guide__workspace {
-    min-height: 340px;
+    flex: 1 1 auto;
+    /* min-height:0 是关键:否则 grid 子项的内容高度会撑破 flex 容器,详情区永远不滚 */
+    min-height: 0;
     display: grid;
     grid-template-columns: 214px minmax(0, 1fr);
     background: #0d0e18;
@@ -597,7 +708,9 @@
 
   .pwa-guide__platforms {
     min-width: 0;
+    min-height: 0;
     padding: 20px 14px 20px 20px;
+    overflow-y: auto;
     border-right: 1px solid rgba(255, 255, 255, 0.07);
     background: rgba(255, 255, 255, 0.012);
   }
@@ -712,7 +825,9 @@
 
   .pwa-guide__detail {
     min-width: 0;
+    min-height: 0;
     padding: 22px 24px 24px;
+    overflow-y: auto;
     animation: pwa-detail-in 0.24s ease;
   }
 
@@ -890,11 +1005,26 @@
   }
 
   @media (max-width: 767px) {
+    /* 窄屏还原成整体滚动:侧栏已横排、详情区没有富余高度,分区滚动只会挤出两个小滚动窗口 */
     :global(.pwa-install-modal.modal-view) {
       width: calc(100% - 20px) !important;
       max-width: none;
+      height: auto;
       max-height: calc(100% - 16px);
       border-radius: 22px;
+    }
+
+    :global(.pwa-install-modal .modal-content) {
+      overflow: auto;
+    }
+
+    .pwa-guide {
+      height: auto;
+    }
+
+    .pwa-guide__platforms,
+    .pwa-guide__detail {
+      overflow: visible;
     }
 
     :global(.pwa-install-modal .modal-header) {
@@ -955,21 +1085,20 @@
       display: none;
     }
 
-    .pwa-guide__native-app {
-      padding: 13px 16px;
+    .pwa-guide__apk-card {
       grid-template-columns: 36px minmax(0, 1fr);
       gap: 10px;
     }
 
-    .pwa-guide__native-app-icon {
+    .pwa-guide__apk-icon {
       width: 36px;
       height: 36px;
     }
 
-    .pwa-guide__native-app-status {
+    .pwa-guide__apk-cta {
       grid-column: 2;
       width: max-content;
-      margin-top: -2px;
+      margin-top: 1px;
     }
 
     .pwa-guide__workspace {
