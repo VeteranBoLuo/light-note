@@ -80,6 +80,7 @@
 </template>
 
 <script lang="ts" setup>
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiBasePost } from '@/http/request.ts';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -321,8 +322,28 @@ async function loadTableSchema(table: string) {
   finally { schemaUpdatedAt.value = new Date().toLocaleString(); }
 }
 
-async function runSql() {
+/** 破坏性 SQL 关键字：命中则要求二次确认。控制台可直接改库，误按回车的代价不可逆。 */
+const MUTATION_SQL_PATTERN = /\b(delete|drop|truncate|update|insert|alter|replace|grant|revoke)\b/i;
+
+function describeMutation(statement: string) {
+  const matched = statement.match(MUTATION_SQL_PATTERN);
+  return matched ? matched[0].toUpperCase() : '';
+}
+
+async function runSql(confirmedMutation = false) {
   if (!sql.value.trim()) { result.value = '请先输入 SQL 语句。'; executionState.value = 'error'; return; }
+  if (executionState.value === 'running') return;
+  const mutation = describeMutation(sql.value);
+  if (mutation && !confirmedMutation) {
+    // Alert 只暴露 onOk，没有 onCancel：用回调续跑而不是 await Promise，
+    // 否则用户点取消时 Promise 永不 resolve，运行按钮会一直卡在 loading。
+    Alert.alert({
+      title: `确认执行 ${mutation}`,
+      content: `这条语句会修改数据库且无法自动回滚，请确认语句与 WHERE 条件无误：\n\n${sql.value.trim().slice(0, 300)}`,
+      onOk: () => runSql(true),
+    });
+    return;
+  }
   executionState.value = 'running'; result.value = '执行中，请稍候...';
   try {
     const res: any = await apiBasePost('/api/common/runSql', { sql: sql.value });
@@ -340,7 +361,7 @@ async function runSql() {
 @import '@/assets/css/admin-breakpoints.less';
 .simple-sql { display: flex; flex-direction: column; height: 100%; padding: 20px; box-sizing: border-box; color: var(--text-color); overflow: hidden; }
 .glass-card { position: relative; overflow: hidden; background: color-mix(in srgb, var(--background-color) 92%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 20px; padding: 20px; backdrop-filter: blur(12px); }
-.glass-card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1px solid rgba(255,255,255,0.08); pointer-events: none; }
+.glass-card::after { content: ''; position: absolute; inset: 0; border-radius: inherit; border: 1px solid color-mix(in srgb, var(--surface-border-color) 55%, transparent); pointer-events: none; }
 .sql-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0,1.2fr) minmax(0,0.8fr); gap: 16px; }
 .editor-stack { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .console-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent); }

@@ -13,13 +13,22 @@
         </template>
       </b-input>
       <BSelect class="image-mg__type-select" :options="imgOptions" v-model:value="imgType" @change="onTypeChange" />
-      <b-button type="danger" @click="clearApiImages">清理</b-button>
+      <BButton
+        type="danger"
+        :loading="clearing"
+        :disabled="clearing || loading || !imageTotal"
+        @click="clearApiImages"
+      >
+        清理{{ imageTotal ? ` ${imageTotal} 张` : "" }}
+      </BButton>
     </template>
 
     <BTable
       fill
       :data="pagedImages"
       :columns="imageColumns"
+      :loading="loading"
+      loading-text="正在加载图片…"
       row-key="id"
       :pagination="true"
       :total="imageTotal"
@@ -80,18 +89,23 @@
   });
 
   function clearApiImages() {
+    if (!imageTotal.value) return;
+    const typeLabel = imgOptions.find((item) => item.value === imgType.value)?.label || imgType.value;
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要清理图片？`,
-      onOk() {
-        apiBasePost('/api/common/clearImages', {
-          images: currentImages.value,
-        }).then((res) => {
+      title: '确认清理',
+      // 清理范围是当前所选类型的全部图片而非当前页，必须把类型与数量写进确认文案
+      content: `将物理删除【${typeLabel}】下的全部 ${imageTotal.value} 张图片，不可恢复，确认继续？`,
+      async onOk() {
+        clearing.value = true;
+        try {
+          const res = await apiBasePost('/api/common/clearImages', { images: currentImages.value });
           if (res.status === 200) {
-            message.success('图片清理成功');
-            searchApiImage();
+            message.success(`已清理 ${imageTotal.value} 张图片`);
+            await searchApiImage();
           }
-        });
+        } finally {
+          clearing.value = false;
+        }
       },
     });
   }
@@ -110,6 +124,9 @@
   const searchValue = ref('');
   const imgType = ref('usedImages');
   const allImg = ref<Record<string, any[]>>({});
+  const loading = ref(false);
+  // 破坏性操作独立的进行中状态：与列表加载分开，避免搜索时误禁用清理按钮之外的判断
+  const clearing = ref(false);
   const currentPage = ref(1);
   const pageSize = ref(20);
   const currentImages = computed(() => allImg.value?.[imgType.value] ?? []);
@@ -132,14 +149,18 @@
     currentPage.value = 1;
   }
 
-  function searchApiImage() {
-    apiBasePost('/api/common/getImages', { name: searchValue.value }).then((res) => {
+  async function searchApiImage() {
+    loading.value = true;
+    try {
+      const res = await apiBasePost('/api/common/getImages', { name: searchValue.value });
       if (res.status === 200) {
         allImg.value = res.data.items;
         const maxPage = Math.max(1, Math.ceil(imageTotal.value / pageSize.value));
         currentPage.value = Math.min(currentPage.value, maxPage);
       }
-    });
+    } finally {
+      loading.value = false;
+    }
   }
   function getImgFullUrl(fullFileName) {
     return `https://boluo66.top/uploads/${fullFileName}`;
