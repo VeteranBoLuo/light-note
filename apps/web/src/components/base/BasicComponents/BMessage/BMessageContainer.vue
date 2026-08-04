@@ -1,20 +1,26 @@
 <template>
   <Teleport to="body">
+    <!--
+      入场动画用纯 CSS animation,节点增删交回 Vue 核心 patch,不要再包 <TransitionGroup>。
+      原实现用 TransitionGroup 做进出场,但在「手动 render() 挂载 + 自引用 Teleport」这套结构下,
+      它的离场节点永远摘不掉:消息已从 messageState 移除,DOM 节点却留在屏幕上,而且一个卡住的
+      节点会连带后续消息也移除不掉。表现就是提示层层堆积、`duration: 0` 的 loading 永久转圈
+      (笔记导出 PDF 就是这条路径)。已验证与 HMR 无关,`:duration`、去掉 v-show、去掉 Teleport 均无效。
+      代价是没有离场动画 —— 提示消失不需要动画,而"关不掉"是功能缺陷,优先保证它一定消失。
+    -->
     <div class="b-message-container" v-show="messageState.messages.length > 0" aria-live="polite" aria-atomic="false">
-      <TransitionGroup name="b-message">
-        <div
-          v-for="msg in messageState.messages"
-          :key="msg.key || msg.id"
-          :class="['b-message-item', `b-message-${msg.type}`]"
-          :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
-          @click="dismissOnMobile(msg.id)"
-        >
-          <span class="b-message-icon" aria-hidden="true">
-            <SvgIcon :src="messageIcons[msg.type]" size="17" :class="{ 'b-message-spin': msg.type === 'loading' }" />
-          </span>
-          <span class="b-message-content">{{ msg.content }}</span>
-        </div>
-      </TransitionGroup>
+      <div
+        v-for="msg in messageState.messages"
+        :key="msg.key || msg.id"
+        :class="['b-message-item', `b-message-${msg.type}`, { 'is-leaving': msg.leaving }]"
+        :role="msg.type === 'error' || msg.type === 'warning' ? 'alert' : 'status'"
+        @click="dismissOnMobile(msg.id)"
+      >
+        <span class="b-message-icon" aria-hidden="true">
+          <SvgIcon :src="messageIcons[msg.type]" size="17" :class="{ 'b-message-spin': msg.type === 'loading' }" />
+        </span>
+        <span class="b-message-content">{{ msg.content }}</span>
+      </div>
     </div>
   </Teleport>
 </template>
@@ -76,6 +82,7 @@
     font-size: 13.5px;
     line-height: 1.45;
     pointer-events: auto;
+    animation: b-message-in 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
   }
 
   .b-message-item::before {
@@ -124,23 +131,52 @@
     font-weight: 560;
   }
 
-  /* Enter / leave animations */
-  .b-message-enter-active {
-    transition: all 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* 进出场都用纯 CSS animation:节点一插入就播入场,标记 is-leaving 就播离场,不依赖 Vue 过渡钩子。
+     离场期间节点仍在 messageState 里(见 messageState.ts 的 LEAVE_ANIMATION_MS),动画放完才被摘除。 */
+  @keyframes b-message-in {
+    from {
+      opacity: 0;
+      transform: translateY(-20px) scale(0.96);
+    }
   }
 
-  .b-message-leave-active {
-    transition: all 0.2s ease-out;
+  @keyframes b-message-in-from-bottom {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.96);
+    }
   }
 
-  .b-message-enter-from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.96);
+  @keyframes b-message-out {
+    to {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.97);
+    }
   }
 
-  .b-message-leave-to {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.97);
+  @keyframes b-message-out-to-bottom {
+    to {
+      opacity: 0;
+      transform: translateY(10px) scale(0.97);
+    }
+  }
+
+  @keyframes b-message-fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+
+  @keyframes b-message-fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+
+  /* forwards 保住终态,避免动画结束到节点摘除之间闪回不透明 */
+  .b-message-item.is-leaving {
+    animation: b-message-out 0.2s ease-out forwards;
+    pointer-events: none;
   }
 
   /* Loading spin animation */
@@ -208,20 +244,23 @@
       display: none;
     }
 
-    /* 底部弹出:进出动画改为从下方滑入/滑出 */
-    .b-message-enter-from {
-      transform: translateY(20px) scale(0.96);
+    /* 底部弹出:进出场都改为从下方滑入/滑出 */
+    .b-message-item {
+      animation-name: b-message-in-from-bottom;
     }
 
-    .b-message-leave-to {
-      transform: translateY(10px) scale(0.97);
+    .b-message-item.is-leaving {
+      animation-name: b-message-out-to-bottom;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .b-message-enter-active,
-    .b-message-leave-active {
-      transition: opacity 0.15s ease;
+    .b-message-item {
+      animation: b-message-fade-in 0.15s ease;
+    }
+
+    .b-message-item.is-leaving {
+      animation: b-message-fade-out 0.15s ease forwards;
     }
 
     .b-message-spin {

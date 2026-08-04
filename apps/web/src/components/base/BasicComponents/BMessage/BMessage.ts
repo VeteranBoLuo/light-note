@@ -35,7 +35,11 @@ function resolveDuration(type: MessageType, duration?: number): number {
 
 function suppressDuplicateMobileMessage(type: MessageType, content: string): (() => void) | null {
   if (!isMobileMessageViewport()) return null;
-  const existing = messageState.messages.find((message) => message.type === type && message.content === content);
+  // 正在播离场动画的那条不算「已存在」:否则新提示会被并进一条即将消失的消息里,
+  // 用户看不到这次操作的反馈
+  const existing = messageState.messages.find(
+    (message) => message.type === type && message.content === content && !message.leaving,
+  );
   return existing ? () => removeMessage(existing.id) : null;
 }
 

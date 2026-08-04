@@ -504,6 +504,23 @@
     margin-bottom: 6px;
   }
 
+  /*
+   * 材料区是「已选 chips + @添加资源 + 上传文件」一条连续的流。
+   * AiContextPicker 自己也是 flex-wrap 容器，chips 多到需要换行时它会撑满整行，
+   * 把同级的「上传文件」一起挤到再下一行 —— 于是明明还有空位，两个入口按钮却分居两行。
+   * 摊平这层包装，让 chips 与两个触发按钮成为同一个 wrap 流的成员：
+   * chips 占满前面的行，两个按钮并排跟在最后一行。
+   * 只作用于桌面容器内，移动端的 AiContextPicker 在材料抽屉里，不受影响。
+   */
+  .context-actions > :deep(.ai-context-picker) {
+    display: contents;
+  }
+
+  /* 摊平后 chips 直接受 .context-actions 的 flex-start 约束，与同行按钮居中对齐 */
+  .context-actions :deep(.ai-context-chips) {
+    align-self: center;
+  }
+
   .mobile-context-actions {
     display: none;
   }

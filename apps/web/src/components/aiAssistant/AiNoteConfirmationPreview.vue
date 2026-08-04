@@ -101,7 +101,6 @@
     box-sizing: border-box;
     border-radius: 8px;
     color: var(--text-color);
-    background: var(--card-background);
     font-size: 13px;
     line-height: 1.65;
     overscroll-behavior: contain;

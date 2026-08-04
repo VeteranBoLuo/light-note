@@ -448,7 +448,7 @@
       key: 'mobile',
       label: t('landing.tabMobile'),
       // public 静态资源不会由 Vite 自动生成内容哈希；图片替换后同步更新版本，避免浏览器继续展示旧图。
-      png: '/screenshots/mobile.png?v=a04898845ef1',
+      png: '/screenshots/mobile.png?v=531585f78bd6',
       aspect: MOBILE_STAGE_ASPECT,
     },
     {
@@ -1090,7 +1090,8 @@
     position: relative;
     flex: 0 0 auto;
     height: 92%;
-    aspect-ratio: 1 / 2;
+    /* 与 mobile.png 里单台截图的真实像素比一致（587 × 1208），避免 object-fit: fill 拉伸变形 */
+    aspect-ratio: 587 / 1208;
     overflow: hidden;
     border: 1px solid rgba(255, 255, 255, 0.16);
     border-radius: clamp(12px, 1.4vw, 20px);
@@ -1115,8 +1116,9 @@
     height: 100%;
     object-fit: fill;
   }
+  /* 双联图两半严格等宽、无中缝，右半正好落在 -100%，不需要再补偿间隙像素 */
   .mobile-preview-device--dark img {
-    left: calc(-100% - 2px);
+    left: -100%;
   }
   .screen-glare {
     position: absolute;

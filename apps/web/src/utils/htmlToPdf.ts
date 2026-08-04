@@ -46,6 +46,74 @@ export function forcePdfLightTheme(clonedDocument: Document) {
   clonedDocument.documentElement?.setAttribute('data-theme', 'day');
 }
 
+/** 会被 html2canvas 解析的纯色属性。`background-image` 另外处理:渐变里也可能嵌 color()。 */
+const COLOR_PROPERTIES = [
+  'color',
+  'background-color',
+  'border-top-color',
+  'border-right-color',
+  'border-bottom-color',
+  'border-left-color',
+  'outline-color',
+  'text-decoration-color',
+  'caret-color',
+  'column-rule-color',
+  'fill',
+  'stroke',
+  'background-image',
+];
+
+/** `color(srgb r g b / a)` —— Chromium 对 color-mix() 计算结果的序列化形式。 */
+const SRGB_COLOR_FUNCTION = /color\(\s*srgb\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s+([\d.eE+-]+)\s*(?:\/\s*([\d.eE+-]+%?)\s*)?\)/gi;
+
+/**
+ * 把 CSS Color 4 的 `color(srgb …)` 改写成等价的 `rgb()/rgba()`。
+ *
+ * html2canvas 的颜色解析器只认老式记法,遇到 `color(` 会直接抛
+ * `Attempting to parse an unsupported color function "color"`,整份导出失败。
+ * 而全站大量使用 `color-mix(in srgb, …)`,Chromium 正是把它的计算值序列化成这种形式。
+ * 只转 srgb 色彩空间:项目的 color-mix 统一写 `in srgb`,其他色彩空间原样留下,
+ * 免得用错误的分量换算悄悄改变颜色。
+ */
+export function replaceUnsupportedColorFunctions(value: string): string {
+  return value.replace(SRGB_COLOR_FUNCTION, (matched, r: string, g: string, b: string, a?: string) => {
+    const channels = [r, g, b].map((channel) => {
+      const parsed = Number(channel);
+      if (!Number.isFinite(parsed)) return null;
+      return Math.max(0, Math.min(255, Math.round(parsed * 255)));
+    });
+    if (channels.some((channel) => channel === null)) return matched;
+    const rgb = channels.join(', ');
+    if (a == null) return `rgb(${rgb})`;
+    const alpha = a.endsWith('%') ? Number(a.slice(0, -1)) / 100 : Number(a);
+    if (!Number.isFinite(alpha)) return matched;
+    return alpha >= 1 ? `rgb(${rgb})` : `rgba(${rgb}, ${alpha})`;
+  });
+}
+
+/**
+ * 遍历克隆文档,把带 `color()` 的计算值就地固化成 html2canvas 认识的记法。
+ *
+ * 必须在 forcePdfLightTheme 之后调用:此时读到的才是 PDF 实际要呈现的浅色主题取值。
+ * 只写克隆树的 inline style,用户页面不受影响。
+ */
+function normalizeUnsupportedColorFunctions(clonedDocument: Document) {
+  const view = clonedDocument.defaultView;
+  // 拿不到 window 就没法取计算值;跳过而不是让导出失败(最差回到原来的报错)
+  if (!view) return;
+
+  clonedDocument.querySelectorAll<HTMLElement>('*').forEach((element) => {
+    if (!element.style) return;
+    const computed = view.getComputedStyle(element);
+    COLOR_PROPERTIES.forEach((property) => {
+      const value = computed.getPropertyValue(property);
+      if (!value || !value.includes('color(')) return;
+      const replaced = replaceUnsupportedColorFunctions(value);
+      if (replaced !== value) element.style.setProperty(property, replaced, 'important');
+    });
+  });
+}
+
 /**
  * 渲染期间把目标元素宽度固定为「纸张内容宽」,结束后恢复。
  *
@@ -231,6 +299,8 @@ async function renderPdfDocument(selector: string, options: PDFOptions): Promise
           backgroundColor: '#FFFFFF',
           onclone: (clonedDocument: Document) => {
             forcePdfLightTheme(clonedDocument);
+            // 顺序有意义:先定浅色主题,再固化颜色计算值,最后才替换勾选框(它会改动 DOM 结构)
+            normalizeUnsupportedColorFunctions(clonedDocument);
             replacePdfCheckboxes(clonedDocument);
           },
         }),
