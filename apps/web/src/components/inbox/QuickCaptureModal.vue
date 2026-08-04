@@ -6,15 +6,20 @@
         <span class="capture-intro__eyebrow">{{ t('inbox.quickCaptureEyebrow') }}</span>
         <div class="capture-intro__description">
           <p>{{ captureHint }}</p>
+          <!--
+            入口跟随当前 Tab：待办是行动对象、不进待整理队列，显示「前往待整理 N」
+            会把用户送到一个根本不含刚创建待办的列表。待办入口也不带数字 ——
+            那个数字已由顶栏待办角标承担，弹框里再重复一次只会分散注意力。
+          -->
           <BButton
             v-if="!bookmark.isMobile"
             size="small"
             class="capture-intro__inbox-link"
-            v-click-log="OPERATION_LOG_MAP.inbox.openInboxFromCapture"
-            @click="goResourceInbox"
+            v-click-log="captureTargetLog"
+            @click="goCaptureTarget"
           >
-            <span>{{ t('inbox.goToInbox') }}</span>
-            <span v-if="inbox.pendingTotal > 0" class="capture-intro__pending-count">
+            <span>{{ captureTargetLabel }}</span>
+            <span v-if="!isTodoCapture && inbox.pendingTotal > 0" class="capture-intro__pending-count">
               {{ displayPendingTotal }}
             </span>
           </BButton>
@@ -113,7 +118,7 @@
         <div class="capture-success__actions">
           <BButton size="small" @click="continueCapture">{{ t('inbox.continueCapture') }}</BButton>
           <BButton size="small" @click="openCapturedResource">{{ t('inbox.openCaptured') }}</BButton>
-          <BButton size="small" @click="goInbox">{{ t('inbox.viewInbox') }}</BButton>
+          <BButton size="small" @click="goInbox">{{ successTargetLabel }}</BButton>
         </div>
       </div>
     </div>
@@ -234,6 +239,16 @@
   const totalFileSize = computed(() => files.value.reduce((sum, file) => sum + file.size, 0));
   const displayPendingTotal = computed(() =>
     inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal),
+  );
+  const isTodoCapture = computed(() => captureType.value === 'todo');
+  // 顶部入口与成功区都跟随当前 Tab：待办跳待办列表，资源类跳待整理
+  const captureTargetLabel = computed(() => (isTodoCapture.value ? t('inbox.goToTodo') : t('inbox.goToInbox')));
+  const successTargetLabel = computed(() => (isTodoCapture.value ? t('inbox.goToTodo') : t('inbox.viewInbox')));
+  // 埋点跟着实际跳转目标走，否则两个入口的使用率会被混在一条记录里
+  const captureTargetLog = computed(() =>
+    isTodoCapture.value
+      ? OPERATION_LOG_MAP.inbox.openTodoFromCapture
+      : OPERATION_LOG_MAP.inbox.openInboxFromCapture,
   );
 
   watch(visible, (value) => {
@@ -488,9 +503,10 @@
     );
   }
 
-  function goResourceInbox() {
+  /** 复用与成功区同一份目标解析，避免顶部入口和成功区各写一套跳转规则。 */
+  function goCaptureTarget() {
     visible.value = false;
-    void router.push('/inbox');
+    void router.push(getQuickCaptureInboxTarget(captureType.value, bookmark.isMobile));
   }
 
   function continueCapture() {

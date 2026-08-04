@@ -79,6 +79,8 @@ export const OPERATION_LOG_MAP = {
   inbox: createModule('待处理', {
     openCapture: '打开快速添加',
     openInboxFromCapture: '快速添加前往待整理',
+    // 待办 Tab 的入口跳的是待办列表而不是待整理，记成同一条会污染这两个入口的使用率
+    openTodoFromCapture: '快速添加查看待办',
     captureBookmark: '收集书签成功',
     captureNote: '收集笔记成功',
     captureFile: '收集文件成功',

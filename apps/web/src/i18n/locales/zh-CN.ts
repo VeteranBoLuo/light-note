@@ -392,6 +392,7 @@ export default {
     quickCaptureEyebrow: '先收集，稍后整理',
     captureHint: '选择内容类型，先保存最必要的信息；标签和位置可以稍后补充。',
     goToInbox: '前往待整理',
+    goToTodo: '查看待办',
     todoCaptureHint: '写下要做的事情，选择日期和优先级即可创建；其他信息可以稍后完善。',
     quickCapturePanels: {
       bookmark: {

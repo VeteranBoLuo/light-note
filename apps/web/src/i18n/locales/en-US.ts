@@ -399,6 +399,7 @@ export default {
     quickCaptureEyebrow: 'Capture now, organize later',
     captureHint: 'Choose a content type and save only what matters now. Add tags and locations later.',
     goToInbox: 'Open To organize',
+    goToTodo: 'View todos',
     todoCaptureHint: 'Add a title, date, and priority to create quickly. Fill in the rest later.',
     quickCapturePanels: {
       bookmark: {
