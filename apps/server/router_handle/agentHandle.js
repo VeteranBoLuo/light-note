@@ -118,6 +118,7 @@ import {
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
+  requestsRichTextNote,
   shouldClassifyNoteDraftTask,
 } from '../util/agent/noteDraft.js';
 
@@ -1487,6 +1488,7 @@ export async function agentChat(req, res) {
     noteDraftOtherMutations: null,
     noteDraftClassifyMs: null,
     noteDraftClassifyError: null,
+    unhandledOtherMutationDisclosed: null,
     usageStatus: 'missing',
     abortedStage: null,
     route: 'planner',
@@ -2047,11 +2049,18 @@ export async function agentChat(req, res) {
             summary: '笔记草稿已生成，尚未写入。',
             round: 1,
           });
-          routeResponse = String(locale || '')
-            .toLowerCase()
-            .startsWith('en')
-            ? 'The note draft is ready. Review the rendered content and confirm only when you want to create it.'
-            : '笔记草稿已准备好。请先查看正文预览，确认后才会创建笔记。';
+          const english = String(locale || '').toLowerCase().startsWith('en');
+          // 用户点名要富文本/HTML 时不能默默给一篇 Markdown 当作已满足：说明当前边界，
+          // 并指向笔记详情里的类型切换（两种类型可互转）。
+          const richTextNotice = requestsRichTextNote(sourceMessage)
+            ? english
+              ? ' Note: AI can only produce Markdown notes for now — after creating it, switch the note to rich text in the note detail view.'
+              : ' 另外，AI 目前只能生成 Markdown 笔记；创建后可在笔记详情里切换为富文本。'
+            : '';
+          routeResponse =
+            (english
+              ? 'The note draft is ready. Review the rendered content and confirm only when you want to create it.'
+              : '笔记草稿已准备好。请先查看正文预览，确认后才会创建笔记。') + richTextNotice;
         } catch (error) {
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
           const knownPolicyError = error instanceof ToolConfirmationError || error instanceof AgentToolPolicyError;
@@ -3461,6 +3470,29 @@ export async function agentChat(req, res) {
           sources: selectCitedAgentGrounding({ sources: candidateSources, evidence, citationAudit }).sources,
           locale,
         });
+    }
+
+    // ---- 兜底披露未处理的写操作 ----
+    // 分类器已用 otherMutations 识别出「用户在同一句里还要求了笔记之外的写操作」，但模型的
+    // 语义计划可能漏声明它们；一旦漏声明就绕过了 adjudicateSemanticPlan 对 planned 能力的
+    // 失败关闭，表现为「笔记做了、待办被静默丢掉」。这里只补一句说明，不改变任何执行结果，
+    // 也不阻止用户确认那张笔记卡——用户仍然要笔记，只是必须知道另一半没做。
+    if (trace.noteDraftOtherMutations === true && !semanticPolicy) {
+      const confirmedToolNames = new Set(confirmations.map((item) => item?.toolName).filter(Boolean));
+      if (confirmedToolNames.size === 1 && confirmedToolNames.has('create_note')) {
+        const notice = String(locale || '')
+          .toLowerCase()
+          .startsWith('en')
+          ? 'You also asked for something beyond the note in the same message. Only the note was prepared — nothing else was executed. Please send that part as a separate request.'
+          : '你在同一句里还要求了笔记之外的操作，本轮只准备了笔记，其他操作没有执行。请把那部分要求单独发一次。';
+        finalContent = finalContent ? `${finalContent}\n\n${notice}` : notice;
+        trace.unhandledOtherMutationDisclosed = true;
+        if (stream) {
+          sseLifecycle?.send('delta', {
+            output: { text: notice, session_id: getSessionId(session) },
+          });
+        }
+      }
     }
 
     // ---- 公开来源:回答真正依据了什么(与「本轮带了什么材料」分离)----

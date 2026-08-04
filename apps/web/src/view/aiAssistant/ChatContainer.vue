@@ -2591,12 +2591,17 @@
     scroll-behavior: auto;
   }
 
+  /* 固定 40px 单行 + overflow:hidden 会在追问占满宽度时把末尾那条硬裁在
+     「继续基于上轮来源」左边,看起来像被按钮压住。允许换行、高度自适应:
+     空间够时仍是一行按钮右对齐,不够时按钮整条落到下一行,不再裁掉追问。 */
   .recommendation-dock {
     display: flex;
     min-width: 0;
     min-height: 40px;
-    flex: 0 0 40px;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
     align-items: center;
+    gap: 4px;
     padding: 0 1.5rem 4px;
     box-sizing: border-box;
     overflow: hidden;
@@ -2623,16 +2628,11 @@
   }
 
   @container ai-chat (max-width: 520px) {
-    /* 单行 flex + overflow:hidden 会让「继续基于上轮来源」压住并裁掉追问；
-       窄屏改为换行，按钮落到独立一行左对齐。 */
+    /* 换行本身已是默认行为；窄屏只额外收紧留白，并让按钮换行后左对齐。 */
     .recommendation-dock {
       min-height: 0;
-      flex: 0 0 auto;
       align-items: stretch;
-      flex-wrap: wrap;
-      gap: 4px;
       padding: 0 10px 2px;
-      overflow: hidden;
     }
 
     .recommendation-dock .continue-sources-btn {

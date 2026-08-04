@@ -2985,6 +2985,51 @@ describe('agentChat 主链路', () => {
     );
   });
 
+  it('模型漏声明复合写操作时，确认卡仍要披露另一半没有执行', async () => {
+    // 线上实测：「生成一篇笔记，并新建一个待办提醒我明天查看」——分类正确判 otherMutations=true
+    // 并交回 Planner，但 Planner 只声明了 note.create，todo.manage(planned) 被漏掉，
+    // 于是绕过 adjudicateSemanticPlan 的失败关闭，待办被静默丢弃。
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '创建笔记',
+                targetDescription: '材料汇总笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'create_note', arguments: { title: '材料汇总', content: '正文内容。' } }],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '根据这些材料生成一篇笔记，并新建一个待办提醒我明天查看',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.confirmations?.map((item) => item.toolName)).toEqual(['create_note']);
+    expect(data?.response).toContain('其他操作没有执行');
+  });
+
   it('三层依赖按拓扑顺序完成且每轮工具调用 ID 唯一，低轮次配置不会截断核心动作', async () => {
     vi.stubEnv('AI_MAX_TOOL_ROUNDS', '1');
     mocks.selectAgentTools.mockImplementation((registry) =>

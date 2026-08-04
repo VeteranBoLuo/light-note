@@ -7,6 +7,7 @@ import {
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
+  requestsRichTextNote,
   shouldClassifyNoteDraftTask,
 } from './noteDraft.js';
 
@@ -172,6 +173,19 @@ describe('noteDraft', () => {
       if (isNoteDraftRequest(message, noteCreateIntent)) {
         expect(shouldClassifyNoteDraftTask({ message })).toBe(true);
       }
+    }
+  });
+
+  it('识别富文本/HTML 笔记要求，供调用方披露只能产出 Markdown', () => {
+    for (const message of [
+      '归并成新的 html 笔记',
+      '把这些整理成一篇富文本笔记',
+      'Combine these into an HTML note',
+    ]) {
+      expect(requestsRichTextNote(message)).toBe(true);
+    }
+    for (const message of ['归并成新的 Markdown 笔记', '把这两个资源合并成一条笔记', '生成一篇笔记']) {
+      expect(requestsRichTextNote(message)).toBe(false);
     }
   });
 

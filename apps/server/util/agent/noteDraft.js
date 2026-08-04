@@ -272,6 +272,18 @@ export function shouldClassifyNoteDraftTask({ message, contextTypes = [], attach
   return hasMaterial && hasProduceVerb;
 }
 
+/**
+ * 用户是否要求了富文本/HTML 笔记。
+ *
+ * 轻笺笔记本身支持 markdown 与 html 两种类型且可互转，但 create_note 固定写入
+ * markdown，草稿协议也只产 Markdown 正文。静默给一篇 Markdown 会让用户以为
+ * 要求被满足了，因此这里识别出来、由调用方在回执里说明并指向笔记内的类型切换。
+ * 格式名是封闭词表，用正则是恰当的——不涉及自然语言意图路由。
+ */
+export function requestsRichTextNote(message) {
+  return /\bhtml\b|富文本/i.test(String(message || ''));
+}
+
 function parseNoteDraftTaskDecision(response) {
   const toolCalls = Array.isArray(response?.toolCalls) ? response.toolCalls : [];
   if (toolCalls.length !== 1 || toolCalls[0]?.function?.name !== NOTE_DRAFT_TASK_TOOL_NAME) return null;
