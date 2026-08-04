@@ -12,13 +12,15 @@ html[data-theme='night'] {
      同一个"危险红"散出 6 种取值(#e5484d/#d14343/#dc2626/#f04455/#ff4d4f/#f0445e)，
      警告橙 3 种、成功绿 3 种，且深浅主题同色。这里统一定义，深色主题另给一套提亮值。
      --error-color 与 --danger-color 同源，保留别名是因为存量代码两个名字都在用。
-     取值经对比度实测：浅色主题对白底、深色主题对 #1c1e24 均达 WCAG AA 4.5:1
-     （原 fallback 里的 #1f8f55 仅 4.10、#b36b00 仅 4.18，小字号状态文字不合格）。 */
-  --success-color: #1a7d4a;
-  --danger-color: #d93b3b;
+     取值经对比度实测：对**每一个**已定义的表面色都达 WCAG AA 4.5:1，不只是对页面底色。
+     最初只按白底 / #1c1e24 校过，结果 danger 在 --surface-raised-background 上只有 4.08、
+     info 只有 4.10——状态文字恰恰常出现在卡片里，所以基准取最差表面。
+     （原 fallback 里的 #1f8f55 仅 4.10、#b36b00 仅 4.18，同样不合格。） */
+  --success-color: #1a7d4a; /* 最差表面 4.65:1 */
+  --danger-color: #cc3333; /* 最差表面 4.63:1 */
   --error-color: var(--danger-color);
-  --warning-color: #a05f00;
-  --info-color: #2f6fed;
+  --warning-color: #a05f00; /* 最差表面 4.58:1 */
+  --info-color: #2a63d6; /* 最差表面 4.91:1 */
   /* 键盘焦点环。day 下 primary(#615ced) 对浅底 4.44~4.93:1，直接用即可。 */
   --focus-ring-color: var(--primary-color);
   /* 实色填充（角标、状态胶囊）专用。--danger-color / --warning-color 是**前景色**，
@@ -195,12 +197,14 @@ html[data-theme='night'] {
 }
 
 [data-theme='night'] {
-  /* 深色主题下语义色需要提亮，否则在深底上对比度不足（day 的 #1f8f55 在 #1c1e24 上仅 3:1 左右） */
-  --success-color: #3ddc84;
-  --danger-color: #ff6b6b;
+  /* 深色主题下语义色需要提亮，否则在深底上对比度不足（day 的 #1f8f55 在 #1c1e24 上仅 3:1 左右）。
+     同样按最差表面校准：--surface-raised-background 的亮端 #353b47 是最难的底色，
+     原先的 #ff6b6b 在它上面只有 4.05、#6aa1ff 只有 4.37。 */
+  --success-color: #3ddc84; /* 最差表面 6.30:1 */
+  --danger-color: #ff8080; /* 最差表面 4.63:1 */
   --error-color: var(--danger-color);
-  --warning-color: #f5a524;
-  --info-color: #6aa1ff;
+  --warning-color: #f5a524; /* 最差表面 5.51:1 */
+  --info-color: #7cadff; /* 最差表面 4.97:1 */
   /* 键盘焦点环需单独提亮：primary(#615ced) 在深色各表面上只有 2.02~3.38:1
      （最差是 --surface-border-color #3b4351），低于 WCAG 1.4.11 对焦点指示器的 3:1。
      混白 35% 后最差 3.76:1 达标；用 color-mix 而非硬编码，primary 调整时自动跟随。 */

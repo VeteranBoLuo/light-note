@@ -293,17 +293,17 @@
     }
   }
   .ov-todo-chip.danger {
-    background: color-mix(in srgb, #ef4444 20%, transparent);
+    background: color-mix(in srgb, var(--danger-color) 20%, transparent);
 
     &:hover,
     &:focus-visible {
-      background: color-mix(in srgb, #ef4444 28%, transparent);
-      box-shadow: 0 3px 8px color-mix(in srgb, #ef4444 18%, transparent);
+      background: color-mix(in srgb, var(--danger-color) 28%, transparent);
+      box-shadow: 0 3px 8px color-mix(in srgb, var(--danger-color) 18%, transparent);
     }
   }
 
   .ov-err {
-    color: #ef4444 !important;
+    color: var(--danger-color) !important;
     font-weight: 600;
   }
 

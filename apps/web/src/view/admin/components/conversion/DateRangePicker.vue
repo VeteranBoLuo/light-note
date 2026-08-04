@@ -376,7 +376,7 @@
     color: var(--text-color);
     cursor: pointer; font-size: 13px; white-space: nowrap;
   }
-  .drp-trigger:hover { border-color: #615ced; }
+  .drp-trigger:hover { border-color: var(--primary-color); }
   .drp-arrow { font-size: 10px; color: var(--sub-text-color, #888); }
 
   .drp-panel {
@@ -409,7 +409,7 @@
     text-align: left; cursor: pointer; font-size: 13px;
   }
   .drp-preset-btn:hover { background: rgba(97,92,237,.1); }
-  .drp-preset-btn.active { background: #615ced; color: #fff; }
+  .drp-preset-btn.active { background: var(--primary-color); color: #fff; }
 
   .drp-divider {
     width: 1px; margin: 0 16px;
@@ -468,12 +468,12 @@
   }
   .drp-day.dim { visibility: hidden; cursor: default; }
   .drp-day.dim:hover { background: transparent; }
-  .drp-day.today { font-weight: 700; color: #615ced; }
+  .drp-day.today { font-weight: 700; color: var(--primary-color); }
   .drp-day.start {
-    background: #615ced; color: #fff; border-radius: 4px 0 0 4px;
+    background: var(--primary-color); color: #fff; border-radius: 4px 0 0 4px;
   }
   .drp-day.end {
-    background: #615ced; color: #fff; border-radius: 0 4px 4px 0;
+    background: var(--primary-color); color: #fff; border-radius: 0 4px 4px 0;
   }
   .drp-day.start.end {
     border-radius: 4px;
@@ -496,7 +496,7 @@
   .drp-btn.b_btn {
     width: max-content; height: 32px; line-height: 1;
     padding: 6px 14px; border: 0; border-radius: 6px;
-    background: #615ced; color: #fff; cursor: pointer; font-size: 13px;
+    background: var(--primary-color); color: #fff; cursor: pointer; font-size: 13px;
   }
   .drp-btn.ghost {
     background: transparent; border: 1px solid var(--card-border-color, #ddd);

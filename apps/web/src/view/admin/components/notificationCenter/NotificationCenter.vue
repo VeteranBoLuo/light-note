@@ -811,9 +811,11 @@
     color: var(--success-color);
     background: color-mix(in srgb, var(--success-color) 14%, transparent);
   }
+  /* 与上面的 t-system 对齐用主题变量。原先硬编码的 #a855f7 深浅主题同色，
+     且在白底 3.96:1、深色卡片 3.20:1，小字号标签两套主题都读不清。 */
   .nc-type.t-other {
-    color: #a855f7;
-    background: color-mix(in srgb, #a855f7 14%, transparent);
+    color: var(--info-color);
+    background: color-mix(in srgb, var(--info-color) 14%, transparent);
   }
   .nc-rate {
     display: flex;
@@ -843,12 +845,12 @@
     color: var(--desc-color);
   }
   .nc-recall-btn {
-    border: 1px solid color-mix(in srgb, #ef4444 45%, transparent);
+    border: 1px solid color-mix(in srgb, var(--danger-color) 45%, transparent);
     background: transparent;
-    color: #ef4444;
+    color: var(--danger-color);
   }
   .nc-recall-btn:hover {
-    background: color-mix(in srgb, #ef4444 10%, transparent);
+    background: color-mix(in srgb, var(--danger-color) 10%, transparent);
   }
   .nc-recalled-tag {
     font-size: 11.5px;

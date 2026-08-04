@@ -187,7 +187,7 @@
     transform: translate(-50%, -50%);
     border: 1px solid rgba(97, 92, 237, 0.35);
     border-radius: 10px;
-    background: color-mix(in srgb, var(--background-color) 94%, #615ced 6%);
+    background: color-mix(in srgb, var(--background-color) 94%, var(--primary-color) 6%);
     color: var(--text-color);
     font-size: 13px;
     white-space: nowrap;
