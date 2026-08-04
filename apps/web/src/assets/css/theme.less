@@ -21,6 +21,14 @@ html[data-theme='night'] {
   --info-color: #2f6fed;
   /* 键盘焦点环。day 下 primary(#615ced) 对浅底 4.44~4.93:1，直接用即可。 */
   --focus-ring-color: var(--primary-color);
+  /* 实色填充（角标、状态胶囊）专用。--danger-color / --warning-color 是**前景色**，
+     深色主题下必须提亮；而填充底色配白字时需要足够暗，两个角色要求相反。
+     此前 3 个角标组件直接把前景色当底色 + 白字，深色主题下只有 2.04~2.78:1。
+     这里成对定义底色与配套字色，两套主题都过 4.5:1。 */
+  --danger-fill-bg: #d93b3b;
+  --danger-fill-fg: #ffffff; /* 4.53:1 */
+  --warning-fill-bg: #a05f00;
+  --warning-fill-fg: #ffffff; /* 5.08:1 */
   /* --border-color / --sub-text-color 是存量代码里广泛使用却从未定义的"幽灵变量"
      （前者 15 处、无 fallback，直接导致边框不可见）。定义为 surface 语义变量的别名，
      比逐处改写调用点安全；新代码请直接用 --surface-border-color / --desc-color。 */
@@ -197,6 +205,12 @@ html[data-theme='night'] {
      （最差是 --surface-border-color #3b4351），低于 WCAG 1.4.11 对焦点指示器的 3:1。
      混白 35% 后最差 3.76:1 达标；用 color-mix 而非硬编码，primary 调整时自动跟随。 */
   --focus-ring-color: color-mix(in srgb, var(--primary-color) 65%, #fff);
+  /* 深色主题的实色填充走「亮底 + 深字」：亮底在深色页面上够突出（6.00~8.16:1），
+     深字保证数字读得清（6.03~7.06:1）。沿用 day 的白字只有 2.04~2.78:1。 */
+  --danger-fill-bg: #ff6b6b;
+  --danger-fill-fg: #3a0f0f; /* 6.03:1 */
+  --warning-fill-bg: #f5a524;
+  --warning-fill-fg: #3a2600; /* 7.06:1 */
   /* --border-color / --sub-text-color 是存量代码里广泛使用却从未定义的"幽灵变量"
      （前者 15 处、无 fallback，直接导致边框不可见）。定义为 surface 语义变量的别名，
      比逐处改写调用点安全；新代码请直接用 --surface-border-color / --desc-color。 */

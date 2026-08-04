@@ -1,12 +1,60 @@
 <template>
   <div class="admin-container">
-    <div class="menu-body">
-      <BList style="font-size: 12px" :listOptions="viewOptions" @nodeClick="nodeClick" :check-id="checkId">
-        <template #icon="{ item }">
-          <svg-icon :src="(item as any).icon" />
-        </template>
-      </BList>
-    </div>
+    <nav class="admin-nav" aria-label="后台管理导航">
+      <ul class="admin-nav__groups">
+        <li
+          v-for="entry in menuEntries"
+          :key="entry.key"
+          class="admin-nav__group"
+          :class="{ 'is-standalone-group': entry.kind === 'item' }"
+        >
+          <!-- 只有一项的分类不给组头：「总览 / 系统总览」这种重复标题白占一行 -->
+          <template v-if="entry.kind === 'item'">
+            <button
+              type="button"
+              class="admin-nav__item is-standalone"
+              :class="{ 'is-active': activeId === entry.item.id }"
+              :aria-current="activeId === entry.item.id ? 'page' : undefined"
+              @click="go(entry.item)"
+            >
+              <svg-icon class="admin-nav__item-icon" size="14" :src="entry.icon" />
+              <span class="admin-nav__item-text">{{ entry.item.title }}</span>
+              <span v-if="entry.item.badge" class="admin-nav__badge" :title="entry.item.badgeHint">
+                {{ entry.item.badge > 99 ? '99+' : entry.item.badge }}
+                <span class="admin-nav__badge-sr">{{ entry.item.badgeHint }}</span>
+              </span>
+              <span v-if="entry.item.external" class="admin-nav__external" aria-label="在独立页面打开">↗</span>
+            </button>
+          </template>
+          <template v-else>
+            <h2 :id="`admin-nav-${entry.key}`" class="admin-nav__group-title">
+              <svg-icon class="admin-nav__group-icon" size="14" :src="entry.icon" />
+              <span>{{ entry.title }}</span>
+            </h2>
+            <ul class="admin-nav__items" :aria-labelledby="`admin-nav-${entry.key}`">
+              <li v-for="item in entry.items" :key="item.id">
+                <button
+                  type="button"
+                  class="admin-nav__item"
+                  :class="{ 'is-active': activeId === item.id }"
+                  :aria-current="activeId === item.id ? 'page' : undefined"
+                  @click="go(item)"
+                >
+                  <span class="admin-nav__item-text">{{ item.title }}</span>
+                  <!-- 角标只在有待处理时出现：常态是 0，长期挂个灰 0 会让真的有事时反而不显眼 -->
+                  <span v-if="item.badge" class="admin-nav__badge" :title="item.badgeHint">
+                    {{ item.badge > 99 ? '99+' : item.badge }}
+                    <span class="admin-nav__badge-sr">{{ item.badgeHint }}</span>
+                  </span>
+                  <!-- 离开后台外壳的入口要标出来，否则点下去侧边菜单突然消失会让人以为出了错 -->
+                  <span v-if="item.external" class="admin-nav__external" aria-label="在独立页面打开">↗</span>
+                </button>
+              </li>
+            </ul>
+          </template>
+        </li>
+      </ul>
+    </nav>
     <div class="admin-view-panel">
       <RouterView />
     </div>
@@ -15,98 +63,79 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
-  import BList from '@/components/base/BasicComponents/BList.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
+  import { useRoute } from 'vue-router';
   import router from '@/router';
-  import { bookmarkStore } from '@/store';
+  import { apiBasePost } from '@/http/request.ts';
   import { useI18n } from 'vue-i18n';
+  import {
+    adminNavTarget,
+    buildAdminNav,
+    resolveActiveNavId,
+    type AdminNavItem,
+  } from '@/view/admin/admin/adminNav.ts';
 
   const { t } = useI18n();
-  const checkId = ref('operationLog');
-  const bookmark = bookmarkStore();
-  const viewOptions = ref([
-    {
-      id: 'overview',
-      title: '总览',
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'operationLog',
-      title: '操作日志',
-      icon: icon.userCenter.operationLog,
-    },
-    {
-      id: 'apiLog',
-      title: 'api日志',
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'userMg',
-      title: '用户管理',
-      icon: icon.navigation.user,
-    },
-    {
-      id: 'userOpinion',
-      title: '用户反馈',
-      icon: icon.userCenter.operationLog,
-    },
-    {
-      id: 'imageMg',
-      title: '图片管理',
-      icon: icon.userCenter.imgMg,
-    },
-    {
-      id: 'simpleSql',
-      title: 'simpleSql',
-      icon: icon.userCenter.sql,
-    },
-    {
-      id: 'agentLog',
-      title: 'AI 监控',
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'aiFeedback',
-      title: 'AI 回答反馈',
-      icon: icon.ai.feedbackDown,
-    },
-    {
-      id: 'aiEvaluation',
-      title: t('aiEvaluationAdmin.title'),
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'conversion',
-      title: '转化漏斗',
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'logCleanup',
-      title: '日志清理',
-      icon: icon.userCenter.sql,
-    },
-    {
-      id: 'logExclude',
-      title: '日志白名单',
-      icon: icon.userCenter.log,
-    },
-    {
-      id: 'pointsOps',
-      title: '积分运营',
-      icon: icon.userCenter.sql,
-    },
-  ]);
+  const route = useRoute();
 
-  function nodeClick(menu: any) {
-    router.push('/admin/' + menu.id);
+  const pendingOpinion = ref(0);
+  const pendingSecurity = ref(0);
+
+  const menuEntries = computed(() =>
+    buildAdminNav({
+      icons: {
+        overview: icon.userCenter.workbenches,
+        user: icon.navigation.user,
+        ai: icon.ai.ask,
+        growth: icon.userCenter.growth,
+        log: icon.userCenter.log,
+        security: icon.navigation.permissions,
+        tool: icon.userCenter.sql,
+      },
+      pendingOpinion: pendingOpinion.value,
+      pendingSecurity: pendingSecurity.value,
+      aiEvaluationTitle: t('aiEvaluationAdmin.title'),
+    }),
+  );
+
+  /** 高亮跟随路由。此前只在 onMounted 取一次，浏览器前进/后退后高亮会停在旧项。 */
+  const activeId = computed(() => resolveActiveNavId(route.path));
+
+  function go(item: AdminNavItem) {
+    router.push(adminNavTarget(item));
   }
-  onMounted(() => {
-    checkId.value = router.currentRoute.value.fullPath.split('/').pop();
-  });
+
+  /**
+   * 角标数据复用总览接口已有的 pending 字段，不新增后端接口。
+   * 取不到就静默保持 0：导航是外壳，不该因为一个统计失败而报错打断使用。
+   */
+  async function loadPending() {
+    try {
+      const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: true });
+      if (res?.status === 200) {
+        pendingOpinion.value = Number(res.data?.pending?.opinion || 0);
+        pendingSecurity.value = Number(res.data?.pending?.security || 0);
+      }
+    } catch {
+      /* 忽略：角标缺失不影响导航 */
+    }
+  }
+
+  // 在反馈/安全页操作完回到别处时刷新角标，避免处理完了角标还挂着
+  watch(
+    () => route.path,
+    (path, prev) => {
+      if (prev && (prev.includes('userOpinion') || prev.includes('securityCenter')) && path !== prev) loadPending();
+    },
+  );
+
+  onMounted(loadPending);
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-mixins.less';
+
   .admin-container {
     display: flex;
     gap: 10px;
@@ -114,10 +143,129 @@
     box-sizing: border-box;
     height: 100%; /* 子路由根被内联固定高度;这里撑满,让内容区在框内滚动而非被裁 */
   }
-  .menu-body {
+
+  .admin-nav {
     width: 200px;
     flex: 0 0 200px;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 4px 0;
   }
+
+  .admin-nav__groups,
+  .admin-nav__items {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .admin-nav__group + .admin-nav__group {
+    margin-top: 10px;
+  }
+
+  /* 顶层条目（加粗、无组头）夹在两个分组之间时，若上下间距与组间距相同，会被读成
+     上一组的最后一项。加大间距把它从相邻分组里断开。 */
+  .admin-nav__group.is-standalone-group + .admin-nav__group,
+  .admin-nav__group + .admin-nav__group.is-standalone-group {
+    margin-top: 16px;
+  }
+
+  .admin-nav__group-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 4px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--desc-color);
+  }
+
+  .admin-nav__group-icon {
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+
+  .admin-nav__item {
+    .admin-focus-ring(8px);
+
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 5px 10px 5px 26px; /* 左缩进对齐分组标题的文字起点，让层级一眼可见 */
+    border: none;
+    border-radius: 8px;
+    background: none;
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    color: var(--text-color);
+    cursor: pointer;
+
+    &:hover {
+      background: var(--category-item-ba-color);
+    }
+
+    &.is-active {
+      background: var(--category-item-ba-color);
+      font-weight: 600;
+    }
+  }
+
+  /* 无组头的顶层条目（总览、安全中心）：不缩进，自带类别图标，与分组标题同一层级 */
+  .admin-nav__item.is-standalone {
+    padding-left: 8px;
+    font-weight: 600;
+  }
+
+  .admin-nav__item-icon {
+    flex-shrink: 0;
+    opacity: 0.75;
+  }
+
+  .admin-nav__item-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-nav__badge {
+    position: relative; /* 兜住内部只给读屏的绝对定位说明，否则它会挂到更外层的定位祖先上 */
+    flex-shrink: 0;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    background: var(--danger-fill-bg);
+    color: var(--danger-fill-fg);
+    font-size: 11px;
+    line-height: 17px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 数字本身对读屏用户没有意义，补一段只给读屏的完整说明 */
+  .admin-nav__badge-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .admin-nav__external {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--desc-color);
+  }
+
   .admin-view-panel {
     flex: 1 1 0;
     width: calc(100% - 210px);
@@ -125,30 +273,5 @@
     min-height: 0; /* flex 子项允许收缩,配合 overflow 才能滚 */
     overflow-x: hidden;
     overflow-y: auto; /* 内容超高时自身滚动(如积分运营页) */
-  }
-
-  .person-menu {
-    border-radius: 12px;
-    overflow: hidden;
-    margin-top: 20px;
-  }
-
-  .person-menu-item {
-    background-color: var(--phone-menu-item-bg-color);
-    height: 50px;
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    justify-content: space-between;
-    cursor: pointer;
-
-    .person-menu-item-des {
-      color: #999fa8;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      line-height: 100%;
-    }
   }
 </style>

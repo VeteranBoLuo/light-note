@@ -271,8 +271,10 @@
      * （见 docs/development.md 的「Android APK 样式回退」）。
      * 默认红色兜底：有逾期时才是最需要警示的情况，class 逻辑失效也不会弱化提醒。
      */
-    background: var(--danger-color, #e5484d);
-    color: #fff;
+    /* 用 --danger-fill-* 而不是 --danger-color：后者是前景色，深色主题会提亮到
+       #ff6b6b，配白字只有 2.78:1。填充色对在两套主题都保证数字可读。 */
+    background: var(--danger-fill-bg, #d93b3b);
+    color: var(--danger-fill-fg, #fff);
     font-size: 10px;
     font-weight: 600;
     line-height: 1;
@@ -281,7 +283,8 @@
   }
   /* 没有历史逾期、只有今天到期：降一档为警示色，不与真正的逾期混为一谈 */
   .navigation-attention-badge.is-due-today {
-    background: var(--warning-color, #f59e0b);
+    background: var(--warning-fill-bg, #a05f00);
+    color: var(--warning-fill-fg, #fff);
   }
 
   .navigation {

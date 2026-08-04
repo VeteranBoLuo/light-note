@@ -179,7 +179,8 @@
   /* 没有历史逾期、只有今天到期：降一档为警示色，与桌面顶栏同一套语义。
      实色变量，不经 color-mix —— 旧 WebView 会把混色塌缩掉。 */
   .mobile-bottom-nav__badge.is-due-today {
-    background: var(--warning-color, #f59e0b);
+    background: var(--warning-fill-bg, #a05f00);
+    color: var(--warning-fill-fg, #fff);
   }
   .mobile-bottom-nav__badge {
     position: absolute;
@@ -194,8 +195,9 @@
     justify-content: center;
     border: 2px solid var(--surface-page-bg, var(--background-color));
     border-radius: 999px;
-    color: #fff;
-    background: var(--danger-color, #e5484d);
+    /* 前景色变量（--danger-color）深色主题会提亮，配白字只有 2.78:1；用填充色对 */
+    color: var(--danger-fill-fg, #fff);
+    background: var(--danger-fill-bg, #d93b3b);
     font-size: 9px;
     line-height: 1;
   }
