@@ -1,6 +1,61 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { categoryCondition, FILE_CATEGORY_CASE, FILE_CATEGORY_LABEL, breakdownFromRows } from '../fileCategory.js';
+import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+
+// LIKE 通配符按字面处理：文件名里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
+function escapeLikePattern(keyword) {
+  return String(keyword).replace(/[\\%_]/g, '\\$&');
+}
+
+/**
+ * 文件名 LIKE 对口语化问法（"我上传过一个讲X的文档"）召回为零，且它只匹配文件名、
+ * 不匹配解析正文。零结果时降级个人知识索引（覆盖已解析文件的正文与 OCR），
+ * 索引只提供候选 ID 与顺序，归属与文件夹/类型/时间条件仍以二次 SQL 为最终边界。
+ * 边界：尚未解析的文件不在索引里，降级救不回，fail-open 后仍是空结果。
+ */
+async function semanticFallback({ userId, keyword, take, resolvedFolderId, typeCond, time }) {
+  const result = await searchPersonalKnowledge({
+    userId,
+    query: keyword,
+    limit: take,
+    scope: { types: ['file'] },
+  });
+  const orderedIds = [];
+  const seen = new Set();
+  for (const hit of result?.hits || []) {
+    if (hit.type !== 'file') continue;
+    const id = String(hit.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    orderedIds.push(id);
+    if (orderedIds.length >= take) break;
+  }
+  if (!orderedIds.length) return [];
+  let where = 'f.id IN (?) AND f.create_by = ? AND f.del_flag = 0';
+  const params = [orderedIds, userId];
+  if (resolvedFolderId) {
+    where += ' AND f.folder_id = ?';
+    params.push(resolvedFolderId);
+  }
+  if (time) {
+    where += ' AND f.create_time >= ? AND f.create_time <= ?';
+    params.push(time.start, time.end);
+  }
+  if (typeCond) where += ` AND ${typeCond}`;
+  const [rows] = await pool.query(
+    `SELECT f.id, f.file_name, f.file_type, f.file_size, f.create_time,
+            f.folder_id, folders.name AS folder_name
+       FROM files f
+       LEFT JOIN folders ON folders.id = f.folder_id
+                        AND folders.create_by = f.create_by
+                        AND folders.del_flag = 0
+      WHERE ${where}`,
+    params,
+  );
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  return orderedIds.map((id) => byId.get(id)).filter(Boolean);
+}
 
 function normalizeArgs(args = {}) {
   const rawFolderId = args.folderId ?? args.folder_id ?? args.directoryId ?? args.directory_id;
@@ -30,8 +85,8 @@ export default {
   name: 'query_files',
   sourceType: 'file',
   description:
-    '查询用户云空间的文件。可按关键词(匹配文件名)、文件夹 ID/精确名称、文件类型(image图片/document文档/video视频/audio音频/archive压缩包/other其他)、时间范围筛选。folderId 与 folderName 同时存在时以 folderId 为准。' +
-    '注意:file_type 存的是 MIME,类型按 MIME 归类;结果总会附带各类型数量分布 typeBreakdown,回答"各类文件有多少/除了图片还有什么"时直接看它,不要逐类猜。',
+    '查询用户云空间的文件。keyword 应为短关键词或词组(匹配文件名),不要传整句问题;可按文件夹 ID/精确名称、文件类型(image图片/document文档/video视频/audio音频/archive压缩包/other其他)、时间范围筛选。folderId 与 folderName 同时存在时以 folderId 为准。' +
+    '注意:file_type 存的是 MIME,类型按 MIME 归类;结果总会附带各类型数量分布 typeBreakdown,回答"各类文件有多少/除了图片还有什么"时直接看它,不要逐类猜。需要按语义查找文件正文内容时优先使用 search_content。',
   parameters: {
     type: 'object',
     properties: {
@@ -81,7 +136,7 @@ export default {
     const baseParams = [ctx.userId];
     if (keyword) {
       baseWhere += ' AND f.file_name LIKE ?';
-      baseParams.push(`%${keyword}%`);
+      baseParams.push(`%${escapeLikePattern(keyword)}%`);
     }
     if (resolvedFolderId) {
       baseWhere += ' AND f.folder_id = ?';
@@ -97,6 +152,17 @@ export default {
     const cond = type ? categoryCondition(type) : null;
     if (cond) where += ` AND ${cond}`;
 
+    // 有关键词时按相关度排序（文件名精确 100 > 前缀 80 > 包含 60），同档按时间；
+    // 否则宽泛词命中超过 limit 时旧目标会被时间排序挤出截断。
+    const order = keyword
+      ? `ORDER BY CASE
+           WHEN LOWER(f.file_name) = LOWER(?) THEN 100
+           WHEN LOWER(f.file_name) LIKE LOWER(?) THEN 80
+           ELSE 60
+         END DESC, f.create_time DESC`
+      : 'ORDER BY f.create_time DESC';
+    const orderParams = keyword ? [keyword, `${escapeLikePattern(keyword)}%`] : [];
+
     const [[rows], [countRes], [bdRows]] = await Promise.all([
       pool.query(
         `SELECT f.id, f.file_name, f.file_type, f.file_size, f.create_time,
@@ -106,8 +172,8 @@ export default {
                             AND folders.create_by = f.create_by
                             AND folders.del_flag = 0
           WHERE ${where}
-          ORDER BY f.create_time DESC LIMIT ?`,
-        [...baseParams, take],
+          ${order} LIMIT ?`,
+        [...baseParams, ...orderParams, take],
       ),
       pool.query(
         `SELECT COUNT(*) as total FROM files f
@@ -128,15 +194,43 @@ export default {
     ]);
 
     const { map: typeBreakdown } = breakdownFromRows(bdRows);
-    return {
-      total: Number(countRes[0]?.total || 0),
-      items: rows.map((row) => ({
-        ...row,
-        folderId: row.folder_id == null ? null : String(row.folder_id),
-        folderName: row.folder_name || null,
-      })),
-      typeBreakdown,
-    };
+    const mapRow = (row) => ({
+      ...row,
+      folderId: row.folder_id == null ? null : String(row.folder_id),
+      folderName: row.folder_name || null,
+    });
+    if (rows.length || !keyword) {
+      return {
+        total: Number(countRes[0]?.total || 0),
+        items: rows.map(mapRow),
+        typeBreakdown,
+        matchMode: 'like',
+      };
+    }
+
+    // LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
+    // typeBreakdown 保持主查询口径（LIKE 筛选下的分布），不用降级结果冒充。
+    try {
+      const fallbackRows = await semanticFallback({
+        userId: ctx.userId,
+        keyword,
+        take,
+        resolvedFolderId,
+        typeCond: cond,
+        time,
+      });
+      if (fallbackRows.length) {
+        return {
+          total: fallbackRows.length,
+          items: fallbackRows.map(mapRow),
+          typeBreakdown,
+          matchMode: 'semantic',
+        };
+      }
+    } catch (error) {
+      console.warn('[query_files] semantic fallback failed code=%s', error?.code || error?.message);
+    }
+    return { total: 0, items: [], typeBreakdown, matchMode: 'like' };
   },
   transform(raw, args = {}) {
     const { text: bdText } = breakdownFromRows(
@@ -161,11 +255,18 @@ export default {
       const folder = r.folderName || r.folder_name || '云空间根目录';
       return `${i + 1}. [file:${r.id}] ${name} (${size}) · 文件夹：${folder}${time ? ` · ${time}` : ''}`;
     });
-    const head = label ? `${label}文件共 ${raw.total} 个` : `共 ${raw.total} 个文件`;
+    // 降级结果不能冒充精确计数
+    const head =
+      raw?.matchMode === 'semantic'
+        ? `文件名没有精确匹配，以下是内容语义相关的 ${items.length} 个文件`
+        : label
+          ? `${label}文件共 ${raw.total} 个`
+          : `共 ${raw.total} 个文件`;
     return `${distLine}${head}：\n${lines.join('\n')}`;
   },
   summarize(raw) {
     if (!raw?.total && !(raw?.typeBreakdown && Object.keys(raw.typeBreakdown).length)) return `文件查询：无结果`;
-    return `文件查询：共 ${raw.total} 个文件`;
+    const mode = raw?.matchMode === 'semantic' ? '（语义匹配）' : '';
+    return `文件查询${mode}：共 ${raw.total} 个文件`;
   },
 };

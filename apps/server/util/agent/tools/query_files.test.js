@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.fn();
+const searchPersonalKnowledge = vi.fn();
 
 vi.mock('../../../db/index.js', () => ({ default: { query } }));
+vi.mock('../../personalKnowledgeSearch.js', () => ({ searchPersonalKnowledge }));
 
 const { default: tool } = await import('./query_files.js');
 
@@ -82,6 +84,61 @@ describe('query_files 工具', () => {
   it('拒绝无效文件夹 ID', async () => {
     await expect(tool.execute({ folderId: '../7' }, { userId: 'user-1' })).rejects.toThrow(/FOLDER_ID_INVALID/);
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('文件名 LIKE 零结果时降级语义索引，二次查询保留归属与类型/时间条件', async () => {
+    query.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes('f.id IN (?)')) {
+        return [
+          [
+            { id: 3, file_name: '方案.pdf', file_type: 'application/pdf', file_size: 100, create_time: null, folder_id: null, folder_name: null },
+            { id: 5, file_name: '纪要.docx', file_type: 'application/msword', file_size: 100, create_time: null, folder_id: null, folder_name: null },
+          ],
+        ];
+      }
+      if (text.includes('COUNT(*) as total')) return [[{ total: 0 }]];
+      if (text.includes('GROUP BY category')) return [[]];
+      return [[]]; // 主查询零结果
+    });
+    searchPersonalKnowledge.mockResolvedValue({
+      hits: [
+        { type: 'file', id: '5' },
+        { type: 'note', id: 'n1' }, // 非文件命中被过滤
+        { type: 'file', id: '3' },
+      ],
+    });
+
+    const result = await tool.execute(
+      { keyword: '我上传过一个讲统一材料方案的文档', type: 'document', timeRange: '今年' },
+      { userId: 'user-1' },
+    );
+
+    expect(searchPersonalKnowledge).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', scope: { types: ['file'] } }),
+    );
+    const fallbackCall = query.mock.calls.find((call) => String(call[0]).includes('f.id IN (?)'));
+    expect(String(fallbackCall[0])).toContain('f.create_by = ?');
+    expect(String(fallbackCall[0])).toContain('f.create_time >= ?'); // 时间条件保留
+    expect(String(fallbackCall[0])).toMatch(/file_type|LIKE/); // 类型条件保留（categoryCondition 产物）
+    // 顺序跟随索引相关度（5 在前）
+    expect(result.items.map((item) => String(item.id))).toEqual(['5', '3']);
+    expect(result.matchMode).toBe('semantic');
+    expect(tool.transform(result, {})).toContain('没有精确匹配');
+  });
+
+  it('降级自身失败时 fail-open 回到空结果', async () => {
+    query.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes('COUNT(*) as total')) return [[{ total: 0 }]];
+      if (text.includes('GROUP BY category')) return [[]];
+      return [[]];
+    });
+    searchPersonalKnowledge.mockRejectedValue(new Error('INDEX_DOWN'));
+
+    const result = await tool.execute({ keyword: '任意词' }, { userId: 'user-1' });
+
+    expect(result).toMatchObject({ total: 0, items: [], matchMode: 'like' });
   });
 
   it('异常 limit 回退默认值，过大值限制为 50', async () => {

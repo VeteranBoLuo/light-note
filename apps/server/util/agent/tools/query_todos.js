@@ -1,8 +1,75 @@
 import pool from '../../../db/index.js';
 import { listTodoPage } from '../../services/todoService.js';
+import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
 
 const PRIORITY_LABELS = Object.freeze({ 0: '低优先级', 1: '普通优先级', 2: '高优先级' });
 const REMINDER_LABELS = Object.freeze({ in_app: '站内提醒', email: '邮件提醒' });
+
+function parseChecklistProgress(value) {
+  try {
+    const checklist = typeof value === 'string' ? JSON.parse(value) : value;
+    if (!Array.isArray(checklist)) return { completed: 0, total: 0 };
+    return {
+      completed: checklist.filter((entry) => Boolean(entry?.done)).length,
+      total: checklist.length,
+    };
+  } catch {
+    return { completed: 0, total: 0 };
+  }
+}
+
+/**
+ * listTodoPage 的 keyword 是裸 LIKE，口语化问法（"我有没有关于X的待办"）召回为零。
+ * 首页零结果时降级个人知识索引（待办的标题/说明/清单文本都在索引里）；索引只提供
+ * 候选 ID 与顺序，归属与状态条件仍以二次 SQL 为最终边界。翻页（带 cursor）的零结果
+ * 是翻到底，不是检索失败，不触发降级。排序沿用索引相关度序——这是检索场景而非
+ * 列表场景，不套用待办列表的 smart/due 产品排序。
+ * 降级摘要不含提醒渠道（其加载逻辑在 service 内部未导出），如实置空、不编造。
+ */
+async function semanticFallback({ userId, keyword, take, status }) {
+  const result = await searchPersonalKnowledge({
+    userId,
+    query: keyword,
+    limit: take,
+    scope: { types: ['todo'] },
+  });
+  const orderedIds = [];
+  const seen = new Set();
+  for (const hit of result?.hits || []) {
+    if (hit.type !== 'todo') continue;
+    const id = String(hit.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    orderedIds.push(id);
+    if (orderedIds.length >= take) break;
+  }
+  if (!orderedIds.length) return [];
+  let where = 'id IN (?) AND user_id = ? AND del_flag = 0';
+  const params = [orderedIds, userId];
+  if (status && status !== 'all') {
+    where += ' AND status = ?';
+    params.push(status);
+  }
+  const [rows] = await pool.query(
+    `SELECT id, title, checklist, priority, status, due_at AS dueAt, completed_at AS completedAt
+       FROM todo_items WHERE ${where}`,
+    params,
+  );
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  return orderedIds
+    .map((id) => byId.get(id))
+    .filter(Boolean)
+    .map((item) => ({
+      id: String(item.id),
+      title: item.title || '未命名待办',
+      priority: Number(item.priority || 0),
+      status: item.status,
+      dueAt: item.dueAt || null,
+      completedAt: item.completedAt || null,
+      checklistProgress: parseChecklistProgress(item.checklist),
+      reminderChannels: [],
+    }));
+}
 
 function normalizeArgs(input = {}) {
   const rawLimit = Number(input.limit ?? 20);
@@ -66,7 +133,25 @@ export default {
   async execute(input, ctx) {
     const args = normalizeArgs(input);
     if (cannotReadTodos(ctx)) return { items: [], total: 0, nextCursor: null };
-    return listTodoPage(pool, ctx.userId, { ...args, view: 'summary' });
+    const page = await listTodoPage(pool, ctx.userId, { ...args, view: 'summary' });
+    if (page.items.length || !args.keyword || args.cursor) {
+      return { ...page, matchMode: 'like' };
+    }
+    // 首页 LIKE 零结果 → 语义降级；降级自身失败 fail-open 回空结果，不升级成报错。
+    try {
+      const fallbackItems = await semanticFallback({
+        userId: ctx.userId,
+        keyword: args.keyword,
+        take: args.limit,
+        status: args.status,
+      });
+      if (fallbackItems.length) {
+        return { items: fallbackItems, total: fallbackItems.length, nextCursor: null, matchMode: 'semantic' };
+      }
+    } catch (error) {
+      console.warn('[query_todos] semantic fallback failed code=%s', error?.code || error?.message);
+    }
+    return { ...page, matchMode: 'like' };
   },
   getDependencyRefs(raw) {
     return (Array.isArray(raw?.items) ? raw.items : []).map((item) => ({ type: 'todo', id: item.id }));
@@ -96,13 +181,18 @@ export default {
         : '';
       return `${index + 1}. [todo:${item.id}] ${item.title || '未命名待办'} · ${item.status === 'completed' ? '已完成' : '待处理'} · ${PRIORITY_LABELS[item.priority] || '普通优先级'} · 截止：${formatTime(item.dueAt)} · 清单：${checklist.completed}/${checklist.total}${reminder}`;
     });
-    const head = `共 ${raw.total || items.length} 条待办，当前返回 ${items.length} 条：`;
+    // 降级结果不能冒充精确计数
+    const head =
+      raw?.matchMode === 'semantic'
+        ? `关键词没有精确匹配，以下是语义相关的 ${items.length} 条待办：`
+        : `共 ${raw.total || items.length} 条待办，当前返回 ${items.length} 条：`;
     const cursor = raw?.nextCursor ? `\n还有更多结果；继续查询时仅将此 cursor 传给本工具：${raw.nextCursor}` : '';
     return `${head}\n${lines.join('\n')}${cursor}`;
   },
   summarize(raw, args = {}) {
     if (!raw?.total) return '待办查询：无结果';
     const keyword = args.keyword ? `（关键词“${args.keyword}”）` : '';
-    return `待办查询${keyword}：共 ${raw.total} 条，已返回 ${raw.items?.length || 0} 条安全摘要`;
+    const mode = raw?.matchMode === 'semantic' ? '（语义匹配）' : '';
+    return `待办查询${keyword}${mode}：共 ${raw.total} 条，已返回 ${raw.items?.length || 0} 条安全摘要`;
   },
 };

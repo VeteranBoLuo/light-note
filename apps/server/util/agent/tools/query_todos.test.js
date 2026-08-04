@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const listTodoPage = vi.fn();
+const poolQuery = vi.fn();
+const searchPersonalKnowledge = vi.fn();
 
-vi.mock('../../../db/index.js', () => ({ default: {} }));
+vi.mock('../../../db/index.js', () => ({ default: { query: poolQuery } }));
 vi.mock('../../services/todoService.js', () => ({ listTodoPage }));
+vi.mock('../../personalKnowledgeSearch.js', () => ({ searchPersonalKnowledge }));
 
 const { default: tool } = await import('./query_todos.js');
 
@@ -47,6 +50,74 @@ describe('query_todos 工具', () => {
       'visitor-subject',
       expect.objectContaining({ view: 'summary' }),
     );
+  });
+
+  it('首页 LIKE 零结果时降级语义索引，保留状态条件且摘要不编造提醒渠道', async () => {
+    listTodoPage.mockResolvedValue({ items: [], total: 0, nextCursor: null });
+    searchPersonalKnowledge.mockResolvedValue({
+      hits: [
+        { type: 'todo', id: 't2' },
+        { type: 'note', id: 'n1' }, // 非待办命中被过滤
+        { type: 'todo', id: 't1' },
+      ],
+    });
+    poolQuery.mockResolvedValueOnce([
+      [
+        {
+          id: 't1',
+          title: '甲',
+          checklist: JSON.stringify([{ text: 'a', done: true }, { text: 'b', done: false }]),
+          priority: 1,
+          status: 'pending',
+          dueAt: null,
+          completedAt: null,
+        },
+        { id: 't2', title: '乙', checklist: null, priority: 0, status: 'pending', dueAt: null, completedAt: null },
+      ],
+    ]);
+
+    const result = await tool.execute(
+      { keyword: '我有没有关于打篮球的待办', status: 'pending' },
+      { userId: 'user-1', userRole: 'user' },
+    );
+
+    expect(searchPersonalKnowledge).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-1', scope: { types: ['todo'] } }),
+    );
+    const [sql, params] = poolQuery.mock.calls[0];
+    expect(sql).toContain('id IN (?)');
+    expect(sql).toContain('user_id = ?');
+    expect(sql).toContain('status = ?'); // 状态条件保留
+    expect(params[0]).toEqual(['t2', 't1']);
+    // 顺序跟随索引相关度；清单进度从 JSON 计算；提醒渠道如实置空
+    expect(result.items.map((item) => item.id)).toEqual(['t2', 't1']);
+    expect(result.items[1].checklistProgress).toEqual({ completed: 1, total: 2 });
+    expect(result.items.every((item) => Array.isArray(item.reminderChannels) && !item.reminderChannels.length)).toBe(
+      true,
+    );
+    expect(result.matchMode).toBe('semantic');
+    expect(tool.transform(result, { keyword: '打篮球' })).toContain('没有精确匹配');
+  });
+
+  it('带 cursor 的翻页零结果是翻到底，不触发降级', async () => {
+    listTodoPage.mockResolvedValue({ items: [], total: 3, nextCursor: null });
+
+    const result = await tool.execute(
+      { keyword: '发票', cursor: 'scope:12' },
+      { userId: 'user-1', userRole: 'user' },
+    );
+
+    expect(searchPersonalKnowledge).not.toHaveBeenCalled();
+    expect(result.matchMode).toBe('like');
+  });
+
+  it('降级自身失败时 fail-open 回到原空结果', async () => {
+    listTodoPage.mockResolvedValue({ items: [], total: 0, nextCursor: null });
+    searchPersonalKnowledge.mockRejectedValue(new Error('INDEX_DOWN'));
+
+    const result = await tool.execute({ keyword: '任意词' }, { userId: 'user-1', userRole: 'user' });
+
+    expect(result).toMatchObject({ items: [], total: 0, matchMode: 'like' });
   });
 
   it('只向模型展示清单进度和提醒渠道，不展示提醒邮箱或待办说明', () => {
