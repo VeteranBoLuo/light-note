@@ -249,6 +249,22 @@ function toolCall(name, args, id = `call-${name}`) {
   };
 }
 
+/**
+ * 笔记入口的受约束语义分类响应。
+ *
+ * 传感器命中的请求会先花一次分类判断本轮是否要产出一篇笔记，因此这些用例的
+ * Provider 序列第一项固定是它，草稿协议从第二项开始。
+ */
+function noteDraftTaskResponse({ producesNote = true, otherMutations = false } = {}) {
+  return {
+    content: '',
+    toolCalls: [toolCall('classify_note_draft_task', { producesNote, otherMutations })],
+    usage: usage(2),
+    usageStatus: 'reported',
+    finishReason: 'tool_calls',
+  };
+}
+
 function request(body) {
   return {
     body,
@@ -596,7 +612,7 @@ describe('agentChat 主链路', () => {
       }
       return [[]];
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -622,8 +638,11 @@ describe('agentChat 主链路', () => {
 
     expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.toolExecute).not.toHaveBeenCalled();
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
     expect(mocks.requestAi.mock.calls[0][1]).toMatchObject({
+      toolChoice: { type: 'function', function: { name: 'classify_note_draft_task' } },
+    });
+    expect(mocks.requestAi.mock.calls[1][1]).toMatchObject({
       toolChoice: { type: 'function', function: { name: 'submit_note_draft' } },
     });
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
@@ -657,6 +676,7 @@ describe('agentChat 主链路', () => {
       }
       return [[]];
     });
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse());
     mocks.toolExecute.mockResolvedValueOnce({ error: 'READ_FAILED', message: '网站拒绝读取' });
     const res = response();
 
@@ -671,7 +691,9 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.toolExecute).toHaveBeenCalledOnce();
-    expect(mocks.requestAi).not.toHaveBeenCalled();
+    // 入口分类之后不得再有草稿生成调用：材料不可读时不能凭标题编造正文。
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
       response: expect.stringContaining('没有返回足够的可读正文'),
@@ -714,7 +736,7 @@ describe('agentChat 主链路', () => {
         overall: { documentCount: 1, complete: true },
       },
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -739,8 +761,8 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.toolExecute).toHaveBeenCalledOnce();
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('文件中的可靠正文');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('文件中的可靠正文');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: 'create_note',
@@ -1636,6 +1658,7 @@ describe('agentChat 主链路', () => {
 
   it('明确创建笔记时使用统一草稿协议，并对 Provider 漏协议做一次有界修复', async () => {
     mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse())
       .mockResolvedValueOnce({
         content: '漏掉结构化草稿协议',
         toolCalls: [],
@@ -1667,9 +1690,10 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
-    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft');
-    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('note_draft_repair');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('note_draft');
+    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('note_draft_repair');
     expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.confirmations).toHaveLength(1);
@@ -1681,7 +1705,7 @@ describe('agentChat 主链路', () => {
       title: 'Redis 学习记录',
       content: 'Redis 是内存数据结构存储。'.repeat(60),
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -1705,8 +1729,8 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledOnce();
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('Redis 是内存数据结构存储');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('Redis 是内存数据结构存储');
     expect(mocks.createToolConfirmation).toHaveBeenCalledOnce();
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1737,7 +1761,7 @@ describe('agentChat 主链路', () => {
         { text: '检查移动端', done: false },
       ],
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -1761,7 +1785,7 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    const prompt = mocks.requestAi.mock.calls[0][0][1].content;
+    const prompt = mocks.requestAi.mock.calls[1][0][1].content;
     expect(prompt).toContain('发布前完成回归测试');
     expect(prompt).toContain('[已完成] 执行服务端测试');
     expect(prompt).toContain('[待处理] 检查移动端');
@@ -1786,7 +1810,7 @@ describe('agentChat 主链路', () => {
       ],
       coverage: { documents: [], overall: { documentCount: 1, complete: true } },
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -1810,7 +1834,7 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('文件完整正文');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('文件完整正文');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         privateContext: expect.objectContaining({ contextRefs: [], attachmentIds: ['source-1'] }),
@@ -1857,7 +1881,7 @@ describe('agentChat 主链路', () => {
       sources: [{ type: 'document', id: 'source-1', documentId: 'source-1', title: '验收标准.pdf' }],
       coverage: { documents: [], overall: { documentCount: 1, complete: true } },
     });
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -1886,7 +1910,7 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    const prompt = mocks.requestAi.mock.calls[0][0][1].content;
+    const prompt = mocks.requestAi.mock.calls[1][0][1].content;
     expect(prompt).toContain('书签快照正文');
     expect(prompt).toContain('笔记中的讨论结论');
     expect(prompt).toContain('完成统一工作流');
@@ -1909,7 +1933,7 @@ describe('agentChat 主链路', () => {
 
   it('直接粘贴文本生成笔记时不要求额外引用资源', async () => {
     const pastedText = 'Redis 通过内存数据结构提供高性能读写，并可结合持久化机制保存数据。'.repeat(20);
-    mocks.requestAi.mockResolvedValueOnce({
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
       content: '',
       toolCalls: [
         toolCall('submit_note_draft', {
@@ -1933,7 +1957,7 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain(pastedText.slice(0, 120));
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain(pastedText.slice(0, 120));
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         privateContext: expect.objectContaining({ contextRefs: [], attachmentIds: [] }),
@@ -1949,7 +1973,10 @@ describe('agentChat 主链路', () => {
       usageStatus: 'reported',
       finishReason: 'tool_calls',
     });
-    mocks.requestAi.mockResolvedValueOnce(invalidDraftResponse()).mockResolvedValueOnce(invalidDraftResponse());
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse())
+      .mockResolvedValueOnce(invalidDraftResponse())
+      .mockResolvedValueOnce(invalidDraftResponse());
     const res = response();
 
     await agentChat(
@@ -1962,7 +1989,8 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    // 入口分类 + 两次草稿尝试；草稿协议连续缺失后必须失败关闭。
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
       response: expect.stringMatching(/没有生成完整可确认的笔记草稿/),
@@ -2858,6 +2886,9 @@ describe('agentChat 主链路', () => {
       dependencyRefs: [{ type: 'todo', id: 'todo-1' }],
     });
     mocks.requestAi
+      // 同一句里还要改待办：笔记入口必须把复合写请求交回 Semantic Planner，
+      // 否则待办那一步会被统一草稿协议静默丢弃。
+      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
@@ -2934,7 +2965,9 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    // 入口分类 + 语义计划 + Final Reply。
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
     expect(mocks.createToolConfirmation).toHaveBeenCalledTimes(2);
     expect(mocks.createToolConfirmation.mock.calls.map(([input]) => input.toolName)).toEqual([
       'create_note',

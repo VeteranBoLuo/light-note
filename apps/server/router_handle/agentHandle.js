@@ -111,12 +111,14 @@ import {
   resolveAiMemoryPromptResource,
 } from '../util/agent/memoryRuntime.js';
 import {
+  classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
+  shouldClassifyNoteDraftTask,
 } from '../util/agent/noteDraft.js';
 
 // ============================================================
@@ -171,6 +173,8 @@ const TRANSLATION_LANGUAGE_NAMES = Object.freeze({
 
 const MAX_SEMANTIC_PLAN_COMPLETION_ATTEMPTS = 2;
 const MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS = 2;
+// 笔记草稿入口的语义路由默认启用；设为 false 可在不发版的情况下退回纯正则判定。
+const NOTE_DRAFT_SEMANTIC_ROUTE_ENABLED = process.env.AGENT_NOTE_DRAFT_SEMANTIC_ROUTE !== 'false';
 
 function expectedEnabledSemanticCapabilityIds(intent, catalog) {
   if (intent?.kind !== 'action' || intent?.resolution !== 'enabled') return [];
@@ -1478,6 +1482,11 @@ export async function agentChat(req, res) {
     toolMs: null,
     finalMs: null,
     pendingDraftIntentMs: null,
+    noteDraftRouteSource: 'none',
+    noteDraftLegacyAgreement: null,
+    noteDraftOtherMutations: null,
+    noteDraftClassifyMs: null,
+    noteDraftClassifyError: null,
     usageStatus: 'missing',
     abortedStage: null,
     route: 'planner',
@@ -1762,7 +1771,75 @@ export async function agentChat(req, res) {
     // 明确且单一的“材料 → 创建笔记”任务走统一草稿协议。材料可以是书签、笔记、文件、
     // 待办、混合引用或用户直接粘贴的文本；网页只在缺少快照时补读。旧草稿改写必须携带
     // 待确认令牌，服务端再从确认存储恢复稳定引用并重新校验归属，绝不相信客户端回传的正文或材料。
-    const noteDraftRequested = !enableTranslation && isNoteDraftRequest(message, legacyIntentSuspicion);
+    //
+    // 是否进入该流程由受约束语义分类决定，不再由固定写入表达和旧动作传感器共同把关：
+    // “合并/汇总/归并/consolidate”这类开放表达无需逐个补进正则。旧正则保留为分类
+    // 不可用时的降级路径和一致性传感器，其分歧只写入 trace，不改变本轮执行。
+    let noteDraftRequested = false;
+    if (!enableTranslation && !refinementRequested) {
+      const legacyNoteDraftRequested = isNoteDraftRequest(message, legacyIntentSuspicion);
+      const classifyNoteDraft =
+        NOTE_DRAFT_SEMANTIC_ROUTE_ENABLED &&
+        shouldClassifyNoteDraftTask({
+          message,
+          contextTypes: requestContextTypes,
+          attachmentCount: Array.isArray(requestAttachmentIds) ? requestAttachmentIds.length : 0,
+        });
+      if (classifyNoteDraft) {
+        const noteDraftTaskStartedAt = Date.now();
+        try {
+          const task = await classifyNoteDraftTask({
+            message,
+            contextTypes: requestContextTypes,
+            attachmentCount: Array.isArray(requestAttachmentIds) ? requestAttachmentIds.length : 0,
+            signal: agentAbortController.signal,
+            traceId: requestId,
+            onResponse(response) {
+              pendingDraftIntentCalls += 1;
+              apiCallsForLog = pendingDraftIntentCalls;
+              const usage = response?.usage || {};
+              totalUsage.promptTokens += Number(usage.promptTokens || 0);
+              totalUsage.completionTokens += Number(usage.completionTokens || 0);
+              totalUsage.totalTokens += Number(usage.totalTokens || 0);
+              pendingDraftIntentUsageReported =
+                pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+              trace.finishReason = response?.finishReason || trace.finishReason;
+            },
+          });
+          // 复合写请求必须回到 Semantic Planner，否则笔记之外的写操作会被静默丢弃。
+          noteDraftRequested = task.producesNote && !task.otherMutations;
+          trace.noteDraftRouteSource = 'semantic';
+          trace.noteDraftOtherMutations = task.otherMutations;
+        } catch (error) {
+          // 客户端断开和硬超时属于请求终止，不能被降级逻辑吞掉。
+          if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
+          noteDraftRequested = legacyNoteDraftRequested;
+          trace.noteDraftRouteSource = 'legacy_fallback';
+          trace.noteDraftClassifyError = stableAgentErrorCode(error);
+        }
+        trace.noteDraftClassifyMs = Date.now() - noteDraftTaskStartedAt;
+        trace.noteDraftLegacyAgreement =
+          noteDraftRequested === legacyNoteDraftRequested
+            ? 'agree'
+            : noteDraftRequested
+              ? 'semantic_only'
+              : 'legacy_only';
+        // 只在分歧或降级时输出：semantic_only 是本次修复的目标场景，legacy_only 是误接管
+        // 信号，两者都是后续移除正则权威的依据。不记录任何用户正文。
+        if (trace.noteDraftLegacyAgreement !== 'agree' || trace.noteDraftRouteSource === 'legacy_fallback') {
+          console.warn(
+            '[Agent] note draft route agreement=%s source=%s ms=%s error=%s',
+            trace.noteDraftLegacyAgreement,
+            trace.noteDraftRouteSource,
+            trace.noteDraftClassifyMs,
+            trace.noteDraftClassifyError || 'none',
+          );
+        }
+      } else {
+        noteDraftRequested = legacyNoteDraftRequested;
+        trace.noteDraftRouteSource = legacyNoteDraftRequested ? 'legacy_pattern' : 'none';
+      }
+    }
     if (noteDraftRequested || refinementRequested) {
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
       memoryInfluence = buildAiMemoryNotUsedInfluence(

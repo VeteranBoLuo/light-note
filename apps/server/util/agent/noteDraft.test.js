@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
+  shouldClassifyNoteDraftTask,
 } from './noteDraft.js';
 
 function response(args, overrides = {}) {
@@ -19,6 +21,23 @@ function response(args, overrides = {}) {
       },
     ],
     usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+    usageStatus: 'reported',
+    finishReason: 'tool_calls',
+    ...overrides,
+  };
+}
+
+function taskResponse(args, overrides = {}) {
+  return {
+    content: '',
+    toolCalls: [
+      {
+        id: 'task-call',
+        type: 'function',
+        function: { name: 'classify_note_draft_task', arguments: JSON.stringify(args) },
+      },
+    ],
+    usage: { promptTokens: 9, completionTokens: 3, totalTokens: 12 },
     usageStatus: 'reported',
     finishReason: 'tool_calls',
     ...overrides,
@@ -86,6 +105,138 @@ describe('noteDraft', () => {
     expect(normalizeNoteDraftRefinement({ confirmationId: 'confirmation-1', confirmationToken: 'short' })).toBe(
       null,
     );
+  });
+
+  it('开放的笔记产出表达在旧正则下会漏判，这是语义路由必须接管入口的原因', () => {
+    // 这些表达语义上都是“材料 → 一篇笔记”，但 NOTE_WRITE_PATTERN 与 note.create 的
+    // actionPatterns 都不含合并/汇总/归并类动词，旧门禁一律判否。
+    for (const message of [
+      '合并这两个资源为一条笔记',
+      '把这些材料汇总进同一份记录',
+      '归并成新的 Markdown 笔记',
+      'Combine these sources into one note',
+    ]) {
+      expect(isNoteDraftRequest(message, noteCreateIntent)).toBe(false);
+    }
+  });
+
+  it('传感器对开放产出表达高召回，对纯查询和闲聊不触发分类', () => {
+    for (const message of [
+      '合并这两个资源为一条笔记',
+      '把这些材料汇总进同一份记录',
+      '综合上面的内容，整理成一篇文档',
+      '归并成新的 Markdown 笔记',
+      'Combine these sources into one note',
+      '请根据这些材料生成一篇笔记。',
+      '把这三个文件总结成一篇笔记', // 产出动词不在词表内，但产物指向明确
+      '帮我把这些整理成笔记，好吗？', // 带疑问语气仍有产出动词，不能被问句规则排除
+    ]) {
+      expect(shouldClassifyNoteDraftTask({ message })).toBe(true);
+    }
+    for (const message of [
+      '你好',
+      '深圳今天会下雨吗？',
+      '我的笔记里有没有讲遗传的那篇？',
+      '轻笺怎么导出数据？',
+      // 产物词不能单独成立：以下都提到笔记，但都不是产出笔记的任务。
+      '帮我删除我的笔记：引用测试',
+      '彻底删除全部笔记',
+      '总结我最近 7 天新增的书签和笔记',
+      '把这篇笔记的标题改成新版',
+    ]) {
+      expect(shouldClassifyNoteDraftTask({ message })).toBe(false);
+    }
+    // 已选材料时，省略宾语的产出说法要进入分类。
+    expect(
+      shouldClassifyNoteDraftTask({ message: 'Consolidate the selected materials', contextTypes: ['bookmark'] }),
+    ).toBe(true);
+    expect(shouldClassifyNoteDraftTask({ message: '帮我整理一下', attachmentCount: 2 })).toBe(true);
+    // 材料问答是高频场景：有材料但只要一段回答时不得多付一次分类调用。
+    expect(shouldClassifyNoteDraftTask({ message: '总结文件', attachmentCount: 1 })).toBe(false);
+    expect(shouldClassifyNoteDraftTask({ message: '这些材料讲了什么？', contextTypes: ['bookmark', 'note'] })).toBe(
+      false,
+    );
+    expect(shouldClassifyNoteDraftTask({ message: '', contextTypes: ['note'] })).toBe(false);
+  });
+
+  it('传感器严格宽于旧正则，避免传感器不命中时回落正则又漏判', () => {
+    // 主链在传感器不命中时会回落到 isNoteDraftRequest。只要存在“正则命中但传感器
+    // 不命中”的表达，那条请求就既不分类也不接管，等于静默漏判。
+    for (const message of [
+      '请根据这些材料生成一篇笔记。',
+      '请把下面的文字写成笔记。',
+      '整理成一份 markdown 笔记',
+      '把这个转换为笔记',
+      'create a note from these sources',
+    ]) {
+      if (isNoteDraftRequest(message, noteCreateIntent)) {
+        expect(shouldClassifyNoteDraftTask({ message })).toBe(true);
+      }
+    }
+  });
+
+  it('语义分类接管笔记入口，复合写请求交回 Semantic Planner', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: false }))
+      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: true }))
+      .mockResolvedValueOnce(taskResponse({ producesNote: false, otherMutations: false }));
+    const onResponse = vi.fn();
+
+    const merge = await classifyNoteDraftTask({
+      message: '合并这两个资源为一条笔记',
+      contextTypes: ['bookmark', 'note'],
+      request,
+      onResponse,
+    });
+    const compound = await classifyNoteDraftTask({
+      message: '生成一篇笔记，并新建一个待办提醒我明天查看',
+      request,
+      onResponse,
+    });
+    const query = await classifyNoteDraftTask({ message: '这些材料讲了什么？', request, onResponse });
+
+    expect(merge).toMatchObject({ producesNote: true, otherMutations: false });
+    expect(compound).toMatchObject({ producesNote: true, otherMutations: true });
+    expect(query).toMatchObject({ producesNote: false });
+    expect(request.mock.calls[0][0][0].content).toContain('合并、汇总、归并');
+    expect(request.mock.calls[0][0][1].content).toContain('合并这两个资源为一条笔记');
+    expect(request.mock.calls[0][0][1].content).toContain('bookmark');
+    expect(request.mock.calls[0][1]).toMatchObject({
+      toolChoice: { type: 'function', function: { name: 'classify_note_draft_task' } },
+      maxTokens: 256,
+      temperature: 0,
+    });
+    expect(onResponse).toHaveBeenCalledTimes(3);
+  });
+
+  it('笔记任务分类协议不完整时显式失败，由调用方决定降级', async () => {
+    const cases = [
+      { content: '大概是要笔记吧', toolCalls: [] },
+      taskResponse({ producesNote: true }),
+      taskResponse({ producesNote: 'yes', otherMutations: false }),
+      taskResponse({ producesNote: true, otherMutations: false, extra: 1 }),
+      taskResponse(
+        { producesNote: true, otherMutations: false },
+        {
+          toolCalls: [
+            {
+              id: 'task-call',
+              type: 'function',
+              function: { name: 'submit_note_draft', arguments: '{"title":"x","content":"y"}' },
+            },
+          ],
+        },
+      ),
+    ];
+    for (const mocked of cases) {
+      await expect(
+        classifyNoteDraftTask({ message: '合并这些材料', request: vi.fn().mockResolvedValue(mocked) }),
+      ).rejects.toMatchObject({ code: 'NOTE_DRAFT_TASK_INVALID' });
+    }
+    await expect(classifyNoteDraftTask({ message: '   ', request: vi.fn() })).rejects.toMatchObject({
+      code: 'NOTE_DRAFT_TASK_INVALID',
+    });
   });
 
   it('用受约束语义协议判断草稿承接，不由调用方枚举用户句式', async () => {

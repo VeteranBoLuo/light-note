@@ -31,6 +31,21 @@ function noteDraftCall(draft, index) {
   };
 }
 
+/** 笔记入口的受约束语义分类：决定本轮是否进入统一草稿协议。 */
+function noteDraftTaskCall(task, index) {
+  return {
+    id: `replay-note-draft-task-${index + 1}`,
+    type: 'function',
+    function: {
+      name: 'classify_note_draft_task',
+      arguments: JSON.stringify({
+        producesNote: task?.producesNote !== false,
+        otherMutations: task?.otherMutations === true,
+      }),
+    },
+  };
+}
+
 export function buildReplayProviderResponses(steps = []) {
   return steps.map((step, index) => ({
     content: String(step.content || ''),
@@ -38,10 +53,12 @@ export function buildReplayProviderResponses(steps = []) {
       ? [semanticPlanCall(step.plan, index)]
       : step.draft
         ? [noteDraftCall(step.draft, index)]
-        : [],
+        : step.task
+          ? [noteDraftTaskCall(step.task, index)]
+          : [],
     usage: usage(Number(step.totalTokens || 1)),
     usageStatus: 'reported',
-    finishReason: step.plan || step.draft ? 'tool_calls' : 'stop',
+    finishReason: step.plan || step.draft || step.task ? 'tool_calls' : 'stop',
   }));
 }
 

@@ -1,4 +1,43 @@
+/**
+ * 开放的笔记产出表达必须走统一草稿协议。
+ *
+ * 这些说法在旧入口下一律漏判：NOTE_WRITE_PATTERN 与 note.create 的 actionPatterns
+ * 都不含合并/汇总/归并类动词，请求会退化成全量工具 Semantic Planner，且因为
+ * getPlannerMaxTokens 同样按写入词判断预算，长正文还会被 1200 token 截断。
+ *
+ * 这里验证的是“分类判定为产出笔记后主链是否进入草稿协议”；真实模型的分类准确率
+ * 需要打真实 Provider 的用例覆盖，不在确定性回放范围内。
+ */
+const NOTE_DRAFT_SEMANTIC_ROUTE_CASES = Object.freeze(
+  [
+    ['merge-two-resources', '把这两个资源合并成一条笔记'],
+    ['consolidate-materials', '把这些材料汇总进同一份记录'],
+    ['organize-into-document', '综合上面的内容，整理成一篇文档'],
+    ['combine-english', 'Combine these sources into one note'],
+  ].map(([suffix, message]) => ({
+    id: `note-draft-open-phrasing-${suffix}`,
+    request: {
+      message,
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      selectedTools: ['create_note'],
+    },
+    providerSteps: [
+      { task: { producesNote: true } },
+      { draft: { title: '合成合并笔记', content: '这是完全合成的合并结果正文。' } },
+    ],
+    expected: {
+      providerCalls: 2,
+      requiredStages: ['note_draft_task', 'note_draft'],
+      confirmations: 1,
+      responseExcludes: ['已创建成功', '(ID:', '（ID:'],
+    },
+  })),
+);
+
 export const AGENT_REPLAY_CASES = Object.freeze([
+  ...NOTE_DRAFT_SEMANTIC_ROUTE_CASES,
   {
     id: 'provider-missing-note-draft-protocol-then-repair',
     request: {
@@ -9,12 +48,13 @@ export const AGENT_REPLAY_CASES = Object.freeze([
       selectedTools: ['create_note'],
     },
     providerSteps: [
+      { task: { producesNote: true } },
       { content: '漏掉结构化草稿协议' },
       { draft: { title: '合成网页摘要', content: '这是完全合成的测试正文。' } },
     ],
     expected: {
-      providerCalls: 2,
-      requiredStages: ['note_draft', 'note_draft_repair'],
+      providerCalls: 3,
+      requiredStages: ['note_draft_task', 'note_draft', 'note_draft_repair'],
       confirmations: 1,
       responseExcludes: ['已创建成功', '(ID:', '（ID:'],
     },
@@ -29,12 +69,13 @@ export const AGENT_REPLAY_CASES = Object.freeze([
       selectedTools: ['create_note'],
     },
     providerSteps: [
+      { task: { producesNote: true } },
       { draft: { title: '只有标题' } },
       { draft: { title: '合成网页摘要', content: '这是修复后的完整合成测试正文。' } },
     ],
     expected: {
-      providerCalls: 2,
-      requiredStages: ['note_draft', 'note_draft_repair'],
+      providerCalls: 3,
+      requiredStages: ['note_draft_task', 'note_draft', 'note_draft_repair'],
       confirmations: 1,
       responseExcludes: ['当前账号或访问模式不能使用', '已创建成功', '(ID:', '（ID:'],
     },
