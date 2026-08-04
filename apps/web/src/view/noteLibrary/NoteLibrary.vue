@@ -190,7 +190,7 @@
             :menu="menuForNote(note)"
             @select="handleNoteMenuSelect($event, note)"
           >
-            <note-list-item :note="note" @nodeTypeChange="handleNodeTypeChange" />
+            <note-list-item :note="note" :batch-mode="batchMode" @nodeTypeChange="handleNodeTypeChange" />
           </RightMenu>
         </VueDraggable>
       </div>
@@ -791,6 +791,15 @@
   });
 
   const selectedVisibleCount = computed(() => viewNoteList.value.filter((data) => data.isCheck === true).length);
+  // 桌面端复选框是进入批量模式的直接入口。复选框更新 note.isCheck 后必须同步页级模式，
+  // 否则卡片虽然已选中，ResourcePageShell 的 actions 仍会继续显示普通操作栏。
+  watch(
+    selectedVisibleCount,
+    (count) => {
+      if (count > 0 && !batchMode.value) batchMode.value = true;
+    },
+    { flush: 'sync' },
+  );
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'batch',
@@ -858,11 +867,11 @@
   }
 
   function exitBatch() {
-    batchMode.value = false;
     mobileBatchActionsOpen.value = false;
     noteList.value.forEach((data) => {
       data.isCheck = false;
     });
+    batchMode.value = false;
   }
 
   function enterBatch() {

@@ -1,8 +1,8 @@
 <template>
   <div
     class="note-list-item"
-    :class="{ 'is-selected': note.isCheck, 'is-mobile': bookmark.isMobile }"
-    @click="router.push(`/noteLibrary/${note.id}`)"
+    :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode, 'is-mobile': bookmark.isMobile }"
+    @click="handleItemClick"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
     <div v-if="!bookmark.isMobile" class="note-select-column">
@@ -44,7 +44,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
-  const props = defineProps<{ note: any }>();
+  const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
+    batchMode: false,
+  });
   const bookmark = bookmarkStore();
 
   const getTags = function (note) {
@@ -84,6 +86,14 @@
   function openTagDetail(tag) {
     if (!tag?.id) return;
     router.push(`/tag/${tag.id}`);
+  }
+
+  function handleItemClick() {
+    if (props.batchMode) {
+      props.note.isCheck = !props.note.isCheck;
+      return;
+    }
+    router.push(`/noteLibrary/${props.note.id}`);
   }
 </script>
 
