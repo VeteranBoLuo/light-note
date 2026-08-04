@@ -3069,6 +3069,163 @@ describe('agentChat 主链路', () => {
     expect(String(data?.response || '')).not.toContain('其他操作没有执行');
   });
 
+  it('材料续问候选经语义分类判承接后，服务端按候选引用解析材料', async () => {
+    // 前端正则漏判（"作者是谁"零指代词）时只带候选引用；分类判 continue 则解析材料。
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_material_follow_up', { decision: 'continue_with_materials' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '作者是张三。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-1',
+              title: '文章快照',
+              url: 'https://example.com/a',
+              snapshot_content: '作者是张三。'.repeat(40),
+              description: '',
+              content: '作者是张三。'.repeat(40),
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '作者是谁',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        history: [
+          { role: 'user', content: '总结这篇文章' },
+          { role: 'assistant', content: '这篇文章讲了……' },
+        ],
+        followUpMaterials: { contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }], attachmentIds: [] },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('material_follow_up');
+    // 候选材料被服务端按归属解析并进入回答上下文
+    expect(mocks.poolQuery.mock.calls.some((call) => String(call[0]).includes('FROM bookmark b'))).toBe(true);
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.entityRefs).toEqual([expect.objectContaining({ type: 'bookmark', id: 'bookmark-1' })]);
+  });
+
+  it('材料续问分类判独立时不继承候选，行为与旧版一致', async () => {
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_material_follow_up', { decision: 'independent_request' })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '今天天气不错。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '今天深圳天气怎么样',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        followUpMaterials: { contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }], attachmentIds: [] },
+      }),
+      res,
+    );
+
+    // 判独立后不解析候选材料
+    expect(mocks.poolQuery.mock.calls.some((call) => String(call[0]).includes('FROM bookmark b'))).toBe(false);
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.entityRefs || []).toHaveLength(0);
+  });
+
+  it('本轮已带显式材料时不触发续问分类', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('FROM bookmark b')) {
+        return [
+          [
+            {
+              id: 'bookmark-2',
+              title: '新材料',
+              url: 'https://example.com/b',
+              snapshot_content: '内容。'.repeat(40),
+              description: '',
+              content: '内容。'.repeat(40),
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [] })],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '好的。',
+        toolCalls: [],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '这篇讲了什么',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-2' }],
+        attachmentIds: [],
+        followUpMaterials: { contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }], attachmentIds: [] },
+      }),
+      res,
+    );
+
+    // 第一次 provider 调用直接是 planner，没有 material_follow_up 阶段
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).not.toBe('material_follow_up');
+  });
+
   it('传感器多判的能力不再强制修复：就绪计划按模型语义放行并出全确认卡', async () => {
     // 线上实测：「分析这个书签，生成一篇笔记，然后创建一个今天晚上 21 点的待办」——
     // 旧动作传感器因「书签」与「创建」远距交叉多判出 bookmark.create，模型经两轮修复

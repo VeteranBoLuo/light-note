@@ -110,6 +110,7 @@ import {
   normalizeAiMemoryMode,
   resolveAiMemoryPromptResource,
 } from '../util/agent/memoryRuntime.js';
+import { classifyMaterialFollowUp, normalizeFollowUpMaterialCandidate } from '../util/agent/materialFollowUp.js';
 import {
   classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
@@ -1497,6 +1498,9 @@ export async function agentChat(req, res) {
     noteDraftClassifyMs: null,
     noteDraftClassifyError: null,
     unhandledOtherMutationDisclosed: null,
+    materialFollowUpDecision: null,
+    materialFollowUpMs: null,
+    materialFollowUpError: null,
     usageStatus: 'missing',
     abortedStage: null,
     route: 'planner',
@@ -1530,6 +1534,7 @@ export async function agentChat(req, res) {
       scope = {},
       pendingNoteDraft = null,
       draftRefinement = null,
+      followUpMaterials = null,
     } = req.body;
     const canUseInteractions = supportsAgentInteractions(clientCapabilities);
     stream = req.body.stream ?? false;
@@ -1758,8 +1763,48 @@ export async function agentChat(req, res) {
 
     // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
     // 过期或被篡改的客户端材料既不能替换原材料，也不会在恢复权威私有引用前阻断请求。
-    const effectiveRequestContexts = refinementRequested ? [] : requestContexts;
-    const effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
+    let effectiveRequestContexts = refinementRequested ? [] : requestContexts;
+    let effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
+
+    // 材料续问兜底：前端指代/命令正则命中时会直接带真实材料（误判率实测 0，零成本通道）；
+    // 正则漏判（真实追问 83% 不含指代词）时前端只带上轮材料的候选引用，由受约束语义分类
+    // 决定是否沿用。候选只有 type+id，实际内容仍由 resolveResourceContexts 按归属解析；
+    // 分类失败 fail-open 不继承（与旧行为一致）。
+    const followUpCandidate =
+      !enableTranslation && !refinementRequested && !requestContexts.length && !requestAttachmentIds.length
+        ? normalizeFollowUpMaterialCandidate(followUpMaterials)
+        : null;
+    if (followUpCandidate) {
+      const followUpStartedAt = Date.now();
+      try {
+        const followUp = await classifyMaterialFollowUp({
+          message,
+          history,
+          signal: agentAbortController.signal,
+          traceId: requestId,
+          onResponse(response) {
+            pendingDraftIntentCalls += 1;
+            apiCallsForLog = pendingDraftIntentCalls;
+            const usage = response?.usage || {};
+            totalUsage.promptTokens += Number(usage.promptTokens || 0);
+            totalUsage.completionTokens += Number(usage.completionTokens || 0);
+            totalUsage.totalTokens += Number(usage.totalTokens || 0);
+            pendingDraftIntentUsageReported =
+              pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+          },
+        });
+        trace.materialFollowUpDecision = followUp.decision;
+        if (followUp.decision === 'continue_with_materials') {
+          effectiveRequestContexts = followUpCandidate.contextRefs;
+          effectiveRequestAttachmentIds = followUpCandidate.attachmentIds;
+        }
+      } catch (error) {
+        if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
+        trace.materialFollowUpDecision = 'classify_failed';
+        trace.materialFollowUpError = stableAgentErrorCode(error);
+      }
+      trace.materialFollowUpMs = Date.now() - followUpStartedAt;
+    }
     const [resolvedContexts, resolvedAttachments] = enableTranslation
       ? [
           { text: '', sources: [] },

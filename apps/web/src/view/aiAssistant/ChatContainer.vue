@@ -263,7 +263,11 @@
   import { applyAiRecoverySnapshot, shouldAttemptAiStreamRecovery } from '@/utils/aiStreamRecovery';
   import { toAiMemoryInfluenceActivity } from '@/utils/aiMemoryInfluence';
   import { scrollIntoContainer } from '@/utils/zoom';
-  import { decideAiConversationContinuity, type AiConversationRecency } from '@/utils/aiConversationContinuity';
+  import {
+    decideAiConversationContinuity,
+    shouldLoadLatestConversationOnOpen,
+    type AiConversationRecency,
+  } from '@/utils/aiConversationContinuity';
 
   withDefaults(
     defineProps<{
@@ -1163,6 +1167,15 @@
     try {
       const currentCloudId = String(conversationId.value || '').trim();
       if (!currentCloudId) {
+        // 用户主动新建、还没发第一条消息时保持空白：不能用「最近活跃会话」顶掉他的显式操作
+        if (
+          !shouldLoadLatestConversationOnOpen({
+            currentConversationId: currentCloudId,
+            newConversationPending: aiAssistant.newConversationPending,
+          })
+        ) {
+          return;
+        }
         const listed = await listAiCloudConversations({ status: 'active', limit: 1 });
         const latest = listed.items[0] || null;
         if (!latest || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
@@ -1681,6 +1694,16 @@
       shouldAutoInheritAiAssistantMaterials(inputText)
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
         : null;
+    // 指代/命令正则没命中时不再直接放弃继承：把上轮材料的稳定引用作为候选交给服务端，
+    // 由受约束语义分类判断本轮是否承接（真实追问 83% 不含指代词，"作者是谁""翻译成英文"
+    // 这类问法此前必然丢材料）。候选只含 type+id，是否使用及内容解析都在服务端完成。
+    const followUpMaterialCandidate =
+      !options.materialSnapshot &&
+      !contexts.value.length &&
+      !attachments.value.length &&
+      !autoInheritedMaterialSnapshot
+        ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
+        : null;
     const materialSnapshot =
       options.materialSnapshot ||
       autoInheritedMaterialSnapshot ||
@@ -2036,6 +2059,20 @@
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
           ...(pendingNoteDraft ? { pendingNoteDraft } : {}),
+          ...(followUpMaterialCandidate &&
+          (followUpMaterialCandidate.contextRefs.length || followUpMaterialCandidate.attachmentRefs.length)
+            ? {
+                followUpMaterials: {
+                  contextRefs: followUpMaterialCandidate.contextRefs.map((item) => ({
+                    type: item.type,
+                    id: item.id,
+                  })),
+                  attachmentIds: followUpMaterialCandidate.attachmentRefs
+                    .filter((item) => item.status === 'ready')
+                    .map((item) => item.id),
+                },
+              }
+            : {}),
           scope: {
             mode: scopeMode.value,
             externalWeb: false,
