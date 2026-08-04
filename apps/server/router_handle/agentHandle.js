@@ -1824,21 +1824,23 @@ export async function agentChat(req, res) {
             : noteDraftRequested
               ? 'semantic_only'
               : 'legacy_only';
-        // 只在分歧或降级时输出：semantic_only 是本次修复的目标场景，legacy_only 是误接管
-        // 信号，两者都是后续移除正则权威的依据。不记录任何用户正文。
-        if (trace.noteDraftLegacyAgreement !== 'agree' || trace.noteDraftRouteSource === 'legacy_fallback') {
-          console.warn(
-            '[Agent] note draft route agreement=%s source=%s ms=%s error=%s',
-            trace.noteDraftLegacyAgreement,
-            trace.noteDraftRouteSource,
-            trace.noteDraftClassifyMs,
-            trace.noteDraftClassifyError || 'none',
-          );
-        }
       } else {
         noteDraftRequested = legacyNoteDraftRequested;
         trace.noteDraftRouteSource = legacyNoteDraftRequested ? 'legacy_pattern' : 'none';
       }
+      // 上线初期无条件记录一次路由决策：只记分歧会让“分类根本没跑”和“分类判否”
+      // 呈现出同一种现象（都没有日志），无法定位。观察稳定后再收敛为只记分歧。
+      // 只记录布尔与枚举，不记录用户正文。
+      console.warn(
+        '[Agent] note draft route classify=%s source=%s taken=%s legacy=%s agreement=%s ms=%s error=%s',
+        classifyNoteDraft,
+        trace.noteDraftRouteSource,
+        noteDraftRequested,
+        legacyNoteDraftRequested,
+        trace.noteDraftLegacyAgreement || '-',
+        trace.noteDraftClassifyMs ?? '-',
+        trace.noteDraftClassifyError || 'none',
+      );
     }
     if (noteDraftRequested || refinementRequested) {
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
