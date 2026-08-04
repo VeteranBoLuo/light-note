@@ -428,6 +428,70 @@ describe('agentChat 主链路', () => {
     expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
   });
 
+  it('有效草稿候选不会劫持语义上独立的新问题', async () => {
+    const confirmationToken = 'p'.repeat(43);
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'pending-note-1',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '旧草稿', content: '旧正文' },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '根据材料生成一篇笔记',
+          contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+          attachmentIds: [],
+        },
+      },
+    });
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('classify_pending_note_draft_intent', {
+          decision: 'separate_request',
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    mocks.requestAiStream.mockImplementation(async (_messages, options) => {
+      options.onDelta('你好，我在。');
+      return {
+        content: '你好，我在。',
+        leakedToolCall: false,
+        usage: usage(9),
+        usageStatus: 'reported',
+        provider: 'test',
+        model: 'test-model',
+        finishReason: 'stop',
+      };
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '你好',
+        stream: true,
+        contexts: [],
+        attachmentIds: [],
+        pendingNoteDraft: {
+          confirmationId: 'pending-note-1',
+          confirmationToken,
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(mocks.requestAiStream).toHaveBeenCalledOnce();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(mocks.settleSessionAction).not.toHaveBeenCalled();
+    expect(sseEvents(res).find((event) => event.event === 'response.completed')?.answer).toBe('你好，我在。');
+  });
+
   it('能力总览由服务端按实际工具确定性生成，不再交给模型自由扩写', async () => {
     mocks.selectAgentTools.mockImplementation((registry) =>
       [registry.get('create_note'), registry.get('set_todo_status')].filter(Boolean),
@@ -689,7 +753,7 @@ describe('agentChat 主链路', () => {
     });
   });
 
-  it('“写长一点”读取服务端旧草稿并用新确认原子替换旧确认', async () => {
+  it('待确认草稿语境中的省略表达走语义判断，并用新确认原子替换旧确认', async () => {
     const oldToken = 'o'.repeat(43);
     const oldContent = '旧正文。'.repeat(80);
     mocks.poolQuery.mockImplementation(async (sql, params = []) => {
@@ -740,28 +804,38 @@ describe('agentChat 主链路', () => {
         },
       },
     });
-    mocks.requestAi.mockResolvedValueOnce({
-      content: '',
-      toolCalls: [
-        toolCall('submit_note_draft', {
-          title: '扩写后的标题',
-          content: `${oldContent}\n\n${'新增分析。'.repeat(80)}`,
-        }),
-      ],
-      usage: usage(40),
-      usageStatus: 'reported',
-      finishReason: 'tool_calls',
-    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          toolCall('classify_pending_note_draft_intent', { decision: 'revise_pending_draft' }),
+        ],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          toolCall('submit_note_draft', {
+            title: '扩写后的标题',
+            content: `${oldContent}\n\n${'新增分析。'.repeat(80)}`,
+          }),
+        ],
+        usage: usage(40),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
     const res = response();
 
     await agentChat(
       request({
-        message: '太短了，重新写长一点、更详细一点。',
+        message: '再试一下。',
         stream: true,
         sessionId: 'session-1',
         contexts: [{ type: 'bookmark', id: 'bookmark-evil' }],
         attachmentIds: [],
-        draftRefinement: {
+        pendingNoteDraft: {
           confirmationId: 'old-confirmation',
           confirmationToken: oldToken,
         },
@@ -770,8 +844,11 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.inspectToolConfirmationExecution).toHaveBeenCalledWith(oldToken, 'user:user-1', 'session-1');
-    expect(mocks.requestAi.mock.calls[0][0][1].content).toContain('网页存档');
-    expect(mocks.requestAi.mock.calls[0][0][1].content).not.toContain('客户端伪造的新材料');
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[0][0][0].content).toContain('整体含义、指代和最近对话');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('网页存档');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('再试一下');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).not.toContain('客户端伪造的新材料');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         replaceToken: oldToken,

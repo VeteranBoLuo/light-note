@@ -111,9 +111,9 @@ import {
   resolveAiMemoryPromptResource,
 } from '../util/agent/memoryRuntime.js';
 import {
+  classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
-  isNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
@@ -1477,6 +1477,7 @@ export async function agentChat(req, res) {
     plannerMs: null,
     toolMs: null,
     finalMs: null,
+    pendingDraftIntentMs: null,
     usageStatus: 'missing',
     abortedStage: null,
     route: 'planner',
@@ -1508,6 +1509,7 @@ export async function agentChat(req, res) {
       conversationId = '',
       sourceMessageId = '',
       scope = {},
+      pendingNoteDraft = null,
       draftRefinement = null,
     } = req.body;
     const canUseInteractions = supportsAgentInteractions(clientCapabilities);
@@ -1534,10 +1536,13 @@ export async function agentChat(req, res) {
     logContext = { userId: logUserId, userAlias: logUserAlias, question: message };
     res.on('close', onClientClose);
     const session = await raceWithSignal(getOrCreateSession(identity.ownerKey, sessionId), agentAbortController.signal);
+    // 待确认笔记草稿携带的是服务端后续语义判断所需的候选引用。它必须先于通用的
+    // “重试上一动作”短句解析，因为“再试一下”在当前草稿语境中也可能表示重做草稿。
+    const normalizedPendingNoteDraft = normalizeNoteDraftRefinement(pendingNoteDraft || draftRefinement);
 
     // “重新执行/重试”不是普通问答，而是对上一项结构化动作的控制命令。
     // 必须在进入模型和额度占位前由服务端解析，只能依据可信动作状态重新生成一张新确认卡。
-    const actionControl = !enableTranslation ? parseAgentActionControl(message) : null;
+    const actionControl = !enableTranslation && !normalizedPendingNoteDraft ? parseAgentActionControl(message) : null;
     if (actionControl?.type === 'retry') {
       trace.route = 'action_control';
       trace.taskType = 'agent_action_retry';
@@ -1607,12 +1612,10 @@ export async function agentChat(req, res) {
       return;
     }
 
-    const normalizedDraftRefinement = normalizeNoteDraftRefinement(draftRefinement);
-    const refinementRequested = !enableTranslation && normalizedDraftRefinement && isNoteDraftRefinement(message);
-    // 改写只接受确认存储里的权威材料引用。客户端为了展示而续带的 context/attachment
-    // 不参与本轮解析，既不能替换原材料，也不能用无效引用阻断原草稿恢复。
-    const requestContexts = refinementRequested ? [] : contexts;
-    const requestAttachmentIds = refinementRequested ? [] : attachmentIds;
+    // 前端只携带当前有效草稿的候选引用，不解释用户句式。旧字段保留兼容已发布客户端；
+    // 是否真要改写由额度门禁后的受约束语义分类决定，不能再用关键词正则做主路由。
+    const requestContexts = contexts;
+    const requestAttachmentIds = attachmentIds;
     const requestContextTypes = [
       ...(Array.isArray(requestContexts) ? requestContexts : [])
         .map((item) => String(item?.type || ''))
@@ -1624,26 +1627,6 @@ export async function agentChat(req, res) {
     const legacyIntentSuspicion = enableTranslation
       ? { kind: 'none', resolution: 'none', capabilities: [], toolNames: [], reason: 'translation' }
       : resolveAgentActionIntent({ message, contextTypes: requestContextTypes });
-
-    // 初次生成的附件和资源归属先于 AI 额度占位校验；草稿改写不解析客户端续带材料，
-    // 而是在确认令牌校验后恢复服务端私有引用并重新校验归属。
-    const [resolvedContexts, resolvedAttachments] = enableTranslation
-      ? [
-          { text: '', sources: [] },
-          { text: '', sources: [], coverage: { documents: [], overall: null } },
-        ]
-      : await raceWithSignal(
-          Promise.all([
-            resolveResourceContexts(userId, requestContexts, message),
-            resolveDocumentAttachments({
-              userId,
-              sourceIds: requestAttachmentIds,
-              question: message,
-            }),
-          ]),
-          agentAbortController.signal,
-        );
-    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message);
 
     // ---- AI token 前置 gate ----
     // 配额默认强制执行；只有运维显式设置 AI_GATE_ENFORCE=false 才进入观测模式。
@@ -1690,6 +1673,92 @@ export async function agentChat(req, res) {
       return;
     }
 
+    let refinementRequested = false;
+    let pendingNoteDraftInspection = null;
+    let pendingNoteDraftPrivateContext = null;
+    let pendingNoteDraftInspectionError = null;
+    let pendingDraftIntentCalls = 0;
+    let pendingDraftIntentUsageReported = true;
+    if (!enableTranslation && normalizedPendingNoteDraft) {
+      try {
+        const inspected = await inspectToolConfirmationExecution(
+          normalizedPendingNoteDraft.confirmationToken,
+          identity.ownerKey,
+          getSessionId(session),
+        );
+        if (
+          inspected.state !== 'ready' ||
+          inspected.confirmation?.id !== normalizedPendingNoteDraft.confirmationId ||
+          inspected.confirmation?.toolName !== 'create_note'
+        ) {
+          throw new ToolConfirmationError(
+            'TOOL_CONFIRMATION_CONFLICT',
+            '原草稿状态已经变化，请基于当前会话重新发起生成。',
+            409,
+          );
+        }
+        pendingNoteDraftInspection = inspected;
+        pendingNoteDraftPrivateContext = normalizeNoteDraftPrivateContext(inspected.confirmation.privateContext);
+        if (!pendingNoteDraftPrivateContext) {
+          throw new ToolConfirmationError(
+            'TOOL_CONFIRMATION_CONTEXT_MISSING',
+            '原草稿没有可恢复的材料上下文，请重新发起生成。',
+            409,
+          );
+        }
+      } catch (error) {
+        pendingNoteDraftInspectionError = error;
+        pendingNoteDraftInspection = null;
+        pendingNoteDraftPrivateContext = null;
+      }
+
+      const intentStartedAt = Date.now();
+      const intent = await classifyPendingNoteDraftFollowUp({
+        message,
+        history,
+        sourceMessage: pendingNoteDraftPrivateContext?.sourceMessage || '',
+        draftTitle: pendingNoteDraftInspection?.confirmation?.args?.title || '',
+        draftContent: pendingNoteDraftInspection?.confirmation?.args?.content || '',
+        signal: agentAbortController.signal,
+        traceId: requestId,
+        onResponse(response) {
+          pendingDraftIntentCalls += 1;
+          apiCallsForLog = pendingDraftIntentCalls;
+          const usage = response?.usage || {};
+          totalUsage.promptTokens += Number(usage.promptTokens || 0);
+          totalUsage.completionTokens += Number(usage.completionTokens || 0);
+          totalUsage.totalTokens += Number(usage.totalTokens || 0);
+          pendingDraftIntentUsageReported =
+            pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+          trace.finishReason = response?.finishReason || trace.finishReason;
+        },
+      });
+      trace.pendingDraftIntentMs = Date.now() - intentStartedAt;
+      refinementRequested = intent.decision === 'revise_pending_draft';
+    }
+
+    // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
+    // 过期或被篡改的客户端材料既不能替换原材料，也不会在恢复权威私有引用前阻断请求。
+    const effectiveRequestContexts = refinementRequested ? [] : requestContexts;
+    const effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
+    const [resolvedContexts, resolvedAttachments] = enableTranslation
+      ? [
+          { text: '', sources: [] },
+          { text: '', sources: [], coverage: { documents: [], overall: null } },
+        ]
+      : await raceWithSignal(
+          Promise.all([
+            resolveResourceContexts(userId, effectiveRequestContexts, message),
+            resolveDocumentAttachments({
+              userId,
+              sourceIds: effectiveRequestAttachmentIds,
+              question: message,
+            }),
+          ]),
+          agentAbortController.signal,
+        );
+    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message);
+
     // 明确且单一的“材料 → 创建笔记”任务走统一草稿协议。材料可以是书签、笔记、文件、
     // 待办、混合引用或用户直接粘贴的文本；网页只在缺少快照时补读。旧草稿改写必须携带
     // 待确认令牌，服务端再从确认存储恢复稳定引用并重新校验归属，绝不相信客户端回传的正文或材料。
@@ -1719,8 +1788,8 @@ export async function agentChat(req, res) {
       let routeResponse = '';
       let routeStatus = 'confirmation_pending';
       let routeError = '';
-      let allUsageReported = true;
-      let modelCalls = 0;
+      let allUsageReported = pendingDraftIntentUsageReported;
+      let modelCalls = pendingDraftIntentCalls;
 
       if (stream) {
         sseLifecycle = buildSseLifecycle(getSessionId(session));
@@ -1731,28 +1800,13 @@ export async function agentChat(req, res) {
 
       if (refinementRequested) {
         try {
-          const inspected = await inspectToolConfirmationExecution(
-            normalizedDraftRefinement.confirmationToken,
-            identity.ownerKey,
-            getSessionId(session),
-          );
-          if (
-            inspected.state !== 'ready' ||
-            inspected.confirmation?.id !== normalizedDraftRefinement.confirmationId ||
-            inspected.confirmation?.toolName !== 'create_note'
-          ) {
+          if (pendingNoteDraftInspectionError) throw pendingNoteDraftInspectionError;
+          previousConfirmation = pendingNoteDraftInspection?.confirmation || null;
+          privateContext = pendingNoteDraftPrivateContext;
+          if (!previousConfirmation || !privateContext) {
             throw new ToolConfirmationError(
               'TOOL_CONFIRMATION_CONFLICT',
               '原草稿状态已经变化，请基于当前会话重新发起生成。',
-              409,
-            );
-          }
-          previousConfirmation = inspected.confirmation;
-          privateContext = normalizeNoteDraftPrivateContext(previousConfirmation.privateContext);
-          if (!privateContext) {
-            throw new ToolConfirmationError(
-              'TOOL_CONFIRMATION_CONTEXT_MISSING',
-              '原草稿没有可恢复的材料上下文，请重新发起生成。',
               409,
             );
           }
@@ -1887,7 +1941,7 @@ export async function agentChat(req, res) {
             identity,
             req,
             session,
-            replaceToken: previousConfirmation ? normalizedDraftRefinement.confirmationToken : undefined,
+            replaceToken: previousConfirmation ? normalizedPendingNoteDraft.confirmationToken : undefined,
             replaceConfirmationId: previousConfirmation?.id,
             privateContext,
           });
@@ -1935,7 +1989,7 @@ export async function agentChat(req, res) {
       }
 
       trace.usageStatus = allUsageReported ? 'reported' : 'missing';
-      trace.plannerMs = 0;
+      trace.plannerMs = trace.pendingDraftIntentMs || 0;
       if (stream) {
         if (previousConfirmation && confirmation) {
           sseLifecycle?.send('tool_confirmation_replaced', {
@@ -2201,7 +2255,7 @@ export async function agentChat(req, res) {
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     const toolEntitySources = [];
     let finalContent = '';
-    let apiCalls = 0;
+    let apiCalls = pendingDraftIntentCalls;
     let remainingToolResultBudget = 24000;
     // 累计所有 DeepSeek 调用的 token 用量(totalUsage 已在 try 外声明,供 finally 回写额度)
 
@@ -2451,7 +2505,7 @@ export async function agentChat(req, res) {
     }
     trace.plannerMs = Date.now() - plannerStartedAt;
     trace.finishReason = plannerResponse.finishReason;
-    let plannerUsageReported = plannerResponse.usageStatus === 'reported';
+    let plannerUsageReported = pendingDraftIntentUsageReported && plannerResponse.usageStatus === 'reported';
     trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
 
     // DeepSeek 偶发把工具调用标记吐进 content。先做本地协议归一；

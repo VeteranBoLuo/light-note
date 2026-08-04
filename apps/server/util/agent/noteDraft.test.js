@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
   generateNoteDraft,
-  isNoteDraftRefinement,
   isNoteDraftRequest,
   normalizeNoteDraftPrivateContext,
   normalizeNoteDraftRefinement,
@@ -19,6 +19,26 @@ function response(args, overrides = {}) {
       },
     ],
     usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+    usageStatus: 'reported',
+    finishReason: 'tool_calls',
+    ...overrides,
+  };
+}
+
+function intentResponse(decision, overrides = {}) {
+  return {
+    content: '',
+    toolCalls: [
+      {
+        id: 'intent-call',
+        type: 'function',
+        function: {
+          name: 'classify_pending_note_draft_intent',
+          arguments: JSON.stringify({ decision }),
+        },
+      },
+    ],
+    usage: { promptTokens: 8, completionTokens: 2, totalTokens: 10 },
     usageStatus: 'reported',
     finishReason: 'tool_calls',
     ...overrides,
@@ -56,10 +76,7 @@ describe('noteDraft', () => {
     ).toBe(false);
   });
 
-  it('识别草稿扩写并只接受格式正确的确认引用', () => {
-    expect(isNoteDraftRefinement('写得太短了，重新生成长一点')).toBe(true);
-    expect(isNoteDraftRefinement('写的太少了，详细一点')).toBe(true);
-    expect(isNoteDraftRefinement('今天天气怎么样')).toBe(false);
+  it('只接受格式正确的待确认草稿引用', () => {
     expect(
       normalizeNoteDraftRefinement({
         confirmationId: 'confirmation-1',
@@ -69,6 +86,79 @@ describe('noteDraft', () => {
     expect(normalizeNoteDraftRefinement({ confirmationId: 'confirmation-1', confirmationToken: 'short' })).toBe(
       null,
     );
+  });
+
+  it('用受约束语义协议判断草稿承接，不由调用方枚举用户句式', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(intentResponse('revise_pending_draft'))
+      .mockResolvedValueOnce(intentResponse('separate_request'));
+    const onResponse = vi.fn();
+
+    const revision = await classifyPendingNoteDraftFollowUp({
+      message: '这一版读起来还是像说明书，面向刚入门的人重新组织一下，语气自然些。',
+      history: [
+        { role: 'user', content: '请根据材料整理一篇笔记。' },
+        { role: 'assistant', content: '笔记草稿已准备好。' },
+      ],
+      sourceMessage: '综合所选材料生成一篇技术笔记。',
+      draftTitle: '原草稿',
+      draftContent: '正文里包含安装步骤和使用示例。',
+      request,
+      onResponse,
+    });
+    const separate = await classifyPendingNoteDraftFollowUp({
+      message: '深圳今天会下雨吗？',
+      request,
+      onResponse,
+    });
+
+    expect(revision.decision).toBe('revise_pending_draft');
+    expect(separate.decision).toBe('separate_request');
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(request.mock.calls[0][0][0].content).toContain('整体含义、指代和最近对话');
+    expect(request.mock.calls[0][0][1].content).toContain('面向刚入门的人重新组织一下');
+    expect(request.mock.calls[0][0][1].content).toContain('正文里包含安装步骤和使用示例');
+    expect(request.mock.calls[0][1]).toMatchObject({
+      toolChoice: { type: 'function', function: { name: 'classify_pending_note_draft_intent' } },
+      maxTokens: 256,
+      temperature: 0,
+    });
+    expect(onResponse).toHaveBeenCalledTimes(2);
+  });
+
+  it('语义分类协议缺失时失败关闭，不回退到关键词猜测', async () => {
+    await expect(
+      classifyPendingNoteDraftFollowUp({
+        message: '按刚才说的处理。',
+        request: vi.fn().mockResolvedValue({
+          content: '普通文本',
+          toolCalls: [],
+          usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+          usageStatus: 'reported',
+        }),
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_DRAFT_INTENT_INVALID' });
+
+    await expect(
+      classifyPendingNoteDraftFollowUp({
+        message: '把这版继续完善。',
+        request: vi.fn().mockResolvedValue(
+          intentResponse('revise_pending_draft', {
+            toolCalls: [
+              {
+                id: 'intent-call',
+                type: 'function',
+                function: {
+                  name: 'classify_pending_note_draft_intent',
+                  arguments: JSON.stringify({ decision: 'revise_pending_draft', unexpected: true }),
+                },
+              },
+            ],
+          }),
+        ),
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_DRAFT_INTENT_INVALID' });
   });
 
   it('私有上下文只保留稳定引用和原始文本，并过滤重复或无效材料', () => {

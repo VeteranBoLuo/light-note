@@ -291,7 +291,7 @@ const MATERIAL_ANAPHORIC_PATTERN =
 const MATERIAL_FOLLOW_UP_COMMAND_PATTERN =
   /^(?:(?:请|麻烦|帮我|能否|可以)\s*)?(?:继续|接着|重新生成|再生成|重写|重做|再写|写(?:得|的)?(?:(?:太|有点|比较)?(?:短|少|简略)|(?:长|多|详细|完整|丰富)(?:一|点|些)?)|(?:太|有点|比较)?(?:短|少|简略)|补充(?:一下|一点|些)|补充(?=[，。！？,.!?\s]|$)|展开(?:一下|说说)?|更(?:长|详细|完整|丰富)(?:一点|些)?|再(?:长|详细|完整|丰富)(?:一点|些)?|不够(?:长|详细|完整|丰富)|扩写|改写|优化(?:一下)?|润色|continue\b|expand\b|regenerate\b|rewrite\b|longer\b|more\s+detail\b)/i;
 
-export interface AiAssistantDraftRefinementReference {
+export interface AiAssistantPendingNoteDraftReference {
   confirmationId: string;
   confirmationToken: string;
 }
@@ -303,32 +303,28 @@ export function shouldAutoInheritAiAssistantMaterials(input: string) {
 }
 
 /**
- * “太短了，写长一点”只能改写当前会话里仍待确认的 create_note 草稿。
- * 客户端仅发送不可预测令牌和 ID；旧正文及原材料稳定引用由服务端从确认存储读取并重新校验，
- * 避免旧页面或篡改参数替换本轮改写所依据的材料。
+ * 返回当前会话最近一张仍有效的 create_note 确认卡，仅作为服务端语义判断的候选上下文。
+ * 前端不解释用户句式，也不决定是否改写；服务端验证令牌、owner 与 session 后再做语义分类。
  */
-export function resolveAiAssistantPendingNoteDraftRefinement(
+export function resolveAiAssistantPendingNoteDraftReference(
   messages: AiAssistantMessage[],
-  input: string,
-): AiAssistantDraftRefinementReference | null {
-  if (!MATERIAL_FOLLOW_UP_COMMAND_PATTERN.test(String(input || '').trim())) return null;
+): AiAssistantPendingNoteDraftReference | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message?.role !== 'assistant') continue;
-    // 只允许承接最近一条助手回答。若草稿后已经产生过普通回答，“重写”更可能指向
-    // 新回答，不能越过它去改动更早仍未过期的确认卡。
-    if (!message.pendingConfirmationIds?.length) return null;
+    // 普通误答不会让仍在页面上且未过期的确认卡失去上下文；继续向前寻找最近的待确认动作。
+    if (!message.pendingConfirmationIds?.length) continue;
     const pendingIds = new Set(message.pendingConfirmationIds);
-    const confirmation = [...(message.confirmations || [])]
-      .reverse()
-      .find(
-        (item) =>
-          item.toolName === 'create_note' &&
-          pendingIds.has(item.id) &&
-          (!item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now())),
-      );
-    // 更晚的待确认轮优先级最高；它不是笔记草稿时不得越过它去改写更早的旧卡。
-    if (!confirmation) return null;
+    const confirmations = [...(message.confirmations || [])].reverse().filter((item) => pendingIds.has(item.id));
+    // 有待确认 ID 却没有对应详情时，不能越过未知的新动作去操作更早的卡片。
+    if (!confirmations.length) return null;
+    const confirmation = confirmations.find(
+      (item) =>
+        !item.expiresAt || (Number.isFinite(Date.parse(item.expiresAt)) && Date.parse(item.expiresAt) > Date.now()),
+    );
+    // 此轮动作均已过期时继续寻找；更晚的有效动作不是笔记草稿时则不得越过。
+    if (!confirmation) continue;
+    if (confirmation.toolName !== 'create_note') return null;
     if (!confirmation.id || !/^[A-Za-z0-9_-]{40,}$/.test(String(confirmation.token || ''))) return null;
     return { confirmationId: confirmation.id, confirmationToken: confirmation.token };
   }

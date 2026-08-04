@@ -4,7 +4,7 @@ import useAiAssistantStore, {
   buildAiAssistantDomainKey,
   createAiAssistantMaterialSnapshot,
   resolveAiAssistantFollowUpMaterialSnapshot,
-  resolveAiAssistantPendingNoteDraftRefinement,
+  resolveAiAssistantPendingNoteDraftReference,
   resolveAiAssistantRequestEdgeStatus,
   resolveAiAssistantIdentity,
   shouldAutoInheritAiAssistantMaterials,
@@ -166,19 +166,10 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
     ];
 
     expect(resolveAiAssistantFollowUpMaterialSnapshot(messages)?.contextRefs[0]?.id).toBe('bookmark-1');
-    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '太短了，重新写长一点')).toEqual({
+    expect(resolveAiAssistantPendingNoteDraftReference(messages)).toEqual({
       confirmationId: 'confirmation-1',
       confirmationToken: 'a'.repeat(43),
     });
-    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '写的太少了，详细一点')).toEqual({
-      confirmationId: 'confirmation-1',
-      confirmationToken: 'a'.repeat(43),
-    });
-    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '优化一下')).toEqual({
-      confirmationId: 'confirmation-1',
-      confirmationToken: 'a'.repeat(43),
-    });
-    expect(resolveAiAssistantPendingNoteDraftRefinement(messages, '今天天气怎么样')).toBeNull();
 
     const newerUnrelatedAction = [
       ...messages,
@@ -201,7 +192,7 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
         ],
       },
     ];
-    expect(resolveAiAssistantPendingNoteDraftRefinement(newerUnrelatedAction, '重写一下')).toBeNull();
+    expect(resolveAiAssistantPendingNoteDraftReference(newerUnrelatedAction)).toBeNull();
 
     const newerNormalReply = [
       ...messages,
@@ -212,7 +203,36 @@ describe('材料生命周期:默认一次性(P0-A/B)', () => {
         timestamp: new Date(),
       },
     ];
-    expect(resolveAiAssistantPendingNoteDraftRefinement(newerNormalReply, '重写一下')).toBeNull();
+    expect(resolveAiAssistantPendingNoteDraftReference(newerNormalReply)).toEqual({
+      confirmationId: 'confirmation-1',
+      confirmationToken: 'a'.repeat(43),
+    });
+
+    const expiredNewerAction = [
+      ...messages,
+      {
+        id: 'assistant-4',
+        role: 'assistant' as const,
+        content: '已过期的待办操作',
+        timestamp: new Date(),
+        pendingConfirmationIds: ['confirmation-3'],
+        confirmations: [
+          {
+            id: 'confirmation-3',
+            token: 'c'.repeat(43),
+            sessionId: 'session-1',
+            toolName: 'set_todo_status',
+            args: { todoId: 'todo-1', status: 'completed' },
+            expiresIn: 300,
+            expiresAt: new Date(Date.now() - 1_000).toISOString(),
+          },
+        ],
+      },
+    ];
+    expect(resolveAiAssistantPendingNoteDraftReference(expiredNewerAction)).toEqual({
+      confirmationId: 'confirmation-1',
+      confirmationToken: 'a'.repeat(43),
+    });
   });
 
   it('把服务端工具返回的待办来源转成稳定追问锚点', () => {

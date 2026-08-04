@@ -251,7 +251,7 @@
     createAiAssistantMaterialSnapshot,
     createAiAssistantMessageId,
     resolveAiAssistantFollowUpMaterialSnapshot,
-    resolveAiAssistantPendingNoteDraftRefinement,
+    resolveAiAssistantPendingNoteDraftReference,
     resolveAiAssistantRequestEdgeStatus,
     resolveAiAssistantIdentity,
     shouldAutoInheritAiAssistantMaterials,
@@ -1670,9 +1670,9 @@
     hasAnswerStarted.value = false;
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
-    const draftRefinement =
+    const pendingNoteDraft =
       !options.materialSnapshot && !contexts.value.length && !attachments.value.length
-        ? resolveAiAssistantPendingNoteDraftRefinement(messages.value, inputText)
+        ? resolveAiAssistantPendingNoteDraftReference(messages.value)
         : null;
     const autoInheritedMaterialSnapshot =
       !options.materialSnapshot &&
@@ -2035,7 +2035,7 @@
           history: historyForRequest,
           contexts: contextSnapshot,
           attachmentIds: attachmentSnapshot.map((item) => item.id),
-          ...(draftRefinement ? { draftRefinement } : {}),
+          ...(pendingNoteDraft ? { pendingNoteDraft } : {}),
           scope: {
             mode: scopeMode.value,
             externalWeb: false,
