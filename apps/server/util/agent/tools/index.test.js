@@ -22,6 +22,7 @@ describe('Agent 工具注册表', () => {
         'create_bookmark',
         'create_image_note',
         'create_note',
+        'create_todo',
         'restore_trash',
         'save_attachment_to_cloud',
         'set_todo_status',

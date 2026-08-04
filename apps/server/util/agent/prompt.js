@@ -65,6 +65,13 @@ ${identityLine}
 
   lines.push(identityLine);
   lines.push('');
+  // 模型没有时钟。缺少这段时，"今天晚上 21 点""下周三"这类要求无法换算成具体时刻，
+  // 需要 dueAt 的工具（如 create_todo）只能靠猜，年份和日期都容易错。
+  lines.push('## 当前时间');
+  lines.push(
+    `${new Date().toLocaleString('zh-CN', { hour12: false })}（用户本地时区）。把"今天/明天/今晚/下周三"等相对说法换算成具体时间时以此为基准，工具参数一律填写 YYYY-MM-DD HH:mm:ss，不要回填相对说法。`,
+  );
+  lines.push('');
   lines.push('### 当前阶段：内部规划');
   lines.push('你只负责判断本轮是否需要工具并准备工具调用，不负责生成用户可见的最终正文。');
   lines.push(

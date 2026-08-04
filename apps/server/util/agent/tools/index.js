@@ -3,6 +3,7 @@ import queryBookmarks from './query_bookmarks.js';
 import queryNotes from './query_notes.js';
 import queryTodos from './query_todos.js';
 import setTodoStatus from './set_todo_status.js';
+import createTodo from './create_todo.js';
 import readNote from './read_note.js';
 import analyzeResourceImages from './analyze_resource_images.js';
 import queryFiles from './query_files.js';
@@ -52,6 +53,7 @@ export default [
   queryNotes,
   queryTodos,
   setTodoStatus,
+  createTodo,
   readNote,
   analyzeResourceImages,
   queryFiles,

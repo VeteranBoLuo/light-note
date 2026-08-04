@@ -160,6 +160,31 @@ vi.mock('../util/agent/tools/index.js', () => ({
       preview: (args) => ({ title: '完成待办', target: args.targetTitle, impact: '确认后才会写入。' }),
     },
     {
+      name: 'create_todo',
+      description: '创建一条待办',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          dueAt: { type: 'string' },
+          priority: { type: 'integer', enum: [0, 1, 2] },
+        },
+        required: ['title'],
+      },
+      isWrite: true,
+      directAction: true,
+      riskLevel: 'low',
+      confirmationPolicy: 'default',
+      execute: vi.fn(),
+      transform: (raw) => `✅ 待办「${raw?.title || '新待办'}」已创建。`,
+      summarize: () => '待办已创建',
+      preview: (args) => ({
+        title: '创建待办',
+        target: args.title,
+        impact: args.dueAt ? `确认后将创建一条截止于 ${args.dueAt} 的待办。` : '确认后将创建一条待办。',
+      }),
+    },
+    {
       name: 'create_note',
       description: '创建一篇笔记',
       parameters: {
@@ -2985,10 +3010,69 @@ describe('agentChat 主链路', () => {
     );
   });
 
-  it('模型漏声明复合写操作时，确认卡仍要披露另一半没有执行', async () => {
-    // 线上实测：「生成一篇笔记，并新建一个待办提醒我明天查看」——分类正确判 otherMutations=true
-    // 并交回 Planner，但 Planner 只声明了 note.create，todo.manage(planned) 被漏掉，
-    // 于是绕过 adjudicateSemanticPlan 的失败关闭，待办被静默丢弃。
+  it('笔记与待办可以在同一句里完成，各自出一张确认卡', async () => {
+    // 用户实测诉求：「分析这个书签，生成一篇笔记，然后创建一个今天晚上 21 点的待办」。
+    // 此前 todo.manage 是 planned 且 operationPatterns 含 CREATE_PATTERN，"新建待办"会命中
+    // 这条 planned 能力，adjudicateSemanticPlan 按 status 优先级把整个请求（含笔记）一起
+    // 失败关闭。todo.create 独立成 enabled 之后，两个写操作各自走确认协议。
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('create_note'), registry.get('create_todo')].filter(Boolean),
+    );
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '创建笔记',
+                targetDescription: '材料汇总笔记',
+                dependsOn: [],
+              },
+              {
+                kind: 'write',
+                capabilityId: 'todo.create',
+                goal: '创建待办',
+                targetDescription: '今天晚上 21 点查看笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              { toolName: 'create_note', arguments: { title: '材料汇总', content: '正文内容。' } },
+              { toolName: 'create_todo', arguments: { title: '查看材料汇总笔记', dueAt: '2026-08-04 21:00:00' } },
+            ],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请分析这个书签的内容，生成一篇笔记，然后创建一个今天晚上 21 点的待办',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.confirmations?.map((item) => item.toolName)).toEqual(['create_note', 'create_todo']);
+    // 两个写操作都覆盖到了，就不该再出现"其他操作没有执行"的兜底披露。
+    expect(String(data?.response || '')).not.toContain('其他操作没有执行');
+  });
+
+  it('模型漏声明第二个写操作时，确认卡仍要披露另一半没有执行', async () => {
+    // otherMutations 是代码级信号，不依赖模型是否老实声明。这里模型只声明了 note.create，
+    // 用户要求的删除（bookmark.delete 仍是 planned）既没执行也没被 adjudicate 拦下，
+    // 必须由兜底披露补上，否则写操作静默丢失。
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('create_note')].filter(Boolean));
     mocks.requestAi
       .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
@@ -3017,7 +3101,7 @@ describe('agentChat 主链路', () => {
 
     await agentChat(
       request({
-        message: '根据这些材料生成一篇笔记，并新建一个待办提醒我明天查看',
+        message: '根据这些材料生成一篇笔记，并把那个失效书签删掉',
         stream: false,
         contexts: [],
         attachmentIds: [],

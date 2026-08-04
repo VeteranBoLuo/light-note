@@ -8,6 +8,9 @@ describe('Agent 动作意图安全策略', () => {
     ['把待办“整理发票”标记为完成', 'enabled', 'set_todo_status'],
     ['恢复回收站里的笔记', 'enabled', 'restore_trash'],
     ['reopen task "invoice"', 'enabled', 'set_todo_status'],
+    ['新建一个待办提醒我明天交材料', 'enabled', 'create_todo'],
+    ['创建一个今天晚上 21 点的待办', 'enabled', 'create_todo'],
+    ['add a task to review the draft', 'enabled', 'create_todo'],
   ])('%s 解析为已启用能力', (message, resolution, toolName) => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({
       kind: 'action',
@@ -22,7 +25,7 @@ describe('Agent 动作意图安全策略', () => {
     ['把云空间的旧文件删掉', 'file.delete'],
     ['修改这篇笔记的标题', 'note.update'],
     ['给这个书签添加标签', 'tag.assign'],
-    ['新建一个待办提醒我明天交材料', 'todo.manage'],
+    ['修改这条待办的标题', 'todo.manage'],
   ])('%s 解析为计划中但未支持的能力', (message, capabilityId) => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({
       kind: 'action',

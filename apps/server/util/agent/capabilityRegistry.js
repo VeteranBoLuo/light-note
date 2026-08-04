@@ -172,6 +172,24 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
     resourcePatterns: [/(?:知识库|帮助中心|knowledge\s+base|help\s+center)/i],
   }),
   defineCapability({
+    id: 'todo.create',
+    status: 'enabled',
+    toolName: 'create_todo',
+    operations: ['create'],
+    resources: ['todo'],
+    riskLevel: 'low',
+    confirmationPolicy: 'default',
+    labels: { zh: '创建待办', en: 'create a todo' },
+    // 中间常夹着时间与内容描述（"创建一个今天晚上 21 点的待办"），间隔要留够。
+    actionPatterns: [
+      /(?:创建|新建|新增|添加|加|记|设|安排).{0,20}(?:待办|任务|提醒)/i,
+      /(?:待办|任务|提醒).{0,16}(?:创建|新建|新增|添加|记下|安排)/i,
+      /\b(?:create|add|new|schedule)\b.{0,24}\b(?:todo|task|reminder)\b/i,
+    ],
+    operationPatterns: [CREATE_PATTERN],
+    resourcePatterns: [/(?:待办|任务|提醒|todo|task|reminder)/i],
+  }),
+  defineCapability({
     id: 'todo.status.set',
     status: 'enabled',
     toolName: 'set_todo_status',
@@ -285,10 +303,13 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
   defineCapability({
     id: 'todo.manage',
     status: 'planned',
-    operations: ['create', 'update'],
+    // 创建已由 todo.create 承接。这里必须收窄成 update-only：只要 CREATE_PATTERN 还留在
+    // 这条 planned 能力上，"新建一个待办"就会同时命中它，而 adjudicateSemanticPlan 按
+    // status 优先级取 planned，整个请求（含那篇笔记）会被一起失败关闭。
+    operations: ['update'],
     resources: ['todo'],
-    labels: { zh: '创建或修改待办', en: 'create or update a todo' },
-    operationPatterns: [CREATE_PATTERN, UPDATE_PATTERN],
+    labels: { zh: '修改待办', en: 'update a todo' },
+    operationPatterns: [UPDATE_PATTERN],
     resourcePatterns: [/(?:待办|任务|提醒|todo|task|reminder)/i],
   }),
   defineCapability({
