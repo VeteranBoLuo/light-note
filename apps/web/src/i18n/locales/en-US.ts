@@ -3146,6 +3146,7 @@ export default {
       targetStatus: 'Target status',
       dueAt: 'Due date',
       priority: 'Priority',
+      todoDescription: 'Description',
       activeReminderCount: 'Pending reminders',
     },
     risk: {

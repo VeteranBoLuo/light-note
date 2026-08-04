@@ -204,7 +204,8 @@ export default {
       details: [
         { key: 'dueAt', value: args.dueAt ? `${args.dueAt}${args.overdue ? '（已过期）' : ''}` : '未设置' },
         { key: 'priority', value: PRIORITY_LABELS[args.priority] || '普通优先级' },
-        ...(args.description ? [{ key: 'description', value: args.description.slice(0, 120) }] : []),
+        // 不能复用 description——确认卡把它翻译成图片笔记的「图片说明」。
+        ...(args.description ? [{ key: 'todoDescription', value: args.description.slice(0, 120) }] : []),
       ],
     };
   },

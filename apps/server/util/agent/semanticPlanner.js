@@ -462,10 +462,19 @@ export function adjudicateSemanticPlan({ plan, toolCalls = [], catalog = [] } = 
     };
   }
 
+  // mixed 不再无条件要求读能力：材料已由服务端注入上下文时，「分析这些材料并创建…」
+  // 的合理计划就是纯写意图（读的部分不经过工具），强制要求 read 会把它错杀成 unknown_query。
+  // 只有 mixed 连一个已启用写能力都没有（读写两头都落空）才按无法核验的查询失败关闭。
+  const hasEnabledWriteIntent = selected.some(
+    (capability) => capability.effect === 'write' && capability.status === 'enabled',
+  );
   const hasUnknownRead =
     (plan?.intents || []).some((intent) => intent.kind === 'read' && intent.capabilityId === 'unknown') ||
-    (['product_help', 'data_query', 'mixed'].includes(plan?.requestClass) &&
-      !selected.some((capability) => capability.effect === 'read'));
+    (['product_help', 'data_query'].includes(plan?.requestClass) &&
+      !selected.some((capability) => capability.effect === 'read')) ||
+    (plan?.requestClass === 'mixed' &&
+      !selected.some((capability) => capability.effect === 'read') &&
+      !hasEnabledWriteIntent);
   if (hasUnknownRead) {
     return {
       state: 'blocked',

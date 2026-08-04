@@ -3063,6 +3063,7 @@ export default {
       targetStatus: '目标状态',
       dueAt: '截止时间',
       priority: '优先级',
+      todoDescription: '待办说明',
       activeReminderCount: '未触发提醒',
     },
     risk: {

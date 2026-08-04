@@ -315,6 +315,80 @@ describe('semanticPlanner', () => {
     });
   });
 
+  it('材料已注入上下文的 mixed 纯写计划不因缺读能力被错杀', () => {
+    // 线上实测：「分析这个书签，生成一篇笔记，然后创建待办」——材料正文已由服务端注入，
+    // 模型报 mixed + 两个已启用写意图 + 调用齐全，是合理计划；读的部分不经过工具。
+    const parsed = parseSemanticPlannerResponse(
+      {
+        toolCalls: [
+          call(
+            SEMANTIC_PLAN_TOOL_NAME,
+            plan({
+              requestClass: 'mixed',
+              intents: [
+                {
+                  kind: 'write',
+                  capabilityId: 'todo.status.set',
+                  goal: '完成待办',
+                  targetDescription: '指定待办',
+                  dependsOn: [],
+                },
+              ],
+              toolCalls: [{ toolName: 'set_todo_status', arguments: { todoId: 'todo-1', status: 'completed' } }],
+            }),
+          ),
+        ],
+      },
+      catalog,
+    );
+    expect(adjudicateSemanticPlan({ plan: parsed.plan, toolCalls: parsed.toolCalls, catalog })).toMatchObject({
+      state: 'ready',
+      resolution: 'enabled',
+    });
+
+    // mixed 读写两头都落空时仍必须失败关闭，不能借这条放宽滑进自由回答。
+    // （写检查在读检查之前，空计划先落 unknown_mutation。）
+    const emptyMixed = parseSemanticPlannerResponse(
+      {
+        toolCalls: [call(SEMANTIC_PLAN_TOOL_NAME, plan({ requestClass: 'mixed', intents: [], toolCalls: [] }))],
+      },
+      catalog,
+    );
+    expect(adjudicateSemanticPlan({ plan: emptyMixed.plan, toolCalls: [], catalog })).toMatchObject({
+      state: 'blocked',
+      resolution: 'unknown_mutation',
+    });
+
+    // mixed 声明的写能力仅是 planned 时也不能放行——那是「计划中未支持」，必须披露。
+    const plannedMixed = parseSemanticPlannerResponse(
+      {
+        toolCalls: [
+          call(
+            SEMANTIC_PLAN_TOOL_NAME,
+            plan({
+              requestClass: 'mixed',
+              intents: [
+                {
+                  kind: 'write',
+                  capabilityId: 'note.delete',
+                  goal: '删除笔记',
+                  targetDescription: '指定笔记',
+                  dependsOn: [],
+                },
+              ],
+              toolCalls: [],
+            }),
+          ),
+        ],
+      },
+      catalog,
+    );
+    expect(adjudicateSemanticPlan({ plan: plannedMixed.plan, toolCalls: [], catalog })).toMatchObject({
+      state: 'blocked',
+      resolution: 'planned',
+    });
+  });
+
   it('计划中写能力由服务端阻断，不能落入自由回答', () => {
     const parsed = parseSemanticPlannerResponse(
       {
