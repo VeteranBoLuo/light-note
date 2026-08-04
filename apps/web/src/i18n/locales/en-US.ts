@@ -818,8 +818,13 @@ export default {
       preferences: 'Quick Preferences',
       updateLogs: 'Update Logs',
       resourceOverview: 'Resource Overview',
+      // Mobile "Today" only: it really does show overdue, due-today and unorganized items
       todaySummary: 'Today’s Pending',
       todaySummaryHint: 'One place for unfinished todos, unorganized resources, and unread notifications',
+      // Desktop workbench only: it counts everything unfinished, not just today, so calling it
+      // "Today" makes people expect it to match the nav badge (overdue + due today).
+      actionOverview: 'Pending Overview',
+      actionOverviewHint: 'All unfinished todos, unorganized resources and unread notifications in one place',
       continueWorking: 'Continue Working',
       continueHint: 'Resume your recent and frequently used content',
       quickCreate: 'Quick Create',
@@ -869,7 +874,9 @@ export default {
       lastUpdated: 'Updated at {time}',
     },
     today: {
-      actionTotalUnit: 'unfinished',
+      // Spells out that the total covers todos and unorganized items only — unread
+      // notifications appear as a tile below but are not counted as action items
+      actionTotalUnit: 'todos / to organize',
       todoPending: 'Unfinished Todos',
       todoPendingHint: 'All todos that still need action',
       unreadNotification: 'Unread Notifications',

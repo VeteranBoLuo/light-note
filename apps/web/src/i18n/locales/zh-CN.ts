@@ -802,8 +802,13 @@ export default {
       preferences: '快捷偏好',
       updateLogs: '更新日志',
       resourceOverview: '资源概览',
+      // 移动端「今日」专用：那里展示的确实是逾期、今天到期和待整理，「今日」是准确的
       todaySummary: '今日待处理',
       todaySummaryHint: '未完成待办、待整理资源与未读通知的统一入口',
+      // 桌面工作台专用：统计范围是「全部未完成」而不是今天，叫「今日」会让人误以为
+      // 它该等于顶栏待办角标（逾期 + 今天）。两个数字都对，只是口径不同。
+      actionOverview: '待处理总览',
+      actionOverviewHint: '集中查看全部未完成待办、待整理资源与未读通知',
       continueWorking: '继续处理',
       continueHint: '从最近访问和常用内容接着开始',
       quickCreate: '快速创建',
@@ -853,7 +858,8 @@ export default {
       lastUpdated: '更新于 {time}',
     },
     today: {
-      actionTotalUnit: '项未完成',
+      // 明确总数只含待办和待整理，未读通知虽然在下方分项里展示，但不计入行动项总数
+      actionTotalUnit: '项待办 / 待整理',
       todoPending: '未完成待办',
       todoPendingHint: '全部仍需完成的待办',
       unreadNotification: '未读通知',

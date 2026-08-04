@@ -44,14 +44,20 @@
         </BButton>
       </div>
 
-      <section class="today-summary" :aria-label="t('workbench.panel.todaySummary')">
+      <!--
+        这一块统计的是「全部未完成待办 + 全部待整理」，不是今天的范围，所以标题用
+        「待处理总览」而不是「今日待处理」—— 后者会让人以为它该等于顶栏待办角标
+        （逾期 + 今天）。统计口径不变，只收口用户可见文案。
+        内部命名沿用 todaySummary*，留给后续专门的工作台命名重构，不在此处机械改名。
+      -->
+      <section class="today-summary" :aria-label="t('workbench.panel.actionOverview')">
         <div class="today-summary-heading">
           <span class="today-summary-heading__icon" aria-hidden="true">
             <SvgIcon :src="icon.noteDetail.toolbar.todo" size="22" />
           </span>
           <span class="today-summary-heading__copy">
-            <strong>{{ t('workbench.panel.todaySummary') }}</strong>
-            <small>{{ t('workbench.panel.todaySummaryHint') }}</small>
+            <strong>{{ t('workbench.panel.actionOverview') }}</strong>
+            <small>{{ t('workbench.panel.actionOverviewHint') }}</small>
           </span>
           <span class="today-summary-total">
             <strong>{{ displayCount(inbox.actionTotal) }}</strong>
