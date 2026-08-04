@@ -107,10 +107,13 @@
             <span :class="{ 'ov-err': (data?.system.apiServerErrorsToday || 0) > 0 }">服务 5xx {{ n(data?.system.apiServerErrorsToday) }}</span>
           </span>
         </li>
-        <li class="admin-stat-card ov-link" @click="go('agentLog')">
-          <span class="admin-stat-label">AI 监控</span>
-          <strong class="admin-stat-value">→</strong>
-          <span class="admin-stat-hint">调用明细</span>
+        <li>
+          <!-- 卡片整块可点：用真 button 才能 Tab 到并被读屏识别为跳转 -->
+          <button type="button" class="admin-stat-card ov-link" @click="go('agentLog')">
+            <span class="admin-stat-label">AI 监控</span>
+            <strong class="admin-stat-value" aria-hidden="true">→</strong>
+            <span class="admin-stat-hint">调用明细</span>
+          </button>
         </li>
       </ul>
 
@@ -127,10 +130,13 @@
           <strong class="admin-stat-value">{{ n(data?.conversion.registers) }}</strong>
           <span class="admin-stat-hint">整体转化 {{ convRate }}%</span>
         </li>
-        <li class="admin-stat-card ov-link" @click="go('conversion')">
-          <span class="admin-stat-label">转化漏斗</span>
-          <strong class="admin-stat-value">→</strong>
-          <span class="admin-stat-hint">详细分析</span>
+        <li>
+          <!-- 卡片整块可点：用真 button 才能 Tab 到并被读屏识别为跳转 -->
+          <button type="button" class="admin-stat-card ov-link" @click="go('conversion')">
+            <span class="admin-stat-label">转化漏斗</span>
+            <strong class="admin-stat-value" aria-hidden="true">→</strong>
+            <span class="admin-stat-hint">详细分析</span>
+          </button>
         </li>
       </ul>
 
@@ -316,7 +322,16 @@
     font-weight: 600;
   }
 
+  /* 改成 <button> 后要重置默认外观，否则卡片会带上浏览器按钮样式。
+     宽度撑满以保持原来的网格单元尺寸。 */
   .ov-link {
+    .admin-focus-ring(12px);
+
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    font: inherit;
+    text-align: left;
     cursor: pointer;
     transition: border-color 0.15s;
   }

@@ -66,7 +66,14 @@
               <div v-if="selected.length" class="nc-chips">
                 <span v-for="u in selected" :key="u.id" class="nc-chip">
                   {{ u.alias || u.email }}
-                  <i class="nc-chip-x" @click="removeUser(u.id)">×</i>
+                  <button
+                    type="button"
+                    class="nc-chip-x"
+                    :aria-label="`移除收件人 ${u.alias || u.email}`"
+                    @click="removeUser(u.id)"
+                  >
+                    ×
+                  </button>
                 </span>
               </div>
               <b-input
@@ -559,6 +566,7 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-breakpoints.less';
+  @import '@/assets/css/admin-mixins.less';
   /* 页面骨架与标题、刷新按钮已交给 AdminDataPage（原 .nc-page/.nc-hero/.nc-title/
      .nc-sub/.nc-refresh 全部删除；刷新按钮改用 BButton 默认外观）。
      Tab 栏放在 toolbar 槽内，间距由容器统一给。 */
@@ -689,6 +697,12 @@
     font-size: 12px;
   }
   .nc-chip-x {
+    .admin-focus-ring(4px);
+
+    padding: 0 2px;
+    border: none;
+    background: none;
+    color: inherit;
     cursor: pointer;
     font-style: normal;
     font-size: 14px;

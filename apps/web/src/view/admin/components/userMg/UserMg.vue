@@ -36,7 +36,16 @@
         <template v-else-if="column.key === 'operation'">
           <BSpace>
             <BTooltip :title="t('guest.userPreviewEntry')">
-              <svg-icon :src="icon.navigation.user" size="16" @click.stop="loginAsUser(record)" class="dom-hover" />
+              <!-- 模拟登录是「以别人身份进系统」的重操作，此前挂在裸 svg-icon 上：
+                   键盘够不到、读屏也不播报，而旁边同等重要的「维护模式」却是正经按钮。 -->
+              <button
+                type="button"
+                class="usermg-icon-btn dom-hover"
+                :aria-label="`${t('guest.userPreviewEntry')}：${record.alias || record.email || record.id}`"
+                @click.stop="loginAsUser(record)"
+              >
+                <svg-icon :src="icon.navigation.user" size="16" />
+              </button>
             </BTooltip>
             <BTooltip :title="t('guest.adminContextMaintainEntry')">
               <BButton size="small" @click.stop="maintainAsUser(record)">{{
@@ -301,6 +310,7 @@
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-mixins.less';
   .log-search-input {
     flex: 1;
   }
@@ -321,5 +331,19 @@
   .user-detail__grid p {
     margin: 0;
     color: var(--text-color);
+  }
+
+  /* 图标形态的操作按钮：重置浏览器默认外观，保持原来「一个图标」的观感 */
+  .usermg-icon-btn {
+    .admin-focus-ring(6px);
+
+    display: inline-flex;
+    align-items: center;
+    padding: 2px;
+    border: none;
+    border-radius: 6px;
+    background: none;
+    color: inherit;
+    cursor: pointer;
   }
 </style>
