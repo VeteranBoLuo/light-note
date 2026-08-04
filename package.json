@@ -17,7 +17,9 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "build:web": "pnpm --filter web build",
-    "dev:server": "pnpm --filter server start",
+    "dev:server": "node scripts/freePort.mjs 9001 && pnpm --filter server start",
+    "dev:server:watch": "node scripts/freePort.mjs 9001 && pnpm --filter server dev",
+    "free:server-port": "node scripts/freePort.mjs 9001",
     "preview": "node scripts/localPreview.mjs",
     "test": "pnpm -r test",
     "typecheck": "pnpm --filter web typecheck",

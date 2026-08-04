@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node app.js",
+    "dev": "node --watch --watch-preserve-output app.js",
     "worker:documents": "node documentWorker.js",
     "worker:bookmark-icons": "node bookmarkIconWorker.js",
     "check:bookmark-icons": "node scripts/checkBookmarkIconRuntime.js",

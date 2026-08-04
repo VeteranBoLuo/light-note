@@ -202,6 +202,24 @@ process.on('uncaughtException', (err) => {
   process.exit(1);
 });
 
-app.listen(9001, () => {
+let listeningReported = false;
+const server = app.listen(9001, () => {
+  listeningReported = true;
   console.log('服务器已启动：' + new Date().toLocaleString('zh-CN'));
+});
+
+// 端口占用必须是一眼可读的错误。否则它会落进上面的 uncaughtException 兜底,
+// 被 stableAgentErrorCode 脱敏成一个看不出原因的码,表现为"重启完前端还连着旧进程"。
+// 双栈绑定下 Node 可能先对一个地址族触发 listening、再对另一个报 EADDRINUSE,
+// 因此上面那行成功日志可能已经打出去了,这里必须显式否认它,不能让人以为启动成功。
+server.on('error', (error) => {
+  if (error?.code === 'EADDRINUSE') {
+    if (listeningReported) console.error('[启动失败] 上一行「服务器已启动」是误报，进程即将退出。');
+    console.error('[启动失败] 端口 9001 已被占用，多半是上一个 dev server 还在跑。');
+    console.error('           查看占用：lsof -nP -iTCP:9001 -sTCP:LISTEN');
+    console.error('           结束占用：pnpm free:server-port');
+    process.exit(1);
+  }
+  console.error('[启动失败] code=%s', stableAgentErrorCode(error));
+  process.exit(1);
 });
