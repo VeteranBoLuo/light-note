@@ -99,6 +99,13 @@
                 {{ layer.label }}
               </span>
             </div>
+            <div v-if="caseExpectation(result)" class="ai-evaluation__expectation">
+              <p class="ai-evaluation__expectation-question">{{ caseExpectation(result)!.message }}</p>
+              <p class="ai-evaluation__expectation-parts">
+                <span>{{ t('aiEvaluationAdmin.expectPrefix') }}</span>
+                <span v-for="(part, index) in caseExpectation(result)!.parts" :key="index">{{ part }}</span>
+              </p>
+            </div>
             <p v-for="(error, index) in caseErrors(result)" :key="index">{{ error }}</p>
           </div>
         </div>
@@ -191,6 +198,19 @@
       (attempt.errors || []).map((error: string) => t('aiEvaluationAdmin.attemptError', { attempt: index + 1, error })),
     );
   }
+  // 跳过原因的可读说明：区分「按设计不适用」与「被前置失败拖累」——两者都显示成
+  // 「已跳过」时无法判断结果是否正常，这是这个页面最主要的阅读障碍。
+  const LAYER_SKIP_REASONS: Record<string, string> = {
+    confirmation_required: 'aiEvaluationAdmin.skipConfirmationRequired',
+    no_tool: 'aiEvaluationAdmin.skipNoTool',
+    clarification: 'aiEvaluationAdmin.skipClarification',
+    not_requested: 'aiEvaluationAdmin.skipNotRequested',
+    prerequisite_failed: 'aiEvaluationAdmin.skipPrerequisiteFailed',
+  };
+  function skipReasonLabel(attempts: any[]) {
+    const reason = attempts.map((layer: any) => layer?.reason).find(Boolean);
+    return reason && LAYER_SKIP_REASONS[reason] ? t(LAYER_SKIP_REASONS[reason]) : '';
+  }
   function caseLayers(result: any) {
     const definitions = [
       { key: 'planning', label: t('aiEvaluationAdmin.layerPlanning') },
@@ -203,14 +223,50 @@
       const applicable = attempts.filter((layer: any) => layer.status !== 'skipped');
       const passed = applicable.filter((layer: any) => layer.status === 'passed').length;
       const status = !applicable.length ? 'skipped' : passed === applicable.length ? 'passed' : 'failed';
+      if (applicable.length) {
+        return {
+          key: definition.key,
+          status,
+          label: t('aiEvaluationAdmin.layerPassed', { layer: definition.label, passed, total: applicable.length }),
+        };
+      }
+      // 跳过时把原因带出来；prerequisite_failed 说明是被前面拖累的，不是"本该跳过"
+      const reason = skipReasonLabel(attempts);
+      const byDesign = attempts.every((layer: any) => layer?.reason !== 'prerequisite_failed');
       return {
         key: definition.key,
-        status,
-        label: !applicable.length
-          ? t('aiEvaluationAdmin.layerSkipped', { layer: definition.label })
-          : t('aiEvaluationAdmin.layerPassed', { layer: definition.label, passed, total: applicable.length }),
+        status: byDesign ? 'skipped' : 'blocked',
+        label: reason
+          ? t('aiEvaluationAdmin.layerSkippedReason', { layer: definition.label, reason })
+          : t('aiEvaluationAdmin.layerSkipped', { layer: definition.label }),
       };
     });
+  }
+  /** 用例期望：这条问题本来该调什么、该不该验回答。没有它就无法判断结果对错。 */
+  function caseExpectation(result: any) {
+    const expectation = result.expectation;
+    if (!expectation) return null;
+    const parts: string[] = [];
+    if (expectation.requiredCapabilities?.length) {
+      parts.push(t('aiEvaluationAdmin.expectCapabilities', { list: expectation.requiredCapabilities.join('、') }));
+    }
+    if (expectation.requiredTools?.length) {
+      parts.push(t('aiEvaluationAdmin.expectTools', { list: expectation.requiredTools.join('、') }));
+    } else if (expectation.expectedNeedsClarification === true) {
+      parts.push(t('aiEvaluationAdmin.expectClarification'));
+    } else if (!expectation.requiredCapabilities?.length) {
+      parts.push(t('aiEvaluationAdmin.expectNoTool'));
+    }
+    if (expectation.forbiddenTools?.length) {
+      parts.push(t('aiEvaluationAdmin.expectForbiddenTools', { list: expectation.forbiddenTools.join('、') }));
+    }
+    if (expectation.expectedAnswerKind === 'refusal') parts.push(t('aiEvaluationAdmin.expectRefusal'));
+    parts.push(
+      expectation.answerLayerApplicable
+        ? t('aiEvaluationAdmin.expectAnswerChecked')
+        : t('aiEvaluationAdmin.expectAnswerByConfirmation'),
+    );
+    return { message: expectation.message || '', parts };
   }
   function toggle(id: string) {
     const next = new Set(expandedIds.value);
@@ -397,6 +453,35 @@
   }
   .ai-evaluation__layer[data-status='failed'] {
     color: var(--danger-color, #dc2626);
+  }
+  /* 被前置层失败拖累的跳过：不是"按设计不适用"，需要与普通跳过区分开，
+     否则读者会误以为这层本来就不用跑。用警示色而非灰色。 */
+  .ai-evaluation__layer[data-status='blocked'] {
+    color: var(--warning-color, #d97706);
+    border: 1px solid color-mix(in srgb, var(--warning-color, #d97706) 32%, transparent);
+  }
+  .ai-evaluation__expectation {
+    grid-column: 2 / -1;
+    margin-top: 4px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--hover-bg-color, var(--card-background));
+    border-left: 2px solid color-mix(in srgb, var(--primary-color) 45%, transparent);
+  }
+  .ai-evaluation__expectation-question {
+    color: var(--title-color, var(--font-color));
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .ai-evaluation__expectation-parts {
+    margin-top: 2px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .ai-evaluation__expectation-parts > span + span::before {
+    content: '·';
+    margin: 0 6px;
+    opacity: 0.6;
   }
   .ai-evaluation__safety {
     color: var(--warning-color, #d97706);

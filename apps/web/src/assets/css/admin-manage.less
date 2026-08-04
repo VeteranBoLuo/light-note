@@ -1,134 +1,145 @@
-/* 公共的admin日志组件样式 */
+/**
+ * 后台管理共享样式。
+ *
+ * 重要约定：
+ * 1. 本文件被多个组件以 `@import` 引入 scoped style，每次引入都会复制一份产物。
+ *    因此这里只放**确实被多处复用**的类，不要放单页专属样式；
+ * 2. 断点统一用 @admin-bp-* 变量，值来自 config/responsive.ts 的 VIEWPORT_BREAKPOINTS，
+ *    禁止在后台各页里另写 max-width 数值（此前散落 11 个不同值，缩放窗口时各页
+ *    在不同宽度变形）；
+ * 3. 颜色只用 theme.less 定义过的语义变量。此前用的 --sub-text-color / --border-color
+ *    在 theme.less 里并不存在，全部落到 fallback 硬编码，导致深浅两套主题同色；
+ *    半透明白（rgba(255,255,255,*)）在浅色主题下不可见，一律不再使用。
+ * 4. 页面骨架（外层容器 + 标题 + 工具栏 + 表格区）统一用 components/admin/AdminDataPage.vue，
+ *    不要再手写 .admin-panel 那套结构——它已退役，仅为存量页面保留过渡期。
+ */
 
-:deep(.ant-table-wrapper) {
-  width: 100%;
+// 与 VIEWPORT_BREAKPOINTS 对齐：mobile 768 / desktop 1200 / compact 1400
+@admin-bp-mobile: 768px;
+@admin-bp-desktop: 1200px;
+@admin-bp-compact: 1400px;
+
+/* ===== 指标卡：概览数字区，多页复用 ===== */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 卡内三行必须由本类自己保证纵向排列：label/value/hint 都是 <span>，
+   不给 flex 就会挤成一行（"指标 1 1,234 今日 +12"）。此前各页看起来正常，
+   是因为它们各自又补了一遍布局。 */
+.admin-stat-card {
   display: flex;
   flex-direction: column;
+  background: var(--surface-raised-background);
+  border: 1px solid var(--surface-border-color);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--text-color);
+  min-width: 0;
+}
+
+.admin-stat-label {
+  font-size: 12px;
+  color: var(--desc-color);
+}
+
+.admin-stat-value {
+  margin-top: 2px;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  /* 数字等宽，多张卡的数值纵向对齐 */
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.admin-stat-hint {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--desc-color);
+}
+
+/* ===== 表格容器：需要独立卡片承载表格时使用 ===== */
+.admin-table-card {
   flex: 1;
   min-height: 0;
+  background: var(--card-background);
+  border: 1px solid var(--surface-border-color);
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
 }
 
-:deep(.ant-table-wrapper .ant-table) {
-  background-color: transparent;
-  color: var(--text-color);
-  width: 100%;
+/* ===== 筛选区 ===== */
+.admin-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-:deep(.ant-table-cell-ellipsis),
-:deep(.ant-table-cell) {
-  background-color: transparent !important;
-  color: var(--text-color) !important;
-  word-break: break-all;
+.admin-filters-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-:deep(.ant-table-thead > tr > th) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+.admin-filters-hint {
   font-size: 12px;
-  font-weight: 500;
-}
-
-:deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-:deep(.ant-table-body) {
-  flex: 1;
-  min-height: 0;
-  overflow: auto !important;
-}
-
-:deep(.ant-table-cell-scrollbar) {
-  background-color: unset !important;
-  display: none;
-}
-
-:deep(.ant-select-dropdown-placement-topLeft) {
-  min-width: 100px !important;
-  transition: none !important;
-}
-
-:deep(.ant-table-row-expand-icon) {
-  color: var(--text-color) !important;
-  opacity: 1 !important;
-  background-color: transparent !important;
-}
-
-:deep(.ant-table-row-expand-icon:hover) {
-  opacity: 1 !important;
-  background-color: rgba(255, 255, 255, 0.1) !important;
-}
-
-:deep(.ant-select-selector .ant-select-selection-item) {
-  background-color: unset !important;
-  transition: none !important;
-}
-
-:deep(.ant-pagination) {
-  color: var(--text-color);
-}
-
-:deep(.ant-pagination-item a) {
-  color: var(--text-color);
-}
-
-:deep(.ant-pagination-item-ellipsis) {
-  color: var(--icon-color) !important;
+  color: var(--desc-color);
 }
 
 .log-search-input {
   width: 50%;
 }
 
-.admin-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 12px;
-  margin: 12px 0 16px;
-  padding: 0;
-  list-style: none;
+@media (max-width: @admin-bp-mobile) {
+  .log-search-input {
+    width: 100%;
+  }
 }
 
-.admin-stat-card {
-  background: linear-gradient(135deg, rgba(82, 115, 255, 0.12), rgba(82, 115, 255, 0));
-  border: 1px solid rgba(82, 115, 255, 0.16);
-  border-radius: 12px;
-  padding: 12px 14px;
+/* ===== 底部与展开区 ===== */
+.admin-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
+}
+
+.admin-expand-panel {
+  padding: 8px 0;
   color: var(--text-color);
 }
 
-.admin-table-card {
-  flex: 1;
-  min-height: 0;
-  background: var(--card-bg-color, rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  border-radius: 16px;
-  padding: 12px;
-  backdrop-filter: blur(6px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
+/* ===== 存量页面骨架（已退役，逐页迁移到 AdminDataPage 后删除）=====
+ * 新页面禁止使用。保留原因：仍有存量页面引用，直接删会破相。
+ */
 .admin-panel-container {
   display: flex;
-    width: 100%;
-    height: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-    padding: 0  0 16px 0;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0 0 16px;
 }
 
 .admin-panel {
   background: var(--background-color);
   border-radius: 18px;
-  padding: 0 20px 20px 20px;
+  padding: 0 20px 20px;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  box-shadow: 0 10px 35px rgba(12, 19, 45, 0.08);
+  box-shadow: var(--surface-card-shadow);
   overflow: hidden;
 }
 
@@ -139,16 +150,6 @@
   gap: 16px;
 }
 
-@media (max-width: 960px) {
-  .admin-panel {
-    padding: 16px;
-  }
-
-  .admin-header {
-    flex-direction: column;
-  }
-}
-
 .admin-title-block {
   color: var(--text-color);
 }
@@ -157,7 +158,7 @@
   font-size: 12px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--sub-text-color, #7c8b9e);
+  color: var(--desc-color);
   margin-bottom: 6px;
 }
 
@@ -170,56 +171,15 @@
 .admin-subtitle {
   margin: 4px 0 0;
   font-size: 13px;
-  color: var(--sub-text-color, #7c8b9e);
+  color: var(--desc-color);
 }
 
-.admin-filters {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
+@media (max-width: @admin-bp-mobile) {
+  .admin-panel {
+    padding: 16px;
+  }
 
-.admin-filters-main {
-  display: flex;
-  gap: 12px;
-  width: 100%;
-  align-items: center;
-}
-
-.admin-filters-hint {
-  font-size: 12px;
-  color: var(--sub-text-color, #7c8b9e);
-  margin-bottom: 5px;
-}
-
-.admin-stat-label {
-  font-size: 12px;
-  text-transform: uppercase;
-  color: var(--sub-text-color, #7c8b9e);
-}
-
-.admin-stat-value {
-  display: block;
-  font-size: 20px;
-  line-height: 1.2;
-  margin: 4px 0;
-}
-
-.admin-stat-hint {
-  font-size: 12px;
-  color: var(--sub-text-color, #7c8b9e);
-}
-
-.admin-footer {
-  margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.admin-expand-panel {
-  max-height: 280px;
-  overflow-y: auto;
-  min-height: 120px;
-  color: var(--text-color);
-  padding: 8px 0;
+  .admin-header {
+    flex-direction: column;
+  }
 }

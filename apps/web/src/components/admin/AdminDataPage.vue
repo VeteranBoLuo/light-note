@@ -37,7 +37,7 @@
         <p v-if="toolbarHint" class="admin-data-page__toolbar-hint">{{ toolbarHint }}</p>
       </div>
 
-      <div class="admin-data-page__table">
+      <div class="admin-data-page__table" :data-layout="layout">
         <slot />
       </div>
     </section>
@@ -47,13 +47,23 @@
 <script lang="ts" setup>
   import { useI18n } from 'vue-i18n';
 
-  defineProps<{
-    eyebrow?: string;
-    title: string;
-    subtitle?: string;
-    toolbarHint?: string;
-    summaryCount?: number;
-  }>();
+  withDefaults(
+    defineProps<{
+      eyebrow?: string;
+      title: string;
+      subtitle?: string;
+      toolbarHint?: string;
+      summaryCount?: number;
+      /**
+       * table：单表格页，表格自身撑满并内部滚动（默认）。
+       * scroll：内容较多的组合页（指标 + 多张表 + 说明），整块按自然高度纵向滚动。
+       * 没有这个模式时，各页只能在自己的 scoped style 里覆写 .admin-panel/.admin-table-card
+       * 的 overflow 来实现滚动，既重复又会随容器改动漂移。
+       */
+      layout?: 'table' | 'scroll';
+    }>(),
+    { layout: 'table' },
+  );
 
   const { t } = useI18n();
 </script>
@@ -81,7 +91,8 @@
     overflow: hidden;
     border-radius: 18px;
     background: var(--background-color);
-    box-shadow: 0 10px 35px rgba(12, 19, 45, 0.08);
+    /* 走主题变量：硬编码深色阴影在深色主题下会糊成一团 */
+    box-shadow: var(--surface-card-shadow);
   }
 
   .admin-data-page__header {
@@ -221,6 +232,16 @@
     overflow: hidden;
   }
 
+  /* 组合页：内容按自然高度排布并整块滚动，子块不再被 flex 平分挤压 */
+  .admin-data-page__table[data-layout='scroll'] {
+    overflow-y: auto;
+    gap: 16px;
+
+    > * {
+      flex: none;
+    }
+  }
+
   @media (max-width: 960px) {
     .admin-data-page {
       padding-bottom: 0;
@@ -238,10 +259,16 @@
     }
 
     .admin-data-page__heading-row,
-    .admin-data-page__toolbar-row,
-    .admin-data-page__toolbar-main {
+    .admin-data-page__toolbar-row {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    /* 工具栏内的控件保持同行、空间不足才换行：强制 column 会让「输入框 + 查询按钮」
+       各占一整行，窄屏纵向空间被工具栏吃掉一大截。 */
+    .admin-data-page__toolbar-main {
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .admin-data-page__metrics {

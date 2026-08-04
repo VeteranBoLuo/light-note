@@ -440,6 +440,23 @@ export async function runLiveSmokeSuite(options) {
       passedAttempts,
       totalAttempts: attempts.length,
       passRate: passedAttempts / attempts.length,
+      // 用例的期望契约必须随结果上报：只看 passed/skipped 无法判断「这条本来该调什么、
+      // 该不该验回答」，后台会因此读不懂结果是否正常。
+      expectation: {
+        message: smokeCase.message,
+        role: smokeCase.role || 'user',
+        requiredCapabilities: smokeCase.requiredCapabilities || [],
+        requiredTools: smokeCase.requiredTools || [],
+        forbiddenTools: smokeCase.forbiddenTools || [],
+        requiredToolArguments: Object.keys(smokeCase.requiredToolArguments || {}),
+        expectedNeedsClarification: smokeCase.expectedNeedsClarification ?? null,
+        expectedAnswerKind: smokeCase.expectedAnswerKind || null,
+        // 写意图用例按设计不验证最终回答（改由确认协议把关），据此说明「回答」层为何跳过。
+        // 写/读判定复用生产能力目录的 effect，不在评测里另造一套规则。
+        answerLayerApplicable: !(smokeCase.requiredCapabilities || []).some(
+          (id) => catalog.find((entry) => entry.id === id)?.effect === 'write',
+        ),
+      },
       attempts,
     });
     if (typeof options.onProgress === 'function') {

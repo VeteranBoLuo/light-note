@@ -1,20 +1,16 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel ov-panel">
-      <header class="admin-header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / 总览</p>
-          <h2 class="admin-title">数据总览</h2>
-          <p class="admin-subtitle">
-            全站累计规模与近期动态一览<template v-if="data"> · 更新于 {{ data.generatedAt }}</template>
-          </p>
-        </div>
-        <label class="ov-hide-internal">
-          <BSwitch v-model:checked="hideInternal" @change="load" />隐藏内部账号(管理员/测试)
-        </label>
-      </header>
+  <AdminDataPage eyebrow="Admin / 总览" title="数据总览" :subtitle="pageSubtitle" layout="scroll">
+    <template #actions>
+      <label class="ov-hide-internal">
+        <BSwitch v-model:checked="hideInternal" :disabled="loading" @change="load" />隐藏内部账号（管理员/测试）
+      </label>
+      <BButton size="small" :loading="loading" @click="load">刷新</BButton>
+    </template>
 
-      <!-- 待办提示:有待处理事项时高亮 -->
+    <!-- 加载态：此前 data 为 null 时全部显示「—」，分不清是在加载还是真的没有数据 -->
+    <p v-if="loading && !data" class="ov-loading">正在加载全站数据…</p>
+
+    <!-- 待办提示:有待处理事项时高亮 -->
       <div v-if="data && pendingTotal > 0" class="ov-todo">
         <span class="ov-todo-icon">🔔</span>
         <span class="ov-todo-text">待处理事项</span>
@@ -138,11 +134,10 @@
         </li>
       </ul>
 
-      <!-- 近 7 天新增趋势:用户与内容量级差异大,拆两个面板各自定轴 -->
-      <p class="ov-section-title">近 7 天新增趋势</p>
-      <AdminGrowthTrendCard v-if="data" :trend="data.trend" />
-    </section>
-  </div>
+    <!-- 近 7 天新增趋势:用户与内容量级差异大,拆两个面板各自定轴 -->
+    <p class="ov-section-title">近 7 天新增趋势</p>
+    <AdminGrowthTrendCard v-if="data" :trend="data.trend" />
+  </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
@@ -151,12 +146,18 @@
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
 
   const bookmark = bookmarkStore();
   const data = ref<any>(null);
   const hideInternal = ref(true);
+  const loading = ref(false);
+
+  const pageSubtitle = computed(() =>
+    data.value ? `全站累计规模与近期动态一览 · 更新于 ${data.value.generatedAt}` : '全站累计规模与近期动态一览',
+  );
 
   const n = (v: any) => (v == null ? '—' : Number(v).toLocaleString());
   const delta = (v: any) => (v == null ? '今日 —' : `今日 +${Number(v).toLocaleString()}`);
@@ -184,10 +185,14 @@
     });
   }
 
-  function load() {
-    apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value }).then((res: any) => {
+  async function load() {
+    loading.value = true;
+    try {
+      const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value });
       if (res.status === 200) data.value = res.data;
-    });
+    } finally {
+      loading.value = false;
+    }
   }
 
   onMounted(load);
@@ -205,6 +210,12 @@
     white-space: nowrap;
     cursor: pointer;
     flex-shrink: 0;
+  }
+
+  .ov-loading {
+    margin: 0;
+    font-size: 13px;
+    color: var(--desc-color);
   }
 
   /* 内容较多:整面板纵向滚动、KPI 卡按自然高度排布(同 ConversionFunnel 的做法) */

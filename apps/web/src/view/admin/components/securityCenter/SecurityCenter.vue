@@ -1,41 +1,35 @@
 <template>
-  <div class="admin-panel-container">
-    <section class="admin-panel security-panel">
-      <header class="admin-header security-header">
-        <div class="admin-title-block">
-          <p class="admin-eyebrow">Admin / Security</p>
-          <h2 class="admin-title">安全中心</h2>
-          <p class="admin-subtitle">查看攻击态势、拦截记录、IP风险和处置状态</p>
-        </div>
-      </header>
+  <AdminDataPage eyebrow="Admin / Security" title="安全中心" subtitle="查看攻击态势、拦截记录、IP 风险和处置状态">
+    <template #toolbar>
+      <BTabs :options="securityTabs" :active-tab="activeKey" class="security-tab-bar" @change="onTabChange" />
+    </template>
 
-      <b-tabs :options="securityTabs" :activeTab="activeKey" @change="onTabChange" class="security-tab-bar" />
+    <div class="security-tab-content">
+      <RouterView />
+    </div>
 
-      <div class="security-tab-content">
-        <RouterView />
-      </div>
-
-      <EventDetailDrawer
-        v-if="eventDetailVisible"
-        :visible="eventDetailVisible"
-        :event-id="currentEventId"
-        @close="eventDetailVisible = false"
-        @saved="onEventSaved"
-      />
-      <IpAccountDrawer
-        v-if="ipAccountVisible"
-        :visible="ipAccountVisible"
-        :ip="currentIp"
-        :ip-banned="currentIpBanned"
-        @close="ipAccountVisible = false"
-      />
-    </section>
-  </div>
+    <EventDetailDrawer
+      v-if="eventDetailVisible"
+      :visible="eventDetailVisible"
+      :event-id="currentEventId"
+      @close="eventDetailVisible = false"
+      @saved="onEventSaved"
+    />
+    <IpAccountDrawer
+      v-if="ipAccountVisible"
+      :visible="ipAccountVisible"
+      :ip="currentIp"
+      :ip-banned="currentIpBanned"
+      @close="ipAccountVisible = false"
+    />
+  </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
   import { computed, defineAsyncComponent, provide, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -223,14 +217,16 @@
 <style lang="less" scoped>
 @import './securityCenter.less';
 
+/* Tab 栏放进 AdminDataPage 的 toolbar 槽，间距由容器统一给，这里不再自加外边距 */
 .security-tab-bar {
-  padding-top: 8px;
-  margin-bottom: 16px;
+  width: 100%;
 }
 
 .security-tab-content {
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow-y: auto;
 }
 </style>
