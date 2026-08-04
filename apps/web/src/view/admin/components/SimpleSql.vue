@@ -81,6 +81,7 @@
 
 <script lang="ts" setup>
 import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+import { buildSqlConfirmation } from '@/view/admin/components/sqlConsoleGuard.ts';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { apiBasePost } from '@/http/request.ts';
 import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -322,26 +323,16 @@ async function loadTableSchema(table: string) {
   finally { schemaUpdatedAt.value = new Date().toLocaleString(); }
 }
 
-/** 破坏性 SQL 关键字：命中则要求二次确认。控制台可直接改库，误按回车的代价不可逆。 */
-const MUTATION_SQL_PATTERN = /\b(delete|drop|truncate|update|insert|alter|replace|grant|revoke)\b/i;
 
-function describeMutation(statement: string) {
-  const matched = statement.match(MUTATION_SQL_PATTERN);
-  return matched ? matched[0].toUpperCase() : '';
-}
 
 async function runSql(confirmedMutation = false) {
   if (!sql.value.trim()) { result.value = '请先输入 SQL 语句。'; executionState.value = 'error'; return; }
   if (executionState.value === 'running') return;
-  const mutation = describeMutation(sql.value);
-  if (mutation && !confirmedMutation) {
+  const confirmation = buildSqlConfirmation(sql.value);
+  if (confirmation && !confirmedMutation) {
     // Alert 只暴露 onOk，没有 onCancel：用回调续跑而不是 await Promise，
     // 否则用户点取消时 Promise 永不 resolve，运行按钮会一直卡在 loading。
-    Alert.alert({
-      title: `确认执行 ${mutation}`,
-      content: `这条语句会修改数据库且无法自动回滚，请确认语句与 WHERE 条件无误：\n\n${sql.value.trim().slice(0, 300)}`,
-      onOk: () => runSql(true),
-    });
+    Alert.alert({ ...confirmation, onOk: () => runSql(true) });
     return;
   }
   executionState.value = 'running'; result.value = '执行中，请稍候...';

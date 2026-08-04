@@ -1,7 +1,6 @@
 import { resultData, snakeCaseKeys, insertData, generateUUID, INTERNAL_ROLES } from '../util/common.js';
 import { isLocalIp } from '../util/ipFilter.js';
 import { isSelfTraffic, listLogExclude, addLogExclude, removeLogExclude } from '../util/logExclude.js';
-import fs from 'fs';
 import fsP from 'fs/promises';
 import path from 'path';
 import pool from '../db/index.js';
@@ -752,10 +751,12 @@ export const getImages = async (req, res) => {
   const directoryPath = '/www/wwwroot/images';
 
   try {
-    // 读取目录中的所有文件和子目录
+    // 读取目录中的所有文件和子目录。
+    // 用异步版：readdirSync 会阻塞事件循环，图片目录条目多时一次后台图库加载
+    // 会把整个单进程服务卡住(所有并发请求一起等)，而这里本来就在 async 上下文里。
     let files = [];
     try {
-      files = fs.readdirSync(directoryPath);
+      files = await fsP.readdir(directoryPath);
     } catch (e) {
       if (e.code === 'ENOENT') {
         files = [];
