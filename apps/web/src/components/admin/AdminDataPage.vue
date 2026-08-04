@@ -3,6 +3,21 @@
     <section class="admin-data-page__surface">
       <header class="admin-data-page__header">
         <div class="admin-data-page__title-block">
+          <!--
+            移动端返回。这些页在手机上是从后台菜单 router.push 进来的顶级路由，既没有
+            CommonContainer 顶栏、也不显示底栏（底栏只在 meta.mobileBottomNav 为 true 时出现），
+            进来之后除了系统手势没有任何退路。
+          -->
+          <button
+            v-if="bookmark.isMobile"
+            type="button"
+            class="admin-data-page__back"
+            aria-label="返回后台管理"
+            @click="goBack"
+          >
+            <svg-icon :src="icon.arrow_left" size="20" />
+            <span>后台管理</span>
+          </button>
           <p v-if="eyebrow" class="admin-data-page__eyebrow">{{ eyebrow }}</p>
           <div class="admin-data-page__heading-row">
             <div class="admin-data-page__heading-copy">
@@ -46,14 +61,20 @@
 
 <script lang="ts" setup>
   import { useI18n } from 'vue-i18n';
+  import router from '@/router';
+  import icon from '@/config/icon.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { bookmarkStore } from '@/store';
 
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       eyebrow?: string;
       title: string;
       subtitle?: string;
       toolbarHint?: string;
       summaryCount?: number;
+      /** 移动端返回的落点。默认回后台菜单；嵌在别的外壳里的页面可以改。 */
+      backTo?: string;
       /**
        * table：单表格页，表格自身撑满并内部滚动（默认）。
        * scroll：内容较多的组合页（指标 + 多张表 + 说明），整块按自然高度纵向滚动。
@@ -62,13 +83,20 @@
        */
       layout?: 'table' | 'scroll';
     }>(),
-    { layout: 'table' },
+    { layout: 'table', backTo: '/admin' },
   );
 
+  const bookmark = bookmarkStore();
   const { t } = useI18n();
+
+  function goBack() {
+    router.push(props.backTo);
+  }
 </script>
 
 <style lang="less" scoped>
+  @import '@/assets/css/admin-mixins.less';
+
   .admin-data-page {
     width: 100%;
     height: 100%;
@@ -102,6 +130,24 @@
   .admin-data-page__title-block,
   .admin-data-page__heading-copy {
     min-width: 0;
+  }
+
+  /* 桌面端不出现：那边有常驻侧边导航，不需要返回 */
+  .admin-data-page__back {
+    .admin-focus-ring(8px);
+
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin: 0 0 6px -6px;
+    padding: 4px 6px;
+    border: none;
+    border-radius: 8px;
+    background: none;
+    font: inherit;
+    font-size: 13px;
+    color: var(--desc-color);
+    cursor: pointer;
   }
 
   .admin-data-page__eyebrow {

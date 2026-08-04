@@ -10,99 +10,36 @@
 
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { useUserStore } from '@/store';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import PhoneMenu from '@/components/base/phoneComponents/PhoneMenu/PhoneMenu.vue';
   import router from '@/router';
   import { useI18n } from 'vue-i18n';
+  import { buildAdminMobileMenu, type AdminMobileMenuItem } from '@/view/admin/admin/adminNav.ts';
+
   const { t } = useI18n();
-  const bookmark = bookmarkStore();
   const user = useUserStore();
-  const menuList = [
-    [
-      {
-        id: 'overview',
-        title: '总览',
-        icon: icon.userCenter.log,
-        url: '/overview',
-      },
-      {
-        id: 'operationLog',
-        title: '操作日志',
-        icon: icon.userCenter.operationLog,
-        url: '/operationLog',
-      },
-      {
-        id: 'apiLog',
-        title: 'api日志',
-        icon: icon.userCenter.log,
-        url: '/apiLog',
-      },
-      {
-        id: 'userMg',
-        title: '用户管理',
-        icon: icon.navigation.user,
-        url: '/userMg',
-      },
-      {
-        id: 'userOpinion',
-        title: '用户反馈',
-        icon: icon.userCenter.operationLog,
-        url: '/userOpinion',
-      },
-      {
-        id: 'imageMg',
-        title: '图片管理',
-        icon: icon.userCenter.imgMg,
-        url: '/imageMg',
-      },
-      {
-        id: 'agentLog',
-        title: 'AI 监控',
-        icon: icon.userCenter.log,
-        url: '/agentLog',
-      },
-      {
-        id: 'aiFeedback',
-        title: 'AI 回答反馈',
-        icon: icon.ai.feedbackDown,
-        url: '/aiFeedback',
-      },
-      {
-        id: 'aiEvaluation',
-        title: t('aiEvaluationAdmin.title'),
-        icon: icon.userCenter.log,
-        url: '/aiEvaluation',
-      },
-      {
-        id: 'conversion',
-        title: '转化漏斗',
-        icon: icon.userCenter.log,
-        url: '/conversion',
-      },
-      {
-        id: 'logCleanup',
-        title: '日志清理',
-        icon: icon.userCenter.sql,
-        url: '/logCleanup',
-      },
-      {
-        id: 'logExclude',
-        title: '日志白名单',
-        icon: icon.userCenter.log,
-        url: '/logExclude',
-      },
-    ],
-    [
-      {
-        id: 'securityCenter',
-        title: '安全中心',
-        icon: icon.user_admin,
-        url: '/securityCenterMobile',
-      },
-    ],
-  ];
-  function clickItem(item) {
+
+  /**
+   * 菜单与桌面共用 adminNav.ts 的定义。此前两端各写一份，手机端因此少了 4 个模块，
+   * 标题也没跟上（「api日志」）。图标在 PhoneMenu 里不渲染，所以这里不传。
+   */
+  const menuList = buildAdminMobileMenu({
+    icons: {
+      overview: icon.userCenter.workbenches,
+      user: icon.navigation.user,
+      ai: icon.ai.ask,
+      growth: icon.userCenter.growth,
+      log: icon.userCenter.log,
+      security: icon.navigation.permissions,
+      tool: icon.userCenter.sql,
+    },
+    pendingOpinion: 0,
+    pendingSecurity: 0,
+    aiEvaluationTitle: t('aiEvaluationAdmin.title'),
+  });
+
+  function clickItem(item: AdminMobileMenuItem) {
     router.push(item.url);
   }
 </script>

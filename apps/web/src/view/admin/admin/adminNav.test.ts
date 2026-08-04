@@ -1,5 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { adminNavTarget, buildAdminNav, resolveActiveNavId, type AdminNavEntry } from './adminNav';
+import {
+  adminNavTarget,
+  buildAdminMobileMenu,
+  buildAdminNav,
+  resolveActiveNavId,
+  type AdminNavEntry,
+} from './adminNav';
+
+/**
+ * 手机端可达路由。取自 router/modules/admin.ts 的顶级(扁平)路由
+ * 与 securityCenter.ts 的 /securityCenterMobile，改路由时这里要同步。
+ */
+const MOBILE_ROUTES = new Set([
+  '/overview',
+  '/apiLog',
+  '/operationLog',
+  '/userMg',
+  '/userOpinion',
+  '/imageMg',
+  '/agentLog',
+  '/aiFeedback',
+  '/aiEvaluation',
+  '/conversion',
+  '/logCleanup',
+  '/logExclude',
+  '/securityCenterMobile',
+  '/notificationCenter',
+]);
 
 const ICONS = {
   overview: 'i-overview',
@@ -133,5 +160,45 @@ describe('resolveActiveNavId', () => {
     ]) {
       expect(ids.has(resolveActiveNavId(path))).toBe(true);
     }
+  });
+});
+
+describe('手机后台菜单', () => {
+  const mobile = () =>
+    buildAdminMobileMenu({ icons: ICONS, pendingOpinion: 0, pendingSecurity: 0, aiEvaluationTitle: 'AI 问答测试' });
+
+  it('每一项都指向真实存在的手机路由（点出 404 是最糟的菜单 bug）', () => {
+    const items = mobile().flat();
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(MOBILE_ROUTES.has(item.url), `${item.title} 指向了不存在的手机路由 ${item.url}`).toBe(true);
+    }
+  });
+
+  it('凡是手机上有路由的模块都进菜单，不漏', () => {
+    const urls = new Set(mobile().flat().map((item) => item.url));
+    for (const route of MOBILE_ROUTES) {
+      expect(urls.has(route), `手机上有 ${route} 却没有菜单入口`).toBe(true);
+    }
+  });
+
+  it('标题与桌面一致，不各写一套', () => {
+    const desktop = new Map(allItems(nav()).map((item) => [item.id, item.title]));
+    for (const item of mobile().flat()) {
+      expect(item.title).toBe(desktop.get(item.id));
+    }
+  });
+
+  it('桌面独有的工作台不进手机菜单（手机上没有这些路由）', () => {
+    const ids = mobile().flat().map((item) => item.id);
+    expect(ids).not.toContain('simpleSql');
+    expect(ids).not.toContain('knowledgeBase');
+    expect(ids).not.toContain('pointsOps');
+  });
+
+  it('按桌面的分组顺序输出，空组不留下来', () => {
+    const groups = mobile();
+    expect(groups.every((group) => group.length > 0)).toBe(true);
+    expect(groups[0][0].id).toBe('overview');
   });
 });

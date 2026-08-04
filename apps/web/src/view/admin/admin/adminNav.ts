@@ -162,3 +162,48 @@ export function resolveActiveNavId(path: string): string {
 export function adminNavTarget(item: AdminNavItem): string {
   return item.path || `/admin/${item.id}`;
 }
+
+/**
+ * 移动端能到达的模块 → 手机专用路径。
+ *
+ * 手机后台是另一套扁平路由（App.vue 的 phoneReplaceMap 把 /admin/xxx 换成 /xxx），
+ * 不在这张表里的模块在手机上**没有路由**，列进菜单会点出 404。
+ *
+ * 故意不收录：
+ * - simpleSql / knowledgeBase：双栏工作台（编辑器占满高度），手机屏放不下；
+ * - pointsOps：无手机路由，且发放积分是需要核对的写操作，不适合在手机上顺手做。
+ */
+const MOBILE_PATHS: Record<string, string> = {
+  overview: '/overview',
+  userMg: '/userMg',
+  userOpinion: '/userOpinion',
+  agentLog: '/agentLog',
+  aiFeedback: '/aiFeedback',
+  aiEvaluation: '/aiEvaluation',
+  conversion: '/conversion',
+  notificationCenter: '/notificationCenter',
+  operationLog: '/operationLog',
+  apiLog: '/apiLog',
+  logCleanup: '/logCleanup',
+  logExclude: '/logExclude',
+  securityCenter: '/securityCenterMobile',
+  imageMg: '/imageMg',
+};
+
+export type AdminMobileMenuItem = { id: string; title: string; url: string };
+
+/**
+ * 手机后台菜单。和桌面共用 buildAdminNav 的标题与分组顺序，避免两端漂移——
+ * 此前两份菜单各写各的，手机端少 4 个模块、还留着「api日志」这种没统一过的写法。
+ * PhoneMenu 按「数组的数组」分组渲染卡片，所以这里输出二维数组。
+ */
+export function buildAdminMobileMenu(input: AdminNavInput): AdminMobileMenuItem[][] {
+  return buildAdminNav(input)
+    .map((entry) => {
+      const items = entry.kind === 'item' ? [entry.item] : entry.items;
+      return items
+        .filter((item) => MOBILE_PATHS[item.id])
+        .map((item) => ({ id: item.id, title: item.title, url: MOBILE_PATHS[item.id] }));
+    })
+    .filter((group) => group.length > 0);
+}
