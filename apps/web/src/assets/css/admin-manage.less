@@ -12,10 +12,16 @@
  *    半透明白（rgba(255,255,255,*)）在浅色主题下不可见，一律不再使用。
  * 4. 页面骨架（外层容器 + 标题 + 工具栏 + 表格区）统一用 components/admin/AdminDataPage.vue，
  *    不要再手写 .admin-panel 那套结构——它已退役，仅为存量页面保留过渡期。
+ * 5. 自定义外观的可点击元素一律用 <button type="button"> 而不是 <span>/<div> + @click
+ *    （否则不能 Tab 聚焦、读屏识别不出可操作），重置默认外观后用 .admin-focus-ring()
+ *    补回焦点环——键盘用户否则完全看不出焦点落在哪。
  */
 
 // 断点变量集中在 admin-breakpoints.less（纯变量、零 CSS 产物），各页可单独引入
 @import './admin-breakpoints.less';
+
+// 共享 mixin（.admin-focus-ring 等）同样零 CSS 产物，转引一层供各页直接使用
+@import './admin-mixins.less';
 
 /* ===== 指标卡：概览数字区，多页复用 ===== */
 .admin-stats {

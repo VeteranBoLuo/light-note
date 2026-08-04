@@ -1,16 +1,18 @@
 <template>
-  <div class="nc-page">
-    <header class="nc-hero">
-      <div>
-        <h1 class="nc-title">{{ t('notificationAdmin.inApp.title') }}</h1>
-        <p class="nc-sub">{{ pageSubtitle }}</p>
-      </div>
-      <BButton class="nc-refresh" :loading="activeTab === 'in_app' && loading" @click="refreshActive">
+  <AdminDataPage
+    eyebrow="Admin / 通知"
+    :title="t('notificationAdmin.inApp.title')"
+    :subtitle="pageSubtitle"
+    layout="scroll"
+  >
+    <template #actions>
+      <BButton :loading="activeTab === 'in_app' && loading" @click="refreshActive">
         {{ t('notificationAdmin.refresh') }}
       </BButton>
-    </header>
-
-    <BTabs v-model:active-tab="activeTab" :options="tabOptions" variant="segment" class="nc-tabs" />
+    </template>
+    <template #toolbar>
+      <BTabs v-model:active-tab="activeTab" :options="tabOptions" variant="segment" class="nc-tabs" />
+    </template>
 
     <template v-if="activeTab === 'in_app'">
       <!-- 概览 -->
@@ -240,7 +242,7 @@
     </template>
 
     <EmailDeliveryPanel v-else ref="emailPanelRef" />
-  </div>
+  </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
@@ -255,6 +257,7 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import EmailDeliveryPanel from './EmailDeliveryPanel.vue';
@@ -556,51 +559,11 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-breakpoints.less';
-  .nc-page {
-    height: 100%;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: 22px 24px 48px;
-    background: var(--background-color);
-    color: var(--text-color);
-  }
-  .nc-hero {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
-  }
-  .nc-title {
-    margin: 0;
-    font-size: 22px;
-    font-weight: 700;
-  }
-  .nc-sub {
-    margin: 4px 0 0;
-    font-size: 13px;
-    color: var(--desc-color);
-  }
+  /* 页面骨架与标题、刷新按钮已交给 AdminDataPage（原 .nc-page/.nc-hero/.nc-title/
+     .nc-sub/.nc-refresh 全部删除；刷新按钮改用 BButton 默认外观）。
+     Tab 栏放在 toolbar 槽内，间距由容器统一给。 */
   .nc-tabs {
     width: max-content;
-    margin-bottom: 18px;
-  }
-  .nc-refresh {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 7px 14px;
-    border-radius: 9px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent);
-    background: var(--workbench-subcard-bg);
-    color: var(--text-color);
-    font-size: 13px;
-    cursor: pointer;
-  }
-  .nc-refresh:hover:not(:disabled) {
-    color: var(--primary-color);
-    border-color: color-mix(in srgb, var(--primary-color) 45%, transparent);
   }
 
   /* 概览 */

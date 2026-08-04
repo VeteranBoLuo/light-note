@@ -39,9 +39,15 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'img'">
-          <div class="image-mg__preview dom-hover" @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))">
+          <!-- 预览是查看大图的唯一入口，用真 button 才能被键盘聚焦与读屏识别 -->
+          <button
+            type="button"
+            class="image-mg__preview dom-hover"
+            :aria-label="`预览 ${record.fileName || record.fullFileName}`"
+            @click="bookmark.refreshViewer(getImgFullUrl(record.fullFileName))"
+          >
             <svg-icon size="40" title="点击预览" :src="getImgFullUrl(record.fullFileName)" />
-          </div>
+          </button>
         </template>
       </template>
     </BTable>
@@ -172,6 +178,7 @@
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-breakpoints.less';
+  @import '@/assets/css/admin-mixins.less';
   .log-search-input {
     flex: 1;
   }
@@ -181,6 +188,10 @@
   }
 
   .image-mg__preview {
+    .admin-focus-ring(6px);
+    padding: 0;
+    border: none;
+    background: none;
     width: 40px;
     height: 40px;
     display: flex;

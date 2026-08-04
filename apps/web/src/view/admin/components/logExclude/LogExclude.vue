@@ -38,7 +38,15 @@
             <!-- 是否「本设备」由上方 badge 按当前浏览器指纹动态判断;历史数据里 note 被写死成「本设备」是脏数据,过滤掉避免每行都显示 -->
             <span v-if="item.note && item.note !== '本设备'" class="le-note">{{ item.note }}</span>
           </div>
-          <span class="le-del dom-hover" @click="remove(item.fingerprint)">删除</span>
+          <button
+            type="button"
+            class="le-del dom-hover"
+            :disabled="removing === item.fingerprint"
+            :aria-label="`移除白名单设备 ${item.fingerprint}`"
+            @click="remove(item.fingerprint)"
+          >
+            {{ removing === item.fingerprint ? '移除中…' : '删除' }}
+          </button>
         </div>
       </div>
     </div>
@@ -48,6 +56,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getLogExclude, addLogExclude, removeLogExclude } from '@/api/commonApi';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import { bookmarkStore } from '@/store';
@@ -63,6 +72,7 @@
   }
 
   const bookmark = bookmarkStore();
+  const removing = ref('');
   const list = ref<ExcludeItem[]>([]);
   const loading = ref(false);
   const adding = ref(false);
@@ -102,11 +112,26 @@
     }
   }
 
-  async function remove(fp: string) {
-    const res = await removeLogExclude(fp);
-    if (res.status === 200) {
-      message.success('已移除');
-      await load();
+  async function remove(fp: string, confirmed = false) {
+    if (removing.value) return;
+    if (!confirmed) {
+      // 移除后该设备的日志会重新被记录，属于会改变系统行为的操作，先确认
+      Alert.alert({
+        title: '确认移除',
+        content: `移除后该设备的 API 日志、操作日志与转化漏斗将重新被记录：\n${fp}`,
+        onOk: () => remove(fp, true),
+      });
+      return;
+    }
+    removing.value = fp;
+    try {
+      const res = await removeLogExclude(fp);
+      if (res.status === 200) {
+        message.success('已移除');
+        await load();
+      }
+    } finally {
+      removing.value = '';
     }
   }
 
@@ -114,6 +139,9 @@
 </script>
 
 <style scoped lang="less">
+  /* 只引 mixin 文件：它零 CSS 产物。引 admin-manage.less 会把它的 180+ 行实类
+     全量复制进本页 scoped 产物。 */
+  @import '@/assets/css/admin-mixins.less';
   .log-exclude {
     display: flex;
     flex-direction: column;
@@ -209,10 +237,25 @@
     font-size: 12px;
     color: var(--desc-color);
   }
+  /* 由 <span @click> 改为真 <button>：需重置浏览器默认按钮外观，保持原有纯文字样式。
+     原色值 #ec4899 是资源标签粉，用于删除动作语义不符，改用危险色。 */
   .le-del {
     flex-shrink: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
     font-size: 12px;
-    color: #ec4899;
+    color: var(--danger-color);
     cursor: pointer;
+  }
+
+  .le-del:disabled {
+    cursor: default;
+    opacity: 0.6;
+  }
+
+  .le-del {
+    .admin-focus-ring(4px);
   }
 </style>

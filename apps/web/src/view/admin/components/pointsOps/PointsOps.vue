@@ -57,10 +57,17 @@
         <div class="pops-top">
           <div v-for="(u, i) in ov?.top || []" :key="u.userId" class="pops-top-row">
             <span class="pops-top-rank">{{ i + 1 }}</span>
-            <div class="pops-top-user dom-hover" @click="pickUser(u.userId)" :title="'点击回填 · ' + u.userId">
+            <!-- 回填入口用真 button：键盘用户否则只能手抄 userId -->
+            <button
+              type="button"
+              class="pops-top-user dom-hover"
+              :title="'点击回填 · ' + u.userId"
+              :aria-label="`回填用户 ${u.alias || u.email || u.userId}`"
+              @click="pickUser(u.userId)"
+            >
               <span class="pops-top-alias">{{ u.alias || '(未设昵称)' }}</span>
               <span class="pops-top-email">{{ u.email || u.userId }}</span>
-            </div>
+            </button>
             <b class="pops-top-pts">🪙 {{ u.points.toLocaleString('en-US') }}</b>
           </div>
           <div v-if="!ov?.top?.length" class="pops-empty">暂无持有人</div>
@@ -256,6 +263,7 @@
 
 <style scoped lang="less">
   @import '@/assets/css/admin-breakpoints.less';
+  @import '@/assets/css/admin-mixins.less';
   /* 骨架与指标卡已迁到 AdminDataPage + .admin-stat-*，原 .pops-header/.pops-card* 全部删除。
      这里只保留指标卡内的正负值语义色。 */
   .admin-stat-value.up {
@@ -328,6 +336,12 @@
     font-weight: 700;
   }
   .pops-top-user {
+    .admin-focus-ring(6px);
+    padding: 0;
+    border: none;
+    background: none;
+    font: inherit;
+    text-align: left;
     flex: 1 1 auto;
     min-width: 0;
     display: flex;

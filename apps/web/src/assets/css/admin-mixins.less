@@ -1,0 +1,20 @@
+/**
+ * 后台管理共享 mixin。
+ *
+ * 单独成文件的原因：Less mixin 不被调用就不产出任何 CSS，因此这个文件可以被任意
+ * 页面安全引入；而 admin-manage.less 含大量实类，@import 它会把全部规则复制进
+ * 引入方的 scoped 产物（本文件被 17 个页面引入，复制成本是真实的）。
+ * 只需要 mixin 的页面引这里，不要引 admin-manage.less。
+ */
+
+/* 统一焦点环。自定义外观的可点击元素（重置了 border/background 的 <button>）
+   必须调用它，否则键盘 Tab 过去完全看不出焦点在哪。
+   颜色用 --focus-ring-color 而不是 --primary-color：primary 在深色主题的
+   表面色上只有 2.02:1，不满足 WCAG 1.4.11 对焦点指示器的 3:1（详见 theme.less）。 */
+.admin-focus-ring(@radius: 6px) {
+  &:focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+    border-radius: @radius;
+  }
+}
