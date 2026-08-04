@@ -244,12 +244,12 @@
   .phone-balance-change-card {
     margin: 8px 16px 0;
     padding: 10px 12px;
-    border: 1px solid color-mix(in srgb, var(--success-color, #2e8b57) 24%, var(--card-border-color));
+    border: 1px solid color-mix(in srgb, var(--success-color) 24%, var(--card-border-color));
     border-radius: 12px;
     display: grid;
     grid-template-columns: 1fr auto;
     gap: 2px 10px;
-    background: color-mix(in srgb, var(--success-color, #2e8b57) 7%, var(--card-background));
+    background: color-mix(in srgb, var(--success-color) 7%, var(--card-background));
     color: var(--text-color);
   }
   .phone-balance-change-card > span,

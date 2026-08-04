@@ -326,7 +326,7 @@
   .user-opinion__filters-hint,
   .opinion-reply-editor__time {
     font-size: 12px;
-    color: var(--sub-text-color, #7c8b9e);
+    color: var(--desc-color);
   }
 
   .user-opinion__operation {
@@ -348,19 +348,19 @@
   }
 
   .user-opinion__status-tag--pending {
-    color: #b36b00;
+    color: var(--warning-color);
     background: rgba(255, 184, 77, 0.12);
     border-color: rgba(255, 184, 77, 0.3);
   }
 
   .user-opinion__status-tag--replied {
-    color: #2f6fed;
+    color: var(--info-color);
     background: rgba(47, 111, 237, 0.14);
     border-color: rgba(47, 111, 237, 0.3);
   }
 
   .user-opinion__status-tag--viewed {
-    color: #1f8f55;
+    color: var(--success-color);
     background: rgba(31, 143, 85, 0.14);
     border-color: rgba(31, 143, 85, 0.3);
   }
@@ -381,7 +381,7 @@
     display: block;
     margin-bottom: 6px;
     font-size: 12px;
-    color: var(--sub-text-color, #7c8b9e);
+    color: var(--desc-color);
   }
 
   .opinion-detail p {

@@ -287,10 +287,10 @@
     font-variant-numeric: tabular-nums;
   }
   .pops-card-num.up {
-    color: #16a34a;
+    color: var(--success-color);
   }
   .pops-card-num.down {
-    color: #dc2626;
+    color: var(--danger-color);
   }
   .pops-card-sub {
     font-size: 11px;
@@ -343,10 +343,10 @@
     font-weight: 700;
   }
   .up {
-    color: #16a34a;
+    color: var(--success-color);
   }
   .down {
-    color: #dc2626;
+    color: var(--danger-color);
   }
   .pops-reason-cnt {
     color: var(--desc-color);

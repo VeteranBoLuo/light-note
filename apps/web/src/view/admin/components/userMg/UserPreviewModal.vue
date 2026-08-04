@@ -195,7 +195,7 @@
   }
   .preview-context-status.mode-maintain {
     border-color: rgba(245, 158, 11, 0.55);
-    background: color-mix(in srgb, var(--background-color) 92%, #f59e0b 8%);
+    background: color-mix(in srgb, var(--background-color) 92%, var(--warning-color) 8%);
   }
   .preview-context-subject {
     min-width: 0;

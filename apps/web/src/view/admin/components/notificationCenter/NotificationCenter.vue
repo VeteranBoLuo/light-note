@@ -831,8 +831,8 @@
     font-weight: 600;
   }
   .nc-type.t-system {
-    color: #16a34a;
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    color: var(--success-color);
+    background: color-mix(in srgb, var(--success-color) 14%, transparent);
   }
   .nc-type.t-other {
     color: #a855f7;
@@ -950,8 +950,8 @@
     border-radius: 999px;
   }
   .nc-recipient-status.is-read {
-    color: #16a34a;
-    background: color-mix(in srgb, #16a34a 14%, transparent);
+    color: var(--success-color);
+    background: color-mix(in srgb, var(--success-color) 14%, transparent);
   }
   .nc-recipient-status.is-unread {
     color: var(--desc-color);

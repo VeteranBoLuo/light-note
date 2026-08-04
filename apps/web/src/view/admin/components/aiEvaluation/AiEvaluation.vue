@@ -411,11 +411,11 @@
     font-weight: 600;
   }
   .ai-evaluation__status[data-status='passed'] {
-    color: var(--success-color, #16a34a);
+    color: var(--success-color);
   }
   .ai-evaluation__status[data-status='failed'],
   .ai-evaluation__status[data-status='error'] {
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color);
   }
   .ai-evaluation__details {
     display: grid;
@@ -432,7 +432,7 @@
   .ai-evaluation__case p {
     grid-column: 2 / -1;
     margin: 0;
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color);
     font-size: 12px;
   }
   .ai-evaluation__layers {
@@ -449,16 +449,16 @@
     font-size: 12px;
   }
   .ai-evaluation__layer[data-status='passed'] {
-    color: var(--success-color, #16a34a);
+    color: var(--success-color);
   }
   .ai-evaluation__layer[data-status='failed'] {
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color);
   }
   /* 被前置层失败拖累的跳过：不是"按设计不适用"，需要与普通跳过区分开，
      否则读者会误以为这层本来就不用跑。用警示色而非灰色。 */
   .ai-evaluation__layer[data-status='blocked'] {
-    color: var(--warning-color, #d97706);
-    border: 1px solid color-mix(in srgb, var(--warning-color, #d97706) 32%, transparent);
+    color: var(--warning-color);
+    border: 1px solid color-mix(in srgb, var(--warning-color) 32%, transparent);
   }
   .ai-evaluation__expectation {
     grid-column: 2 / -1;
@@ -484,11 +484,11 @@
     opacity: 0.6;
   }
   .ai-evaluation__safety {
-    color: var(--warning-color, #d97706);
+    color: var(--warning-color);
     font-size: 12px;
   }
   .ai-evaluation__error {
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color);
   }
   @media (max-width: @admin-bp-mobile) {
     :deep(.admin-data-page__surface) {

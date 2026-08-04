@@ -223,7 +223,7 @@
 
   /* 转化率过低时标红，扫一眼就能定位流失最严重的一步 */
   .funnel-chain__rate[data-weak='true'] {
-    color: var(--danger-color, #dc2626);
+    color: var(--danger-color);
     font-weight: 600;
   }
 

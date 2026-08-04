@@ -47,8 +47,9 @@
 
           <div class="p-user-opinion__section">
             <label>管理员回复</label>
-            <a-textarea
+            <BInput
               v-model:value="replyDrafts[record.id]"
+              type="textarea"
               :rows="3"
               :placeholder="record.replyContent || '请输入回复内容'"
             />
@@ -268,19 +269,19 @@
   }
 
   .p-user-opinion__status-tag--pending {
-    color: #b36b00;
+    color: var(--warning-color);
     background: rgba(255, 184, 77, 0.12);
     border-color: rgba(255, 184, 77, 0.3);
   }
 
   .p-user-opinion__status-tag--replied {
-    color: #2f6fed;
+    color: var(--info-color);
     background: rgba(47, 111, 237, 0.14);
     border-color: rgba(47, 111, 237, 0.3);
   }
 
   .p-user-opinion__status-tag--viewed {
-    color: #1f8f55;
+    color: var(--success-color);
     background: rgba(31, 143, 85, 0.14);
     border-color: rgba(31, 143, 85, 0.3);
   }

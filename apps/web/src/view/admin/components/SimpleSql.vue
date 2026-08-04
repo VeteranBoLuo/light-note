@@ -1,3 +1,6 @@
+<!-- 说明：本页 3 处 <button type="button"> 是 chip / 自动补全建议项形态，不是按钮形态。
+     用 BButton 会带入其内边距与背景而破坏 chip 外观，换成 <div @click> 则丢失键盘
+     聚焦与读屏语义，因此按 AGENTS.md 铁律的例外条款保留原生 button 并在此注明。 -->
 <template>
   <div class="simple-sql">
     <div class="sql-main">
@@ -347,8 +350,8 @@ async function runSql() {
 .sql-header-actions { display: flex; gap: 12px; }
 .ghost-btn, .primary-btn { min-width: 100px; }
 .ghost-btn { background: transparent; border: 1px dashed color-mix(in srgb, var(--card-border-color) 70%, transparent); color: var(--text-color); transition: all 0.3s ease; }
-.ghost-btn:hover { border-color: color-mix(in srgb, #3488ff 80%, var(--text-color) 20%); color: color-mix(in srgb, #3488ff 80%, var(--text-color) 20%); background: color-mix(in srgb, #3488ff 8%, transparent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(52,136,255,0.15); }
-.primary-btn { background: linear-gradient(135deg, color-mix(in srgb, #3488ff 90%, var(--background-color) 10%), color-mix(in srgb, #7c4dff 90%, var(--background-color) 10%)); color: #fff; border: none; box-shadow: 0 4px 16px rgba(52,136,255,0.3), 0 2px 8px rgba(124,77,255,0.2); transition: all 0.3s ease; }
+.ghost-btn:hover { border-color: color-mix(in srgb, var(--primary-color) 80%, var(--text-color) 20%); color: color-mix(in srgb, var(--primary-color) 80%, var(--text-color) 20%); background: color-mix(in srgb, var(--primary-color) 8%, transparent); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(52,136,255,0.15); }
+.primary-btn { background: linear-gradient(135deg, color-mix(in srgb, var(--primary-color) 90%, var(--background-color) 10%), color-mix(in srgb, #7c4dff 90%, var(--background-color) 10%)); color: #fff; border: none; box-shadow: 0 4px 16px rgba(52,136,255,0.3), 0 2px 8px rgba(124,77,255,0.2); transition: all 0.3s ease; }
 .primary-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(52,136,255,0.4), 0 4px 12px rgba(124,77,255,0.3); filter: brightness(1.1) saturate(1.1); }
 .sql-editor-shell { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
 .editor-meta-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--desc-color); }
@@ -356,16 +359,16 @@ async function runSql() {
 .sql-input { flex: 1; display: flex; }
 .sql-input-wrapper { position: relative; flex: 1; min-height: 0; overflow: hidden; display: flex; }
 .sql-input :deep(textarea) { flex: 1; min-height: 0; font-family: 'JetBrains Mono','Fira Code',Consolas,monospace; }
-.sql-suggest { flex-shrink: 0; background: color-mix(in srgb, var(--background-color) 96%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 14px; box-shadow: 0 10px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); backdrop-filter: blur(10px); overflow: hidden; }
+.sql-suggest { flex-shrink: 0; background: color-mix(in srgb, var(--background-color) 96%, transparent); border: 1px solid color-mix(in srgb, var(--card-border-color) 60%, transparent); border-radius: 14px; box-shadow: var(--surface-raised-shadow); backdrop-filter: blur(10px); overflow: hidden; }
 .sql-suggest-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 12px; font-size: 11px; color: var(--desc-color); background: color-mix(in srgb, var(--background-color) 90%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 50%, transparent); }
 .sql-suggest-list { max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; }
 .sql-suggest-item { border: none; background: transparent; color: var(--text-color); text-align: left; padding: 8px 12px; font-size: 12px; cursor: pointer; transition: background-color 0.2s ease, color 0.2s ease; }
-.sql-suggest-item:hover, .sql-suggest-item.active { background: color-mix(in srgb, #3488ff 12%, transparent); color: color-mix(in srgb, #3488ff 85%, var(--text-color) 15%); }
+.sql-suggest-item:hover, .sql-suggest-item.active { background: color-mix(in srgb, var(--primary-color) 12%, transparent); color: color-mix(in srgb, var(--primary-color) 85%, var(--text-color) 15%); }
 .panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .panel-header h3 { margin: 0; }
 .panel-header small { color: var(--desc-color); }
-.status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid transparent; background: color-mix(in srgb, var(--background-color) 95%, transparent); color: var(--desc-color); box-shadow: 0 2px 8px rgba(0,0,0,0.06); backdrop-filter: blur(8px); }
-.status-pill.running { border-color: color-mix(in srgb, #3488ff 70%, var(--background-color) 30%); color: #3488ff; background: color-mix(in srgb, #3488ff 8%, transparent); animation: pulse 1.4s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(52,136,255,0.2); }
+.status-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid transparent; background: color-mix(in srgb, var(--background-color) 95%, transparent); color: var(--desc-color); box-shadow: var(--surface-card-shadow); backdrop-filter: blur(8px); }
+.status-pill.running { border-color: color-mix(in srgb, var(--primary-color) 70%, var(--background-color) 30%); color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 8%, transparent); animation: pulse 1.4s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(52,136,255,0.2); }
 .status-pill.completed { border-color: color-mix(in srgb, #39c59f 70%, var(--background-color) 30%); color: #39c59f; background: color-mix(in srgb, #39c59f 8%, transparent); box-shadow: 0 2px 8px rgba(57,197,159,0.15); }
 .status-pill.error { border-color: color-mix(in srgb, #ff6b6b 70%, var(--background-color) 30%); color: #ff6b6b; background: color-mix(in srgb, #ff6b6b 8%, transparent); box-shadow: 0 2px 8px rgba(255,107,107,0.15); }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(52,136,255,0.4); } 100% { box-shadow: 0 0 0 12px rgba(52,136,255,0); } }
@@ -374,13 +377,13 @@ async function runSql() {
 .chip-grid { display: grid; gap: 8px; }
 .chip-grid.two-col { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); }
 .chip-grid.four-col { grid-template-columns: repeat(auto-fill, 100px); overflow-y: auto; padding-right: 4px; }
-.chip { border: none; border-radius: 16px; padding: 6px 12px; background: color-mix(in srgb, var(--common-tag-bg-color) 90%, transparent); color: var(--common-tag-h-color); cursor: pointer; transition: all 0.3s ease; font-size: 11px; font-weight: 500; line-height: 1.2; border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-.chip:hover { transform: translateY(-2px); background: var(--btn-h-bg-color); color: var(--text-color); box-shadow: 0 4px 12px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.08); border-color: color-mix(in srgb, var(--card-border-color) 60%, transparent); }
+.chip { border: none; border-radius: 16px; padding: 6px 12px; background: color-mix(in srgb, var(--common-tag-bg-color) 90%, transparent); color: var(--common-tag-h-color); cursor: pointer; transition: all 0.3s ease; font-size: 11px; font-weight: 500; line-height: 1.2; border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent); box-shadow: var(--surface-card-shadow); }
+.chip:hover { transform: translateY(-2px); background: var(--btn-h-bg-color); color: var(--text-color); box-shadow: var(--surface-hover-shadow); border-color: color-mix(in srgb, var(--card-border-color) 60%, transparent); }
 .table-filter { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--desc-color); }
 .table-grid { display: flex; flex-wrap: wrap; gap: 8px; max-height: 180px; overflow-y: auto; padding-right: 4px; align-items: flex-start; }
 .table-chip { border-radius: 12px; border: 1px dashed transparent; padding: 6px 8px; background: var(--common-tag-bg-color); color: var(--common-tag-h-color); cursor: pointer; transition: border-color 0.2s ease, background-color 0.2s ease; font-size: 11px; text-align: center; word-break: break-word; line-height: 1.2; display: flex; align-items: center; justify-content: center; height: auto; min-height: auto; }
-.table-chip:hover { border-color: #3488ff; background: rgba(52,136,255,0.12); color: #3488ff; }
-.table-chip.active { border-color: #3488ff; background: rgba(52,136,255,0.12); color: #3488ff; }
+.table-chip:hover { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); color: var(--primary-color); }
+.table-chip.active { border-color: var(--primary-color); background: color-mix(in srgb, var(--primary-color) 12%, transparent); color: var(--primary-color); }
 .result-grid { display: grid; grid-template-columns: 0.7fr 1fr; gap: 16px; height: 260px; }
 .template-row { display: flex; align-items: center; gap: 8px; padding: 10px 0; flex-wrap: wrap; }
 .template-label { font-size: 12px; color: var(--desc-color); white-space: nowrap; }

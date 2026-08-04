@@ -22,13 +22,13 @@
       >
         <template #bodyCell="{ column, record }">
           <template v-if="column.key === 'riskScore'">
-            <a-progress
+            <BProgress
               :title="String(record.riskScore || 0)"
+              :aria-label="`风险评分 ${record.riskScore || 0}`"
               :percent="record.riskScore || 0"
               size="small"
               :stroke-color="scoreColor(record.riskScore || 0)"
               trail-color="var(--security-progress-trail)"
-              :show-info="false"
             />
           </template>
           <template v-else-if="column.key === 'isBanned'">
@@ -49,6 +49,7 @@
   import { inject, onMounted, reactive, ref, watch } from 'vue';
   import { apiQueryPost } from '@/http/request.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import { OPEN_IP_ACCOUNTS, REFRESH_TRIGGER, ipColumns, scoreColor } from './securityShared';

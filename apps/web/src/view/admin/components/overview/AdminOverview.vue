@@ -252,8 +252,8 @@
     margin-top: 12px;
     padding: 10px 14px;
     border-radius: 10px;
-    background: color-mix(in srgb, #f59e0b 12%, var(--background-color));
-    border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+    background: color-mix(in srgb, var(--warning-color) 12%, var(--background-color));
+    border: 1px solid color-mix(in srgb, var(--warning-color) 35%, transparent);
     font-size: 13px;
     color: var(--text-color);
   }
@@ -269,7 +269,7 @@
     padding: 4px 10px !important;
     border: 0;
     border-radius: 999px;
-    background: color-mix(in srgb, #f59e0b 22%, transparent);
+    background: color-mix(in srgb, var(--warning-color) 22%, transparent);
     color: var(--text-color);
     font-size: 12.5px;
     line-height: 1.35 !important;
@@ -283,7 +283,7 @@
     &:focus-visible {
       outline: none;
       transform: translateY(-1px);
-      box-shadow: 0 3px 8px color-mix(in srgb, #f59e0b 18%, transparent);
+      box-shadow: 0 3px 8px color-mix(in srgb, var(--warning-color) 18%, transparent);
     }
   }
   .ov-todo-chip.danger {
@@ -308,11 +308,11 @@
     line-height: 1.45;
   }
   .ov-warn {
-    color: #f59e0b;
+    color: var(--warning-color);
     font-weight: 600;
   }
   .ov-muted-warn {
-    color: var(--sub-text-color, #7c8b9e);
+    color: var(--desc-color);
     font-weight: 600;
   }
 

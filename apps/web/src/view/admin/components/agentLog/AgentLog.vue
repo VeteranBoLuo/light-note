@@ -359,10 +359,10 @@
     );
   }
   .agent-balance-change-card {
-    border-color: color-mix(in srgb, var(--success-color, #2e8b57) 24%, var(--card-border-color));
+    border-color: color-mix(in srgb, var(--success-color) 24%, var(--card-border-color));
     background: linear-gradient(
       135deg,
-      color-mix(in srgb, var(--success-color, #2e8b57) 8%, var(--card-background)),
+      color-mix(in srgb, var(--success-color) 8%, var(--card-background)),
       var(--card-background)
     );
   }

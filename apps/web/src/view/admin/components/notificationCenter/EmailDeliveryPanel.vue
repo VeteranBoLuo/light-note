@@ -358,13 +358,13 @@
     font-size: 12px;
   }
   .email-stat.is-accepted b {
-    color: var(--success-color, #22a06b);
+    color: var(--success-color);
   }
   .email-stat.is-failed b {
-    color: var(--danger-color, #e5484d);
+    color: var(--danger-color);
   }
   .email-stat.is-unknown b {
-    color: var(--warning-color, #d97706);
+    color: var(--warning-color);
   }
   .email-toolbar {
     display: flex;
@@ -426,11 +426,11 @@
   }
   .email-status.is-accepted {
     color: var(--success-color, #16845b);
-    background: color-mix(in srgb, var(--success-color, #22a06b) 12%, transparent);
+    background: color-mix(in srgb, var(--success-color) 12%, transparent);
   }
   .email-status.is-failed {
     color: var(--danger-color, #d43c45);
-    background: color-mix(in srgb, var(--danger-color, #e5484d) 12%, transparent);
+    background: color-mix(in srgb, var(--danger-color) 12%, transparent);
   }
   .email-status.is-sending {
     color: var(--primary-color);
@@ -438,7 +438,7 @@
   }
   .email-status.is-unknown {
     color: var(--warning-color, #b45309);
-    background: color-mix(in srgb, var(--warning-color, #d97706) 13%, transparent);
+    background: color-mix(in srgb, var(--warning-color) 13%, transparent);
   }
   .email-detail-state {
     padding: 32px 0;

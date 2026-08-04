@@ -271,7 +271,7 @@
 
   .admin-stat-value.is-unhelpful,
   .ai-feedback__rating.is-unhelpful {
-    color: var(--error-color, #e5484d);
+    color: var(--error-color);
   }
 
   .ai-feedback__rating,
@@ -299,7 +299,7 @@
     color: var(--resource-note-color);
 
     &.is-pending {
-      color: var(--error-color, #e5484d);
+      color: var(--error-color);
     }
   }
 

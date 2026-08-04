@@ -498,7 +498,7 @@
     color: var(--text-secondary-color);
 
     &.error {
-      color: #dc2626;
+      color: var(--danger-color);
     }
   }
 
