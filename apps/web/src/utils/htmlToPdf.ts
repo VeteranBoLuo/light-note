@@ -189,12 +189,14 @@ function findSafeCutY(canvas: HTMLCanvasElement, idealY: number, maxBacktrack: n
 }
 
 /**
- * 从 HTML 元素生成 PDF
- * @param title PDF 文件名
+ * 从 HTML 元素渲染出 PDF 文档对象。
+ *
+ * 只负责渲染，不负责交付：桌面端直接 `save()` 下载即可，移动端必须拿到 Blob
+ * 走「系统分享 / blob 下载」的统一链路（见 `utils/fileDelivery.ts`）。
  * @param selector CSS 选择器，目标元素
  * @param options 配置选项
  */
-export async function generatePDF(title: string, selector: string, options: PDFOptions = {}): Promise<void> {
+async function renderPdfDocument(selector: string, options: PDFOptions): Promise<JsPDF> {
   try {
     // 获取目标元素
     const target = document.querySelector(selector) as HTMLElement;
@@ -285,10 +287,20 @@ export async function generatePDF(title: string, selector: string, options: PDFO
       pageCanvas.remove();
     }
 
-    // 保存 PDF
-    pdf.save(`${title}.pdf`);
+    return pdf;
   } catch (error) {
     console.error('PDF 生成失败:', error);
     throw new Error(`PDF 生成失败: ${(error as Error).message}`);
   }
+}
+
+/**
+ * 从 HTML 元素生成 PDF，产出 Blob。
+ *
+ * 只产出内容、不负责落盘：文件名清洗与「系统分享 / 下载」的选择统一由
+ * `utils/fileDelivery.ts` 决定，桌面与移动端因此共用同一条交付链路。
+ */
+export async function generatePdfBlob(selector: string, options: PDFOptions = {}): Promise<Blob> {
+  const pdf = await renderPdfDocument(selector, options);
+  return pdf.output('blob');
 }

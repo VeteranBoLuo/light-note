@@ -404,6 +404,25 @@ import icon from "@/config/icon.ts";
   - fixed/absolute 浮层用 `100vw` 定位在 zoom 下会偏移（放大遮挡内容）；改用「视口中心 `left: 50%` + `transform` 偏移」，视口中心与内容同 zoom 上下文等比缩放、相对位置恒定。
   - **排查"只有缩放≠标准时才出现的定位/滚动问题",先怀疑这里。**
 
+**Android APK 样式回退（CSS `color-mix()` · 重要坑）：**
+
+APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` 渲染错，也会把低透明度、多层 `box-shadow` 画成实心黑框。项目为此做了一层构建期回退，**因此 APK 里看到的混色和你在 Chrome 里写的不是同一个颜色**：
+
+1. 构建时 PostCSS 插件 `src/vite/androidColorMixFallback.ts` 把每个 `color-mix(...)` 包成 `var(--ln-android-color-mix-<类别>, color-mix(...))`，类别由混色操作数的**变量名**推断（primary / border / background / card-background / danger …）。
+2. 运行时 `main.ts` 检测到 Android WebView（APK 或 `; wv)` UA）给 `<html>` 加 `light-note-android-webview`。
+3. `assets/css/android-webview-compat.less` 只在该类下定义那批 `--ln-android-color-mix-*` 变量；普通浏览器没有定义，继续使用真实混色。
+
+- **后果：APK 内每个 `color-mix()` 都塌缩成一个稳定实色，混色表达的层次差异基本消失。** 具体取哪个色由权重更大的一侧决定：
+  - 混**主题底色**的淡染（`color-mix(in srgb, var(--primary-color) 5%~15%, var(--background-color))`）→ 取底色，**淡色完全消失**；
+  - 混 **`transparent`** 的淡染（`color-mix(in srgb, var(--primary-color) 9%, transparent)`）→ 走 `*-soft-background`，保留一层固定 `rgba(…, 0.1)`，**淡底还在**。所以想让淡底在 APK 上活下来，第二操作数用 `transparent` 而不是底色变量。注意这层 rgba 是硬编码的品牌色，局部覆盖了 `--primary-color` 的页面（如待办页覆盖成天空蓝）在 APK 内会拿到品牌紫的淡底；
+  - 偏中性色的混色边框 → 塌缩成普通边框色，与相邻元素再无差异；偏主色的混色边框 → 变成饱和实色主色（仍可见）；
+  - `box-shadow` 里的混色 → 一律回退成 `transparent`，**阴影直接消失**。
+- **铁律：状态与层级不能只由 `color-mix()` 或阴影承载。** 选中、今天、激活、错误、当前项等状态必须同时有一个不依赖混色的实色信号 —— 实色描边（`var(--primary-color)`）、实心圆点 / 圆底、图标、字重或文字色；淡混色只能作为锦上添花。待办日历的「今天」踩过：只写了混色描边 + 5% 淡底，APK 上退化成与普通格子完全一样，只剩一个纯 `var()` 的小圆点。
+- **不要用 `@supports (color-mix(in srgb, red, blue))` 做分支**：出问题的 WebView 是**错误渲染**而不是不支持，`@supports` 会返回 true，判别不出来。回退交给上面那层机制，不要另造一套。
+- 新写混色时留意回退类别按变量名推断：`--surface-border-color` 这类名字里同时含 "surface" 的变量曾被归成背景色，导致 APK 上边框与底色同色、整条边消失（现已对边框声明强制兜底到边框色）。新增容易被误判的语义变量，先在 `androidColorMixFallback.test.ts` 补一条断言。
+- **本地自检（不需要真机）**：DevTools 执行 `document.documentElement.classList.add('light-note-android-webview')`，颜色回退立刻复现，用它确认状态标记在 APK 上依然可辨。阴影被画成黑框那类渲染 bug 只能真机复验。
+- 确实需要按 APK 单独修样式时，写进 `android-webview-compat.less` 的 `html.light-note-android-webview` 块，不要在业务组件里散落 UA 判断。
+
 ## 自检清单
 
 ### 代码提交前
@@ -414,6 +433,7 @@ import icon from "@/config/icon.ts";
 - [ ] 修改文件反查调用方/被调用方，确认不破坏兼容
 - [ ] 删除文件确认无残留引用
 - [ ] 前端：检查 PC 端、移动端、深色主题、中英文
+- [ ] 前端新增或修改 `color-mix()` / 阴影表达的状态与层级 → 加 `light-note-android-webview` 类复检，确认颜色回退后状态仍可辨（见「Android APK 样式回退」）
 - [ ] 后端：检查最外层 `try/catch`、`return` 遗漏、事务完整性
 - [ ] SQL：确认全部参数化，无字符串拼接
 - [ ] 构建通过（`vite build` 或类型检查）

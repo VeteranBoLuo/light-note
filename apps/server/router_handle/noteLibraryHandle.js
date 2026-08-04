@@ -616,12 +616,12 @@ export const editNoteTag = async (req, res) => {
   }
 };
 
-export const queryNoteTagList = (req, res) => {
+export const queryNoteTagList = async (req, res) => {
   try {
     const userId = req.user.id;
-    pool
-      .query(
-        `
+    // 标签计数与「全部 / 无标签」汇总取同一次查询,笔记库左侧目录的三类数字才不会互相对不上
+    const [tags] = await pool.query(
+      `
           SELECT
             t.*,
             (
@@ -634,17 +634,36 @@ export const queryNoteTagList = (req, res) => {
           WHERE t.user_id = ? AND t.del_flag = 0
           ORDER BY t.sort, t.create_time DESC
         `,
-        [userId],
-      )
-      .then(([result]) => {
-        res.send(resultData(result));
-      })
-      .catch((err) => {
-        return sendNoteServerError(res, 'query-note-tag-list', err);
-      });
+      [userId],
+    );
+    const [summary] = await pool.query(
+      `
+          SELECT
+            COUNT(*) AS totalCount,
+            SUM(
+              CASE
+                WHEN NOT EXISTS (
+                  SELECT 1
+                  FROM resource_tag_relations r
+                  WHERE r.resource_id = n.id AND r.resource_type = 'note'
+                ) THEN 1
+                ELSE 0
+              END
+            ) AS untaggedCount
+          FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0
+        `,
+      [userId],
+    );
+    res.send(
+      resultData({
+        items: tags,
+        totalCount: Number(summary?.[0]?.totalCount || 0),
+        untaggedCount: Number(summary?.[0]?.untaggedCount || 0),
+      }),
+    );
   } catch (e) {
-    console.warn('[note-library] query tags rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
+    return sendNoteServerError(res, 'query-note-tag-list', e);
   }
 };
 

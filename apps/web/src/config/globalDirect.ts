@@ -123,4 +123,33 @@ export default function (app) {
       delete el.__clickLogValue;
     },
   });
+
+  /*
+   * v-auto-scrollbar:滚动时才显示滚动条,停手后缓慢淡出。
+   *
+   * 只切换滑块颜色,不切换滚动条宽度 —— 改宽度会在显隐瞬间挤压内容宽度,
+   * 滚动过程中出现横向抖动比常显滚动条更难受。配套样式见 assets/css/common.less 的 .auto-scrollbar。
+   * CSS 无法表达"正在滚动",所以用一个空闲定时器补上这个状态。
+   */
+  const SCROLLBAR_IDLE_MS = 700;
+  app.directive('auto-scrollbar', {
+    mounted(el) {
+      el.classList.add('auto-scrollbar');
+      el.__autoScrollbarHandler = () => {
+        el.classList.add('is-scrolling');
+        if (el.__autoScrollbarTimer) window.clearTimeout(el.__autoScrollbarTimer);
+        el.__autoScrollbarTimer = window.setTimeout(() => {
+          el.classList.remove('is-scrolling');
+          el.__autoScrollbarTimer = null;
+        }, SCROLLBAR_IDLE_MS);
+      };
+      el.addEventListener('scroll', el.__autoScrollbarHandler, { passive: true });
+    },
+    unmounted(el) {
+      if (el.__autoScrollbarHandler) el.removeEventListener('scroll', el.__autoScrollbarHandler);
+      if (el.__autoScrollbarTimer) window.clearTimeout(el.__autoScrollbarTimer);
+      delete el.__autoScrollbarHandler;
+      delete el.__autoScrollbarTimer;
+    },
+  });
 }

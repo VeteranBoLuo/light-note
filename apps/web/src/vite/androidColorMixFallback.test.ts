@@ -45,6 +45,37 @@ describe('wrapAndroidColorMixFallbacks', () => {
     expect(wrapAndroidColorMixFallbacks(value, 'border-color')).toBe(`var(--ln-android-color-mix-border, ${value})`);
   });
 
+  /**
+   * `--surface-border-color` 的名字里同时含 "surface"，按变量名会被归成 background。
+   * 若真按 background 回退，Android WebView 上边框会与底色同色、整条边消失
+   * （待办日历「今天」的高亮就只剩一个小圆点）。边框声明必须回退到边框色。
+   */
+  it('边框声明不会回退成背景色，即使混色操作数是 surface / background 变量', () => {
+    const surfaceBorder =
+      'color-mix(in srgb, var(--primary-color) 36%, var(--surface-border-color, var(--card-border-color)))';
+    const pageBackground = 'color-mix(in srgb, var(--primary-color) 30%, var(--background-color))';
+
+    expect(wrapAndroidColorMixFallbacks(surfaceBorder, 'border-color')).toBe(
+      `var(--ln-android-color-mix-border, ${surfaceBorder})`,
+    );
+    expect(wrapAndroidColorMixFallbacks(pageBackground, 'border-color')).toBe(
+      `var(--ln-android-color-mix-border, ${pageBackground})`,
+    );
+    // 同一个变量用在背景声明上仍按背景回退，不受这条兜底影响
+    expect(wrapAndroidColorMixFallbacks(pageBackground, 'background')).toBe(
+      `var(--ln-android-color-mix-background, ${pageBackground})`,
+    );
+  });
+
+  /** 阴影里的混色一律回退成 transparent（阴影直接消失），因此层级不能只靠混色阴影表达。 */
+  it('阴影中的混色回退为透明', () => {
+    const value = '0 2px 8px color-mix(in srgb, var(--primary-color) 20%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'box-shadow')).toBe(
+      '0 2px 8px var(--ln-android-color-mix-transparent, color-mix(in srgb, var(--primary-color) 20%, transparent))',
+    );
+  });
+
   it('treats neutral primary button backgrounds as backgrounds', () => {
     const base = 'color-mix(in srgb, var(--primary-btn-bg-color) 72%, transparent)';
     const hover = 'color-mix(in srgb, var(--primary-btn-h-bg-color) 82%, transparent)';

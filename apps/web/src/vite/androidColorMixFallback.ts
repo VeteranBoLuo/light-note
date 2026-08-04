@@ -177,7 +177,16 @@ function fallbackCategory(colorMix: string, property: string) {
   const second = parseOperand(parts[2]);
   const softCategory = softBackgroundCategory(first, second, kind);
   if (softCategory) return softCategory;
-  return variableCategory(selectFallbackOperand(first, second, kind), kind);
+  const category = variableCategory(selectFallbackOperand(first, second, kind), kind);
+  /*
+   * 边框声明的回退绝不能落到背景色上。
+   * `color-mix(in srgb, var(--primary-color) 36%, var(--surface-border-color, …))` 这类写法里，
+   * 权重更大的一侧是边框变量，但 `--surface-border-color` 的变量名同时含 "surface"，
+   * 按名字会被归成 background —— Android WebView 上边框于是与底色同色、整条边直接消失
+   * （待办日历「今天」的高亮就是这样只剩一个小圆点）。按声明用途兜底更可靠。
+   */
+  if (kind === 'border' && category.endsWith('background')) return 'border';
+  return category;
 }
 
 export function wrapAndroidColorMixFallbacks(value: string, property: string) {

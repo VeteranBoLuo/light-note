@@ -200,7 +200,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import { defineAsyncComponent, ref } from 'vue';
-  import { generatePDF } from '@/utils/htmlToPdf.ts';
+  import { generatePdfBlob } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -220,6 +220,8 @@
     buildNoteExportMarkdown,
     renderMarkdownForExport,
   } from '@/utils/noteExport';
+  import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
+  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -260,17 +262,49 @@
   const bookmark = bookmarkStore();
   const turndownService = createNoteTurndownService();
 
-  const downloadFile = (fileName: string, content: string, mimeType: string) => {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
+  /** 手机与平板优先走系统分享：可存进「文件」也可转发到其他 App，比隐式下载更符合手机习惯。 */
+  const preferShareExport = () => bookmark.isMobile || bookmark.isTablet;
+
+  /**
+   * 轻笺 Android App 的 WebView 既没有 Web Share，原生下载通道（DownloadManager）
+   * 也只接受 http(s) 地址，前端生成的 `blob:` 文件在 App 内根本落不了盘。
+   * 必须提前识别并给出可操作降级 —— 否则用户点导出只会毫无反应。
+   */
+  const canSaveExportFile = () => canShareGeneratedFile() || !isLightNoteAndroidApp();
+
+  /** App 内无法落盘时的降级：文本格式至少能复制出去，粘贴到其他应用里。 */
+  async function copyExportContent(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      message.warning(t('noteDetail.exportCopiedInApp'));
+    } catch (error) {
+      console.error('导出内容复制失败:', error);
+      message.error(t('noteDetail.exportUnavailableInApp'));
+    }
+  }
+
+  /** 统一交付：取消分享既不提示也不记成功日志，只有真正交付成功才写操作日志。 */
+  async function deliverExportFile(
+    content: string | Blob,
+    fileName: string,
+    mimeType: string,
+    operation: string,
+  ) {
+    try {
+      const result = await deliverGeneratedFile({
+        content,
+        fileName,
+        mimeType,
+        preferShare: preferShareExport(),
+      });
+      if (result === 'cancelled') return;
+      message.success(t(result === 'shared' ? 'noteDetail.exportShared' : 'noteDetail.exportDownloaded'));
+      recordOperation({ module: '笔记', operation });
+    } catch (error) {
+      console.error('笔记导出失败:', error);
+      message.error(t('noteDetail.exportFailed'));
+    }
+  }
 
   const tagConfDlgVisible = ref(false);
   function updateTag() {
@@ -399,6 +433,11 @@
     recordOperation(OPERATION_LOG_MAP.note.saveAsTemplate);
   }
 
+  function openMobileExport() {
+    openExportModal();
+    recordOperation(OPERATION_LOG_MAP.note.exportNote);
+  }
+
   const mobileMenuOptions = computed(() => {
     const options: HeaderMenuOption[] = [
       {
@@ -425,6 +464,13 @@
         });
       }
     }
+
+    // 导出与 readonly 无关(桌面端同样不受限):只读笔记也允许导出留档
+    options.push({
+      label: t('noteDetail.export'),
+      icon: icon.noteDetail.exportLine,
+      function: openMobileExport,
+    });
 
     options.push(
       { divider: true },
@@ -462,11 +508,28 @@
           message.warning(isMd ? t('noteDetail.exportPdfTip') : t('noteDetail.noExportContent'));
           return;
         }
-        await generatePDF(props.note.title, selector);
-        recordOperation({
-          module: '笔记',
-          operation: `导出PDF成功【${props.note.title || t('noteDetail.unnamedDoc')}】`,
-        });
+        // PDF 是二进制,App 内既存不了盘也没有剪贴板降级,提前拦住而不是白跑一遍长图渲染
+        if (!canSaveExportFile()) {
+          message.warning(t('noteDetail.exportPdfUnavailableInApp'));
+          return;
+        }
+        const title = props.note.title || t('noteDetail.unnamedDoc');
+        // 手机上渲染长笔记要几秒,没有反馈会被当成没点上
+        const closeRendering = message.loading(t('noteDetail.exportPdfRendering'), 0);
+        try {
+          const blob = await generatePdfBlob(selector);
+          closeRendering();
+          await deliverExportFile(
+            blob,
+            buildExportFileName(title, t('noteDetail.unnamedDoc'), 'pdf'),
+            'application/pdf',
+            `导出PDF成功【${title}】`,
+          );
+        } catch (error) {
+          closeRendering();
+          console.error('PDF 导出失败:', error);
+          message.error(t('noteDetail.exportFailed'));
+        }
       },
     });
   };
@@ -483,8 +546,17 @@
         // 必须先按站内同口径渲染成 HTML。
         const body =
           props.noteType === 'markdown' ? await renderMarkdownForExport(content) : content;
-        downloadFile(`${title}.html`, buildNoteExportHtml(title, body), 'text/html;charset=utf-8');
-        recordOperation({ module: '笔记', operation: `导出HTML成功【${title}】` });
+        const html = buildNoteExportHtml(title, body);
+        if (!canSaveExportFile()) {
+          await copyExportContent(html);
+          return;
+        }
+        await deliverExportFile(
+          html,
+          buildExportFileName(title, t('noteDetail.unnamedDoc'), 'html'),
+          'text/html',
+          `导出HTML成功【${title}】`,
+        );
       },
     });
   };
@@ -504,8 +576,16 @@
           props.noteType || 'html',
           (html) => turndownService.turndown(html),
         );
-        downloadFile(`${title}.md`, markdown, 'text/markdown;charset=utf-8');
-        recordOperation({ module: '笔记', operation: `导出Markdown成功【${title}】` });
+        if (!canSaveExportFile()) {
+          await copyExportContent(markdown);
+          return;
+        }
+        await deliverExportFile(
+          markdown,
+          buildExportFileName(title, t('noteDetail.unnamedDoc'), 'md'),
+          'text/markdown',
+          `导出Markdown成功【${title}】`,
+        );
       },
     });
   };

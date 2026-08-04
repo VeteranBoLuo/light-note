@@ -84,7 +84,8 @@
           </BButton>
         </div>
         <template v-else>
-          <TagFilterSelector :all-tags="visibleNoteTags" />
+          <!-- 列表视图的标签筛选已移到左侧目录,顶部不再重复放一个下拉 -->
+          <TagFilterSelector v-if="!isListLayout" :all-tags="visibleNoteTags" />
           <ViewModeToggle />
           <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
             <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
@@ -114,71 +115,52 @@
       </template>
     </template>
 
-    <div class="note-workspace" @scroll.capture.passive="onNoteScroll">
-      <div
-        v-if="loading && currentViewMode === 'card'"
-        class="note-library-body note-card-skeleton-wrap"
-        data-mobile-resource-scroll
+    <div class="note-workspace" :class="{ 'is-split': isListLayout }" @scroll.capture.passive="onNoteScroll">
+      <!-- 侧栏常驻 DOM 才能有进出过渡;卡片视图下用 inert 关掉焦点与辅助技术可见性,而不是直接卸载 -->
+      <aside
+        v-if="!bookmark.isMobile"
+        class="note-tag-panel"
+        :inert="!isListLayout || undefined"
+        :aria-hidden="!isListLayout || undefined"
       >
-        <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
-          <div class="skeleton-line long"></div>
-          <div class="skeleton-line"></div>
-          <div class="skeleton-line short"></div>
-          <div class="skeleton-tags">
-            <div class="skeleton-chip"></div>
-            <div class="skeleton-chip"></div>
-          </div>
-        </div>
-      </div>
-      <VueDraggable
-        v-else-if="currentViewMode === 'card' && visibleDragNoteList.length"
-        :disabled="!canDragNote"
-        :animation="200"
-        v-model="visibleDragNoteList"
-        class="note-library-body"
-        data-mobile-resource-scroll
-        @start="onStart"
-        @end="onEnd"
-        ghost-class="note-card-drag-ghost"
-        chosen-class="note-card-drag-chosen"
-        drag-class="note-card-dragging"
-        :scroll-sensitivity="50"
-        :forceFallback="true"
-        :touchStartThreshold="10"
-        :delay="100"
-      >
-        <RightMenu
-          v-for="note in visibleDragNoteList"
-          :key="note.id"
-          :menu="menuForNote(note)"
-          @select="handleNoteMenuSelect($event, note)"
+        <NoteTagSidebar
+          :all-tags="visibleNoteTags"
+          :total-count="allNoteCount"
+          :untagged-count="untaggedNoteCount"
+          :loading="tagLoading"
+        />
+      </aside>
+
+      <div class="note-main-panel" :class="{ 'is-refreshing': refreshing }">
+        <div v-if="refreshing" class="note-refresh-bar" aria-hidden="true"></div>
+        <div
+          v-if="loading && currentViewMode === 'card'"
+          class="note-library-body note-card-skeleton-wrap"
+          data-mobile-resource-scroll
         >
-          <note-card
-            :note="note"
-            :batch-mode="batchMode"
-            @nodeTypeChange="handleNodeTypeChange"
-            @action="handleNoteCardAction($event, note)"
-          />
-        </RightMenu>
-      </VueDraggable>
-      <div v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)" class="note-library-body-list">
-        <div v-if="loading" class="note-list note-list-skeleton-wrap" data-mobile-resource-scroll>
-          <div v-for="n in 10" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
+          <div v-for="n in bookmark.isMobile ? 4 : 30" :key="`card-skeleton-${n}`" class="note-card-skeleton">
             <div class="skeleton-line long"></div>
             <div class="skeleton-line"></div>
             <div class="skeleton-line short"></div>
+            <div class="skeleton-tags">
+              <div class="skeleton-chip"></div>
+              <div class="skeleton-chip"></div>
+            </div>
           </div>
         </div>
         <VueDraggable
-          v-else
+          v-else-if="currentViewMode === 'card' && visibleDragNoteList.length"
+          v-auto-scrollbar
           :disabled="!canDragNote"
           :animation="200"
-          ref="el"
           v-model="visibleDragNoteList"
-          class="note-list"
+          class="note-library-body"
           data-mobile-resource-scroll
           @start="onStart"
           @end="onEnd"
+          ghost-class="note-card-drag-ghost"
+          chosen-class="note-card-drag-chosen"
+          drag-class="note-card-dragging"
           :scroll-sensitivity="50"
           :forceFallback="true"
           :touchStartThreshold="10"
@@ -190,29 +172,71 @@
             :menu="menuForNote(note)"
             @select="handleNoteMenuSelect($event, note)"
           >
-            <note-list-item :note="note" :batch-mode="batchMode" @nodeTypeChange="handleNodeTypeChange" />
+            <note-card
+              :note="note"
+              :batch-mode="batchMode"
+              @nodeTypeChange="handleNodeTypeChange"
+              @action="handleNoteCardAction($event, note)"
+            />
           </RightMenu>
         </VueDraggable>
-      </div>
-      <div v-if="loadingMore" class="note-load-more">
-        <BLoading inline loading :title="$t('common.loading')" />
-      </div>
-      <div v-if="!loading && !visibleDragNoteList.length" class="note-empty-state">
-        <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
-        <!-- 区分「搜索/标签筛选无命中」与「新用户没笔记」 -->
-        <template v-if="hasActiveFilter">
-          <strong>{{ $t('note.noFilterMatch') }}</strong>
-          <BButton type="primary" class="note-create-button" @click="clearFilters">
-            {{ $t('note.clearFilter') }}
-          </BButton>
-        </template>
-        <template v-else>
-          <strong>{{ $t('note.empty') }}</strong>
-          <p>{{ $t('note.emptyHint') }}</p>
-          <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
-            {{ $t('note.newNote') }}
-          </BButton>
-        </template>
+        <div
+          v-if="currentViewMode === 'list' && (loading || visibleDragNoteList.length)"
+          class="note-library-body-list"
+        >
+          <div v-if="loading" class="note-list note-list-skeleton-wrap" data-mobile-resource-scroll>
+            <!-- 两条线对应「标题 + 摘要」两行,骨架高度要贴住真实行高,否则数据落地时列表会跳 -->
+            <div v-for="n in 12" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
+              <div class="skeleton-line long"></div>
+              <div class="skeleton-line short"></div>
+            </div>
+          </div>
+          <VueDraggable
+            v-else
+            v-auto-scrollbar
+            :disabled="!canDragNote"
+            :animation="200"
+            ref="el"
+            v-model="visibleDragNoteList"
+            class="note-list"
+            data-mobile-resource-scroll
+            @start="onStart"
+            @end="onEnd"
+            :scroll-sensitivity="50"
+            :forceFallback="true"
+            :touchStartThreshold="10"
+            :delay="100"
+          >
+            <RightMenu
+              v-for="note in visibleDragNoteList"
+              :key="note.id"
+              :menu="menuForNote(note)"
+              @select="handleNoteMenuSelect($event, note)"
+            >
+              <note-list-item :note="note" :batch-mode="batchMode" @nodeTypeChange="handleNodeTypeChange" />
+            </RightMenu>
+          </VueDraggable>
+        </div>
+        <div v-if="loadingMore" class="note-load-more">
+          <BLoading inline loading :title="$t('common.loading')" />
+        </div>
+        <div v-if="!loading && !visibleDragNoteList.length" class="note-empty-state">
+          <span class="note-empty-icon"><SvgIcon :src="icon.resource.note" size="28" /></span>
+          <!-- 区分「搜索/标签筛选无命中」与「新用户没笔记」 -->
+          <template v-if="hasActiveFilter">
+            <strong>{{ $t('note.noFilterMatch') }}</strong>
+            <BButton type="primary" class="note-create-button" @click="clearFilters">
+              {{ $t('note.clearFilter') }}
+            </BButton>
+          </template>
+          <template v-else>
+            <strong>{{ $t('note.empty') }}</strong>
+            <p>{{ $t('note.emptyHint') }}</p>
+            <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
+              {{ $t('note.newNote') }}
+            </BButton>
+          </template>
+        </div>
       </div>
     </div>
 
@@ -275,6 +299,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
+  import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
@@ -325,6 +350,9 @@
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
   const loadingMore = ref(false);
+  // 只切标签时走软刷新:保留旧列表并降透明度,不整屏换骨架屏
+  const refreshing = ref(false);
+  const tagLoading = ref(true);
   const noteTotal = ref(0);
   const notePage = ref(0);
   const noteHasMore = ref(false);
@@ -603,7 +631,14 @@
     handleNoteMenuSelect(action, note);
   }
   const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
+  // 左侧标签目录只服务桌面/平板的列表视图;移动端 currentViewMode 恒为 card,不会命中
+  const isListLayout = computed(() => !bookmark.isMobile && currentViewMode.value === 'list');
   const allTags = ref<any[]>([]);
+  const untaggedNoteCount = ref<number | null>(null);
+  const totalNoteCount = ref<number | null>(null);
+  // 侧栏的三个计数取同一次标签查询的快照,避免"全部"和各标签之和对不上;
+  // 旧后端没有该字段时回退到无筛选列表写入的 user.noteTotal
+  const allNoteCount = computed(() => totalNoteCount.value ?? user.noteTotal ?? 0);
 
   async function init() {
     await Promise.all([reloadNotes(), getAllTags()]);
@@ -616,11 +651,13 @@
     return String(rawTag);
   }
 
-  async function queryNotePage(targetPage: number, append = false) {
+  async function queryNotePage(targetPage: number, append = false, soft = false) {
     const requestSeq = append ? noteRequestSeq : ++noteRequestSeq;
     if (append) loadingMore.value = true;
     else {
-      loading.value = true;
+      // soft 时不动 loading:模板继续渲染旧列表,避免切标签整屏闪骨架屏
+      if (soft) refreshing.value = true;
+      else loading.value = true;
       loadingMore.value = false;
       notePage.value = 0;
       noteHasMore.value = false;
@@ -656,12 +693,13 @@
       if (requestSeq === noteRequestSeq) {
         loading.value = false;
         loadingMore.value = false;
+        refreshing.value = false;
       }
     }
   }
 
-  function reloadNotes() {
-    return queryNotePage(1, false);
+  function reloadNotes(soft = false) {
+    return queryNotePage(1, false, soft);
   }
 
   function loadMoreNotes() {
@@ -671,7 +709,11 @@
 
   function onNoteScroll(event: Event) {
     const target = event.target;
-    if (target instanceof HTMLElement && isNearResourceScrollEnd(target)) {
+    if (!(target instanceof HTMLElement)) return;
+    // 左侧标签目录也在这个捕获范围内,只认笔记列表自身的滚动容器,
+    // 否则标签列表滚到底会被当成"笔记列表触底"而误加载下一页
+    if (!target.hasAttribute('data-mobile-resource-scroll')) return;
+    if (isNearResourceScrollEnd(target)) {
       void loadMoreNotes();
     }
   }
@@ -680,11 +722,23 @@
     try {
       const res = await apiBasePost('/api/note/queryNoteTagList', { userId: user.id });
       if (res.status === 200) {
-        allTags.value = res.data;
+        // 兼容旧后端:老版本直接返回标签数组,新版本返回带汇总计数的对象
+        const payload: any = res.data;
+        const isLegacyArray = Array.isArray(payload);
+        allTags.value = isLegacyArray ? payload : Array.isArray(payload?.items) ? payload.items : [];
+        untaggedNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.untaggedCount);
+        totalNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.totalCount);
       }
     } catch (error) {
       console.warn('fetchNoteTags fallback', error);
+    } finally {
+      tagLoading.value = false;
     }
+  }
+
+  function toFiniteCount(value: unknown): number | null {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 
   // 空态区分用:搜索词或标签筛选(?tag=,含 'null'=无标签筛选)任一激活
@@ -721,9 +775,13 @@
 
   watch(
     [debouncedSearch, () => router.currentRoute.value.query.tag, () => router.currentRoute.value.query._rt],
-    () => {
+    ([search, tag, refreshToken], previous) => {
+      // 只有"页面已有内容 + 本次仅标签变化"才软刷新;首屏、搜索和强制刷新仍用骨架屏
+      const onlyTagChanged =
+        Array.isArray(previous) && search === previous[0] && refreshToken === previous[2] && tag !== previous[1];
+      const soft = onlyTagChanged && visibleDragNoteList.value.length > 0;
       if (batchMode.value) exitBatch();
-      void reloadNotes();
+      void reloadNotes(soft);
       if (bookmark.isMobile) {
         nextTick(() => {
           window.requestAnimationFrame(resetCurrentResourceScroll);
@@ -1117,6 +1175,7 @@
     overflow: auto;
     box-sizing: border-box;
     align-content: start;
+    transition: opacity 180ms ease;
 
     :deep(.note-card) {
       transition:
@@ -1161,8 +1220,7 @@
   }
 
   .note-card-skeleton,
-  .note-list-skeleton-item,
-  .tag-tree-skeleton {
+  .note-list-skeleton-item {
     position: relative;
     overflow: hidden;
     background: var(--card-background);
@@ -1216,8 +1274,7 @@
   }
 
   .note-card-skeleton::after,
-  .note-list-skeleton-item::after,
-  .tag-tree-skeleton::after {
+  .note-list-skeleton-item::after {
     content: '';
     position: absolute;
     top: 0;
@@ -1244,71 +1301,25 @@
     padding: 20px;
     box-sizing: border-box;
     gap: 20px;
-    .tag-sidebar {
-      width: 220px;
-      background: var(--background-color);
-      border: 1px solid var(--card-border-color);
-      border-radius: 8px;
-      padding: 20px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-      overflow-y: auto;
-      .tag-item {
-        padding: 12px 16px;
-        cursor: pointer;
-        border-radius: 6px;
-        margin-bottom: 8px;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-        color: var(--text-color);
-        justify-content: space-between;
-        &:hover {
-          background-color: var(--hover-bg-color, #f0f0f0);
-          color: #161824;
-        }
-        &.active {
-          background-color: #605ce5;
-          color: white;
-          font-weight: 600;
-        }
-      }
-
-      .tag-toggle-item {
-        min-height: 30px;
-        padding: 0 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        color: var(--desc-color);
-        font-size: 12px;
-        cursor: pointer;
-        user-select: none;
-      }
-    }
+    transition: opacity 180ms ease;
     .note-list {
       flex: 1;
       overflow-y: auto;
       padding: 0 10px;
     }
 
-    .tag-tree-skeleton {
-      border-radius: 8px;
-      padding: 12px;
-      box-sizing: border-box;
-      height: 100%;
-    }
-
     .note-list-skeleton-wrap {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
       overflow-y: auto;
       padding: 0 10px;
       flex: 1;
     }
 
     .note-list-skeleton-item {
-      min-height: 88px;
+      min-height: 70px;
+      padding: 11px 14px;
       border: 1px solid var(--card-border-color);
     }
   }
@@ -1496,6 +1507,7 @@
 
   .note-workspace {
     --note-card-min-width: 320px;
+    --note-tag-panel-width: 208px;
 
     width: 100%;
     height: 100%;
@@ -1508,9 +1520,97 @@
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
     container-type: inline-size;
 
+    // 两列常驻,卡片视图把第一列收到 0:列数不变,侧栏进出才有宽度过渡可做。
+    // 子项显式占列,移动端不渲染侧栏时主区也不会掉进第一列。
+    display: grid;
+    grid-template-columns: 0px minmax(0, 1fr);
+    transition: grid-template-columns 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
+
+    &.is-split {
+      grid-template-columns: var(--note-tag-panel-width) minmax(0, 1fr);
+    }
+
     @supports (width: 1cqi) {
       // 以工作区宽度自适应:1470 左右保持可读卡宽,2560 左右自然落到 6 列。
       --note-card-min-width: clamp(320px, 15cqi, 460px);
+    }
+  }
+
+  .note-tag-panel {
+    grid-column: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+    padding: 12px 0 12px 12px;
+    border-right: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    transition:
+      opacity 200ms ease,
+      transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  }
+
+  .note-workspace:not(.is-split) .note-tag-panel {
+    opacity: 0;
+    transform: translateX(-12px);
+    pointer-events: none;
+  }
+
+  .note-main-panel {
+    grid-column: 2;
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .note-refresh-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 4;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 16%, transparent);
+
+    &::after {
+      content: '';
+      display: block;
+      width: 28%;
+      height: 100%;
+      border-radius: 999px;
+      background: var(--resource-note-color, #00a884);
+      animation: note-refresh-slide 900ms ease-in-out infinite;
+    }
+  }
+
+  @keyframes note-refresh-slide {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(360%);
+    }
+  }
+
+  .note-main-panel.is-refreshing .note-library-body,
+  .note-main-panel.is-refreshing .note-library-body-list {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .note-workspace,
+    .note-tag-panel,
+    .note-library-body,
+    .note-library-body-list {
+      transition: none;
+    }
+
+    .note-refresh-bar::after {
+      width: 100%;
+      animation: none;
     }
   }
 
@@ -1538,7 +1638,8 @@
   .note-library-body-list .note-list,
   .note-library-body-list .note-list-skeleton-wrap {
     width: 100%;
-    padding: 0 4px;
+    // 右侧留出与滚动条的呼吸位,列表项不贴着滑块
+    padding: 0 8px 0 4px;
     box-sizing: border-box;
     scrollbar-gutter: stable;
   }

@@ -26,7 +26,7 @@
         }"
         @click="selectDay(day)"
       >
-        <span>{{ day.date.getDate() }}</span>
+        <span><b class="todo-calendar-daynum">{{ day.date.getDate() }}</b></span>
         <BButton
           v-for="item in day.items.slice(0, 3)"
           :key="item.id"
@@ -314,17 +314,33 @@
   .todo-calendar-day.is-outside {
     opacity: 0.42;
   }
-  .todo-calendar-day.is-today {
-    border-color: color-mix(in srgb, var(--primary-color) 36%, var(--surface-border-color, var(--card-border-color)));
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+  /* 日期数字单独成块,「今天」才能用实心圆底标记(日历通用语义,窄格子里也一眼可见) */
+  .todo-calendar-daynum {
+    display: inline-flex;
+    min-width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
   }
-
-  .todo-calendar-day.is-today > span::after {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+  /**
+   * 「今天」的可辨识度不能只靠混色描边与淡底:Android WebView 会把 color-mix() 回退成
+   * 稳定主题色(见 src/vite/androidColorMixFallback.ts),淡底会退化成普通页面底色,
+   * 混色边框也失去与相邻格子的差异 —— 当天曾只剩一个小圆点。
+   * 因此实色主色描边 + 实心圆底日期承担基础标记,淡底只是支持混色时的锦上添花。
+   */
+  .todo-calendar-day.is-today {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
+  }
+  .todo-calendar-day.is-today .todo-calendar-daynum {
     background: var(--primary-color);
-    content: '';
+    color: #fff;
+    font-weight: 700;
   }
   .todo-calendar-item {
     display: block;
@@ -380,9 +396,11 @@
   .todo-agenda-card__meta small.is-completed {
     color: var(--success-color, #2e8b57);
   }
+  /* 选中日要比「今天」更强:主色描边再加内层一圈实色,混色淡底被回退掉时依然分得清 */
   .todo-calendar-day.is-selected {
     border-color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 13%, var(--background-color));
+    box-shadow: inset 0 0 0 1px var(--primary-color);
   }
 
   .todo-calendar-day.is-selected > span {
@@ -604,6 +622,11 @@
     }
     .todo-calendar-day > span {
       font-size: 10px;
+    }
+    .todo-calendar-daynum {
+      min-width: 16px;
+      height: 16px;
+      padding: 0 2px;
     }
     .todo-calendar-item {
       min-height: 20px;

@@ -42,7 +42,8 @@
       >
         <span class="tag-detail-label">{{ tag.name }}</span>
         <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-          <SvgIcon :src="icon.cloudSpace.share" size="11" />
+          <!-- 站内跳转到标签详情页,用"进入下一级"的箭头;share 是外链分享语义,不匹配 -->
+          <SvgIcon :src="icon.arrow_right" size="13" />
         </BButton>
       </div>
     </div>
@@ -255,23 +256,12 @@
     }
   }
 
-  .tag-detail-corner {
-    width: 18px;
-    min-width: 18px;
-    height: 18px;
-    padding: 0;
-    border-radius: 999px;
-    color: currentColor;
-    background: transparent;
-  }
+  /* 详情角标统一由 assets/css/common.less 负责:浮在标签右上角外侧、hover 淡入的小圆钮。
+     这里不要覆写它的 background —— 圆钮跨在标签边界上,一旦变成 transparent,
+     上下两半会分别透出卡片底色和标签底色,看起来就像被切掉一半。
+     .footer-tag 的 padding: 7px 7px 5px 0 是给这个外溢圆钮留的裁切余量,不要收掉。 */
 
   @media (max-width: 1023px) {
-    /* 标签详情是独立跳转，触控区按移动端最小热区处理。 */
-    .tag-detail-corner {
-      width: 44px;
-      min-width: 44px;
-      height: 44px;
-    }
     .card-body {
       height: 154px;
       &:hover {

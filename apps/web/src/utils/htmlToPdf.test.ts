@@ -84,7 +84,7 @@ describe('findBlankRowInBand', () => {
  */
 const addImage = vi.fn();
 const addPage = vi.fn();
-const save = vi.fn();
+const output = vi.fn(() => new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
 let sourceCanvas: { width: number; height: number; getContext: () => unknown };
 
 /** 造一个假的长图 canvas：blankRows 里的绝对行号为纯白背景，其余视为文字。 */
@@ -115,7 +115,7 @@ describe('generatePDF 分页', () => {
   beforeEach(() => {
     addImage.mockClear();
     addPage.mockClear();
-    save.mockClear();
+    output.mockClear();
     document.body.innerHTML = '<div id="pdf-target">note</div>';
     vi.spyOn(HTMLCanvasElement.prototype, 'toDataURL').mockReturnValue('data:image/jpeg;base64,stub');
     // jsdom 没有 canvas 实现，桩掉临时切片 canvas 的 2D 上下文（源长图的上下文由 fakeCanvas 提供）
@@ -136,12 +136,12 @@ describe('generatePDF 分页', () => {
       default: class {
         addImage = addImage;
         addPage = addPage;
-        save = save;
+        output = output;
       },
     }));
-    const { generatePDF } = await import('./htmlToPdf');
+    const { generatePdfBlob } = await import('./htmlToPdf');
     // 显式 margins:0,让断言维持「满幅 A4」的简单几何(默认边距另有专门用例)
-    await generatePDF('测试笔记', '#pdf-target', { margins: 0 });
+    return generatePdfBlob('#pdf-target', { margins: 0 });
   }
 
   it('整页无空白行时退化为硬切，页数正确且不会死循环', async () => {
@@ -150,7 +150,13 @@ describe('generatePDF 分页', () => {
     await run();
     expect(addImage).toHaveBeenCalledTimes(3);
     expect(addPage).toHaveBeenCalledTimes(2);
-    expect(save).toHaveBeenCalledOnce();
+  });
+
+  it('产出 Blob 交给统一交付链路，自己不落盘', async () => {
+    sourceCanvas = fakeCanvas(1000, 1000, new Set());
+    const blob = await run();
+    expect(output).toHaveBeenCalledWith('blob');
+    expect(blob).toBeInstanceOf(Blob);
   });
 
   it('把切点挪到理想位置上方的空白行，文字不再被切成两半', async () => {
@@ -271,11 +277,11 @@ describe('withPrintWidth:导出结果与设备宽度/分辨率无关', () => {
         default: class {
           addImage = addImage;
           addPage = addPage;
-          save = save;
+          output = output;
         },
       }));
-      const { generatePDF } = await import('./htmlToPdf');
-      await generatePDF('一致性', '#pdf-target');
+      const { generatePdfBlob } = await import('./htmlToPdf');
+      await generatePdfBlob('#pdf-target');
       captured.push(addImage.mock.calls.length);
       // 放置宽度恒为纸张内容宽，缩放比 1:1（不再随窗口宽度忽大忽小）
       expect(addImage.mock.calls[0][4]).toBeCloseTo(contentWidthPt, 2);

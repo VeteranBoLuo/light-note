@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    启动入口的窗口背景（系统 starting window 的画面）。
+
+    Android 12 以下没有 SplashScreen API：系统在 Activity 创建之前唯一能绘制的就是
+    windowBackground。它原来是纯色，于是进程启动那一瞬只有一整块 splash_background
+    （深色主题下是 #222222，观感等于黑屏），品牌标识要等 MainActivity 的原生等待层
+    才出现 —— 看起来就是「先黑一下，再进开屏页」。
+
+    把标识画进窗口背景后首帧即完整开屏画面。底色、标识资源和 288dp 居中尺寸都与
+    MainActivity#createLaunchOverlay 保持一致，切换到等待层时不产生位移或明暗跳变。
+    改这里要同步那边，两处必须是同一套视觉。
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:width="288dp"
+        android:height="288dp"
+        android:drawable="@drawable/ic_splash_mark"
+        android:gravity="center" />
+</layer-list>

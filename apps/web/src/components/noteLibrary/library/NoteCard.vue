@@ -26,7 +26,8 @@
         >
           <span class="tag-detail-label">{{ tag.name }}</span>
           <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-            <SvgIcon :src="icon.cloudSpace.share" size="11" />
+            <!-- 站内跳转到标签详情页,用"进入下一级"的箭头;share 是外链分享语义,不匹配 -->
+            <SvgIcon :src="icon.arrow_right" size="13" />
           </BButton>
         </span>
         <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
@@ -293,23 +294,26 @@
     gap: 6px;
     flex-wrap: nowrap;
     width: 100%;
+    // padding-top 是给 hover 时上溢的角标留的(本行 overflow: hidden),
+    // 原来用等量负 margin 抵消掉了,标签因此贴着正文;去掉负值让标签落到正文与日期中间。
+    // 卡片是固定 282px,这里多占的高度由正文区吸收,不会撑大卡片或改变网格
     padding: 7px 7px 0 0;
     box-sizing: border-box;
     min-height: 24px;
     overflow: hidden;
     align-items: center;
-    margin: -7px 0 7px;
+    margin: 0 0 7px;
 
     .b-tag {
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
       padding: 3px 10px;
       max-width: 96px;
-      text-align: center;
       border-radius: 20px;
       font-size: 12px;
       color: var(--resource-note-color, #00a884);
       cursor: pointer;
       transition: all 0.2s ease;
+      text-align: center;
       flex-shrink: 0;
 
       &:hover {
@@ -336,16 +340,9 @@
     }
   }
 
-  .tag-detail-corner {
-    width: 20px;
-    min-width: 20px;
-    height: 20px;
-    margin: -2px -7px -2px 1px;
-    padding: 0;
-    border-radius: 999px;
-    color: currentColor;
-    background: transparent;
-  }
+  // 详情角标统一由 assets/css/common.less 的 .tag-detail-chip / .tag-detail-corner 负责,
+  // 这里不做任何局部覆盖 —— 之前那份覆盖(background: transparent + 自定尺寸)正是它
+  // 在浅色主题下看不清、并被 .note-tags 的 overflow 切掉一半的原因。
 
   .note-time {
     font-size: 12px;

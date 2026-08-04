@@ -14,28 +14,36 @@
         <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
         <InboxPendingBadge v-if="note.isPending" />
       </div>
-      <div class="note-description" v-html="getDescription(note.content)"></div>
-      <div class="note-tags" v-if="getTags(note)">
-        <span
-          class="b-tag tag-detail-chip"
-          v-for="tag in getTags(note)"
-          :key="tag.id || tag.name"
-          @click.stop="noteTypeChange(tag)"
-          v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
-        >
-          <span class="tag-detail-label">{{ tag.name }}</span>
-          <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-            <SvgIcon :src="icon.cloudSpace.share" size="11" />
-          </BButton>
-        </span>
+      <!-- 摘要与标签同占一行:有无标签行高都一致,列表不会忽高忽低 -->
+      <div class="note-meta-row">
+        <div class="note-description">{{ description }}</div>
+        <div class="note-tags" v-if="visibleTags.length">
+          <span
+            class="b-tag tag-detail-chip"
+            v-for="tag in visibleTags"
+            :key="tag.id || tag.name"
+            :title="tag.name"
+            @click.stop="noteTypeChange(tag)"
+            v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+          >
+            <span class="tag-detail-label">{{ tag.name }}</span>
+            <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
+              <!-- 站内跳转到标签详情页,用"进入下一级"的箭头;share 是外链分享语义,不匹配 -->
+              <SvgIcon :src="icon.arrow_right" size="13" />
+            </BButton>
+          </span>
+          <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
+            >+{{ hiddenTagCount }}</span
+          >
+        </div>
       </div>
-      <div class="note-tags" v-else style="font-size: 12px">_</div>
     </div>
-    <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
+    <div class="note-time">{{ listTime }}</div>
   </div>
 </template>
 
 <script lang="ts" setup>
+  import { computed } from 'vue';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -49,34 +57,37 @@
   });
   const bookmark = bookmarkStore();
 
-  const getTags = function (note) {
-    if (note.tags) {
-      return note.tags;
-    }
-    return '';
-  };
+  // 与 NoteCard 保持同一套标签折叠规则
+  const MAX_VISIBLE_TAGS = 3;
+  const tagList = computed<any[]>(() => (Array.isArray(props.note?.tags) ? props.note.tags : []));
+  const visibleTags = computed(() => tagList.value.slice(0, MAX_VISIBLE_TAGS));
+  const hiddenTagCount = computed(() => Math.max(0, tagList.value.length - MAX_VISIBLE_TAGS));
+  const hiddenTagsLabel = computed(() =>
+    tagList.value
+      .slice(MAX_VISIBLE_TAGS)
+      .map((t: any) => t.name)
+      .join('、'),
+  );
 
-  const getDescription = (htmlContent: string) => {
-    // Markdown 笔记
-    if (props.note?.type === 'markdown' && !(htmlContent || '').includes('<')) {
-      const text = (htmlContent || '')
+  // 摘要按纯文本插值渲染,不再走 v-html:
+  // HTML 分支取的是 textContent,`&lt;img onerror=...&gt;` 会被解码成真实标签再被 v-html 执行
+  const description = computed(() => {
+    const raw = props.note?.content || '';
+    if (props.note?.type === 'markdown' && !raw.includes('<')) {
+      return raw
         .replace(/[#*`~>\[\]()_-]/g, ' ')
         .replace(/\s+/g, ' ')
-        .trim();
-      return text.length > 150 ? text.substring(0, 150) + '...' : text;
+        .trim()
+        .slice(0, 150);
     }
-    // 提取文本内容作为描述
     const tempElement = document.createElement('div');
-    tempElement.innerHTML = htmlContent;
-    const text = tempElement.textContent || tempElement.innerText || '';
-    return text.length > 150 ? text.substring(0, 150) + '...' : text;
-  };
+    tempElement.innerHTML = raw;
+    return (tempElement.textContent || tempElement.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 150);
+  });
 
-  const formatTime = (timeStr: string) => {
-    if (!timeStr) return '';
-    const date = new Date(timeStr);
-    return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
+  // 后端已按本地时区格式化为 'YYYY-MM-DD HH:mm:ss',这里只截日期段。
+  // 不用 new Date() 二次解析:空格分隔格式在部分浏览器解析不稳,还会引入时区偏移
+  const listTime = computed(() => String(props.note?.updateTime ?? props.note?.createTime ?? '').slice(0, 10));
 
   const emit = defineEmits(['nodeTypeChange']);
   const noteTypeChange = function (tag) {
@@ -99,12 +110,15 @@
 
 <style lang="less" scoped>
   .note-list-item {
+    // 标题与右侧时间共用同一行高,时间不再靠写死的 line-height 去凑基线
+    --note-row-line: 22px;
+
     display: grid;
-    grid-template-columns: 28px minmax(0, 1fr) auto;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
     column-gap: 12px;
     align-items: flex-start;
-    padding: 18px 20px;
-    margin-bottom: 15px;
+    padding: 11px 14px;
+    margin-bottom: 8px;
     background: var(--card-background);
     border: 1px solid var(--surface-border-color);
     border-radius: 8px;
@@ -128,16 +142,18 @@
 
     &.is-mobile {
       grid-template-columns: minmax(0, 1fr) auto;
+      // 触控端不跟着桌面一起压扁
+      padding: 14px;
     }
 
     .note-select-column {
       --primary-color: var(--resource-note-color, #00a884);
-      width: 28px;
-      min-width: 28px;
+      width: 26px;
+      min-width: 26px;
+      height: var(--note-row-line);
       display: flex;
-      align-items: flex-start;
+      align-items: center;
       justify-content: flex-start;
-      margin-top: -2px;
     }
 
     .note-info {
@@ -147,14 +163,14 @@
         align-items: center;
         gap: 8px;
         min-width: 0;
-        margin-bottom: 8px;
+        margin-bottom: 3px;
       }
       .note-title {
-        font-size: 18px;
-        font-weight: 600;
+        font-size: 15px;
+        font-weight: 500;
         color: var(--text-color);
         margin-bottom: 0;
-        line-height: 1.4;
+        line-height: var(--note-row-line);
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -173,59 +189,68 @@
         font-weight: 600;
         line-height: 18px;
       }
+      .note-meta-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        // 无摘要也无标签时保持同样的行高
+        min-height: 20px;
+      }
       .note-description {
-        font-size: 14px;
+        flex: 1 1 auto;
+        min-width: 0;
+        font-size: 13px;
         color: var(--desc-color);
-        width: calc(100% - 20px);
-        margin-bottom: 10px;
-        line-height: 1.5;
-        word-break: break-all;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        line-clamp: 2;
-        -webkit-box-orient: vertical;
+        line-height: 20px;
+        // break-all 会把英文单词从中间劈开
+        overflow-wrap: anywhere;
+        white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
       }
       .note-tags {
+        flex: 0 0 auto;
         display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        padding-top: 7px;
-        margin-top: -7px;
+        gap: 6px;
+        align-items: center;
         .b-tag {
           background-color: var(--tag-bg-color, #eeedff);
           color: var(--tag-color, #8b88f2);
-          padding: 4px 10px;
-          border-radius: 12px;
-          font-size: 12px;
+          padding: 2px 8px;
+          border-radius: 999px;
+          font-size: 11px;
           font-weight: 500;
+          line-height: 16px;
           cursor: pointer;
-          transition: all 0.2s;
-          max-width: 140px;
+          transition:
+            background-color 0.2s ease,
+            color 0.2s ease;
+          max-width: 120px;
+          // 只加深底色,不做实心反白:列表里标签是次要信息,hover 不该抢焦点,
+          // 也避免原来写死的 #605ce5 / white 在两套主题下都是同一个色
           &:hover {
-            background-color: #605ce5;
-            color: white;
+            background-color: color-mix(in srgb, var(--tag-color, #8b88f2) 20%, var(--tag-bg-color, #eeedff));
+          }
+        }
+        .tag-more {
+          background-color: var(--common-tag-bg-color, #f0f0f0);
+          color: var(--desc-color);
+          cursor: default;
+
+          &:hover {
+            background-color: var(--common-tag-bg-color, #f0f0f0);
           }
         }
       }
-      .tag-detail-corner {
-        width: 20px;
-        min-width: 20px;
-        height: 20px;
-        margin: -2px -7px -2px 1px;
-        padding: 0;
-        border-radius: 999px;
-        color: currentColor;
-        background: transparent;
-      }
+      // 详情角标统一由 assets/css/common.less 负责,这里不做局部覆盖
     }
     .note-time {
       font-size: 12px;
       color: var(--desc-color);
       white-space: nowrap;
       align-self: flex-start;
-      line-height: 26px;
+      line-height: var(--note-row-line);
+      font-variant-numeric: tabular-nums;
     }
   }
 </style>

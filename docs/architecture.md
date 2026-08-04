@@ -159,6 +159,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 - PC 浏览器、移动浏览器、PWA 与 Android APK 的被动身份变化遵循同一规则：冷启动、刷新、自动入口分流、初始化发现游客、历史会话失效和手动退出都不能自动打开登录/注册弹窗。历史登录记录只用于移动入口兼容，不代表当前登录意图；运行中的真实会话过期仅显示非阻塞提示并降级到游客资料页。认证弹窗只由用户主动点击登录/注册，或在受保护操作的软引导中再次主动确认后打开。
 - 原生壳只负责 WebView 容器、安全导航、文件选择、下载、系统返回和版本标识，书签、笔记、云空间等业务继续由 Web 端统一维护。
 - Android 以 `MainActivity` 作为唯一桌面入口和 `singleTask` 任务根；隐私同意页只在未授权时由主入口内部打开。同意后重建以主页面为根的任务，Android 13+ 预测返回与旧版返回键统一走同一原生回调。底部一级导航使用替换历史而不是压栈；一级页没有浮层时，系统返回手势把整个任务移到后台但不结束 WebView 进程，再次点桌面图标恢复同一实例。详情页仍正常回退，带 history 占位的弹框/抽屉优先消费返回并关闭浮层。
+- 冷启动开屏由三段接力构成，三者必须是同一套视觉，否则首帧会露出「无标识纯色」而被看成黑屏：`Theme.LightNote.Launcher` 的 `windowBackground`（`splash_window_background.xml`，Android 12 以下系统在 Activity 创建前唯一能画的东西）→ Android 12+ 的 `windowSplashScreenBackground` + `windowSplashScreenAnimatedIcon` → `MainActivity#createLaunchOverlay` 的原生等待层（等 Web 端 `app.ready` 或超时后淡出）。改动任一处的底色、标识资源或尺寸（当前为 288dp 居中）必须同步其余两处。带标识的窗口背景只给启动入口 Activity，应用内浏览器、法律文档和隐私同意页保持纯色，避免内容未铺满时透出标识。
 - Android「今日」支持在列表顶部下拉刷新今日摘要、行动项和成长任务；普通移动浏览器不接管系统页面回弹，继续使用页面内刷新入口。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
 - SEO 只以无本地访问记录的普通浏览器语义为准：根官网始终返回同一份预渲染 HTML，保留 `index, follow`、自引用 canonical、完整标题与正文；Googlebot Smartphone、百度等窄视口爬虫和普通手机首访获得同一份完整响应式官网，不强制伪装成 PC 视口。回访分流只发生在客户端本地记录存在时，不改变 HTTP 响应与索引产物；`/app` 与业务页面继续 `noindex`。不得按搜索引擎 UA 提供不同内容。

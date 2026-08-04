@@ -6,7 +6,11 @@
  * “同一串数字在任何时区显示一致”。因此事件时间使用 RFC 5545 浮动时间（不带 Z、不带 TZID），
  * 直接抄写字符串数字生成，+提前量/时长用纯组件进位算术，全程不经过 Date 的时区换算；
  * 只有 DTSTAMP 按 RFC 要求使用 UTC。
+ *
+ * 文件名清洗与「分享/下载」交付链路是所有前端生成文件的共用能力，统一在 `utils/fileDelivery.ts`。
  */
+
+import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
 
 export interface TodoIcsInput {
   id: string;
@@ -161,15 +165,7 @@ export function deriveSequence(updatedAt: string | null | undefined): number {
 
 /** 清理文件名：去控制字符，非法字符换空格，折叠空白并限长；空结果用兜底名。 */
 export function buildIcsFileName(title: string, fallback: string): string {
-  const withoutControls = Array.from(title)
-    .filter((char) => char.charCodeAt(0) >= 32)
-    .join('');
-  const cleaned = withoutControls
-    .replace(/[\\/:*?"<>|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const limited = Array.from(cleaned).slice(0, 40).join('').trim();
-  return `${limited || fallback}.ics`;
+  return buildExportFileName(title, fallback, 'ics');
 }
 
 /**
@@ -222,43 +218,5 @@ export async function deliverIcsFile(
   fileName: string,
   preferShare: boolean,
 ): Promise<IcsDeliveryResult> {
-  if (
-    preferShare &&
-    typeof navigator !== 'undefined' &&
-    typeof File !== 'undefined' &&
-    typeof navigator.share === 'function'
-  ) {
-    try {
-      const file = new File([content], fileName, { type: 'text/calendar' });
-      if (typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: fileName });
-        return 'shared';
-      }
-    } catch (error) {
-      if ((error as DOMException)?.name === 'AbortError') return 'cancelled';
-      // canShare/File/share 在部分 WebView 中会抛异常；除用户取消外统一降级下载
-    }
-  }
-  if (
-    typeof document === 'undefined' ||
-    typeof URL === 'undefined' ||
-    typeof URL.createObjectURL !== 'function' ||
-    typeof URL.revokeObjectURL !== 'function'
-  ) {
-    throw new Error('ICS download is unavailable in the current environment');
-  }
-  const blob = new Blob([content], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  try {
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    return 'downloaded';
-  } finally {
-    anchor.remove();
-    // Safari/WebView 可能在 click 返回后才读取 blob，延迟释放可避免偶发空文件
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
+  return deliverGeneratedFile({ content, fileName, mimeType: 'text/calendar', preferShare });
 }

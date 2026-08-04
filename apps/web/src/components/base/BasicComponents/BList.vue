@@ -5,6 +5,7 @@
     </slot>
     <div
       class="category-body"
+      v-auto-scrollbar
       :style="{
         height: bookmark.isDesktop ? 'calc(100% - 40px)' : 'calc(100% - 50px)',
       }"
@@ -120,16 +121,11 @@
     height: 100%;
     width: 100%;
   }
+  // 滚动条走 v-auto-scrollbar(滚动才显示、停手淡出)。
+  // 原来是 hover 时把宽度从 0 改成 3px,显隐会挤压内容宽度,列表项右侧内容跟着抖。
   .category-body {
     width: 100%;
     overflow-y: auto;
-    --scrollbar-width: 0;
-    &::-webkit-scrollbar {
-      width: var(--scrollbar-width);
-    }
-    &:hover {
-      --scrollbar-width: 3px;
-    }
   }
   .category-item {
     margin: 5px 0;

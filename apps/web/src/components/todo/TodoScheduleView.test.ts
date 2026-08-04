@@ -77,6 +77,20 @@ describe('TodoScheduleView mobile swipe delete', () => {
     expect(onDelete).toHaveBeenCalledWith(todo);
   });
 
+  /**
+   * 「今天」的高亮曾经全靠 color-mix 的描边与底色，在不支持 color-mix 的移动端 WebView 上
+   * 整条声明被丢弃，当天格子看不出任何标记。日期数字必须是独立元素，才能挂实心圆底。
+   */
+  it('当天格子把日期数字包成独立元素，供不依赖 color-mix 的圆底标记使用', async () => {
+    const { host } = mountSchedule('calendar');
+    await nextTick();
+
+    const todayCell = host.querySelector<HTMLElement>('.todo-calendar-day.is-today');
+    expect(todayCell).not.toBeNull();
+    const dayNumber = todayCell!.querySelector<HTMLElement>('.todo-calendar-daynum');
+    expect(dayNumber?.textContent).toBe(String(today.getDate()));
+  });
+
   it('日历底部的当天议程列表也提供相同删除入口', async () => {
     const { host, onDelete } = mountSchedule('calendar');
     await nextTick();

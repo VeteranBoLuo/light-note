@@ -10,4 +10,15 @@
     </style>
 
     <style name="Theme.LightNote" parent="Theme.LightNote.Base" />
+
+    <!--
+        启动入口专用：窗口背景带品牌标识，让 Android 12 以下的 starting window
+        首帧就是完整开屏画面，而不是一整块纯色（详见 splash_window_background.xml）。
+        parent 指向 Theme.LightNote，因此 v29 / v31 的限定符定义仍会按设备版本生效。
+        只给 MainActivity 用：应用内浏览器、法律文档、隐私同意页保持纯色窗口背景，
+        避免它们内容尚未铺满时从底下透出品牌标识。
+    -->
+    <style name="Theme.LightNote.Launcher" parent="Theme.LightNote">
+        <item name="android:windowBackground">@drawable/splash_window_background</item>
+    </style>
 </resources>
