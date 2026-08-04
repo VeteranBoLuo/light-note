@@ -198,7 +198,15 @@ function missingExpectedSemanticCapabilityIds(plan, expectedCapabilityIds = []) 
 function shouldRepairSemanticPlan(plan, adjudicated, expectedCapabilityIds = []) {
   if (!plan || adjudicated?.resolution === 'semantic_conflict') return true;
   if (!expectedCapabilityIds.length) return false;
-  if (missingExpectedSemanticCapabilityIds(plan, expectedCapabilityIds).length > 0) return true;
+  const missingCapabilityIds = missingExpectedSemanticCapabilityIds(plan, expectedCapabilityIds);
+  if (missingCapabilityIds.length > 0) {
+    // 传感器是高召回低精度的正则：资源词与动作词远距交叉会多判能力（「分析这个书签…
+    // 创建一个待办」被多判出 bookmark.create）。计划已覆盖部分 expected 且自洽就绪时，
+    // 模型显然没有把写请求当普通对话，缺口按模型的语义判断放行；只有一个都没覆盖
+    // （真正漏判成对话/查询）才值得花修复轮。
+    const coveredCount = expectedCapabilityIds.length - missingCapabilityIds.length;
+    if (!(coveredCount > 0 && adjudicated?.state === 'ready')) return true;
+  }
   return ['forbidden_context', 'unverified'].includes(adjudicated?.resolution);
 }
 
@@ -2716,8 +2724,18 @@ export async function agentChat(req, res) {
       // 高召回动作传感器只用于校验“模型是否遗漏了明确、已启用的写能力”，不会替模型
       // 生成参数或直接执行工具。若受限重判后仍把明确写请求当成普通对话/查询，必须失败
       // 关闭，不能继续进入 Final Reply 并用一段普通回答冒充已请求的产品操作。
+      //
+      // 但“逐项全覆盖”不能作为硬校验：传感器会因资源词与动作词远距交叉而多判能力，
+      // 模型经修复提示后仍拒绝编造的缺口，只要计划已覆盖部分 expected 且自洽就绪，
+      // 按模型的语义判断放行——写操作仍全部经确认协议，多判最多只是少一张卡，
+      // 且 otherMutations 兜底披露会告知未执行的部分。分歧记入 trace 供离线复核。
       const missingExpectedCapabilityIds = missingExpectedSemanticCapabilityIds(semanticPlan, expectedCapabilityIds);
-      if (semanticPlan && missingExpectedCapabilityIds.length > 0) {
+      const coveredExpectedCount = expectedCapabilityIds.length - missingExpectedCapabilityIds.length;
+      if (
+        semanticPlan &&
+        missingExpectedCapabilityIds.length > 0 &&
+        !(coveredExpectedCount > 0 && adjudicated.state === 'ready')
+      ) {
         const missingExpectedCapabilities = missingExpectedCapabilityIds
           .map((capabilityId) => semanticCatalog.find((entry) => entry.id === capabilityId))
           .filter(Boolean);
@@ -2729,6 +2747,13 @@ export async function agentChat(req, res) {
           toolCalls: [],
           writeToolNames: missingExpectedCapabilities.flatMap((capability) => capability.toolNames || []),
         };
+      } else if (semanticPlan && missingExpectedCapabilityIds.length > 0) {
+        trace.expectedCapabilityGap = missingExpectedCapabilityIds;
+        console.warn(
+          '[Agent] expected capability gap tolerated covered=%s missing=%s',
+          coveredExpectedCount,
+          missingExpectedCapabilityIds.join(','),
+        );
       }
 
       // Provider 偶尔会正确声明多个读取 intent，却漏掉其中一个或全部内嵌 toolCalls。

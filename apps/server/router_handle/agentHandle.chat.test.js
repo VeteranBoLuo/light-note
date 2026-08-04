@@ -3069,6 +3069,102 @@ describe('agentChat 主链路', () => {
     expect(String(data?.response || '')).not.toContain('其他操作没有执行');
   });
 
+  it('传感器多判的能力不再强制修复：就绪计划按模型语义放行并出全确认卡', async () => {
+    // 线上实测：「分析这个书签，生成一篇笔记，然后创建一个今天晚上 21 点的待办」——
+    // 旧动作传感器因「书签」与「创建」远距交叉多判出 bookmark.create，模型经两轮修复
+    // 提示仍正确拒绝编造建书签意图，反而被 missing-expected 硬校验失败关闭。
+    // 现在：计划已覆盖部分 expected 且自洽就绪 → 不触发修复轮、不失败关闭。
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('create_note'), registry.get('create_todo'), registry.get('read_url')].filter(Boolean),
+    );
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '创建分析笔记',
+                targetDescription: '书签分析笔记',
+                dependsOn: [],
+              },
+              {
+                kind: 'write',
+                capabilityId: 'todo.create',
+                goal: '创建今晚待办',
+                targetDescription: '今晚 21 点待办',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              { toolName: 'create_note', arguments: { title: '书签分析', content: '分析正文。' } },
+              { toolName: 'create_todo', arguments: { title: '查看笔记', dueAt: '2026-08-04 21:00:00' } },
+            ],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        // 该消息会让传感器判出 note.create + bookmark.create + todo.create 三个能力；
+        // 计划只覆盖 note + todo，bookmark.create 是多判。
+        message: '分析这个书签，生成一篇笔记，然后创建一个今天晚上 21 点的待办',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    // 分类 + planner 各一次：就绪计划不再进修复轮。
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
+    expect(data?.confirmations?.map((item) => item.toolName)).toEqual(['create_note', 'create_todo']);
+    expect(String(data?.response || '')).not.toContain('该操作尚未执行');
+  });
+
+  it('计划一个 expected 能力都没覆盖时仍失败关闭，不能用普通回答冒充操作', async () => {
+    // 传感器宽容只对"部分覆盖 + 就绪"生效；模型把明确写请求当普通对话仍必须拦下。
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('create_note'), registry.get('create_todo')].filter(Boolean),
+    );
+    const conversationPlan = () => ({
+      content: '',
+      toolCalls: [semanticPlanCall({ requestClass: 'conversation', intents: [], toolCalls: [] })],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
+      .mockResolvedValueOnce(conversationPlan())
+      .mockResolvedValueOnce(conversationPlan())
+      .mockResolvedValueOnce(conversationPlan());
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '分析这个书签，生成一篇笔记，然后创建一个今天晚上 21 点的待办',
+        stream: false,
+        contexts: [{ type: 'bookmark', id: 'bookmark-1' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.confirmations || []).toHaveLength(0);
+    expect(String(data?.response || '')).toContain('该操作尚未执行');
+  });
+
   it('模型漏声明第二个写操作时，确认卡仍要披露另一半没有执行', async () => {
     // otherMutations 是代码级信号，不依赖模型是否老实声明。这里模型只声明了 note.create，
     // 用户要求的删除（bookmark.delete 仍是 planned）既没执行也没被 adjudicate 拦下，
