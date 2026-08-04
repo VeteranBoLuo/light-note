@@ -16,6 +16,7 @@ export default {
     workbench: '工作台',
     resourceCenter: '资源中心',
     todo: '待办',
+    todoAttention: '{count} 项待办需要关注：逾期 {overdue} 项，今天到期 {dueToday} 项',
     bookmark: '书签',
     tag: '标签',
     note: '笔记',

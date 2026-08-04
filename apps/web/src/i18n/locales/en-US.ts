@@ -16,6 +16,7 @@ export default {
     workbench: 'Workbench',
     resourceCenter: 'Resource Center',
     todo: 'Todos',
+    todoAttention: '{count} todos need attention: {overdue} overdue, {dueToday} due today',
     bookmark: 'Bookmark',
     tag: 'Tag',
     note: 'Note',

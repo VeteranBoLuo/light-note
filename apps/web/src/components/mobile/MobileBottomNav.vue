@@ -14,8 +14,19 @@
     >
       <span class="mobile-bottom-nav__icon">
         <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'ai' ? '21' : '20'" aria-hidden="true" />
-        <span v-if="item.key === 'todo' && inbox.todoPendingTotal > 0" class="mobile-bottom-nav__badge">
-          {{ inbox.todoPendingTotal > 99 ? '99+' : inbox.todoPendingTotal }}
+        <!--
+          与桌面顶栏同一口径：只提醒「逾期 + 今天到期」。原来用全部未完成待办，
+          那个数字永不清零，挂成常驻角标会被用户学会忽略。两端必须一致，
+          否则同一个账号在手机和电脑上看到两个不同的待办数字。
+        -->
+        <span
+          v-if="item.key === 'todo' && inbox.todoAttentionTotal > 0"
+          class="mobile-bottom-nav__badge"
+          :class="{ 'is-due-today': inbox.todoOverdueTotal === 0 }"
+          role="status"
+          :aria-label="todoAttentionLabel"
+        >
+          {{ inbox.todoAttentionTotal > 99 ? '99+' : inbox.todoAttentionTotal }}
         </span>
       </span>
       <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
@@ -24,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-  import { watch } from 'vue';
+  import { computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -45,6 +56,15 @@
   const inbox = inboxStore();
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
+
+  // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
+  const todoAttentionLabel = computed(() =>
+    t('navigation.todoAttention', {
+      count: inbox.todoAttentionTotal,
+      overdue: inbox.todoOverdueTotal,
+      dueToday: inbox.todoDueTodayTotal,
+    }),
+  );
 
   const bottomIcons = {
     today: icon.common.calendar,
@@ -156,6 +176,11 @@
     line-height: 14px;
   }
 
+  /* 没有历史逾期、只有今天到期：降一档为警示色，与桌面顶栏同一套语义。
+     实色变量，不经 color-mix —— 旧 WebView 会把混色塌缩掉。 */
+  .mobile-bottom-nav__badge.is-due-today {
+    background: var(--warning-color, #f59e0b);
+  }
   .mobile-bottom-nav__badge {
     position: absolute;
     top: -4px;

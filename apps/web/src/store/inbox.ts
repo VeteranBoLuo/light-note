@@ -9,11 +9,33 @@ interface TypeTotals {
 
 export type ActionCaptureType = InboxResourceType | 'todo';
 
+/**
+ * 解析注意力口径计数（逾期 + 今天到期），供导航角标使用。
+ *
+ * 灰度期旧后端还没有这三个字段，回落到「全部未完成待办」：宁可数字偏大，
+ * 也不要让角标在版本错配时整体消失。前后端同批发布后可删掉 fallback。
+ *
+ * 必须用 `??` 而不是 `||`：后端返回 0 是有效结果（今天没有要关注的待办），
+ * 用 `||` 会把这个 0 误判成缺字段并回落成全部未完成数，让本该清零的角标继续挂着。
+ */
+function readAttentionCounts(data: any) {
+  return {
+    todoAttentionTotal: Number(data?.todoAttentionTotal ?? data?.todoPendingTotal ?? 0),
+    todoOverdueTotal: Number(data?.todoOverdueTotal ?? 0),
+    todoDueTodayTotal: Number(data?.todoDueTodayTotal ?? 0),
+  };
+}
+
 export default defineStore('inbox', {
   state: () => ({
     pendingTotal: 0,
+    // 「库存」口径：全部未完成待办，供工作台总览；永不清零，不用于角标
     todoPendingTotal: 0,
     actionTotal: 0,
+    // 「注意力」口径：逾期 + 今天到期，供导航角标；做完今天的事即可归零
+    todoAttentionTotal: 0,
+    todoOverdueTotal: 0,
+    todoDueTodayTotal: 0,
     typeTotals: { bookmark: 0, note: 0, file: 0 } as TypeTotals,
     items: [] as InboxItem[],
     total: 0,
@@ -38,6 +60,9 @@ export default defineStore('inbox', {
       this.pendingTotal = 0;
       this.todoPendingTotal = 0;
       this.actionTotal = 0;
+      this.todoAttentionTotal = 0;
+      this.todoOverdueTotal = 0;
+      this.todoDueTodayTotal = 0;
       this.typeTotals = { bookmark: 0, note: 0, file: 0 };
       this.items = [];
       this.total = 0;
@@ -58,6 +83,7 @@ export default defineStore('inbox', {
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
         this.todoPendingTotal = Number(res.data?.todoPendingTotal || 0);
         this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
+        Object.assign(this, readAttentionCounts(res.data));
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
         return true;
       } catch {
@@ -85,6 +111,7 @@ export default defineStore('inbox', {
         this.pendingTotal = Number(res.data?.pendingTotal || 0);
         this.todoPendingTotal = Number(res.data?.todoPendingTotal || 0);
         this.actionTotal = Number(res.data?.actionTotal || this.pendingTotal + this.todoPendingTotal);
+        Object.assign(this, readAttentionCounts(res.data));
         this.typeTotals = res.data?.typeTotals || { bookmark: 0, note: 0, file: 0 };
         this.selectedKeys = [];
         return true;

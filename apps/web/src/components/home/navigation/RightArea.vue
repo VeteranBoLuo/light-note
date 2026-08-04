@@ -11,8 +11,12 @@
         :aria-label="$t('inbox.quickCapture')"
         @click="openQuickCapture"
       >
+        <!--
+          快速添加只负责创建，不承担待处理催办：它的角标曾用 actionTotal（全部未完成待办 +
+          全部待整理），点开却只有创建表单，数字无从解释。待处理提醒改由「待办」导航角标
+          （逾期 + 今天）和弹框内的上下文入口承担。
+        -->
         <svg-icon size="21" :src="icon.common.add" />
-        <span v-if="inbox.actionTotal" class="quick-capture-count">{{ displayInboxCount }}</span>
       </BButton>
     </BTooltip>
     <BTooltip v-if="!bookmark.isMobile" :title="$t('navigation.moreEntries')">
@@ -75,7 +79,6 @@
   const showQuickCapture = computed(() => !bookmark.isMobile && Boolean(user.id) && user.role !== 'visitor');
   const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
-  const displayInboxCount = computed(() => (inbox.actionTotal > 99 ? '99+' : String(inbox.actionTotal)));
   const moreMenuOptions = computed(() => [
     { label: t('home.officialSite'), icon: icon.userCenter.home, function: officialSiteClick },
     { label: t('home.toolbox'), icon: icon.toolkit, function: toolkitClick },
@@ -201,26 +204,6 @@
       background: color-mix(in srgb, var(--primary-color, #615ced) 18%, var(--background-color));
       transform: translateY(-1px);
     }
-  }
-  .quick-capture-count {
-    position: absolute;
-    top: -4px;
-    right: -5px;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 3px;
-    border-radius: 999px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--primary-color, #615ced);
-    color: #fff;
-    font-size: 10px;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    pointer-events: none;
-    box-shadow: 0 0 0 2px var(--background-color);
   }
   .guest-register-link {
     font-size: 13px;

@@ -32,12 +32,17 @@ vi.mock('vue-router', async (importOriginal) => {
   };
 });
 
+const inbox = {
+  todoAttentionTotal: 0,
+  todoOverdueTotal: 0,
+  todoDueTodayTotal: 0,
+  resetForOwner: mocks.resetInbox,
+  refreshCount: mocks.refreshInbox,
+};
+
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
-  inboxStore: () => ({
-    resetForOwner: mocks.resetInbox,
-    refreshCount: mocks.refreshInbox,
-  }),
+  inboxStore: () => inbox,
   useUserStore: () => ({
     id: '',
     role: 'visitor',
@@ -82,6 +87,9 @@ afterEach(() => {
   cleanup = undefined;
   mocks.routerPush.mockClear();
   bookmark.isFold = false;
+  inbox.todoAttentionTotal = 0;
+  inbox.todoOverdueTotal = 0;
+  inbox.todoDueTodayTotal = 0;
 });
 
 describe('Navigation', () => {
@@ -96,5 +104,64 @@ describe('Navigation', () => {
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/app');
     expect(bookmark.isFold).toBe(true);
+  });
+
+  /**
+   * 待办是唯一挂注意力角标的导航项，口径是「逾期 + 今天到期」。
+   * 颜色分档必须由 overdue 是否为 0 决定：有历史逾期才是危险色。
+   */
+  describe('待办注意力角标', () => {
+    it('没有需要关注的待办时不渲染角标', async () => {
+      const host = await mountNavigation();
+      expect(host.querySelector('.navigation-attention-badge')).toBeNull();
+    });
+
+    it('有逾期时显示总数并使用危险色档位', async () => {
+      inbox.todoAttentionTotal = 3;
+      inbox.todoOverdueTotal = 1;
+      inbox.todoDueTodayTotal = 2;
+
+      const host = await mountNavigation();
+      const badge = host.querySelector<HTMLElement>('.navigation-attention-badge');
+
+      expect(badge?.textContent?.trim()).toBe('3');
+      // 默认档位即危险色，不额外挂 is-due-today
+      expect(badge?.classList.contains('is-due-today')).toBe(false);
+      expect(badge?.getAttribute('aria-label')).toBe('3 项待办需要关注：逾期 1 项，今天到期 2 项');
+    });
+
+    it('只有今天到期、没有历史逾期时降一档为警示色', async () => {
+      inbox.todoAttentionTotal = 2;
+      inbox.todoOverdueTotal = 0;
+      inbox.todoDueTodayTotal = 2;
+
+      const host = await mountNavigation();
+      const badge = host.querySelector<HTMLElement>('.navigation-attention-badge');
+
+      expect(badge?.textContent?.trim()).toBe('2');
+      expect(badge?.classList.contains('is-due-today')).toBe(true);
+    });
+
+    it('超过两位数收敛为 99+，不撑开导航', async () => {
+      inbox.todoAttentionTotal = 128;
+      inbox.todoOverdueTotal = 100;
+      inbox.todoDueTodayTotal = 28;
+
+      const host = await mountNavigation();
+
+      expect(host.querySelector('.navigation-attention-badge')?.textContent?.trim()).toBe('99+');
+    });
+
+    /** 角标只能挂在待办上：资源中心的待整理属于低时效库存，不做常驻催办。 */
+    it('角标只出现在待办入口，资源中心不带角标', async () => {
+      inbox.todoAttentionTotal = 2;
+      inbox.todoOverdueTotal = 1;
+      inbox.todoDueTodayTotal = 1;
+
+      const host = await mountNavigation();
+
+      expect(host.querySelectorAll('.navigation-attention-badge')).toHaveLength(1);
+      expect(host.querySelector('.navigation-todo-entry .navigation-attention-badge')).not.toBeNull();
+    });
   });
 });

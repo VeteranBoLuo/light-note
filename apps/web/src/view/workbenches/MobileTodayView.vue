@@ -344,9 +344,15 @@
           inbox: Number(data.counts?.inbox || 0),
           todoPending: Number(data.counts?.todoPending || 0),
         };
-        // 底部导航角标与今日摘要共用同一份计数，避免两处数字不一致
+        // 底部导航角标与今日摘要共用同一份计数，避免两处数字不一致。
+        // overdue / dueToday 来自 listTodoPage 的 due=overdue|today（includeTotal 权威总数），
+        // 与 /inbox/count 的注意力口径同源同边界，可以直接喂给角标字段；
+        // 少了这两行，进过今日页后角标会被下面的库存口径稀释回「全部未完成」。
         inbox.pendingTotal = counts.value.inbox;
         inbox.todoPendingTotal = counts.value.todoPending;
+        inbox.todoOverdueTotal = counts.value.overdue;
+        inbox.todoDueTodayTotal = counts.value.dueToday;
+        inbox.todoAttentionTotal = counts.value.overdue + counts.value.dueToday;
       } catch {
         if (requestId === todayRequestId) loadFailed.value = true;
       } finally {

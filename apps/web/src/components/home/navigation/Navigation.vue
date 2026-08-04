@@ -73,12 +73,26 @@
             >{{ $t('navigation.tag') }}
           </div>
 
+          <!--
+            待办是唯一挂注意力角标的导航项：它的数字是「逾期 + 今天到期」，做完今天的事
+            就能归零，点进去即可处理。角标绝对定位，出现或消失都不改变导航项宽度，
+            后面的「资源中心」不会左右跳动。
+          -->
           <div
             :style="{ color: isTodoRoute ? '#615ced' : '' }"
+            class="navigation-todo-entry"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.todo"
             @click="router.push({ path: '/inbox', query: { tab: 'todo' } })"
-            >{{ $t('navigation.todo') }}</div
+            >{{ $t('navigation.todo')
+            }}<span
+              v-if="inbox.todoAttentionTotal > 0"
+              class="navigation-attention-badge"
+              :class="{ 'is-due-today': inbox.todoOverdueTotal === 0 }"
+              role="status"
+              :aria-label="todoAttentionLabel"
+              >{{ displayTodoAttention }}</span
+            ></div
           >
           <div
             :style="{
@@ -140,6 +154,17 @@
       route.path.includes('/notificationCenter'),
   );
   const isTodoRoute = computed(() => route.path === '/inbox' && String(route.query?.tab || '') === 'todo');
+  const displayTodoAttention = computed(() =>
+    inbox.todoAttentionTotal > 99 ? '99+' : String(inbox.todoAttentionTotal),
+  );
+  // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
+  const todoAttentionLabel = computed(() =>
+    t('navigation.todoAttention', {
+      count: inbox.todoAttentionTotal,
+      overdue: inbox.todoOverdueTotal,
+      dueToday: inbox.todoDueTodayTotal,
+    }),
+  );
 
   const adminMenuOptions = computed(() => [
     {
@@ -224,6 +249,41 @@
 </script>
 
 <style lang="less" scoped>
+  /* 角标绝对定位在文字右上角：数字出现或消失都不占导航流宽度，后续导航项不会跳动 */
+  .navigation-todo-entry {
+    position: relative;
+  }
+  .navigation-attention-badge {
+    position: absolute;
+    top: -7px;
+    right: -14px;
+    display: inline-flex;
+    min-width: 16px;
+    height: 16px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    /*
+     * 实色背景 + 白字：Android WebView 会把 color-mix() 塌缩成稳定实色、
+     * 把混色阴影回退成透明，时间提醒这种关键状态不能只靠混色或阴影表达
+     * （见 docs/development.md 的「Android APK 样式回退」）。
+     * 默认红色兜底：有逾期时才是最需要警示的情况，class 逻辑失效也不会弱化提醒。
+     */
+    background: var(--danger-color, #e5484d);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  /* 没有历史逾期、只有今天到期：降一档为警示色，不与真正的逾期混为一谈 */
+  .navigation-attention-badge.is-due-today {
+    background: var(--warning-color, #f59e0b);
+  }
+
   .navigation {
     height: 60px;
     display: flex;

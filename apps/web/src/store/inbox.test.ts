@@ -137,4 +137,125 @@ describe('inbox store', () => {
     expect(store.actionTotal).toBe(5);
     expect(store.typeTotals).toEqual({ bookmark: 0, note: 0, file: 0 });
   });
+
+  describe('注意力口径计数', () => {
+    const attentionResponse = {
+      status: 200,
+      data: {
+        pendingTotal: 1,
+        todoPendingTotal: 4,
+        actionTotal: 5,
+        todoAttentionTotal: 2,
+        todoOverdueTotal: 1,
+        todoDueTodayTotal: 1,
+      },
+    };
+
+    it('库存口径与注意力口径同时落库，互不覆盖', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce(attentionResponse);
+
+      await store.refreshCount();
+
+      // 库存：工作台用
+      expect(store.todoPendingTotal).toBe(4);
+      expect(store.actionTotal).toBe(5);
+      // 注意力：导航角标用
+      expect(store.todoAttentionTotal).toBe(2);
+      expect(store.todoOverdueTotal).toBe(1);
+      expect(store.todoDueTodayTotal).toBe(1);
+    });
+
+    it('列表接口返回的计数同样同步注意力字段，两个入口口径不分叉', async () => {
+      const store = useInboxStore();
+      listInbox.mockResolvedValueOnce(
+        successList([], { todoAttentionTotal: 3, todoOverdueTotal: 2, todoDueTodayTotal: 1 }),
+      );
+
+      await store.refreshList();
+
+      expect(store.todoAttentionTotal).toBe(3);
+      expect(store.todoOverdueTotal).toBe(2);
+      expect(store.todoDueTodayTotal).toBe(1);
+    });
+
+    /**
+     * 灰度期旧后端没有注意力字段：宁可显示偏大的全部未完成数，也不要让角标整体消失。
+     */
+    it('旧后端缺注意力字段时回落到全部未完成待办', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce({
+        status: 200,
+        data: { pendingTotal: 1, todoPendingTotal: 4, actionTotal: 5 },
+      });
+
+      await store.refreshCount();
+
+      expect(store.todoAttentionTotal).toBe(4);
+      expect(store.todoOverdueTotal).toBe(0);
+      expect(store.todoDueTodayTotal).toBe(0);
+    });
+
+    /**
+     * 关键边界：后端返回 0 是有效结果（今天没有要关注的待办），必须保留成 0。
+     * 若 fallback 用 `||` 而不是 `??`，这个 0 会被当成缺字段回落成全部未完成数，
+     * 本该清零的角标会继续挂着 —— 正是这个口径要解决的问题。
+     */
+    it('注意力计数为 0 时保持 0，不被回落逻辑覆盖成全部未完成数', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce({
+        status: 200,
+        data: {
+          pendingTotal: 1,
+          todoPendingTotal: 4,
+          actionTotal: 5,
+          todoAttentionTotal: 0,
+          todoOverdueTotal: 0,
+          todoDueTodayTotal: 0,
+        },
+      });
+
+      await store.refreshCount();
+
+      expect(store.todoAttentionTotal).toBe(0);
+      expect(store.todoPendingTotal).toBe(4);
+    });
+
+    it('账号切换时注意力计数一并清零，不残留上个账号的角标', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce(attentionResponse);
+      store.ownerId = 'user-a';
+      await store.refreshCount();
+      expect(store.todoAttentionTotal).toBe(2);
+
+      store.resetForOwner('user-b');
+
+      expect(store.todoAttentionTotal).toBe(0);
+      expect(store.todoOverdueTotal).toBe(0);
+      expect(store.todoDueTodayTotal).toBe(0);
+    });
+
+    it('计数接口失败时保留现有注意力数字，不归零', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce(attentionResponse);
+      await store.refreshCount();
+
+      countInbox.mockRejectedValueOnce(new Error('network error'));
+      await expect(store.refreshCount()).resolves.toBe(false);
+
+      expect(store.todoAttentionTotal).toBe(2);
+      expect(store.todoOverdueTotal).toBe(1);
+    });
+
+    it('接口返回非 200 时不写入任何计数', async () => {
+      const store = useInboxStore();
+      countInbox.mockResolvedValueOnce(attentionResponse);
+      await store.refreshCount();
+
+      countInbox.mockResolvedValueOnce({ status: 500, data: null });
+      await expect(store.refreshCount()).resolves.toBe(false);
+
+      expect(store.todoAttentionTotal).toBe(2);
+    });
+  });
 });
