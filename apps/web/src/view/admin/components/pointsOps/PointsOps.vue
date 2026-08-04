@@ -1,43 +1,42 @@
 <template>
-  <div class="pops">
-    <header class="pops-header">
-      <h2 class="pops-title">积分运营</h2>
-      <p class="pops-subtitle"
-        >监控积分经济健康度(发放/消耗/存量、抽奖返还率),按需给指定账号手动发放或扣减积分/存储/补签卡。仅站长可见。</p
-      >
-    </header>
+  <AdminDataPage
+    eyebrow="Admin / 积分"
+    title="积分运营"
+    subtitle="监控积分经济健康度（发放/消耗/存量、抽奖返还率），按需给指定账号手动发放或扣减积分/存储/补签卡。仅站长可见。"
+    layout="scroll"
+  >
+    <template #actions>
+      <BButton size="small" :loading="loading" @click="loadOverview">刷新</BButton>
+    </template>
 
-    <!-- 总览 -->
-    <div class="pops-cards">
-      <div class="pops-card">
-        <span class="pops-card-label">累计发放</span>
-        <b class="pops-card-num up">+{{ (ov?.issued || 0).toLocaleString('en-US') }}</b>
-      </div>
-      <div class="pops-card">
-        <span class="pops-card-label">累计消耗</span>
-        <b class="pops-card-num down">-{{ (ov?.spent || 0).toLocaleString('en-US') }}</b>
-      </div>
-      <div class="pops-card">
-        <span class="pops-card-label">当前存量</span>
-        <b class="pops-card-num">{{ (ov?.outstanding || 0).toLocaleString('en-US') }}</b>
-      </div>
-      <div class="pops-card">
-        <span class="pops-card-label">抽奖积分返还率</span>
-        <b class="pops-card-num">{{ ov?.lottery?.payoutRatio ?? 0 }}%</b>
-        <span class="pops-card-sub"
+    <!-- 总览：复用共享指标卡，不再自造 pops-card 一套 -->
+    <ul class="admin-stats">
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">累计发放</span>
+        <strong class="admin-stat-value up">+{{ (ov?.issued || 0).toLocaleString('en-US') }}</strong>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">累计消耗</span>
+        <strong class="admin-stat-value down">-{{ (ov?.spent || 0).toLocaleString('en-US') }}</strong>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">当前存量</span>
+        <strong class="admin-stat-value">{{ (ov?.outstanding || 0).toLocaleString('en-US') }}</strong>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">抽奖积分返还率</span>
+        <strong class="admin-stat-value">{{ ov?.lottery?.payoutRatio ?? 0 }}%</strong>
+        <span class="admin-stat-hint"
           >抽 {{ ov?.lottery?.draws || 0 }} 次 · 花 {{ ov?.lottery?.cost || 0 }} · 返
           {{ ov?.lottery?.winPoints || 0 }}</span
         >
-      </div>
-    </div>
+      </li>
+    </ul>
 
     <div class="pops-cols">
       <!-- 按来源分布 -->
       <div class="pops-block">
-        <div class="pops-block-head">
-          <span>按来源分布</span>
-          <b-button size="small" :disabled="loading" @click="loadOverview">刷新</b-button>
-        </div>
+        <div class="pops-block-head"><span>按来源分布</span></div>
         <div class="pops-reasons">
           <div v-for="r in ov?.byReason || []" :key="r.reason" class="pops-reason">
             <span class="pops-reason-name">{{ reasonLabel(r.reason) }}</span>
@@ -92,7 +91,7 @@
         /></div>
         <div class="pops-actions">
           <b-button size="small" :disabled="!form.userId || querying" @click="queryUser">查询</b-button>
-          <b-button type="primary" size="small" :disabled="!form.userId || granting" @click="grant"
+          <b-button type="primary" size="small" :disabled="!form.userId || granting" @click="grant()"
             >发放 / 扣减</b-button
           >
         </div>
@@ -130,13 +129,15 @@
         </div>
       </div>
     </div>
-  </div>
+  </AdminDataPage>
 </template>
 
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import growthApi from '@/api/growthApi.ts';
 
@@ -201,13 +202,28 @@
     }
   }
 
-  async function grant() {
+  async function grant(confirmedGrant = false) {
     if (!form.value.userId) return;
     const points = Number(form.value.points) || 0;
     const storageMb = Number(form.value.storageMb) || 0;
     const cards = Number(form.value.cards) || 0;
     if (!points && !storageMb && !cards) {
       message.info('请至少填写一项发放数量');
+      return;
+    }
+    // 直接改动用户资产，必须先让操作者复核账号与数量（此前只有 disabled，没有确认）
+    const parts = [
+      points ? `积分 ${points > 0 ? '+' : ''}${points}` : '',
+      storageMb ? `存储 ${storageMb > 0 ? '+' : ''}${storageMb}MB` : '',
+      cards ? `补签卡 ${cards > 0 ? '+' : ''}${cards}` : '',
+    ].filter(Boolean);
+    // Alert 只有 onOk（无 onCancel），统一用回调续跑而不是 await Promise
+    if (!confirmedGrant) {
+      Alert.alert({
+        title: points < 0 || storageMb < 0 || cards < 0 ? '确认扣减' : '确认发放',
+        content: `目标账号 ${form.value.userId.trim()}\n${parts.join(' · ')}\n\n将立即写入并记入积分流水，确认继续？`,
+        onOk: () => grant(true),
+      });
       return;
     }
     granting.value = true;
@@ -240,61 +256,13 @@
 
 <style scoped lang="less">
   @import '@/assets/css/admin-breakpoints.less';
-  .pops {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    color: var(--text-color);
-    padding-bottom: 24px;
-  }
-  .pops-header {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .pops-title {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-  }
-  .pops-subtitle {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--desc-color);
-  }
-  .pops-cards {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-  }
-  .pops-card {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 62%, transparent);
-    background: var(--workbench-subcard-bg);
-  }
-  .pops-card-label {
-    font-size: 12px;
-    color: var(--desc-color);
-  }
-  .pops-card-num {
-    font-size: 20px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-  }
-  .pops-card-num.up {
+  /* 骨架与指标卡已迁到 AdminDataPage + .admin-stat-*，原 .pops-header/.pops-card* 全部删除。
+     这里只保留指标卡内的正负值语义色。 */
+  .admin-stat-value.up {
     color: var(--success-color);
   }
-  .pops-card-num.down {
+  .admin-stat-value.down {
     color: var(--danger-color);
-  }
-  .pops-card-sub {
-    font-size: 11px;
-    color: var(--desc-color);
   }
   .pops-cols {
     display: grid;
