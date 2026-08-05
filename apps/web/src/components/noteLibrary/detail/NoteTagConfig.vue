@@ -1,10 +1,15 @@
 <template>
-  <BModal
-    v-model:visible="visible"
-    :title="$t('note.tagConfig.title')"
-    :mask-closable="false"
-    wrap-class-name="note-tag-modal"
+  <!--
+    移动端用底部抽屉、桌面端用居中弹框 —— 与 QuickCaptureModal 同一套外壳切换模式。
+    居中弹框在手机上撑满屏幕仍是桌面味道；bottom sheet 才有从底部升起、下滑关闭的手感。
+    BDrawer 没有内置 footer，所以移动端的「确定/取消」由下面那条固定操作条承担。
+  -->
+  <component
+    :is="shellComponent"
+    v-bind="shellProps"
     @ok="handleOk"
+    @close="handleShellClose"
+    @update:visible="syncVisible"
   >
     <div class="tag-config" :class="{ mobile: bookmark.isMobile }">
       <div class="panel selected-panel">
@@ -108,12 +113,19 @@
         <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
       </div>
     </div>
-  </BModal>
+
+    <!-- 抽屉没有内置 footer：移动端自己给一条贴底的操作条，滚动内容时它不跟着走 -->
+    <div v-if="bookmark.isMobile" class="tag-config-footer">
+      <b-button type="primary" @click="handleOk">{{ $t('common.confirm') }}</b-button>
+      <b-button @click="visible = false">{{ $t('common.cancel') }}</b-button>
+    </div>
+  </component>
 </template>
 
 <script lang="ts" setup>
   import { computed, inject, onMounted, ref } from 'vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -147,6 +159,37 @@
   const searchValue = ref('');
   /** 正在就地改名的标签 id，空串表示没有行处于编辑态 */
   const renamingTagId = ref('');
+
+  /*
+   * 移动端 bottom sheet、桌面端居中弹框。抽屉留出上下呼吸位，内容自己滚动；
+   * 两端都不允许点遮罩关闭 —— 未点确定的绑定改动会丢，误触代价太大。
+   */
+  const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
+  const shellProps = computed(() =>
+    bookmark.isMobile
+      ? {
+          open: visible.value === true,
+          title: t('note.tagConfig.title'),
+          placement: 'bottom' as const,
+          height: 'min(86dvh, 720px)',
+          bodyPadding: '12px',
+          maskClosable: false,
+        }
+      : {
+          visible: visible.value === true,
+          title: t('note.tagConfig.title'),
+          maskClosable: false,
+          wrapClassName: 'note-tag-modal',
+        },
+  );
+
+  /** BDrawer 用 @close，BModal 用 v-model:visible —— 统一收敛成一处关闭。 */
+  function handleShellClose() {
+    visible.value = false;
+  }
+  function syncVisible(next: boolean) {
+    visible.value = next;
+  }
 
   const filteredTags = computed(() => {
     const keyword = searchValue.value.trim().toLowerCase();
@@ -318,6 +361,27 @@
       grid-template-columns: 1fr;
       gap: 16px;
     }
+  }
+
+  /*
+   * 移动端抽屉里的贴底操作条：抽屉高度固定、内容自己滚动，操作条不能跟着滚走。
+   * 用 sticky 而不是 fixed —— fixed 会脱离抽屉、在软键盘弹起时错位。
+   */
+  .tag-config-footer {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: 10px;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+    margin-top: 4px;
+    background: var(--background-color);
+    /* 内容滚到底之前，操作条与列表之间要有一条可见分界 */
+    border-top: 1px solid var(--card-border-color);
+  }
+  .tag-config-footer :deep(.b_btn) {
+    flex: 1 1 0;
+    /* 触控高度不低于 44px（design.md 的移动端要求） */
+    min-height: 44px;
   }
 
   .panel {

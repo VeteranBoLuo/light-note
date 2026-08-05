@@ -26,13 +26,17 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success, warning, info, error: vi.fn() },
 }));
 vi.mock('vue-router', () => ({ useRouter: () => ({ resolve: () => ({ href: '/manage/editTag/add' }) }) }));
+const layout = { isMobile: false };
 vi.mock('@/store', () => ({
-  bookmarkStore: () => ({ isMobile: false }),
+  bookmarkStore: () => layout,
   useUserStore: () => ({ id: 'user-1', role: 'user' }),
 }));
 // 弹框外壳与图标不参与本测试的行为，替换成透传容器让内容直接渲染
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: { name: 'BModalStub', template: '<div class="modal-stub"><slot /></div>' },
+}));
+vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
+  default: { name: 'BDrawerStub', template: '<div class="drawer-stub"><slot /></div>' },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<i />' },
@@ -133,6 +137,7 @@ describe('NoteTagConfig 就地新建标签', () => {
   afterEach(() => {
     cleanup?.();
     cleanup = undefined;
+    layout.isMobile = false;
   });
 
   it('入口是内联创建，不再是跳转到标签编辑页的按钮', async () => {
@@ -245,5 +250,49 @@ describe('NoteTagConfig 就地新建标签', () => {
     await nextTick();
 
     expect(selectedCount(host)).toBe(0);
+  });
+
+  /**
+   * 移动端换成 bottom sheet：居中弹框在手机上撑满屏幕仍是桌面味道。
+   * BDrawer 没有内置 footer，所以移动端必须自带贴底的「确定/取消」，
+   * 否则用户在抽屉里根本找不到保存入口。
+   */
+  describe('移动端外壳', () => {
+    it('移动端用底部抽屉并自带贴底操作条', async () => {
+      layout.isMobile = true;
+      const host = mount();
+      await settle();
+
+      expect(host.querySelector('.drawer-stub')).not.toBeNull();
+      expect(host.querySelector('.modal-stub')).toBeNull();
+      const footer = host.querySelector('.tag-config-footer');
+      expect(footer).not.toBeNull();
+      expect(footer!.querySelectorAll('button')).toHaveLength(2);
+    });
+
+    it('桌面端仍用居中弹框，不重复渲染操作条', async () => {
+      const host = mount();
+      await settle();
+
+      expect(host.querySelector('.modal-stub')).not.toBeNull();
+      expect(host.querySelector('.drawer-stub')).toBeNull();
+      // 桌面端的确定/取消由 BModal 内置 footer 提供，这里不该再有一条
+      expect(host.querySelector('.tag-config-footer')).toBeNull();
+    });
+
+    it('移动端点贴底「确定」走同一个保存入口', async () => {
+      layout.isMobile = true;
+      const host = mount(['tag-1']);
+      await settle();
+      apiBasePost.mockClear();
+
+      host.querySelector<HTMLButtonElement>('.tag-config-footer button')!.click();
+      await settle();
+
+      expect(apiBasePost).toHaveBeenCalledWith('/api/note/updateNoteTags', {
+        noteId: 'note-1',
+        tags: ['tag-1'],
+      });
+    });
   });
 });

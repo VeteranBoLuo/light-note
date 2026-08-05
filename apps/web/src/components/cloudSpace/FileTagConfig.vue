@@ -1,11 +1,9 @@
 <template>
-  <b-modal
-    v-model:visible="visible"
-    :title="t('cloudSpace.fileTagConfig.title')"
-    width="min(920px, 92vw)"
-    :mask-closable="false"
-    @close="handleClose"
-  >
+  <!--
+    移动端 bottom sheet、桌面端居中弹框，与笔记侧同一套外壳切换。
+    BDrawer 没有内置 footer，所以下面的操作条按端切换渲染位置。
+  -->
+  <component :is="shellComponent" v-bind="shellProps" @close="handleClose" @update:visible="syncVisible">
     <div class="file-tag-config" :class="{ mobile: bookmark.isMobile }">
       <div class="panel file-panel">
         <div class="file-card">
@@ -126,7 +124,15 @@
       </div>
     </div>
 
-    <template #footer>
+    <!-- 抽屉没有 footer 插槽：移动端把操作条放进内容底部并贴底吸附 -->
+    <div v-if="bookmark.isMobile" class="tag-config-footer">
+      <b-button type="primary" @click="submitFileTags">
+        {{ saving ? t('cloudSpace.fileTagConfig.saving') : t('common.confirm') }}
+      </b-button>
+      <b-button @click="handleClose">{{ t('common.cancel') }}</b-button>
+    </div>
+
+    <template v-if="!bookmark.isMobile" #footer>
       <div class="modal-footer">
         <b-space>
           <b-button type="primary" @click="submitFileTags">
@@ -136,7 +142,7 @@
         </b-space>
       </div>
     </template>
-  </b-modal>
+  </component>
 </template>
 
 <script setup lang="ts">
@@ -144,6 +150,7 @@
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
@@ -186,6 +193,30 @@
   const renamingTagId = ref('');
   const loading = ref(false);
   const saving = ref(false);
+
+  /* 移动端 bottom sheet、桌面端居中弹框；两端都不允许点遮罩关闭，避免丢掉未保存的绑定改动 */
+  const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
+  const shellProps = computed(() =>
+    bookmark.isMobile
+      ? {
+          open: visible.value === true,
+          title: t('cloudSpace.fileTagConfig.title'),
+          placement: 'bottom' as const,
+          height: 'min(86dvh, 720px)',
+          bodyPadding: '12px',
+          maskClosable: false,
+        }
+      : {
+          visible: visible.value === true,
+          title: t('cloudSpace.fileTagConfig.title'),
+          width: 'min(920px, 92vw)',
+          maskClosable: false,
+        },
+  );
+
+  function syncVisible(next: boolean) {
+    visible.value = next;
+  }
 
   const filteredTags = computed(() => {
     const keyword = searchValue.value.trim().toLowerCase();
@@ -470,6 +501,22 @@
    * 与笔记侧一致地横向排布：标签名通常只有两三个字，
    * 每个 chip 独占一行在移动端单栏布局下会吃掉半屏。
    */
+  /* 移动端抽屉里的贴底操作条：sticky 而非 fixed，软键盘弹起时不会错位 */
+  .tag-config-footer {
+    position: sticky;
+    bottom: 0;
+    display: flex;
+    gap: 10px;
+    padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
+    margin-top: 4px;
+    background: var(--background-color);
+    border-top: 1px solid var(--card-border-color);
+  }
+  .tag-config-footer :deep(.b_btn) {
+    flex: 1 1 0;
+    min-height: 44px;
+  }
+
   .chip-list {
     display: flex;
     flex-wrap: wrap;
