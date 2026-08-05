@@ -19,7 +19,13 @@ export async function downloadField(id: number | string) {
     const res = await apiBasePost('/api/file/downloadFileById', { id });
     if (res.status === 200 && res.data?.downloadUrl) {
       const { downloadUrl, fileName } = res.data;
+      /*
+       * 「已开始下载」由这里提示。原生侧原本也弹一条系统 Toast，和网页提示重复，已经去掉；
+       * 反过来说这条不能省 —— 否则点了下载在进度条出现前没有任何反馈，
+       * 旧版 APK（没有进度回传）更是全程无声。
+       */
       if (requestAndroidDownload(downloadUrl, fileName)) {
+        message.success(i18n.global.t('common.downloadStarted'));
         return true;
       }
       const a = document.createElement('a');
@@ -28,6 +34,7 @@ export async function downloadField(id: number | string) {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      message.success(i18n.global.t('common.downloadStarted'));
       return true;
     } else {
       message.error(i18n.global.t('common.downloadLinkFailed'));
@@ -155,5 +162,8 @@ export async function downloadFileShare(token: string, accessCode = '') {
     anchor.click();
     anchor.remove();
   }
+  // 与云空间下载同一口径：原生不再弹系统 Toast，开始下载的反馈由网页给。
+  // 分享页原本只把按钮文案换成「再次下载」，反馈太弱。
+  message.success(i18n.global.t('common.downloadStarted'));
   return true;
 }

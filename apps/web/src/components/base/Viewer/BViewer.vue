@@ -47,8 +47,10 @@
     const src = viewSrc.value;
     if (!src) return;
     const fileName = deriveImageFileName(src);
-    // App 内交给原生:能落到系统下载目录,而且原生侧自带「开始/完成」提示,这里不再重复弹消息
+    // App 内交给原生:能落到系统下载目录。原生那两条系统 Toast 已经去掉(和网页提示重复),
+    // 所以这里必须自己给反馈,否则点了保存没有任何动静。
     if (isHttpImageSrc(src) && postAndroidMessage({ type: 'download', url: src, fileName })) {
+      message.success(t('common.downloadStarted'));
       return;
     }
     try {

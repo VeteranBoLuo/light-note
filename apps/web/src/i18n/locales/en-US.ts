@@ -1758,6 +1758,7 @@ export default {
     saveSuccess: 'Save Successful',
     saveImage: 'Save image',
     saveImageFailed: 'Failed to save image',
+    downloadStarted: 'Download started',
     downloadingFile: 'Downloading',
     downloadFinished: 'Completed',
     downloadInterrupted: 'Download failed',

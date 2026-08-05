@@ -1730,6 +1730,7 @@ export default {
     saveSuccess: '保存成功',
     saveImage: '保存图片',
     saveImageFailed: '保存图片失败',
+    downloadStarted: '已开始下载',
     downloadingFile: '下载中',
     downloadFinished: '已完成',
     downloadInterrupted: '下载失败',

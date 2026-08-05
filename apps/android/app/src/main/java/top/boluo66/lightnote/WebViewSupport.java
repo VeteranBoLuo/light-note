@@ -71,12 +71,20 @@ final class WebViewSupport {
                     return;
                 }
 
-                int message = isDownloadSuccessful(context, downloadId)
-                    ? R.string.download_completed
-                    : R.string.download_failed_named;
+                /*
+                 * 成功不再弹系统 Toast：网页侧自己有「下载中 → 已完成」的进度条和提示
+                 * （见 web 的 AndroidDownloadProgress.vue 与各调用方的 message），
+                 * 两套一起出现就是同一件事说两遍。
+                 *
+                 * 失败仍然弹：进度轮询有 30 分钟上限，超时之后网页那边收不到终态，
+                 * 而下载失败是必须让人知道的，系统广播是这里最可靠的兜底。
+                 */
+                if (isDownloadSuccessful(context, downloadId)) {
+                    return;
+                }
                 Toast.makeText(
                     context,
-                    context.getString(message, fileName),
+                    context.getString(R.string.download_failed_named, fileName),
                     Toast.LENGTH_LONG
                 ).show();
             }
@@ -375,7 +383,8 @@ final class WebViewSupport {
             if (progressListener != null) {
                 watchDownloadProgress(context, downloadId, fileName, progressListener);
             }
-            Toast.makeText(context, R.string.download_started, Toast.LENGTH_LONG).show();
+            // 「已开始下载」交给网页提示：这里再弹一次系统 Toast 就成了重复播报。
+            // enqueue 本身失败（下面的 catch）仍要弹 —— 那种失败网页无从得知。
         } catch (Exception error) {
             Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
         }
