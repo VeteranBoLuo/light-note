@@ -17,8 +17,15 @@ export const WEBSITE_ICP_NUMBER = '蜀ICP备2026017699号-1';
 /** 工信部备案查询入口。 */
 export const MIIT_QUERY_URL = 'https://beian.miit.gov.cn';
 
-/** 唯一正式分发域名。下载页的安全提示要明确只认这个域名。 */
-export const OFFICIAL_HOST = 'boluo66.top';
+/** 唯一正式分发域名。下载页的安全提示要明确只认这个域名。后端拼绝对地址也要用它，故同在 shared。 */
+export { OFFICIAL_HOST } from '@lightnote/shared';
+
+/**
+ * 发布记录本体已移到 @lightnote/shared：后端要用同一份数据把「永久下载地址」
+ * （ANDROID_LATEST_APK_PATH）302 到当前版本的实际文件，两边各存一份版本号必然漂移。
+ * 这里只做转出，所有 `@/config/androidRelease` 的引用方无需改动。
+ */
+export { ANDROID_RELEASE, ANDROID_LATEST_APK_PATH } from '@lightnote/shared';
 
 export interface AndroidReleaseInfo {
   /** 用户可见版本号 */
@@ -40,7 +47,7 @@ export interface AndroidReleaseInfo {
   /** 最低系统版本 */
   minAndroidVersion: string;
   /** 原生权限清单 */
-  permissions: string[];
+  permissions: readonly string[];
   /**
    * APK 是否已经真的躺在线上可下载路径里。
    * false 时下载按钮显示「准备中」且不可点,用于「已备案未发布」这一过渡状态,
@@ -48,26 +55,6 @@ export interface AndroidReleaseInfo {
    */
   released: boolean;
 }
-
-export const ANDROID_RELEASE: AndroidReleaseInfo = {
-  versionName: '1.0.1',
-  versionCode: 10001,
-  packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-08-06',
-  fileSizeBytes: 1771377,
-  sha256: '7e070054237c82c49d3d96f9b4e7ee88ce39b23e68b58ff5cebce30d9e053f13',
-  certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
-  downloadPath: '/downloads/android/light-note-1.0.1.apk',
-  minAndroidVersion: '8.0',
-  permissions: [
-    'android.permission.INTERNET',
-    'android.permission.ACCESS_NETWORK_STATE',
-    // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
-    // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
-    'android.permission.REQUEST_INSTALL_PACKAGES',
-  ],
-  released: true,
-};
 
 /** 把字节数格式化成 MB,下载页展示文件大小用。 */
 export function formatFileSize(bytes: number): string {

@@ -95,3 +95,24 @@ export declare function dedupeResourceRefs(hrefs: string[]): ResourceRef[];
 
 /** 前后端共享的 canonical 协议测试向量。 */
 export declare const RESOURCE_REF_TEST_VECTORS: ReadonlyArray<{ href: string; ref: ResourceRef | null }>;
+
+/** 轻笺 Android 正式发布记录（前后端共享的单一事实源）。 */
+export declare const ANDROID_RELEASE: {
+  readonly versionName: string;
+  readonly versionCode: number;
+  readonly packageName: string;
+  readonly releaseDate: string;
+  readonly fileSizeBytes: number;
+  readonly sha256: string;
+  readonly certificateSha256: string;
+  readonly downloadPath: string;
+  readonly minAndroidVersion: string;
+  readonly permissions: ReadonlyArray<string>;
+  readonly released: boolean;
+};
+
+/** 唯一正式分发域名。 */
+export declare const OFFICIAL_HOST: string;
+
+/** 永不变化的安装包地址（相对路径），302 到当前版本的实际文件。 */
+export declare const ANDROID_LATEST_APK_PATH: string;

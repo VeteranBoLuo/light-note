@@ -368,3 +368,42 @@ export const RESOURCE_REF_TEST_VECTORS = Object.freeze([
   { href: '/noteLibrary/id-with%2Fslash', ref: null },
   { href: `/noteLibrary/${'a'.repeat(256)}`, ref: null },
 ]);
+
+/**
+ * 轻笺 Android 正式发布记录（前后端共享的单一事实源）。
+ *
+ * 放在 shared 而不是前端 config 里，是因为后端要用它做「永久下载地址」的重定向目标：
+ * 对外传播的固定地址（/api/app/android/latest.apk）必须始终指向当前版本，
+ * 而带版本号的实际文件是不可变地址、享受长缓存。若两边各存一份版本号必然漂移。
+ *
+ * 发新版时同时更新这里与 apps/web/public/downloads/android/ 下的 APK，
+ * 两者必须来自同一次 Release 构建。前端仍从 @/config/androidRelease 引用，那边只做转出。
+ */
+export const ANDROID_RELEASE = Object.freeze({
+  versionName: '1.0.1',
+  versionCode: 10001,
+  packageName: 'top.boluo66.lightnote',
+  releaseDate: '2026-08-06',
+  fileSizeBytes: 1771377,
+  sha256: '7e070054237c82c49d3d96f9b4e7ee88ce39b23e68b58ff5cebce30d9e053f13',
+  certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
+  downloadPath: '/downloads/android/light-note-1.0.1.apk',
+  minAndroidVersion: '8.0',
+  permissions: Object.freeze([
+    'android.permission.INTERNET',
+    'android.permission.ACCESS_NETWORK_STATE',
+    // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
+    // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
+    'android.permission.REQUEST_INSTALL_PACKAGES',
+  ]),
+  released: true,
+});
+
+/** 唯一正式分发域名。下载页的安全提示要明确只认这个域名。 */
+export const OFFICIAL_HOST = 'boluo66.top';
+
+/**
+ * 永不变化的安装包地址（相对路径）。
+ * 对外传播（群聊、文档、二维码）只发这一个；它 302 到当前版本的实际文件。
+ */
+export const ANDROID_LATEST_APK_PATH = '/api/app/android/latest.apk';

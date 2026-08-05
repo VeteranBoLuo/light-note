@@ -1,4 +1,5 @@
 import userRouter from '../router/user.js';
+import appRouter from '../router/app.js';
 import commonRouter from '../router/common.js';
 import noteLibraryRouter from '../router/noteLibrary.js';
 import bookmarkRouter from '../router/bookmark.js';
@@ -188,6 +189,11 @@ export const baseRouter = [
   {
     path: '/json',
     router: jsonRouter,
+  },
+  {
+    // 安装包永久地址（公开，未登录可访问）
+    path: '/app',
+    router: appRouter,
   },
   {
     path: '/common',

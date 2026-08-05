@@ -197,6 +197,8 @@ declare(ADMIN_POLICIES.READ, 'common', [
   ['GET', '/helpCenter/:id'],
   ['GET', '/sitemap.xml'],
 ]);
+// 安装包永久地址：只做一次 302 到静态文件，不读用户数据，代管上下文下同样放行
+declare(ADMIN_POLICIES.READ, 'app', [['GET', '/app/android/latest.apk']]);
 declare(ADMIN_POLICIES.READ, 'update_log', [
   ['POST', '/updateLog/list'],
   ['GET', '/updateLog/image/:logId/:fileName'],
