@@ -1173,6 +1173,8 @@ export default {
     tplReviewDesc: '回顾结果、分析原因、沉淀下一步',
     tplKnowledgeName: '知识卡片',
     tplKnowledgeDesc: '定义、场景、例子与关联知识',
+    tplMindmapName: '思维导图',
+    tplMindmapDesc: '中心主题发散分支，图下逐条展开',
     saveAsTemplate: '存为模板',
     tplNameLabel: '模板名称',
     tplNamePlaceholder: '如：日报',
@@ -3441,6 +3443,18 @@ export default {
     input: '请输入',
     searchPlaceholder: '请输入搜索内容',
     selectPlaceholder: '请选择',
+  },
+  // 标签库里的「顺手新建」：只收名字，图标与批量关联留给标签管理页
+  tagInlineCreate: {
+    entry: '新建共享标签',
+    placeholder: '输入标签名，回车创建',
+    creating: '创建中…',
+    duplicate: '该标签已存在，已刷新标签库',
+    failed: '标签创建失败，请稍后重试',
+    created: '已创建标签「{name}」并绑定',
+    createdOnly: '已创建标签「{name}」',
+    reused: '标签「{name}」已存在，已为你绑定',
+    reusedBound: '标签「{name}」已经绑定过了',
   },
   tagManage: {
     title: '标签管理',

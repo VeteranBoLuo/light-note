@@ -55,14 +55,17 @@
             <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
           </div>
           <div class="tag-actions">
-            <b-button
-              size="small"
-              type="primary"
-              @click="openTagWorkspace('add')"
-              v-click-log="{ module: '笔记-标签配置', operation: '新增共享标签' }"
-            >
-              {{ $t('note.tagConfig.newSharedTag') }}
-            </b-button>
+            <!--
+              就地新建：原来 window.open 到标签编辑页，用户要离开当前上下文、
+              建完自己切回来、手动刷新标签库、再手动点绑定。这里建完即绑。
+            -->
+            <InlineTagCreate
+              :existing-tags="allTags"
+              guard-scene="create-note-tag"
+              @created="handleTagCreated"
+              @reused="handleTagReused"
+              @stale="fetchAllTags"
+            />
           </div>
         </div>
 
@@ -118,6 +121,7 @@
   import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
 
   interface TagItem {
     id: string;
@@ -198,6 +202,39 @@
 
   function isTagBound(tagId: string) {
     return noteTags.value.some((t) => t.id === tagId);
+  }
+
+  /**
+   * 就地新建成功：先刷新标签库让它出现在列表里，再绑定到当前笔记。
+   * 笔记最多绑 3 个标签，已满时只提示「已创建」——标签本身是建好了的，
+   * 不能让用户以为创建失败；也不走 bindTag 以免弹出第二条上限提示。
+   */
+  async function handleTagCreated(tag: { id: string; name: string }) {
+    await fetchAllTags();
+    // 刷新失败时列表里找不到新标签，退回最小对象：已选区只用 id 和 name 展示
+    const created = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
+    if (noteTags.value.length >= 3) {
+      message.warning(t('tagInlineCreate.createdOnly', { name: tag.name }));
+      return;
+    }
+    noteTags.value.push(created);
+    message.success(t('tagInlineCreate.created', { name: tag.name }));
+    recordOperation({ module: '笔记-标签配置', operation: `新建共享标签【${tag.name}】` });
+  }
+
+  /** 输入的名字已存在：直接复用，不报错也不重复创建。 */
+  function handleTagReused(tag: { id: string; name: string }) {
+    const existing = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
+    if (isTagBound(existing.id)) {
+      message.info(t('tagInlineCreate.reusedBound', { name: existing.name }));
+      return;
+    }
+    if (noteTags.value.length >= 3) {
+      message.warning(t('note.tagConfig.maxTags'));
+      return;
+    }
+    noteTags.value.push(existing);
+    message.info(t('tagInlineCreate.reused', { name: existing.name }));
   }
 
   function bindTag(tag: TagItem) {

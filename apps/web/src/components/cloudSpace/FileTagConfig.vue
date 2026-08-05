@@ -73,14 +73,14 @@
             >
               {{ t('cloudSpace.fileTagConfig.manageTags') }}
             </b-button>
-            <b-button
-              size="small"
-              type="primary"
-              @click="openTagWorkspace('add')"
-              v-click-log="{ module: '云空间-文件标签配置', operation: '新建共享标签' }"
-            >
-              {{ t('cloudSpace.fileTagConfig.newSharedTag') }}
-            </b-button>
+            <!-- 与笔记侧共用同一个内联创建组件：建完即绑，不再跳出到标签编辑页 -->
+            <InlineTagCreate
+              :existing-tags="allTags"
+              guard-scene="create-file-tag"
+              @created="handleTagCreated"
+              @reused="handleTagReused"
+              @stale="fetchData"
+            />
           </div>
         </div>
 
@@ -152,6 +152,7 @@
   import { getCloudFileCategory } from '@/constants/cloudFileCategory.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
 
   interface TagItem {
     id: string;
@@ -234,6 +235,30 @@
       return;
     }
     selectedTags.value.push(tag);
+  }
+
+  /**
+   * 就地新建成功：刷新标签库让它出现在列表里，再绑定到当前文件。
+   * 文件侧没有笔记那样的 3 个标签上限，直接绑。
+   */
+  async function handleTagCreated(tag: { id: string; name: string }) {
+    await fetchData();
+    // 刷新失败时列表里找不到新标签，退回最小对象：已选区只用 id 和 name 展示
+    const created = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
+    if (!isTagBound(created.id)) selectedTags.value.push(created);
+    message.success(t('tagInlineCreate.created', { name: tag.name }));
+    recordOperation({ module: '云空间-文件标签配置', operation: `新建共享标签【${tag.name}】` });
+  }
+
+  /** 输入的名字已存在：直接复用，不报错也不重复创建。 */
+  function handleTagReused(tag: { id: string; name: string }) {
+    const existing = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
+    if (isTagBound(existing.id)) {
+      message.info(t('tagInlineCreate.reusedBound', { name: existing.name }));
+      return;
+    }
+    selectedTags.value.push(existing);
+    message.info(t('tagInlineCreate.reused', { name: existing.name }));
   }
 
   function unbindTag(tag: TagItem) {

@@ -1193,6 +1193,8 @@ export default {
     tplReviewDesc: 'Review results, find causes and capture next steps',
     tplKnowledgeName: 'Knowledge card',
     tplKnowledgeDesc: 'Definition, use cases, examples and related knowledge',
+    tplMindmapName: 'Mind map',
+    tplMindmapDesc: 'Branch out from a central topic, then expand below',
     saveAsTemplate: 'Save as template',
     tplNameLabel: 'Template name',
     tplNamePlaceholder: 'e.g. Daily report',
@@ -3527,6 +3529,18 @@ export default {
     input: 'Please enter',
     searchPlaceholder: 'Please enter to search',
     selectPlaceholder: 'Please select',
+  },
+  // Inline "create on the spot" in the tag library: name only; icon and bulk linking stay in Tag Management
+  tagInlineCreate: {
+    entry: 'New shared tag',
+    placeholder: 'Type a tag name, press Enter',
+    creating: 'Creating…',
+    duplicate: 'That tag already exists; the tag library has been refreshed',
+    failed: 'Failed to create the tag, please try again later',
+    created: 'Created “{name}” and linked it',
+    createdOnly: 'Created “{name}”',
+    reused: '“{name}” already exists and has been linked for you',
+    reusedBound: '“{name}” is already linked',
   },
   tagManage: {
     title: 'Tag Management',
