@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canSaveImage, deriveImageFileName, isHttpImageSrc } from './viewerSave';
+import { canSaveImage, deriveImageFileName, isBase64ImageSrc, isHttpImageSrc } from './viewerSave';
 
 describe('canSaveImage', () => {
   it('http(s) 图在 App 和浏览器里都能存', () => {
@@ -7,10 +7,26 @@ describe('canSaveImage', () => {
     expect(canSaveImage('https://boluo66.top/a.png', false)).toBe(true);
   });
 
-  it('data URL 只在浏览器里给按钮:App 内两条保存路径都走不通', () => {
-    const dataUrl = 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=';
-    expect(canSaveImage(dataUrl, true)).toBe(false);
-    expect(canSaveImage(dataUrl, false)).toBe(true);
+  /*
+   * 回归用例：轻笺的头像是 data:image/jpeg;base64 存库的，早先这里在 App 内返回 false，
+   * 导致「保存头像」这个最主要的场景连按钮都不出现。base64 图现在走原生直写通道。
+   */
+  it('base64 图在 App 内也要给按钮 —— 头像就是这种', () => {
+    const avatar = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
+    expect(canSaveImage(avatar, true)).toBe(true);
+    expect(canSaveImage(avatar, false)).toBe(true);
+  });
+
+  it('blob: 在 App 内仍然不给按钮:既不是 http 也拿不到字节', () => {
+    expect(canSaveImage('blob:http://a/uuid', true)).toBe(false);
+    expect(canSaveImage('blob:http://a/uuid', false)).toBe(true);
+  });
+
+  it('识别 base64 图片 src', () => {
+    expect(isBase64ImageSrc('data:image/jpeg;base64,/9j/4AAQ')).toBe(true);
+    expect(isBase64ImageSrc('data:image/svg+xml;base64,PHN2Zz4=')).toBe(true);
+    expect(isBase64ImageSrc('data:text/plain;base64,aGk=')).toBe(false);
+    expect(isBase64ImageSrc('https://a/b.png')).toBe(false);
   });
 
   it('空 src 不显示按钮', () => {

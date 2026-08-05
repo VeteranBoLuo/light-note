@@ -19,11 +19,19 @@ export interface AndroidDownloadProgress {
   percent: number;
 }
 
+/** 图片保存结果。`unsupported` 覆盖旧版 App（没有这个通道，等不到回复）和系统版本过低两种情况。 */
+export interface AndroidImageSaveResult {
+  ok: boolean;
+  reason?: 'unsupported' | 'failed';
+}
+
 declare global {
   interface Window {
     LightNoteAndroid?: LightNoteAndroidBridge;
     /** 原生 → 网页的下载进度回调，由 onAndroidDownloadProgress 装上 */
     __lightNoteAndroidDownloadProgress?: (raw: unknown) => void;
+    /** 原生 → 网页的图片保存结果回调，由 saveImageViaAndroid 装上 */
+    __lightNoteAndroidImageSaveResult?: (raw: unknown) => void;
   }
 }
 
@@ -134,6 +142,61 @@ export function onAndroidDownloadProgress(listener: AndroidDownloadProgressListe
   return () => {
     downloadProgressListeners.delete(listener);
   };
+}
+
+/*
+ * 图片保存（base64 直写）。
+ *
+ * 轻笺的头像本身就是 `data:image/jpeg;base64,...` 存在库里的，不是 http 地址，
+ * 而 DownloadManager 只收 http(s)、WebView 对 data:/blob: 的 `<a download>` 又不触发下载，
+ * 所以这类图片在 App 内两条常规路径都走不通，只能把字节交给原生自己写进相册。
+ *
+ * 用「请求带 token + 原生回传结果」而不是靠 UA 里的版本号判断能力：debug 与正式版
+ * versionName 相同，版本号区分不出来；等不到回复就当旧版不支持，还能顺带拿到真实失败原因。
+ */
+const IMAGE_SAVE_TIMEOUT_MS = 8000;
+const pendingImageSaves = new Map<string, (result: AndroidImageSaveResult) => void>();
+let imageSaveHookInstalled = false;
+
+function ensureImageSaveHook() {
+  if (imageSaveHookInstalled || typeof window === 'undefined') return;
+  imageSaveHookInstalled = true;
+  window.__lightNoteAndroidImageSaveResult = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return;
+    const source = raw as Record<string, unknown>;
+    const token = typeof source.token === 'string' ? source.token : '';
+    const settle = pendingImageSaves.get(token);
+    if (!settle) return;
+    pendingImageSaves.delete(token);
+    settle({
+      ok: source.ok === true,
+      reason: source.ok === true ? undefined : source.reason === 'unsupported' ? 'unsupported' : 'failed',
+    });
+  };
+}
+
+export function saveImageViaAndroid(dataUrl: string, fileName: string): Promise<AndroidImageSaveResult> {
+  return new Promise((resolve) => {
+    if (!hasAndroidBridge()) {
+      resolve({ ok: false, reason: 'unsupported' });
+      return;
+    }
+    ensureImageSaveHook();
+    const token = `img-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    let settled = false;
+    const settle = (result: AndroidImageSaveResult) => {
+      if (settled) return;
+      settled = true;
+      pendingImageSaves.delete(token);
+      resolve(result);
+    };
+    pendingImageSaves.set(token, settle);
+    // 旧版 App 收到未知消息类型会直接忽略，不会有任何回复 —— 超时即视为不支持
+    setTimeout(() => settle({ ok: false, reason: 'unsupported' }), IMAGE_SAVE_TIMEOUT_MS);
+    if (!postAndroidMessage({ type: 'image.save', token, dataUrl, fileName })) {
+      settle({ ok: false, reason: 'unsupported' });
+    }
+  });
 }
 
 export function postAndroidAppReady(): boolean {

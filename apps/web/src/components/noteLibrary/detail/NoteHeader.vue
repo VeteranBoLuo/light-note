@@ -315,7 +315,12 @@
     }
 
     if (outcome.ok) {
-      message.success(t('noteDetail.exportSavedToDownloads'));
+      /*
+       * 这里只是「换到票据、交给系统下载」，文件还没落盘 —— 原来在这一步报
+       * 「已保存到下载目录」是在说一件还没发生的事，紧接着进度条又跑一遍、
+       * 完成时再报一次成功，用户根本分不清哪个是真的。
+       * 真正的「已保存到…」由进度模块在落盘后统一报，这里不再自己报成功。
+       */
       recordOperation({ module: '笔记', operation });
       return true;
     }

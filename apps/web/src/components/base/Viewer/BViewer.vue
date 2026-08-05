@@ -8,8 +8,8 @@
     transform/overflow 裁掉。
   -->
   <Teleport to="body">
-    <BButton v-if="saveVisible" class="viewer-save-btn" @click="saveImage">
-      <SvgIcon :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
+    <BButton v-if="saveVisible" class="viewer-save-btn" :loading="saving" @click="saveImage">
+      <SvgIcon v-if="!saving" :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
       <span>{{ t('common.saveImage') }}</span>
     </BButton>
   </Teleport>
@@ -25,8 +25,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { isLightNoteAndroidApp, postAndroidMessage } from '@/utils/androidBridge.ts';
-  import { canSaveImage, deriveImageFileName, isHttpImageSrc } from './viewerSave';
+  import { isLightNoteAndroidApp, postAndroidMessage, saveImageViaAndroid } from '@/utils/androidBridge.ts';
+  import { canSaveImage, deriveImageFileName, isBase64ImageSrc, isHttpImageSrc } from './viewerSave';
+  import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
   import {
     registerMobileOverlayHistory,
     releaseMobileOverlayHistory,
@@ -43,16 +44,40 @@
   // 判定与命名规则见 viewerSave.ts(纯函数,已被单测覆盖)
   const saveVisible = computed(() => viewerVisible.value && canSaveImage(viewSrc.value, isLightNoteAndroidApp()));
 
-  function saveImage() {
+  const saving = ref(false);
+
+  async function saveImage() {
     const src = viewSrc.value;
-    if (!src) return;
+    if (!src || saving.value) return;
     const fileName = deriveImageFileName(src);
-    // App 内交给原生:能落到系统下载目录。原生那两条系统 Toast 已经去掉(和网页提示重复),
-    // 所以这里必须自己给反馈,否则点了保存没有任何动静。
-    if (isHttpImageSrc(src) && postAndroidMessage({ type: 'download', url: src, fileName })) {
-      message.success(t('common.downloadStarted'));
+    const inApp = isLightNoteAndroidApp();
+
+    // http 图交给系统下载:进度条负责过程,落盘后由进度模块统一报「已保存到…」,
+    // 这里只在等不到进度事件(旧版不回传)时才补一句「已开始下载」。
+    if (inApp && isHttpImageSrc(src) && postAndroidMessage({ type: 'download', url: src, fileName })) {
+      announceNativeDownloadStart();
       return;
     }
+
+    // base64 图(头像就是这种)只能让原生解码后写进相册
+    if (inApp && isBase64ImageSrc(src)) {
+      saving.value = true;
+      try {
+        const result = await saveImageViaAndroid(src, fileName);
+        if (result.ok) {
+          message.success(t('common.imageSavedToGallery'));
+        } else if (result.reason === 'unsupported') {
+          // 旧版 App 没有这个通道(等不到回复),或系统低于 Android 10 无法免权限写入
+          message.warning(t('common.saveImageUnsupportedInApp'));
+        } else {
+          message.error(t('common.saveImageFailed'));
+        }
+      } finally {
+        saving.value = false;
+      }
+      return;
+    }
+
     try {
       const anchor = document.createElement('a');
       anchor.href = src;

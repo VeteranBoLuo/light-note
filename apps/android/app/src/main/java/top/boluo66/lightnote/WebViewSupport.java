@@ -4,6 +4,8 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.DownloadManager;
 import android.content.BroadcastReceiver;
+import android.content.ContentResolver;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -15,6 +17,8 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.MediaStore;
+import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.webkit.WebSettings;
@@ -30,6 +34,8 @@ import androidx.webkit.WebViewFeature;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.LinkedHashSet;
@@ -394,6 +400,104 @@ final class WebViewSupport {
      * 轮询一个下载任务的进度并推给网页，直到进入终态、接收方失效或超过兜底上限。
      * 只持有 applicationContext，不碰 Activity，避免 Handler 拖住已销毁的界面。
      */
+    /* ===== 图片保存（base64 直写相册） ===== */
+
+    enum ImageSaveOutcome {
+        OK,
+        /** 系统版本太低（无 MediaStore 免权限写入）或数据不是可识别的图片 data URL */
+        UNSUPPORTED,
+        FAILED
+    }
+
+    interface ImageSaveCallback {
+        void onDone(ImageSaveOutcome outcome);
+    }
+
+    /** data URL 上限。头像通常几十到几百 KB；给足余量同时挡住异常大的输入。 */
+    private static final int MAX_IMAGE_DATA_URL_LENGTH = 12 * 1024 * 1024;
+    private static final Pattern IMAGE_DATA_URL_PATTERN =
+        Pattern.compile("^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", Pattern.DOTALL);
+
+    /**
+     * 把 `data:image/*;base64,` 写进相册。
+     *
+     * 只支持 Android 10（Q）及以上：Q 之后往 MediaStore 写自己创建的图片不需要任何存储权限，
+     * 而 Q 以下要 WRITE_EXTERNAL_STORAGE —— 轻笺的 Manifest 刻意不申请存储权限，
+     * 不值得为这个功能引入一个敏感权限和一整套运行时授权流程，低版本直接回 UNSUPPORTED，
+     * 由网页提示改用浏览器保存。
+     *
+     * 解码和写盘放在后台线程：几百 KB 的 base64 解码加 IO 不该卡住 WebView 所在的主线程。
+     */
+    static void saveImageAsync(Context context, String dataUrl, String suggestedFileName, ImageSaveCallback callback) {
+        Context appContext = context.getApplicationContext();
+        new Thread(() -> callback.onDone(saveImage(appContext, dataUrl, suggestedFileName)), "ln-image-save").start();
+    }
+
+    private static ImageSaveOutcome saveImage(Context appContext, String dataUrl, String suggestedFileName) {
+        if (isBlank(dataUrl) || dataUrl.length() > MAX_IMAGE_DATA_URL_LENGTH) {
+            return ImageSaveOutcome.UNSUPPORTED;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return ImageSaveOutcome.UNSUPPORTED;
+        }
+        Matcher matcher = IMAGE_DATA_URL_PATTERN.matcher(dataUrl);
+        if (!matcher.matches()) {
+            return ImageSaveOutcome.UNSUPPORTED;
+        }
+        String mimeType = matcher.group(1);
+        byte[] bytes;
+        try {
+            bytes = Base64.decode(matcher.group(2), Base64.DEFAULT);
+        } catch (IllegalArgumentException error) {
+            return ImageSaveOutcome.FAILED;
+        }
+        if (bytes.length == 0) {
+            return ImageSaveOutcome.FAILED;
+        }
+
+        String fileName = sanitizeFileName(suggestedFileName);
+        if (isBlank(fileName)) {
+            fileName = "light-note-image";
+        }
+
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, fileName);
+        values.put(MediaStore.Images.Media.MIME_TYPE, mimeType);
+        // 单独放一个子目录，用户在相册里好找，也不会和别的应用混在一起
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/LightNote");
+        values.put(MediaStore.Images.Media.IS_PENDING, 1);
+
+        ContentResolver resolver = appContext.getContentResolver();
+        Uri target = null;
+        try {
+            target = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+            if (target == null) {
+                return ImageSaveOutcome.FAILED;
+            }
+            try (OutputStream output = resolver.openOutputStream(target)) {
+                if (output == null) {
+                    throw new IOException("openOutputStream returned null");
+                }
+                output.write(bytes);
+            }
+            // 清掉 IS_PENDING 之后其它应用才能看见这张图
+            ContentValues done = new ContentValues();
+            done.put(MediaStore.Images.Media.IS_PENDING, 0);
+            resolver.update(target, done, null, null);
+            return ImageSaveOutcome.OK;
+        } catch (Exception error) {
+            // 写一半失败要把占位记录删掉，否则相册里留一条打不开的空图
+            if (target != null) {
+                try {
+                    resolver.delete(target, null, null);
+                } catch (Exception ignored) {
+                    // 清理失败无能为力，不掩盖原始错误
+                }
+            }
+            return ImageSaveOutcome.FAILED;
+        }
+    }
+
     private static void watchDownloadProgress(
         Context context,
         long downloadId,

@@ -1,4 +1,6 @@
 import { onScopeDispose, readonly, ref } from 'vue';
+import message from '@/components/base/BasicComponents/BMessage/BMessage';
+import i18n from '@/i18n';
 import { onAndroidDownloadProgress, type AndroidDownloadProgress } from '@/utils/androidBridge';
 
 /**
@@ -21,8 +23,21 @@ const FINISHED_LINGER_MS = 2000;
  */
 const STALE_TIMEOUT_MS = 90_000;
 
+/*
+ * 「已开始下载」的降级窗口。
+ *
+ * 有进度回传的 App 版本，进度条会在几十毫秒内出现，那就不该再弹一句「已开始下载」——
+ * 同一件事说两遍。但正式版 1.0.0 不回传进度，什么都不说就变成点了没反应，
+ * 所以这个窗口内没等到任何进度事件时才补提示。
+ */
+const START_FEEDBACK_GRACE_MS = 900;
+
 const activeDownloads = ref<AndroidDownloadProgress[]>([]);
 const removalTimers = new Map<string, ReturnType<typeof setTimeout>>();
+/** 已经报过「已保存」的下载，避免原生重复推终态时弹两遍 */
+const announcedIds = new Set<string>();
+/** 最近一次收到原生进度的时刻，用来判断当前 App 版本会不会回传进度 */
+let lastProgressAt = 0;
 let unsubscribe: (() => void) | null = null;
 let subscriberCount = 0;
 
@@ -34,12 +49,47 @@ function scheduleRemoval(id: string, delay: number) {
     id,
     setTimeout(() => {
       removalTimers.delete(id);
+      // 一起清掉去重标记，否则长会话里 announcedIds 只增不减
+      announcedIds.delete(id);
       activeDownloads.value = activeDownloads.value.filter((item) => item.id !== id);
     }, delay),
   );
 }
 
+/**
+ * 下载真正落盘后才说「已保存」，并且必须带上位置。
+ *
+ * 之前用户的原话是「不知道下载到哪了」：系统 Toast 里那句「可在文件或相册中查看」被我们
+ * 去掉后，就没人交代文件去处了。另外这条只在这里弹 —— 发起方（云空间/导出/图片保存）
+ * 一律不再自己报成功，否则同一次下载会出现两条口径不同的「成功」。
+ */
+function announceSaved(progress: AndroidDownloadProgress) {
+  if (announcedIds.has(progress.id)) return;
+  announcedIds.add(progress.id);
+  const fileName = progress.fileName?.trim();
+  message.success(
+    fileName
+      ? i18n.global.t('common.downloadSavedToNamed', { name: fileName })
+      : i18n.global.t('common.downloadSavedTo'),
+  );
+}
+
+/**
+ * 通知「刚发起了一次交给系统下载的动作」。
+ *
+ * 会回传进度的 App 版本什么都不用提示（进度条马上就出来了）；只有等不到进度事件时
+ * 才补一句，兼容不回传进度的旧版本。调用方因此不必自己判断 App 版本。
+ */
+export function announceNativeDownloadStart() {
+  const requestedAt = Date.now();
+  setTimeout(() => {
+    if (lastProgressAt >= requestedAt) return;
+    message.success(i18n.global.t('common.downloadStarted'));
+  }, START_FEEDBACK_GRACE_MS);
+}
+
 function applyProgress(progress: AndroidDownloadProgress) {
+  lastProgressAt = Date.now();
   const index = activeDownloads.value.findIndex((item) => item.id === progress.id);
   if (index >= 0) {
     // 整数组替换而不是改元素属性：这样 readonly 暴露出去的引用也能触发更新
@@ -51,6 +101,7 @@ function applyProgress(progress: AndroidDownloadProgress) {
   }
   const finished = progress.status === 'success' || progress.status === 'failed';
   scheduleRemoval(progress.id, finished ? FINISHED_LINGER_MS : STALE_TIMEOUT_MS);
+  if (progress.status === 'success') announceSaved(progress);
 }
 
 /**
@@ -80,6 +131,8 @@ export function useAndroidDownloadProgress() {
 export function resetAndroidDownloadProgressForTest() {
   removalTimers.forEach((timer) => clearTimeout(timer));
   removalTimers.clear();
+  announcedIds.clear();
+  lastProgressAt = 0;
   activeDownloads.value = [];
   unsubscribe?.();
   unsubscribe = null;

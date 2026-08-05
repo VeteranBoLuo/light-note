@@ -10,15 +10,26 @@ export function isHttpImageSrc(src: string): boolean {
   return /^https?:\/\//i.test(src);
 }
 
+/** `data:image/*;base64,` 走原生直写通道（DownloadManager 不收 data URL） */
+export function isBase64ImageSrc(src: string): boolean {
+  return /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(src);
+}
+
 /*
- * data:/blob: 图（目前只有 mermaid 图表走这条路）在轻笺 Android App 内存不下来：
- * 原生 DownloadManager 只接受 http(s)（见 WebViewSupport.download 的 isHttpUrl 校验），
- * 而 WebView 对 data:/blob: 的 `<a download>` 又不触发 DownloadListener —— 两条路都堵死。
- * 与其给一个点了没反应的按钮，不如在 App 内直接不显示；浏览器里这类图仍可正常保存。
+ * 能不能给出「保存图片」按钮。
+ *
+ * 曾经这里把 App 内的 data URL 一律排除，理由是 DownloadManager 只收 http(s)、
+ * WebView 对 data:/blob: 的 `<a download>` 也不触发下载。但轻笺的头像恰恰是
+ * `data:image/jpeg;base64,...` 存在库里的 —— 结果「保存头像」这个最主要的场景
+ * 一个都覆盖不到，用户看到的就是「按钮根本没出现」。
+ *
+ * 现在 base64 图片交给原生 base64 直写（image.save 桥），所以 App 内也放开。
+ * 仍然排除的是 blob:：它既不是 http 也拿不到字节，两条路都走不通。
  */
 export function canSaveImage(src: string | null | undefined, isAndroidApp: boolean): boolean {
   if (!src) return false;
-  return isHttpImageSrc(src) || !isAndroidApp;
+  if (!isAndroidApp) return true;
+  return isHttpImageSrc(src) || isBase64ImageSrc(src);
 }
 
 /** data URL 的 MIME 子类型 → 扩展名。svg+xml 这种带后缀的要取前半段。 */

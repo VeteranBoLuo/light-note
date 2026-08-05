@@ -3,6 +3,7 @@ import i18n from '@/i18n';
 import cloudSpaceStore from '@/store/cloudSpace';
 import { apiBasePost } from '@/http/request.ts';
 import { postAndroidMessage } from '@/utils/androidBridge.ts';
+import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
 const cloud = cloudSpaceStore();
 
 function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
@@ -20,12 +21,13 @@ export async function downloadField(id: number | string) {
     if (res.status === 200 && res.data?.downloadUrl) {
       const { downloadUrl, fileName } = res.data;
       /*
-       * 「已开始下载」由这里提示。原生侧原本也弹一条系统 Toast，和网页提示重复，已经去掉；
-       * 反过来说这条不能省 —— 否则点了下载在进度条出现前没有任何反馈，
-       * 旧版 APK（没有进度回传）更是全程无声。
+       * App 内不在这里报「已开始下载」：进度条马上就出来了，再弹一句就是同一件事说两遍
+       * （用户原话：既然有进度条就不需要这个提示）。announceNativeDownloadStart 只在
+       * 等不到进度事件时才补提示，兼容不回传进度的旧版本。落盘后的「已保存到…」
+       * 由进度模块统一负责，这里不重复报成功。
        */
       if (requestAndroidDownload(downloadUrl, fileName)) {
-        message.success(i18n.global.t('common.downloadStarted'));
+        announceNativeDownloadStart();
         return true;
       }
       const a = document.createElement('a');
@@ -34,6 +36,7 @@ export async function downloadField(id: number | string) {
       document.body.appendChild(a);
       a.click();
       a.remove();
+      // 浏览器/桌面没有原生进度条，下载条也在浏览器自己的 UI 里，这里仍需一句确认点到了
       message.success(i18n.global.t('common.downloadStarted'));
       return true;
     } else {
@@ -154,16 +157,17 @@ export async function getFileShareDownload(token: string, accessCode = '') {
 
 export async function downloadFileShare(token: string, accessCode = '') {
   const { downloadUrl, fileName } = await getFileShareDownload(token, accessCode);
-  if (!requestAndroidDownload(downloadUrl, fileName)) {
-    const anchor = document.createElement('a');
-    anchor.href = downloadUrl;
-    if (fileName) anchor.download = decodeURIComponent(fileName);
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
+  // 与云空间下载同一口径：App 内交给进度条，只有旧版等不到进度时才补提示
+  if (requestAndroidDownload(downloadUrl, fileName)) {
+    announceNativeDownloadStart();
+    return true;
   }
-  // 与云空间下载同一口径：原生不再弹系统 Toast，开始下载的反馈由网页给。
-  // 分享页原本只把按钮文案换成「再次下载」，反馈太弱。
+  const anchor = document.createElement('a');
+  anchor.href = downloadUrl;
+  if (fileName) anchor.download = decodeURIComponent(fileName);
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
   message.success(i18n.global.t('common.downloadStarted'));
   return true;
 }

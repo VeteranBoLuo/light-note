@@ -622,6 +622,33 @@ public final class MainActivity extends Activity {
         );
     }
 
+    /** 把图片保存结果回给网页，让它据此提示成功/失败（网页那边有超时，收不到就按不支持处理）。 */
+    private void reportImageSaveResult(String token, WebViewSupport.ImageSaveOutcome outcome) {
+        runOnUiThread(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) {
+                return;
+            }
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("token", token == null ? "" : token);
+                payload.put("ok", outcome == WebViewSupport.ImageSaveOutcome.OK);
+                if (outcome == WebViewSupport.ImageSaveOutcome.UNSUPPORTED) {
+                    payload.put("reason", "unsupported");
+                } else if (outcome == WebViewSupport.ImageSaveOutcome.FAILED) {
+                    payload.put("reason", "failed");
+                }
+            } catch (JSONException error) {
+                return;
+            }
+            webView.evaluateJavascript(
+                "window.__lightNoteAndroidImageSaveResult&&window.__lightNoteAndroidImageSaveResult("
+                    + payload
+                    + ");",
+                null
+            );
+        });
+    }
+
     /**
      * 把原生下载进度推给网页。
      *
@@ -675,6 +702,17 @@ public final class MainActivity extends Activity {
                         fileName,
                         MainActivity.this::reportDownloadProgress
                     )
+                );
+            } else if ("image.save".equals(messageType)) {
+                // 头像等 data:base64 图片走不了 DownloadManager，交给原生写进相册
+                String token = payload.optString("token");
+                String dataUrl = payload.optString("dataUrl");
+                String fileName = payload.optString("fileName");
+                WebViewSupport.saveImageAsync(
+                    MainActivity.this,
+                    dataUrl,
+                    fileName,
+                    ok -> reportImageSaveResult(token, ok)
                 );
             } else if ("privacyConsent.withdraw".equals(messageType)) {
                 runOnUiThread(this::restartForPrivacyConsent);

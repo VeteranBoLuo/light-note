@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { normalizeAndroidDownloadProgress, onAndroidDownloadProgress } from './androidBridge';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { normalizeAndroidDownloadProgress, onAndroidDownloadProgress, saveImageViaAndroid } from './androidBridge';
 
 /*
  * 原生和网页是各自发版的：字段缺失、类型不对、状态改名都可能在旧 App + 新网页
@@ -108,5 +108,61 @@ describe('onAndroidDownloadProgress', () => {
     offBad();
     offGood();
     errorSpy.mockRestore();
+  });
+});
+
+/*
+ * 图片保存桥。头像是 base64 存库的，DownloadManager 不收，只能让原生解码写盘；
+ * 而正式版 1.0.0 没有这个通道，收到未知消息类型会静默忽略 —— 所以「等不到回复」
+ * 必须被当成「不支持」而不是永远挂着。
+ */
+describe('saveImageViaAndroid', () => {
+  const dataUrl = 'data:image/jpeg;base64,/9j/4AAQ';
+
+  afterEach(() => {
+    delete (window as any).LightNoteAndroid;
+    vi.useRealTimers();
+  });
+
+  it('没有原生桥（浏览器）直接返回不支持', async () => {
+    await expect(saveImageViaAndroid(dataUrl, 'a.jpg')).resolves.toEqual({ ok: false, reason: 'unsupported' });
+  });
+
+  it('原生回传成功', async () => {
+    const posted: string[] = [];
+    (window as any).LightNoteAndroid = { postMessage: (m: string) => posted.push(m) };
+    const promise = saveImageViaAndroid(dataUrl, 'a.jpg');
+    const token = JSON.parse(posted[0]).token;
+    expect(JSON.parse(posted[0]).type).toBe('image.save');
+    window.__lightNoteAndroidImageSaveResult!({ token, ok: true });
+    await expect(promise).resolves.toEqual({ ok: true, reason: undefined });
+  });
+
+  it('原生回传失败原因原样带出', async () => {
+    const posted: string[] = [];
+    (window as any).LightNoteAndroid = { postMessage: (m: string) => posted.push(m) };
+    const promise = saveImageViaAndroid(dataUrl, 'a.jpg');
+    const token = JSON.parse(posted[0]).token;
+    window.__lightNoteAndroidImageSaveResult!({ token, ok: false, reason: 'failed' });
+    await expect(promise).resolves.toEqual({ ok: false, reason: 'failed' });
+  });
+
+  it('token 不匹配的回复不会误结算别的请求', async () => {
+    vi.useFakeTimers();
+    const posted: string[] = [];
+    (window as any).LightNoteAndroid = { postMessage: (m: string) => posted.push(m) };
+    const promise = saveImageViaAndroid(dataUrl, 'a.jpg');
+    window.__lightNoteAndroidImageSaveResult!({ token: 'someone-else', ok: true });
+    // 仍在等自己的回复，直到超时才按不支持结算
+    vi.advanceTimersByTime(8001);
+    await expect(promise).resolves.toEqual({ ok: false, reason: 'unsupported' });
+  });
+
+  it('旧版 App 不回复 → 超时按不支持处理，不会一直挂着', async () => {
+    vi.useFakeTimers();
+    (window as any).LightNoteAndroid = { postMessage: () => undefined };
+    const promise = saveImageViaAndroid(dataUrl, 'a.jpg');
+    vi.advanceTimersByTime(8001);
+    await expect(promise).resolves.toEqual({ ok: false, reason: 'unsupported' });
   });
 });
