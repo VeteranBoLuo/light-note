@@ -371,22 +371,31 @@
     color: var(--desc-color);
   }
 
+  /*
+   * 已选标签横向排布：标签名多是「SSL」「证书」这种两三个字，
+   * 原来每个 chip 独占一行，三个标签就吃掉半屏（移动端只有一栏时尤其浪费）。
+   * 上限 3 个标签，横排通常一行就放完。
+   */
   .chip-list {
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-wrap: wrap;
+    gap: 8px;
     min-height: 48px;
+    align-items: flex-start;
   }
 
   .chip {
     display: flex;
+    max-width: 100%;
+    min-width: 0;
     align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 12px;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
     border: 1px solid rgba(96, 92, 229, 0.3);
     background: rgba(96, 92, 229, 0.06);
     color: var(--text-color);
+    font-size: 13px;
   }
 
   .color-dot {
@@ -399,7 +408,8 @@
 
   .chip-text {
     min-width: 0;
-    flex: 1;
+    /* 横排下 chip 取内容宽度：flex:1 会把每个 chip 拉成满宽，又变回一行一个 */
+    flex: 0 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

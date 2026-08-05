@@ -450,9 +450,14 @@
     line-height: 1.5;
   }
 
+  /*
+   * 与笔记侧一致地横向排布：标签名通常只有两三个字，
+   * 每个 chip 独占一行在移动端单栏布局下会吃掉半屏。
+   */
   .chip-list {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: flex-start;
     gap: 8px;
     max-height: 210px;
     overflow: auto;
@@ -460,11 +465,12 @@
 
   .chip {
     display: flex;
+    max-width: 100%;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
-    padding: 9px 10px;
-    border-radius: 8px;
+    padding: 5px 10px;
+    border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--resource-tag-color) 30%, var(--card-border-color));
     background: color-mix(in srgb, var(--resource-tag-color) 7%, var(--background-color));
   }
@@ -479,7 +485,8 @@
 
   .chip-text {
     min-width: 0;
-    flex: 1;
+    /* 横排下 chip 取内容宽度：flex:1 会把每个 chip 拉成满宽，又变回一行一个 */
+    flex: 0 1 auto;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

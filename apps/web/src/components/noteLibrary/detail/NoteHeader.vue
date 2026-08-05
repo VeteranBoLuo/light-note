@@ -139,7 +139,12 @@
             <SvgIcon :src="icon.noteDetail.template" />
           </div>
         </BTooltip>
-        <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && bookmark.isDesktop && note?.id">
+        <!--
+          历史版本 / 标签 / 导出这三项此前限定 isDesktop，把平板一起挡掉了：
+          平板走的是非移动端分支，没有「更多」下拉菜单可以兜底，等于这三个功能
+          在平板上完全无法访问。平板横向空间（768px 起）足够放下，改为「非手机即显示」。
+        -->
+        <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && !bookmark.isMobile && note?.id">
           <div
             class="note-header-title-icon note-header-title-icon--history"
             @click="$emit('history')"
@@ -148,7 +153,7 @@
             <SvgIcon :src="icon.noteDetail.history" />
           </div>
         </BTooltip>
-        <BTooltip :title="$t('noteDetail.tags')" v-if="bookmark.isDesktop">
+        <BTooltip :title="$t('noteDetail.tags')" v-if="!bookmark.isMobile">
           <div
             class="note-header-title-icon note-header-title-icon--tag"
             @click="updateTag"
@@ -157,7 +162,7 @@
             <SvgIcon :src="icon.manage_categoryBtn_tag" />
           </div>
         </BTooltip>
-        <BTooltip :title="$t('noteDetail.export')" v-if="bookmark.isDesktop">
+        <BTooltip :title="$t('noteDetail.export')" v-if="!bookmark.isMobile">
           <div
             class="note-header-title-icon note-header-title-icon--export"
             @click="openExportModal"
@@ -218,6 +223,7 @@
   import {
     buildNoteExportHtml,
     buildNoteExportMarkdown,
+    inlineMermaidForExport,
     renderMarkdownForExport,
   } from '@/utils/noteExport';
   import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
@@ -544,8 +550,12 @@
         const content = props.note.content || '';
         // md 笔记的 content 是 Markdown 源码,直接塞进 <body> 只会显示 `#`、`- [ ]` 原文,
         // 必须先按站内同口径渲染成 HTML。
+        // 富文本笔记的正文已经是 HTML,但里面的 mermaid 源码块同样要在导出时渲染成内联 SVG
+        // ——导出文件跑不了 JS,不预渲染就只剩一段图表源码。
         const body =
-          props.noteType === 'markdown' ? await renderMarkdownForExport(content) : content;
+          props.noteType === 'markdown'
+            ? await renderMarkdownForExport(content)
+            : await inlineMermaidForExport(content);
         const html = buildNoteExportHtml(title, body);
         if (!canSaveExportFile()) {
           await copyExportContent(html);
