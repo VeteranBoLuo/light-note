@@ -64,7 +64,14 @@
 
             <div v-else class="file-capture" @dragover.prevent @drop.prevent="handleDrop">
               <div class="file-capture__dropzone">
-                <BUpload :multiple="true" :raw-file="true" :max-total-size="MAX_FILE_TOTAL_SIZE" @change="selectFiles">
+                <!-- 来源显式传 'picker',与 handleDrop/handlePaste 一致;别简写成 @change="addFiles",
+                     那样 BUpload 以后多 emit 一个参数就会顶掉 source -->
+                <BUpload
+                  :multiple="true"
+                  :raw-file="true"
+                  :max-total-size="MAX_FILE_TOTAL_SIZE"
+                  @change="(selected) => addFiles(selected, 'picker')"
+                >
                   <BButton>{{ t('inbox.chooseFiles') }}</BButton>
                 </BUpload>
                 <span>{{ t('inbox.dropOrPasteFiles') }}</span>
