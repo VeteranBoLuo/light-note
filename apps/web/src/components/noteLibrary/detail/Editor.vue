@@ -2063,10 +2063,19 @@
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
     plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount quickbars',
+    // 移动端富文本把长按/选择完全交还给系统菜单(复制/粘贴/全选),只有桌面才用自研快捷条。
+    // 之前移动端两层自定义菜单都会顶掉系统的文本操作:
+    //   1. quickbars 选区条只有 copy,没有 paste/全选(浏览器不允许自定义 paste 按钮读剪贴板);
+    //   2. contextmenu 不配时 TinyMCE 用默认值 'link linkchecker image editimage table
+    //      spellchecker configurepermanentpen',未加载的付费插件被过滤后,普通文字上只剩「链接」,
+    //      而 silver theme 把 longpress 也当作 contextmenu 触发源(见 theme.js getPointAnchor)。
+    // contextmenu: false 会让菜单项为空,其处理函数直接 return 且不 preventDefault,原生菜单接管。
+    // 格式化能力不受影响:移动端仍有底部主工具栏 #editor-toolbar。
     quickbars_selection_toolbar: bookmark.isMobile
-      ? 'copy | bold italic forecolor backcolor | removeformat | quicklink'
+      ? false
       : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
     quickbars_insert_toolbar: false,
+    ...(bookmark.isMobile ? { contextmenu: false } : {}),
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
       'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
