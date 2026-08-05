@@ -50,14 +50,14 @@ export interface AndroidReleaseInfo {
 }
 
 export const ANDROID_RELEASE: AndroidReleaseInfo = {
-  versionName: '1.0.0',
-  versionCode: 10000,
+  versionName: '1.0.1',
+  versionCode: 10001,
   packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-08-04',
-  fileSizeBytes: 1766657,
-  sha256: '210f70593a97748b331acb76f4e1e4efba1506bddb2257ea737bec55c302a77f',
+  releaseDate: '2026-08-06',
+  fileSizeBytes: 1771377,
+  sha256: '7e070054237c82c49d3d96f9b4e7ee88ce39b23e68b58ff5cebce30d9e053f13',
   certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
-  downloadPath: '/downloads/android/light-note-1.0.0.apk',
+  downloadPath: '/downloads/android/light-note-1.0.1.apk',
   minAndroidVersion: '8.0',
   permissions: [
     'android.permission.INTERNET',
