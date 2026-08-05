@@ -144,6 +144,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { recordOperation } from '@/api/commonApi';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   interface TodayInboxItem {
@@ -216,11 +217,23 @@
   let todayRequestId = 0;
   let currentTodayRequest: Promise<void> | null = null;
 
-  const dateLabel = computed(() =>
-    new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date()),
-  );
+  /*
+   * 日期和问候语取的是"现在",但 computed 只认响应式依赖 —— 直接读 new Date()
+   * 等于算一次就永久缓存。页面挂一夜再回来,数据被前台刷新换成了今天的,
+   * 标题却还写着昨天,比不刷更糟。clockTick 就是那个显式依赖:
+   * 回到前台时递增一次,强制两个 computed 重算。不要因为"看起来没用"删掉它。
+   */
+  const clockTick = ref(0);
+
+  const dateLabel = computed(() => {
+    void clockTick.value;
+    return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(
+      new Date(),
+    );
+  });
 
   const greetingLine = computed(() => {
+    void clockTick.value;
     const hour = new Date().getHours();
     const greeting =
       hour < 11
@@ -364,6 +377,19 @@
     getScrollContainer: () => scrollRef.value,
     onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]),
   });
+  /*
+   * 从后台切回来时补一次数据。今日页最需要这个:日期、待办和签到状态都跟"今天"绑定,
+   * 用户很可能昨天开着页面睡了,今天回来看到的还是昨天的内容。
+   * 提示由顶栏那条全局细条负责(composable 内部已注册)。
+   */
+  useForegroundRefresh({
+    refresh: () => {
+      // 先让日期/问候语跟上真实时间,再取数据,避免出现"今天的数据 + 昨天的标题"。
+      clockTick.value += 1;
+      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]);
+    },
+    canRefresh: () => !initialTodayLoading.value,
+  });
 
   // 账号切换后必须重新取数，不能把上一个账号的待办留在屏幕上
   watch(
@@ -390,6 +416,11 @@
     void loadGrowthTasks();
   });
 
+  /*
+   * 注意:本项目当前没有任何 keep-alive,路由切换会重建页面,所以这段 onActivated
+   * 实际不会执行(留着是为了将来真启用 keep-alive 时仍有正确行为)。
+   * 「离开一段时间再回来要刷新」这件事现在由上面的 useForegroundRefresh 兜住。
+   */
   onActivated(() => {
     if (dashboard.value) void loadDashboard();
     if (growthTasks.value) void loadGrowthTasks(true);

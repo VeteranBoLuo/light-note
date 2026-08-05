@@ -67,7 +67,14 @@ export default defineStore('todo', {
       }
     },
     async refreshList(
-      options: { status?: TodoFilterStatus; keyword?: string; sort?: TodoSort; preserveStatus?: boolean } = {},
+      options: {
+        status?: TodoFilterStatus;
+        keyword?: string;
+        sort?: TodoSort;
+        preserveStatus?: boolean;
+        // silent: 同 inbox store,下拉刷新时保留旧列表不闪骨架屏。
+        silent?: boolean;
+      } = {},
     ) {
       const requestStatus = options.status || this.effectiveStatus || this.status;
       if (options.status && !options.preserveStatus) this.status = options.status;
@@ -75,7 +82,7 @@ export default defineStore('todo', {
       if (options.keyword !== undefined) this.keyword = options.keyword;
       if (options.sort) this.sort = options.sort;
       const requestId = ++this.requestId;
-      this.loading = true;
+      if (!options.silent) this.loading = true;
       this.loadFailed = false;
       try {
         const res = await listTodos({ status: requestStatus, keyword: this.keyword, sort: this.sort });

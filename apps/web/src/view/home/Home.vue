@@ -126,6 +126,7 @@
   import ViewPanel from '@/view/home/ViewPanel.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -178,6 +179,12 @@
     getScrollContainer: () =>
       workspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
+  });
+  /* 从后台切回来时补一次数据,复用下拉刷新那条静默路径。提示条由顶栏统一负责,页面不必接线。 */
+  useForegroundRefresh({
+    refresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
+    canRefresh: () =>
+      !batchMode.value && !bookmark.bookmarkLoading && !bookmark.bookmarkLoadingMore && !batchMutating.value,
   });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {

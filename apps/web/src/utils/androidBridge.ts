@@ -4,9 +4,26 @@ export interface LightNoteAndroidBridge {
 
 export type AndroidLegalDocument = 'privacy-policy.html' | 'user-agreement.html';
 
+export type AndroidDownloadStatus = 'pending' | 'running' | 'paused' | 'success' | 'failed';
+
+/** 原生 DownloadManager 的一次进度快照（由 WebViewSupport.progressPayload 生成） */
+export interface AndroidDownloadProgress {
+  /** DownloadManager 的 downloadId，同一次下载全程不变 */
+  id: string;
+  fileName: string;
+  status: AndroidDownloadStatus;
+  bytesDownloaded: number;
+  /** -1 表示服务器没给 Content-Length，总量未知 */
+  totalBytes: number;
+  /** -1 表示进度未知（只能显示不确定态） */
+  percent: number;
+}
+
 declare global {
   interface Window {
     LightNoteAndroid?: LightNoteAndroidBridge;
+    /** 原生 → 网页的下载进度回调，由 onAndroidDownloadProgress 装上 */
+    __lightNoteAndroidDownloadProgress?: (raw: unknown) => void;
   }
 }
 
@@ -45,6 +62,78 @@ export function postAndroidMessage(payload: Record<string, unknown>): boolean {
     console.warn('Android 原生通道不可用:', error);
     return false;
   }
+}
+
+const DOWNLOAD_STATUSES: AndroidDownloadStatus[] = ['pending', 'running', 'paused', 'success', 'failed'];
+
+function toFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/**
+ * 校验原生推来的进度快照。
+ *
+ * 原生和网页是各自发版的，字段缺失/改名要能被挡住而不是把 NaN 画到进度条上，
+ * 所以这里逐字段兜底，形状不对就整条丢弃。
+ */
+export function normalizeAndroidDownloadProgress(raw: unknown): AndroidDownloadProgress | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw as Record<string, unknown>;
+  const id = typeof source.id === 'string' ? source.id : String(source.id ?? '');
+  if (!id) return null;
+  const status = DOWNLOAD_STATUSES.includes(source.status as AndroidDownloadStatus)
+    ? (source.status as AndroidDownloadStatus)
+    : 'running';
+  const totalBytes = toFiniteNumber(source.totalBytes, -1);
+  const bytesDownloaded = Math.max(0, toFiniteNumber(source.bytesDownloaded, 0));
+  let percent = Math.round(toFiniteNumber(source.percent, -1));
+  if (percent >= 0) percent = Math.min(100, percent);
+  // 成功一定是 100%：服务器不给 Content-Length 时原生算不出百分比，但收口值是确定的
+  if (status === 'success') percent = 100;
+  return {
+    id,
+    fileName: typeof source.fileName === 'string' ? source.fileName : '',
+    status,
+    bytesDownloaded,
+    totalBytes: totalBytes > 0 ? totalBytes : -1,
+    percent,
+  };
+}
+
+type AndroidDownloadProgressListener = (progress: AndroidDownloadProgress) => void;
+const downloadProgressListeners = new Set<AndroidDownloadProgressListener>();
+let downloadProgressHookInstalled = false;
+
+function ensureDownloadProgressHook() {
+  if (downloadProgressHookInstalled || typeof window === 'undefined') return;
+  downloadProgressHookInstalled = true;
+  window.__lightNoteAndroidDownloadProgress = (raw: unknown) => {
+    const progress = normalizeAndroidDownloadProgress(raw);
+    if (!progress) return;
+    downloadProgressListeners.forEach((listener) => {
+      try {
+        listener(progress);
+      } catch (error) {
+        // 一个订阅者出错不该影响其它订阅者，也不该把异常抛回原生的 evaluateJavascript
+        console.error('下载进度回调出错:', error);
+      }
+    });
+  };
+}
+
+/**
+ * 订阅原生下载进度。返回取消订阅函数。
+ *
+ * 进度按 DownloadManager 的 downloadId 标识，网页发起下载时拿不到这个 id，
+ * 所以不做「发起 ↔ 进度」的握手：谁在下载都能收到，也就顺带覆盖了 WebView
+ * 自身 DownloadListener 触发的下载（例如分享页里的下载链接）。
+ */
+export function onAndroidDownloadProgress(listener: AndroidDownloadProgressListener): () => void {
+  ensureDownloadProgressHook();
+  downloadProgressListeners.add(listener);
+  return () => {
+    downloadProgressListeners.delete(listener);
+  };
 }
 
 export function postAndroidAppReady(): boolean {

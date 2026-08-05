@@ -1,6 +1,6 @@
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
-import { snakeCaseKeys, resultData, mergeExistingProperties, insertData } from '../util/common.js';
+import { snakeCaseKeys, resultData, mergeExistingProperties, insertData, L } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
@@ -24,6 +24,12 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
+import {
+  EXPORT_FORMATS,
+  MAX_EXPORT_BYTES,
+  consumeExportTicket,
+  createExportTicket,
+} from '../util/noteExportTickets.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -1012,5 +1018,141 @@ export const delNoteTemplate = async (req, res) => {
     res.send(resultData('删除模板成功'));
   } catch (e) {
     sendTemplateServerError(res, '删除模板', e);
+  }
+};
+
+/**
+ * 导出文件名清洗。前端 buildExportFileName 已经清过一遍,后端不能因此信任它:
+ * 这个值会进 Content-Disposition 响应头,残留 CR/LF 就是响应头注入,
+ * 残留路径分隔符还会被安全规则当成 PATH_TRAVERSAL 特征。
+ */
+function sanitizeExportFileName(value, format) {
+  // 三种导出格式的扩展名与 format 同名(md/html/pdf),format 已在调用前过白名单
+  const extension = format;
+  const withoutControls = Array.from(String(value ?? ''))
+    .filter((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)
+    .join('');
+  const base = withoutControls
+    .replace(/[\\/:*?"<>|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(new RegExp(`\\.${extension}$`, 'i'), '')
+    .trim();
+  const limited = Array.from(base).slice(0, 60).join('').trim();
+  return `${limited || '未命名文档'}.${extension}`;
+}
+
+// POST /note/exportFile —— 把前端生成好的导出件换成一次性 http 下载地址。
+// 只为 Android App 而存在:App 的 WebView 落不了 blob 文件,拿到 http 地址后由原生
+// DownloadManager 存进系统下载目录(细节见 util/noteExportTickets.js 顶部说明)。
+// 导出件内容由前端生成并上传,这样 PDF/mermaid 这类必须在浏览器里渲染的格式与桌面端同口径。
+export const createNoteExportTicket = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const userId = req.user.id;
+    const noteId = req.body?.id;
+    const format = String(req.body?.format || '').toLowerCase();
+    const contentBase64 = req.body?.contentBase64;
+
+    if (!noteId || typeof contentBase64 !== 'string' || !contentBase64) {
+      return res.send(resultData(null, 400, L(req, '参数错误', 'Invalid parameters')));
+    }
+    if (!Object.prototype.hasOwnProperty.call(EXPORT_FORMATS, format)) {
+      return res.send(resultData(null, 400, L(req, '不支持的导出格式', 'Unsupported export format')));
+    }
+    // 先按 base64 长度估算原始体积再解码:超限内容不该先被解成大 Buffer 才拒绝
+    if (Math.floor((contentBase64.length * 3) / 4) > MAX_EXPORT_BYTES) {
+      return res.send(
+        resultData(
+          null,
+          413,
+          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
+        ),
+      );
+    }
+
+    // 归属校验:只能导出自己的笔记
+    const [own] = await pool.query('SELECT id FROM note WHERE id=? AND create_by=? AND del_flag=?', [
+      noteId,
+      userId,
+      '0',
+    ]);
+    if (own.length === 0) {
+      return res.send(resultData(null, 404, L(req, '笔记不存在', 'Note not found')));
+    }
+
+    const content = Buffer.from(contentBase64, 'base64');
+    if (!content.length) {
+      return res.send(resultData(null, 400, L(req, '导出内容为空', 'Export content is empty')));
+    }
+    if (content.length > MAX_EXPORT_BYTES) {
+      return res.send(
+        resultData(
+          null,
+          413,
+          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
+        ),
+      );
+    }
+
+    const fileName = sanitizeExportFileName(req.body?.fileName, format);
+    const { token, expiresIn } = await createExportTicket({ userId, noteId, format, fileName, content });
+
+    // token 放 query 而不是路径段:路径里带随机值会让每次导出都变成一个「新路径」,
+    // 触发安全中间件的接口枚举检测(1 分钟内不同路径数),正常使用也可能被误判封 IP。
+    res.send(
+      resultData({
+        downloadUrl: `/api/note/exportFile?token=${encodeURIComponent(token)}`,
+        fileName,
+        expiresIn,
+      }),
+    );
+  } catch (e) {
+    console.error('创建笔记导出票据失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, L(req, '导出失败,请稍后重试', 'Export failed, please try again later')));
+  }
+};
+
+// GET /note/exportFile?token=xxx —— 消费票据并直出文件。
+// 这个端点由系统 DownloadManager(而非页面 fetch)请求,所以必须用真实 HTTP 状态码表达结果,
+// 不能沿用「HTTP 200 + body.status」的接口惯例——那样失败时会把一段 JSON 存成用户的笔记文件。
+export const downloadNoteExportFile = async (req, res) => {
+  // 不能复用 ensureNotVisitor:它按接口惯例回「HTTP 200 + body.status」,DownloadManager 会把
+  // 那段 JSON 原样存成用户的笔记文件。身份不足必须是真的 403。
+  if (!req.user?.id || req.user.role === 'visitor') {
+    return res
+      .status(403)
+      .type('text/plain')
+      .send(L(req, '请登录后再导出笔记', 'Please sign in before exporting notes'));
+  }
+  try {
+    const ticket = await consumeExportTicket(req.query?.token, req.user.id);
+    if (!ticket) {
+      // 故意不用 404:安全中间件按 5 分钟内 404 次数判「扫描器」并累积 IP 信誉分,
+      // 用户重复点导出踩到过期票据不该把自己的 IP 送进封禁名单。410 语义也更准确。
+      return res
+        .status(410)
+        .type('text/plain')
+        .send(L(req, '下载链接已失效,请重新导出', 'This download link has expired, please export again'));
+    }
+
+    // 一律 octet-stream + nosniff:导出的 HTML 是用户可控内容,若带着 text/html 在主站域名下
+    // 被浏览器渲染,就等于把导出接口变成站内 XSS 入口。attachment 只是第一道,不能只靠它。
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Content-Length', String(ticket.content.length));
+    res.setHeader(
+      'Content-Disposition',
+      // filename* 走 RFC 5987 让中文名在浏览器直连时也正确;App 内的文件名由原生桥另行指定
+      `attachment; filename="export.${ticket.format}"; filename*=UTF-8''${encodeURIComponent(ticket.fileName)}`,
+    );
+    res.end(ticket.content);
+  } catch (e) {
+    console.error('笔记导出文件下载失败 code=%s', stableAgentErrorCode(e));
+    res
+      .status(500)
+      .type('text/plain')
+      .send(L(req, '下载失败,请重新导出', 'Download failed, please export again'));
   }
 };

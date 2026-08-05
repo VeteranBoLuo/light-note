@@ -200,17 +200,31 @@
 
     <section v-if="pageLoadFailed && actionItems.length" class="inbox-error-banner">
       <span>{{ t('inbox.loadFailedDesc') }}</span>
-      <BButton size="small" @click="refreshList">{{ t('inbox.retry') }}</BButton>
+      <BButton size="small" @click="refreshList()">{{ t('inbox.retry') }}</BButton>
     </section>
 
     <section class="inbox-content" :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade }">
-      <div ref="scrollContainer" class="inbox-scroll" @scroll="handleInboxScroll">
+      <div
+        ref="scrollContainer"
+        class="inbox-scroll"
+        @scroll="handleInboxScroll"
+        @touchstart.passive="pullRefresh.onTouchStart"
+        @touchmove="pullRefresh.onTouchMove"
+        @touchend.passive="pullRefresh.onTouchEnd"
+        @touchcancel.passive="pullRefresh.onTouchCancel"
+      >
+        <MobilePullRefreshIndicator
+          :distance="pullRefresh.pullDistance.value"
+          :refreshing="pullRefresh.refreshing.value"
+          :ready="pullRefresh.ready.value"
+          :visible="pullRefresh.visible.value"
+        />
         <BLoading :loading="pageLoading" class="inbox-loading">
           <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
             <div class="inbox-empty__icon">!</div>
             <h2>{{ t('inbox.loadFailedTitle') }}</h2>
             <p>{{ t('inbox.loadFailedDesc') }}</p>
-            <BButton type="primary" @click="refreshList">{{ t('inbox.retry') }}</BButton>
+            <BButton type="primary" @click="refreshList()">{{ t('inbox.retry') }}</BButton>
           </div>
           <div
             v-else-if="!pageLoading && actionItems.length === 0"
@@ -353,6 +367,9 @@
     TodoSort,
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
 
@@ -430,6 +447,27 @@
     if (isMobileTodoPrimary.value) return todo.loadFailed;
     if (isMobileResourceInbox.value) return inbox.loadFailed;
     return inbox.filterType === 'todo' ? todo.loadFailed : inbox.loadFailed;
+  });
+  const pullRefresh = useAndroidPullRefresh({
+    // 批量选择模式下顶部是操作条,下拉手势与勾选滑动容易互相误触,直接停用。
+    enabled: computed(() => !todoSelectionMode.value && !resourceSelectionMode.value),
+    externalBusy: pageLoading,
+    getScrollContainer: () => scrollContainer.value,
+    // 已有左滑面板展开时不允许下拉:此时用户的意图是操作那一项,不是刷新。
+    canStart: () => !openSwipeTodoId.value && !openSwipeResourceKey.value,
+    onRefresh: async () => {
+      // 日程视图的滑动状态在子组件内部,外部只能命令它收起。
+      scheduleViewRef.value?.closeSwipe();
+      // refreshList 用返回值而非异常表达失败,且失败已由 loadFailed 的顶部横幅呈现,
+      // 这里不再转成 reject,避免和横幅重复提示。
+      await refreshList(false, true);
+    },
+  });
+  /* 从后台切回来时补一次数据,走同一条静默路径。提示条由顶栏统一负责,页面不必接线。 */
+  useForegroundRefresh({
+    refresh: () => refreshList(false, true),
+    canRefresh: () =>
+      !todoSelectionMode.value && !resourceSelectionMode.value && !pageLoading.value && !todoBatchMutating.value,
   });
   const isInboxGloballyEmpty = computed(() =>
     inbox.filterType === 'todo' ? todo.pendingTotal === 0 : inbox.pendingTotal === 0,
@@ -731,20 +769,21 @@
   async function search() {
     await refreshList(true);
   }
-  async function refreshList(resetScroll = false) {
+  // silent: 下拉刷新专用 —— 不进 loading(旧列表留在屏幕上),也不重置滚动位置。
+  async function refreshList(resetScroll = false, silent = false) {
     todo.keyword = inbox.keyword;
     if (inbox.filterType === 'todo' && !isMobileTodoPrimary.value) todo.sort = inbox.sort as TodoSort;
     let refreshed = false;
     let inboxCountsReady = false;
     if (inbox.filterType === 'todo') {
-      refreshed = await todo.refreshList();
+      refreshed = await todo.refreshList({ silent });
       inboxCountsReady = await inbox.refreshCount();
     } else if (inbox.filterType === 'all') {
-      const inboxRefreshed = await inbox.refreshList();
+      const inboxRefreshed = await inbox.refreshList({ silent });
       refreshed = inboxRefreshed;
       inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
     } else {
-      const inboxRefreshed = await inbox.refreshList();
+      const inboxRefreshed = await inbox.refreshList({ silent });
       refreshed = inboxRefreshed;
       inboxCountsReady = inboxRefreshed || (await inbox.refreshCount());
     }
@@ -868,10 +907,13 @@
     showTopFade.value = element.scrollTop > 3;
     showBottomFade.value = element.scrollTop + element.clientHeight < element.scrollHeight - 3;
   }
-  function handleInboxScroll() {
+  function closeAllSwipe() {
     openSwipeTodoId.value = '';
     openSwipeResourceKey.value = '';
     scheduleViewRef.value?.closeSwipe();
+  }
+  function handleInboxScroll() {
+    closeAllSwipe();
     updateScrollFade();
   }
   function beginTodoSwipe(id: string) {
@@ -1356,6 +1398,8 @@
     opacity: 0.96;
   }
   .inbox-scroll {
+    /* 下拉刷新指示器以此为定位基准(靠负 top 藏在内容上方) */
+    position: relative;
     height: 100%;
     min-height: 0;
     overflow-y: auto;

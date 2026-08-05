@@ -67,12 +67,12 @@
                   class="search-header-icon-btn refresh-btn"
                   :disabled="viewState.loading"
                   :aria-label="t('resourceCenter.refresh')"
-                  @click="refreshData"
+                  @click="refreshData()"
                   v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
                 >
                   <span
                     class="refresh-icon"
-                    :class="{ 'refresh-icon--spinning': viewState.loading }"
+                    :class="{ 'refresh-icon--spinning': viewState.loading || foregroundRefresh.refreshing.value }"
                     aria-hidden="true"
                   >
                     <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
@@ -180,12 +180,12 @@
                     :disabled="viewState.loading"
                     :aria-label="t('resourceCenter.refresh')"
                     :title="t('resourceCenter.refresh')"
-                    @click="refreshData"
+                    @click="refreshData()"
                     v-click-log="{ module: '资源中心', operation: '刷新搜索结果' }"
                   >
                     <span
                       class="refresh-icon"
-                      :class="{ 'refresh-icon--spinning': viewState.loading }"
+                      :class="{ 'refresh-icon--spinning': viewState.loading || foregroundRefresh.refreshing.value }"
                       aria-hidden="true"
                     >
                       <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
@@ -329,7 +329,20 @@
                 </div>
               </section>
 
-              <div ref="resultScrollRef" class="result-scroll-area">
+              <div
+                ref="resultScrollRef"
+                class="result-scroll-area"
+                @touchstart.passive="pullRefresh.onTouchStart"
+                @touchmove="pullRefresh.onTouchMove"
+                @touchend.passive="pullRefresh.onTouchEnd"
+                @touchcancel.passive="pullRefresh.onTouchCancel"
+              >
+                <MobilePullRefreshIndicator
+                  :distance="pullRefresh.pullDistance.value"
+                  :refreshing="pullRefresh.refreshing.value"
+                  :ready="pullRefresh.ready.value"
+                  :visible="pullRefresh.visible.value"
+                />
                 <div
                   v-if="shouldShowLoadingSkeleton"
                   class="result-skeleton"
@@ -385,7 +398,7 @@
                   <p v-if="viewState.error.requestId" class="result-error-request-id">
                     {{ t('common.requestIdLabel') }}：{{ viewState.error.requestId }}
                   </p>
-                  <BButton type="primary" @click="refreshData">{{ t('common.retry') }}</BButton>
+                  <BButton type="primary" @click="refreshData()">{{ t('common.retry') }}</BButton>
                 </div>
 
                 <div v-else class="empty-state">
@@ -563,6 +576,9 @@
   import { useRoute, useRouter } from 'vue-router';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -639,6 +655,32 @@
   const showLoadingSkeleton = ref(false);
   let skeletonTimer: number | null = null;
   const resultScrollRef = ref<HTMLElement | null>(null);
+
+  /*
+   * 下拉刷新。走 refreshData({ silent: true }):保留旧结果、不进骨架屏。
+   * 刷新保留搜索关键词、类型/标签/时间筛选、排序与 URL 查询参数 ——
+   * 它们都在 queryState 里,refreshData 只重取数据,不碰查询条件。
+   */
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: computed(() => !batchMode.value),
+    externalBusy: computed(() => viewState.loading || viewState.loadingMore),
+    getScrollContainer: () => resultScrollRef.value,
+    onRefresh: () => refreshData({ silent: true }),
+  });
+  /*
+   * 从后台切回来时补一次数据。
+   *
+   * 这里不加顶部进度条:结果区是 20px 圆角卡片,absolute 的细条两端会溢出圆角,
+   * 而父级又不能 overflow: hidden(会裁掉类型筛选浮层)。本页本来就有一个常驻
+   * 刷新按钮,让它的图标在静默刷新时一起转,比新增一条进度条更贴合既有设计。
+   *
+   * 与手动刷新并发是安全的:loadData 用 requestSeq 作废先发请求。
+   */
+  const foregroundRefresh = useForegroundRefresh({
+    refresh: () => refreshData({ silent: true }),
+    // 批量选择中刷新会让已勾选的项消失,等用户退出批量模式再说。
+    canRefresh: () => !batchMode.value && !viewState.loading && !viewState.loadingMore,
+  });
   const resultLoadSentinel = ref<HTMLElement | null>(null);
   let resultLoadObserver: IntersectionObserver | null = null;
   let requestSeq = 0;
@@ -1014,12 +1056,26 @@
     );
   }
 
-  async function loadData(force = false, skeletonDelayMs = SKELETON_DELAY_MS, append = false) {
+  /**
+   * @param silent 下拉刷新用：不进 loading、不排骨架屏定时器，旧结果留在屏幕上，
+   *   顶部指示器负责表达进度。游标仍要重置（刷新等于回到第一页），
+   *   但 rawItems 不清空，请求失败时结果原样保留。
+   */
+  async function loadData(
+    force = false,
+    skeletonDelayMs = SKELETON_DELAY_MS,
+    append = false,
+    silent = false,
+  ) {
     if (append && (viewState.loading || viewState.loadingMore || !viewState.hasMore)) return false;
     const seq = append ? requestSeq : ++requestSeq;
     let loadSucceeded = false;
     if (append) {
       viewState.loadingMore = true;
+    } else if (silent) {
+      viewState.loadingMore = false;
+      viewState.nextCursor = null;
+      viewState.hasMore = false;
     } else {
       viewState.loading = true;
       viewState.loadingMore = false;
@@ -1067,12 +1123,17 @@
       return true;
     } catch (error) {
       const requestError = error as Error & { requestId?: string };
-      if (!append) viewState.rawItems = [];
-      viewState.error = {
-        message: requestError.message || t('common.requestFailedDescription'),
-        requestId: String(requestError.requestId || ''),
-      };
-      if (!append) message.error(t('resourceCenter.refreshFailed'));
+      // 静默刷新失败必须保留旧结果:下拉一下就把列表清成错误态,比不刷新更糟
+      if (!append && !silent) {
+        viewState.rawItems = [];
+        viewState.error = {
+          message: requestError.message || t('common.requestFailedDescription'),
+          requestId: String(requestError.requestId || ''),
+        };
+        message.error(t('resourceCenter.refreshFailed'));
+      }
+      // 抛回给下拉刷新的调用方，由它统一提示；按钮刷新路径已在上面提示过
+      if (silent) throw error;
       return false;
     } finally {
       if (seq === requestSeq) {
@@ -1200,14 +1261,21 @@
     applyQueryState('清空筛选');
   }
 
-  async function refreshData() {
+  /**
+   * @param options.silent 下拉刷新用：保留旧结果、不进骨架屏。
+   *   批量模式下手势本就被禁用，所以这里照旧清空选择不会影响下拉场景。
+   *   失败时向上抛出，交给下拉刷新的统一失败提示，避免弹两条消息。
+   */
+  async function refreshData(options: { silent?: boolean } = {}) {
+    const silent = Boolean(options.silent);
     clearBatchSelection();
     clearGlobalSearchCache();
-    viewState.loading = true;
+    if (!silent) viewState.loading = true;
     try {
       await nextTick();
-      await loadData(true);
+      await loadData(true, SKELETON_DELAY_MS, false, silent);
     } catch (error) {
+      if (silent) throw error;
       message.error(t('resourceCenter.refreshFailed'));
     }
   }
@@ -2074,6 +2142,8 @@
   }
 
   .result-scroll-area {
+    /* 下拉刷新指示器以此为定位基准(它靠负 top 藏在内容上方) */
+    position: relative;
     margin-top: 12px;
     box-sizing: border-box;
     border-radius: 14px;

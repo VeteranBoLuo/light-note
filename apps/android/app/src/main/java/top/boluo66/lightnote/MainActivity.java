@@ -610,8 +610,35 @@ public final class MainActivity extends Activity {
         });
 
         webView.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) ->
-            WebViewSupport.download(this, url, userAgent, contentDisposition, mimeType)
+            WebViewSupport.download(
+                this,
+                url,
+                userAgent,
+                contentDisposition,
+                mimeType,
+                null,
+                this::reportDownloadProgress
+            )
         );
+    }
+
+    /**
+     * 把原生下载进度推给网页。
+     *
+     * @return false 表示 WebView 已不可用，让轮询自己停下来（否则会一直转到超时）。
+     */
+    private boolean reportDownloadProgress(String payloadJson) {
+        if (webView == null || isFinishing() || isDestroyed()) {
+            return false;
+        }
+        // payloadJson 由 JSONObject.toString() 生成，已转义，可直接作为 JS 对象字面量传入
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidDownloadProgress&&window.__lightNoteAndroidDownloadProgress("
+                + payloadJson
+                + ");",
+            null
+        );
+        return true;
     }
 
     private void configureTrustedWebMessages() {
@@ -645,7 +672,8 @@ public final class MainActivity extends Activity {
                         sourceView.getSettings().getUserAgentString(),
                         null,
                         null,
-                        fileName
+                        fileName,
+                        MainActivity.this::reportDownloadProgress
                     )
                 );
             } else if ("privacyConsent.withdraw".equals(messageType)) {

@@ -78,6 +78,9 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/getNoteVersionDetail'],
   ['POST', '/note/queryNoteTemplates'],
   ['POST', '/note/getNoteTemplateDetail'],
+  // 导出中转不改用户内容,只把已可读的笔记正文换成一次性下载地址,与 /file/downloadFileById 同属只读
+  ['POST', '/note/exportFile'],
+  ['GET', '/note/exportFile'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [

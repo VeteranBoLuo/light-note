@@ -1375,6 +1375,10 @@ export default {
     exportDownloaded: 'Note exported',
     exportFailed: 'Export failed, please try again later',
     exportPdfRendering: 'Generating PDF…',
+    exportPreparing: 'Preparing the export file…',
+    exportSavedToDownloads: 'Saved to your device Downloads folder',
+    exportTooLargeInApp:
+      'This note is too large to export in the app. Open Light Note in a mobile browser to export.',
     exportCopiedInApp:
       'The app cannot save files directly. The content has been copied to the clipboard — open Light Note in a mobile browser to export a file.',
     exportUnavailableInApp: 'The app cannot save files directly. Open Light Note in a mobile browser to export.',
@@ -1438,6 +1442,8 @@ export default {
   cloudSpace: {
     title: 'Cloud Space',
     subtitle: 'Organize files by folder and type, with search, preview, drag-and-drop, and batch actions.',
+    // 下拉刷新时文件、文件夹、用量分别请求,只有一部分失败时用它区别于整体失败
+    refreshPartialFailed: 'Some data failed to refresh. Existing content was kept.',
     fileCount: '{count} files',
     viewMode: 'File view mode',
     searchFile: 'Search files',
@@ -1750,6 +1756,12 @@ export default {
     preview: 'Preview',
     select: 'Select',
     saveSuccess: 'Save Successful',
+    saveImage: 'Save image',
+    saveImageFailed: 'Failed to save image',
+    downloadingFile: 'Downloading',
+    downloadFinished: 'Completed',
+    downloadInterrupted: 'Download failed',
+    downloadPaused: 'Paused',
     more: 'More',
     loadMore: 'Load more',
     downloadLinkFailed: 'Failed to get download link',

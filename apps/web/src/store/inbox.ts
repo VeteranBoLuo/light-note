@@ -91,9 +91,11 @@ export default defineStore('inbox', {
         return false;
       }
     },
-    async refreshList() {
+    // silent: 下拉刷新等场景不进 loading,避免旧列表被骨架屏替换。
+    // 失败时不需要特殊处理 loadFailed —— 页面对"有数据 + 失败"已渲染为顶部横幅并保留列表。
+    async refreshList(options: { silent?: boolean } = {}) {
       const requestId = ++this.requestId;
-      this.loading = true;
+      if (!options.silent) this.loading = true;
       this.loadFailed = false;
       try {
         const res = await listInbox({

@@ -19,6 +19,7 @@
       <BViewer />
       <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
       <GuestNudge />
+      <AndroidDownloadProgress />
       <DisplayScaleSuggestion />
       <AdminContextBanner />
       <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
@@ -50,6 +51,7 @@
   import { showPreviewGuide } from '@/composables/useGuestGuard';
   import GuestNudge from '@/components/home/GuestNudge.vue';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
+  import AndroidDownloadProgress from '@/components/base/AndroidDownloadProgress.vue';
   import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';

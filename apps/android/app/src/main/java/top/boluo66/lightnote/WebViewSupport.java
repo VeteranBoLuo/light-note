@@ -12,6 +12,9 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
 import android.webkit.WebSettings;
@@ -23,6 +26,9 @@ import androidx.webkit.SafeBrowsingResponseCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -283,8 +289,25 @@ final class WebViewSupport {
         activity.startActivity(intent);
     }
 
+    /*
+     * 下载进度回传。
+     *
+     * 系统 DownloadManager 的进度只出现在通知栏，App 界面里看不到，所以这里轮询
+     * DownloadManager.query 把进度推回 WebView，让网页能画自己的进度条。
+     * 不改下载通道本身 —— DownloadManager 的大文件、后台续传、系统集成都要保留
+     * （网页侧用 XHR 取 blob 再存的做法在 WebView 里存不下来，见 BViewer 的注释）。
+     */
+    interface DownloadProgressListener {
+        /** @return false 表示接收方（WebView）已失效，轮询应当停止 */
+        boolean onProgress(String payloadJson);
+    }
+
+    private static final long DOWNLOAD_PROGRESS_INTERVAL_MS = 500L;
+    /** 兜底上限：下载卡住又迟迟不进终态时，不该让轮询一直转下去 */
+    private static final long DOWNLOAD_PROGRESS_MAX_DURATION_MS = 30L * 60L * 1000L;
+
     static void download(Context context, String url, String userAgent, String contentDisposition, String mimeType) {
-        download(context, url, userAgent, contentDisposition, mimeType, null);
+        download(context, url, userAgent, contentDisposition, mimeType, null, null);
     }
 
     static void download(
@@ -294,6 +317,18 @@ final class WebViewSupport {
         String contentDisposition,
         String mimeType,
         String suggestedFileName
+    ) {
+        download(context, url, userAgent, contentDisposition, mimeType, suggestedFileName, null);
+    }
+
+    static void download(
+        Context context,
+        String url,
+        String userAgent,
+        String contentDisposition,
+        String mimeType,
+        String suggestedFileName,
+        DownloadProgressListener progressListener
     ) {
         if (!isHttpUrl(url)) {
             Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
@@ -337,9 +372,130 @@ final class WebViewSupport {
             if (canReportCompletion) {
                 PENDING_DOWNLOADS.put(downloadId, fileName);
             }
+            if (progressListener != null) {
+                watchDownloadProgress(context, downloadId, fileName, progressListener);
+            }
             Toast.makeText(context, R.string.download_started, Toast.LENGTH_LONG).show();
         } catch (Exception error) {
             Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * 轮询一个下载任务的进度并推给网页，直到进入终态、接收方失效或超过兜底上限。
+     * 只持有 applicationContext，不碰 Activity，避免 Handler 拖住已销毁的界面。
+     */
+    private static void watchDownloadProgress(
+        Context context,
+        long downloadId,
+        String fileName,
+        DownloadProgressListener listener
+    ) {
+        Context appContext = context.getApplicationContext();
+        DownloadManager manager =
+            (DownloadManager) appContext.getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) {
+            return;
+        }
+        Handler handler = new Handler(Looper.getMainLooper());
+        long startedAt = SystemClock.elapsedRealtime();
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                DownloadProgress progress = queryDownloadProgress(manager, downloadId);
+                // 查不到记录（用户在系统下载管理里删了）也要给网页一个终态，
+                // 否则界面上的进度条会永远停在「下载中」。
+                String status = progress == null ? STATUS_FAILED : progress.status;
+                long bytesDownloaded = progress == null ? 0L : progress.bytesDownloaded;
+                long totalBytes = progress == null ? -1L : progress.totalBytes;
+                String payload = progressPayload(downloadId, fileName, status, bytesDownloaded, totalBytes);
+                boolean receiverAlive = payload == null || listener.onProgress(payload);
+                boolean finished = STATUS_SUCCESS.equals(status) || STATUS_FAILED.equals(status);
+                if (!receiverAlive || finished) {
+                    return;
+                }
+                if (SystemClock.elapsedRealtime() - startedAt > DOWNLOAD_PROGRESS_MAX_DURATION_MS) {
+                    return;
+                }
+                handler.postDelayed(this, DOWNLOAD_PROGRESS_INTERVAL_MS);
+            }
+        });
+    }
+
+    private static final String STATUS_SUCCESS = "success";
+    private static final String STATUS_FAILED = "failed";
+
+    private static final class DownloadProgress {
+        final String status;
+        final long bytesDownloaded;
+        /** -1 表示服务器没给 Content-Length，进度未知 */
+        final long totalBytes;
+
+        DownloadProgress(String status, long bytesDownloaded, long totalBytes) {
+            this.status = status;
+            this.bytesDownloaded = bytesDownloaded;
+            this.totalBytes = totalBytes;
+        }
+    }
+
+    private static DownloadProgress queryDownloadProgress(DownloadManager manager, long downloadId) {
+        DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+        try (Cursor cursor = manager.query(query)) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                return null;
+            }
+            int statusColumn = cursor.getColumnIndex(DownloadManager.COLUMN_STATUS);
+            int soFarColumn = cursor.getColumnIndex(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR);
+            int totalColumn = cursor.getColumnIndex(DownloadManager.COLUMN_TOTAL_SIZE_BYTES);
+            int status = statusColumn >= 0 ? cursor.getInt(statusColumn) : DownloadManager.STATUS_FAILED;
+            long soFar = soFarColumn >= 0 ? cursor.getLong(soFarColumn) : 0L;
+            long total = totalColumn >= 0 ? cursor.getLong(totalColumn) : -1L;
+            return new DownloadProgress(downloadStatusName(status), soFar, total);
+        } catch (RuntimeException error) {
+            return null;
+        }
+    }
+
+    private static String downloadStatusName(int status) {
+        switch (status) {
+            case DownloadManager.STATUS_SUCCESSFUL:
+                return STATUS_SUCCESS;
+            case DownloadManager.STATUS_FAILED:
+                return STATUS_FAILED;
+            case DownloadManager.STATUS_PAUSED:
+                return "paused";
+            case DownloadManager.STATUS_PENDING:
+                return "pending";
+            default:
+                return "running";
+        }
+    }
+
+    private static String progressPayload(
+        long downloadId,
+        String fileName,
+        String status,
+        long bytesDownloaded,
+        long totalBytes
+    ) {
+        int percent = totalBytes > 0
+            ? (int) Math.max(0L, Math.min(100L, bytesDownloaded * 100L / totalBytes))
+            : -1;
+        // 服务器没给 Content-Length 时进度一路未知，成功后仍要收口到 100%
+        if (STATUS_SUCCESS.equals(status)) {
+            percent = 100;
+        }
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("id", String.valueOf(downloadId));
+            payload.put("fileName", fileName == null ? "" : fileName);
+            payload.put("status", status);
+            payload.put("bytesDownloaded", bytesDownloaded);
+            payload.put("totalBytes", totalBytes);
+            payload.put("percent", percent);
+            return payload.toString();
+        } catch (JSONException error) {
+            return null;
         }
     }
 

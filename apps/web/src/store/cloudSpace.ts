@@ -61,14 +61,24 @@ export default defineStore('dom', {
     },
   getters: {},
   actions: {
-    async queryFieldList(options: { append?: boolean } = {}) {
+    /**
+     * 拉取当前文件夹/筛选下的文件。
+     *
+     * silent 供下拉刷新使用：不进 loading，页面保留旧文件列表（骨架屏由 loading 驱动），
+     * 顶部指示器负责表达进度。失败时同样保留旧列表，不清空。
+     */
+    async queryFieldList(options: { append?: boolean; silent?: boolean } = {}) {
       const append = options.append === true;
+      const silent = options.silent === true;
       if (append && (this.loading || this.loadingMore || !this.fileHasMore)) return false;
 
       const requestVersion = append ? this.fileRequestVersion : ++this.fileRequestVersion;
       const targetPage = append ? this.filePage + 1 : 1;
       if (append) {
         this.loadingMore = true;
+      } else if (silent) {
+        // 只重置分页游标：翻页状态必须回到第一页，但列表与 loading 都不动
+        this.loadingMore = false;
       } else {
         this.loading = true;
         this.loadingMore = false;
@@ -113,20 +123,35 @@ export default defineStore('dom', {
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
     },
-    getUsedSpace() {
-      apiBasePost('/api/file/queryTotalFileSize').then((res) => {
-        if (res.status === 200) {
-          this.usedSpace = res.data.totalSizeMB;
-          if (res.data.quotaMB) this.maxSpace = res.data.quotaMB;
-        }
-      });
+    /**
+     * 空间用量。返回是否成功,供下拉刷新判断「部分数据刷新失败」。
+     * 失败时保留上一次的用量,不写成 0 —— 那会让用户以为空间被清空了。
+     */
+    async getUsedSpace() {
+      try {
+        const res = await apiBasePost('/api/file/queryTotalFileSize');
+        if (res?.status !== 200) return false;
+        this.usedSpace = res.data.totalSizeMB;
+        if (res.data.quotaMB) this.maxSpace = res.data.quotaMB;
+        return true;
+      } catch (error) {
+        console.warn('加载云空间用量失败:', error);
+        return false;
+      }
     },
-    queryFolder() {
-      apiQueryPost('/api/file/queryFolder').then((res) => {
-        if (res.status === 200) {
-          this.folderList = res.data.items;
-        }
-      });
+    /**
+     * 文件夹列表。返回是否成功,理由同上:失败保留旧文件夹,不清空成空列表。
+     */
+    async queryFolder() {
+      try {
+        const res = await apiQueryPost('/api/file/queryFolder');
+        if (res?.status !== 200) return false;
+        this.folderList = Array.isArray(res.data?.items) ? res.data.items : this.folderList;
+        return true;
+      } catch (error) {
+        console.warn('加载云空间文件夹失败:', error);
+        return false;
+      }
     },
   },
 });

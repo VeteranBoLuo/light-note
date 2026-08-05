@@ -228,6 +228,7 @@
   } from '@/utils/noteExport';
   import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -277,6 +278,54 @@
    * 必须提前识别并给出可操作降级 —— 否则用户点导出只会毫无反应。
    */
   const canSaveExportFile = () => canShareGeneratedFile() || !isLightNoteAndroidApp();
+
+  /**
+   * App 内能否走服务端中转落盘：把导出件换成短时 http 地址，交给原生系统下载。
+   * 需要笔记已保存 —— 中转接口要校验笔记归属，未落库的新笔记换不到下载票据。
+   */
+  const canExportViaAppBridge = () => isLightNoteAndroidApp() && !!props.note?.id;
+
+  /**
+   * App 内的落盘尝试。
+   * 返回 true 表示本次导出已有结果（落盘成功，或内容过大已给出明确提示），调用方就此结束；
+   * 返回 false 表示没能处理，调用方继续走自己的降级（文本退剪贴板、PDF 退提示）。
+   */
+  async function handleExportInApp(
+    content: string | Blob,
+    fileName: string,
+    mimeType: string,
+    format: NoteExportFormat,
+    operation: string,
+  ): Promise<boolean> {
+    if (!canExportViaAppBridge()) return false;
+
+    // 上传+换票据在弱网下要等几秒,没有反馈会被当成没点上
+    const closeUploading = message.loading(t('noteDetail.exportPreparing'), 0);
+    let outcome;
+    try {
+      outcome = await deliverExportViaAndroidBridge({
+        noteId: String(props.note.id),
+        content,
+        fileName,
+        format,
+        mimeType,
+      });
+    } finally {
+      closeUploading();
+    }
+
+    if (outcome.ok) {
+      message.success(t('noteDetail.exportSavedToDownloads'));
+      recordOperation({ module: '笔记', operation });
+      return true;
+    }
+    if (outcome.reason === 'too_large') {
+      // 内容过大时复制到剪贴板同样没意义(剪贴板也放不下、粘贴端也难处理),直接给明确出路
+      message.warning(outcome.message || t('noteDetail.exportTooLargeInApp'));
+      return true;
+    }
+    return false;
+  }
 
   /** App 内无法落盘时的降级：文本格式至少能复制出去，粘贴到其他应用里。 */
   async function copyExportContent(content: string) {
@@ -514,8 +563,9 @@
           message.warning(isMd ? t('noteDetail.exportPdfTip') : t('noteDetail.noExportContent'));
           return;
         }
-        // PDF 是二进制,App 内既存不了盘也没有剪贴板降级,提前拦住而不是白跑一遍长图渲染
-        if (!canSaveExportFile()) {
+        // PDF 是二进制,没有剪贴板降级:只有服务端中转也走不通时才提前拦住,
+        // 免得白跑一遍几秒的长图渲染。中转可用时照常导出。
+        if (!canSaveExportFile() && !canExportViaAppBridge()) {
           message.warning(t('noteDetail.exportPdfUnavailableInApp'));
           return;
         }
@@ -525,12 +575,16 @@
         try {
           const blob = await generatePdfBlob(selector);
           closeRendering();
-          await deliverExportFile(
-            blob,
-            buildExportFileName(title, t('noteDetail.unnamedDoc'), 'pdf'),
-            'application/pdf',
-            `导出PDF成功【${title}】`,
-          );
+          const pdfFileName = buildExportFileName(title, t('noteDetail.unnamedDoc'), 'pdf');
+          const pdfOperation = `导出PDF成功【${title}】`;
+          if (!canSaveExportFile()) {
+            // 中转也没成时必须给提示:用户已经等了几秒渲染,静默返回会被当成按钮坏了
+            if (!(await handleExportInApp(blob, pdfFileName, 'application/pdf', 'pdf', pdfOperation))) {
+              message.warning(t('noteDetail.exportPdfUnavailableInApp'));
+            }
+            return;
+          }
+          await deliverExportFile(blob, pdfFileName, 'application/pdf', pdfOperation);
         } catch (error) {
           closeRendering();
           console.error('PDF 导出失败:', error);
@@ -557,16 +611,15 @@
             ? await renderMarkdownForExport(content)
             : await inlineMermaidForExport(content);
         const html = buildNoteExportHtml(title, body);
+        const htmlFileName = buildExportFileName(title, t('noteDetail.unnamedDoc'), 'html');
+        const htmlOperation = `导出HTML成功【${title}】`;
         if (!canSaveExportFile()) {
+          // 先试服务端中转落成真文件,不行才退回剪贴板
+          if (await handleExportInApp(html, htmlFileName, 'text/html', 'html', htmlOperation)) return;
           await copyExportContent(html);
           return;
         }
-        await deliverExportFile(
-          html,
-          buildExportFileName(title, t('noteDetail.unnamedDoc'), 'html'),
-          'text/html',
-          `导出HTML成功【${title}】`,
-        );
+        await deliverExportFile(html, htmlFileName, 'text/html', htmlOperation);
       },
     });
   };
@@ -586,16 +639,15 @@
           props.noteType || 'html',
           (html) => turndownService.turndown(html),
         );
+        const mdFileName = buildExportFileName(title, t('noteDetail.unnamedDoc'), 'md');
+        const mdOperation = `导出Markdown成功【${title}】`;
         if (!canSaveExportFile()) {
+          // 先试服务端中转落成真文件,不行才退回剪贴板
+          if (await handleExportInApp(markdown, mdFileName, 'text/markdown', 'md', mdOperation)) return;
           await copyExportContent(markdown);
           return;
         }
-        await deliverExportFile(
-          markdown,
-          buildExportFileName(title, t('noteDetail.unnamedDoc'), 'md'),
-          'text/markdown',
-          `导出Markdown成功【${title}】`,
-        );
+        await deliverExportFile(markdown, mdFileName, 'text/markdown', mdOperation);
       },
     });
   };

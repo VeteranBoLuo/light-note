@@ -47,6 +47,10 @@ router.post('/getNoteVersions', noteLibraryHandle.getNoteVersions);
 router.post('/getNoteVersionDetail', noteLibraryHandle.getNoteVersionDetail);
 router.post('/restoreNoteVersion', noteLibraryHandle.restoreNoteVersion);
 
+// 导出中转:POST 换一次性下载票据,GET 由系统 DownloadManager 取件(仅 Android App 需要)
+router.post('/exportFile', noteLibraryHandle.createNoteExportTicket);
+router.get('/exportFile', noteLibraryHandle.downloadNoteExportFile);
+
 router.post('/queryNoteTemplates', noteLibraryHandle.queryNoteTemplates);
 router.post('/getNoteTemplateDetail', noteLibraryHandle.getNoteTemplateDetail);
 router.post('/addNoteTemplate', noteLibraryHandle.addNoteTemplate);

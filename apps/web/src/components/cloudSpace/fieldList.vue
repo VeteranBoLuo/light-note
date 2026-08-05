@@ -1,5 +1,18 @@
 <template>
-  <div class="field-list">
+  <div
+    ref="fieldListRef"
+    class="field-list"
+    @touchstart.passive="pullRefresh.onTouchStart"
+    @touchmove="pullRefresh.onTouchMove"
+    @touchend.passive="pullRefresh.onTouchEnd"
+    @touchcancel.passive="pullRefresh.onTouchCancel"
+  >
+    <MobilePullRefreshIndicator
+      :distance="pullRefresh.pullDistance.value"
+      :refreshing="pullRefresh.refreshing.value"
+      :ready="pullRefresh.ready.value"
+      :visible="pullRefresh.visible.value"
+    />
     <section v-if="batchMode && bookmark.isMobile" class="mobile-batch-toolbar">
       <div class="mobile-batch-summary">
         <BCheckbox
@@ -580,6 +593,9 @@
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import icon from '@/config/icon.ts';
   import {
     deleteField,
@@ -624,6 +640,51 @@
   const viewMode = computed(() => props.viewMode ?? 'table');
 
   const batchMode = computed(() => props.batchMode ?? false);
+  const fieldListRef = ref<HTMLElement | null>(null);
+
+  /*
+   * 下拉刷新。三类数据里只需并发两个请求:queryFieldList 的 finally 本身就会
+   * 顺带刷新空间用量,再单独调一次 getUsedSpace 会重复请求同一个接口。
+   *
+   * 卡片视图(.file-card-grid)和列表视图(.file-container)是二选一渲染的两个滚动容器,
+   * 容器按 data-mobile-resource-scroll 动态取,自动跟随当前视图 —— 一个刷新实例覆盖两个视图。
+   *
+   * 用 allSettled 而不是 all:文件列表成功、文件夹失败时应当保留已刷新的列表,
+   * 只提示部分失败,而不是把整次刷新判为失败(见落地方案第 12 节)。
+   */
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: computed(() => !batchMode.value),
+    externalBusy: computed(
+      () => cloud.loading || cloud.loadingMore || cloud.fileList?.some((item: any) => item?.isRename) === true,
+    ),
+    getScrollContainer: () =>
+      fieldListRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+    onRefresh: async () => {
+      const [fileResult, folderResult] = await Promise.allSettled([
+        cloud.queryFieldList({ silent: true }),
+        cloud.queryFolder(),
+      ]);
+      const fileOk = fileResult.status === 'fulfilled' && fileResult.value !== false;
+      const folderOk = folderResult.status === 'fulfilled' && folderResult.value !== false;
+      if (!fileOk && !folderOk) throw new Error('CLOUD_REFRESH_FAILED');
+      // 只有一部分失败:已刷新的数据保留,给出区别于整体失败的提示
+      if (!fileOk || !folderOk) message.warning(t('cloudSpace.refreshPartialFailed'));
+    },
+  });
+  /*
+   * 从后台切回来时补一次数据。与下拉刷新的区别:这里一律不提示 ——
+   * 用户没主动要求刷新,失败就保留旧列表当作没发生过。
+   */
+  useForegroundRefresh({
+    refresh: () => Promise.allSettled([cloud.queryFieldList({ silent: true }), cloud.queryFolder()]),
+    canRefresh: () =>
+      !batchMode.value &&
+      !cloud.loading &&
+      !cloud.loadingMore &&
+      // 有文件正在重命名时刷新会把输入框里的内容冲掉
+      cloud.fileList?.some((item: any) => item?.isRename) !== true,
+  });
+
   function onFileListScroll(event: Event) {
     const target = event.currentTarget;
     if (target instanceof HTMLElement && isNearResourceScrollEnd(target)) {

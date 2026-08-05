@@ -148,7 +148,15 @@
       </aside>
 
       <div class="note-main-panel" :class="{ 'is-refreshing': refreshing }">
-        <div v-if="refreshing" class="note-refresh-bar" aria-hidden="true"></div>
+        <!--
+          这条只留给桌面端。移动端的静默刷新统一由顶栏下沿那条全局提示负责
+          (见 useGlobalRefreshBar),同一件事不在两处说。
+          下拉刷新在任何端都由跟手的胶囊指示器表达,不走进度条。
+        -->
+        <PageRefreshBar
+          tone="note"
+          :active="!bookmark.isMobile && (refreshing || foregroundRefresh.refreshing.value)"
+        />
         <div
           v-if="loading && currentViewMode === 'card'"
           class="note-library-body note-card-skeleton-wrap"
@@ -323,6 +331,9 @@
   import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
+  import PageRefreshBar from '@/components/base/PageRefreshBar.vue';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
@@ -678,6 +689,20 @@
       noteWorkspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: () => Promise.all([reloadNotes(true), getAllTags()]),
   });
+  /*
+   * 从后台切回来时补一次数据。走的是同一条软刷新路径,区别只在触发方式:
+   * 这里没有手势,所以反馈只有顶部那条进度条。
+   */
+  const foregroundRefresh = useForegroundRefresh({
+    refresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+    canRefresh: () =>
+      !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
+  });
+  /*
+   * 切标签的软刷新在移动端也要有提示。前台恢复刷新由 composable 自己注册,
+   * 这一条是页面自己的软刷新 —— 必须排除下拉引起的那次,否则和胶囊指示器重复。
+   */
+  registerGlobalRefreshSource(() => refreshing.value && !pullRefresh.refreshing.value);
   const allTags = ref<any[]>([]);
   const untaggedNoteCount = ref<number | null>(null);
   const totalNoteCount = ref<number | null>(null);
@@ -1610,36 +1635,7 @@
     overflow: hidden;
   }
 
-  .note-refresh-bar {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 4;
-    height: 2px;
-    overflow: hidden;
-    pointer-events: none;
-    background: color-mix(in srgb, var(--resource-note-color, #00a884) 16%, transparent);
 
-    &::after {
-      content: '';
-      display: block;
-      width: 28%;
-      height: 100%;
-      border-radius: 999px;
-      background: var(--resource-note-color, #00a884);
-      animation: note-refresh-slide 900ms ease-in-out infinite;
-    }
-  }
-
-  @keyframes note-refresh-slide {
-    0% {
-      transform: translateX(-100%);
-    }
-    100% {
-      transform: translateX(360%);
-    }
-  }
 
   .note-main-panel.is-refreshing .note-library-body,
   .note-main-panel.is-refreshing .note-library-body-list {
@@ -1653,11 +1649,6 @@
     .note-library-body,
     .note-library-body-list {
       transition: none;
-    }
-
-    .note-refresh-bar::after {
-      width: 100%;
-      animation: none;
     }
   }
 

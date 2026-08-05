@@ -182,6 +182,7 @@
   import { recordOperation } from '@/api/commonApi';
   import { getTotalResourceCount, type TagFilterValue, type TagRecord, useTagManage } from './useTagManage';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   const { t } = useI18n();
@@ -201,6 +202,11 @@
     externalBusy: computed(() => loading.value || refreshing.value || mutating.value),
     getScrollContainer: () => scrollRef.value,
     onRefresh: () => reload({ silent: true }),
+  });
+  /* 从后台切回来时补一次数据,提示由顶栏那条全局细条负责。 */
+  useForegroundRefresh({
+    refresh: () => reload({ silent: true }),
+    canRefresh: () => !selectionMode.value && !loading.value && !refreshing.value && !mutating.value,
   });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
