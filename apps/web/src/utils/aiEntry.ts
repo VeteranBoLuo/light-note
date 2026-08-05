@@ -31,8 +31,16 @@ export interface AiAssistantLaunchPayload {
   query?: string;
 }
 
-export function shouldHideAiEdgeTrigger(isMobile: boolean, routeName: unknown): boolean {
-  return isMobile && String(routeName || '') !== 'noteDetail';
+/**
+ * 手机端一律不挂 AI 侧边触发器——它是贴在屏幕边缘的悬浮把手，在触控端既容易误触，
+ * 又和底部导航的 AI 入口重复。
+ *
+ * 此前对 noteDetail 开了例外，因为那条路由不显示底部导航（meta 没有 mobileBottomNav），
+ * 边缘把手是笔记里唯一的 AI 入口。现在按产品决定统一去掉；如果之后需要在笔记里就近唤起
+ * AI，应该加进顶栏的更多菜单，而不是把悬浮把手放回来。
+ */
+export function shouldHideAiEdgeTrigger(isMobile: boolean, _routeName?: unknown): boolean {
+  return isMobile;
 }
 
 function normalizedContexts(value: unknown): AiAssistantContextRef[] {

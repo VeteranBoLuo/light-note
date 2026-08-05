@@ -27,6 +27,10 @@ html[data-theme='night'] {
      深色主题下必须提亮；而填充底色配白字时需要足够暗，两个角色要求相反。
      此前 3 个角标组件直接把前景色当底色 + 白字，深色主题下只有 2.04~2.78:1。
      这里成对定义底色与配套字色，两套主题都过 4.5:1。 */
+  /* 中性 chip（笔记格式胶囊、标签的 +N）上的文字色。
+     直接用 --desc-color 在 --common-tag-bg-color(#f0f0f0) 上只有 4.24:1，
+     11px 小字不合格；比 desc 再深一档到 5.06:1，仍是次要信息的观感，不会抢标题。 */
+  --chip-neutral-color: #65656e;
   --danger-fill-bg: #d93b3b;
   --danger-fill-fg: #ffffff; /* 4.53:1 */
   --warning-fill-bg: #a05f00;
@@ -211,6 +215,8 @@ html[data-theme='night'] {
   --focus-ring-color: color-mix(in srgb, var(--primary-color) 65%, #fff);
   /* 深色主题的实色填充走「亮底 + 深字」：亮底在深色页面上够突出（6.00~8.16:1），
      深字保证数字读得清（6.03~7.06:1）。沿用 day 的白字只有 2.04~2.78:1。 */
+  /* 深色主题下 --desc-color 在 --common-tag-bg-color(#343a45) 上已有 5.08:1，直接沿用 */
+  --chip-neutral-color: var(--desc-color);
   --danger-fill-bg: #ff6b6b;
   --danger-fill-fg: #3a0f0f; /* 6.03:1 */
   --warning-fill-bg: #f5a524;

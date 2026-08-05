@@ -33,6 +33,14 @@ export interface UserPreferences {
   notificationsTimezoneOffset?: number;
 }
 
+/**
+ * 笔记库默认视图。与后端建号时写入的 preferences.noteViewMode 保持一致
+ * （userHandle.js 的注册与 GitHub 建号两处都是 'card'）。
+ * 此前前端在 App.vue / LoginPage / RegisterPage 三处各写了一遍 'list'，
+ * 与后端相反，导致「偏好里没有这个 key」的账号（老账号、游客）拿到列表视图。
+ */
+export const DEFAULT_NOTE_VIEW_MODE: NonNullable<UserPreferences['noteViewMode']> = 'card';
+
 export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'bookmark';
 // 移动端默认进入「今日」——它是每天打开轻笺后处理事情的第一站
 export const DEFAULT_MOBILE_HOME_PAGE: MobileHomePreference = 'workbench';

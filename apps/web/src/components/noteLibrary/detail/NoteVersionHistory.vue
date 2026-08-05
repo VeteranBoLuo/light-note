@@ -47,7 +47,12 @@
           </BButton>
         </div>
         <div class="preview-body">
-          <div v-if="activeId && previewMode === 'preview'" class="preview-html" v-html="activePreviewHtml"></div>
+          <div
+            v-if="activeId && previewMode === 'preview'"
+            class="preview-html"
+            v-html="activePreviewHtml"
+            v-mermaid
+          ></div>
           <div v-else-if="activeId" class="version-diff" :aria-label="$t('noteDetail.history.diff')">
             <div class="version-diff-summary">
               <span class="version-diff-summary__label">{{ $t('noteDetail.history.comparisonBasis') }}</span>

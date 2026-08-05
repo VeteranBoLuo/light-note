@@ -30,9 +30,11 @@
             @focusout="hideCitationTip"
             @keydown="onCitationKeydown"
           ></div>
+          <!-- mermaid 只在输出完成后渲染:流式过程中代码块还是半截的,渲染必然报语法错 -->
           <div
             v-else
             class="text"
+            v-mermaid
             v-html="formatAssistantMessage(message.content)"
             @click="handleLinkClick"
             @mouseover="showCitationTip"

@@ -192,7 +192,8 @@
               </div>
             </div>
 
-            <div v-if="!bookmark.isMobile" class="field">
+            <!-- 手机端笔记库已支持列表视图，这里跟着开放；与 PC 共用 noteViewMode 偏好 -->
+            <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.noteView') }}</span>
                 <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>

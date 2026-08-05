@@ -1,5 +1,9 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  DEFAULT_NOTE_VIEW_MODE,
   getApplicationEntryPath,
   getAppHomePath,
   getDesktopHomePath,
@@ -72,5 +76,30 @@ describe('默认首页解析', () => {
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 390)).toBe('/noteLibrary');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 820)).toBe('/home');
     expect(getApplicationEntryPath({ homePage: 'noteLibrary' }, 1440)).toBe('/noteLibrary');
+  });
+});
+
+describe('DEFAULT_NOTE_VIEW_MODE', () => {
+  it('与后端建号写入的默认值一致', () => {
+    // 这两处默认值曾经相反：后端写 'card'，前端在三个文件里各自兜底 'list'，
+    // 结果「偏好里没有 noteViewMode」的账号(老账号、游客)拿到的是列表视图。
+    // 直接读后端源码断言，避免以后有人只改一边。
+    const here = dirname(fileURLToPath(import.meta.url));
+    const backend = readFileSync(resolve(here, '../../../server/router_handle/userHandle.js'), 'utf8');
+    const defaults = [...backend.matchAll(/noteViewMode:\s*'(\w+)'/g)].map((match) => match[1]);
+    expect(defaults.length).toBeGreaterThan(0);
+    for (const value of defaults) {
+      expect(value).toBe(DEFAULT_NOTE_VIEW_MODE);
+    }
+  });
+
+  it('前端不再散落字面量兜底，统一引用常量', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const file of ['../App.vue', '../components/login/LoginPage.vue', '../components/login/RegisterPage.vue']) {
+      const source = readFileSync(resolve(here, file), 'utf8');
+      const line = source.split('\n').find((text) => text.includes('noteViewMode ='));
+      expect(line, `${file} 找不到 noteViewMode 赋值`).toBeTruthy();
+      expect(line).toContain('DEFAULT_NOTE_VIEW_MODE');
+    }
   });
 });

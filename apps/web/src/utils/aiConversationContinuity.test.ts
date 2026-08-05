@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   compareAiConversationRecency,
   decideAiConversationContinuity,
+  shouldLoadLatestConversationOnOpen,
   type AiConversationRecency,
 } from './aiConversationContinuity';
 
@@ -48,5 +49,35 @@ describe('aiConversationContinuity', () => {
     const older = conversation('conversation-a', '2026-07-23T10:00:00.000Z');
     const newer = conversation('conversation-b', '2026-07-23T10:00:00.000Z');
     expect(compareAiConversationRecency(newer, older)).toBeGreaterThan(0);
+  });
+});
+
+describe('shouldLoadLatestConversationOnOpen', () => {
+  it('新设备本地没有会话时加载云端最近会话', () => {
+    expect(
+      shouldLoadLatestConversationOnOpen({ currentConversationId: '', newConversationPending: false }),
+    ).toBe(true);
+  });
+
+  it('用户主动新建的空白对话不被最近会话顶掉', () => {
+    expect(
+      shouldLoadLatestConversationOnOpen({ currentConversationId: '', newConversationPending: true }),
+    ).toBe(false);
+  });
+
+  it('已有当前会话时不走这条路径', () => {
+    expect(
+      shouldLoadLatestConversationOnOpen({ currentConversationId: 'conversation-a', newConversationPending: false }),
+    ).toBe(false);
+    // 标记未清也不影响:有具体会话就该走「是否提示切到更新会话」那条判断
+    expect(
+      shouldLoadLatestConversationOnOpen({ currentConversationId: 'conversation-a', newConversationPending: true }),
+    ).toBe(false);
+  });
+
+  it('只有空白字符的会话 id 视为没有会话', () => {
+    expect(
+      shouldLoadLatestConversationOnOpen({ currentConversationId: '   ', newConversationPending: false }),
+    ).toBe(true);
   });
 });

@@ -1241,6 +1241,8 @@ export default {
     diagramSequence: 'Sequence diagram',
     diagramTimeline: 'Timeline',
     mermaidZoom: 'Zoom in',
+    mermaidEdgeCurved: 'Use curved connectors',
+    mermaidEdgeOrthogonal: 'Use right-angle connectors',
     mermaidDownload: 'Download image',
     mermaidDownloadFailed: 'Failed to generate image, please retry',
     mermaidRenderFailed: 'Diagram syntax error',

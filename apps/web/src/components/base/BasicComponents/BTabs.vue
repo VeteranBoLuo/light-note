@@ -24,7 +24,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, nextTick, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
   export interface TabItem {
     label: string;
@@ -117,6 +117,45 @@
       immediate: true,
     },
   );
+
+  /*
+   * 下划线的宽度/位置是按 tab 的 offsetWidth 量出来的,只在切换时算一次。
+   * 刚进页面时布局还没稳(相邻面板在加载、字体还没换上),量到的是中间态的尺寸,
+   * 之后没人再算 —— 表现就是刷新后下划线横跨了两个 tab(实测量到 405px,实际 tab 只有 295px)。
+   * 这里补上尺寸变化后的重算。
+   */
+  let underlineObserver: ResizeObserver | null = null;
+  const resyncTimers: number[] = [];
+  const resync = () => syncUnderline(String(activeValue.value));
+
+  onMounted(() => {
+    if (props.variant !== 'line') return;
+    if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+      underlineObserver = new ResizeObserver(resync);
+      underlineObserver.observe(containerRef.value);
+      // tab 自身宽度变化(文案变长、字体换成中文字体)时容器尺寸可能不变,逐个也观察上
+      containerRef.value.querySelectorAll<HTMLElement>('.tab').forEach((tab) => underlineObserver?.observe(tab));
+    }
+    // 兜底:窗口尺寸变化、字体加载完成,以及挂载后的几个时间点各校验一次。
+    // 相邻面板(如 AI 助手)是异步挂载的,首次计算往往落在它出现之前 —— 那时 tab 还占着整行,
+    // 量到的宽度比最终值大一截,下划线就会横跨到隔壁 tab 上。
+    // ResizeObserver 理论上能覆盖,但实测在这个场景里不总是触发,所以补上定时校验。
+    window.addEventListener('resize', resync);
+    (document as any).fonts?.ready?.then?.(resync);
+    requestAnimationFrame(() => requestAnimationFrame(resync));
+    [120, 400, 1000].forEach((delay) => {
+      const timer = window.setTimeout(resync, delay);
+      resyncTimers.push(timer);
+    });
+  });
+
+  onBeforeUnmount(() => {
+    underlineObserver?.disconnect();
+    underlineObserver = null;
+    window.removeEventListener('resize', resync);
+    resyncTimers.forEach((timer) => window.clearTimeout(timer));
+    resyncTimers.length = 0;
+  });
 </script>
 
 <style scoped lang="less">

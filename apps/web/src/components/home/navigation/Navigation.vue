@@ -112,13 +112,20 @@
             @click="router.push('/co-build')"
             >{{ $t('navigation.coBuild') }}</div
           >
-          <b-dropdown v-if="user.role === 'root'" align="center" :menu-options="adminMenuOptions">
-            <div
-              :style="{ color: adminRouteActive ? '#615ced' : '' }"
-              style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-              >{{ $t('navigation.management') }}</div
-            >
-          </b-dropdown>
+          <!--
+            管理是单入口：知识库、通知中心、安全中心都已进了 /admin 的侧边导航，
+            这里再挂一层下拉只是把后台里已有的入口重复一遍，所以直接进后台总览。
+            高亮仍覆盖那三个跨外壳路由，在它们里面也能看出自己属于管理。
+          -->
+          <div
+            v-if="user.role === 'root'"
+            id="nav-admin-entry"
+            :style="{ color: adminRouteActive ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.admin"
+            @click="router.push('/admin')"
+            >{{ $t('navigation.management') }}</div
+          >
         </template>
       </div>
       <RightArea />
@@ -130,14 +137,10 @@
   import { computed, onMounted, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon.ts';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
-  import { recordOperation } from '@/api/commonApi';
 
   const route = useRoute();
   const user = useUserStore();
@@ -165,37 +168,6 @@
       dueToday: inbox.todoDueTodayTotal,
     }),
   );
-
-  const adminMenuOptions = computed(() => [
-    {
-      label: t('navigation.knowledgeBase'),
-      function: () => {
-        recordOperation({ module: '导航栏', operation: '知识库' });
-        router.push('/knowledgeBase');
-      },
-    },
-    {
-      label: t('navigation.admin'),
-      function: () => {
-        recordOperation({ module: '导航栏', operation: '后台管理' });
-        router.push('/admin');
-      },
-    },
-    {
-      label: t('navigation.securityCenter'),
-      function: () => {
-        recordOperation({ module: '导航栏', operation: '安全中心' });
-        router.push('/securityCenter');
-      },
-    },
-    {
-      label: t('navigation.notificationCenter'),
-      function: () => {
-        recordOperation({ module: '导航栏', operation: '通知中心' });
-        router.push('/notificationCenter');
-      },
-    },
-  ]);
 
   const bookmark = bookmarkStore();
   async function handleToApplicationHome() {

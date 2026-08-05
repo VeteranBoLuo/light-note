@@ -473,6 +473,77 @@ export const BUILTIN_NOTE_TEMPLATES: BuiltinNoteTemplate[] = [
 `,
     },
   },
+  {
+    key: 'mindmap',
+    nameKey: 'note.tplMindmapName',
+    descKey: 'note.tplMindmapDesc',
+    type: 'markdown',
+    titleTemplate: { 'zh-CN': '思维导图 {{date}}', 'en-US': 'Mind Map {{date}}' },
+    preview: {
+      'zh-CN': ['中心主题与分支', '图下逐条展开', '结论与下一步'],
+      'en-US': ['Central topic & branches', 'Expand below the map', 'Takeaway & next step'],
+    },
+    content: {
+      'zh-CN': `> 整理于 {{date}}
+
+## 主题脑图
+
+\`\`\`mermaid
+mindmap
+  root(中心主题)
+    分支一
+      要点 A
+      要点 B
+    分支二
+      要点 C
+    分支三
+\`\`\`
+
+## 分支展开
+
+### 分支一
+
+-
+
+### 分支二
+
+-
+
+## 结论与下一步
+
+-
+`,
+      'en-US': `> Organized on {{date}}
+
+## Topic map
+
+\`\`\`mermaid
+mindmap
+  root(Central topic)
+    Branch 1
+      Point A
+      Point B
+    Branch 2
+      Point C
+    Branch 3
+\`\`\`
+
+## Branch details
+
+### Branch 1
+
+-
+
+### Branch 2
+
+-
+
+## Takeaway & next step
+
+-
+`,
+    },
+  },
 ];
 
 export function findBuiltinNoteTemplate(key: string | undefined | null): BuiltinNoteTemplate | undefined {

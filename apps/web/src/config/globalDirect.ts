@@ -1,4 +1,5 @@
 import { recordOperation } from '@/api/commonApi.ts';
+import { renderMermaidBlocks, watchMermaidTheme } from '@/utils/mermaidRender.ts';
 
 export default function (app) {
   app.directive('drag', (el, binding) => {
@@ -150,6 +151,39 @@ export default function (app) {
       if (el.__autoScrollbarTimer) window.clearTimeout(el.__autoScrollbarTimer);
       delete el.__autoScrollbarHandler;
       delete el.__autoScrollbarTimer;
+    },
+  });
+
+  /*
+   * v-mermaid:容器内 Markdown 渲染出的 ```mermaid 代码块就地换成图。
+   *
+   * 用在所有 v-html 渲染 Markdown 的地方(笔记预览、AI 回复、历史版本…),
+   * 让"哪里能出图"只由这一个指令决定,不必每个组件各写一遍扫描逻辑。
+   * v-html 更新后 DOM 是整片重建的,所以 updated 里要再扫一次;
+   * 编辑时输入很密,用一个短防抖压掉中间态(mermaid 渲染是异步的,半截语法必然报错)。
+   */
+  const MERMAID_RENDER_DEBOUNCE_MS = 220;
+  watchMermaidTheme();
+  const scheduleMermaid = (el) => {
+    if (el.__mermaidTimer) window.clearTimeout(el.__mermaidTimer);
+    el.__mermaidTimer = window.setTimeout(() => {
+      el.__mermaidTimer = null;
+      void renderMermaidBlocks(el);
+    }, MERMAID_RENDER_DEBOUNCE_MS);
+  };
+  app.directive('mermaid', {
+    mounted(el, binding) {
+      // v-mermaid="false" 用于流式输出等"内容还没写完"的场景,此时渲染只会不停报语法错
+      if (binding.value === false) return;
+      scheduleMermaid(el);
+    },
+    updated(el, binding) {
+      if (binding.value === false) return;
+      scheduleMermaid(el);
+    },
+    unmounted(el) {
+      if (el.__mermaidTimer) window.clearTimeout(el.__mermaidTimer);
+      delete el.__mermaidTimer;
     },
   });
 }

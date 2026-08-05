@@ -74,6 +74,7 @@
         <!-- 移动端不放第二个文本搜索框：找笔记统一走顶栏全局搜索，这里只保留标签筛选 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
           <TagFilterSelector :all-tags="visibleNoteTags" />
+          <ViewModeToggle compact />
           <BButton
             class="note-action-button note-ai-button"
             @click="aiOrgVisible = true"
@@ -213,7 +214,12 @@
               :menu="menuForNote(note)"
               @select="handleNoteMenuSelect($event, note)"
             >
-              <note-list-item :note="note" :batch-mode="batchMode" @nodeTypeChange="handleNodeTypeChange" />
+              <note-list-item
+                :note="note"
+                :batch-mode="batchMode"
+                @nodeTypeChange="handleNodeTypeChange"
+                @action="handleNoteCardAction($event, note)"
+              />
             </RightMenu>
           </VueDraggable>
         </div>
@@ -309,6 +315,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
+  import { DEFAULT_NOTE_VIEW_MODE } from '@/utils/preferences.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
@@ -339,6 +346,7 @@
     project: icon.noteTemplate.project,
     review: icon.noteTemplate.review,
     knowledge: icon.noteTemplate.knowledge,
+    mindmap: icon.noteTemplate.mindmap,
   };
 
   const { t, locale } = useI18n();
@@ -630,7 +638,8 @@
   function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete', note: any) {
     handleNoteMenuSelect(action, note);
   }
-  const currentViewMode = computed(() => (bookmark.isMobile ? 'card' : user.preferences.noteViewMode));
+  // 手机与桌面共用同一个 noteViewMode 偏好：设置里能配、笔记库顶部也能快切，与 PC 一致
+  const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
   // 左侧标签目录只服务桌面/平板的列表视图;移动端 currentViewMode 恒为 card,不会命中
   const isListLayout = computed(() => !bookmark.isMobile && currentViewMode.value === 'list');
   const allTags = ref<any[]>([]);
@@ -1487,7 +1496,9 @@
   .note-mobile-actions {
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* 中间列按内容宽（图标态视图切换约 73px），两侧平分剩余，三个控件挤在同一行。
+       原来是两等列，加进视图切换后第三个控件被顶到第二行，切换器还被拉满一整列留下大片空白。 */
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 8px;
   }
 
@@ -1642,6 +1653,26 @@
     padding: 0 8px 0 4px;
     box-sizing: border-box;
     scrollbar-gutter: stable;
+  }
+
+  /*
+   * 手机端去掉这两层的横向内边距。
+   * 卡片视图的容器是 0 padding，列表这边两层各留一点，列表项被内缩到 315px，
+   * 比工具栏和卡片(都是 351px)窄 36px，左右都对不齐。触控端也没有占位滚动条，
+   * 不需要给滑块留呼吸位。上面两条是全局规则(不在媒体查询里)，所以必须单独覆盖，
+   * 不能直接改它们——那会连桌面一起改。
+   */
+  @media (max-width: 767px) {
+    /* padding 归零而不只是去掉左右：卡片视图的容器是 0 padding，列表这边留 12px 上边距
+       会让首项离工具栏 22px，比卡片的 10px 明显远一截。首项与工具栏的间隔由外层负责。 */
+    .note-library-body-list {
+      padding: 0;
+    }
+
+    .note-library-body-list .note-list,
+    .note-library-body-list .note-list-skeleton-wrap {
+      padding: 0;
+    }
   }
 
   .note-empty-state {

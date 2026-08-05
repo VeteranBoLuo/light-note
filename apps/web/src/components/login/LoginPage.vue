@@ -76,7 +76,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { apiBasePost } from '@/http/request.ts';
   import { setLocale } from '@/i18n';
-  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { DEFAULT_NOTE_VIEW_MODE, getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
@@ -138,7 +138,7 @@
       }
       user.preferences.theme = res.data?.preferences?.theme || 'day';
       user.preferences.lang = res.data?.preferences?.lang || 'zh-CN';
-      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || 'list';
+      user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || DEFAULT_NOTE_VIEW_MODE;
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
       await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));

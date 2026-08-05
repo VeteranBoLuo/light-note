@@ -46,6 +46,21 @@ export function forcePdfLightTheme(clonedDocument: Document) {
   clonedDocument.documentElement?.setAttribute('data-theme', 'day');
 }
 
+/**
+ * 富文本编辑态里,mermaid 图表是「源码块 + 图」并排显示的(源码要可编辑)。
+ * 导出成 PDF 时只留图 —— 同一张图先出一遍代码再出一遍图，读者只会觉得是排版事故。
+ * 只改克隆树,用户页面不受影响。
+ */
+export function hideMermaidSourceBlocks(clonedDocument: Document) {
+  // 「后面紧跟着一张图」的代码块才是源码块;渲染失败时图表框里那份源码要留着
+  clonedDocument.querySelectorAll<HTMLElement>('pre[class*="language-mermaid"]').forEach((el) => {
+    const next = el.nextElementSibling;
+    if (next?.classList.contains('mermaid-figure--companion')) {
+      el.style.setProperty('display', 'none', 'important');
+    }
+  });
+}
+
 /** 会被 html2canvas 解析的纯色属性。`background-image` 另外处理:渐变里也可能嵌 color()。 */
 const COLOR_PROPERTIES = [
   'color',
@@ -299,6 +314,7 @@ async function renderPdfDocument(selector: string, options: PDFOptions): Promise
           backgroundColor: '#FFFFFF',
           onclone: (clonedDocument: Document) => {
             forcePdfLightTheme(clonedDocument);
+            hideMermaidSourceBlocks(clonedDocument);
             // 顺序有意义:先定浅色主题,再固化颜色计算值,最后才替换勾选框(它会改动 DOM 结构)
             normalizeUnsupportedColorFunctions(clonedDocument);
             replacePdfCheckboxes(clonedDocument);

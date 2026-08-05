@@ -37,6 +37,14 @@ export function applyDisplaySettings(options: { forceStandard?: boolean } = {}):
   const root = document.documentElement;
   const scale = options.forceStandard ? 1 : (UI_SCALE[(user.preferences as any).uiScale] ?? 1);
   (root.style as any).zoom = scale === 1 ? '' : String(scale);
+  /*
+   * 给「按视觉坐标定位、又把结果写进布局坐标」的第三方浮层用的反向缩放系数。
+   * TinyMCE 的 tooltip/菜单就是这样:它用 getBoundingClientRect(已含 zoom)算好位置写进 style.left,
+   * 而 style.left 会再被 <html> 的 zoom 放大一次 —— 缩放开到 1.25 时 tooltip 实测偏出按钮 109px。
+   * 容器套一层 1/scale 把这次多余的放大抵消掉(见 common.less 的 .tox-tinymce-aux)。
+   * 自研的 BPopover 按实时 rect 定位、与 zoom 自洽,不需要这个。
+   */
+  root.style.setProperty('--ln-aux-zoom', scale === 1 ? '1' : String(1 / scale));
   // 清掉上一版"字号+密度"分离实现的残留
   root.style.fontSize = '';
   root.removeAttribute('data-density');

@@ -41,7 +41,7 @@
   import { setLocale } from './i18n';
   import { applyDisplaySettings } from '@/utils/savePreference';
   import { RoleEnum } from '@/config/bookmarkCfg.ts';
-  import { getHomePagePreference } from '@/utils/preferences.ts';
+  import { DEFAULT_NOTE_VIEW_MODE, getHomePagePreference } from '@/utils/preferences.ts';
   import { getRuntimeApplicationHomePath, getRuntimeGuestEntryPath } from '@/utils/appEntry.ts';
   import { resolveLightNoteRuntime, shouldRedirectLandingToApplication } from '@/utils/appRuntime.ts';
   import { useI18n } from 'vue-i18n';
@@ -355,7 +355,7 @@
     }
     user.preferences.theme = user.preferences?.theme || 'day';
     user.preferences.lang = user.preferences?.lang || 'zh-CN';
-    user.preferences.noteViewMode = user.preferences?.noteViewMode || 'list';
+    user.preferences.noteViewMode = user.preferences?.noteViewMode || DEFAULT_NOTE_VIEW_MODE;
     if (user.id && user.role !== 'visitor') {
       user.preferences.homePage = getHomePagePreference(user.preferences);
       setStoredPreferences(user.preferences);

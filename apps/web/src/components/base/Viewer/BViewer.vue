@@ -31,11 +31,12 @@
     currentViewer = null;
     viewSrc.value = `${bookmark.viewer.src}`;
     nextTick(() => {
+      const options: Record<string, any> = bookmark.viewer.options || {};
       const viewer = new Viewer(document.getElementById('viewImage'), {
         inline: false,
         navbar: false,
         toolbar: false,
-        ...bookmark.viewer.options,
+        ...options,
         hidden() {
           if (historyHandle) releaseMobileOverlayHistory(historyHandle);
           historyHandle = null;
@@ -44,7 +45,12 @@
           viewSrc.value = '';
         },
         viewed(e) {
-          // 在图片被查看时设置样式
+          // 默认把图压到 200px:头像、反馈截图这类小图放到原尺寸反而糊。
+          // 调用方传了自己的 viewed 就以它为准(思维导图要铺满视口才看得清)。
+          if (typeof options.viewed === 'function') {
+            options.viewed(e);
+            return;
+          }
           e.detail.image.style.maxWidth = '200px';
           e.detail.image.style.maxHeight = '200px';
         },

@@ -121,6 +121,15 @@ interface AiAssistantPersistedState {
   /** 本设备最后确认过的云端最新会话位置，用于避免同一跨设备更新反复询问。 */
   cloudConversationCheckpointId?: string;
   cloudConversationCheckpointAt?: string;
+  /**
+   * 用户主动新建了对话、但还没发出第一条消息。
+   *
+   * 此时本地没有 conversationId，而"没有 conversationId"默认会去加载云端最近活跃会话
+   * （给新设备接上历史用）。这个标记把"用户要空白对话"和"新设备首次打开"区分开，
+   * 否则新建对话会被静默退回旧会话。随载荷持久化：移动端页面被系统回收是用户无感的，
+   * 只放内存会让同一个"划走再回来"时好时坏。发出第一条消息或打开任意会话后清除。
+   */
+  newConversationPending?: boolean;
   longChatHinted: boolean;
   scopeMode?: AiAssistantScopeMode;
   temporarySession?: boolean;
@@ -148,6 +157,8 @@ interface AiAssistantState {
   staleCloudConversationId: string;
   cloudConversationCheckpointId: string;
   cloudConversationCheckpointAt: string;
+  /** 见 AiAssistantPersistedState.newConversationPending */
+  newConversationPending: boolean;
   longChatHinted: boolean;
   scopeMode: AiAssistantScopeMode;
   temporarySession: boolean;
@@ -743,6 +754,7 @@ function createInitialState(): AiAssistantState {
     staleCloudConversationId: '',
     cloudConversationCheckpointId: '',
     cloudConversationCheckpointAt: '',
+    newConversationPending: false,
     longChatHinted: false,
     scopeMode: 'workspace',
     temporarySession: false,
@@ -813,6 +825,7 @@ export default defineStore('aiAssistant', {
         staleCloudConversationId: this.staleCloudConversationId,
         cloudConversationCheckpointId: this.cloudConversationCheckpointId,
         cloudConversationCheckpointAt: this.cloudConversationCheckpointAt,
+        newConversationPending: Boolean(this.newConversationPending),
         longChatHinted: Boolean(this.longChatHinted),
         scopeMode: this.scopeMode,
         temporarySession: Boolean(this.temporarySession),
@@ -893,6 +906,8 @@ export default defineStore('aiAssistant', {
         typeof persisted?.cloudConversationCheckpointAt === 'string'
           ? persisted.cloudConversationCheckpointAt.trim()
           : '';
+      // 旧载荷没有这个字段 → false，行为与升级前完全一致，不需要 bump 版本
+      this.newConversationPending = Boolean(persisted?.newConversationPending);
       this.longChatHinted = Boolean(persisted?.longChatHinted);
       // 检索范围已收敛为「始终整个知识空间」(已选材料仍会被优先带入),不再从持久化恢复旧的 selected。
       this.scopeMode = 'workspace';
@@ -1037,6 +1052,10 @@ export default defineStore('aiAssistant', {
       this.sessionId = '';
       this.conversationId = '';
       this.staleCloudConversationId = '';
+      // 记下"用户要的是空白对话"。没有这个标记时，空的 conversationId 会被当成
+      // "新设备首次打开"而去加载云端最近活跃会话，把用户刚新建的对话静默顶掉。
+      // 上面的 removeItem 只是清掉旧载荷，末尾的 persist 会把带标记的新载荷写回去。
+      this.newConversationPending = true;
       this.longChatHinted = false;
       this.scopeMode = 'workspace';
       this.temporarySession = false;
@@ -1044,7 +1063,12 @@ export default defineStore('aiAssistant', {
       this.persistCurrentConversation();
     },
     setCloudConversationId(conversationId: string) {
-      this.conversationId = String(conversationId || '').trim();
+      const nextConversationId = String(conversationId || '').trim();
+      this.conversationId = nextConversationId;
+      // 有了具体会话，"要空白对话"的意图就结束了：发出第一条消息(创建会话)和打开任意会话
+      // 都必经这里。传空串的调用(云历史关闭、云端会话已删除)不能清标记 —— 那些情况下
+      // 同样不该去恢复最近会话。
+      if (nextConversationId) this.newConversationPending = false;
       this.schedulePersistence();
     },
     markCloudConversationCheckpoint(conversationId: string, lastMessageAt: string) {

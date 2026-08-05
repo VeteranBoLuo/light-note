@@ -1,20 +1,26 @@
 <template>
-  <div class="view-mode-toggle" :aria-label="$t('note.viewMode')">
+  <div class="view-mode-toggle" :class="{ 'is-compact': compact }" role="group" :aria-label="$t('note.viewMode')">
     <BButton
       class="view-mode-button"
       :class="{ active: user.preferences.noteViewMode === 'card' }"
+      :title="compact ? $t('note.cardView') : undefined"
+      :aria-label="compact ? $t('note.cardView') : undefined"
+      :aria-pressed="user.preferences.noteViewMode === 'card'"
       @click="setMode('card')"
     >
       <SvgIcon :src="icon.navigation.portal" size="15" />
-      {{ $t('note.cardView') }}
+      <span v-if="!compact">{{ $t('note.cardView') }}</span>
     </BButton>
     <BButton
       class="view-mode-button"
       :class="{ active: user.preferences.noteViewMode === 'list' }"
+      :title="compact ? $t('note.listView') : undefined"
+      :aria-label="compact ? $t('note.listView') : undefined"
+      :aria-pressed="user.preferences.noteViewMode === 'list'"
       @click="setMode('list')"
     >
       <SvgIcon :src="icon.filterPanel.list" size="15" />
-      {{ $t('note.listView') }}
+      <span v-if="!compact">{{ $t('note.listView') }}</span>
     </BButton>
   </div>
 </template>
@@ -26,6 +32,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  // compact：只出图标不出文字。手机端工具栏放不下两个带文字的按钮
+  withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const user = useUserStore();
   const setMode = async (mode: any) => {
     // 统一走 updatePreference(本地生效 + 游客只本地 + 登录同步后端并失败回滚)
@@ -55,6 +63,13 @@
     color: var(--desc-color);
     background: transparent;
     font-size: 12px;
+  }
+
+  /* 图标态:去掉文字后按钮要收成正方形，否则 padding 让它看着松垮 */
+  .view-mode-toggle.is-compact .view-mode-button {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
   }
 
   .view-mode-button.active {

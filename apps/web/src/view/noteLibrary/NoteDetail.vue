@@ -950,6 +950,41 @@
     flex: 2;
     min-width: 0;
   }
+
+  /*
+   * 目录「从无到有 / 从有到无」时平滑让出空间（新打一个标题就会触发）。
+   *
+   * 动 flex-grow 而不是 width：.catalog-panel 的 flex-basis 是 0%，宽度完全由 grow
+   * 决定，动它编辑区会跟着连续变宽；动 width 反而要和 flex 打架。
+   *
+   * margin-right 抵掉 .note-body 的 20px gap——折叠到 0 宽后那道空隙还在，
+   * 编辑区就还差 20px 没补上，等于问题只解决了一半。
+   */
+  .catalog-panel {
+    /*
+     * 动 flex-grow：.catalog-panel 的 flex-basis 是 0%，宽度完全由 grow 决定，
+     * 动它编辑区会跟着连续变宽；动 width 反而要和 flex 打架。
+     */
+    transition:
+      flex-grow 0.26s ease,
+      margin-right 0.26s ease,
+      opacity 0.18s ease;
+  }
+
+  .catalog-panel.is-collapsed {
+    flex-grow: 0;
+    // 抵掉 .note-body 的 20px gap，否则折叠到 0 宽后编辑区还差 20px 没补上
+    margin-right: -20px;
+    opacity: 0;
+    // 折叠过程中不要冒出滚动条(.toc-container 本身是 overflow: auto)
+    overflow: hidden;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .catalog-panel {
+      transition: none;
+    }
+  }
   .editor-panel {
     --note-editor-header-bg: var(--surface-panel-bg);
 

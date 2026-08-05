@@ -23,6 +23,9 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M19 8.5A7.75 7.75 0 1 0 19.6 15"/><path d="M19 4.5v4h-4"/><path d="m8.5 15.5l2.2-2.2l2 1.5l3-3"/></g></svg>',
     knowledge:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="6.5" cy="12" r="2.1"/><circle cx="16.75" cy="6.4" r="2.1"/><circle cx="16.75" cy="17.6" r="2.1"/><path d="m8.35 10.95l6.55-3.5M8.35 13.05l6.55 3.5"/></g></svg>',
+    // 中心主题向两侧放射:与 knowledge(三点关系图)拉开区分,两张卡片在选择器里是并排的
+    mindmap:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="2.6"/><path d="M14.6 12h2.15M9.4 12H7.25M14.35 10.6l1.9-2.5M9.65 10.6l-1.9-2.5M14.35 13.4l1.9 2.5M9.65 13.4l-1.9 2.5"/><circle cx="18.6" cy="12" r="1.35"/><circle cx="5.4" cy="12" r="1.35"/><circle cx="17.35" cy="7.1" r="1.35"/><circle cx="6.65" cy="7.1" r="1.35"/><circle cx="17.35" cy="16.9" r="1.35"/><circle cx="6.65" cy="16.9" r="1.35"/></g></svg>',
   },
   message: {
     success:
@@ -186,6 +189,9 @@ export default {
     'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+Cgk8ZyBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIxLjUiPgoJCTxwYXRoIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGQ9Ik0xNS42OCAxNC41ODdjMy40OSAwIDYuMzItMi44MTggNi4zMi02LjI5NFMxOS4xNyAyIDE1LjY4IDJTOS4zNjMgNC44MTggOS4zNjMgOC4yOTNjMCAxLjYxLjczNCAyLjc4MS43MzQgMi43ODFsLTcuNjQyIDcuNjFjLS4zNDMuMzQyLS44MjMgMS4yMyAwIDIuMDVsLjg4Mi44NzhjLjM0My4yOTMgMS4yMDUuNzAzIDEuOTEgMGwxLjAzLTEuMDI0YzEuMDI4IDEuMDI0IDIuMjA0LjQzOSAyLjY0NS0uMTQ3Yy43MzQtMS4wMjQtLjE0Ny0yLjA0OS0uMTQ3LTIuMDQ5bC4yOTQtLjI5M2MxLjQxIDEuNDA2IDIuNjQ1LjU4NiAzLjA4NiAwYy43MzUtMS4wMjQgMC0yLjA0OSAwLTIuMDQ5Yy0uMjk0LS41ODUtLjg4Mi0uNTg1LS4xNDctMS4zMTdsLjg4Mi0uODc4Yy43MDUuNTg1IDIuMTU1LjczMiAyLjc5Mi43MzJaIiAvPgoJCTxwYXRoIGQ9Ik0xNy44ODUgOC4yOTRhMi4yIDIuMiAwIDAgMS0yLjIwNCAyLjE5NWEyLjIgMi4yIDAgMCAxLTIuMjA0LTIuMTk1YTIuMiAyLjIgMCAwIDEgMi4yMDQtMi4xOTZhMi4yIDIuMiAwIDAgMSAyLjIwNCAyLjE5NloiIC8+Cgk8L2c+Cjwvc3ZnPg==',
   card_edit:
     '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 21h18M12.222 5.828L15.05 3L20 7.95l-2.828 2.828m-4.95-4.95l-5.607 5.607a1 1 0 0 0-.293.707v4.536h4.536a1 1 0 0 0 .707-.293l5.607-5.607m-4.95-4.95l4.95 4.95"/></svg>',
+  // 笔记里的 mermaid 图表(思维导图/流程图…):一个根节点分出两个子节点，与脑图的语义一致
+  noteDiagram:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="2.75" y="9.75" width="6" height="4.5" rx="1.5"/><rect x="15.25" y="3.75" width="6" height="4.5" rx="1.5"/><rect x="15.25" y="15.75" width="6" height="4.5" rx="1.5"/><path d="M8.75 12h2.75a1.5 1.5 0 0 0 1.5-1.5V7.5A1.5 1.5 0 0 1 14.5 6h.75M8.75 12h2.75a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 0 1.5 1.5h.75"/></g></svg>',
   manage_categoryBtn_tag:
     '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4.5 7.2V5.8A2.8 2.8 0 0 1 7.3 3h4.4c.74 0 1.45.29 1.98.82l5.5 5.5a2.8 2.8 0 0 1 0 3.96l-4.9 4.9a2.8 2.8 0 0 1-3.96 0l-5.5-5.5A2.8 2.8 0 0 1 4 10.7V9.9"/><path d="M8.2 7.8h.01M8.2 7.8a1.25 1.25 0 1 0 0 .01"/><path d="M13.25 7.55h2.9M12 10.4h5.35M10.75 13.25h4.45"/></g></svg>',
   manage_categoryBtn_bookmark:
@@ -243,6 +249,36 @@ export default {
       todo: '<svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m9 11l3 3l8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></g></svg>',
       codeBlock:
         '<svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="m17 7.83l1.697 1.526c1.542 1.389 2.313 2.083 2.313 2.974c0 .89-.771 1.585-2.314 2.973L17 16.83M13.987 5L12 12.415l-1.987 7.415M7 7.83L5.304 9.356C3.76 10.745 2.99 11.44 2.99 12.33s.771 1.585 2.314 2.973L7 16.83"/></svg>',
+      // Markdown 编辑工具栏:统一 24×24、1.8 描边的线性图标,与上面两个同系列
+      bold: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M7 5h6.2a3.4 3.4 0 0 1 0 6.8H7Zm0 6.8h7a3.6 3.6 0 0 1 0 7.2H7Z"/></svg>',
+      italic:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" d="M15.5 5h-5m3 14h-5M14 5l-4 14"/></svg>',
+      heading:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.9" d="M5 5v14M14 5v14M5 12h9M17.5 19v-6.2l-2 1.4"/></svg>',
+      quote:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5v13"/><path d="M9 8h11M9 12h11M9 16h7"/></g></svg>',
+      bulletList:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.6" cy="6.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="4.6" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="4.6" cy="17.5" r="1.15" fill="currentColor" stroke="none"/></g></svg>',
+      table:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M12 9.5v10"/></g></svg>',
+      image:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2.2"/><circle cx="8.75" cy="9.75" r="1.5"/><path d="m4.5 16.5l4.2-3.9a1.6 1.6 0 0 1 2.2.06L15 16.4m0 0l1.9-1.7a1.6 1.6 0 0 1 2.16.03l1.44 1.32"/></g></svg>',
+      mention:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M15.2 9.4V13a2.6 2.6 0 0 0 5.2 0v-1a8.4 8.4 0 1 0-3.3 6.68"/></g></svg>',
+    },
+    /*
+     * 图表(mermaid)自带工具条的图标。这里必须是可直接 innerHTML 的 raw SVG:
+     * 工具条由 utils/mermaidRender.ts 用原生 DOM 生成,拿不到 SvgIcon 组件,data URL 也用不了。
+     */
+    diagramTools: {
+      zoom: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16l4 4M10.7 7.8v5.8M7.8 10.7h5.8"/></g></svg>',
+      download:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M12 4v10.5m0 0l-3.8-3.8M12 14.5l3.8-3.8"/><path d="M4.5 16.5v1.8A2.2 2.2 0 0 0 6.7 20.5h10.6a2.2 2.2 0 0 0 2.2-2.2v-1.8"/></g></svg>',
+      // 连线样式切换:两端各一个节点,中间的走线一个是弧、一个是直角
+      edgeCurved:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="5" cy="6.5" r="2.1"/><circle cx="19" cy="17.5" r="2.1"/><path d="M6.6 8C9.2 10.6 8.4 15 12 16.4c1.6.6 3.4.9 4.9 1"/></g></svg>',
+      edgeOrthogonal:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="5" cy="6.5" r="2.1"/><circle cx="19" cy="17.5" r="2.1"/><path d="M5 8.6v6.4a1.5 1.5 0 0 0 1.5 1.5h10.4"/></g></svg>',
     },
   },
 

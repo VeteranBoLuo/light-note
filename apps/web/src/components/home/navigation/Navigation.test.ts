@@ -40,21 +40,16 @@ const inbox = {
   refreshCount: mocks.refreshInbox,
 };
 
+const user = { id: '', role: 'visitor' };
+
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
   inboxStore: () => inbox,
-  useUserStore: () => ({
-    id: '',
-    role: 'visitor',
-  }),
+  useUserStore: () => user,
 }));
 
 vi.mock('@/components/home/navigation/RightArea.vue', () => ({
   default: { name: 'RightAreaStub', template: '<div></div>' },
-}));
-
-vi.mock('@/components/base/BasicComponents/BDropdown.vue', () => ({
-  default: { name: 'BDropdownStub', template: '<div><slot /></div>' },
 }));
 
 const { default: Navigation } = await import('./Navigation.vue');
@@ -86,6 +81,7 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   mocks.routerPush.mockClear();
+  user.role = 'visitor';
   bookmark.isFold = false;
   inbox.todoAttentionTotal = 0;
   inbox.todoOverdueTotal = 0;
@@ -162,6 +158,30 @@ describe('Navigation', () => {
 
       expect(host.querySelectorAll('.navigation-attention-badge')).toHaveLength(1);
       expect(host.querySelector('.navigation-todo-entry .navigation-attention-badge')).not.toBeNull();
+    });
+  });
+
+  /**
+   * 管理是 root 单入口：知识库/通知中心/安全中心已经在 /admin 的侧边导航里，
+   * 顶部不再挂下拉，点一次直达后台总览。锁住的是「入口存在且只有一跳」。
+   */
+  describe('管理入口', () => {
+    it('非 root 看不到管理入口', async () => {
+      const host = await mountNavigation();
+      expect(host.querySelector('#nav-admin-entry')).toBeNull();
+    });
+
+    it('root 点击管理直接进后台总览', async () => {
+      user.role = 'root';
+
+      const host = await mountNavigation();
+      const entry = host.querySelector<HTMLElement>('#nav-admin-entry');
+
+      expect(entry?.textContent?.trim()).toBe('管理');
+      entry?.click();
+      await nextTick();
+
+      expect(mocks.routerPush).toHaveBeenCalledWith('/admin');
     });
   });
 });

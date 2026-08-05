@@ -120,7 +120,7 @@
       </div>
 
       <div v-show="activeTab === 'preview'" class="markdown-preview-pane">
-        <div v-if="renderedPreview" class="markdown-body" v-html="renderedPreview"></div>
+        <div v-if="renderedPreview" class="markdown-body" v-html="renderedPreview" v-mermaid></div>
         <div v-else class="preview-empty">{{ t('changelog.previewEmpty') }}</div>
       </div>
 

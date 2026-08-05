@@ -1,6 +1,21 @@
 <template>
-  <!-- 无标题时不渲染:否则 .catalog 的左边框会在桌面端留下一个空框 -->
-  <aside v-if="bookmark.isDesktop && note.headings.length" class="toc-container">
+  <!--
+    桌面端常驻 DOM、用 is-collapsed 折叠，而不是 v-if 直接挂载/卸载：
+    后者会让编辑区宽度瞬间跳变（实测 875px ↔ 1070px），新打一个标题时表现为
+    「闪一下把右侧内容挤开」。折叠态宽度为 0 且 overflow: hidden，
+    不会留下 .catalog 左边框那个空框；同时用 inert 关掉焦点与辅助技术可见性。
+
+    刻意不用 <Transition>：本组件是 aside / BDrawer 的 v-if/v-else 双分支，
+    同时只渲染一个所以父级的 .catalog-panel（决定宽度）能正常透传；
+    一旦包上 Transition 就变成真多根，那个 class 会被静默丢弃。
+  -->
+  <aside
+    v-if="bookmark.isDesktop"
+    class="toc-container"
+    :class="{ 'is-collapsed': !note.headings.length }"
+    :inert="!note.headings.length || undefined"
+    :aria-hidden="!note.headings.length || undefined"
+  >
     <nav class="catalog" :aria-label="t('noteDetail.catalogTitle')">
       <BButton
         v-for="(heading, index) in note.headings"
@@ -18,6 +33,7 @@
     </nav>
   </aside>
 
+  <!-- 桌面端的目录已由上面的 aside 常驻承担，抽屉只服务平板/手机 -->
   <BDrawer
     v-else
     :open="drawerOpen"

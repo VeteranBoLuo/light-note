@@ -556,6 +556,91 @@ describe('getConversionFunnel', () => {
     const funnelSql = query.mock.calls.map((c) => c[0]).find((s) => /GROUP BY event/.test(s));
     expect(funnelSql).toContain("fingerprint <> ''");
   });
+
+  /**
+   * 进入示例和打开注册是并行入口:signup_open 的访客不是 demo_enter 的子集。
+   * 所以要按 fingerprint 拆出「先看过示例」和「没看示例」两路,页面才不会拿两批
+   * 不相干的人相除。两路互斥且相加等于该事件总访客数。
+   */
+  it('按 fingerprint 拆分示例路径与直接路径,两路相加等于总访客数', async () => {
+    const calls = [];
+    query.mockImplementation((sql, params) => {
+      calls.push({ sql, params });
+      if (/GROUP BY event/.test(sql)) {
+        return Promise.resolve([
+          [
+            { event: 'page_view', visitors: 10 },
+            { event: 'demo_enter', visitors: 8 },
+            { event: 'wall_hit', visitors: 6 },
+            { event: 'signup_open', visitors: 4 },
+            { event: 'register', visitors: 2 },
+          ],
+        ]);
+      }
+      if (/GROUP BY fingerprint/.test(sql)) {
+        return Promise.resolve([
+          [
+            {
+              demoThenSignupOpen: 3,
+              directSignupOpen: 1,
+              demoThenRegister: 1,
+              directRegister: 1,
+              wallThenSignupOpen: 2,
+            },
+          ],
+        ]);
+      }
+      if (/DISTINCT ip/.test(sql)) return Promise.resolve([[{ ips: 4 }]]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getConversionFunnel(
+      { user: { role: 'root' }, body: { startDate: '2026-07-01', endDate: '2026-07-31' } },
+      res,
+    );
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.data).toMatchObject({
+      demoThenSignupOpenVisitors: 3,
+      directSignupOpenVisitors: 1,
+      demoThenRegisterVisitors: 1,
+      directRegisterVisitors: 1,
+      wallThenSignupOpenVisitors: 2,
+    });
+    // 拆分口径的自洽性:两路相加必须等于主查询的总访客数,否则页面上的验算会对不上
+    expect(arg.data.demoThenSignupOpenVisitors + arg.data.directSignupOpenVisitors).toBe(
+      arg.data.signupOpenVisitors,
+    );
+    expect(arg.data.demoThenRegisterVisitors + arg.data.directRegisterVisitors).toBe(arg.data.registerVisitors);
+    const pathCall = calls.find((c) => /GROUP BY fingerprint/.test(c.sql));
+    // 归属靠首次事件时间比较(示例发生在注册意图之前),而不是简单的集合相交
+    expect(pathCall.sql).toContain('demo_first < signup_first');
+    expect(pathCall.sql).toContain("MIN(CASE WHEN event = 'demo_enter' THEN create_time END)");
+    expect(pathCall.sql).toContain("fingerprint <> ''");
+    // 时间窗同样下推,否则路径拆分会用全期数据、和上面各段的时间窗对不上
+    expect(pathCall.params).toEqual(['2026-07-01 00:00:00', '2026-07-31']);
+  });
+
+  it('路径拆分查询无结果时各路径字段归零,不影响其余字段', async () => {
+    query.mockImplementation((sql) => {
+      if (/GROUP BY event/.test(sql)) return Promise.resolve([[{ event: 'page_view', visitors: 5 }]]);
+      if (/GROUP BY fingerprint/.test(sql)) return Promise.resolve([[]]);
+      if (/DISTINCT ip/.test(sql)) return Promise.resolve([[{ ips: 3 }]]);
+      return Promise.resolve([[]]);
+    });
+    const res = mockRes();
+    await getConversionFunnel({ user: { role: 'root' } }, res);
+    const arg = res.send.mock.calls[0][0];
+    expect(arg.status).toBe(200);
+    expect(arg.data).toMatchObject({
+      pageViewVisitors: 5,
+      demoThenSignupOpenVisitors: 0,
+      directSignupOpenVisitors: 0,
+      demoThenRegisterVisitors: 0,
+      directRegisterVisitors: 0,
+      wallThenSignupOpenVisitors: 0,
+      uniqueIps: 3,
+    });
+  });
 });
 
 describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {

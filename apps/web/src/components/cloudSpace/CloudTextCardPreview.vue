@@ -26,6 +26,7 @@
       v-else-if="state.kind === 'markdown'"
       class="cloud-text-card-preview__document"
       v-html="state.html"
+      v-mermaid
     ></div>
     <pre v-else class="cloud-text-card-preview__plain">{{ state.text }}</pre>
   </div>

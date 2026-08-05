@@ -123,6 +123,33 @@ export const getConversionFunnel = async (req, res) => {
        GROUP BY d ORDER BY d`,
       timeParams,
     );
+    // 路径拆分:「进入示例」和「打开注册」是并行入口,不是上下游——不少访客直接点注册、从没进过示例,
+    // 所以 signup_open / register 的访客里必须区分「先看过示例」和「没看示例」两路,
+    // 否则 signup_open÷demo_enter 会把两批毫不相干的人当成一条转化链(直接注册的人多时还会超 100%)。
+    // 按 fingerprint 取各事件首次时间,以「示例是否发生在注册意图之前」判定归属:
+    // 两路互斥且相加等于该事件总访客数,页面上可以直接验算。
+    // 撞墙单独算(它与看示例会重叠,不能三分),只用于撞墙这条独立分支自身的转化率。
+    const [pathRows] = await pool.query(
+      `SELECT
+         SUM(CASE WHEN signup_first IS NOT NULL AND demo_first IS NOT NULL AND demo_first < signup_first THEN 1 ELSE 0 END) AS demoThenSignupOpen,
+         SUM(CASE WHEN signup_first IS NOT NULL AND (demo_first IS NULL OR demo_first >= signup_first) THEN 1 ELSE 0 END) AS directSignupOpen,
+         SUM(CASE WHEN reg_first IS NOT NULL AND demo_first IS NOT NULL AND demo_first < reg_first THEN 1 ELSE 0 END) AS demoThenRegister,
+         SUM(CASE WHEN reg_first IS NOT NULL AND (demo_first IS NULL OR demo_first >= reg_first) THEN 1 ELSE 0 END) AS directRegister,
+         SUM(CASE WHEN signup_first IS NOT NULL AND wall_first IS NOT NULL AND wall_first < signup_first THEN 1 ELSE 0 END) AS wallThenSignupOpen
+       FROM (
+         SELECT fingerprint,
+           MIN(CASE WHEN event = 'demo_enter' THEN create_time END) AS demo_first,
+           MIN(CASE WHEN event = 'wall_hit' THEN create_time END) AS wall_first,
+           MIN(CASE WHEN event = 'signup_open' THEN create_time END) AS signup_first,
+           MIN(CASE WHEN event = 'register' THEN create_time END) AS reg_first
+         FROM conversion_events
+         WHERE fingerprint <> '' AND (event = 'register' OR visitor_type = 'visitor')
+           AND event IN ('demo_enter', 'wall_hit', 'signup_open', 'register')${andTime}
+         GROUP BY fingerprint
+       ) p`,
+      timeParams,
+    );
+    const pathOf = (key) => Number(pathRows[0]?.[key] || 0);
     res.send(
       resultData({
         pageViewVisitors: visitorsOf('page_view'),
@@ -132,6 +159,12 @@ export const getConversionFunnel = async (req, res) => {
         signupSubmitVisitors: visitorsOf('signup_submit'),
         registerVisitors: visitorsOf('register'),
         signupFailedVisitors: visitorsOf('signup_failed'),
+        // 并行入口拆分:demoThen* + direct* 恒等于对应事件的总访客数
+        demoThenSignupOpenVisitors: pathOf('demoThenSignupOpen'),
+        directSignupOpenVisitors: pathOf('directSignupOpen'),
+        demoThenRegisterVisitors: pathOf('demoThenRegister'),
+        directRegisterVisitors: pathOf('directRegister'),
+        wallThenSignupOpenVisitors: pathOf('wallThenSignupOpen'),
         ctaClickVisitors: visitorsOf('cta_click'), // legacy:旧客户端历史上报,新代码不再写入,仅供历史对比
         shareViewVisitors: visitorsOf('share_view'),
         shareCtaClickVisitors: visitorsOf('share_cta_click'),

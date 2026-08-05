@@ -1,5 +1,5 @@
 <template>
-  <div id="editor-container" class="note-editor">
+  <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly }">
     <!-- HTML 模式：TinyMCE -->
     <template v-if="currentType === 'html'">
       <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly"></div>
@@ -22,6 +22,47 @@
         <div class="md-editor-toolbar" v-if="!readonly">
           <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="line" />
         </div>
+        <!--
+          Markdown 的编辑工具栏。富文本模式本来就有一条(#editor-toolbar),Markdown 一直没有,
+          插入类操作才无处安放 —— 塞进视图 tab 那行像第四个 tab,塞进编辑栏头部会把左栏撑高、
+          和预览栏标签行错位,悬浮又是贴上去的补丁。这里补齐这条横跨整个编辑区的工具栏,
+          两栏的对齐完全不受影响,以后加插入图片/表格也有地方放。
+        -->
+        <div class="md-edit-toolbar" v-if="!readonly && mdView !== 'preview'">
+          <!-- 用 BTooltip 而不是原生 title:原生的要悬停一秒才出、样式也和站内其它工具栏不一致 -->
+          <BTooltip v-for="tool in markdownTextTools" :key="tool.key" :title="tool.label">
+            <BButton class="md-tool-button" size="small" :aria-label="tool.label" @click="tool.run">
+              <SvgIcon :src="tool.icon" size="16" />
+            </BButton>
+          </BTooltip>
+          <span class="md-tool-divider" />
+          <BTooltip v-for="tool in markdownInsertTools" :key="tool.key" :title="tool.label">
+            <BButton
+              class="md-tool-button"
+              size="small"
+              :aria-label="tool.label"
+              :disabled="tool.disabled"
+              @click="tool.run"
+            >
+              <SvgIcon :src="tool.icon" size="16" />
+            </BButton>
+          </BTooltip>
+          <BTooltip :title="$t('note.insertDiagram')">
+            <BDropdown :trigger="'click'" :align="'left'" :menu-options="diagramMenuOptions">
+              <BButton class="md-tool-button" size="small" :aria-label="$t('note.insertDiagram')">
+                <SvgIcon :src="icon.noteDiagram" size="16" />
+              </BButton>
+            </BDropdown>
+          </BTooltip>
+        </div>
+        <!-- 工具栏的「插入图片」走这里;正文粘贴图片仍是原来的 onMarkdownPaste 通道 -->
+        <input
+          ref="markdownImageInputRef"
+          type="file"
+          accept="image/*"
+          class="md-hidden-file-input"
+          @change="onMarkdownImagePicked"
+        />
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
             <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdEdit') }}</div>
@@ -50,6 +91,7 @@
               @click="handleRenderedResourceLinkClick"
               @touchend="handleRenderedResourceLinkClick"
               v-html="renderedMd"
+              v-mermaid
             ></div>
           </div>
         </div>
@@ -70,11 +112,17 @@
     >
       <span aria-hidden="true"></span>
       <template #content>
+        <!--
+          mousedown.prevent:不让点击把焦点从正文抢走。
+          正文一失焦就会触发 focusout → 关掉浮层,click 落到空处 —— 表现就是"鼠标点条目没反应,
+          只有回车能选"。按下不移焦点,click 才能正常派发,同时正文光标也还在原位。
+        -->
         <ResourcePickerPanel
           ref="inlineMentionSuggestionsRef"
           :allowed-types="['bookmark', 'note', 'file']"
           :show-search="false"
           :keyword="inlineMentionQuery"
+          @mousedown.prevent
           @select="insertInlineResourceMention"
           @close="closeInlineMention"
           @results-count="inlineMentionHasResults = $event > 0"
@@ -195,7 +243,21 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
+  import { inlineCachedMermaid, renderMermaidBlocks } from '@/utils/mermaidRender.ts';
+  import {
+    applyEditResult,
+    buildCodeBlock,
+    buildMarkdownTable,
+    insertBlock,
+    toggleLinePrefix,
+    wrapSelection,
+    type EditResult,
+    type EditorSelection,
+  } from '@/utils/markdownEditing.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
@@ -302,7 +364,7 @@
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const isMobile = computed(() => bookmark.isMobile);
   // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
   const canEditResourceMentions = computed(() => !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace));
@@ -374,6 +436,7 @@
   // Markdown 编辑器状态
   const mdContent = ref('');
   const markdownImageUploading = ref(false);
+  const markdownImageInputRef = ref<HTMLInputElement | null>(null);
   let markedLib: any = null;
   let dompurifyLib: any = null;
   const mentionPickerVisible = ref(false);
@@ -956,12 +1019,14 @@
 
   function setInlineMentionAnchor(rect: Pick<DOMRect, 'top' | 'left' | 'height'>) {
     const zoom = getRootZoom();
+    // 锚点比光标行高多留 6px:浮层贴着光标展开会压住正在写的那一行,看不见自己刚打的字
+    const anchorHeight = (Math.max(rect.height, 18) + 6) / zoom;
     inlineMentionAnchorStyle.value = {
       position: 'fixed',
       left: `${rect.left / zoom}px`,
       top: `${rect.top / zoom}px`,
       width: '1px',
-      height: `${Math.max(rect.height, 18) / zoom}px`,
+      height: `${anchorHeight}px`,
       pointerEvents: 'none',
     };
   }
@@ -1016,7 +1081,16 @@
     };
   }
 
-  function closeInlineMention() {
+  /*
+   * 用户主动关掉浮层(Esc / 点外面)后,这个 @ 的位置要记下来。
+   * 否则 textarea 里的 @ 还在,下一次 keyup/click 又会把它当成「正在提及」重新弹出来 ——
+   * 表现就是按了 Esc 浮层立刻又冒出来,关不掉。
+   * 只抑制同一个 @ 位置;继续打字或换个地方再敲 @,位置变了自然恢复。
+   */
+  let dismissedMentionStart: number | null = null;
+
+  function closeInlineMention(options?: { dismissed?: boolean }) {
+    if (options?.dismissed) dismissedMentionStart = markdownMentionRange?.start ?? null;
     if (!inlineMentionVisible.value) return;
     inlineMentionVisible.value = false;
     inlineMentionHasResults.value = false;
@@ -1034,7 +1108,7 @@
       '.mce-content-body',
       '.tox-edit-area',
     ],
-    onDismiss: () => closeInlineMention(),
+    onDismiss: () => closeInlineMention({ dismissed: true }),
   });
 
   function closeMentionPicker() {
@@ -1053,7 +1127,13 @@
     const textarea = getMdTextarea();
     if (!textarea) return;
     const query = resolveMentionQuery(textarea.value, textarea.selectionStart);
-    if (!query) return closeInlineMention();
+    if (!query) {
+      dismissedMentionStart = null;
+      return closeInlineMention();
+    }
+    // 这个 @ 刚被用户关掉过就别再自动弹;换个位置或继续输入让起点变了才恢复
+    if (dismissedMentionStart === query.start) return;
+    dismissedMentionStart = null;
     markdownMentionRange = { start: query.start, end: query.end };
     if (isMobile.value) {
       if (!mentionPickerVisible.value) {
@@ -1131,6 +1211,24 @@
       event.preventDefault();
       return;
     }
+    /*
+     * Ctrl/Cmd + Y 是 Windows 那套的「重做」,但浏览器把它占去开历史记录了
+     * (mac 上 Cmd+Y 打开历史,Windows Chrome 同样),在正文里按下去笔记没反应、还弹出个历史面板。
+     * 编辑区里拦下来交给原生 redo,和 Cmd+Shift+Z 等价。
+     */
+    const isRedo =
+      !event.isComposing &&
+      (event.metaKey || event.ctrlKey) &&
+      (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'));
+    if (isRedo) {
+      event.preventDefault();
+      try {
+        document.execCommand('redo');
+      } catch {
+        /* 浏览器不支持时保持原状,至少不再弹历史面板 */
+      }
+      return;
+    }
     if (!inlineMentionVisible.value || event.isComposing) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
@@ -1143,7 +1241,7 @@
       inlineMentionSuggestionsRef.value?.chooseActive();
     } else if (event.key === 'Escape') {
       event.preventDefault();
-      closeInlineMention();
+      closeInlineMention({ dismissed: true });
     }
   }
 
@@ -1320,6 +1418,9 @@
 
   const renderedMd = ref('');
   let mdRenderTimer: ReturnType<typeof setTimeout> | null = null;
+  // 富文本里图表装饰块的重渲染节流(编辑器的 NodeChange 触发很密)
+  const MERMAID_COMPANION_DEBOUNCE_MS = 260;
+  let mermaidCompanionTimer: number | null = null;
 
   function onMdInput(value: string | number) {
     const val = String(value ?? '');
@@ -1411,6 +1512,203 @@
     }
   }
 
+  /**
+   * 工具栏操作的统一出口:拿当前选区 → 交给 utils/markdownEditing 算出一次区间替换 → 写回。
+   *
+   * 写回必须走 execCommand('insertText'):它是浏览器自己的编辑通道,改动会进原生 undo 栈,
+   * 用户 Ctrl+Z 撤得回来。直接给 textarea.value 赋值(或只改 v-model)会绕过 undo 栈 ——
+   * 点完「插入表格」再按 Ctrl+Z 毫无反应,只能手动去删。
+   * execCommand 已废弃但至今是唯一能写进 textarea undo 栈的方式;失败时退回直接赋值。
+   */
+  async function applyMarkdownEdit(transform: (input: EditorSelection) => EditResult) {
+    if (props.readonly) return;
+    const textarea = getMdTextarea();
+    const value = mdContent.value || '';
+    const input: EditorSelection = {
+      value,
+      selectionStart: textarea?.selectionStart ?? value.length,
+      selectionEnd: textarea?.selectionEnd ?? textarea?.selectionStart ?? value.length,
+    };
+    const result = transform(input);
+
+    let insertedViaBrowser = false;
+    if (textarea) {
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(result.rangeStart, result.rangeEnd);
+      try {
+        insertedViaBrowser = document.execCommand('insertText', false, result.text);
+      } catch {
+        insertedViaBrowser = false;
+      }
+    }
+    // execCommand 会自己派发 input 事件带动 v-model;失败时才手动同步一次
+    if (!insertedViaBrowser) onMdInput(applyEditResult(value, result));
+
+    await nextTick();
+    const activeTextarea = getMdTextarea();
+    activeTextarea?.focus({ preventScroll: true });
+    activeTextarea?.setSelectionRange(result.selectionStart, result.selectionEnd);
+  }
+
+  /** 插入 mermaid 图表模板。图表代码块必须自成段落,交给 insertBlock 统一补空行 */
+  function insertDiagramTemplate(templateKey: string) {
+    const template = MERMAID_TEMPLATES.find((item) => item.key === templateKey);
+    if (!template) return;
+    const snippet = mermaidTemplateMarkdown(template, locale.value);
+    void applyMarkdownEdit((input) => insertBlock(input, snippet));
+  }
+
+  /** 文本格式类:作用在选中的文字上 */
+  const markdownTextTools = computed(() => [
+    {
+      key: 'bold',
+      label: t('note.mdBold'),
+      icon: icon.noteDetail.toolbar.bold,
+      run: () => void applyMarkdownEdit((input) => wrapSelection(input, '**', t('note.mdBoldPlaceholder'))),
+    },
+    {
+      key: 'italic',
+      label: t('note.mdItalic'),
+      icon: icon.noteDetail.toolbar.italic,
+      run: () => void applyMarkdownEdit((input) => wrapSelection(input, '*', t('note.mdItalicPlaceholder'))),
+    },
+    {
+      key: 'heading',
+      label: t('note.mdHeading'),
+      icon: icon.noteDetail.toolbar.heading,
+      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '## ')),
+    },
+    {
+      key: 'quote',
+      label: t('note.mdQuote'),
+      icon: icon.noteDetail.toolbar.quote,
+      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '> ')),
+    },
+    {
+      key: 'bulletList',
+      label: t('note.mdBulletList'),
+      icon: icon.noteDetail.toolbar.bulletList,
+      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '- ')),
+    },
+    {
+      key: 'todo',
+      label: t('note.mdTodoList'),
+      icon: icon.noteDetail.toolbar.todo,
+      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '- [ ] ')),
+    },
+  ]);
+
+  /** 插入块/资源类 */
+  const markdownInsertTools = computed(() => [
+    {
+      key: 'codeBlock',
+      label: t('note.mdCodeBlock'),
+      icon: icon.noteDetail.toolbar.codeBlock,
+      disabled: false,
+      run: () => void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock())),
+    },
+    {
+      key: 'table',
+      label: t('note.mdTable'),
+      icon: icon.noteDetail.toolbar.table,
+      disabled: false,
+      run: () =>
+        void applyMarkdownEdit((input) =>
+          insertBlock(input, buildMarkdownTable([t('note.mdTableColumn', { index: 1 }), t('note.mdTableColumn', { index: 2 })])),
+        ),
+    },
+    {
+      key: 'image',
+      label: t('note.mdUploadImage'),
+      icon: icon.noteDetail.toolbar.image,
+      disabled: markdownImageUploading.value,
+      run: () => markdownImageInputRef.value?.click(),
+    },
+    {
+      key: 'mention',
+      label: t('note.mdInsertResource'),
+      icon: icon.noteDetail.toolbar.mention,
+      disabled: !canEditResourceMentions.value,
+      run: () => openResourceMentionPicker(),
+    },
+  ]);
+
+  /**
+   * 工具栏点「插入资源」:等价于在光标处敲一个 @,复用整套提及流程。
+   * 桌面端走贴着光标的内联浮层(和输入 @ 完全一致);只有手机才用弹窗 ——
+   * 桌面用弹窗的话,一个只有几行的列表被撑进 460px 的框里,底下全是空白。
+   */
+  function openResourceMentionPicker() {
+    if (!canEditResourceMentions.value) return;
+    const textarea = getMdTextarea();
+
+    if (isMobile.value || !textarea) {
+      const caret = textarea?.selectionStart ?? (mdContent.value || '').length;
+      markdownMentionRange = { start: caret, end: textarea?.selectionEnd ?? caret };
+      dismissedMentionStart = null;
+      recordResourceMentionOperation('打开资源提及选择器');
+      mentionPickerVisible.value = true;
+      return;
+    }
+
+    /*
+     * 桌面端**真的往正文里敲一个 @**,而不是凭空开一个浮层。
+     * 之前那样开出来的浮层背后没有 @ 文本,光标一动 resolveMentionQuery 就找不到提及、
+     * 立刻把浮层关掉 —— 表现就是"按上下键菜单直接消失"。插入真实字符后,
+     * 后续筛选、上下键、Esc、选中替换全部复用手敲 @ 的那一套,行为完全一致。
+     * 走 execCommand 保证这个 @ 也能被 Ctrl+Z 撤掉。
+     */
+    dismissedMentionStart = null;
+    textarea.focus({ preventScroll: true });
+    let inserted = false;
+    try {
+      inserted = document.execCommand('insertText', false, '@');
+    } catch {
+      inserted = false;
+    }
+    if (!inserted) {
+      const caret = textarea.selectionStart ?? 0;
+      const value = mdContent.value || '';
+      onMdInput(`${value.slice(0, caret)}@${value.slice(textarea.selectionEnd ?? caret)}`);
+      void nextTick().then(() => {
+        const active = getMdTextarea();
+        active?.focus({ preventScroll: true });
+        active?.setSelectionRange(caret + 1, caret + 1);
+        syncOrOpenMarkdownMention();
+      });
+      return;
+    }
+    syncOrOpenMarkdownMention();
+  }
+
+  async function onMarkdownImagePicked(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    // 先清空 value,同一张图连续选两次也能触发 change
+    input.value = '';
+    if (file) await uploadMarkdownImage(file, file.name);
+  }
+
+  const diagramMenuOptions = computed(() =>
+    MERMAID_TEMPLATES.map((template) => ({
+      label: t(template.labelKey),
+      icon: icon.noteDiagram,
+      function: () => void insertDiagramTemplate(template.key),
+    })),
+  );
+
+  /** 富文本里插入图表:存的是源码代码块,图是编辑期装饰(见 utils/mermaidRender 的伴随模式) */
+  function insertHtmlDiagramTemplate(editor: any, templateKey: string) {
+    const template = MERMAID_TEMPLATES.find((item) => item.key === templateKey);
+    if (!template || props.readonly) return;
+    const code = locale.value.startsWith('zh') ? template.code.zh : template.code.en;
+    const escaped = code.replace(
+      /[&<>]/g,
+      (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char] as string,
+    );
+    editor.insertContent(`<pre class="language-mermaid">${escaped}</pre><p></p>`);
+  }
+
   watch([mentionPickerVisible, inlineMentionVisible], ([modalOpen, inlineOpen]) => {
     if (modalOpen || inlineOpen) return;
     markdownMentionRange = null;
@@ -1430,7 +1728,12 @@
     try {
       const safeHtml = mdToSafeHtml(mdContent.value || '');
       publishResourceRefs(safeHtml);
-      renderedMd.value = presentResourceReferenceChips(safeHtml, props.resourceRefs, resourcePresentationOptions());
+      // 已经画过的图直接用缓存顶上;改了图表内容、缓存还没有时沿用上一版预览里的旧图,
+      // 都是为了不让右边的图在编辑过程中闪回代码块
+      renderedMd.value = inlineCachedMermaid(
+        presentResourceReferenceChips(safeHtml, props.resourceRefs, resourcePresentationOptions()),
+        mdPreviewRef.value,
+      );
     } catch {
       renderedMd.value = '<p>' + t('note.renderError') + '</p>';
       publishResourceRefs('');
@@ -1769,7 +2072,7 @@
       'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
     toolbar: props.readonly
       ? false
-      : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock',
+      : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock mermaidDiagram',
     fixed_toolbar_container: '#editor-toolbar',
     toolbar_persist: true,
     toolbar_mode: 'wrap',
@@ -1834,7 +2137,7 @@
           inlineMentionSuggestionsRef.value?.chooseActive();
         } else if (event.key === 'Escape') {
           event.preventDefault();
-          closeInlineMention();
+          closeInlineMention({ dismissed: true });
         }
       });
 
@@ -1989,6 +2292,33 @@
         },
         onAction: () => editor.execCommand('FormatBlock', false, 'pre'),
       });
+      // 富文本里的 mermaid 图表:插入的是源码代码块(会存进内容),图由 renderMermaidCompanions
+      // 以 data-mce-bogus 装饰块的形式挂在它后面,不进内容,所以不存在往返转换损坏内容的风险
+      editor.ui.registry.addIcon('mermaid-diagram', icon.noteDiagram);
+      editor.ui.registry.addMenuButton('mermaidDiagram', {
+        icon: 'mermaid-diagram',
+        tooltip: t('note.insertDiagram'),
+        fetch: (callback: (items: any[]) => void) => {
+          callback(
+            MERMAID_TEMPLATES.map((template) => ({
+              type: 'menuitem',
+              text: t(template.labelKey),
+              onAction: () => insertHtmlDiagramTemplate(editor, template.key),
+            })),
+          );
+        },
+      });
+      const scheduleCompanionRender = () => {
+        if (mermaidCompanionTimer) window.clearTimeout(mermaidCompanionTimer);
+        mermaidCompanionTimer = window.setTimeout(() => {
+          mermaidCompanionTimer = null;
+          const body = editor.getBody?.();
+          if (body) void renderMermaidBlocks(body, { companion: true });
+        }, MERMAID_COMPANION_DEBOUNCE_MS);
+      };
+      editor.on('SetContent input undo redo', scheduleCompanionRender);
+      // NodeChange 触发很密,但 renderMermaidCompanions 对没变过的源码是空操作
+      editor.on('NodeChange', scheduleCompanionRender);
       editor.ui.registry.addMenuButton('myHeadingMenu', {
         text: t('noteDetail.editor.headingMenu'),
         fetch: function (callback) {
@@ -2173,7 +2503,7 @@
       });
     },
     content_style: [
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: #f6f8fa; border: 1px solid #e5e7eb; padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: var(--pre-bg-color); color: #ffffff; border: 1px solid rgba(148, 163, 184, 0.4); padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -2372,22 +2702,73 @@
   }
 
   /* Markdown 编辑器工具栏 */
+  /*
+   * 视图 tab 与下面那条编辑工具栏是同一个「头部区」,连成一片:
+   * tab 组件自己带底轨线,这里再画一条 border-bottom 就变成两条挨着的横线,
+   * 加上栏标签行的线,一屏里三条平行线,非常吵。
+   */
   .md-editor-toolbar {
     display: flex;
     align-items: center;
     min-height: 40px;
     padding: 0 12px;
+    background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
+    flex-shrink: 0;
+  }
+  /* Markdown 编辑工具栏:与富文本的 #editor-toolbar 同一层级,横跨编辑区,不介入左右分栏 */
+  .md-edit-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
     border-bottom: 1px solid var(--surface-border-color);
     background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
     flex-shrink: 0;
   }
-  .md-view-toggle {
+
+  /* 高度交给 BButton 的 size="small"(24px),这里只管配色与图标间距 */
+  .md-edit-toolbar .md-tool-button {
+    padding: 0 6px;
+    border-radius: 6px;
+    color: var(--desc-color);
+
+    &:hover:not(.disabled) {
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
+    }
+  }
+
+  /* 分组之间用一道细分隔:文本格式一组、插入一组,按钮多了不至于糊成一条 */
+  .md-tool-divider {
+    width: 1px;
+    height: 16px;
+    margin: 0 2px;
+    background: var(--surface-border-color);
+    flex-shrink: 0;
+  }
+
+  .md-hidden-file-input {
+    display: none;
+  }
+
+  @media (max-width: 767px) {
+    .md-edit-toolbar {
+      padding: 3px 8px;
+    }
+  }
+
+  /*
+   * 选择器带父级是为了压过 BTabs 的 .tab-container(同特异性、加载顺序在后):
+   * 它自带的 margin-bottom: 10px 是给独立成块的 tab 组留的外间距,在这里全变成
+   * 「按钮上方一大片空白」,只压这一项。
+   * 注意别顺手把 border-bottom / padding-bottom 也清掉 —— 那条下边框和下划线的呼吸空间
+   * 是 tab 组件本身的样子,一直都在。
+   */
+  .md-editor-toolbar .md-view-toggle {
     flex: 1 1 auto;
-    width: 100%;
+    min-width: 0;
     gap: 0;
     margin: 0;
-    padding: 0;
-    border-bottom: 0;
 
     .tab {
       flex: 1 1 0;
@@ -2438,11 +2819,11 @@
   .md-editor-pane {
     border-right: 1px solid var(--card-border-color, #e8eaf2);
   }
+  /* 栏标签只是「这半边是什么」的标识,灰色小字已经够,不用再画一条线 */
   .md-editor-label {
     padding: 4px 10px;
     font-size: 11px;
     color: var(--desc-color, #888);
-    border-bottom: 1px solid var(--card-border-color, #e8eaf2);
     flex-shrink: 0;
   }
   .md-textarea {

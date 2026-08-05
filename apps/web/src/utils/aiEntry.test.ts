@@ -71,10 +71,15 @@ describe('aiEntry', () => {
     window.removeEventListener(AI_ASSISTANT_VISIBILITY_EVENT, listener);
   });
 
-  it('移动端只在笔记详情展示 AI 侧边图标，桌面端保持全局入口', () => {
-    expect(shouldHideAiEdgeTrigger(true, 'noteDetail')).toBe(false);
+  it('手机端一律不挂 AI 侧边触发器，桌面端保持全局入口', () => {
+    // 笔记详情曾是唯一例外（那条路由不显示底部导航），现已统一去掉：
+    // 悬浮把手在触控端容易误触，且与底部导航的 AI 入口重复
+    expect(shouldHideAiEdgeTrigger(true, 'noteDetail')).toBe(true);
     expect(shouldHideAiEdgeTrigger(true, 'settings')).toBe(true);
     expect(shouldHideAiEdgeTrigger(true, 'growth')).toBe(true);
+    expect(shouldHideAiEdgeTrigger(true, undefined)).toBe(true);
+    // 桌面端不受影响，任何路由都保留
     expect(shouldHideAiEdgeTrigger(false, 'settings')).toBe(false);
+    expect(shouldHideAiEdgeTrigger(false, 'noteDetail')).toBe(false);
   });
 });

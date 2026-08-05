@@ -17,6 +17,7 @@
       @click.prevent
       @keydown.enter.prevent
       v-html="renderedContent"
+      v-mermaid
     ></div>
     <pre v-else class="confirmation-note-preview__body confirmation-note-preview__source">{{
       contentPreview.source

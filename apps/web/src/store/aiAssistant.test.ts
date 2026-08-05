@@ -840,3 +840,87 @@ describe('aiAssistant store', () => {
     expect(resolveAiAssistantRequestEdgeStatus('stopped', true)).toBe('idle');
   });
 });
+
+describe('新建对话的空白意图跨页面生命周期保持', () => {
+  beforeEach(() => {
+    vi.useRealTimers();
+    localStorage.clear();
+    setActivePinia(createPinia());
+  });
+
+  const self = identity('u1', 'u1', 'self', '');
+
+  it('新建对话后标记空白意图，页面被回收重建后仍然保持', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    store.setCloudConversationId('conversation-old');
+    expect(store.newConversationPending).toBe(false);
+
+    store.clearCurrentConversation('你好');
+    expect(store.newConversationPending).toBe(true);
+    expect(store.conversationId).toBe('');
+
+    // 移动端页面被系统回收后重新进入:标记必须还在,否则新建的空白对话会被"最近会话"顶掉
+    setActivePinia(createPinia());
+    const restored = useAiAssistantStore();
+    restored.switchConversation(self, '你好');
+    expect(restored.newConversationPending).toBe(true);
+    expect(restored.conversationId).toBe('');
+  });
+
+  it('拿到具体会话后清除标记(发出第一条消息或打开任意会话都经过这里)', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    store.clearCurrentConversation('你好');
+    expect(store.newConversationPending).toBe(true);
+
+    store.setCloudConversationId('conversation-new');
+    expect(store.newConversationPending).toBe(false);
+  });
+
+  it('会话 id 被清空时不清除标记:云历史关闭或云端已删除同样不该恢复最近会话', () => {
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    store.clearCurrentConversation('你好');
+
+    store.setCloudConversationId('');
+    expect(store.newConversationPending).toBe(true);
+  });
+
+  it('升级前的旧载荷没有该字段时按 false 恢复，行为与升级前一致', () => {
+    const domainKey = buildAiAssistantDomainKey(self);
+    localStorage.setItem(
+      domainKey,
+      JSON.stringify({
+        version: 3,
+        identity: self,
+        draft: '',
+        contextRefs: [],
+        attachmentRefs: [],
+        messages: [],
+        scrollTop: 0,
+        shouldFollowMessages: true,
+        showScrollToBottom: false,
+        sessionId: '',
+        conversationId: '',
+        longChatHinted: false,
+        savedAt: new Date().toISOString(),
+      }),
+    );
+
+    const store = useAiAssistantStore();
+    store.switchConversation(self, '你好');
+    expect(store.newConversationPending).toBe(false);
+  });
+
+  it('切换身份域不会把一个域的空白意图带到另一个域', () => {
+    const store = useAiAssistantStore();
+    const other = identity('root-user', 'user-b');
+    store.switchConversation(self, '你好');
+    store.clearCurrentConversation('你好');
+    expect(store.newConversationPending).toBe(true);
+
+    store.switchConversation(other, '你好');
+    expect(store.newConversationPending).toBe(false);
+  });
+});

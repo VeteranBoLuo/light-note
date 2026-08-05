@@ -12,8 +12,11 @@
       <div class="note-title" :title="note.title">{{ note.title }}</div>
       <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
       <InboxPendingBadge v-if="note.isPending" />
+      <!-- 格式标识排在状态徽章之后：置顶/待整理是「要不要现在处理」，格式只是「打开后长什么样」 -->
+      <NoteFormatBadge :type="note.type" />
     </div>
-    <div class="note-content" v-html="extractAndConvertTags(note.content)" />
+    <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
+    <div class="note-content">{{ summary }}</div>
     <div class="note-footer">
       <div class="note-tags" v-if="note.tags && note.tags.length">
         <span
@@ -61,9 +64,14 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
+  import { useNoteSummary } from '@/composables/useNoteSummary';
   const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
     batchMode: false,
   });
+
+  // 摘要统一走 noteSummaryText(只信 note.type,Markdown 过 marked 再取纯文本)
+  const summary = useNoteSummary(() => props.note, { maxLength: 300 });
 
   const bookmark = bookmarkStore();
   const { t } = useI18n();
@@ -107,43 +115,6 @@
       .join('、'),
   );
 
-  // 提取<h>和<p>标签等并转换为<p>标签
-  const extractAndConvertTags = (htmlContent: string) => {
-    // Markdown 笔记先转换为 HTML
-    let content = htmlContent || '';
-    if (props.note?.type === 'markdown' && !content.includes('<')) {
-      // 简单处理：纯 MD 文本，只取前 200 字作为预览
-      const text = content
-        .replace(/[#*`~>\[\]()_-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      return text.length > 200 ? text.substring(0, 200) + '...' : text;
-    }
-    // 创建一个临时的DOM元素
-    const tempElement = document.createElement('div');
-    tempElement.innerHTML = content;
-
-    // 获取所有的<h>和<p>标签
-    const allowedTags = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'span', 'div', 'pre', 'table', 'tr', 'td'];
-    const extractedContent = Array.from(tempElement.querySelectorAll('*'))
-      .filter((el) => allowedTags.includes(el.tagName.toLowerCase()))
-      .map((el) => {
-        // 移除元素的样式和类属性
-        el.removeAttribute('style');
-        el.removeAttribute('class');
-
-        // 将<h>标签转换为<p>标签
-        if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(el.tagName.toLowerCase())) {
-          const newElement = document.createElement('p');
-          newElement.innerHTML = el.innerHTML;
-          return newElement.outerHTML;
-        }
-        return el.outerHTML;
-      })
-      .join('');
-
-    return extractedContent;
-  };
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -255,6 +226,10 @@
     margin-top: 10px;
     overflow: hidden;
     max-height: 154px;
+    // 摘要是纯文本,块级换行靠 pre-line 还原;长英文/URL 不许撑破卡片
+    white-space: pre-line;
+    word-break: break-word;
+    overflow-wrap: break-word;
 
     // 底部渐变淡出，避免硬截断
     &::after {
@@ -266,16 +241,6 @@
       height: 42px;
       background: linear-gradient(to bottom, transparent, var(--note-card-bg));
       pointer-events: none;
-    }
-
-    :deep(li) {
-      margin-top: 4px;
-    }
-    :deep(div) {
-      margin-top: 4px;
-    }
-    :deep(p) {
-      margin: 0 0 4px;
     }
   }
 
@@ -330,7 +295,8 @@
 
     .tag-more {
       background-color: var(--common-tag-bg-color, #f0f0f0);
-      color: var(--desc-color);
+      // desc 在这个底色上只有 4.24:1，11px 小字不合格，改用专为中性 chip 定的文字色
+      color: var(--chip-neutral-color);
       cursor: default;
 
       &:hover {
@@ -429,17 +395,6 @@
     .note-title {
       flex: 1 1 auto;
       min-width: 0;
-    }
-
-    .note-content :deep(img),
-    .note-content :deep(table),
-    .note-content :deep(pre) {
-      max-width: 100%;
-    }
-
-    .note-content :deep(img) {
-      height: auto !important;
-      object-fit: contain;
     }
   }
 </style>

@@ -465,3 +465,164 @@ h1 {
   -moz-user-select: none !important;
   cursor: grabbing !important;
 }
+
+/*
+ * Markdown 里的 mermaid 图表(见 utils/mermaidRender.ts)。
+ * 笔记预览、AI 回复、历史版本共用一套外观,所以放全局而不是某个组件的 scoped 里。
+ */
+.mermaid-figure {
+  position: relative;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--surface-border-color);
+  border-radius: 10px;
+  background: var(--card-background);
+
+  &__canvas {
+    overflow-x: auto;
+    text-align: center;
+
+    svg {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  /* 图右上角的工具条:紧凑/宽松、手绘、复制源码、下载、放大 */
+  &__tools {
+    position: absolute;
+    right: 8px;
+    top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 8px;
+    background: var(--card-background);
+    opacity: 0;
+    transition: opacity 0.16s ease;
+  }
+
+  &__tool {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--desc-color);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--primary-color, #635bff);
+      background: color-mix(in srgb, var(--primary-color, #635bff) 10%, transparent);
+    }
+
+    /* 手绘风格开着时按钮保持点亮,不然没法判断当前是哪种风格。实色底+实色字,不依赖混色 */
+    &.is-active {
+      color: #ffffff;
+      background: var(--primary-color, #635bff);
+    }
+  }
+
+  &:hover &__tools,
+  &__tools:focus-within {
+    opacity: 1;
+  }
+
+  /* 语法错误:实色描边 + 实色文字,不依赖混色 —— APK WebView 会把 color-mix 回退成实色 */
+  &[data-mermaid-state='error'] {
+    border-color: var(--error-color, #e5484d);
+
+    pre {
+      margin: 8px 0 0;
+    }
+  }
+
+  &__error {
+    color: var(--error-color, #e5484d);
+    font-size: 12px;
+    line-height: 1.6;
+    word-break: break-word;
+  }
+
+  /* 渲染中先占位,避免代码块闪一下又被换成图 */
+  &[data-mermaid-state='pending'],
+  &[data-mermaid-state='queued'] {
+    min-height: 60px;
+  }
+
+  /* 全新图表的占位:一块带呼吸感的空白,比摊开一段源码体面 */
+  &__placeholder {
+    height: 140px;
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--desc-color) 8%, transparent);
+    animation: mermaid-figure-breathe 1.4s ease-in-out infinite;
+  }
+}
+
+/* 触屏没有 hover,工具条常显 */
+@media (max-width: 1023px) {
+  .mermaid-figure__tools {
+    opacity: 1;
+  }
+}
+
+/*
+ * 富文本里的图表源码块。编辑时要能看见、能改;只读展示(分享、管理员预览)时只看图。
+ * 注意是隐藏而不是删除 —— 源码块是笔记的真实内容,删了再保存就把图表弄丢了。
+ */
+.note-editor.is-readonly pre[class*='language-mermaid'] {
+  display: none;
+}
+
+/* 渲染失败时图表框里会保留一份源码,那份必须留着 —— 否则只读页面上只剩一句报错 */
+.note-editor.is-readonly .mermaid-figure pre[class*='language-mermaid'] {
+  display: block;
+}
+
+.mermaid-figure--companion {
+  /* 紧跟在源码块后面,视觉上归属同一块内容 */
+  margin-top: 6px;
+}
+
+/*
+ * 思维导图根节点的品牌色改由 utils/mermaidRender.ts 写成内联样式,这里不再用 CSS 覆盖 ——
+ * 图会被转成 data URL 去放大/下载,那是独立文档,外部样式表管不到,
+ * 用 CSS 会出现「页面上是品牌紫、点开放大变回藏蓝」的不一致。
+ */
+
+/*
+ * TinyMCE 的 tooltip / 下拉菜单挂在 body 下的 .tox-tinymce-aux 里,由它自己按
+ * getBoundingClientRect(视觉坐标,已含 <html> 的 zoom)算位置、再写进 style.left/top(布局坐标)。
+ * 布局坐标会被 zoom 再放大一次,于是界面缩放一开,提示框就飘到离图标很远的地方
+ * (实测 1.25 倍下水平偏出 109px)。这里套一层反向缩放把多出来的那次抵消掉。
+ * 系数由 utils/savePreference.ts 跟随缩放设置写入。
+ */
+.tox-tinymce-aux {
+  zoom: var(--ln-aux-zoom, 1);
+}
+
+@keyframes mermaid-figure-breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* 动效敏感的用户只保留静态占位 */
+@media (prefers-reduced-motion: reduce) {
+  .mermaid-figure__placeholder {
+    animation: none;
+  }
+}

@@ -209,11 +209,11 @@
         <div class="ai-preview-split">
           <div class="ai-preview-col ai-preview-col--origin">
             <div class="ai-preview-col-head">{{ t('ai.reply.previewOrigin') }}</div>
-            <div class="ai-preview-body" v-html="originRenderedHtml"></div>
+            <div class="ai-preview-body" v-html="originRenderedHtml" v-mermaid></div>
           </div>
           <div class="ai-preview-col">
             <div class="ai-preview-col-head">{{ t('ai.reply.previewGenerated') }}</div>
-            <div class="ai-preview-body" ref="previewBodyRef" v-html="generatedRenderedHtml"></div>
+            <div class="ai-preview-body" ref="previewBodyRef" v-html="generatedRenderedHtml" v-mermaid></div>
           </div>
         </div>
         <div class="ai-preview-followup">

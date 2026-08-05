@@ -196,7 +196,8 @@
             v-click-log="{ module: '标签详情', operation: `打开笔记【${note.title || '未命名文档'}】` }"
           >
             <div class="note-item-title">{{ note.title || $t('noteDetail.unnamedDoc', '未命名文档') }}</div>
-            <div class="note-item-desc" v-html="getNoteDesc(note.content, note.type)" />
+            <!-- 摘要走纯文本插值:v-html 会把笔记里写的标签当真渲染 -->
+            <div class="note-item-desc">{{ getNoteDesc(note) }}</div>
             <div v-if="note.tags?.length" class="note-item-tags">
               <span
                 v-for="noteTag in note.tags"
@@ -269,6 +270,7 @@
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { openAiAssistant } from '@/utils/aiEntry';
+  import { noteSummaryText } from '@/utils/noteSummary';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -286,6 +288,26 @@
   const notes = ref<any[]>([]);
   const files = ref<any[]>([]);
   const loading = ref(false);
+
+  // 笔记摘要与笔记库共用 noteSummaryText(异步:Markdown 要按需加载 marked),
+  // 卡片和图谱节点都读这份 map,两处口径一致
+  const noteDescMap = ref<Record<string, string>>({});
+  let noteDescSeq = 0;
+  watch(
+    notes,
+    async (list) => {
+      const current = ++noteDescSeq;
+      const entries = await Promise.all(
+        (list || []).map(async (n: any) => [
+          String(n?.id ?? ''),
+          await noteSummaryText(n?.content || '', n?.type, { maxLength: 120, singleLine: true }),
+        ]),
+      );
+      if (current !== noteDescSeq) return;
+      noteDescMap.value = Object.fromEntries(entries);
+    },
+    { immediate: true },
+  );
 
   const filePreviewVisible = ref(false);
   const previewFileInfo = ref<any>({});
@@ -340,7 +362,7 @@
       size: 22,
       weight: 1,
       meta: {
-        description: getNoteDesc(note.content, note.type),
+        description: getNoteDesc(note),
         updateTime: note.updateTime || note.createTime,
       },
     })),
@@ -657,20 +679,8 @@
     tagIconLoadError.value = true;
   }
 
-  function getNoteDesc(content: string, type?: string) {
-    if (!content) return '';
-    // Markdown 笔记
-    if (type === 'markdown' && !content.includes('<')) {
-      const text = content
-        .replace(/[#*`~>\[\]()_-]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      return text.length > 120 ? text.substring(0, 120) + '...' : text;
-    }
-    const div = document.createElement('div');
-    div.innerHTML = content;
-    const text = div.textContent || div.innerText || '';
-    return text.length > 120 ? text.substring(0, 120) + '...' : text;
+  function getNoteDesc(note: any) {
+    return noteDescMap.value[String(note?.id ?? '')] || '';
   }
 
   function getFileIcon(file: any) {

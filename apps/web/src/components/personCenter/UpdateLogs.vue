@@ -70,6 +70,7 @@
               class="log-markdown markdown-body"
               :class="{ 'has-meta-divider': item.tags.length > 0 || Boolean(item.summary) }"
               v-html="renderedContent[item.id]"
+              v-mermaid
             ></div>
 
             <div v-if="canToggle(item)" class="log-card-footer">

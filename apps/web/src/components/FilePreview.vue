@@ -209,6 +209,7 @@
                 v-html="markdownContent"
                 class="markdown-container"
                 @click="handleMarkdownLink"
+                v-mermaid
               ></div>
             </template>
             <pre

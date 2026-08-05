@@ -1,6 +1,6 @@
 <template>
   <div class="admin-container">
-    <nav class="admin-nav" aria-label="后台管理导航">
+    <nav class="admin-nav" aria-label="后台管理导航" v-auto-scrollbar>
       <ul class="admin-nav__groups">
         <li
           v-for="entry in menuEntries"
@@ -69,12 +69,7 @@
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
   import { useI18n } from 'vue-i18n';
-  import {
-    adminNavTarget,
-    buildAdminNav,
-    resolveActiveNavId,
-    type AdminNavItem,
-  } from '@/view/admin/admin/adminNav.ts';
+  import { adminNavTarget, buildAdminNav, resolveActiveNavId, type AdminNavItem } from '@/view/admin/admin/adminNav.ts';
 
   const { t } = useI18n();
   const route = useRoute();
