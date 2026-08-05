@@ -337,12 +337,6 @@
                 @touchend.passive="pullRefresh.onTouchEnd"
                 @touchcancel.passive="pullRefresh.onTouchCancel"
               >
-                <MobilePullRefreshIndicator
-                  :distance="pullRefresh.pullDistance.value"
-                  :refreshing="pullRefresh.refreshing.value"
-                  :ready="pullRefresh.ready.value"
-                  :visible="pullRefresh.visible.value"
-                />
                 <div
                   v-if="shouldShowLoadingSkeleton"
                   class="result-skeleton"
@@ -578,7 +572,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -2139,7 +2132,6 @@
   }
 
   .result-scroll-area {
-    /* 下拉刷新指示器以此为定位基准(它靠负 top 藏在内容上方) */
     position: relative;
     margin-top: 12px;
     box-sizing: border-box;

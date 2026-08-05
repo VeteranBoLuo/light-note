@@ -81,12 +81,6 @@
         @touchend.passive="pullRefresh.onTouchEnd"
         @touchcancel.passive="pullRefresh.onTouchCancel"
       >
-        <MobilePullRefreshIndicator
-          :distance="pullRefresh.pullDistance.value"
-          :refreshing="pullRefresh.refreshing.value"
-          :ready="pullRefresh.ready.value"
-          :visible="pullRefresh.visible.value"
-        />
         <aside v-if="!bookmark.isMobile" class="bookmark-side-panel">
           <FilterPanel />
         </aside>
@@ -125,7 +119,6 @@
   import FilterPanel from '@/view/home/FilterPanel.vue';
   import ViewPanel from '@/view/home/ViewPanel.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -675,7 +668,6 @@
   }
 
   .bookmark-workspace {
-    /* 下拉刷新指示器以此为定位基准(它靠负 top 藏在内容上方) */
     position: relative;
     width: 100%;
     height: 100%;

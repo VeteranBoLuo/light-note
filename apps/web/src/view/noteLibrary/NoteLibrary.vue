@@ -126,12 +126,6 @@
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <MobilePullRefreshIndicator
-        :distance="pullRefresh.pullDistance.value"
-        :refreshing="pullRefresh.refreshing.value"
-        :ready="pullRefresh.ready.value"
-        :visible="pullRefresh.visible.value"
-      />
       <!-- 侧栏常驻 DOM 才能有进出过渡;卡片视图下用 inert 关掉焦点与辅助技术可见性,而不是直接卸载 -->
       <aside
         v-if="!bookmark.isMobile"
@@ -321,7 +315,6 @@
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
   import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';

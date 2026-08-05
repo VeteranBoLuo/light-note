@@ -7,12 +7,6 @@
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <MobilePullRefreshIndicator
-      :distance="pullRefresh.pullDistance.value"
-      :refreshing="pullRefresh.refreshing.value"
-      :ready="pullRefresh.ready.value"
-      :visible="pullRefresh.visible.value"
-    />
     <section v-if="batchMode && bookmark.isMobile" class="mobile-batch-toolbar">
       <div class="mobile-batch-summary">
         <BCheckbox
@@ -595,7 +589,6 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import icon from '@/config/icon.ts';
   import {
     deleteField,

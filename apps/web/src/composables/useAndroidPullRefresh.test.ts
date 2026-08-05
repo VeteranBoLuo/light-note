@@ -21,7 +21,11 @@ vi.mock('@/i18n', () => ({
   default: { global: { t: (key: string) => key } },
 }));
 
-import { useAndroidPullRefresh, type UseAndroidPullRefreshOptions } from './useAndroidPullRefresh';
+import {
+  activePullIndicator,
+  useAndroidPullRefresh,
+  type UseAndroidPullRefreshOptions,
+} from './useAndroidPullRefresh';
 
 /** 造一个可控 scrollTop 的容器，避免依赖 jsdom 的真实布局。 */
 function createContainer(scrollTop = 0) {
@@ -373,5 +377,53 @@ describe('useAndroidPullRefresh 失败与清理', () => {
     api.onTouchCancel();
     expect(api.pullDistance.value).toBe(0);
     wrapper.unmount();
+  });
+});
+
+describe('全站唯一的指示器状态选取', () => {
+  it('没有页面在下拉时不提供状态，指示器不渲染', () => {
+    const { wrapper } = setup({ onRefresh: vi.fn().mockResolvedValue(undefined) });
+    expect(activePullIndicator.value).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('下拉中的页面提供状态，松手复位后又变回空', async () => {
+    const { api, wrapper } = setup({ onRefresh: vi.fn().mockResolvedValue(undefined) });
+
+    pullDown(api, 40);
+    await nextTick();
+    expect(activePullIndicator.value).not.toBeNull();
+    expect(activePullIndicator.value?.pullDistance.value).toBe(api.pullDistance.value);
+
+    await api.onTouchEnd();
+    await nextTick();
+    expect(activePullIndicator.value).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('路由切换瞬间新旧页面同时挂载时，用正在下拉的那个页面的状态', async () => {
+    const older = setup({ onRefresh: vi.fn().mockResolvedValue(undefined) });
+    const newer = setup({ onRefresh: vi.fn().mockResolvedValue(undefined) });
+
+    pullDown(newer.api, 50);
+    await nextTick();
+    expect(activePullIndicator.value?.pullDistance.value).toBe(newer.api.pullDistance.value);
+    expect(older.api.pullDistance.value).toBe(0);
+
+    await newer.api.onTouchEnd();
+    older.wrapper.unmount();
+    newer.wrapper.unmount();
+  });
+
+  it('页面卸载后注销，卸载在下拉途中也不会把状态留在全局', async () => {
+    const { api, wrapper } = setup({ onRefresh: vi.fn(() => new Promise(() => {})) });
+
+    pullDown(api, 90);
+    await nextTick();
+    expect(activePullIndicator.value).not.toBeNull();
+
+    wrapper.unmount();
+    await nextTick();
+    expect(activePullIndicator.value).toBeNull();
   });
 });

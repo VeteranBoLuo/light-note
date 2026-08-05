@@ -213,12 +213,6 @@
         @touchend.passive="pullRefresh.onTouchEnd"
         @touchcancel.passive="pullRefresh.onTouchCancel"
       >
-        <MobilePullRefreshIndicator
-          :distance="pullRefresh.pullDistance.value"
-          :refreshing="pullRefresh.refreshing.value"
-          :ready="pullRefresh.ready.value"
-          :visible="pullRefresh.visible.value"
-        />
         <BLoading :loading="pageLoading" class="inbox-loading">
           <div v-if="!pageLoading && pageLoadFailed && actionItems.length === 0" class="inbox-empty inbox-error">
             <div class="inbox-empty__icon">!</div>
@@ -368,7 +362,6 @@
   } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
@@ -1398,7 +1391,6 @@
     opacity: 0.96;
   }
   .inbox-scroll {
-    /* 下拉刷新指示器以此为定位基准(靠负 top 藏在内容上方) */
     position: relative;
     height: 100%;
     min-height: 0;

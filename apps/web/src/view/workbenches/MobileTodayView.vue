@@ -14,12 +14,6 @@
     @touchend.passive="pullRefresh.onTouchEnd"
     @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <MobilePullRefreshIndicator
-      :distance="pullRefresh.pullDistance.value"
-      :refreshing="pullRefresh.refreshing.value"
-      :ready="pullRefresh.ready.value"
-      :visible="pullRefresh.visible.value"
-    />
     <header class="mobile-today__head">
       <span class="mobile-today__date">{{ dateLabel }}</span>
       <h1>{{ greetingLine }}</h1>
@@ -145,7 +139,6 @@
   import { recordOperation } from '@/api/commonApi';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -440,7 +433,7 @@
     color: var(--text-color);
   }
 
-  /* 下拉刷新指示器的样式已随组件迁到 components/mobile/MobilePullRefreshIndicator.vue */
+  /* 下拉刷新指示器现在是全站唯一一个,挂在 MobileAppShell 的内容区顶部 */
 
   .mobile-today__head {
     margin-bottom: 14px;

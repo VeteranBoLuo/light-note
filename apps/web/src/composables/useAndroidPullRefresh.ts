@@ -1,4 +1,14 @@
-import { computed, onBeforeUnmount, ref, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue';
+import {
+  computed,
+  onBeforeUnmount,
+  onScopeDispose,
+  ref,
+  shallowRef,
+  toValue,
+  type ComputedRef,
+  type MaybeRefOrGetter,
+  type Ref,
+} from 'vue';
 import i18n from '@/i18n';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 import { isLightNoteAndroidApp } from '@/utils/androidBridge';
@@ -34,6 +44,35 @@ const REFRESHING_DISTANCE = 52;
  * 不必逐页回滚代码。
  */
 export const ANDROID_PULL_REFRESH_ENABLED = true;
+
+/**
+ * 指示器状态的全局登记表。
+ *
+ * 为什么不让每个页面各挂一个 <MobilePullRefreshIndicator>：它是 absolute 定位，
+ * 基准是各页自己的滚动容器，而那些容器的顶边位置差得很远 —— 今日页正好贴在顶栏下，
+ * 书签落在第一张卡片里，云空间落在列表第一行，标签落在统计卡中间。
+ * 同一个手势在不同模块弹出的位置不一样，看起来就像四个不同的功能。
+ *
+ * 收成一个之后，指示器只在 MobileAppShell 的内容区顶部出现，全站同一个位置。
+ *
+ * 用 shallowRef：数组里存的是 ref，深层响应式会把它们解包成普通值。
+ */
+const indicatorSources = shallowRef<PullIndicatorState[]>([]);
+
+export interface PullIndicatorState {
+  pullDistance: Readonly<Ref<number>>;
+  refreshing: Readonly<Ref<boolean>>;
+  ready: ComputedRef<boolean>;
+  visible: ComputedRef<boolean>;
+}
+
+/**
+ * 当前该显示的指示器状态。同一时刻只有一个页面可见，所以取第一个 visible 的即可；
+ * 路由切换瞬间新旧页面同时挂载时，谁在下拉就用谁的。
+ */
+export const activePullIndicator = computed(
+  () => indicatorSources.value.find((item) => item.visible.value) ?? null,
+);
 
 type GestureStage = 'idle' | 'tracking' | 'pulling';
 
@@ -204,6 +243,13 @@ export function useAndroidPullRefresh(options: UseAndroidPullRefreshOptions): Us
 
   // 页面卸载时清状态，避免刷新态残留到下次进入
   onBeforeUnmount(reset);
+
+  /* 把状态登记到全局,由 MobileAppShell 渲染那唯一一个指示器。 */
+  const indicatorState: PullIndicatorState = { pullDistance, refreshing, ready, visible };
+  indicatorSources.value = [...indicatorSources.value, indicatorState];
+  onScopeDispose(() => {
+    indicatorSources.value = indicatorSources.value.filter((item) => item !== indicatorState);
+  });
 
   return {
     pullDistance,

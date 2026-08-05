@@ -9,12 +9,6 @@
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <MobilePullRefreshIndicator
-        :distance="pullRefresh.pullDistance.value"
-        :refreshing="pullRefresh.refreshing.value"
-        :ready="pullRefresh.ready.value"
-        :visible="pullRefresh.visible.value"
-      />
       <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
         <div class="mobile-overview__total">
           <strong>{{ overview.tag }}</strong>
@@ -183,7 +177,6 @@
   import { getTotalResourceCount, type TagFilterValue, type TagRecord, useTagManage } from './useTagManage';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   const { t } = useI18n();
   const { loading, refreshing, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } =
