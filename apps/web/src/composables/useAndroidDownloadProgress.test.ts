@@ -47,18 +47,18 @@ describe('useAndroidDownloadProgress', () => {
     expect(downloads.value.map((item) => item.id)).toEqual(['1', '2']);
   });
 
-  it('成功后短暂停留再消失,让人看得到 100%', () => {
+  it('成功后停留一会儿再消失,让人读完「已完成 + 已保存到…」', () => {
     push({ id: '1', fileName: 'a.pdf', status: 'success', percent: 100 });
     expect(downloads.value).toHaveLength(1);
-    vi.advanceTimersByTime(1999);
+    vi.advanceTimersByTime(3599);
     expect(downloads.value).toHaveLength(1);
     vi.advanceTimersByTime(2);
     expect(downloads.value).toHaveLength(0);
   });
 
-  it('失败同样短暂停留后消失', () => {
+  it('失败同样停留后消失', () => {
     push({ id: '1', fileName: 'a.pdf', status: 'failed', percent: -1 });
-    vi.advanceTimersByTime(2001);
+    vi.advanceTimersByTime(3601);
     expect(downloads.value).toHaveLength(0);
   });
 
@@ -86,23 +86,18 @@ describe('useAndroidDownloadProgress', () => {
    * 「既然有进度条就不需要再弹已开始下载」、「下载完不知道存到哪了」。
    */
   describe('提示口径', () => {
-    it('落盘后报一次「已保存」并带上文件名,用户才知道文件去哪了', () => {
+    /*
+     * 落盘结果不再弹 toast:移动端 toast 也贴在底部,和进度卡片正好叠在一起
+     * （用户实测截图里两段文字压在一起）。位置信息改由卡片自己那一行显示。
+     */
+    it('落盘不弹 toast —— 否则会和底部的进度卡片叠住', () => {
       const spy = vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
       push({ id: '1', fileName: 'a.pdf', status: 'success', percent: 100 });
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(String(spy.mock.calls[0][0])).toContain('a.pdf');
+      expect(spy).not.toHaveBeenCalled();
       spy.mockRestore();
     });
 
-    it('原生重复推终态时只报一次,不刷屏', () => {
-      const spy = vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
-      push({ id: '1', fileName: 'a.pdf', status: 'success', percent: 100 });
-      push({ id: '1', fileName: 'a.pdf', status: 'success', percent: 100 });
-      expect(spy).toHaveBeenCalledTimes(1);
-      spy.mockRestore();
-    });
-
-    it('失败不报「已保存」', () => {
+    it('失败也不弹 toast,失败态由卡片自己表达', () => {
       const spy = vi.spyOn(message, 'success').mockImplementation(() => undefined as never);
       push({ id: '1', fileName: 'a.pdf', status: 'failed', percent: -1 });
       expect(spy).not.toHaveBeenCalled();

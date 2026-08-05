@@ -161,29 +161,38 @@
   .viewer-save-btn {
     position: fixed;
     left: 50%;
-    bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+    /* 让开底部导航:viewer 的遮罩是半透明的,导航仍然看得见,按钮压在「AI」上会显得很挤。
+       用和进度浮层同一个变量对齐,没有底部导航的页面自动退回安全区。 */
+    bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom, 0px)) + 22px);
     transform: translateX(-50%);
     z-index: 2020;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    /* 显式压住行高:BButton 自带的行高会把胶囊撑到 48px 上下,比这里需要的高一截。
+       看图才是主任务,按钮只要「找得到」,不该在小屏上糊掉一大块。 */
     height: auto;
-    min-height: 44px;
-    padding: 10px 20px;
-    border: 1px solid rgba(255, 255, 255, 0.28);
+    min-height: 34px;
+    padding: 6px 13px;
+    line-height: 1.2;
+    /* 深色半透明 + 白字:和 viewer 的深色遮罩同一族,不像原来的白色实心块那样抢眼。
+       用 rgba 而不是 color-mix —— APK 的 WebView 会把混色回退掉,而这里的对比度
+       是按钮能不能被看见的唯一依据,不能依赖混色。 */
+    border: 1px solid rgba(255, 255, 255, 0.22);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.94);
-    color: #1b1d29;
-    font-size: 14px;
-    font-weight: 600;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34);
+    background: rgba(28, 28, 32, 0.72);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(6px);
   }
   .viewer-save-btn:hover {
-    background: #fff;
-    color: #1b1d29;
+    background: rgba(40, 40, 46, 0.82);
+    color: #fff;
   }
   .viewer-save-btn:active {
-    background: rgba(240, 240, 245, 0.96);
+    background: rgba(52, 52, 58, 0.88);
   }
 </style>
 

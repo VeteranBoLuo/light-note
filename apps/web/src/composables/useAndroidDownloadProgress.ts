@@ -13,8 +13,11 @@ import { onAndroidDownloadProgress, type AndroidDownloadProgress } from '@/utils
  * 状态放模块级：下载是全局的，切页面不该丢进度；组件只订阅、不各自持有一份。
  */
 
-/** 终态后再留一会儿，让人看得到 100% 或失败，而不是「刚出现就消失」 */
-const FINISHED_LINGER_MS = 2000;
+/*
+ * 终态后的停留时间。落盘位置现在写在这张卡片里（不再另弹 toast），
+ * 得留够时间让人读完「已完成 + 已保存到「下载」目录」，2 秒偏短。
+ */
+const FINISHED_LINGER_MS = 3600;
 /*
  * 失联兜底：原生轮询有 30 分钟上限（见 WebViewSupport.DOWNLOAD_PROGRESS_MAX_DURATION_MS），
  * 超时后就不再推任何状态了。没有这个兜底的话，极大文件配慢网会在界面上留下一条
@@ -34,8 +37,6 @@ const START_FEEDBACK_GRACE_MS = 900;
 
 const activeDownloads = ref<AndroidDownloadProgress[]>([]);
 const removalTimers = new Map<string, ReturnType<typeof setTimeout>>();
-/** 已经报过「已保存」的下载，避免原生重复推终态时弹两遍 */
-const announcedIds = new Set<string>();
 /** 最近一次收到原生进度的时刻，用来判断当前 App 版本会不会回传进度 */
 let lastProgressAt = 0;
 let unsubscribe: (() => void) | null = null;
@@ -49,28 +50,8 @@ function scheduleRemoval(id: string, delay: number) {
     id,
     setTimeout(() => {
       removalTimers.delete(id);
-      // 一起清掉去重标记，否则长会话里 announcedIds 只增不减
-      announcedIds.delete(id);
       activeDownloads.value = activeDownloads.value.filter((item) => item.id !== id);
     }, delay),
-  );
-}
-
-/**
- * 下载真正落盘后才说「已保存」，并且必须带上位置。
- *
- * 之前用户的原话是「不知道下载到哪了」：系统 Toast 里那句「可在文件或相册中查看」被我们
- * 去掉后，就没人交代文件去处了。另外这条只在这里弹 —— 发起方（云空间/导出/图片保存）
- * 一律不再自己报成功，否则同一次下载会出现两条口径不同的「成功」。
- */
-function announceSaved(progress: AndroidDownloadProgress) {
-  if (announcedIds.has(progress.id)) return;
-  announcedIds.add(progress.id);
-  const fileName = progress.fileName?.trim();
-  message.success(
-    fileName
-      ? i18n.global.t('common.downloadSavedToNamed', { name: fileName })
-      : i18n.global.t('common.downloadSavedTo'),
   );
 }
 
@@ -100,8 +81,9 @@ function applyProgress(progress: AndroidDownloadProgress) {
     activeDownloads.value = [...activeDownloads.value, progress];
   }
   const finished = progress.status === 'success' || progress.status === 'failed';
+  // 落盘结果(含保存位置)由进度卡片自己显示,这里不再弹 toast —— 移动端 toast 也贴底,
+  // 两者会叠在一起,而且卡片已经写了「已完成」,再弹一条就是重复播报。
   scheduleRemoval(progress.id, finished ? FINISHED_LINGER_MS : STALE_TIMEOUT_MS);
-  if (progress.status === 'success') announceSaved(progress);
 }
 
 /**
@@ -131,7 +113,6 @@ export function useAndroidDownloadProgress() {
 export function resetAndroidDownloadProgressForTest() {
   removalTimers.forEach((timer) => clearTimeout(timer));
   removalTimers.clear();
-  announcedIds.clear();
   lastProgressAt = 0;
   activeDownloads.value = [];
   unsubscribe?.();

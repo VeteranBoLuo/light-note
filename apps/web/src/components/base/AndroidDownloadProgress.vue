@@ -15,7 +15,13 @@
       >
         <span :style="barStyle(item)"></span>
       </div>
-      <div v-if="item.status !== 'failed'" class="native-download-meta">{{ sizeText(item) }}</div>
+      <!--
+        落盘后这一行改说保存位置。原来是另外弹一条「已保存到…」的 toast，
+        但移动端 toast 也贴在底部，和这张卡片正好叠在一起；而且卡片已经写了
+        「已完成」，toast 再说一遍成功本就是重复。合成一行既不重叠也不啰嗦。
+      -->
+      <div v-if="item.status === 'success'" class="native-download-meta">{{ t('common.downloadSavedTo') }}</div>
+      <div v-else-if="item.status !== 'failed'" class="native-download-meta">{{ sizeText(item) }}</div>
     </div>
   </div>
 </template>
@@ -74,11 +80,12 @@
 
 <style scoped lang="less">
   /* 底部浮层:下载多为后台行为,不该盖住正在操作的内容。
-     贴底并让开移动端底部导航与手势区。 */
+     用和 BMessage 同一套坐标(--mobile-shell-bottom-height)让开底部导航与安全区,
+     否则两者各按各的算法贴底,会算出几乎相同的位置而叠在一起。 */
   .native-download-progress {
     position: fixed;
     left: 50%;
-    bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 12px);
     transform: translateX(-50%);
     z-index: 1200;
     width: min(420px, calc(100vw - 24px));

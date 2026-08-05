@@ -1761,7 +1761,6 @@ export default {
     imageSavedToGallery: 'Saved to gallery',
     saveImageUnsupportedInApp: 'This app version cannot save this image. Open it in a browser to save.',
     downloadStarted: 'Download started',
-    downloadSavedToNamed: 'Saved to Downloads: {name}',
     downloadSavedTo: 'Saved to Downloads',
     downloadingFile: 'Downloading',
     downloadFinished: 'Completed',

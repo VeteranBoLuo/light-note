@@ -1733,7 +1733,6 @@ export default {
     imageSavedToGallery: '已保存到相册',
     saveImageUnsupportedInApp: '当前版本暂不支持保存这张图片，可在浏览器中打开保存',
     downloadStarted: '已开始下载',
-    downloadSavedToNamed: '已保存到「下载」目录：{name}',
     downloadSavedTo: '已保存到「下载」目录',
     downloadingFile: '下载中',
     downloadFinished: '已完成',

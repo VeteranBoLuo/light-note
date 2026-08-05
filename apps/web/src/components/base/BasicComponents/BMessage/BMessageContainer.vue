@@ -216,6 +216,11 @@
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 230px);
     }
 
+    /* 原生下载进度浮层也占着底部,消息同样要叠在它上方(否则文字互相压住看不清) */
+    body:has(.native-download-progress) .b-message-container {
+      bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 104px);
+    }
+
     .b-message-item {
       width: max-content;
       min-width: min(180px, calc(100vw - 24px));
