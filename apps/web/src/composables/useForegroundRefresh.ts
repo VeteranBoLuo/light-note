@@ -11,8 +11,8 @@ import { registerGlobalRefreshSource } from './useGlobalRefreshBar';
  *
  * 与下拉刷新的分工：下拉是用户主动要最新数据，有明确的手势反馈；
  * 这里是被动补偿，必须完全静默 —— 不进 loading、不闪骨架屏、不弹提示，
- * 失败就保留旧数据当作什么都没发生。唯一的视觉表达是页面顶部那条
- * 极细的进度条（PageRefreshBar），告诉用户「后台在更新」。
+ * 失败就保留旧数据当作什么都没发生。唯一的视觉表达是视口顶部那条全局进度条
+ * （App.vue 里的 BLoading bar，由 useGlobalRefreshBar 驱动），告诉用户「后台在更新」。
  *
  * 判定用「距上次成功加载的时长」而不是「离开的时长」：用户离开 10 秒但
  * 数据已经 10 分钟没更新过，同样值得刷一次；反过来离开很久却刚刷过则不必。
@@ -95,8 +95,8 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
   }
 
   /*
-   * 自动接上移动端顶栏的统一提示条 —— 前台恢复刷新是「页面外触发」的,
-   * 页面自己没有合适位置说这件事,统一交给顶栏。页面无需额外接线。
+   * 自动接上顶部那条全局进度条 —— 前台恢复刷新是「页面外触发」的,
+   * 页面自己没有合适位置说这件事。页面无需额外接线。
    */
   registerGlobalRefreshSource(refreshing);
 

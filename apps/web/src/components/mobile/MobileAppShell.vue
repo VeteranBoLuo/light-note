@@ -3,11 +3,6 @@
     <MobileTopBar />
     <MobileResourceTabs v-if="showTopSwitcher" />
     <main class="mobile-app-shell__content">
-      <!--
-        全站唯一的静默刷新提示,贴在顶栏下沿。各页面的滚动结构差异太大,
-        逐页挂条都要单独取舍位置(见 useGlobalRefreshBar 的说明),这里收成一处。
-      -->
-      <PageRefreshBar :active="globalRefreshing" />
       <slot />
     </main>
     <MobileBottomNav v-if="showBottomNav && !keyboardOpen" />
@@ -22,8 +17,6 @@
   import MobileResourceTabs from '@/components/mobile/MobileResourceTabs.vue';
   import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
-  import PageRefreshBar from '@/components/base/PageRefreshBar.vue';
-  import { globalRefreshing } from '@/composables/useGlobalRefreshBar';
   import MobileGlobalSearchOverlay from '@/components/globalSearch/MobileGlobalSearchOverlay.vue';
   import { getMobileResourcePath } from '@/config/mobileNavigation';
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
@@ -125,8 +118,7 @@
     overflow: hidden;
   }
 
-  /* 排除刷新条:它是 2px 的绝对定位细条,不能被这条「子元素铺满」规则撑成全屏高。 */
-  .mobile-app-shell__content > :deep(*:not(.page-refresh-bar)) {
+  .mobile-app-shell__content > :deep(*) {
     width: 100%;
     height: 100%;
     min-height: 0;

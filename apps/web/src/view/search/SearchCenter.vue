@@ -72,7 +72,7 @@
                 >
                   <span
                     class="refresh-icon"
-                    :class="{ 'refresh-icon--spinning': viewState.loading || foregroundRefresh.refreshing.value }"
+                    :class="{ 'refresh-icon--spinning': viewState.loading }"
                     aria-hidden="true"
                   >
                     <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
@@ -185,7 +185,7 @@
                   >
                     <span
                       class="refresh-icon"
-                      :class="{ 'refresh-icon--spinning': viewState.loading || foregroundRefresh.refreshing.value }"
+                      :class="{ 'refresh-icon--spinning': viewState.loading }"
                       aria-hidden="true"
                     >
                       <SvgIcon :src="icon.cloudSpace.preview.retry" size="16" />
@@ -668,15 +668,12 @@
     onRefresh: () => refreshData({ silent: true }),
   });
   /*
-   * 从后台切回来时补一次数据。
-   *
-   * 这里不加顶部进度条:结果区是 20px 圆角卡片,absolute 的细条两端会溢出圆角,
-   * 而父级又不能 overflow: hidden(会裁掉类型筛选浮层)。本页本来就有一个常驻
-   * 刷新按钮,让它的图标在静默刷新时一起转,比新增一条进度条更贴合既有设计。
+   * 从后台切回来时补一次数据。提示走顶部那条全局进度条(App.vue),
+   * 不让刷新按钮跟着转 —— 静默刷新不是用户点的,转圈会让人以为自己碰到了按钮。
    *
    * 与手动刷新并发是安全的:loadData 用 requestSeq 作废先发请求。
    */
-  const foregroundRefresh = useForegroundRefresh({
+  useForegroundRefresh({
     refresh: () => refreshData({ silent: true }),
     // 批量选择中刷新会让已勾选的项消失,等用户退出批量模式再说。
     canRefresh: () => !batchMode.value && !viewState.loading && !viewState.loadingMore,

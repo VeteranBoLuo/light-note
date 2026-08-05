@@ -147,16 +147,7 @@
         />
       </aside>
 
-      <div class="note-main-panel" :class="{ 'is-refreshing': refreshing }">
-        <!--
-          这条只留给桌面端。移动端的静默刷新统一由顶栏下沿那条全局提示负责
-          (见 useGlobalRefreshBar),同一件事不在两处说。
-          下拉刷新在任何端都由跟手的胶囊指示器表达,不走进度条。
-        -->
-        <PageRefreshBar
-          tone="note"
-          :active="!bookmark.isMobile && (refreshing || foregroundRefresh.refreshing.value)"
-        />
+      <div class="note-main-panel">
         <div
           v-if="loading && currentViewMode === 'card'"
           class="note-library-body note-card-skeleton-wrap"
@@ -331,7 +322,6 @@
   import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
-  import PageRefreshBar from '@/components/base/PageRefreshBar.vue';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
@@ -693,14 +683,15 @@
    * 从后台切回来时补一次数据。走的是同一条软刷新路径,区别只在触发方式:
    * 这里没有手势,所以反馈只有顶部那条进度条。
    */
-  const foregroundRefresh = useForegroundRefresh({
+  useForegroundRefresh({
     refresh: () => Promise.all([reloadNotes(true), getAllTags()]),
     canRefresh: () =>
       !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
   });
   /*
-   * 切标签的软刷新在移动端也要有提示。前台恢复刷新由 composable 自己注册,
-   * 这一条是页面自己的软刷新 —— 必须排除下拉引起的那次,否则和胶囊指示器重复。
+   * 切标签的软刷新也要有提示,走顶部那条全局进度条(App.vue)。
+   * 前台恢复刷新由 composable 自己注册,这一条是页面自己的软刷新 ——
+   * 必须排除下拉引起的那次,否则和跟手的胶囊指示器重复。
    */
   registerGlobalRefreshSource(() => refreshing.value && !pullRefresh.refreshing.value);
   const allTags = ref<any[]>([]);
@@ -1636,12 +1627,6 @@
   }
 
 
-
-  .note-main-panel.is-refreshing .note-library-body,
-  .note-main-panel.is-refreshing .note-library-body-list {
-    opacity: 0.45;
-    pointer-events: none;
-  }
 
   @media (prefers-reduced-motion: reduce) {
     .note-workspace,

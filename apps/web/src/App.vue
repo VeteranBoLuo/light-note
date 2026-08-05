@@ -1,6 +1,15 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
-    <BLoading v-if="!isAndroidApp" :loading="routeNavigationLoading" bar :title="t('common.loading')" />
+    <!--
+      全站唯一的顶部进度条,视口级 fixed 定位,所有模块共用同一个位置。
+      两件事共用它:路由导航(Android App 里不显示,原生层自己有反馈)和静默刷新
+      (回到前台的陈旧刷新、切标签一类的软刷新 —— 这个在 Android App 里也要显示)。
+    -->
+    <BLoading
+      :loading="(!isAndroidApp && routeNavigationLoading) || globalRefreshing"
+      bar
+      :title="globalLoadingBarTitle"
+    />
     <a-config-provider
       :theme="{
         token: {
@@ -65,6 +74,7 @@
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { routeNavigationLoading } from '@/router';
+  import { globalRefreshing } from '@/composables/useGlobalRefreshBar';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
 
@@ -83,6 +93,10 @@
     computed(() => bookmark.isMobile),
   );
   const isAndroidApp = isLightNoteAndroidApp();
+  /* 同一条进度条服务两件事,读屏文案要说清当前是哪一件。 */
+  const globalLoadingBarTitle = computed(() =>
+    globalRefreshing.value && !routeNavigationLoading.value ? t('common.refreshing') : t('common.loading'),
+  );
   const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
