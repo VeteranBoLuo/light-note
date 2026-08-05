@@ -1,11 +1,17 @@
 <template>
+  <!--
+    click 必须 .stop：这个按钮总是放在表格行、卡片这类本身可点击的容器里，
+    「执行这个操作」绝不该顺带触发容器的点击（用户管理里点编辑/删除会连带弹出
+    用户详情，就是这条漏了 —— 旁边的 keydown 一直是 .prevent.stop）。
+    父组件写 @click.stop 挡不住：那是自定义事件，修饰符对它无效。
+  -->
   <span
     class="b-action-button"
     :class="[`b-action-button--${action}`, { 'b-action-button--with-label': label }]"
     role="button"
     tabindex="0"
     :aria-label="tooltip"
-    @click="emit('click')"
+    @click.stop="emit('click')"
     @keydown.enter.prevent.stop="emit('click')"
     @keydown.space.prevent.stop="emit('click')"
   >

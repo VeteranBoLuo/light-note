@@ -34,10 +34,14 @@
           <svg-icon style="border-radius: 50%" :src="record.headPicture || icon.navigation.user" :size="30" />
         </template>
         <template v-else-if="column.key === 'operation'">
+          <!--
+            五个操作平铺时这一列又挤又难扫。只把最常用的「预览用户」留在外面
+            （日常查账号基本都走这个），编辑、维护模式、成长运营与删除收进
+            「更多」，删除放最后并标危险色，顺带降低误点概率。
+          -->
           <BSpace>
+            <!-- 行本身可点击（打开用户详情），所以每个操作入口都要 @click.stop -->
             <BTooltip :title="t('guest.userPreviewEntry')">
-              <!-- 模拟登录是「以别人身份进系统」的重操作，此前挂在裸 svg-icon 上：
-                   键盘够不到、读屏也不播报，而旁边同等重要的「维护模式」却是正经按钮。 -->
               <button
                 type="button"
                 class="usermg-icon-btn dom-hover"
@@ -47,20 +51,23 @@
                 <svg-icon :src="icon.navigation.user" size="16" />
               </button>
             </BTooltip>
-            <BTooltip :title="t('guest.adminContextMaintainEntry')">
-              <BButton size="small" @click.stop="maintainAsUser(record)">{{
-                t('guest.adminContextMaintainShort')
-              }}</BButton>
-            </BTooltip>
-            <BActionButton action="edit" :tooltip="t('common.edit')" @click="editUser(record)" />
-            <BActionButton action="delete" :tooltip="t('common.delete')" @click="delUser(record)" />
-            <span
-              title="成长运营(发经验/调等级/送补签卡)"
-              class="dom-hover"
-              style="cursor: pointer; font-size: 15px; line-height: 1"
-              @click.stop="openGrowthAdmin(record)"
-              >🎖️</span
-            >
+            <!--
+              整个下拉外面包一层 @click.stop：不能把 .stop 加在触发按钮上 ——
+              那样 BDropdown 收不到冒泡上来的 click，菜单根本展不开。
+            -->
+            <span class="usermg-more" @click.stop>
+              <BDropdown trigger="click" align="right" :menu-options="moreOptions(record)">
+                <BTooltip :title="t('common.more')">
+                  <button
+                    type="button"
+                    class="usermg-icon-btn dom-hover"
+                    :aria-label="`${t('common.more')}：${record.alias || record.email || record.id}`"
+                  >
+                    <svg-icon :src="icon.common.more" size="16" />
+                  </button>
+                </BTooltip>
+              </BDropdown>
+            </span>
           </BSpace>
         </template>
       </template>
@@ -139,8 +146,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
@@ -184,7 +190,8 @@
       { title: 'IP', key: 'ip', width: '150px' },
       { title: '最近在线', key: 'lastActiveTime', width: '1fr', sortable: true },
       { title: '注册时间', key: 'createTime', width: '1fr' },
-      { title: '操作', key: 'operation', width: '190px' },
+      // 操作只剩「预览 + 更多」两个图标，190px 是五个按钮平铺时代的遗留
+      { title: '操作', key: 'operation', width: '100px' },
     ];
   });
 
@@ -221,6 +228,39 @@
   const previewMode = ref<'readonly' | 'maintain'>('readonly');
   const growthAdminVisible = ref(false);
   const growthAdminUser = ref<{ id: string; alias: string }>({ id: '', alias: '' });
+  /**
+   * 「更多」里的低频与危险操作。
+   * 删除单独用分隔线隔开并标 danger，避免和上面几个「进入某人的工作区」混在一起误点。
+   */
+  const moreOptions = (record: any) => [
+    {
+      key: 'edit',
+      label: t('common.edit'),
+      icon: icon.table_edit,
+      function: () => editUser(record),
+    },
+    {
+      key: 'maintain',
+      label: t('guest.adminContextMaintainEntry'),
+      icon: icon.userCenter.settingsGear,
+      function: () => maintainAsUser(record),
+    },
+    {
+      key: 'growth',
+      label: '成长运营（发经验 / 调等级 / 送补签卡）',
+      icon: icon.userCenter.growth,
+      function: () => openGrowthAdmin(record),
+    },
+    { divider: true },
+    {
+      key: 'delete',
+      label: t('common.delete'),
+      icon: icon.table_delete,
+      danger: true,
+      function: () => delUser(record),
+    },
+  ];
+
   const openGrowthAdmin = (record) => {
     growthAdminUser.value = { id: record.id, alias: record.alias || record.userName || '' };
     growthAdminVisible.value = true;

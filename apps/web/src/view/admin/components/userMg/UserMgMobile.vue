@@ -32,7 +32,6 @@
                 {
                   label: t('common.edit'),
                   icon: icon.table_edit,
-                  danger: true,
                   function: () => editUser(record),
                 },
                 {
