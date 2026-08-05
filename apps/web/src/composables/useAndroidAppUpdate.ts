@@ -14,8 +14,16 @@
 
 import { computed, ref } from 'vue';
 import { ANDROID_RELEASE, OFFICIAL_HOST } from '@/config/androidRelease';
-import { getLightNoteAndroidVersion, isLightNoteAndroidApp, postAndroidMessage } from '@/utils/androidBridge';
+import {
+  getLightNoteAndroidVersion,
+  installApkViaAndroid,
+  isLightNoteAndroidApp,
+  onAndroidDownloadProgress,
+  postAndroidMessage,
+} from '@/utils/androidBridge';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+import { copyTextToClipboard } from '@/utils/clipboard';
 import i18n from '@/i18n';
 
 /** 记住"这个版本的红点已经看过了"。换成更高版本会重新提示。 */
@@ -64,9 +72,53 @@ function readDismissedVersion(): string {
  */
 const dismissedVersion = ref(readDismissedVersion());
 
+/** 期望的安装包文件名。下载进度回传里只有文件名，靠它认领「哪个下载是更新包」。 */
+function expectedApkFileName(): string {
+  return ANDROID_RELEASE.downloadPath.split('/').pop() || 'light-note.apk';
+}
+
+/**
+ * 安装包下载完成后弹「立即安装」。
+ *
+ * 监听放在模块级、只注册一次：下载在后台进行，用户很可能已经离开个人中心页，挂在组件里
+ * 就收不到完成事件了。用 Alert 而不是自己加组件，是为了不依赖某个挂载点 —— 任何页面都能弹。
+ */
+let installPromptHooked = false;
+
+function promptInstall(downloadId: string) {
+  Alert.alert({
+    title: i18n.global.t('appUpdate.installReadyTitle'),
+    content: i18n.global.t('appUpdate.installReadyContent'),
+    okText: i18n.global.t('appUpdate.installNow'),
+    async onOk() {
+      const result = await installApkViaAndroid(downloadId);
+      if (result.ok) return;
+      if (result.reason === 'need_permission') {
+        // 原生已经把用户送到「允许安装未知应用」那一页，开完权限要回来再点一次
+        message.warning(i18n.global.t('appUpdate.installNeedPermission'));
+        return;
+      }
+      // unsupported（旧版 App 没有这个通道）/ not_found / failed 一律退回手动安装引导
+      message.warning(i18n.global.t('appUpdate.installFallbackManual'));
+    },
+  });
+}
+
+function ensureInstallPromptHook() {
+  if (installPromptHooked) return;
+  installPromptHooked = true;
+  onAndroidDownloadProgress((progress) => {
+    if (progress.status !== 'success') return;
+    // 只认自己那个更新包：用户可能同时在下别的文件（导出件、云空间文件）
+    if (progress.fileName !== expectedApkFileName()) return;
+    promptInstall(progress.id);
+  });
+}
+
 /** 仅测试用:模块级状态不会随 localStorage.clear() 复位,用例之间必须显式重置。 */
 export function resetAndroidAppUpdateForTest() {
   dismissedVersion.value = readDismissedVersion();
+  installPromptHooked = false;
 }
 
 export function useAndroidAppUpdate() {
@@ -117,6 +169,8 @@ export function useAndroidAppUpdate() {
    * 所以提示文案必须同时给出前两层，不能只说"去通知栏点"。
    */
   function startUpdate(): boolean {
+    // 先挂上完成监听再发起下载，避免下载极快时错过 success 那一帧
+    ensureInstallPromptHook();
     const delivered = postAndroidMessage({
       type: 'download',
       url: apkUrl.value,
@@ -132,17 +186,24 @@ export function useAndroidAppUpdate() {
     return false;
   }
 
-  /** 兜底：把下载页地址交给用户，自己在手机浏览器打开 —— 浏览器自带安装权限，一定能装。 */
+  /**
+   * 兜底：把下载页地址交给用户，自己在手机浏览器打开 —— 浏览器自带安装权限，一定能装。
+   *
+   * 复制本身也可能失败（鸿蒙「卓易通」兼容层实测就复制不了），而这已经是第三层兜底了，
+   * 再失败就没有下一层。所以失败时不能只弹一句会消失的提示，要把完整地址留在弹框里
+   * 让用户能长按选中或照着输入。
+   */
   async function copyDownloadPageUrl(): Promise<boolean> {
-    try {
-      await navigator.clipboard.writeText(downloadPageUrl);
+    const copied = await copyTextToClipboard(downloadPageUrl);
+    if (copied) {
       message.success(i18n.global.t('appUpdate.pageUrlCopied'));
       return true;
-    } catch (error) {
-      console.error('复制下载页地址失败:', error);
-      message.error(i18n.global.t('appUpdate.pageUrlCopyFailed'));
-      return false;
     }
+    Alert.alert({
+      title: i18n.global.t('appUpdate.pageUrlCopyFailedTitle'),
+      content: `${i18n.global.t('appUpdate.pageUrlCopyFailedHint')}\n\n${downloadPageUrl}`,
+    });
+    return false;
   }
 
   return {

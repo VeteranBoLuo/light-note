@@ -25,6 +25,17 @@ export interface AndroidImageSaveResult {
   reason?: 'unsupported' | 'failed';
 }
 
+/**
+ * 安装已下载安装包的结果。
+ * - `unsupported`：旧版 App 没有这个通道（等不到回复）
+ * - `need_permission`：没授权「安装未知应用」，原生已顺手跳了设置页，开完要再点一次
+ * - `not_found`：下载记录已不存在，或那个包不是从轻笺官网下载的
+ */
+export interface AndroidApkInstallResult {
+  ok: boolean;
+  reason?: 'unsupported' | 'need_permission' | 'not_found' | 'failed';
+}
+
 declare global {
   interface Window {
     LightNoteAndroid?: LightNoteAndroidBridge;
@@ -32,6 +43,8 @@ declare global {
     __lightNoteAndroidDownloadProgress?: (raw: unknown) => void;
     /** 原生 → 网页的图片保存结果回调，由 saveImageViaAndroid 装上 */
     __lightNoteAndroidImageSaveResult?: (raw: unknown) => void;
+    /** 原生 → 网页的安装包安装结果回调，由 installApkViaAndroid 装上 */
+    __lightNoteAndroidApkInstallResult?: (raw: unknown) => void;
   }
 }
 
@@ -208,6 +221,69 @@ export function saveImageViaAndroid(dataUrl: string, fileName: string): Promise<
     // 旧版 App 收到未知消息类型会直接忽略，不会有任何回复 —— 超时即视为不支持
     setTimeout(() => settle({ ok: false, reason: 'unsupported' }), IMAGE_SAVE_TIMEOUT_MS);
     if (!postAndroidMessage({ type: 'image.save', token, dataUrl, fileName })) {
+      settle({ ok: false, reason: 'unsupported' });
+    }
+  });
+}
+
+/*
+ * 应用内更新的安装环节。
+ *
+ * 下载完成后由原生把安装包交给系统安装器，省掉「自己去文件管理里翻」这一步 —— 在鸿蒙
+ * 兼容层上这一步尤其难走：既不弹系统下载通知，文件也不落在「下载」目录。
+ *
+ * 同样用「请求带 token + 原生回传结果」而不是靠 UA 版本号判断能力：旧版 App 不认识
+ * apk.install，收到后直接忽略、不会有任何回复，超时即视为不支持并降级回手动安装引导。
+ */
+const APK_INSTALL_TIMEOUT_MS = 8000;
+const pendingApkInstalls = new Map<string, (result: AndroidApkInstallResult) => void>();
+let apkInstallHookInstalled = false;
+
+function ensureApkInstallHook() {
+  if (apkInstallHookInstalled || typeof window === 'undefined') return;
+  apkInstallHookInstalled = true;
+  window.__lightNoteAndroidApkInstallResult = (raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return;
+    const source = raw as Record<string, unknown>;
+    const token = typeof source.token === 'string' ? source.token : '';
+    const settle = pendingApkInstalls.get(token);
+    if (!settle) return;
+    pendingApkInstalls.delete(token);
+    settle({
+      ok: source.ok === true,
+      reason: source.ok === true ? undefined : normalizeApkInstallReason(source.reason),
+    });
+  };
+}
+
+function normalizeApkInstallReason(value: unknown): AndroidApkInstallResult['reason'] {
+  return value === 'need_permission' || value === 'not_found' || value === 'unsupported'
+    ? value
+    : 'failed';
+}
+
+/**
+ * 请求原生安装已下载好的安装包。
+ * `ok` 只表示系统安装确认页已被拉起 —— 装不装由用户在系统界面上决定，网页无从得知结果。
+ */
+export function installApkViaAndroid(downloadId: string): Promise<AndroidApkInstallResult> {
+  return new Promise((resolve) => {
+    if (!hasAndroidBridge()) {
+      resolve({ ok: false, reason: 'unsupported' });
+      return;
+    }
+    ensureApkInstallHook();
+    const token = `apk-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    let settled = false;
+    const settle = (result: AndroidApkInstallResult) => {
+      if (settled) return;
+      settled = true;
+      pendingApkInstalls.delete(token);
+      resolve(result);
+    };
+    pendingApkInstalls.set(token, settle);
+    setTimeout(() => settle({ ok: false, reason: 'unsupported' }), APK_INSTALL_TIMEOUT_MS);
+    if (!postAndroidMessage({ type: 'apk.install', token, downloadId: String(downloadId) })) {
       settle({ ok: false, reason: 'unsupported' });
     }
   });

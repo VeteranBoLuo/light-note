@@ -18,6 +18,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.Base64;
 import android.webkit.CookieManager;
 import android.webkit.URLUtil;
@@ -495,6 +496,101 @@ final class WebViewSupport {
                 }
             }
             return ImageSaveOutcome.FAILED;
+        }
+    }
+
+    /**
+     * 应用内更新的安装结果。
+     * NEED_PERMISSION 与其它失败必须分开：前者能靠跳设置页救回来，后者只能退回手动安装。
+     */
+    enum ApkInstallOutcome {
+        OK,
+        NEED_PERMISSION,
+        NOT_FOUND,
+        FAILED
+    }
+
+    /**
+     * 把已下载完成的轻笺安装包交给系统安装器。
+     *
+     * 只接受本应用经 DownloadManager 下载、且原始地址在轻笺官方域名下的文件：DownloadManager
+     * 按 uid 隔离，别的应用的 downloadId 在这里本来就查不到，再加一道来源域名校验，网页侧即使
+     * 被诱导发来任意 downloadId 也装不了非轻笺的包。
+     *
+     * 用 getUriForDownloadedFile 而不是直接读 COLUMN_LOCAL_URI：后者可能是 file:// 路径，
+     * Android 7+ 把它递给其它应用会抛 FileUriExposedException，前者给的是可共享的 content URI。
+     *
+     * 拉起的是系统安装确认页，装不装仍由用户在系统界面上决定，这里没有静默安装能力。
+     */
+    static ApkInstallOutcome installDownloadedApk(Activity activity, long downloadId) {
+        if (downloadId < 0) {
+            return ApkInstallOutcome.NOT_FOUND;
+        }
+        // API 26 起未授权「安装未知应用」时 startActivity 会被系统直接拒绝，先问再走
+        if (!activity.getPackageManager().canRequestPackageInstalls()) {
+            return ApkInstallOutcome.NEED_PERMISSION;
+        }
+
+        DownloadManager manager =
+            (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
+        if (manager == null) {
+            return ApkInstallOutcome.FAILED;
+        }
+        if (!isLightNoteUrl(downloadSourceUrl(manager, downloadId))) {
+            return ApkInstallOutcome.NOT_FOUND;
+        }
+
+        try {
+            Uri contentUri = manager.getUriForDownloadedFile(downloadId);
+            if (contentUri == null) {
+                return ApkInstallOutcome.NOT_FOUND;
+            }
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(contentUri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(intent);
+            return ApkInstallOutcome.OK;
+        } catch (Exception error) {
+            return ApkInstallOutcome.FAILED;
+        }
+    }
+
+    /** 下载记录里的原始请求地址，用于确认这个包确实来自轻笺官网。 */
+    private static String downloadSourceUrl(DownloadManager manager, long downloadId) {
+        DownloadManager.Query query = new DownloadManager.Query().setFilterById(downloadId);
+        try (Cursor cursor = manager.query(query)) {
+            if (cursor == null || !cursor.moveToFirst()) {
+                return "";
+            }
+            int uriColumn = cursor.getColumnIndex(DownloadManager.COLUMN_URI);
+            return uriColumn >= 0 ? String.valueOf(cursor.getString(uriColumn)) : "";
+        } catch (RuntimeException error) {
+            return "";
+        }
+    }
+
+    /**
+     * 打开系统的「允许安装未知应用」授权页。
+     * 带上本应用的包名直达自己那一项;个别 ROM 没有这个页面时退回应用详情页,再不行就放弃,
+     * 由网页侧提示用户手动安装。
+     */
+    static boolean openUnknownAppSourcesSettings(Activity activity) {
+        Uri packageUri = Uri.parse("package:" + activity.getPackageName());
+        Intent manageSources =
+            new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, packageUri);
+        try {
+            activity.startActivity(manageSources);
+            return true;
+        } catch (Exception ignored) {
+            // 继续尝试应用详情页
+        }
+        try {
+            activity.startActivity(
+                new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+            );
+            return true;
+        } catch (Exception error) {
+            return false;
         }
     }
 

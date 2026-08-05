@@ -59,7 +59,13 @@ export const ANDROID_RELEASE: AndroidReleaseInfo = {
   certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
   downloadPath: '/downloads/android/light-note-1.0.0.apk',
   minAndroidVersion: '8.0',
-  permissions: ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE'],
+  permissions: [
+    'android.permission.INTERNET',
+    'android.permission.ACCESS_NETWORK_STATE',
+    // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
+    // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
+    'android.permission.REQUEST_INSTALL_PACKAGES',
+  ],
   released: true,
 };
 

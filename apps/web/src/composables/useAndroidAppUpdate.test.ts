@@ -7,7 +7,14 @@ const release = {
   released: true,
 };
 const postAndroidMessage = vi.fn(() => true);
+const installApkViaAndroid = vi.fn();
+/** 原生下载进度的订阅者，用来手工投递「下载完成」事件 */
+const progressListeners: Array<(p: unknown) => void> = [];
 let userAgent = '';
+
+function emitDownloadProgress(payload: Record<string, unknown>) {
+  progressListeners.forEach((listener) => listener(payload));
+}
 
 vi.mock('@/config/androidRelease', () => ({
   get ANDROID_RELEASE() {
@@ -22,10 +29,18 @@ vi.mock('@/utils/androidBridge', () => ({
     const matched = /\bLightNoteAndroid\/([\w.-]+)/i.exec(userAgent);
     return matched ? matched[1] : '';
   },
+  installApkViaAndroid,
+  onAndroidDownloadProgress: (listener: (p: unknown) => void) => {
+    progressListeners.push(listener);
+    return () => {};
+  },
 }));
-vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
-  default: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
-}));
+const messageMock = { success: vi.fn(), warning: vi.fn(), error: vi.fn() };
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({ default: messageMock }));
+const alertMock = vi.fn();
+vi.mock('@/components/base/BasicComponents/BModal/Alert.ts', () => ({ default: { alert: alertMock } }));
+const copyTextToClipboard = vi.fn();
+vi.mock('@/utils/clipboard', () => ({ copyTextToClipboard }));
 vi.mock('@/i18n', () => ({ default: { global: { t: (key: string) => key } } }));
 
 const { compareAppVersions, resetAndroidAppUpdateForTest, useAndroidAppUpdate } = await import(
@@ -43,7 +58,9 @@ beforeEach(() => {
   release.downloadPath = '/downloads/android/light-note-1.0.0.apk';
   release.released = true;
   window.localStorage.clear();
-  // dismissed 是模块级共享状态，clear() 不会把它复位，用例之间必须显式重置
+  progressListeners.length = 0;
+  installApkViaAndroid.mockResolvedValue({ ok: true });
+  // dismissed 与「已挂上完成监听」都是模块级共享状态，clear() 不会复位，用例之间必须显式重置
   resetAndroidAppUpdateForTest();
 });
 
@@ -163,5 +180,83 @@ describe('useAndroidAppUpdate', () => {
   it('兜底地址是固定的下载页，不是带版本号的 APK 直链', () => {
     const update = useAndroidAppUpdate();
     expect(update.downloadPageUrl).toBe('https://boluo66.top/download/android');
+  });
+
+  it('下载完成后弹「立即安装」，确认即请求原生拉起安装器', async () => {
+    release.versionName = '1.0.1';
+    release.downloadPath = '/downloads/android/light-note-1.0.1.apk';
+    const update = useAndroidAppUpdate();
+    update.startUpdate();
+
+    emitDownloadProgress({ id: '42', fileName: 'light-note-1.0.1.apk', status: 'success', percent: 100 });
+    expect(alertMock).toHaveBeenCalledTimes(1);
+
+    await alertMock.mock.calls[0][0].onOk();
+    expect(installApkViaAndroid).toHaveBeenCalledWith('42');
+  });
+
+  it('只认自己那个更新包，别的下载完成不弹安装', () => {
+    release.versionName = '1.0.1';
+    release.downloadPath = '/downloads/android/light-note-1.0.1.apk';
+    useAndroidAppUpdate().startUpdate();
+
+    // 用户可能同时在下导出件或云空间文件
+    emitDownloadProgress({ id: '7', fileName: '周报.pdf', status: 'success', percent: 100 });
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('下载中途的进度事件不弹安装，只有 success 才弹', () => {
+    release.versionName = '1.0.1';
+    release.downloadPath = '/downloads/android/light-note-1.0.1.apk';
+    useAndroidAppUpdate().startUpdate();
+
+    emitDownloadProgress({ id: '42', fileName: 'light-note-1.0.1.apk', status: 'running', percent: 40 });
+    emitDownloadProgress({ id: '42', fileName: 'light-note-1.0.1.apk', status: 'failed', percent: -1 });
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('未授权安装时提示去系统设置开权限，而不是笼统失败', async () => {
+    release.versionName = '1.0.1';
+    release.downloadPath = '/downloads/android/light-note-1.0.1.apk';
+    installApkViaAndroid.mockResolvedValue({ ok: false, reason: 'need_permission' });
+    useAndroidAppUpdate().startUpdate();
+
+    emitDownloadProgress({ id: '42', fileName: 'light-note-1.0.1.apk', status: 'success', percent: 100 });
+    await alertMock.mock.calls[0][0].onOk();
+
+    expect(messageMock.warning).toHaveBeenCalledWith('appUpdate.installNeedPermission');
+  });
+
+  it('旧版 App 没有安装通道时退回手动安装引导', async () => {
+    release.versionName = '1.0.1';
+    release.downloadPath = '/downloads/android/light-note-1.0.1.apk';
+    installApkViaAndroid.mockResolvedValue({ ok: false, reason: 'unsupported' });
+    useAndroidAppUpdate().startUpdate();
+
+    emitDownloadProgress({ id: '42', fileName: 'light-note-1.0.1.apk', status: 'success', percent: 100 });
+    await alertMock.mock.calls[0][0].onOk();
+
+    expect(messageMock.warning).toHaveBeenCalledWith('appUpdate.installFallbackManual');
+  });
+
+  it('复制成功时只给一句轻提示', async () => {
+    copyTextToClipboard.mockResolvedValue(true);
+    const update = useAndroidAppUpdate();
+
+    await expect(update.copyDownloadPageUrl()).resolves.toBe(true);
+    expect(copyTextToClipboard).toHaveBeenCalledWith('https://boluo66.top/download/android');
+    expect(messageMock.success).toHaveBeenCalled();
+    expect(alertMock).not.toHaveBeenCalled();
+  });
+
+  it('复制失败时把完整地址留在弹框里 —— 这是第三层兜底，没有下一层了', async () => {
+    // 鸿蒙「卓易通」实测：Clipboard API 与 execCommand 都不可用
+    copyTextToClipboard.mockResolvedValue(false);
+    const update = useAndroidAppUpdate();
+
+    await expect(update.copyDownloadPageUrl()).resolves.toBe(false);
+    // 一闪而过的 message 记不住也来不及抄，必须是能停留、能长按选中的弹框
+    expect(alertMock).toHaveBeenCalledTimes(1);
+    expect(String(alertMock.mock.calls[0][0].content)).toContain('https://boluo66.top/download/android');
   });
 });

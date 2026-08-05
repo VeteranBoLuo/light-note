@@ -649,6 +649,48 @@ public final class MainActivity extends Activity {
         });
     }
 
+    /** 网页传来的 downloadId 是字符串（进度回传里就是字符串形态），非法值当查不到处理。 */
+    private static long parseDownloadId(String value) {
+        try {
+            return Long.parseLong(String.valueOf(value).trim());
+        } catch (NumberFormatException error) {
+            return -1L;
+        }
+    }
+
+    /**
+     * 把安装结果回给网页。
+     * 网页那边有超时，旧版 App 不认识 apk.install、什么都不回，超时即按「不支持」降级成手动安装引导。
+     * need_permission 单独给出去：那种情况已经顺手跳了设置页，网页要提示用户开完权限再点一次。
+     */
+    private void reportApkInstallResult(String token, WebViewSupport.ApkInstallOutcome outcome) {
+        runOnUiThread(() -> {
+            if (webView == null || isFinishing() || isDestroyed()) {
+                return;
+            }
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("token", token == null ? "" : token);
+                payload.put("ok", outcome == WebViewSupport.ApkInstallOutcome.OK);
+                if (outcome == WebViewSupport.ApkInstallOutcome.NEED_PERMISSION) {
+                    payload.put("reason", "need_permission");
+                } else if (outcome == WebViewSupport.ApkInstallOutcome.NOT_FOUND) {
+                    payload.put("reason", "not_found");
+                } else if (outcome == WebViewSupport.ApkInstallOutcome.FAILED) {
+                    payload.put("reason", "failed");
+                }
+            } catch (JSONException error) {
+                return;
+            }
+            webView.evaluateJavascript(
+                "window.__lightNoteAndroidApkInstallResult&&window.__lightNoteAndroidApkInstallResult("
+                    + payload
+                    + ");",
+                null
+            );
+        });
+    }
+
     /**
      * 把原生下载进度推给网页。
      *
@@ -714,6 +756,19 @@ public final class MainActivity extends Activity {
                     fileName,
                     ok -> reportImageSaveResult(token, ok)
                 );
+            } else if ("apk.install".equals(messageType)) {
+                // 应用内更新：把刚下载好的安装包交给系统安装器，省掉用户自己去文件管理里翻
+                String token = payload.optString("token");
+                long downloadId = parseDownloadId(payload.optString("downloadId"));
+                runOnUiThread(() -> {
+                    WebViewSupport.ApkInstallOutcome outcome =
+                        WebViewSupport.installDownloadedApk(MainActivity.this, downloadId);
+                    // 未授权「安装未知应用」时顺手把用户送到那一页，否则他不知道该去哪开
+                    if (outcome == WebViewSupport.ApkInstallOutcome.NEED_PERMISSION) {
+                        WebViewSupport.openUnknownAppSourcesSettings(MainActivity.this);
+                    }
+                    reportApkInstallResult(token, outcome);
+                });
             } else if ("privacyConsent.withdraw".equals(messageType)) {
                 runOnUiThread(this::restartForPrivacyConsent);
             } else if ("legal.open".equals(messageType)) {

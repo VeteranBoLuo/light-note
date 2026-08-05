@@ -1376,7 +1376,7 @@ export default {
     exportFailed: 'Export failed, please try again later',
     exportPdfRendering: 'Generating PDF…',
     exportPreparing: 'Preparing the export file…',
-    exportSavedToDownloads: 'Saved to your device Downloads folder',
+    exportSavedToDownloads: 'Saved to your device — find it in your Files app',
     exportTooLargeInApp:
       'This note is too large to export in the app. Open Light Note in a mobile browser to export.',
     exportCopiedInApp:
@@ -4420,13 +4420,22 @@ export default {
     modalNote:
       'The installer is only served from boluo66.top. If the system warns about an unknown source, allow the install first.',
     actionDownload: 'Download the new version',
-    actionDownloadDesc: 'When the download finishes, tap the file in your notifications or Files app to install',
+    actionDownloadDesc:
+      'When the download finishes, open your Files app, search for "light-note" and tap the installer',
     actionBrowser: 'Copy the download page link',
-    actionBrowserDesc: 'If neither of the above works, paste the link into your mobile browser and install from there',
-    downloadStarted: 'Download started — tap it in your notifications or Files app to install',
+    actionBrowserDesc: 'If the installer will not run, paste the link into your mobile browser and install from there',
+    downloadStarted: 'Download started — find "light-note" in your Files app to install it',
     bridgeUnavailable: 'This version cannot download directly. Copy the download page link and open it in your browser.',
     pageUrlCopied: 'Link copied — paste it into your mobile browser',
-    pageUrlCopyFailed: 'Copy failed. Please visit boluo66.top/download/android manually.',
+    pageUrlCopyFailedTitle: 'Open the download page manually',
+    pageUrlCopyFailedHint: 'This device does not support copying. Enter this address in your mobile browser:',
+    installReadyTitle: 'The new version has finished downloading',
+    installReadyContent: 'Tap "Install now", then confirm on the system install screen.',
+    installNow: 'Install now',
+    installNeedPermission:
+      'Allow Light Note to install apps in the settings screen that just opened, then tap "Install now" again',
+    installFallbackManual:
+      'Could not open the installer. Open your Files app, search for "light-note" and tap the installer.',
   },
   pwa: {
     install: 'Install LightNote',
