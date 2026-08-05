@@ -100,6 +100,9 @@ view/search/
 - 移动浏览器、移动 PWA 与 Android APK 共用 `apps/web` 中的移动端 Web UI；不得把 Vue 页面或移动布局迁入 `apps/android`。`apps/android` 只维护 WebView 容器和文件选择、下载、系统返回等原生能力。
 - 移动端 `BModal`、`BDrawer` 和全屏预览必须统一接入 `utils/mobileOverlayHistory.ts`，禁止组件自行 `history.pushState()` 或注册互不识别的 `popstate` 占位。
 - 从移动端弹框、抽屉或全屏预览发起路由跳转、打开外链时，统一使用 `closeCurrentMobileOverlayThen(closeOverlay, next)`；禁止在同一事件轮中直接写 `visible = false` 后立刻 `router.push()`，否则关闭浮层触发的 `history.back()` 会与新路由竞争，出现首次无响应、二次闪回。
+- **浮层交给浮层同样适用这条规则**：关闭一个占 history 的浮层、同时打开另一个（如快速添加抽屉里点「完善详情」打开待办编辑抽屉），必须走同一个 `closeCurrentMobileOverlayThen`，等上一层占位真正出栈后再打开下一层。释放占位的 `history.back()` 是异步的、新浮层压栈是同步的，写在同一轮里 back() 最终弹掉的是新浮层刚压入的那一格，**新浮层一打开就被自己的返回占位关掉**（症状：上一个抽屉关了，新抽屉没出来）。`releaseMobileOverlayHistory` 里「当前占位不是自己就不 back」的保护只在新浮层先压栈时生效，靠不住。
+- 因此两个浮层的可见性不要互相推导（`const aVisible = computed(() => x && !bVisible.value)`）：这种写法把「关 A」和「开 B」绑成一次赋值，无法插入等待占位出栈的时机，且 watch 执行顺序由组件挂载顺序决定，正好落进上面那个陷阱。用独立状态分别控制。
+- `BPopover` / `BDropdown` 不占 history 占位，从它们切换到弹框不受此限制。
 - 新增“弹层内跳转”交互时必须覆盖移动端回归：首次点击即可进入目标页、系统返回只关闭最上层浮层、关闭后不会闪回原页；相关公共机制需补 `mobileOverlayHistory` 单元测试。
 
 ### 后端规范

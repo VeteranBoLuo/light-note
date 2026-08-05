@@ -96,6 +96,45 @@ describe('mobileOverlayHistory', () => {
     expect(navigate).toHaveBeenCalledOnce();
   });
 
+  /**
+   * 浮层 → 浮层的交接：快速添加抽屉里点「完善详情」，要关掉外壳并打开待办详情抽屉。
+   *
+   * 若在同一事件轮里关外壳、开详情，外壳释放占位调用的 `history.back()` 是异步的、
+   * 详情压栈是同步的，back() 最终弹掉的是详情刚压入的那一格，详情抽屉一打开就被关掉。
+   * 交接必须走 closeCurrentMobileOverlayThen，等外壳占位真正出栈再注册下一层。
+   */
+  it('浮层交接时先等上层占位出栈，再注册新浮层，新浮层不会被上一次返回弹掉', async () => {
+    const shellBack = vi.fn();
+    const shell = registerMobileOverlayHistory(shellBack)!;
+    const drawerBack = vi.fn();
+    let drawer: ReturnType<typeof registerMobileOverlayHistory> = null;
+
+    const task = closeCurrentMobileOverlayThen(
+      () => releaseMobileOverlayHistory(shell),
+      () => {
+        drawer = registerMobileOverlayHistory(drawerBack);
+      },
+    );
+
+    // 外壳占位尚未出栈前，新浮层不能抢先注册
+    expect(drawer).toBeNull();
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    await task;
+
+    expect(drawer).not.toBeNull();
+    // 外壳的释放不触发它自己的关闭回调，新浮层也没有被连带关闭
+    expect(shellBack).not.toHaveBeenCalled();
+    expect(drawerBack).not.toHaveBeenCalled();
+
+    // 新浮层此时是唯一占位：按一次返回只关它
+    window.dispatchEvent(
+      new PopStateEvent('popstate', { state: { [MOBILE_OVERLAY_HISTORY_STATE_KEY]: undefined } }),
+    );
+    expect(drawerBack).toHaveBeenCalledOnce();
+    expect(shellBack).not.toHaveBeenCalled();
+  });
+
   it('弹出其他自管历史层并落回当前占位时，不误关底层浮层', () => {
     const close = vi.fn();
     const legacyOverlayClose = vi.fn();

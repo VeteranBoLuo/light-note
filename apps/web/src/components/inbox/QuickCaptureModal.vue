@@ -178,7 +178,13 @@
   const captureType = ref<ActionCaptureType>(inbox.quickCaptureType);
 
   const shellTitle = computed(() => t('inbox.quickCapture'));
-  const quickShellVisible = computed(() => visible.value === true && !todoDetailsVisible.value);
+  /*
+   * 详情抽屉打开期间隐藏快速添加外壳。这里必须是独立状态，不能由 todoDetailsVisible
+   * 反推：移动端要先关外壳、等它的 history 占位真正出栈，再打开详情抽屉，
+   * 两个动作得能分别控制（详见 openTodoDetails）。
+   */
+  const quickShellSuppressed = ref(false);
+  const quickShellVisible = computed(() => visible.value === true && !quickShellSuppressed.value);
   const shellComponent = computed(() => (bookmark.isMobile ? BDrawer : BModal));
   const shellProps = computed(() =>
     bookmark.isMobile
@@ -467,13 +473,31 @@
     }
   }
 
-  function openTodoDetails(payload: TodoPayload) {
+  async function openTodoDetails(payload: TodoPayload) {
     todoDraft.value = {
       title: payload.title,
       priority: payload.priority,
       dueAt: payload.dueAt,
     };
-    todoDetailsVisible.value = true;
+    /*
+     * 移动端两个 BDrawer 各自持有 history 占位，交接必须分两步。
+     *
+     * 原来只写 `todoDetailsVisible = true`，一个赋值同时关外壳、开详情：
+     * 外壳释放占位调用的 `history.back()` 是异步的，详情压栈是同步的，于是
+     * back() 最终弹掉的是详情刚压入的那一格，详情抽屉一打开就被自己的返回占位关掉
+     * —— 表现为「快速添加抽屉关了，完整待办抽屉没出来」。
+     *
+     * 与 docs/development.md 里「弹层内跳转」同源，只是这里是浮层→浮层而非浮层→路由，
+     * 同样必须先等占位出栈再执行下一步。桌面端没有占位，会立即继续。
+     */
+    await closeCurrentMobileOverlayThen(
+      () => {
+        quickShellSuppressed.value = true;
+      },
+      () => {
+        todoDetailsVisible.value = true;
+      },
+    );
   }
 
   async function afterDetailedTodoSaved(result: { id: string; title: string }) {
@@ -486,11 +510,13 @@
     }
     emit('captured');
     todoDetailsVisible.value = false;
+    quickShellSuppressed.value = false;
     visible.value = false;
   }
 
   function closeAfterTodoDetails() {
     todoDetailsVisible.value = false;
+    quickShellSuppressed.value = false;
     visible.value = false;
   }
 
@@ -542,6 +568,8 @@
     capturedResource.value = null;
     manualType.value = false;
     todoDetailsVisible.value = false;
+    // 外壳抑制状态必须一起清掉，否则下次打开快速添加会拿到一个隐形的外壳
+    quickShellSuppressed.value = false;
     todoDraft.value = undefined;
     captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
   }
