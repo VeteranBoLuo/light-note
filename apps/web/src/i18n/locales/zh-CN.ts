@@ -1735,6 +1735,7 @@ export default {
     saveImageUnsupportedInApp: '当前版本暂不支持保存这张图片，可在浏览器中打开保存',
     downloadStarted: '已开始下载',
     downloadSavedTo: '已保存到「下载」目录',
+    downloadConnecting: '连接中',
     downloadingFile: '下载中',
     downloadFinished: '已完成',
     downloadInterrupted: '下载失败',

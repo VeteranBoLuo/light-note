@@ -1762,6 +1762,7 @@ export default {
     saveImageUnsupportedInApp: 'This app version cannot save this image. Open it in a browser to save.',
     downloadStarted: 'Download started',
     downloadSavedTo: 'Saved to Downloads',
+    downloadConnecting: 'Connecting',
     downloadingFile: 'Downloading',
     downloadFinished: 'Completed',
     downloadInterrupted: 'Download failed',
