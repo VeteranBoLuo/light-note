@@ -161,29 +161,30 @@
 </script>
 
 <style lang="less" scoped>
+  /*
+   * 与 InlineTagRename 同一套：grid 两列的分配是确定的，flex-wrap 下
+   * 输入框会吃满整行把按钮挤下去，白占一行高度。
+   */
   .inline-tag-create__form {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
+    gap: 6px;
   }
   .inline-tag-create__input {
-    flex: 1 1 140px;
     min-width: 0;
   }
   .inline-tag-create__actions {
     display: flex;
-    flex-shrink: 0;
     gap: 6px;
   }
 
   @media (max-width: 767px) {
-    /* 窄屏让输入框独占一行，两个按钮并排在下面，避免输入框被挤成一条缝 */
-    .inline-tag-create__input {
-      flex: 1 1 100%;
+    /* 窄屏改单列：输入框独占一行，两个按钮并排在下面右对齐 */
+    .inline-tag-create__form {
+      grid-template-columns: minmax(0, 1fr);
     }
     .inline-tag-create__actions {
-      width: 100%;
       /* 触控高度由 b-button 的移动端样式保证，这里只管排布 */
       justify-content: flex-end;
     }

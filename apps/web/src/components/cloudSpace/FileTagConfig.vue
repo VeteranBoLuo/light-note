@@ -59,20 +59,11 @@
             <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.sharedDesc') }}</div>
           </div>
           <div class="tag-actions">
-            <b-button
-              size="small"
-              @click="fetchData"
-              v-click-log="{ module: '云空间-文件标签配置', operation: '刷新标签' }"
-            >
-              {{ t('common.refresh') }}
-            </b-button>
-            <b-button
-              size="small"
-              @click="openTagWorkspace()"
-              v-click-log="{ module: '云空间-文件标签配置', operation: '管理标签' }"
-            >
-              {{ t('cloudSpace.fileTagConfig.manageTags') }}
-            </b-button>
+            <!--
+              「刷新」与「标签管理」已移除，与笔记侧一致：新建、改名都在弹框内就地完成，
+              列表由操作本身即时更新；「标签管理」是一次跳页，在「给文件绑标签」的流程里
+              点它意味着放弃当前未保存的绑定改动，而它在导航里另有独立入口。
+            -->
             <!-- 与笔记侧共用同一个内联创建组件：建完即绑，不再跳出到标签编辑页 -->
             <InlineTagCreate
               :existing-tags="allTags"
@@ -93,26 +84,39 @@
             v-for="tag in filteredTags"
             :key="tag.id"
             class="tag-row"
-            :class="{ active: isTagBound(tag.id) }"
-            @click="toggleTag(tag)"
+            :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
+            @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
             v-click-log="{ module: '云空间-文件标签配置', operation: `切换文件标签【${tag.name}】` }"
           >
-            <div class="tag-left">
-              <span class="tag-dot" />
-              <div class="tag-text">
-                <div class="tag-name">{{ tag.name }}</div>
-                <div class="tag-state">
-                  {{ isTagBound(tag.id) ? t('cloudSpace.fileTagConfig.bound') : t('cloudSpace.fileTagConfig.unbound') }}
+            <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
+            <InlineTagRename
+              v-if="renamingTagId === tag.id"
+              :tag="tag"
+              :existing-tags="allTags"
+              guard-scene="rename-file-tag"
+              @renamed="handleTagRenamed"
+              @cancel="renamingTagId = ''"
+            />
+            <template v-else>
+              <div class="tag-left">
+                <span class="tag-dot" />
+                <div class="tag-text">
+                  <div class="tag-name">{{ tag.name }}</div>
+                  <div class="tag-state">
+                    {{
+                      isTagBound(tag.id) ? t('cloudSpace.fileTagConfig.bound') : t('cloudSpace.fileTagConfig.unbound')
+                    }}
+                  </div>
                 </div>
               </div>
-            </div>
-            <b-button
-              size="small"
-              @click.stop="openTagWorkspace(tag.id)"
-              v-click-log="{ module: '云空间-文件标签配置', operation: `编辑标签【${tag.name}】` }"
-            >
-              {{ t('cloudSpace.fileTagConfig.editInWorkspace') }}
-            </b-button>
+              <b-button
+                size="small"
+                @click.stop="renamingTagId = tag.id"
+                v-click-log="{ module: '云空间-文件标签配置', operation: `改名标签【${tag.name}】` }"
+              >
+                {{ t('tagInlineRename.entry') }}
+              </b-button>
+            </template>
           </div>
           <div v-if="!loading && !filteredTags.length" class="empty">
             {{ t('cloudSpace.fileTagConfig.noTagsCreate') }}
@@ -138,7 +142,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -153,6 +156,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
+  import InlineTagRename from '@/components/tag/InlineTagRename.vue';
 
   interface TagItem {
     id: string;
@@ -171,7 +175,6 @@
   const emit = defineEmits(['saved']);
   const visible = defineModel<boolean>('visible');
   const { t } = useI18n();
-  const router = useRouter();
   const bookmark = bookmarkStore();
   const user = useUserStore();
 
@@ -179,6 +182,8 @@
   const selectedTags = ref<TagItem[]>([]);
   const initialTags = ref<TagItem[]>([]);
   const searchValue = ref('');
+  /** 正在就地改名的标签 id，空串表示没有行处于编辑态 */
+  const renamingTagId = ref('');
   const loading = ref(false);
   const saving = ref(false);
 
@@ -250,6 +255,23 @@
     recordOperation({ module: '云空间-文件标签配置', operation: `新建共享标签【${tag.name}】` });
   }
 
+  /**
+   * 就地改名成功：同步标签库与已选区里的名字，不重新拉列表。
+   * 已选区是本地待保存状态，重拉会把用户还没点确定的绑定改动冲掉。
+   */
+  function handleTagRenamed(tag: { id: string; name: string }) {
+    const apply = (list: TagItem[]) => {
+      const target = list.find((item) => item.id === tag.id);
+      if (target) target.name = tag.name;
+    };
+    apply(allTags.value);
+    apply(selectedTags.value);
+    apply(initialTags.value);
+    renamingTagId.value = '';
+    message.success(t('tagInlineRename.renamed', { name: tag.name }));
+    recordOperation({ module: '云空间-文件标签配置', operation: `标签改名【${tag.name}】` });
+  }
+
   /** 输入的名字已存在：直接复用，不报错也不重复创建。 */
   function handleTagReused(tag: { id: string; name: string }) {
     const existing = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
@@ -275,12 +297,6 @@
 
   function resetTags() {
     selectedTags.value = [...initialTags.value];
-  }
-
-  function openTagWorkspace(tagId?: string) {
-    const target = tagId === 'add' ? '/manage/editTag/add' : tagId ? `/manage/editTag/${tagId}` : '/manage/tagMg';
-    const resolved = router.resolve(target);
-    window.open(resolved.href, '_blank');
   }
 
   function handleClose() {

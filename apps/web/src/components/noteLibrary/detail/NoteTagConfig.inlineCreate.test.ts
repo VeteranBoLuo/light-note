@@ -103,6 +103,28 @@ function selectedCount(host: HTMLElement) {
   return Number(host.querySelector('.overview-count')?.textContent?.trim() || '0');
 }
 
+
+/** 点某个标签行的「改名」并提交新名字 */
+async function renameTag(host: HTMLElement, index: number, next: string) {
+  const rows = host.querySelectorAll<HTMLElement>('.tag-row');
+  rows[index].querySelector<HTMLButtonElement>('.tag-meta button')!.click();
+  await nextTick();
+  const input = host.querySelector<HTMLInputElement>('.inline-tag-rename__input input')!;
+  input.value = next;
+  input.dispatchEvent(new Event('input'));
+  await nextTick();
+  host.querySelector<HTMLButtonElement>('.inline-tag-rename__submit')!.click();
+  await settle();
+}
+
+function libraryNames(host: HTMLElement) {
+  return [...host.querySelectorAll('.tag-row .tag-name')].map((el) => el.textContent?.trim());
+}
+
+function selectedNames(host: HTMLElement) {
+  return [...host.querySelectorAll('.chip-text')].map((el) => el.textContent?.trim());
+}
+
 describe('NoteTagConfig 就地新建标签', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -176,5 +198,52 @@ describe('NoteTagConfig 就地新建标签', () => {
 
     expect(selectedCount(host)).toBe(1);
     expect(info).toHaveBeenCalledOnce();
+  });
+
+  it('弹框内不再有跳出去的入口：刷新与标签管理都已移除', async () => {
+    const host = mount();
+    await settle();
+
+    const libraryButtons = [...host.querySelectorAll('.library-panel .panel-header button')].map((b) =>
+      b.textContent?.trim(),
+    );
+    expect(libraryButtons).not.toContain('刷新');
+    expect(libraryButtons).not.toContain('标签管理');
+  });
+
+  /**
+   * 改名要就地同步到标签库与已选区。已选区是本地待保存状态，
+   * 不能靠重拉列表刷新 —— 那会把用户还没点确定的绑定改动冲掉。
+   */
+  it('改名后标签库与已选区的名字同步更新，且不重拉列表', async () => {
+    const host = mount(['tag-1']);
+    await settle();
+    expect(selectedNames(host)).toEqual(['SSL']);
+    apiQueryPost.mockClear();
+
+    await renameTag(host, 0, 'SSL 证书');
+
+    expect(apiBasePost).toHaveBeenCalledWith('/api/bookmark/updateTag', { id: 'tag-1', name: 'SSL 证书' });
+    expect(libraryNames(host)[0]).toBe('SSL 证书');
+    expect(selectedNames(host)).toEqual(['SSL 证书']);
+    // 没有重新拉取标签库
+    expect(apiQueryPost).not.toHaveBeenCalled();
+  });
+
+  it('改名态下点击该行不会误切换绑定', async () => {
+    const host = mount();
+    await settle();
+    expect(selectedCount(host)).toBe(0);
+
+    const rows = host.querySelectorAll<HTMLElement>('.tag-row');
+    rows[0].querySelector<HTMLButtonElement>('.tag-meta button')!.click();
+    await nextTick();
+
+    // 点编辑态所在的行（输入行内部与行本身）都不应触发绑定
+    host.querySelector<HTMLElement>('.inline-tag-rename')!.click();
+    rows[0].click();
+    await nextTick();
+
+    expect(selectedCount(host)).toBe(0);
   });
 });

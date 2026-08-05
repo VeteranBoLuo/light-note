@@ -37,21 +37,14 @@
       <div class="panel library-panel">
         <div class="panel-header panel-header--library">
           <div>
-            <div class="title flex-align-center-gap"
-              >{{ $t('note.tagConfig.tagLibrary') }}
-              <b-button
-                size="small"
-                @click="fetchAllTags"
-                v-click-log="{ module: '笔记-标签配置', operation: '刷新标签' }"
-                >{{ $t('common.refresh') }}</b-button
-              >
-              <b-button
-                size="small"
-                @click="openTagWorkspace()"
-                v-click-log="{ module: '笔记-标签配置', operation: '管理标签' }"
-                >{{ $t('note.tagConfig.manageTags') }}</b-button
-              ></div
-            >
+            <!--
+              「刷新」与「标签管理」都已移除：
+              新建、改名都在弹框内就地完成，列表由操作本身即时更新，没有「去别处改完
+              回来同步」的场景了，刷新按钮失去了用途。而「标签管理」是一次跳页 ——
+              在这个「给笔记绑标签」的流程里点它意味着放弃当前未保存的绑定改动；
+              标签管理在桌面顶部导航和移动端「资料」区都有独立入口，不必在这里重复。
+            -->
+            <div class="title flex-align-center-gap">{{ $t('note.tagConfig.tagLibrary') }}</div>
             <div class="panel-subtitle panel-subtitle--tight">{{ $t('note.tagConfig.sharedDesc') }}</div>
           </div>
           <div class="tag-actions">
@@ -78,27 +71,38 @@
             v-for="tag in filteredTags"
             :key="tag.id"
             class="tag-row"
-            :class="{ active: isTagBound(tag.id) }"
-            @click="toggleTag(tag)"
+            :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
+            @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
             v-click-log="{ module: '笔记-标签配置', operation: `切换标签绑定【${tag.name}】` }"
           >
-            <div class="tag-left">
-              <span class="color-dot" />
-              <div class="tag-text">
-                <div class="tag-name">{{ tag.name }}</div>
-                <div class="tag-state">{{
-                  isTagBound(tag.id) ? $t('note.tagConfig.bound') : $t('note.tagConfig.unbound')
-                }}</div>
+            <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
+            <InlineTagRename
+              v-if="renamingTagId === tag.id"
+              :tag="tag"
+              :existing-tags="allTags"
+              guard-scene="rename-note-tag"
+              @renamed="handleTagRenamed"
+              @cancel="renamingTagId = ''"
+            />
+            <template v-else>
+              <div class="tag-left">
+                <span class="color-dot" />
+                <div class="tag-text">
+                  <div class="tag-name">{{ tag.name }}</div>
+                  <div class="tag-state">{{
+                    isTagBound(tag.id) ? $t('note.tagConfig.bound') : $t('note.tagConfig.unbound')
+                  }}</div>
+                </div>
               </div>
-            </div>
-            <div class="tag-meta">
-              <b-button
-                size="small"
-                @click.stop="openTagWorkspace(tag.id)"
-                v-click-log="{ module: '笔记-标签配置', operation: `编辑标签【${tag.name}】` }"
-                >{{ t('note.tagConfig.editInWorkspace') }}</b-button
-              >
-            </div>
+              <div class="tag-meta">
+                <b-button
+                  size="small"
+                  @click.stop="renamingTagId = tag.id"
+                  v-click-log="{ module: '笔记-标签配置', operation: `改名标签【${tag.name}】` }"
+                  >{{ t('tagInlineRename.entry') }}</b-button
+                >
+              </div>
+            </template>
           </div>
         </div>
         <div class="empty" v-else>{{ $t('note.tagConfig.noTagsCreate') }}</div>
@@ -118,10 +122,10 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import InlineTagCreate from '@/components/tag/InlineTagCreate.vue';
+  import InlineTagRename from '@/components/tag/InlineTagRename.vue';
 
   interface TagItem {
     id: string;
@@ -134,7 +138,6 @@
   const emit = defineEmits<{ saveTag: [tags: TagItem[]] }>();
   const bookmark = bookmarkStore();
   const user = useUserStore();
-  const router = useRouter();
   const injectedNote: any = inject('note', null);
   const currentNote = computed(() => props.note ?? injectedNote);
 
@@ -142,6 +145,8 @@
   const noteTags = ref<TagItem[]>([]);
   const initialNoteTags = ref<TagItem[]>([]);
   const searchValue = ref('');
+  /** 正在就地改名的标签 id，空串表示没有行处于编辑态 */
+  const renamingTagId = ref('');
 
   const filteredTags = computed(() => {
     const keyword = searchValue.value.trim().toLowerCase();
@@ -222,6 +227,23 @@
     recordOperation({ module: '笔记-标签配置', operation: `新建共享标签【${tag.name}】` });
   }
 
+  /**
+   * 就地改名成功：同步标签库与已选区里的名字，不重新拉列表。
+   * 已选区是本地待保存状态，重拉会把用户还没点确定的绑定改动冲掉。
+   */
+  function handleTagRenamed(tag: { id: string; name: string }) {
+    const apply = (list: TagItem[]) => {
+      const target = list.find((item) => item.id === tag.id);
+      if (target) target.name = tag.name;
+    };
+    apply(allTags.value);
+    apply(noteTags.value);
+    apply(initialNoteTags.value);
+    renamingTagId.value = '';
+    message.success(t('tagInlineRename.renamed', { name: tag.name }));
+    recordOperation({ module: '笔记-标签配置', operation: `标签改名【${tag.name}】` });
+  }
+
   /** 输入的名字已存在：直接复用，不报错也不重复创建。 */
   function handleTagReused(tag: { id: string; name: string }) {
     const existing = allTags.value.find((item) => item.id === tag.id) ?? normalizeTag(tag);
@@ -263,12 +285,6 @@
 
   function resetTags() {
     noteTags.value = [...initialNoteTags.value];
-  }
-
-  function openTagWorkspace(tagId?: string) {
-    const target = tagId === 'add' ? '/manage/editTag/add' : tagId ? `/manage/editTag/${tagId}` : '/manage/tagMg';
-    const resolved = router.resolve(target);
-    window.open(resolved.href, '_blank');
   }
 
   async function handleOk() {
