@@ -6,6 +6,7 @@ import path from 'path';
 import pool from '../db/index.js';
 import { validateQueryParams } from '../util/request.js';
 import { recordConversionEvent, normalizeConversionSource } from '../util/conversion.js';
+import { buildOperationLogSystem } from '../util/apiLogSystem.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
@@ -458,6 +459,9 @@ export const recordOperationLogs = (req, res) => {
       operation: req.isVisitorWorkspace ? `${operationName}（目标游客：${req.user?.id || '未知'}）` : operationName,
       create_by: userId,
       ip: req.ip || '',
+      // 与 api_logs 同一口径，后台能按「浏览器 / PWA / Android App」筛查问题操作。
+      // 只留环境相关字段：这一列是 varchar(255)，不塞 fingerprint 之类的长值。
+      system: JSON.stringify(buildOperationLogSystem(req)),
       del_flag: 0,
     };
     // operation_logs 为 latin1 表,operation/module 等列不支持 4 字节字符(emoji):
@@ -559,6 +563,16 @@ LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
     );
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
+    // 与 api 日志同样的处理:存的是 JSON 字符串,前端按对象读 system.os / system.runtime。
+    // 迁移之前的历史行没有这一列的值,normalize 会把它补成「未知 + browser」，不会渲染成空白。
+    page.forEach((row) => {
+      if (row.system && typeof row.system === 'string') {
+        try {
+          row.system = JSON.parse(row.system);
+        } catch (e) {}
+      }
+      row.system = normalizeApiLogSystem(row.system);
+    });
     let total;
     if (!cursorMode || !cursor) {
       const [totalRes] = await pool.query(

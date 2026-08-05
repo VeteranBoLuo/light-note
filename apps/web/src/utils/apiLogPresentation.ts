@@ -11,6 +11,19 @@ export function getApiLogRuntimeLabelKey(runtime?: string): string {
   return RUNTIME_LABEL_KEYS[runtime as ApiLogRuntime] || RUNTIME_LABEL_KEYS.unknown;
 }
 
+/**
+ * 运行环境后面要不要缀 App 版本号。
+ *
+ * 只有 Android App 有版本号（浏览器/PWA 说「版本」没有意义），拿它是为了按 APK 版本定位问题 ——
+ * 同一个毛病往往只出现在某个版本上，日志里不写清楚就只能靠猜。
+ * 返回后缀而不是整段文案，是为了让调用方各自用自己的 t() 取标签，避免把 i18n 实例传进来。
+ */
+export function getApiLogAppVersionSuffix(runtime?: string, appVersion?: string): string {
+  if (runtime !== 'android-app') return '';
+  const version = String(appVersion || '').trim();
+  return version ? ` ${version}` : '';
+}
+
 export function getApiLogRuntimeColor(runtime?: string): string {
   if (runtime === 'pwa-standalone') return 'var(--primary-color)';
   if (runtime === 'android-app') return 'var(--primary-h-color)';

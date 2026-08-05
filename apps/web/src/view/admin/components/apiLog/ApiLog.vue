@@ -43,9 +43,10 @@
           }}</span>
         </template>
         <template v-else-if="column.key === 'runtime'">
-          <span :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }">{{
-            t(getApiLogRuntimeLabelKey(record.system?.runtime))
-          }}</span>
+          <span :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
+            >{{ t(getApiLogRuntimeLabelKey(record.system?.runtime))
+            }}{{ getApiLogAppVersionSuffix(record.system?.runtime, record.system?.appVersion) }}</span
+          >
         </template>
       </template>
     </BTable>
@@ -76,7 +77,10 @@
       <div>城市：{{ selectedRecord.location?.city }}</div>
       <div>浏览器：{{ selectedRecord.system?.browser }}</div>
       <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
-      <div>{{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime)) }}</div>
+      <div>
+        {{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime))
+        }}{{ getApiLogAppVersionSuffix(selectedRecord.system?.runtime, selectedRecord.system?.appVersion) }}
+      </div>
     </div>
   </BModal>
 </template>
@@ -95,7 +99,12 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import { useI18n } from 'vue-i18n';
-  import { getApiLogOsColor, getApiLogRuntimeColor, getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
+  import {
+    getApiLogAppVersionSuffix,
+    getApiLogOsColor,
+    getApiLogRuntimeColor,
+    getApiLogRuntimeLabelKey,
+  } from '@/utils/apiLogPresentation.ts';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   const { t } = useI18n();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);

@@ -35,7 +35,21 @@
       :has-more="hasMore"
       @load-more="loadMore"
       @row-click="onRowClick"
-    />
+    >
+      <template #bodyCell="{ text, record, column }">
+        <template v-if="column.key === 'system'">
+          <span :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">{{
+            text?.os || t('apiLog.unknown')
+          }}</span>
+        </template>
+        <template v-else-if="column.key === 'runtime'">
+          <span :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
+            >{{ t(getApiLogRuntimeLabelKey(record.system?.runtime))
+            }}{{ getApiLogAppVersionSuffix(record.system?.runtime, record.system?.appVersion) }}</span
+          >
+        </template>
+      </template>
+    </BTable>
   </AdminDataPage>
 
   <BModal v-model:visible="detailVisible" title="操作详情" width="500px" :show-footer="false" :mask-closable="true">
@@ -44,6 +58,11 @@
       <div>邮箱：{{ selectedRecord.email }}</div>
       <div>模块：{{ selectedRecord.module }}</div>
       <div>操作：{{ selectedRecord.operation }}</div>
+      <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
+      <div>
+        {{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime))
+        }}{{ getApiLogAppVersionSuffix(selectedRecord.system?.runtime, selectedRecord.system?.appVersion) }}
+      </div>
       <div>时间：{{ selectedRecord.createTime }}</div>
     </div>
   </BModal>
@@ -63,6 +82,12 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  import {
+    getApiLogAppVersionSuffix,
+    getApiLogOsColor,
+    getApiLogRuntimeColor,
+    getApiLogRuntimeLabelKey,
+  } from '@/utils/apiLogPresentation.ts';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
@@ -90,6 +115,10 @@
     { title: '邮箱', key: 'email', width: '1fr' },
     { title: '模块', key: 'module', width: '1fr' },
     { title: '操作', key: 'operation', width: '1fr' },
+    // 与 api 日志同样的两列：出问题时能看出这条操作来自浏览器、PWA 还是 Android App。
+    // 给得比其他列窄一点，7 列平分会把「操作」挤得看不全。
+    { title: '操作系统', key: 'system', width: '0.7fr' },
+    { title: '运行环境', key: 'runtime', width: '0.8fr' },
     { title: '时间', key: 'createTime', width: '1fr' },
   ];
 

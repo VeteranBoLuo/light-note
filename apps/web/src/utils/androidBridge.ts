@@ -55,11 +55,14 @@ export function hasLightNoteAndroidUserAgent(
 }
 
 /**
- * 取出 App 自己写进 UA 的 versionName(WebViewSupport.configure 追加的 `LightNoteAndroid/x.y.z`)。
+ * 从 UA 里取轻笺 App 的版本号（`LightNoteAndroid/1.0.1` → `1.0.1`）。
+ * 版本由 WebViewSupport.configure 追加到 UA，取不到就是不在 App 内。
  *
- * 应用内更新检查只能靠这个值:提示的服务对象恰恰是旧版本用户,若改用新增的原生桥消息去问
- * 版本号,现存装机永远收不到提示(要先装新包才有这个能力)。UA 里没有 versionCode,
- * 所以比较按 versionName 走语义化比较,见 composables/useAndroidAppUpdate.ts。
+ * 两处在用，理由都记在这里以免被当成冗余删掉：
+ * - 应用内更新检查只能靠它。提示的服务对象恰恰是旧版本用户，若改用新增的原生桥消息去问
+ *   版本号，现存装机永远收不到提示（要先装新包才有那个能力）。UA 里没有 versionCode，
+ *   所以比较按 versionName 走语义化比较，见 composables/useAndroidAppUpdate.ts。
+ * - 日志里带上它才能按版本定位问题 —— 同一个毛病往往只出现在某个 APK 版本上。
  */
 export function getLightNoteAndroidVersion(
   userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,

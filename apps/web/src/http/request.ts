@@ -4,6 +4,7 @@ import i18n from '@/i18n';
 import useUserStore from '@/store/useUser';
 import { getBrowserType, getLogDeviceId, getLogFingerprint, getUserOsInfo } from '@/utils/common.ts';
 import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
+import { getLightNoteAndroidVersion } from '@/utils/androidBridge.ts';
 import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
 
@@ -159,6 +160,9 @@ request.interceptors.request.use(
       config.headers['OS'] = getUserOsInfo();
       config.headers['Browser'] = getBrowserType();
       config.headers['X-LightNote-Runtime'] = resolveLightNoteRuntime();
+      // 只在 App 内有值。日志里的运行环境带上版本号才能按 APK 版本定位问题
+      const androidAppVersion = getLightNoteAndroidVersion();
+      if (androidAppVersion) config.headers['X-LightNote-App-Version'] = androidAppVersion;
       config.headers['X-Lang'] = currentLang;
       const adminContextToken = getAdminContextToken();
       if (adminContextToken) {

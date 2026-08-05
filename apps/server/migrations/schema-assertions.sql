@@ -345,3 +345,13 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name='agent_logs'
  AND actual.index_name='idx_agent_logs_correlation'
 WHERE actual.index_name IS NULL;
+
+-- 23) 操作日志的环境列必须存在（期望 0 行）
+-- 缺列时后台的「操作系统 / 运行环境」两列会整列空白，且写入侧会静默丢掉这个字段。
+SELECT '[23] missing_operation_logs_system_column' AS check_name, 'operation_logs.system' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='operation_logs'
+ AND actual.column_name='system'
+WHERE actual.column_name IS NULL;

@@ -29,6 +29,11 @@
         <div>邮箱：{{ selectedRecord.email }}</div>
         <div>模块：{{ selectedRecord.module }}</div>
         <div>操作：{{ selectedRecord.operation }}</div>
+        <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
+        <div>
+          {{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime))
+          }}{{ getApiLogAppVersionSuffix(selectedRecord.system?.runtime, selectedRecord.system?.appVersion) }}
+        </div>
         <div>时间：{{ selectedRecord.createTime }}</div>
       </div>
     </BModal>
@@ -50,6 +55,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  import { getApiLogAppVersionSuffix, getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
   import { useI18n } from 'vue-i18n';
   const { t } = useI18n();
   const searchValue = ref('');

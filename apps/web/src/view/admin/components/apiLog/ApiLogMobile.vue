@@ -49,7 +49,10 @@
         <div>城市：{{ selectedRecord.location?.city }}</div>
         <div>浏览器：{{ selectedRecord.system?.browser }}</div>
         <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
-        <div>{{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime)) }}</div>
+        <div>
+          {{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime))
+          }}{{ getApiLogAppVersionSuffix(selectedRecord.system?.runtime, selectedRecord.system?.appVersion) }}
+        </div>
       </div>
     </BModal>
   </CommonContainer>
@@ -70,7 +73,7 @@
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useI18n } from 'vue-i18n';
-  import { getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
+  import { getApiLogAppVersionSuffix, getApiLogRuntimeLabelKey } from '@/utils/apiLogPresentation.ts';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   const { t } = useI18n();
   const searchValue = ref('');

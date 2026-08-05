@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { insertData } from './common.js';
 import { isSelfTraffic } from './logExclude.js';
+import { buildOperationLogSystem } from './apiLogSystem.js';
 
 const stripAstral = (value) =>
   typeof value === 'string' ? value.replace(/[\u{10000}-\u{10FFFF}]/gu, '') : value;
@@ -26,6 +27,8 @@ export async function recordServerOperation(req, { module, operation, userId } =
       : operationName,
     createBy: operatorId,
     ip: req?.ip || '',
+    // 与前端上报的那条走同一口径,否则改密这类服务端记的操作在后台会缺环境信息
+    system: JSON.stringify(buildOperationLogSystem(req)),
     delFlag: 0,
   };
   Object.keys(log).forEach((key) => {
