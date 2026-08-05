@@ -172,7 +172,9 @@
           title: t('note.tagConfig.title'),
           placement: 'bottom' as const,
           height: 'min(86dvh, 720px)',
-          bodyPadding: '12px',
+          // 底部 padding 交给操作条自己承担：sticky 的 bottom:0 停在 padding box 内边缘，
+          // 留着 12px 就会从操作条下方透出滚动内容
+          bodyPadding: '12px 12px 0',
           maskClosable: false,
         }
       : {
@@ -372,8 +374,9 @@
     bottom: 0;
     display: flex;
     gap: 10px;
-    padding: 10px 0 calc(10px + env(safe-area-inset-bottom, 0px));
-    margin-top: 4px;
+    /* 抽屉 body 底部 padding 已归零，这里补齐呼吸位与安全区 */
+    padding: 10px 0 calc(12px + env(safe-area-inset-bottom, 0px));
+    margin-top: 8px;
     background: var(--background-color);
     /* 内容滚到底之前，操作条与列表之间要有一条可见分界 */
     border-top: 1px solid var(--card-border-color);
