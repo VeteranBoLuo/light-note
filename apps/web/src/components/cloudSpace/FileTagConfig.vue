@@ -4,7 +4,13 @@
     BDrawer 没有内置 footer，所以下面的操作条按端切换渲染位置。
   -->
   <component :is="shellComponent" v-bind="shellProps" @close="handleClose" @update:visible="syncVisible">
-    <div class="file-tag-config" :class="{ mobile: bookmark.isMobile }">
+    <!--
+      内容与操作条同属一个 shell：内容不足时靠 margin-top:auto 把操作条压到底，
+      内容超出时靠它自己的 sticky 吸附。少了这层，空状态下 sticky 不生效，
+      按钮会停在内容末尾，等接口返回后再跳到底部。
+    -->
+    <div class="tag-config-shell" :class="{ 'is-sheet': bookmark.isMobile }">
+      <div class="file-tag-config" :class="{ mobile: bookmark.isMobile }">
       <div class="panel file-panel">
         <div class="file-card">
           <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(file)]" size="34" class="file-icon" />
@@ -120,16 +126,17 @@
             {{ t('cloudSpace.fileTagConfig.noTagsCreate') }}
           </div>
         </div>
-        <b-loading :loading="loading" class="panel-loading" />
+          <b-loading :loading="loading" class="panel-loading" />
+        </div>
       </div>
-    </div>
 
-    <!-- 抽屉没有 footer 插槽：移动端把操作条放进内容底部并贴底吸附 -->
-    <div v-if="bookmark.isMobile" class="tag-config-footer">
-      <b-button type="primary" @click="submitFileTags">
-        {{ saving ? t('cloudSpace.fileTagConfig.saving') : t('common.confirm') }}
-      </b-button>
-      <b-button @click="handleClose">{{ t('common.cancel') }}</b-button>
+      <!-- 抽屉没有 footer 插槽：移动端把操作条放进内容底部并贴底吸附 -->
+      <div v-if="bookmark.isMobile" class="tag-config-footer">
+        <b-button type="primary" @click="submitFileTags">
+          {{ saving ? t('cloudSpace.fileTagConfig.saving') : t('common.confirm') }}
+        </b-button>
+        <b-button @click="handleClose">{{ t('common.cancel') }}</b-button>
+      </div>
     </div>
 
     <template v-if="!bookmark.isMobile" #footer>
@@ -504,6 +511,21 @@
    * 每个 chip 独占一行在移动端单栏布局下会吃掉半屏。
    */
   /* 移动端抽屉里的贴底操作条：sticky 而非 fixed，软键盘弹起时不会错位 */
+  /*
+   * sticky 只在「内容超出容器」时才吸附：空状态内容矮，按钮会停在内容末尾，
+   * 等接口返回、列表变高后才跳到底部 —— 就是打开抽屉时看到的那次高度跳动。
+   * 让 shell 至少撑满 body 高度，再用 margin-top:auto 把操作条压到底，
+   * 空状态与有数据时按钮位置一致；内容超出时仍由 sticky 接管。
+   */
+  .tag-config-shell.is-sheet {
+    display: flex;
+    min-height: 100%;
+    flex-direction: column;
+  }
+  .tag-config-shell.is-sheet .tag-config-footer {
+    margin-top: auto;
+  }
+
   .tag-config-footer {
     position: sticky;
     bottom: 0;
