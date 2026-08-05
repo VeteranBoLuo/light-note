@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getLightNoteAndroidVersion,
   hasAndroidBridge,
   hasLightNoteAndroidUserAgent,
   isAndroidWebViewRuntime,
@@ -29,6 +30,12 @@ describe('androidBridge', () => {
     expect(isLightNoteAndroidApp(webViewUa)).toBe(false);
     expect(isAndroidWebViewRuntime(chromeUa)).toBe(false);
     expect(isAndroidWebViewRuntime(webViewUa)).toBe(true);
+
+    // 应用内更新检查要拿到具体版本号，不只是"是不是 App"
+    expect(getLightNoteAndroidVersion(appUa)).toBe('1.0.0');
+    expect(getLightNoteAndroidVersion(`${chromeUa} LightNoteAndroid/1.2.10`)).toBe('1.2.10');
+    expect(getLightNoteAndroidVersion(chromeUa)).toBe('');
+    expect(getLightNoteAndroidVersion(webViewUa)).toBe('');
   });
 
   it('没有原生通道时安全回退', () => {

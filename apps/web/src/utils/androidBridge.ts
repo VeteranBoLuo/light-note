@@ -41,6 +41,20 @@ export function hasLightNoteAndroidUserAgent(
   return /\bLightNoteAndroid\/[\w.-]+/i.test(userAgent);
 }
 
+/**
+ * 取出 App 自己写进 UA 的 versionName(WebViewSupport.configure 追加的 `LightNoteAndroid/x.y.z`)。
+ *
+ * 应用内更新检查只能靠这个值:提示的服务对象恰恰是旧版本用户,若改用新增的原生桥消息去问
+ * 版本号,现存装机永远收不到提示(要先装新包才有这个能力)。UA 里没有 versionCode,
+ * 所以比较按 versionName 走语义化比较,见 composables/useAndroidAppUpdate.ts。
+ */
+export function getLightNoteAndroidVersion(
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+): string {
+  const matched = /\bLightNoteAndroid\/([\w.-]+)/i.exec(userAgent);
+  return matched ? matched[1] : '';
+}
+
 export function hasAndroidBridge(): boolean {
   return typeof window !== 'undefined' && typeof window.LightNoteAndroid?.postMessage === 'function';
 }

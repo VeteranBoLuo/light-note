@@ -28,6 +28,17 @@
         >
           {{ inbox.todoAttentionTotal > 99 ? '99+' : inbox.todoAttentionTotal }}
         </span>
+        <!--
+          新版本红点冒泡到「我的」：用户不会主动去个人中心翻更新，红点只挂在页面内部等于没有。
+          与页面内那颗共享同一份 dismissed 状态，所以点了「下载新版本」两处一起消失。
+          无数字，只表示「有事待看」，具体版本号进去才说。
+        -->
+        <span
+          v-if="item.key === 'profile' && appUpdate.showBadge.value"
+          class="mobile-bottom-nav__badge mobile-bottom-nav__badge--dot"
+          role="status"
+          :aria-label="t('appUpdate.newVersionShort', { version: appUpdate.latestVersion.value })"
+        ></span>
       </span>
       <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
@@ -49,6 +60,7 @@
   } from '@/config/mobileNavigation';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import { inboxStore, useUserStore } from '@/store';
+  import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
 
   const route = useRoute();
   const router = useRouter();
@@ -56,6 +68,7 @@
   const inbox = inboxStore();
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
+  const appUpdate = useAndroidAppUpdate();
 
   // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
   const todoAttentionLabel = computed(() =>
@@ -200,6 +213,16 @@
     background: var(--danger-fill-bg, #d93b3b);
     font-size: 9px;
     line-height: 1;
+  }
+
+  /* 无数字的纯红点（新版本提示）：沿用上面那套定位与 2px 描边，只把尺寸收成圆点。
+     同样走 --danger-fill-bg 实色变量，APK 里混色回退后依然可见。 */
+  .mobile-bottom-nav__badge--dot {
+    min-width: 0;
+    width: 8px;
+    height: 8px;
+    padding: 0;
+    left: calc(50% + 7px);
   }
 
   @media (prefers-reduced-motion: reduce) {

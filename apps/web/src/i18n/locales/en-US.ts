@@ -4411,6 +4411,23 @@ export default {
     resetSuccess: 'Verified — password reset successfully',
     closeEsc: 'Close (Esc)',
   },
+  appUpdate: {
+    entry: 'App update',
+    newVersionShort: 'Version {version} available',
+    currentVersionShort: 'Current {version}',
+    upToDate: 'You are on the latest version {version}',
+    modalTitle: 'A new version is available',
+    modalNote:
+      'The installer is only served from boluo66.top. If the system warns about an unknown source, allow the install first.',
+    actionDownload: 'Download the new version',
+    actionDownloadDesc: 'When the download finishes, tap the file in your notifications or Files app to install',
+    actionBrowser: 'Copy the download page link',
+    actionBrowserDesc: 'If neither of the above works, paste the link into your mobile browser and install from there',
+    downloadStarted: 'Download started — tap it in your notifications or Files app to install',
+    bridgeUnavailable: 'This version cannot download directly. Copy the download page link and open it in your browser.',
+    pageUrlCopied: 'Link copied — paste it into your mobile browser',
+    pageUrlCopyFailed: 'Copy failed. Please visit boluo66.top/download/android manually.',
+  },
   pwa: {
     install: 'Install LightNote',
     oneClickInstall: 'One-click install',

@@ -80,6 +80,21 @@
               <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
             </span>
           </BButton>
+          <!--
+            App 内复用「安装 App」这一格:浏览器里是装 App、App 里是更新 App,同一位置的两种形态。
+            不另开入口是刻意的 —— settingsRegistry 里已经写明安装类入口只保留这一处。
+          -->
+          <BButton v-if="isAndroidApp" class="person-menu-item person-menu-item--button" @click="handleAppUpdateEntry">
+            <span class="person-menu-item-title">
+              {{ $t('appUpdate.entry') }}
+              <!-- 实心圆点,不依赖混色:APK 的 WebView 会把 color-mix 回退成实色，状态信号必须自带形状 -->
+              <span v-if="showUpdateBadge" class="person-menu-item-dot" aria-hidden="true"></span>
+            </span>
+            <span class="person-menu-item-des">
+              {{ appUpdateDescription }}
+              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            </span>
+          </BButton>
           <div
             class="person-menu-item"
             @click="goToProfileModule('/settings')"
@@ -181,6 +196,13 @@
       </div>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
+    <ActionCardModal
+      v-if="updateModalVisible"
+      v-model:visible="updateModalVisible"
+      :title="$t('appUpdate.modalTitle')"
+      :sections="updateSections"
+      :note="$t('appUpdate.modalNote')"
+    />
   </CommonContainer>
 </template>
 
@@ -203,8 +225,11 @@
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   const MyInfo = defineAsyncComponent(() => import('@/components/personCenter/myInfo/MyInfo.vue'));
+  const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -218,6 +243,15 @@
     return frameVariant(id) ? id : null;
   });
   const isAndroidApp = isLightNoteAndroidApp();
+  const appUpdate = useAndroidAppUpdate();
+  const updateModalVisible = ref(false);
+  const showUpdateBadge = computed(() => appUpdate.showBadge.value);
+  /** 摘要直接把版本号说清楚，省得用户点进去才知道是不是白跑一趟 */
+  const appUpdateDescription = computed(() =>
+    appUpdate.updateAvailable.value
+      ? t('appUpdate.newVersionShort', { version: appUpdate.latestVersion.value })
+      : t('appUpdate.currentVersionShort', { version: appUpdate.installedVersion.value }),
+  );
   const { canPrompt, isStandalone, openGuide } = usePwaInstall();
   const pwaEntryDescription = computed(() =>
     isStandalone.value
@@ -244,6 +278,48 @@
   function handlePwaEntry() {
     openGuide('person-center');
   }
+
+  /**
+   * 更新入口。无新版时只回一句「已是最新」，不弹面板 —— 用户点它多半是想确认一下。
+   * 有新版才展开三层安装路径：下载(通知栏/文件管理器) → 复制地址去浏览器。
+   */
+  function handleAppUpdateEntry() {
+    if (!appUpdate.updateAvailable.value) {
+      message.success(t('appUpdate.upToDate', { version: appUpdate.installedVersion.value }));
+      return;
+    }
+    updateModalVisible.value = true;
+    recordOperation({ module: '个人中心', operation: `打开更新面板【${appUpdate.latestVersion.value}】` });
+  }
+
+  const updateSections = computed(() => [
+    {
+      key: 'update',
+      title: '',
+      actions: [
+        {
+          key: 'download',
+          label: t('appUpdate.actionDownload'),
+          description: t('appUpdate.actionDownloadDesc'),
+          onClick: () => {
+            updateModalVisible.value = false;
+            if (appUpdate.startUpdate()) {
+              recordOperation({ module: '个人中心', operation: `下载新版 APK【${appUpdate.latestVersion.value}】` });
+            }
+          },
+        },
+        {
+          key: 'browser',
+          label: t('appUpdate.actionBrowser'),
+          description: t('appUpdate.actionBrowserDesc'),
+          onClick: async () => {
+            updateModalVisible.value = false;
+            await appUpdate.copyDownloadPageUrl();
+          },
+        },
+      ],
+    },
+  ]);
 
   function handleExitLogin() {
     menuVisible.value = false;
@@ -322,6 +398,20 @@
     .person-menu-item-title {
       font-size: 16px;
       flex: 0 0 auto;
+    }
+
+    /*
+     * 新版本红点。实心圆点 + 固定色值,不用 color-mix/阴影表达:
+     * APK 的 WebView 会把混色回退成实色、混色阴影回退成透明,只靠混色的状态信号会整体消失。
+     */
+    .person-menu-item-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      margin-left: 6px;
+      border-radius: 50%;
+      background: #f5222d;
+      vertical-align: middle;
     }
 
     .person-menu-item-des {
