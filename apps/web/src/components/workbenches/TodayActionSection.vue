@@ -60,8 +60,10 @@
               </span>
             </div>
             <div class="today-action-row__actions">
+              <!-- 重复待办不会被顺延(会打乱周期)，按钮就不能也叫「明天再看」，否则又是一个
+                   承诺了做不到的事的按钮 —— 它对这类待办只推提醒 -->
               <BButton size="small" :disabled="mutatingTodoId === todo.id" @click="snoozeTodo(todo)">
-                {{ t('workbench.today.snoozeTomorrow') }}
+                {{ todo.recurrence ? t('workbench.today.snoozeReminderOnly') : t('workbench.today.snoozeTomorrow') }}
               </BButton>
               <BButton size="small" :disabled="mutatingTodoId === todo.id" @click="editTodo(todo)">
                 {{ t('inbox.editTodo') }}
@@ -118,7 +120,12 @@
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import icon from '@/config/icon';
   import { completeInbox, type InboxResourceType } from '@/api/inboxApi';
-  import { completeTodo as completeTodoApi, snoozeTodo as snoozeTodoApi, type TodoItem } from '@/api/todoApi';
+  import {
+    completeTodo as completeTodoApi,
+    snoozeTodo as snoozeTodoApi,
+    updateTodo as updateTodoApi,
+    type TodoItem,
+  } from '@/api/todoApi';
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
@@ -269,15 +276,33 @@
     }
   }
 
+  /**
+   * 工作台的「明天再看」是「这件事今天不做了」，所以要顺延 dueAt，而不是只推提醒。
+   *
+   * 原来复用了待办页的「稍后提醒」接口，它只改 todo_reminders.scheduled_at；
+   * 而今日区是按 dueAt 判逾期的，于是逾期待办点完照旧赖在这里（乐观移除后一刷新就回来），
+   * 今天到期的那种则会在明天变成逾期再冒出来。待办页的「稍后提醒」语义本来就是提醒，那边不动。
+   *
+   * 重复待办例外：下一个实例是按当前 dueAt 推算的（todoService 的 nextRecurrenceAt），
+   * 顺延 dueAt 会让整条周期一起漂移（每周一的事顺延一天就全变周二）。
+   * 所以重复待办仍然只推提醒、条目留在今日区，并用提示说明截止时间没动，
+   * 免得又变成「点了没反应」。
+   */
   async function snoozeTodo(item: TodayTodoRow) {
     if (blockGuestWrite('workbench-today-todo', t('inbox.guestPrompt'))) return;
     mutatingTodoId.value = item.id;
+    const targetAt = todoSnoozeAt('tomorrow');
+    const recurring = Boolean(item.recurrence);
     try {
-      const res = await snoozeTodoApi(item.id, todoSnoozeAt('tomorrow'));
+      const res = recurring ? await snoozeTodoApi(item.id, targetAt) : await updateTodoApi(item.id, { dueAt: targetAt });
       if (res.status === 200) {
-        removedTodoIds.value = new Set([...removedTodoIds.value, item.id]);
-        recordOperation({ module: '工作台', operation: '今日行动稍后待办' });
-        message.success(t('inbox.todoSnoozed'));
+        // 只有真的顺延了截止时间才从今日区移除；重复待办仍属于今天，留着才和提示一致
+        if (!recurring) removedTodoIds.value = new Set([...removedTodoIds.value, item.id]);
+        recordOperation({
+          module: '工作台',
+          operation: recurring ? '今日行动推迟提醒(重复待办)' : '今日行动顺延待办到明天',
+        });
+        message.success(recurring ? t('workbench.today.snoozeRecurringHint') : t('workbench.today.snoozedToTomorrow'));
         emit('refresh');
       } else {
         message.error(t('inbox.todoSnoozeFailed'));

@@ -158,6 +158,12 @@
     margin-top: 10px;
   }
 
+  /* 组内条目必须留缝：选中态和 hover 都是整块填充圆角背景，零间距时相邻两项的
+     背景会拼成一整片，圆角互相抵消，看不出「哪一项被选中」。 */
+  .admin-nav__items > li + li {
+    margin-top: 3px;
+  }
+
   /* 顶层条目（加粗、无组头）夹在两个分组之间时，若上下间距与组间距相同，会被读成
      上一组的最后一项。加大间距把它从相邻分组里断开。 */
   .admin-nav__group.is-standalone-group + .admin-nav__group,

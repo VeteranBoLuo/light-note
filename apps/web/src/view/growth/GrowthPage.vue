@@ -38,8 +38,13 @@
         <ActivityHeatmap ref="heatmapRef" />
       </section>
 
-      <div v-if="showGrowthSection('overview')" class="growth-row">
-        <section v-if="questsEnabled" class="growth-panel growth-panel--flex">
+      <!--
+        每日任务属于「任务」页：概览只留成长概况与数据统计，任务类内容集中在一处，
+        不再让人在概览里翻到一半才发现有任务要做。
+        桌面端不分 Tab，这一行仍是「每日任务 + 数据统计」两栏并排(移动端本就纵列)。
+      -->
+      <div v-if="showQuestsStatsRow" class="growth-row">
+        <section v-if="questsEnabled && showGrowthSection('tasks')" class="growth-panel growth-panel--flex">
           <DailyQuests
             :quests="quests"
             :bonus="questBonus"
@@ -48,7 +53,7 @@
             @claim="onClaim"
           />
         </section>
-        <section class="growth-panel growth-panel--flex">
+        <section v-if="showGrowthSection('overview')" class="growth-panel growth-panel--flex">
           <GrowthStats :stats="stats" />
         </section>
       </div>
@@ -176,6 +181,14 @@
   function showGrowthSection(section: MobileGrowthSection) {
     return !bookmark.isMobile || activeMobileSection.value === section;
   }
+
+  /**
+   * 「每日任务 + 数据统计」这一行的外层。移动端两个子项分属不同 Tab（任务 / 概览），
+   * 所以要在任一子项可见时才渲染外层，否则空 div 会白占容器 18px 的 gap。
+   */
+  const showQuestsStatsRow = computed(
+    () => showGrowthSection('overview') || (questsEnabled.value && showGrowthSection('tasks')),
+  );
 
   function scrollToHash() {
     const targetId = route.hash.replace(/^#/, '');

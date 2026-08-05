@@ -103,6 +103,34 @@ describe('后台导航菜单', () => {
     expect(security?.badgeHint).toContain('12 个高危事件未处理');
   });
 
+  /*
+   * 顺序是有意的：日志紧跟用户,「看某个用户 → 翻他的操作/接口日志」是排查时最常走的
+   * 一条线,中间隔着 AI 与增长运营会让这段来回跨半屏。原来 arrayContaining 只管
+   * 「在不在」不管「在哪」,顺序被改了测试也不会响。
+   */
+  it('分组顺序固定：日志排在用户之后、AI 之前', () => {
+    expect(nav().map((entry) => entry.key)).toEqual(['overview', 'user', 'log', 'ai', 'growth', 'security', 'tool']);
+  });
+
+  it('手机菜单的分组顺序与桌面一致', () => {
+    const groups = buildAdminMobileMenu({
+      icons: ICONS,
+      pendingOpinion: 0,
+      pendingSecurity: 0,
+      aiEvaluationTitle: 'AI 问答测试',
+    });
+
+    expect(groups.map((group) => group[0].id)).toEqual([
+      'overview',
+      'userMg',
+      'operationLog',
+      'agentLog',
+      'conversion',
+      'securityCenter',
+      'imageMg',
+    ]);
+  });
+
   it('只有一项的类别不给组头，多项的才分组', () => {
     const entries = nav();
     const standalone = entries.filter((entry) => entry.kind === 'item');

@@ -36,6 +36,11 @@ html.light-note-android-webview {
   --ln-android-color-mix-warning-soft-background: rgba(245, 158, 11, 0.1);
   --ln-android-color-mix-danger-soft-background: rgba(229, 72, 77, 0.1);
   --ln-android-color-mix-success-soft-background: rgba(34, 164, 71, 0.1);
+  // 中性弱底色(分段控件的槽、统计块、弱分隔区)。语义色那几个可以写死品牌 RGBA,
+  // 中性灰必须分主题:浅色主题压深、深色主题提亮,否则一套值在另一套主题上等于看不见。
+  --ln-android-color-mix-border-soft-background: rgba(15, 23, 42, 0.06);
+  --ln-android-color-mix-muted-soft-background: rgba(15, 23, 42, 0.06);
+  --ln-android-color-mix-text-soft-background: rgba(15, 23, 42, 0.06);
   --ln-android-color-mix-transparent: transparent;
   --ln-android-color-mix-white: #ffffff;
   --ln-android-color-mix-black: #111318;
@@ -184,4 +189,14 @@ html.light-note-android-webview {
     box-sizing: border-box;
     transform-origin: center;
   }
+}
+
+/*
+ * 深色主题下的中性弱底色。语义色的软底色两套主题共用一套品牌 RGBA 就够,
+ * 中性灰不行 —— 浅色主题那份「压深的黑」放到深色背景上完全看不出来。
+ */
+html.light-note-android-webview[data-theme='night'] {
+  --ln-android-color-mix-border-soft-background: rgba(255, 255, 255, 0.08);
+  --ln-android-color-mix-muted-soft-background: rgba(255, 255, 255, 0.08);
+  --ln-android-color-mix-text-soft-background: rgba(255, 255, 255, 0.08);
 }

@@ -84,6 +84,20 @@ export function buildAdminNav({
       ],
     },
     {
+      // 日志紧跟用户：排查问题时「看某个用户 → 翻他的操作/接口日志」是最常走的一条线，
+      // 中间隔着 AI 与增长运营会让这段来回跨半屏。
+      kind: 'group',
+      key: 'log',
+      title: '日志',
+      icon: icons.log,
+      items: [
+        { id: 'operationLog', title: '操作日志' },
+        { id: 'apiLog', title: 'API 日志' },
+        { id: 'logCleanup', title: '日志清理' },
+        { id: 'logExclude', title: '日志白名单' },
+      ],
+    },
+    {
       kind: 'group',
       key: 'ai',
       title: 'AI',
@@ -104,18 +118,6 @@ export function buildAdminNav({
         { id: 'conversion', title: '转化漏斗' },
         { id: 'pointsOps', title: '积分运营' },
         { id: 'notificationCenter', title: '通知中心', path: EXTERNAL_PATHS.notificationCenter, external: true },
-      ],
-    },
-    {
-      kind: 'group',
-      key: 'log',
-      title: '日志',
-      icon: icons.log,
-      items: [
-        { id: 'operationLog', title: '操作日志' },
-        { id: 'apiLog', title: 'API 日志' },
-        { id: 'logCleanup', title: '日志清理' },
-        { id: 'logExclude', title: '日志白名单' },
       ],
     },
     {

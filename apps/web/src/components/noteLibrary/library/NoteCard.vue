@@ -142,7 +142,7 @@
     position: relative;
     border-radius: 12px;
     border: 1px solid var(--surface-border-color);
-    padding: 18px 20px 16px;
+    padding: 16px 20px 16px;
     box-sizing: border-box;
     cursor: pointer;
     background: var(--note-card-bg);
@@ -325,7 +325,6 @@
     pointer-events: none;
     position: absolute;
     right: 14px;
-    top: 14px;
     z-index: 2;
     transition:
       opacity 0.16s ease,

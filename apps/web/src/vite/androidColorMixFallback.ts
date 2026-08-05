@@ -7,6 +7,13 @@ interface ParsedOperand {
   weight: number | null;
 }
 
+/*
+ * 弱混色背景(可见色权重 < 50、混向 transparent)在旧 WebView 上算不准,统一换成稳定 RGBA。
+ *
+ * 中性类别(border/muted/text)一开始漏了,于是所有「边框色/文字色 + transparent」的弱底色
+ * 在 APK 里直接回退成透明 —— 全站有 40 多处这种写法,表现就是分段控件、统计块之类的浅灰底
+ * 在 App 里整片消失,而 Web 上一切正常(用户报的「卡片列表切换区域背景色没了」就是这个)。
+ */
 const SOFT_BACKGROUND_CATEGORIES = new Set([
   'primary',
   'bookmark',
@@ -16,7 +23,19 @@ const SOFT_BACKGROUND_CATEGORIES = new Set([
   'warning',
   'danger',
   'success',
+  'border',
+  'muted',
+  'text',
 ]);
+
+/*
+ * 中性类别单独设一个下限:语义色的弱底色是「有意的强调」,多弱都该保留;
+ * 中性灰不一样 —— 4% 那种底纹本来就近乎看不见,回退成固定 RGBA 反而比原样更重,
+ * 而 40% 上下的灰槽(分段控件、统计块)不给底色就整块消失。
+ * 以 20% 划线:更弱的继续保持透明,够强的换成稳定 RGBA。
+ */
+const NEUTRAL_SOFT_BACKGROUND_CATEGORIES = new Set(['border', 'muted', 'text']);
+const NEUTRAL_SOFT_BACKGROUND_MIN_WEIGHT = 20;
 
 function splitTopLevel(value: string) {
   const parts: string[] = [];
@@ -110,7 +129,11 @@ function softBackgroundCategory(first: ParsedOperand, second: ParsedOperand, kin
   if (visibleWeight >= 50) return null;
 
   const category = variableCategory(visible.color, kind);
-  return SOFT_BACKGROUND_CATEGORIES.has(category) ? `${category}-soft-background` : null;
+  if (!SOFT_BACKGROUND_CATEGORIES.has(category)) return null;
+  if (NEUTRAL_SOFT_BACKGROUND_CATEGORIES.has(category) && visibleWeight < NEUTRAL_SOFT_BACKGROUND_MIN_WEIGHT) {
+    return null;
+  }
+  return `${category}-soft-background`;
 }
 
 function literalCategory(color: string, kind: ColorMixKind) {

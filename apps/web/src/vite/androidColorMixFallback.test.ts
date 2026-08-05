@@ -39,6 +39,34 @@ describe('wrapAndroidColorMixFallbacks', () => {
     );
   });
 
+  /*
+   * 中性弱底色曾经一律回退成透明,导致分段控件的灰槽、统计块的浅底在 APK 里整片消失
+   * (Web 正常)。20% 是分界:再弱的底纹保持透明,够强的换成稳定 RGBA。
+   */
+  it('keeps mid-weight neutral backgrounds visible in Android', () => {
+    const value = 'color-mix(in srgb, var(--card-border-color) 42%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
+      `var(--ln-android-color-mix-border-soft-background, ${value})`,
+    );
+  });
+
+  it('still drops the faintest neutral backgrounds to transparent', () => {
+    const value = 'color-mix(in srgb, var(--card-border-color) 14%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
+      `var(--ln-android-color-mix-transparent, ${value})`,
+    );
+  });
+
+  it('keeps mid-weight muted backgrounds visible in Android', () => {
+    const value = 'color-mix(in srgb, var(--desc-color) 30%, transparent)';
+
+    expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
+      `var(--ln-android-color-mix-muted-soft-background, ${value})`,
+    );
+  });
+
   it('uses the semantic border fallback for borders', () => {
     const value = 'color-mix(in srgb, var(--card-border-color) 70%, transparent)';
 
