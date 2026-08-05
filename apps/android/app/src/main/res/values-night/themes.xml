@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    系统处于深色模式时，把基础主题的 parent 换成 Material 的暗色版。
+
+    为什么必须有这份文件：WebView 的 `prefers-color-scheme` 媒体查询**不看系统的深色开关**，
+    只看宿主应用主题的 `isLightTheme` 属性。此前 parent 恒为 `Theme.Material.Light.NoActionBar`，
+    于是无论系统是否深色，网页里 `matchMedia('(prefers-color-scheme: dark)')` 永远是 false ——
+    表现为设置里选了「跟随系统」、系统也是深色，App 却一直停在浅色主题。
+    颜色与 bool 早已有 values-night 覆盖，唯独主题本身漏了这一层。
+
+    只覆盖 Base、不要在这里定义 Theme.LightNote：资源限定符中夜间模式的优先级高于平台版本，
+    若此处也定义 Theme.LightNote，会顶掉 values-v29 / values-v31 里的 forceDarkAllowed
+    与 windowSplashScreen* 配置。让 v29 / v31 的 Theme.LightNote 继续继承本 Base 即可。
+
+    item 必须完整重复：资源限定符是整条 style 的替换而非合并。其中引用的
+    @color/splash_background 与 @bool/light_system_bars 各自已有 night 版本，无需改动。
+-->
+<resources>
+    <style name="Theme.LightNote.Base" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
+    </style>
+</resources>
