@@ -379,9 +379,10 @@
       const iconUrl = String(res?.data?.iconUrl || '');
       if (res.status !== 200 || !iconUrl) throw new Error(res.msg || 'resolve failed');
       value.value = applyTagIconColor(iconUrl, selectedColor.value);
-      pickerVisible.value = false;
+      // 选图不是终点：用户挑完图往往还要调颜色、或者换一个再比较，所以既不关弹框也不弹「成功」。
+      // 选中态已经由候选图的 selected 描边表达；图标真正生效要用户点「保存标签」，
+      // 这里提前说「成功」会让人以为已经存下了。
       recordOperation({ module: '标签详情', operation: `选择标签图标【${iconName}】` });
-      message.success(t('tagManage.iconSelectSuccess'));
     } catch (error) {
       selectedIcon.value = '';
       console.error('resolve tag icon failed', error);

@@ -3588,7 +3588,6 @@ export default {
     iconSearchEmptyDesc: '可以换一个更简短的关键词继续搜索。',
     iconSearchFailed: '图标搜索失败，请稍后重试',
     iconResolveFailed: '图标获取失败，请重新选择',
-    iconSelectSuccess: '已选择标签图标',
     iconUploadTooLarge: '图片大小不能超过 5MB',
     iconUploadFailed: '图片处理失败，请更换图片后重试',
     previousIcons: '上一批',

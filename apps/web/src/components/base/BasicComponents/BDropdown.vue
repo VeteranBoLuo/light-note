@@ -87,6 +87,9 @@
   let closeTimer: number | null = null;
   let positionFrame: number | null = null;
   let resizeObserver: ResizeObserver | null = null;
+  /** 打开时刻，用于忽略上一次滑动的惯性余速(见 onScrollClose) */
+  let openedAt = 0;
+  const SCROLL_CLOSE_GRACE_MS = 250;
 
   const triggerModes = computed(() => (Array.isArray(props.trigger) ? props.trigger : [props.trigger]));
   const isHover = computed(() => triggerModes.value.includes('hover'));
@@ -140,6 +143,7 @@
     if (visible.value) return;
     teleportTarget.value = (props.getPopupContainer?.(triggerRef.value as HTMLElement) as HTMLElement | null) || 'body';
     panelStyle.visibility = 'hidden';
+    openedAt = Date.now();
     visible.value = true;
     emit('openChange', true);
     nextTick(() => {
@@ -156,7 +160,9 @@
         resizeObserver.observe(panelRef.value);
       }
     });
-    window.addEventListener('scroll', computePosition, true);
+    // 滚动关闭而不是跟随重定位：浮层是 fixed 层，内容一滚就与触发元素脱节，
+    // 与其让它跟着飘，不如像右键菜单那样直接关掉。resize 仍然重定位(软键盘、窗口变化)。
+    window.addEventListener('scroll', onScrollClose, true);
     window.addEventListener('resize', computePosition);
     if (isClick.value) document.addEventListener('mousedown', onDocMouseDown, true);
   }
@@ -169,7 +175,7 @@
     cancelPositionFrame();
     resizeObserver?.disconnect();
     resizeObserver = null;
-    window.removeEventListener('scroll', computePosition, true);
+    window.removeEventListener('scroll', onScrollClose, true);
     window.removeEventListener('resize', computePosition);
     document.removeEventListener('mousedown', onDocMouseDown, true);
   }
@@ -201,6 +207,23 @@
     close();
   }
 
+  /**
+   * 内容滚动即关闭，和 RightMenu(右键菜单)一个手感，不必点空白处才能关。
+   *
+   * 用捕获阶段的 scroll 而不是 RightMenu 那样的 wheel：wheel 只覆盖鼠标滚轮，
+   * 移动端的触摸与惯性滚动收不到，而这个菜单在手机上的笔记卡片/文件列表里最常用。
+   * scroll 不冒泡，但捕获阶段能收到任意滚动容器的事件。
+   */
+  function onScrollClose(e: Event) {
+    // 面板自身滚动(菜单项多到内部出滚动条)不算「内容滚动」
+    const target = e.target;
+    if (target instanceof Node && panelRef.value?.contains(target)) return;
+    // 手机上滑完列表立刻点「更多」时，惯性滚动的余速会在菜单打开后继续派发 scroll，
+    // 留一小段宽限期，免得菜单刚开就被上一次滑动的余速关掉。
+    if (Date.now() - openedAt < SCROLL_CLOSE_GRACE_MS) return;
+    close();
+  }
+
   function onItemClick(item: BDropdownOption) {
     if (item.divider) return;
     item.function?.();
@@ -211,7 +234,7 @@
     clearCloseTimer();
     cancelPositionFrame();
     resizeObserver?.disconnect();
-    window.removeEventListener('scroll', computePosition, true);
+    window.removeEventListener('scroll', onScrollClose, true);
     window.removeEventListener('resize', computePosition);
     document.removeEventListener('mousedown', onDocMouseDown, true);
   });

@@ -3673,7 +3673,6 @@ export default {
     iconSearchEmptyDesc: 'Try a shorter or more general keyword.',
     iconSearchFailed: 'Icon search failed. Please try again later.',
     iconResolveFailed: 'Failed to load this icon. Please choose another one.',
-    iconSelectSuccess: 'Tag icon selected',
     iconUploadTooLarge: 'Image size cannot exceed 5MB',
     iconUploadFailed: 'Unable to process this image. Try another file.',
     previousIcons: 'Previous',
