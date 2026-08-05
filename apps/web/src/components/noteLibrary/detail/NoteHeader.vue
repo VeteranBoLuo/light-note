@@ -229,6 +229,7 @@
   import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
+  import { copyTextToClipboard } from '@/utils/clipboard';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -332,13 +333,15 @@
     return false;
   }
 
-  /** App 内无法落盘时的降级：文本格式至少能复制出去，粘贴到其他应用里。 */
+  /**
+   * App 内无法落盘时的降级：文本格式至少能复制出去，粘贴到其他应用里。
+   * 走 copyTextToClipboard 而不是裸 navigator.clipboard —— 部分 WebView（实测鸿蒙
+   * 「卓易通」兼容层）的 Clipboard API 不可用，那里需要 execCommand 降级才能复制成功。
+   */
   async function copyExportContent(content: string) {
-    try {
-      await navigator.clipboard.writeText(content);
+    if (await copyTextToClipboard(content)) {
       message.warning(t('noteDetail.exportCopiedInApp'));
-    } catch (error) {
-      console.error('导出内容复制失败:', error);
+    } else {
       message.error(t('noteDetail.exportUnavailableInApp'));
     }
   }
