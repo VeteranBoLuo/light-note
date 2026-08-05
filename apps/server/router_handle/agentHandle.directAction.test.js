@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   recordPendingActionBatchById: vi.fn(),
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
+  rejectToolConfirmation: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({
@@ -113,7 +114,7 @@ vi.mock('../util/agent/confirmationStore.js', () => {
       preview: confirmation.preview,
       expiresIn,
     }),
-    rejectToolConfirmation: vi.fn(),
+    rejectToolConfirmation: mocks.rejectToolConfirmation,
     settleToolConfirmationExecution: mocks.settleToolConfirmationExecution,
     ToolConfirmationError,
   };
@@ -173,7 +174,9 @@ vi.mock('../util/agent/tools/index.js', () => ({
   ],
 }));
 
-const { confirmAgentTool, prepareAgentToolAction, respondAgentInteraction } = await import('./agentHandle.js');
+const { confirmAgentTool, prepareAgentToolAction, rejectAgentTool, respondAgentInteraction } = await import(
+  './agentHandle.js'
+);
 const { ToolConfirmationError } = await import('../util/agent/confirmationStore.js');
 
 function createResponse() {
@@ -181,6 +184,22 @@ function createResponse() {
   res.status = vi.fn().mockReturnValue(res);
   res.send = vi.fn().mockReturnValue(res);
   return res;
+}
+
+/**
+ * 把 agent_logs 的 INSERT 还原成「列名 → 值」，顺带校验列与占位符数量一致——
+ * 这条 SQL 有 30 多个位置参数，错位不会报错，只会把值写进相邻列。
+ */
+function agentLogInsert() {
+  const call = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
+  if (!call) return null;
+  const [sql, params] = call;
+  const columns = String(sql)
+    .match(/\(([^)]*)\)\s*VALUES/)[1]
+    .split(',')
+    .map((column) => column.trim());
+  expect(columns.length).toBe(params.length);
+  return Object.fromEntries(columns.map((column, index) => [column, params[index]]));
 }
 
 describe('prepareAgentToolAction', () => {
@@ -780,5 +799,157 @@ describe('confirmAgentTool', () => {
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ code: 'TOOL_CONFIRMATION_RESULT_PENDING' }) }),
     );
+  });
+});
+
+// 发卡、用户确认、用户驳回是三个独立请求，各有自己的 request_id。correlation_id 是唯一能把它们
+// 串起来的字段，后台据此回答「确认卡发出去了吗、用户点了没有、最后成功了吗」。
+describe('确认动作链路日志', () => {
+  const settledConfirmation = {
+    id: 'confirm-image-1',
+    sessionId: 'session-image',
+    toolName: 'create_image_note',
+    args: { attachmentId: 'attachment-1', title: '测试图片' },
+    resourceUserId: 'user-1',
+    resourceUserRole: 'user',
+    adminContextId: null,
+    adminMode: null,
+    actionLockKey: 'agent:action-lock:test',
+    idempotencyKey: 'agent-write-v1:confirm-image',
+    originRequestId: 'origin-request-1',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.poolQuery.mockResolvedValue([[]]);
+    mocks.acquireToolConfirmationAction.mockResolvedValue(true);
+    mocks.finalizeToolConfirmationAction.mockResolvedValue(undefined);
+    mocks.settleToolConfirmationExecution.mockImplementation(async (_confirmation, outcome) => outcome);
+    mocks.executeImageNote.mockResolvedValue({ id: 'note-1', title: '测试图片' });
+    mocks.inspectToolConfirmationExecution.mockResolvedValue({ state: 'ready', confirmation: settledConfirmation });
+    mocks.claimToolConfirmationExecution.mockResolvedValue({ state: 'claimed', confirmation: settledConfirmation });
+  });
+
+  it('确认执行成功后把日志挂回发卡那一轮的链路', async () => {
+    const req = {
+      body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+      user: { id: 'user-1', role: 'user', alias: '测试用户' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+
+    await confirmAgentTool(req, createResponse());
+
+    const log = agentLogInsert();
+    expect(log).toMatchObject({
+      task_type: 'agent_confirmation',
+      status: 'success',
+      correlation_id: 'origin-request-1',
+      confirmation_id: 'confirm-image-1',
+      // 确认执行本身不产出对话正文，只落动作结果
+      outcome_kind: 'action_only',
+      delivered: 1,
+      answer_digest: null,
+    });
+    // 自身 request_id 必须与链路键区分开，否则详情页无法定位当前这一条
+    expect(log.request_id).not.toBe(log.correlation_id);
+  });
+
+  it('工具执行失败仍留在同一条链路上，并标成出错', async () => {
+    mocks.executeImageNote.mockResolvedValueOnce({ error: 'DUPLICATE_TITLE', message: '笔记标题已存在。' });
+    const req = {
+      body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+
+    await confirmAgentTool(req, createResponse());
+
+    expect(agentLogInsert()).toMatchObject({
+      correlation_id: 'origin-request-1',
+      confirmation_id: 'confirm-image-1',
+      status: 'error',
+      outcome_kind: 'error',
+    });
+  });
+
+  it('旧确认卡没有发卡轮标识时退回自身 request_id，不写出空链路', async () => {
+    const legacyConfirmation = { ...settledConfirmation, originRequestId: null };
+    mocks.inspectToolConfirmationExecution.mockResolvedValue({ state: 'ready', confirmation: legacyConfirmation });
+    mocks.claimToolConfirmationExecution.mockResolvedValue({ state: 'claimed', confirmation: legacyConfirmation });
+    const req = {
+      body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+
+    await confirmAgentTool(req, createResponse());
+
+    const log = agentLogInsert();
+    expect(log.correlation_id).toBe(log.request_id);
+    expect(log.confirmation_id).toBe('confirm-image-1');
+  });
+
+  it('用户驳回记成 rejected 并挂回链路，且不把内部标识回传客户端', async () => {
+    mocks.rejectToolConfirmation.mockResolvedValue({
+      id: 'confirm-image-1',
+      toolName: 'create_image_note',
+      originRequestId: 'origin-request-1',
+    });
+    const req = {
+      body: { confirmationToken: 'token-image', sessionId: 'session-image' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await rejectAgentTool(req, res);
+
+    expect(agentLogInsert()).toMatchObject({
+      task_type: 'agent_confirmation',
+      status: 'confirmation_rejected',
+      correlation_id: 'origin-request-1',
+      confirmation_id: 'confirm-image-1',
+      outcome_kind: 'rejected',
+    });
+    const [payload] = res.send.mock.calls[0];
+    expect(payload.data).toEqual({ id: 'confirm-image-1', toolName: 'create_image_note' });
+    expect(payload.data).not.toHaveProperty('originRequestId');
+  });
+
+  it('发卡时把本轮 request_id 交给确认卡保存，链路才能在下一个请求里接上', async () => {
+    mocks.getOrCreateSession.mockResolvedValue({ id: 'session-server' });
+    mocks.prepareArgs.mockImplementation(async (args) => ({ ...args, folderId: '12', folderName: '项目资料' }));
+    mocks.preview.mockResolvedValue({ title: '保存附件', target: '项目资料 / 测试.png' });
+    mocks.createToolConfirmation.mockResolvedValue({
+      token: 'token-1',
+      expiresIn: 300,
+      confirmation: { id: 'confirm-1', sessionId: 'session-server', toolName: 'save_attachment_to_cloud', args: {} },
+    });
+    const req = {
+      body: {
+        sessionId: 'session-server',
+        toolName: 'save_attachment_to_cloud',
+        args: { attachmentId: 'attachment-1', fileName: '测试.png', folderId: '12', folderName: '项目资料' },
+      },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+
+    await prepareAgentToolAction(req, createResponse());
+
+    const [createArgs] = mocks.createToolConfirmation.mock.calls[0];
+    const log = agentLogInsert();
+    expect(createArgs.originRequestId).toBe(log.request_id);
+    expect(log).toMatchObject({
+      status: 'confirmation_pending',
+      outcome_kind: 'confirmation_card',
+      confirmation_id: 'confirm-1',
+      delivered: 1,
+    });
   });
 });

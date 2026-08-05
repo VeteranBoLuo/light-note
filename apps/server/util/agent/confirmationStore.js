@@ -80,6 +80,9 @@ function confirmationBinding(confirmation) {
     adminContextId: confirmation.adminContextId || null,
     adminMode: confirmation.adminMode || null,
     idempotencyKey: confirmation.idempotencyKey || null,
+    // 发卡那一轮的 request_id：确认执行与驳回都是独立请求，只有把它绑进 binding，
+    // claim/settle 之后仍能取到，后台才能把「发卡 → 用户处置 → 结果」串成一条链路。
+    originRequestId: confirmation.originRequestId || null,
   };
 }
 
@@ -216,6 +219,7 @@ export async function createToolConfirmation({
   replaceToken,
   replaceConfirmationId,
   privateContext,
+  originRequestId,
 }) {
   const token = suppliedToken || crypto.randomBytes(32).toString('base64url');
   if (!/^[A-Za-z0-9_-]{40,}$/.test(token)) {
@@ -236,11 +240,16 @@ export async function createToolConfirmation({
     context: { ...context, sessionId },
   });
   const normalizedPrivateContext = normalizePrivateContext(privateContext);
+  // 只做长度与字符白名单约束：这个值只用于后台链路串联，绝不参与权限判断或执行分支。
+  const normalizedOriginRequestId = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/.test(String(originRequestId || ''))
+    ? String(originRequestId)
+    : null;
   const confirmation = {
     id: confirmationId,
     ownerHash: ownerHash(ownerKey),
     sessionId,
     toolName,
+    originRequestId: normalizedOriginRequestId,
     capabilityId: String(capabilityId || '').trim() || null,
     args,
     argsHash: argsHash(args),
@@ -509,5 +518,9 @@ export async function finalizeToolConfirmationAction(confirmation, { succeeded =
 
 export async function rejectToolConfirmation(token, ownerKey, expectedSessionId) {
   const confirmation = await consumeToolConfirmation(token, ownerKey, expectedSessionId);
-  return { id: confirmation.id, toolName: confirmation.toolName };
+  return {
+    id: confirmation.id,
+    toolName: confirmation.toolName,
+    originRequestId: confirmation.originRequestId || null,
+  };
 }

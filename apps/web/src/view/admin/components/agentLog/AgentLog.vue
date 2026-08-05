@@ -107,6 +107,30 @@
         <label>提问</label>
         <p>{{ selectedRecord.question || '-' }}</p>
       </div>
+      <div class="agent-detail__outcome">
+        <label>结果</label>
+        <p class="agent-outcome-line">
+          <span class="agent-outcome-tag" :class="`is-${selectedOutcome.tone}`">
+            <i class="agent-outcome-dot" aria-hidden="true"></i>{{ selectedOutcome.label }}
+          </span>
+          <span class="agent-outcome-meta"
+            >正文 {{ formatAnswerChars(selectedRecord) }} · {{ formatDeliveredLabel(selectedRecord.delivered) }}</span
+          >
+        </p>
+        <p class="agent-outcome-digest">{{ formatAnswerDigest(selectedRecord) }}</p>
+      </div>
+      <div class="agent-detail__chain" v-if="chainLoading || chainSteps.length">
+        <label>动作时间线</label>
+        <p v-if="chainLoading" class="agent-chain-loading">正在加载链路…</p>
+        <ol v-else class="agent-chain">
+          <li v-for="step in chainSteps" :key="step.id" :class="{ 'is-current': step.isCurrent }">
+            <i class="agent-outcome-dot" :class="`is-${step.tone}`" aria-hidden="true"></i>
+            <span class="agent-chain-title">{{ step.title }}</span>
+            <span class="agent-chain-detail">{{ step.detail }}</span>
+            <span class="agent-chain-time">{{ step.at }}</span>
+          </li>
+        </ol>
+      </div>
       <div class="agent-detail__tools" v-if="selectedRecord.toolsUsed">
         <label>调用工具</label>
         <p>{{ formatToolsUsed(selectedRecord.toolsUsed) }}</p>
@@ -151,6 +175,14 @@
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
+  import {
+    type AgentLogChainStep,
+    fetchAgentLogChain,
+    formatAnswerChars,
+    formatAnswerDigest,
+    formatDeliveredLabel,
+    outcomeMeta,
+  } from './agentLogOutcome.ts';
 
   const { t } = useI18n();
 
@@ -174,6 +206,10 @@
   const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
+  const chainSteps = ref<AgentLogChainStep[]>([]);
+  const chainLoading = ref(false);
+  // 快速连续点行会并发多个链路请求，只认最后一次，避免旧响应覆盖当前记录的时间线。
+  let chainRequestSeq = 0;
   let timer: number | null = null;
   const {
     items: logList,
@@ -240,9 +276,28 @@
     { title: '时间', key: 'createdAt', width: '1fr' },
   ];
 
+  const selectedOutcome = computed(() => outcomeMeta(selectedRecord.value?.outcomeKind));
+
   function onRowClick(record: any) {
     selectedRecord.value = record;
     detailVisible.value = true;
+    void loadChain(record);
+  }
+
+  async function loadChain(record: any) {
+    const seq = ++chainRequestSeq;
+    chainSteps.value = [];
+    if (!record?.correlationId) return;
+    chainLoading.value = true;
+    try {
+      const steps = await fetchAgentLogChain(record);
+      if (seq === chainRequestSeq) chainSteps.value = steps;
+    } catch {
+      // 链路是补充信息，取不到就不显示这一块，不打断详情查看。
+      if (seq === chainRequestSeq) chainSteps.value = [];
+    } finally {
+      if (seq === chainRequestSeq) chainLoading.value = false;
+    }
   }
 
   function handleSearch() {
@@ -398,6 +453,8 @@
   .agent-detail__grid label,
   .agent-detail__question label,
   .agent-detail__tools label,
+  .agent-detail__outcome label,
+  .agent-detail__chain label,
   .agent-detail__error label {
     display: block;
     margin-bottom: 4px;
@@ -407,6 +464,7 @@
   .agent-detail__grid p,
   .agent-detail__question p,
   .agent-detail__tools p,
+  .agent-detail__outcome p,
   .agent-detail__error p {
     margin: 0;
     color: var(--text-color);
@@ -414,8 +472,116 @@
   }
   .agent-detail__question,
   .agent-detail__tools,
+  .agent-detail__outcome,
+  .agent-detail__chain,
   .agent-detail__error {
     margin-bottom: 12px;
+  }
+
+  // 状态信号必须有实色描边 + 实心圆点：APK 的系统 WebView 会把 color-mix 回退成实色，
+  // 只靠混色底色表达的差异会全部消失。
+  .agent-outcome-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .agent-outcome-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border: 1px solid var(--desc-color);
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-color);
+  }
+  .agent-outcome-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--desc-color);
+    flex-shrink: 0;
+  }
+  .agent-outcome-tag.is-success {
+    border-color: var(--success-color);
+  }
+  .agent-outcome-tag.is-success .agent-outcome-dot,
+  .agent-outcome-dot.is-success {
+    background: var(--success-color);
+  }
+  .agent-outcome-tag.is-warning {
+    border-color: var(--warning-color);
+  }
+  .agent-outcome-tag.is-warning .agent-outcome-dot,
+  .agent-outcome-dot.is-warning {
+    background: var(--warning-color);
+  }
+  .agent-outcome-tag.is-danger {
+    border-color: var(--error-color);
+  }
+  .agent-outcome-tag.is-danger .agent-outcome-dot,
+  .agent-outcome-dot.is-danger {
+    background: var(--error-color);
+  }
+  .agent-outcome-meta {
+    font-size: 12px;
+    color: var(--desc-color);
+  }
+  .agent-outcome-digest {
+    margin-top: 6px !important;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--card-color);
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+  .agent-chain-loading {
+    margin: 0;
+    font-size: 13px;
+    color: var(--desc-color);
+  }
+  .agent-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .agent-chain li {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: baseline;
+    gap: 2px 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--text-color);
+  }
+  // 当前查看的那一条：左描边 + 加粗双信号。用 --focus-ring-color 而不是 --primary-color，
+  // 后者在深色主题的表面色上只有 2.02:1（见 admin-mixins.less 的说明）。
+  .agent-chain li.is-current {
+    border-left: 3px solid var(--focus-ring-color);
+    font-weight: 600;
+  }
+  .agent-chain-detail {
+    grid-column: 2;
+    font-size: 12px;
+    color: var(--desc-color);
+    font-weight: 400;
+  }
+  .agent-chain-time {
+    grid-row: 1;
+    grid-column: 3;
+    font-size: 12px;
+    color: var(--desc-color);
+    font-weight: 400;
+    white-space: nowrap;
   }
   .agent-detail__tokens {
     margin-bottom: 12px;

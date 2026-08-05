@@ -321,3 +321,27 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name=expected.tn
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 22) AI 监控的结果轮廓与动作链路字段必须存在（期望 0 行）
+SELECT '[22] missing_agent_log_outcome_column' AS check_name, CONCAT('agent_logs.', expected.cn) AS detail
+FROM (
+  SELECT 'correlation_id' cn UNION ALL
+  SELECT 'confirmation_id' UNION ALL
+  SELECT 'outcome_kind' UNION ALL
+  SELECT 'answer_chars' UNION ALL
+  SELECT 'answer_digest' UNION ALL
+  SELECT 'delivered'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='agent_logs'
+ AND actual.column_name=expected.cn
+WHERE actual.column_name IS NULL;
+
+SELECT '[22] missing_agent_log_correlation_index' AS check_name, 'agent_logs.idx_agent_logs_correlation' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='agent_logs'
+ AND actual.index_name='idx_agent_logs_correlation'
+WHERE actual.index_name IS NULL;

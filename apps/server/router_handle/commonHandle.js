@@ -1431,6 +1431,43 @@ export const getAgentLogs = async (req, res) => {
   }
 };
 
+/**
+ * 一条动作链路上的全部调用（root 专属）。
+ *
+ * 发卡、用户确认或驳回是彼此独立的请求，各有自己的 request_id；correlation_id 把它们绑在一起，
+ * 后台才能回答「确认卡发出去了吗、用户点了没有、最后成功了吗」。链路记录条数天然很小(通常 2~4 条)，
+ * 因此不做分页，只做固定上限保护。
+ */
+export const getAgentLogChain = async (req, res) => {
+  try {
+    if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
+
+    const correlationId = String(req.body?.correlationId || '').trim();
+    if (!correlationId || correlationId.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(correlationId)) {
+      return res.send(resultData(null, 400, '链路标识无效'));
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, request_id, correlation_id, confirmation_id, task_type, status, outcome_kind, tools_used,
+              answer_chars, answer_digest, delivered, error_msg, duration_ms, total_tokens, created_at
+         FROM agent_logs
+        WHERE correlation_id = ?
+        ORDER BY created_at ASC, id ASC
+        LIMIT 20`,
+      [correlationId],
+    );
+
+    return res.send(resultData({ items: rows, correlationId }));
+  } catch (e) {
+    // 老库还没跑迁移时按「无链路」返回，后台详情仍能展示其余信息，不整页报错。
+    if (e?.code === 'ER_BAD_FIELD_ERROR') {
+      return res.send(resultData({ items: [], correlationId: String(req.body?.correlationId || '') }));
+    }
+    console.error('[admin-list] AI 调用链路查询失败 code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, '查询失败'));
+  }
+};
+
 // AI 回答反馈（root 专属）：只查询仍处于现有保留期内的会话。
 // 不复制问题/回答正文，也不绕过会话删除策略；用户清空会话后外键级联删除反馈，本接口自然不可见。
 export const getAiFeedback = async (req, res) => {

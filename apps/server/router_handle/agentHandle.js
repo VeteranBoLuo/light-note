@@ -558,6 +558,7 @@ async function createPendingWriteConfirmation({
   replaceToken,
   replaceConfirmationId,
   privateContext,
+  originRequestId,
 }) {
   const policy = await enforceToolPolicy({
     registry: toolRegistry,
@@ -592,6 +593,7 @@ async function createPendingWriteConfirmation({
     replaceToken,
     replaceConfirmationId,
     privateContext,
+    originRequestId,
   });
   return publicToolConfirmation(pending.token, pending.confirmation, pending.expiresIn);
 }
@@ -725,6 +727,7 @@ async function prepareRetriedAction({ session, identity, req, requestId }) {
       identity,
       req,
       session,
+      originRequestId: requestId,
     });
     await recordPendingActionBatch(session, {
       batchId: requestId,
@@ -1304,10 +1307,56 @@ function questionForAgentLog(question, taskType = 'agent') {
   return `[${safeTaskType || 'agent'} AI 请求，用户未提交问题]`;
 }
 
+const AGENT_LOG_OUTCOME_KINDS = new Set([
+  'answer',
+  'confirmation_card',
+  'interaction_card',
+  'rejected',
+  'action_only',
+  'error',
+  'aborted',
+  'blocked',
+  'empty',
+]);
+
+// 摘要只保留开头一小段，且由 operationalLogRetention 按保留期置空；轮廓字段长期保留。
+const AGENT_LOG_ANSWER_DIGEST_CHARS = 200;
+
+/**
+ * 结果轮廓。status 有 20 多种内部取值(含动态的 semantic_*),后台无法逐个认识,
+ * 这里收敛成固定枚举,用来回答「这轮到底产出了什么」:出了正文、只发了确认卡、
+ * 被用户驳回、只执行了动作没正文、还是彻底没有产出。
+ */
+function resolveAgentLogOutcome({ status, answerChars, toolsUsed = [], errorMsg, explicit }) {
+  if (AGENT_LOG_OUTCOME_KINDS.has(explicit)) return explicit;
+  const normalized = String(status || '');
+  if (normalized === 'confirmation_pending') return 'confirmation_card';
+  if (normalized === 'interaction_pending') return 'interaction_card';
+  if (normalized === 'confirmation_rejected' || normalized === 'interaction_cancelled') return 'rejected';
+  if (normalized === 'aborted') return 'aborted';
+  if (normalized === 'quota_blocked') return 'blocked';
+  if (normalized === 'error' || normalized === 'timeout' || errorMsg) return 'error';
+  if (Number(answerChars) > 0) return 'answer';
+  // 动作执行、后台辅助任务(建议生成、标签图标检索等)本来就不产出对话正文，
+  // 成功时算「仅动作」而不是「无产出」，否则后台会把正常完成的后台任务误读成空回复。
+  if (toolsUsed.some((tool) => ['success', 'succeeded'].includes(String(tool?.status || '')))) return 'action_only';
+  if (['success', 'succeeded', 'fallback', 'interaction_resolved'].includes(normalized)) return 'action_only';
+  return 'empty';
+}
+
+// 摘要与提问走同一套凭据/邮箱清洗；正文全文不入库,只留开头片段供排查。
+function answerDigestForLog(answer) {
+  if (typeof answer !== 'string' || !answer.trim()) return null;
+  return redactSensitiveText(answer, AGENT_LOG_ANSWER_DIGEST_CHARS).trim() || null;
+}
+
 /**
  * 写入 agent_logs 表
  * 成本按当前生效的 AGENT_LLM_PROVIDER 计价(见 deepseekClient.js 的 PROVIDERS 单价表),
  * 不同供应商单价不同,切换后新请求会自动按新供应商计费。
+ *
+ * answer 只用于派生字符数与脱敏摘要,不落全文;trace.correlationId 把「发卡 → 用户处置 → 结果」
+ * 串成一条链路,trace.delivered 记录终态是否真的写给了客户端。
  */
 async function logAgentRequest({
   userId,
@@ -1319,6 +1368,7 @@ async function logAgentRequest({
   durationMs,
   status,
   errorMsg,
+  answer,
   trace = {},
 }) {
   let price = trace.providerInfo?.price;
@@ -1363,6 +1413,22 @@ async function logAgentRequest({
       error_msg: errorMsg ? stableAgentErrorCode(errorMsg) : null,
       duration_ms: durationMs,
     };
+    const answerChars = typeof answer === 'string' ? answer.length : null;
+    const outcomeValues = [
+      // 没有显式 correlationId 时退回自身 request_id：单轮问答本身就是一条完整链路。
+      trace.correlationId || trace.requestId || null,
+      trace.confirmationId || null,
+      resolveAgentLogOutcome({
+        status: data.status,
+        answerChars,
+        toolsUsed: loggedTools,
+        errorMsg: data.error_msg,
+        explicit: trace.outcomeKind,
+      }),
+      answerChars,
+      answerDigestForLog(answer),
+      trace.delivered == null ? null : trace.delivered ? 1 : 0,
+    ];
     const traceValues = [
       trace.requestId || null,
       trace.providerInfo?.provider || null,
@@ -1381,8 +1447,8 @@ async function logAgentRequest({
     try {
       await pool.query(
         `INSERT INTO agent_logs
-          (id,request_id,provider,model,task_type,toolset_version,selected_tools,finish_reason,first_token_ms,planner_ms,tool_ms,final_ms,usage_status,aborted_stage,user_id,user_alias,question,tools_used,iterations,prompt_tokens,completion_tokens,total_tokens,cost,status,error_msg,duration_ms)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          (id,request_id,provider,model,task_type,toolset_version,selected_tools,finish_reason,first_token_ms,planner_ms,tool_ms,final_ms,usage_status,aborted_stage,user_id,user_alias,question,tools_used,iterations,prompt_tokens,completion_tokens,total_tokens,cost,status,error_msg,duration_ms,correlation_id,confirmation_id,outcome_kind,answer_chars,answer_digest,delivered)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           data.id,
           ...traceValues,
@@ -1398,6 +1464,7 @@ async function logAgentRequest({
           data.status,
           data.error_msg,
           data.duration_ms,
+          ...outcomeValues,
         ],
       );
     } catch (error) {
@@ -1626,10 +1693,13 @@ export async function agentChat(req, res) {
         durationMs: Date.now() - requestStartedAt,
         status: outcome.confirmation ? 'confirmation_pending' : outcome.state,
         errorMsg: outcome.error,
+        answer: outcome.response,
         trace: {
           ...trace,
           selectedTools: outcome.confirmation ? [outcome.confirmation.toolName] : [],
           usageStatus: 'reported',
+          confirmationId: outcome.confirmation?.id || null,
+          delivered: !clientDisconnected,
         },
       });
       res.removeListener('close', onClientClose);
@@ -2078,6 +2148,7 @@ export async function agentChat(req, res) {
             replaceToken: previousConfirmation ? normalizedPendingNoteDraft.confirmationToken : undefined,
             replaceConfirmationId: previousConfirmation?.id,
             privateContext,
+            originRequestId: requestId,
           });
           await recordPendingActionBatch(session, {
             batchId: requestId,
@@ -2195,7 +2266,12 @@ export async function agentChat(req, res) {
         durationMs: Date.now() - requestStartedAt,
         status: confirmation ? 'confirmation_pending' : routeStatus,
         errorMsg: routeError,
-        trace,
+        answer: routeResponse,
+        trace: {
+          ...trace,
+          confirmationId: confirmation?.id || null,
+          delivered: !clientDisconnected,
+        },
       });
       res.removeListener('close', onClientClose);
       return;
@@ -2524,6 +2600,7 @@ export async function agentChat(req, res) {
                 identity,
                 req,
                 session,
+                originRequestId: requestId,
               });
               confirmations.push(confirmation);
               roundConfirmations.push(confirmation);
@@ -3689,7 +3766,13 @@ export async function agentChat(req, res) {
           : actionPolicy
             ? `semantic_${actionPolicy.resolution}`.slice(0, 32)
             : 'success',
-      trace,
+      answer: finalContent,
+      trace: {
+        ...trace,
+        // 发卡轮自己就是链路起点，用本轮 request_id 作为分组键，确认落地那条会回填同一个值。
+        confirmationId: confirmations[0]?.id || null,
+        delivered: !clientDisconnected,
+      },
     });
   } catch (error) {
     const deadlineExceeded = agentAbortController.signal.reason?.code === 'AGENT_HARD_DEADLINE_EXCEEDED';
@@ -3721,6 +3804,7 @@ export async function agentChat(req, res) {
                 ? 'tools'
                 : 'final'
             : null,
+          delivered: !clientDisconnected,
         },
       });
     }
@@ -3891,7 +3975,7 @@ export async function prepareAgentToolAction(req, res) {
         totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         durationMs: Date.now() - requestStartedAt,
         status: 'interaction_pending',
-        trace: { requestId, taskType: 'agent_action_prepare', selectedTools: [toolName] },
+        trace: { requestId, taskType: 'agent_action_prepare', selectedTools: [toolName], delivered: true },
       });
       return res.send(resultData({ sessionId: getSessionId(session), interaction: created.interaction }));
     }
@@ -3902,6 +3986,7 @@ export async function prepareAgentToolAction(req, res) {
       identity,
       req,
       session,
+      originRequestId: requestId,
     });
     await recordPendingActionBatch(session, {
       batchId: requestId,
@@ -3917,7 +4002,13 @@ export async function prepareAgentToolAction(req, res) {
       totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       durationMs: Date.now() - requestStartedAt,
       status: 'confirmation_pending',
-      trace: { requestId, taskType: 'agent_action_prepare', selectedTools: [toolName] },
+      trace: {
+        requestId,
+        taskType: 'agent_action_prepare',
+        selectedTools: [toolName],
+        confirmationId: confirmation.id,
+        delivered: true,
+      },
     });
     return res.send(resultData({ sessionId: getSessionId(session), confirmation }));
   } catch (error) {
@@ -4066,7 +4157,7 @@ export async function respondAgentInteraction(req, res) {
         totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         durationMs: Date.now() - requestStartedAt,
         status: resolved.state === 'cancelled' ? 'interaction_cancelled' : 'interaction_resolved',
-        trace: { requestId, taskType: 'agent_interaction', selectedTools: [] },
+        trace: { requestId, taskType: 'agent_interaction', selectedTools: [], delivered: true },
       });
       return res.send(resultData(resolved));
     }
@@ -4089,6 +4180,7 @@ export async function respondAgentInteraction(req, res) {
       req,
       session: { id: sessionId },
       token,
+      originRequestId: requestId,
     });
     const { token: _confirmationToken, ...cacheableConfirmation } = confirmation;
     const outcome = { state: 'confirmation_required', confirmation: cacheableConfirmation };
@@ -4108,7 +4200,13 @@ export async function respondAgentInteraction(req, res) {
       totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       durationMs: Date.now() - requestStartedAt,
       status: 'confirmation_pending',
-      trace: { requestId, taskType: 'agent_interaction', selectedTools: [resolved.toolName] },
+      trace: {
+        requestId,
+        taskType: 'agent_interaction',
+        selectedTools: [resolved.toolName],
+        confirmationId: confirmation.id,
+        delivered: true,
+      },
     });
     return res.send(resultData({ ...outcome, confirmation }));
   } catch (error) {
@@ -4287,7 +4385,14 @@ export async function confirmAgentTool(req, res) {
         durationMs: Date.now() - requestStartedAt,
         status: 'error',
         errorMsg: result.error || 'TOOL_EXECUTION_FAILED',
-        trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
+        trace: {
+          requestId,
+          taskType: 'agent_confirmation',
+          selectedTools: [confirmation.toolName],
+          correlationId: confirmation.originRequestId || null,
+          confirmationId: confirmation.id,
+          delivered: true,
+        },
       });
       return sendOutcome(failureOutcome);
     }
@@ -4318,7 +4423,14 @@ export async function confirmAgentTool(req, res) {
       totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       durationMs: Date.now() - requestStartedAt,
       status: 'success',
-      trace: { requestId, taskType: 'agent_confirmation', selectedTools: [confirmation.toolName] },
+      trace: {
+        requestId,
+        taskType: 'agent_confirmation',
+        selectedTools: [confirmation.toolName],
+        correlationId: confirmation.originRequestId || null,
+        confirmationId: confirmation.id,
+        delivered: true,
+      },
     });
     return sendOutcome(successOutcome);
   } catch (error) {
@@ -4376,7 +4488,14 @@ export async function confirmAgentTool(req, res) {
         durationMs: Date.now() - requestStartedAt,
         status: 'error',
         errorMsg: code,
-        trace: { requestId, taskType: 'agent_confirmation', selectedTools: toolName ? [toolName] : [] },
+        trace: {
+          requestId,
+          taskType: 'agent_confirmation',
+          selectedTools: toolName ? [toolName] : [],
+          // confirmation 可能在解析令牌阶段就失败，此时没有链路可串。
+          correlationId: confirmation?.originRequestId || null,
+          confirmationId: confirmation?.id || null,
+        },
       });
     }
     return res.status(status).send(resultData({ code }, status, message));
@@ -4406,9 +4525,18 @@ export async function rejectAgentTool(req, res) {
       totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
       durationMs: Date.now() - requestStartedAt,
       status: 'confirmation_rejected',
-      trace: { requestId, taskType: 'agent_confirmation', selectedTools: [rejected.toolName] },
+      trace: {
+        requestId,
+        taskType: 'agent_confirmation',
+        selectedTools: [rejected.toolName],
+        correlationId: rejected.originRequestId || null,
+        confirmationId: rejected.id,
+        delivered: true,
+      },
     });
-    return res.send(resultData(rejected));
+    // originRequestId 只服务后台链路串联，不进客户端响应体。
+    const { originRequestId: _rejectedOriginRequestId, ...publicRejected } = rejected;
+    return res.send(resultData(publicRejected));
   } catch (error) {
     const status = error instanceof ToolConfirmationError ? error.status : 500;
     const code = error instanceof ToolConfirmationError ? error.code : 'TOOL_CONFIRMATION_REJECT_FAILED';

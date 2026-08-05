@@ -382,6 +382,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/clearImages'],
   ['POST', '/common/runSql'],
   ['POST', '/common/getAgentLogs'],
+  ['POST', '/common/getAgentLogChain'],
   ['POST', '/common/getAgentLogsSummary'],
   ['POST', '/common/getAiFeedback'],
   ['POST', '/common/getDeepSeekBalance'],
