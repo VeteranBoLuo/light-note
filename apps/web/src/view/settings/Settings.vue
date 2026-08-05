@@ -1,7 +1,15 @@
 <template>
   <div class="settings-page" ref="pageRef">
     <div class="settings-container">
-      <header class="settings-hero">
+      <!-- 移动端子页顶栏:只有「返回 + 当前分类」。不重复「设置 / 外观、语言…」那段大标题,
+           手机上纵向空间宝贵,标题已由这一行承担。 -->
+      <header v-if="isMobileSubPage" class="settings-subhead">
+        <BButton class="settings-subhead-back" :aria-label="t('common.back')" @click="goBack">
+          <svg-icon :src="icon.arrow_left" size="18" />
+        </BButton>
+        <h1 class="settings-subhead-title">{{ currentSectionTitle }}</h1>
+      </header>
+      <header v-else class="settings-hero">
         <BButton class="settings-back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
@@ -10,7 +18,10 @@
         <p class="settings-subtitle">{{ t('settings.subtitle') }}</p>
       </header>
 
-      <nav class="settings-anchors">
+      <SettingsMobileIndex v-if="showMobileIndex" :sections="mobileIndexRows" @select="openSection" />
+
+      <!-- 锚点条只服务桌面长页:移动端已按分类拆成子页,不渲染也就不必观察 -->
+      <nav v-if="!bookmark.isMobile" class="settings-anchors">
         <BButton
           v-for="a in anchors"
           :key="a.id"
@@ -22,15 +33,12 @@
         >
       </nav>
 
-      <div class="settings-body">
+      <div v-if="!showMobileIndex" class="settings-body" :class="{ 'is-mobile-sub': isMobileSubPage }">
         <!-- 外观 -->
-        <section class="settings-card" id="set-appearance">
-          <div class="card-head">
+        <section v-if="sectionVisible('appearance')" class="settings-card" id="set-appearance">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--appearance">
-              <svg viewBox="0 0 24 24" width="20" height="20">
-                <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6" />
-                <path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor" />
-              </svg>
+              <SvgIcon :src="icon.settings.appearance" size="20" aria-hidden="true" />
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.appearance') }}</h2>
@@ -104,23 +112,10 @@
         </section>
 
         <!-- 通用 -->
-        <section class="settings-card" id="set-general">
-          <div class="card-head">
+        <section v-if="sectionVisible('general')" class="settings-card" id="set-general">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--general">
-              <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-              >
-                <path d="M5 7h14M5 12h14M5 17h14" />
-                <circle cx="10" cy="7" r="1.7" fill="currentColor" stroke="none" />
-                <circle cx="15" cy="12" r="1.7" fill="currentColor" stroke="none" />
-                <circle cx="8" cy="17" r="1.7" fill="currentColor" stroke="none" />
-              </svg>
+              <SvgIcon :src="icon.settings.general" size="20" aria-hidden="true" />
             </span>
             <div class="card-head-text">
               <h2 class="card-title">{{ t('settings.general') }}</h2>
@@ -328,8 +323,9 @@
           </div>
         </section>
 
-        <!-- 安装到设备 -->
-        <section v-if="!isAndroidApp" class="settings-card" id="set-install">
+        <!-- 安装到设备:桌面专属。移动端「我的」里已有安装入口(带状态摘要),
+             设置里不再放第二个,所以这一块连目录项一起从移动端去掉(见 settingsRegistry 的 SettingsIndexSectionId)。 -->
+        <section v-if="!isAndroidApp && !bookmark.isMobile" class="settings-card" id="set-install">
           <div class="card-head">
             <span class="card-icon card-icon--install">
               <SvgIcon :src="icon.pwa.install" size="20" aria-hidden="true" />
@@ -383,8 +379,8 @@
         </section>
 
         <!-- 通知 -->
-        <section class="settings-card" id="set-notification">
-          <div class="card-head">
+        <section v-if="sectionVisible('notification')" class="settings-card" id="set-notification">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--general">
               <SvgIcon :src="icon.settings.notification" size="20" aria-hidden="true" />
             </span>
@@ -517,25 +513,14 @@
         </section>
 
         <!-- 账号与安全(登录用户可见) -->
-        <section v-if="!isGuestUser()" class="settings-card" id="set-account">
-          <div class="card-head">
+        <section v-if="!isGuestUser() && sectionVisible('account')" class="settings-card" id="set-account">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--general">
-              <svg
-                viewBox="0 0 24 24"
-                width="20"
-                height="20"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" />
-              </svg>
+              <SvgIcon :src="icon.settings.account" size="20" aria-hidden="true" />
             </span>
             <div class="card-head-text">
-              <h2 class="card-title">账号与安全</h2>
-              <p class="card-sub">密码、账号绑定与登录设备</p>
+              <h2 class="card-title">{{ t('settings.accountSecurityTitle') }}</h2>
+              <p class="card-sub">{{ t('settings.accountSecurityDesc') }}</p>
             </div>
           </div>
           <div class="fields">
@@ -544,8 +529,8 @@
         </section>
 
         <!-- AI 设置 -->
-        <section class="settings-card" id="set-ai">
-          <div class="card-head">
+        <section v-if="sectionVisible('ai')" class="settings-card" id="set-ai">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--appearance">
               <SvgIcon :src="icon.settings.ai" size="20" aria-hidden="true" />
             </span>
@@ -690,8 +675,8 @@
         </section>
 
         <!-- 隐私与协议 -->
-        <section class="settings-card" id="set-privacy">
-          <div class="card-head">
+        <section v-if="sectionVisible('privacy')" class="settings-card" id="set-privacy">
+          <div v-if="!isMobileSubPage" class="card-head">
             <span class="card-icon card-icon--general">
               <SvgIcon :src="icon.settings.privacy" size="20" aria-hidden="true" />
             </span>
@@ -727,12 +712,7 @@
                 <span class="field-label">{{ t('settings.appFiling') }}</span>
                 <span class="field-desc">{{ t('settings.appFilingDesc') }}</span>
               </div>
-              <a
-                class="app-filing-link"
-                :href="MIIT_QUERY_URL"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
+              <a class="app-filing-link" :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">
                 <span>{{ APP_FILING_NUMBER }}</span>
                 <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
               </a>
@@ -740,16 +720,17 @@
           </div>
         </section>
 
-        <p class="settings-foot">{{ t('settings.footHint') }}</p>
+        <!-- 这段脚注讲的是「右上角头像菜单」，只对桌面成立；移动端目录页有自己的脚注 -->
+        <p v-if="!bookmark.isMobile" class="settings-foot">{{ t('settings.footHint') }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, onMounted, onBeforeUnmount } from 'vue';
+  import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { bookmarkStore, useUserStore } from '@/store';
   import { updatePreference, isGuestUser } from '@/utils/savePreference';
   import { scrollIntoContainer } from '@/utils/zoom';
@@ -773,9 +754,19 @@
   } from '@/utils/androidBridge.ts';
   import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
+  import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
+  import {
+    SETTINGS_SECTION_ANCHOR,
+    countEnabledNotifications,
+    parseSettingsSection,
+    visibleSettingsSections,
+    type SettingsEnv,
+    type SettingsIndexSectionId,
+  } from './settingsRegistry';
 
   const { t } = useI18n();
   const router = useRouter();
+  const route = useRoute();
   const bookmark = bookmarkStore();
   const isAndroidApp = isLightNoteAndroidApp();
 
@@ -799,6 +790,29 @@
     list.push({ id: 'set-privacy', label: t('settings.privacyTitle') });
     return list;
   });
+  /*
+   * 移动端「目录 + 子页」状态机。
+   *
+   * 唯一状态来源是 route.query.section —— 不另存 expandedSection 之类的组件状态,
+   * 否则会出现「URL 指向通知、组件却展开 AI」。这么定下来后刷新、深链接、
+   * 浏览器/Android 系统返回全都免费拿到,不必自己维护一套历史。
+   *
+   *   无 section        → 紧凑目录(SettingsMobileIndex)
+   *   有合法 section    → 只渲染对应那一个区块
+   *
+   * 桌面端不参与:mobileSection 恒为 null,继续渲染完整长页 + 锚点。
+   */
+  const settingsEnv = computed<SettingsEnv>(() => ({ isGuest: isGuestUser() }));
+  const mobileSection = computed(() =>
+    bookmark.isMobile ? parseSettingsSection(route.query.section, settingsEnv.value) : null,
+  );
+  const isMobileSubPage = computed(() => mobileSection.value !== null);
+  const showMobileIndex = computed(() => bookmark.isMobile && mobileSection.value === null);
+  /** 桌面端渲染全部区块;移动端只渲染当前子页那一个 */
+  function sectionVisible(id: SettingsIndexSectionId) {
+    return !bookmark.isMobile || mobileSection.value === id;
+  }
+
   function scrollToSection(id: string) {
     const page = pageRef.value;
     const el = document.getElementById(id);
@@ -821,7 +835,10 @@
       activeAnchor.value = anchors.value[anchors.value.length - 1].id;
     }
   };
+  // ScrollSpy 和锚点条只为桌面长页服务:移动端已按分类拆成子页,一页只有一个区块,
+  // 既没有锚点条可高亮,也不该为此挂观察器和滚动监听。
   onMounted(() => {
+    if (bookmark.isMobile) return;
     anchorSpy = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
@@ -835,17 +852,119 @@
       if (el) anchorSpy!.observe(el);
     });
     pageRef.value?.addEventListener('scroll', onPageScroll, { passive: true });
+    // 桌面端直接访问 ?section=ai 时不报错也不忽略:滚到对应区块,和点锚点等效
+    const deepLink = parseSettingsSection(route.query.section, settingsEnv.value);
+    if (deepLink) nextTick(() => scrollToSection(SETTINGS_SECTION_ANCHOR[deepLink]));
   });
   onBeforeUnmount(() => {
     anchorSpy?.disconnect();
     pageRef.value?.removeEventListener('scroll', onPageScroll);
+  });
+
+  /*
+   * 目录滚动位置恢复。存在组件内(路由 keepAlive,同一实例不会被销毁),
+   * 不写 localStorage —— 刷新 App 后从顶部开始是合理的,没必要跨会话记住。
+   */
+  const indexScrollTop = ref(0);
+  /** 是否由目录页 push 进来:决定返回用 back() 还是 replace()(深链接进来没有目录可回) */
+  let enteredFromIndex = false;
+
+  function openSection(id: SettingsIndexSectionId) {
+    indexScrollTop.value = pageRef.value?.scrollTop ?? 0;
+    enteredFromIndex = true;
+    router.push({ path: '/settings', query: { section: id } });
+  }
+
+  function backToIndex() {
+    // 走 back() 才能让浏览器/Android 的前进后退保持一致;深链接进来时历史里没有目录页,只能 replace
+    if (enteredFromIndex) router.back();
+    else router.replace({ path: '/settings' });
+  }
+
+  // 子页 ↔ 目录切换时的滚动:进子页从顶部开始,回目录恢复到刚才浏览的位置。
+  // scrollTop 是布局坐标,不受界面缩放(<html> zoom)影响,这里无需换算。
+  watch(mobileSection, (current, previous) => {
+    if (current) {
+      nextTick(() => {
+        if (pageRef.value) pageRef.value.scrollTop = 0;
+      });
+      return;
+    }
+    if (previous) {
+      enteredFromIndex = false;
+      const top = indexScrollTop.value;
+      nextTick(() => {
+        if (pageRef.value) pageRef.value.scrollTop = top;
+      });
+    }
   });
   const user = useUserStore();
   // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
   const selectedHomePage = computed(() =>
     bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),
   );
+
+  /*
+   * 目录摘要:一行说清当前状态，让人不进子页也知道现在是什么设置。
+   * 必须取真实偏好、不能写死 —— 摘要一旦和实际不符，目录就从「帮你定位」变成「骗你一次」。
+   */
+  const appearanceSummary = computed(() => {
+    const theme = themeOpts.value.find((o) => o.v === (user.preferences.theme || 'system'))?.label;
+    const lang = langOpts.find((o) => o.v === (user.preferences.lang || 'zh-CN'))?.label;
+    return [theme, lang].filter(Boolean).join(' · ');
+  });
+
+  // 项数由 settingsRegistry 的清单算出(总数不写死)，免打扰单独作为后缀,原因见该模块注释
+  const notificationSummary = computed(() => {
+    const prefs = user.preferences as Record<string, unknown>;
+    const base = t('settings.notificationSummary', countEnabledNotifications(prefs));
+    return prefs.notificationsDnd === true ? `${base} · ${t('settings.notificationSummaryDnd')}` : base;
+  });
+
+  const aiSummary = computed(() => {
+    if (user.preferences.aiEnabled === false) return t('settings.ai.summaryOff');
+    const style = aiStyleOpts.value.find((o) => o.v === ((user.preferences as any).aiStyle || 'balanced'))?.label;
+    return style ? `${t('settings.ai.summaryOn')} · ${style}` : t('settings.ai.summaryOn');
+  });
   const { canPrompt, installState, isStandalone, openGuide } = usePwaInstall();
+
+  /*
+   * 移动端目录行。标题用 mobileIndex.* 那套更完整的名字(目录一行只放一个分类、有横向空间),
+   * 桌面锚点继续用短标题。summary 全部来自上面的实时 computed。
+   */
+  const mobileIndexRows = computed<SettingsIndexRow[]>(() => {
+    const copy: Record<SettingsIndexSectionId, { title: string; summary: string }> = {
+      appearance: { title: t('settings.mobileIndex.appearance'), summary: appearanceSummary.value },
+      general: { title: t('settings.mobileIndex.general'), summary: t('settings.mobileIndex.generalSummary') },
+      notification: { title: t('settings.notification'), summary: notificationSummary.value },
+      ai: { title: t('settings.ai.title'), summary: aiSummary.value },
+      account: { title: t('settings.accountSecurityTitle'), summary: t('settings.accountSecurityDesc') },
+      privacy: { title: t('settings.privacyTitle'), summary: t('settings.mobileIndex.privacySummary') },
+    };
+    const icons: Record<SettingsIndexSectionId, string> = {
+      appearance: icon.settings.appearance,
+      general: icon.settings.general,
+      notification: icon.settings.notification,
+      ai: icon.settings.ai,
+      account: icon.settings.account,
+      privacy: icon.settings.privacy,
+    };
+    return visibleSettingsSections(settingsEnv.value).map((meta) => ({
+      id: meta.id,
+      group: meta.group,
+      tone: meta.tone,
+      icon: icons[meta.id],
+      title: copy[meta.id].title,
+      summary: copy[meta.id].summary,
+    }));
+  });
+
+  /** 子页顶栏标题:与目录行同源，避免两处各写一份而说法不一致 */
+  const currentSectionTitle = computed(() => {
+    const current = mobileSection.value;
+    if (!current) return t('settings.title');
+    return mobileIndexRows.value.find((row) => row.id === current)?.title ?? t('settings.title');
+  });
   const pwaStateLabel = computed(() =>
     installState.value === 'installed'
       ? t('pwa.installed')
@@ -1133,7 +1252,12 @@
     if (!Number.isFinite(n)) return '—';
     return n >= 10000 ? `${(n / 10000).toFixed(n % 10000 === 0 ? 0 : 1)}万` : String(n);
   }
-  onMounted(async () => {
+  // 额度只在真正会显示它的页面才请求:移动端目录页看不到额度,进 AI 子页时再拉。
+  // 桌面长页一进来就渲染 AI 区块,仍按首屏加载。
+  let quotaLoaded = false;
+  async function loadAiQuota() {
+    if (quotaLoaded) return;
+    quotaLoaded = true;
     try {
       const res = await apiBasePost('/api/chat/aiQuota', {});
       const d: any = res?.data;
@@ -1144,9 +1268,21 @@
     } catch {
       quotaText.value = '—';
     }
-  });
+  }
+  watch(
+    () => !bookmark.isMobile || mobileSection.value === 'ai',
+    (needQuota) => {
+      if (needQuota) loadAiQuota();
+    },
+    { immediate: true },
+  );
 
   function goBack() {
+    // 移动端子页的返回终点是设置目录，不是个人中心
+    if (isMobileSubPage.value) {
+      backToIndex();
+      return;
+    }
     // 移动端设置页是个人中心的下级页面，返回目标必须稳定留在轻笺内部。
     // 使用 replace 避免个人中心再次按浏览器返回时又回到设置页形成往返循环。
     if (bookmark.isMobile) {
@@ -1366,6 +1502,45 @@
     color: var(--desc-color);
   }
 
+  /* ---- 移动端子页顶栏 ---- */
+  /* 返回键 + 当前分类名。sticky 让它在长子页(通知有十来项)里始终可达,
+     不必滚回顶部才能返回。left/right 负边距抵掉 .settings-page 的左右内边距,
+     背景才能通栏,不然滚动内容会从两侧漏出来。 */
+  .settings-subhead {
+    position: sticky;
+    top: -28px;
+    z-index: 6;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+    margin: -28px -24px 0;
+    padding: 10px 16px;
+    background: var(--background-color);
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 42%, transparent);
+  }
+  .settings-subhead-title {
+    margin: 0;
+    /* 标题居中,同时给右侧留出与返回键等宽的占位,避免长标题把自己推歪 */
+    padding-right: 34px;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 700;
+  }
+  .settings-container .settings-subhead-back {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--desc-color);
+  }
+  .settings-container .settings-subhead-back:hover {
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
+  }
+
   /* ---- fields ---- */
   .fields {
     display: flex;
@@ -1527,6 +1702,61 @@
     }
   }
 
+  /* ---- 移动端子页:分段控件铺满整行 ----
+     子页里标签和选项本来就是竖排(见上面的 @container),选项那一行整条空着。
+     桌面那套 chips 按文字宽、约 31px 高,搬到手机就是又窄又矮、手指难点。
+     这里把 .seg 变成一条等分轨道:按钮平分整行,44px 高刚好到触控下限。
+     只作用于移动端子页 —— 桌面是「标签在左、选项在右」,铺满会把字段拉散。 */
+  .settings-body.is-mobile-sub {
+    /* 轨道底色:混 border 色而非某个表面变量,深浅两套主题下都稳定地「比卡片底突出一层」
+       (浅色下 border 偏暗、深色下偏亮,方向都对)。
+       权重必须留在 20% 以上 —— androidColorMixFallback 只把「中性色 + transparent」里
+       ≥20% 的弱底色换成稳定 RGBA,更弱的直接回退成透明,APK 里整条轨道会消失
+       (就是那个「卡片列表切换区域背景色没了」)。40% 正落在插件注释所说的灰槽档位。 */
+    .seg {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 4px;
+      border-radius: 14px;
+      background: color-mix(in srgb, var(--card-border-color) 40%, transparent);
+    }
+    /* flex:1 让 2~3 项平分一行;min-width 保证 4 项(移动端默认首页)在 320px 下
+       折成两行各自铺满,而不是硬挤一行把文字压断。只写布局、不碰颜色,
+       选中态的实色紫底+白字继续由下面的 .active 规则决定。 */
+    .seg-btn {
+      flex: 1 1 auto;
+      min-width: 76px;
+      min-height: 44px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    /* 4 项(移动端的「默认首页」)在窄屏必然换行,默认会折成 3+1、最后一项独占一整行很突兀。
+       项数 ≥4 时改成两列,折成 2+2 更齐。旧 WebView 不支持 :has() 就退回 3+1 ——
+       只是排布差异,不影响可用性,也不涉及状态可辨。 */
+    .seg:has(> .seg-btn:nth-child(4)) .seg-btn {
+      flex-basis: calc(50% - 2px);
+    }
+    /* 未选中项在轨道里不需要自己的描边/底色;选中项因此成为轨道内唯一的实色块。
+       用 :not(.active) 而不是覆盖再复原,避免把 .active 的渐变背景压掉。 */
+    .seg-btn:not(.active) {
+      border-color: transparent;
+      background: transparent;
+    }
+    /* 手机没有真 hover:轨道内再做位移会让整条跟着抖 */
+    .seg-btn:hover:not(.active) {
+      transform: none;
+      border-color: transparent;
+      color: var(--text-color);
+    }
+    /* 桌面 chips 那颗大投影(y+10、blur 22)是给「浮在卡片上的独立按钮」用的,
+       放进轨道后会漏到轨道外侧、每个字段都糊一片。这里收成贴合的一层。 */
+    .seg-btn.active {
+      box-shadow: 0 1px 3px color-mix(in srgb, var(--primary-color) 32%, transparent);
+    }
+  }
+
   .settings-foot {
     margin: 2px 0 0;
     text-align: center;
@@ -1573,6 +1803,12 @@
   @media (max-width: 560px) {
     .settings-page {
       padding: 20px 16px 48px;
+    }
+    /* 顶栏的负边距必须跟着 .settings-page 的内边距走,否则通栏背景对不上 */
+    .settings-subhead {
+      top: -20px;
+      margin: -20px -16px 0;
+      padding: 10px 12px;
     }
   }
 </style>

@@ -73,7 +73,20 @@
         </template>
       </template>
 
-      <div class="bookmark-workspace">
+      <div
+        ref="workspaceRef"
+        class="bookmark-workspace"
+        @touchstart.passive="pullRefresh.onTouchStart"
+        @touchmove="pullRefresh.onTouchMove"
+        @touchend.passive="pullRefresh.onTouchEnd"
+        @touchcancel.passive="pullRefresh.onTouchCancel"
+      >
+        <MobilePullRefreshIndicator
+          :distance="pullRefresh.pullDistance.value"
+          :refreshing="pullRefresh.refreshing.value"
+          :ready="pullRefresh.ready.value"
+          :visible="pullRefresh.visible.value"
+        />
         <aside v-if="!bookmark.isMobile" class="bookmark-side-panel">
           <FilterPanel />
         </aside>
@@ -111,6 +124,8 @@
 <script lang="ts" setup>
   import FilterPanel from '@/view/home/FilterPanel.vue';
   import ViewPanel from '@/view/home/ViewPanel.vue';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import GuestBrowseNudge from '@/components/home/GuestBrowseNudge.vue';
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -146,6 +161,24 @@
   const selectedIds = ref<string[]>([]);
   const batchMutating = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const workspaceRef = ref<HTMLElement | null>(null);
+
+  /*
+   * 下拉刷新：书签列表走静默路径（保留旧列表与计数），标签列表复用已有的
+   * queryTagList(true) —— 别处新增/删除的标签也要一起同步，否则刷完还是旧标签。
+   *
+   * 移动端真实滚动容器是 CardPanel 的 .card-panel-wrap（桌面端才是 .view-panel），
+   * 所以手势绑在工作区外层靠冒泡接收，容器按 data-mobile-resource-scroll 动态取。
+   */
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: computed(() => !batchMode.value),
+    externalBusy: computed(
+      () => bookmark.bookmarkLoading || bookmark.bookmarkLoadingMore || batchMutating.value,
+    ),
+    getScrollContainer: () =>
+      workspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+    onRefresh: () => Promise.all([loadCurrentBookmarkPage({ silent: true }), queryTagList(true)]),
+  });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'batch',
@@ -440,12 +473,20 @@
     }
   }
 
-  const watchedRefreshKey = computed(() => bookmark.refreshKey);
-  watch(
-    () => watchedRefreshKey.value,
-    async () => {
-      const requestSequence = ++bookmarkRequestSequence;
-      const requestType = bookmark.type;
+  /**
+   * 按当前视图（全部 / 标签 / 搜索）重新取第一页。
+   *
+   * silent 供下拉刷新使用，与普通刷新的差别只有三处副作用：
+   * - 不清空列表与计数，也不进 loading —— 旧数据留在屏幕上，顶部指示器负责表达进度；
+   * - 不 scrollToTop：下拉本来就发生在顶部，滚动只会打断用户视线；
+   * - 不走最小骨架时长，那是为了骨架屏不闪，静默刷新没有骨架。
+   * 请求失败（result 为 null）时同样不写入，于是旧列表与计数原样保留。
+   */
+  async function loadCurrentBookmarkPage(options: { silent?: boolean } = {}) {
+    const silent = Boolean(options.silent);
+    const requestSequence = ++bookmarkRequestSequence;
+    const requestType = bookmark.type;
+    if (!silent) {
       bookmark.bookmarkList = [];
       bookmark.bookmarkPage = 0;
       bookmark.bookmarkTotal = 0;
@@ -454,47 +495,51 @@
       // 请求成功且全部页完成前保持 false，避免把刷新时的临时空数组误判成「新用户没有书签」。
       bookmark.bookmarkAllLoaded = false;
       bookmark.bookmarkLoading = true;
-      const loadingStart = Date.now();
-      try {
-        let result: Awaited<ReturnType<typeof fetchBookmarkList>> = null;
-        if (requestType === 'normal') {
-          const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
-          bookmark.tagData = tag;
-          // 相关标签不再随列表接口下发(已改为按共同资源推导),仅为当前选中标签单独拉取一次
-          if (tag?.id) void loadRelatedTagsForCurrent(tag.id);
-          if (tag) {
-            result = await fetchBookmarkList('normal', { tagId: tag.id }, 1);
-            if (isHomeDrawerLayout.value) {
-              bookmark.isFold = true;
-            }
+    }
+    const loadingStart = Date.now();
+    try {
+      let result: Awaited<ReturnType<typeof fetchBookmarkList>> = null;
+      if (requestType === 'normal') {
+        const tag = bookmark.tagList?.find((item) => item.id === route.params?.id);
+        bookmark.tagData = tag;
+        // 相关标签不再随列表接口下发(已改为按共同资源推导),仅为当前选中标签单独拉取一次
+        if (tag?.id) void loadRelatedTagsForCurrent(tag.id);
+        if (tag) {
+          result = await fetchBookmarkList('normal', { tagId: tag.id }, 1);
+          // 静默刷新不该顺手改抽屉状态：那是「切换到某个标签」的行为
+          if (isHomeDrawerLayout.value && !silent) {
+            bookmark.isFold = true;
           }
-        } else if (requestType === 'all') {
-          bookmark.tagData = null;
-          result = await fetchBookmarkList('all', {}, 1);
-        } else if (requestType === 'search' && bookmark.bookmarkSearch) {
-          bookmark.tagData = null;
-          result = await fetchBookmarkList('search', { value: bookmark.bookmarkSearch }, 1);
-        } else {
-          bookmark.tagData = null;
-          bookmark.type = 'all';
-          bookmark.refreshData();
-          return;
         }
+      } else if (requestType === 'all') {
+        bookmark.tagData = null;
+        result = await fetchBookmarkList('all', {}, 1);
+      } else if (requestType === 'search' && bookmark.bookmarkSearch) {
+        bookmark.tagData = null;
+        result = await fetchBookmarkList('search', { value: bookmark.bookmarkSearch }, 1);
+      } else {
+        bookmark.tagData = null;
+        bookmark.type = 'all';
+        // 静默刷新不能触发清空式全量重查，交给下一次普通刷新处理
+        if (!silent) bookmark.refreshData();
+        return;
+      }
 
-        if (requestSequence !== bookmarkRequestSequence) return;
-        if (result) {
-          bookmark.bookmarkList = result.items;
-          bookmark.bookmarkPage = result.page;
-          bookmark.bookmarkTotal = result.total;
-          bookmark.bookmarkHasMore = result.hasMore;
-          if (requestType === 'all') {
-            user.bookmarkTotal = result.total;
-            bookmark.bookmarkAllLoaded = !result.hasMore;
-          }
+      if (requestSequence !== bookmarkRequestSequence) return;
+      if (result) {
+        bookmark.bookmarkList = result.items;
+        bookmark.bookmarkPage = result.page;
+        bookmark.bookmarkTotal = result.total;
+        bookmark.bookmarkHasMore = result.hasMore;
+        if (requestType === 'all') {
+          user.bookmarkTotal = result.total;
+          bookmark.bookmarkAllLoaded = !result.hasMore;
         }
-        scrollToTop();
-        void cacheImages(result?.items || []);
-      } finally {
+      }
+      if (!silent) scrollToTop();
+      void cacheImages(result?.items || []);
+    } finally {
+      if (!silent) {
         const elapsed = Date.now() - loadingStart;
         if (elapsed < MIN_SKELETON_MS) {
           await new Promise((resolve) => setTimeout(resolve, MIN_SKELETON_MS - elapsed));
@@ -504,9 +549,11 @@
           void ensureLocatedBookmark(requestSequence);
         }
       }
-    },
-    { flush: 'sync' },
-  );
+    }
+  }
+
+  const watchedRefreshKey = computed(() => bookmark.refreshKey);
+  watch(() => watchedRefreshKey.value, () => loadCurrentBookmarkPage(), { flush: 'sync' });
 
   watch(
     () => bookmark.refreshTagKey,
@@ -621,6 +668,8 @@
   }
 
   .bookmark-workspace {
+    /* 下拉刷新指示器以此为定位基准(它靠负 top 藏在内容上方) */
+    position: relative;
     width: 100%;
     height: 100%;
     min-height: 0;

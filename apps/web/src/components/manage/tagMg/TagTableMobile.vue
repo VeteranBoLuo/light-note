@@ -1,7 +1,20 @@
 <template>
   <!-- 作为移动资料区第四个页签渲染:顶栏(搜索/新建)与底部导航由移动壳提供,不再自带页头 -->
   <b-loading :loading="loading">
-    <div class="mobile-tag-page">
+    <div
+      ref="scrollRef"
+      class="mobile-tag-page"
+      @touchstart.passive="pullRefresh.onTouchStart"
+      @touchmove="pullRefresh.onTouchMove"
+      @touchend.passive="pullRefresh.onTouchEnd"
+      @touchcancel.passive="pullRefresh.onTouchCancel"
+    >
+      <MobilePullRefreshIndicator
+        :distance="pullRefresh.pullDistance.value"
+        :refreshing="pullRefresh.refreshing.value"
+        :ready="pullRefresh.ready.value"
+        :visible="pullRefresh.visible.value"
+      />
       <BCard as="section" variant="raised" padding="14px 15px" class="mobile-overview">
         <div class="mobile-overview__total">
           <strong>{{ overview.tag }}</strong>
@@ -168,13 +181,27 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { getTotalResourceCount, type TagFilterValue, type TagRecord, useTagManage } from './useTagManage';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   const { t } = useI18n();
-  const { loading, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } = useTagManage();
+  const { loading, refreshing, keyword, activeFilter, sortMode, filterCounts, visibleTags, overview, reload } =
+    useTagManage();
   const selectionMode = ref(false);
   const selectedIds = ref<string[]>([]);
   const mutating = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const scrollRef = ref<HTMLElement | null>(null);
+
+  // 下拉刷新只刷新标签数据本身:activeFilter / sortMode / keyword 和横向筛选条位置
+  // 都是页面自己的 ref,reload 不碰它们,所以刷新后当前筛选原地保留。
+  // overview(总数、覆盖率)由 tags 计算得出,自动跟着更新,不需要额外请求。
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: computed(() => !selectionMode.value),
+    externalBusy: computed(() => loading.value || refreshing.value || mutating.value),
+    getScrollContainer: () => scrollRef.value,
+    onRefresh: () => reload({ silent: true }),
+  });
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'batch',
@@ -342,6 +369,8 @@
     --mobile-tag-muted-bg: var(--bl-input-noBorder-bg-color);
     --mobile-tag-border: var(--surface-border-color);
 
+    /* 下拉刷新指示器以此为定位基准(它靠负 top 藏在内容上方) */
+    position: relative;
     height: 100%;
     min-height: 0;
     /* 壳内页签形态:内容区自带四周留白(原由 ResourcePageShell 提供) */

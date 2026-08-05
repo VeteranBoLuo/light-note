@@ -116,7 +116,22 @@
       </template>
     </template>
 
-    <div class="note-workspace" :class="{ 'is-split': isListLayout }" @scroll.capture.passive="onNoteScroll">
+    <div
+      ref="noteWorkspaceRef"
+      class="note-workspace"
+      :class="{ 'is-split': isListLayout }"
+      @scroll.capture.passive="onNoteScroll"
+      @touchstart.passive="pullRefresh.onTouchStart"
+      @touchmove="pullRefresh.onTouchMove"
+      @touchend.passive="pullRefresh.onTouchEnd"
+      @touchcancel.passive="pullRefresh.onTouchCancel"
+    >
+      <MobilePullRefreshIndicator
+        :distance="pullRefresh.pullDistance.value"
+        :refreshing="pullRefresh.refreshing.value"
+        :ready="pullRefresh.ready.value"
+        :visible="pullRefresh.visible.value"
+      />
       <!-- 侧栏常驻 DOM 才能有进出过渡;卡片视图下用 inert 关掉焦点与辅助技术可见性,而不是直接卸载 -->
       <aside
         v-if="!bookmark.isMobile"
@@ -306,6 +321,8 @@
   import { VueDraggable } from 'vue-draggable-plus';
   import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
   import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
   import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
@@ -642,6 +659,25 @@
   const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
   // 左侧标签目录只服务桌面/平板的列表视图;移动端 currentViewMode 恒为 card,不会命中
   const isListLayout = computed(() => !bookmark.isMobile && currentViewMode.value === 'list');
+  const noteWorkspaceRef = ref<HTMLElement | null>(null);
+
+  /*
+   * 下拉刷新。走 reloadNotes(true) 的软刷新路径:保留旧列表、不进骨架屏,
+   * 只降透明度加顶部进度条 —— 与「下拉刷新不清空数据」的要求正好一致。
+   * 当前标签(URL query 驱动)、视图、搜索词、路由、排序都不受影响。
+   *
+   * 骨架屏容器和卡片列表是两个轮换出现的 DOM 节点(都带 data-mobile-resource-scroll),
+   * 所以容器要动态取当前存在的那个,不能绑死一个 ref。
+   */
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: computed(() => !batchMode.value),
+    externalBusy: computed(
+      () => loading.value || refreshing.value || loadingMore.value || noteDragging.value,
+    ),
+    getScrollContainer: () =>
+      noteWorkspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+    onRefresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+  });
   const allTags = ref<any[]>([]);
   const untaggedNoteCount = ref<number | null>(null);
   const totalNoteCount = ref<number | null>(null);

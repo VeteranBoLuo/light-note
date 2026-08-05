@@ -888,6 +888,11 @@ export default {
       dueAt: '{time} 到期',
       collectedAt: '{day} 收集',
       snoozeTomorrow: '明天再看',
+      // 重复待办不顺延截止时间，按钮也不能叫「明天再看」
+      snoozeReminderOnly: '推迟提醒',
+      // 工作台的「明天再看」顺延截止时间；重复待办只推提醒，提示要讲明差别
+      snoozedToTomorrow: '已顺延到明天上午 9 点',
+      snoozeRecurringHint: '已推迟提醒；重复待办的截止时间保持不变',
       completeTodo: '完成待办 {title}',
       todoCompleted: '已完成，干得漂亮',
       inboxCompleted: '已完成整理',
@@ -913,9 +918,6 @@ export default {
       captureTodo: '待办',
       continueTitle: '继续处理',
       continueHint: '接着上次的内容',
-      pullToRefresh: '下拉刷新',
-      releaseToRefresh: '松开刷新',
-      refreshing: '正在刷新…',
     },
     empty: {
       continueTitle: '还没有可继续的内容',
@@ -1683,6 +1685,11 @@ export default {
     unpinned: '已取消置顶',
     delete: '删除',
     refresh: '刷新',
+    // App 端统一下拉刷新:各列表页共用同一套文案,不再按页面各写一份
+    pullToRefresh: '下拉刷新',
+    releaseToRefresh: '松开刷新',
+    refreshing: '正在刷新…',
+    refreshFailed: '刷新失败，请稍后重试',
     export: '导出',
     import: '导入',
     add: '新增',
@@ -1858,6 +1865,24 @@ export default {
     installStateDesc: '安装后仍使用同一账号与在线数据，更新由网站自动提供',
     privacyTitle: '隐私与协议',
     privacyDesc: '随时查看轻笺当前生效的规则',
+    // 「账号与安全」原先在模板里写死中文，进移动端目录后必须走 i18n。
+    // 不叫 accountTitle/accountDesc：下面已有一组同名键指个人中心的资料入口，含义完全不同
+    accountSecurityTitle: '账号与安全',
+    accountSecurityDesc: '密码、账号绑定与登录设备',
+    /*
+     * 移动端设置目录专用文案。桌面长页继续用上面的短标题(锚点条宽度有限)，
+     * 目录页一行只放一个分类、有横向空间，用更能说清范围的名字。
+     */
+    mobileIndex: {
+      groupPreferences: '偏好设置',
+      groupAccount: '账号与设备',
+      groupRules: '规则与数据',
+      appearance: '外观与语言',
+      general: '内容与交互',
+      generalSummary: '打开方式、视图与排序',
+      privacySummary: '协议、备案与当前规则',
+      footHint: '偏好实时保存 · 修改后立即生效',
+    },
     privacyPolicy: '隐私政策',
     privacyPolicyDesc: '了解轻笺处理账号、内容、文件、日志和第三方服务的方式',
     userAgreement: '用户协议',
@@ -1904,6 +1929,9 @@ export default {
     resourceSortDesc: '资源中心搜索结果的默认排序方式',
     notification: '通知',
     notificationDesc: '控制各类通知的推送方式',
+    // 移动端卡片收起时替代描述显示的当前状态
+    notificationSummary: '{on}/{total} 项已开启',
+    notificationSummaryDnd: '免打扰中',
     notificationsInApp: '站内通知总开关',
     notificationsInAppDesc: '关闭后不再投递新的站内提醒。',
     notificationsEmail: '邮件通知总开关',
@@ -1994,6 +2022,8 @@ export default {
     ai: {
       title: 'AI 设置',
       description: '回答风格、打开方式、云端历史与今日额度',
+      summaryOn: 'AI 助手已启用',
+      summaryOff: 'AI 助手已关闭',
       style: '回答风格',
       styleDescription: '越“发散”每次回答越不同，越“严谨”越稳定一致',
       styleStrict: '严谨',

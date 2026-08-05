@@ -81,6 +81,15 @@ export default {
   },
 
   settings: {
+    /** 外观与语言:半明半暗的圆,表达主题明暗切换 */
+    appearance:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg>',
+    /** 内容与交互:带滑块的列表行,表达打开方式与视图偏好 */
+    general:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"><path d="M5 7h14M5 12h14M5 17h14"/></g><g fill="currentColor"><circle cx="10" cy="7" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="8" cy="17" r="1.7"/></g></svg>',
+    /** 账号与安全:盾牌(与 privacy 的「盾+勾」区分,这里是纯盾) */
+    account:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"/></svg>',
     shortcuts:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect width="19" height="13.5" x="2.5" y="5.25" rx="2.5"/><path d="M6.5 9h.01M10.15 9h.01M13.8 9h.01M17.45 9h.01M6.5 12.75h.01M10.15 12.75h.01M13.8 12.75h3.65M7.25 16.25h9.5"/></g></svg>',
     ai: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6"><circle cx="12" cy="12" r="3.5"/><path d="M12 3v2M12 19v2M5 12H3M21 12h-2M6 6l1.5 1.5M16.5 16.5L18 18M18 6l-1.5 1.5M7.5 16.5L6 18"/></g></svg>',

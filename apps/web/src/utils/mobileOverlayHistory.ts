@@ -141,6 +141,17 @@ export function registerMobileOverlayHistory(onBack: () => void): MobileOverlayH
 }
 
 /**
+ * 当前是否有统一管理的移动端浮层处于打开状态（弹框 / 抽屉 / 全屏预览）。
+ *
+ * 给需要「浮层打开时不响应手势」的能力用（如下拉刷新）：判断只有这一份，
+ * 各页面不必再各自罗列自己有哪些 visible 变量 —— 那样每接入一个页面就多一份
+ * 会漏项的清单。正在关闭中的浮层同样算打开，它的 history 占位还没出栈。
+ */
+export function hasOpenMobileOverlay(): boolean {
+  return entries.some((entry) => entry.state !== 'released');
+}
+
+/**
  * 等待当前最上层浮层的 history 占位完成释放。
  *
  * 选择弹框内容后需要跳转路由时，应先取得这个 Promise，再把弹框的

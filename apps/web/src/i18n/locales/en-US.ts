@@ -903,6 +903,11 @@ export default {
       dueAt: 'Due {time}',
       collectedAt: 'Collected {day}',
       snoozeTomorrow: 'Tomorrow',
+      // Recurring todos keep their due date, so the button must not say "Tomorrow"
+      snoozeReminderOnly: 'Postpone reminder',
+      // The workbench action pushes the due date; recurring todos only move the reminder
+      snoozedToTomorrow: 'Moved to tomorrow 9:00 AM',
+      snoozeRecurringHint: 'Reminder postponed; the due date of a recurring todo stays put',
       completeTodo: 'Complete todo {title}',
       todoCompleted: 'Completed. Nice work!',
       inboxCompleted: 'Marked as organized',
@@ -928,9 +933,6 @@ export default {
       captureTodo: 'Todo',
       continueTitle: 'Pick up where you left off',
       continueHint: 'Recent notes and files',
-      pullToRefresh: 'Pull to refresh',
-      releaseToRefresh: 'Release to refresh',
-      refreshing: 'Refreshing…',
     },
     empty: {
       continueTitle: 'Nothing to resume yet',
@@ -1710,6 +1712,11 @@ export default {
     unpinned: 'Unpinned',
     delete: 'Delete',
     refresh: 'Refresh',
+    // App 端统一下拉刷新:各列表页共用同一套文案,不再按页面各写一份
+    pullToRefresh: 'Pull to refresh',
+    releaseToRefresh: 'Release to refresh',
+    refreshing: 'Refreshing…',
+    refreshFailed: 'Refresh failed. Please try again later.',
     export: 'Export',
     import: 'Import',
     add: 'Add',
@@ -1885,6 +1892,26 @@ export default {
     installStateDesc: 'The installed app uses the same account and online data, and updates automatically',
     privacyTitle: 'Privacy & Terms',
     privacyDesc: 'Review the rules currently in effect for Light Note',
+    // Account section used to hardcode Chinese; the mobile index needs it translated.
+    // Not named accountTitle/accountDesc — those already exist below for the
+    // person-center profile entry and mean something else entirely.
+    accountSecurityTitle: 'Account & security',
+    accountSecurityDesc: 'Password, linked accounts and signed-in devices',
+    /*
+     * Copy used only by the mobile settings index. The desktop long page keeps the
+     * short titles above (the anchor rail is narrow); index rows have room for
+     * names that describe the whole scope.
+     */
+    mobileIndex: {
+      groupPreferences: 'Preferences',
+      groupAccount: 'Account & device',
+      groupRules: 'Rules & data',
+      appearance: 'Appearance & language',
+      general: 'Content & interaction',
+      generalSummary: 'Opening, views and sorting',
+      privacySummary: 'Terms, filing record and current rules',
+      footHint: 'Preferences save instantly · changes take effect right away',
+    },
     privacyPolicy: 'Privacy Policy',
     privacyPolicyDesc: 'How Light Note processes account data, content, files, logs, and third-party services',
     userAgreement: 'User Agreement',
@@ -1931,6 +1958,9 @@ export default {
     resourceSortDesc: 'Default sort order of resource center results',
     notification: 'Notifications',
     notificationDesc: 'Control how each kind of notification is pushed',
+    // Shown instead of the description when the card is collapsed on mobile
+    notificationSummary: '{on} of {total} enabled',
+    notificationSummaryDnd: 'Do not disturb on',
     notificationsInApp: 'In-app notifications',
     notificationsInAppDesc: 'Turn off delivery of new in-app reminders.',
     notificationsEmail: 'Email notifications',
@@ -2023,6 +2053,8 @@ export default {
     ai: {
       title: 'AI settings',
       description: 'Answer style, opening behavior, cloud history, and today’s quota',
+      summaryOn: 'AI assistant on',
+      summaryOff: 'AI assistant off',
       style: 'Answer style',
       styleDescription: 'Creative varies more between replies; strict stays more consistent.',
       styleStrict: 'Strict',
@@ -4390,8 +4422,10 @@ export default {
     apkMethodBadge: 'Recommended',
     webMethodTitle: 'Option 2: add to home screen',
     apkCardTitle: 'Download LightNote for Android {version}',
-    apkCardDesc: 'Download the package from the official site for a real app icon, system back gesture, and full file upload and download support.',
-    apkCardDescHarmony: 'Download the package from the official site. HarmonyOS needs an Android compatibility layer such as Zhuoyitong; some models are unsupported, in which case use option 2 below.',
+    apkCardDesc:
+      'Download the package from the official site for a real app icon, system back gesture, and full file upload and download support.',
+    apkCardDescHarmony:
+      'Download the package from the official site. HarmonyOS needs an Android compatibility layer such as Zhuoyitong; some models are unsupported, in which case use option 2 below.',
     benefitStandalone: 'Standalone window',
     benefitSynced: 'Synced data',
     benefitAutoUpdate: 'Auto updates',
@@ -4689,9 +4723,11 @@ export default {
     preparing: 'Preparing',
     usePwaInstead: 'Install the web app instead',
     alreadyInApp: 'You are already using the LightNote app',
-    iosNote: 'iPhone and iPad cannot install Android packages. Open LightNote in Safari and use "Add to Home Screen" for an app-like experience.',
+    iosNote:
+      'iPhone and iPad cannot install Android packages. Open LightNote in Safari and use "Add to Home Screen" for an app-like experience.',
     addToHomeScreen: 'Add to Home Screen',
-    desktopNote: 'You are on a desktop or tablet browser. The APK installs on an Android phone — send the address below to your phone browser.',
+    desktopNote:
+      'You are on a desktop or tablet browser. The APK installs on an Android phone — send the address below to your phone browser.',
     copy: 'Copy',
     copyApkLink: 'Copy APK link',
     copiedPageUrl: 'Page address copied',
@@ -4700,12 +4736,15 @@ export default {
     copiedCert: 'Certificate fingerprint copied',
     copyFailed: 'This browser blocked automatic copying. Please select and copy manually.',
     reqAndroid: 'Requires Android {version} or later',
-    reqHarmony: 'HarmonyOS devices that support Android packages can install it via Zhuoyitong. This is not a native HarmonyOS app.',
+    reqHarmony:
+      'HarmonyOS devices that support Android packages can install it via Zhuoyitong. This is not a native HarmonyOS app.',
     // The unknown-source warning is explained once, in the install steps below.
-    safetyOnlyOfficial: 'Download the official build only from {host}; packages with the same name elsewhere are from untrusted sources.',
+    safetyOnlyOfficial:
+      'Download the official build only from {host}; packages with the same name elsewhere are from untrusted sources.',
 
     verifyTitle: 'Package verification',
-    verifyDesc: 'Everything below is taken from the exact package currently served here, so you can confirm your download was not swapped.',
+    verifyDesc:
+      'Everything below is taken from the exact package currently served here, so you can confirm your download was not swapped.',
     factPackage: 'Package name',
     factVersion: 'Version',
     factSize: 'File size',
@@ -4724,11 +4763,14 @@ export default {
       'Follow the system prompts, then open LightNote from your home screen.',
       'On first launch the privacy policy and user agreement are shown; the app only goes online after you accept.',
     ],
-    unknownSourceNote: 'An unknown-source warning on first install is normal and unrelated to filing status; a filing number only shows the app has met its filing obligation.',
+    unknownSourceNote:
+      'An unknown-source warning on first install is normal and unrelated to filing status; a filing number only shows the app has met its filing obligation.',
     updateTitle: 'Updating',
-    updateDesc: 'Download the newer package and install over the old one — cloud data is preserved. Web-side updates apply automatically and usually need no reinstall.',
+    updateDesc:
+      'Download the newer package and install over the old one — cloud data is preserved. Web-side updates apply automatically and usually need no reinstall.',
     uninstallTitle: 'Uninstalling',
-    uninstallDesc: 'Uninstall it like any app: long-press the home screen icon, or use the app list in system settings. Uninstalling removes only the local app; your account and cloud data are untouched.',
+    uninstallDesc:
+      'Uninstall it like any app: long-press the home screen icon, or use the app list in system settings. Uninstalling removes only the local app; your account and cloud data are untouched.',
 
     changelogTitle: 'Release notes',
     changelogVersion: '{version} (first official release)',

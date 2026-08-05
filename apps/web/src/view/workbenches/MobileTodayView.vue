@@ -6,28 +6,20 @@
     资源总量、增长趋势、文件类型分布、常用标签排行和最近更新都留在桌面工作台。
   -->
   <div
+    ref="scrollRef"
     class="mobile-today"
     data-mobile-resource-scroll
-    @touchstart.passive="startPullRefresh"
-    @touchmove="movePullRefresh"
-    @touchend.passive="finishPullRefresh"
-    @touchcancel.passive="cancelPullRefresh"
+    @touchstart.passive="pullRefresh.onTouchStart"
+    @touchmove="pullRefresh.onTouchMove"
+    @touchend.passive="pullRefresh.onTouchEnd"
+    @touchcancel.passive="pullRefresh.onTouchCancel"
   >
-    <div
-      v-if="isAndroidApp && (pullDistance > 0 || pullRefreshing)"
-      class="mobile-today__pull-refresh"
-      :class="{ 'is-ready': pullReady, 'is-refreshing': pullRefreshing }"
-      :style="{ transform: `translateY(${Math.min(pullDistance, 58)}px)` }"
-      role="status"
-    >
-      {{
-        pullRefreshing
-          ? t('workbench.mobileToday.refreshing')
-          : pullReady
-            ? t('workbench.mobileToday.releaseToRefresh')
-            : t('workbench.mobileToday.pullToRefresh')
-      }}
-    </div>
+    <MobilePullRefreshIndicator
+      :distance="pullRefresh.pullDistance.value"
+      :refreshing="pullRefresh.refreshing.value"
+      :ready="pullRefresh.ready.value"
+      :visible="pullRefresh.visible.value"
+    />
     <header class="mobile-today__head">
       <span class="mobile-today__date">{{ dateLabel }}</span>
       <h1>{{ greetingLine }}</h1>
@@ -151,7 +143,8 @@
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { recordOperation } from '@/api/commonApi';
-  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
+  import MobilePullRefreshIndicator from '@/components/mobile/MobilePullRefreshIndicator.vue';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -172,11 +165,7 @@
   const router = useRouter();
   const inbox = inboxStore();
   const user = useUserStore();
-  const isAndroidApp = isLightNoteAndroidApp();
-  const pullDistance = ref(0);
-  const pullRefreshing = ref(false);
-  const pullReady = computed(() => pullDistance.value >= 72);
-  let pullStartY: number | null = null;
+  const scrollRef = ref<HTMLElement | null>(null);
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
@@ -367,44 +356,14 @@
     return request;
   }
 
-  function startPullRefresh(event: TouchEvent) {
-    const container = event.currentTarget as HTMLElement | null;
-    if (!isAndroidApp || pullRefreshing.value || !container || container.scrollTop > 0) return;
-    pullStartY = event.touches[0]?.clientY ?? null;
-  }
-
-  function movePullRefresh(event: TouchEvent) {
-    if (pullStartY === null) return;
-    const distance = (event.touches[0]?.clientY ?? pullStartY) - pullStartY;
-    if (distance <= 0) {
-      pullDistance.value = 0;
-      return;
-    }
-    event.preventDefault();
-    pullDistance.value = Math.min(96, distance * 0.48);
-  }
-
-  async function finishPullRefresh() {
-    if (pullStartY === null) return;
-    pullStartY = null;
-    if (!pullReady.value) {
-      pullDistance.value = 0;
-      return;
-    }
-    pullRefreshing.value = true;
-    pullDistance.value = 52;
-    try {
-      await Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]);
-    } finally {
-      pullRefreshing.value = false;
-      pullDistance.value = 0;
-    }
-  }
-
-  function cancelPullRefresh() {
-    pullStartY = null;
-    if (!pullRefreshing.value) pullDistance.value = 0;
-  }
+  // 手势细节(阈值、阻尼、方向锁、顶部判定、浮层拦截、竞态)全部收口在 composable 里,
+  // 这里只声明「什么时候能刷」和「刷什么」。
+  const pullRefresh = useAndroidPullRefresh({
+    enabled: true,
+    externalBusy: initialTodayLoading,
+    getScrollContainer: () => scrollRef.value,
+    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]),
+  });
 
   // 账号切换后必须重新取数，不能把上一个账号的待办留在屏幕上
   watch(
@@ -450,29 +409,7 @@
     color: var(--text-color);
   }
 
-  .mobile-today__pull-refresh {
-    position: absolute;
-    top: -42px;
-    left: 50%;
-    z-index: 3;
-    padding: 5px 10px;
-    border: 1px solid var(--surface-divider-color);
-    border-radius: 10px;
-    color: var(--desc-color);
-    background: var(--card-background);
-    box-shadow: var(--surface-card-shadow);
-    font-size: 12px;
-    line-height: 20px;
-    white-space: nowrap;
-    transition: transform 0.16s ease;
-    translate: -50% 0;
-  }
-
-  .mobile-today__pull-refresh.is-ready,
-  .mobile-today__pull-refresh.is-refreshing {
-    color: var(--primary-color);
-    border-color: color-mix(in srgb, var(--primary-color) 30%, var(--surface-divider-color));
-  }
+  /* 下拉刷新指示器的样式已随组件迁到 components/mobile/MobilePullRefreshIndicator.vue */
 
   .mobile-today__head {
     margin-bottom: 14px;
