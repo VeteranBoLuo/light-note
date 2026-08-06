@@ -63,6 +63,23 @@ final class WebViewSupport {
         new AtomicBoolean(false);
     private static final Map<Long, String> PENDING_DOWNLOADS =
         new ConcurrentHashMap<>();
+
+    /**
+     * 下载完成后询问用户是否打开该文件。
+     *
+     * 完成广播是用 application context 注册的，弹不了对话框（AlertDialog 要 Activity），
+     * 所以把这一步交回界面：MainActivity 在前台时登记自己，退到后台就取消登记 ——
+     * 用户已经切走了还硬弹一个对话框是打扰，而且此时 startActivity 也不该由我们发起。
+     */
+    interface DownloadOpenPrompt {
+        void promptOpen(long downloadId, String fileName);
+    }
+
+    private static volatile DownloadOpenPrompt downloadOpenPrompt;
+
+    static void setDownloadOpenPrompt(DownloadOpenPrompt prompt) {
+        downloadOpenPrompt = prompt;
+    }
     private static final BroadcastReceiver DOWNLOAD_COMPLETION_RECEIVER =
         new BroadcastReceiver() {
             @Override
@@ -88,6 +105,18 @@ final class WebViewSupport {
                  * 而下载失败是必须让人知道的，系统广播是这里最可靠的兜底。
                  */
                 if (isDownloadSuccessful(context, downloadId)) {
+                    /*
+                     * 日历文件下载完就地问一句「要不要导入」。
+                     *
+                     * 只落到「下载」目录是不够用的：用户不知道文件在哪，找到了还得自己选
+                     * 「用日历打开」，中间掉队的人很多（菠萝在鸿蒙 6 + 卓易通上实测的原话）。
+                     * 按扩展名判断而不是让网页传标记：文件名是我们自己生成并由服务端清洗过的，
+                     * 判断可靠，而且顺带覆盖所有产出 .ics 的路径。
+                     */
+                    DownloadOpenPrompt prompt = downloadOpenPrompt;
+                    if (prompt != null && fileName.toLowerCase(Locale.ROOT).endsWith(".ics")) {
+                        prompt.promptOpen(downloadId, fileName);
+                    }
                     return;
                 }
                 Toast.makeText(
@@ -873,6 +902,44 @@ final class WebViewSupport {
      * 代价:intent 没有「提前多少分钟提醒」的标准 extra,提醒得用户在日历页自己选。
      * 需要带上提醒的场景仍然走 .ics 文件(VALARM 在文件里),两条路并存。
      */
+    /**
+     * 用系统里能处理该类型的应用打开一个已下载完成的文件（日历文件就是「导入日历」那一步）。
+     *
+     * 地址必须走 `getUriForDownloadedFile` 拿 content:// —— 我们把文件落在公共「下载」目录，
+     * 直接甩 file:// 在 API 24+ 会触发 FileUriExposedException；content:// 配
+     * FLAG_GRANT_READ_URI_PERMISSION 才能让日历应用读到。
+     *
+     * MIME 显式传入而不是只靠 getMimeTypeForDownloadedFile：部分机型对 .ics 猜成
+     * application/octet-stream，那样系统就不会把日历应用列为候选。
+     */
+    static boolean openDownloadedFile(Activity activity, long downloadId, String mimeType) {
+        if (activity == null || downloadId < 0) {
+            return false;
+        }
+        try {
+            DownloadManager manager =
+                (DownloadManager) activity.getSystemService(Context.DOWNLOAD_SERVICE);
+            if (manager == null) {
+                return false;
+            }
+            Uri uri = manager.getUriForDownloadedFile(downloadId);
+            if (uri == null) {
+                return false;
+            }
+            String resolved = isBlank(mimeType)
+                ? manager.getMimeTypeForDownloadedFile(downloadId)
+                : mimeType;
+            Intent intent = new Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, isBlank(resolved) ? "*/*" : resolved)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            activity.startActivity(intent);
+            return true;
+        } catch (Exception error) {
+            // 主要是 ActivityNotFoundException（没有能处理这个类型的应用）
+            return false;
+        }
+    }
+
     static boolean insertCalendarEvent(
         Activity activity,
         String title,

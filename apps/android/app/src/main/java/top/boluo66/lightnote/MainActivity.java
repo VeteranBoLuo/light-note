@@ -1,6 +1,7 @@
 package top.boluo66.lightnote;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Intent;
 import android.content.res.Configuration;
@@ -189,6 +190,40 @@ public final class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         pushSystemThemeToWeb(WindowInsetsSupport.isNightMode(this));
+        // 只在前台登记：退到后台还弹对话框是打扰，那时也不该由我们发起 startActivity
+        WebViewSupport.setDownloadOpenPrompt(this::promptOpenCalendarFile);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        WebViewSupport.setDownloadOpenPrompt(null);
+    }
+
+    /**
+     * 日历文件下载完成后就地问一句「要不要现在导入」。
+     *
+     * 只把文件放进「下载」目录是不够用的：用户不知道文件在哪，找到了还得自己选「用日历打开」，
+     * 中间掉队的人很多。不问自动打开会更少一步，但那等于用户点了「导出文件」却被甩进另一个
+     * 应用，太突兀；弹一次确认既省掉那两步，又保留了用户的选择权。
+     */
+    private void promptOpenCalendarFile(long downloadId, String fileName) {
+        runOnUiThread(() -> {
+            if (isFinishing() || isDestroyed()) {
+                return;
+            }
+            new AlertDialog.Builder(this)
+                .setTitle(R.string.calendar_import_title)
+                .setMessage(getString(R.string.calendar_import_message, fileName))
+                .setNegativeButton(R.string.calendar_import_later, null)
+                .setPositiveButton(R.string.calendar_import_confirm, (dialog, which) -> {
+                    if (!WebViewSupport.openDownloadedFile(this, downloadId, "text/calendar")) {
+                        // 没有能打开 .ics 的应用：文件仍在「下载」目录，别让用户以为白下了
+                        Toast.makeText(this, R.string.calendar_import_unavailable, Toast.LENGTH_LONG).show();
+                    }
+                })
+                .show();
+        });
     }
 
     /**

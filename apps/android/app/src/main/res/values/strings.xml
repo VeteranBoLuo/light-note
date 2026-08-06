@@ -13,6 +13,12 @@
          系统 Toast 会变成同一件事说两遍。下面两条失败提示保留 —— 那是网页收不到的情况。 -->
     <string name="download_failed">无法开始下载</string>
     <string name="download_failed_named">下载失败：%1$s</string>
+    <!-- 日历文件落进「下载」目录后，用户往往找不到文件、也不知道要选「用日历打开」，所以就地问一句 -->
+    <string name="calendar_import_title">日历文件已下载</string>
+    <string name="calendar_import_message">现在把「%1$s」导入到日历吗？</string>
+    <string name="calendar_import_confirm">导入日历</string>
+    <string name="calendar_import_later">稍后</string>
+    <string name="calendar_import_unavailable">没找到能打开日历文件的应用，文件已存在「下载」目录</string>
     <string name="file_chooser_opening">正在打开系统文件选择器…</string>
     <string name="file_chooser_processing">正在读取所选文件…</string>
     <string name="file_chooser_returning">正在返回轻笺…</string>
