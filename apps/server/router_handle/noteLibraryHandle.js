@@ -25,6 +25,14 @@ import { buildPagedResult, normalizeOptionalPagination } from '../util/paginatio
 import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
 import {
+  NoteTreeError,
+  loadOwnedNoteTree,
+  queryOwnedNoteTree,
+  resolveNoteBreadcrumbFromSnapshot,
+  resolveNoteDescendantIdsFromSnapshot,
+  resolveOwnedNoteBreadcrumb,
+} from '../util/services/noteTreeService.js';
+import {
   EXPORT_FORMATS,
   MAX_EXPORT_BYTES,
   consumeExportTicket,
@@ -46,6 +54,31 @@ const sendTemplateServerError = (res, scene, error) => {
 const sendNoteServerError = (res, scene, error) => {
   console.error('[note-library] %s failed code=%s', scene, stableAgentErrorCode(error));
   return res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+};
+
+const NOTE_TREE_ERROR_COPY = Object.freeze({
+  NOTE_TREE_USER_REQUIRED: ['缺少用户身份', 'User identity is required'],
+  NOTE_TREE_NODE_NOT_FOUND: ['笔记不存在', 'Note not found'],
+  NOTE_TREE_PARENT_NOT_FOUND: ['目录不存在', 'Directory not found'],
+  NOTE_TREE_INVALID_DEPTH: ['目录展开层级无效', 'Invalid directory depth'],
+  NOTE_TREE_CYCLE: ['笔记目录存在循环关系', 'The note tree contains a cycle'],
+});
+
+const sendNoteTreeError = (req, res, scene, error) => {
+  if (error instanceof NoteTreeError) {
+    const [zh, en] = NOTE_TREE_ERROR_COPY[error.code] || [
+      '笔记目录暂时无法处理该请求',
+      'The note directory cannot process this request right now',
+    ];
+    return res.send(
+      resultData(
+        { code: error.code, ...(error.details ? { details: error.details } : {}) },
+        error.status || 400,
+        L(req, zh, en),
+      ),
+    );
+  }
+  return sendNoteServerError(res, scene, error);
 };
 
 // Markdown 正文的规范读模型：只对当前正式类型 `markdown` 生效。
@@ -132,6 +165,35 @@ export const addNote = async (req, res) => {
     res.send(resultData({ id: result.id, addedToInbox: result.addedToInbox }));
   } catch (e) {
     return sendNoteServerError(res, 'add-note', e);
+  }
+};
+
+// 页面树只读元数据：不返回正文，服务端始终按 auth/admin context 中的 subject 用户建树。
+export const queryNoteTree = async (req, res) => {
+  try {
+    const result = await queryOwnedNoteTree({
+      userId: req.user?.id,
+      parentId: req.body?.parentId ?? null,
+      depth: req.body?.depth ?? 1,
+    });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendNoteTreeError(req, res, 'query-note-tree', error);
+  }
+};
+
+export const queryNoteBreadcrumb = async (req, res) => {
+  try {
+    const noteId = String(req.body?.noteId || '').trim();
+    if (!noteId) {
+      return res.send(
+        resultData({ code: 'NOTE_TREE_NOTE_ID_REQUIRED' }, 400, L(req, '缺少笔记 ID', 'Note ID is required')),
+      );
+    }
+    const result = await resolveOwnedNoteBreadcrumb({ userId: req.user?.id, noteId });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendNoteTreeError(req, res, 'query-note-breadcrumb', error);
   }
 };
 
@@ -283,6 +345,34 @@ export const queryNoteList = async (req, res) => {
     const pagination = normalizeOptionalPagination(req.body);
     const where = ['n.create_by = ?', 'n.del_flag = 0'];
     const params = [userId];
+    const treeMode = Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId');
+    const parentId = String(req.body?.parentId ?? '').trim() || null;
+    const hasTreeFilter = Boolean(keyword) || tagId === 'null' || Boolean(tagId);
+    let treeSnapshot = null;
+
+    if (treeMode) {
+      treeSnapshot = await loadOwnedNoteTree(userId);
+      if (parentId && !treeSnapshot.nodesById.has(parentId)) {
+        throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+      }
+      if (hasTreeFilter && parentId) {
+        // 搜索/标签筛选始终由服务端扩展当前页面的全部后代；不信任客户端上传的 includeDescendants。
+        const descendantIds = resolveNoteDescendantIdsFromSnapshot(treeSnapshot, parentId);
+        if (descendantIds.length) {
+          where.push(`n.id IN (${descendantIds.map(() => '?').join(',')})`);
+          params.push(...descendantIds);
+        } else {
+          where.push('1 = 0');
+        }
+      } else if (!hasTreeFilter) {
+        if (parentId) {
+          where.push('n.parent_id = ?');
+          params.push(parentId);
+        } else {
+          where.push('n.parent_id IS NULL');
+        }
+      }
+    }
 
     if (keyword) {
       const like = `%${keyword}%`;
@@ -346,6 +436,11 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+      if (treeSnapshot && hasTreeFilter) {
+        const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
+        note.path = path;
+        note.path_text = path.map((item) => item.title).join(' / ');
+      }
     });
     try {
       await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
@@ -355,8 +450,11 @@ export const queryNoteList = async (req, res) => {
 
     return res.send(resultData(pagination.enabled ? buildPagedResult(result, total, pagination) : result));
   } catch (error) {
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'query-note-list', error);
     console.error('[note-library] list failed code=%s', String(error?.code || 'NOTE_LIBRARY_LIST_FAILED'));
-    return res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
+    return res.send(
+      resultData(null, 500, L(req, '服务器暂时无法处理，请稍后重试', 'The server is temporarily unavailable')),
+    );
   }
 };
 
@@ -1063,11 +1161,7 @@ export const createNoteExportTicket = async (req, res) => {
     // 先按 base64 长度估算原始体积再解码:超限内容不该先被解成大 Buffer 才拒绝
     if (Math.floor((contentBase64.length * 3) / 4) > MAX_EXPORT_BYTES) {
       return res.send(
-        resultData(
-          null,
-          413,
-          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
-        ),
+        resultData(null, 413, L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app')),
       );
     }
 
@@ -1087,11 +1181,7 @@ export const createNoteExportTicket = async (req, res) => {
     }
     if (content.length > MAX_EXPORT_BYTES) {
       return res.send(
-        resultData(
-          null,
-          413,
-          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
-        ),
+        resultData(null, 413, L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app')),
       );
     }
 

@@ -29,6 +29,8 @@ router.post('/uploadImage', blockVisitorUpload, upload.single('file'), noteLibra
 router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
+router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);

@@ -15,6 +15,7 @@ const attachPendingStatus = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
+  L: (_req, zh) => zh,
   snakeCaseKeys: vi.fn((obj) => obj),
   mergeExistingProperties: vi.fn((obj) => obj),
   insertData: vi.fn((obj) => ({ ...obj, id: 'generated-id' })),
@@ -93,6 +94,71 @@ describe('笔记置顶 handler', () => {
         pageSize: 48,
         hasMore: false,
       },
+    });
+  });
+
+  it('页面树模式在根目录只查询直接子页面，旧调用未传 parentId 时仍保持平铺兼容', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          { id: 'root', parent_id: null, title: '根页面', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'child', parent_id: 'root', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'root', parent_id: null, title: '根页面', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: null } }, res);
+
+    expect(poolQuery.mock.calls[0][0]).toContain('SELECT id, parent_id, title');
+    expect(poolQuery.mock.calls[1][0]).toContain('n.parent_id IS NULL');
+    expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 48, 0]);
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { total: 1 } });
+  });
+
+  it('页面树内搜索由服务端扩展权威后代，并为重名结果附加路径', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          { id: 'parent', parent_id: null, title: '项目', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'child', parent_id: 'parent', title: '模块', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'grandchild', parent_id: 'child', title: '复盘', sort: 0, is_top: 0, del_flag: 0 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'grandchild', parent_id: 'child', title: '复盘', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList(
+      { user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: 'parent', keyword: '复盘' } },
+      res,
+    );
+
+    const [listSql, listParams] = poolQuery.mock.calls[1];
+    expect(listSql).toContain('n.id IN (?,?)');
+    expect(listParams).toEqual(['u1', 'child', 'grandchild', '%复盘%', '%复盘%', 48, 0]);
+    expect(lastSent(res).data.items[0]).toMatchObject({
+      id: 'grandchild',
+      path: [
+        { id: 'parent', title: '项目' },
+        { id: 'child', title: '模块' },
+        { id: 'grandchild', title: '复盘' },
+      ],
+      path_text: '项目 / 模块 / 复盘',
+    });
+  });
+
+  it('页面树模式拒绝不属于当前用户的 parentId', async () => {
+    poolQuery.mockResolvedValueOnce([[]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { parentId: 'other-user-note' } }, res);
+
+    expect(poolQuery).toHaveBeenCalledTimes(1);
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_PARENT_NOT_FOUND' },
     });
   });
 

@@ -355,3 +355,30 @@ LEFT JOIN information_schema.columns actual
  AND actual.table_name='operation_logs'
  AND actual.column_name='system'
 WHERE actual.column_name IS NULL;
+
+-- 24) 笔记页面树基础列与索引必须存在（页面树 PR1；期望 0 行）
+SELECT '[24] missing_note_tree_column' AS check_name, 'note.parent_id' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='note'
+ AND actual.column_name='parent_id'
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.column_type) <> 'varchar(255)'
+   OR actual.is_nullable <> 'YES';
+
+SELECT '[24] invalid_note_tree_index' AS check_name,
+  CONCAT(expected.idx, ' 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (
+  SELECT 'idx_note_owner_parent_order' idx,
+    'create_by,parent_id,del_flag,is_top,sort,update_time,id' cols UNION ALL
+  SELECT 'idx_note_parent', 'parent_id'
+) expected
+LEFT JOIN (
+  SELECT index_name,
+    GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE() AND table_name='note'
+  GROUP BY index_name
+) actual ON actual.index_name=expected.idx
+WHERE actual.index_name IS NULL OR actual.cols <> expected.cols;

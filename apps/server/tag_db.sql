@@ -216,10 +216,17 @@ CREATE TABLE `note` (
   `update_by` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `del_flag` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '0',
   `sort` int(11) NOT NULL DEFAULT '0',
+  `is_top` tinyint(1) NOT NULL DEFAULT '0',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`) USING BTREE
+  `type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'html',
+  `parent_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '页面树父笔记 ID，NULL 表示我的知识库根层',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_note_owner_top_sort` (`create_by`,`del_flag`,`is_top`,`sort`,`update_time`),
+  KEY `idx_note_owner` (`create_by`,`del_flag`,`update_time`),
+  KEY `idx_note_owner_parent_order` (`create_by`,`parent_id`,`del_flag`,`is_top`,`sort`,`update_time`,`id`),
+  KEY `idx_note_parent` (`parent_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------

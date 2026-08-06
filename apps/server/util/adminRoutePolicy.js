@@ -69,6 +69,8 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 
 declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteList'],
+  ['POST', '/note/queryNoteTree'],
+  ['POST', '/note/queryNoteBreadcrumb'],
   ['POST', '/note/getNoteDetail'],
   ['POST', '/note/resolveResourceRefs'],
   ['POST', '/note/resourceBacklinks'],
