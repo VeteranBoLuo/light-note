@@ -40,6 +40,7 @@
         </div>
         <BSelect
           mode="multiple"
+          chip-tone="tag"
           :max-tag-count="4"
           :options="tagOptions"
           :placeholder="$t('quickSave.tagsPh')"
@@ -48,15 +49,18 @@
         />
         <div v-if="aiNewTags.length" class="qs-newtags">
           <span class="qs-newtags-label">{{ $t('quickSave.aiNewTags') }}</span>
-          <BButton
+          <BChip
             v-for="nt in aiNewTags"
             :key="nt"
             class="qs-newtag"
+            tone="tag"
+            size="medium"
+            interactive
             :disabled="creatingTag === nt"
             @click="createAndSelect(nt)"
           >
             ＋ {{ nt }}
-          </BButton>
+          </BChip>
         </div>
 
         <BCheckbox v-model="form.saveSnapshot" class="qs-check-line">
@@ -78,6 +82,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -355,19 +360,6 @@
   .qs-newtags-label {
     font-size: 11px;
     color: var(--desc-color, #999);
-  }
-  .qs-newtag {
-    border: 1px dashed color-mix(in srgb, var(--primary-color) 40%, transparent);
-    background: color-mix(in srgb, var(--primary-color) 8%, transparent);
-    color: var(--primary-color);
-    border-radius: 20px;
-    padding: 2px 10px;
-    font-size: 12px;
-    cursor: pointer;
-  }
-  .qs-newtag:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
   .qs-check-line {
     display: flex;

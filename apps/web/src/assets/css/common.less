@@ -159,16 +159,17 @@ h1 {
 
 .common-tag {
   font-size: 12px;
-  color: var(--desc-color);
+  color: var(--chip-neutral-fg);
+  border: 1px solid var(--chip-neutral-border);
   border-radius: 30px;
-  background-color: var(--common-tag-bg-color);
+  background-color: var(--chip-neutral-bg);
   padding: 0.25rem 0.75rem;
   line-height: 1rem;
   box-sizing: border-box;
   width: max-content;
   transition: color 0.1s;
   &:hover {
-    color: var(--common-tag-h-color);
+    color: var(--chip-neutral-fg);
   }
 }
 
@@ -212,18 +213,16 @@ h1 {
   padding: 0 !important;
   /* 配色一律带 !important:BButton 的 scoped 选择器是 .b_btn[data-v-x](0,2,0),
      特异性高于这里的 .tag-detail-corner(0,1,0),不加就会被它的默认按钮底色吃掉 */
-  border: 1px solid color-mix(in srgb, var(--text-color) 26%, transparent) !important;
+  border: 1px solid var(--chip-tag-border) !important;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   line-height: 1;
   /* 必须不透明:圆钮跨在标签边界上,半透明会让上下两半透出不同底色而显得被切掉。
-     朝白偏移而不是朝文字色偏移 —— 它同时压着卡片底色和标签底色两个表面,
-     而浅色主题的标签底(#f0f0f0 一类)本身就比卡片底暗,朝深处偏会和标签糊在一起。
-     偏白后:浅色下是接近纯白的圆,靠边框与阴影从白卡片上分离;暗色下则明确亮于两者。 */
-  background: color-mix(in srgb, var(--card-background) 88%, #ffffff) !important;
-  color: var(--text-color) !important;
+     与标签共用稳定的粉色语义 Token，深浅主题和 Android WebView 回退后都保持一致。 */
+  background: var(--chip-tag-bg) !important;
+  color: var(--chip-tag-fg) !important;
   box-shadow: 0 2px 6px color-mix(in srgb, var(--text-color) 22%, transparent);
   cursor: pointer;
   opacity: 0;
@@ -249,9 +248,9 @@ h1 {
    */
 
   &:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 55%, transparent) !important;
-    background: color-mix(in srgb, var(--primary-color) 14%, var(--card-background)) !important;
-    color: var(--primary-color) !important;
+    border-color: var(--chip-tag-fg) !important;
+    background: var(--chip-tag-hover-bg) !important;
+    color: var(--chip-tag-hover-fg) !important;
   }
 }
 

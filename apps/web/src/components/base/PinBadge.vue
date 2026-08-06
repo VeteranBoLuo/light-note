@@ -1,5 +1,5 @@
 <template>
-  <BChip class="inbox-pending-badge" tone="pending" size="small">{{ t('inbox.pendingBadge') }}</BChip>
+  <BChip class="pin-badge" tone="pin" size="small">{{ t('common.pin') }}</BChip>
 </template>
 
 <script setup lang="ts">
@@ -10,7 +10,7 @@
 </script>
 
 <style scoped>
-  .inbox-pending-badge {
-    letter-spacing: 0.02em;
+  .pin-badge {
+    letter-spacing: 0.04em;
   }
 </style>

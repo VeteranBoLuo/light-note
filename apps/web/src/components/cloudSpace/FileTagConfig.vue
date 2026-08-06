@@ -42,16 +42,19 @@
         </div>
 
         <div v-if="selectedTags.length" class="chip-list">
-          <div v-for="tag in selectedTags" :key="tag.id" class="chip">
+          <BChip v-for="tag in selectedTags" :key="tag.id" class="chip" tone="tag" size="medium">
             <span class="tag-dot" />
             <span class="chip-text">{{ tag.name }}</span>
-            <svg-icon
-              :src="icon.common.close"
+            <BButton
               class="chip-close"
+              :title="t('common.delete')"
+              :aria-label="t('common.delete')"
               @click.stop="unbindTag(tag)"
               v-click-log="{ module: '云空间-文件标签配置', operation: `解绑标签【${tag.name}】` }"
-            />
-          </div>
+            >
+              <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
+            </BButton>
+          </BChip>
         </div>
         <div v-else class="empty">{{ t('cloudSpace.fileTagConfig.noSelectedTags') }}</div>
       </div>
@@ -160,6 +163,7 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -551,24 +555,22 @@
     overflow: auto;
   }
 
-  .chip {
-    display: flex;
-    max-width: 100%;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    padding: 5px 10px;
-    border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 30%, var(--card-border-color));
-    background: color-mix(in srgb, var(--resource-tag-color) 7%, var(--background-color));
-  }
-
   .tag-dot {
     flex: 0 0 auto;
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: var(--resource-tag-color);
+    background: var(--chip-tag-fg);
+  }
+
+  .chip {
+    max-width: 100%;
+    min-width: 0;
+
+    :deep(.b-chip__content) {
+      width: 100%;
+      gap: 6px;
+    }
   }
 
   .chip-text {
@@ -580,9 +582,21 @@
     white-space: nowrap;
   }
 
-  .chip-close {
+  :deep(.chip-close.b_btn) {
     flex: 0 0 auto;
-    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: inherit;
+    background: transparent;
+
+    &:hover {
+      color: var(--chip-tag-hover-fg);
+      background: var(--chip-tag-hover-bg);
+    }
   }
 
   .tag-actions {

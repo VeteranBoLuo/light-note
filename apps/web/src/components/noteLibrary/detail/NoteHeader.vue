@@ -96,10 +96,13 @@
           </BButton>
         </div>
         <div class="inline-note-tags" v-if="visibleTags.length">
-          <span class="inline-note-tag" v-for="tag in displayedTags" :key="`${tag.id ?? tag.name}`" :title="tag.name">
-            {{ tag.name }}
-          </span>
-          <span v-if="hiddenTagCount" class="inline-note-tag inline-note-tag--more"> +{{ hiddenTagCount }} </span>
+          <ResourceTagChip
+            v-for="tag in displayedTags"
+            :key="`${tag.id ?? tag.name}`"
+            :tag="tag"
+            max-width="108px"
+          />
+          <BChip v-if="hiddenTagCount" tone="neutral" size="small">+{{ hiddenTagCount }}</BChip>
         </div>
         <ResourceBacklinks
           v-if="bookmark.isDesktop && note?.id"
@@ -209,6 +212,7 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -230,6 +234,7 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
   import { copyTextToClipboard } from '@/utils/clipboard';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -1038,31 +1043,4 @@
     white-space: nowrap;
   }
 
-  .inline-note-tag {
-    flex: 0 0 auto;
-    max-width: 108px;
-    height: 22px;
-    padding: 0 8px;
-    box-sizing: border-box;
-    display: inline-flex;
-    align-items: center;
-    border: 0;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
-    color: var(--resource-note-color, #00a884);
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1;
-    cursor: default;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .inline-note-tag--more {
-    max-width: none;
-    color: var(--desc-color);
-    background: var(--common-tag-bg-color, #f0f0f0);
-  }
 </style>

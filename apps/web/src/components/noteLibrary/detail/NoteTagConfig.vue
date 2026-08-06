@@ -31,16 +31,19 @@
           <div class="overview-text">{{ $t('note.tagConfig.selectedCountText', { count: noteTags.length }) }}</div>
         </div>
         <div class="chip-list" v-if="noteTags.length">
-          <div v-for="tag in noteTags" :key="tag.id" class="chip">
+          <BChip v-for="tag in noteTags" :key="tag.id" class="chip" tone="tag" size="medium">
             <span class="color-dot" />
             <span class="chip-text">{{ tag.name }}</span>
-            <SvgIcon
-              :src="icon.common.close"
+            <BButton
               class="chip-close"
+              :title="t('common.delete')"
+              :aria-label="t('common.delete')"
               @click.stop="unbindTag(tag)"
               v-click-log="{ module: '笔记-标签配置', operation: `解绑标签【${tag.name}】` }"
-            />
-          </div>
+            >
+              <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
+            </BButton>
+          </BChip>
         </div>
         <div class="empty" v-else>{{ $t('note.tagConfig.noTags') }}</div>
       </div>
@@ -135,6 +138,7 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { apiBasePost, apiQueryPost } from '@/http/request.ts';
@@ -490,24 +494,20 @@
   }
 
   .chip {
-    display: flex;
     max-width: 100%;
     min-width: 0;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(96, 92, 229, 0.3);
-    background: rgba(96, 92, 229, 0.06);
-    color: var(--text-color);
-    font-size: 13px;
+
+    :deep(.b-chip__content) {
+      width: 100%;
+      gap: 6px;
+    }
   }
 
   .color-dot {
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: var(--noteType-hover-color, #605ce5);
+    background: var(--chip-tag-fg);
     flex: 0 0 auto;
   }
 
@@ -520,9 +520,21 @@
     white-space: nowrap;
   }
 
-  .chip-close {
-    cursor: pointer;
+  :deep(.chip-close.b_btn) {
     flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+    min-height: 18px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: inherit;
+    background: transparent;
+
+    &:hover {
+      color: var(--chip-tag-hover-fg);
+      background: var(--chip-tag-hover-bg);
+    }
   }
 
   .tag-actions {

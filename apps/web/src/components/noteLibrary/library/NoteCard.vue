@@ -10,7 +10,7 @@
   >
     <div class="note-title-row">
       <div class="note-title" :title="note.title">{{ note.title }}</div>
-      <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
+      <PinBadge v-if="note.isTop" />
       <InboxPendingBadge v-if="note.isPending" />
       <!-- 格式标识排在状态徽章之后：置顶/待整理是「要不要现在处理」，格式只是「打开后长什么样」 -->
       <NoteFormatBadge :type="note.type" />
@@ -19,23 +19,26 @@
     <div class="note-content">{{ summary }}</div>
     <div class="note-footer">
       <div class="note-tags" v-if="note.tags && note.tags.length">
-        <span
+        <ResourceTagChip
           :key="tag.id || tag.name"
-          :title="tag.name"
-          class="b-tag tag-detail-chip"
           v-for="tag in visibleTags"
+          :tag="tag"
+          show-detail-corner
+          max-width="96px"
           @click.stop="noteTypeChange(tag)"
+          @detail="openTagDetail(tag)"
           v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+        />
+        <BChip
+          v-if="hiddenTagCount > 0"
+          class="tag-more"
+          tone="neutral"
+          size="small"
+          :title="hiddenTagsLabel"
+          @click.stop
         >
-          <span class="tag-detail-label">{{ tag.name }}</span>
-          <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-            <!-- 站内跳转到标签详情页,用"进入下一级"的箭头;share 是外链分享语义,不匹配 -->
-            <SvgIcon :src="icon.arrow_right" size="13" />
-          </BButton>
-        </span>
-        <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
-          >+{{ hiddenTagCount }}</span
-        >
+          +{{ hiddenTagCount }}
+        </BChip>
       </div>
       <div v-else class="note-tags note-tags--empty"></div>
       <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
@@ -61,10 +64,13 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import PinBadge from '@/components/base/PinBadge.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
     batchMode: false,
@@ -202,19 +208,6 @@
     max-width: 100%;
   }
 
-  .note-top-badge {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 7px;
-    border-radius: 999px;
-    color: var(--resource-note-color, #00a884);
-    background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 18px;
-  }
-
   .note-content {
     position: relative;
     box-sizing: border-box;
@@ -269,50 +262,13 @@
     align-items: center;
     margin: 0 0 7px;
 
-    .b-tag {
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
-      padding: 3px 10px;
-      max-width: 96px;
-      border-radius: 20px;
-      font-size: 12px;
-      color: var(--resource-note-color, #00a884);
-      cursor: pointer;
-      transition: all 0.2s ease;
-      text-align: center;
-      flex-shrink: 0;
-
-      // 同 NoteListItem:触屏的 :hover 会粘住,点一下标签就永久变成实心反白,
-      // 看着像「选中了这个标签」,但其实只是没散掉的 hover 态。
-      @media (hover: hover) and (pointer: fine) {
-        &:hover {
-          background: var(--resource-note-color, #00a884);
-          color: #fff;
-        }
-      }
-    }
-
     &--empty {
       padding-top: 0;
       margin-top: 0;
       visibility: hidden;
     }
 
-    .tag-more {
-      background-color: var(--common-tag-bg-color, #f0f0f0);
-      // desc 在这个底色上只有 4.24:1，11px 小字不合格，改用专为中性 chip 定的文字色
-      color: var(--chip-neutral-color);
-      cursor: default;
-
-      &:hover {
-        background-color: var(--common-tag-bg-color, #f0f0f0);
-        color: var(--desc-color);
-      }
-    }
   }
-
-  // 详情角标统一由 assets/css/common.less 的 .tag-detail-chip / .tag-detail-corner 负责,
-  // 这里不做任何局部覆盖 —— 之前那份覆盖(background: transparent + 自定尺寸)正是它
-  // 在浅色主题下看不清、并被 .note-tags 的 overflow 切掉一半的原因。
 
   .note-time {
     font-size: 12px;

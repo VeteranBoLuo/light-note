@@ -373,15 +373,15 @@
               <div class="section-block">
                 <div class="section-title">{{ $t('bookmarkMg.relatedTag') }}</div>
                 <div v-if="bookmarkItem.tagList?.length" class="chip-list">
-                  <span
+                  <ResourceTagChip
                     v-for="t in bookmarkItem.tagList"
                     :key="t.id"
-                    class="common-chip common-chip--bookmark"
-                    :title="t.name"
+                    :tag="t"
+                    size="medium"
+                    interactive
+                    max-width="160px"
                     @click.stop="router.push(`/tag/${t.id}`)"
-                  >
-                    {{ t.name }}
-                  </span>
+                  />
                 </div>
                 <div v-else class="empty-inline">{{ $t('bookmarkMg.noTags') }}</div>
               </div>
@@ -431,14 +431,14 @@
               </template>
               <template v-else-if="column.key === 'tagList'">
                 <div class="flex-align-center-gap">
-                  <span
-                    :title="t.name"
-                    class="common-tag dom-hover"
+                  <ResourceTagChip
                     v-for="t in (record as BookmarkInterface).tagList"
                     :key="t.id"
+                    :tag="t"
+                    interactive
+                    max-width="120px"
                     @click.stop="router.push(`/tag/${t.id}`)"
-                    >{{ t.name }}</span
-                  >
+                  />
                 </div>
               </template>
               <template v-else-if="column.key === 'url'">
@@ -556,6 +556,7 @@
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
   import { openAiAssistant } from '@/utils/aiEntry';
   import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
 
@@ -1750,26 +1751,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-  }
-
-  .common-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 12px;
-    border: 1px solid var(--card-border-color);
-    cursor: pointer;
-    transition: all 0.18s ease;
-    &:hover {
-      transform: translateY(-1px);
-    }
-  }
-
-  .common-chip--bookmark:hover {
-    border-color: var(--resource-bookmark-color);
-    color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 8%, transparent);
   }
 
   .empty-inline {

@@ -409,15 +409,16 @@
           <div class="file-tags-cell">
             <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
             <div v-else class="file-tags-list">
-              <span
+              <ResourceTagChip
                 v-for="tag in item.tags"
                 :key="tag.id"
-                class="file-tag-chip text-hidden dom-hover"
+                :tag="tag"
+                size="medium"
+                interactive
+                max-width="90px"
                 @click.stop="goToTagDetail(tag.id)"
                 v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
-              >
-                {{ tag.name }}
-              </span>
+              />
             </div>
           </div>
           <div>{{
@@ -617,6 +618,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -1888,18 +1890,6 @@
     gap: 6px;
     max-height: 40px;
     overflow: hidden;
-  }
-
-  .file-tag-chip {
-    max-width: 90px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 12px;
-    line-height: 18px;
-    color: var(--resource-file-color, #ff8a00);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 8%, var(--menu-body-bg-color));
-    display: inline-block;
-    cursor: pointer;
   }
 
   .file-tags-empty {
