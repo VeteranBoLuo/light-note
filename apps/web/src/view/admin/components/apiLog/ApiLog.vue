@@ -86,7 +86,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref } from 'vue';
+  import { computed, onMounted, onUnmounted, ref } from 'vue';
   import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -130,7 +130,6 @@
     },
   });
   const hasLoaded = ref(false);
-  const inPageActive = ref(false);
 
   const logColumns = computed(() => {
     return [
@@ -219,32 +218,25 @@
     if (loaded) hasLoaded.value = true;
   }
 
+  /*
+   * 回到前台补一次日志。这里故意不用 useForegroundRefresh:那套要求刷新全程静默
+   * (不进 loading、不闪列表)且有 5 分钟陈旧阈值,而日志页要的正相反 ——
+   * 每次切回来都要最新一屏,reload 本身就会清空列表并进表格 loading。
+   * 「从别处回到本页」不需要单独处理:全站没有 keep-alive,重新进页即重新挂载,
+   * 由下面的 onMounted 取数(silent 只用于抑制自动刷新的报错提示)。
+   */
   const handleVisibilityChange = () => {
-    if (!document.hidden && hasLoaded.value && inPageActive.value) {
+    if (!document.hidden && hasLoaded.value) {
       searchApiLog({ silent: true });
     }
   };
 
   onMounted(() => {
-    inPageActive.value = true;
     searchApiLog();
     document.addEventListener('visibilitychange', handleVisibilityChange);
   });
 
-  onActivated(() => {
-    inPageActive.value = true;
-    if (hasLoaded.value) {
-      searchApiLog({ silent: true });
-    }
-  });
-
-  onDeactivated(() => {
-    inPageActive.value = false;
-    cancelPendingRequest();
-  });
-
   onUnmounted(() => {
-    inPageActive.value = false;
     clearSearchTimer();
     cancelPendingRequest();
     document.removeEventListener('visibilitychange', handleVisibilityChange);

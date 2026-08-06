@@ -862,7 +862,8 @@
   });
 
   /*
-   * 目录滚动位置恢复。存在组件内(路由 keepAlive,同一实例不会被销毁),
+   * 目录滚动位置恢复。存在组件内 —— 目录与子页只差 query(?section=),
+   * 同一路由 + 固定的 router-view key 会复用同一实例,不会被销毁(全站并没有 keep-alive);
    * 不写 localStorage —— 刷新 App 后从顶部开始是合理的,没必要跨会话记住。
    */
   const indexScrollTop = ref(0);
