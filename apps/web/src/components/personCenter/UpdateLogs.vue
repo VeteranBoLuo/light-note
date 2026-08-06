@@ -1,6 +1,21 @@
 <template>
   <CommonContainer :title="t('changelog.title')">
-    <div v-if="user.role === 'root'" class="page-actions">
+    <template #navigation>
+      <BButton class="mobile-changelog-nav__back" :aria-label="t('common.back')" @click="backRouterPage">
+        <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
+      </BButton>
+      <strong class="mobile-changelog-nav__title">{{ t('changelog.title') }}</strong>
+      <BButton
+        v-if="user.role === 'root'"
+        class="mobile-changelog-nav__create"
+        :loading="creating"
+        @click="createLog"
+      >
+        {{ t('changelog.newLog') }}
+      </BButton>
+      <span v-else class="mobile-changelog-nav__placeholder" aria-hidden="true"></span>
+    </template>
+    <div v-if="user.role === 'root' && !bookmark.isMobile" class="page-actions">
       <BButton
         type="primary"
         size="small"
@@ -13,7 +28,7 @@
     </div>
 
     <div class="logs-container">
-      <header class="logs-intro">
+      <header v-if="!bookmark.isMobile" class="logs-intro">
         <h1 class="intro-title">{{ t('changelog.pageTitle') }}</h1>
         <p class="intro-desc">{{ t('changelog.pageDesc') }}</p>
       </header>
@@ -22,6 +37,60 @@
         <BLoading :loading="true" inline :title="t('common.loading')" />
       </div>
       <div v-else-if="!logs.length" class="logs-state">{{ t('changelog.empty') }}</div>
+
+      <div v-else-if="bookmark.isMobile" class="mobile-changelog">
+        <section class="mobile-changelog__latest">
+          <h2>{{ t('changelog.latestVersion') }}</h2>
+          <article v-if="logs[0]" class="mobile-latest-card">
+            <div class="mobile-latest-card__meta">
+              <time :datetime="logs[0].publishDate">{{ logs[0].publishDate }}</time>
+              <span class="latest-badge">{{ t('changelog.latest') }}</span>
+              <span v-if="logs[0].status === 'draft'" class="draft-badge">{{ t('changelog.status.draft') }}</span>
+            </div>
+            <h3>{{ logs[0].title }}</h3>
+            <div v-if="logs[0].tags.length" class="log-tags">
+              <span v-for="tag in logs[0].tags" :key="tag">{{ tag }}</span>
+            </div>
+            <p v-if="logs[0].summary" class="log-summary">{{ logs[0].summary }}</p>
+            <div
+              v-if="isExpanded(logs[0].id) && renderedContent[logs[0].id]"
+              class="log-markdown markdown-body"
+              v-html="renderedContent[logs[0].id]"
+              v-mermaid
+            ></div>
+            <ol v-else-if="isExpanded(logs[0].id) && logs[0].highlights.length" class="log-highlights">
+              <li v-for="(highlight, index) in logs[0].highlights" :key="index">{{ highlight }}</li>
+            </ol>
+            <div class="mobile-latest-card__actions">
+              <BButton v-if="canToggle(logs[0])" class="expand-button" @click="toggleExpanded(logs[0].id)">
+                {{ isExpanded(logs[0].id) ? t('changelog.collapse') : t('changelog.expand') }}
+              </BButton>
+              <BButton v-if="user.role === 'root'" @click="editLog(logs[0].id)">{{ t('common.edit') }}</BButton>
+            </div>
+          </article>
+        </section>
+
+        <section v-if="logs.length > 1" class="mobile-changelog__history">
+          <h2>{{ t('changelog.history') }}</h2>
+          <MobileListSurface>
+            <template v-for="item in logs.slice(1)" :key="item.id">
+              <MobileListRow interactive @click="toggleExpanded(item.id)">
+                <template #leading><time class="mobile-history-date">{{ item.publishDate.slice(5) }}</time></template>
+                <template #title>{{ item.title }}</template>
+                <template #subtitle>{{ item.summary || item.tags.join(' · ') }}</template>
+                <template #trailing><SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" /></template>
+              </MobileListRow>
+              <div v-if="isExpanded(item.id)" class="mobile-history-detail">
+                <div v-if="renderedContent[item.id]" class="log-markdown markdown-body" v-html="renderedContent[item.id]" v-mermaid></div>
+                <ol v-else-if="item.highlights.length" class="log-highlights">
+                  <li v-for="(highlight, index) in item.highlights" :key="index">{{ highlight }}</li>
+                </ol>
+                <BButton v-if="user.role === 'root'" size="small" @click="editLog(item.id)">{{ t('common.edit') }}</BButton>
+              </div>
+            </template>
+          </MobileListSurface>
+        </section>
+      </div>
 
       <div v-else class="timeline" role="list">
         <article v-for="item in logs" :key="item.id" class="timeline-item" role="listitem">
@@ -102,12 +171,17 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import UpdateLogEditor from '@/components/personCenter/UpdateLogEditor.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { useUserStore } from '@/store';
-  import { noteContentToHtml } from '@/utils/common';
+  import { bookmarkStore, useUserStore } from '@/store';
+  import { backRouterPage, noteContentToHtml } from '@/utils/common';
   import { createUpdateLogDraft, listManagedUpdateLogs, listUpdateLogs, type UpdateLogItem } from '@/api/updateLogApi';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
+  import MobileListRow from '@/components/mobile/MobileListRow.vue';
 
   const { t } = useI18n();
   const user = useUserStore();
+  const bookmark = bookmarkStore();
   const logs = ref<UpdateLogItem[]>([]);
   const renderedContent = ref<Record<string, string>>({});
   const expandedIds = ref(new Set<string>());
@@ -139,7 +213,7 @@
       logs.value = items;
       renderedContent.value = Object.fromEntries(renderedPairs);
       const firstId = items[0]?.id;
-      expandedIds.value = firstId ? new Set([firstId]) : new Set();
+      expandedIds.value = firstId && !bookmark.isMobile ? new Set([firstId]) : new Set();
     } catch (error) {
       console.error(error);
       message.error(t('changelog.errorInfo'));
@@ -495,6 +569,109 @@
     background: transparent;
   }
 
+  .mobile-changelog-nav__back,
+  .mobile-changelog-nav__create,
+  .mobile-changelog-nav__placeholder {
+    position: absolute;
+    top: 8px;
+    min-width: 44px;
+    height: 44px;
+  }
+
+  .mobile-changelog-nav__back {
+    left: 0;
+    padding: 0;
+    background: transparent !important;
+  }
+
+  .mobile-changelog-nav__create,
+  .mobile-changelog-nav__placeholder {
+    right: 0;
+  }
+
+  .mobile-changelog-nav__create {
+    width: auto;
+    padding-inline: 8px;
+    color: var(--primary-color);
+    background: transparent !important;
+    font-weight: 650;
+  }
+
+  .mobile-changelog-nav__title {
+    font-size: 18px;
+    font-weight: 720;
+  }
+
+  .mobile-changelog h2 {
+    margin: 0 0 8px;
+    color: var(--text-color);
+    font-size: 16px;
+  }
+
+  .mobile-changelog__history {
+    margin-top: 18px;
+
+    :deep(.mobile-list-row) {
+      --mobile-row-min-height: 68px;
+
+      height: auto;
+    }
+
+    :deep(.mobile-list-row__title),
+    :deep(.mobile-list-row__subtitle) {
+      white-space: nowrap;
+    }
+  }
+
+  .mobile-latest-card {
+    padding: 16px;
+    border: 1px solid var(--primary-color);
+    border-radius: var(--mobile-surface-radius, 16px);
+    background: var(--card-background);
+    box-shadow: none;
+  }
+
+  .mobile-latest-card__meta,
+  .mobile-latest-card__actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .mobile-latest-card__meta time,
+  .mobile-history-date {
+    color: var(--desc-color);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mobile-latest-card h3 {
+    margin: 10px 0 0;
+    color: var(--text-color);
+    font-size: 17px;
+    line-height: 1.45;
+  }
+
+  .mobile-latest-card__actions {
+    margin-top: 14px;
+  }
+
+  .mobile-latest-card__actions :deep(.b_btn) {
+    min-height: 44px;
+  }
+
+  .mobile-history-date {
+    width: 38px;
+    text-align: center;
+  }
+
+  .mobile-history-detail {
+    padding: 12px 14px 16px;
+    border-left: 3px solid var(--primary-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
   @media (min-width: 768px) {
     .logs-container {
       padding-right: 10%;
@@ -515,7 +692,7 @@
     }
 
     .logs-container {
-      padding: 20px 0 36px;
+      padding: 14px 0 36px;
     }
 
     .logs-intro {
@@ -565,6 +742,20 @@
     .markdown-body {
       font-size: 13.5px;
       line-height: 1.72;
+    }
+
+    :deep(.phone-container) {
+      padding-inline: var(--mobile-page-gutter, 14px);
+      background: var(--surface-page-bg);
+    }
+
+    :deep(.phone-navigation),
+    :deep(.phone-body) {
+      width: calc(100% - 28px);
+    }
+
+    :deep(.phone-body) {
+      padding-top: 0;
     }
   }
 </style>

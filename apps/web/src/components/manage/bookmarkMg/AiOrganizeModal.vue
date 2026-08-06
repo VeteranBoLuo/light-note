@@ -411,6 +411,17 @@
   .aio-actions--center {
     justify-content: center;
   }
+
+  @media (max-width: 767px) {
+    .aio-actions {
+      padding-top: 10px;
+      border-top: 1px solid var(--surface-divider-color);
+    }
+
+    .aio-actions :deep(.b_btn) {
+      min-height: var(--mobile-touch-size, 44px);
+    }
+  }
   .aio-spin {
     width: 34px;
     height: 34px;

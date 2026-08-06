@@ -12,6 +12,8 @@ export interface MobileTopBarBinding {
   /** 二级页面标题；与 onBack 同时提供时，顶栏切换为「返回 + 标题」形态。 */
   title?: () => string;
   onBack?: () => void;
+  /** 批量态等场景可用文字替换返回图标，例如“取消”。 */
+  leadingActionLabel?: () => string;
   /**
    * 搜索入口形态：
    * - `wide`（默认）：宽全局搜索框，用于今日、资料、待办
@@ -36,6 +38,8 @@ export interface MobileTopBarBinding {
   auxiliaryActionIcon?: () => string;
   onAdd?: () => void;
   addLabel?: () => string;
+  /** 默认是加号图标；批量态可切为“全选”等文字动作。 */
+  addActionMode?: () => 'icon' | 'text';
 }
 
 interface MobileTopBarRegistration {

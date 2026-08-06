@@ -2,7 +2,13 @@
   <!-- 快速添加只承担低成本捕获；待办的完整字段转交独立抽屉。 -->
   <component :is="shellComponent" v-bind="shellProps" @close="close" @update:visible="syncVisible">
     <div class="capture-modal" @paste="handlePaste">
-      <div class="capture-intro">
+      <MobileNoticeStrip
+        v-if="bookmark.isMobile"
+        class="capture-intro-strip"
+        :title="t('inbox.quickCaptureEyebrow')"
+        :description="captureHint"
+      />
+      <div v-else class="capture-intro">
         <span class="capture-intro__eyebrow">{{ t('inbox.quickCaptureEyebrow') }}</span>
         <div class="capture-intro__description">
           <p>{{ captureHint }}</p>
@@ -172,6 +178,7 @@
   import type { ActionCaptureType } from '@/store/inbox';
   import icon from '@/config/icon';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
 
   const MAX_FILE_TOTAL_SIZE = 200 * 1024 * 1024;
 
@@ -854,8 +861,10 @@
     background: var(--card-background) !important;
   }
   @media (max-width: 767px) {
-    .capture-intro {
-      padding: 10px 12px;
+    .capture-intro-strip {
+      min-height: 64px;
+      max-height: 72px;
+      padding: 9px 12px;
     }
     .capture-workspace {
       padding: 13px;

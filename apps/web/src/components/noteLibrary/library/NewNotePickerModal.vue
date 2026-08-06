@@ -320,7 +320,8 @@
 
   .new-note-picker__remove {
     flex: 0 0 auto;
-    width: 42px;
+    width: var(--mobile-touch-size, 44px);
+    min-width: var(--mobile-touch-size, 44px);
     height: 56px;
     padding: 0;
     color: var(--sub-text-color);

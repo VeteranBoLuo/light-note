@@ -30,20 +30,28 @@
               </b-tooltip>
             </template>
           </b-input>
-          <BButton
-            v-if="bookmark.isMobile"
-            class="filter-all-entry"
-            :class="{ active: bookmark.type === 'all' }"
-            @click="handleViewAll"
-          >
-            <svg-icon size="18" :src="icon.resource.bookmark" />
-            <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
-            <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
-          </BButton>
           <div v-if="bookmark.isMobile" class="mobile-empty-tag-toggle">
             <span>{{ $t('home.hideEmptyTags') }}</span>
             <BSwitch v-model:checked="hideEmptyTags" />
           </div>
+          <BButton
+            v-if="bookmark.isMobile"
+            class="filter-all-entry"
+            :class="{ active: bookmark.type === 'all' }"
+            :aria-current="bookmark.type === 'all' ? 'true' : undefined"
+            @click="handleViewAll"
+          >
+            <svg-icon size="18" :src="icon.resource.bookmark" />
+            <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
+            <SvgIcon
+              v-if="bookmark.type === 'all'"
+              class="tag-item-check"
+              :src="icon.filterPanel.check"
+              size="16"
+              aria-hidden="true"
+            />
+            <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
+          </BButton>
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
@@ -58,7 +66,9 @@
         >
           <div
             class="category-item"
+            :class="{ 'is-current': String((bookmark.tagData as any)?.id || '') === String(item.id) }"
             :title="item.name"
+            :aria-current="String((bookmark.tagData as any)?.id || '') === String(item.id) ? 'true' : undefined"
             :style="{
               backgroundColor: (bookmark.tagData as any)?.id === item.id ? 'var(--category-item-ba-color)' : '',
             }"
@@ -72,6 +82,13 @@
               class="tag-item-icon"
             />
             <span class="text-hidden tag-item-name">{{ item.name }}</span>
+            <SvgIcon
+              v-if="bookmark.isMobile && String((bookmark.tagData as any)?.id || '') === String(item.id)"
+              class="tag-item-check"
+              :src="icon.filterPanel.check"
+              size="16"
+              aria-hidden="true"
+            />
             <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
         </BActionMenu>
@@ -428,16 +445,19 @@
   }
 
   .filter-all-entry {
-    height: 42px;
+    min-height: 52px;
     justify-content: flex-start;
     gap: 9px;
     padding: 0 10px;
+    border: 1px solid transparent;
     color: var(--text-color);
     background: transparent;
 
     &.active {
+      border-color: var(--resource-bookmark-color, #615ced);
       color: var(--resource-bookmark-color, #615ced);
-      background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 10%, transparent);
+      background: var(--mobile-selected-bg);
+      font-weight: 650;
     }
   }
 
@@ -452,17 +472,29 @@
 
   .filter-all-count,
   .tag-item-count {
-    margin-left: auto;
+    width: 34px;
+    flex: 0 0 34px;
     color: var(--desc-color);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .filter-all-label,
+  .tag-item-name {
+    margin-right: auto;
+  }
+
+  .tag-item-check {
+    flex: 0 0 auto;
+    color: var(--resource-bookmark-color, #615ced);
   }
 
   .mobile-empty-tag-toggle {
-    min-height: 36px;
+    min-height: 44px;
     justify-content: space-between;
     padding: 0 10px;
-    border-top: 1px solid color-mix(in srgb, var(--card-border-color) 58%, transparent);
+    border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
     font-size: 12px;
   }
@@ -563,14 +595,31 @@
       width: 100%;
     }
 
+    .filter-tools {
+      position: sticky;
+      z-index: 2;
+      top: 0;
+      padding-bottom: 4px;
+      background: var(--card-background);
+    }
+
     .category-item {
       width: 100%;
-      min-height: 44px;
-      margin: 2px 0;
-      padding: 7px 10px;
+      min-height: 54px;
+      margin: 0;
+      padding: 8px 10px;
+      border-left: 3px solid transparent;
+      border-radius: 8px;
 
       &:hover {
         background-color: unset;
+      }
+
+      &.is-current {
+        border-left-color: var(--resource-bookmark-color, #615ced);
+        color: var(--resource-bookmark-color, #615ced);
+        background: var(--mobile-selected-bg) !important;
+        font-weight: 650;
       }
     }
 
