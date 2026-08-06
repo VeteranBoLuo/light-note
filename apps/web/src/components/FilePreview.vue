@@ -105,21 +105,38 @@
           <!-- 2. 视频预览 -->
           <VideoPreview
             v-else-if="previewType === 'video'"
+            :key="String(fileInfo.id)"
             :video-url="effectiveFileUrl"
+            :mime-type="mediaMimeType"
+            :format-label="mediaFormatLabel"
             class="preview-video"
-            @play="onRendered"
+            @loaded="onRendered"
+            @error="onMediaError"
           />
 
           <!-- 2.5 音频预览 -->
           <div v-else-if="previewType === 'audio'" class="preview-audio-container">
-            <audio
-              :src="effectiveFileUrl"
-              class="preview-audio"
-              controls
-              preload="metadata"
-              @canplay="onRendered"
-              @error="onError"
-            />
+            <div class="preview-audio-card">
+              <div class="preview-audio-summary">
+                <div class="preview-audio-artwork">
+                  <SvgIcon :src="icon.cloudSpace.fileIcon.audio" size="42" aria-hidden="true" />
+                </div>
+                <div class="preview-audio-meta">
+                  <span class="preview-audio-name" :title="fileInfo.fileName">{{ fileInfo.fileName }}</span>
+                  <span class="preview-audio-format">{{ mediaFormatLabel || t('cloudSpace.audio') }}</span>
+                </div>
+              </div>
+              <audio
+                :key="String(fileInfo.id)"
+                class="preview-audio"
+                controls
+                preload="metadata"
+                @loadedmetadata="onRendered"
+                @error="onMediaError"
+              >
+                <source :src="effectiveFileUrl" :type="mediaMimeType || undefined" />
+              </audio>
+            </div>
           </div>
 
           <!-- 3. 图片预览 -->
@@ -229,20 +246,11 @@
             </div>
             <h3>{{ unsupportedTitle }}</h3>
             <p>{{ unsupportedDescription }}</p>
-            <div class="flex-center" style="gap: 8px">
-              <BButton type="primary" @click="downloadFile" v-if="fileInfo.fileUrl">
-                <SvgIcon :src="icon.cloudSpace.download" size="16" />
-                {{ t('cloudSpace.previewPanel.download') }}
-              </BButton>
-            </div>
           </div>
         </div>
 
         <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
-        <div
-          v-if="!loading && !error && !unsupportedTypes.includes(previewType) && !isHtmlFullscreen"
-          class="preview-controls"
-        >
+        <div v-if="!loading && !isHtmlFullscreen && (showNext || fileInfo.fileUrl)" class="preview-controls">
           <div v-if="showNext" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
@@ -299,6 +307,7 @@
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -307,6 +316,8 @@
   import {
     CLOUD_FILE_CATEGORY_LABEL_KEY,
     getCloudFileCategory,
+    getCloudMediaMimeType,
+    getCloudMediaPlaybackSupport,
     getCloudPreviewType,
     isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
@@ -355,6 +366,7 @@
   const imagePosition = ref({ x: 0, y: 0 });
   const MIN_IMAGE_SCALE = 0.1;
   const MAX_IMAGE_SCALE = 5;
+  const MAX_TEXT_PREVIEW_CHARS = 1_000_000;
   let touchGesture: 'pan' | 'pinch' | null = null;
   let pinchStartDistance = 0;
   let pinchStartScale = 1;
@@ -369,6 +381,7 @@
   const markdownContainerRef = ref<HTMLElement | null>(null);
   const markdownContent = ref('');
   let activePreviewFileId = '';
+  let textAbortController: AbortController | null = null;
 
   let officeStyleLoaded = false;
   let markdownLibLoaded = false;
@@ -379,6 +392,13 @@
 
   const currentCategory = computed(() => getCloudFileCategory(props.fileInfo));
   const previewType = computed(() => getCloudPreviewType(props.fileInfo));
+  const mediaMimeType = computed(() => getCloudMediaMimeType(props.fileInfo));
+  const mediaPlaybackSupport = computed(() => getCloudMediaPlaybackSupport(props.fileInfo));
+  const mediaFormatLabel = computed(() => {
+    const fileName = String(props.fileInfo?.fileName || '');
+    const extension = fileName.includes('.') ? fileName.split('.').pop()?.trim().toUpperCase() : '';
+    return extension || mediaMimeType.value.split('/').pop()?.split(';')[0]?.toUpperCase() || '';
+  });
   const legacyOfficeFile = computed(() => isLegacyOfficeFile(props.fileInfo));
   const unsupportedTitle = computed(() =>
     t(
@@ -424,6 +444,13 @@
       }
       usedIds.add(uniqueId);
       el.id = uniqueId;
+    });
+
+    template.content.querySelectorAll<HTMLAnchorElement>('a[href]').forEach((link) => {
+      const href = (link.getAttribute('href') || '').trim();
+      if (!/^https?:/i.test(href)) return;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
     });
 
     return template.innerHTML;
@@ -486,6 +513,8 @@
         return;
       }
       if (!newVisible) {
+        textAbortController?.abort();
+        textAbortController = null;
         void exitHtmlFullscreen();
         activePreviewFileId = '';
         releaseHtmlBlobUrl();
@@ -529,11 +558,14 @@
 
   // 开始预览
   async function startPreview(file: typeof props.fileInfo) {
+    textAbortController?.abort();
+    textAbortController = null;
     loading.value = true;
     error.value = false;
     errorMessage.value = '';
     textContent.value = '';
     markdownContent.value = '';
+    resetImageView();
     releaseHtmlBlobUrl();
     try {
       if (['word', 'excel', 'ppt'].includes(previewType.value)) {
@@ -543,6 +575,13 @@
         await loadHtmlBlob(effectiveFileUrl.value);
       } else if (previewType.value === 'text') {
         await loadTextContent(effectiveFileUrl.value);
+      } else if (
+        (previewType.value === 'video' || previewType.value === 'audio') &&
+        mediaPlaybackSupport.value === 'unsupported'
+      ) {
+        error.value = true;
+        errorMessage.value = t('cloudSpace.previewPanel.mediaUnsupported');
+        loading.value = false;
       } else if (unsupportedTypes.includes(previewType.value)) {
         loading.value = false;
       }
@@ -591,30 +630,61 @@
 
   // 加载文本内容
   async function loadTextContent(url?: string) {
+    const expectedFileId = activePreviewFileId;
     if (!url) {
       textContent.value = t('cloudSpace.previewPanel.invalidUrl');
       loading.value = false;
       return;
     }
 
+    const controller = new AbortController();
+    textAbortController = controller;
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
       if (!response.ok) {
         throw new Error(`HTTP错误! 状态码: ${response.status}`);
       }
-      const content = await response.text();
 
-      if (content.length > 1000000) {
-        textContent.value = content.substring(0, 1000000) + `\n\n${t('cloudSpace.previewPanel.contentTruncated')}`;
+      let content = '';
+      let truncated = false;
+      if (response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          content += decoder.decode(value, { stream: true });
+          if (content.length > MAX_TEXT_PREVIEW_CHARS) {
+            content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
+            truncated = true;
+            await reader.cancel().catch(() => undefined);
+            break;
+          }
+        }
+        if (!truncated) content += decoder.decode();
       } else {
-        textContent.value = content;
+        content = await response.text();
+        if (content.length > MAX_TEXT_PREVIEW_CHARS) {
+          content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
+          truncated = true;
+        }
       }
+
+      if (content.length > MAX_TEXT_PREVIEW_CHARS) {
+        content = content.slice(0, MAX_TEXT_PREVIEW_CHARS);
+        truncated = true;
+      }
+
+      if (expectedFileId !== activePreviewFileId) return;
+      textContent.value = truncated ? content + `\n\n${t('cloudSpace.previewPanel.contentTruncated')}` : content;
     } catch (err) {
+      if ((err as DOMException)?.name === 'AbortError' || expectedFileId !== activePreviewFileId) return;
       console.error('加载文本文件失败:', err);
       textContent.value = t('cloudSpace.previewPanel.textLoadFailed');
       throw err;
     } finally {
-      loading.value = false;
+      if (textAbortController === controller) textAbortController = null;
+      if (expectedFileId === activePreviewFileId) loading.value = false;
     }
   }
 
@@ -638,6 +708,12 @@
   function onRendered() {
     loading.value = false;
     error.value = false;
+  }
+
+  function onMediaError() {
+    loading.value = false;
+    error.value = true;
+    errorMessage.value = t('cloudSpace.previewPanel.mediaLoadFailed');
   }
 
   function onPdfError(err: unknown) {
@@ -664,9 +740,10 @@
   async function copyText() {
     try {
       await navigator.clipboard.writeText(textContent.value);
-      console.log('文本已复制到剪贴板');
+      message.success(t('cloudSpace.previewPanel.copySuccess'));
     } catch (err) {
       console.error('复制失败:', err);
+      message.error(t('cloudSpace.previewPanel.copyFailed'));
     }
   }
 
@@ -707,12 +784,14 @@
     const href = (link.getAttribute('href') || '').trim();
     if (!href) return;
 
-    if (/^(https?:|mailto:|tel:)/i.test(href)) {
-      return;
-    }
+    if (/^(https?:|mailto:|tel:)/i.test(href)) return;
 
     const hashIndex = href.indexOf('#');
-    if (hashIndex === -1) return;
+    if (hashIndex === -1) {
+      event.preventDefault();
+      message.warning(t('cloudSpace.previewPanel.relativeLinkUnavailable'));
+      return;
+    }
 
     const rawHash = href.slice(hashIndex + 1);
     if (!rawHash) return;
@@ -789,12 +868,16 @@
     isHtmlFullscreen.value = false;
   }
 
+  function resetImageView() {
+    rotate.value = 0;
+    scale.value = 1;
+    imagePosition.value = { x: 0, y: 0 };
+    resetTouchGesture();
+  }
+
   function handleClose() {
     releaseHtmlBlobUrl();
-    rotate.value = 0; // 重置旋转角度
-    scale.value = 1; // 重置缩放
-    imagePosition.value = { x: 0, y: 0 }; // 重置位置
-    resetTouchGesture();
+    resetImageView();
     if (previewHistoryHandle && requestMobileOverlayHistoryClose(previewHistoryHandle)) return;
     previewHistoryHandle = null;
     emit('update:visible', false);
@@ -1029,6 +1112,8 @@
   });
 
   onUnmounted(() => {
+    textAbortController?.abort();
+    textAbortController = null;
     syncEscapeLock(false);
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('wheel', handleWheel);
@@ -1131,9 +1216,10 @@
       .file-type-badge {
         flex: 0 0 auto;
         padding: 3px 8px;
+        border: 1px solid var(--resource-file-color);
         border-radius: 999px;
-        background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-        color: var(--primary-color);
+        background: color-mix(in srgb, var(--resource-file-color) 12%, transparent);
+        color: var(--resource-file-color);
         font-size: 11px;
         font-weight: 600;
       }
@@ -1277,9 +1363,65 @@
           display: flex;
           justify-content: center;
           align-items: center;
+          box-sizing: border-box;
+          padding: 24px 20px 88px;
+
+          .preview-audio-card {
+            width: min(560px, 100%);
+            padding: 22px;
+            box-sizing: border-box;
+            border: 1px solid var(--card-border-color);
+            border-radius: 16px;
+            background: var(--card-background);
+            box-shadow: var(--surface-card-shadow);
+          }
+
+          .preview-audio-summary {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            min-width: 0;
+            margin-bottom: 18px;
+          }
+
+          .preview-audio-artwork {
+            flex: 0 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 64px;
+            height: 64px;
+            border: 1px solid var(--resource-file-color);
+            border-radius: 18px;
+            background: color-mix(in srgb, var(--resource-file-color) 10%, var(--card-background));
+          }
+
+          .preview-audio-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 0;
+          }
+
+          .preview-audio-name {
+            overflow: hidden;
+            color: var(--text-color);
+            font-size: 15px;
+            font-weight: 650;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .preview-audio-format {
+            color: var(--desc-color);
+            font-size: 12px;
+            font-weight: 600;
+          }
 
           .preview-audio {
-            width: min(560px, 90%);
+            display: block;
+            width: 100%;
+            accent-color: var(--resource-file-color);
           }
         }
 
@@ -1375,7 +1517,7 @@
 
         .unsupported-preview {
           text-align: center;
-          padding: 60px 40px;
+          padding: 60px 40px 104px;
 
           .unsupported-icon {
             color: var(--desc-color);
@@ -1556,11 +1698,48 @@
           padding: 14px 14px 78px;
         }
 
+        .preview-main .preview-audio-container {
+          padding: 14px 12px 76px;
+
+          .preview-audio-card {
+            padding: 16px;
+            border-radius: 13px;
+          }
+
+          .preview-audio-artwork {
+            width: 54px;
+            height: 54px;
+            border-radius: 15px;
+          }
+        }
+
         .preview-controls {
           bottom: max(10px, env(safe-area-inset-bottom));
           max-width: calc(100% - 16px);
           padding: 6px;
           border-radius: 13px;
+
+          .action-btn {
+            width: 40px;
+            min-width: 40px;
+            height: 40px;
+            border-radius: 11px;
+          }
+
+          .zoom-value-btn {
+            width: 58px;
+            min-width: 58px;
+          }
+        }
+      }
+
+      .preview-header .preview-actions {
+        .header-close-btn,
+        .header-fullscreen-btn {
+          width: 40px;
+          min-width: 40px;
+          height: 40px;
+          border-radius: 11px;
         }
       }
 

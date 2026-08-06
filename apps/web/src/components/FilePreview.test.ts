@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick } from 'vue';
+import { createApp, h, nextTick, ref } from 'vue';
 import FilePreview from './FilePreview.vue';
 import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview';
-import {
-  MOBILE_OVERLAY_HISTORY_STATE_KEY,
-  resetMobileOverlayHistoryForTests,
-} from '@/utils/mobileOverlayHistory';
+import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } from '@/utils/mobileOverlayHistory';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -185,6 +182,34 @@ async function mountImagePreview() {
   return document.body.querySelector<HTMLImageElement>('.preview-image')!;
 }
 
+async function mountUnsupportedPreview() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({
+    setup() {
+      return () =>
+        h(FilePreview, {
+          visible: true,
+          showNext: true,
+          fileInfo: {
+            id: 'archive-1',
+            fileName: 'archive.zip',
+            fileType: 'application/zip',
+            fileUrl: 'https://files.example/archive.zip?signature=test',
+            category: 'compress',
+          },
+        });
+    },
+  });
+  app.mount(host);
+  await nextTick();
+
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
+}
+
 function dispatchTouch(
   image: HTMLImageElement,
   type: 'touchstart' | 'touchmove' | 'touchend',
@@ -321,6 +346,69 @@ describe('FilePreview PDF preview', () => {
   });
 });
 
+describe('FilePreview unified bottom controls', () => {
+  it('keeps navigation and download in the bottom bar for unsupported files', async () => {
+    await mountUnsupportedPreview();
+
+    const controls = document.body.querySelector('.preview-controls');
+    expect(controls).not.toBeNull();
+    expect(controls?.querySelectorAll('button')).toHaveLength(3);
+    expect(document.body.querySelector('.unsupported-preview button')).toBeNull();
+  });
+});
+
+describe('FilePreview text request lifecycle', () => {
+  it('does not let an older slow response overwrite the newly selected file', async () => {
+    let resolveFirstResponse: ((value: unknown) => void) | undefined;
+    const firstResponse = new Promise((resolve) => {
+      resolveFirstResponse = resolve;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(firstResponse)
+      .mockResolvedValueOnce({ ok: true, body: null, text: async () => 'new file content' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const fileInfo = ref({
+      id: 'text-1',
+      fileName: 'first.txt',
+      fileType: 'text/plain',
+      fileUrl: 'https://files.example/first.txt?signature=test',
+      category: 'text',
+    });
+    const app = createApp({
+      setup() {
+        return () => h(FilePreview, { visible: true, fileInfo: fileInfo.value });
+      },
+    });
+    app.mount(host);
+    await nextTick();
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    fileInfo.value = {
+      ...fileInfo.value,
+      id: 'text-2',
+      fileName: 'second.txt',
+      fileUrl: 'https://files.example/second.txt?signature=test',
+    };
+    await vi.waitFor(() =>
+      expect(document.body.querySelector('.preview-text')?.textContent).toContain('new file content'),
+    );
+
+    resolveFirstResponse?.({ ok: true, body: null, text: async () => 'old file content' });
+    await Promise.resolve();
+    await nextTick();
+
+    expect(document.body.querySelector('.preview-text')?.textContent).toContain('new file content');
+    expect(document.body.querySelector('.preview-text')?.textContent).not.toContain('old file content');
+  });
+});
+
 describe('FilePreview mobile image gestures', () => {
   it('uses the shared mobile overlay history marker so Android back closes the preview first', async () => {
     await mountImagePreview();
@@ -350,5 +438,51 @@ describe('FilePreview mobile image gestures', () => {
     await nextTick();
 
     expect(image.getAttribute('style')).toContain('translate(30px, 40px)');
+  });
+
+  it('resets image transform when switching to another file', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const fileInfo = ref({
+      id: 'image-1',
+      fileName: 'first.png',
+      fileType: 'image/png',
+      fileUrl: 'https://files.example/first.png?signature=test',
+      category: 'image',
+    });
+    const app = createApp({
+      setup() {
+        return () => h(FilePreview, { visible: true, fileInfo: fileInfo.value });
+      },
+    });
+    app.mount(host);
+    await nextTick();
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const firstImage = document.body.querySelector<HTMLImageElement>('.preview-image')!;
+    dispatchTouch(firstImage, 'touchstart', [
+      { clientX: 100, clientY: 100 },
+      { clientX: 200, clientY: 100 },
+    ]);
+    dispatchTouch(firstImage, 'touchmove', [
+      { clientX: 80, clientY: 100 },
+      { clientX: 220, clientY: 100 },
+    ]);
+    await nextTick();
+    expect(firstImage.getAttribute('style')).toContain('scale(1.4)');
+
+    fileInfo.value = {
+      ...fileInfo.value,
+      id: 'image-2',
+      fileName: 'second.png',
+      fileUrl: 'https://files.example/second.png?signature=test',
+    };
+    await nextTick();
+
+    const secondImage = document.body.querySelector<HTMLImageElement>('.preview-image')!;
+    expect(secondImage.getAttribute('style')).toContain('translate(0px, 0px) scale(1) rotate(0deg)');
   });
 });
