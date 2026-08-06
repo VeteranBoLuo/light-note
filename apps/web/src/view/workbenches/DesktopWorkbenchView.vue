@@ -282,17 +282,12 @@
       </section>
 
       <section class="analytics-section">
-        <div class="section-heading">
-          <div>
-            <h2>{{ t('workbench.panel.contentOverview') }}</h2>
-            <p>{{ t('workbench.panel.contentOverviewHint') }}</p>
-          </div>
-        </div>
         <WorkbenchCharts
           :loading="summaryLoading"
           :theme-key="user.currentTheme || 'day'"
           :trend-data="trendChartData"
           :file-type-data="fileTypeChartData"
+          :week-days="trendWeekDays"
           @open-files="openQuickCapture('file')"
         />
       </section>
@@ -340,6 +335,7 @@
             </div>
             <BButton size="small" class="quiet-button" @click="openUpdateLogs">
               {{ t('workbench.panel.viewAll') }}
+              <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
             </BButton>
           </div>
 
@@ -352,6 +348,9 @@
             <div class="latest-update-title">
               <span class="update-dot"></span>
               <strong>{{ latestUpdateLog.title || latestUpdateLog.label || t('workbench.logs.latest') }}</strong>
+              <BChip class="latest-update-badge" tone="pin" size="small">
+                {{ t('workbench.logs.latest') }}
+              </BChip>
               <time>{{ latestUpdateLog.publishDate || latestUpdateLog.time || '-' }}</time>
             </div>
             <div v-if="latestUpdateItems.length" class="latest-update-items">
@@ -385,6 +384,7 @@
   import { listUpdateLogs, updateLogMarkdownSummaryItems, type UpdateLogItem } from '@/api/updateLogApi.ts';
   import { cloudSpaceStore, inboxStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import TodayActionSection from '@/components/workbenches/TodayActionSection.vue';
@@ -482,6 +482,7 @@
     usedSpace: 0,
   });
   const weeklyStats = ref({ bookmark: 0, note: 0, file: 0, tag: 0 });
+  const trendWeekDays = ref(new Date().getDay() || 7);
   const todayStats = ref({
     actionTotal: 0,
     todoPendingTotal: 0,
@@ -881,6 +882,7 @@
         file: Number(data.weeklyStats?.file || 0),
         tag: Number(data.weeklyStats?.tag || 0),
       };
+      trendWeekDays.value = Math.max(1, Math.min(7, Number(data.weekDays || new Date().getDay() || 7)));
       todayStats.value = {
         actionTotal: Number(data.today?.actionTotal || 0),
         todoPendingTotal: Number(data.today?.todoPendingTotal || 0),
@@ -1810,6 +1812,7 @@
 
   .quiet-button {
     flex: 0 0 auto;
+    gap: 4px;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 7%, var(--menu-body-bg-color));
   }
@@ -2021,7 +2024,6 @@
   .analytics-section {
     display: flex;
     flex-direction: column;
-    gap: 10px;
   }
 
   .section-heading {
@@ -2030,13 +2032,63 @@
 
   .lower-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(280px, 0.72fr) minmax(0, 1.28fr);
     gap: 12px;
   }
 
   .hot-tags-panel,
   .latest-update-panel {
-    min-height: 220px;
+    min-height: 300px;
+  }
+
+  .latest-update-panel {
+    padding: 20px;
+    border-radius: 18px;
+    background: linear-gradient(
+      145deg,
+      var(--menu-body-bg-color) 0%,
+      color-mix(in srgb, var(--primary-color) 2.5%, var(--menu-body-bg-color)) 100%
+    );
+    box-shadow: 0 18px 44px -38px rgba(30, 27, 75, 0.38);
+  }
+
+  .latest-update-panel .panel-header {
+    margin-bottom: 16px;
+  }
+
+  .latest-update-panel .panel-header > div {
+    position: relative;
+    padding-left: 14px;
+  }
+
+  .latest-update-panel .panel-header > div::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 1px;
+    width: 4px;
+    height: 34px;
+    border-radius: 999px;
+    background: var(--primary-color);
+  }
+
+  .latest-update-panel .panel-header h2 {
+    font-size: 18px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
+
+  .latest-update-panel .panel-header p {
+    margin-top: 5px;
+    font-size: 11.5px;
+  }
+
+  .latest-update-panel .quiet-button {
+    min-height: 34px;
+    padding: 0 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    background: var(--menu-body-bg-color);
   }
 
   .tag-list {
@@ -2092,82 +2144,98 @@
   }
 
   .latest-update-content {
-    min-height: 142px;
-    padding: 12px;
+    min-height: 216px;
     box-sizing: border-box;
-    border-radius: 11px;
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--bl-input-noBorder-bg-color));
+    overflow: hidden;
+    border: 1px solid var(--card-border-color);
+    border-radius: 14px;
+    background: color-mix(in srgb, var(--menu-body-bg-color) 94%, var(--bl-input-noBorder-bg-color));
   }
 
   .latest-update-title {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
+    min-height: 54px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--card-border-color);
+    background: color-mix(in srgb, var(--primary-color) 4%, var(--menu-body-bg-color));
   }
 
   .update-dot {
-    width: 8px;
-    height: 8px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: var(--primary-color);
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 10%, transparent);
+    border: 3px solid color-mix(in srgb, var(--primary-color) 18%, var(--menu-body-bg-color));
   }
 
   .latest-update-title strong {
     min-width: 0;
-    font-size: 12.5px;
+    font-size: 14px;
+    font-weight: 700;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
+  .latest-update-badge {
+    flex: 0 0 auto;
+  }
+
   .latest-update-title time {
     color: var(--desc-color);
-    font-size: 10.5px;
+    font-size: 11px;
     font-variant-numeric: tabular-nums;
   }
 
   .latest-update-items {
-    margin-top: 11px;
     display: flex;
     flex-direction: column;
-    gap: 7px;
   }
 
   .latest-update-item {
     display: grid;
-    grid-template-columns: 20px minmax(0, 1fr);
-    gap: 7px;
-    align-items: start;
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    min-height: 40px;
+    padding: 6px 14px;
+    border-bottom: 1px solid var(--card-border-color);
+  }
+
+  .latest-update-item:last-child {
+    border-bottom: 0;
   }
 
   .latest-update-item > span {
-    width: 20px;
-    height: 20px;
-    border-radius: 6px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid var(--primary-color);
+    border-radius: 7px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 9%, transparent);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
   }
 
   .latest-update-item p {
-    margin: 1px 0 0;
+    margin: 0;
     color: var(--desc-color);
-    font-size: 11px;
-    line-height: 1.55;
+    font-size: 11.5px;
+    line-height: 1.5;
     display: -webkit-box;
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
 
   .update-skeleton {
-    min-height: 142px;
+    min-height: 216px;
     padding: 14px;
     box-sizing: border-box;
     display: flex;

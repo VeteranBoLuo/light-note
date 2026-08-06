@@ -82,6 +82,8 @@
     top: '0px',
     left: '0px',
     minWidth: '0px',
+    maxHeight: 'none',
+    overflowY: 'auto',
     visibility: 'hidden',
   });
   let closeTimer: number | null = null;
@@ -108,6 +110,9 @@
     const rRight = rect.right / zoom;
     const rWidth = rect.width / zoom;
     const panelW = panelRef.value?.offsetWidth ?? 0;
+    const panelH = panelRef.value?.offsetHeight ?? 0;
+    const viewportGap = 8;
+    const triggerGap = 6;
     // 按 align 算浮层期望的视口左边界:left 对齐触发元素左边,center 居中,right 对齐右边
     let vLeft = rLeft;
     if (props.align === 'center') vLeft = rLeft + rWidth / 2 - panelW / 2;
@@ -115,13 +120,27 @@
     // 统一用 fixed(视口坐标),不依赖容器是否为定位元素 —— 原 absolute 分支在静态容器下会错位(缩放尤甚)。
     // 口径:getBoundingClientRect=视觉(÷zoom 得布局);offsetWidth=布局;clientWidth=视觉(÷zoom 得布局);style=布局。
     let left = vLeft;
-    const vw = document.documentElement.clientWidth / zoom; // 视口宽(布局像素)
-    if (panelW && left + panelW > vw - 8) left = vw - panelW - 8;
-    if (left < 8) left = 8;
+    const vw = (document.documentElement.clientWidth || window.innerWidth) / zoom; // 视口宽(布局像素)
+    const vh = (document.documentElement.clientHeight || window.innerHeight) / zoom; // 视口高(布局像素)
+    const maxPanelHeight = Math.max(0, vh - viewportGap * 2);
+    const visiblePanelHeight = panelH ? Math.min(panelH, maxPanelHeight) : 0;
+    const belowTop = rBottom + triggerGap;
+    const aboveTop = rTop - visiblePanelHeight - triggerGap;
+    let top = belowTop;
+    if (visiblePanelHeight && belowTop + visiblePanelHeight > vh - viewportGap) {
+      // 靠近视口底部时优先向上展开；若上下都放不下，则选空间更大的一侧并把面板限制在视口内滚动。
+      const spaceAbove = rTop - viewportGap - triggerGap;
+      const spaceBelow = vh - rBottom - viewportGap - triggerGap;
+      top = aboveTop >= viewportGap || spaceAbove >= spaceBelow ? Math.max(viewportGap, aboveTop) : belowTop;
+    }
+    if (visiblePanelHeight) top = Math.min(top, Math.max(viewportGap, vh - visiblePanelHeight - viewportGap));
+    if (panelW && left + panelW > vw - viewportGap) left = vw - panelW - viewportGap;
+    if (left < viewportGap) left = viewportGap;
     panelStyle.position = 'fixed';
-    panelStyle.top = `${rBottom + 6}px`;
+    panelStyle.top = `${top}px`;
     panelStyle.left = `${left}px`;
     panelStyle.minWidth = `${Math.ceil(rWidth)}px`;
+    panelStyle.maxHeight = `${maxPanelHeight}px`;
     panelStyle.visibility = 'visible';
   }
 

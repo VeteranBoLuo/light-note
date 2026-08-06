@@ -14,7 +14,19 @@
           <SvgIcon :src="icon.navigation.search" size="14" aria-hidden="true" />
         </template>
       </BInput>
-      <BButton class="note-tree-root" :class="{ 'is-active': currentParentId === null }" @click="emit('select', null)">
+      <BButton
+        class="note-tree-root"
+        :class="{
+          'is-active': currentParentId === null,
+          'is-drop-candidate': dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start',
+          'is-drop-target':
+            dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start' && dropTargetActive,
+          'is-drop-root-start': dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start',
+        }"
+        :data-note-drop-parent="NOTE_TREE_ROOT_KEY"
+        :data-note-drop-title="t('note.knowledgeRoot')"
+        @click="emit('select', null)"
+      >
         <SvgIcon :src="icon.noteTree.root" size="17" aria-hidden="true" />
         <span>{{ t('note.knowledgeRoot') }}</span>
         <span class="note-tree-root-count">{{ searchActive ? searchMatchCount : rootItems.length }}</span>
@@ -35,14 +47,22 @@
           :loading-keys="loadingKeys"
           :write-enabled="writeEnabled"
           :search-mode="searchActive"
+          :drop-target-key="dropTargetKey"
+          :drop-target-active="dropTargetActive"
+          :drop-target-position="dropTargetPosition"
+          :menu-disabled="menuDisabled"
           @toggle="emit('toggle', $event)"
           @select="emit('select', $event)"
           @open="emit('open', $event)"
           @create="emit('create', $event)"
+          @attach="emit('attach', $event)"
+          @toggle-top="emit('toggleTop', $event)"
           @move="emit('move', $event)"
           @rename="emit('rename', $event)"
           @copy-link="emit('copyLink', $event)"
           @delete="emit('delete', $event)"
+          @drag-start="(node, event) => emit('dragStart', node, event)"
+          @drag-end="emit('dragEnd')"
         />
       </ul>
       <p v-if="searchActive && !searchLoading && searchMatchCount === 0 && !treeError" class="note-tree-empty">
@@ -58,6 +78,8 @@
       :total-count="totalCount"
       :untagged-count="untaggedCount"
       :loading="tagLoading"
+      defer-navigation
+      @select="emit('selectTag', $event)"
     />
   </nav>
 </template>
@@ -75,6 +97,7 @@
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import icon from '@/config/icon';
   import type { NoteTreeItem } from '@/types/noteTree';
+  import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
 
   const props = withDefaults(
     defineProps<{
@@ -93,6 +116,10 @@
       searchActive?: boolean;
       searchLoading?: boolean;
       searchMatchCount?: number;
+      dropTargetKey?: string;
+      dropTargetActive?: boolean;
+      dropTargetPosition?: NoteTreeDropPosition | '';
+      menuDisabled?: boolean;
     }>(),
     {
       treeError: '',
@@ -106,19 +133,28 @@
       searchActive: false,
       searchLoading: false,
       searchMatchCount: 0,
+      dropTargetKey: '',
+      dropTargetActive: false,
+      dropTargetPosition: '',
+      menuDisabled: false,
     },
   );
 
   const emit = defineEmits<{
     toggle: [node: NoteTreeItem];
     select: [id: string | null];
+    selectTag: [key: string];
     open: [id: string];
     create: [node: NoteTreeItem];
+    attach: [node: NoteTreeItem];
+    toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     copyLink: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     search: [value: string];
+    dragStart: [node: NoteTreeItem, event: DragEvent];
+    dragEnd: [];
   }>();
   const { t } = useI18n();
   const activeTab = defineModel<'directory' | 'tags'>('mode', { default: 'directory' });
@@ -181,6 +217,7 @@
   }
 
   .note-tree-root {
+    position: relative;
     width: 100%;
     height: 36px;
     flex: 0 0 auto;
@@ -197,6 +234,36 @@
       border-color: var(--resource-note-color, #00a884);
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--workspace-panel-bg-color));
       font-weight: 650;
+    }
+
+    &.is-drop-candidate {
+      color: var(--resource-note-color, #00a884);
+      border-color: var(--resource-note-color, #00a884);
+      font-weight: 650;
+    }
+
+    &.is-drop-target {
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 14%, var(--workspace-panel-bg-color));
+    }
+
+    &.is-drop-root-start {
+      margin-bottom: 12px;
+      transform: translateY(-2px);
+      transition:
+        margin 180ms cubic-bezier(0.22, 0.61, 0.36, 1),
+        transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+
+    &.is-drop-root-start::after {
+      position: absolute;
+      right: 7px;
+      bottom: -9px;
+      left: 7px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--resource-note-color, #00a884);
+      content: '';
+      pointer-events: none;
     }
   }
 

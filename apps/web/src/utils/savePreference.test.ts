@@ -26,8 +26,10 @@ describe('applyPreferenceLocally', () => {
   it('多字段可多次合并', () => {
     applyPreferenceLocally({ lang: 'en-US' });
     applyPreferenceLocally({ noteViewMode: 'card' });
+    applyPreferenceLocally({ noteSidebarMode: 'tags' });
     expect(userState.preferences.lang).toBe('en-US');
     expect(userState.preferences.noteViewMode).toBe('card');
+    expect(userState.preferences.noteSidebarMode).toBe('tags');
     expect(userState.preferences.theme).toBe('day');
   });
 

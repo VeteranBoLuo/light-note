@@ -20,18 +20,18 @@ describe('noteTree feature snapshot', () => {
     apiBasePostMock.mockReset();
   });
 
-  it('只接受服务端显式 true，未知或缺失值一律失败关闭', async () => {
+  it('识别 resultData 实际返回的 camelCase 字段，且只接受显式 true', async () => {
     apiBasePostMock.mockResolvedValue({
       status: 200,
       data: {
         features: {
-          note_tree_read: true,
-          note_tree_write: 1,
-          note_tree_mobile: true,
-          note_tree_subtree_trash: false,
-          ai_note_branch_scope: true,
-          ai_note_branch_analysis: true,
-          unknown_feature: true,
+          noteTreeRead: true,
+          noteTreeWrite: 1,
+          noteTreeMobile: true,
+          noteTreeSubtreeTrash: false,
+          aiNoteBranchScope: true,
+          aiNoteBranchAnalysis: true,
+          unknownFeature: true,
         },
       },
     });
@@ -45,6 +45,31 @@ describe('noteTree feature snapshot', () => {
       ai_note_branch_analysis: true,
     });
     expect(apiBasePostMock).toHaveBeenCalledWith('/api/note/getNoteTreeFeatures', {}, { silent: true });
+  });
+
+  it('兼容未经过 resultData 转换的 snake_case 能力快照', async () => {
+    apiBasePostMock.mockResolvedValue({
+      status: 200,
+      data: {
+        features: {
+          note_tree_read: true,
+          note_tree_write: true,
+          note_tree_mobile: true,
+          note_tree_subtree_trash: true,
+          ai_note_branch_scope: true,
+          ai_note_branch_analysis: true,
+        },
+      },
+    });
+
+    await expect(fetchNoteTreeFeatures()).resolves.toEqual({
+      note_tree_read: true,
+      note_tree_write: true,
+      note_tree_mobile: true,
+      note_tree_subtree_trash: true,
+      ai_note_branch_scope: true,
+      ai_note_branch_analysis: true,
+    });
   });
 
   it('旧后端或异常响应不猜测开启状态', async () => {

@@ -1,39 +1,88 @@
 <template>
   <div class="chart-grid">
-    <div class="chart-card" :class="cardThemeClass">
-      <div class="chart-title">{{ t('workbench.chart.trend', '本周内容趋势') }}</div>
-      <div v-if="loading" class="chart-skeleton"></div>
-      <div v-else-if="trendData.length" ref="trendRef" class="chart-body neon-trend">
-        <canvas ref="trendCanvasRef" class="trend-canvas"></canvas>
-        <div class="trend-legend">
-          <span v-for="item in trendLegendItems" :key="item.type" class="trend-legend-item">
-            <span
-              class="trend-legend-dot"
-              :style="{ backgroundColor: item.color, boxShadow: `0 0 10px ${item.color}` }"
-            ></span>
-            {{ item.type }}
-          </span>
+    <article class="chart-card chart-card--trend" :class="cardThemeClass">
+      <header class="chart-header">
+        <div class="chart-heading-copy">
+          <h2>{{ trendTitle }}</h2>
+          <p>{{ trendHint }}</p>
         </div>
-        <div
-          v-if="trendTooltip.visible"
-          class="trend-tooltip"
-          :style="{ left: `${trendTooltip.x}px`, top: `${trendTooltip.y}px` }"
-        >
-          <div class="trend-tooltip-date">{{ trendTooltip.date }}</div>
-          <div v-for="item in trendTooltip.items" :key="item.type" class="trend-tooltip-row">
-            <span class="trend-tooltip-dot" :style="{ backgroundColor: item.color }"></span>
-            <span>{{ item.type }}</span>
-            <strong>{{ item.value }}</strong>
+        <BTabs
+          v-model:active-tab="activeTrendRange"
+          class="trend-range-tabs"
+          variant="segment"
+          :options="trendRangeOptions"
+        />
+      </header>
+
+      <div v-if="loading" class="chart-skeleton chart-skeleton--trend"></div>
+      <div v-else-if="visibleTrendData.length" class="trend-content">
+        <div class="trend-summary-grid">
+          <div
+            v-for="item in trendSummaryItems"
+            :key="item.key"
+            class="trend-summary-card"
+            :class="`trend-summary-card--${item.key}`"
+          >
+            <span class="trend-summary-icon" aria-hidden="true">
+              <SvgIcon :src="item.icon" size="22" />
+            </span>
+            <span class="trend-summary-copy">
+              <span>{{ item.label }}</span>
+              <strong>+{{ item.value }}</strong>
+            </span>
           </div>
+        </div>
+
+        <div ref="trendRef" class="chart-body trend-plot">
+          <span class="trend-axis-label">{{ t('workbench.chart.quantity') }}</span>
+          <canvas ref="trendCanvasRef" class="trend-canvas"></canvas>
+          <div class="trend-legend">
+            <span v-for="item in trendLegendItems" :key="item.type" class="trend-legend-item">
+              <span class="trend-legend-line" :style="{ backgroundColor: item.color }"></span>
+              <span>{{ item.type }}</span>
+            </span>
+          </div>
+          <div
+            v-if="trendTooltip.visible"
+            class="trend-tooltip"
+            :style="{ left: `${trendTooltip.x}px`, top: `${trendTooltip.y}px` }"
+          >
+            <div class="trend-tooltip-date">{{ trendTooltip.date }}</div>
+            <div v-for="item in trendTooltip.items" :key="item.type" class="trend-tooltip-row">
+              <span class="trend-tooltip-dot" :style="{ backgroundColor: item.color }"></span>
+              <span>{{ item.type }}</span>
+              <strong>{{ item.value }}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="trendInsight" class="trend-insight" role="status">
+          <span class="trend-insight-icon" aria-hidden="true">
+            <SvgIcon :src="trendInsight.icon" size="17" />
+          </span>
+          <span>
+            <strong>{{ t('workbench.chart.insightLeader', { type: trendInsight.type }) }}</strong>
+            {{
+              t('workbench.chart.insightChange', {
+                start: trendInsight.start,
+                end: trendInsight.end,
+              })
+            }}
+          </span>
         </div>
       </div>
       <div v-else class="chart-empty">{{ t('workbench.chart.empty', '暂无数据') }}</div>
-    </div>
+    </article>
 
-    <div class="chart-card" :class="cardThemeClass">
-      <div class="chart-title">{{ t('workbench.chart.fileType', '文件类型分布') }}</div>
+    <article class="chart-card chart-card--type" :class="cardThemeClass">
+      <header class="chart-header">
+        <div class="chart-heading-copy">
+          <h2>{{ t('workbench.chart.fileType', '文件类型分布') }}</h2>
+          <p>{{ t('workbench.chart.fileTypeHint') }}</p>
+        </div>
+      </header>
       <div v-if="loading" class="chart-skeleton"></div>
-      <div v-else-if="fileTypeData.length" ref="typeRef" class="chart-body neon-type">
+      <div v-else-if="fileTypeData.length" ref="typeRef" class="chart-body type-plot">
         <canvas ref="typeCanvasRef" class="type-canvas"></canvas>
         <div class="type-center">
           <div class="type-center-value">{{ fileTypeTotal }}</div>
@@ -41,10 +90,7 @@
         </div>
         <div class="type-legend">
           <div v-for="item in displayedFileTypeLegendItems" :key="item.type" class="type-legend-item">
-            <span
-              class="type-legend-dot"
-              :style="{ backgroundColor: item.color, boxShadow: `0 0 10px ${item.color}` }"
-            ></span>
+            <span class="type-legend-dot" :style="{ backgroundColor: item.color }"></span>
             <span class="type-legend-label">{{ item.type }}</span>
             <strong>{{ item.value }}</strong>
             <span>{{ item.percent }}%</span>
@@ -79,7 +125,7 @@
           {{ t('workbench.chart.fileEmptyAction') }}
         </BButton>
       </div>
-    </div>
+    </article>
   </div>
 </template>
 
@@ -87,6 +133,7 @@
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
@@ -102,39 +149,61 @@
     value: number;
   }
 
-  const props = defineProps<{
-    loading: boolean;
-    themeKey: string;
-    trendData: TrendItem[];
-    fileTypeData: FileTypeItem[];
-  }>();
+  type TrendRange = 'week' | 'month';
+
+  const props = withDefaults(
+    defineProps<{
+      loading: boolean;
+      themeKey: string;
+      trendData: TrendItem[];
+      fileTypeData: FileTypeItem[];
+      weekDays?: number;
+    }>(),
+    {
+      weekDays: 7,
+    },
+  );
   const emit = defineEmits<{ openFiles: [] }>();
 
   const { t } = useI18n();
+  const activeTrendRange = ref<TrendRange>('week');
+  const trendRangeOptions = computed(() => [
+    { key: 'week', label: t('workbench.chart.rangeWeek') },
+    { key: 'month', label: t('workbench.chart.rangeMonth') },
+  ]);
+  const trendTitle = computed(() =>
+    activeTrendRange.value === 'month' ? t('workbench.chart.trendMonth') : t('workbench.chart.trendWeek'),
+  );
+  const trendHint = computed(() =>
+    activeTrendRange.value === 'month' ? t('workbench.chart.trendHintMonth') : t('workbench.chart.trendHintWeek'),
+  );
   const cardThemeClass = computed(() => (props.themeKey === 'night' ? 'chart-card--night' : 'chart-card--day'));
   const trendRef = ref<HTMLElement | null>(null);
   const trendCanvasRef = ref<HTMLCanvasElement | null>(null);
   const typeRef = ref<HTMLElement | null>(null);
   const typeCanvasRef = ref<HTMLCanvasElement | null>(null);
 
-  let trendFrameId: number | null = null;
   let typeFrameId: number | null = null;
   let trendResizeObserver: ResizeObserver | null = null;
   let typeResizeObserver: ResizeObserver | null = null;
   let chartVisibilityObserver: IntersectionObserver | null = null;
   let trendEventTarget: HTMLElement | null = null;
   let typeEventTarget: HTMLElement | null = null;
-  let trendIsVisible = true;
   let typeIsVisible = true;
-  let lastTrendFrameAt = 0;
   let lastTypeFrameAt = 0;
   const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
   const CHART_FRAME_INTERVAL = 48;
   const TYPE_LEGEND_WIDTH = 136;
+  const TREND_PLOT_TOP = 30;
+  const TREND_PLOT_RIGHT = 16;
+  const TREND_PLOT_BOTTOM = 48;
+  const TREND_PLOT_LEFT = 42;
+  const TREND_TOOLTIP_WIDTH = 146;
 
   const trendTooltip = reactive({
     visible: false,
+    index: -1,
     x: 0,
     y: 0,
     date: '',
@@ -182,9 +251,55 @@
     };
   }
 
+  const visibleTrendData = computed(() => {
+    const dates = Array.from(new Set(props.trendData.map((item) => item.date)));
+    const dayCount = activeTrendRange.value === 'month' ? 30 : Math.max(1, Math.min(7, Number(props.weekDays || 7)));
+    const visibleDates = new Set(dates.slice(-dayCount));
+    return props.trendData.filter((item) => visibleDates.has(item.date));
+  });
+
+  const trendSummaryItems = computed(() => {
+    const configs = [
+      { key: 'bookmark', label: t('workbench.chart.bookmark'), icon: icon.resource.bookmark },
+      { key: 'note', label: t('workbench.chart.note'), icon: icon.resource.note },
+      { key: 'file', label: t('workbench.chart.file'), icon: icon.resource.file },
+    ];
+    return configs.map((config) => ({
+      ...config,
+      value: visibleTrendData.value
+        .filter((item) => item.type === config.label)
+        .reduce((sum, item) => sum + Number(item.value || 0), 0),
+    }));
+  });
+
+  const trendInsight = computed(() => {
+    const dates = Array.from(new Set(visibleTrendData.value.map((item) => item.date)));
+    if (dates.length < 2) return null;
+    const leader = [...trendSummaryItems.value].sort((a, b) => b.value - a.value)[0];
+    if (!leader || leader.value <= 0) return null;
+    const values = dates.map(
+      (date) => visibleTrendData.value.find((item) => item.date === date && item.type === leader.label)?.value || 0,
+    );
+    let strongestIndex = 1;
+    let strongestChange = Number(values[1] || 0) - Number(values[0] || 0);
+    for (let index = 2; index < values.length; index += 1) {
+      const change = Number(values[index] || 0) - Number(values[index - 1] || 0);
+      if (change > strongestChange) {
+        strongestChange = change;
+        strongestIndex = index;
+      }
+    }
+    return {
+      type: leader.label,
+      icon: leader.icon,
+      start: dates[strongestIndex - 1],
+      end: dates[strongestIndex],
+    };
+  });
+
   const trendLegendItems = computed(() => {
     const colorMap = getTrendColorMap();
-    return Array.from(new Set(props.trendData.map((item) => item.type))).map((type) => ({
+    return Array.from(new Set(visibleTrendData.value.map((item) => item.type))).map((type) => ({
       type,
       color: colorMap[type] || RESOURCE_COLOR_HEX.bookmark,
     }));
@@ -213,7 +328,6 @@
 
   function destroyTrend() {
     stopTrendAnimation();
-    trendTooltip.visible = false;
   }
 
   function destroyType() {
@@ -228,7 +342,7 @@
     }
     await nextTick();
 
-    if (trendRef.value && trendCanvasRef.value && props.trendData.length) {
+    if (trendRef.value && trendCanvasRef.value && visibleTrendData.value.length) {
       startTrendAnimation();
     } else {
       destroyTrend();
@@ -242,7 +356,7 @@
   }
 
   function handleResize() {
-    drawTrend(performance.now());
+    drawTrend();
     drawType(performance.now());
   }
 
@@ -252,14 +366,18 @@
 
   function buildTrendSeries() {
     const colorMap = getTrendColorMap();
-    const dates = Array.from(new Set(props.trendData.map((item) => item.date)));
-    const types = Array.from(new Set(props.trendData.map((item) => item.type)));
-    const valueMap = new Map(props.trendData.map((item) => [`${item.date}__${item.type}`, Number(item.value || 0)]));
+    const dates = Array.from(new Set(visibleTrendData.value.map((item) => item.date)));
+    const types = Array.from(new Set(visibleTrendData.value.map((item) => item.type)));
+    const valueMap = new Map(
+      visibleTrendData.value.map((item) => [`${item.date}__${item.type}`, Number(item.value || 0)]),
+    );
+    const rawMaxValue = Math.max(...visibleTrendData.value.map((item) => Number(item.value || 0)), 1);
+    const maxValue = Math.max(4, Math.ceil(rawMaxValue / 4) * 4);
     return {
       dates,
       types,
       colorMap,
-      maxValue: Math.max(...props.trendData.map((item) => Number(item.value || 0)), 1),
+      maxValue,
       series: types.map((type) => ({
         type,
         color: colorMap[type] || RESOURCE_COLOR_HEX.bookmark,
@@ -279,32 +397,21 @@
     return `rgba(${r}, ${g}, ${b}, ${alpha})`;
   }
 
-  function getSmoothControlPoints(points: Array<{ x: number; y: number }>, index: number) {
-    const current = points[index];
-    const previous = points[index - 1] || current;
-    const next = points[index + 1] || current;
-    const tension = 0.18;
-    return {
-      c1x: current.x + (next.x - previous.x) * tension,
-      c1y: current.y + (next.y - previous.y) * tension,
-    };
-  }
-
-  function drawSmoothPath(ctx: CanvasRenderingContext2D, points: Array<{ x: number; y: number }>) {
+  function drawTrendPath(ctx: CanvasRenderingContext2D, points: Array<{ x: number; y: number }>) {
     if (!points.length) return;
     ctx.beginPath();
     ctx.moveTo(points[0].x, points[0].y);
     for (let i = 0; i < points.length - 1; i += 1) {
-      const cp1 = getSmoothControlPoints(points, i);
-      const cp2 = getSmoothControlPoints(points, i + 1);
-      ctx.bezierCurveTo(cp1.c1x, cp1.c1y, cp2.c1x, cp2.c1y, points[i + 1].x, points[i + 1].y);
+      // 工作台数据经常出现 0 → 峰值 → 0。旧的贝塞尔控制点会越过相邻日期，
+      // 在低点处画出回勾；这里使用稳定的日期折线，保证每个点都严格落在对应日期。
+      ctx.lineTo(points[i + 1].x, points[i + 1].y);
     }
   }
 
-  function drawTrend(time = performance.now()) {
+  function drawTrend() {
     const canvas = trendCanvasRef.value;
     const container = trendRef.value;
-    if (!canvas || !container || !props.trendData.length) return;
+    if (!canvas || !container || !visibleTrendData.value.length) return;
 
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -323,22 +430,25 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, width, height);
 
-    const top = 36;
-    const right = 16;
-    const bottom = 34;
-    const left = 34;
+    const top = TREND_PLOT_TOP;
+    const right = TREND_PLOT_RIGHT;
+    const bottom = TREND_PLOT_BOTTOM;
+    const left = TREND_PLOT_LEFT;
     const plotWidth = Math.max(width - left - right, 1);
     const plotHeight = Math.max(height - top - bottom, 1);
     const { dates, series, maxValue } = buildTrendSeries();
+    const activeIndex =
+      trendTooltip.visible && trendTooltip.index >= 0 && trendTooltip.index < dates.length ? trendTooltip.index : -1;
     const descColor = getThemeVar('--desc-color', '#71717a');
     const gridColor = getThemeVar('--bl-input-noBorder-bg-color', '#f4f4f5');
-    const phase = (time / 1200) % 1;
+    const primaryColor = getThemeVar('--primary-color', '#615ced');
+    const pointBackground = getThemeVar('--menu-body-bg-color', '#fff');
 
     ctx.lineWidth = 1;
     ctx.strokeStyle = gridColor;
-    ctx.globalAlpha = props.themeKey === 'night' ? 0.42 : 0.68;
-    for (let i = 0; i <= 3; i += 1) {
-      const y = top + (plotHeight / 3) * i;
+    ctx.globalAlpha = props.themeKey === 'night' ? 0.5 : 0.82;
+    for (let i = 0; i <= 4; i += 1) {
+      const y = top + (plotHeight / 4) * i;
       ctx.beginPath();
       ctx.moveTo(left, y);
       ctx.lineTo(left + plotWidth, y);
@@ -348,15 +458,29 @@
 
     ctx.fillStyle = descColor;
     ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    for (let i = 0; i <= 4; i += 1) {
+      const value = Math.round(maxValue - (maxValue / 4) * i);
+      ctx.fillText(String(value), left - 10, top + (plotHeight / 4) * i);
+    }
+
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    const labelStep = dates.length > 20 ? 5 : dates.length > 10 ? 3 : dates.length > 7 ? 2 : 1;
     dates.forEach((date, index) => {
-      if (dates.length > 7 && index % 2 !== 0) return;
+      const isActive = index === activeIndex;
+      const isRegularLabel = index === dates.length - 1 || index % labelStep === 0;
+      const isTooCloseToActive = activeIndex >= 0 && Math.abs(index - activeIndex) <= 1;
+      if (!isActive && (!isRegularLabel || isTooCloseToActive)) return;
       const x = left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * index);
-      ctx.fillText(String(date).slice(5) || date, x, top + plotHeight + 12);
+      ctx.fillStyle = isActive ? primaryColor : descColor;
+      ctx.font = isActive ? '700 11px sans-serif' : '11px sans-serif';
+      ctx.fillText(date, x, top + plotHeight + 11);
     });
 
-    series.forEach((line, lineIndex) => {
+    const activePoints: Array<{ x: number; y: number; color: string }> = [];
+    series.forEach((line) => {
       const points = line.values.map((value, index) => ({
         x: left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * index),
         y: top + plotHeight - (Number(value || 0) / maxValue) * plotHeight,
@@ -364,85 +488,64 @@
       }));
       if (!points.length) return;
 
-      const fillGradient = ctx.createLinearGradient(0, top, width * (1 + phase), top + plotHeight);
-      fillGradient.addColorStop(0, hexToRgba(line.color, 0.02));
-      fillGradient.addColorStop(Math.max(0.05, phase - 0.2), hexToRgba(line.color, 0.08));
-      fillGradient.addColorStop(Math.min(0.95, phase + 0.2), hexToRgba(line.color, 0.25));
-      fillGradient.addColorStop(1, hexToRgba(line.color, 0.02));
+      const fillGradient = ctx.createLinearGradient(0, top, 0, top + plotHeight);
+      fillGradient.addColorStop(0, hexToRgba(line.color, props.themeKey === 'night' ? 0.16 : 0.12));
+      fillGradient.addColorStop(1, hexToRgba(line.color, 0.01));
 
-      drawSmoothPath(ctx, points);
+      drawTrendPath(ctx, points);
       ctx.lineTo(points[points.length - 1].x, top + plotHeight);
       ctx.lineTo(points[0].x, top + plotHeight);
       ctx.closePath();
       ctx.fillStyle = fillGradient;
       ctx.fill();
 
-      drawSmoothPath(ctx, points);
-      ctx.lineWidth = 10;
-      ctx.strokeStyle = hexToRgba(line.color, props.themeKey === 'night' ? 0.2 : 0.14);
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = line.color;
+      drawTrendPath(ctx, points);
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = line.color;
       ctx.stroke();
 
-      drawSmoothPath(ctx, points);
-      ctx.lineWidth = 4.2;
-      ctx.strokeStyle = hexToRgba(line.color, 0.82);
-      ctx.shadowBlur = 16;
-      ctx.shadowColor = line.color;
-      ctx.stroke();
+      const activePoint = activeIndex >= 0 ? points[activeIndex] : null;
+      if (activePoint) activePoints.push({ x: activePoint.x, y: activePoint.y, color: line.color });
+    });
 
-      drawSmoothPath(ctx, points);
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = '#ffffff';
-      ctx.globalAlpha = 0.72;
-      ctx.shadowBlur = 0;
+    if (activeIndex >= 0) {
+      const activeX = left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * activeIndex);
+      ctx.save();
+      ctx.beginPath();
+      ctx.setLineDash([4, 4]);
+      ctx.globalAlpha = props.themeKey === 'night' ? 0.72 : 0.5;
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = primaryColor;
+      ctx.moveTo(activeX, top);
+      ctx.lineTo(activeX, top + plotHeight);
       ctx.stroke();
-      ctx.globalAlpha = 1;
+      ctx.restore();
 
-      points.forEach((point, index) => {
-        const pulse = 0.5 + 0.5 * Math.sin(time / 360 + index * 0.8 + lineIndex);
+      activePoints.forEach((point) => {
         ctx.beginPath();
-        ctx.fillStyle = hexToRgba(line.color, 0.18 + pulse * 0.12);
-        ctx.arc(point.x, point.y, 8 + pulse * 4, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.fillStyle = '#fff';
-        ctx.strokeStyle = line.color;
-        ctx.lineWidth = 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = line.color;
-        ctx.arc(point.x, point.y, 3.2 + pulse * 0.9, 0, Math.PI * 2);
+        ctx.fillStyle = pointBackground;
+        ctx.strokeStyle = point.color;
+        ctx.lineWidth = 2.5;
+        ctx.arc(point.x, point.y, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.shadowBlur = 0;
+
+        ctx.beginPath();
+        ctx.fillStyle = point.color;
+        ctx.arc(point.x, point.y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
       });
-    });
+    }
   }
 
   function startTrendAnimation() {
     stopTrendAnimation();
-    if (prefersReducedMotion) {
-      drawTrend(0);
-      return;
-    }
-    const frame = (time: number) => {
-      if (!trendIsVisible) {
-        stopTrendAnimation();
-        return;
-      }
-      if (time - lastTrendFrameAt >= CHART_FRAME_INTERVAL) {
-        drawTrend(time);
-        lastTrendFrameAt = time;
-      }
-      trendFrameId = requestAnimationFrame(frame);
-    };
-    trendFrameId = requestAnimationFrame(frame);
+    drawTrend();
   }
 
   function stopTrendAnimation() {
-    if (trendFrameId) cancelAnimationFrame(trendFrameId);
-    trendFrameId = null;
+    trendTooltip.visible = false;
+    trendTooltip.index = -1;
   }
 
   function getCanvasMetrics(canvas: HTMLCanvasElement, container: HTMLElement) {
@@ -587,32 +690,47 @@
 
   function handleTrendPointer(event: MouseEvent) {
     const container = trendRef.value;
-    if (!container || !props.trendData.length) return;
+    if (!container || !visibleTrendData.value.length) return;
     const rect = container.getBoundingClientRect();
     const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
     const width = container.clientWidth;
     const height = container.clientHeight;
-    const left = 34;
-    const right = 16;
-    const top = 36;
+    const left = TREND_PLOT_LEFT;
+    const right = TREND_PLOT_RIGHT;
+    const top = TREND_PLOT_TOP;
+    const bottom = TREND_PLOT_BOTTOM;
     const plotWidth = Math.max(width - left - right, 1);
+    const plotHeight = Math.max(height - top - bottom, 1);
+    if (x < left || x > left + plotWidth || y < top || y > top + plotHeight) {
+      hideTrendTooltip();
+      return;
+    }
     const { dates, series } = buildTrendSeries();
     const index = Math.max(0, Math.min(dates.length - 1, Math.round(((x - left) / plotWidth) * (dates.length - 1))));
+    const activeX = left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * index);
     const tooltipItems = series.map((line) => ({
       type: line.type,
       value: line.values[index] || 0,
       color: line.color,
     }));
 
+    const shouldRedraw = !trendTooltip.visible || trendTooltip.index !== index;
     trendTooltip.visible = true;
+    trendTooltip.index = index;
     trendTooltip.date = dates[index] || '';
     trendTooltip.items = tooltipItems;
-    trendTooltip.x = Math.min(Math.max(x + 12, 8), width - 138);
-    trendTooltip.y = top + Math.min(34, Math.max(0, height - 150));
+    const preferredTooltipX = activeX > width / 2 ? activeX - TREND_TOOLTIP_WIDTH - 12 : activeX + 12;
+    trendTooltip.x = Math.min(Math.max(preferredTooltipX, 8), Math.max(8, width - TREND_TOOLTIP_WIDTH - 8));
+    trendTooltip.y = top + 8;
+    if (shouldRedraw) drawTrend();
   }
 
   function hideTrendTooltip() {
+    if (!trendTooltip.visible && trendTooltip.index === -1) return;
     trendTooltip.visible = false;
+    trendTooltip.index = -1;
+    drawTrend();
   }
 
   function normalizeAngle(angle: number) {
@@ -660,7 +778,7 @@
   }
 
   watch(
-    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData],
+    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData, activeTrendRange.value, props.weekDays],
     () => {
       syncCharts();
     },
@@ -718,9 +836,8 @@
       (entries) => {
         entries.forEach((entry) => {
           if (entry.target === trendRef.value) {
-            trendIsVisible = entry.isIntersecting;
-            if (trendIsVisible && props.trendData.length && !trendFrameId) startTrendAnimation();
-            if (!trendIsVisible) destroyTrend();
+            if (entry.isIntersecting && visibleTrendData.value.length) startTrendAnimation();
+            if (!entry.isIntersecting) destroyTrend();
           }
           if (entry.target === typeRef.value) {
             typeIsVisible = entry.isIntersecting;
@@ -753,118 +870,231 @@
 <style scoped lang="less">
   .chart-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
+  }
+
+  .chart-card--trend {
+    grid-column: span 2;
+  }
+
+  .chart-card--type {
+    grid-column: span 1;
   }
 
   .chart-card {
     position: relative;
-    border-radius: 14px;
-    padding: 14px;
-    height: 270px;
+    min-width: 0;
+    height: 420px;
+    padding: 20px;
     box-sizing: border-box;
-    background: var(--menu-body-bg-color);
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
-    box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-      opacity: 0.55;
-    }
-
-    &:hover::before {
-      opacity: 1;
-    }
+    border: 1px solid var(--card-border-color);
+    border-radius: 18px;
+    color: var(--text-color);
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 18px 44px -38px rgba(30, 27, 75, 0.38);
   }
 
   .chart-card--day {
     background: linear-gradient(
-      160deg,
-      color-mix(in srgb, var(--primary-color) 2%, var(--menu-body-bg-color)),
-      var(--menu-body-bg-color)
+      145deg,
+      var(--menu-body-bg-color) 0%,
+      color-mix(in srgb, var(--primary-color) 2.5%, var(--menu-body-bg-color)) 100%
     );
-
-    &::before {
-      background:
-        radial-gradient(circle at 100% 0%, rgba(108, 99, 255, 0.07), transparent 44%),
-        radial-gradient(circle at 0% 100%, rgba(0, 194, 255, 0.05), transparent 50%);
-    }
   }
 
   .chart-card--night {
     background: linear-gradient(
-      155deg,
-      color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color)),
-      var(--menu-body-bg-color)
+      145deg,
+      var(--menu-body-bg-color) 0%,
+      color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color)) 100%
     );
-    border-color: color-mix(in srgb, var(--primary-color) 20%, var(--card-border-color));
-
-    &::before {
-      background:
-        radial-gradient(circle at 100% 0%, rgba(124, 92, 255, 0.13), transparent 46%),
-        radial-gradient(circle at 0% 100%, rgba(0, 229, 255, 0.08), transparent 56%);
-    }
   }
 
-  .chart-title {
-    font-size: 13px;
-    opacity: 0.9;
-    font-weight: 600;
+  .chart-header {
     position: relative;
     z-index: 1;
-    padding-left: 10px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .chart-heading-copy {
+    position: relative;
+    min-width: 0;
+    padding-left: 14px;
 
     &::before {
       content: '';
       position: absolute;
       left: 0;
-      top: 3px;
-      width: 3px;
-      height: 14px;
+      top: 1px;
+      width: 4px;
+      height: 34px;
       border-radius: 999px;
-      background: var(--noteType-hover-color);
+      background: var(--primary-color);
     }
   }
 
+  .chart-heading-copy h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 18px;
+    line-height: 1.25;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+  }
+
+  .chart-heading-copy p {
+    margin: 5px 0 0;
+    color: var(--desc-color);
+    font-size: 11.5px;
+    line-height: 1.45;
+  }
+
+  .trend-range-tabs.tab-container.is-segment {
+    flex: 0 0 auto;
+    border-radius: 10px;
+    background: var(--bl-input-noBorder-bg-color);
+  }
+
+  .trend-range-tabs :deep(.tab) {
+    min-width: 72px;
+    min-height: 34px;
+    justify-content: center;
+    padding: 0 14px;
+    line-height: 34px;
+  }
+
+  .trend-range-tabs :deep(.tab.is-active) {
+    color: var(--primary-color);
+    font-weight: 700;
+    background: var(--menu-body-bg-color);
+    box-shadow: inset 0 -2px 0 var(--primary-color);
+  }
+
+  .trend-content {
+    min-height: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .trend-summary-grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .trend-summary-card {
+    min-width: 0;
+    min-height: 68px;
+    padding: 10px 12px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--card-border-color);
+    border-left-width: 3px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, var(--bl-input-noBorder-bg-color));
+  }
+
+  .trend-summary-card--bookmark {
+    border-left-color: var(--resource-bookmark-color, #635bff);
+  }
+
+  .trend-summary-card--note {
+    border-left-color: var(--resource-note-color, #00a67e);
+  }
+
+  .trend-summary-card--file {
+    border-left-color: var(--resource-file-color, #ff8a00);
+  }
+
+  .trend-summary-icon {
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+  }
+
+  .trend-summary-card--bookmark .trend-summary-icon,
+  .trend-summary-card--bookmark strong {
+    color: var(--resource-bookmark-color, #635bff);
+  }
+
+  .trend-summary-card--bookmark .trend-summary-icon {
+    background: color-mix(in srgb, var(--resource-bookmark-color, #635bff) 10%, transparent);
+  }
+
+  .trend-summary-card--note .trend-summary-icon,
+  .trend-summary-card--note strong {
+    color: var(--resource-note-color, #00a67e);
+  }
+
+  .trend-summary-card--note .trend-summary-icon {
+    background: color-mix(in srgb, var(--resource-note-color, #00a67e) 10%, transparent);
+  }
+
+  .trend-summary-card--file .trend-summary-icon,
+  .trend-summary-card--file strong {
+    color: var(--resource-file-color, #ff8a00);
+  }
+
+  .trend-summary-card--file .trend-summary-icon {
+    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 10%, transparent);
+  }
+
+  .trend-summary-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .trend-summary-copy > span {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  .trend-summary-copy strong {
+    font-size: 20px;
+    line-height: 1.15;
+    font-weight: 760;
+    font-variant-numeric: tabular-nums;
+  }
+
   .chart-body {
-    margin-top: 10px;
     flex: 1;
     min-height: 0;
     position: relative;
     z-index: 1;
   }
 
-  .neon-trend {
+  .trend-plot {
+    min-height: 190px;
+    margin-top: 8px;
     overflow: hidden;
     border-radius: 10px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--menu-body-bg-color) 36%, transparent), transparent 54%),
-      radial-gradient(
-        circle at 50% 0%,
-        color-mix(in srgb, var(--noteType-hover-color) 10%, transparent),
-        transparent 54%
-      );
+    cursor: crosshair;
+  }
 
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(color-mix(in srgb, var(--text-color) 5%, transparent) 1px, transparent 1px),
-        linear-gradient(90deg, color-mix(in srgb, var(--text-color) 4%, transparent) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.6), transparent 78%);
-      opacity: 0.75;
-    }
+  .trend-axis-label {
+    position: absolute;
+    top: 7px;
+    left: 42px;
+    z-index: 2;
+    color: var(--desc-color);
+    font-size: 10px;
+    pointer-events: none;
   }
 
   .trend-canvas {
@@ -876,12 +1106,13 @@
 
   .trend-legend {
     position: absolute;
-    top: 5px;
-    left: 10px;
-    right: 10px;
+    left: 42px;
+    right: 16px;
+    bottom: 1px;
     display: flex;
+    justify-content: center;
     flex-wrap: wrap;
-    gap: 8px 12px;
+    gap: 8px 18px;
     align-items: center;
     pointer-events: none;
   }
@@ -889,16 +1120,16 @@
   .trend-legend-item {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     min-width: 0;
     color: var(--desc-color);
     font-size: 11px;
     line-height: 16px;
   }
 
-  .trend-legend-dot {
-    width: 7px;
-    height: 7px;
+  .trend-legend-line {
+    width: 18px;
+    height: 2px;
     border-radius: 999px;
     flex-shrink: 0;
   }
@@ -908,12 +1139,10 @@
     z-index: 3;
     min-width: 126px;
     padding: 8px 9px;
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, transparent);
-    border: 1px solid color-mix(in srgb, var(--noteType-hover-color) 30%, var(--workbench-border-color, transparent));
-    box-shadow:
-      0 10px 28px rgba(0, 0, 0, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--card-border-color);
+    border-radius: 9px;
+    background: var(--menu-body-bg-color);
+    box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.35);
     backdrop-filter: blur(12px);
     pointer-events: none;
   }
@@ -947,29 +1176,44 @@
     border-radius: 999px;
   }
 
-  .neon-type {
-    overflow: hidden;
+  .trend-insight {
+    min-height: 38px;
+    padding: 8px 11px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--card-border-color);
+    border-left: 3px solid var(--primary-color);
     border-radius: 10px;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--menu-body-bg-color) 38%, transparent), transparent 58%),
-      radial-gradient(
-        circle at 34% 50%,
-        color-mix(in srgb, var(--noteType-hover-color) 11%, transparent),
-        transparent 54%
-      );
+    color: var(--desc-color);
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color));
+    font-size: 11px;
+    line-height: 1.45;
+  }
 
-    &::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image:
-        linear-gradient(color-mix(in srgb, var(--text-color) 4%, transparent) 1px, transparent 1px),
-        linear-gradient(90deg, color-mix(in srgb, var(--text-color) 4%, transparent) 1px, transparent 1px);
-      background-size: 44px 44px;
-      mask-image: radial-gradient(circle at 34% 50%, rgba(0, 0, 0, 0.72), transparent 74%);
-      opacity: 0.68;
-    }
+  .trend-insight strong {
+    color: var(--text-color);
+    font-weight: 700;
+  }
+
+  .trend-insight-icon {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--primary-color);
+  }
+
+  .type-plot {
+    margin-top: 12px;
+    overflow: hidden;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--menu-body-bg-color) 92%, var(--bl-input-noBorder-bg-color));
   }
 
   .type-canvas {
@@ -993,7 +1237,6 @@
     line-height: 1;
     font-weight: 800;
     color: var(--text-color);
-    text-shadow: 0 0 16px color-mix(in srgb, var(--noteType-hover-color) 28%, transparent);
     font-variant-numeric: tabular-nums;
   }
 
@@ -1006,13 +1249,13 @@
 
   .type-legend {
     position: absolute;
-    top: 18px;
+    top: 28px;
     right: 10px;
     bottom: 12px;
     width: 136px;
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 7px;
     overflow: hidden;
   }
 
@@ -1024,8 +1267,8 @@
     min-height: 22px;
     padding: 3px 6px;
     border-radius: 7px;
-    background: color-mix(in srgb, var(--menu-body-bg-color) 52%, transparent);
-    border: 1px solid color-mix(in srgb, var(--text-color) 7%, transparent);
+    background: var(--menu-body-bg-color);
+    border: 1px solid var(--card-border-color);
     color: var(--desc-color);
     font-size: 10px;
 
@@ -1054,10 +1297,10 @@
   }
 
   .chart-empty {
-    margin-top: 10px;
+    margin-top: 12px;
     flex: 1;
     border-radius: 10px;
-    border: 1px dashed color-mix(in srgb, var(--primary-color) 15%, var(--card-border-color));
+    border: 1px dashed var(--card-border-color);
     background: color-mix(in srgb, var(--primary-color) 2.5%, var(--menu-body-bg-color));
     display: flex;
     flex-direction: column;
@@ -1114,7 +1357,7 @@
   }
 
   .chart-skeleton {
-    margin-top: 10px;
+    margin-top: 14px;
     flex: 1;
     border-radius: 10px;
     background: linear-gradient(
@@ -1127,6 +1370,10 @@
     animation: workbench-chart-shine 1.2s infinite;
   }
 
+  .chart-skeleton--trend {
+    min-height: 310px;
+  }
+
   @keyframes workbench-chart-shine {
     0% {
       background-position: 200% 0;
@@ -1136,17 +1383,44 @@
     }
   }
 
-  @media (max-width: 760px) {
+  @media (max-width: 1100px) {
     .chart-grid {
       grid-template-columns: 1fr;
+    }
+
+    .chart-card--trend,
+    .chart-card--type {
+      grid-column: auto;
+    }
+
+    .chart-card--type {
+      height: 340px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .chart-card {
+      height: auto;
+      min-height: 380px;
+      padding: 16px;
+    }
+
+    .chart-header {
+      flex-direction: column;
+    }
+
+    .trend-summary-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .trend-content {
+      min-height: 520px;
     }
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .chart-card::before,
     .chart-skeleton {
       animation: none;
-      transition: none;
     }
   }
 </style>

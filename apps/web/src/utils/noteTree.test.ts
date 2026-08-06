@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { canMoveNoteSubtreeToDepth, collectNoteDescendantIds, flattenNoteTree } from './noteTree';
+import {
+  canMoveNoteSubtreeToDepth,
+  collectNoteDescendantIds,
+  flattenNoteTree,
+  getNoteParentPathText,
+} from './noteTree';
 
 const tree = [
   {
@@ -54,5 +59,16 @@ describe('noteTree 前端纯函数', () => {
     expect(canMoveNoteSubtreeToDepth(7, 1, 8)).toBe(false);
     expect(canMoveNoteSubtreeToDepth(0, 7, 8)).toBe(true);
     expect(canMoveNoteSubtreeToDepth(0, 0, 0)).toBe(false);
+  });
+
+  it('卡片路径只显示父目录，不重复当前笔记标题，并兼容旧响应', () => {
+    expect(
+      getNoteParentPathText({
+        title: '复盘',
+        path: [{ title: '项目' }, { title: '模块' }, { title: '复盘' }],
+      }),
+    ).toBe('项目 / 模块');
+    expect(getNoteParentPathText({ title: '椅子', pathText: '椅子' })).toBe('');
+    expect(getNoteParentPathText({ title: '复盘', pathText: '项目 / 模块 / 复盘' })).toBe('项目 / 模块');
   });
 });

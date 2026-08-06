@@ -4,6 +4,30 @@ export interface FlatNoteTreeItem extends NoteTreeItem {
   depth: number;
 }
 
+/**
+ * 列表中的路径只展示父级目录；当前笔记标题已经在卡片/行首出现，不能再重复一遍。
+ * 同时兼容新后端的 path 数组和旧后端只返回 pathText 的响应。
+ */
+export function getNoteParentPathText(note: {
+  title?: unknown;
+  path?: Array<{ title?: unknown }> | null;
+  pathText?: unknown;
+}) {
+  if (Array.isArray(note.path)) {
+    return note.path
+      .slice(0, -1)
+      .map((item) => String(item?.title || '').trim())
+      .filter(Boolean)
+      .join(' / ');
+  }
+  const segments = String(note.pathText || '')
+    .split(' / ')
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (segments.at(-1) === String(note.title || '').trim()) segments.pop();
+  return segments.join(' / ');
+}
+
 export function flattenNoteTree(items: NoteTreeItem[] = []): FlatNoteTreeItem[] {
   const result: FlatNoteTreeItem[] = [];
   const visited = new Set<string>();
@@ -42,11 +66,7 @@ export function collectNoteDescendantIds(items: NoteTreeItem[] = [], rootId: str
   return descendants;
 }
 
-export function canMoveNoteSubtreeToDepth(
-  targetParentDepth: number,
-  subtreeRelativeDepth: number,
-  maxDepth: number,
-) {
+export function canMoveNoteSubtreeToDepth(targetParentDepth: number, subtreeRelativeDepth: number, maxDepth: number) {
   const parentDepth = Math.max(0, Math.trunc(Number(targetParentDepth) || 0));
   const relativeDepth = Math.max(0, Math.trunc(Number(subtreeRelativeDepth) || 0));
   const normalizedMaxDepth = Math.trunc(Number(maxDepth) || 0);

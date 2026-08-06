@@ -168,6 +168,80 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     expect(open.value).toBe(false);
   });
 
+  it('点击面包屑可一次切换到对应目录并关闭抽屉', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const open = ref(true);
+    const selected = vi.fn();
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(NoteDirectoryDrawer, {
+              open: open.value,
+              'onUpdate:open': (value: boolean) => (open.value = value),
+              currentParentId: 'a',
+              onSelect: selected,
+            });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    click('.note-drawer-breadcrumb > button:first-of-type');
+    await flushUi();
+
+    expect(open.value).toBe(false);
+    expect(selected).toHaveBeenCalledOnce();
+    expect(selected).toHaveBeenCalledWith(null);
+  });
+
+  it('浏览层级与已选目录不同时不再显示绿色勾选态', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () => h(NoteDirectoryDrawer, { open: true, currentParentId: 'a' });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    expect(document.querySelector('.note-drawer-current')?.classList.contains('is-selected')).toBe(true);
+    expect(document.querySelector('.note-drawer-current-check')).not.toBeNull();
+
+    click('.note-drawer-enter');
+    await flushUi();
+
+    expect(document.querySelector('.note-drawer-current')?.classList.contains('is-selected')).toBe(false);
+    expect(document.querySelector('.note-drawer-current-check')).toBeNull();
+  });
+
   it('移动端目录行菜单可将完整节点交给删除确认流程并先关闭抽屉', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -214,8 +288,9 @@ describe('NoteDirectoryDrawer 返回层级', () => {
   it('可注入确定性目录数据用于离线交互验收且不会请求业务接口', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    const toggledTop = vi.fn();
     const loadDirectoryLevel = vi.fn(async (parentId: string | null) => ({
-      items: [{ id: 'local', parentId, title: '离线目录', childCount: 0, hasChildren: false, isTop: false, sort: 0 }],
+      items: [{ id: 'local', parentId, title: '离线目录', childCount: 0, hasChildren: false, isTop: true, sort: 0 }],
       breadcrumb: parentId ? [{ id: parentId, title: '当前目录' }] : [],
     }));
     const app = createApp(
@@ -226,6 +301,7 @@ describe('NoteDirectoryDrawer 返回层级', () => {
               open: true,
               currentParentId: null,
               loadDirectoryLevel,
+              onToggleTop: toggledTop,
             });
         },
       }),
@@ -234,7 +310,7 @@ describe('NoteDirectoryDrawer 返回层级', () => {
       createI18n({
         legacy: false,
         locale: 'zh-CN',
-        messages: { 'zh-CN': { note: {}, common: {} } },
+        messages: { 'zh-CN': { note: {}, common: { pin: '置顶', unpin: '取消置顶' } } },
         missingWarn: false,
         fallbackWarn: false,
       }),
@@ -247,6 +323,14 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     expect(loadDirectoryLevel).toHaveBeenCalledWith(null);
     expect(mocks.apiBasePost).not.toHaveBeenCalled();
     expect(document.querySelector('.note-drawer-row-title')?.textContent).toContain('离线目录');
+    expect(document.querySelector('.note-drawer-row-pin')).not.toBeNull();
+    const unpinAction = [...document.querySelectorAll<HTMLButtonElement>('.dropdown-option')].find((option) =>
+      option.textContent?.includes('取消置顶'),
+    );
+    expect(unpinAction).toBeDefined();
+    unpinAction!.click();
+    await flushUi();
+    expect(toggledTop).toHaveBeenCalledWith(expect.objectContaining({ id: 'local', isTop: true }));
   });
 
   it('目录能力关闭时只展示标签且不会发送隐藏的目录请求', async () => {

@@ -44,11 +44,12 @@
             :aria-label="t('note.currentDirectory')"
           >
             <template v-for="(item, index) in detailBreadcrumbDisplay" :key="item.key">
-              <span v-if="index" aria-hidden="true">/</span>
+              <span v-if="index" class="note-detail-crumb-separator" aria-hidden="true">/</span>
               <BButton
                 v-if="item.kind === 'root'"
+                size="small"
                 class="note-detail-crumb"
-                @click="openBreadcrumbDirectory(null)"
+                @click="openBreadcrumbPage(null)"
               >
                 {{ t('note.knowledgeRoot') }}
               </BButton>
@@ -60,11 +61,20 @@
               >
                 …
               </span>
+              <span
+                v-else-if="item.id === note.id"
+                class="note-detail-crumb is-current"
+                :title="item.title || t('note.untitled')"
+                aria-current="page"
+              >
+                {{ item.title || t('note.untitled') }}
+              </span>
               <BButton
                 v-else
+                size="small"
                 class="note-detail-crumb"
-                :class="{ 'is-current': item.id === note.id }"
-                @click="item.id === note.id ? undefined : openBreadcrumbDirectory(item.id)"
+                :title="item.title || t('note.untitled')"
+                @click="openBreadcrumbPage(item.id)"
               >
                 {{ item.title || t('note.untitled') }}
               </BButton>
@@ -110,7 +120,10 @@
             v-if="noteTreeReadEnabled && nodeType === 'edit' && note.id"
             :note-id="note.id"
             :readonly="readonly || !noteTreeWriteEnabled"
+            :refresh-key="subpageRefreshKey"
             @create="createChildPage"
+            @attach="openAttachPages"
+            @move-self="openMoveSelf"
             @open="openSubpage"
           />
         </div>
@@ -127,6 +140,18 @@
       @restored="onVersionRestored"
     />
     <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
+    <NoteAttachPagesModal
+      v-if="noteTreeWriteEnabled && note.id"
+      v-model:visible="attachPagesVisible"
+      :target-note="{ id: note.id, title: note.title }"
+      @attached="handlePagesAttached"
+    />
+    <NoteMoveModal
+      v-if="noteTreeWriteEnabled && note.id"
+      v-model:visible="moveSelfVisible"
+      :note="moveSelfNote"
+      @moved="handleSelfMoved"
+    />
   </div>
 </template>
 
@@ -157,6 +182,8 @@
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import NoteSubpageSection from '@/components/noteLibrary/detail/NoteSubpageSection.vue';
+  import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
+  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
   import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
@@ -181,6 +208,7 @@
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import type { NoteBreadcrumbItem } from '@/types/noteTree';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
+  import { resolveNoteLibraryListPath } from '@/utils/noteDetailNavigation';
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -212,11 +240,12 @@
     const parent = routeQueryValue(router.currentRoute.value.query.parent);
     return parent ? { path: '/noteLibrary', query: { parent } } : { path: '/noteLibrary' };
   };
-  const safeNoteLibraryFromPath = () => {
-    const from = routeQueryValue(router.currentRoute.value.query.from);
-    return from.startsWith('/noteLibrary') && !from.startsWith('//') ? from : '';
+  const sourceNoteLibraryPath = () => resolveNoteLibraryListPath(router.currentRoute.value.query.from);
+  const detailSourceQuery = () => {
+    const from = sourceNoteLibraryPath();
+    return from ? { from } : {};
   };
-  const returnToSourceDirectory = () => router.push(safeNoteLibraryFromPath() || noteLibraryFallback());
+  const returnToSourceDirectory = () => router.push(sourceNoteLibraryPath() || noteLibraryFallback());
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -237,6 +266,7 @@
     content: initialNoteType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
     createBy: '',
     type: initialNoteType,
+    parentId: null as string | null,
   });
   const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
@@ -530,24 +560,66 @@
     editorRef.value?.scrollToMarkdownHeading?.(index, heading.sourceOffset);
   }
 
+  const attachPagesVisible = ref(false);
+  const moveSelfVisible = ref(false);
+  const subpageRefreshKey = ref(0);
+  const moveSelfNote = computed(() => ({
+    id: note.id,
+    title: note.title,
+    parentId: note.parentId || detailBreadcrumb.value.at(-2)?.id || null,
+  }));
+
   function createChildPage() {
     if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
     router.push({
       path: '/noteLibrary/add',
-      query: { type: 'html', parent: note.id, from: router.currentRoute.value.fullPath },
+      query: { type: 'html', parent: note.id, ...detailSourceQuery() },
+    });
+  }
+
+  function openAttachPages() {
+    if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
+    attachPagesVisible.value = true;
+  }
+
+  function handlePagesAttached() {
+    attachPagesVisible.value = false;
+    subpageRefreshKey.value += 1;
+    void loadDetailBreadcrumb(note.id);
+  }
+
+  function openMoveSelf() {
+    if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
+    moveSelfVisible.value = true;
+  }
+
+  function handleSelfMoved(result: { parentId?: string | null } | null) {
+    moveSelfVisible.value = false;
+    if (result && Object.prototype.hasOwnProperty.call(result, 'parentId')) {
+      note.parentId = result.parentId || null;
+    }
+    subpageRefreshKey.value += 1;
+    void loadDetailBreadcrumb(note.id);
+  }
+
+  function openNoteDetailPage(id: string) {
+    if (!id) return;
+    return router.push({
+      path: `/noteLibrary/${encodeURIComponent(id)}`,
+      query: detailSourceQuery(),
     });
   }
 
   function openSubpage(id: string) {
-    if (!id) return;
-    router.push({
-      path: `/noteLibrary/${encodeURIComponent(id)}`,
-      query: { from: router.currentRoute.value.fullPath },
-    });
+    void openNoteDetailPage(id);
   }
 
-  function openBreadcrumbDirectory(parentId: string | null) {
-    router.push(parentId ? { path: '/noteLibrary', query: { parent: parentId } } : { path: '/noteLibrary' });
+  function openBreadcrumbPage(pageId: string | null) {
+    if (!pageId) {
+      void router.push('/noteLibrary');
+      return;
+    }
+    void openNoteDetailPage(pageId);
   }
 
   async function loadDetailBreadcrumb(noteId: string) {
@@ -559,6 +631,7 @@
       const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true });
       detailBreadcrumb.value =
         response.status === 200 && Array.isArray(response.data?.items) ? response.data.items : [];
+      if (detailBreadcrumb.value.length) note.parentId = detailBreadcrumb.value.at(-2)?.id || null;
     } catch {
       detailBreadcrumb.value = [];
     }
@@ -646,6 +719,7 @@
         if (res.status === 200 && res.data?.id) {
           note.id = res.data.id;
           note.createBy = user.id;
+          note.parentId = params.parentId || null;
           if (!note.title || !note.title.trim()) {
             note.title = params.title;
           }
@@ -972,9 +1046,13 @@
       isLeaving.value = false;
       return;
     }
-    if (nodeType.value === 'add') {
-      returnToSourceDirectory();
-    } else if (safeNoteLibraryFromPath()) {
+    const parentId =
+      nodeType.value === 'add'
+        ? routeQueryValue(router.currentRoute.value.query.parent)
+        : note.parentId || detailBreadcrumb.value.at(-2)?.id || '';
+    if (parentId) {
+      void openNoteDetailPage(parentId);
+    } else if (nodeType.value === 'add' || sourceNoteLibraryPath()) {
       returnToSourceDirectory();
     } else {
       router.back();
@@ -1126,35 +1204,52 @@
   }
   .note-detail-breadcrumb {
     min-width: 0;
-    height: 32px;
-    padding: 0 10px;
+    height: 30px;
+    padding: 0 12px;
     flex: 0 0 auto;
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 3px;
     overflow: hidden;
     border-bottom: 1px solid var(--surface-border-color);
     color: var(--muted-text-color, var(--desc-color));
-    background: var(--workspace-panel-bg-color, var(--surface-page-bg));
+    background: var(--surface-page-bg, var(--background-color));
     font-size: 11px;
   }
 
   .note-detail-crumb {
     min-width: 0;
     max-width: 180px;
-    height: 24px;
-    padding: 0 4px;
+    height: 22px;
+    padding: 0 3px;
+    display: inline-flex;
+    align-items: center;
     overflow: hidden;
     color: var(--desc-color);
-    background: transparent;
+    border: 0 !important;
+    border-radius: 4px;
+    background: transparent !important;
     font-size: 11px;
+    line-height: 22px;
     text-overflow: ellipsis;
     white-space: nowrap;
+
+    &:hover,
+    &:focus-visible {
+      color: var(--resource-note-color, #00a884);
+      background: transparent !important;
+    }
 
     &.is-current {
       color: var(--resource-note-color, #00a884);
       font-weight: 650;
     }
+  }
+
+  .note-detail-crumb-separator {
+    flex: 0 0 auto;
+    color: var(--muted-text-color, var(--desc-color));
+    opacity: 0.65;
   }
 
   .note-detail-crumb-ellipsis {

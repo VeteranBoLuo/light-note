@@ -3,12 +3,25 @@
     <header class="note-subpage-header">
       <div class="note-subpage-heading">
         <strong>{{ t('note.subpageSection') }}</strong>
-        <span>{{ items.length }}</span>
+        <span>{{ items.length || t('note.noSubpagesShort') }}</span>
       </div>
-      <BButton v-if="!readonly" type="primary" class="note-subpage-create" @click="emit('create')">
-        <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
-        {{ t('note.newChildPage') }}
-      </BButton>
+      <div v-if="!readonly" class="note-subpage-actions">
+        <BDropdown
+          class="note-subpage-position-menu"
+          :trigger="'click'"
+          :align="'right'"
+          :menu-options="positionMenuOptions"
+        >
+          <BButton class="note-subpage-position-button" :title="t('note.pageRelations')">
+            <SvgIcon :src="icon.noteTree.move" size="14" aria-hidden="true" />
+            {{ t('note.pageRelations') }}
+          </BButton>
+        </BDropdown>
+        <BButton type="primary" class="note-subpage-create" @click="emit('create')">
+          <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
+          {{ t('note.newChildPage') }}
+        </BButton>
+      </div>
     </header>
 
     <BLoading v-if="loading" inline loading :title="t('common.loading')" />
@@ -23,27 +36,44 @@
       </BButton>
     </div>
     <p v-else-if="error" class="note-subpage-error">{{ error }}</p>
-    <p v-else class="note-subpage-empty">{{ t('note.noSubpages') }}</p>
   </section>
 </template>
 
 <script lang="ts" setup>
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
 
-  const props = withDefaults(defineProps<{ noteId: string; readonly?: boolean }>(), { readonly: false });
-  const emit = defineEmits<{ create: []; open: [id: string] }>();
+  const props = withDefaults(defineProps<{ noteId: string; readonly?: boolean; refreshKey?: number }>(), {
+    readonly: false,
+    refreshKey: 0,
+  });
+  const emit = defineEmits<{ create: []; attach: []; moveSelf: []; open: [id: string] }>();
   const { t } = useI18n();
   const items = ref<NoteTreeItem[]>([]);
   const loading = ref(false);
   const error = ref('');
   let requestSeq = 0;
+  const positionMenuOptions = computed(() => [
+    {
+      key: 'add-existing-children',
+      label: t('note.moveExistingUnderThisPage'),
+      icon: icon.noteTree.move,
+      function: () => emit('attach'),
+    },
+    {
+      key: 'move-this-page',
+      label: t('note.moveThisPageUnderAnother'),
+      icon: icon.noteTree.move,
+      function: () => emit('moveSelf'),
+    },
+  ]);
 
   async function loadSubpages() {
     const noteId = String(props.noteId || '').trim();
@@ -75,7 +105,7 @@
   }
 
   watch(
-    () => props.noteId,
+    () => [props.noteId, props.refreshKey] as const,
     () => void loadSubpages(),
     { immediate: true },
   );
@@ -84,10 +114,11 @@
 <style lang="less" scoped>
   .note-subpage-section {
     flex: 0 0 auto;
-    max-height: min(34vh, 270px);
-    padding: 10px 14px 12px;
+    max-height: min(18vh, 118px);
+    padding: 6px 10px 7px;
+    box-sizing: border-box;
     border-top: 1px solid var(--surface-border-color);
-    background: var(--workspace-panel-bg-color, var(--surface-page-bg));
+    background: var(--surface-page-bg, var(--background-color));
   }
 
   .note-subpage-header {
@@ -111,34 +142,57 @@
     }
   }
 
-  .note-subpage-create {
-    height: 30px;
+  .note-subpage-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .note-subpage-create,
+  .note-subpage-position-button {
+    height: 28px;
+    padding-inline: 9px;
     gap: 5px;
-    border-radius: 8px;
+    border-radius: 7px;
+    font-size: 12px;
+  }
+
+  .note-subpage-position-button {
+    border: 1px solid var(--surface-border-color);
+    color: var(--resource-note-color, #00a884);
+    background: transparent !important;
+  }
+
+  .note-subpage-position-menu {
+    display: inline-flex;
   }
 
   .note-subpage-list {
-    max-height: 180px;
-    margin-top: 7px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 5px;
+    max-height: 70px;
+    margin-top: 5px;
     overflow-y: auto;
   }
 
   .note-subpage-row {
     width: 100%;
-    min-height: 34px;
+    min-width: 0;
+    height: 32px;
     padding: 4px 7px;
     justify-content: flex-start;
     gap: 7px;
-    border: 1px solid transparent;
-    border-bottom-color: var(--surface-border-color);
+    border: 1px solid var(--surface-border-color) !important;
     border-radius: 7px;
     color: var(--desc-color);
-    background: transparent;
+    background: transparent !important;
 
     &:hover,
     &:focus-visible {
-      border-color: var(--resource-note-color, #00a884);
+      border-color: var(--resource-note-color, #00a884) !important;
       color: var(--resource-note-color, #00a884);
+      background: var(--menu-item-h-bg-color) !important;
     }
   }
 
@@ -156,26 +210,37 @@
     font-size: 11px;
   }
 
-  .note-subpage-empty,
   .note-subpage-error {
-    margin: 8px 0 0;
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-
-  .note-subpage-error {
+    margin: 6px 0 0;
     color: var(--danger-color, #dc2626);
+    font-size: 12px;
   }
 
   @media (max-width: 767px) {
     .note-subpage-section {
-      max-height: min(38dvh, 250px);
-      padding-inline: 12px;
-      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      max-height: min(18dvh, 108px);
+      padding: 6px 8px;
+    }
+
+    .note-subpage-list {
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      max-height: 76px;
     }
 
     .note-subpage-row {
-      min-height: 42px;
+      height: 38px;
+    }
+
+    .note-subpage-actions {
+      gap: 5px;
+    }
+
+    .note-subpage-heading {
+      gap: 5px;
+
+      strong {
+        font-size: 12px;
+      }
     }
   }
 </style>

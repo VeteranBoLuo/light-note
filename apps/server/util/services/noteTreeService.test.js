@@ -266,7 +266,7 @@ describe('noteTreeService 写入落点与移动', () => {
     expect(updateCalls).toHaveLength(2);
     expect(updateCalls[0]).toEqual([
       expect.stringContaining('SET parent_id = ?'),
-      [null, 1, 'a', 'u1'],
+      [null, 0, 1, 'a', 'u1'],
     ]);
     expect(updateCalls[1]).toEqual([
       expect.stringContaining('parent_id <=> ?'),
@@ -295,12 +295,59 @@ describe('noteTreeService 写入落点与移动', () => {
     expect(result).toMatchObject({ parentId: 'target', previousParentId: null, moved: true, updatedCount: 3 });
     expect(connection.query.mock.calls.slice(1)).toEqual([
       [expect.stringContaining('parent_id <=> ?'), [1, 'target', 'u1', null]],
-      [expect.stringContaining('SET parent_id = ?'), ['target', 1, 'moved', 'u1']],
+      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'moved', 'u1']],
       [expect.stringContaining('parent_id <=> ?'), [2, 'y', 'u1', 'target']],
     ]);
   });
 
-  it('拒绝跨父层、跨置顶组或过期锚点', async () => {
+  it('拖到置顶节点前时同步置顶，并分别收口两个分组的 sort', async () => {
+    const connection = createTreeConnection([
+      { id: 'pinned', parent_id: null, title: '置顶页面', sort: 0, is_top: 1, del_flag: 0 },
+      { id: 'moved', parent_id: null, title: '待移动', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'normal', parent_id: null, title: '普通页面', sort: 1, is_top: 0, del_flag: 0 },
+    ]);
+
+    const result = await moveOwnedNoteNode(connection, {
+      userId: 'u1',
+      id: 'moved',
+      nextId: 'pinned',
+    });
+
+    expect(result).toMatchObject({
+      id: 'moved',
+      parentId: null,
+      previousParentId: null,
+      isTop: true,
+      moved: true,
+      updatedCount: 3,
+    });
+    expect(connection.query.mock.calls.slice(1)).toEqual([
+      [expect.stringContaining('parent_id <=> ?'), [0, 'normal', 'u1', null]],
+      [expect.stringContaining('SET parent_id = ?'), [null, 1, 0, 'moved', 'u1']],
+      [expect.stringContaining('parent_id <=> ?'), [1, 'pinned', 'u1', null]],
+    ]);
+  });
+
+  it('置顶页面移入另一目录时自动取消旧父层的置顶状态', async () => {
+    const connection = createTreeConnection([
+      { id: 'target', parent_id: null, title: '目标目录', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'moved', parent_id: null, title: '待移动置顶页面', sort: 0, is_top: 1, del_flag: 0 },
+      { id: 'child', parent_id: 'target', title: '已有子页面', sort: 0, is_top: 0, del_flag: 0 },
+    ]);
+
+    const result = await moveOwnedNoteNode(connection, {
+      userId: 'u1',
+      id: 'moved',
+      parentId: 'target',
+    });
+
+    expect(result).toMatchObject({ parentId: 'target', previousParentId: null, isTop: false, moved: true });
+    expect(connection.query.mock.calls.slice(1)).toEqual([
+      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'moved', 'u1']],
+    ]);
+  });
+
+  it('拒绝跨父层、混用置顶分组或过期锚点', async () => {
     const connection = createTreeConnection([
       { id: 'target', parent_id: null, title: '目标', sort: 0, is_top: 0, del_flag: 0 },
       { id: 'moved', parent_id: null, title: '待移动', sort: 1, is_top: 0, del_flag: 0 },
@@ -314,6 +361,7 @@ describe('noteTreeService 写入落点与移动', () => {
         id: 'moved',
         parentId: 'target',
         previousId: 'pinned',
+        nextId: 'nested',
       }),
     ).rejects.toMatchObject({ code: 'INVALID_SORT_ANCHOR', status: 409 });
     expect(connection.query).toHaveBeenCalledTimes(1);

@@ -25,7 +25,7 @@ vi.mock('../util/services/todoService.js', () => ({
 }));
 vi.mock('../util/resourceInbox.js', () => ({ listInboxResources: mocks.listInboxResources }));
 
-const { getWorkbenchToday } = await import('./workbenchHandle.js');
+const { getWorkbenchSummary, getWorkbenchToday } = await import('./workbenchHandle.js');
 
 function createResponse() {
   return { send: vi.fn() };
@@ -114,7 +114,12 @@ describe('getWorkbenchToday', () => {
     await getWorkbenchToday({ user: { id: 'user-1' } }, res);
 
     const limits = mocks.listTodoPage.mock.calls.map(([, , options]) => [options.due, options.limit]);
-    expect(limits).toEqual(expect.arrayContaining([['overdue', 3], ['today', 4]]));
+    expect(limits).toEqual(
+      expect.arrayContaining([
+        ['overdue', 3],
+        ['today', 4],
+      ]),
+    );
     expect(mocks.listInboxResources.mock.calls[0][1]).toMatchObject({ limit: 3 });
   });
 
@@ -129,5 +134,34 @@ describe('getWorkbenchToday', () => {
     const res = createResponse();
     await getWorkbenchToday({ user: { id: 'user-1' } }, res);
     expect(res.send.mock.calls.at(-1)?.[0]).toMatchObject({ status: 500 });
+  });
+});
+
+describe('getWorkbenchSummary', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.pool.query.mockResolvedValue([[]]);
+    mocks.queryTodoPendingCount.mockResolvedValue(0);
+    mocks.listTodoPage.mockResolvedValue({ items: [], total: 0 });
+    mocks.listInboxResources.mockResolvedValue({ items: [] });
+  });
+
+  it('一次返回包含今天在内的近 30 天趋势，并限制查询上界', async () => {
+    const res = createResponse();
+    await getWorkbenchSummary({ user: { id: 'user-1' } }, res);
+
+    const payload = res.send.mock.calls.at(-1)?.[0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.trend).toHaveLength(30);
+    expect(payload.data.trend.at(-1)).toMatchObject({ bookmark: 0, note: 0, file: 0 });
+
+    const trendSqls = mocks.pool.query.mock.calls
+      .map(([sql]) => String(sql))
+      .filter((sql) => sql.includes('DATE_FORMAT'));
+    expect(trendSqls).toHaveLength(3);
+    trendSqls.forEach((sql) => {
+      expect(sql).toContain('INTERVAL 29 DAY');
+      expect(sql).toContain('INTERVAL 1 DAY');
+    });
   });
 });

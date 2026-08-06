@@ -153,7 +153,7 @@ describe('笔记置顶 handler', () => {
         { id: 'child', title: '模块' },
         { id: 'grandchild', title: '复盘' },
       ],
-      path_text: '项目 / 模块 / 复盘',
+      path_text: '项目 / 模块',
     });
   });
 

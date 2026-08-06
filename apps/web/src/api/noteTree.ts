@@ -11,6 +11,15 @@ export type NoteTreeFeatureName =
 
 export type NoteTreeFeatures = Record<NoteTreeFeatureName, boolean>;
 
+const NOTE_TREE_FEATURE_RESPONSE_KEYS = Object.freeze({
+  note_tree_read: 'noteTreeRead',
+  note_tree_write: 'noteTreeWrite',
+  note_tree_mobile: 'noteTreeMobile',
+  note_tree_subtree_trash: 'noteTreeSubtreeTrash',
+  ai_note_branch_scope: 'aiNoteBranchScope',
+  ai_note_branch_analysis: 'aiNoteBranchAnalysis',
+} satisfies Record<NoteTreeFeatureName, string>);
+
 export const DISABLED_NOTE_TREE_FEATURES: NoteTreeFeatures = Object.freeze({
   note_tree_read: false,
   note_tree_write: false,
@@ -25,9 +34,12 @@ export async function fetchNoteTreeFeatures(): Promise<NoteTreeFeatures> {
   if (response.status !== 200 || !response.data?.features) {
     throw new Error(String(response.data?.code || 'NOTE_TREE_FEATURES_UNAVAILABLE'));
   }
-  const raw = response.data.features as Partial<Record<NoteTreeFeatureName, unknown>>;
+  const raw = response.data.features as Record<string, unknown>;
   return Object.fromEntries(
-    Object.keys(DISABLED_NOTE_TREE_FEATURES).map((key) => [key, raw[key as NoteTreeFeatureName] === true]),
+    (Object.keys(DISABLED_NOTE_TREE_FEATURES) as NoteTreeFeatureName[]).map((key) => [
+      key,
+      raw[NOTE_TREE_FEATURE_RESPONSE_KEYS[key]] === true || raw[key] === true,
+    ]),
   ) as NoteTreeFeatures;
 }
 

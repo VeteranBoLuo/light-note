@@ -17,39 +17,38 @@
     </div>
     <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
     <div class="note-content">{{ summary }}</div>
-    <div v-if="note.pathText" class="note-path" :title="note.pathText">{{ note.pathText }}</div>
+    <div v-if="parentPathText" class="note-path" :title="parentPathText">{{ parentPathText }}</div>
     <div class="note-footer">
-      <div class="note-tags" v-if="note.tags && note.tags.length">
-        <ResourceTagChip
-          :key="tag.id || tag.name"
-          v-for="tag in visibleTags"
-          :tag="tag"
-          show-detail-corner
-          max-width="96px"
-          @click.stop="noteTypeChange(tag)"
-          @detail="openTagDetail(tag)"
-          v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
-        />
-        <BChip
-          v-if="hiddenTagCount > 0"
-          class="tag-more"
-          tone="neutral"
-          size="small"
-          :title="hiddenTagsLabel"
-          @click.stop
-        >
-          +{{ hiddenTagCount }}
-        </BChip>
-      </div>
-      <div v-else class="note-tags note-tags--empty"></div>
-      <div class="note-footer-meta">
+      <div class="note-footer-chips">
+        <div class="note-tags" v-if="note.tags && note.tags.length">
+          <ResourceTagChip
+            :key="tag.id || tag.name"
+            v-for="tag in visibleTags"
+            :tag="tag"
+            show-detail-corner
+            max-width="96px"
+            @click.stop="noteTypeChange(tag)"
+            @detail="openTagDetail(tag)"
+            v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+          />
+          <BChip
+            v-if="hiddenTagCount > 0"
+            class="tag-more"
+            tone="neutral"
+            size="small"
+            :title="hiddenTagsLabel"
+            @click.stop
+          >
+            +{{ hiddenTagCount }}
+          </BChip>
+        </div>
+        <div v-else class="note-tags note-tags--empty"></div>
         <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
           <span>{{ $t('note.childPages', { count: childCount }) }}</span>
           <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
         </BButton>
-        <span v-else></span>
-        <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
       </div>
+      <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
     </div>
     <div v-if="!bookmark.isMobile || batchMode" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
@@ -80,6 +79,7 @@
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
+  import { getNoteParentPathText } from '@/utils/noteTree';
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
     {
@@ -97,12 +97,12 @@
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
     action: [
-      action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'move' | 'delete',
+      action:
+        'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
     ];
   }>();
-  const childCount = computed(() =>
-    props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0,
-  );
+  const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
+  const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
 
   const mobileMenuOptions = computed(() => [
     {
@@ -128,7 +128,12 @@
             function: () => emit('action', 'createChild'),
           },
           {
-            label: t('note.movePage'),
+            label: t('note.addExistingPages'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'attach'),
+          },
+          {
+            label: t('note.moveThisPage'),
             icon: icon.noteTree.move,
             function: () => emit('action', 'move'),
           },
@@ -294,10 +299,12 @@
   }
 
   .note-tags {
+    flex: 1 1 auto;
+    min-width: 0;
     display: flex;
     gap: 6px;
     flex-wrap: nowrap;
-    width: 100%;
+    width: auto;
     // padding-top 是给 hover 时上溢的角标留的(本行 overflow: hidden),
     // 原来用等量负 margin 抵消掉了,标签因此贴着正文;去掉负值让标签落到正文与日期中间。
     // 卡片是固定 282px,这里多占的高度由正文区吸收,不会撑大卡片或改变网格
@@ -306,14 +313,13 @@
     min-height: 24px;
     overflow: hidden;
     align-items: center;
-    margin: 0 0 7px;
+    margin: 0;
 
     &--empty {
       padding-top: 0;
       margin-top: 0;
       visibility: hidden;
     }
-
   }
 
   .note-time {
@@ -322,17 +328,19 @@
     white-space: nowrap;
     line-height: 18px;
     text-align: right;
+    align-self: flex-end;
   }
 
-  .note-footer-meta {
+  .note-footer-chips {
     min-width: 0;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    align-items: flex-end;
     gap: 8px;
   }
 
   .note-child-count {
+    flex: 0 0 auto;
+    margin-bottom: 0;
     min-width: 0;
     height: 24px;
     padding: 0 6px;

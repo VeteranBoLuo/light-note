@@ -53,10 +53,6 @@ function compareNodes(left, right) {
   return String(right.id).localeCompare(String(left.id));
 }
 
-function samePinnedGroup(left, right) {
-  return Boolean(left?.isTop) === Boolean(right?.isTop);
-}
-
 export class NoteTreeError extends Error {
   constructor(code, message, status = 400, details = null) {
     super(message);
@@ -469,7 +465,7 @@ async function updateSiblingSort(connection, { userId, parentId, rows, skipId = 
  *
  * - 仅使用当前 owner 的完整加锁快照；
  * - parentId === undefined 表示旧排序调用保持当前父页面，null 才表示移动到根；
- * - 排序锚点必须属于目标父层且与被移动页面处于同一置顶分组；
+ * - 排序锚点必须属于目标父层；跨置顶分组时跟随锚点切换页面的 is_top；
  * - 结构变化不会写正文历史，也显式保留 update_time。
  */
 export async function moveOwnedNoteNode(
@@ -492,9 +488,25 @@ export async function moveOwnedNoteNode(
 
   const normalizedPreviousId = normalizeId(previousId);
   const normalizedNextId = normalizeId(nextId);
-  const targetGroup = getNoteTreeChildren(snapshot, targetParentId).filter(
-    (node) => node.id !== movedId && samePinnedGroup(node, moved),
+  const previousParentId = moved.effectiveParentId;
+  const targetSiblings = getNoteTreeChildren(snapshot, targetParentId).filter((node) => node.id !== movedId);
+  const previousAnchor = normalizedPreviousId
+    ? targetSiblings.find((node) => node.id === normalizedPreviousId)
+    : null;
+  const nextAnchor = normalizedNextId ? targetSiblings.find((node) => node.id === normalizedNextId) : null;
+  if (
+    (normalizedPreviousId && !previousAnchor) ||
+    (normalizedNextId && !nextAnchor) ||
+    (previousAnchor && nextAnchor && Boolean(previousAnchor.isTop) !== Boolean(nextAnchor.isTop))
+  ) {
+    throw new NoteTreeError('INVALID_SORT_ANCHOR', '排序锚点已失效', 409);
+  }
+  // 置顶是当前父层内的状态：移入新目录且没有显式排序锚点时默认回到普通组；
+  // 拖到某个节点前后时则跟随该锚点所在分组，让直接操作结果与视觉落点一致。
+  const targetIsTop = Boolean(
+    previousAnchor?.isTop ?? nextAnchor?.isTop ?? (previousParentId === targetParentId ? moved.isTop : false),
   );
+  const targetGroup = targetSiblings.filter((node) => Boolean(node.isTop) === targetIsTop);
   const insertIndex = assertValidMoveAnchors(targetGroup, {
     movedId,
     previousId: normalizedPreviousId,
@@ -502,29 +514,31 @@ export async function moveOwnedNoteNode(
   });
   targetGroup.splice(insertIndex, 0, moved);
 
-  const previousParentId = moved.effectiveParentId;
   const parentChanged = previousParentId !== targetParentId;
+  const pinnedChanged = Boolean(moved.isTop) !== targetIsTop;
   const previousGroup = getNoteTreeChildren(snapshot, previousParentId).filter(
-    (node) => node.id !== movedId && samePinnedGroup(node, moved),
+    (node) => node.id !== movedId && Boolean(node.isTop) === Boolean(moved.isTop),
   );
   const originalGroupIds = getNoteTreeChildren(snapshot, previousParentId)
-    .filter((node) => samePinnedGroup(node, moved))
+    .filter((node) => Boolean(node.isTop) === Boolean(moved.isTop))
     .map((node) => node.id);
   const targetGroupIds = targetGroup.map((node) => node.id);
-  const orderChanged = parentChanged || originalGroupIds.some((nodeId, index) => nodeId !== targetGroupIds[index]);
+  const orderChanged =
+    parentChanged || pinnedChanged || originalGroupIds.some((nodeId, index) => nodeId !== targetGroupIds[index]);
 
   if (!orderChanged) {
     return {
       id: movedId,
       parentId: targetParentId,
       previousParentId,
+      isTop: targetIsTop,
       moved: false,
       updatedCount: 0,
     };
   }
 
   let updatedCount = 0;
-  if (parentChanged) {
+  if (parentChanged || pinnedChanged) {
     updatedCount += await updateSiblingSort(db, {
       userId: normalizedUserId,
       parentId: previousParentId,
@@ -535,9 +549,9 @@ export async function moveOwnedNoteNode(
   const movedSort = targetGroup.findIndex((node) => node.id === movedId);
   const [moveResult] = await db.query(
     `UPDATE note
-        SET parent_id = ?, sort = ?, update_time = update_time
+        SET parent_id = ?, is_top = ?, sort = ?, update_time = update_time
       WHERE id = ? AND create_by = ? AND del_flag = 0`,
-    [targetParentId, movedSort, movedId, normalizedUserId],
+    [targetParentId, targetIsTop ? 1 : 0, movedSort, movedId, normalizedUserId],
   );
   if (Number(moveResult?.affectedRows || 0) !== 1) {
     throw new NoteTreeError('NOTE_TREE_MOVE_CONFLICT', '页面状态已变化，请刷新后重试', 409);
@@ -554,6 +568,7 @@ export async function moveOwnedNoteNode(
     id: movedId,
     parentId: targetParentId,
     previousParentId,
+    isTop: targetIsTop,
     moved: true,
     updatedCount,
   };

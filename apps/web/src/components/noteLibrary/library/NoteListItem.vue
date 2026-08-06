@@ -31,7 +31,7 @@
       -->
       <div class="note-meta-row">
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
-        <div v-if="note.pathText" class="note-path" :title="note.pathText">{{ note.pathText }}</div>
+        <div v-if="parentPathText" class="note-path" :title="parentPathText">{{ parentPathText }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
           它们同为 chip 形态，放在一个容器里既省一行高度，也比拆成两行整齐。
@@ -112,6 +112,7 @@
   import { useI18n } from 'vue-i18n';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import { getNoteParentPathText } from '@/utils/noteTree';
 
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
@@ -148,9 +149,13 @@
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'move' | 'delete'];
+    action: [
+      action:
+        'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
+    ];
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
+  const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -180,7 +185,12 @@
             function: () => emit('action', 'createChild'),
           },
           {
-            label: t('note.movePage'),
+            label: t('note.addExistingPages'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'attach'),
+          },
+          {
+            label: t('note.moveThisPage'),
             icon: icon.noteTree.move,
             function: () => emit('action', 'move'),
           },
@@ -290,6 +300,7 @@
 
         // 底行：徽章 + 标签靠左，时间被推到行尾
         .note-tags {
+          order: 0;
           width: 100%;
           flex-wrap: wrap;
           row-gap: 4px;
@@ -389,6 +400,7 @@
         text-overflow: ellipsis;
       }
       .note-tags {
+        order: -1;
         flex: 0 0 auto;
         display: flex;
         gap: 6px;

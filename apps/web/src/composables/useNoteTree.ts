@@ -218,6 +218,8 @@ export function useNoteTree(options: { enabled?: Ref<boolean> } = {}) {
   async function selectDirectory(parentId: string | null) {
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
+    // 目录与标签是两套互斥的分类范围；进入目录时不能继续叠加旧标签。
+    delete query.tag;
     if (parentId) query.parent = parentId;
     else delete query.parent;
     await router.push({ path: '/noteLibrary', query });

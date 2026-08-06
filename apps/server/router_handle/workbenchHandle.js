@@ -11,15 +11,13 @@ function dayLabel(date) {
   return `${month}-${day}`;
 }
 
-function getRecentDays() {
+function getRecentDays(totalDays = 30) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayOfWeek = today.getDay();
-  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
   const days = [];
-  for (let i = 0; i <= daysSinceMonday; i++) {
+  for (let i = totalDays - 1; i >= 0; i -= 1) {
     const d = new Date(today);
-    d.setDate(d.getDate() - daysSinceMonday + i);
+    d.setDate(d.getDate() - i);
     days.push(dayLabel(d));
   }
   return days;
@@ -158,13 +156,15 @@ async function queryTodaySummary(userId, actionLimits) {
 }
 
 async function queryTrend(userId) {
-  const days = getRecentDays();
+  const days = getRecentDays(30);
   const [bookmarkRows, noteRows, fileRows] = await Promise.all([
     pool.query(
       `
         SELECT DATE_FORMAT(create_time, '%m-%d') AS day, COUNT(*) AS count
         FROM bookmark
-        WHERE user_id = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        WHERE user_id = ? AND del_flag = 0
+          AND create_time >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+          AND create_time < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
         GROUP BY day
       `,
       [userId],
@@ -173,7 +173,9 @@ async function queryTrend(userId) {
       `
         SELECT DATE_FORMAT(COALESCE(update_time, create_time), '%m-%d') AS day, COUNT(*) AS count
         FROM note
-        WHERE create_by = ? AND del_flag = 0 AND COALESCE(update_time, create_time) >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        WHERE create_by = ? AND del_flag = 0
+          AND COALESCE(update_time, create_time) >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+          AND COALESCE(update_time, create_time) < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
         GROUP BY day
       `,
       [userId],
@@ -182,7 +184,9 @@ async function queryTrend(userId) {
       `
         SELECT DATE_FORMAT(create_time, '%m-%d') AS day, COUNT(*) AS count
         FROM files
-        WHERE create_by = ? AND del_flag = 0 AND create_time >= DATE_SUB(CURDATE(), INTERVAL WEEKDAY(CURDATE()) DAY)
+        WHERE create_by = ? AND del_flag = 0
+          AND create_time >= DATE_SUB(CURDATE(), INTERVAL 29 DAY)
+          AND create_time < DATE_ADD(CURDATE(), INTERVAL 1 DAY)
         GROUP BY day
       `,
       [userId],

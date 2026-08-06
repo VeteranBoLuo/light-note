@@ -368,6 +368,7 @@ export const registerUser = async (req, res) => {
     params.preferences = JSON.stringify({
       theme: 'day',
       noteViewMode: 'card',
+      noteSidebarMode: 'directory',
       homePage: 'bookmark',
       lang: detectLangFromReq(req),
     });
@@ -1254,6 +1255,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
         const defaultPreferences = JSON.stringify({
           theme: 'day',
           noteViewMode: 'card',
+          noteSidebarMode: 'directory',
           homePage: 'bookmark',
           lang: detectLangFromReq(req),
         });

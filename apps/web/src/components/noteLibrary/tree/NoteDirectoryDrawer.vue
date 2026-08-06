@@ -14,22 +14,49 @@
 
       <template v-if="activeTab === 'directory'">
         <nav class="note-drawer-breadcrumb" :aria-label="t('note.currentDirectory')">
-          <BButton :class="{ 'is-current': browseParentId === null }" @click="browseTo(null)">
+          <BButton
+            :class="{
+              'is-current': browseParentId === null,
+              'is-selected': props.currentParentId === null,
+            }"
+            :aria-current="browseParentId === null ? 'page' : undefined"
+            @click="selectDirectory(null)"
+          >
             {{ t('note.knowledgeRoot') }}
           </BButton>
           <template v-for="item in breadcrumb" :key="item.id">
             <span aria-hidden="true">/</span>
-            <BButton :class="{ 'is-current': item.id === browseParentId }" @click="browseTo(item.id)">
+            <BButton
+              :class="{
+                'is-current': item.id === browseParentId,
+                'is-selected': item.id === props.currentParentId,
+              }"
+              :aria-current="item.id === browseParentId ? 'page' : undefined"
+              @click="selectDirectory(item.id)"
+            >
               {{ item.title || t('note.untitled') }}
             </BButton>
           </template>
         </nav>
 
-        <BButton class="note-drawer-current" @click="selectDirectory(browseParentId)">
+        <BButton
+          class="note-drawer-current"
+          :class="{ 'is-selected': isBrowsingSelectedDirectory }"
+          :aria-pressed="isBrowsingSelectedDirectory"
+          @click="selectDirectory(browseParentId)"
+        >
           <SvgIcon :src="browseParentId ? icon.resource.note : icon.noteTree.root" size="17" aria-hidden="true" />
           <span>{{ browseTitle }}</span>
-          <span>{{ t('note.selectThisDirectory') }}</span>
-          <SvgIcon :src="icon.filterPanel.check" size="15" aria-hidden="true" />
+          <span class="note-drawer-current-action">
+            {{ isBrowsingSelectedDirectory ? t('note.selectedDirectory') : t('note.selectThisDirectory') }}
+          </span>
+          <SvgIcon
+            v-if="isBrowsingSelectedDirectory"
+            class="note-drawer-current-check"
+            :src="icon.filterPanel.check"
+            size="15"
+            aria-hidden="true"
+          />
         </BButton>
 
         <BLoading v-if="loading" inline loading :title="t('common.loading')" />
@@ -38,6 +65,9 @@
             <BButton class="note-drawer-select" @click="selectDirectory(item.id)">
               <SvgIcon :src="icon.resource.note" size="17" aria-hidden="true" />
               <span class="note-drawer-row-title">{{ item.title || t('note.untitled') }}</span>
+              <span v-if="item.isTop" class="note-drawer-row-pin" :aria-label="t('common.pinned')">
+                <SvgIcon :src="icon.contextMenu.pin" size="13" aria-hidden="true" />
+              </span>
               <span v-if="item.childCount" class="note-drawer-row-count">{{ item.childCount }}</span>
             </BButton>
             <BButton
@@ -125,6 +155,8 @@
     selectTag: [key: string];
     openPage: [node: NoteTreeItem];
     create: [node: NoteTreeItem];
+    attach: [node: NoteTreeItem];
+    toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
@@ -145,6 +177,7 @@
     { key: 'tags', label: t('note.tagsTab') },
   ]);
   const browseTitle = computed(() => breadcrumb.value[breadcrumb.value.length - 1]?.title || t('note.knowledgeRoot'));
+  const isBrowsingSelectedDirectory = computed(() => browseParentId.value === props.currentParentId);
 
   function registerHistory() {
     if (!open.value || historyHandle) return;
@@ -189,8 +222,18 @@
     await closeThen(() => emit('selectTag', key));
   }
 
-  async function closeAndEmit(kind: 'openPage' | 'create' | 'move' | 'delete', node: NoteTreeItem) {
-    await closeThen(() => emit(kind, node));
+  async function closeAndEmit(
+    kind: 'openPage' | 'create' | 'attach' | 'toggleTop' | 'move' | 'delete',
+    node: NoteTreeItem,
+  ) {
+    await closeThen(() => {
+      if (kind === 'openPage') emit('openPage', node);
+      else if (kind === 'create') emit('create', node);
+      else if (kind === 'attach') emit('attach', node);
+      else if (kind === 'toggleTop') emit('toggleTop', node);
+      else if (kind === 'move') emit('move', node);
+      else emit('delete', node);
+    });
   }
 
   function directoryActions(node: NoteTreeItem) {
@@ -203,12 +246,22 @@
       ...(props.writeEnabled
         ? [
             {
+              label: node.isTop ? t('common.unpin') : t('common.pin'),
+              icon: node.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+              function: () => closeAndEmit('toggleTop', node),
+            },
+            {
               label: t('note.newChildPage'),
               icon: icon.common.add,
               function: () => closeAndEmit('create', node),
             },
             {
-              label: t('note.movePage'),
+              label: t('note.addExistingPages'),
+              icon: icon.noteTree.move,
+              function: () => closeAndEmit('attach', node),
+            },
+            {
+              label: t('note.moveThisPage'),
               icon: icon.noteTree.move,
               function: () => closeAndEmit('move', node),
             },
@@ -338,8 +391,12 @@
       font-size: 12px;
 
       &.is-current {
-        color: var(--resource-note-color, #00a884);
+        color: var(--text-color);
         font-weight: 650;
+      }
+
+      &.is-selected {
+        color: var(--resource-note-color, #00a884);
       }
     }
   }
@@ -351,16 +408,38 @@
     padding: 6px 10px;
     justify-content: flex-start;
     gap: 8px;
-    border: 1px solid var(--resource-note-color, #00a884);
+    border: 1px solid var(--surface-border-color);
     border-radius: 10px;
-    color: var(--resource-note-color, #00a884);
-    background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--menu-body-bg-color));
-    font-weight: 650;
+    color: var(--text-color);
+    background: var(--menu-body-bg-color);
+    font-weight: 500;
+    transition:
+      border-color 0.16s ease,
+      color 0.16s ease,
+      background-color 0.16s ease;
 
-    span:nth-of-type(2) {
+    .note-drawer-current-action {
       margin-left: auto;
+      color: var(--resource-note-color, #00a884);
       font-size: 11px;
-      font-weight: 500;
+      font-weight: 650;
+    }
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--resource-note-color, #00a884);
+    }
+
+    &.is-selected {
+      border-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--menu-body-bg-color));
+      font-weight: 650;
+
+      .note-drawer-current-action {
+        color: inherit;
+        font-weight: 500;
+      }
     }
   }
 
@@ -407,6 +486,13 @@
   .note-drawer-row-count {
     margin-left: auto;
     font-size: 11px;
+  }
+
+  .note-drawer-row-pin {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    color: var(--primary-color);
   }
 
   .note-drawer-enter,

@@ -606,7 +606,10 @@ export const queryNoteList = async (req, res) => {
       if (treeSnapshot && hasTreeFilter) {
         const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
         note.path = path;
-        note.path_text = path.map((item) => item.title).join(' / ');
+        note.path_text = path
+          .slice(0, -1)
+          .map((item) => item.title)
+          .join(' / ');
       }
     });
     try {
