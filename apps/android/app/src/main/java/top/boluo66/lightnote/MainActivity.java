@@ -108,12 +108,6 @@ public final class MainActivity extends Activity {
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
     private boolean resolvedNightTheme;
-    /**
-     * 上一次推给网页的系统深浅色。null 表示还没推过。
-     * 与 resolvedNightTheme 不是一回事：那个跟随网页当前 data-theme（用户可能手动选了深/浅色），
-     * 这个只记系统开关，两者混用会让「手动浅色 + 系统深色」这种组合互相打架。
-     */
-    private Boolean lastNotifiedSystemNight;
     private boolean backNavigationPending;
     private long lastRootBackPressedAt;
     private int backHintAnimationGeneration;
@@ -189,7 +183,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        pushSystemThemeToWeb(WindowInsetsSupport.isNightMode(this));
+        pushSystemThemeToWeb(WindowInsetsSupport.isSystemNightMode());
         // 只在前台登记：退到后台还弹对话框是打扰，那时也不该由我们发起 startActivity
         WebViewSupport.setDownloadOpenPrompt(this::promptOpenCalendarFile);
     }
@@ -203,9 +197,8 @@ public final class MainActivity extends Activity {
     /**
      * 日历文件下载完成后就地问一句「要不要现在导入」。
      *
-     * 只把文件放进「下载」目录是不够用的：用户不知道文件在哪，找到了还得自己选「用日历打开」，
-     * 中间掉队的人很多。不问自动打开会更少一步，但那等于用户点了「导出文件」却被甩进另一个
-     * 应用，太突兀；弹一次确认既省掉那两步，又保留了用户的选择权。
+     * 不问自动打开会更少一步，但那等于用户点了「导出文件」却被甩进另一个应用，太突兀；
+     * 弹一次确认既省掉「去文件管理里找 → 选用日历打开」这两步，又保留了用户的选择权。
      */
     private void promptOpenCalendarFile(long downloadId, String fileName) {
         runOnUiThread(() -> {
@@ -230,33 +223,34 @@ public final class MainActivity extends Activity {
      * 重新获得窗口焦点时补一次系统主题。
      *
      * 这条覆盖的是最常见的操作：下拉通知栏点深色开关。那时 App 并没有退到后台，
-     * onResume 不会触发；而通知栏收起、焦点回到 App 时这里一定会走，此刻 Configuration
-     * 已是最新。真机上 onConfigurationChanged 与 onResume 都没能让界面实时跟随，
-     * 缺的正是这条路径。
+     * onResume 不会触发；而通知栏收起、焦点回到 App 时这里一定会走。
+     *
+     * 取值用 isSystemNightMode()（系统级配置）而不是 isNightMode(this)：Activity 的
+     * Resources 副本更新滞后，读它会拿到切换前的值 —— 那正是「只有第一次切换生效」的来源。
      */
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            pushSystemThemeToWeb(WindowInsetsSupport.isNightMode(this));
+            pushSystemThemeToWeb(WindowInsetsSupport.isSystemNightMode());
         }
     }
 
     /**
-     * 只在与上次推送的值不同时才通知网页，避免每次回前台都白跑一次 evaluateJavascript。
+     * 把系统深浅色推给网页。
      *
-     * 三个调用点都保留：真机（鸿蒙 6 + 卓易通）实测确实有推送发出，但无法确定是哪一条路径命中，
-     * 各 ROM 对 onConfigurationChanged / onResume / onWindowFocusChanged 的回调时机差异很大，
-     * 留全三条最稳。重复触发由这里的去重挡掉，代价只是一次比较。
+     * 刻意不做「与上次相同就跳过」的去重：真机上正是它导致「只有第一次切换生效」——
+     * 某次回调读到滞后的配置、把记录值写成了错的，此后真正的切换全被当成重复而吞掉。
+     * 推送本身只是一句 evaluateJavascript，网页那边 applyDocumentTheme 幂等，
+     * 多推几次的代价远小于漏推一次；三条路径里只要有一条读到正确值，界面就能收敛到对。
+     *
+     * 三个调用点都保留：各 ROM 对 onConfigurationChanged / onResume / onWindowFocusChanged
+     * 的回调时机差异很大，鸿蒙兼容层上尤其不可预期。
      */
     private void pushSystemThemeToWeb(boolean nightMode) {
         if (webView == null || isFinishing() || isDestroyed()) {
             return;
         }
-        if (lastNotifiedSystemNight != null && lastNotifiedSystemNight == nightMode) {
-            return;
-        }
-        lastNotifiedSystemNight = nightMode;
         WebViewSupport.notifySystemThemeChanged(webView, nightMode);
     }
 

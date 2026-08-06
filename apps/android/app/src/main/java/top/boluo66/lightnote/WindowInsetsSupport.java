@@ -3,6 +3,7 @@ package top.boluo66.lightnote;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Color;
 import android.os.Build;
 import android.view.View;
@@ -78,6 +79,22 @@ final class WindowInsetsSupport {
      */
     static boolean isNightMode(Context context) {
         int nightMode = context.getResources().getConfiguration().uiMode
+            & Configuration.UI_MODE_NIGHT_MASK;
+        return nightMode == Configuration.UI_MODE_NIGHT_YES;
+    }
+
+    /**
+     * 系统当前是否深色，读全局系统资源而不是某个 Context 的。
+     *
+     * Activity / Application 的 Resources 持有各自的配置副本，更新时机滞后于系统：在
+     * onResume、onWindowFocusChanged 这类时刻用 isNightMode(this) 可能仍读到切换「前」的值，
+     * 而某些 ROM 干脆不回调 onConfigurationChanged，那份副本会一直不刷新。
+     * Resources.getSystem() 拿的是系统级配置，不受这些副本影响。
+     *
+     * 本应用没有用 UiModeManager 覆盖过 uiMode，所以系统级值就是我们要的「系统深色开关」。
+     */
+    static boolean isSystemNightMode() {
+        int nightMode = Resources.getSystem().getConfiguration().uiMode
             & Configuration.UI_MODE_NIGHT_MASK;
         return nightMode == Configuration.UI_MODE_NIGHT_YES;
     }
