@@ -139,6 +139,7 @@
   import { recordOperation } from '@/api/commonApi';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
 
   interface TodayInboxItem {
     resourceType: 'bookmark' | 'note' | 'file';
@@ -163,8 +164,10 @@
   const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
-  const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
+  const dailyGrowthBonus = computed(
+    () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
+  );
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
 
@@ -174,21 +177,12 @@
     try {
       const res = await claimDailyBonus();
       if (res?.status === 200 && res.data?.ok) {
-        if (res.data.already) {
-          message.info(t('growth.questClaimedAlready'));
-        } else if (res.data.capped) {
-          message.info(t('growth.questCapped'));
+        const feedback = resolveDailyQuestClaimFeedback(res.data);
+        if (feedback.level === 'success') {
+          message.success(t(feedback.key, feedback.params));
+          recordOperation({ module: '工作台', operation: dailyQuestClaimLogText(res.data) });
         } else {
-          const points = res.data.pointsEarned || 0;
-          message.success(
-            points > 0
-              ? t('growth.questClaimOkPts', { n: res.data.expGained, p: points })
-              : t('growth.questClaimOk', { n: res.data.expGained }),
-          );
-          recordOperation({
-            module: '工作台',
-            operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${points}）`,
-          });
+          message.info(t(feedback.key, feedback.params));
         }
       }
     } catch (error) {

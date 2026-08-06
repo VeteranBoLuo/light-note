@@ -377,7 +377,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, defineAsyncComponent, onActivated, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { apiBasePost } from '@/http/request.ts';
@@ -400,6 +400,8 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import type { ActionCaptureType } from '@/store/inbox.ts';
   import { openNotificationPanel } from '@/utils/notificationEntry';
 
@@ -434,8 +436,10 @@
   } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
-  const dailyGrowthBonus = computed(() => dashboard.value?.questBonus || { exp: 0, claimed: false, claimable: false });
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && dashboard.value.questsEnabled !== false));
+  const dailyGrowthBonus = computed(
+    () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
+  );
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
   const growthSectionLoading = computed(
@@ -448,21 +452,12 @@
     try {
       const res = await claimDailyBonus();
       if (res?.status === 200 && res.data?.ok) {
-        if (res.data.already) {
-          message.info(t('growth.questClaimedAlready'));
-        } else if (res.data.capped) {
-          message.info(t('growth.questCapped'));
+        const feedback = resolveDailyQuestClaimFeedback(res.data);
+        if (feedback.level === 'success') {
+          message.success(t(feedback.key, feedback.params));
+          recordOperation({ module: '工作台', operation: dailyQuestClaimLogText(res.data) });
         } else {
-          const points = res.data.pointsEarned || 0;
-          message.success(
-            points > 0
-              ? t('growth.questClaimOkPts', { n: res.data.expGained, p: points })
-              : t('growth.questClaimOk', { n: res.data.expGained }),
-          );
-          recordOperation({
-            module: '工作台',
-            operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${points}）`,
-          });
+          message.info(t(feedback.key, feedback.params));
         }
       }
     } catch (error) {
@@ -845,16 +840,26 @@
     router.push('/updateLogs');
   }
 
-  async function fetchWorkbenchSummary() {
-    loadingWorkbench.value = true;
-    workbenchError.value = null;
+  /**
+   * silent: 回到前台的静默补刷 —— 不进骨架屏、失败不弹错误条(保留屏上旧数据),
+   * 并把失败抛给调用方，让 useForegroundRefresh 保留陈旧计时、下次唤醒再试。
+   * 用户点刷新按钮走的仍是非静默路径：主动操作要有 loading 和失败反馈。
+   */
+  async function fetchWorkbenchSummary(options: { silent?: boolean } = {}) {
+    const silent = options.silent === true;
+    if (!silent) {
+      loadingWorkbench.value = true;
+      workbenchError.value = null;
+    }
     try {
       const res = await apiBasePost('/api/workbench/summary');
       if (res.status !== 200) {
-        workbenchError.value = {
+        const failure = {
           message: res.msg || t('common.requestFailedDescription'),
           requestId: res.requestId,
         };
+        if (silent) throw Object.assign(new Error(failure.message), { requestId: failure.requestId });
+        workbenchError.value = failure;
         return;
       }
       const data = res.data || {};
@@ -895,12 +900,13 @@
       recentNoteTable.value = Array.isArray(data.recentNotes) ? data.recentNotes : [];
       recentFileTable.value = Array.isArray(data.recentFiles) ? data.recentFiles : [];
     } catch (error: any) {
+      if (silent) throw error;
       workbenchError.value = {
         message: error?.message || t('common.requestFailedDescription'),
         requestId: error?.requestId,
       };
     } finally {
-      loadingWorkbench.value = false;
+      if (!silent) loadingWorkbench.value = false;
     }
   }
 
@@ -958,11 +964,21 @@
     { immediate: true },
   );
 
-  onActivated(() => {
-    if (initializedOwner.value) {
-      void loadDashboard();
-      void loadGrowthTasks(true);
-    }
+  /*
+   * 从后台切回前台时补一次数据。原来这里是 onActivated（本意是「回到工作台时重新取数」），
+   * 但全站没有 keep-alive，路由切回来就是重新挂载，那件事已由上面 immediate 的 watch 走 init 完成；
+   * 剩下真正会拿到陈旧数据的只有「页面一直在、人离开了」—— 工作台正是最容易被丢在标签页里开一天的页面，
+   * 而它满屏都是绑「今天」的内容（逾期/今日待办、收集箱、每日任务、签到）。
+   * 三个请求都走静默路径：不进骨架屏、失败保留旧数据，唯一的反馈是顶部那条全局细进度条。
+   */
+  useForegroundRefresh({
+    refresh: async () => {
+      await Promise.all([fetchWorkbenchSummary({ silent: true }), loadDashboard(), loadGrowthTasks(true)]);
+      // 与 init 同口径：角标计数最终以 /inbox/count 为准，否则静默刷新会把工作台自己的口径留给角标。
+      if (user.id && user.role !== 'visitor') await inbox.refreshCount();
+    },
+    // 首屏还没成功过、或 init 正在跑时不插队：前者没有旧数据可保，后者会重复打同一批请求。
+    canRefresh: () => Boolean(initializedOwner.value) && !initRunning.value,
   });
 </script>
 

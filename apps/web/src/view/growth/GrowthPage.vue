@@ -44,7 +44,7 @@
         桌面端不分 Tab，这一行仍是「每日任务 + 数据统计」两栏并排(移动端本就纵列)。
       -->
       <div v-if="showQuestsStatsRow" class="growth-row">
-        <section v-if="questsEnabled && showGrowthSection('tasks')" class="growth-panel growth-panel--flex">
+        <section v-if="showGrowthSection('tasks')" class="growth-panel growth-panel--flex">
           <DailyQuests
             :quests="quests"
             :bonus="questBonus"
@@ -106,7 +106,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onActivated, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import GrowthCard from '@/components/growth/GrowthCard.vue';
@@ -133,6 +133,8 @@
   import growthApi from '@/api/growthApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
+  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
 
   type MobileGrowthSection = 'overview' | 'tasks' | 'achievements' | 'assets';
 
@@ -186,9 +188,7 @@
    * 「每日任务 + 数据统计」这一行的外层。移动端两个子项分属不同 Tab（任务 / 概览），
    * 所以要在任一子项可见时才渲染外层，否则空 div 会白占容器 18px 的 gap。
    */
-  const showQuestsStatsRow = computed(
-    () => showGrowthSection('overview') || (questsEnabled.value && showGrowthSection('tasks')),
-  );
+  const showQuestsStatsRow = computed(() => showGrowthSection('overview') || showGrowthSection('tasks'));
 
   function scrollToHash() {
     const targetId = route.hash.replace(/^#/, '');
@@ -223,13 +223,11 @@
     weekExp: 0,
     checkinDays: [] as string[],
   };
-  const EMPTY_BONUS = { exp: 0, claimed: false, claimable: false };
+  const EMPTY_BONUS = { exp: 0, points: 0, claimed: false, claimable: false };
   const stats = computed(() => dashboard.value?.stats || EMPTY_STATS);
   const achievements = computed(() => dashboard.value?.achievements || []);
   const quests = computed(() => dashboard.value?.quests || []);
   const timeline = computed(() => dashboard.value?.timeline || []);
-  // 仅在后端明确 questsEnabled===false(满级/root)时隐藏任务卡;游客/加载中默认展示
-  const questsEnabled = computed(() => dashboard.value?.questsEnabled !== false);
   const questBonus = computed(() => dashboard.value?.questBonus || EMPTY_BONUS);
   const streakMilestones = computed(() => dashboard.value?.streakMilestones || []);
   const currentStreak = computed(() => dashboard.value?.currentStreak ?? growth.value?.streak ?? 0);
@@ -241,18 +239,12 @@
     try {
       const res = await claimDailyBonus();
       if (res?.status === 200 && res.data?.ok) {
-        if (res.data.already) {
-          message.info(t('growth.questClaimedAlready'));
-        } else if (res.data.capped) {
-          message.info(t('growth.questCapped'));
+        const feedback = resolveDailyQuestClaimFeedback(res.data);
+        if (feedback.level === 'success') {
+          message.success(t(feedback.key, feedback.params));
+          recordOperation({ module: '成长', operation: dailyQuestClaimLogText(res.data) });
         } else {
-          const pts = res.data.pointsEarned || 0;
-          if (pts > 0) {
-            message.success(t('growth.questClaimOkPts', { n: res.data.expGained, p: pts }));
-          } else {
-            message.success(t('growth.questClaimOk', { n: res.data.expGained }));
-          }
-          recordOperation({ module: '成长', operation: `领取每日任务奖励（经验+${res.data.expGained}、积分+${pts}）` });
+          message.info(t(feedback.key, feedback.params));
         }
       }
     } catch (err) {
@@ -293,14 +285,22 @@
     scrollToHash();
   });
 
-  onActivated(() => {
-    // 从笔记库、书签或待办返回时，资源旁路完成可能已经更新了一次性任务状态。
-    void loadGrowthTasks(true);
-    void loadRecap();
-    scrollToHash();
+  /*
+   * 从后台切回前台时补一次数据。原来这里是 onActivated（本意是「从笔记库、书签或待办
+   * 返回时同步旁路完成的任务状态」），但全站没有 keep-alive，从别处回到本页就是重新挂载，
+   * 那件事已由上面的 onMounted 完成；真正取不到新数据的只有「页面一直在、人离开了」：
+   * Android App 切后台再回来、PC 标签页搁很久再切回。
+   * 成长页几乎每块都绑在「今天」上（每日任务、签到、连续天数），挂一夜回来看到的会是昨天。
+   * 刷新过程静默，提示由顶部那条全局细进度条负责（composable 内部已注册）。
+   */
+  useForegroundRefresh({
+    refresh: () => Promise.all([loadDashboard(), loadGrowthTasks(true), loadRecap()]),
+    // 领取奖励在途或周报弹框开着时不插队刷新：会把面板数据换到用户正在看的内容底下。
+    canRefresh: () => !claiming.value && !claimingAch.value && !wrVisible.value,
   });
 
-  // 工作台「查看全部成长任务」会带 hash；页面被 keep-alive 时也要响应同页 hash 变化。
+  // 工作台「查看全部成长任务」会带 hash；已在成长页时再进一次不会重挂载（router-view key 固定），
+  // 所以同页 hash 变化要单独响应。
   watch(
     () => route.hash,
     () => scrollToHash(),

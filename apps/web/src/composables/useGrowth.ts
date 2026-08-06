@@ -83,7 +83,10 @@ export interface TimelineItem {
 }
 
 export interface QuestBonus {
+  /** 一次性经验。root 的经验不入账，这里为 0，前端据此改说「只发积分」。 */
   exp: number;
+  /** 一次性积分。消费货币，满级/root 同样发放。 */
+  points: number;
   claimed: boolean;
   claimable: boolean;
 }
@@ -103,7 +106,6 @@ export interface GrowthDashboard {
   claimableCount?: number;
   totalAchievements: number;
   quests: Quest[];
-  questsEnabled: boolean;
   questBonus: QuestBonus;
   timeline: TimelineItem[];
   streakMilestones?: StreakMilestone[];

@@ -20,11 +20,7 @@
       <div class="dq-bonus-left">
         <span class="dq-bonus-emoji">{{ bonus.claimed ? '🎉' : '🎁' }}</span>
         <span class="dq-bonus-text">
-          {{
-            bonus.claimed
-              ? t('growth.questBonusClaimed', { n: bonus.exp })
-              : t('growth.questBonusHint', { n: bonus.exp })
-          }}
+          {{ bonusText }}
         </span>
       </div>
       <BButton
@@ -57,6 +53,22 @@
 
   const doneCount = computed(() => props.quests.filter((q) => q.done).length);
   const allDone = computed(() => props.quests.length > 0 && doneCount.value === props.quests.length);
+
+  /*
+   * 奖励文案。满级的 root 经验不入账(后端把 bonus.exp 置 0),说「可领 +0 经验」等于白说,
+   * 这时只报积分 —— 那 30 积分才是它真正能拿到的东西。
+   */
+  const bonusText = computed(() => {
+    const pointsOnly = !props.bonus.exp && props.bonus.points > 0;
+    if (props.bonus.claimed) {
+      return pointsOnly
+        ? t('growth.questBonusClaimedPointsOnly', { p: props.bonus.points })
+        : t('growth.questBonusClaimed', { n: props.bonus.exp });
+    }
+    return pointsOnly
+      ? t('growth.questBonusHintPointsOnly', { p: props.bonus.points })
+      : t('growth.questBonusHint', { n: props.bonus.exp });
+  });
 
   function questLabel(q: Quest): string {
     if (q.key === 'exp30') return t('growth.questExp', { n: q.target ?? 30 });

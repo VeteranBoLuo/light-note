@@ -33,6 +33,7 @@ import {
   MAKEUP_WINDOW_DAYS,
   ACHIEVEMENTS,
   useProtectCard,
+  claimDailyQuestBonus,
   getGrowthDashboard,
   getActivityHeatmap,
   awardCreate,
@@ -318,5 +319,80 @@ describe('后台成长调整的升级通知', () => {
     expect(result).toMatchObject({ ok: true, level: 3, leveledUp: true });
     expect(createNotification).not.toHaveBeenCalled();
     expect(grantItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('claimDailyQuestBonus 对满级/root 的处理', () => {
+  // root 的经验整体不入账,所以它的每日任务只有「签到 + 记录内容」两项,
+  // 「今天领过没」也只能看积分流水 —— 这两条是本组用例要锁住的行为。
+  const GROWTH_ROW = {
+    exp: 0,
+    streak: 1,
+    last_checkin_date: '20260806',
+    last_notified_level: 15,
+    streak_protect_cards: 0,
+    points: 0,
+    equipped_title: null,
+    equipped_frame: null,
+    storage_bonus_mb: 0,
+  };
+
+  function mockRootQueries({ createdToday = 1 } = {}) {
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ ...GROWTH_ROW }]];
+      if (sql.includes('AS c')) return [[{ c: createdToday }]];
+      throw new Error(`未预期的 pool 查询: ${sql}`);
+    });
+  }
+
+  function useAugust6() {
+    vi.useFakeTimers();
+    // 用本地时间构造:dayKey 走本地时区,写成 UTC 字面量会在非 +08 机器上偏一天
+    vi.setSystemTime(new Date(2026, 7, 6, 10, 0, 0));
+  }
+
+  it('root 领取只发积分:不发经验、不误报撞上经验日顶', async () => {
+    vi.clearAllMocks();
+    useAugust6();
+    mockRootQueries();
+    earnPoints.mockResolvedValue(true);
+
+    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+
+    // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
+    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
+    expect(earnPoints).toHaveBeenCalledWith('root-1', 30, 'quest', '20260806');
+    // 没走 grantExp,所以不该有 growth_events 的写入连接
+    expect(pool.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('root 当天重复领取按积分流水判重,返回 already', async () => {
+    vi.clearAllMocks();
+    useAugust6();
+    mockRootQueries();
+    earnPoints.mockResolvedValue(false); // 积分流水已存在 = 今天领过了
+
+    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+
+    expect(result).toMatchObject({ ok: true, already: true });
+    expect(result.pointsEarned).toBeUndefined();
+  });
+
+  it('root 未记录内容时仍算未完成,不发积分', async () => {
+    vi.clearAllMocks();
+    useAugust6();
+    mockRootQueries({ createdToday: 0 });
+
+    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+
+    expect(result).toEqual({ ok: false, reason: 'incomplete' });
+    expect(earnPoints).not.toHaveBeenCalled();
+  });
+
+  it('游客照旧不发', async () => {
+    vi.clearAllMocks();
+    const result = await claimDailyQuestBonus('visitor', { userRole: 'visitor' });
+    expect(result).toEqual({ ok: false, reason: 'visitor' });
+    expect(earnPoints).not.toHaveBeenCalled();
   });
 });

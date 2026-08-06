@@ -890,27 +890,42 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     createdToday = Number(c.c || 0);
   }
   const dailyExp = Number(growth.dailyExp || 0);
+  /*
+   * root 的经验整体不入账(grantExp 对站长直接跳过,getGrowth 里 dailyExp 也恒为 0),
+   * 所以给它留「今日获得 30 经验」这一项等于永远做不完 —— 只考核签到与记录内容两项。
+   * 满级的普通用户不受影响:经验照常入账,只是等级不再涨。
+   */
+  const expGranted = userRole !== 'root';
   const quests = [
     { key: 'checkin', done: !!growth.checkedInToday },
     { key: 'create', done: createdToday > 0 },
-    { key: 'exp30', done: dailyExp >= 30, cur: Math.min(dailyExp, 30), target: 30 },
+    ...(expGranted ? [{ key: 'exp30', done: dailyExp >= 30, cur: Math.min(dailyExp, 30), target: 30 }] : []),
   ];
-  // 满级(含 root)不再需要每日经验养成,前端据此隐藏任务卡
-  const questsEnabled = !growth.isMax;
   const allQuestsDone = quests.every((q) => q.done);
+  /*
+   * 每日任务对满级(含 root)照常开放。原先按 isMax 整块关掉,但奖励里的 30 积分是消费货币,
+   * 满级账号照样要花;周挑战、成就、成长任务本来就照发给满级账号,只有每日任务是那个例外。
+   * root 的「今天领过没」只能看积分流水:它不写 growth_events,经验那条幂等对它天然失效。
+   */
   let bonusClaimed = false;
-  if (!isGuest && questsEnabled) {
-    const [[bq]] = await pool.query(
-      `SELECT COUNT(*) AS c FROM growth_events WHERE user_id = ? AND source = 'daily_quest' AND day = ? AND status = 'granted'`,
-      [userId, dayKey()],
-    );
+  if (!isGuest) {
+    const [[bq]] = expGranted
+      ? await pool.query(
+          `SELECT COUNT(*) AS c FROM growth_events WHERE user_id = ? AND source = 'daily_quest' AND day = ? AND status = 'granted'`,
+          [userId, dayKey()],
+        )
+      : await pool.query(`SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason = 'quest' AND ref = ?`, [
+          userId,
+          dayKey(),
+        ]);
     bonusClaimed = Number(bq.c || 0) > 0;
   }
-  // 全部完成 → 可领每日奖励(一次性 EXP,豁免日顶)
+  // 全部完成 → 可领每日奖励(经验受日顶约束;积分固定,root 只拿积分那部分)
   const questBonus = {
-    exp: DAILY_QUEST_BONUS,
+    exp: expGranted ? DAILY_QUEST_BONUS : 0,
+    points: DAILY_QUEST_POINTS,
     claimed: bonusClaimed,
-    claimable: questsEnabled && allQuestsDone && !bonusClaimed,
+    claimable: allQuestsDone && !bonusClaimed,
   };
 
   // 连签里程碑阶梯(静态奖励表 + 按当前连签标注是否达成),供成长页展示「坚持到 X 天可得 Y」
@@ -930,7 +945,6 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     claimableCount,
     totalAchievements: ACHIEVEMENTS.length,
     quests,
-    questsEnabled,
     questBonus,
     timeline,
     streakMilestones,
@@ -939,13 +953,15 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
 }
 
 /**
- * 领取今日任务奖励(全部完成后一次性 EXP;每日一次,幂等)。
- * 后端二次核算任务完成状态,防前端伪造;满级/root/游客不发。
+ * 领取今日任务奖励(全部完成后一次性 EXP + 积分;每日一次,幂等)。
+ * 后端二次核算任务完成状态,防前端伪造;游客不发。
+ * 满级(含 root)照发:经验对他们没意义,但积分是消费货币 —— 与周挑战/成就/成长任务同口径。
  */
 export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const g = await getGrowth(userId, { userRole });
-  if (g.isMax) return { ok: false, reason: 'max' };
+  // 与 getGrowthDashboard 同一判定:root 的经验不入账,考核项和幂等来源都要跟着变
+  const expGranted = userRole !== 'root';
 
   const today = dayKey();
   const [[c]] = await pool.query(
@@ -973,19 +989,26 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   );
   const createdToday = Number(c.c || 0);
   const dailyExp = Number(g.dailyExp || 0);
-  const allDone = g.checkedInToday && createdToday > 0 && dailyExp >= 30;
+  // 考核项与看板一致:root 不考核「今日 30 经验」(它的经验永远不入账)
+  const allDone = g.checkedInToday && createdToday > 0 && (!expGranted || dailyExp >= 30);
   if (!allDone) return { ok: false, reason: 'incomplete' };
 
-  const grant = await grantExp(userId, 'daily_quest', { day: today, amount: DAILY_QUEST_BONUS, userRole });
+  const grant = expGranted
+    ? await grantExp(userId, 'daily_quest', { day: today, amount: DAILY_QUEST_BONUS, userRole })
+    : { granted: 0 };
   if (grant.duplicated) return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
   // 积分与经验独立:即便经验被日顶截断(granted=0),完成任务照样发积分。按天幂等。
   const gotQuestPoints = await earnPoints(userId, DAILY_QUEST_POINTS, 'quest', today);
-  // granted 为 0 = 今日经验已达上限被截断(奖励入账为 0,但已标记领取,不重复)
+  // root 没走 grantExp,少了那道 duplicated 判重:积分流水就是它唯一的「今天领过」标记
+  if (!expGranted && !gotQuestPoints) {
+    return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+  }
   return {
     ok: true,
     expGained: grant.granted || 0,
     pointsEarned: gotQuestPoints ? DAILY_QUEST_POINTS : 0,
-    capped: (grant.granted || 0) === 0,
+    // capped 专指「今日经验已达上限被截断」;root 本就不发经验,不能让前端误报成撞了日顶
+    capped: expGranted && (grant.granted || 0) === 0,
     leveledUp: !!grant.leveledUp,
     growth: await getGrowth(userId, { userRole }),
   };

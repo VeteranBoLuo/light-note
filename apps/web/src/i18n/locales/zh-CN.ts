@@ -2209,6 +2209,7 @@ export default {
     },
     checkinSuccessPts: '签到成功，经验 +{n}、积分 +{p}',
     questClaimOkPts: '领取成功，经验 +{n}、积分 +{p}',
+    questClaimOkPointsOnly: '领取成功，积分 +{p}',
     shopTitle: '积分商店',
     shopSubtitle: '签到、完成每日任务即可赚取积分，兑换实用道具与头像框装扮',
     shopEarnHint: '每日签到 +20~30 · 完成每日任务 +30',
@@ -2339,6 +2340,9 @@ export default {
     questAllDone: '每日任务全部完成，明天继续加油！',
     questBonusHint: '全部完成可领 +{n} 经验',
     questBonusClaimed: '今日奖励已领取 +{n} 经验',
+    // 满级(含 root)的经验不入账，奖励只剩积分那部分，说「+0 经验」会让人以为白领
+    questBonusHintPointsOnly: '全部完成可领 +{p} 积分',
+    questBonusClaimedPointsOnly: '今日奖励已领取 +{p} 积分',
     questClaim: '领取奖励',
     questClaiming: '领取中…',
     questClaimOk: '领取成功，经验 +{n}',
