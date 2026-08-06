@@ -281,9 +281,13 @@
       text-align: center;
       flex-shrink: 0;
 
-      &:hover {
-        background: var(--resource-note-color, #00a884);
-        color: #fff;
+      // 同 NoteListItem:触屏的 :hover 会粘住,点一下标签就永久变成实心反白,
+      // 看着像「选中了这个标签」,但其实只是没散掉的 hover 态。
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--resource-note-color, #00a884);
+          color: #fff;
+        }
       }
     }
 

@@ -366,9 +366,16 @@
             color 0.2s ease;
           max-width: 120px;
           // 只加深底色,不做实心反白:列表里标签是次要信息,hover 不该抢焦点,
-          // 也避免原来写死的 #605ce5 / white 在两套主题下都是同一个色
-          &:hover {
-            background-color: color-mix(in srgb, var(--tag-color, #8b88f2) 20%, var(--tag-bg-color, #eeedff));
+          // 也避免原来写死的 #605ce5 / white 在两套主题下都是同一个色。
+          //
+          // 限定真正带鼠标的设备(同 common.less 里角标的做法):触屏上 :hover 是粘滞的,
+          // 点一下标签这个态就留着不走了。而这条混色的两个操作数都不透明,
+          // androidColorMixFallback 认不出是弱底色,APK 里会按权重回退成页面背景色 ——
+          // 表现就是「点一下标签,它的底色没了」。触屏不套用 hover 即可根治。
+          @media (hover: hover) and (pointer: fine) {
+            &:hover {
+              background-color: color-mix(in srgb, var(--tag-color, #8b88f2) 20%, var(--tag-bg-color, #eeedff));
+            }
           }
         }
         .tag-more {

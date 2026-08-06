@@ -194,10 +194,22 @@
           class="note-library-body-list"
         >
           <div v-if="loading" class="note-list note-list-skeleton-wrap" data-mobile-resource-scroll>
-            <!-- 两条线对应「标题 + 摘要」两行,骨架高度要贴住真实行高,否则数据落地时列表会跳 -->
+            <!--
+              骨架高度要贴住真实行高,否则数据落地时列表会跳。
+              桌面:标题 + 摘要两行(标签与摘要同占一行,不额外占高)。
+              手机:标题、摘要、chip 行是纵向堆叠的三段(实测整项 109px),
+              少了 chip 那段骨架就会比真实项矮约 40px。
+            -->
             <div v-for="n in 12" :key="`list-skeleton-${n}`" class="note-list-skeleton-item">
               <div class="skeleton-line long"></div>
               <div class="skeleton-line short"></div>
+              <template v-if="bookmark.isMobile">
+                <div class="skeleton-line medium"></div>
+                <div class="skeleton-list-chips">
+                  <div class="skeleton-chip"></div>
+                  <div class="skeleton-chip"></div>
+                </div>
+              </template>
             </div>
           </div>
           <VueDraggable
@@ -1320,6 +1332,14 @@
     gap: 8px;
   }
 
+  /* 列表项的 chip 行是随内容流排的(卡片那版 .skeleton-tags 绝对定位贴底,列表不能照搬:
+     列表项高度由内容撑开,绝对定位不占高,骨架照样矮) */
+  .skeleton-list-chips {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
   .skeleton-chip {
     width: 52px;
     height: 16px;
@@ -1372,9 +1392,15 @@
     }
 
     .note-list-skeleton-item {
-      min-height: 70px;
+      /* 贴住真实列表项:padding 22 + 标题 22 + 摘要 38 + gap 4 + chip 22 ≈ 109(实测 109~111)。
+         最后一条骨架线的 margin-bottom 由下面收掉,不然整项会比真实的高出一截。 */
+      min-height: 108px;
       padding: 11px 14px;
       border: 1px solid var(--card-border-color);
+
+      .skeleton-list-chips {
+        margin-bottom: 0;
+      }
     }
   }
 
