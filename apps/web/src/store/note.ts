@@ -57,38 +57,48 @@ export default defineStore('note', {
 
       // HTML 模式：从 DOM 提取标题（原有逻辑）
       await nextTick();
-      const collectHeadings = (attempt = 0) => {
-        const container = document.getElementById('editor-container');
-        if (!container) {
-          if (attempt < 6) {
-            setTimeout(() => collectHeadings(attempt + 1), 120);
+      /*
+       * 富文本要等 TinyMCE 把内容铺进 DOM，所以这里有重试。
+       * 整个重试过程包在 Promise 里，让 await generateTOC() 真的等到目录落定 ——
+       * 调用方据此判断「首屏目录已定型」（见 NoteDetail 的 catalogTransitionReady），
+       * 否则函数早在重试中途就返回了，等于没等。
+       */
+      await new Promise<void>((resolve) => {
+        const collectHeadings = (attempt = 0) => {
+          const container = document.getElementById('editor-container');
+          if (!container) {
+            if (attempt < 6) {
+              setTimeout(() => collectHeadings(attempt + 1), 120);
+              return;
+            }
+            this.headings = [];
+            resolve();
             return;
           }
-          this.headings = [];
-          return;
-        }
-        try {
-          const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
-          if (hTags.length === 0 && attempt < 6) {
-            setTimeout(() => collectHeadings(attempt + 1), 120);
-            return;
+          try {
+            const hTags = container.querySelectorAll<HTMLHeadingElement>('h1, h2, h3, h4, h5, h6');
+            if (hTags.length === 0 && attempt < 6) {
+              setTimeout(() => collectHeadings(attempt + 1), 120);
+              return;
+            }
+            this.headings = Array.from(hTags)
+              .filter((heading) => {
+                const text = heading.innerText || heading.textContent || '';
+                return text.trim() !== '';
+              })
+              .map((heading) => {
+                const level = parseInt(heading.tagName.replace('H', ''), 10);
+                const text = heading.innerText || heading.textContent || '';
+                return { element: heading, text, level };
+              });
+          } catch (error) {
+            console.error('Error generating TOC:', error);
+            this.headings = [];
           }
-          this.headings = Array.from(hTags)
-            .filter((heading) => {
-              const text = heading.innerText || heading.textContent || '';
-              return text.trim() !== '';
-            })
-            .map((heading) => {
-              const level = parseInt(heading.tagName.replace('H', ''), 10);
-              const text = heading.innerText || heading.textContent || '';
-              return { element: heading, text, level };
-            });
-        } catch (error) {
-          console.error('Error generating TOC:', error);
-          this.headings = [];
-        }
-      };
-      setTimeout(() => collectHeadings(), 100);
+          resolve();
+        };
+        setTimeout(() => collectHeadings(), 100);
+      });
     },
   },
 });
@@ -97,6 +107,26 @@ interface MarkdownSourceHeading {
   text: string;
   level: number;
   sourceOffset: number;
+}
+
+/**
+ * 只凭内容字符串粗判「这篇笔记有没有标题」。
+ *
+ * 用途是首屏定版面：generateTOC 必须等编辑器把内容铺进 DOM 才能解析（富文本还要重试），
+ * 那之前的一百多毫秒里 headings 是空的。若按此渲染，正文会先占满整宽、解析完再被目录
+ * 推回去——就是进笔记时正文闪一下的由来。而内容此刻其实已经在手里了，先粗判一次，
+ * 首帧就把目录该占的位置留出来。
+ *
+ * 粗判只决定「留不留位置」，目录内容仍以 generateTOC 的解析结果为准；
+ * 万一判错，等解析完成会自行纠正（那时过渡已启用，是一次平滑的收放）。
+ */
+export function contentLikelyHasHeadings(content?: string, type?: string): boolean {
+  const text = content || '';
+  if (!text) return false;
+  // markdown 复用源码解析：它会跳过 fenced code 里看着像标题的行，比正则准
+  if (type === 'markdown') return extractMdSourceHeadings(text).length > 0;
+  // 富文本存的是 HTML；代码块里的尖括号是转义的（&lt;h1&gt;），不会被这里误判
+  return /<h[1-6][\s>]/i.test(text);
 }
 
 /**

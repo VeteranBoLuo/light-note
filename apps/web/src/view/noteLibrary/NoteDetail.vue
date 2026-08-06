@@ -29,9 +29,10 @@
       </div>
       <div class="note-body" :class="{ 'note-body--organizing': isOrganizingFromInbox }">
         <Catalog
-          :class="{ 'catalog-panel': bookmark.isDesktop }"
+          :class="{ 'catalog-panel': bookmark.isDesktop, 'is-animatable': catalogSettled }"
           :content="note.content"
           :note-type="note.type"
+          :presume-headings="catalogPresumed"
           :drawer-open="catalogDrawerOpen"
           @markdown-heading-click="scrollToMarkdownHeading"
           @close="catalogDrawerOpen = false"
@@ -91,7 +92,18 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, provide, reactive, ref, watch } from 'vue';
+  import {
+    computed,
+    defineAsyncComponent,
+    h,
+    nextTick,
+    onMounted,
+    onUnmounted,
+    provide,
+    reactive,
+    ref,
+    watch,
+  } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import router from '@/router';
@@ -101,6 +113,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore, noteStore, useUserStore } from '@/store';
+  import { contentLikelyHasHeadings } from '@/store/note';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
@@ -119,7 +132,22 @@
   import { buildResourceHref, resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
-  const AiReply = defineAsyncComponent(() => import('@/components/noteLibrary/detail/AiReply.vue'));
+  /*
+   * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
+   * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
+   * (实测面板晚 330ms 挂载,正文宽度从 1150px 缩到 875px、左边界从 270 挪到 215)。
+   *
+   * 占位是个空 div,宽度全由父级 .ai-panel 决定(flex: 3 + min-width: 310px),
+   * 首帧就把位置占住,组件到位后原地填充,布局自始至终不变。
+   * delay: 0 不能省 —— defineAsyncComponent 默认等 200ms 才显示 loading 组件
+   * (为了避免快速加载时闪一下),那样占位会迟到,等于问题只解决一半。
+   */
+  const AiPanelPlaceholder = { render: () => h('div', { class: 'ai-panel-skeleton' }) };
+  const AiReply = defineAsyncComponent({
+    loader: () => import('@/components/noteLibrary/detail/AiReply.vue'),
+    loadingComponent: AiPanelPlaceholder,
+    delay: 0,
+  });
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -245,7 +273,7 @@
       }
     }
     setUpdateTime();
-    nextTick(() => refreshCatalog());
+    nextTick(() => void refreshCatalog());
   }
 
   function triggerEditorSwitch() {
@@ -379,12 +407,30 @@
     return note.title.trim() !== DEFAULT_NOTE_TITLE || !isBlankNoteContent(note.content);
   }
 
-  function refreshCatalog() {
-    nStore.generateTOC(note.content, note.type);
+  /*
+   * 进笔记时目录那一下「闪」的两处根因,分开治:
+   *
+   * 一是版面。generateTOC 要等编辑器把内容铺进 DOM 才解析得出标题(富文本还带重试),
+   * 那之前 headings 是空的 —— 照此渲染,正文先占满整宽,一百多毫秒后目录解析出来又把它推回去。
+   * 但内容在 isReady 之前就已经拿到了,所以先按字符串粗判有没有标题(catalogPresumed),
+   * 首帧就把目录该占的位置留出来,解析完成后这个预判即失效,一切以真实 headings 为准。
+   *
+   * 二是过渡。那 0.26s 的展开是给「编辑时新打一个标题」准备的,首屏定型不该表演一次,
+   * 所以过渡等首屏解析完再开(catalogTransitionReady)。
+   * 不用 requestAnimationFrame 挂这个开关:后台标签页里 rAF 不触发,
+   * 在新标签打开的笔记会永远开不了过渡 —— 首帧版面既然已经摆对,这里直接开即可。
+   */
+  const catalogSettled = ref(false);
+  const catalogPresumed = computed(() => !catalogSettled.value && contentLikelyHasHeadings(note.content, note.type));
+
+  async function refreshCatalog() {
+    await nStore.generateTOC(note.content, note.type);
+    catalogSettled.value = true;
   }
 
   async function handleEditorReady() {
-    refreshCatalog();
+    // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
+    void refreshCatalog();
     const raw = String(router.currentRoute.value.query.focusRef || '');
     const separator = raw.indexOf(':');
     if (separator <= 0) return;
@@ -959,12 +1005,11 @@
    *
    * margin-right 抵掉 .note-body 的 20px gap——折叠到 0 宽后那道空隙还在，
    * 编辑区就还差 20px 没补上，等于问题只解决了一半。
+   *
+   * 挂在 .is-animatable 上而不是 .catalog-panel：进入笔记时的「空目录 → 有目录」
+   * 是首屏定型，不该表演一次展开。这个类由 NoteDetail 在首屏目录落定后才加。
    */
-  .catalog-panel {
-    /*
-     * 动 flex-grow：.catalog-panel 的 flex-basis 是 0%，宽度完全由 grow 决定，
-     * 动它编辑区会跟着连续变宽；动 width 反而要和 flex 打架。
-     */
+  .catalog-panel.is-animatable {
     transition:
       flex-grow 0.26s ease,
       margin-right 0.26s ease,
@@ -981,7 +1026,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .catalog-panel {
+    /* 选择器要和上面等特异性，否则 .catalog-panel.is-animatable 会把这条盖掉 */
+    .catalog-panel.is-animatable {
       transition: none;
     }
   }
@@ -1001,6 +1047,27 @@
     flex: 3;
     min-width: 310px;
     width: 0;
+  }
+
+  /*
+   * AI 面板加载期的占位。必须复刻 AiReply 内 .ai-container 的盒模型
+   * (padding + border + border-box) —— flex-basis: 0% 只把 content-box 归零,
+   * padding 16 + border 1 这 34px 仍要占位并参与分配:
+   *   宽度 = 34 + 3/15 × (可分配空间 - 34)
+   * 所以带盒模型的面板比光板 div 宽 27px 左右(1680 视口下 347 vs 320)。
+   * 这 27px 就是「正文先宽一截、AI 组件到位后又缩回去」的来源
+   * (表现为编辑区滚动条先贴上 AI 面板左边框,再弹回原位)。
+   * 约 1494px 以下两者都被 min-width: 310 顶平,看不出差别 —— 别据此以为不必对齐,
+   * 1536 起就会显形(实测 1280~3440 共 11 档,对齐后差值恒为 0)。
+   * 顺带把背景和圆角也照搬:加载过程于是变成「空面板 → 填入内容」,而不是「空白 → 面板冒出来」。
+   */
+  .ai-panel-skeleton {
+    height: 100%;
+    padding: 16px;
+    box-sizing: border-box;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
   }
   .editor-component {
     flex: 1 1 auto;

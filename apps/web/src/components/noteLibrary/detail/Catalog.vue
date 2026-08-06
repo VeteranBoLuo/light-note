@@ -12,7 +12,7 @@
   <aside
     v-if="bookmark.isDesktop"
     class="toc-container"
-    :class="{ 'is-collapsed': !note.headings.length }"
+    :class="{ 'is-collapsed': collapsed }"
     :inert="!note.headings.length || undefined"
     :aria-hidden="!note.headings.length || undefined"
   >
@@ -84,10 +84,16 @@
       content: string;
       noteType?: string;
       drawerOpen?: boolean;
+      /**
+       * 首屏「先把目录的位置留出来」。父级在内容到手时按字符串粗判，
+       * 解析出真正的 headings 之后就会关掉（见 NoteDetail 的 catalogPresumed）。
+       */
+      presumeHeadings?: boolean;
     }>(),
     {
       noteType: 'html',
       drawerOpen: false,
+      presumeHeadings: false,
     },
   );
   const emit = defineEmits<{
@@ -95,6 +101,12 @@
     close: [];
   }>();
   const isMdMode = computed(() => props.noteType === 'markdown');
+  /*
+   * 折叠只影响版面(宽度),所以要认 presumeHeadings —— 首屏解析出来之前先按「有目录」占位,
+   * 免得正文先铺满整宽、解析完又被推回去。
+   * inert / aria-hidden 仍只看真实 headings:位置留着但还没内容时,不该能被聚焦或读屏。
+   */
+  const collapsed = computed(() => !note.headings.length && !props.presumeHeadings);
   const activeHeading = ref<number | null>(null);
   const drawerListRef = ref<HTMLElement | null>(null);
   const drawerItemRefs = new Map<number, HTMLElement>();
