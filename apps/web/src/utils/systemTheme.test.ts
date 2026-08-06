@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { computed } from 'vue';
 import { getAndroidSystemTheme } from './androidBridge';
 import { onSystemThemeChange, resetSystemThemeForTest, resolveSystemTheme } from './systemTheme';
 
@@ -75,7 +76,9 @@ describe('resolveSystemTheme', () => {
     stubMatchMedia(true);
     expect(resolveSystemTheme()).toBe('night');
 
+    // 值现在被响应式缓存（这正是修复的一部分），换 stub 相当于换了一台设备，需要重新初始化
     stubMatchMedia(false);
+    resetSystemThemeForTest();
     expect(resolveSystemTheme()).toBe('day');
   });
 
@@ -122,6 +125,25 @@ describe('onSystemThemeChange', () => {
     dispose();
   });
 
+  it('resolveSystemTheme 必须是响应式的 —— 否则 Pinia getter 会缓存住第一次的值', () => {
+    // 真机症状「系统主题只有第一次切换生效」就出在这：useUser.currentTheme 是 Pinia getter
+    // （computed，会缓存），只追踪响应式依赖。系统主题若是普通变量，getter 求值一次后
+    // 再也不失效 —— 因为 preferences.theme 一直是 'system' 没变过。原生怎么推都没用。
+    stubUserAgent(`${CHROME_UA} LightNoteAndroid/1.0.2 LightNoteSystemTheme/day`);
+    stubMatchMedia(false);
+    const themeLikeGetter = computed(() => resolveSystemTheme());
+    expect(themeLikeGetter.value).toBe('day');
+
+    window.__lightNoteAndroidSystemTheme?.('night');
+    expect(themeLikeGetter.value).toBe('night');
+
+    // 反复切换都要生效，不能只有第一次
+    window.__lightNoteAndroidSystemTheme?.('day');
+    expect(themeLikeGetter.value).toBe('day');
+    window.__lightNoteAndroidSystemTheme?.('night');
+    expect(themeLikeGetter.value).toBe('night');
+  });
+
   it('原生推来的非法值被忽略', () => {
     stubMatchMedia(false);
     const seen: string[] = [];
@@ -156,13 +178,17 @@ describe('onSystemThemeChange', () => {
     dispose();
   });
 
-  it('取消订阅后两路都不再回调，且媒体查询监听被摘掉', () => {
+  it('取消订阅只摘掉自己那条媒体查询监听', () => {
     stubUserAgent(CHROME_UA);
     const mq = stubMatchMedia(true);
+    // 模块内部常驻一条（负责维护数据源，不随订阅者增减），这里记下基线
+    resolveSystemTheme();
+    const baseline = mq.listenerCount();
+
     const dispose = onSystemThemeChange(() => {});
-    expect(mq.listenerCount()).toBe(1);
+    expect(mq.listenerCount()).toBe(baseline + 1);
 
     dispose();
-    expect(mq.listenerCount()).toBe(0);
+    expect(mq.listenerCount()).toBe(baseline);
   });
 });

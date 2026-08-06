@@ -11,6 +11,7 @@
  * 非 App 环境（手机浏览器、桌面）仍然走 prefers-color-scheme。
  */
 
+import { ref } from 'vue';
 import { getAndroidSystemTheme, onAndroidSystemThemeChange } from '@/utils/androidBridge';
 
 export type SystemTheme = 'night' | 'day';
@@ -22,42 +23,67 @@ function mediaQuerySystemTheme(): SystemTheme {
 }
 
 /**
- * 原生推来的最新系统主题。
+ * 当前系统主题，**必须是响应式的**。
  *
- * 必须有这个可变状态：UA 里的标记是 WebView 创建那一刻的快照、永远不变，而运行中切换系统
- * 深浅色只能靠原生推送。如果 resolveSystemTheme 仍回头读 UA，推送触发的重新求值会拿回旧值、
- * 把主题设成原样 —— 真机症状就是「Toast 显示已推送，界面却毫无变化」。
- * 推送到达时先更新这里，再通知订阅者，顺序不能颠倒。
+ * 这里踩过一个很隐蔽的坑：useUser 的 currentTheme 是 Pinia getter（本质是 computed，会缓存），
+ * 它只追踪读到的响应式依赖。若本值是个普通模块级变量，getter 求值一次后就再也不会失效 ——
+ * 因为 preferences.theme 始终是 'system' 没变过。表现为「系统主题切换只有第一次生效，
+ * 之后无论原生推多少次都不动」，而且怎么查原生侧都查不出问题，因为原生一直在正常推送。
+ *
+ * 值的来源：App 内是原生推送（UA 只提供启动时的初值，它是快照、永不更新），
+ * 其余环境是 prefers-color-scheme。
  */
-let nativePushedTheme: SystemTheme | '' = '';
+const systemTheme = ref<SystemTheme>('day');
+let initialized = false;
+
+/** 首次读取时才初始化：模块加载时机可能早于 DOM/navigator 就绪（预渲染）。 */
+function ensureInitialized() {
+  if (initialized) return;
+  initialized = true;
+  systemTheme.value = getAndroidSystemTheme() || mediaQuerySystemTheme();
+
+  // 原生推送：这一路要在模块内部常驻，不能只挂在订阅者身上 —— 即使没有任何组件订阅，
+  // resolveSystemTheme() 也必须能读到最新值
+  onAndroidSystemThemeChange((theme) => {
+    systemTheme.value = theme;
+  });
+
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    mq.addEventListener('change', () => {
+      // App 内媒体查询不可信（只反映宿主主题的 isLightTheme），以原生推送为准
+      if (getAndroidSystemTheme()) return;
+      systemTheme.value = mq.matches ? 'night' : 'day';
+    });
+  }
+}
 
 /** 仅测试用：模块级状态不随用例自动复位。 */
 export function resetSystemThemeForTest() {
-  nativePushedTheme = '';
+  initialized = false;
+  systemTheme.value = 'day';
 }
 
 /**
- * 当前系统主题。App 内优先原生信号（推送值 > UA 快照），其余环境走媒体查询。
+ * 当前系统主题。
  * 只在用户把主题设为 'system' 时才应该调用它 —— 手动指定深色/浅色的用户不受系统开关影响。
  */
 export function resolveSystemTheme(): SystemTheme {
-  return nativePushedTheme || getAndroidSystemTheme() || mediaQuerySystemTheme();
+  ensureInitialized();
+  return systemTheme.value;
 }
 
 /**
  * 订阅系统主题变化，返回取消订阅函数。
- * 两个来源都挂上：App 内是原生推送，浏览器里是媒体查询 —— 同一个回调，调用方不必分环境。
+ *
+ * 数据源的维护统一在 ensureInitialized 里，这里只负责把变化通知出去：
+ * 两条来源（原生推送 / 媒体查询）各挂一次，调用方不必分环境。
  */
 export function onSystemThemeChange(listener: (theme: SystemTheme) => void): () => void {
+  ensureInitialized();
   const disposers: Array<() => void> = [];
 
-  disposers.push(
-    onAndroidSystemThemeChange((theme) => {
-      // 先落数据源再通知：订阅者的回调里往往要重新读 resolveSystemTheme()
-      nativePushedTheme = theme;
-      listener(theme);
-    }),
-  );
+  disposers.push(onAndroidSystemThemeChange(listener));
 
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
