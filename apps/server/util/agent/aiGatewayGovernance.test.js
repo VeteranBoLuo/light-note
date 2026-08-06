@@ -81,6 +81,27 @@ describe('AI Gateway entry governance', () => {
     expect(mocks.reconcile).toHaveBeenCalledWith(expect.any(Object), 5000, { aborted: false });
   });
 
+  it('记录脱敏后的短摘要，不落完整请求正文', async () => {
+    const state = await beginAiGatewayGovernance({
+      governance: {
+        request: { user: { id: 'user-1', role: 'user' }, headers: {}, body: { content: '不可记录正文' } },
+        quotaPolicy: 'user',
+        taskType: 'tag_icon_search',
+        requestSummary: `标签选图：数据库 token=super-secret-value ${'x'.repeat(240)}`,
+      },
+      traceId: 'trace-summary',
+      taskType: 'tag_icon_search',
+      startedAt: Date.now(),
+    });
+    await finishAiGatewayGovernance({ state, result: { usageStatus: 'missing' } });
+
+    const params = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'))?.[1];
+    expect(params[16]).toContain('标签选图：数据库');
+    expect(params[16]).toContain('token=[REDACTED]');
+    expect(params[16].length).toBeLessThanOrEqual(200);
+    expect(params[16]).not.toContain('不可记录正文');
+  });
+
   it('额度不足时在 Provider 调用前返回稳定错误并记录 quota_blocked', async () => {
     mocks.reserve.mockResolvedValueOnce({ blocked: true, used: 100_000, quota: 100_000 });
 

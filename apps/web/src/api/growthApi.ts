@@ -82,6 +82,8 @@ export const getPointsLog = (limit = 30, offset = 0) =>
 // —— root 积分运营 ——
 export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
 export const adminUserPoints = (userId: string) => apiBasePost('/api/growth/admin/userPoints', { userId });
+export const adminSearchUsers = (keyword: string, limit = 20) =>
+  apiBasePost('/api/growth/admin/searchUsers', { keyword, limit });
 export const adminGrantPoints = (payload: {
   userId: string;
   points?: number;
@@ -119,5 +121,6 @@ export default {
   getPointsLog,
   adminPointsOverview,
   adminUserPoints,
+  adminSearchUsers,
   adminGrantPoints,
 };

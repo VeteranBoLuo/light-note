@@ -22,14 +22,19 @@
       v-model:listOptions="cloud.folderList"
       v-model:dragList="cloud.folderList"
       :node-type="{ id: 'id', title: 'name' }"
+      @start="onFolderDragStart"
       @onEnd="onDragEnd"
       @nodeClick="folderClick"
     >
       <template #item="{ item }">
-        <RightMenu
-          :menu="folderContextMenu"
+        <BActionMenu
           v-if="!item.isRename"
-          @select="handleTagMenu($event, item)"
+          class="cloud-folder-action-menu"
+          :items="folderContextMenu"
+          :triggers="folderMenuTriggers"
+          placement="right-start"
+          :disabled="folderMenuDisabled"
+          @select="(action, source) => handleFolderMenu(action, item, source)"
         >
           <div
             class="category-item"
@@ -48,7 +53,7 @@
             <svg-icon size="16" :src="icon.common.folder" />
             <span class="text-hidden" style="width: calc(100% - 28px)">{{ item['name'] }}</span>
           </div>
-        </RightMenu>
+        </BActionMenu>
         <b-input v-else class="edit-input" v-model:value="newName" @click.stop @keydown.enter="handleRename(item)">
           <template #suffix>
             <div class="flex-align-center-gap">
@@ -69,7 +74,12 @@
 <script lang="ts" setup>
   import icon from '@/config/icon.ts';
   import BList from '@/components/base/BasicComponents/BList.vue';
-  import RightMenu from '@/components/base/RightMenu.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type {
+    BActionMenuItem,
+    BActionMenuSource,
+    BActionMenuTrigger,
+  } from '@/components/base/BasicComponents/actionMenu';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, cloudSpaceStore } from '@/store';
   import { computed, nextTick, ref } from 'vue';
@@ -83,9 +93,11 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
+  const isFolderDragging = ref(false);
+  const folderMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
 
   const emit = defineEmits(['uploadFiles']);
-  const folderContextMenu = computed(() => [
+  const folderContextMenu = computed<BActionMenuItem[]>(() => [
     { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
     { key: 'upload', label: t('cloudSpace.uploadFile'), icon: icon.file_upload },
     { key: 'folder-actions-divider', divider: true },
@@ -95,6 +107,8 @@
   function isInnerFileDrag() {
     return Boolean(cloud.draggingFile?.id);
   }
+
+  const folderMenuDisabled = computed(() => !bookmark.isDesktop || isFolderDragging.value || isInnerFileDrag());
 
   function normalizeFolderId(folderId?: string) {
     return folderId && folderId !== 'all' ? folderId : '';
@@ -110,7 +124,10 @@
       fileIds: [fileId],
     });
     if (res.status === 200) {
-      recordOperation({ module: '云空间', operation: targetFolderId ? '拖拽移动文件到文件夹成功' : '拖拽移动文件到全部文件成功' });
+      recordOperation({
+        module: '云空间',
+        operation: targetFolderId ? '拖拽移动文件到文件夹成功' : '拖拽移动文件到全部文件成功',
+      });
       message.success(t('cloudSpace.moveSuccess'));
       cloud.queryFieldList();
     } else {
@@ -132,9 +149,18 @@
   }
 
   const newName = ref('');
-  function handleTagMenu(action: string, folder: any) {
+  function handleFolderMenu(action: string, folder: any, source: BActionMenuSource = 'contextmenu') {
     const actionLabel = folderContextMenu.value.find((item: any) => item.key === action)?.label || action;
-    recordOperation({ module: '云空间', operation: `右键${actionLabel}文件夹【${folder.name}】` });
+    const sourceLabel: Record<BActionMenuSource, string> = {
+      hover: '悬浮菜单',
+      contextmenu: '右键菜单',
+      click: '点击菜单',
+      keyboard: '键盘菜单',
+    };
+    recordOperation({
+      module: '云空间',
+      operation: `${sourceLabel[source]}${actionLabel}文件夹【${folder.name}】`,
+    });
     const actions = {
       rename: () => {
         if (cloud.folderList.find((i) => !i.id || i.isRename)) {
@@ -210,7 +236,7 @@
     folder.isRename = !folder.isRename;
     folder.name = trimmed;
     newName.value = trimmed;
-      if (folder.id) {
+    if (folder.id) {
       apiBasePost('/api/file/updateFolder', folder).then((res) => {
         if (res.status === 200) {
           recordOperation({ module: '云空间', operation: `重命名文件夹成功【${folder.name}】` });
@@ -229,7 +255,12 @@
     }
   }
 
+  function onFolderDragStart() {
+    isFolderDragging.value = true;
+  }
+
   async function onDragEnd() {
+    isFolderDragging.value = false;
     if (blockGuestWrite('reorder-folder')) {
       cloud.queryFolder(); // b-list 已就地改了 cloud.folderList 顺序,游客态重新拉取复位
       return;
@@ -332,5 +363,14 @@
     :deep(.b-input) {
       padding-right: 60px !important;
     }
+  }
+
+  .cloud-folder-action-menu {
+    display: block;
+    width: 100%;
+  }
+
+  .cloud-folder-action-menu.is-menu-open .category-item {
+    background-color: var(--category-item-ba-color);
   }
 </style>

@@ -446,7 +446,8 @@ export default {
     calendarUnavailableInApp: 'App 内暂时保存不了日历文件，请用「加入日历」，或在手机浏览器中打开轻笺导出。',
     calendarHandedToDownloads: '日历文件已开始下载，完成后在「下载」目录点开即可导入日历。',
     calendarInsertAction: '加入日历',
-    calendarInsertNote: '「加入日历」会打开系统日历，在那里按保存即可；提前提醒需要在日历里自己选。导出文件会带上上面选的提醒。',
+    calendarInsertNote:
+      '「加入日历」会打开系统日历，在那里按保存即可；提前提醒需要在日历里自己选。导出文件会带上上面选的提醒。',
     calendarInsertOpened: '已打开系统日历，请在其中确认保存。',
     calendarInsertUnsupported: '当前 App 版本还不支持直接加入日历，请改用「导出文件」。',
     calendarInsertNoApp: '没找到可用的日历应用，请改用「导出日历文件」，下载后用系统日历打开。',
@@ -1697,6 +1698,7 @@ export default {
     copyLink: '复制链接',
     linkCopied: '链接已复制',
     pin: '置顶',
+    pinnedBadge: '置顶',
     unpin: '取消置顶',
     pinned: '已置顶',
     unpinned: '已取消置顶',

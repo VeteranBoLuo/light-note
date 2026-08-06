@@ -7,7 +7,7 @@ import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { BOOKMARK_URL_STATE } from '@lightnote/shared';
 import { getActiveProviderInfo } from '../util/agent/deepseekClient.js';
 import { requestAi, requestAiStream } from '../util/agent/aiGateway.js';
-import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { redactSensitiveText, stableAgentErrorCode } from '../util/agent/logSafety.js';
 import * as aiQuota from '../util/aiQuota.js';
 
 export const generateTagIcon = async (req, res) => {
@@ -121,6 +121,7 @@ export const generateBookmarkMeta = async (req, res) => {
           quotaPolicy: 'user',
           taskType: 'organize_bookmark_meta',
           requestId,
+          requestSummary: `智能识别书签：${new URL(resolvedUrl).hostname}`,
         },
       });
       if (controller.signal.aborted) throw controller.signal.reason;
@@ -164,6 +165,34 @@ export const generateBookmarkMeta = async (req, res) => {
 
 export const generateBookmarkDescription = generateBookmarkMeta;
 
+const NOTE_ASSIST_OPERATION_LABELS = {
+  polishFull: '润色全文',
+  optimizeTitle: '优化标题',
+  generateSummary: '生成摘要',
+  correctErrors: '纠错与语病',
+  continueWrite: '续写扩展',
+  translate: '翻译',
+  outline: '生成大纲',
+  custom: '自定义处理',
+  followup: '继续修改',
+  selection_polish: '润色选段',
+  selection_translate: '翻译选段',
+  selection_condense: '精简选段',
+  selection_expand: '扩写选段',
+};
+
+function buildNoteAssistRequestSummary(input) {
+  const metadata = input && typeof input === 'object' && !Array.isArray(input) ? input : {};
+  const operation = String(metadata.operation || 'custom');
+  const label = NOTE_ASSIST_OPERATION_LABELS[operation] || '笔记辅助处理';
+  const scope = ['full', 'selection', 'generated'].includes(metadata.scope) ? metadata.scope : 'full';
+  const contentChars = Math.max(0, Math.min(60000, Math.trunc(Number(metadata.contentChars) || 0)));
+  const instruction = redactSensitiveText(metadata.instruction, 200).replace(/\s+/gu, ' ').trim();
+  const scopeText = scope === 'selection' ? '选区' : scope === 'generated' ? '上一版结果' : '原文';
+  const instructionText = instruction ? `：${instruction}` : '';
+  return `${label}${instructionText}（${scopeText} ${contentChars.toLocaleString('zh-CN')} 字，正文未记录）`;
+}
+
 async function logNoteAssist({
   req,
   requestId,
@@ -175,6 +204,7 @@ async function logNoteAssist({
   startedAt,
   firstTokenMs,
   finishReason,
+  requestSummary,
 }) {
   try {
     const price = providerInfo?.price || { input: 0, output: 0 };
@@ -206,7 +236,7 @@ async function logNoteAssist({
           status === 'aborted' ? 'final' : null,
           userId,
           userAlias,
-          '[笔记助手请求，正文不写入日志]',
+          requestSummary,
           null,
           1,
           usage.promptTokens,
@@ -226,7 +256,7 @@ async function logNoteAssist({
           id,
           userId,
           userAlias,
-          '[笔记助手请求，正文不写入日志]',
+          requestSummary,
           null,
           1,
           usage.promptTokens,
@@ -302,6 +332,7 @@ export const assistNote = async (req, res) => {
   let logStatus = 'success';
   let logError = null;
   let heartbeatTimer = null;
+  const requestSummary = buildNoteAssistRequestSummary(req.body?.requestMetadata);
   try {
     providerInfo = getActiveProviderInfo();
     const noteAssistMaxTokens = providerInfo.noteAssistMaxTokens || 4096;
@@ -442,6 +473,7 @@ export const assistNote = async (req, res) => {
       startedAt,
       firstTokenMs,
       finishReason,
+      requestSummary,
     });
   }
 };

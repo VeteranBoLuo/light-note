@@ -26,7 +26,14 @@ export async function search(req, res) {
         await searchTagIcons({
           query: req.body?.query,
           page: req.body?.page,
-          governance: { request: req, quotaPolicy: 'user', taskType: 'tag_icon_search' },
+          governance: {
+            request: req,
+            quotaPolicy: 'user',
+            taskType: 'tag_icon_search',
+            requestSummary: `标签选图：${String(req.body?.query || '')
+              .trim()
+              .slice(0, 80)}`,
+          },
         }),
       ),
     );

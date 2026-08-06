@@ -167,7 +167,8 @@
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
+  // 「今日」只展示当天尚未收口的任务：保留待领奖入口，奖励领取后不再占用首屏空间。
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
 
@@ -214,9 +215,7 @@
 
   const dateLabel = computed(() => {
     void clockTick.value;
-    return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(
-      new Date(),
-    );
+    return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
   });
 
   const greetingLine = computed(() => {

@@ -439,7 +439,8 @@
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
+  // 工作台只承载今天仍需处理的任务：全部完成但未领奖时继续保留领取入口，领取后隐藏。
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
   const growthSectionLoading = computed(

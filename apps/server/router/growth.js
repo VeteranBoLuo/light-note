@@ -32,6 +32,7 @@ router.post('/weekly/claim', growthHandle.doClaimWeekly);
 router.get('/points/log', growthHandle.getMyPointsLog);
 router.post('/admin/pointsOverview', growthHandle.getPointsOverviewForAdmin);
 router.post('/admin/userPoints', growthHandle.getUserPointsForAdmin);
+router.post('/admin/searchUsers', growthHandle.searchUsersForPointsAdmin);
 router.post('/admin/grantPoints', growthHandle.doAdminGrantPoints);
 router.post('/notices/read', growthHandle.readNotices);
 

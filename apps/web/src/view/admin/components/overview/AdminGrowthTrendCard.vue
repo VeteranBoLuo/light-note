@@ -1,5 +1,5 @@
 <template>
-  <section class="growth-trend" aria-label="近 7 天新增趋势">
+  <section class="growth-trend" :aria-label="`近 ${periodDays} 天新增趋势`">
     <article v-for="panel in panels" :key="panel.key" class="growth-trend__panel">
       <header class="growth-trend__head">
         <div class="growth-trend__title">
@@ -12,11 +12,11 @@
         </div>
         <dl class="growth-trend__summary">
           <div>
-            <dt>7 天新增</dt>
+            <dt>{{ periodDays }} 天新增</dt>
             <dd>{{ panel.summary.sum }}</dd>
           </div>
           <div>
-            <dt>日均</dt>
+            <dt>{{ granularity === 'week' ? '周均' : '日均' }}</dt>
             <dd>{{ panel.summary.dailyAverage }}</dd>
           </div>
           <div>
@@ -107,7 +107,7 @@
 
       <div class="growth-trend__x">
         <span v-for="(day, index) in days" :key="index" :class="{ 'is-active': hoverIndex === index }">
-          {{ day.label }}
+          {{ shouldShowXAxisLabel(index) ? day.label : '' }}
         </span>
       </div>
     </article>
@@ -128,7 +128,18 @@
     type AdminTrendDay,
   } from './adminTrendChart';
 
-  const props = defineProps<{ trend?: AdminTrendDay[] | null }>();
+  const props = withDefaults(
+    defineProps<{
+      trend?: AdminTrendDay[] | null;
+      periodDays?: number;
+      granularity?: 'day' | 'week';
+    }>(),
+    {
+      trend: null,
+      periodDays: 7,
+      granularity: 'day',
+    },
+  );
 
   // 两个面板共享同一条时间轴:悬浮索引联动,便于对比同一天的用户与内容变化。
   // 但 tooltip 只在鼠标所在的面板显示,避免同时弹两个气泡。
@@ -194,6 +205,13 @@
 
   function formatTick(value: number) {
     return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  }
+
+  function shouldShowXAxisLabel(index: number) {
+    const count = days.value.length;
+    if (count <= 15) return true;
+    const step = count <= 30 ? 3 : 2;
+    return index === 0 || index === count - 1 || index % step === 0;
   }
 
   function dotStyle(value: number, axisMax: number, colorVar: string) {

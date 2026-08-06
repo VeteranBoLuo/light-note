@@ -24,7 +24,7 @@ function mountBadges() {
       locale: 'zh-CN',
       messages: {
         'zh-CN': {
-          common: { pin: '置顶' },
+          common: { pinnedBadge: '置顶' },
           inbox: { pendingBadge: '待整理' },
           note: { formatMarkdown: 'Markdown', formatRichText: '富文本' },
         },
@@ -51,6 +51,13 @@ describe('共享语义徽章', () => {
     expect(badges[1]?.classList.contains('b-chip--pending')).toBe(true);
     expect(badges[2]?.classList.contains('b-chip--neutral')).toBe(true);
     expect(badges.every((badge) => badge?.tagName === 'SPAN')).toBe(true);
+  });
+
+  it('置顶徽章同时展示图钉图标和状态文案', () => {
+    const host = mountBadges();
+    const pinBadge = host.querySelector('.pin-badge');
+    expect(pinBadge?.querySelector('.pin-badge__icon')).not.toBeNull();
+    expect(pinBadge?.textContent?.trim()).toBe('置顶');
   });
 
   it('格式徽章保留可读全称，视觉只显示紧凑缩写', () => {

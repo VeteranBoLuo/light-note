@@ -451,8 +451,7 @@ export default {
     calendarExportFailed: 'Failed to generate the calendar file. Please check the due time.',
     calendarUnavailableInApp:
       'Saving calendar files is not available in the app yet. Use "Add to calendar", or open 轻笺 in a mobile browser to export.',
-    calendarHandedToDownloads:
-      'The calendar file is downloading. Open it from your Download folder to import it.',
+    calendarHandedToDownloads: 'The calendar file is downloading. Open it from your Download folder to import it.',
     calendarInsertAction: 'Add to calendar',
     calendarInsertNote:
       '"Add to calendar" opens your system calendar — just tap save there. The reminder has to be picked in the calendar app; the exported file keeps the reminder selected above.',
@@ -1388,8 +1387,7 @@ export default {
     exportPdfRendering: 'Generating PDF…',
     exportPreparing: 'Preparing the export file…',
     exportSavedToDownloads: 'Saved to your device — find it in your Files app',
-    exportTooLargeInApp:
-      'This note is too large to export in the app. Open Light Note in a mobile browser to export.',
+    exportTooLargeInApp: 'This note is too large to export in the app. Open Light Note in a mobile browser to export.',
     exportCopiedInApp:
       'The app cannot save files directly. The content has been copied to the clipboard — open Light Note in a mobile browser to export a file.',
     exportUnavailableInApp: 'The app cannot save files directly. Open Light Note in a mobile browser to export.',
@@ -1728,6 +1726,7 @@ export default {
     copyLink: 'Copy link',
     linkCopied: 'Link copied',
     pin: 'Pin to top',
+    pinnedBadge: 'Pinned',
     unpin: 'Unpin',
     pinned: 'Pinned',
     unpinned: 'Unpinned',
@@ -4444,7 +4443,8 @@ export default {
     actionBrowser: 'Copy the download page link',
     actionBrowserDesc: 'If the installer will not run, paste the link into your mobile browser and install from there',
     downloadStarted: 'Download started — find "light-note" in your Files app to install it',
-    bridgeUnavailable: 'This version cannot download directly. Copy the download page link and open it in your browser.',
+    bridgeUnavailable:
+      'This version cannot download directly. Copy the download page link and open it in your browser.',
     pageUrlCopied: 'Link copied — paste it into your mobile browser',
     pageUrlCopyFailedTitle: 'Open the download page manually',
     pageUrlCopyFailedHint: 'This device does not support copying. Enter this address in your mobile browser:',

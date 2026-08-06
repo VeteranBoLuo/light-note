@@ -52,7 +52,12 @@ describe('tagIconHandle Gateway governance', () => {
     expect(mocks.searchTagIcons).toHaveBeenCalledWith({
       query: '数据库',
       page: 0,
-      governance: { request: req, quotaPolicy: 'user', taskType: 'tag_icon_search' },
+      governance: {
+        request: req,
+        quotaPolicy: 'user',
+        taskType: 'tag_icon_search',
+        requestSummary: '标签选图：数据库',
+      },
     });
     expect(res.payload).toMatchObject({ status: 200, data: { icons: ['lucide:tag'] } });
   });
