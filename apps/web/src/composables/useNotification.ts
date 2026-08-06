@@ -11,6 +11,7 @@ export interface NotificationItem {
   meta: any;
   isRead: number;
   createTime: string;
+  todoState?: 'pending' | 'completed' | 'unavailable';
 }
 
 export interface NotificationPage {

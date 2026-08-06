@@ -12,6 +12,41 @@ const GROUP_KEY = 'COALESCE(batch_id, id)';
 const EMAIL_TYPES = ['verification', 'todo_reminder', 'system'];
 const EMAIL_STATUSES = ['sending', 'accepted', 'failed', 'unknown'];
 
+function parseNotificationMeta(meta) {
+  if (!meta) return {};
+  if (typeof meta === 'object') return meta;
+  try {
+    return JSON.parse(meta);
+  } catch {
+    return {};
+  }
+}
+
+async function attachTodoStates(items, userId) {
+  const reminderItems = items
+    .filter((item) => item.type === 'todo_reminder')
+    .map((item) => ({ item, todoId: String(parseNotificationMeta(item.meta)?.todoId || '').trim() }));
+  const todoIds = [...new Set(reminderItems.map(({ todoId }) => todoId).filter(Boolean))];
+  if (!todoIds.length) {
+    reminderItems.forEach(({ item }) => {
+      item.todoState = 'unavailable';
+    });
+    return;
+  }
+
+  const placeholders = todoIds.map(() => '?').join(',');
+  const [todos] = await pool.query(
+    `SELECT id, status FROM todo_items
+     WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
+    [userId, ...todoIds],
+  );
+  const statusById = new Map(todos.map((todo) => [String(todo.id), todo.status]));
+  reminderItems.forEach(({ item, todoId }) => {
+    const status = statusById.get(todoId);
+    item.todoState = status === 'pending' || status === 'completed' ? status : 'unavailable';
+  });
+}
+
 async function ensureRootRole(req, res) {
   const userId = req.user?.id;
   if (!userId || req.user?.role !== 'root' || req.adminContext) {
@@ -67,14 +102,16 @@ export const list = async (req, res) => {
        ORDER BY create_time DESC LIMIT ? OFFSET ?`,
       [...params, pageSize, offset],
     );
+    await attachTodoStates(items, userId);
     const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
     const [[{ unreadTotal }]] = await pool.query(
       `SELECT COUNT(*) AS unreadTotal FROM notification WHERE user_id = ? AND is_read = 0 AND del_flag = 0`,
       [userId],
     );
     res.send(resultData({ items, total, unreadTotal, currentPage, pageSize }));
-  } catch (e) {
-    res.send(resultData(null, 500, '获取通知列表失败: ' + e.message));
+  } catch (error) {
+    console.error('[notification] 列表查询失败 code=%s', error?.code || 'UNKNOWN');
+    res.send(resultData(null, 500, '获取通知列表失败'));
   }
 };
 

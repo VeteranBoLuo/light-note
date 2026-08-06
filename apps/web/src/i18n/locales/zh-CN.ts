@@ -2481,6 +2481,8 @@ export default {
     todoComplete: '直接完成',
     todoOpen: '打开待办',
     todoCompleted: '待办已完成',
+    todoCompletedState: '已完成',
+    todoUnavailable: '待办已删除',
     todoCompleteFailed: '待办完成失败，请打开待办查看当前状态',
     delete: '删除',
   },

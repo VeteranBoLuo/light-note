@@ -156,7 +156,10 @@
 
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const searchValue = ref('');
-  const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({ key: null, order: null });
+  const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({
+    key: 'lastActiveTime',
+    order: 'desc',
+  });
   const {
     items: userList,
     total,

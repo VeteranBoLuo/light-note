@@ -2518,6 +2518,8 @@ export default {
     todoComplete: 'Complete',
     todoOpen: 'Open todo',
     todoCompleted: 'Todo completed.',
+    todoCompletedState: 'Completed',
+    todoUnavailable: 'Todo deleted',
     todoCompleteFailed: 'Could not complete the todo. Open it to review the current status.',
     delete: 'Delete',
   },

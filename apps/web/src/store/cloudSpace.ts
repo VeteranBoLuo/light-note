@@ -30,11 +30,14 @@ export default defineStore('dom', {
         folder?: { id: string; name: string };
         searchFileName: string;
         loading: boolean;
+        folderLoading: boolean;
         loadingMore: boolean;
         filePage: number;
         fileTotal: number;
         fileHasMore: boolean;
         fileRequestVersion: number;
+        folderRequestVersion: number;
+        usedSpaceRequestVersion: number;
         cacheImgArr: any[]; // 记录需要清空缓存的图片，因为图片直接覆盖后地址不变，需要手动记录一下方便浏览器清空老图片缓存
         draggingFile: { id: string; folderId?: string } | null;
       }
@@ -51,11 +54,14 @@ export default defineStore('dom', {
       },
       searchFileName: '',
       loading: false,
+      folderLoading: false,
       loadingMore: false,
       filePage: 0,
       fileTotal: 0,
       fileHasMore: false,
       fileRequestVersion: 0,
+      folderRequestVersion: 0,
+      usedSpaceRequestVersion: 0,
       cacheImgArr: [],
       draggingFile: null,
     },
@@ -128,8 +134,10 @@ export default defineStore('dom', {
      * 失败时保留上一次的用量,不写成 0 —— 那会让用户以为空间被清空了。
      */
     async getUsedSpace() {
+      const requestVersion = ++this.usedSpaceRequestVersion;
       try {
         const res = await apiBasePost('/api/file/queryTotalFileSize');
+        if (requestVersion !== this.usedSpaceRequestVersion) return false;
         if (res?.status !== 200) return false;
         this.usedSpace = res.data.totalSizeMB;
         if (res.data.quotaMB) this.maxSpace = res.data.quotaMB;
@@ -143,15 +151,47 @@ export default defineStore('dom', {
      * 文件夹列表。返回是否成功,理由同上:失败保留旧文件夹,不清空成空列表。
      */
     async queryFolder() {
+      const requestVersion = ++this.folderRequestVersion;
+      if (!this.folderList.length) this.folderLoading = true;
       try {
         const res = await apiQueryPost('/api/file/queryFolder');
+        if (requestVersion !== this.folderRequestVersion) return false;
         if (res?.status !== 200) return false;
         this.folderList = Array.isArray(res.data?.items) ? res.data.items : this.folderList;
         return true;
       } catch (error) {
         console.warn('加载云空间文件夹失败:', error);
         return false;
+      } finally {
+        if (requestVersion === this.folderRequestVersion) this.folderLoading = false;
       }
+    },
+    /**
+     * 账号身份变化时清空所有账号归属数据，并递增请求版本使旧身份的在途响应失效。
+     * showLoading 用于登录/登出切换：如果云空间仍在当前视图，立即显示加载态而不是空状态。
+     */
+    reset(options: { showLoading?: boolean } = {}) {
+      this.fileRequestVersion += 1;
+      this.folderRequestVersion += 1;
+      this.usedSpaceRequestVersion += 1;
+      this.usedSpace = 0;
+      this.maxSpace = 512;
+      this.folderList = [];
+      this.fileList = [];
+      this.typeCheckValue = [...CLOUD_FILE_CATEGORY_ORDER];
+      this.folder = {
+        name: i18n.global.t('cloudSpace.allFile'),
+        id: 'all',
+      };
+      this.searchFileName = '';
+      this.loading = options.showLoading === true;
+      this.folderLoading = options.showLoading === true;
+      this.loadingMore = false;
+      this.filePage = 0;
+      this.fileTotal = 0;
+      this.fileHasMore = false;
+      this.cacheImgArr = [];
+      this.draggingFile = null;
     },
   },
 });

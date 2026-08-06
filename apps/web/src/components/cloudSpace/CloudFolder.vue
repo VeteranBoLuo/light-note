@@ -16,7 +16,11 @@
       <svg-icon size="16" :src="icon.common.folder" />
       <span class="text-hidden" style="width: calc(100% - 28px)">{{ $t('cloudSpace.allFile') }}</span>
     </div>
+    <div v-if="cloud.folderLoading" class="cloud-folder-skeleton" aria-hidden="true">
+      <div v-for="index in 6" :key="index" class="cloud-folder-skeleton__row"></div>
+    </div>
     <b-list
+      v-else
       draggable
       style="height: calc(100% - 80px)"
       v-model:listOptions="cloud.folderList"
@@ -362,6 +366,42 @@
     margin-top: 5px !important;
     :deep(.b-input) {
       padding-right: 60px !important;
+    }
+  }
+
+  .cloud-folder-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding-top: 5px;
+  }
+
+  .cloud-folder-skeleton__row {
+    position: relative;
+    height: 32px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--bl-input-noBorder-bg-color);
+  }
+
+  .cloud-folder-skeleton__row::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, var(--skeleton-body-bg-color), transparent);
+    transform: translateX(-100%);
+    animation: cloud-folder-skeleton-shine 1.2s infinite;
+  }
+
+  @keyframes cloud-folder-skeleton-shine {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cloud-folder-skeleton__row::after {
+      animation: none;
     }
   }
 
