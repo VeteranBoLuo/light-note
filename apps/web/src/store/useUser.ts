@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import icon from '@/config/icon.ts';
 import bookmarkStore from './bookmark.ts';
+import { resolveSystemTheme } from '@/utils/systemTheme';
 
 // 接口定义
 interface UserLocation {
@@ -142,11 +143,9 @@ export default defineStore('user', {
      * 获取当前主题
      */
     currentTheme(state): string {
-      return state.preferences.theme === 'system'
-        ? typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'night'
-          : 'day'
-        : state.preferences.theme;
+      // 'system' 的判定统一走 resolveSystemTheme：App 内 prefers-color-scheme 不可信，
+      // 必须用原生给的 uiMode 信号（详见 utils/systemTheme.ts）
+      return state.preferences.theme === 'system' ? resolveSystemTheme() : state.preferences.theme;
     },
     /**
      * 获取图标颜色
@@ -154,9 +153,7 @@ export default defineStore('user', {
     iconColor(state): string {
       const theme = state.preferences.theme;
       if (theme === 'system') {
-        return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'white'
-          : 'black';
+        return resolveSystemTheme() === 'night' ? 'white' : 'black';
       }
       return theme === 'day' ? 'black' : 'white';
     },

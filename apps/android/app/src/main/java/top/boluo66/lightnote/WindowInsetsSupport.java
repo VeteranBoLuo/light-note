@@ -1,6 +1,7 @@
 package top.boluo66.lightnote;
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
@@ -65,8 +66,18 @@ final class WindowInsetsSupport {
         });
     }
 
-    static boolean isNightMode(Activity activity) {
-        int nightMode = activity.getResources().getConfiguration().uiMode
+    /**
+     * 系统是否处于深色模式。
+     *
+     * 参数放宽到 Context（Activity 本身就是 Context，既有调用不受影响）：WebViewSupport.configure
+     * 只拿得到 webView.getContext()，也需要这个判断去给 UA 打系统主题标记。
+     *
+     * 这是判断系统深色唯一可靠的来源 —— 框架层的 uiMode，不经过 WebView。WebView 的
+     * `prefers-color-scheme` 只反映宿主主题的 isLightTheme，且在旧 API 下会被 setForceDark 钉死，
+     * 都不能用来判断系统开关。
+     */
+    static boolean isNightMode(Context context) {
+        int nightMode = context.getResources().getConfiguration().uiMode
             & Configuration.UI_MODE_NIGHT_MASK;
         return nightMode == Configuration.UI_MODE_NIGHT_YES;
     }

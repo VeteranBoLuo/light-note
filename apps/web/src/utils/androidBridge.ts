@@ -45,6 +45,8 @@ declare global {
     __lightNoteAndroidImageSaveResult?: (raw: unknown) => void;
     /** 原生 → 网页的安装包安装结果回调，由 installApkViaAndroid 装上 */
     __lightNoteAndroidApkInstallResult?: (raw: unknown) => void;
+    /** 原生 → 网页的系统深浅色变化回调，由 onAndroidSystemThemeChange 装上 */
+    __lightNoteAndroidSystemTheme?: (raw: unknown) => void;
   }
 }
 
@@ -69,6 +71,54 @@ export function getLightNoteAndroidVersion(
 ): string {
   const matched = /\bLightNoteAndroid\/([\w.-]+)/i.exec(userAgent);
   return matched ? matched[1] : '';
+}
+
+/**
+ * 原生打在 UA 里的系统主题（`LightNoteSystemTheme/night|day`）。不在 App 内则返回 ''。
+ *
+ * 这是 App 内判断系统深浅色的唯一可信来源：WebView 的 `prefers-color-scheme` 只反映宿主主题的
+ * isLightTheme，还会被旧 API 的 setForceDark 钉死，跟系统开关无关（鸿蒙兼容层实测恒为 light）。
+ * 原生读的是框架层 uiMode，见 WindowInsetsSupport.isNightMode。
+ *
+ * 走 UA 而不是桥消息，是因为「跟随系统」要在首屏渲染前就定好主题 —— UA 是唯一在页面第一行
+ * 脚本求值前就已经可用的通道。旧版 App 的 UA 里没有这个标记，调用方据此回退到媒体查询。
+ */
+export function getAndroidSystemTheme(
+  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
+): 'night' | 'day' | '' {
+  const matched = /\bLightNoteSystemTheme\/(night|day)\b/i.exec(userAgent);
+  return matched ? (matched[1].toLowerCase() as 'night' | 'day') : '';
+}
+
+/** UA 是启动时的快照，运行中切换系统深色由原生 onConfigurationChanged 推过来。 */
+type AndroidSystemThemeListener = (theme: 'night' | 'day') => void;
+const systemThemeListeners = new Set<AndroidSystemThemeListener>();
+let systemThemeHookInstalled = false;
+
+function ensureSystemThemeHook() {
+  if (systemThemeHookInstalled || typeof window === 'undefined') return;
+  systemThemeHookInstalled = true;
+  window.__lightNoteAndroidSystemTheme = (raw: unknown) => {
+    const theme = raw === 'night' ? 'night' : raw === 'day' ? 'day' : '';
+    if (!theme) return;
+    systemThemeListeners.forEach((listener) => {
+      try {
+        listener(theme);
+      } catch (error) {
+        // 一个订阅者出错不该影响其它订阅者，也不该把异常抛回原生的 evaluateJavascript
+        console.error('系统主题回调出错:', error);
+      }
+    });
+  };
+}
+
+/** 订阅原生推来的系统主题变化，返回取消订阅函数。 */
+export function onAndroidSystemThemeChange(listener: AndroidSystemThemeListener): () => void {
+  ensureSystemThemeHook();
+  systemThemeListeners.add(listener);
+  return () => {
+    systemThemeListeners.delete(listener);
+  };
 }
 
 export function hasAndroidBridge(): boolean {

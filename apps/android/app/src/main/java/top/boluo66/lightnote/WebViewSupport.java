@@ -137,8 +137,24 @@ final class WebViewSupport {
         settings.setJavaScriptCanOpenWindowsAutomatically(allowMultipleWindows);
         enableSafeBrowsing(webView, settings);
         disableAutomaticDarkening(settings);
+        /*
+         * UA 里除了版本号，还带上系统当前是深色还是浅色。
+         *
+         * 为什么非得走 UA：网页在「跟随系统」模式下要在首屏渲染前就定好主题，而 UA 是唯一
+         * 在页面第一行脚本求值前就已经可用的通道 —— evaluateJavascript 注入总是晚于它。
+         *
+         * 为什么不能让网页自己用 prefers-color-scheme：那个媒体查询只反映宿主主题的
+         * isLightTheme，并且在旧 WebView 上会被 setForceDark(FORCE_DARK_OFF) 钉死成 light，
+         * 与系统开关无关。实测鸿蒙兼容层里它就一直是 light，导致「跟随系统」永远浅色。
+         * 框架层的 uiMode 才是可靠来源（见 WindowInsetsSupport.isNightMode）。
+         *
+         * UA 是创建时的一次性快照，运行中切换系统深色不会更新它 —— 那种情况由
+         * MainActivity.onConfigurationChanged 主动推给网页。
+         */
         settings.setUserAgentString(
-            settings.getUserAgentString() + " LightNoteAndroid/" + BuildConfig.VERSION_NAME
+            settings.getUserAgentString()
+                + " LightNoteAndroid/" + BuildConfig.VERSION_NAME
+                + " LightNoteSystemTheme/" + systemThemeName(webView.getContext())
         );
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         webView.setBackgroundColor(Color.TRANSPARENT);
@@ -148,6 +164,30 @@ final class WebViewSupport {
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
+    }
+
+    /** 系统主题名，与网页侧 data-theme 用同一套字面量（night / day），省掉两边的映射。 */
+    static String systemThemeName(Context context) {
+        return WindowInsetsSupport.isNightMode(context) ? "night" : "day";
+    }
+
+    /**
+     * 把系统主题变化推给网页。
+     *
+     * Manifest 里声明了 configChanges 含 uiMode，切换系统深色时 Activity 不会重建，
+     * WebView 的 UA 也就停留在启动时的快照上，只能由原生主动通知。
+     * 网页那边只在用户选了「跟随系统」时才据此换肤（见 utils/systemTheme.ts）。
+     */
+    static void notifySystemThemeChanged(WebView webView, Context context) {
+        if (webView == null) {
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidSystemTheme&&window.__lightNoteAndroidSystemTheme('"
+                + systemThemeName(context)
+                + "');",
+            null
+        );
     }
 
     private static void enableSafeBrowsing(WebView webView, WebSettings settings) {

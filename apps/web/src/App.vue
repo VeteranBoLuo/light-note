@@ -76,6 +76,7 @@
   import { routeNavigationLoading } from '@/router';
   import { globalRefreshing } from '@/composables/useGlobalRefreshBar';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
@@ -252,8 +253,7 @@
     '/ptrash': '/trash',
   };
 
-  let mq = null;
-  let mqListener = null;
+  let disposeSystemTheme: (() => void) | null = null;
   let noticeTimer: number | null = null;
   let lastNoticeRefreshAt = 0;
   let noticeRequest: Promise<void> | null = null;
@@ -344,15 +344,15 @@
       /* 隐私模式 sessionStorage 不可用时忽略 */
     }
 
-    mq = window.matchMedia('(prefers-color-scheme: dark)');
-    mqListener = () => {
+    // 通过 onSystemThemeChange 而不是直接监听媒体查询：App 内 prefers-color-scheme 不可信，
+    // 系统深浅色由原生推送（详见 utils/systemTheme.ts），这里两个来源共用一个回调。
+    disposeSystemTheme = onSystemThemeChange(() => {
       // 仅当用户选择「跟随系统」时,OS 配色变化才重新应用主题——只切 DOM,不回写 preferences.theme,
       // 保留 'system' 语义(旧实现会把 theme 覆盖成具体 night/day,破坏语义且是隐藏写入口)
       if (user.preferences.theme === 'system') {
         applyTheme();
       }
-    };
-    mq.addEventListener('change', mqListener);
+    });
     console.log('初始屏幕尺寸：', user.preferences);
   }
 
@@ -862,9 +862,8 @@
     window.removeEventListener('online', handleLandingAuthRecoverySignal);
     document.removeEventListener('visibilitychange', handleLandingAuthRecoverySignal);
     clearLandingAuthRetry(true);
-    if (mq && mqListener) {
-      mq.removeEventListener('change', mqListener);
-    }
+    disposeSystemTheme?.();
+    disposeSystemTheme = null;
   });
 
   // 监听布局断点变化

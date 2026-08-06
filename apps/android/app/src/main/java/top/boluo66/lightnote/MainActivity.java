@@ -3,6 +3,7 @@ package top.boluo66.lightnote;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
@@ -153,6 +154,22 @@ public final class MainActivity extends Activity {
         super.onNewIntent(intent);
         // singleTask 从桌面恢复时只更新启动 Intent，保留现有 WebView、路由和滚动状态。
         setIntent(intent);
+    }
+
+    /**
+     * 系统深浅色切换时把新状态推给网页。
+     *
+     * Manifest 声明了 configChanges 含 uiMode，所以这里不会重建 Activity —— WebView 的 UA
+     * 停留在启动那一刻的快照上，网页无从得知系统已经切换，必须主动通知。
+     * 网页只在用户选了「跟随系统」时才据此换肤，手动指定深色/浅色的用户不受影响。
+     */
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (webView == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        WebViewSupport.notifySystemThemeChanged(webView, this);
     }
 
     private void registerSystemBackCallback() {
