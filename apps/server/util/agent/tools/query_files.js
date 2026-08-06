@@ -2,6 +2,7 @@ import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { categoryCondition, FILE_CATEGORY_CASE, FILE_CATEGORY_LABEL, breakdownFromRows } from '../fileCategory.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 
 // LIKE 通配符按字面处理：文件名里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
 function escapeLikePattern(keyword) {
@@ -86,7 +87,8 @@ export default {
   sourceType: 'file',
   description:
     '查询用户云空间的文件。keyword 应为短关键词或词组(匹配文件名),不要传整句问题;可按文件夹 ID/精确名称、文件类型(image图片/document文档/video视频/audio音频/archive压缩包/other其他)、时间范围筛选。folderId 与 folderName 同时存在时以 folderId 为准。' +
-    '注意:file_type 存的是 MIME,类型按 MIME 归类;结果总会附带各类型数量分布 typeBreakdown,回答"各类文件有多少/除了图片还有什么"时直接看它,不要逐类猜。需要按语义查找文件正文内容时优先使用 search_content。',
+    '注意:file_type 存的是 MIME,类型按 MIME 归类;结果总会附带各类型数量分布 typeBreakdown,回答"各类文件有多少/除了图片还有什么"时直接看它,不要逐类猜。需要按语义查找文件正文内容时优先使用 search_content。' +
+    personalScopeHint('云空间文件'),
   parameters: {
     type: 'object',
     properties: {
@@ -100,7 +102,7 @@ export default {
       },
       timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"全部"' },
       limit: { type: 'integer', description: '返回条数，默认10，最大50' },
-      user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），仅管理员可用。不填则查自己的数据' },
+      user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
   argumentAliases: ['folder_id', 'directoryId', 'directory_id', 'folder_name', 'folder'],

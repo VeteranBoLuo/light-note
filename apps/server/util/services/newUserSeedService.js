@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import pool from '../../db/index.js';
-import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
+import { buildResourceHref, normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
 import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
 import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
@@ -120,6 +120,7 @@ function buildChineseSeed(siteUrl) {
         key: 'welcome',
         title: '欢迎使用轻笺',
         type: 'html',
+        sort: 0,
         content:
           '<h2>欢迎来到你的轻笺</h2>' +
           '<p>这里已经准备了少量示例内容，帮助你快速了解书签、笔记、标签和云空间如何配合使用。</p>' +
@@ -135,12 +136,83 @@ function buildChineseSeed(siteUrl) {
         key: 'first-note',
         title: '我的第一篇笔记',
         type: 'markdown',
+        sort: 1,
         content:
           '# 我的第一篇笔记\n\n把这篇示例改成你自己的内容吧。\n\n' +
           '## 今天想做的事\n\n- [ ] 收藏一篇稍后阅读的文章\n' +
           '- [ ] 记录一个突然出现的灵感\n- [ ] 整理一份工作资料\n\n' +
           '> 你可以修改标题、正文和标签，也可以直接删除这篇笔记。',
         tagKeys: ['work', 'ideas'],
+      },
+      {
+        key: 'rich-text-demo',
+        title: '富文本样式示例',
+        type: 'html',
+        sort: 2,
+        tagKeys: ['getting-started'],
+        content:
+          '<h1 style="background: linear-gradient(90deg, #615ced, #00a884, #ff8a00); -webkit-background-clip: text; color: transparent; text-align: center;">富文本样式示例</h1>' +
+          '<p style="text-align: center; color: #6b7280;">这一篇演示轻笺富文本的进阶排版：渐变、发光、动画与配色。</p>' +
+          '<hr>' +
+          '<h2 style="background: linear-gradient(90deg, #615ced, #ec4899); -webkit-background-clip: text; color: transparent;">渐变与发光</h2>' +
+          '<p><span style="background: linear-gradient(135deg, #615ced, #00a884); -webkit-background-clip: text; color: transparent; font-size: 22px; font-weight: bold;">渐变文字：紫色到绿色，颜色顺着笔划流动</span></p>' +
+          '<p><span style="color: #615ced; text-shadow: 0 0 12px rgba(97, 92, 237, 0.85); font-size: 20px; font-weight: bold;">发光文字：像霓虹灯一样亮起来</span></p>' +
+          '<h2>渐变卡片</h2>' +
+          '<p style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(97, 92, 237, 0.55);"><strong style="font-size: 18px;">紫色渐变卡片</strong><br>白字配深色渐变底，圆角加柔和投影，内容区立刻有了层次。</p>' +
+          '<p style="background: linear-gradient(135deg, #00a884, #0d9488); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(13, 148, 136, 0.5);"><strong style="font-size: 18px;">绿色渐变卡片</strong><br>同一套排版换一个配色，就是完全不同的气质。</p>' +
+          '<h2>动画效果</h2>' +
+          '<p>呼吸发光：<span style="display: inline-block; padding: 6px 18px; border-radius: 999px; background: linear-gradient(90deg, #615ced, #00a884); color: #ffffff; font-weight: bold; animation: mermaid-figure-breathe 2s ease-in-out infinite;">同步进行中</span></p>' +
+          '<p>旋转指示：<span style="display: inline-block; width: 26px; height: 26px; border-radius: 50%; border: 4px solid rgba(97, 92, 237, 0.25); border-top-color: #615ced; animation: spin 1.2s linear infinite; vertical-align: middle;">&nbsp;</span>　加载中的转圈也能这样画</p>' +
+          '<p>漂浮移动：<span style="display: inline-block; font-size: 26px; animation: backgroundShift 3s ease-in-out infinite;">🪁</span>　风筝在页面里慢慢飘</p>' +
+          '<h2>渐变边框</h2>' +
+          '<p style="border: 3px solid transparent; background: linear-gradient(var(--card-background, #ffffff), var(--card-background, #ffffff)) padding-box, linear-gradient(135deg, #ff8a00, #ec4899) border-box; border-radius: 14px; padding: 16px 20px;">双背景技巧：外层渐变负责画边框，内层实色负责盖住内容区，浅色深色主题都能自适应。</p>' +
+          '<h2>引用资源</h2>' +
+          '<p>正文里输入 @ 或点工具栏「引用资源」，就能把书签、笔记嵌进文字，点击直达：</p>' +
+          '<ul><li>书签：{{ref:bookmark:help}}、{{ref:bookmark:co-build}}</li><li>笔记：{{ref:note:welcome}}、{{ref:note:first-note}}</li></ul>' +
+          '<h2>彩色列表</h2>' +
+          '<ul><li><span style="color: #615ced; font-weight: bold;">书签</span> — 一键收藏，自动提取摘要与截图</li><li><span style="color: #00a884; font-weight: bold;">笔记</span> — 富文本 / Markdown 双模式</li><li><span style="color: #ff8a00; font-weight: bold;">云空间</span> — 文件直传直看</li></ul>' +
+          '<h2>渐变表格</h2>' +
+          '<table><thead><tr><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">效果</th><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">实现方式</th></tr></thead><tbody><tr><td>渐变文字</td><td>background-clip: text</td></tr><tr><td>霓虹发光</td><td>text-shadow / box-shadow</td></tr><tr><td>呼吸与旋转</td><td>animation 引用全局 keyframes</td></tr></tbody></table>' +
+          '<h2>彩色引用</h2>' +
+          '<blockquote style="border-left: 4px solid #615ced; background: rgba(97, 92, 237, 0.08); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 0;">把每一次收藏与记录都留在这里，在你需要的时候重新派上用场。</blockquote>' +
+          '<hr>' +
+          '<p style="text-align: center; background: linear-gradient(90deg, #ff8a00, #ec4899, #615ced); -webkit-background-clip: text; color: transparent; font-size: 18px; font-weight: bold;">—— 富文本的想象力，远不止黑白 ——</p>',
+      },
+      {
+        key: 'mindmap-demo',
+        title: '思维导图示例',
+        type: 'markdown',
+        sort: 3,
+        tagKeys: ['getting-started'],
+        content:
+          '> 这篇笔记演示轻笺的思维导图能力：在笔记里直接写 mermaid 代码块，就能渲染出可交互、可导出的脑图。\n\n' +
+          '## 一张图看懂轻笺\n\n' +
+          '```mermaid\n' +
+          'mindmap\n' +
+          '  root(轻笺)\n' +
+          '    智能书签\n' +
+          '      一键收藏网页\n' +
+          '      自动提取标题、摘要与截图\n' +
+          '      链接失效也能看\n' +
+          '    云笔记\n' +
+          '      富文本与 Markdown 双模式\n' +
+          '      插入思维导图、流程图等图表\n' +
+          '      自动生成目录，支持导出 PDF\n' +
+          '    动态标签网络\n' +
+          '      书签、笔记、文件自动关联\n' +
+          '      可探索的知识图谱\n' +
+          '    轻笺AI助手\n' +
+          '      问答与翻译\n' +
+          '      润色与整理\n' +
+          '      帮你建笔记、归档书签\n' +
+          '    云空间\n' +
+          '      PDF / Word / PPT 直传直看\n' +
+          '      多端实时同步\n' +
+          '```\n\n' +
+          '## 怎么用\n\n' +
+          '- 新建笔记时选「思维导图」模板，直接得到脑图骨架\n' +
+          '- 在正文里写 ```mermaid 代码块，可插入思维导图、流程图、时序图与时间线\n' +
+          '- 渲染后的图表支持导出图片，方便分享',
       },
     ],
     cloud: {
@@ -211,6 +283,7 @@ function buildEnglishSeed(siteUrl) {
         key: 'welcome',
         title: 'Welcome to Light Note',
         type: 'html',
+        sort: 0,
         content:
           '<h2>Welcome to your Light Note workspace</h2>' +
           '<p>A few examples are ready so you can see how bookmarks, notes, tags, and cloud files work together.</p>' +
@@ -226,12 +299,83 @@ function buildEnglishSeed(siteUrl) {
         key: 'first-note',
         title: 'My First Note',
         type: 'markdown',
+        sort: 1,
         content:
           '# My First Note\n\nTurn this example into something of your own.\n\n' +
           '## Things to try today\n\n- [ ] Save an article to read later\n' +
           '- [ ] Capture a new idea\n- [ ] Organize a work document\n\n' +
           '> You can change the title, body, and tags, or simply delete this note.',
         tagKeys: ['work', 'ideas'],
+      },
+      {
+        key: 'rich-text-demo',
+        title: 'Rich Text Style Example',
+        type: 'html',
+        sort: 2,
+        tagKeys: ['getting-started'],
+        content:
+          '<h1 style="background: linear-gradient(90deg, #615ced, #00a884, #ff8a00); -webkit-background-clip: text; color: transparent; text-align: center;">Rich Text Style Example</h1>' +
+          '<p style="text-align: center; color: #6b7280;">This note shows off advanced rich text: gradients, glow, animations and color schemes.</p>' +
+          '<hr>' +
+          '<h2 style="background: linear-gradient(90deg, #615ced, #ec4899); -webkit-background-clip: text; color: transparent;">Gradients &amp; Glow</h2>' +
+          '<p><span style="background: linear-gradient(135deg, #615ced, #00a884); -webkit-background-clip: text; color: transparent; font-size: 22px; font-weight: bold;">Gradient text: purple to green, flowing through the letters</span></p>' +
+          '<p><span style="color: #615ced; text-shadow: 0 0 12px rgba(97, 92, 237, 0.85); font-size: 20px; font-weight: bold;">Glowing text: like a neon sign</span></p>' +
+          '<h2>Gradient cards</h2>' +
+          '<p style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(97, 92, 237, 0.55);"><strong style="font-size: 18px;">Purple gradient card</strong><br>White text on a deep gradient with rounded corners and a soft shadow adds depth.</p>' +
+          '<p style="background: linear-gradient(135deg, #00a884, #0d9488); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(13, 148, 136, 0.5);"><strong style="font-size: 18px;">Green gradient card</strong><br>The same layout with another palette feels completely different.</p>' +
+          '<h2>Animations</h2>' +
+          '<p>Breathing glow: <span style="display: inline-block; padding: 6px 18px; border-radius: 999px; background: linear-gradient(90deg, #615ced, #00a884); color: #ffffff; font-weight: bold; animation: mermaid-figure-breathe 2s ease-in-out infinite;">Syncing</span></p>' +
+          '<p>Spinner: <span style="display: inline-block; width: 26px; height: 26px; border-radius: 50%; border: 4px solid rgba(97, 92, 237, 0.25); border-top-color: #615ced; animation: spin 1.2s linear infinite; vertical-align: middle;">&nbsp;</span>　A loading spinner drawn with pure CSS</p>' +
+          '<p>Floating: <span style="display: inline-block; font-size: 26px; animation: backgroundShift 3s ease-in-out infinite;">🪁</span>　A kite drifting across the page</p>' +
+          '<h2>Gradient border</h2>' +
+          '<p style="border: 3px solid transparent; background: linear-gradient(var(--card-background, #ffffff), var(--card-background, #ffffff)) padding-box, linear-gradient(135deg, #ff8a00, #ec4899) border-box; border-radius: 14px; padding: 16px 20px;">A two-layer background trick: the outer gradient draws the border, the inner solid color covers the content. Works in both light and dark themes.</p>' +
+          '<h2>Resource references</h2>' +
+          '<p>Type @ or use the resource picker to embed bookmarks and notes inline, then click to jump:</p>' +
+          '<ul><li>Bookmarks: {{ref:bookmark:help}}, {{ref:bookmark:repository}}</li><li>Notes: {{ref:note:welcome}}, {{ref:note:first-note}}</li></ul>' +
+          '<h2>Colorful list</h2>' +
+          '<ul><li><span style="color: #615ced; font-weight: bold;">Bookmarks</span> — save in one click, summary and screenshot extracted</li><li><span style="color: #00a884; font-weight: bold;">Notes</span> — rich text and Markdown</li><li><span style="color: #ff8a00; font-weight: bold;">Cloud storage</span> — preview files directly</li></ul>' +
+          '<h2>Gradient table</h2>' +
+          '<table><thead><tr><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">Effect</th><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">How</th></tr></thead><tbody><tr><td>Gradient text</td><td>background-clip: text</td></tr><tr><td>Neon glow</td><td>text-shadow / box-shadow</td></tr><tr><td>Breathing &amp; spin</td><td>animation with global keyframes</td></tr></tbody></table>' +
+          '<h2>Colored quote</h2>' +
+          '<blockquote style="border-left: 4px solid #615ced; background: rgba(97, 92, 237, 0.08); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 0;">Every bookmark and note stays here, ready whenever you need it again.</blockquote>' +
+          '<hr>' +
+          '<p style="text-align: center; background: linear-gradient(90deg, #ff8a00, #ec4899, #615ced); -webkit-background-clip: text; color: transparent; font-size: 18px; font-weight: bold;">—— Rich text is about way more than black and white ——</p>',
+      },
+      {
+        key: 'mindmap-demo',
+        title: 'Mind Map Example',
+        type: 'markdown',
+        sort: 3,
+        tagKeys: ['getting-started'],
+        content:
+          '> This note demonstrates Light Note mind maps: write a mermaid code block and get an interactive, exportable map.\n\n' +
+          '## Light Note at a glance\n\n' +
+          '```mermaid\n' +
+          'mindmap\n' +
+          '  root(Light Note)\n' +
+          '    Smart bookmarks\n' +
+          '      Save any webpage in one click\n' +
+          '      Title, summary and screenshot extracted\n' +
+          '      Still readable after the link dies\n' +
+          '    Cloud notes\n' +
+          '      Rich text and Markdown\n' +
+          '      Mind maps, flowcharts and more\n' +
+          '      Table of contents and PDF export\n' +
+          '    Dynamic tags\n' +
+          '      Bookmarks, notes and files linked\n' +
+          '      An explorable knowledge graph\n' +
+          '    AI assistant\n' +
+          '      Q&A and translation\n' +
+          '      Polish and summarize\n' +
+          '      Creates notes and files bookmarks\n' +
+          '    Cloud storage\n' +
+          '      Preview PDF / Word / PPT\n' +
+          '      Sync across devices\n' +
+          '```\n\n' +
+          '## How to use\n\n' +
+          '- Pick the Mind Map template when creating a note to start from a map skeleton\n' +
+          '- Write a ```mermaid code block to insert mind maps, flowcharts, sequence diagrams and timelines\n' +
+          '- Export rendered diagrams as images to share',
       },
     ],
     cloud: {
@@ -268,6 +412,28 @@ function buildEnglishSeed(siteUrl) {
 export function buildNewUserSeedContent({ lang = 'zh-CN', siteUrl } = {}) {
   const normalizedSiteUrl = normalizeSiteUrl(siteUrl);
   return normalizeLang(lang) === 'en-US' ? buildEnglishSeed(normalizedSiteUrl) : buildChineseSeed(normalizedSiteUrl);
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+}
+
+/**
+ * 笔记正文里的资源引用占位符（{{ref:bookmark:help}} 形式）在插入前替换成
+ * 指向本账号种子资源的真实引用链接。种子里先插书签再插笔记，所以到这一步
+ * 所有书签/笔记的确定性 ID 都已就绪；引用的一定是用户自己的资源，不会出现失效 chip。
+ * 找不到定义或 ID 时原样保留占位符，不静默丢内容。
+ */
+const NOTE_REF_PLACEHOLDER_RE = /\{\{ref:(bookmark|note):([A-Za-z0-9_-]+)\}\}/g;
+
+function resolveNoteRefPlaceholders(content, ids, rawContent) {
+  return String(rawContent).replace(NOTE_REF_PLACEHOLDER_RE, (match, type, key) => {
+    const definition = type === 'bookmark' ? content.bookmarks.find((b) => b.key === key) : content.notes.find((n) => n.key === key);
+    const id = type === 'bookmark' ? ids.bookmarks[key] : ids.notes[key];
+    if (!definition || !id) return match;
+    const label = escapeHtml(type === 'bookmark' ? definition.name : definition.title);
+    return `<a href="${buildResourceHref({ type, id })}" contenteditable="false" data-ln-resource-type="${type}" data-ln-resource-id="${id}">${label}</a>`;
+  });
 }
 
 function buildSeedIds(userId, content) {
@@ -369,7 +535,9 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
 
     for (const note of content.notes) {
       const noteId = ids.notes[note.key];
-      const noteContent = note.type === 'markdown' ? normalizeMarkdownBlockquoteEntities(note.content) : note.content;
+      const resolvedContent = resolveNoteRefPlaceholders(content, ids, note.content);
+      const noteContent =
+        note.type === 'markdown' ? normalizeMarkdownBlockquoteEntities(resolvedContent) : resolvedContent;
       await connection.query('INSERT INTO note SET ?', [
         insertData({
           id: noteId,
@@ -377,7 +545,7 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
           content: noteContent,
           type: note.type,
           createBy: userId,
-          sort: 0,
+          sort: note.sort ?? 0,
           delFlag: 0,
         }),
       ]);
