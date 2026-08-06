@@ -107,6 +107,12 @@ public final class MainActivity extends Activity {
     private boolean launchOverlayHidden;
     private boolean unsupportedWebView;
     private boolean resolvedNightTheme;
+    /**
+     * 上一次推给网页的系统深浅色。null 表示还没推过。
+     * 与 resolvedNightTheme 不是一回事：那个跟随网页当前 data-theme（用户可能手动选了深/浅色），
+     * 这个只记系统开关，两者混用会让「手动浅色 + 系统深色」这种组合互相打架。
+     */
+    private Boolean lastNotifiedSystemNight;
     private boolean backNavigationPending;
     private long lastRootBackPressedAt;
     private int backHintAnimationGeneration;
@@ -162,14 +168,61 @@ public final class MainActivity extends Activity {
      * Manifest 声明了 configChanges 含 uiMode，所以这里不会重建 Activity —— WebView 的 UA
      * 停留在启动那一刻的快照上，网页无从得知系统已经切换，必须主动通知。
      * 网页只在用户选了「跟随系统」时才据此换肤，手动指定深色/浅色的用户不受影响。
+     *
+     * 深浅色必须取自回调参数 newConfig：这一刻 getResources().getConfiguration() 可能还是
+     * 旧配置，用它读出来的是切换「前」的主题，推过去等于让网页换回原样 —— 真机上就表现为
+     * 运行中切换毫无反应、非得重启 App 才生效。
      */
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
+        pushSystemThemeToWeb(
+            (newConfig.uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        );
+    }
+
+    /**
+     * 回到前台时补一次系统主题。
+     * 覆盖「切到系统设置里改主题再回来」这条路径 —— 部分 ROM 此时未必回调 onConfigurationChanged。
+     */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        pushSystemThemeToWeb(WindowInsetsSupport.isNightMode(this));
+    }
+
+    /**
+     * 重新获得窗口焦点时补一次系统主题。
+     *
+     * 这条覆盖的是最常见的操作：下拉通知栏点深色开关。那时 App 并没有退到后台，
+     * onResume 不会触发；而通知栏收起、焦点回到 App 时这里一定会走，此刻 Configuration
+     * 已是最新。真机上 onConfigurationChanged 与 onResume 都没能让界面实时跟随，
+     * 缺的正是这条路径。
+     */
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            pushSystemThemeToWeb(WindowInsetsSupport.isNightMode(this));
+        }
+    }
+
+    /**
+     * 只在与上次推送的值不同时才通知网页，避免每次回前台都白跑一次 evaluateJavascript。
+     *
+     * 三个调用点都保留：真机（鸿蒙 6 + 卓易通）实测确实有推送发出，但无法确定是哪一条路径命中，
+     * 各 ROM 对 onConfigurationChanged / onResume / onWindowFocusChanged 的回调时机差异很大，
+     * 留全三条最稳。重复触发由这里的去重挡掉，代价只是一次比较。
+     */
+    private void pushSystemThemeToWeb(boolean nightMode) {
         if (webView == null || isFinishing() || isDestroyed()) {
             return;
         }
-        WebViewSupport.notifySystemThemeChanged(webView, this);
+        if (lastNotifiedSystemNight != null && lastNotifiedSystemNight == nightMode) {
+            return;
+        }
+        lastNotifiedSystemNight = nightMode;
+        WebViewSupport.notifySystemThemeChanged(webView, nightMode);
     }
 
     private void registerSystemBackCallback() {

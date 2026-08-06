@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAndroidSystemTheme } from './androidBridge';
-import { onSystemThemeChange, resolveSystemTheme } from './systemTheme';
+import { onSystemThemeChange, resetSystemThemeForTest, resolveSystemTheme } from './systemTheme';
 
 /**
  * 「跟随系统」的判定来源。
@@ -36,12 +36,16 @@ function stubMatchMedia(prefersDark: boolean) {
 
 beforeEach(() => {
   stubUserAgent(originalUa);
+  // 原生推送值是模块级状态，不会随用例自动复位
+  resetSystemThemeForTest();
 });
 
 afterEach(() => {
   Object.defineProperty(navigator, 'userAgent', { get: () => originalUa, configurable: true });
   vi.unstubAllGlobals();
-  delete window.__lightNoteAndroidSystemTheme;
+  // 不要 delete window.__lightNoteAndroidSystemTheme：androidBridge 里的安装标记是模块级的，
+  // 删掉属性后 hook 不会重装，后续用例的推送会静默失效 —— 期望值恰好为空的断言会假通过。
+  // 各用例的监听由 onSystemThemeChange 返回的 dispose 负责摘除，hook 本身留着无害。
 });
 
 describe('getAndroidSystemTheme', () => {
@@ -96,6 +100,26 @@ describe('onSystemThemeChange', () => {
     dispose();
     window.__lightNoteAndroidSystemTheme?.('night');
     expect(seen).toEqual(['night', 'day']);
+  });
+
+  it('推送到达后 resolveSystemTheme 必须返回新值，而不是 UA 里的旧快照', () => {
+    // 真机症状就出在这里：Toast 显示已推送，但订阅者回调里重新求值又读回 UA 的旧值，
+    // 主题被设回原样，看起来毫无变化。UA 是 WebView 创建那一刻的快照、永远不变。
+    stubUserAgent(`${CHROME_UA} LightNoteAndroid/1.0.2 LightNoteSystemTheme/day`);
+    stubMatchMedia(false);
+    expect(resolveSystemTheme()).toBe('day');
+
+    const seen: string[] = [];
+    const dispose = onSystemThemeChange(() => seen.push(resolveSystemTheme()));
+
+    window.__lightNoteAndroidSystemTheme?.('night');
+    // 回调执行时数据源就该是新值 —— 顺序颠倒的话这里会读到 'day'
+    expect(seen).toEqual(['night']);
+    expect(resolveSystemTheme()).toBe('night');
+
+    window.__lightNoteAndroidSystemTheme?.('day');
+    expect(resolveSystemTheme()).toBe('day');
+    dispose();
   });
 
   it('原生推来的非法值被忽略', () => {

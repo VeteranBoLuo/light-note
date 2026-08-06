@@ -178,14 +178,19 @@ final class WebViewSupport {
      * Manifest 里声明了 configChanges 含 uiMode，切换系统深色时 Activity 不会重建，
      * WebView 的 UA 也就停留在启动时的快照上，只能由原生主动通知。
      * 网页那边只在用户选了「跟随系统」时才据此换肤（见 utils/systemTheme.ts）。
+     *
+     * 深浅色由调用方以 boolean 传入，这里不自己去读 Configuration：在
+     * onConfigurationChanged 回调的那一刻，Activity 的 Resources 可能还持有旧配置，
+     * 回调参数 newConfig 才是权威值。之前这里接 Context 自行读取，结果推给网页的是
+     * 切换「前」的主题 —— 表现为运行中切换系统深浅色时界面毫无反应、重启 App 才生效。
      */
-    static void notifySystemThemeChanged(WebView webView, Context context) {
+    static void notifySystemThemeChanged(WebView webView, boolean nightMode) {
         if (webView == null) {
             return;
         }
         webView.evaluateJavascript(
             "window.__lightNoteAndroidSystemTheme&&window.__lightNoteAndroidSystemTheme('"
-                + systemThemeName(context)
+                + (nightMode ? "night" : "day")
                 + "');",
             null
         );

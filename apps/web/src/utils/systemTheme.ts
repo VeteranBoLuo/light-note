@@ -22,11 +22,26 @@ function mediaQuerySystemTheme(): SystemTheme {
 }
 
 /**
- * 当前系统主题。App 内优先原生信号，其余环境走媒体查询。
+ * 原生推来的最新系统主题。
+ *
+ * 必须有这个可变状态：UA 里的标记是 WebView 创建那一刻的快照、永远不变，而运行中切换系统
+ * 深浅色只能靠原生推送。如果 resolveSystemTheme 仍回头读 UA，推送触发的重新求值会拿回旧值、
+ * 把主题设成原样 —— 真机症状就是「Toast 显示已推送，界面却毫无变化」。
+ * 推送到达时先更新这里，再通知订阅者，顺序不能颠倒。
+ */
+let nativePushedTheme: SystemTheme | '' = '';
+
+/** 仅测试用：模块级状态不随用例自动复位。 */
+export function resetSystemThemeForTest() {
+  nativePushedTheme = '';
+}
+
+/**
+ * 当前系统主题。App 内优先原生信号（推送值 > UA 快照），其余环境走媒体查询。
  * 只在用户把主题设为 'system' 时才应该调用它 —— 手动指定深色/浅色的用户不受系统开关影响。
  */
 export function resolveSystemTheme(): SystemTheme {
-  return getAndroidSystemTheme() || mediaQuerySystemTheme();
+  return nativePushedTheme || getAndroidSystemTheme() || mediaQuerySystemTheme();
 }
 
 /**
@@ -36,7 +51,13 @@ export function resolveSystemTheme(): SystemTheme {
 export function onSystemThemeChange(listener: (theme: SystemTheme) => void): () => void {
   const disposers: Array<() => void> = [];
 
-  disposers.push(onAndroidSystemThemeChange(listener));
+  disposers.push(
+    onAndroidSystemThemeChange((theme) => {
+      // 先落数据源再通知：订阅者的回调里往往要重新读 resolveSystemTheme()
+      nativePushedTheme = theme;
+      listener(theme);
+    }),
+  );
 
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
