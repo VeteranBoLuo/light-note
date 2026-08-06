@@ -96,11 +96,14 @@
   });
 
   function viewNote(tag?: 'all' | 'null' | any) {
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
     if (tag === 'all') {
-      router.push(`/noteLibrary`);
+      delete query.tag;
     } else {
-      router.push(`/noteLibrary?tag=${encodeURIComponent(tag)}`);
+      query.tag = String(tag);
     }
+    router.push({ path: '/noteLibrary', query });
     filterVisible.value = false;
   }
 </script>

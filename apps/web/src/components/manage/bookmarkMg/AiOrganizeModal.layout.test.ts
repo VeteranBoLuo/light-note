@@ -39,4 +39,10 @@ describe('AI 整理建议列表布局', () => {
     expect(source).toMatch(/<div class="aio-tags">/);
     expect(styleBlock('.aio-item-name')).toMatch(/text-overflow:\s*ellipsis/);
   });
+
+  it('所选资源使用 selected 范围并消费服务端确认过的当前批次', () => {
+    expect(source).toContain("scope: isSelectedScope.value ? 'selected' : 'untagged'");
+    expect(source).toContain('requestIds');
+    expect(source).toMatch(/selectedQueue\.value = selectedQueue\.value\.filter/);
+  });
 });

@@ -68,7 +68,10 @@ const NOTE_TREE_ERROR_COPY = Object.freeze({
   NOTE_TREE_NODE_ID_REQUIRED: ['缺少笔记 ID', 'Note ID is required'],
   NOTE_TREE_MOVE_CONFLICT: ['页面状态已变化，请刷新后重试', 'The page changed; refresh and try again'],
   INVALID_SORT_ANCHOR: ['排序位置已变化，请刷新后重试', 'The sort position changed; refresh and try again'],
-  NOTE_HAS_CHILDREN: ['页面包含子页面，请使用“移入回收站”删除整棵子树', 'This page has subpages; delete the subtree instead'],
+  NOTE_HAS_CHILDREN: [
+    '页面包含子页面，请使用“移入回收站”删除整棵子树',
+    'This page has subpages; delete the subtree instead',
+  ],
 });
 
 const sendNoteTreeError = (req, res, scene, error) => {
@@ -458,7 +461,14 @@ export const queryNoteList = async (req, res) => {
           WHERE r.resource_type = 'note'
             AND r.resource_id = n.id
             AND t.del_flag = 0
-        ) AS tags
+        ) AS tags,
+        (
+          SELECT COUNT(*)
+          FROM note child
+          WHERE child.create_by = n.create_by
+            AND child.parent_id = n.id
+            AND child.del_flag = 0
+        ) AS child_count
       FROM note n
       WHERE ${whereSql}
       GROUP BY n.id
@@ -590,9 +600,7 @@ export const delNote = async (req, res) => {
   try {
     const ids = [
       ...new Set(
-        (Array.isArray(req.body?.ids) ? req.body.ids : [])
-          .map((id) => String(id ?? '').trim())
-          .filter(Boolean),
+        (Array.isArray(req.body?.ids) ? req.body.ids : []).map((id) => String(id ?? '').trim()).filter(Boolean),
       ),
     ];
     if (ids.length === 0 || ids.length > 100) {

@@ -90,16 +90,19 @@
       totalCount?: number;
       untaggedCount?: number | null;
       loading?: boolean;
+      deferNavigation?: boolean;
     }>(),
     {
       allTags: () => [],
       totalCount: 0,
       untaggedCount: null,
       loading: false,
+      deferNavigation: false,
     },
   );
 
   const { t } = useI18n();
+  const emit = defineEmits<{ select: [key: string] }>();
   const keyword = ref('');
   const scrollRef = ref<HTMLElement | null>(null);
   const indicatorTop = ref(0);
@@ -180,12 +183,17 @@
   }
 
   function selectTag(key: string) {
-    if (key === activeKey.value) return;
+    emit('select', key);
+    if (props.deferNavigation || key === activeKey.value) return;
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
     if (key === ALL_KEY) {
-      void router.push('/noteLibrary');
+      delete query.tag;
+      void router.push({ path: '/noteLibrary', query });
       return;
     }
-    void router.push(`/noteLibrary?tag=${encodeURIComponent(key)}`);
+    query.tag = key;
+    void router.push({ path: '/noteLibrary', query });
   }
 
   watch(

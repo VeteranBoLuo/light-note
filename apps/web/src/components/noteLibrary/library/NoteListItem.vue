@@ -31,6 +31,7 @@
       -->
       <div class="note-meta-row">
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
+        <div v-if="note.pathText" class="note-path" :title="note.pathText">{{ note.pathText }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
           它们同为 chip 形态，放在一个容器里既省一行高度，也比拆成两行整齐。
@@ -41,6 +42,10 @@
             <InboxPendingBadge v-if="note.isPending" />
             <!-- 手机的标题行只剩标题 + 时间 + ⋯，没有余量；格式标识跟徽章一起进 chip 行 -->
             <NoteFormatBadge :type="note.type" />
+            <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
+              {{ $t('note.childPages', { count: childCount }) }}
+              <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+            </BButton>
           </template>
           <span
             class="b-tag tag-detail-chip"
@@ -62,6 +67,14 @@
         </div>
       </div>
     </div>
+    <BButton
+      v-if="!bookmark.isMobile && childCount"
+      class="note-child-count note-child-count-column"
+      @click.stop="emit('action', 'enterDirectory')"
+    >
+      {{ $t('note.childPages', { count: childCount }) }}
+      <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+    </BButton>
     <!-- 桌面时间独占一列;手机让位给操作入口，时间挪到底行 -->
     <div v-if="!bookmark.isMobile" class="note-time">{{ listTime }}</div>
     <!--
@@ -124,8 +137,9 @@
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete'];
+    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'move' | 'delete'];
   }>();
+  const childCount = computed(() => Math.max(0, Number(props.note?.childCount || 0)));
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -147,6 +161,11 @@
       icon: icon.contextMenu.inbox,
       function: () => emit('action', 'toggleInbox'),
     },
+    {
+      label: t('note.movePage'),
+      icon: icon.noteTree.move,
+      function: () => emit('action', 'move'),
+    },
     { divider: true },
     {
       label: t('common.delete'),
@@ -166,7 +185,10 @@
       props.note.isCheck = !props.note.isCheck;
       return;
     }
-    router.push(`/noteLibrary/${props.note.id}`);
+    router.push({
+      path: `/noteLibrary/${encodeURIComponent(props.note.id)}`,
+      query: { from: router.currentRoute.value.fullPath },
+    });
   }
 </script>
 
@@ -176,7 +198,7 @@
     --note-row-line: 22px;
 
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-columns: 26px minmax(0, 1fr) auto auto;
     column-gap: 12px;
     align-items: flex-start;
     padding: 11px 14px;
@@ -335,6 +357,16 @@
         // 无摘要也无标签时保持同样的行高
         min-height: 20px;
       }
+      .note-path {
+        min-width: 0;
+        max-width: 42%;
+        overflow: hidden;
+        color: var(--muted-text-color, var(--desc-color));
+        font-size: 11px;
+        line-height: 20px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .note-description {
         flex: 1 1 auto;
         min-width: 0;
@@ -390,6 +422,22 @@
         }
       }
       // 详情角标统一由 assets/css/common.less 负责,这里不做局部覆盖
+    }
+
+    .note-child-count {
+      height: 24px;
+      padding: 0 6px;
+      gap: 3px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 7px;
+      color: var(--resource-note-color, #00a884);
+      background: transparent;
+      font-size: 11px;
+    }
+
+    .note-child-count-column {
+      align-self: center;
+      white-space: nowrap;
     }
     .note-time {
       font-size: 12px;

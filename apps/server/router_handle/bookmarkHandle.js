@@ -1100,10 +1100,28 @@ async function organizePool(items, n, worker) {
   await Promise.all(runners);
 }
 
+function normalizeOrganizeIds(value) {
+  const seen = new Set();
+  const ids = [];
+  for (const rawId of Array.isArray(value) ? value : []) {
+    if (typeof rawId !== 'string' && typeof rawId !== 'number') continue;
+    const id = String(rawId).trim();
+    if (!id || id.length > 128 || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return {
+    ids: ids.slice(0, ORGANIZE_MAX_BATCH),
+    requestedTotal: ids.length,
+    requestTruncated: ids.length > ORGANIZE_MAX_BATCH,
+  };
+}
+
 // 解析候选:resourceType='bookmark'|'note';scope='selected'(指定 ids,校验归属)/ 'untagged'(未打标签)
 async function resolveOrganizeCandidates(userId, scope, ids, resourceType = 'bookmark') {
   if (resourceType === 'note') {
-    if (scope === 'selected' && Array.isArray(ids) && ids.length) {
+    if (scope === 'selected') {
+      if (!Array.isArray(ids) || !ids.length) return [];
       const [rows] = await pool.query(
         'SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)',
         [userId, ids],
@@ -1119,7 +1137,8 @@ async function resolveOrganizeCandidates(userId, scope, ids, resourceType = 'boo
     );
     return rows;
   }
-  if (scope === 'selected' && Array.isArray(ids) && ids.length) {
+  if (scope === 'selected') {
+    if (!Array.isArray(ids) || !ids.length) return [];
     const [rows] = await pool.query(
       "SELECT id, name, url, description FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> '' AND id IN (?)",
       [userId, ids],
@@ -1151,15 +1170,24 @@ export const doOrganizeQuote = async (req, res) => {
   try {
     const userId = req.user.id;
     const { scope = 'untagged', ids = [], resourceType = 'bookmark' } = req.body || {};
-    const candidates = await resolveOrganizeCandidates(userId, scope, ids, resourceType);
+    const normalizedScope = scope === 'selected' ? 'selected' : 'untagged';
+    const selectedRequest =
+      normalizedScope === 'selected'
+        ? normalizeOrganizeIds(ids)
+        : { ids: [], requestedTotal: 0, requestTruncated: false };
+    const candidates = await resolveOrganizeCandidates(userId, normalizedScope, selectedRequest.ids, resourceType);
     const batchCap = Math.min(candidates.length, ORGANIZE_MAX_BATCH);
     res.send(
       resultData({
+        scope: normalizedScope,
         candidateTotal: candidates.length,
         batchCap,
         batchIds: candidates.slice(0, batchCap).map((c) => c.id),
         maxBatch: ORGANIZE_MAX_BATCH,
         canRun: batchCap > 0,
+        requestIds: selectedRequest.ids,
+        requestedTotal: selectedRequest.requestedTotal,
+        requestTruncated: selectedRequest.requestTruncated,
       }),
     );
   } catch (e) {
@@ -1175,7 +1203,7 @@ export const doOrganizeRun = async (req, res) => {
   try {
     const userId = req.user.id;
     const resourceType = req.body?.resourceType === 'note' ? 'note' : 'bookmark';
-    const raw = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids.filter(Boolean))] : [];
+    const raw = normalizeOrganizeIds(req.body?.ids).ids;
     if (!raw.length) return res.send(resultData(null, 400, '未选择要整理的内容'));
     const [tagRows] = await pool.query('SELECT id, name FROM tag WHERE user_id = ? AND del_flag = 0', [userId]);
     const toMatched = (ids) => tagRows.filter((t) => ids.includes(t.id)).map((t) => ({ id: t.id, name: t.name }));

@@ -17,6 +17,7 @@
     </div>
     <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
     <div class="note-content">{{ summary }}</div>
+    <div v-if="note.pathText" class="note-path" :title="note.pathText">{{ note.pathText }}</div>
     <div class="note-footer">
       <div class="note-tags" v-if="note.tags && note.tags.length">
         <span
@@ -38,7 +39,14 @@
         >
       </div>
       <div v-else class="note-tags note-tags--empty"></div>
-      <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
+      <div class="note-footer-meta">
+        <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
+          <span>{{ $t('note.childPages', { count: childCount }) }}</span>
+          <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+        </BButton>
+        <span v-else></span>
+        <div class="note-time">{{ note['updateTime'] ?? note['createTime'] }}</div>
+      </div>
     </div>
     <div v-if="!bookmark.isMobile || batchMode" class="note-select-control">
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
@@ -77,8 +85,9 @@
   const { t } = useI18n();
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete'];
+    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'move' | 'delete'];
   }>();
+  const childCount = computed(() => Math.max(0, Number(props.note?.childCount || 0)));
 
   const mobileMenuOptions = computed(() => [
     {
@@ -95,6 +104,11 @@
       label: props.note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
       icon: icon.contextMenu.inbox,
       function: () => emit('action', 'toggleInbox'),
+    },
+    {
+      label: t('note.movePage'),
+      icon: icon.noteTree.move,
+      function: () => emit('action', 'move'),
     },
     { divider: true },
     {
@@ -129,7 +143,10 @@
       props.note.isCheck = !props.note.isCheck;
       return;
     }
-    router.push(`/noteLibrary/${props.note.id}`);
+    router.push({
+      path: `/noteLibrary/${encodeURIComponent(props.note.id)}`,
+      query: { from: router.currentRoute.value.fullPath },
+    });
   }
 </script>
 
@@ -244,6 +261,17 @@
     }
   }
 
+  .note-path {
+    flex: 0 0 auto;
+    margin-top: 8px;
+    overflow: hidden;
+    color: var(--muted-text-color, var(--desc-color));
+    font-size: 11px;
+    line-height: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .note-footer {
     flex: 0 0 auto;
     margin-top: auto;
@@ -320,6 +348,26 @@
     white-space: nowrap;
     line-height: 18px;
     text-align: right;
+  }
+
+  .note-footer-meta {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .note-child-count {
+    min-width: 0;
+    height: 24px;
+    padding: 0 6px;
+    gap: 3px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 7px;
+    color: var(--resource-note-color, #00a884);
+    background: transparent;
+    font-size: 11px;
   }
 
   .note-select-control {

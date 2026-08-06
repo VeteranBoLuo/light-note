@@ -51,8 +51,12 @@
             :disabled="!selectedVisibleCount"
             @click="openSelectedNotesAi('organize')"
           >
+            <SvgIcon :src="icon.ai.materials" size="16" />
+            {{ $t('ai.entry.addSelectedToAssistant') }}
+          </BButton>
+          <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openSelectedAiOrganize">
             <SvgIcon :src="icon.ai.organize" size="16" />
-            {{ $t('ai.entry.organizeSelected') }}
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
           </BButton>
           <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openBatchTags('add')">{{
             $t('note.batchAddTags')
@@ -73,20 +77,18 @@
       <template v-else>
         <!-- 移动端不放第二个文本搜索框：找笔记统一走顶栏全局搜索，这里只保留标签筛选 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
-          <TagFilterSelector :all-tags="visibleNoteTags" />
-          <ViewModeToggle compact />
-          <BButton
-            class="note-action-button note-ai-button"
-            @click="aiOrgVisible = true"
-            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
-          >
-            <SvgIcon :src="icon.ai.organize" size="17" />
-            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+          <BButton class="note-mobile-directory" @click="openMobileDirectory('directory')">
+            <SvgIcon :src="currentParentId ? icon.resource.note : icon.noteTree.root" size="16" aria-hidden="true" />
+            <span>{{ currentDirectoryTitle || $t('note.knowledgeRoot') }}</span>
+            <SvgIcon :src="icon.noteTree.chevron" size="12" aria-hidden="true" />
           </BButton>
+          <BButton class="note-mobile-tag" @click="openMobileDirectory('tags')">
+            <SvgIcon :src="icon.manage_categoryBtn_tag" size="15" aria-hidden="true" />
+            {{ $t('note.tagsTab') }}
+          </BButton>
+          <ViewModeToggle compact />
         </div>
         <template v-else>
-          <!-- 列表视图的标签筛选已移到左侧目录,顶部不再重复放一个下拉 -->
-          <TagFilterSelector v-if="!isListLayout" :all-tags="visibleNoteTags" />
           <ViewModeToggle />
           <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
             <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
@@ -97,7 +99,7 @@
           </div>
           <BButton
             class="note-action-button note-ai-button"
-            @click="aiOrgVisible = true"
+            @click="openGlobalAiOrganize"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
           >
             <SvgIcon :src="icon.ai.organize" size="17" />
@@ -110,7 +112,7 @@
             v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
           >
             <SvgIcon :src="icon.common.add" size="16" />
-            {{ $t('note.newNote') }}
+            {{ currentParentId ? $t('note.newChildPage') : $t('note.newNote') }}
           </BButton>
         </template>
       </template>
@@ -119,29 +121,78 @@
     <div
       ref="noteWorkspaceRef"
       class="note-workspace"
-      :class="{ 'is-split': isListLayout }"
+      :class="{ 'is-split': !bookmark.isMobile }"
       @scroll.capture.passive="onNoteScroll"
       @touchstart.passive="pullRefresh.onTouchStart"
       @touchmove="pullRefresh.onTouchMove"
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <!-- 侧栏常驻 DOM 才能有进出过渡;卡片视图下用 inert 关掉焦点与辅助技术可见性,而不是直接卸载 -->
-      <aside
-        v-if="!bookmark.isMobile"
-        class="note-tag-panel"
-        :inert="!isListLayout || undefined"
-        :aria-hidden="!isListLayout || undefined"
-      >
-        <NoteTagSidebar
+      <aside v-if="!bookmark.isMobile" class="note-sidebar-panel">
+        <NoteLibrarySidebar
+          :current-parent-id="currentParentId"
+          :children-by-parent="childrenByParent"
+          :expanded-ids="expandedIds"
+          :loading-keys="treeLoadingKeys"
+          :tree-error="treeError"
           :all-tags="visibleNoteTags"
           :total-count="allNoteCount"
           :untagged-count="untaggedNoteCount"
-          :loading="tagLoading"
+          :tag-loading="tagLoading"
+          :search-value="searchValue"
+          @toggle="toggleTreeNode"
+          @select="selectDirectory"
+          @open="openDirectoryPage"
+          @create="showNewChildPicker"
+          @move="openMoveNote"
+          @search="searchValue = $event"
         />
       </aside>
 
       <div class="note-main-panel">
+        <header v-if="!bookmark.isMobile" class="note-directory-header">
+          <nav class="note-directory-breadcrumbs" :aria-label="$t('note.currentDirectory')">
+            <BButton
+              class="note-directory-crumb"
+              :class="{ 'is-current': currentParentId === null }"
+              @click="selectDirectory(null)"
+            >
+              {{ $t('note.knowledgeRoot') }}
+            </BButton>
+            <template v-for="item in currentBreadcrumb" :key="item.id">
+              <span class="note-directory-separator" aria-hidden="true">/</span>
+              <BButton
+                class="note-directory-crumb"
+                :class="{ 'is-current': item.id === currentParentId }"
+                @click="selectDirectory(item.id)"
+              >
+                {{ item.title || $t('note.untitled') }}
+              </BButton>
+            </template>
+          </nav>
+          <div class="note-directory-title-row">
+            <div class="note-directory-title-copy">
+              <h2>{{ currentDirectoryTitle || $t('note.knowledgeRoot') }}</h2>
+              <span v-if="hasActiveFilter">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
+              <span v-else-if="currentParentId">{{ $t('note.directChildren', { count: noteTotal }) }}</span>
+              <span v-else>{{ $t('note.rootDirectoryHint') }}</span>
+            </div>
+            <div class="note-directory-actions">
+              <BButton
+                v-if="currentParentId"
+                class="note-open-directory-page"
+                @click="openDirectoryPage(currentParentId)"
+              >
+                <SvgIcon :src="icon.noteTree.openPage" size="15" aria-hidden="true" />
+                {{ $t('note.openPageBody') }}
+              </BButton>
+              <BButton type="primary" class="note-new-child-page" @click="showNewNotePicker">
+                <SvgIcon :src="icon.common.add" size="15" aria-hidden="true" />
+                {{ currentParentId ? $t('note.newChildPage') : $t('note.newNote') }}
+              </BButton>
+            </div>
+          </div>
+        </header>
         <div
           v-if="loading && currentViewMode === 'card'"
           class="note-library-body note-card-skeleton-wrap"
@@ -291,12 +342,38 @@
     />
 
     <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
-    <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
+    <AiOrganizeModal
+      v-model:visible="aiOrgVisible"
+      init-type="note"
+      :selected-ids="selectedAiOrganizeIds"
+      @applied="init"
+    />
     <NoteTagConfig
       v-if="tagConfigVisible && activeTagNote"
       v-model:visible="tagConfigVisible"
       :note="activeTagNote"
       @saveTag="handleNoteTagsSaved"
+    />
+    <NoteMoveModal
+      v-if="activeMoveNote"
+      v-model:visible="moveNoteVisible"
+      :note="activeMoveNote"
+      @moved="handleNoteMoved"
+    />
+    <NoteDirectoryDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileDirectoryOpen"
+      :initial-tab="mobileDirectoryInitialTab"
+      :current-parent-id="currentParentId"
+      :all-tags="visibleNoteTags"
+      :total-count="allNoteCount"
+      :untagged-count="untaggedNoteCount"
+      :tag-loading="tagLoading"
+      @select="selectDirectory"
+      @select-tag="selectMobileDirectoryTag"
+      @open-page="openDirectoryPage($event.id)"
+      @create="showNewChildPicker"
+      @move="openMoveNote"
     />
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
@@ -324,8 +401,9 @@
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
-  import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
-  import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
+  import NoteLibrarySidebar from '@/components/noteLibrary/tree/NoteLibrarySidebar.vue';
+  import NoteDirectoryDrawer from '@/components/noteLibrary/tree/NoteDirectoryDrawer.vue';
+  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
@@ -352,6 +430,7 @@
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { useNoteTree } from '@/composables/useNoteTree';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     RESOURCE_LIST_PAGE_SIZE,
@@ -377,6 +456,19 @@
   const user = useUserStore();
   const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
+  const {
+    childrenByParent,
+    currentBreadcrumb,
+    currentDirectoryTitle,
+    currentParentId,
+    expandedIds,
+    loadingKeys: treeLoadingKeys,
+    treeError,
+    openDirectoryPage,
+    refreshTree,
+    selectDirectory,
+    toggleExpanded: toggleTreeNode,
+  } = useNoteTree();
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
@@ -393,12 +485,18 @@
   const searchTimer = ref<number | null>(null);
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
+  const createParentOverride = ref<string | null | undefined>(undefined);
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
+  const selectedAiOrganizeIds = ref<string[]>([]);
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);
+  const activeMoveNote = ref<any | null>(null);
+  const moveNoteVisible = ref(false);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
   const mobileBatchActionsOpen = ref(false);
+  const mobileDirectoryOpen = ref(false);
+  const mobileDirectoryInitialTab = ref<'directory' | 'tags'>('directory');
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -430,12 +528,19 @@
       templateUsage.value = { ...templateUsage.value, [usageKey]: Date.now() };
       localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
     }
-    await closeCurrentMobileOverlayThen(
-      () => {
-        showTypePicker.value = false;
-      },
-      () => router.push({ path: '/noteLibrary/add', query }),
-    );
+    const targetQuery = { ...query };
+    const parentId = createParentOverride.value === undefined ? currentParentId.value : createParentOverride.value;
+    if (parentId) targetQuery.parent = parentId;
+    try {
+      await closeCurrentMobileOverlayThen(
+        () => {
+          showTypePicker.value = false;
+        },
+        () => router.push({ path: '/noteLibrary/add', query: targetQuery }),
+      );
+    } finally {
+      createParentOverride.value = undefined;
+    }
   }
   function readTemplateUsage() {
     try {
@@ -551,6 +656,14 @@
   });
 
   function showNewNotePicker() {
+    createParentOverride.value = currentParentId.value;
+    showTypePicker.value = true;
+    loadMyTemplates();
+  }
+
+  function showNewChildPicker(note: any) {
+    if (!note?.id) return;
+    createParentOverride.value = String(note.id);
     showTypePicker.value = true;
     loadMyTemplates();
   }
@@ -587,6 +700,7 @@
         label: note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
         icon: icon.contextMenu.inbox,
       },
+      { key: 'move', label: t('note.movePage'), icon: icon.noteTree.move },
       { key: 'note-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -651,20 +765,35 @@
     });
   }
 
+  function openMoveNote(note: any) {
+    if (blockGuestWrite('move-note')) return;
+    activeMoveNote.value = note;
+    moveNoteVisible.value = true;
+  }
+
+  async function handleNoteMoved() {
+    moveNoteVisible.value = false;
+    await Promise.all([refreshTree(), reloadNotes()]);
+    activeMoveNote.value = null;
+  }
+
   function handleNoteMenuSelect(action: string, note: any) {
     if (action === 'toggleTop') toggleNoteTop(note);
     else if (action === 'relateTags') openNoteTagConfig(note);
     else if (action === 'toggleInbox') toggleNoteInbox(note);
+    else if (action === 'enterDirectory') selectDirectory(String(note.id));
+    else if (action === 'move') openMoveNote(note);
     else if (action === 'delete') deleteSingleNote(note);
   }
 
-  function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete', note: any) {
+  function handleNoteCardAction(
+    action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'move' | 'delete',
+    note: any,
+  ) {
     handleNoteMenuSelect(action, note);
   }
   // 手机与桌面共用同一个 noteViewMode 偏好：设置里能配、笔记库顶部也能快切，与 PC 一致
   const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
-  // 左侧标签目录只服务桌面/平板的列表视图;移动端 currentViewMode 恒为 card,不会命中
-  const isListLayout = computed(() => !bookmark.isMobile && currentViewMode.value === 'list');
   const noteWorkspaceRef = ref<HTMLElement | null>(null);
 
   /*
@@ -677,19 +806,17 @@
    */
   const pullRefresh = useAndroidPullRefresh({
     enabled: computed(() => !batchMode.value),
-    externalBusy: computed(
-      () => loading.value || refreshing.value || loadingMore.value || noteDragging.value,
-    ),
+    externalBusy: computed(() => loading.value || refreshing.value || loadingMore.value || noteDragging.value),
     getScrollContainer: () =>
       noteWorkspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
-    onRefresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+    onRefresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
   });
   /*
    * 从后台切回来时补一次数据。走的是同一条软刷新路径,区别只在触发方式:
    * 这里没有手势,所以反馈只有顶部那条进度条。
    */
   useForegroundRefresh({
-    refresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+    refresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
     canRefresh: () =>
       !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
   });
@@ -707,7 +834,7 @@
   const allNoteCount = computed(() => totalNoteCount.value ?? user.noteTotal ?? 0);
 
   async function init() {
-    await Promise.all([reloadNotes(), getAllTags()]);
+    await Promise.all([reloadNotes(), getAllTags(), refreshTree()]);
   }
 
   function getActiveNoteTagId() {
@@ -733,6 +860,7 @@
       const res = await apiBasePost('/api/note/queryNoteList', {
         page: targetPage,
         pageSize: RESOURCE_LIST_PAGE_SIZE,
+        parentId: currentParentId.value,
         keyword: debouncedSearch.value,
         tagId: getActiveNoteTagId(),
       });
@@ -747,9 +875,6 @@
       noteTotal.value = Number(res.data?.total || 0);
       notePage.value = Number(res.data?.page || targetPage);
       noteHasMore.value = Boolean(res.data?.hasMore);
-      if (!debouncedSearch.value && getActiveNoteTagId() === undefined) {
-        user.noteTotal = noteTotal.value;
-      }
       return true;
     } catch (error) {
       console.error('加载笔记列表失败:', error);
@@ -814,7 +939,12 @@
   function clearFilters() {
     searchValue.value = '';
     debouncedSearch.value = '';
-    if (router.currentRoute.value.query.tag != null) router.replace({ query: {} });
+    if (router.currentRoute.value.query.tag != null) {
+      const query = { ...router.currentRoute.value.query };
+      delete query.tag;
+      delete query._rt;
+      router.replace({ path: '/noteLibrary', query });
+    }
   }
   const canDragNote = computed(
     () =>
@@ -840,11 +970,20 @@
   );
 
   watch(
-    [debouncedSearch, () => router.currentRoute.value.query.tag, () => router.currentRoute.value.query._rt],
-    ([search, tag, refreshToken], previous) => {
+    [
+      debouncedSearch,
+      () => router.currentRoute.value.query.tag,
+      () => router.currentRoute.value.query._rt,
+      currentParentId,
+    ],
+    ([search, tag, refreshToken, parentId], previous) => {
       // 只有"页面已有内容 + 本次仅标签变化"才软刷新;首屏、搜索和强制刷新仍用骨架屏
       const onlyTagChanged =
-        Array.isArray(previous) && search === previous[0] && refreshToken === previous[2] && tag !== previous[1];
+        Array.isArray(previous) &&
+        search === previous[0] &&
+        refreshToken === previous[2] &&
+        parentId === previous[3] &&
+        tag !== previous[1];
       const soft = onlyTagChanged && visibleDragNoteList.value.length > 0;
       if (batchMode.value) exitBatch();
       void reloadNotes(soft);
@@ -876,11 +1015,12 @@
     auxiliaryActionLabel: () => t(batchMode.value ? 'note.exitBatch' : 'common.more'),
     auxiliaryActionIcon: () => (batchMode.value ? icon.common.close : icon.common.more),
     onAdd: showNewNotePicker,
-    addLabel: () => t('note.newNote'),
+    addLabel: () => t(currentParentId.value ? 'note.newChildPage' : 'note.newNote'),
   });
 
   async function resetNoteLibrary() {
-    const alreadyReset = !debouncedSearch.value && router.currentRoute.value.query.tag == null;
+    const alreadyReset =
+      !debouncedSearch.value && router.currentRoute.value.query.tag == null && currentParentId.value === null;
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     searchTimer.value = null;
     searchValue.value = '';
@@ -926,6 +1066,11 @@
   );
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'aiOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
+      icon: icon.ai.organize,
+    },
+    {
       key: 'batch',
       label: t(batchMode.value ? 'note.exitBatch' : 'inbox.mobileBatchSelect'),
       icon: icon.filterPanel.check,
@@ -933,8 +1078,14 @@
   ]);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
-      key: 'ai',
-      label: t('ai.entry.organizeSelected'),
+      key: 'assistant',
+      label: t('ai.entry.addSelectedToAssistant'),
+      icon: icon.ai.materials,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'smartOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
       icon: icon.ai.organize,
       disabled: selectedVisibleCount.value < 1,
     },
@@ -967,8 +1118,10 @@
 
   function openSelectedNotesAi(intent: AiAssistantIntent) {
     const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
+    if (!checked.length) return;
     if (checked.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
     const selected = checked.slice(0, 5);
+    mobileBatchActionsOpen.value = false;
     openAiAssistant({
       surface: 'note_library',
       suggestedIntent: intent,
@@ -978,6 +1131,21 @@
         title: String(item.title || ''),
       })),
     });
+  }
+
+  function openGlobalAiOrganize() {
+    selectedAiOrganizeIds.value = [];
+    aiOrgVisible.value = true;
+  }
+
+  function openSelectedAiOrganize() {
+    const selectedIds = getSelectedNotes()
+      .map((note) => String(note.id || '').trim())
+      .filter(Boolean);
+    if (!selectedIds.length) return;
+    selectedAiOrganizeIds.value = selectedIds;
+    mobileBatchActionsOpen.value = false;
+    aiOrgVisible.value = true;
   }
   const allVisibleChecked = computed(
     () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,
@@ -1006,13 +1174,30 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key !== 'batch') return;
-    if (batchMode.value) exitBatch();
-    else enterBatch();
+    if (action.key === 'aiOrganize') {
+      openGlobalAiOrganize();
+    } else if (action.key === 'batch') {
+      if (batchMode.value) exitBatch();
+      else enterBatch();
+    }
+  }
+
+  function openMobileDirectory(tab: 'directory' | 'tags') {
+    mobileDirectoryInitialTab.value = tab;
+    mobileDirectoryOpen.value = true;
+  }
+
+  function selectMobileDirectoryTag(key: string) {
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
+    if (key === 'all') delete query.tag;
+    else query.tag = key;
+    void router.push({ path: '/noteLibrary', query });
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'ai') openSelectedNotesAi('organize');
+    if (action.key === 'assistant') openSelectedNotesAi('organize');
+    else if (action.key === 'smartOrganize') openSelectedAiOrganize();
     else if (action.key === 'addTags') openBatchTags('add');
     else if (action.key === 'removeTags') openBatchTags('remove');
     else if (action.key === 'export') void exportSelectedNotes();
@@ -1089,11 +1274,11 @@
   }
 
   const handleNodeTypeChange = (tag) => {
-    if (tag === null) {
-      router.push('/noteLibrary');
-    } else {
-      router.push(`/noteLibrary?tag=${tag.id}`);
-    }
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
+    if (tag === null) delete query.tag;
+    else query.tag = String(tag.id);
+    router.push({ path: '/noteLibrary', query });
   };
 
   function onStart() {
@@ -1178,7 +1363,9 @@
         return;
       }
 
-      const res = await apiBasePost('/api/note/updateNoteSort', { move });
+      const res = await apiBasePost('/api/note/updateNoteSort', {
+        move: { ...move, parentId: currentParentId.value },
+      });
       if (res.status === 200) {
         noteList.value = groupedNotes;
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
@@ -1569,7 +1756,7 @@
     display: grid;
     /* 中间列按内容宽（图标态视图切换约 73px），两侧平分剩余，三个控件挤在同一行。
        原来是两等列，加进视图切换后第三个控件被顶到第二行，切换器还被拉满一整列留下大片空白。 */
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 8px;
   }
 
@@ -1577,6 +1764,38 @@
     width: 100%;
     min-width: 0;
     justify-content: center;
+  }
+
+  .note-mobile-directory,
+  .note-mobile-tag {
+    min-width: 0;
+    height: 36px;
+    padding: 0 9px;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--menu-body-bg-color);
+  }
+
+  .note-mobile-directory {
+    justify-content: flex-start;
+
+    span {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-color);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :deep(.icon-base64:last-child) {
+      margin-left: auto;
+    }
+  }
+
+  .note-mobile-tag {
+    white-space: nowrap;
   }
 
   .note-create-button {
@@ -1589,7 +1808,7 @@
 
   .note-workspace {
     --note-card-min-width: 320px;
-    --note-tag-panel-width: 208px;
+    --note-sidebar-panel-width: 248px;
 
     width: 100%;
     height: 100%;
@@ -1609,7 +1828,7 @@
     transition: grid-template-columns 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
 
     &.is-split {
-      grid-template-columns: var(--note-tag-panel-width) minmax(0, 1fr);
+      grid-template-columns: var(--note-sidebar-panel-width) minmax(0, 1fr);
     }
 
     @supports (width: 1cqi) {
@@ -1618,7 +1837,7 @@
     }
   }
 
-  .note-tag-panel {
+  .note-sidebar-panel {
     grid-column: 1;
     min-width: 0;
     min-height: 0;
@@ -1626,15 +1845,6 @@
     box-sizing: border-box;
     padding: 12px 0 12px 12px;
     border-right: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
-    transition:
-      opacity 200ms ease,
-      transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-workspace:not(.is-split) .note-tag-panel {
-    opacity: 0;
-    transform: translateX(-12px);
-    pointer-events: none;
   }
 
   .note-main-panel {
@@ -1643,13 +1853,107 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
+  .note-directory-header {
+    flex: 0 0 auto;
+    padding: 12px 16px 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+  }
 
+  .note-directory-breadcrumbs {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .note-directory-crumb {
+    min-width: 0;
+    max-width: 180px;
+    height: 24px;
+    padding: 0 4px;
+    overflow: hidden;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 12px;
+    text-overflow: ellipsis;
+
+    &.is-current {
+      color: var(--resource-note-color, #00a884);
+      font-weight: 650;
+    }
+  }
+
+  .note-directory-separator {
+    flex: 0 0 auto;
+    color: var(--muted-text-color, var(--desc-color));
+    font-size: 11px;
+  }
+
+  .note-directory-title-row {
+    min-width: 0;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .note-directory-title-copy {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+
+    h2 {
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: var(--text-color);
+      font-size: 18px;
+      font-weight: 720;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      flex: 0 0 auto;
+      color: var(--desc-color);
+      font-size: 12px;
+    }
+  }
+
+  .note-open-directory-page {
+    height: 32px;
+    flex: 0 0 auto;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 9px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color);
+  }
+
+  .note-directory-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .note-new-child-page {
+    height: 32px;
+    gap: 6px;
+    border-radius: 9px;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .note-workspace,
-    .note-tag-panel,
+    .note-sidebar-panel,
     .note-library-body,
     .note-library-body-list {
       transition: none;
@@ -1657,7 +1961,9 @@
   }
 
   .note-library-body {
-    height: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     padding: 14px;
     grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width), 1fr));
     gap: 14px;
@@ -1672,7 +1978,9 @@
 
   .note-library-body-list {
     width: 100%;
-    height: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     padding: 12px;
     gap: 0;
   }
@@ -1707,7 +2015,8 @@
   }
 
   .note-empty-state {
-    min-height: 100%;
+    min-height: 0;
+    flex: 1;
     padding: 56px 20px;
     box-sizing: border-box;
     display: flex;
@@ -1817,7 +2126,6 @@
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
     }
   }
-
 
   @media (min-width: 520px) and (max-width: 767px) {
     .note-library-body {

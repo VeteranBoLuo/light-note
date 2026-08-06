@@ -4,20 +4,45 @@
       <!-- 确认额度 -->
       <template v-if="step === 'confirm'">
         <p class="aio-hint">{{
-          resourceType === 'note' ? $t('bookmarkMg.aiOrganizeIntroNote') : $t('bookmarkMg.aiOrganizeIntro')
+          isSelectedScope
+            ? $t(
+                resourceType === 'note'
+                  ? 'bookmarkMg.aiOrganizeSelectedIntroNote'
+                  : 'bookmarkMg.aiOrganizeSelectedIntro',
+                { n: selectedOriginalCount },
+              )
+            : resourceType === 'note'
+              ? $t('bookmarkMg.aiOrganizeIntroNote')
+              : $t('bookmarkMg.aiOrganizeIntro')
         }}</p>
         <div v-if="quoteLoading" class="aio-center aio-muted">…</div>
         <template v-else-if="quote">
-          <div v-if="quote.candidateTotal === 0" class="aio-center aio-muted">{{
-            $t('bookmarkMg.aiOrganizeNone')
-          }}</div>
+          <div v-if="quote.candidateTotal === 0" class="aio-center aio-muted">
+            {{ $t(isSelectedScope ? 'bookmarkMg.aiOrganizeSelectedNone' : 'bookmarkMg.aiOrganizeNone') }}
+            <div v-if="isSelectedScope && quote.requestTruncated" class="aio-actions aio-actions--center">
+              <BButton size="small" @click="skipSelectedBatch">
+                {{ $t('bookmarkMg.aiOrganizeSelectedContinue', { n: selectedRemainingAfterQuote }) }}
+              </BButton>
+            </div>
+          </div>
           <template v-else>
             <ul class="aio-stat">
-              <li>{{ $t('bookmarkMg.aiOrganizeCand', { n: quote.candidateTotal }) }}</li>
+              <li>
+                {{
+                  $t(isSelectedScope ? 'bookmarkMg.aiOrganizeSelectedCand' : 'bookmarkMg.aiOrganizeCand', {
+                    n: quote.candidateTotal,
+                  })
+                }}
+              </li>
               <li>
                 {{ $t('bookmarkMg.aiOrganizeThisRunFree', { n: quote.batchCap }) }}
-                <span v-if="quote.candidateTotal > quote.batchCap" class="aio-muted">
-                  · {{ $t('bookmarkMg.aiOrganizeBatchHint') }}</span
+                <span v-if="quote.candidateTotal > quote.batchCap || quote.requestTruncated" class="aio-muted">
+                  ·
+                  {{
+                    isSelectedScope
+                      ? $t('bookmarkMg.aiOrganizeSelectedBatchHint', { n: selectedRemainingAfterQuote })
+                      : $t('bookmarkMg.aiOrganizeBatchHint')
+                  }}</span
                 >
               </li>
             </ul>
@@ -94,9 +119,19 @@
       <!-- 完成 -->
       <div v-else-if="step === 'done'" class="aio-center aio-done">
         <div class="aio-check">✓</div>
-        <p>{{ $t('bookmarkMg.aiOrganizeDoneMsg', { n: appliedCount }) }}</p>
+        <p>{{
+          $t(resourceType === 'note' ? 'bookmarkMg.aiOrganizeDoneMsgNote' : 'bookmarkMg.aiOrganizeDoneMsg', {
+            n: appliedCount,
+          })
+        }}</p>
         <div class="aio-actions" style="justify-content: center">
-          <BButton size="small" @click="continueOrganize">{{ $t('bookmarkMg.aiOrganizeContinue') }}</BButton>
+          <BButton v-if="!isSelectedScope || selectedQueue.length" size="small" @click="continueOrganize">
+            {{
+              $t(isSelectedScope ? 'bookmarkMg.aiOrganizeSelectedContinue' : 'bookmarkMg.aiOrganizeContinue', {
+                n: selectedQueue.length,
+              })
+            }}
+          </BButton>
           <BButton size="small" type="primary" @click="close">{{ $t('bookmarkMg.aiOrganizeClose') }}</BButton>
         </div>
       </div>
@@ -106,6 +141,7 @@
 
 <script lang="ts" setup>
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
@@ -115,8 +151,9 @@
   import { useUserStore } from '@/store';
 
   const visible = defineModel<boolean>('visible');
-  const props = defineProps<{ initType?: 'bookmark' | 'note' }>();
+  const props = defineProps<{ initType?: 'bookmark' | 'note'; selectedIds?: string[] }>();
   const emit = defineEmits<{ (e: 'applied'): void }>();
+  const { t } = useI18n();
   const user = useUserStore();
   const isReadonlyAdminContext = computed(() => user.adminContext?.mode === 'readonly');
 
@@ -143,8 +180,19 @@
   const fillMeta = ref(true);
   const applying = ref(false);
   const appliedCount = ref(0);
+  const selectedMode = ref(false);
+  const selectedOriginalCount = ref(0);
+  const selectedQueue = ref<string[]>([]);
 
   const chosenCount = computed(() => suggestions.value.filter((s) => s.include).length);
+  const isSelectedScope = computed(() => selectedMode.value);
+  const selectedRemainingAfterQuote = computed(() =>
+    Math.max(0, Number(quote.value?.requestedTotal || 0) - Number(quote.value?.requestIds?.length || 0)),
+  );
+
+  function normalizeSelectedIds(value: string[] | undefined) {
+    return [...new Set((value || []).map((id) => String(id || '').trim()).filter(Boolean))];
+  }
 
   function toggle(arr: string[], v: string) {
     const i = arr.indexOf(v);
@@ -152,14 +200,38 @@
     else arr.push(v);
   }
 
+  function useSuggestions(rows: unknown) {
+    suggestions.value = (Array.isArray(rows) ? rows : []).map((s: any) => ({
+      ...s,
+      include: true,
+      pickTags: (s.matchedTags || []).map((tag: any) => tag.id),
+      pickNew: [...(s.newTags || [])],
+    }));
+    if (!suggestions.value.length) {
+      appliedCount.value = 0;
+      consumeSelectedRequest();
+      step.value = 'done';
+      return;
+    }
+    step.value = 'review';
+  }
+
   async function loadQuote() {
     quoteLoading.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/quote', {
-        scope: 'untagged',
-        resourceType: resourceType.value,
-      });
+      const res = await apiBasePost(
+        '/api/bookmark/ai/organize/quote',
+        {
+          scope: isSelectedScope.value ? 'selected' : 'untagged',
+          ids: isSelectedScope.value ? selectedQueue.value : undefined,
+          resourceType: resourceType.value,
+        },
+        { silent: true },
+      );
       if (res?.status === 200) quote.value = res.data;
+    } catch {
+      quote.value = null;
+      message.error(t('bookmarkMg.aiOrganizeQuoteFailed'));
     } finally {
       quoteLoading.value = false;
     }
@@ -169,34 +241,33 @@
     if (!quote.value?.batchIds?.length) return;
     step.value = 'running';
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/run', {
-        ids: quote.value.batchIds,
-        resourceType: resourceType.value,
-      });
+      const res = await apiBasePost(
+        '/api/bookmark/ai/organize/run',
+        {
+          ids: quote.value.batchIds,
+          resourceType: resourceType.value,
+        },
+        { silent: true },
+      );
       if (res?.status === 200 && res.data?.ok) {
         const processed = Number(res.data?.processed || 0);
         recordOperation({
           module: resourceType.value === 'note' ? '笔记库' : '书签管理',
           operation: `AI 智能整理生成建议成功【${processed}项】`,
         });
-        suggestions.value = (res.data.suggestions || []).map((s: any) => ({
-          ...s,
-          include: true,
-          pickTags: (s.matchedTags || []).map((t: any) => t.id),
-          pickNew: [...(s.newTags || [])],
-        }));
-        if (!suggestions.value.length) {
-          appliedCount.value = 0;
-          step.value = 'done';
-        } else {
-          step.value = 'review';
-        }
+        useSuggestions(res.data.suggestions);
       } else {
-        message.info(res?.data?.msg || res?.msg || 'AI 整理失败');
+        message.info(res?.data?.msg || res?.msg || t('bookmarkMg.aiOrganizeRunFailed'));
         step.value = 'confirm';
       }
     } catch (e: any) {
-      message.info(e?.message || 'AI 整理失败');
+      const partialSuggestions = Array.isArray(e?.data?.suggestions) ? e.data.suggestions : [];
+      if (e?.status === 429 && partialSuggestions.length) {
+        useSuggestions(partialSuggestions);
+        message.warning(t('bookmarkMg.aiOrganizePartialQuota', { n: partialSuggestions.length }));
+        return;
+      }
+      message.info(e?.message || t('bookmarkMg.aiOrganizeRunFailed'));
       step.value = 'confirm';
     }
   }
@@ -215,7 +286,11 @@
     if (!items.length) return;
     applying.value = true;
     try {
-      const res = await apiBasePost('/api/bookmark/ai/organize/apply', { items, resourceType: resourceType.value });
+      const res = await apiBasePost(
+        '/api/bookmark/ai/organize/apply',
+        { items, resourceType: resourceType.value },
+        { silent: true },
+      );
       if (res?.status === 200) {
         appliedCount.value = res.data?.applied || 0;
         if (appliedCount.value > 0) {
@@ -224,11 +299,14 @@
             operation: `应用 AI 智能整理结果成功【${appliedCount.value}项】`,
           });
         }
+        consumeSelectedRequest();
         step.value = 'done';
         emit('applied');
       } else {
-        message.info(res?.msg || '应用失败');
+        message.info(res?.msg || t('bookmarkMg.aiOrganizeApplyFailed'));
       }
+    } catch {
+      message.error(t('bookmarkMg.aiOrganizeApplyFailed'));
     } finally {
       applying.value = false;
     }
@@ -236,6 +314,20 @@
 
   function close() {
     visible.value = false;
+  }
+
+  function consumeSelectedRequest() {
+    if (!isSelectedScope.value) return;
+    const consumedIds = new Set(
+      (Array.isArray(quote.value?.requestIds) ? quote.value.requestIds : []).map((id: unknown) => String(id)),
+    );
+    if (!consumedIds.size) return;
+    selectedQueue.value = selectedQueue.value.filter((id) => !consumedIds.has(id));
+  }
+
+  function skipSelectedBatch() {
+    consumeSelectedRequest();
+    continueOrganize();
   }
 
   // 完成后继续整理下一批(重新预估,反映已减少的未打标签数)
@@ -250,6 +342,9 @@
   watch(visible, (v) => {
     if (v) {
       resourceType.value = props.initType || 'bookmark';
+      selectedQueue.value = normalizeSelectedIds(props.selectedIds);
+      selectedMode.value = selectedQueue.value.length > 0;
+      selectedOriginalCount.value = selectedQueue.value.length;
       step.value = 'confirm';
       quote.value = null;
       suggestions.value = [];
@@ -311,6 +406,9 @@
   }
   .aio-actions :deep(.b_btn) {
     max-width: 100%;
+  }
+  .aio-actions--center {
+    justify-content: center;
   }
   .aio-spin {
     width: 34px;

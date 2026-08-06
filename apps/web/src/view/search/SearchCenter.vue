@@ -318,8 +318,8 @@
                   </BButton>
                   <template v-else>
                     <BButton :disabled="allMatchingActive || !selectedCount" @click="openSearchAi('organize')">
-                      <SvgIcon :src="icon.ai.organize" size="15" />
-                      {{ t('ai.entry.organizeSelected') }}
+                      <SvgIcon :src="icon.ai.materials" size="15" />
+                      {{ t('ai.entry.addSelectedToAssistant') }}
                     </BButton>
                     <BButton @click="batchAddToInbox">{{ t('inbox.addExisting') }}</BButton>
                     <BButton type="primary" @click="batchAddTag">{{ t('resourceCenter.batch.addTag') }}</BButton>
@@ -767,8 +767,8 @@
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
       key: 'ai',
-      label: t('ai.entry.organizeSelected'),
-      icon: icon.ai.organize,
+      label: t('ai.entry.addSelectedToAssistant'),
+      icon: icon.ai.materials,
       disabled: allMatchingActive.value || selectedCount.value < 1,
     },
     {

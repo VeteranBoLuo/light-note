@@ -38,6 +38,25 @@
           @close="catalogDrawerOpen = false"
         />
         <div class="note-body-header editor-panel">
+          <nav
+            v-if="nodeType === 'edit' && detailBreadcrumb.length"
+            class="note-detail-breadcrumb"
+            :aria-label="t('note.currentDirectory')"
+          >
+            <BButton class="note-detail-crumb" @click="openBreadcrumbDirectory(null)">
+              {{ t('note.knowledgeRoot') }}
+            </BButton>
+            <template v-for="item in detailBreadcrumb" :key="item.id">
+              <span aria-hidden="true">/</span>
+              <BButton
+                class="note-detail-crumb"
+                :class="{ 'is-current': item.id === note.id }"
+                @click="item.id === note.id ? undefined : openBreadcrumbDirectory(item.id)"
+              >
+                {{ item.title || t('note.untitled') }}
+              </BButton>
+            </template>
+          </nav>
           <div class="note-body-title n-title">
             <BInput
               v-if="bookmark.isMobile"
@@ -73,6 +92,13 @@
             @ready="handleEditorReady"
             @markdown-rendered="refreshCatalog"
             @resource-refs-change="onEditorResourceRefsChange"
+          />
+          <NoteSubpageSection
+            v-if="nodeType === 'edit' && note.id"
+            :note-id="note.id"
+            :readonly="readonly"
+            @create="createChildPage"
+            @open="openSubpage"
           />
         </div>
         <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
@@ -117,6 +143,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
+  import NoteSubpageSection from '@/components/noteLibrary/detail/NoteSubpageSection.vue';
   import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
@@ -132,6 +159,7 @@
   import { buildResourceHref, resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
+  import type { NoteBreadcrumbItem } from '@/types/noteTree';
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -155,6 +183,19 @@
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
+  const routeQueryValue = (value: unknown) => {
+    const raw = Array.isArray(value) ? value[0] : value;
+    return String(raw ?? '').trim();
+  };
+  const noteLibraryFallback = () => {
+    const parent = routeQueryValue(router.currentRoute.value.query.parent);
+    return parent ? { path: '/noteLibrary', query: { parent } } : { path: '/noteLibrary' };
+  };
+  const safeNoteLibraryFromPath = () => {
+    const from = routeQueryValue(router.currentRoute.value.query.from);
+    return from.startsWith('/noteLibrary') && !from.startsWith('//') ? from : '';
+  };
+  const returnToSourceDirectory = () => router.push(safeNoteLibraryFromPath() || noteLibraryFallback());
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -181,6 +222,7 @@
   const versionHistoryVisible = ref(false);
   const catalogDrawerOpen = ref(false);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
+  const detailBreadcrumb = ref<NoteBreadcrumbItem[]>([]);
   let resourceResolveVersion = 0;
   let lastResourceRefSignature = '';
   let currentEditorResourceRefs: ResourceRef[] = [];
@@ -449,6 +491,40 @@
     editorRef.value?.scrollToMarkdownHeading?.(index, heading.sourceOffset);
   }
 
+  function createChildPage() {
+    if (!note.id || readonly.value) return;
+    router.push({
+      path: '/noteLibrary/add',
+      query: { type: 'html', parent: note.id, from: router.currentRoute.value.fullPath },
+    });
+  }
+
+  function openSubpage(id: string) {
+    if (!id) return;
+    router.push({
+      path: `/noteLibrary/${encodeURIComponent(id)}`,
+      query: { from: router.currentRoute.value.fullPath },
+    });
+  }
+
+  function openBreadcrumbDirectory(parentId: string | null) {
+    router.push(parentId ? { path: '/noteLibrary', query: { parent: parentId } } : { path: '/noteLibrary' });
+  }
+
+  async function loadDetailBreadcrumb(noteId: string) {
+    if (!noteId) {
+      detailBreadcrumb.value = [];
+      return;
+    }
+    try {
+      const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true });
+      detailBreadcrumb.value =
+        response.status === 200 && Array.isArray(response.data?.items) ? response.data.items : [];
+    } catch {
+      detailBreadcrumb.value = [];
+    }
+  }
+
   // —— 模板实例化(新建时从 query 读取模板并预填标题/正文) ——
   const saveTemplateVisible = ref(false);
   let appliedTemplateName = ''; // 创建成功日志附带模板名,便于区分模板使用情况
@@ -460,7 +536,7 @@
       title: t('common.defaultTitle'),
       content: t('note.tplLoadFailedChoice'),
       onOk() {
-        router.push('/noteLibrary');
+        returnToSourceDirectory();
       },
     });
   }
@@ -521,6 +597,8 @@
     if (!params.title || !params.title.trim()) {
       params.title = DEFAULT_NOTE_TITLE;
     }
+    const parentId = routeQueryValue(router.currentRoute.value.query.parent);
+    if (parentId) params.parentId = parentId;
     createPromise = apiBasePost('/api/note/addNote', params)
       .then((res) => {
         if (res.status === 200 && res.data?.id) {
@@ -534,6 +612,7 @@
           // replace 保留原 query(type/builtin):万一组件仍被重挂(旧版本页面/共键失效),
           // resolveInitialNoteType 也能拿到 markdown,不再落回 html 打开 TinyMCE 竞态转义窗口(日报模板 &gt; 案根因)
           markNoteDraftPromoted(note.id as string);
+          void loadDetailBreadcrumb(note.id as string);
           router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
           recordOperation({
             module: '笔记',
@@ -740,7 +819,7 @@
             // 删除已在服务端成功完成，离开时不能再把排队中的旧草稿写回已删除笔记。
             skipSaveOnLeave = true;
             clearScheduledSave();
-            router.push('/noteLibrary');
+            returnToSourceDirectory();
           }
         });
       },
@@ -791,7 +870,9 @@
       return;
     }
     if (nodeType.value === 'add') {
-      router.push('/noteLibrary');
+      returnToSourceDirectory();
+    } else if (safeNoteLibraryFromPath()) {
+      returnToSourceDirectory();
     } else {
       router.back();
     }
@@ -832,6 +913,7 @@
             });
             note.lastTitle = cloneDeep(note.title);
             updateTime.value = res.data?.updateTime ?? res.data?.createTime;
+            void loadDetailBreadcrumb(String(note.id));
           }
         })
         .finally(async () => {
@@ -937,6 +1019,38 @@
       &:focus-visible {
         background: transparent !important;
       }
+    }
+  }
+  .note-detail-breadcrumb {
+    min-width: 0;
+    height: 32px;
+    padding: 0 10px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    border-bottom: 1px solid var(--surface-border-color);
+    color: var(--muted-text-color, var(--desc-color));
+    background: var(--workspace-panel-bg-color, var(--surface-page-bg));
+    font-size: 11px;
+  }
+
+  .note-detail-crumb {
+    min-width: 0;
+    max-width: 180px;
+    height: 24px;
+    padding: 0 4px;
+    overflow: hidden;
+    color: var(--desc-color);
+    background: transparent;
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-current {
+      color: var(--resource-note-color, #00a884);
+      font-weight: 650;
     }
   }
   .note-title-mobile {
