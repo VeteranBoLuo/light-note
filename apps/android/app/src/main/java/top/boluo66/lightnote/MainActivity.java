@@ -709,6 +709,40 @@ public final class MainActivity extends Activity {
     }
 
     /**
+     * 把「有没有成功打开系统日历」回给网页。
+     *
+     * 网页那边有超时：旧版 App 收到 calendar.insert 会当成未知类型直接忽略、什么都不回，
+     * 等不到回复就按不支持处理并回落到 .ics，所以这里不需要版本号协商。
+     */
+    private void reportCalendarInsertResult(String token, boolean ok) {
+        if (webView == null || isFinishing() || isDestroyed()) {
+            return;
+        }
+        JSONObject payload = new JSONObject();
+        try {
+            payload.put("token", token == null ? "" : token);
+            payload.put("ok", ok);
+            if (!ok) {
+                /*
+                 * 这里一定是 failed 而不是 unsupported：能走到这个方法就说明 App 支持这条通道，
+                 * 失败只可能是设备上没有能接 ACTION_INSERT 的日历应用 —— 鸿蒙 + 卓易通这类
+                 * 兼容层容器里很可能就没有。网页据此提示「改用导出日历文件」，
+                 * 而不是笼统说「App 版本太旧」：旧版是压根不回复，由网页超时收口成 unsupported。
+                 */
+                payload.put("reason", "failed");
+            }
+        } catch (JSONException error) {
+            return;
+        }
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidCalendarResult&&window.__lightNoteAndroidCalendarResult("
+                + payload
+                + ");",
+            null
+        );
+    }
+
+    /**
      * 把原生下载进度推给网页。
      *
      * @return false 表示 WebView 已不可用，让轮询自己停下来（否则会一直转到超时）。
@@ -786,6 +820,27 @@ public final class MainActivity extends Activity {
                     }
                     reportApkInstallResult(token, outcome);
                 });
+            } else if ("calendar.insert".equals(messageType)) {
+                // 待办直接进系统日历,不用先落一个 .ics 文件再让用户自己点开导入
+                String token = payload.optString("token");
+                String title = payload.optString("title");
+                String description = payload.optString("description");
+                String location = payload.optString("location");
+                long beginTime = payload.optLong("beginTime", 0L);
+                long endTime = payload.optLong("endTime", 0L);
+                runOnUiThread(() ->
+                    reportCalendarInsertResult(
+                        token,
+                        WebViewSupport.insertCalendarEvent(
+                            MainActivity.this,
+                            title,
+                            description,
+                            location,
+                            beginTime,
+                            endTime
+                        )
+                    )
+                );
             } else if ("privacyConsent.withdraw".equals(messageType)) {
                 runOnUiThread(this::restartForPrivacyConsent);
             } else if ("legal.open".equals(messageType)) {

@@ -554,12 +554,17 @@ async function downloadDiagramImage(svg: string) {
     ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
     const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!blob) throw new Error('CANVAS_TO_BLOB_FAILED');
-    await deliverGeneratedFile({
+    const result = await deliverGeneratedFile({
       content: blob,
       fileName: `diagram-${new Date().toISOString().slice(0, 10)}.png`,
       mimeType: 'image/png',
       preferShare: true,
     });
+    // App 内落不了盘就别静默收场：图已经渲染完了，什么都不说等于让人以为存好了。
+    // （更好的出路是走 image.save 存进相册，和头像同一条通道，本次未做。）
+    if (result === 'unavailable') {
+      message.warning(i18n.global.t('note.mermaidDownloadFailed'));
+    }
   } catch {
     message.warning(i18n.global.t('note.mermaidDownloadFailed'));
   }

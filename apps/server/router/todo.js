@@ -16,5 +16,8 @@ router.post('/batch-delete', todoHandle.batchDeleteTodo);
 router.post('/batch-restore', todoHandle.batchRestoreTodo);
 router.post('/reorder', todoHandle.reorderTodo);
 router.post('/snooze', todoHandle.snoozeTodo);
+// App 内 .ics 落不了 blob，先换一次性 http 地址再交给系统 DownloadManager（见 handler 顶部说明）
+router.post('/exportCalendar', todoHandle.createTodoCalendarTicket);
+router.get('/exportCalendar', todoHandle.downloadTodoCalendarFile);
 
 export default router;

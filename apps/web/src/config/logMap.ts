@@ -89,6 +89,7 @@ export const OPERATION_LOG_MAP = {
     completeBatch: '批量整理完成',
     openCalendarExport: '打开添加到日历',
     exportCalendar: '导出待办日历文件成功',
+    insertCalendar: '待办加入系统日历成功',
     deleteOne: '单条资源移入回收站',
     deleteBatch: '批量资源移入回收站',
     openResource: '打开原资源继续整理',

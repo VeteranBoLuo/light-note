@@ -1,7 +1,8 @@
 /**
  * 轻笺 Android App 内的导出落盘通道。
  *
- * App 的 WebView 既没有 Web Share，`a[download]` 点 `blob:` 也不触发原生下载监听，
+ * App 的 WebView 没有 Web Share，`a[download]` 点 `blob:` 虽然会进原生下载监听，却在
+ * `WebViewSupport.download` 的 isHttpUrl 那一关被挡掉（只弹「无法开始下载」，不落盘），
  * 所以前端生成好的导出件在 App 内本来无处可去（见 utils/fileDelivery.ts 顶部说明）。
  * 这里把内容换成一个短时 http 地址，交给已有的 `{type:'download'}` 桥 →
  * 系统 DownloadManager 存进「下载」目录，并复用系统下载通知（含通知栏进度）。
@@ -14,6 +15,7 @@
 
 import { apiBasePost } from '@/http/request';
 import { postAndroidMessage } from '@/utils/androidBridge';
+import { encodeFileContentToBase64 } from '@/utils/fileDelivery';
 
 export type NoteExportFormat = 'md' | 'html' | 'pdf';
 
@@ -26,22 +28,6 @@ export type AndroidExportOutcome =
    */
   | { ok: false; reason: 'too_large' | 'request_failed' | 'bridge_failed'; message?: string };
 
-/** Blob/文本 → 纯 base64（不含 data URI 前缀）。文本走 Blob 统一交给 FileReader，避免自己处理 UTF-8 编码。 */
-function toBase64(content: string | Blob, mimeType: string): Promise<string> {
-  const blob =
-    content instanceof Blob ? content : new Blob([content], { type: `${mimeType};charset=utf-8` });
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const separator = result.indexOf(',');
-      // readAsDataURL 结果形如 `data:<mime>;base64,<payload>`，只取 payload
-      resolve(separator >= 0 ? result.slice(separator + 1) : '');
-    };
-    reader.readAsDataURL(blob);
-  });
-}
 
 /**
  * 把导出件送进 App 的系统下载目录。
@@ -59,7 +45,7 @@ export async function deliverExportViaAndroidBridge(options: {
 
   let contentBase64: string;
   try {
-    contentBase64 = await toBase64(content, mimeType);
+    contentBase64 = await encodeFileContentToBase64(content, mimeType);
   } catch (error) {
     console.error('导出内容编码失败:', error);
     return { ok: false, reason: 'request_failed' };

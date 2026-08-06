@@ -1096,7 +1096,13 @@ export const createNoteExportTicket = async (req, res) => {
     }
 
     const fileName = sanitizeExportFileName(req.body?.fileName, format);
-    const { token, expiresIn } = await createExportTicket({ userId, noteId, format, fileName, content });
+    const { token, expiresIn } = await createExportTicket({
+      userId,
+      resourceId: noteId,
+      format,
+      fileName,
+      content,
+    });
 
     // token 放 query 而不是路径段:路径里带随机值会让每次导出都变成一个「新路径」,
     // 触发安全中间件的接口枚举检测(1 分钟内不同路径数),正常使用也可能被误判封 IP。

@@ -449,6 +449,17 @@ export default {
     calendarShared: 'Calendar file shared. Please confirm it in your calendar app.',
     calendarDownloaded: 'Calendar file downloaded. Open it with your system calendar from your downloads.',
     calendarExportFailed: 'Failed to generate the calendar file. Please check the due time.',
+    calendarUnavailableInApp:
+      'Saving calendar files is not available in the app yet. Use "Add to calendar", or open 轻笺 in a mobile browser to export.',
+    calendarHandedToDownloads:
+      'The calendar file is downloading. Open it from your Download folder to import it.',
+    calendarInsertAction: 'Add to calendar',
+    calendarInsertNote:
+      '"Add to calendar" opens your system calendar — just tap save there. The reminder has to be picked in the calendar app; the exported file keeps the reminder selected above.',
+    calendarInsertOpened: 'Your system calendar is open. Confirm and save there.',
+    calendarInsertUnsupported: 'This app version cannot add events directly yet. Please use "Export file".',
+    calendarInsertNoApp:
+      'No calendar app was found. Please use "Export calendar file" and open the download with your calendar.',
     todoDeleted: 'Todo deleted',
     todoSaved: 'Todo saved',
     todoSaveFailed: 'Could not save the todo. Please try again.',
@@ -1606,6 +1617,10 @@ export default {
     batchDownloadCancelled: 'Batch download cancelled',
     batchDownloading: 'Downloading files',
     batchPacking: 'Packing zip',
+    batchDownloadSubmitting: 'Starting downloads',
+    batchDownloadHandedOff: '{count} files started downloading, check the Download folder when done',
+    batchDownloadPartial: '{success} started downloading, {failed} failed',
+    batchDownloadCancelledPartial: 'Cancelled. {count} files are already downloading',
     moveCompleted: 'Move completed',
     batchMoveSuccess: 'Batch move successful! Moved',
     moveSuccess: 'Move successful',

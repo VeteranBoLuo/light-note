@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   addMinutesToWallClock,
   buildIcsFileName,
+  buildTodoCalendarEvent,
   buildTodoIcs,
   deliverIcsFile,
   deriveSequence,
@@ -191,6 +192,48 @@ describe('buildTodoIcs', () => {
   it('dueAt 非法时返回 null 而不是产出错误文件', () => {
     expect(buildTodoIcs({ ...BASE_TODO, dueAt: '' }, BASE_OPTIONS)).toBeNull();
     expect(buildTodoIcs({ ...BASE_TODO, dueAt: 'invalid' }, BASE_OPTIONS)).toBeNull();
+  });
+});
+
+/*
+ * 「加入日历」和 .ics 的时间语义不同：.ics 是浮动时间（数字照抄），intent 只收时间戳、
+ * 必须落到确定瞬间。这里锁住「按设备本地时区换算」——用 Date.UTC 写期望值会在非 UTC 机器上
+ * 假失败，所以期望值同样用本地时间构造。
+ */
+describe('buildTodoCalendarEvent', () => {
+  it('起止时间按本地时区换算，时长与 .ics 一致（30 分钟）', () => {
+    const event = buildTodoCalendarEvent(BASE_TODO, 'https://boluo66.top');
+
+    expect(event).not.toBeNull();
+    expect(event!.beginTime).toBe(new Date(2026, 6, 28, 9, 0, 0).getTime());
+    expect(event!.endTime).toBe(new Date(2026, 6, 28, 9, 30, 0).getTime());
+    expect(event!.endTime - event!.beginTime).toBe(30 * 60 * 1000);
+  });
+
+  it('描述沿用 .ics 那份：正文 + 深链，两条路进日历后长得一样', () => {
+    const event = buildTodoCalendarEvent(BASE_TODO, 'https://boluo66.top');
+
+    expect(event!.title).toBe('提交周报');
+    expect(event!.description).toBe(
+      '整理本周进展\n\nhttps://boluo66.top/inbox?tab=todo&todoId=todo-123',
+    );
+  });
+
+  it('没有正文时只留深链，不留空行', () => {
+    const event = buildTodoCalendarEvent({ ...BASE_TODO, description: null }, 'https://boluo66.top');
+
+    expect(event!.description).toBe('https://boluo66.top/inbox?tab=todo&todoId=todo-123');
+  });
+
+  it('跨小时进位不出错（09:45 + 30min = 10:15）', () => {
+    const event = buildTodoCalendarEvent({ ...BASE_TODO, dueAt: '2026-07-28 09:45:00' }, 'https://boluo66.top');
+
+    expect(event!.endTime).toBe(new Date(2026, 6, 28, 10, 15, 0).getTime());
+  });
+
+  it('dueAt 非法时返回 null，绝不猜一个时间加进日历', () => {
+    expect(buildTodoCalendarEvent({ ...BASE_TODO, dueAt: '' }, 'https://boluo66.top')).toBeNull();
+    expect(buildTodoCalendarEvent({ ...BASE_TODO, dueAt: '2026-13-01 09:00:00' }, 'https://boluo66.top')).toBeNull();
   });
 });
 

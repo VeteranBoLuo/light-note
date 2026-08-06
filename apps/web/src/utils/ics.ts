@@ -10,7 +10,7 @@
  * 文件名清洗与「分享/下载」交付链路是所有前端生成文件的共用能力，统一在 `utils/fileDelivery.ts`。
  */
 
-import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
+import { buildExportFileName, deliverGeneratedFile, type FileDeliveryResult } from '@/utils/fileDelivery';
 
 export interface TodoIcsInput {
   id: string;
@@ -163,6 +163,48 @@ export function deriveSequence(updatedAt: string | null | undefined): number {
   return Math.max(0, Math.floor((ms - SEQUENCE_EPOCH_MS) / 1000));
 }
 
+/** 事件时长。待办只有截止时间、没有时长，给 30 分钟让它在日历里占一个可见的块。 */
+const EVENT_DURATION_MINUTES = 30;
+
+function buildTodoDeepLink(todoId: string, origin: string): string {
+  return `${origin}/inbox?tab=todo&todoId=${encodeURIComponent(todoId)}`;
+}
+
+/** 正文 + 深链。两条进日历的路（.ics 与「加入日历」）共用，避免同一个事件长得不一样。 */
+function buildEventDescription(todo: TodoIcsInput, origin: string): string {
+  return [String(todo.description ?? '').trim(), buildTodoDeepLink(todo.id, origin)]
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/**
+ * 待办 → 「加入日历」（原生 ACTION_INSERT）所需的绝对时间戳与文案。
+ *
+ * 和 .ics 有一处刻意的不同：.ics 用 RFC 5545 浮动时间（同一串数字在任何时区都照原样显示），
+ * 而 intent 只收毫秒时间戳，必须落到一个确定的瞬间。这里按**设备本地时区**换算 ——
+ * 也就是用户此刻在轻笺界面上看到的那个时间；之后换设备时区会偏移，这是 intent 的固有限制，
+ * 要严格保持浮动语义就得走 .ics。时长与描述沿用 .ics 的口径，两条路进日历后长得一样。
+ *
+ * dueAt 非法时返回 null，由调用方提示，绝不猜测。
+ */
+export function buildTodoCalendarEvent(
+  todo: TodoIcsInput,
+  origin: string,
+): { title: string; description: string; beginTime: number; endTime: number } | null {
+  const due = parseWallClock(todo.dueAt);
+  if (!due) return null;
+  const end = addMinutesToWallClock(due, EVENT_DURATION_MINUTES);
+  // 按组件构造本地时间，不经字符串解析：`new Date('2026-07-28 09:00')` 各浏览器口径不一
+  const toLocalMs = (wall: ReturnType<typeof parseWallClock>) =>
+    new Date(wall!.year, wall!.month - 1, wall!.day, wall!.hour, wall!.minute, wall!.second).getTime();
+  return {
+    title: String(todo.title ?? '').trim(),
+    description: buildEventDescription(todo, origin),
+    beginTime: toLocalMs(due),
+    endTime: toLocalMs(end),
+  };
+}
+
 /** 清理文件名：去控制字符，非法字符换空格，折叠空白并限长；空结果用兜底名。 */
 export function buildIcsFileName(title: string, fallback: string): string {
   return buildExportFileName(title, fallback, 'ics');
@@ -175,9 +217,9 @@ export function buildIcsFileName(title: string, fallback: string): string {
 export function buildTodoIcs(todo: TodoIcsInput, options: TodoIcsOptions): string | null {
   const due = parseWallClock(todo.dueAt);
   if (!due) return null;
-  const end = addMinutesToWallClock(due, 30);
-  const link = `${options.origin}/inbox?tab=todo&todoId=${encodeURIComponent(todo.id)}`;
-  const description = [String(todo.description ?? '').trim(), link].filter(Boolean).join('\n\n');
+  const end = addMinutesToWallClock(due, EVENT_DURATION_MINUTES);
+  const description = buildEventDescription(todo, options.origin);
+  const link = buildTodoDeepLink(todo.id, options.origin);
 
   const lines: string[] = [
     'BEGIN:VCALENDAR',
@@ -207,11 +249,12 @@ export function buildTodoIcs(todo: TodoIcsInput, options: TodoIcsOptions): strin
   return lines.flatMap(foldIcsLine).join('\r\n') + '\r\n';
 }
 
-export type IcsDeliveryResult = 'shared' | 'downloaded' | 'cancelled';
+export type IcsDeliveryResult = FileDeliveryResult;
 
 /**
  * 把日历内容交给系统：移动端优先 Web Share（文件分享），失败或不支持时降级下载。
  * 用户主动取消分享返回 'cancelled'，调用方不得记成功埋点、也不强行下载打扰用户。
+ * App 内两条路都走不通时返回 'unavailable'，调用方必须给出路而不是报成功。
  */
 export async function deliverIcsFile(
   content: string,

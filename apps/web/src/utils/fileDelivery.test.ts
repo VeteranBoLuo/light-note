@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from './fileDelivery';
+import {
+  buildExportFileName,
+  canSaveGeneratedFile,
+  canShareGeneratedFile,
+  deliverGeneratedFile,
+} from './fileDelivery';
 
 describe('buildExportFileName', () => {
   it('按格式拼扩展名，并清掉会让 a[download] 截断的非法字符', () => {
@@ -47,6 +52,8 @@ describe('deliverGeneratedFile', () => {
     else delete (URL as Partial<typeof URL>).createObjectURL;
     if (originalRevokeObjectUrl) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectUrl);
     else delete (URL as Partial<typeof URL>).revokeObjectURL;
+    // 桩在 window 上的原生桥必须清掉，否则后面的用例会被误判成运行在 App 内
+    delete window.LightNoteAndroid;
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -100,6 +107,47 @@ describe('deliverGeneratedFile', () => {
     ).resolves.toBe('downloaded');
     expect(createObjectUrl).toHaveBeenCalledWith(blob);
     expect(click).toHaveBeenCalledOnce();
+  });
+
+  /*
+   * 真机实测过的坑：App 内点导出日历，原生弹「无法开始下载」，网页同时报「已下载」。
+   * 根因就是这里点完 anchor.click() 无条件返回 'downloaded'。落不了盘必须如实回报，
+   * 而且不能白白造一个 blob URL 出来。
+   */
+  it('App 内不再假装下载：blob 落不了盘就回 unavailable', async () => {
+    delete (navigator as Navigator & { share?: Navigator['share'] }).share;
+    delete (navigator as Navigator & { canShare?: Navigator['canShare'] }).canShare;
+    window.LightNoteAndroid = { postMessage: vi.fn() };
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+
+    await expect(
+      deliverGeneratedFile({
+        content: 'BEGIN:VCALENDAR',
+        fileName: '待办.ics',
+        mimeType: 'text/calendar',
+        preferShare: true,
+      }),
+    ).resolves.toBe('unavailable');
+    expect(canSaveGeneratedFile()).toBe(false);
+    expect(createObjectUrl).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  });
+
+  it('App 内一旦支持 Web Share 就照常走分享，不被上面那条挡掉', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'share', { configurable: true, value: share });
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: vi.fn(() => true) });
+    window.LightNoteAndroid = { postMessage: vi.fn() };
+
+    await expect(
+      deliverGeneratedFile({
+        content: 'BEGIN:VCALENDAR',
+        fileName: '待办.ics',
+        mimeType: 'text/calendar',
+        preferShare: true,
+      }),
+    ).resolves.toBe('shared');
+    expect(canSaveGeneratedFile()).toBe(true);
   });
 
   it('两条路都不可用时抛错，由调用方转成明确提示而不是静默失败', async () => {

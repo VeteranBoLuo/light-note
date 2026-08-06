@@ -320,7 +320,9 @@
       v-model:visible="todoCalendarVisible"
       :item="calendarTodo"
       :exporting="exportingCalendar"
+      :inserting="insertingCalendar"
       @confirm="exportTodoCalendar"
+      @insert="addTodoToSystemCalendar"
     />
   </main>
 </template>
@@ -342,7 +344,9 @@
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
   import TodoScheduleView from '@/components/todo/TodoScheduleView.vue';
-  import { buildIcsFileName, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
+  import { buildIcsFileName, buildTodoCalendarEvent, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
+  import { deliverIcsViaAndroidBridge, insertAndroidCalendarEvent } from '@/utils/androidCalendar';
+  import { hasAndroidBridge } from '@/utils/androidBridge';
   import { bookmarkStore, inboxStore, todoStore, useUserStore } from '@/store';
   import type { InboxItem as InboxItemType } from '@/api/inboxApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -382,6 +386,7 @@
   const calendarTodo = ref<TodoItemType | null>(null);
   const todoCalendarVisible = ref(false);
   const exportingCalendar = ref(false);
+  const insertingCalendar = ref(false);
   const updatingTodoId = ref('');
   const deletingTodoId = ref('');
   const openSwipeTodoId = ref('');
@@ -1086,6 +1091,49 @@
     calendarTodo.value = item;
     todoCalendarVisible.value = true;
   }
+  /**
+   * App 内「加入日历」：直接打开系统日历的新建事件页（原生 ACTION_INSERT）。
+   *
+   * 成功只代表日历页打开了，事件存不存由用户在那边按保存决定，所以提示说「请确认保存」，
+   * 不能报「已加入」—— 那又会变成在说一件还没发生的事。旧版 App 没有这条通道、等不到回复，
+   * 会以 unsupported 收口，此时不关弹窗，让用户改用导出文件。
+   */
+  async function addTodoToSystemCalendar() {
+    if (insertingCalendar.value) return;
+    const item = calendarTodo.value;
+    if (!item?.dueAt) return;
+    const event = buildTodoCalendarEvent(
+      { id: item.id, title: item.title, description: item.description, dueAt: item.dueAt },
+      window.location.origin,
+    );
+    if (!event) {
+      message.error(t('inbox.calendarExportFailed'));
+      return;
+    }
+    insertingCalendar.value = true;
+    try {
+      const result = await insertAndroidCalendarEvent(event);
+      if (!result.ok) {
+        /*
+         * 两种失败要分开说，出路不一样：
+         * failed      —— App 支持这条通道，但设备上没有能接 ACTION_INSERT 的日历应用
+         *               （鸿蒙 + 卓易通这类兼容层容器里很常见），只能改用导出文件；
+         * unsupported —— 原生压根没回复，是还没升级到带这条通道的 App 版本。
+         */
+        message.warning(
+          t(result.reason === 'failed' ? 'inbox.calendarInsertNoApp' : 'inbox.calendarInsertUnsupported'),
+        );
+        return;
+      }
+      todoCalendarVisible.value = false;
+      calendarTodo.value = null;
+      message.success(t('inbox.calendarInsertOpened'));
+      recordOperation(OPERATION_LOG_MAP.inbox.insertCalendar);
+    } finally {
+      insertingCalendar.value = false;
+    }
+  }
+
   async function exportTodoCalendar(alarmMinutesBefore: number | null) {
     if (exportingCalendar.value) return;
     const item = calendarTodo.value;
@@ -1105,9 +1153,38 @@
     const fileName = buildIcsFileName(item.title, t('inbox.calendarFileFallback'));
     exportingCalendar.value = true;
     try {
+      /*
+       * App 内先走服务端中转：blob 在 App 里落不了盘（见 utils/androidCalendar.ts），
+       * 换成 http 地址交给系统 DownloadManager 才是真的存下来，而且 .ics 里的
+       * 提前提醒（VALARM）能一并带上 —— 这是它和「加入日历」并存的理由。
+       */
+      if (hasAndroidBridge()) {
+        const outcome = await deliverIcsViaAndroidBridge({ todoId: item.id, content, fileName });
+        if (outcome.ok) {
+          todoCalendarVisible.value = false;
+          calendarTodo.value = null;
+          message.success(t('inbox.calendarHandedToDownloads'));
+          recordOperation(OPERATION_LOG_MAP.inbox.exportCalendar);
+          return;
+        }
+        // 中转也没成时给明确出路，不能静默返回让人以为按钮坏了
+        message.warning(
+          outcome.reason === 'too_large'
+            ? t('inbox.calendarExportFailed')
+            : t('inbox.calendarUnavailableInApp'),
+        );
+        return;
+      }
+
       // 移动端优先系统分享（可直达日历应用），取消分享不打扰也不记成功；桌面端直接下载
       const result = await deliverIcsFile(content, fileName, bookmark.isMobile);
       if (result === 'cancelled') return;
+      if (result === 'unavailable') {
+        // 原生已经弹过「无法开始下载」了，这里再报「已下载」就是同一秒里两个相反的说法；
+        // 弹窗也不关、日志也不记，用户还能改用别的方式
+        message.warning(t('inbox.calendarUnavailableInApp'));
+        return;
+      }
       todoCalendarVisible.value = false;
       calendarTodo.value = null;
       message.success(t(result === 'shared' ? 'inbox.calendarShared' : 'inbox.calendarDownloaded'));

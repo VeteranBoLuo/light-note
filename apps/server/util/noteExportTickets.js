@@ -2,11 +2,12 @@ import crypto from 'node:crypto';
 import redisClient from './redisClient.js';
 
 /**
- * 笔记导出的一次性下载票据。
+ * 前端生成件的一次性下载票据（笔记导出、待办日历 .ics）。
  *
- * 为什么需要这层中转:轻笺 Android App 的 WebView 既没有 Web Share,`a[download]` 点
- * `blob:` 也不触发原生 DownloadListener,而原生下载桥(WebViewSupport.download)第一行就
- * 只认 http(s)。于是前端生成好的导出内容在 App 内根本落不了盘。把内容暂存到这里换一个
+ * 为什么需要这层中转:轻笺 Android App 的 WebView 没有 Web Share,`a[download]` 点
+ * `blob:` 虽然会进原生 DownloadListener,但原生下载桥(WebViewSupport.download)第一行
+ * 只认 http(s),blob 被挡掉后只弹一句「无法开始下载」(真机实测)。于是前端生成好的
+ * 导出内容在 App 内根本落不了盘。把内容暂存到这里换一个
  * 短时 http 地址,App 就能复用既有的 `{type:'download'}` 桥交给系统 DownloadManager,
  * 不需要改原生、也不需要用户升级 APK。
  *
@@ -63,11 +64,12 @@ export function isValidExportToken(value) {
  * 同一用户只保留最新一张:导出按钮被连点或多篇笔记连续导出时,旧票据立即失效,
  * Redis 占用被钉在「单用户一份」而不是随点击次数线性增长。
  */
-export async function createExportTicket({ userId, noteId, format, fileName, content }) {
+export async function createExportTicket({ userId, resourceId, format, fileName, content }) {
   const token = crypto.randomBytes(32).toString('base64url');
   const payload = JSON.stringify({
     userId: String(userId),
-    noteId: String(noteId),
+    // 只是排查用的元数据,消费时不校验:笔记传 noteId,待办日历传 todoId
+    resourceId: String(resourceId),
     format,
     fileName,
     contentBase64: content.toString('base64'),
@@ -112,7 +114,7 @@ export async function consumeExportTicket(token, userId) {
   await redisClient.del(userPointerKey(userId)).catch(() => {});
 
   return {
-    noteId: ticket.noteId,
+    resourceId: ticket.resourceId,
     format: ticket.format,
     fileName: ticket.fileName,
     content,

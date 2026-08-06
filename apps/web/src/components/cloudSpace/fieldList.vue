@@ -594,12 +594,15 @@
     deleteField,
     downloadField,
     listFileShares,
+    requestAndroidDownload,
     revokeFileShare,
     rotateFileShare,
     shareField,
     type FileShareInput,
     type FileShareRecord,
   } from '@/http/common.ts';
+  import { hasAndroidBridge } from '@/utils/androidBridge.ts';
+  import { submitAndroidBatchDownload } from '@/utils/androidBatchDownload.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
@@ -1084,6 +1087,66 @@
     batchDownloadAbortController.value?.abort();
   };
 
+  /*
+   * App 内的批量下载：不打包，逐个交给系统 DownloadManager（原因见
+   * utils/androidBatchDownload.ts 顶部——zip 的 blob 地址在原生那关落不了盘）。
+   *
+   * 结果是手机上拿到 N 个文件而不是一个压缩包：手机上单个文件反而更好用，不用再找解压工具；
+   * 而且不在前端打包就没有体积上限，几十 MB 的选择也不会撑爆 WebView 内存。
+   */
+  const runAndroidBatchDownload = async (selectedFiles: any[]) => {
+    batchDownloadLoading.value = true;
+    batchDownloadCancelled.value = false;
+    downloadProgress.value = {
+      visible: true,
+      percent: 0,
+      current: 0,
+      total: selectedFiles.length,
+      phaseText: t('cloudSpace.batchDownloadSubmitting'),
+    };
+
+    let succeeded = 0;
+    let failed = 0;
+    let cancelled = false;
+    try {
+      ({ succeeded, failed, cancelled } = await submitAndroidBatchDownload({
+        files: selectedFiles,
+        resolveMeta: getDownloadMeta,
+        submit: requestAndroidDownload,
+        isCancelled: () => batchDownloadCancelled.value,
+        onSubmitted: (done, total) => {
+          downloadProgress.value.current = done;
+          downloadProgress.value.percent = Math.round((done / total) * 100);
+        },
+      }));
+    } finally {
+      batchDownloadLoading.value = false;
+      setTimeout(() => {
+        downloadProgress.value.visible = false;
+      }, 600);
+    }
+
+    if (cancelled) {
+      message.info(
+        succeeded > 0
+          ? t('cloudSpace.batchDownloadCancelledPartial', { count: succeeded })
+          : t('cloudSpace.batchDownloadCancelled'),
+      );
+    } else if (!succeeded) {
+      message.error(t('cloudSpace.batchDownloadFailed'));
+    } else if (failed > 0) {
+      message.warning(t('cloudSpace.batchDownloadPartial', { success: succeeded, failed }));
+    } else {
+      // 进度卡片只画单个下载的进度，说不出「一共交了几个」，这条汇总不算重复播报；
+      // 而且正式版 1.0.0 根本不回传进度，没有它点完就完全没反馈
+      message.success(t('cloudSpace.batchDownloadHandedOff', { count: succeeded }));
+    }
+
+    if (succeeded > 0) {
+      recordOperation({ module: '云空间', operation: `批量下载文件成功【${succeeded}个】` });
+    }
+  };
+
   const handleBatchDownload = async () => {
     if (!hasSelection.value) {
       message.warning(t('cloudSpace.selectFilesToDownload'));
@@ -1096,6 +1159,13 @@
       if (success) {
         recordOperation({ module: '云空间', operation: `下载文件成功【${selectedFiles[0].fileName}】` });
       }
+      return;
+    }
+
+    // 按「桥在不在」而不是 UA 分流：桥就是这条路唯一需要的能力，UA 判断会把没有桥的
+    // WebView 也推进 App 分支，结果每个文件都 post 失败
+    if (hasAndroidBridge()) {
+      await runAndroidBatchDownload(selectedFiles);
       return;
     }
 

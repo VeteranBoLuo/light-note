@@ -226,7 +226,7 @@
     inlineMermaidForExport,
     renderMarkdownForExport,
   } from '@/utils/noteExport';
-  import { buildExportFileName, canShareGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
+  import { buildExportFileName, canSaveGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
   import { copyTextToClipboard } from '@/utils/clipboard';
@@ -278,7 +278,8 @@
    * 也只接受 http(s) 地址，前端生成的 `blob:` 文件在 App 内根本落不了盘。
    * 必须提前识别并给出可操作降级 —— 否则用户点导出只会毫无反应。
    */
-  const canSaveExportFile = () => canShareGeneratedFile() || !isLightNoteAndroidApp();
+  // 判断本身挪到了交付层（utils/fileDelivery.ts），这里只是取个贴合导出语境的名字
+  const canSaveExportFile = () => canSaveGeneratedFile();
 
   /**
    * App 内能否走服务端中转落盘：把导出件换成短时 http 地址，交给原生系统下载。
@@ -361,6 +362,12 @@
         preferShare: preferShareExport(),
       });
       if (result === 'cancelled') return;
+      if (result === 'unavailable') {
+        // 正常流程会被 canSaveExportFile() 提前挡在 App 分支，走到这里说明判断和交付层不一致，
+        // 那也不能报成功：宁可给一句「App 内导不了」，也不要谎报已保存
+        message.warning(t('noteDetail.exportUnavailableInApp'));
+        return;
+      }
       message.success(t(result === 'shared' ? 'noteDetail.exportShared' : 'noteDetail.exportDownloaded'));
       recordOperation({ module: '笔记', operation });
     } catch (error) {

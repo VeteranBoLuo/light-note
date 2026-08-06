@@ -153,6 +153,9 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
   ['POST', '/todo/count'],
+  // 日历导出中转不改用户内容,只把已可读的待办换成一次性下载地址,与 /note/exportFile 同属只读
+  ['POST', '/todo/exportCalendar'],
+  ['GET', '/todo/exportCalendar'],
 ]);
 // 待办属于账号私有行动数据，首期不开放管理员代管；普通请求不受该策略影响。
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [

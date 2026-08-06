@@ -17,6 +17,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.provider.CalendarContract;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.util.Base64;
@@ -361,7 +362,19 @@ final class WebViewSupport {
     /** 兜底上限：下载卡住又迟迟不进终态时，不该让轮询一直转下去 */
     private static final long DOWNLOAD_PROGRESS_MAX_DURATION_MS = 30L * 60L * 1000L;
 
+    /*
+     * 应用内浏览页专用：这里打开的是外部站点,网页那边不会替我们说话,blob/data 这类落不了盘的
+     * 地址必须由原生给一句提示,否则用户点了完全没反应。
+     *
+     * 轻笺自己的页面走下面带 suggestedFileName / progressListener 的重载,那条链路的非 http
+     * 地址一律静默 —— 网页层已经会如实提示(见 web/utils/fileDelivery.ts 的 'unavailable'),
+     * 原生再弹一次就成了同一件事两个说法,而且一个说失败一个说成功。
+     */
     static void download(Context context, String url, String userAgent, String contentDisposition, String mimeType) {
+        if (!isHttpUrl(url)) {
+            Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
+            return;
+        }
         download(context, url, userAgent, contentDisposition, mimeType, null, null);
     }
 
@@ -386,7 +399,15 @@ final class WebViewSupport {
         DownloadProgressListener progressListener
     ) {
         if (!isHttpUrl(url)) {
-            Toast.makeText(context, R.string.download_failed, Toast.LENGTH_SHORT).show();
+            /*
+             * 静默返回,不弹「无法开始下载」。
+             *
+             * 走到这里的只会是轻笺自己页面里的 blob:/data: —— WebView 确实会把它们交给
+             * DownloadListener,但 DownloadManager 只收 http(s)。这种情况网页层自己知道、
+             * 也会给出可操作的提示(改用「加入日历」、换手机浏览器…),原生再弹一句系统 Toast
+             * 只会和网页提示打架:用户同时看到「无法开始下载」和网页的说法,不知道信哪个。
+             * enqueue 真失败(下面的 catch)仍然要弹 —— 那种失败网页无从得知。
+             */
             return;
         }
 
@@ -834,5 +855,56 @@ final class WebViewSupport {
 
     static boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    /*
+     * 把待办递给系统日历的「新建事件」页。
+     *
+     * 为什么用 ACTION_INSERT 而不是自己往 CalendarContract 写:直接写需要 WRITE_CALENDAR
+     * 危险权限,而权限清单是对外公示并已随 App 备案的(见 apps/web/src/config/androidRelease.ts
+     * 与 docs/android/p4-compliance-audit.md),多一个危险权限就要走合规复审。ACTION_INSERT
+     * 由系统日历自己完成写入,零新增权限,用户还能在保存前改。
+     *
+     * 代价:intent 没有「提前多少分钟提醒」的标准 extra,提醒得用户在日历页自己选。
+     * 需要带上提醒的场景仍然走 .ics 文件(VALARM 在文件里),两条路并存。
+     */
+    static boolean insertCalendarEvent(
+        Activity activity,
+        String title,
+        String description,
+        String location,
+        long beginTime,
+        long endTime
+    ) {
+        if (activity == null || beginTime <= 0L) {
+            return false;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_INSERT)
+                .setData(CalendarContract.Events.CONTENT_URI)
+                .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, beginTime);
+            if (endTime > beginTime) {
+                intent.putExtra(CalendarContract.EXTRA_EVENT_END_TIME, endTime);
+            }
+            if (!isBlank(title)) {
+                intent.putExtra(CalendarContract.Events.TITLE, title);
+            }
+            if (!isBlank(description)) {
+                intent.putExtra(CalendarContract.Events.DESCRIPTION, description);
+            }
+            if (!isBlank(location)) {
+                intent.putExtra(CalendarContract.Events.EVENT_LOCATION, location);
+            }
+            /*
+             * 故意不做 resolveActivity 预检:Android 11 起的包可见性会让它在日历应用确实存在时
+             * 也返回 null,预检等于把能用的机型判成不支持。直接 start,没有日历应用时
+             * ActivityNotFoundException 会告诉我们,网页据此回落到 .ics。
+             */
+            activity.startActivity(intent);
+            return true;
+        } catch (Exception error) {
+            // 主要就是 ActivityNotFoundException(机型没有日历应用);其余异常同样只能算失败
+            return false;
+        }
     }
 }

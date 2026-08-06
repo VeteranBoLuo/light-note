@@ -6,7 +6,14 @@ import { postAndroidMessage } from '@/utils/androidBridge.ts';
 import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
 const cloud = cloudSpaceStore();
 
-function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
+/**
+ * 把一个 http(s) 地址交给原生 DownloadManager 落盘。
+ *
+ * 导出出去给云空间的批量下载复用：批量那条路在 App 内没法先打包成 blob（原生
+ * WebViewSupport.download 第一行的 isHttpUrl 只认 http(s)），只能逐个走这里，
+ * 交给桥的消息格式必须和单文件下载共用同一份。
+ */
+export function requestAndroidDownload(downloadUrl: string, fileName?: string): boolean {
   return postAndroidMessage({
     type: 'download',
     url: downloadUrl,

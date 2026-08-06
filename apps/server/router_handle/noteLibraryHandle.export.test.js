@@ -94,7 +94,7 @@ describe('createNoteExportTicket', () => {
     expect(res.body.data.downloadUrl).toBe('/api/note/exportFile?token=ticket-token');
     expect(res.body.data.expiresIn).toBe(180);
     expect(createExportTicket).toHaveBeenCalledWith(
-      expect.objectContaining({ userId: 'user-1', noteId: 'note-1', format: 'md', fileName: '周报.md' }),
+      expect.objectContaining({ userId: 'user-1', resourceId: 'note-1', format: 'md', fileName: '周报.md' }),
     );
   });
 
