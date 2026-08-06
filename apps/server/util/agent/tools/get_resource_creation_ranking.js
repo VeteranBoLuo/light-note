@@ -1,6 +1,6 @@
 import pool from '../../../db/index.js';
 import { INTERNAL_ROLES } from '../../internalRoles.js';
-import { parseTimeRange } from '../timeRange.js';
+import { isAllTimeExpression, parseRequiredTimeRange } from '../timeRange.js';
 
 const RESOURCE_TYPES = Object.freeze({
   all: { label: '资源', countColumn: 'total_count', unit: '项' },
@@ -9,40 +9,10 @@ const RESOURCE_TYPES = Object.freeze({
   file: { label: '文件', countColumn: 'file_count', unit: '个' },
 });
 
-const ALL_TIME_EXPRESSIONS = new Set([
-  '全部',
-  '所有',
-  '全量',
-  '累计',
-  '历史',
-  '当前',
-  '目前',
-  '现在',
-  '当前项目',
-  '目前项目',
-  '当前全站',
-  '目前全站',
-  '截至目前',
-  '截至现在',
-  'all',
-  'current',
-  'overall',
-]);
-
 function normalizeLimit(value) {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) return 10;
   return Math.min(Math.max(parsed, 1), 50);
-}
-
-function parseRequiredTimeRange(value, fieldName) {
-  const expression = String(value || '').trim();
-  if (fieldName === 'timeRange' && ALL_TIME_EXPRESSIONS.has(expression.toLowerCase())) return null;
-  const time = parseTimeRange(expression);
-  if (!time) {
-    throw new Error(`${fieldName === 'registeredWithin' ? '用户注册' : '资源新增'}时间范围无法识别`);
-  }
-  return time;
 }
 
 function normalizeResourceType(value) {
@@ -76,7 +46,7 @@ function normalizeResourceType(value) {
 function normalizeArgs(args = {}) {
   const requestedTimeRange = String(args.timeRange || args.resourceTimeRange || args.createdWithin || '').trim();
   if (!requestedTimeRange) throw new Error('资源排行需要明确时间范围');
-  const allTime = ALL_TIME_EXPRESSIONS.has(requestedTimeRange.toLowerCase());
+  const allTime = isAllTimeExpression(requestedTimeRange);
   return {
     timeRange: allTime ? '全部' : requestedTimeRange,
     registeredWithin: String(args.registeredWithin || args.userRegisteredWithin || '').trim(),
@@ -122,9 +92,9 @@ export default {
   requireRoot: true,
   async execute(args = {}) {
     const normalized = normalizeArgs(args);
-    const resourceTime = parseRequiredTimeRange(normalized.timeRange, 'timeRange');
+    const resourceTime = parseRequiredTimeRange(normalized.timeRange, { label: '资源新增时间', allowAll: true });
     const registeredTime = normalized.registeredWithin
-      ? parseRequiredTimeRange(normalized.registeredWithin, 'registeredWithin')
+      ? parseRequiredTimeRange(normalized.registeredWithin, { label: '用户注册时间' })
       : null;
 
     const resourceTimeFilter = resourceTime ? 'AND create_time >= ? AND create_time <= ?' : '';

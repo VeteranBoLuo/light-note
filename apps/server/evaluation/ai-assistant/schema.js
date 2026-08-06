@@ -280,6 +280,7 @@ export const GOLDEN_ENUMS = Object.freeze({
     'get_points_overview',
     'get_pending_feedback',
     'get_resource_creation_ranking',
+    'query_platform_resources',
     'get_checkin_ranking',
     'write_knowledge_base',
     // 研究与整理不通过 Agent function calling，但需要在离线结果适配器中保留可评分的规范操作名。

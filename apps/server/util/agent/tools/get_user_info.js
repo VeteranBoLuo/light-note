@@ -1,4 +1,5 @@
 import pool from '../../../db/index.js';
+import { PERSONAL_SCOPE_USER_PARAM } from '../ownerScope.js';
 
 export default {
   name: 'get_user_info',
@@ -6,7 +7,7 @@ export default {
   parameters: {
     type: 'object',
     properties: {
-      user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），仅管理员可用。不填则查自己的信息' },
+      user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
   requireRoot: false,

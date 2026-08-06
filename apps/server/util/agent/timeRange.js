@@ -219,3 +219,51 @@ export function parseTimeRange(expr) {
   // 不认识的表达式 → 返回 null，视为"全部"
   return null;
 }
+
+/**
+ * 明确表示「不限时间」的说法。
+ *
+ * parseTimeRange 对「全部」和「压根看不懂的表达式」都返回 null，平台级统计不能容忍这种混同：
+ * 前者是全量口径，后者必须让本轮失败并追问，否则会把无法识别的时间条件悄悄当成全量返回。
+ */
+const ALL_TIME_EXPRESSIONS = new Set([
+  '全部',
+  '所有',
+  '全量',
+  '累计',
+  '历史',
+  '当前',
+  '目前',
+  '现在',
+  '当前项目',
+  '目前项目',
+  '当前全站',
+  '目前全站',
+  '截至目前',
+  '截至现在',
+  'all',
+  'current',
+  'overall',
+]);
+
+export function isAllTimeExpression(value) {
+  return ALL_TIME_EXPRESSIONS.has(String(value || '').trim().toLowerCase());
+}
+
+/**
+ * 解析「必须给出口径」的时间范围：识别不了就抛错，不静默降级成全量。
+ *
+ * 供跨用户的平台级统计/清单工具共用，让它们的时间口径始终一致——口径一旦漂移，
+ * 同一个问题的计数和明细会互相矛盾。
+ *
+ * @param {string} value
+ * @param {{ label?: string, allowAll?: boolean }} options allowAll=true 时「全部」返回 null（不加时间过滤）
+ * @returns {{ start: string, end: string } | null}
+ */
+export function parseRequiredTimeRange(value, { label = '时间', allowAll = false } = {}) {
+  const expression = String(value || '').trim();
+  if (allowAll && isAllTimeExpression(expression)) return null;
+  const time = parseTimeRange(expression);
+  if (!time) throw new Error(`${label}范围无法识别`);
+  return time;
+}

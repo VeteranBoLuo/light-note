@@ -2,6 +2,7 @@ import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { parseNoteContent, renderNoteForAi } from '../../noteSemantic.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 
 // LIKE 通配符按字面处理：用户标题里的 % 和 _ 不能变成通配（与 todoService 同规则）。
 function escapeLikePattern(keyword) {
@@ -51,15 +52,16 @@ export default {
   name: 'query_notes',
   sourceType: 'note',
   description:
-    '查询用户的笔记。keyword 应为短关键词或词组（如"开发计划"），不要传整句问题；可按时间范围筛选，返回笔记标题、内容片段和创建时间。' +
-    '需要按语义查找"资料里怎么说"或跨资料检索正文证据时，优先使用 search_content。管理员可通过 user 参数查询指定用户的笔记。',
+    '查询笔记。keyword 应为短关键词或词组（如"开发计划"），不要传整句问题；可按时间范围筛选，返回笔记标题、内容片段和创建时间。' +
+    '需要按语义查找"资料里怎么说"或跨资料检索正文证据时，优先使用 search_content。' +
+    personalScopeHint('笔记'),
   parameters: {
     type: 'object',
     properties: {
       keyword: { type: 'string', description: '搜索关键词或短词组，匹配笔记标题和内容；不要传整句问题' },
       timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"全部"' },
       limit: { type: 'integer', description: '返回条数，默认10，最大50' },
-      user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），仅管理员可用。不填则查自己的数据' },
+      user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
   requireRoot: false,

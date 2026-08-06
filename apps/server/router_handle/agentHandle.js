@@ -25,6 +25,7 @@ import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
 import { buildAgentSemanticCapabilityCatalog, getAgentCapabilityByToolName } from '../util/agent/capabilityRegistry.js';
+import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
 import {
   adjudicateSemanticPlan,
@@ -295,6 +296,7 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'TYPE_REQUIRED',
   'URL_REQUIRED',
   'URL_SCOPE_FORBIDDEN',
+  'USER_AMBIGUOUS',
   'EMPTY',
   'TOO_LONG',
   'URL_TOO_LONG',
@@ -364,6 +366,7 @@ function publicToolErrorStatus(code, fallback = 400) {
       'TODO_STATUS_CONFLICT',
       'TODO_STATUS_NOOP',
       'TODO_STATUS_PREVIEW_REQUIRED',
+      'USER_AMBIGUOUS',
     ].includes(normalized)
   ) {
     return 409;
@@ -397,7 +400,7 @@ async function executeTool(name, args, ctx) {
 
     // root 在普通会话中可通过 user 参数查询指定账号；管理员代管上下文由策略层固定 subject，禁止再次跳转。
     if (args.user && String(args.user).trim()) {
-      const resolved = await resolveUser(args.user);
+      const resolved = await resolveAgentTargetUser(args.user);
       if (!resolved) {
         return { status: 'error', summary: `未找到用户"${args.user}"`, error: 'USER_NOT_FOUND' };
       }
@@ -743,25 +746,6 @@ async function prepareRetriedAction({ session, identity, req, requestId }) {
       error: publicError.code,
     };
   }
-}
-
-// ============================================================
-// 用户解析（root 查他人数据时用）
-// ============================================================
-
-/**
- * 根据昵称/邮箱/ID 查找用户
- * @param {string} keyword
- * @returns {Promise<{ id: string, alias: string } | null>}
- */
-async function resolveUser(keyword) {
-  const kw = String(keyword).trim();
-  if (!kw) return null;
-  const [rows] = await pool.query(
-    `SELECT id, alias FROM user WHERE (alias = ? OR email = ? OR id = ?) AND del_flag = '0' LIMIT 1`,
-    [kw, kw, kw],
-  );
-  return rows[0] || null;
 }
 
 async function resolveResourceContexts(userId, contexts, question = '') {

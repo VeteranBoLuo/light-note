@@ -1,6 +1,7 @@
 import pool from '../../../db/index.js';
 import { parseTimeRange } from '../timeRange.js';
 import { searchPersonalKnowledge } from '../../personalKnowledgeSearch.js';
+import { PERSONAL_SCOPE_USER_PARAM, personalScopeHint } from '../ownerScope.js';
 
 // LIKE 通配符按字面处理：名称里的 % 和 _ 不能变成通配（与 query_notes/todoService 同规则）。
 function escapeLikePattern(keyword) {
@@ -62,8 +63,9 @@ export default {
   name: 'query_bookmarks',
   sourceType: 'bookmark',
   description:
-    '查询用户的书签。keyword 应为短关键词或词组（匹配名称和URL），不要传整句问题；可按标签名、时间范围筛选。' +
-    '需要按语义查找书签快照正文时优先使用 search_content。跨类型搜索时可同时调用 query_notes 和 query_files。',
+    '查询书签。keyword 应为短关键词或词组（匹配名称和URL），不要传整句问题；可按标签名、时间范围筛选。' +
+    '需要按语义查找书签快照正文时优先使用 search_content。跨类型搜索时可同时调用 query_notes 和 query_files。' +
+    personalScopeHint('书签'),
   parameters: {
     type: 'object',
     properties: {
@@ -71,7 +73,7 @@ export default {
       tag: { type: 'string', description: '标签名称，精确匹配' },
       timeRange: { type: 'string', description: '时间范围，如"最近7天"、"上个月"、"今年"、"全部"' },
       limit: { type: 'integer', description: '返回条数，默认10，最大50' },
-      user: { type: 'string', description: '可选，指定查询的用户（昵称/邮箱/ID），仅管理员可用。不填则查自己的数据' },
+      user: { type: 'string', description: PERSONAL_SCOPE_USER_PARAM },
     },
   },
   requireRoot: false,

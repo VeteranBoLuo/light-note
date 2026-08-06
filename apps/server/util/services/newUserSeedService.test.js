@@ -50,7 +50,7 @@ describe('newUserSeedService', () => {
     });
     expect(zh.tags).toHaveLength(4);
     expect(zh.bookmarks).toHaveLength(3);
-    expect(zh.notes).toHaveLength(2);
+    expect(zh.notes).toHaveLength(4);
     expect(zh.cloud.files).toHaveLength(2);
     expect(zh.cloud.files).toEqual(
       expect.arrayContaining([
@@ -96,7 +96,7 @@ describe('newUserSeedService', () => {
       created: true,
       version: NEW_USER_SEED_VERSION,
       folderId: 42,
-      counts: { tags: 4, bookmarks: 3, notes: 2, folders: 1 },
+      counts: { tags: 4, bookmarks: 3, notes: 4, folders: 1 },
     });
     expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
     expect(connection.commit).toHaveBeenCalledTimes(1);
@@ -115,13 +115,15 @@ describe('newUserSeedService', () => {
 
     expect(tagInserts).toHaveLength(4);
     expect(bookmarkInserts).toHaveLength(3);
-    expect(noteInserts).toHaveLength(2);
-    expect(relationInserts).toHaveLength(5);
-    expect(seedMarkerInserts).toHaveLength(9);
+    expect(noteInserts).toHaveLength(4);
+    expect(relationInserts).toHaveLength(7);
+    expect(seedMarkerInserts).toHaveLength(11);
     expect(seedMarkerInserts.map(([, values]) => values[1]).sort()).toEqual([
       'bookmark',
       'bookmark',
       'bookmark',
+      'note',
+      'note',
       'note',
       'note',
       'tag',
@@ -136,7 +138,17 @@ describe('newUserSeedService', () => {
       url: 'https://demo.test/help',
       del_flag: 0,
     });
-    expect(noteInserts.map(([, [row]]) => row.type).sort()).toEqual(['html', 'markdown']);
+    expect(noteInserts.map(([, [row]]) => row.type).sort()).toEqual(['html', 'html', 'markdown', 'markdown']);
+    // 富文本示例里的引用占位符必须替换成指向本账号种子资源的真实引用链接，且不留占位符残留
+    const richTextNote = noteInserts.map(([, [row]]) => row).find((row) => row.title === '富文本样式示例');
+    expect(richTextNote).toBeDefined();
+    expect(richTextNote.content).toContain('data-ln-resource-type="bookmark"');
+    expect(richTextNote.content).toContain('data-ln-resource-type="note"');
+    expect(richTextNote.content).not.toContain('{{ref:');
+    expect(richTextNote.content).toContain('轻笺使用帮助');
+    expect(richTextNote.content).toContain('欢迎使用轻笺');
+    // 四篇笔记 sort 递增，保证新用户笔记库顺序稳定（is_top DESC, sort, update_time DESC）
+    expect(noteInserts.map(([, [row]]) => row.sort)).toEqual([0, 1, 2, 3]);
     expect(relationInserts.flatMap(([, [values]]) => values).every((row) => row[4] === 'onboarding')).toBe(true);
     const allSeedSql = connection.query.mock.calls.map(([sql]) => compactSql(sql)).join('\n');
     expect(allSeedSql).not.toMatch(/growth_events|user_growth_tasks|points_log|user_growth\b/i);
