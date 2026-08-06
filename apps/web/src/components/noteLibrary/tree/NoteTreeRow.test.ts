@@ -63,7 +63,7 @@ describe('NoteTreeRow 显式页面操作', () => {
     document.body.innerHTML = '';
   });
 
-  it('单击标题只选择目录，保留两个快捷图标并通过整行 ActionMenu 提供完整操作', async () => {
+  it('单击标题直接打开正文，只保留新建子页快捷操作并通过整行 ActionMenu 提供完整操作', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const events = {
@@ -118,11 +118,9 @@ describe('NoteTreeRow 显式页面操作', () => {
     const title = host.querySelector<HTMLButtonElement>('.note-tree-title')!;
     title.click();
     title.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
-    expect(events.select).toHaveBeenCalledWith('note-1');
-    expect(events.open).not.toHaveBeenCalled();
-
-    host.querySelector<HTMLButtonElement>('.note-tree-action[aria-label="打开正文"]')!.click();
     expect(events.open).toHaveBeenCalledWith('note-1');
+    expect(events.select).not.toHaveBeenCalled();
+    expect(host.querySelector('.note-tree-action[aria-label="打开正文"]')).toBeNull();
     expect(host.querySelector('.note-tree-action[aria-label="更多"]')).toBeNull();
     expect(host.querySelector('.action-menu-stub')?.getAttribute('data-triggers')).toBe('hover,contextmenu');
 

@@ -14,6 +14,7 @@ import cloudSpaceRouter from '@/router/modules/cloudSpace.ts';
 import workbenchesRouter from '@/router/modules/workbenches.ts';
 import securityCenterRouter from '@/router/modules/securityCenter.ts';
 import notificationCenterRouter from '@/router/modules/notificationCenter.ts';
+import notificationsRouter from '@/router/modules/notifications.ts';
 import searchRouter from '@/router/modules/search.ts';
 import searchBatchRouter from '@/router/modules/searchBatch.ts';
 import tagDetailRouter from '@/router/modules/tagDetail.ts';
@@ -74,6 +75,7 @@ export const routes: RouteRecordRaw[] = [
       aiRouter,
       ...coBuildRouter,
       ...securityCenterRouter,
+      notificationsRouter,
       notificationCenterRouter,
     ],
   },
@@ -181,8 +183,7 @@ router.beforeEach((to, from) => {
   if (to.name === 'landing') {
     const runtime = resolveLightNoteRuntime();
     const isMobileLayout = isMobileViewport(window.innerWidth);
-    const isReturningVisitor =
-      runtime === 'browser' && (hasVisitedMobileLanding() || hasLoggedInBefore());
+    const isReturningVisitor = runtime === 'browser' && (hasVisitedMobileLanding() || hasLoggedInBefore());
 
     // 这是 <head> 首屏守卫的路由级兜底，也覆盖同一 SPA 会话中再次导航到根路径：
     // APK/移动 PWA 与移动回访浏览器进入应用，桌面浏览器和桌面 PWA 保留官网。

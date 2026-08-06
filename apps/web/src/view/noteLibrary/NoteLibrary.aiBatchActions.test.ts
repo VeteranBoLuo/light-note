@@ -13,6 +13,11 @@ const listItemSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteListItem.vue'),
   'utf8',
 );
+const mobilePageListSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobilePageLevelList.vue'),
+  'utf8',
+);
+const treeRowSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteTreeRow.vue'), 'utf8');
 
 describe('笔记库批量 AI 操作语义', () => {
   it('桌面与移动端都区分“添加到 AI 助手”和“AI 智能整理”', () => {
@@ -131,7 +136,7 @@ describe('笔记库页面树交互接线', () => {
   it('详情页把当前页作为父节点和子节点的移动入口分开，并将子页面压缩为紧凑导航条', () => {
     expect(detailSource).toContain('@move-self="openMoveSelf"');
     expect(detailSource).toContain('<NoteMoveModal');
-    expect(detailSource).toContain(':note="moveSelfNote"');
+    expect(detailSource).toContain(':note="moveTargetNote"');
     expect(subpageSource).toContain("t('note.moveExistingUnderThisPage')");
     expect(subpageSource).toContain("t('note.moveThisPageUnderAnother')");
     expect(subpageSource).toContain('grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))');
@@ -144,5 +149,20 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).toMatch(/function openBreadcrumbPage[\s\S]*openNoteDetailPage\(pageId\)/);
     expect(detailSource).toMatch(/function openNoteDetailPage[\s\S]*`\/noteLibrary\/\$\{encodeURIComponent\(id\)\}`/);
     expect(detailSource).not.toContain('function openBreadcrumbDirectory');
+  });
+
+  it('页面标题只负责打开正文，桌面与移动菜单提供完整页面管理且不重复“打开正文”', () => {
+    expect(treeRowSource).toContain('@click="emit(\'open\', node.id)"');
+    expect(treeRowSource).not.toContain("key: 'open'");
+    expect(mobilePageListSource).toMatch(/function selectItem[\s\S]*emit\('openPage', item\.id\)/);
+    expect(mobilePageListSource).toContain("emit('toggleTop', item)");
+    expect(mobilePageListSource).toContain("emit('create', item)");
+    expect(mobilePageListSource).toContain("emit('attach', item)");
+    expect(mobilePageListSource).toContain("emit('rename', item)");
+    expect(mobilePageListSource).toContain("emit('move', item)");
+    expect(mobilePageListSource).toContain("emit('copyLink', item)");
+    expect(mobilePageListSource).toContain("emit('delete', item)");
+    expect(detailSource).toContain(':write-enabled="noteTreeWriteEnabled && !readonly"');
+    expect(detailSource).toContain(':drag-enabled="false"');
   });
 });

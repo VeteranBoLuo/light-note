@@ -1,7 +1,13 @@
 import type { TodoItem } from '@/api/todoApi';
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
-export type TodoSnoozePreset = 'tenMinutes' | 'tomorrow' | 'nextWeek';
+export type TodoSnoozePreset =
+  | 'tenMinutes'
+  | 'oneHour'
+  | 'threeHours'
+  | 'oneDay'
+  | 'tomorrow'
+  | 'nextWeek';
 export type TodoDateFormatOptions = {
   relative?: boolean;
   includeYear?: boolean;
@@ -128,7 +134,14 @@ export function dueForTodoGroup(key: TodoGroupKey, now = new Date()) {
 }
 
 export function todoSnoozeAt(preset: TodoSnoozePreset, now = new Date()) {
-  let target = new Date(now.getTime() + 10 * 60_000);
+  const relativeMinutes: Partial<Record<TodoSnoozePreset, number>> = {
+    tenMinutes: 10,
+    oneHour: 60,
+    threeHours: 180,
+    oneDay: 24 * 60,
+  };
+  const minutes = relativeMinutes[preset];
+  let target = new Date(now.getTime() + (minutes ?? 10) * 60_000);
   if (preset === 'tomorrow') target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9);
   if (preset === 'nextWeek') {
     const days = ((8 - now.getDay()) % 7) || 7;

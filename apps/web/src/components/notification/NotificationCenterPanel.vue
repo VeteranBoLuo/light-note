@@ -230,7 +230,12 @@
 
   .is-mobile .nt-list {
     max-height: none;
+    min-height: 0;
     flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 6px var(--mobile-page-gutter, 14px) max(24px, env(safe-area-inset-bottom));
   }
 
@@ -266,7 +271,7 @@
     display: flex;
     gap: 10px;
     padding: 12px 52px 12px 12px;
-    border-left: 3px solid transparent;
+    border-left: 0;
     background: var(--card-background);
     cursor: pointer;
   }
@@ -276,8 +281,7 @@
   }
 
   .nt-item.unread {
-    border-left-color: var(--primary-color);
-    background: var(--mobile-selected-bg);
+    background: var(--card-background);
   }
 
   .nt-dot {
@@ -371,5 +375,78 @@
     margin-top: 8px;
     color: var(--primary-color);
     background: transparent !important;
+  }
+
+  .is-mobile .nt-tabs {
+    gap: 4px;
+    margin: 14px 14px 6px;
+    padding: 4px;
+    border-radius: 13px;
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .is-mobile .nt-tab {
+    min-height: 36px;
+    border: 0;
+    border-radius: 10px;
+    font-size: 13px;
+  }
+
+  .is-mobile .nt-tab.active {
+    border: 0;
+    color: var(--primary-color);
+    background: var(--card-background) !important;
+    box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
+    font-weight: 700;
+  }
+
+  .is-mobile .nt-group-label {
+    padding: 12px 2px 9px;
+    font-size: 16px;
+  }
+
+  .is-mobile .nt-group-surface {
+    border-radius: 17px;
+  }
+
+  .is-mobile .nt-item {
+    min-height: 88px;
+    gap: 10px;
+    padding: 13px 52px 13px 13px;
+  }
+
+  .is-mobile .nt-item-title {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .is-mobile .nt-dot {
+    width: 9px;
+    height: 9px;
+    margin-top: 7px;
+    flex-basis: 9px;
+  }
+
+  .is-mobile .nt-todo-action {
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 10px;
+    border: 0;
+    color: var(--primary-color);
+    background: transparent !important;
+    font-size: 11px;
+  }
+
+  .is-mobile .nt-todo-action::before {
+    position: absolute;
+    z-index: -1;
+    inset: 5px 0;
+    border: 1px solid var(--primary-color);
+    border-radius: 9px;
+    background: var(--mobile-selected-bg);
+    content: '';
   }
 </style>

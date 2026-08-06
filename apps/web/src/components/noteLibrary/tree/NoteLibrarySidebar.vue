@@ -6,7 +6,7 @@
       <BInput
         v-model:value="directorySearch"
         class="note-tree-search"
-        :placeholder="t('note.searchPage')"
+        :placeholder="t('note.searchAllPages')"
         :maxlength="120"
         clearable
       >
@@ -17,7 +17,7 @@
       <BButton
         class="note-tree-root"
         :class="{
-          'is-active': currentParentId === null,
+          'is-browse-scope': surface === 'library' && browseParentId === null,
           'is-drop-candidate': dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start',
           'is-drop-target':
             dropTargetKey === NOTE_TREE_ROOT_KEY && dropTargetPosition === 'root-start' && dropTargetActive,
@@ -25,7 +25,7 @@
         }"
         :data-note-drop-parent="NOTE_TREE_ROOT_KEY"
         :data-note-drop-title="t('note.knowledgeRoot')"
-        @click="emit('select', null)"
+        @click="surface === 'detail' ? emit('goLibrary') : emit('select', null)"
       >
         <SvgIcon :src="icon.noteTree.root" size="17" aria-hidden="true" />
         <span>{{ t('note.knowledgeRoot') }}</span>
@@ -41,19 +41,21 @@
           :key="node.id"
           :node="node"
           :depth="0"
-          :current-parent-id="currentParentId"
+          :active-page-id="activePageId"
+          :browse-parent-id="browseParentId"
           :children-by-parent="childrenByParent"
           :expanded-ids="expandedIds"
           :loading-keys="loadingKeys"
           :write-enabled="writeEnabled"
+          :drag-enabled="dragEnabled"
           :search-mode="searchActive"
           :drop-target-key="dropTargetKey"
           :drop-target-active="dropTargetActive"
           :drop-target-position="dropTargetPosition"
           :menu-disabled="menuDisabled"
           @toggle="emit('toggle', $event)"
-          @select="emit('select', $event)"
           @open="emit('open', $event)"
+          @browse-children="emit('browseChildren', $event)"
           @create="emit('create', $event)"
           @attach="emit('attach', $event)"
           @toggle-top="emit('toggleTop', $event)"
@@ -72,7 +74,7 @@
     </div>
 
     <NoteTagSidebar
-      v-else
+      v-else-if="activeTab === 'tags'"
       class="note-sidebar-tags"
       :all-tags="allTags"
       :total-count="totalCount"
@@ -81,6 +83,10 @@
       defer-navigation
       @select="emit('selectTag', $event)"
     />
+
+    <div v-else class="note-sidebar-outline">
+      <slot name="outline" />
+    </div>
   </nav>
 </template>
 
@@ -101,7 +107,10 @@
 
   const props = withDefaults(
     defineProps<{
-      currentParentId: string | null;
+      currentParentId?: string | null;
+      activePageId?: string | null;
+      browseParentId?: string | null;
+      surface?: 'library' | 'detail';
       childrenByParent: Record<string, NoteTreeItem[]>;
       expandedIds: Set<string>;
       loadingKeys: Set<string>;
@@ -113,6 +122,7 @@
       searchValue?: string;
       directoryEnabled?: boolean;
       writeEnabled?: boolean;
+      dragEnabled?: boolean;
       searchActive?: boolean;
       searchLoading?: boolean;
       searchMatchCount?: number;
@@ -130,6 +140,7 @@
       searchValue: '',
       directoryEnabled: true,
       writeEnabled: true,
+      dragEnabled: true,
       searchActive: false,
       searchLoading: false,
       searchMatchCount: 0,
@@ -137,6 +148,10 @@
       dropTargetActive: false,
       dropTargetPosition: '',
       menuDisabled: false,
+      currentParentId: null,
+      activePageId: null,
+      browseParentId: null,
+      surface: 'library',
     },
   );
 
@@ -145,6 +160,8 @@
     select: [id: string | null];
     selectTag: [key: string];
     open: [id: string];
+    browseChildren: [id: string];
+    goLibrary: [];
     create: [node: NoteTreeItem];
     attach: [node: NoteTreeItem];
     toggleTop: [node: NoteTreeItem];
@@ -157,11 +174,18 @@
     dragEnd: [];
   }>();
   const { t } = useI18n();
-  const activeTab = defineModel<'directory' | 'tags'>('mode', { default: 'directory' });
-  const tabs = computed(() => [
-    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.directoryTab') }] : []),
-    { key: 'tags', label: t('note.tagsTab') },
-  ]);
+  const activeTab = defineModel<'directory' | 'tags' | 'outline'>('mode', { default: 'directory' });
+  const tabs = computed(() =>
+    props.surface === 'detail'
+      ? [
+          { key: 'directory', label: t('note.pagesTab') },
+          { key: 'outline', label: t('note.outlineTab') },
+        ]
+      : [
+          ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
+          { key: 'tags', label: t('note.tagsTab') },
+        ],
+  );
   const rootItems = computed(() => props.childrenByParent[NOTE_TREE_ROOT_KEY] || []);
   const directorySearch = computed({
     get: () => props.searchValue,
@@ -170,7 +194,7 @@
   watch(
     () => props.directoryEnabled,
     (enabled) => {
-      if (!enabled && activeTab.value === 'directory') activeTab.value = 'tags';
+      if (!enabled && activeTab.value === 'directory' && props.surface === 'library') activeTab.value = 'tags';
     },
     { immediate: true },
   );
@@ -196,7 +220,8 @@
   }
 
   .note-directory-panel,
-  .note-sidebar-tags {
+  .note-sidebar-tags,
+  .note-sidebar-outline {
     flex: 1;
     min-height: 0;
   }
@@ -229,7 +254,7 @@
     color: var(--desc-color);
     background: transparent;
 
-    &.is-active {
+    &.is-browse-scope {
       color: var(--resource-note-color, #00a884);
       border-color: var(--resource-note-color, #00a884);
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--workspace-panel-bg-color));

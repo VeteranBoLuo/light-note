@@ -22,6 +22,42 @@ afterEach(() => {
 });
 
 describe('BDrawer compositor cleanup', () => {
+  it('can place the close control before a centered mobile title', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(BDrawer, {
+            open: true,
+            title: '快速添加',
+            mobileCenteredHeader: true,
+            closeIcon: 'back-icon',
+          });
+      },
+    });
+    app.use(createPinia());
+    app.use(createI18n({ legacy: false, locale: 'zh', messages: { zh: { common: { close: '关闭' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    const header = document.querySelector('.b-drawer-header');
+    expect(header?.classList.contains('b-drawer-header--centered')).toBe(true);
+    expect(header?.firstElementChild?.classList.contains('b-drawer-close--leading')).toBe(true);
+    expect(header?.querySelector('.b-drawer-title')?.textContent).toBe('快速添加');
+    expect(header?.querySelector('.b-drawer-header-actions .b-drawer-close')).toBeNull();
+  });
+
   it('releases the transform layer even when transitionend is not emitted', async () => {
     vi.useFakeTimers();
     vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {

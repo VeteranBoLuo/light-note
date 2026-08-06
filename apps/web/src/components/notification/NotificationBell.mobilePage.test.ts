@@ -1,0 +1,21 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { describe, expect, it } from 'vitest';
+
+const source = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationBell.vue'), 'utf8');
+
+describe('移动端通知入口', () => {
+  it('从铃铛进入独立通知页，不再渲染近全屏底部抽屉', () => {
+    expect(source).toContain("router.push({ name: 'notifications' })");
+    expect(source).not.toContain('<BDrawer');
+    expect(source).not.toContain('mobile-full-screen');
+  });
+
+  it('通知页保留返回、全部已读、筛选分组和可滚动面板', () => {
+    expect(source).toContain('v-if="page" class="nt-page"');
+    expect(source).toContain('@click="leaveNotificationPage"');
+    expect(source).toContain("t('notification.markAllRead')");
+    expect(source).toMatch(/<NotificationCenterPanel[\s\S]*?mobile[\s\S]*?@switch-tab="switchTab"/);
+    expect(source).toMatch(/\.nt-page[\s\S]*?height:\s*100%[\s\S]*?overflow:\s*hidden/);
+  });
+});

@@ -26,6 +26,9 @@ const expected = {
     'chip-neutral-fg': '#65656e',
     'chip-neutral-bg': '#f0f0f0',
     'chip-neutral-border': '#e4e4e7',
+    'chip-todo-fg': '#0878a7',
+    'chip-todo-bg': '#e9f7fe',
+    'chip-todo-border': '#b9e4f6',
   },
   night: {
     'chip-tag-fg': '#ff8ec3',
@@ -42,6 +45,9 @@ const expected = {
     'chip-neutral-fg': '#a7adba',
     'chip-neutral-bg': '#343a45',
     'chip-neutral-border': '#464d59',
+    'chip-todo-fg': '#6ccff6',
+    'chip-todo-bg': '#203b49',
+    'chip-todo-border': '#31576a',
   },
 } as const;
 
@@ -86,6 +92,7 @@ describe('资源胶囊主题 Token', () => {
       ['chip-pin-fg', 'chip-pin-bg'],
       ['chip-pending-fg', 'chip-pending-bg'],
       ['chip-neutral-fg', 'chip-neutral-bg'],
+      ['chip-todo-fg', 'chip-todo-bg'],
     ] as const;
 
     for (const [foreground, background] of pairs) {

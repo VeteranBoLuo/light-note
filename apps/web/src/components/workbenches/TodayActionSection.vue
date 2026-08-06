@@ -91,7 +91,12 @@
               <BButton size="small" :disabled="mutatingInboxKey === inboxKey(item)" @click="openInboxItem(item)">
                 {{ t('inbox.organize') }}
               </BButton>
-              <BButton size="small" :loading="mutatingInboxKey === inboxKey(item)" @click="completeInboxItem(item)">
+              <BButton
+                v-if="!compactActions"
+                size="small"
+                :loading="mutatingInboxKey === inboxKey(item)"
+                @click="completeInboxItem(item)"
+              >
                 {{ t('inbox.complete') }}
               </BButton>
             </div>
@@ -159,8 +164,9 @@
       showHeader?: boolean;
       contained?: boolean;
       compactEmpty?: boolean;
+      compactActions?: boolean;
     }>(),
-    { showHeader: true, contained: false, compactEmpty: false },
+    { showHeader: true, contained: false, compactEmpty: false, compactActions: false },
   );
   const emit = defineEmits<{ refresh: [] }>();
 

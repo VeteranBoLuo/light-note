@@ -1,5 +1,5 @@
 <template>
-  <component :is="shellComponent" v-bind="shellProps" @ok="confirmMove" @close="close" @update:visible="syncVisible">
+  <component :is="shellComponent" v-bind="shellProps" v-on="shellListeners">
     <div class="note-move-shell" :class="{ 'is-mobile': bookmark.isMobile }">
       <div class="note-move-summary">
         <strong v-if="isBatchMove">{{ t('note.moveSelectedPages', { count: selectedIds.size }) }}</strong>
@@ -125,6 +125,11 @@
           height: 'min(720px, 82vh)',
           maskClosable: false,
         },
+  );
+  const shellListeners = computed(() =>
+    bookmark.isMobile
+      ? { close }
+      : { ok: confirmMove, close, 'update:visible': syncVisible },
   );
   const flatItems = computed(() => flattenNoteTree(treeItems.value));
   const isBatchMove = computed(() => props.notes.length > 0);

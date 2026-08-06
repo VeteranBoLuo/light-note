@@ -1,12 +1,22 @@
 <template>
-  <section class="note-subpage-section" :aria-label="t('note.subpageSection')">
+  <section class="note-subpage-section" :class="{ 'is-compact': compact }" :aria-label="t('note.subpageSection')">
     <header class="note-subpage-header">
-      <div class="note-subpage-heading">
+      <BButton
+        v-if="items.length"
+        class="note-subpage-heading"
+        :aria-label="t('note.browseChildPages')"
+        @click="emit('browseChildren')"
+      >
         <strong>{{ t('note.subpageSection') }}</strong>
-        <span>{{ items.length || t('note.noSubpagesShort') }}</span>
+        <span>{{ items.length }}</span>
+        <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+      </BButton>
+      <div v-else class="note-subpage-empty-copy">
+        <strong>{{ t('note.currentPageNoChildren') }}</strong>
       </div>
-      <div v-if="!readonly" class="note-subpage-actions">
+      <div v-if="!readonly && (!compact || !items.length)" class="note-subpage-actions">
         <BDropdown
+          v-if="!compact"
           class="note-subpage-position-menu"
           :trigger="'click'"
           :align="'right'"
@@ -25,7 +35,7 @@
     </header>
 
     <BLoading v-if="loading" inline loading :title="t('common.loading')" />
-    <div v-else-if="items.length" v-auto-scrollbar class="note-subpage-list">
+    <div v-else-if="items.length && !compact" v-auto-scrollbar class="note-subpage-list">
       <BButton v-for="item in items" :key="item.id" class="note-subpage-row" @click="emit('open', item.id)">
         <SvgIcon :src="icon.resource.note" size="15" aria-hidden="true" />
         <span class="note-subpage-title">{{ item.title || t('note.untitled') }}</span>
@@ -50,11 +60,19 @@
   import { apiBasePost } from '@/http/request';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
 
-  const props = withDefaults(defineProps<{ noteId: string; readonly?: boolean; refreshKey?: number }>(), {
+  const props = withDefaults(defineProps<{ noteId: string; readonly?: boolean; refreshKey?: number; compact?: boolean }>(), {
     readonly: false,
     refreshKey: 0,
+    compact: false,
   });
-  const emit = defineEmits<{ create: []; attach: []; moveSelf: []; open: [id: string] }>();
+  const emit = defineEmits<{
+    create: [];
+    attach: [];
+    moveSelf: [];
+    open: [id: string];
+    browseChildren: [];
+    countChange: [count: number];
+  }>();
   const { t } = useI18n();
   const items = ref<NoteTreeItem[]>([]);
   const loading = ref(false);
@@ -80,6 +98,7 @@
     const seq = ++requestSeq;
     if (!noteId) {
       items.value = [];
+      emit('countChange', 0);
       return;
     }
     loading.value = true;
@@ -89,14 +108,17 @@
       if (seq !== requestSeq) return;
       if (response.status !== 200) {
         items.value = [];
+        emit('countChange', 0);
         error.value = response.msg || t('note.treeLoadFailed');
         return;
       }
       const data = (response.data || {}) as NoteTreeQueryResult;
       items.value = Array.isArray(data.items) ? data.items : [];
+      emit('countChange', items.value.length);
     } catch {
       if (seq === requestSeq) {
         items.value = [];
+        emit('countChange', 0);
         error.value = t('note.treeLoadFailed');
       }
     } finally {
@@ -114,7 +136,7 @@
 <style lang="less" scoped>
   .note-subpage-section {
     flex: 0 0 auto;
-    max-height: min(18vh, 118px);
+    max-height: min(18dvh, 108px);
     padding: 6px 10px 7px;
     box-sizing: border-box;
     border-top: 1px solid var(--surface-border-color);
@@ -129,11 +151,17 @@
   }
 
   .note-subpage-heading {
+    min-width: 0;
+    height: 30px;
+    padding: 0 4px;
     display: flex;
+    justify-content: flex-start;
     align-items: center;
     gap: 7px;
     color: var(--text-color);
     font-size: 13px;
+    border: 0;
+    background: transparent;
 
     span {
       color: var(--desc-color);
@@ -146,6 +174,15 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  .note-subpage-empty-copy {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .note-subpage-create,
@@ -216,10 +253,23 @@
     font-size: 12px;
   }
 
+  .note-subpage-section.is-compact {
+    min-height: 48px;
+    max-height: 48px;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+
+    .note-subpage-header {
+      width: 100%;
+    }
+  }
+
   @media (max-width: 767px) {
     .note-subpage-section {
-      max-height: min(18dvh, 108px);
-      padding: 6px 8px;
+      min-height: 52px;
+      max-height: 52px;
+      padding: 8px 10px;
     }
 
     .note-subpage-list {
@@ -236,11 +286,18 @@
     }
 
     .note-subpage-heading {
+      flex: 1 1 auto;
+      height: 36px;
+      padding-inline: 2px;
       gap: 5px;
 
       strong {
         font-size: 12px;
       }
+    }
+
+    .note-subpage-create {
+      height: 34px;
     }
   }
 </style>

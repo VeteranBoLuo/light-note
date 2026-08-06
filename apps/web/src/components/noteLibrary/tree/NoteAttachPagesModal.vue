@@ -1,5 +1,5 @@
 <template>
-  <component :is="shellComponent" v-bind="shellProps" @ok="confirmAttach" @close="close" @update:visible="syncVisible">
+  <component :is="shellComponent" v-bind="shellProps" v-on="shellListeners">
     <div class="note-attach-shell" :class="{ 'is-mobile': bookmark.isMobile }">
       <div class="note-attach-summary">
         <span>{{ t('note.attachTarget') }}</span>
@@ -111,6 +111,11 @@
           maskClosable: false,
           showFooter: false,
         },
+  );
+  const shellListeners = computed(() =>
+    bookmark.isMobile
+      ? { close }
+      : { ok: confirmAttach, close, 'update:visible': syncVisible },
   );
   const flatItems = computed(() => flattenNoteTree(treeItems.value));
   const targetId = computed(() => String(props.targetNote?.id || '').trim());

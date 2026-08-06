@@ -299,10 +299,15 @@
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));
     align-content: start;
-    gap: 5px;
+    gap: 1px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 14px;
+    background: var(--surface-border-color, var(--card-border-color));
   }
   .todo-calendar-weekday {
-    padding: 5px;
+    padding: 7px 5px;
+    background: var(--workspace-panel-bg-color, var(--background-color));
     color: var(--desc-color);
     font-size: 11px;
     text-align: center;
@@ -310,9 +315,9 @@
   .todo-calendar-day {
     min-height: 104px;
     padding: 6px;
-    border: 1px solid var(--surface-border-color, var(--card-border-color));
-    border-radius: 10px;
-    background: var(--background-color);
+    border: 0;
+    border-radius: 0;
+    background: var(--card-background, var(--background-color));
   }
   .todo-calendar-day > span {
     display: flex;
@@ -427,9 +432,9 @@
     gap: 6px;
     margin-top: 12px;
     padding: 12px;
-    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border: 0;
     border-radius: 12px;
-    background: var(--background-color);
+    background: var(--workspace-panel-bg-color, var(--background-color));
   }
   .todo-calendar-daylist > header {
     display: flex;
@@ -461,7 +466,7 @@
     justify-content: flex-start;
     gap: 8px;
     padding: 7px 9px;
-    border: 1px solid var(--card-border-color);
+    border: 0;
     border-radius: 10px;
     background: color-mix(in srgb, var(--primary-color) 4%, transparent) !important;
     text-align: left;
@@ -547,8 +552,8 @@
   }
   .todo-agenda {
     display: grid;
-    gap: 8px;
-    padding: 14px 18px 24px;
+    gap: 9px;
+    padding: 8px 2px 24px;
     box-sizing: border-box;
   }
   .todo-agenda-item {
@@ -569,6 +574,10 @@
     min-height: 60px;
     padding: 9px 14px;
     box-sizing: border-box;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 13px;
+    background: var(--card-background, var(--background-color));
+    box-shadow: 0 12px 30px -28px rgba(30, 40, 80, 0.5);
     justify-content: flex-start;
     gap: 8px;
     line-height: 1.3;
@@ -614,7 +623,7 @@
     .todo-calendar-grid {
       min-width: 0;
       grid-auto-rows: 82px;
-      gap: 3px;
+      gap: 1px;
     }
     .todo-schedule-view {
       overflow-x: hidden;
@@ -629,7 +638,7 @@
       padding: 3px;
       box-sizing: border-box;
       overflow: hidden;
-      border-radius: 8px;
+      border-radius: 0;
     }
     .todo-calendar-day > span {
       font-size: 10px;
@@ -657,7 +666,7 @@
       grid-template-columns: 86px minmax(0, 1fr);
     }
     .todo-agenda {
-      padding: 12px 14px 20px;
+      padding: 6px 0 20px;
     }
     .todo-schedule-empty {
       margin: 0 14px 8px;

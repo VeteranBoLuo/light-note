@@ -3,13 +3,23 @@
     :open="visible === true"
     :title="shellTitle"
     :placement="bookmark.isMobile ? 'bottom' : 'right'"
-    :height="bookmark.isMobile ? '92dvh' : undefined"
-    width="min(720px, 90vw)"
-    :body-padding="bookmark.isMobile ? '14px' : '20px'"
+    :mobile-full-screen="bookmark.isMobile"
+    :mobile-centered-header="bookmark.isMobile"
+    :close-icon="bookmark.isMobile ? icon.common.back : undefined"
+    width="min(1180px, 90vw)"
+    body-padding="0"
     :mask-closable="false"
     @close="close"
   >
-    <div class="todo-editor-shell" :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '14px' : '20px' }">
+    <template v-if="bookmark.isMobile" #header-actions>
+      <span class="todo-editor-step-count">{{ mobileStep }} / 3</span>
+    </template>
+    <div
+      v-auto-scrollbar
+      class="todo-editor-shell"
+      :class="{ 'is-mobile': bookmark.isMobile }"
+      :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '16px' : '22px' }"
+    >
       <TodoEditorForm
         :item="item"
         :initial-values="initialValues"
@@ -19,6 +29,7 @@
         :v2-enabled="todoPlanFeatures.enabled"
         :legacy-conversion-enabled="todoPlanFeatures.conversionEnabled"
         sticky-actions
+        @mobile-step-change="mobileStep = $event"
         @submit="save"
         @cancel="close"
       />
@@ -46,6 +57,7 @@
   } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore } from '@/store';
+  import icon from '@/config/icon';
 
   const props = defineProps<{
     item?: TodoItem | null;
@@ -59,6 +71,7 @@
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const saving = ref(false);
+  const mobileStep = ref<1 | 2 | 3>(1);
   const formKey = ref(0);
   const todoPlanFeatures = ref<TodoPlanFeatureState>({
     enabled: true,
@@ -67,10 +80,13 @@
     conversionEnabled: true,
   });
 
-  const shellTitle = computed(() => (props.item ? t('inbox.editTodo') : t('inbox.createTodo')));
+  const shellTitle = computed(() =>
+    props.item ? t('inbox.editTodo') : bookmark.isMobile ? t('inbox.createTodo') : t('inbox.todoPlanCreateTitle'),
+  );
 
   watch(visible, async (open) => {
     if (!open) return;
+    mobileStep.value = 1;
     try {
       const response = await getTodoPlanV2Config();
       if (response.status === 200 && response.data) todoPlanFeatures.value = response.data as TodoPlanFeatureState;
@@ -119,5 +135,16 @@
 <style scoped lang="less">
   .todo-editor-shell {
     min-width: 0;
+    min-height: 100%;
+  }
+  .todo-editor-shell.is-mobile {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .todo-editor-step-count {
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
   }
 </style>

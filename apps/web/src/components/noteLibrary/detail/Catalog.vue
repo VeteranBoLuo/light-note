@@ -10,11 +10,11 @@
     一旦包上 Transition 就变成真多根，那个 class 会被静默丢弃。
   -->
   <aside
-    v-if="bookmark.isDesktop"
+    v-if="variant === 'embedded' || (variant === 'auto' && bookmark.isDesktop)"
     class="toc-container"
-    :class="{ 'is-collapsed': collapsed }"
-    :inert="!note.headings.length || undefined"
-    :aria-hidden="!note.headings.length || undefined"
+    :class="{ 'is-collapsed': variant === 'auto' && collapsed, 'is-embedded': variant === 'embedded' }"
+    :inert="variant === 'auto' && !note.headings.length ? true : undefined"
+    :aria-hidden="variant === 'auto' && !note.headings.length ? true : undefined"
   >
     <nav class="catalog" :aria-label="t('noteDetail.catalogTitle')">
       <BButton
@@ -30,12 +30,15 @@
         <span class="toc-marker" aria-hidden="true" />
         <span class="toc-text">{{ heading.text || t('noteDetail.catalogUntitled') }}</span>
       </BButton>
+      <p v-if="variant === 'embedded' && !note.headings.length" class="toc-empty">
+        {{ t('noteDetail.catalogEmpty') }}
+      </p>
     </nav>
   </aside>
 
   <!-- 桌面端的目录已由上面的 aside 常驻承担，抽屉只服务平板/手机 -->
   <BDrawer
-    v-else
+    v-else-if="variant === 'auto'"
     :open="drawerOpen"
     class="note-catalog-drawer"
     placement="bottom"
@@ -89,11 +92,13 @@
        * 解析出真正的 headings 之后就会关掉（见 NoteDetail 的 catalogPresumed）。
        */
       presumeHeadings?: boolean;
+      variant?: 'auto' | 'embedded';
     }>(),
     {
       noteType: 'html',
       drawerOpen: false,
       presumeHeadings: false,
+      variant: 'auto',
     },
   );
   const emit = defineEmits<{
@@ -147,7 +152,7 @@
         scrollIntoContainer(scrollContainer, heading.element as HTMLElement, 8);
       }
     }
-    if (bookmark.isMobileDevice) emit('close');
+    if (props.variant === 'auto' && bookmark.isMobileDevice) emit('close');
     manualScrollTimer = window.setTimeout(() => {
       manualScrolling = false;
       updateActiveHeading();
@@ -234,7 +239,7 @@
   watch(
     () => bookmark.isDesktop,
     (desktop) => {
-      if (desktop && props.drawerOpen) emit('close');
+      if (props.variant === 'auto' && desktop && props.drawerOpen) emit('close');
     },
   );
 
@@ -250,6 +255,17 @@
     height: calc(100% - 60px);
     overflow: auto;
     box-sizing: border-box;
+  }
+
+  .toc-container.is-embedded {
+    width: 100%;
+    height: 100%;
+  }
+
+  .toc-container.is-embedded .catalog {
+    margin: 6px 0;
+    padding: 0;
+    border-left: 0;
   }
 
   .catalog {

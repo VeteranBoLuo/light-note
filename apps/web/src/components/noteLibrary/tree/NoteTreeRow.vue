@@ -23,6 +23,7 @@
         class="note-tree-row"
         :class="{
           'is-active': active,
+          'is-browse-scope': browsing,
           'is-search-match': node.matched,
           'has-invalid-parent': node.invalidParent,
           'is-drop-candidate': dropTargetKey === node.id && dropTargetPosition === 'inside',
@@ -31,8 +32,8 @@
           'is-drop-after': dropTargetKey === node.id && dropTargetPosition === 'after',
         }"
         :style="rowStyle"
-        :draggable="writeEnabled && !searchMode"
-        :title="writeEnabled && !searchMode ? t('note.dragPageHint') : undefined"
+        :draggable="writeEnabled && dragEnabled && !searchMode"
+        :title="writeEnabled && dragEnabled && !searchMode ? t('note.dragPageHint') : undefined"
         :data-note-drop-parent="node.id"
         :data-note-drop-title="node.title || t('note.untitled')"
         :data-note-tree-node-id="node.id"
@@ -53,7 +54,7 @@
           <span v-else class="note-tree-toggle-placeholder" aria-hidden="true"></span>
         </BButton>
 
-        <BButton class="note-tree-title" @click="emit('select', node.id)">
+        <BButton class="note-tree-title" @click="emit('open', node.id)">
           <SvgIcon :src="icon.resource.note" size="15" class="note-tree-page-icon" aria-hidden="true" />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
           <span v-if="node.isTop" class="note-tree-pin" :aria-label="t('common.pinned')">
@@ -63,11 +64,6 @@
         </BButton>
 
         <div class="note-tree-actions">
-          <BTooltip :title="t('note.openPageBody')">
-            <BButton class="note-tree-action" :aria-label="t('note.openPageBody')" @click.stop="emit('open', node.id)">
-              <SvgIcon :src="icon.noteTree.openPage" size="14" aria-hidden="true" />
-            </BButton>
-          </BTooltip>
           <BTooltip v-if="writeEnabled" :title="t('note.newChildPage')">
             <BButton class="note-tree-action" :aria-label="t('note.newChildPage')" @click.stop="emit('create', node)">
               <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
@@ -83,19 +79,21 @@
         :key="child.id"
         :node="child"
         :depth="depth + 1"
-        :current-parent-id="currentParentId"
+        :active-page-id="activePageId"
+        :browse-parent-id="browseParentId"
         :children-by-parent="childrenByParent"
         :expanded-ids="expandedIds"
         :loading-keys="loadingKeys"
         :write-enabled="writeEnabled"
+        :drag-enabled="dragEnabled"
         :search-mode="searchMode"
         :drop-target-key="dropTargetKey"
         :drop-target-active="dropTargetActive"
         :drop-target-position="dropTargetPosition"
         :menu-disabled="menuDisabled"
         @toggle="emit('toggle', $event)"
-        @select="emit('select', $event)"
         @open="emit('open', $event)"
+        @browse-children="emit('browseChildren', $event)"
         @create="emit('create', $event)"
         @attach="emit('attach', $event)"
         @toggle-top="emit('toggleTop', $event)"
@@ -127,11 +125,13 @@
     defineProps<{
       node: NoteTreeItem;
       depth: number;
-      currentParentId: string | null;
+      activePageId?: string | null;
+      browseParentId?: string | null;
       childrenByParent: Record<string, NoteTreeItem[]>;
       expandedIds: Set<string>;
       loadingKeys: Set<string>;
       writeEnabled?: boolean;
+      dragEnabled?: boolean;
       searchMode?: boolean;
       dropTargetKey?: string;
       dropTargetActive?: boolean;
@@ -140,18 +140,21 @@
     }>(),
     {
       writeEnabled: true,
+      dragEnabled: true,
       searchMode: false,
       dropTargetKey: '',
       dropTargetActive: false,
       dropTargetPosition: '',
       menuDisabled: false,
+      activePageId: null,
+      browseParentId: null,
     },
   );
 
   const emit = defineEmits<{
     toggle: [node: NoteTreeItem];
-    select: [id: string];
     open: [id: string];
+    browseChildren: [id: string];
     create: [node: NoteTreeItem];
     attach: [node: NoteTreeItem];
     toggleTop: [node: NoteTreeItem];
@@ -163,7 +166,8 @@
     dragEnd: [];
   }>();
   const { t } = useI18n();
-  const active = computed(() => props.currentParentId === props.node.id);
+  const active = computed(() => props.activePageId === props.node.id);
+  const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
   const children = computed(() => props.childrenByParent[props.node.id || NOTE_TREE_ROOT_KEY] || []);
@@ -173,11 +177,15 @@
   const showEdgeDrop = computed(() => showDropBefore.value || showDropAfter.value);
   const actionMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
   const actionMenuItems = computed<BActionMenuItem[]>(() => [
-    {
-      key: 'open',
-      label: t('note.openPageBody'),
-      icon: icon.noteTree.openPage,
-    },
+    ...(props.node.hasChildren
+      ? [
+          {
+            key: 'browse-children',
+            label: t('note.browseChildPages'),
+            icon: icon.noteTree.chevron,
+          },
+        ]
+      : []),
     ...(props.writeEnabled
       ? [
           {
@@ -197,13 +205,13 @@
           },
         ]
       : []),
-    {
-      key: 'rename',
-      label: t('note.renamePage'),
-      icon: icon.cloudSpace.rename,
-    },
     ...(props.writeEnabled
       ? [
+          {
+            key: 'rename',
+            label: t('note.renamePage'),
+            icon: icon.cloudSpace.rename,
+          },
           {
             key: 'move',
             label: t('note.moveThisPage'),
@@ -216,21 +224,25 @@
       label: t('common.copyLink'),
       icon: icon.cloudSpace.preview.copy,
     },
-    {
-      key: 'note-tree-actions-divider',
-      divider: true,
-    },
-    {
-      key: 'delete',
-      label: t('note.moveToTrash'),
-      icon: icon.table_delete,
-      danger: true,
-    },
+    ...(props.writeEnabled
+      ? [
+          {
+            key: 'note-tree-actions-divider',
+            divider: true,
+          },
+          {
+            key: 'delete',
+            label: t('note.moveToTrash'),
+            icon: icon.table_delete,
+            danger: true,
+          },
+        ]
+      : []),
   ]);
 
   function handleActionMenuSelect(action: string) {
     const actions: Record<string, () => void> = {
-      open: () => emit('open', props.node.id),
+      'browse-children': () => emit('browseChildren', props.node.id),
       create: () => emit('create', props.node),
       attach: () => emit('attach', props.node),
       'toggle-top': () => emit('toggleTop', props.node),
@@ -324,9 +336,27 @@
 
     &.is-active {
       color: var(--resource-note-color, #00a884);
-      border-color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--workspace-panel-bg-color));
+      border-color: transparent;
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 11%, var(--workspace-panel-bg-color));
       font-weight: 650;
+
+      &::before {
+        position: absolute;
+        top: 7px;
+        bottom: 7px;
+        left: 2px;
+        width: 3px;
+        border-radius: 999px;
+        background: var(--resource-note-color, #00a884);
+        content: '';
+      }
+    }
+
+    &.is-browse-scope {
+      color: var(--resource-note-color, #00a884);
+      border-color: var(--resource-note-color, #00a884);
+      background: var(--workspace-panel-bg-color);
+      font-weight: 600;
     }
 
     &.is-search-match:not(.is-active) {
@@ -394,7 +424,7 @@
     width: 100%;
     justify-content: flex-start;
     gap: 6px;
-    padding-right: 48px;
+    padding-right: 28px;
     overflow: hidden;
     text-align: left;
   }

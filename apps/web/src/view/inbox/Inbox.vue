@@ -56,7 +56,6 @@
           <!-- 移动端待办不放第二个文本搜索框：查找待办统一走顶栏全局搜索，
                这里只保留状态、排序、视图等结构化筛选。 -->
           <BTabs
-            v-if="todoView === 'list'"
             v-model:active-tab="todo.status"
             :options="todoStatusTabOptions"
             variant="pill"
@@ -1327,6 +1326,7 @@
   }
   .inbox-page--todo-focused {
     --primary-color: var(--todo-accent-color, #0ea5e9);
+    --todo-navigation-color: #615ced;
   }
   .section-switcher {
     min-height: 34px;
@@ -1420,16 +1420,16 @@
   }
   .todo-group-list {
     display: grid;
-    gap: 16px;
-    padding: 8px 10px 22px;
+    gap: 22px;
+    padding: 6px 2px 24px;
   }
   .todo-group {
     display: grid;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 12%, var(--card-border-color));
-    border-radius: 16px;
-    background: color-mix(in srgb, var(--primary-color) 2.5%, var(--background-color));
+    gap: 9px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .todo-group > header {
     display: flex;
@@ -1480,14 +1480,10 @@
     margin-bottom: 14px;
     padding: 9px 10px;
     box-sizing: border-box;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 82%, transparent);
+    border: 0;
     border-radius: 14px;
-    background: linear-gradient(
-      112deg,
-      color-mix(in srgb, var(--primary-color) 5%, var(--background-color)),
-      color-mix(in srgb, var(--background-color) 98%, transparent)
-    );
-    box-shadow: 0 8px 24px rgba(28, 33, 66, 0.035);
+    background: var(--workspace-panel-bg-color, var(--background-color));
+    box-shadow: none;
     flex-shrink: 0;
   }
   .inbox-toolbar :deep(.tab-container) {
@@ -1542,10 +1538,10 @@
     min-height: 0;
     flex: 1;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--card-border-color) 80%, transparent);
-    border-radius: 18px;
-    background: color-mix(in srgb, var(--background-color) 96%, var(--primary-color) 4%);
-    box-shadow: 0 10px 34px rgba(28, 33, 66, 0.04);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
   .inbox-content::before,
   .inbox-content::after {
@@ -1662,7 +1658,7 @@
       flex-wrap: wrap;
     }
     .inbox-page--mobile-todo {
-      padding: 8px 10px 0;
+      padding: 14px 14px 0;
     }
 
     /* 顶栏在 SearchCenter 里位于页面容器之外、天然贴边；这里它在 .inbox-page 之内，
@@ -1693,9 +1689,9 @@
       overflow: visible;
     }
     .inbox-toolbar--todo-primary {
-      min-height: 48px;
-      margin-bottom: 8px;
-      padding: 6px;
+      min-height: 44px;
+      margin-bottom: 14px;
+      padding: 0;
       align-items: center;
       flex-direction: row;
       gap: 6px;
@@ -1705,15 +1701,48 @@
       box-shadow: none;
     }
     .inbox-toolbar--todo-primary :deep(.tab-container) {
+      min-height: 44px;
+      box-sizing: border-box;
       min-width: 0;
       flex: 1 1 auto;
       overflow-x: auto;
-      padding-bottom: 0;
+      gap: 4px;
+      padding: 4px;
+      border: 0;
+      border-radius: 13px;
+      background: var(--workspace-panel-bg-color);
+    }
+    .inbox-toolbar--todo-primary :deep(.tab) {
+      min-height: 36px;
+      flex: 1 1 0;
+      justify-content: center;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .inbox-toolbar--todo-primary :deep(.tab.is-active) {
+      border: 0;
+      color: var(--todo-navigation-color);
+      background: var(--card-background);
+      box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
+      font-weight: 700;
+    }
+    .inbox-toolbar--todo-primary :deep(.tab.is-active .tab-badge) {
+      color: #fff;
+      background: var(--todo-navigation-color);
     }
     .mobile-todo-sort {
-      width: 104px;
-      min-width: 104px;
-      flex: 0 0 104px;
+      width: 112px;
+      min-width: 112px;
+      flex: 0 0 112px;
+    }
+    .mobile-todo-sort :deep(.select-trigger) {
+      height: 44px;
+      min-height: 44px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--workspace-panel-bg-color);
     }
     .inbox-toolbar :deep(.tab-container) {
       width: 100%;
@@ -1761,14 +1790,14 @@
     }
     /* 分组列表(列表视图)此前保留了桌面的水平内边距,导致卡片比上方工具条多缩进一截 */
     .inbox-page--mobile-todo .todo-group-list {
-      gap: 12px;
+      gap: 14px;
       padding: 0 0 18px;
     }
     .inbox-page--mobile-todo.is-selection-mode .todo-group-list {
       padding-bottom: 110px;
     }
     .inbox-page--mobile-todo .todo-group {
-      gap: 8px;
+      gap: 9px;
       padding: 0;
       border: 0;
       border-radius: 0;
@@ -1776,7 +1805,8 @@
     }
     .inbox-page--mobile-todo .todo-group > header {
       padding: 0 2px;
-      font-size: 15px;
+      justify-content: space-between;
+      font-size: 16px;
     }
     .inbox-page--mobile-todo .todo-group > header > span {
       min-width: 0;
@@ -1785,6 +1815,46 @@
       color: var(--desc-color);
       background: transparent;
       font-size: 12px;
+    }
+
+    .inbox-page--mobile-todo .todo-workspace-toolbar {
+      margin-bottom: 14px;
+    }
+    .inbox-page--mobile-todo .todo-workspace-toolbar__views {
+      max-width: 220px;
+    }
+    /* BTabs 的 class 直接落在组件根节点 .tab-container 上，不能用后代选择器。 */
+    .inbox-page--mobile-todo :deep(.todo-workspace-toolbar__views.tab-container) {
+      min-height: 44px;
+      box-sizing: border-box;
+      gap: 4px;
+      padding: 4px;
+      border: 0;
+      border-radius: 13px;
+      background: var(--workspace-panel-bg-color);
+    }
+    .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab) {
+      min-height: 36px;
+      flex: 1 1 0;
+      justify-content: center;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab.is-active) {
+      border: 0;
+      color: var(--todo-navigation-color);
+      background: var(--card-background);
+      box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
+      font-weight: 700;
+    }
+    .inbox-page--mobile-todo .todo-workspace-toolbar__select {
+      min-height: 44px;
+      padding: 0 6px;
+      color: var(--todo-navigation-color);
+      background: transparent !important;
+      font-weight: 700;
     }
     .inbox-page--mobile-todo .todo-list-toolbar {
       min-height: 44px;

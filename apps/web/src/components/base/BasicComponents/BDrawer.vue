@@ -43,12 +43,25 @@
           @pointerdown="startResize"
           @keydown="handleResizeKeydown"
         />
-        <div class="b-drawer-header">
+        <div class="b-drawer-header" :class="{ 'b-drawer-header--centered': mobileCenteredHeader }">
+          <BButton
+            v-if="mobileCenteredHeader"
+            class="b-drawer-close b-drawer-close--leading"
+            :aria-label="closeLabel || t('common.close')"
+            @click="handleClose"
+          >
+            <SvgIcon size="18" :src="closeIcon || icon.common.close" aria-hidden="true" />
+          </BButton>
           <span :id="drawerTitleId" class="b-drawer-title">{{ title }}</span>
           <div class="b-drawer-header-actions">
             <slot name="header-actions" />
-            <BButton class="b-drawer-close" :aria-label="closeLabel || t('common.close')" @click="handleClose">
-              <SvgIcon size="18" :src="icon.common.close" aria-hidden="true" />
+            <BButton
+              v-if="!mobileCenteredHeader"
+              class="b-drawer-close"
+              :aria-label="closeLabel || t('common.close')"
+              @click="handleClose"
+            >
+              <SvgIcon size="18" :src="closeIcon || icon.common.close" aria-hidden="true" />
             </BButton>
           </div>
         </div>
@@ -89,6 +102,8 @@
       maskClosable?: boolean;
       fullScreen?: boolean;
       mobileFullScreen?: boolean;
+      mobileCenteredHeader?: boolean;
+      closeIcon?: string;
       destroyOnClose?: boolean;
       keyboard?: boolean;
       ariaLabel?: string;
@@ -111,6 +126,8 @@
       maskClosable: true,
       fullScreen: false,
       mobileFullScreen: false,
+      mobileCenteredHeader: false,
+      closeIcon: '',
       destroyOnClose: true,
       keyboard: true,
       ariaLabel: '',
@@ -607,6 +624,31 @@
     }
   }
 
+  .b-drawer-header.b-drawer-header--centered {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(44px, auto);
+    align-items: center;
+    gap: 6px;
+
+    .b-drawer-title {
+      overflow: hidden;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .b-drawer-header-actions {
+      min-width: 44px;
+      justify-content: flex-end;
+    }
+
+    .b-drawer-close--leading {
+      grid-column: 1;
+      width: 44px;
+      height: 44px;
+    }
+  }
+
   @media (max-width: 767px) {
     .b-drawer-resize-handle {
       display: none;
@@ -614,6 +656,8 @@
 
     .b-drawer-panel--mobile-fullscreen {
       .fullscreen-drawer();
+      border-radius: 0;
+      box-shadow: none;
     }
   }
 
@@ -689,6 +733,7 @@
   }
 
   .b-drawer-body {
+    min-height: 0;
     flex: 1;
     overflow-y: auto;
     padding: 24px;

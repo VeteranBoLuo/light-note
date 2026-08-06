@@ -47,12 +47,12 @@
 
       <div class="note-header-mobile-actions">
         <BButton
-          v-if="hasCatalog"
+          v-if="hasNavigation || hasCatalog"
           class="note-header-mobile-icon-button note-header-mobile-catalog"
-          :aria-label="$t('noteDetail.catalogOpen')"
-          @click.stop="$emit('openCatalog')"
+          :aria-label="$t('note.mobileNavigation')"
+          @click.stop="hasNavigation ? $emit('openNavigation') : $emit('openCatalog')"
         >
-          <SvgIcon :src="icon.noteDetail.catalogue" size="19" aria-hidden="true" />
+          <SvgIcon :src="icon.noteTree.sidebarOpen" size="19" aria-hidden="true" />
         </BButton>
         <BButton
           v-if="!readonly"
@@ -74,16 +74,23 @@
 
     <template v-else>
       <div class="note-header-leading">
-        <div class="back-icon" @click="$emit('back')">
+        <BButton class="back-icon" :aria-label="$t('common.back')" @click="$emit('back')">
           <SvgIcon :src="icon.noteDetail.back" />
-        </div>
-        <div
-          class="note-header-title n-title"
-          :contenteditable="!readonly"
-          id="note-header-title"
-          @focusout="$emit('focusout')"
+        </BButton>
+        <BTooltip
+          v-if="hasNavigation || hasCatalog"
+          :title="$t(sidebarOpen ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
         >
-        </div>
+          <BButton
+            class="note-header-title-icon note-header-sidebar-toggle"
+            :class="{ 'is-active': sidebarOpen }"
+            :aria-label="$t(sidebarOpen ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
+            :aria-pressed="sidebarOpen"
+            @click="$emit('toggleSidebar')"
+          >
+            <SvgIcon :src="sidebarOpen ? icon.noteTree.sidebarOpen : icon.noteTree.sidebarClosed" size="19" />
+          </BButton>
+        </BTooltip>
         <div class="note-header-save-state" aria-live="polite">
           <span>{{ desktopSaveState }}</span>
           <BButton
@@ -95,23 +102,24 @@
             {{ $t('noteDetail.retrySave') }}
           </BButton>
         </div>
-        <div class="inline-note-tags" v-if="visibleTags.length">
-          <ResourceTagChip
-            v-for="tag in displayedTags"
-            :key="`${tag.id ?? tag.name}`"
-            :tag="tag"
-            max-width="108px"
-          />
-          <BChip v-if="hiddenTagCount" tone="neutral" size="small">+{{ hiddenTagCount }}</BChip>
-        </div>
-        <ResourceBacklinks
-          v-if="bookmark.isDesktop && note?.id"
-          placement="header"
-          target-type="note"
-          :target-id="note.id"
-        />
+        <BButton v-if="childCount > 0" class="note-header-child-chip" @click="$emit('browseChildren')">
+          {{ $t('note.childPagesCount', { count: childCount }) }}
+          <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+        </BButton>
       </div>
       <div class="note-header-actions flex-align-center">
+        <BTooltip v-if="showAiToggle" :title="$t(aiOpen ? 'note.hideAiPanel' : 'note.showAiPanel')">
+          <BButton
+            class="note-header-ai-toggle"
+            :class="{ 'is-active': aiOpen }"
+            :aria-label="$t(aiOpen ? 'note.hideAiPanel' : 'note.showAiPanel')"
+            :aria-pressed="aiOpen"
+            @click="$emit('toggleAi')"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
+            <span>{{ $t('note.aiAssistant') }}</span>
+          </BButton>
+        </BTooltip>
         <span class="mode-pill-group" v-if="!readonly">
           <BTooltip :title="$t('note.switchModeTooltip')">
             <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
@@ -124,65 +132,34 @@
             </BTooltip>
           </span>
         </span>
-        <BTooltip v-if="hasCatalog && bookmark.isTablet" :title="$t('noteDetail.catalogOpen')">
+        <BTooltip v-if="!hasNavigation && hasCatalog && bookmark.isTablet" :title="$t('note.mobileNavigation')">
           <BButton
             class="note-header-title-icon note-header-tablet-catalog"
-            :aria-label="$t('noteDetail.catalogOpen')"
-            @click.stop="$emit('openCatalog')"
+            :aria-label="$t('note.mobileNavigation')"
+            @click.stop="hasNavigation ? $emit('openNavigation') : $emit('openCatalog')"
           >
-            <SvgIcon :src="icon.noteDetail.catalogue" size="19" aria-hidden="true" />
+            <SvgIcon :src="icon.noteTree.sidebarOpen" size="19" aria-hidden="true" />
           </BButton>
         </BTooltip>
-        <BTooltip :title="$t('note.saveAsTemplate')" v-if="!readonly">
-          <div
-            class="note-header-title-icon note-header-title-icon--template"
-            @click="$emit('saveAsTemplate')"
-            v-click-log="OPERATION_LOG_MAP.note.saveAsTemplate"
-          >
-            <SvgIcon :src="icon.noteDetail.template" />
-          </div>
-        </BTooltip>
-        <!--
-          历史版本 / 标签 / 导出这三项此前限定 isDesktop，把平板一起挡掉了：
-          平板走的是非移动端分支，没有「更多」下拉菜单可以兜底，等于这三个功能
-          在平板上完全无法访问。平板横向空间（768px 起）足够放下，改为「非手机即显示」。
-        -->
-        <BTooltip :title="$t('noteDetail.history.entry')" v-if="!readonly && !bookmark.isMobile && note?.id">
-          <div
-            class="note-header-title-icon note-header-title-icon--history"
-            @click="$emit('history')"
-            v-click-log="OPERATION_LOG_MAP.note.history"
-          >
-            <SvgIcon :src="icon.noteDetail.history" />
-          </div>
-        </BTooltip>
-        <BTooltip :title="$t('noteDetail.tags')" v-if="!bookmark.isMobile">
-          <div
-            class="note-header-title-icon note-header-title-icon--tag"
-            @click="updateTag"
-            v-click-log="OPERATION_LOG_MAP.note.updateTag"
-          >
-            <SvgIcon :src="icon.manage_categoryBtn_tag" />
-          </div>
-        </BTooltip>
-        <BTooltip :title="$t('noteDetail.export')" v-if="!bookmark.isMobile">
-          <div
-            class="note-header-title-icon note-header-title-icon--export"
-            @click="openExportModal"
-            v-click-log="OPERATION_LOG_MAP.note.exportNote"
-          >
-            <SvgIcon :src="icon.noteDetail.exportLine" />
-          </div>
-        </BTooltip>
-        <BTooltip :title="$t('noteDetail.delete')">
-          <div class="note-header-title-icon note-header-title-icon--danger" @click="$emit('del')">
-            <SvgIcon :src="icon.noteDetail.deleteLine" />
-          </div>
-        </BTooltip>
+        <ResourceBacklinks
+          v-if="bookmark.isDesktop && note?.id"
+          placement="header"
+          target-type="note"
+          :target-id="note.id"
+        />
+        <BDropdown trigger="click" align="right" :menu-options="desktopMenuOptions">
+          <BButton class="note-header-title-icon note-header-desktop-more" :aria-label="$t('common.more')">
+            <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
+          </BButton>
+        </BDropdown>
         <BTooltip :title="$t('noteDetail.save')">
-          <div class="note-header-title-icon note-header-title-icon--save" @click="$emit('save', true)">
+          <BButton
+            class="note-header-title-icon note-header-title-icon--save"
+            :aria-label="$t('noteDetail.save')"
+            @click="$emit('save', true)"
+          >
             <SvgIcon :src="icon.noteDetail.saveLine" />
-          </div>
+          </BButton>
         </BTooltip>
       </div>
     </template>
@@ -212,7 +189,6 @@
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
@@ -234,7 +210,6 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
   import { copyTextToClipboard } from '@/utils/clipboard';
-  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -248,6 +223,12 @@
     noteType?: string;
     hasBackup?: boolean;
     hasCatalog?: boolean;
+    hasNavigation?: boolean;
+    sidebarOpen?: boolean;
+    aiOpen?: boolean;
+    showAiToggle?: boolean;
+    childCount?: number;
+    pageTreeWritable?: boolean;
   }>();
 
   interface HeaderMenuOption {
@@ -269,6 +250,13 @@
     'history',
     'saveAsTemplate',
     'openCatalog',
+    'openNavigation',
+    'toggleSidebar',
+    'toggleAi',
+    'browseChildren',
+    'createChild',
+    'attachPages',
+    'movePage',
     'retrySave',
   ]);
 
@@ -443,8 +431,6 @@
     }
     return normalizeTags(props.note?.tags || props.note?.tagList);
   });
-  const displayedTags = computed(() => visibleTags.value.slice(0, bookmark.isMobile ? 1 : 3));
-  const hiddenTagCount = computed(() => Math.max(0, visibleTags.value.length - displayedTags.value.length));
 
   function parseUpdateTime(value?: string) {
     if (!value) return null;
@@ -514,13 +500,45 @@
   }
 
   const mobileMenuOptions = computed(() => {
-    const options: HeaderMenuOption[] = [
+    const options: HeaderMenuOption[] = [];
+
+    if (props.hasNavigation) {
+      if (Number(props.childCount || 0) > 0) {
+        options.push({
+          label: t('note.browseChildPages'),
+          icon: icon.noteTree.sidebarOpen,
+          function: () => emit('browseChildren'),
+        });
+      }
+      if (!props.readonly && props.pageTreeWritable) {
+        options.push(
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('createChild'),
+          },
+          {
+            label: t('note.addExistingPages'),
+            icon: icon.noteTree.move,
+            function: () => emit('attachPages'),
+          },
+          {
+            label: t('note.moveThisPageUnderAnother'),
+            icon: icon.noteTree.move,
+            function: () => emit('movePage'),
+          },
+        );
+      }
+      if (options.length) options.push({ divider: true });
+    }
+
+    options.push(
       {
         label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
         icon: icon.manage_categoryBtn_tag,
         function: openMobileTagConfig,
       },
-    ];
+    );
 
     if (!props.readonly) {
       options.push({
@@ -556,6 +574,47 @@
         function: () => emit('del'),
       },
     );
+    return options;
+  });
+
+  const desktopMenuOptions = computed<HeaderMenuOption[]>(() => {
+    const options: HeaderMenuOption[] = [
+      {
+        label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
+        icon: icon.manage_categoryBtn_tag,
+        function: openMobileTagConfig,
+      },
+    ];
+    if (!props.readonly) {
+      options.push({
+        label: t('note.saveAsTemplate'),
+        icon: icon.noteDetail.template,
+        function: openMobileSaveAsTemplate,
+      });
+      if (props.note?.id) {
+        options.push({
+          label: t('noteDetail.history.entry'),
+          icon: icon.noteDetail.history,
+          function: () => emit('history'),
+        });
+      }
+    }
+    options.push({
+      label: t('noteDetail.export'),
+      icon: icon.noteDetail.exportLine,
+      function: openMobileExport,
+    });
+    if (!props.readonly) {
+      options.push(
+        { divider: true },
+        {
+          label: t('noteDetail.delete'),
+          icon: icon.noteDetail.deleteLine,
+          danger: true,
+          function: () => emit('del'),
+        },
+      );
+    }
     return options;
   });
 
@@ -925,6 +984,44 @@
   .note-header-save-state {
     color: #c0c0c0;
     font-size: 12px;
+  }
+  .note-header-sidebar-toggle.b_btn {
+    padding: 0;
+
+    &.is-active {
+      border-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 9%, var(--card-background));
+      font-weight: 700;
+    }
+  }
+  .note-header-child-chip.b_btn {
+    flex: 0 0 auto;
+    height: 30px;
+    padding: 0 9px;
+    gap: 4px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--card-background);
+    font-size: 12px;
+  }
+  .note-header-ai-toggle.b_btn {
+    min-width: 114px;
+    height: 36px;
+    padding: 0 12px;
+    gap: 7px;
+    border: 1px solid var(--primary-color, #615ced);
+    border-radius: 10px;
+    color: var(--primary-color, #615ced);
+    background: var(--card-background);
+
+    &.is-active {
+      border-color: var(--primary-color, #615ced);
+      color: #fff;
+      background: var(--primary-color, #615ced);
+      font-weight: 650;
+    }
   }
   .note-header-title {
     padding: 0 10px;

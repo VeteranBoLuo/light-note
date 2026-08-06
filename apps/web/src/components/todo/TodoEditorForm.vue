@@ -1,16 +1,27 @@
 <template>
-  <div class="todo-editor-form">
-    <ol v-if="mobileWizard && !legacyMode" class="todo-editor-form__steps" :aria-label="t('inbox.todoPlanWizard')">
-      <li
-        v-for="step in mobileSteps"
-        :key="step.value"
-        :class="{ active: mobileStep === step.value, done: mobileStep > step.value }"
-      >
-        <span>{{ step.value }}</span>
-        <strong>{{ step.label }}</strong>
-      </li>
-    </ol>
-    <div v-show="!mobileWizard || legacyMode || mobileStep === 1" class="todo-editor-form__step">
+  <div
+    class="todo-editor-form"
+    :class="{
+      'is-mobile-wizard': mobileWizard && !legacyMode,
+      'is-desktop-plan': desktopPlanLayout,
+    }"
+  >
+    <div
+      v-if="mobileWizard && !legacyMode"
+      class="todo-editor-form__mobile-progress"
+      :aria-label="t('inbox.todoPlanWizard')"
+    >
+      <div class="todo-editor-form__progress-track" aria-hidden="true">
+        <span :style="{ width: `${mobileStep * 33.333}%` }"></span>
+      </div>
+    </div>
+    <section v-show="!mobileWizard || legacyMode || mobileStep === 1" class="todo-editor-form__step">
+      <header class="todo-editor-form__section-title">
+        <div>
+          <strong>{{ t('inbox.todoPlanStepContent') }}</strong>
+          <small>{{ t('inbox.todoContentHint') }}</small>
+        </div>
+      </header>
       <label>
         <span>{{ t('inbox.todoTitle') }}</span>
         <BInput v-model:value="form.title" :maxlength="200" :placeholder="t('inbox.todoTitlePlaceholder')" />
@@ -42,6 +53,27 @@
         <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
       </label>
 
+      <label class="todo-editor-form__priority-field">
+        <span>{{ t('inbox.todoPriority') }}</span>
+        <div class="todo-editor-form__segment" role="group" :aria-label="t('inbox.todoPriority')">
+          <BButton
+            v-for="option in priorityOptions"
+            :key="option.value"
+            :class="{ active: form.priority === option.value }"
+            @click="form.priority = option.value"
+          >
+            {{ option.label }}
+          </BButton>
+        </div>
+      </label>
+
+      <div class="todo-editor-form__advanced-head">
+        <span>{{ t('inbox.todoAdvancedContentHint') }}</span>
+        <BButton size="small" @click="advancedContentOpen = !advancedContentOpen">
+          {{ advancedContentOpen ? t('inbox.todoHideAdvancedContent') : t('inbox.todoShowAdvancedContent') }}
+        </BButton>
+      </div>
+
       <BModal
         v-model:visible="resourcePickerVisible"
         :title="t('inbox.todoAddResource')"
@@ -56,7 +88,7 @@
         />
       </BModal>
 
-      <section class="todo-resource-refs">
+      <section v-if="advancedContentOpen" class="todo-resource-refs">
         <div class="todo-resource-refs__head">
           <span class="todo-resource-refs__label">
             {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
@@ -78,7 +110,7 @@
           </span>
         </div>
       </section>
-      <section class="todo-checklist-editor">
+      <section v-if="advancedContentOpen" class="todo-checklist-editor">
         <div class="todo-checklist-editor__header">
           <div>
             <span>{{ t('inbox.todoChecklist') }}</span>
@@ -109,17 +141,13 @@
           </div>
         </div>
       </section>
-      <div class="todo-editor-form__grid">
-        <label>
-          <span>{{ t('inbox.todoPriority') }}</span>
-          <BSelect v-model:value="form.priority" :options="priorityOptions" />
-        </label>
+      <div v-if="legacyMode" class="todo-editor-form__grid">
         <label v-if="legacyMode">
           <span>{{ t('inbox.todoDueAt') }}</span>
           <BDateTimePicker v-model:value="form.dueAt" :placeholder="t('inbox.todoDuePlaceholder')" />
         </label>
       </div>
-    </div>
+    </section>
     <section v-if="legacyItem && !legacyConversion" class="todo-legacy-plan-banner">
       <div>
         <strong>{{ t('inbox.todoLegacyPlanTitle') }}</strong>
@@ -150,9 +178,20 @@
       :resource-refs="resourceRefInputs"
       :initial-due-at="initialValues?.dueAt || null"
       :mobile-step="mobileWizard ? mobileStep : 0"
+      :desktop-layout="desktopPlanLayout"
       :reset-key="resetKey"
       @ready="planSubmission = $event"
-    />
+      @preview-count="planOccurrenceCount = $event"
+    >
+      <template v-if="desktopPlanLayout" #preview-actions>
+        <div class="todo-editor-form__actions todo-editor-form__actions--preview">
+          <BButton @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
+            {{ item ? t('common.save') : t('inbox.todoPlanCreateCount', { count: planOccurrenceCount }) }}
+          </BButton>
+        </div>
+      </template>
+    </TodoPlanScheduleEditor>
     <section v-if="legacyMode" class="todo-recurrence-editor">
       <div>
         <strong>{{ t('inbox.todoRecurrence') }}</strong>
@@ -225,7 +264,7 @@
         </p>
       </template>
     </section>
-    <div class="todo-editor-form__actions" :class="{ 'is-sticky': stickyActions }">
+    <div v-if="!desktopPlanLayout" class="todo-editor-form__actions" :class="{ 'is-sticky': stickyActions }">
       <template v-if="mobileWizard && !legacyMode">
         <BButton v-if="mobileStep === 1" @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
         <BButton v-else @click="mobileStep -= 1">{{ t('inbox.todoPlanPreviousStep') }}</BButton>
@@ -309,16 +348,15 @@
   const emit = defineEmits<{
     submit: [submission: TodoEditorSubmission];
     cancel: [];
+    'mobile-step-change': [step: 1 | 2 | 3];
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
   const reminderEditorRef = ref<HTMLElement | null>(null);
   const mobileStep = ref<1 | 2 | 3>(1);
-  const mobileSteps = computed(() => [
-    { value: 1 as const, label: t('inbox.todoPlanStepContent') },
-    { value: 2 as const, label: t('inbox.todoPlanStepSchedule') },
-    { value: 3 as const, label: t('inbox.todoPlanStepReminder') },
-  ]);
+  const advancedContentOpen = ref(false);
+  const planOccurrenceCount = ref(1);
+  watch(mobileStep, (step) => emit('mobile-step-change', step), { immediate: true });
 
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
@@ -427,6 +465,7 @@
   const legacyConversion = ref(false);
   const legacyItem = computed(() => Boolean(props.item && Number(props.item.planVersion || 1) !== 2));
   const legacyMode = computed(() => (!props.v2Enabled && !props.item) || (legacyItem.value && !legacyConversion.value));
+  const desktopPlanLayout = computed(() => !props.mobileWizard && !legacyMode.value);
   const legacyBehaviorSummary = computed(() => {
     const parts: string[] = [];
     if (props.item?.recurrence) parts.push(t('inbox.todoLegacyCompletionRepeat'));
@@ -454,7 +493,9 @@
     recurrenceInterval: 1 as number | string,
     recurrenceEndAt: '',
   });
-  const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
+  const priorityOptions = computed(() =>
+    ([0, 1, 2] as TodoPriority[]).map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })),
+  );
   const reminderModeOptions = computed(() => [
     { value: 'none', label: t('inbox.todoReminderNone') },
     { value: 'once', label: t('inbox.todoReminderOnce') },
@@ -588,10 +629,12 @@
     form.recurrenceInterval = props.item?.recurrence?.interval || 1;
     form.recurrenceEndAt = toTodoLocalInput(props.item?.recurrence?.endAt);
     planSubmission.value = null;
+    planOccurrenceCount.value = 1;
     const initialChecklist = props.item?.checklist || initialValues?.checklist;
     checklistItems.value = initialChecklist?.length
       ? initialChecklist.map((item) => ({ ...item }))
       : [createChecklistItem()];
+    advancedContentOpen.value = Boolean(resourceRefs.value.length || initialChecklist?.length);
   }
 
   function createChecklistItem(): TodoChecklistItem {
@@ -723,56 +766,62 @@
     gap: 16px;
     color: var(--text-color);
   }
+  .todo-editor-form.is-desktop-plan {
+    position: relative;
+    min-height: calc(100dvh - 65px);
+    padding: 22px 410px 24px 22px;
+    background: var(--card-background);
+  }
+  .todo-editor-form:not(.is-desktop-plan) {
+    min-height: 100%;
+    padding: 20px;
+    box-sizing: border-box;
+  }
   .todo-editor-form__step {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 13px;
+    padding: 16px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 15px;
+    background: var(--card-background);
   }
-  .todo-editor-form__steps {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+  .todo-editor-form__section-title {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 1px;
   }
-  .todo-editor-form__steps li {
+  .todo-editor-form__section-title > div {
     display: flex;
     min-width: 0;
-    align-items: center;
-    gap: 6px;
-    padding: 8px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 10px;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .todo-editor-form__section-title strong {
+    font-size: 15px;
+  }
+  .todo-editor-form__section-title small {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 400;
   }
-  .todo-editor-form__steps li > span {
-    display: inline-flex;
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    background: var(--workspace-panel-bg-color);
-    font-weight: 700;
+  .todo-editor-form__mobile-progress {
+    display: block;
   }
-  .todo-editor-form__steps li > strong {
-    min-width: 0;
+  .todo-editor-form__progress-track {
+    height: 4px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    border-radius: 999px;
+    background: var(--surface-border-color);
   }
-  .todo-editor-form__steps li.active {
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    font-weight: 700;
-  }
-  .todo-editor-form__steps li.active > span,
-  .todo-editor-form__steps li.done > span {
+  .todo-editor-form__progress-track > span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
     background: var(--primary-color);
-    color: #fff;
+    transition: width 0.2s ease;
   }
   .todo-editor-form label {
     display: flex;
@@ -818,15 +867,52 @@
     border-color: color-mix(in srgb, var(--primary-color) 48%, var(--surface-border-color)) !important;
   }
 
-  .todo-editor-form > label:first-child :deep(.b-input) {
+  .todo-editor-form__step > label:nth-of-type(1) :deep(.b-input) {
     height: 44px;
     border-color: color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color)) !important;
     border-radius: 10px;
     font-size: 15px;
   }
-  .todo-editor-form > label:nth-child(2) :deep(.b-textarea) {
+  .todo-editor-form__step > label:nth-of-type(2) :deep(.b-textarea) {
     min-height: 104px;
     border-radius: 10px;
+  }
+  .todo-editor-form__priority-field {
+    max-width: 360px;
+  }
+  .todo-editor-form__segment {
+    display: flex;
+    gap: 5px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .todo-editor-form__segment :deep(.b_btn) {
+    min-width: 0;
+    min-height: 36px;
+    flex: 1 1 0;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--desc-color);
+  }
+  .todo-editor-form__segment :deep(.b_btn.active) {
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 700;
+  }
+  .todo-editor-form__advanced-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-top: 2px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-editor-form__advanced-head :deep(.b_btn) {
+    color: var(--primary-color);
   }
   .todo-reminder-editor__interval-field {
     display: flex;
@@ -1004,6 +1090,13 @@
     justify-content: flex-end;
     gap: 8px;
   }
+  .todo-editor-form__actions--preview {
+    margin-top: 16px;
+  }
+  .todo-editor-form__actions--preview :deep(.b_btn) {
+    min-height: 42px;
+    flex: 1 1 0;
+  }
 
   /* 负 margin 抵消抽屉 body 的内边距，让底栏通栏压住滚动内容 */
   .todo-editor-form__actions.is-sticky {
@@ -1021,7 +1114,29 @@
     min-height: 40px;
     flex: 1 1 0;
   }
+  @media (min-width: 768px) and (max-width: 980px) {
+    .todo-editor-form.is-desktop-plan {
+      min-height: 0;
+      padding: 18px;
+    }
+  }
   @media (max-width: 767px) {
+    .todo-editor-form:not(.is-desktop-plan) {
+      gap: 15px;
+      padding: 14px 16px 0;
+    }
+    .todo-editor-form.is-mobile-wizard .todo-editor-form__step {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .todo-editor-form.is-mobile-wizard .todo-editor-form__priority-field {
+      max-width: none;
+    }
+    .todo-editor-form.is-mobile-wizard .todo-editor-form__section-title small {
+      font-size: 11px;
+    }
     .todo-legacy-plan-banner {
       flex-direction: column;
     }

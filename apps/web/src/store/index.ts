@@ -5,5 +5,15 @@ import noteStore from './note.ts';
 import inboxStore from './inbox.ts';
 import todoStore from './todo.ts';
 import useAiAssistantStore from './aiAssistant.ts';
+import useNoteWorkspaceStore from './noteWorkspace.ts';
 
-export { cloudSpaceStore, useUserStore, bookmarkStore, noteStore, inboxStore, todoStore, useAiAssistantStore };
+export {
+  cloudSpaceStore,
+  useUserStore,
+  bookmarkStore,
+  noteStore,
+  inboxStore,
+  todoStore,
+  useAiAssistantStore,
+  useNoteWorkspaceStore,
+};

@@ -23,6 +23,10 @@ describe('todoPlanning', () => {
 
   it('稍后提醒使用稳定的本地时间', () => {
     expect(todoSnoozeAt('tenMinutes', now)).toBe('2026-07-30T16:40');
+    expect(todoSnoozeAt('oneHour', now)).toBe('2026-07-30T17:30');
+    expect(todoSnoozeAt('threeHours', now)).toBe('2026-07-30T19:30');
+    expect(todoSnoozeAt('oneDay', now)).toBe('2026-07-31T16:30');
+    // 今日工作台仍使用旧的“明天上午 9 点”语义，继续保持兼容。
     expect(todoSnoozeAt('tomorrow', now)).toBe('2026-07-31T09:00');
   });
 

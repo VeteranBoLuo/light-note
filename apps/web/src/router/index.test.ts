@@ -16,4 +16,12 @@ describe('官网与应用入口路由', () => {
     const legacyLanding = router.getRoutes().find((record) => record.name === 'legacyLanding');
     expect(legacyLanding?.redirect).toBe('/');
   });
+
+  it('用户通知使用独立页面路由，且不挂移动端主导航壳', () => {
+    const resolved = router.resolve('/notifications');
+    expect(resolved.name).toBe('notifications');
+    expect(resolved.meta.requireAuth).toBe(true);
+    expect(resolved.meta.mobileTopSwitcher).not.toBe(true);
+    expect(resolved.meta.mobileBottomNav).not.toBe(true);
+  });
 });

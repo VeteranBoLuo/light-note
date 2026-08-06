@@ -93,7 +93,11 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoSnoozeNextWeek: '下周',
             todoReminderInApp: '站内',
             todoReminderEmail: '邮箱',
+            todoReminderOnceSummary: '{channels} · 单次提醒',
             todoReminderRepeatSummary: '{channels} · 周期提醒',
+            todoNextReminder: '下一次提醒：{time}',
+            todoToday: '今天',
+            todoTomorrow: '明天',
             todoLegacyCompletionBadge: '旧版完成触发重复',
             todoLegacyReminderBadge: '旧版多次提醒',
             todoSeriesPausedBadge: '系列已暂停',
@@ -102,6 +106,9 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoSeriesResume: '恢复系列',
             todoSeriesStop: '结束系列',
             todoRecurrenceSummary: { daily: '每 {interval} 天生成下一项' },
+            todoSnoozeOneHour: '1 小时后',
+            todoSnoozeThreeHours: '3 小时后',
+            todoSnoozeOneDay: '1 天后',
           },
           ai: { sourceTypes: { note: '笔记' } },
         },
@@ -147,6 +154,50 @@ describe('TodoItem card editing', () => {
 
     host.querySelector<HTMLElement>('.todo-item__body')!.click();
     expect(onEdit).not.toHaveBeenCalled();
+  });
+
+  it('批量选择框位于标题行的正常布局流中，不占用截止时间区域', async () => {
+    const dueTodo = { ...todo, dueAt: '2026-08-07 18:30:00' };
+    const { host } = mountTodoItem(dueTodo, { selectable: true });
+    await nextTick();
+
+    const selectionLine = host.querySelector('.todo-item__selection-line');
+    expect(selectionLine).not.toBeNull();
+    expect(selectionLine?.querySelector('.todo-item__select')).not.toBeNull();
+    expect(host.querySelector('.todo-item__meta .todo-item__select')).toBeNull();
+  });
+
+  it('按原型先展示标题，再展示计划胶囊和下一次提醒摘要', async () => {
+    const { host } = mountTodoItem({
+      ...todo,
+      reminder: {
+        mode: 'once_per_instance',
+        channels: ['in_app'],
+        nextAt: '2026-08-08 14:00:00',
+      },
+    });
+    await nextTick();
+
+    const title = host.querySelector('.todo-item__main-line')!;
+    const chips = host.querySelector('.todo-item__chips')!;
+    expect(title.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chips.textContent).toContain('站内 · 单次提醒');
+    expect(host.querySelector('.todo-reminder-summary')?.textContent).toContain('下一次提醒：');
+  });
+
+  it('稍后提醒仅展示四个相对时间预设', async () => {
+    const { host } = mountTodoItem();
+    await nextTick();
+
+    const mobileActions = host.querySelectorAll<HTMLButtonElement>('.todo-item__actions--mobile button');
+    mobileActions[1]?.click();
+    await nextTick();
+
+    const drawerText = document.body.textContent || '';
+    expect(drawerText).toContain('10 分钟后');
+    expect(drawerText).toContain('1 小时后');
+    expect(drawerText).toContain('3 小时后');
+    expect(drawerText).toContain('1 天后');
   });
 
   it('已完成卡片也能通过正文进入编辑', async () => {

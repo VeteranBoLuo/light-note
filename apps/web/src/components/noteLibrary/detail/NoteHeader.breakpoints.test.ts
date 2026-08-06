@@ -29,7 +29,12 @@ vi.mock('@/components/base/BasicComponents/BPopover.vue', () => ({
   default: { name: 'BPopoverStub', template: '<div><slot /></div>' },
 }));
 vi.mock('@/components/base/BasicComponents/BDropdown.vue', () => ({
-  default: { name: 'BDropdownStub', template: '<div class="dropdown-stub"><slot /></div>' },
+  default: {
+    name: 'BDropdownStub',
+    props: ['menuOptions'],
+    template:
+      '<div class="dropdown-stub"><slot /><span v-for="option in menuOptions" class="dropdown-option-stub">{{ option.label }}</span></div>',
+  },
 }));
 vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
   default: { name: 'ResourceBacklinksStub', template: '<div />' },
@@ -68,10 +73,11 @@ function mount() {
 
 /** 三个曾被 isDesktop 挡掉的操作 */
 function reachableActions(host: HTMLElement) {
+  const menuText = [...host.querySelectorAll('.dropdown-option-stub')].map((item) => item.textContent || '').join(' ');
   return {
-    history: Boolean(host.querySelector('.note-header-title-icon--history')),
-    tag: Boolean(host.querySelector('.note-header-title-icon--tag')),
-    export: Boolean(host.querySelector('.note-header-title-icon--export')),
+    history: menuText.includes(zhCN.noteDetail.history.entry),
+    tag: menuText.includes(zhCN.noteDetail.tags),
+    export: menuText.includes(zhCN.noteDetail.export),
   };
 }
 
@@ -92,15 +98,15 @@ describe('NoteHeader 断点下的操作可达性', () => {
     cleanup = undefined;
   });
 
-  it('桌面端显示历史版本、标签与导出', async () => {
+  it('桌面端从紧凑的更多菜单提供历史版本、标签与导出', async () => {
     const host = mount();
     await nextTick();
 
     expect(reachableActions(host)).toEqual({ history: true, tag: true, export: true });
   });
 
-  /** 这条是回归重点：平板此前三个都拿不到，且没有「更多」菜单可以兜底。 */
-  it('平板与桌面拿到同一组操作，不因断点丢功能', async () => {
+  /** 这条是回归重点：平板与桌面共用同一份更多菜单，不因断点丢功能。 */
+  it('平板与桌面拿到同一组更多菜单操作，不因断点丢功能', async () => {
     setLayout('tablet');
     const host = mount();
     await nextTick();
@@ -116,13 +122,16 @@ describe('NoteHeader 断点下的操作可达性', () => {
     expect(host.querySelector('.note-header-tablet-catalog')).not.toBeNull();
   });
 
-  /** 手机走独立分支：图标按钮收进「更多」菜单，所以顶栏上不该有这三个图标。 */
+  /** 手机走独立分支：功能仍可达，但只能收进「更多」菜单，不能摊在顶栏。 */
   it('手机端把这些操作收进「更多」菜单，而不是摊在顶栏', async () => {
     setLayout('mobile');
     const host = mount();
     await nextTick();
 
-    expect(reachableActions(host)).toEqual({ history: false, tag: false, export: false });
+    expect(reachableActions(host)).toEqual({ history: true, tag: true, export: true });
+    expect(host.querySelector('.note-header-title-icon--history')).toBeNull();
+    expect(host.querySelector('.note-header-title-icon--tag')).toBeNull();
+    expect(host.querySelector('.note-header-title-icon--export')).toBeNull();
     expect(host.querySelector('.note-header-mobile-more')).not.toBeNull();
   });
 });

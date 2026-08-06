@@ -52,6 +52,7 @@
           :loading="initialTodayLoading"
           :show-header="false"
           compact-empty
+          compact-actions
           @refresh="loadToday"
         />
       </div>
@@ -442,12 +443,11 @@
 
   .mobile-today__pending {
     margin-bottom: 14px;
-    padding: 12px;
+    padding: 14px;
     border: 1px solid var(--surface-border-color);
-    border-left: 3px solid var(--primary-color);
-    border-radius: 14px;
+    border-radius: 17px;
     background: var(--card-background);
-    box-shadow: 0 8px 24px -22px color-mix(in srgb, var(--primary-color) 60%, transparent);
+    box-shadow: none;
   }
 
   .mobile-today__pending-head {
@@ -457,13 +457,13 @@
   }
 
   .mobile-today__pending-head strong {
-    font-size: 15px;
+    font-size: 16px;
     font-weight: 700;
   }
 
   .mobile-today__pending-head span {
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .mobile-today__date {
@@ -509,8 +509,8 @@
        column 主轴还要显式居中，否则数字会贴着卡片上边。 */
     width: 100%;
     min-width: 0;
-    height: 74px;
-    padding: 12px 8px;
+    height: 70px;
+    padding: 13px 7px;
     gap: 5px;
     flex-direction: column;
     justify-content: center;
@@ -530,6 +530,14 @@
     border-radius: 0;
     background: transparent;
     box-shadow: none;
+  }
+
+  /* 骨架与加载后的分组共用同一层级：真实列表已去掉内层外框，加载态也不能
+     凭空多出一张圆角卡片，否则数据回来时会出现明显的边框闪变。 */
+  .mobile-today__pending-details :deep(.today-actions__skeleton-group) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .mobile-today__pending-details :deep(.today-actions__group + .today-actions__group) {
@@ -561,10 +569,10 @@
 
   .mobile-today__capture {
     margin-bottom: 14px;
-    padding: 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 14px;
-    background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .mobile-today__capture-head {
@@ -576,7 +584,7 @@
   }
 
   .mobile-today__capture-head strong {
-    font-size: 14px;
+    font-size: 16px;
   }
 
   .mobile-today__capture-head span {
@@ -585,7 +593,7 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .mobile-today__capture-grid {
@@ -597,15 +605,16 @@
   .mobile-today__capture-action {
     width: 100%;
     min-width: 0;
-    height: 72px;
+    height: 94px;
     padding: 12px 4px;
     gap: 7px;
     flex-direction: column;
     justify-content: center;
-    border-radius: 11px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 15px;
     color: var(--text-color);
     background: var(--card-background) !important;
-    font-size: 11px;
+    font-size: 12px;
   }
 
   /* 图标是 column flex 的子项，不锁定收缩会被压扁成一条（实测 22px 只剩 9px） */

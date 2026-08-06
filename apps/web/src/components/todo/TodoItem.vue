@@ -10,30 +10,7 @@
     @delete="emit('delete')"
   >
     <article class="todo-item" :class="{ 'is-overdue': overdue, 'is-completed': item.status === 'completed' }">
-      <BCheckbox
-        v-if="selectable"
-        class="todo-item__select"
-        :model-value="selected"
-        :disabled="disabled"
-        :aria-label="t('inbox.todoSelect', { title: item.title })"
-        @update:model-value="$emit('select', $event)"
-      />
       <div class="todo-item__body" :class="{ 'is-editable': cardEditable }" @click="openEditorFromCard">
-        <div class="todo-item__meta">
-          <span>{{ t('inbox.todo') }}</span>
-          <span class="todo-priority">{{ priorityLabel }}</span>
-          <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
-          <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
-          <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
-          <span v-if="seriesLabel || item.recurrence" class="todo-recurrence-label">{{
-            seriesLabel || recurrenceLabel
-          }}</span>
-          <span v-if="seriesProgressLabel" class="todo-series-progress">{{ seriesProgressLabel }}</span>
-          <span v-if="item.series?.status === 'paused'" class="todo-plan-state-label">{{
-            t('inbox.todoSeriesPausedBadge')
-          }}</span>
-          <span v-for="label in legacyLabels" :key="label" class="todo-legacy-label">{{ label }}</span>
-        </div>
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
         <div v-if="!selectable" class="todo-item__main-line">
           <BCheckbox
@@ -46,7 +23,33 @@
           />
           <span class="todo-item__title todo-item__title--static">{{ item.title }}</span>
         </div>
-        <div v-else class="todo-item__selection-title">{{ item.title }}</div>
+        <div v-else class="todo-item__selection-line">
+          <BCheckbox
+            class="todo-item__select"
+            :model-value="selected"
+            :disabled="disabled"
+            :aria-label="t('inbox.todoSelect', { title: item.title })"
+            @click.stop
+            @update:model-value="$emit('select', $event)"
+          />
+          <span class="todo-item__selection-title">{{ item.title }}</span>
+        </div>
+        <div v-if="startLabel || item.dueAt" class="todo-item__meta">
+          <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
+          <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
+        </div>
+        <div class="todo-item__chips">
+          <span class="todo-priority" :class="`is-priority-${item.priority}`">{{ priorityLabel }}</span>
+          <span v-if="seriesLabel || item.recurrence" class="todo-recurrence-label">{{
+            seriesLabel || recurrenceLabel
+          }}</span>
+          <span v-if="seriesProgressLabel" class="todo-series-progress">{{ seriesProgressLabel }}</span>
+          <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
+          <span v-if="item.series?.status === 'paused'" class="todo-plan-state-label">{{
+            t('inbox.todoSeriesPausedBadge')
+          }}</span>
+          <span v-for="label in legacyLabels" :key="label" class="todo-legacy-label">{{ label }}</span>
+        </div>
         <p v-if="item.description" class="todo-item__description">{{ item.description }}</p>
         <section v-if="item.checklist?.length" class="todo-checklist" @click.stop>
           <header class="todo-checklist__header">
@@ -87,8 +90,12 @@
             <span v-if="hiddenResourceRefCount" class="todo-resource-more">+{{ hiddenResourceRefCount }}</span>
           </div>
         </section>
+        <section v-if="reminderLabel" class="todo-reminder-summary">
+          <strong>{{ reminderLabel }}</strong>
+          <span v-if="nextReminderLabel">{{ t('inbox.todoNextReminder', { time: nextReminderLabel }) }}</span>
+        </section>
       </div>
-      <!-- 已完成的待办只保留「取消勾选恢复」和「删除」,避免对无效动作(编辑/日历/优先级/稍后)的误操作 -->
+      <!-- 已完成待办的右侧操作只保留删除；恢复仍通过标题前的勾选框完成。 -->
       <div class="todo-item__actions todo-item__actions--desktop">
         <template v-if="item.status === 'pending'">
           <BSelect
@@ -111,56 +118,64 @@
                 <BButton @click="runMenuAction(() => emit('snooze', 'tenMinutes'))">
                   {{ t('inbox.todoSnoozeTenMinutes') }}
                 </BButton>
-                <BButton @click="runMenuAction(() => emit('snooze', 'tomorrow'))">
-                  {{ t('inbox.todoSnoozeTomorrow') }}
+                <BButton @click="runMenuAction(() => emit('snooze', 'oneHour'))">
+                  {{ t('inbox.todoSnoozeOneHour') }}
                 </BButton>
-                <BButton @click="runMenuAction(() => emit('snooze', 'nextWeek'))">
-                  {{ t('inbox.todoSnoozeNextWeek') }}
+                <BButton @click="runMenuAction(() => emit('snooze', 'threeHours'))">
+                  {{ t('inbox.todoSnoozeThreeHours') }}
                 </BButton>
-              </div>
-            </template>
-          </BPopover>
-          <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
-          <BPopover
-            v-if="item.seriesId"
-            trigger="click"
-            placement="bottom-right"
-            :open="openMenu === 'series'"
-            @update:open="(visible: boolean) => setMenu('series', visible)"
-          >
-            <BButton size="small" :disabled="disabled">{{ t('inbox.todoSeriesActions') }}</BButton>
-            <template #content>
-              <div class="todo-mobile-action-menu">
-                <BButton @click="runMenuAction(() => emit('series-action', 'skip'))">
-                  {{ t('inbox.todoSeriesSkipInstance') }}
-                </BButton>
-                <BButton
-                  v-if="item.series?.status === 'paused'"
-                  @click="runMenuAction(() => emit('series-action', 'resume'))"
-                >
-                  {{ t('inbox.todoSeriesResume') }}
-                </BButton>
-                <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
-                  {{ t('inbox.todoSeriesPause') }}
-                </BButton>
-                <BButton type="danger" @click="runMenuAction(() => emit('series-action', 'stop'))">
-                  {{ t('inbox.todoSeriesStop') }}
+                <BButton @click="runMenuAction(() => emit('snooze', 'oneDay'))">
+                  {{ t('inbox.todoSnoozeOneDay') }}
                 </BButton>
               </div>
             </template>
           </BPopover>
-          <BButton
-            size="small"
-            :disabled="disabled"
-            v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-            @click="$emit('add-to-calendar')"
-          >
-            {{ t('inbox.addToCalendar') }}
-          </BButton>
         </template>
-        <BButton size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
-          {{ t('inbox.deleteTodo') }}
-        </BButton>
+        <BPopover
+          trigger="click"
+          placement="bottom-right"
+          :open="openMenu === 'desktopMore'"
+          @update:open="(visible: boolean) => setMenu('desktopMore', visible)"
+        >
+          <BButton class="todo-more-button" size="small" :disabled="disabled" :aria-label="t('common.more')">
+            <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
+          </BButton>
+          <template #content>
+            <div class="todo-more-menu">
+              <template v-if="item.status === 'pending'">
+                <BButton @click="runMenuAction(() => emit('edit'))">{{ t('inbox.editTodo') }}</BButton>
+                <BButton
+                  v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
+                  @click="runMenuAction(() => emit('add-to-calendar'))"
+                >
+                  {{ t('inbox.addToCalendar') }}
+                </BButton>
+                <template v-if="item.seriesId">
+                  <span class="todo-more-menu__divider" aria-hidden="true"></span>
+                  <BButton @click="runMenuAction(() => emit('series-action', 'skip'))">
+                    {{ t('inbox.todoSeriesSkipInstance') }}
+                  </BButton>
+                  <BButton
+                    v-if="item.series?.status === 'paused'"
+                    @click="runMenuAction(() => emit('series-action', 'resume'))"
+                  >
+                    {{ t('inbox.todoSeriesResume') }}
+                  </BButton>
+                  <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
+                    {{ t('inbox.todoSeriesPause') }}
+                  </BButton>
+                  <BButton type="danger" @click="runMenuAction(() => emit('series-action', 'stop'))">
+                    {{ t('inbox.todoSeriesStop') }}
+                  </BButton>
+                </template>
+              </template>
+              <span class="todo-more-menu__divider" aria-hidden="true"></span>
+              <BButton type="danger" :loading="deleting" @click="runMenuAction(() => emit('delete'))">
+                {{ t('inbox.deleteTodo') }}
+              </BButton>
+            </div>
+          </template>
+        </BPopover>
       </div>
       <div class="todo-item__actions todo-item__actions--mobile">
         <template v-if="item.status === 'pending'">
@@ -200,13 +215,14 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
-  import { formatTodoDateTime, parseTodoDate } from '@/utils/todoPlanning';
+  import { formatTodoDateTime, parseTodoDate, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import icon from '@/config/icon';
 
   const props = defineProps<{
@@ -225,7 +241,7 @@
     delete: [];
     'add-to-calendar': [];
     select: [selected: boolean];
-    snooze: [preset: 'tenMinutes' | 'tomorrow' | 'nextWeek'];
+    snooze: [preset: TodoSnoozePreset];
     'update-priority': [priority: TodoPriority];
     'swipe-start': [];
     'update:swipe-open': [open: boolean];
@@ -235,11 +251,11 @@
   const router = useRouter();
 
   // 桌面端使用 BPopover；移动端优先进入统一的底部 Action Sheet。
-  const openMenu = ref<'desktopSnooze' | 'series' | ''>('');
+  const openMenu = ref<'desktopSnooze' | 'desktopMore' | ''>('');
   const mobileMenu = ref<'priority' | 'snooze' | 'more'>('more');
   const mobileMenuOpen = ref(false);
 
-  function setMenu(key: 'desktopSnooze' | 'series', visible: boolean) {
+  function setMenu(key: 'desktopSnooze' | 'desktopMore', visible: boolean) {
     openMenu.value = visible ? key : '';
   }
 
@@ -281,6 +297,7 @@
   const reminderLabel = computed(() => {
     const reminder = props.item.reminder;
     if (!reminder) return '';
+    if (reminder.mode === 'none') return '';
     const channelLabels = reminder.channels.map((channel) =>
       channel === 'email' ? t('inbox.todoReminderEmail') : t('inbox.todoReminderInApp'),
     );
@@ -294,6 +311,17 @@
       });
     }
     return t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });
+  });
+  const nextReminderLabel = computed(() => {
+    const reminder = props.item.reminder;
+    const nextAt =
+      (reminder && 'nextAt' in reminder ? reminder.nextAt : null) || props.item.reminderAt || null;
+    if (!nextAt) return '';
+    return formatTodoDateTime(nextAt, locale.value, {
+      relative: true,
+      includeYear: false,
+      relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+    });
   });
   const seriesLabel = computed(() => {
     const series = props.item.series;
@@ -353,8 +381,9 @@
     if (mobileMenu.value === 'snooze') {
       return [
         { key: 'snooze-tenMinutes', label: t('inbox.todoSnoozeTenMinutes'), icon: icon.common.calendar },
-        { key: 'snooze-tomorrow', label: t('inbox.todoSnoozeTomorrow'), icon: icon.common.calendar },
-        { key: 'snooze-nextWeek', label: t('inbox.todoSnoozeNextWeek'), icon: icon.common.calendar },
+        { key: 'snooze-oneHour', label: t('inbox.todoSnoozeOneHour'), icon: icon.common.calendar },
+        { key: 'snooze-threeHours', label: t('inbox.todoSnoozeThreeHours'), icon: icon.common.calendar },
+        { key: 'snooze-oneDay', label: t('inbox.todoSnoozeOneDay'), icon: icon.common.calendar },
       ];
     }
     const seriesActions: MobilePageActionItem[] =
@@ -404,7 +433,7 @@
   function handleMobileMenuAction(action: MobilePageActionItem) {
     if (action.key.startsWith('priority-')) changePriority(action.key.slice('priority-'.length));
     else if (action.key.startsWith('snooze-')) {
-      emit('snooze', action.key.slice('snooze-'.length) as 'tenMinutes' | 'tomorrow' | 'nextWeek');
+      emit('snooze', action.key.slice('snooze-'.length) as TodoSnoozePreset);
     } else if (action.key === 'edit') emit('edit');
     else if (action.key === 'calendar') emit('add-to-calendar');
     else if (action.key === 'series-skip') emit('series-action', 'skip');
@@ -452,21 +481,18 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
-    gap: 18px;
-    padding: 16px 18px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
-    border-radius: 16px;
-    background: linear-gradient(
-      108deg,
-      color-mix(in srgb, var(--primary-color) 6%, var(--background-color)),
-      var(--background-color) 42%
-    );
+    gap: 12px;
+    padding: 15px 16px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 15px;
+    background: var(--card-background, var(--background-color));
+    box-shadow: 0 12px 30px -28px rgba(30, 40, 80, 0.5);
   }
   .todo-item__select {
-    position: absolute;
-    top: 18px;
-    left: 10px;
-    z-index: 1;
+    flex: 0 0 auto;
+    align-items: flex-start;
+    margin-top: 4px;
+    padding: 2px 0;
   }
   .todo-recurrence-label {
     color: var(--success-color, #2e8b57);
@@ -491,34 +517,33 @@
   }
   .todo-item::before {
     position: absolute;
-    top: 12px;
-    bottom: 12px;
+    top: 14px;
+    bottom: 14px;
     left: 0;
     width: 3px;
     border-radius: 0 4px 4px 0;
     content: '';
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      var(--primary-color) 20%,
-      var(--primary-color) 80%,
-      transparent
-    );
+    background: var(--todo-accent-color, var(--primary-color));
   }
   .todo-item.is-overdue {
-    border-color: color-mix(in srgb, var(--danger-color, #e5484d) 38%, var(--card-border-color));
+    border-color: var(--surface-border-color, var(--card-border-color));
+  }
+  .todo-item.is-overdue::before {
+    background: var(--danger-color, #e5484d);
   }
   /* 完成态明确「退场」:压低内容存在感,收起主题色渐变与左侧强调条。
      注意只淡化文案区——勾选框(取消完成)和右侧操作(删除)仍可点,
      整卡 opacity 会让它们看起来像禁用。 */
   .todo-item.is-completed {
-    border-color: var(--card-border-color);
-    background: color-mix(in srgb, var(--text-color) 3%, var(--background-color));
+    border-color: var(--surface-border-color, var(--card-border-color));
+    background: var(--workspace-panel-bg-color, var(--background-color));
   }
   .todo-item.is-completed .todo-item__meta,
+  .todo-item.is-completed .todo-item__chips,
   .todo-item.is-completed .todo-item__description,
   .todo-item.is-completed .todo-checklist,
-  .todo-item.is-completed .todo-resource-refs {
+  .todo-item.is-completed .todo-resource-refs,
+  .todo-item.is-completed .todo-reminder-summary {
     opacity: 0.62;
   }
   .todo-item.is-completed::before {
@@ -533,25 +558,65 @@
   .todo-item__meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-left: 30px;
+    gap: 5px 10px;
+    margin: 4px 0 0 30px;
     color: var(--desc-color);
     font-size: 12px;
   }
-  .todo-item__meta > span:first-child {
-    color: var(--primary-color);
-    font-weight: 600;
-  }
   .todo-item__meta .overdue {
     color: var(--danger-color, #e5484d);
+    font-weight: 650;
+  }
+  .todo-item__chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 8px 0 0 30px;
+  }
+  .todo-item__chips > span {
+    min-height: 20px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 999px;
+    background: var(--workspace-panel-bg-color, var(--background-color));
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .todo-item__chips > .todo-recurrence-label {
+    border-color: var(--chip-success-border) !important;
+    background: var(--chip-success-bg) !important;
+    color: var(--chip-success-fg) !important;
+  }
+  .todo-item__chips > .todo-plan-state-label {
+    border-color: var(--chip-pin-border) !important;
+    background: var(--chip-pin-bg) !important;
+    color: var(--chip-pin-fg) !important;
+  }
+  .todo-item__chips > .todo-legacy-label {
+    border-color: var(--chip-pending-border) !important;
+    background: var(--chip-pending-bg) !important;
+    color: var(--chip-pending-fg) !important;
   }
   .todo-reminder-label {
-    color: var(--primary-color);
+    border-color: var(--chip-pending-border) !important;
+    background: var(--chip-pending-bg) !important;
+    color: var(--chip-pending-fg) !important;
   }
   .todo-priority {
-    padding: 0 6px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    border-color: var(--chip-todo-border) !important;
+    background: var(--chip-todo-bg) !important;
+    color: var(--chip-todo-fg) !important;
+    font-weight: 650;
+  }
+  .todo-priority.is-priority-2 {
+    border-color: var(--chip-danger-border) !important;
+    background: var(--chip-danger-bg) !important;
+    color: var(--chip-danger-fg) !important;
   }
   .todo-item__main-line {
     display: flex;
@@ -581,9 +646,15 @@
     line-height: 1.45;
     overflow-wrap: anywhere;
   }
-  .todo-item__selection-title {
+  .todo-item__selection-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
     margin-top: 5px;
-    padding: 2px 0 2px 30px;
+  }
+  .todo-item__selection-title {
+    min-width: 0;
+    padding: 2px 0;
     color: var(--text-color);
     font-size: 16px;
     font-weight: 600;
@@ -606,9 +677,9 @@
   .todo-checklist {
     margin: 11px 0 0 30px;
     padding: 9px 10px 8px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 10%, var(--card-border-color));
+    border: 0;
     border-radius: 11px;
-    background: color-mix(in srgb, var(--primary-color) 4%, transparent);
+    background: var(--workspace-panel-bg-color, var(--hover-background));
   }
   .todo-checklist__header {
     display: flex;
@@ -699,30 +770,55 @@
     font-size: 12px;
   }
 
+  .todo-reminder-summary {
+    display: grid;
+    gap: 2px;
+    margin: 10px 0 0 30px;
+    padding: 9px 11px;
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color, var(--hover-background));
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-reminder-summary strong {
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 650;
+  }
+
   .todo-item__actions {
     align-self: center;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: 10px;
+    gap: 6px;
   }
   .todo-item__actions--mobile {
     display: none;
   }
   .todo-item__priority-select {
-    width: 116px;
+    width: 92px;
   }
   .todo-item__actions :deep(.select-trigger),
   .todo-item__actions :deep(.b_btn) {
-    height: 44px;
-    min-height: 44px;
+    height: 34px;
+    min-height: 34px;
     box-sizing: border-box;
-    border-radius: 10px;
+    border: 0;
+    border-radius: 9px;
+    background: var(--workspace-panel-bg-color);
   }
   .todo-item__actions :deep(.b_btn) {
-    padding: 0 14px;
-    line-height: 44px;
+    padding: 0 11px;
+    line-height: 34px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-item__actions :deep(.todo-more-button) {
+    width: 34px;
+    padding: 0;
+    color: var(--text-color);
   }
   .todo-snooze-menu {
     display: grid;
@@ -739,6 +835,30 @@
     padding: 0 10px;
     font-size: 13px;
   }
+  .todo-more-menu {
+    display: grid;
+    width: 176px;
+    padding: 4px;
+    gap: 2px;
+  }
+  .todo-more-menu :deep(.b_btn) {
+    width: 100%;
+    height: 32px;
+    min-height: 32px;
+    justify-content: flex-start;
+    padding: 0 10px;
+    border-radius: 7px;
+    font-size: 13px;
+  }
+  .todo-more-menu :deep(.danger_btn) {
+    color: var(--danger-color, #e5484d);
+    background: transparent;
+  }
+  .todo-more-menu__divider {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--surface-border-color, var(--card-border-color));
+  }
   @media (pointer: coarse) {
     .todo-snooze-menu :deep(.b_btn) {
       min-height: 44px;
@@ -748,8 +868,8 @@
     .todo-item {
       grid-template-columns: minmax(0, 1fr);
       gap: 10px;
-      padding: 12px 13px;
-      border-radius: 14px;
+      padding: 14px;
+      border-radius: 17px;
       border: 1px solid var(--surface-border-color);
       border-left: 4px solid var(--todo-accent-color);
       background: var(--card-background);
@@ -770,11 +890,12 @@
     .todo-item__meta {
       margin-left: 30px;
       gap: 6px;
+      font-size: 12px;
     }
-    .todo-item__meta > span:first-child {
-      display: none;
+    .todo-item__chips {
+      margin-left: 30px;
     }
-    .todo-priority {
+    .todo-item__chips > .todo-priority {
       display: none;
     }
     .todo-item__actions--desktop {
@@ -784,28 +905,48 @@
       display: flex;
       width: auto;
       margin-left: 30px;
-      gap: 8px;
+      gap: 7px;
       align-items: center;
       justify-content: flex-end;
     }
     .todo-item__actions--mobile :deep(.b_btn) {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
       width: auto;
       min-width: 0;
       height: var(--mobile-touch-size, 44px);
       min-height: var(--mobile-touch-size, 44px);
-      padding-inline: 10px;
-      font-size: 13px;
+      padding-inline: 12px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent !important;
+      font-size: 12px;
       white-space: nowrap;
+    }
+    .todo-item__actions--mobile :deep(.b_btn::before) {
+      position: absolute;
+      z-index: -1;
+      inset: 3px 0;
+      border-radius: 10px;
+      background: var(--workspace-panel-bg-color);
+      content: '';
     }
     .todo-mobile-action--priority {
       margin-right: auto;
-      border: 1px solid var(--todo-accent-color);
       color: var(--todo-accent-color);
-      background: var(--card-background) !important;
       font-weight: 650;
+    }
+    .todo-item__actions--mobile :deep(.todo-mobile-action--priority::before) {
+      inset: 9px 0;
+      border: 1px solid color-mix(in srgb, var(--todo-accent-color) 45%, var(--surface-border-color));
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--todo-accent-color) 10%, var(--card-background));
     }
     .todo-checklist {
       margin-right: 0;
+      padding: 11px;
+      border-radius: 12px;
       border: 0;
       background: var(--workspace-panel-bg-color);
       box-shadow: none;

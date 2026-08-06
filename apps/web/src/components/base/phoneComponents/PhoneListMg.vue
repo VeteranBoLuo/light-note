@@ -1,5 +1,6 @@
 <template>
   <ResourcePageShell
+    class="phone-list-page-shell"
     :title="title"
     :subtitle="subtitle"
     accent="bookmark"
@@ -32,7 +33,7 @@
           aria-busy="true"
         >
           <MobileListSurface>
-            <MobileListRow v-for="index in 6" :key="`phone-bookmark-skeleton-${index}`">
+            <MobileListRow v-for="index in 9" :key="`phone-bookmark-skeleton-${index}`">
               <span class="phone-skeleton-item">
                 <span class="phone-skeleton-icon"></span>
                 <span class="phone-skeleton-lines">
@@ -160,12 +161,20 @@
 </script>
 
 <style lang="less" scoped>
+  :deep(.resource-page-body) {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
   .edit-list-container {
-    height: 100%;
+    min-height: 0;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    padding: 12px;
+    overflow: hidden;
+    padding: 14px;
   }
 
   .table-search-input {
@@ -175,14 +184,20 @@
     min-height: var(--mobile-touch-size, 44px);
   }
   .list-body {
-    margin-top: 10px;
+    margin-top: 14px;
     min-height: 0;
-    flex: 1;
+    flex: 1 1 auto;
     display: flex;
     flex-direction: column;
     gap: 0;
-    overflow: auto;
-    border-radius: 10px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    border-radius: var(--mobile-surface-radius, 16px);
+  }
+  .list-body :deep(> .mobile-list-surface) {
+    flex: 0 0 auto;
   }
   .list-item {
     position: relative;
@@ -190,7 +205,14 @@
   }
 
   .phone-list-skeleton {
-    display: block;
+    min-height: 100%;
+    display: flex;
+  }
+
+  .phone-list-skeleton :deep(.mobile-list-surface) {
+    width: 100%;
+    min-height: 100%;
+    flex: 1 0 auto;
   }
 
   .phone-skeleton-item {
@@ -209,10 +231,10 @@
   }
 
   .phone-skeleton-icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
-    border-radius: 8px;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    border-radius: 11px;
   }
 
   .phone-skeleton-lines {
@@ -222,16 +244,24 @@
   }
 
   .phone-skeleton-line {
-    height: 8px;
+    height: 9px;
     border-radius: 999px;
   }
 
   .phone-skeleton-line--title {
-    width: 62%;
+    width: 58%;
   }
 
   .phone-skeleton-line--meta {
-    width: 38%;
+    width: 36%;
+  }
+
+  @media (max-width: 767px) {
+    /* ResourcePageShell 默认已有移动端 12px 留白；此页内部按原型自行提供 14px，避免双层缩进。 */
+    .phone-list-page-shell {
+      padding: 0;
+      gap: 0;
+    }
   }
 
   @keyframes phone-bookmark-skeleton {

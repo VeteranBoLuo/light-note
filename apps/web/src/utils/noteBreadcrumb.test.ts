@@ -13,9 +13,9 @@ describe('buildNoteBreadcrumbDisplay', () => {
     ]);
   });
 
-  it('移动端不显示虚拟根，深层路径保留首个真实祖先与当前页面', () => {
+  it('移动端始终显示知识库根，深层路径折叠中间层并保留当前页面', () => {
     expect(buildNoteBreadcrumbDisplay(path, true)).toEqual([
-      { kind: 'note', key: 'note:n1', id: 'n1', title: '第1层' },
+      { kind: 'root', key: 'root' },
       { kind: 'ellipsis', key: 'ellipsis' },
       { kind: 'note', key: 'note:n6', id: 'n6', title: '第6层' },
     ]);

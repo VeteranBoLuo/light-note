@@ -14,13 +14,13 @@
   >
     <template #item="{ data }">
       <span class="bookmark-item-main" :class="{ 'is-batch-mode': batchMode }">
-        <span class="bookmark-item-title">
-          <BookmarkFavicon :bookmark-id="data.id" :src="data.iconUrl" :size="20" :tile-size="28" />
+        <BookmarkFavicon :bookmark-id="data.id" :src="data.iconUrl" :size="20" :tile-size="38" />
+        <span class="bookmark-item-copy">
           <span class="bookmark-item-name">{{ data.name }}</span>
-        </span>
-        <span v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
-          <span v-if="data.hasSnapshot" class="bm-badge">{{ $t('bookmarkMg.badgeArchived') }}</span>
-          <span v-if="data.hasSummary" class="bm-badge">{{ $t('bookmarkMg.badgeSummary') }}</span>
+          <span v-if="data.hasSnapshot || data.hasSummary" class="bm-badges">
+            <span v-if="data.hasSnapshot" class="bm-badge">{{ $t('bookmarkMg.badgeArchived') }}</span>
+            <span v-if="data.hasSummary" class="bm-badge">{{ $t('bookmarkMg.badgeSummary') }}</span>
+          </span>
         </span>
       </span>
       <span class="edit-tag-operation" aria-hidden="true">
@@ -293,26 +293,33 @@
   .bookmark-item-main {
     display: flex;
     flex: 1 1 auto;
-    flex-direction: column;
-    gap: 6px;
+    align-items: center;
+    gap: 11px;
     min-width: 0;
-    padding-right: 56px;
+    padding-right: 44px;
 
     &.is-batch-mode {
       padding-right: 44px;
     }
   }
-  .bookmark-item-title {
+  .bookmark-item-copy {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 5px;
     min-width: 0;
+  }
+  .bookmark-item-main :deep(.bookmark-favicon) {
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
   }
   .bookmark-item-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 15px;
+    font-weight: 700;
   }
   .bookmark-item-tags {
     display: flex;
@@ -325,12 +332,12 @@
     gap: 6px;
   }
   .bm-badge {
-    padding: 3px 7px;
+    padding: 2px 7px;
     border: 1px solid var(--primary-color);
     border-radius: 999px;
     color: var(--primary-color);
     background: var(--mobile-selected-bg);
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.2;
   }
   .bookmark-item-tag {
@@ -382,6 +389,14 @@
   :deep(.list-item) {
     height: auto;
     box-sizing: border-box;
+  }
+  :deep(.list-item .mobile-list-row) {
+    min-height: 70px;
+    padding: 12px 13px;
+    gap: 11px;
+  }
+  :deep(.list-item .mobile-list-row.is-complex) {
+    min-height: 70px;
   }
   .table-search-input {
     width: 100%;

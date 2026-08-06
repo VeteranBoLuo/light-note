@@ -56,7 +56,7 @@ describe('NoteSubpageSection 页面树双向操作', () => {
       { parentId: 'current-note', depth: 1 },
       { silent: true },
     );
-    expect(host.querySelector('.note-subpage-heading')?.textContent).toContain(zhCN.note.noSubpagesShort);
+    expect(host.querySelector('.note-subpage-empty-copy')?.textContent).toContain(zhCN.note.currentPageNoChildren);
     expect(host.querySelector('.note-subpage-empty')).toBeNull();
 
     const relationButton = host.querySelector<HTMLButtonElement>('.note-subpage-position-button');

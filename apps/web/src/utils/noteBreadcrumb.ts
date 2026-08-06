@@ -18,11 +18,11 @@ function normalizedNotes(items: NoteBreadcrumbItem[]): NoteBreadcrumbDisplayItem
 /** 深层路径确定性折叠，不能依赖 overflow 把当前页随机裁掉。 */
 export function buildNoteBreadcrumbDisplay(items: NoteBreadcrumbItem[], mobile: boolean) {
   const notes = normalizedNotes(items);
-  if (mobile) {
-    if (notes.length <= 3) return notes;
-    return [notes[0], { kind: 'ellipsis' as const, key: 'ellipsis' }, notes[notes.length - 1]];
-  }
   const root: NoteBreadcrumbDisplayItem = { kind: 'root', key: 'root' };
+  if (mobile) {
+    if (notes.length <= 2) return [root, ...notes];
+    return [root, { kind: 'ellipsis' as const, key: 'ellipsis' }, notes[notes.length - 1]];
+  }
   if (notes.length <= 3) return [root, ...notes];
   return [
     root,

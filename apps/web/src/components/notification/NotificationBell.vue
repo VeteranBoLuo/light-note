@@ -1,6 +1,42 @@
 <template>
+  <section v-if="page" class="nt-page">
+    <header class="nt-page__header">
+      <BButton class="nt-page__back" :aria-label="t('common.back')" @click="leaveNotificationPage">
+        <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
+      </BButton>
+      <h1>{{ t('notification.title') }}</h1>
+      <BButton class="nt-page__markall" :disabled="unreadTotal <= 0" @click="onMarkAll">
+        {{ t('notification.markAllRead') }}
+      </BButton>
+    </header>
+    <NotificationCenterPanel
+      mobile
+      :show-header="false"
+      :items="items"
+      :groups="groupedItems"
+      :tabs="tabs"
+      :active-tab="activeTab"
+      :unread-total="unreadTotal"
+      :total="total"
+      :loading="loading"
+      :completing-todo-id="completingTodoId"
+      :tab-unread="tabUnread"
+      :render-title="renderTitle"
+      :render-content="renderContent"
+      :format-time="fmtTime"
+      :todo-id="getTodoId"
+      :todo-action-state="todoActionState"
+      @mark-all="onMarkAll"
+      @switch-tab="switchTab"
+      @item-click="onItemClick"
+      @complete-todo="completeReminderTodo"
+      @open-todo="openReminderTodo"
+      @more="openNotificationActions"
+      @load-more="loadMore"
+    />
+  </section>
   <BPopover
-    v-if="!isMobileLayout"
+    v-else-if="!isMobileLayout"
     trigger="click"
     placement="bottom-right"
     overlay-class-name="notification-popover"
@@ -47,46 +83,6 @@
         <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
       </BButton>
     </BTooltip>
-    <BDrawer
-      :open="open"
-      :title="t('notification.title')"
-      placement="bottom"
-      height="calc(100dvh - env(safe-area-inset-top))"
-      mobile-full-screen
-      body-padding="0"
-      @close="open = false"
-    >
-      <template #header-actions>
-        <BButton class="nt-mobile-markall" :disabled="unreadTotal <= 0" @click="onMarkAll">
-          {{ t('notification.markAllRead') }}
-        </BButton>
-      </template>
-      <NotificationCenterPanel
-        mobile
-        :show-header="false"
-        :items="items"
-        :groups="groupedItems"
-        :tabs="tabs"
-        :active-tab="activeTab"
-        :unread-total="unreadTotal"
-        :total="total"
-        :loading="loading"
-        :completing-todo-id="completingTodoId"
-        :tab-unread="tabUnread"
-        :render-title="renderTitle"
-        :render-content="renderContent"
-        :format-time="fmtTime"
-        :todo-id="getTodoId"
-        :todo-action-state="todoActionState"
-        @mark-all="onMarkAll"
-        @switch-tab="switchTab"
-        @item-click="onItemClick"
-        @complete-todo="completeReminderTodo"
-        @open-todo="openReminderTodo"
-        @more="openNotificationActions"
-        @load-more="loadMore"
-      />
-    </BDrawer>
   </template>
   <MobilePageActionsDrawer
     v-model:open="notificationActionsOpen"
@@ -119,7 +115,6 @@
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
-  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
@@ -135,7 +130,8 @@
   import NotificationCenterPanel from '@/components/notification/NotificationCenterPanel.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { useMobileLayout } from '@/composables/useMobileLayout';
-  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+
+  const props = withDefaults(defineProps<{ page?: boolean }>(), { page: false });
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -262,13 +258,28 @@
     if (v) load(true);
   }
   function openMobileNotifications() {
-    open.value = true;
-    void load(true);
+    void router.push({ name: 'notifications' });
   }
   function handleExternalOpen() {
+    if (props.page) {
+      void load(true);
+      return;
+    }
+    if (isMobileLayout.value) {
+      openMobileNotifications();
+      return;
+    }
     if (open.value) return;
     open.value = true;
     void load(true);
+  }
+
+  function leaveNotificationPage() {
+    if (typeof router.options.history.state.back === 'string') {
+      router.back();
+      return;
+    }
+    void router.replace({ name: 'workbenches' });
   }
   async function onMarkAll() {
     const succeeded = await markAllRead();
@@ -358,13 +369,8 @@
   }
 
   async function closePanelThen(next: () => void | Promise<unknown>) {
-    if (isMobileLayout.value && open.value) {
-      await closeCurrentMobileOverlayThen(
-        () => {
-          open.value = false;
-        },
-        next,
-      );
+    if (props.page) {
+      await next();
       return;
     }
     open.value = false;
@@ -394,6 +400,7 @@
   let timer: ReturnType<typeof setInterval> | null = null;
   onMounted(() => {
     refreshUnread();
+    if (props.page) void load(true);
     timer = setInterval(() => refreshUnread(), 120000);
     window.addEventListener(NOTIFICATION_PANEL_OPEN_EVENT, handleExternalOpen);
   });
@@ -442,13 +449,70 @@
     box-shadow: 0 0 0 1.5px var(--background-color);
   }
 
-  .nt-mobile-markall {
-    min-width: 72px;
+  .nt-page {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    color: var(--text-color);
+    background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .nt-page__header {
+    position: relative;
+    min-height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--surface-divider-color, var(--card-border-color));
+    background: var(--card-background);
+  }
+
+  .nt-page__header h1 {
+    position: absolute;
+    left: 50%;
+    margin: 0;
+    transform: translateX(-50%);
+    color: var(--text-color);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .nt-page__back,
+  .nt-page__markall {
+    position: relative;
+    z-index: 1;
     height: 44px;
-    padding-inline: 8px;
-    color: var(--primary-color);
+    padding: 0;
     background: transparent !important;
+  }
+
+  .nt-page__back {
+    width: 44px;
+    min-width: 44px;
+    color: var(--text-color);
+  }
+
+  .nt-page__markall {
+    min-width: 72px;
+    padding-inline: 6px;
+    color: var(--primary-color);
     font-size: 13px;
+  }
+
+  .nt-page__markall:disabled {
+    color: var(--desc-color);
+  }
+
+  .nt-page > :deep(.nt-panel) {
+    min-height: 0;
+    flex: 1 1 auto;
   }
 </style>
 

@@ -12,6 +12,12 @@
         :note-type="note.type"
         :has-backup="hasSwitchBackup"
         :has-catalog="nStore.headings.length > 0"
+        :has-navigation="canShowPrivateNavigation"
+        :sidebar-open="detailSidebarEffectiveOpen"
+        :ai-open="detailAiEffectiveOpen"
+        :show-ai-toggle="!bookmark.isMobile"
+        :child-count="subpageCount"
+        :page-tree-writable="noteTreeWriteEnabled"
         @del="delNote"
         @save="clickSaveNote"
         @retry-save="retryPendingSave"
@@ -20,6 +26,13 @@
         @history="versionHistoryVisible = true"
         @save-as-template="saveTemplateVisible = true"
         @open-catalog="catalogDrawerOpen = true"
+        @open-navigation="openMobileNavigation()"
+        @toggle-sidebar="toggleDetailSidebar"
+        @toggle-ai="toggleDetailAi"
+        @browse-children="browseCurrentChildren"
+        @create-child="createChildPage"
+        @attach-pages="openAttachPages"
+        @move-page="openMoveSelf"
       />
       <div v-if="isOrganizingFromInbox" class="inbox-organize-banner">
         <span>{{ t('inbox.organizeEditorHint') }}</span>
@@ -27,21 +40,81 @@
           {{ t('inbox.saveAndComplete') }}
         </BButton>
       </div>
-      <div class="note-body" :class="{ 'note-body--organizing': isOrganizingFromInbox }">
-        <Catalog
-          :class="{ 'catalog-panel': bookmark.isDesktop, 'is-animatable': catalogSettled }"
-          :content="note.content"
-          :note-type="note.type"
-          :presume-headings="catalogPresumed"
-          :drawer-open="catalogDrawerOpen"
-          @markdown-heading-click="scrollToMarkdownHeading"
-          @close="catalogDrawerOpen = false"
-        />
+      <NoteWorkspaceShell
+        class="note-body"
+        :class="{ 'note-body--organizing': isOrganizingFromInbox }"
+        :mobile="bookmark.isMobile"
+        :has-sidebar="canShowDetailSidebar"
+        :has-ai="!bookmark.isMobile"
+        :sidebar-open="sidebarPreferredOpen"
+        :ai-open="aiPreferredOpen"
+        :sidebar-overlay-open="detailSidebarOverlayOpen"
+        :ai-overlay-open="detailAiOverlayOpen"
+        :sidebar-width="noteWorkspaceSidebarWidth"
+        @update:sidebar-open="noteWorkspace.setSidebarPreferredOpen($event)"
+        @update:sidebar-overlay-open="setDetailSidebarOverlayOpen"
+        @update:sidebar-width="noteWorkspace.setSidebarWidth($event)"
+        @update:ai-open="noteWorkspace.setAiPreferredOpen($event)"
+        @update:ai-overlay-open="setDetailAiOverlayOpen"
+        @layout-change="handleDetailLayoutChange"
+      >
+        <template #sidebar>
+          <aside class="note-detail-sidebar-panel">
+            <NoteWorkspaceSidebar
+              v-if="canShowPrivateNavigation"
+              v-model:mode="detailSidebarMode"
+              surface="detail"
+              :current-parent-id="null"
+              :active-page-id="note.id || null"
+              :browse-parent-id="browseParentId"
+              :children-by-parent="sidebarTreeChildrenByParent"
+              :expanded-ids="sidebarTreeExpandedIds"
+              :loading-keys="sidebarTreeLoadingKeys"
+              :tree-error="sidebarTreeError"
+              :search-value="detailTreeSearchValue"
+              :directory-enabled="noteTreeReadEnabled"
+              :write-enabled="noteTreeWriteEnabled && !readonly"
+              :drag-enabled="false"
+              :search-active="treeSearchActive"
+              :search-loading="treeSearchLoading"
+              :search-match-count="treeSearchMatchCount"
+              @toggle="toggleTreeNode"
+              @open="openNoteDetailPage"
+              @browse-children="browseSidebarChildren"
+              @create="createChildPage"
+              @attach="openAttachPages"
+              @toggle-top="toggleSidebarPageTop"
+              @move="openMoveSelf"
+              @rename="openRenamePage"
+              @copy-link="copySidebarPageLink"
+              @delete="deleteSidebarPage"
+              @go-library="openBreadcrumbPage(null)"
+              @search="detailTreeSearchValue = $event"
+            >
+              <template #outline>
+                <Catalog
+                  variant="embedded"
+                  :content="note.content"
+                  :note-type="note.type"
+                  @markdown-heading-click="scrollToMarkdownHeading"
+                />
+              </template>
+            </NoteWorkspaceSidebar>
+            <Catalog
+              v-else
+              variant="embedded"
+              :content="note.content"
+              :note-type="note.type"
+              @markdown-heading-click="scrollToMarkdownHeading"
+            />
+          </aside>
+        </template>
         <div class="note-body-header editor-panel">
           <nav
-            v-if="noteTreeReadEnabled && nodeType === 'edit' && detailBreadcrumb.length"
+            v-if="canShowPrivateNavigation && detailBreadcrumb.length"
             class="note-detail-breadcrumb"
             :aria-label="t('note.currentDirectory')"
+            @click.self="openMobileNavigation()"
           >
             <template v-for="(item, index) in detailBreadcrumbDisplay" :key="item.key">
               <span v-if="index" class="note-detail-crumb-separator" aria-hidden="true">/</span>
@@ -117,18 +190,53 @@
             @resource-refs-change="onEditorResourceRefsChange"
           />
           <NoteSubpageSection
-            v-if="noteTreeReadEnabled && nodeType === 'edit' && note.id"
+            v-if="canShowPrivateNavigation && bookmark.isMobile"
             :note-id="note.id"
             :readonly="readonly || !noteTreeWriteEnabled"
             :refresh-key="subpageRefreshKey"
+            compact
             @create="createChildPage"
             @attach="openAttachPages"
             @move-self="openMoveSelf"
             @open="openSubpage"
+            @browse-children="browseCurrentChildren"
+            @count-change="subpageCount = $event"
           />
         </div>
-        <AiReply class="ai-panel" v-if="!bookmark.isMobile" />
-      </div>
+        <template #ai>
+          <div class="note-detail-ai-slot">
+            <AiReply class="ai-panel" />
+          </div>
+        </template>
+      </NoteWorkspaceShell>
+
+      <NoteMobileNavigationDrawer
+        v-if="bookmark.isMobile && canShowPrivateNavigation"
+        v-model:open="mobileNavigationOpen"
+        :current-page-id="note.id"
+        :initial-parent-id="mobileNavigationParentId"
+        :content="note.content"
+        :note-type="note.type"
+        :initial-tab="mobileNavigationInitialTab"
+        :write-enabled="noteTreeWriteEnabled && !readonly"
+        @open-page="openNoteDetailPage"
+        @create="createChildPage"
+        @attach="openAttachPages"
+        @toggle-top="toggleSidebarPageTop"
+        @move="openMoveSelf"
+        @rename="openRenamePage"
+        @copy-link="copySidebarPageLink"
+        @delete="deleteSidebarPage"
+        @markdown-heading-click="scrollToMarkdownHeading"
+      />
+      <Catalog
+        v-if="!canShowPrivateNavigation && !bookmark.isDesktop"
+        :content="note.content"
+        :note-type="note.type"
+        :drawer-open="catalogDrawerOpen"
+        @markdown-heading-click="scrollToMarkdownHeading"
+        @close="catalogDrawerOpen = false"
+      />
     </div>
     <b-loading :loading="!isReady" style="z-index: -1" />
     <NoteVersionHistory
@@ -143,14 +251,20 @@
     <NoteAttachPagesModal
       v-if="noteTreeWriteEnabled && note.id"
       v-model:visible="attachPagesVisible"
-      :target-note="{ id: note.id, title: note.title }"
+      :target-note="attachTargetNote"
       @attached="handlePagesAttached"
     />
     <NoteMoveModal
       v-if="noteTreeWriteEnabled && note.id"
       v-model:visible="moveSelfVisible"
-      :note="moveSelfNote"
+      :note="moveTargetNote"
       @moved="handleSelfMoved"
+    />
+    <NoteRenameModal
+      v-if="noteTreeWriteEnabled"
+      v-model:visible="renamePageVisible"
+      :note="renameTargetNote"
+      @renamed="handlePageRenamed"
     />
   </div>
 </template>
@@ -168,6 +282,7 @@
     ref,
     watch,
   } from 'vue';
+  import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
   import router from '@/router';
@@ -176,14 +291,17 @@
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { bookmarkStore, noteStore, useUserStore } from '@/store';
-  import { contentLikelyHasHeadings } from '@/store/note';
+  import { bookmarkStore, noteStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import NoteSubpageSection from '@/components/noteLibrary/detail/NoteSubpageSection.vue';
+  import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
+  import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
+  import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
   import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
   import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
+  import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
   import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
@@ -206,9 +324,12 @@
   import { buildResourceHref, resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
-  import type { NoteBreadcrumbItem } from '@/types/noteTree';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
   import { resolveNoteLibraryListPath } from '@/utils/noteDetailNavigation';
+  import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
+  import { copyTextToClipboard } from '@/utils/clipboard';
+  import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
+  import type { NoteTreeItem } from '@/types/noteTree';
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -228,6 +349,7 @@
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
+  const nStore = noteStore();
   const { guardWrite } = useGuestGuard();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
   const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
@@ -268,18 +390,127 @@
     type: initialNoteType,
     parentId: null as string | null,
   });
+  const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
   const noteTreeWriteEnabled = computed(() => noteTreeFeatures.value.note_tree_write);
   const noteTreeSubtreeTrashEnabled = computed(
     () => noteTreeWriteEnabled.value && noteTreeFeatures.value.note_tree_subtree_trash,
   );
+  const canShowPrivateNavigation = computed(
+    () =>
+      noteTreeReadEnabled.value &&
+      nodeType.value === 'edit' &&
+      Boolean(note.id) &&
+      Boolean(user.id) &&
+      user.id === note.createBy,
+  );
+  const canShowDetailSidebar = computed(
+    () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
+  );
+  const noteWorkspace = useNoteWorkspaceStore();
+  const {
+    aiPreferredOpen,
+    browseParentId,
+    detailTab,
+    sidebarPreferredOpen,
+    sidebarWidth: noteWorkspaceSidebarWidth,
+  } = storeToRefs(noteWorkspace);
+  const initialDetailWorkspaceLayout = resolveNoteWorkspaceLayout(
+    typeof window === 'undefined' ? 1420 : window.innerWidth,
+    bookmark.isMobile,
+  );
+  const detailWorkspaceMode = ref(initialDetailWorkspaceLayout.mode);
+  const detailSidebarOverlayOpen = ref(false);
+  const detailAiOverlayOpen = ref(false);
+  const detailSidebarEffectiveOpen = computed(() =>
+    detailWorkspaceMode.value === 'wide' || detailWorkspaceMode.value === 'standard'
+      ? sidebarPreferredOpen.value
+      : detailSidebarOverlayOpen.value,
+  );
+  const detailAiEffectiveOpen = computed(() =>
+    detailWorkspaceMode.value === 'wide' ? aiPreferredOpen.value : detailAiOverlayOpen.value,
+  );
+
+  function handleDetailLayoutChange(layout: NoteWorkspaceLayoutState) {
+    if (detailWorkspaceMode.value !== layout.mode) {
+      detailSidebarOverlayOpen.value = false;
+      detailAiOverlayOpen.value = false;
+    }
+    detailWorkspaceMode.value = layout.mode;
+  }
+
+  function setDetailSidebarOverlayOpen(value: boolean) {
+    detailSidebarOverlayOpen.value = value;
+    if (value) detailAiOverlayOpen.value = false;
+  }
+
+  function setDetailAiOverlayOpen(value: boolean) {
+    detailAiOverlayOpen.value = value;
+    if (value) detailSidebarOverlayOpen.value = false;
+  }
+
+  function toggleDetailSidebar() {
+    if (detailWorkspaceMode.value === 'wide' || detailWorkspaceMode.value === 'standard') {
+      noteWorkspace.setSidebarPreferredOpen(!sidebarPreferredOpen.value);
+      return;
+    }
+    setDetailSidebarOverlayOpen(!detailSidebarOverlayOpen.value);
+  }
+
+  function toggleDetailAi() {
+    if (detailWorkspaceMode.value === 'wide') {
+      noteWorkspace.setAiPreferredOpen(!aiPreferredOpen.value);
+      return;
+    }
+    setDetailAiOverlayOpen(!detailAiOverlayOpen.value);
+  }
+  const {
+    childrenByParent,
+    currentBreadcrumb: detailBreadcrumb,
+    expandedIds,
+    loadingKeys: treeLoadingKeys,
+    treeError,
+    treeSearchChildrenByParent,
+    treeSearchError,
+    treeSearchExpandedIds,
+    treeSearchKeyword,
+    treeSearchLoading,
+    treeSearchMatchCount,
+    loadBreadcrumb: loadWorkspaceBreadcrumb,
+    loadChildren: loadTreeChildren,
+    refreshTree,
+    searchTree,
+    toggleExpanded,
+  } = useNoteTree({ enabled: canShowPrivateNavigation });
+  const detailSidebarMode = computed<'directory' | 'outline'>({
+    get: () => (detailTab.value === 'outline' ? 'outline' : 'directory'),
+    set: (value) => {
+      detailTab.value = value === 'outline' ? 'outline' : 'pages';
+    },
+  });
+  const detailTreeSearchValue = ref('');
+  const treeSearchActive = computed(() => Boolean(treeSearchKeyword.value.trim()));
+  const sidebarTreeChildrenByParent = computed(() =>
+    treeSearchActive.value ? treeSearchChildrenByParent.value : childrenByParent.value,
+  );
+  const sidebarTreeExpandedIds = computed(() =>
+    treeSearchActive.value ? treeSearchExpandedIds.value : expandedIds.value,
+  );
+  const sidebarTreeLoadingKeys = computed(() =>
+    treeSearchActive.value && treeSearchLoading.value
+      ? new Set([NOTE_TREE_ROOT_KEY])
+      : treeSearchActive.value
+        ? new Set<string>()
+        : treeLoadingKeys.value,
+  );
+  const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
+  let detailTreeSearchTimer = 0;
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
   const catalogDrawerOpen = ref(false);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
-  const detailBreadcrumb = ref<NoteBreadcrumbItem[]>([]);
   const detailBreadcrumbDisplay = computed(() => buildNoteBreadcrumbDisplay(detailBreadcrumb.value, bookmark.isMobile));
   let resourceResolveVersion = 0;
   let lastResourceRefSignature = '';
@@ -416,8 +647,6 @@
       note.content = normalizedContent;
     }
   });
-  const nodeType = ref<'edit' | 'add' | 'share'>('edit');
-
   const readonly = computed(() => {
     if (user.role === 'root') {
       return false;
@@ -476,7 +705,6 @@
   let latestRequestedTitle = note.title;
   let skipSaveOnLeave = false;
   let saveQueue: Promise<boolean> = Promise.resolve(true);
-  const nStore = noteStore();
   // 把当前笔记标题同步给 note store,供全局 AI 抽屉「@当前页面」显示真实笔记名
   // (抽屉是全局组件、拿不到详情页的响应式 note;离开笔记页后该值不再被读到,无需清理)。
   watch(
@@ -531,12 +759,8 @@
    * 不用 requestAnimationFrame 挂这个开关:后台标签页里 rAF 不触发,
    * 在新标签打开的笔记会永远开不了过渡 —— 首帧版面既然已经摆对,这里直接开即可。
    */
-  const catalogSettled = ref(false);
-  const catalogPresumed = computed(() => !catalogSettled.value && contentLikelyHasHeadings(note.content, note.type));
-
   async function refreshCatalog() {
     await nStore.generateTOC(note.content, note.type);
-    catalogSettled.value = true;
   }
 
   async function handleEditorReady() {
@@ -562,44 +786,175 @@
 
   const attachPagesVisible = ref(false);
   const moveSelfVisible = ref(false);
+  const renamePageVisible = ref(false);
+  const activeAttachTarget = ref<NoteTreeItem | null>(null);
+  const activeMoveTarget = ref<NoteTreeItem | null>(null);
+  const renameTargetNote = ref<{ id: string; title?: string } | null>(null);
   const subpageRefreshKey = ref(0);
-  const moveSelfNote = computed(() => ({
+  const subpageCount = ref(0);
+  const mobileNavigationOpen = ref(false);
+  const mobileNavigationParentId = ref<string | null>(null);
+  const mobileNavigationInitialTab = ref<'pages' | 'outline'>('pages');
+  const currentTreeNote = computed(() => ({
     id: note.id,
     title: note.title,
     parentId: note.parentId || detailBreadcrumb.value.at(-2)?.id || null,
   }));
+  const attachTargetNote = computed(() => activeAttachTarget.value || currentTreeNote.value);
+  const moveTargetNote = computed(() => activeMoveTarget.value || currentTreeNote.value);
 
-  function createChildPage() {
+  function createChildPage(target?: NoteTreeItem) {
     if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
     router.push({
       path: '/noteLibrary/add',
-      query: { type: 'html', parent: note.id, ...detailSourceQuery() },
+      query: { type: 'html', parent: target?.id || note.id, ...detailSourceQuery() },
     });
   }
 
-  function openAttachPages() {
+  function openAttachPages(target?: NoteTreeItem) {
     if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
+    activeAttachTarget.value = target || null;
     attachPagesVisible.value = true;
   }
 
   function handlePagesAttached() {
     attachPagesVisible.value = false;
+    activeAttachTarget.value = null;
     subpageRefreshKey.value += 1;
+    void refreshTree();
     void loadDetailBreadcrumb(note.id);
   }
 
-  function openMoveSelf() {
+  function openMoveSelf(target?: NoteTreeItem) {
     if (!noteTreeWriteEnabled.value || !note.id || readonly.value) return;
+    activeMoveTarget.value = target || null;
     moveSelfVisible.value = true;
   }
 
   function handleSelfMoved(result: { parentId?: string | null } | null) {
     moveSelfVisible.value = false;
-    if (result && Object.prototype.hasOwnProperty.call(result, 'parentId')) {
+    const movedCurrentPage = !activeMoveTarget.value || activeMoveTarget.value.id === note.id;
+    if (movedCurrentPage && result && Object.prototype.hasOwnProperty.call(result, 'parentId')) {
       note.parentId = result.parentId || null;
     }
+    activeMoveTarget.value = null;
     subpageRefreshKey.value += 1;
+    void refreshTree();
     void loadDetailBreadcrumb(note.id);
+  }
+
+  function openRenamePage(target: NoteTreeItem) {
+    if (!guardWrite(undefined, 'rename-note') || readonly.value) return;
+    renameTargetNote.value = { id: target.id, title: target.title || '' };
+    renamePageVisible.value = true;
+  }
+
+  async function handlePageRenamed(updated: { id: string; title: string }) {
+    renamePageVisible.value = false;
+    renameTargetNote.value = null;
+    if (updated.id === note.id) {
+      note.title = updated.title;
+      note.lastTitle = updated.title;
+    }
+    recordOperation({ module: '笔记', operation: `重命名笔记【${updated.title}】` });
+    await refreshTree();
+    if (updated.id === note.id) await loadDetailBreadcrumb(note.id);
+  }
+
+  async function toggleSidebarPageTop(target: NoteTreeItem) {
+    if (!guardWrite(undefined, 'pin-note') || readonly.value) return;
+    const response = await apiBasePost('/api/note/toggleNoteTop', { id: target.id });
+    if (response.status !== 200) return;
+    target.isTop = Boolean(response.data?.isTop);
+    message.success(target.isTop ? t('common.pinned') : t('common.unpinned'));
+    await refreshTree();
+  }
+
+  async function copySidebarPageLink(target: NoteTreeItem) {
+    const relative = router.resolve({ path: `/noteLibrary/${encodeURIComponent(target.id)}` }).href;
+    let link = relative;
+    try {
+      link = new URL(relative, window.location.origin).toString();
+    } catch {
+      // 自定义 WebView origin 不完整时仍可复制站内相对地址。
+    }
+    if (await copyTextToClipboard(link)) message.success(t('common.linkCopied'));
+    else message.error(t('note.copyLinkFailed'));
+  }
+
+  async function deleteSidebarPage(target: NoteTreeItem) {
+    if (target.id === note.id) {
+      await delNote();
+      return;
+    }
+    if (!guardWrite(undefined, 'delete-note') || readonly.value) return;
+    let preview;
+    try {
+      preview = await fetchNoteDeletePreview(target.id);
+    } catch {
+      message.error(t('note.deletePreviewFailed'));
+      return;
+    }
+    Alert.alert({
+      title: t('note.deleteOneTitle'),
+      content: preview.descendantCount
+        ? t('note.deleteSubtreeConfirm', {
+            title: target.title || t('note.untitled'),
+            descendants: preview.descendantCount,
+          })
+        : t('note.deleteOneConfirm', { title: target.title || t('note.untitled') }),
+      okText:
+        preview.totalCount > 1 ? t('note.moveItemsToTrash', { count: preview.totalCount }) : t('note.moveToTrash'),
+      async onOk() {
+        const endpoint = noteTreeSubtreeTrashEnabled.value ? '/api/note/deleteNoteSubtree' : '/api/note/delNote';
+        const payload = noteTreeSubtreeTrashEnabled.value
+          ? { id: preview.id, expectedDescendantCount: preview.descendantCount }
+          : { ids: [String(target.id)] };
+        const response = await apiBasePost(endpoint, payload);
+        if (response.status === 409) {
+          message.warning(response.msg || t('note.deleteScopeChanged'));
+          return;
+        }
+        if (response.status !== 200) return;
+        message.success(t('common.deleteSuccess'));
+        await refreshTree();
+        await loadDetailBreadcrumb(note.id);
+      },
+    });
+  }
+
+  async function toggleTreeNode(node: any) {
+    await toggleExpanded(node);
+  }
+
+  async function browseSidebarChildren(id: string) {
+    noteWorkspace.setNavigation({ browseParentId: id });
+    await loadTreeChildren(id);
+  }
+
+  function openMobileNavigation(parentId: string | null = null, tab: 'pages' | 'outline' = 'pages') {
+    mobileNavigationParentId.value = parentId ?? note.parentId ?? detailBreadcrumb.value.at(-2)?.id ?? null;
+    mobileNavigationInitialTab.value = tab;
+    mobileNavigationOpen.value = true;
+  }
+
+  async function browseCurrentChildren() {
+    if (!note.id) return;
+    if (bookmark.isMobile) {
+      openMobileNavigation(note.id, 'pages');
+      return;
+    }
+    if (detailWorkspaceMode.value === 'wide' || detailWorkspaceMode.value === 'standard') {
+      noteWorkspace.setSidebarPreferredOpen(true);
+    } else {
+      setDetailSidebarOverlayOpen(true);
+    }
+    noteWorkspace.setNavigation({ browseParentId: note.id });
+    await loadTreeChildren(note.id);
+    const currentNode = Object.values(childrenByParent.value)
+      .flat()
+      .find((item) => item.id === note.id);
+    if (currentNode?.hasChildren && !expandedIds.value.has(note.id)) await toggleExpanded(currentNode);
   }
 
   function openNoteDetailPage(id: string) {
@@ -623,19 +978,18 @@
   }
 
   async function loadDetailBreadcrumb(noteId: string) {
-    if (!noteTreeReadEnabled.value || !noteId) {
+    if (!canShowPrivateNavigation.value || !noteId) {
       detailBreadcrumb.value = [];
       return;
     }
-    try {
-      const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true });
-      detailBreadcrumb.value =
-        response.status === 200 && Array.isArray(response.data?.items) ? response.data.items : [];
-      if (detailBreadcrumb.value.length) note.parentId = detailBreadcrumb.value.at(-2)?.id || null;
-    } catch {
-      detailBreadcrumb.value = [];
-    }
+    const items = await loadWorkspaceBreadcrumb(noteId);
+    if (items.length) note.parentId = items.at(-2)?.id || null;
   }
+
+  watch(detailTreeSearchValue, (value) => {
+    window.clearTimeout(detailTreeSearchTimer);
+    detailTreeSearchTimer = window.setTimeout(() => void searchTree(value), 180);
+  });
 
   // —— 模板实例化(新建时从 query 读取模板并预填标题/正文) ——
   const saveTemplateVisible = ref(false);
@@ -1139,6 +1493,7 @@
     }
   });
   onUnmounted(() => {
+    window.clearTimeout(detailTreeSearchTimer);
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
     window.removeEventListener('focus', refreshEditorResourceRefs);
@@ -1154,7 +1509,7 @@
 
 <style lang="less">
   .note-container {
-    --note-detail-header-height: 60px;
+    --note-detail-header-height: 58px;
 
     width: 100%;
     height: 100%;
@@ -1165,7 +1520,7 @@
     flex-direction: column;
   }
   .note-container--mobile {
-    --note-detail-header-height: 48px;
+    --note-detail-header-height: 56px;
   }
   .note-body-title {
     height: 56px;
@@ -1277,17 +1632,16 @@
       }
     }
   }
-  .note-body {
-    display: flex;
-    padding: 20px;
-    flex-direction: row;
-    gap: 20px;
+  .note-body.note-workspace-shell {
+    display: grid;
+    padding: 0;
     box-sizing: border-box;
     height: calc(100% - var(--note-detail-header-height));
     position: fixed;
     top: var(--note-detail-header-height);
     width: 100%;
     min-width: 0;
+    background: var(--workspace-panel-bg-color, var(--surface-page-bg));
   }
   .inbox-organize-banner {
     position: fixed;
@@ -1311,9 +1665,20 @@
     top: calc(var(--note-detail-header-height) + 48px);
     height: calc(100% - var(--note-detail-header-height) - 48px);
   }
-  .catalog-panel {
-    flex: 2;
+  .note-body > .note-workspace-shell__main {
     min-width: 0;
+    min-height: 0;
+    padding: 16px;
+    display: flex;
+    box-sizing: border-box;
+  }
+
+  .note-detail-sidebar-panel {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    padding: 12px;
+    box-sizing: border-box;
   }
 
   /*
@@ -1353,7 +1718,9 @@
   .editor-panel {
     --note-editor-header-bg: var(--surface-panel-bg);
 
-    flex: 10;
+    flex: 1 1 auto;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     box-sizing: border-box;
     overflow: hidden;
@@ -1363,9 +1730,16 @@
   }
 
   .ai-panel {
-    flex: 3;
-    min-width: 310px;
-    width: 0;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+  }
+
+  .note-detail-ai-slot {
+    width: 100%;
+    height: 100%;
+    padding: 16px;
+    box-sizing: border-box;
   }
 
   /*
@@ -1430,16 +1804,11 @@
   }
 
   @media (max-width: 1024px) {
-    .note-body {
-      padding: 0;
+    .note-body > .note-workspace-shell__main {
+      padding: 10px;
     }
     .note-body-header {
-      width: calc(100% - 40px);
-    }
-    .catalog-panel {
-      flex: unset !important;
-      width: 0;
-      min-width: none !important;
+      width: 100%;
     }
     #editor-toolbar .tox-toolbar {
       flex-wrap: nowrap !important;
@@ -1448,9 +1817,8 @@
   }
 
   @media (max-width: 767px) {
-    .note-body {
-      // 移动端没有目录和 AI 助手侧栏，保留桌面列间距会在左侧形成无效留白。
-      gap: 0;
+    .note-body > .note-workspace-shell__main {
+      padding: 0;
     }
 
     .editor-panel {
@@ -1463,6 +1831,16 @@
       width: 100%;
       max-width: 100%;
       min-width: 0;
+    }
+
+    .note-detail-breadcrumb {
+      height: 35px;
+      cursor: pointer;
+    }
+
+    .note-detail-crumb {
+      height: 30px;
+      font-size: 12px;
     }
 
     .note-body-title {

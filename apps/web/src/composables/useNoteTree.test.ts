@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, ref } from 'vue';
+import { createPinia, setActivePinia } from 'pinia';
 
 const mocks = vi.hoisted(() => ({
   route: {
@@ -25,6 +26,7 @@ const { NOTE_TREE_ROOT_KEY, useNoteTree } = await import('./useNoteTree');
 
 describe('useNoteTree', () => {
   beforeEach(() => {
+    setActivePinia(createPinia());
     vi.clearAllMocks();
     sessionStorage.clear();
     mocks.route.value = {
@@ -215,7 +217,7 @@ describe('useNoteTree', () => {
 
     expect(mocks.apiBasePost).toHaveBeenCalledWith(
       '/api/note/queryNoteTree',
-      { parentId: 'project', depth: 'all', keyword: '深层页面' },
+      { parentId: null, depth: 'all', keyword: '深层页面' },
       { silent: true },
     );
     expect(tree?.treeSearchMatchCount.value).toBe(1);

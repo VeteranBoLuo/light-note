@@ -1,5 +1,5 @@
 <template>
-  <div class="todo-plan-editor">
+  <div class="todo-plan-editor" :class="{ 'is-desktop-layout': desktopLayout, 'is-mobile-step': mobileStep > 0 }">
     <section v-show="mobileStep !== 3" v-if="item?.planVersion === 2 && item.seriesId" class="todo-plan-editor__scope">
       <div>
         <strong>{{ t('inbox.todoPlanEditScope') }}</strong>
@@ -11,8 +11,8 @@
     <section v-show="mobileStep !== 3" class="todo-plan-editor__section">
       <header>
         <div>
-          <strong>{{ t('inbox.todoPlanTimeTitle') }}</strong>
-          <small>{{ t('inbox.todoPlanTimeHint') }}</small>
+          <strong>{{ mobileStep === 2 ? t('inbox.todoPlanStepSchedule') : t('inbox.todoPlanTimeTitle') }}</strong>
+          <small>{{ mobileStep === 2 ? t('inbox.todoPlanHint') : t('inbox.todoPlanTimeHint') }}</small>
         </div>
       </header>
       <div class="todo-plan-editor__grid">
@@ -25,70 +25,96 @@
           <BDateTimePicker v-model:value="form.dueAt" :placeholder="t('inbox.todoDuePlaceholder')" />
         </label>
       </div>
-      <label>
+      <label class="todo-plan-editor__timezone">
         <span>{{ t('inbox.todoTimezone') }}</span>
         <BSelect v-model:value="form.timezone" :options="timezoneOptions" />
       </label>
     </section>
 
     <section v-show="mobileStep !== 3" class="todo-plan-editor__section">
-      <header>
+      <header v-if="mobileStep !== 2">
         <div>
           <strong>{{ t('inbox.todoPlanTitle') }}</strong>
           <small>{{ t('inbox.todoPlanHint') }}</small>
         </div>
-        <BSelect v-if="!currentOnly" v-model:value="form.planType" :options="planTypeOptions" />
-        <span v-else class="todo-plan-editor__current-badge">{{ t('inbox.todoPlanCurrentOnly') }}</span>
+        <span v-if="currentOnly" class="todo-plan-editor__current-badge">{{ t('inbox.todoPlanCurrentOnly') }}</span>
       </header>
 
+      <div
+        v-if="!currentOnly"
+        class="todo-plan-editor__segment todo-plan-editor__segment--plan"
+        role="group"
+        :aria-label="t('inbox.todoPlanTitle')"
+      >
+        <span v-if="mobileStep === 2" class="todo-plan-editor__segment-label">{{ t('inbox.todoPlanTitle') }}</span>
+        <BButton
+          v-for="option in planTypeOptions"
+          :key="option.value"
+          :class="{ active: form.planType === option.value }"
+          @click="selectPlanType(option.value)"
+        >
+          {{ option.label }}
+        </BButton>
+      </div>
+
       <template v-if="!currentOnly && form.planType === 'scheduled'">
-        <div class="todo-plan-editor__grid">
-          <label>
-            <span>{{ t('inbox.todoPlanFrequency') }}</span>
-            <BSelect v-model:value="form.frequency" :options="frequencyOptions" />
-          </label>
-          <label>
-            <span>{{ t('inbox.todoPlanEvery') }}</span>
-            <div class="todo-plan-editor__inline">
-              <BInput v-model:value="form.planInterval" type="number" />
-              <span>{{ frequencyUnitLabel }}</span>
-            </div>
-          </label>
-        </div>
-
-        <div v-if="form.frequency === 'weekly'" class="todo-plan-editor__weekdays">
-          <span>{{ t('inbox.todoPlanWeekdays') }}</span>
-          <div>
-            <BCheckbox v-for="day in weekdayOptions" :key="day.value" v-model="weekdayState[day.value]">
-              {{ day.label }}
-            </BCheckbox>
+        <BButton
+          v-if="mobileStep > 0"
+          class="todo-plan-editor__schedule-summary"
+          @click="scheduleAdvancedOpen = !scheduleAdvancedOpen"
+        >
+          <span>{{ t('inbox.todoPlanRepeatSummary') }}</span>
+          <strong>{{ scheduleSummary }}</strong>
+        </BButton>
+        <div v-show="mobileStep === 0 || scheduleAdvancedOpen" class="todo-plan-editor__scheduled-config">
+          <div class="todo-plan-editor__grid">
+            <label>
+              <span>{{ t('inbox.todoPlanFrequency') }}</span>
+              <BSelect v-model:value="form.frequency" :options="frequencyOptions" />
+            </label>
+            <label>
+              <span>{{ t('inbox.todoPlanEvery') }}</span>
+              <div class="todo-plan-editor__inline">
+                <BInput v-model:value="form.planInterval" type="number" />
+                <span>{{ frequencyUnitLabel }}</span>
+              </div>
+            </label>
           </div>
-        </div>
 
-        <div v-if="form.frequency === 'monthly'" class="todo-plan-editor__grid">
-          <label>
-            <span>{{ t('inbox.todoPlanMonthDay') }}</span>
-            <BInput v-model:value="form.monthDay" type="number" />
-          </label>
-          <label>
-            <span>{{ t('inbox.todoPlanShortMonth') }}</span>
-            <BSelect v-model:value="form.shortMonthPolicy" :options="shortMonthOptions" />
-          </label>
-        </div>
+          <div v-if="form.frequency === 'weekly'" class="todo-plan-editor__weekdays">
+            <span>{{ t('inbox.todoPlanWeekdays') }}</span>
+            <div>
+              <BCheckbox v-for="day in weekdayOptions" :key="day.value" v-model="weekdayState[day.value]">
+                {{ day.label }}
+              </BCheckbox>
+            </div>
+          </div>
 
-        <div class="todo-plan-editor__grid">
-          <label>
-            <span>{{ t('inbox.todoPlanEndMode') }}</span>
-            <BSelect v-model:value="form.endMode" :options="endModeOptions" />
-          </label>
-          <label v-if="form.endMode === 'count'">
-            <span>{{ t('inbox.todoPlanCount') }}</span>
-            <BInput v-model:value="form.endCount" type="number" />
-          </label>
-          <label v-else-if="form.endMode === 'until'">
-            <span>{{ t('inbox.todoPlanUntil') }}</span>
-            <BDateTimePicker v-model:value="form.untilAt" />
-          </label>
+          <div v-if="form.frequency === 'monthly'" class="todo-plan-editor__grid">
+            <label>
+              <span>{{ t('inbox.todoPlanMonthDay') }}</span>
+              <BInput v-model:value="form.monthDay" type="number" />
+            </label>
+            <label>
+              <span>{{ t('inbox.todoPlanShortMonth') }}</span>
+              <BSelect v-model:value="form.shortMonthPolicy" :options="shortMonthOptions" />
+            </label>
+          </div>
+
+          <div class="todo-plan-editor__grid">
+            <label>
+              <span>{{ t('inbox.todoPlanEndMode') }}</span>
+              <BSelect v-model:value="form.endMode" :options="endModeOptions" />
+            </label>
+            <label v-if="form.endMode === 'count'">
+              <span>{{ t('inbox.todoPlanCount') }}</span>
+              <BInput v-model:value="form.endCount" type="number" />
+            </label>
+            <label v-else-if="form.endMode === 'until'">
+              <span>{{ t('inbox.todoPlanUntil') }}</span>
+              <BDateTimePicker v-model:value="form.untilAt" />
+            </label>
+          </div>
         </div>
       </template>
 
@@ -117,11 +143,34 @@
     <section v-show="mobileStep !== 2" ref="reminderEditorRef" class="todo-plan-editor__section">
       <header>
         <div>
-          <strong>{{ repeatingPlan ? t('inbox.todoPerItemReminder') : t('inbox.todoReminder') }}</strong>
+          <strong>{{
+            mobileStep === 3
+              ? t('inbox.todoPlanStepReminder')
+              : repeatingPlan
+                ? t('inbox.todoPerItemReminder')
+                : t('inbox.todoReminder')
+          }}</strong>
           <small>{{ t('inbox.todoPerItemReminderHint') }}</small>
         </div>
-        <BSelect v-model:value="form.reminderMode" :options="reminderModeOptions" />
       </header>
+
+      <div
+        class="todo-plan-editor__segment todo-plan-editor__segment--reminder"
+        role="group"
+        :aria-label="repeatingPlan ? t('inbox.todoPerItemReminder') : t('inbox.todoReminder')"
+      >
+        <span v-if="mobileStep === 3" class="todo-plan-editor__segment-label">{{
+          repeatingPlan ? t('inbox.todoPerItemReminder') : t('inbox.todoReminder')
+        }}</span>
+        <BButton
+          v-for="option in reminderModeOptions"
+          :key="option.value"
+          :class="{ active: form.reminderMode === option.value }"
+          @click="selectReminderMode(option.value)"
+        >
+          {{ option.label }}
+        </BButton>
+      </div>
 
       <template v-if="form.reminderMode !== 'none'">
         <div class="todo-plan-editor__grid">
@@ -189,14 +238,6 @@
       </template>
     </section>
 
-    <section v-show="mobileStep !== 2" v-if="needsPastPolicy" class="todo-plan-editor__past">
-      <div>
-        <strong>{{ t('inbox.todoPastChoiceTitle') }}</strong>
-        <small>{{ t('inbox.todoPastChoiceHint') }}</small>
-      </div>
-      <BSelect v-model:value="form.pastPolicy" :options="pastPolicyOptions" />
-    </section>
-
     <section v-show="mobileStep !== 2" class="todo-plan-preview" :class="{ 'has-error': previewError }">
       <header>
         <div>
@@ -208,9 +249,20 @@
       <p v-if="previewError" class="todo-plan-preview__error">{{ previewError }}</p>
       <template v-else-if="preview">
         <strong class="todo-plan-preview__headline">{{ preview.displaySummary.title }}</strong>
-        <p>{{ preview.displaySummary.range }}</p>
-        <p v-if="preview.displaySummary.timing">{{ preview.displaySummary.timing }}</p>
-        <p>{{ preview.displaySummary.reminder }}</p>
+        <div class="todo-plan-preview__summary-list">
+          <div>
+            <span>{{ t('inbox.todoPlanPreviewRange') }}</span>
+            <strong>{{ preview.displaySummary.range }}</strong>
+          </div>
+          <div v-if="preview.displaySummary.timing">
+            <span>{{ t('inbox.todoPlanPreviewTiming') }}</span>
+            <strong>{{ preview.displaySummary.timing }}</strong>
+          </div>
+          <div>
+            <span>{{ t('inbox.todoPlanPreviewReminder') }}</span>
+            <strong>{{ preview.displaySummary.reminder }}</strong>
+          </div>
+        </div>
         <div class="todo-plan-preview__facts">
           <span>{{
             t('inbox.todoPlanInstances', { count: preview.occurrenceCount ?? preview.generatedNowCount })
@@ -222,6 +274,24 @@
         </div>
       </template>
       <p v-else>{{ t('inbox.todoPlanPreviewWaiting') }}</p>
+      <div v-if="needsPastPolicy" class="todo-plan-editor__past">
+        <div>
+          <strong>{{ t('inbox.todoPastChoiceTitle') }}</strong>
+          <small>{{ t('inbox.todoPastChoiceHint') }}</small>
+        </div>
+        <div class="todo-plan-editor__past-options" role="group" :aria-label="t('inbox.todoPastChoose')">
+          <BButton
+            v-for="option in pastPolicyOptions"
+            :key="option.value"
+            :class="{ active: form.pastPolicy === option.value }"
+            @click="selectPastPolicy(option.value)"
+          >
+            <strong>{{ option.label }}</strong>
+            <small>{{ pastPolicyHint(option.value) }}</small>
+          </BButton>
+        </div>
+      </div>
+      <slot name="preview-actions" />
     </section>
   </div>
 </template>
@@ -263,14 +333,17 @@
       resourceRefs: TodoResourceRefInput[];
       initialDueAt?: string | null;
       legacyConversion?: boolean;
+      /** PC 使用原型中的左侧表单 + 右侧权威预览布局。 */
+      desktopLayout?: boolean;
       /** 0 为桌面完整表单；2/3 分别只展示移动端计划或提醒确认步骤。 */
       mobileStep?: 0 | 1 | 2 | 3;
       resetKey?: number;
     }>(),
-    { item: null, initialDueAt: null, legacyConversion: false, mobileStep: 0, resetKey: 0 },
+    { item: null, initialDueAt: null, legacyConversion: false, desktopLayout: false, mobileStep: 0, resetKey: 0 },
   );
   const emit = defineEmits<{
     ready: [value: { scope: TodoPlanScope; payload: TodoPlanWritePayload } | null];
+    'preview-count': [count: number];
   }>();
   const { t, locale } = useI18n();
   const preview = ref<TodoPlanPreview | null>(null);
@@ -279,6 +352,7 @@
   const needsPastPolicy = ref(false);
   const reminderEditorRef = ref<HTMLElement | null>(null);
   const reminderAdvancedOpen = ref(false);
+  const scheduleAdvancedOpen = ref(false);
   let previewTimer: number | null = null;
   let previewSequence = 0;
   let idempotencyKey = generateUUID();
@@ -371,6 +445,24 @@
         ? t('inbox.todoReminderWeeks')
         : t('inbox.todoPlanMonths'),
   );
+  const scheduleSummary = computed(() => {
+    const frequencyLabel =
+      form.frequency === 'daily'
+        ? t('inbox.todoRecurrenceDaily')
+        : form.frequency === 'weekly'
+          ? t('inbox.todoRecurrenceWeekly')
+          : t('inbox.todoRecurrenceMonthly');
+    const interval = Number(form.planInterval) || 1;
+    const frequency =
+      interval === 1 ? frequencyLabel : `${t('inbox.todoPlanEvery')} ${interval} ${frequencyUnitLabel.value}`;
+    const ending =
+      form.endMode === 'count'
+        ? t('inbox.todoPlanCountSummary', { count: Number(form.endCount) || 1 })
+        : form.endMode === 'until'
+          ? t('inbox.todoPlanUntilSummary', { date: datePart(form.untilAt) || '—' })
+          : t('inbox.todoPlanEndNever');
+    return `${frequency} · ${ending}`;
+  });
   const weekdayOptions = computed(() => {
     const base = new Date(2026, 7, 3);
     return Array.from({ length: 7 }, (_, index) => ({
@@ -414,11 +506,28 @@
     { value: 'skip', label: t('inbox.todoQuietSkip') },
   ]);
   const pastPolicyOptions = computed(() => [
-    { value: '', label: t('inbox.todoPastChoose') },
-    { value: 'keep_overdue', label: t('inbox.todoPastKeep') },
-    { value: 'restart_today_keep_count', label: t('inbox.todoPastRestart') },
-    { value: 'skip_missed', label: t('inbox.todoPastSkip') },
+    { value: 'keep_overdue' as const, label: t('inbox.todoPastKeep') },
+    { value: 'restart_today_keep_count' as const, label: t('inbox.todoPastRestart') },
+    { value: 'skip_missed' as const, label: t('inbox.todoPastSkip') },
   ]);
+
+  function selectPlanType(value: '' | 'once' | 'scheduled' | 'after_completion') {
+    form.planType = value;
+  }
+
+  function selectReminderMode(value: 'none' | 'once_per_instance' | 'nudge') {
+    form.reminderMode = value;
+  }
+
+  function selectPastPolicy(value: TodoPastPolicy) {
+    form.pastPolicy = value;
+  }
+
+  function pastPolicyHint(value: TodoPastPolicy) {
+    if (value === 'keep_overdue') return t('inbox.todoPastKeepHint');
+    if (value === 'restart_today_keep_count') return t('inbox.todoPastRestartHint');
+    return t('inbox.todoPastSkipHint');
+  }
 
   function datePart(value: string) {
     return String(value || '').slice(0, 10);
@@ -541,6 +650,7 @@
       if (response.status !== 200) throw new Error(response.msg || t('inbox.todoPlanPreviewFailed'));
       const next = response.data as TodoPlanPreview;
       preview.value = next;
+      emit('preview-count', Math.max(1, Number(next.occurrenceCount ?? next.generatedNowCount ?? 1)));
       needsPastPolicy.value = next.requiredChoices?.includes('pastPolicy') || false;
       if (needsPastPolicy.value && !form.pastPolicy) {
         previewError.value = '';
@@ -571,6 +681,7 @@
     previewError.value = '';
     preview.value = null;
     emit('ready', null);
+    emit('preview-count', 1);
     if (previewTimer !== null) window.clearTimeout(previewTimer);
     previewTimer = window.setTimeout(() => void refreshPreview(), 350);
   }
@@ -579,6 +690,7 @@
     idempotencyKey = generateUUID();
     idempotencyFingerprint = '';
     reminderAdvancedOpen.value = false;
+    scheduleAdvancedOpen.value = false;
     const item = props.item;
     const timing = item?.series?.timing;
     const plan = item?.series?.plan;
@@ -653,24 +765,25 @@
   .todo-plan-editor {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
+  }
+  .todo-plan-editor.is-desktop-layout {
+    display: contents;
   }
   .todo-plan-editor__section,
   .todo-plan-editor__scope,
-  .todo-plan-preview,
-  .todo-plan-editor__past {
+  .todo-plan-preview {
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 16px;
-    border: 1px solid var(--card-border-color);
-    border-radius: 16px;
-    background: var(--background-color);
+    border: 1px solid var(--surface-border-color);
+    border-radius: 15px;
+    background: var(--card-background);
   }
   .todo-plan-editor__section > header,
   .todo-plan-editor__scope,
-  .todo-plan-preview > header,
-  .todo-plan-editor__past {
+  .todo-plan-preview > header {
     flex-direction: row;
     align-items: flex-start;
     justify-content: space-between;
@@ -704,6 +817,38 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
+  .todo-plan-editor__segment {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 4px;
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .todo-plan-editor__segment :deep(.b_btn) {
+    min-width: 0;
+    min-height: 38px;
+    flex: 1 1 0;
+    padding: 0 9px;
+    border: 0;
+    border-radius: 9px;
+    background: transparent;
+    color: var(--desc-color);
+    white-space: nowrap;
+  }
+  .todo-plan-editor__segment :deep(.b_btn.active) {
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 700;
+  }
+  .todo-plan-editor__segment-label {
+    width: 100%;
+    flex: 0 0 100%;
+    padding: 3px 4px 0;
+    color: var(--text-color);
+    font-size: 12px;
+    font-weight: 650;
+  }
   .todo-plan-editor__inline,
   .todo-plan-editor__channels {
     display: flex;
@@ -714,6 +859,30 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .todo-plan-editor__scheduled-config {
+    display: grid;
+    gap: 12px;
+  }
+  .todo-plan-editor__schedule-summary {
+    width: 100%;
+    height: auto;
+    min-height: 46px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 11px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+    text-align: left;
+  }
+  .todo-plan-editor__schedule-summary > span {
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .todo-plan-editor__schedule-summary > strong {
+    color: var(--text-color);
+    font-size: 13px;
   }
   .todo-plan-editor__advanced-toggle {
     align-self: flex-start;
@@ -743,19 +912,46 @@
     font-size: 12px;
     font-weight: 600;
   }
-  .todo-plan-editor__past {
-    border-color: #d97706;
-    background: #fffbeb;
-  }
   .todo-plan-preview {
-    border: 2px solid var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+    border-color: var(--primary-color);
+    background: var(--card-background);
+  }
+  .todo-plan-editor.is-desktop-layout > .todo-plan-preview {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 388px;
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: 20px;
+    border: 0;
+    border-left: 1px solid var(--surface-border-color);
+    border-radius: 0;
+    background: var(--workspace-panel-bg-color);
   }
   .todo-plan-preview.has-error {
     border-color: var(--danger-color, #e5484d);
   }
   .todo-plan-preview__headline {
-    font-size: 16px;
+    font-size: 18px;
+  }
+  .todo-plan-preview__summary-list {
+    display: grid;
+    gap: 11px;
+    margin-top: 2px;
+  }
+  .todo-plan-preview__summary-list > div {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .todo-plan-preview__summary-list span {
+    color: var(--desc-color);
+  }
+  .todo-plan-preview__summary-list strong {
+    line-height: 1.55;
   }
   .todo-plan-preview__facts {
     display: flex;
@@ -769,11 +965,79 @@
     color: var(--desc-color);
     font-size: 12px;
   }
+  .todo-plan-editor__past {
+    display: grid;
+    gap: 10px;
+    margin-top: 2px;
+    padding: 12px;
+    border: 1px solid var(--chip-pending-border, #d97706);
+    border-radius: 12px;
+    background: var(--chip-pending-bg, #fffbeb);
+    color: var(--chip-pending-fg, #92400e);
+  }
+  .todo-plan-editor__past small {
+    color: inherit;
+    opacity: 0.82;
+  }
+  .todo-plan-editor__past-options {
+    display: grid;
+    gap: 8px;
+  }
+  .todo-plan-editor__past-options :deep(.b_btn) {
+    display: grid;
+    width: 100%;
+    height: auto;
+    min-height: 54px;
+    justify-items: start;
+    gap: 2px;
+    padding: 9px 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+    color: var(--text-color);
+    text-align: left;
+    white-space: normal;
+  }
+  .todo-plan-editor__past-options :deep(.b_btn.active) {
+    border-color: var(--primary-color);
+    box-shadow: inset 3px 0 0 var(--primary-color);
+  }
+  .todo-plan-editor__past-options :deep(.b_btn strong) {
+    font-size: 12px;
+  }
+  .todo-plan-editor__past-options :deep(.b_btn small) {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
   .todo-plan-preview__error {
     color: var(--danger-color, #e5484d) !important;
     font-weight: 600;
   }
-  @media (max-width: 640px) {
+  @media (max-width: 980px) {
+    .todo-plan-editor.is-desktop-layout > .todo-plan-preview {
+      position: static;
+      width: auto;
+      min-height: 0;
+      padding: 16px;
+      border: 1px solid var(--primary-color);
+      border-radius: 15px;
+      background: var(--card-background);
+    }
+  }
+  @media (max-width: 767px) {
+    .todo-plan-editor.is-mobile-step {
+      gap: 15px;
+    }
+    .todo-plan-editor.is-mobile-step > .todo-plan-editor__section {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .todo-plan-editor.is-mobile-step .todo-plan-editor__timezone {
+      display: none;
+    }
     .todo-plan-editor__grid {
       grid-template-columns: 1fr;
     }
@@ -787,6 +1051,15 @@
     .todo-plan-editor__scope :deep(.b-select),
     .todo-plan-editor__past :deep(.b-select) {
       width: 100%;
+    }
+    .todo-plan-editor.is-mobile-step > .todo-plan-preview {
+      padding: 15px;
+      border: 1px solid var(--primary-color);
+      border-radius: 16px;
+      background: var(--card-background);
+    }
+    .todo-plan-preview__summary-list > div {
+      grid-template-columns: 68px minmax(0, 1fr);
     }
   }
   :global(html.light-note-android-webview) .todo-plan-preview {

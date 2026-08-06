@@ -1,7 +1,7 @@
 <template>
   <BDrawer
     :open="open"
-    :title="t('note.chooseDirectory')"
+    :title="t('note.chooseBrowseScope')"
     placement="bottom"
     height="min(88dvh, 760px)"
     body-padding="10px 12px max(10px, env(safe-area-inset-bottom))"
@@ -73,7 +73,7 @@
             <BButton
               class="note-drawer-enter"
               :disabled="!item.hasChildren"
-              :aria-label="t('note.enterDirectory')"
+              :aria-label="t('note.browseChildPages')"
               @click="browseTo(item.id)"
             >
               <SvgIcon v-if="item.hasChildren" :src="icon.arrow_right" size="15" aria-hidden="true" />
@@ -173,7 +173,7 @@
   let forceClosing = false;
 
   const tabs = computed(() => [
-    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.directoryTab') }] : []),
+    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.pagesTab') }] : []),
     { key: 'tags', label: t('note.tagsTab') },
   ]);
   const browseTitle = computed(() => breadcrumb.value[breadcrumb.value.length - 1]?.title || t('note.knowledgeRoot'));
@@ -267,12 +267,16 @@
             },
           ]
         : []),
-      {
-        label: t('note.moveToTrash'),
-        icon: icon.table_delete,
-        danger: true,
-        function: () => closeAndEmit('delete', node),
-      },
+      ...(props.writeEnabled
+        ? [
+            {
+              label: t('note.moveToTrash'),
+              icon: icon.table_delete,
+              danger: true,
+              function: () => closeAndEmit('delete', node),
+            },
+          ]
+        : []),
     ];
   }
 

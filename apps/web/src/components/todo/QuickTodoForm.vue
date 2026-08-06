@@ -2,7 +2,7 @@
   <div class="quick-todo-form">
     <div class="quick-todo-form__intro">
       <strong>{{ t('inbox.quickTodoHeading') }}</strong>
-      <span>{{ t('inbox.quickTodoHint') }}</span>
+      <span>{{ t('inbox.quickTodoEnterHint') }}</span>
     </div>
 
     <label class="quick-todo-form__title">
@@ -15,7 +15,6 @@
         :placeholder="t('inbox.todoTitlePlaceholder')"
         @enter="submit"
       />
-      <small>{{ t('inbox.quickTodoEnterHint') }}</small>
     </label>
 
     <div class="quick-todo-form__options">
@@ -208,8 +207,27 @@
   }
 
   @media (max-width: 767px) {
+    .quick-todo-form {
+      gap: 14px;
+    }
+
+    .quick-todo-form__intro {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .quick-todo-form__intro strong {
+      font-size: 15px;
+    }
+
+    .quick-todo-form__intro span {
+      font-size: 13px;
+    }
+
     .quick-todo-form__options {
       grid-template-columns: 1fr;
+      gap: 14px;
     }
 
     .quick-todo-form__field :deep(.b-select) {
@@ -219,7 +237,50 @@
     .quick-todo-form__actions :deep(.b_btn) {
       flex: 1 1 0;
       width: auto;
-      min-height: 40px;
+      height: 48px;
+      min-height: 48px;
+    }
+
+    .quick-todo-form__actions {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 2;
+      gap: 9px;
+      padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
+      border-top: 1px solid var(--surface-divider-color);
+      background: var(--card-background);
+    }
+
+    .quick-todo-form__date-options {
+      gap: 2px;
+    }
+
+    .quick-todo-form__date-options :deep(.b_btn) {
+      position: relative;
+      z-index: 0;
+      isolation: isolate;
+      min-height: 44px;
+      padding: 0 8px;
+      border: 0;
+      background: transparent !important;
+      font-size: 11px;
+    }
+
+    .quick-todo-form__date-options :deep(.b_btn::before) {
+      position: absolute;
+      z-index: -1;
+      inset: 10px 2px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 999px;
+      background: var(--workspace-panel-bg-color);
+      content: '';
+    }
+
+    .quick-todo-form__date-options :deep(.b_btn.is-active::before) {
+      border-color: var(--primary-color);
+      background: var(--mobile-selected-bg);
     }
   }
 </style>

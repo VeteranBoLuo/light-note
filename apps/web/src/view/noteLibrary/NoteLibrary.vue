@@ -13,11 +13,14 @@
     </template>
 
     <template #actions>
-      <BTooltip v-if="isMediumNoteLayout" :title="$t(noteSidebarExpanded ? 'note.hideSidebar' : 'note.showSidebar')">
+      <BTooltip
+        v-if="!bookmark.isMobile && noteTreeReadEnabled"
+        :title="$t(noteSidebarExpanded ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
+      >
         <BButton
           class="note-action-button note-sidebar-toggle"
           :class="{ 'is-active': noteSidebarExpanded }"
-          :aria-label="$t(noteSidebarExpanded ? 'note.hideSidebar' : 'note.showSidebar')"
+          :aria-label="$t(noteSidebarExpanded ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
           :aria-pressed="noteSidebarExpanded"
           @click="toggleNoteSidebar"
         >
@@ -168,20 +171,29 @@
       </template>
     </template>
 
-    <div
+    <NoteWorkspaceShell
       ref="noteWorkspaceRef"
       class="note-workspace"
-      :class="{ 'is-split': showNoteSidebar }"
+      :mobile="bookmark.isMobile"
+      :has-sidebar="noteTreeReadEnabled"
+      :has-ai="false"
+      :sidebar-width="noteWorkspaceSidebarWidth"
+      v-model:sidebar-open="noteSidebarExpanded"
+      @update:sidebar-width="noteWorkspace.setSidebarWidth($event)"
       @scroll.capture.passive="onNoteScroll"
       @touchstart.passive="pullRefresh.onTouchStart"
       @touchmove="pullRefresh.onTouchMove"
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <aside v-if="showNoteSidebar" class="note-sidebar-panel">
-        <NoteLibrarySidebar
+      <template #sidebar>
+        <aside class="note-sidebar-panel">
+        <NoteWorkspaceSidebar
           v-model:mode="noteSidebarMode"
           :current-parent-id="currentParentId"
+          :active-page-id="null"
+          :browse-parent-id="currentParentId"
+          surface="library"
           :children-by-parent="sidebarTreeChildrenByParent"
           :expanded-ids="sidebarTreeExpandedIds"
           :loading-keys="sidebarTreeLoadingKeys"
@@ -190,7 +202,7 @@
           :total-count="allNoteCount"
           :untagged-count="untaggedNoteCount"
           :tag-loading="tagLoading"
-          :search-value="searchValue"
+          :search-value="treeSearchValue"
           :directory-enabled="!noteTreeFeaturesReady || noteTreeReadEnabled"
           :write-enabled="noteTreeWriteEnabled"
           :search-active="treeSearchActive"
@@ -204,6 +216,7 @@
           @select="selectDirectory"
           @select-tag="selectMobileDirectoryTag"
           @open="openDirectoryPage"
+          @browse-children="selectDirectory"
           @create="showNewChildPicker"
           @attach="openAttachPages"
           @toggle-top="toggleTreeNoteTop"
@@ -211,11 +224,12 @@
           @rename="openRenameNote"
           @copy-link="copyNoteLink"
           @delete="deleteSingleNote"
-          @search="searchValue = $event"
+          @search="treeSearchValue = $event"
           @drag-start="onTreeDragStart"
           @drag-end="onTreeDragEnd"
         />
-      </aside>
+        </aside>
+      </template>
 
       <div class="note-main-panel">
         <header
@@ -273,7 +287,7 @@
                 {{ $t('note.openPageBody') }}
               </BButton>
               <BButton
-                v-if="!currentParentId || noteTreeWriteEnabled"
+                v-if="currentParentId && noteTreeWriteEnabled"
                 type="primary"
                 class="note-new-child-page"
                 @click="showNewNotePicker"
@@ -466,7 +480,7 @@
           {{ dragDropHint }}
         </div>
       </div>
-    </div>
+    </NoteWorkspaceShell>
 
     <!-- 新建笔记类型选择 -->
     <NewNotePickerModal
@@ -567,10 +581,12 @@
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+  import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { bookmarkStore, useUserStore } from '@/store';
+  import { bookmarkStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
-  import NoteLibrarySidebar from '@/components/noteLibrary/tree/NoteLibrarySidebar.vue';
+  import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
+  import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteDirectoryDrawer from '@/components/noteLibrary/tree/NoteDirectoryDrawer.vue';
   import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
   import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
@@ -643,6 +659,9 @@
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const noteWorkspace = useNoteWorkspaceStore();
+  const { sidebarPreferredOpen: noteSidebarExpanded, sidebarWidth: noteWorkspaceSidebarWidth } =
+    storeToRefs(noteWorkspace);
   const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
   const noteTreeFeaturesReady = ref(false);
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
@@ -651,17 +670,6 @@
   const noteTreeSubtreeTrashEnabled = computed(
     () => noteTreeWriteEnabled.value && noteTreeFeatures.value.note_tree_subtree_trash,
   );
-  const NOTE_SIDEBAR_EXPANDED_KEY = 'light-note-note-tree-sidebar-expanded';
-
-  function readSessionValue(key: string) {
-    if (typeof sessionStorage === 'undefined') return '';
-    try {
-      return String(sessionStorage.getItem(key) || '');
-    } catch {
-      return '';
-    }
-  }
-
   function initialNoteClassificationMode(): 'directory' | 'tags' {
     const query = router.currentRoute.value.query;
     if (query.parent != null && query.tag == null) return 'directory';
@@ -669,27 +677,16 @@
     return user.preferences.noteSidebarMode === 'tags' ? 'tags' : 'directory';
   }
 
-  const noteSidebarExpanded = ref(readSessionValue(NOTE_SIDEBAR_EXPANDED_KEY) !== '0');
   const noteSidebarMode = ref<'directory' | 'tags'>(initialNoteClassificationMode());
   const isMediumNoteLayout = computed(() => bookmark.isTablet);
   const showNoteSidebar = computed(
     () => !bookmark.isMobile && (!isMediumNoteLayout.value || noteSidebarExpanded.value),
   );
 
-  function writeSessionValue(key: string, value: string) {
-    if (typeof sessionStorage === 'undefined') return;
-    try {
-      sessionStorage.setItem(key, value);
-    } catch {
-      // 隐私模式或受限 WebView 可能禁用存储；布局本身仍保持当前内存状态。
-    }
-  }
-
   function toggleNoteSidebar() {
     noteSidebarExpanded.value = !noteSidebarExpanded.value;
   }
 
-  watch(noteSidebarExpanded, (expanded) => writeSessionValue(NOTE_SIDEBAR_EXPANDED_KEY, expanded ? '1' : '0'));
   watch(
     () => user.preferences.noteSidebarMode,
     (mode) => {
@@ -793,8 +790,10 @@
   let dragDropTimer: number | null = null;
   let treeDragImageElement: HTMLElement | null = null;
   const searchValue = ref('');
+  const treeSearchValue = ref('');
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
+  const treeSearchTimer = ref<number | null>(null);
   const treeSearchActive = computed(() => noteTreeReadEnabled.value && Boolean(treeSearchKeyword.value.trim()));
   const sidebarTreeChildrenByParent = computed(() =>
     treeSearchActive.value ? treeSearchChildrenByParent.value : childrenByParent.value,
@@ -1415,7 +1414,12 @@
   }
   // 手机与桌面共用同一个 noteViewMode 偏好：设置里能配、笔记库顶部也能快切，与 PC 一致
   const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
-  const noteWorkspaceRef = ref<HTMLElement | null>(null);
+  const noteWorkspaceRef = ref<InstanceType<typeof NoteWorkspaceShell> | HTMLElement | null>(null);
+
+  function noteWorkspaceElement() {
+    const target = noteWorkspaceRef.value as any;
+    return (target?.$el || target) as HTMLElement | null;
+  }
 
   /*
    * 下拉刷新。走 reloadNotes(true) 的软刷新路径:保留旧列表、不进骨架屏,
@@ -1429,7 +1433,7 @@
     enabled: computed(() => !batchMode.value),
     externalBusy: computed(() => loading.value || refreshing.value || loadingMore.value || noteDragging.value),
     getScrollContainer: () =>
-      noteWorkspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+      noteWorkspaceElement()?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
   });
   /*
@@ -1608,13 +1612,13 @@
   );
 
   watch(
-    [noteTreeReadEnabled, debouncedSearch, currentParentId],
-    ([enabled, keyword, parentId]) => {
-      if (!enabled || !keyword) {
-        void searchTree('', parentId);
-        return;
-      }
-      void searchTree(keyword, parentId);
+    [noteTreeReadEnabled, treeSearchValue],
+    ([enabled, keyword]) => {
+      if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
+      treeSearchTimer.value = window.setTimeout(() => {
+        void searchTree(enabled ? keyword : '');
+        treeSearchTimer.value = null;
+      }, 180);
     },
     { immediate: true },
   );
@@ -1687,6 +1691,7 @@
 
   onBeforeUnmount(() => {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
     window.removeEventListener('pointermove', onDragPointerMove, true);
     cleanupTreeNativeDrag();
     clearDragDropTarget();
@@ -2902,7 +2907,6 @@
 
   .note-workspace {
     --note-card-min-width: 320px;
-    --note-sidebar-panel-width: 248px;
 
     width: 100%;
     height: 100%;
@@ -2915,16 +2919,6 @@
     box-shadow: 0 12px 30px -28px color-mix(in srgb, var(--text-color) 38%, transparent);
     container-type: inline-size;
 
-    // 两列常驻,卡片视图把第一列收到 0:列数不变,侧栏进出才有宽度过渡可做。
-    // 子项显式占列,移动端不渲染侧栏时主区也不会掉进第一列。
-    display: grid;
-    grid-template-columns: 0px minmax(0, 1fr);
-    transition: grid-template-columns 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
-
-    &.is-split {
-      grid-template-columns: var(--note-sidebar-panel-width) minmax(0, 1fr);
-    }
-
     @supports (width: 1cqi) {
       // 以工作区宽度自适应:1470 左右保持可读卡宽,2560 左右自然落到 6 列。
       --note-card-min-width: clamp(320px, 15cqi, 460px);
@@ -2932,7 +2926,8 @@
   }
 
   .note-sidebar-panel {
-    grid-column: 1;
+    width: 100%;
+    height: 100%;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
@@ -2942,7 +2937,8 @@
   }
 
   .note-main-panel {
-    grid-column: 2;
+    width: 100%;
+    height: 100%;
     position: relative;
     min-width: 0;
     min-height: 0;

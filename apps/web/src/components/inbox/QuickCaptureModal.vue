@@ -205,9 +205,11 @@
       ? {
           open: quickShellVisible.value,
           title: shellTitle.value,
-          placement: 'bottom' as const,
-          height: 'auto',
-          bodyPadding: '14px',
+          placement: 'right' as const,
+          height: '100%',
+          mobileFullScreen: true,
+          mobileCenteredHeader: true,
+          bodyPadding: '14px 14px 0',
           maskClosable: !submitting.value,
         }
       : {
@@ -861,16 +863,48 @@
     background: var(--card-background) !important;
   }
   @media (max-width: 767px) {
+    .capture-modal {
+      height: 100%;
+      gap: 14px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding-bottom: calc(82px + env(safe-area-inset-bottom));
+      box-sizing: border-box;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
     .capture-intro-strip {
-      min-height: 64px;
-      max-height: 72px;
-      padding: 9px 12px;
+      min-height: 58px;
+      max-height: 64px;
+      padding: 9px 13px;
+      border: 0;
+      border-radius: 13px;
     }
     .capture-workspace {
-      padding: 13px;
+      gap: 14px;
+      padding: 16px;
+      border-radius: 17px;
+      box-shadow: none;
+    }
+    .capture-tabs :deep(.tab-container) {
+      gap: 4px;
+      padding: 4px;
+      border: 0;
+      border-radius: 13px;
+      background: var(--workspace-panel-bg-color);
     }
     .capture-tabs :deep(.tab) {
-      min-height: 40px;
+      min-height: 36px;
+      padding: 0 8px;
+      border: 0;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+    .capture-tabs :deep(.tab.is-active) {
+      color: var(--primary-color);
+      background: var(--card-background);
+      box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
+      font-weight: 700;
     }
     .capture-success {
       align-items: flex-start;
@@ -883,6 +917,19 @@
     .capture-actions :deep(.b_btn) {
       flex: 1;
       width: auto;
+    }
+    .capture-actions.is-sticky {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 2;
+      margin: 0;
+      padding: 12px 14px calc(20px + env(safe-area-inset-bottom));
+    }
+    .capture-actions.is-sticky :deep(.b_btn) {
+      height: 48px;
+      min-height: 48px;
     }
   }
 </style>
