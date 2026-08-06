@@ -5,6 +5,7 @@
       'inbox-page--todo-focused': isTodoFocused,
       'inbox-page--mobile-todo': isMobileTodoPrimary,
       'inbox-page--mobile-resources': isMobileResourceInbox,
+      'is-selection-mode': todoSelectionMode,
     }"
   >
     <!-- 待整理属于资源中心，顶栏与「全部资源」共用同一常驻搜索入口；
@@ -130,7 +131,7 @@
       >
         {{ t('inbox.selectedCount', { count: selectedTodoIds.length }) }}
       </BCheckbox>
-      <div class="todo-list-toolbar__actions">
+      <div v-if="!bookmark.isMobile" class="todo-list-toolbar__actions">
         <BButton
           v-if="todo.status !== 'completed'"
           size="small"
@@ -152,7 +153,29 @@
         </BButton>
         <BButton size="small" @click="toggleTodoSelectionMode">{{ t('inbox.todoBatchCancel') }}</BButton>
       </div>
+      <BButton v-else size="small" class="todo-list-toolbar__cancel" @click="toggleTodoSelectionMode">
+        {{ t('common.cancel') }}
+      </BButton>
     </section>
+    <MobileStickyActionBar v-if="isMobileTodoPrimary && todoView === 'list' && todoSelectionMode">
+      <BButton
+        v-if="todo.status !== 'completed'"
+        type="primary"
+        :loading="todoBatchMutating"
+        :disabled="!selectedTodoIds.length"
+        @click="completeSelectedTodos"
+      >
+        {{ t('inbox.completeSelected') }}
+      </BButton>
+      <BButton
+        type="danger"
+        :loading="todoBatchMutating"
+        :disabled="!selectedTodoIds.length"
+        @click="confirmDeleteSelectedTodos"
+      >
+        {{ t('inbox.deleteSelected') }}
+      </BButton>
+    </MobileStickyActionBar>
 
     <section v-if="todoUndo" class="todo-undo-banner" role="status">
       <span>{{
@@ -332,6 +355,7 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -1595,7 +1619,10 @@
       align-items: center;
       flex-direction: row;
       gap: 6px;
-      border-radius: 12px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
     }
     .inbox-toolbar--todo-primary :deep(.tab-container) {
       min-width: 0;
@@ -1656,6 +1683,40 @@
     .inbox-page--mobile-todo .todo-group-list {
       gap: 12px;
       padding: 0 0 18px;
+    }
+    .inbox-page--mobile-todo.is-selection-mode .todo-group-list {
+      padding-bottom: 110px;
+    }
+    .inbox-page--mobile-todo .todo-group {
+      gap: 8px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .inbox-page--mobile-todo .todo-group > header {
+      padding: 0 2px;
+      font-size: 15px;
+    }
+    .inbox-page--mobile-todo .todo-group > header > span {
+      min-width: 0;
+      padding: 0;
+      border-radius: 0;
+      color: var(--desc-color);
+      background: transparent;
+      font-size: 12px;
+    }
+    .inbox-page--mobile-todo .todo-list-toolbar {
+      min-height: 44px;
+      padding: 0 2px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .todo-list-toolbar__cancel {
+      min-height: 44px;
+      color: var(--primary-color);
+      background: transparent !important;
     }
   }
 </style>

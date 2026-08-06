@@ -128,72 +128,33 @@
       </div>
       <div class="todo-item__actions todo-item__actions--mobile">
         <template v-if="item.status === 'pending'">
-          <BSelect
-            class="todo-item__priority-select"
-            :value="item.priority"
-            :options="priorityOptions"
+          <BButton
+            class="todo-mobile-action todo-mobile-action--priority"
             :disabled="disabled"
-            :aria-label="t('inbox.todoPriority')"
-            @change="changePriority"
-          />
-          <BPopover
-            trigger="click"
-            placement="top-left"
-            :open="openMenu === 'snooze'"
-            @update:open="(visible: boolean) => setMenu('snooze', visible)"
+            @click="openMobileMenu('priority')"
           >
-            <BButton size="small" :disabled="disabled">{{ t('inbox.todoSnooze') }}</BButton>
-            <template #content>
-              <div class="todo-snooze-menu">
-                <BButton @click="runMenuAction(() => emit('snooze', 'tenMinutes'))">
-                  {{ t('inbox.todoSnoozeTenMinutes') }}
-                </BButton>
-                <BButton @click="runMenuAction(() => emit('snooze', 'tomorrow'))">
-                  {{ t('inbox.todoSnoozeTomorrow') }}
-                </BButton>
-                <BButton @click="runMenuAction(() => emit('snooze', 'nextWeek'))">
-                  {{ t('inbox.todoSnoozeNextWeek') }}
-                </BButton>
-              </div>
-            </template>
-          </BPopover>
-          <BPopover
-            trigger="click"
-            placement="top-right"
-            :open="openMenu === 'more'"
-            @update:open="(visible: boolean) => setMenu('more', visible)"
-          >
-            <BButton size="small" :disabled="disabled">{{ t('common.more') }}</BButton>
-            <template #content>
-              <div class="todo-mobile-action-menu">
-                <BButton :disabled="disabled" @click="runMenuAction(() => emit('edit'))">
-                  {{ t('inbox.editTodo') }}
-                </BButton>
-                <BButton
-                  :disabled="disabled"
-                  v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
-                  @click="runMenuAction(() => emit('add-to-calendar'))"
-                >
-                  {{ t('inbox.addToCalendar') }}
-                </BButton>
-                <BButton
-                  type="danger"
-                  :loading="deleting"
-                  :disabled="disabled"
-                  @click="runMenuAction(() => emit('delete'))"
-                >
-                  {{ t('inbox.deleteTodo') }}
-                </BButton>
-              </div>
-            </template>
-          </BPopover>
+            {{ priorityLabel }}
+          </BButton>
+          <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('snooze')">
+            {{ t('inbox.todoSnooze') }}
+          </BButton>
+          <BButton class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+            {{ t('common.more') }}
+          </BButton>
         </template>
-        <BButton v-else size="small" type="danger" :loading="deleting" :disabled="disabled" @click="$emit('delete')">
-          {{ t('inbox.deleteTodo') }}
+        <BButton v-else class="todo-mobile-action" :disabled="disabled" @click="openMobileMenu('more')">
+          {{ t('common.more') }}
         </BButton>
       </div>
     </article>
   </MobileSwipeDelete>
+  <MobilePageActionsDrawer
+    v-model:open="mobileMenuOpen"
+    :object-title="item.title"
+    :title="mobileMenuTitle"
+    :actions="mobileMenuActions"
+    @action="handleMobileMenuAction"
+  />
 </template>
 
 <script setup lang="ts">
@@ -204,11 +165,13 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import MobileSwipeDelete from '@/components/mobile/MobileSwipeDelete.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
   import { formatTodoDateTime, parseTodoDate } from '@/utils/todoPlanning';
+  import icon from '@/config/icon';
 
   const props = defineProps<{
     item: TodoItem;
@@ -234,17 +197,12 @@
   const { t, locale } = useI18n();
   const router = useRouter();
 
-  /**
-   * 「稍后」与「更多」菜单受控：点菜单项后必须先收起菜单，否则编辑弹框打开时
-   * 菜单还浮在弹框上面。
-   *
-   * 桌面与移动两套操作区必须用不同的 key：非当前端的那套只是 display:none，
-   * 组件仍然存在，而 BPopover 的浮层 teleport 到 body、不受父元素隐藏影响，
-   * 共用 key 会让两个浮层同时打开，隐藏那套因为锚点不可见而飘到左上角。
-   */
-  const openMenu = ref<'snooze' | 'desktopSnooze' | 'more' | ''>('');
+  // 桌面端「稍后」仍由 BPopover 承载；移动端操作独立进入 Bottom Action Sheet。
+  const openMenu = ref<'desktopSnooze' | ''>('');
+  const mobileMenu = ref<'priority' | 'snooze' | 'more'>('more');
+  const mobileMenuOpen = ref(false);
 
-  function setMenu(key: 'snooze' | 'desktopSnooze' | 'more', visible: boolean) {
+  function setMenu(key: 'desktopSnooze', visible: boolean) {
     openMenu.value = visible ? key : '';
   }
 
@@ -294,6 +252,57 @@
   const visibleResourceRefs = computed(() => (props.item.resourceRefs || []).slice(0, MAX_VISIBLE_REFS));
   const hiddenResourceRefCount = computed(() => Math.max(0, (props.item.resourceRefs?.length || 0) - MAX_VISIBLE_REFS));
   const cardEditable = computed(() => !props.selectable && !props.disabled);
+  const mobileMenuTitle = computed(() => {
+    if (mobileMenu.value === 'priority') return t('inbox.todoPriority');
+    if (mobileMenu.value === 'snooze') return t('inbox.todoSnooze');
+    return t('common.more');
+  });
+  const mobileMenuActions = computed<MobilePageActionItem[]>(() => {
+    if (mobileMenu.value === 'priority') {
+      return [0, 1, 2].map((value) => ({
+        key: `priority-${value}`,
+        label: t(`inbox.todoPriority${value}`),
+        selected: props.item.priority === value,
+      }));
+    }
+    if (mobileMenu.value === 'snooze') {
+      return [
+        { key: 'snooze-tenMinutes', label: t('inbox.todoSnoozeTenMinutes'), icon: icon.common.calendar },
+        { key: 'snooze-tomorrow', label: t('inbox.todoSnoozeTomorrow'), icon: icon.common.calendar },
+        { key: 'snooze-nextWeek', label: t('inbox.todoSnoozeNextWeek'), icon: icon.common.calendar },
+      ];
+    }
+    return [
+      ...(props.item.status === 'pending'
+        ? [
+            { key: 'edit', label: t('inbox.editTodo'), icon: icon.table_edit },
+            { key: 'calendar', label: t('inbox.addToCalendar'), icon: icon.common.calendar },
+          ]
+        : []),
+      {
+        key: 'delete',
+        label: t('inbox.deleteTodo'),
+        icon: icon.table_delete,
+        danger: true,
+        dividerBefore: props.item.status === 'pending',
+        loading: props.deleting,
+      },
+    ];
+  });
+
+  function openMobileMenu(menu: 'priority' | 'snooze' | 'more') {
+    mobileMenu.value = menu;
+    mobileMenuOpen.value = true;
+  }
+
+  function handleMobileMenuAction(action: MobilePageActionItem) {
+    if (action.key.startsWith('priority-')) changePriority(action.key.slice('priority-'.length));
+    else if (action.key.startsWith('snooze-')) {
+      emit('snooze', action.key.slice('snooze-'.length) as 'tenMinutes' | 'tomorrow' | 'nextWeek');
+    } else if (action.key === 'edit') emit('edit');
+    else if (action.key === 'calendar') emit('add-to-calendar');
+    else if (action.key === 'delete') emit('delete');
+  }
 
   function openEditorFromCard(event: MouseEvent) {
     if (!cardEditable.value) return;
@@ -602,23 +611,8 @@
     padding: 0 10px;
     font-size: 13px;
   }
-  .todo-mobile-action-menu {
-    display: grid;
-    width: max-content;
-    min-width: 0;
-    padding: 4px;
-    gap: 2px;
-  }
-  .todo-mobile-action-menu :deep(.b_btn) {
-    width: 100%;
-    min-height: 36px;
-    padding: 0 10px;
-    font-size: 13px;
-    justify-content: flex-start;
-  }
   @media (pointer: coarse) {
-    .todo-snooze-menu :deep(.b_btn),
-    .todo-mobile-action-menu :deep(.b_btn) {
+    .todo-snooze-menu :deep(.b_btn) {
       min-height: 44px;
     }
   }
@@ -628,6 +622,22 @@
       gap: 10px;
       padding: 12px 13px;
       border-radius: 14px;
+      border: 1px solid var(--surface-border-color);
+      border-left: 4px solid var(--todo-accent-color);
+      background: var(--card-background);
+      box-shadow: none;
+    }
+    .todo-item::before {
+      display: none;
+    }
+    .todo-item.is-overdue {
+      border-color: var(--surface-border-color);
+      border-left-color: var(--danger-color);
+    }
+    .todo-item.is-completed {
+      border-color: var(--surface-border-color);
+      border-left-color: var(--success-color);
+      background: var(--card-background);
     }
     .todo-item__meta {
       margin-left: 30px;
@@ -643,31 +653,34 @@
       display: none;
     }
     .todo-item__actions--mobile {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      display: flex;
       width: auto;
       margin-left: 30px;
       gap: 8px;
       align-items: center;
+      justify-content: flex-end;
     }
-    .todo-item__actions--mobile .todo-item__priority-select {
-      width: 100%;
-      min-width: 0;
-    }
-    /* 卡片内的次级操作继承了桌面的 44px，在窄屏显得笨重；
-       收到 38px 并压紧内边距，仍高于 36px 的舒适触控下限 */
-    .todo-item__actions--mobile :deep(.select-trigger),
     .todo-item__actions--mobile :deep(.b_btn) {
-      width: 100%;
+      width: auto;
       min-width: 0;
-      height: 38px;
-      min-height: 38px;
+      height: var(--mobile-touch-size, 44px);
+      min-height: var(--mobile-touch-size, 44px);
       padding-inline: 10px;
       font-size: 13px;
       white-space: nowrap;
     }
+    .todo-mobile-action--priority {
+      margin-right: auto;
+      border: 1px solid var(--todo-accent-color);
+      color: var(--todo-accent-color);
+      background: var(--card-background) !important;
+      font-weight: 650;
+    }
     .todo-checklist {
       margin-right: 0;
+      border: 0;
+      background: var(--workspace-panel-bg-color);
+      box-shadow: none;
     }
   }
 </style>

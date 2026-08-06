@@ -2,7 +2,7 @@
   <div class="search-center-route">
     <!-- “全部资源 / 待整理”表达资源范围；知识地图是全部资源的独立查看方式。 -->
     <ResourceCenterTopBar
-      v-if="bookmark.isMobile"
+      v-if="bookmark.isMobile && !isKnowledgeMapView"
       :keyword="queryState.keyword"
       input-id="mobile-search-page-input"
       show-menu
@@ -1623,8 +1623,23 @@
     syncQueryDebounced();
   }
 
-  // 本页自带顶栏，通知共享顶栏整体让位，避免同屏出现两个搜索入口
-  useMobileTopBar(['searchCenter'], { ownTopBar: true });
+  // 资源列表自带搜索顶栏；知识地图切为标准二级页顶栏，避免全局宽搜索与本地搜索重复。
+  useMobileTopBar(['searchCenter'], {
+    ownTopBar: () => !isKnowledgeMapView.value,
+    title: () => (isKnowledgeMapView.value ? t('knowledgeMap.title') : ''),
+    onBack: () => {
+      if (isKnowledgeMapView.value) void router.replace('/search');
+      else leaveSearchPage();
+    },
+    showNotification: false,
+    onAuxiliaryAction: () => {
+      const host = document.getElementById('knowledge-map-mobile-search');
+      const input = host?.tagName === 'INPUT' ? host : host?.querySelector('input');
+      (input as HTMLInputElement | null)?.focus();
+    },
+    auxiliaryActionLabel: () => (isKnowledgeMapView.value ? t('knowledgeMap.searchPlaceholder') : ''),
+    auxiliaryActionIcon: () => (isKnowledgeMapView.value ? icon.navigation.search : ''),
+  });
 
   // 完整搜索页是二级页面：返回发起搜索的来源页，没有历史时回落资料首页
   function leaveSearchPage() {

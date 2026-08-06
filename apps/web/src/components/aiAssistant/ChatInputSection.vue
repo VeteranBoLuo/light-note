@@ -693,11 +693,11 @@
 
   @media (max-width: 767px) {
     .input-section {
-      padding: 0.25rem 0.625rem calc(0.4rem + env(safe-area-inset-bottom));
+      padding: 0.2rem 0.625rem calc(0.35rem + env(safe-area-inset-bottom));
     }
 
     .input-container {
-      padding: 0.45rem 0.5rem 0.4rem;
+      padding: 0.38rem 0.5rem 0.34rem;
       border-radius: 1rem;
     }
 
@@ -720,11 +720,12 @@
       gap: 7px;
       width: max-content;
       max-width: 100%;
-      height: 36px !important;
-      padding: 4px 8px 4px 5px !important;
+      height: var(--mobile-touch-size, 44px) !important;
+      min-height: var(--mobile-touch-size, 44px);
+      padding: 5px 9px 5px 6px !important;
       /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
       border: 1px solid var(--card-border-color);
-      border-color: color-mix(in srgb, var(--primary-color) 34%, var(--card-border-color));
+      border-color: var(--primary-color);
       border-radius: 12px;
       background: var(--card-background);
       background: linear-gradient(
@@ -733,7 +734,7 @@
         color-mix(in srgb, var(--primary-color) 6%, var(--card-background))
       );
       color: var(--primary-color);
-      box-shadow: 0 8px 20px -16px color-mix(in srgb, var(--primary-color) 72%, transparent);
+      box-shadow: none;
       font-size: 12px;
       font-weight: 650;
       line-height: 1;
@@ -741,9 +742,9 @@
 
     .mobile-context-toggle__icon {
       display: grid;
-      flex: 0 0 26px;
-      width: 26px;
-      height: 26px;
+      flex: 0 0 30px;
+      width: 30px;
+      height: 30px;
       place-items: center;
       border-radius: 8px;
       background: var(--primary-color);
@@ -964,8 +965,8 @@
     }
 
     .input-actions :deep(.b_btn) {
-      min-height: 32px !important;
-      height: 32px !important;
+      min-height: var(--mobile-touch-size, 44px) !important;
+      height: var(--mobile-touch-size, 44px) !important;
       padding-inline: 10px;
     }
 
@@ -975,7 +976,7 @@
     }
 
     .composer-toolbar {
-      min-height: 24px;
+      min-height: var(--mobile-touch-size, 44px);
       margin-top: 2px;
       justify-content: flex-end;
     }
@@ -989,7 +990,7 @@
 
     .send-btn {
       min-width: 54px;
-      height: 32px;
+      height: var(--mobile-touch-size, 44px);
     }
   }
 </style>

@@ -14,7 +14,7 @@
         </BButton>
       </slot>
     </template>
-    <BCard variant="panel" padding="12px" class="edit-list-container">
+    <div class="edit-list-container">
       <BInput
         v-model:value="searchValue"
         class="table-search-input"
@@ -31,19 +31,17 @@
           :aria-label="$t('bookmarkMg.loadingState.title')"
           aria-busy="true"
         >
-          <BCard
-            v-for="index in 6"
-            :key="`phone-bookmark-skeleton-${index}`"
-            variant="card"
-            padding="0 12px"
-            class="list-item phone-skeleton-item"
-          >
-            <span class="phone-skeleton-icon"></span>
-            <span class="phone-skeleton-lines">
-              <span class="phone-skeleton-line phone-skeleton-line--title"></span>
-              <span class="phone-skeleton-line phone-skeleton-line--meta"></span>
-            </span>
-          </BCard>
+          <MobileListSurface>
+            <MobileListRow v-for="index in 6" :key="`phone-bookmark-skeleton-${index}`">
+              <span class="phone-skeleton-item">
+                <span class="phone-skeleton-icon"></span>
+                <span class="phone-skeleton-lines">
+                  <span class="phone-skeleton-line phone-skeleton-line--title"></span>
+                  <span class="phone-skeleton-line phone-skeleton-line--meta"></span>
+                </span>
+              </span>
+            </MobileListRow>
+          </MobileListSurface>
         </div>
         <div v-else-if="error" class="list-status" role="alert">
           <span class="list-status-icon list-status-icon--error">
@@ -53,19 +51,19 @@
           <span>{{ $t('bookmarkMg.loadErrorDesc') }}</span>
           <BButton size="small" type="primary" @click="$emit('retry')">{{ $t('bookmarkMg.retryLoad') }}</BButton>
         </div>
-        <template v-else-if="dataList.length">
-          <BCard
+        <MobileListSurface v-else-if="dataList.length">
+          <MobileListRow
             v-for="item in dataList"
             :key="item.id || item.name"
-            variant="card"
-            padding="0 10px"
-            class="list-item flex-align-center"
-            :class="{ 'is-selected': selectedKeys.includes(String(item.id || item.name)) }"
+            interactive
+            :complex="Boolean(item.hasSnapshot || item.hasSummary)"
+            :selected="selectedKeys.includes(String(item.id || item.name))"
+            class="list-item"
             @click="$emit('item-click', item)"
           >
             <slot name="item" :data="item" />
-          </BCard>
-        </template>
+          </MobileListRow>
+        </MobileListSurface>
         <div v-else class="list-status">
           <span class="list-status-icon">
             <SvgIcon
@@ -87,14 +85,15 @@
           <BButton v-else size="small" type="primary" @click="$emit('add')">{{ $t('common.add') }}</BButton>
         </div>
       </div>
-    </BCard>
+    </div>
   </ResourcePageShell>
 </template>
 
 <script lang="ts" setup>
   import { computed, ref, type PropType } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import MobileListRow from '@/components/mobile/MobileListRow.vue';
+  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -162,18 +161,18 @@
 
 <style lang="less" scoped>
   .edit-list-container {
-    --b-card-background: var(--workspace-panel-bg-color);
-    --b-card-border-color: var(--surface-border-color);
-
     height: 100%;
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    border-radius: 14px;
+    padding: 12px;
   }
 
   .table-search-input {
     width: 100%;
+  }
+  .table-search-input :deep(.b-input) {
+    min-height: var(--mobile-touch-size, 44px);
   }
   .list-body {
     margin-top: 10px;
@@ -181,34 +180,21 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 0;
     overflow: auto;
     border-radius: 10px;
   }
   .list-item {
-    --b-card-background: var(--card-background);
-    --b-card-border-color: var(--surface-border-color);
-    --b-card-shadow: var(--surface-card-shadow);
-
     position: relative;
-    gap: 10px;
-    height: 44px;
     flex: 0 0 auto;
-    border-radius: 10px;
-
-    &.is-selected {
-      --b-card-background: color-mix(in srgb, var(--resource-bookmark-color) 6%, var(--card-background));
-      --b-card-border-color: color-mix(in srgb, var(--resource-bookmark-color) 62%, var(--surface-border-color));
-      box-shadow: 0 0 0 1px color-mix(in srgb, var(--resource-bookmark-color) 16%, transparent);
-    }
   }
 
   .phone-list-skeleton {
-    display: grid;
-    gap: 8px;
+    display: block;
   }
 
   .phone-skeleton-item {
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 10px;

@@ -1,5 +1,6 @@
 <template>
   <BPopover
+    v-if="!isMobileLayout"
     trigger="click"
     placement="bottom-right"
     overlay-class-name="notification-popover"
@@ -14,90 +15,83 @@
     </BTooltip>
 
     <template #content>
-      <div class="nt-panel">
-        <div class="nt-head">
-          <span class="nt-title">{{ t('notification.title') }}</span>
-          <BButton
-            class="nt-markall dom-hover"
-            :disabled="unreadTotal <= 0"
-            :aria-label="t('notification.markAllRead')"
-            @click="onMarkAll"
-          >
-            <SvgIcon :src="icon.settings.notificationReadAll" size="15" aria-hidden="true" />
-            {{ t('notification.markAllRead') }}
-          </BButton>
-        </div>
-
-        <div class="nt-tabs">
-          <BButton
-            v-for="tb in tabs"
-            :key="tb.v"
-            class="nt-tab"
-            :class="{ active: activeTab === tb.v }"
-            @click="switchTab(tb.v)"
-          >
-            {{ tb.label }}
-            <span v-if="tabUnread(tb.v) > 0" class="nt-tab-badge">{{
-              tabUnread(tb.v) > 99 ? '99+' : tabUnread(tb.v)
-            }}</span>
-          </BButton>
-        </div>
-
-        <div class="nt-list">
-          <div v-if="loading && !items.length" class="nt-state">{{ t('notification.loading') }}</div>
-          <div v-else-if="!items.length" class="nt-state">
-            <div class="nt-empty-icon">🔔</div>
-            <div>{{ t('notification.empty') }}</div>
-          </div>
-          <template v-else>
-            <div v-for="grp in groupedItems" :key="grp.key" class="nt-group">
-              <div class="nt-group-label">{{ grp.label }}</div>
-              <div
-                v-for="n in grp.items"
-                :key="n.id"
-                class="nt-item"
-                :class="{ unread: !n.isRead }"
-                @click="onItemClick(n)"
-                v-click-log="{ module: '通知中心', operation: `查看通知【${renderTitle(n)}】` }"
-              >
-                <span class="nt-dot" :class="`type-${n.type}`"></span>
-                <div class="nt-item-main">
-                  <div class="nt-item-title">{{ renderTitle(n) }}</div>
-                  <div v-if="renderContent(n)" class="nt-item-content">{{ renderContent(n) }}</div>
-                  <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
-                  <div v-if="n.type === 'todo_reminder'" class="nt-todo-actions">
-                    <BButton
-                      size="small"
-                      type="primary"
-                      class="nt-todo-action nt-todo-action--complete"
-                      :loading="completingTodoId === String(parseMeta(n.meta).todoId || '')"
-                      @click.stop="completeReminderTodo(n)"
-                    >
-                      {{ t('notification.todoComplete') }}
-                    </BButton>
-                    <BButton size="small" class="nt-todo-action nt-todo-action--open" @click.stop="openReminderTodo(n)">
-                      {{ t('notification.todoOpen') }}
-                    </BButton>
-                  </div>
-                </div>
-                <BButton
-                  class="nt-del dom-hover"
-                  :title="t('notification.delete')"
-                  :aria-label="t('notification.delete')"
-                  @click.stop="onDelete(n)"
-                >
-                  <SvgIcon :src="icon.noteDetail.delete" size="15" aria-hidden="true" />
-                </BButton>
-              </div>
-            </div>
-            <BButton v-if="items.length < total" class="nt-more" :disabled="loading" @click="loadMore">
-              {{ loading ? t('notification.loading') : t('notification.loadMore') }}
-            </BButton>
-          </template>
-        </div>
-      </div>
+      <NotificationCenterPanel
+        :items="items"
+        :groups="groupedItems"
+        :tabs="tabs"
+        :active-tab="activeTab"
+        :unread-total="unreadTotal"
+        :total="total"
+        :loading="loading"
+        :completing-todo-id="completingTodoId"
+        :tab-unread="tabUnread"
+        :render-title="renderTitle"
+        :render-content="renderContent"
+        :format-time="fmtTime"
+        :todo-id="getTodoId"
+        @mark-all="onMarkAll"
+        @switch-tab="switchTab"
+        @item-click="onItemClick"
+        @complete-todo="completeReminderTodo"
+        @open-todo="openReminderTodo"
+        @delete="onDelete"
+        @load-more="loadMore"
+      />
     </template>
   </BPopover>
+  <template v-else>
+    <BTooltip :title="t('notification.title')">
+      <BButton class="nt-bell" @click="openMobileNotifications">
+        <SvgIcon :src="icon.settings.notification" size="24" aria-hidden="true" />
+        <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
+      </BButton>
+    </BTooltip>
+    <BDrawer
+      :open="open"
+      :title="t('notification.title')"
+      placement="bottom"
+      height="calc(100dvh - env(safe-area-inset-top))"
+      mobile-full-screen
+      body-padding="0"
+      @close="open = false"
+    >
+      <template #header-actions>
+        <BButton class="nt-mobile-markall" :disabled="unreadTotal <= 0" @click="onMarkAll">
+          {{ t('notification.markAllRead') }}
+        </BButton>
+      </template>
+      <NotificationCenterPanel
+        mobile
+        :show-header="false"
+        :items="items"
+        :groups="groupedItems"
+        :tabs="tabs"
+        :active-tab="activeTab"
+        :unread-total="unreadTotal"
+        :total="total"
+        :loading="loading"
+        :completing-todo-id="completingTodoId"
+        :tab-unread="tabUnread"
+        :render-title="renderTitle"
+        :render-content="renderContent"
+        :format-time="fmtTime"
+        :todo-id="getTodoId"
+        @mark-all="onMarkAll"
+        @switch-tab="switchTab"
+        @item-click="onItemClick"
+        @complete-todo="completeReminderTodo"
+        @open-todo="openReminderTodo"
+        @more="openNotificationActions"
+        @load-more="loadMore"
+      />
+    </BDrawer>
+  </template>
+  <MobilePageActionsDrawer
+    v-model:open="notificationActionsOpen"
+    :object-title="activeNotification ? renderTitle(activeNotification) : t('notification.title')"
+    :actions="notificationActions"
+    @action="handleNotificationAction"
+  />
   <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
 
   <!-- 无跳转链接的通知:点击弹框看完整标题 + 正文(列表里被截两行) -->
@@ -123,6 +117,7 @@
   import { useRouter } from 'vue-router';
   import { useUserStore } from '@/store';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import { useNotification, type NotificationItem } from '@/composables/useNotification.ts';
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
@@ -135,10 +130,15 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { NOTIFICATION_PANEL_OPEN_EVENT } from '@/utils/notificationEntry';
+  import NotificationCenterPanel from '@/components/notification/NotificationCenterPanel.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const { t, locale } = useI18n();
   const router = useRouter();
   const user = useUserStore();
+  const isMobileLayout = useMobileLayout();
   const { unreadTotal, unreadByType, refreshUnread, fetchList, markRead, markAllRead, deleteNotifications } =
     useNotification();
 
@@ -151,28 +151,22 @@
   const total = ref(0);
   const loading = ref(false);
   const completingTodoId = ref('');
+  const notificationActionsOpen = ref(false);
+  const activeNotification = ref<NotificationItem | null>(null);
   const activeTab = ref('all');
   const currentPage = ref(1);
   const pageSize = 20;
 
   const tabs = computed(() => [
-    { v: 'all', label: t('notification.tabAll') },
-    { v: 'level_up', label: t('notification.tabLevelUp') },
-    { v: 'opinion_reply', label: t('notification.tabReply') },
-    { v: 'system', label: t('notification.tabSystem') },
-    { v: 'other', label: t('notification.tabOther') },
+    { value: 'all', label: t('notification.tabAll') },
+    { value: 'todo_reminder', label: t('notification.tabTodo') },
+    { value: 'system', label: t('notification.tabSystem') },
+    { value: 'opinion_reply', label: t('notification.tabFeedback') },
   ]);
   // 各 tab 未读角标:全部=总数,其余=该类型未读数
   // 「其他」tab 兜底:非三大已知类型(如 streak_risk 签到提醒)都归它,与后端 list 口径一致
-  const KNOWN_NOTIFY_TYPES = ['level_up', 'opinion_reply', 'system'];
   function tabUnread(v: string): number {
     if (v === 'all') return unreadTotal.value;
-    if (v === 'other') {
-      return Object.entries(unreadByType.value).reduce(
-        (s, [t, c]) => (KNOWN_NOTIFY_TYPES.includes(t) ? s : s + Number(c || 0)),
-        0,
-      );
-    }
     return unreadByType.value[v] || 0;
   }
 
@@ -256,6 +250,10 @@
   function onOpenChange(v: boolean) {
     if (v) load(true);
   }
+  function openMobileNotifications() {
+    open.value = true;
+    void load(true);
+  }
   function handleExternalOpen() {
     if (open.value) return;
     open.value = true;
@@ -277,33 +275,33 @@
     const m = parseMeta(n.meta);
     if (m?.weeklyReport) {
       wrData.value = m.weeklyReport;
-      wrVisible.value = true;
-      open.value = false;
+      await closePanelThen(() => {
+        wrVisible.value = true;
+      });
       return;
     }
     if (n.link) {
       // 升级/反馈等带跳转链接的通知:关闭面板并跳转
-      open.value = false;
-      router.push(n.link).catch(() => {});
+      await closePanelThen(() => router.push(n.link).catch(() => {}));
     } else {
       // 系统/其他等无跳转链接的通知:弹框展示完整标题+正文(列表里被截成两行,弹框看全)
       detailItem.value = n;
-      detailVisible.value = true;
-      open.value = false;
+      await closePanelThen(() => {
+        detailVisible.value = true;
+      });
     }
   }
   async function openReminderTodo(n: NotificationItem) {
-    const todoId = String(parseMeta(n.meta).todoId || '');
+    const todoId = getTodoId(n);
     if (!todoId) return;
     if (!n.isRead) {
       n.isRead = 1;
       await markRead([n.id]);
     }
-    open.value = false;
-    router.push({ path: '/inbox', query: { tab: 'todo', todoId } }).catch(() => {});
+    await closePanelThen(() => router.push({ path: '/inbox', query: { tab: 'todo', todoId } }).catch(() => {}));
   }
   async function completeReminderTodo(n: NotificationItem) {
-    const todoId = String(parseMeta(n.meta).todoId || '');
+    const todoId = getTodoId(n);
     if (!todoId || completingTodoId.value) return;
     completingTodoId.value = todoId;
     try {
@@ -339,6 +337,43 @@
       items.value = previousItems;
       total.value = previousTotal;
     }
+  }
+
+  function getTodoId(n: NotificationItem) {
+    return String(parseMeta(n.meta).todoId || '');
+  }
+
+  async function closePanelThen(next: () => void | Promise<unknown>) {
+    if (isMobileLayout.value && open.value) {
+      await closeCurrentMobileOverlayThen(
+        () => {
+          open.value = false;
+        },
+        next,
+      );
+      return;
+    }
+    open.value = false;
+    await next();
+  }
+
+  const notificationActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'delete',
+      label: t('notification.delete'),
+      icon: icon.noteDetail.delete,
+      danger: true,
+      description: t('notification.deleteDescription'),
+    },
+  ]);
+
+  function openNotificationActions(item: NotificationItem) {
+    activeNotification.value = item;
+    notificationActionsOpen.value = true;
+  }
+
+  function handleNotificationAction(action: MobilePageActionItem) {
+    if (action.key === 'delete' && activeNotification.value) void onDelete(activeNotification.value);
   }
 
   // 未读数:进来拉一次 + 定时轮询(2 分钟) + 切号刷新
@@ -391,6 +426,15 @@
     text-align: center;
     box-sizing: border-box;
     box-shadow: 0 0 0 1.5px var(--background-color);
+  }
+
+  .nt-mobile-markall {
+    min-width: 72px;
+    height: 44px;
+    padding-inline: 8px;
+    color: var(--primary-color);
+    background: transparent !important;
+    font-size: 13px;
   }
 </style>
 

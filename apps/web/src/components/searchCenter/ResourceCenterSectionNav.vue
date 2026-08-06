@@ -1,11 +1,19 @@
 <template>
-  <div class="resource-center-section-bar">
-    <div class="resource-center-section-nav" role="tablist" :aria-label="t('resourceCenter.title')">
+  <div
+    class="resource-center-section-bar"
+    :role="bookmark.isMobile ? 'tablist' : undefined"
+    :aria-label="bookmark.isMobile ? t('resourceCenter.title') : undefined"
+  >
+    <div
+      class="resource-center-section-nav"
+      :role="bookmark.isMobile ? undefined : 'tablist'"
+      :aria-label="bookmark.isMobile ? undefined : t('resourceCenter.title')"
+    >
       <BButton
         class="section-nav-item"
-        :class="{ active: activeSection === 'resources' }"
+        :class="{ active: activeSection === 'resources' && !isKnowledgeMapView }"
         role="tab"
-        :aria-selected="activeSection === 'resources'"
+        :aria-selected="activeSection === 'resources' && (!bookmark.isMobile || !isKnowledgeMapView)"
         @click="goTo('resources')"
       >
         {{ t('resourceCenter.sections.resources') }}
@@ -25,7 +33,9 @@
       class="knowledge-map-view"
       :class="{ active: isKnowledgeMapView }"
       :aria-label="t('resourceCenter.knowledgeGraph')"
-      :aria-pressed="isKnowledgeMapView"
+      :role="bookmark.isMobile ? 'tab' : undefined"
+      :aria-selected="bookmark.isMobile ? isKnowledgeMapView : undefined"
+      :aria-pressed="bookmark.isMobile ? undefined : isKnowledgeMapView"
       @click="toggleKnowledgeMap"
     >
       <SvgIcon :src="icon.noteTemplate.knowledge" size="16" aria-hidden="true" />
@@ -179,35 +189,65 @@
   @media (max-width: 767px) {
     .resource-center-section-bar {
       width: 100%;
-      gap: 6px;
+      height: 52px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 4px;
+      padding: 4px;
+      border-radius: 12px;
+      background: var(--workspace-panel-bg-color);
     }
 
     .resource-center-section-nav {
-      width: auto;
-      min-width: 0;
-      flex: 1 1 auto;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      display: contents;
     }
 
     .section-nav-item {
       width: 100%;
       min-width: 0;
+      height: var(--mobile-touch-size, 44px);
       padding-inline: 8px;
+      border: 1px solid transparent;
+      background: transparent !important;
+      box-shadow: none;
+    }
+
+    .section-nav-item.active {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+      background: var(--card-background) !important;
+      font-weight: 650;
     }
 
     .knowledge-map-view {
-      min-width: 82px;
-      flex: 0 0 auto;
-      padding-inline: 10px;
+      width: 100%;
+      min-width: 0;
+      height: var(--mobile-touch-size, 44px);
+      padding-inline: 8px;
+      border-color: transparent;
+      border-radius: 7px;
+      background: transparent !important;
+      box-shadow: none;
     }
 
-    .knowledge-map-view__label--full {
+    .knowledge-map-view :deep(svg) {
       display: none;
     }
 
-    .knowledge-map-view__label--short {
+    .knowledge-map-view.active {
+      border-color: var(--resource-tag-color);
+      color: var(--resource-tag-color);
+      background: var(--card-background) !important;
+      font-weight: 650;
+      box-shadow: none;
+    }
+
+    .knowledge-map-view__label--full {
       display: inline;
+    }
+
+    .knowledge-map-view__label--short {
+      display: none;
     }
   }
 </style>

@@ -4,7 +4,8 @@
     :subtitle="pageSubtitle"
     accent="neutral"
     layout="workspace"
-    show-back
+    :show-header="!bookmark.isMobile"
+    :show-back="!bookmark.isMobile"
     @back="router.back()"
   >
     <template #actions>
@@ -16,15 +17,36 @@
       </BButton>
     </template>
 
-    <BCard variant="card" padding="14px" class="trash-page">
+    <BCard
+      variant="card"
+      padding="14px"
+      class="trash-page"
+      :class="{ 'is-mobile-batch': bookmark.isMobile && mobileBatchMode }"
+    >
       <!-- 提示区 -->
-      <div v-if="total > 0 || trashFileSize > 0" class="trash-info-bar">
+      <MobileNoticeStrip
+        v-if="bookmark.isMobile && (total > 0 || trashFileSize > 0)"
+        :title="retainDays >= 3650 ? $t('trash.autoCleanForever') : $t('trash.autoCleanTip', { days: retainDays })"
+        :description="pageSubtitle"
+        :icon="icon.common.important"
+      />
+      <div v-else-if="total > 0 || trashFileSize > 0" class="trash-info-bar">
         <svg-icon :src="icon.common.important" size="14" color="red" />
         <span v-if="retainDays >= 3650">{{ $t('trash.autoCleanForever') }}</span>
         <span v-else>{{ $t('trash.autoCleanTip', { days: retainDays }) }}</span>
       </div>
 
-      <div v-if="trashFileSizeWarnLevel" :class="['trash-size-warning', `is-${trashFileSizeWarnLevel}`]">
+      <MobileNoticeStrip
+        v-if="bookmark.isMobile && trashFileSizeWarnLevel"
+        :tone="trashFileSizeWarnLevel"
+        :description="
+          trashFileSizeWarnLevel === 'danger'
+            ? $t('trash.trashSizeWarning500', { size: trashFileSizeMB })
+            : $t('trash.trashSizeWarning200', { size: trashFileSizeMB })
+        "
+        :icon="icon.common.important"
+      />
+      <div v-else-if="trashFileSizeWarnLevel" :class="['trash-size-warning', `is-${trashFileSizeWarnLevel}`]">
         <span>{{
           trashFileSizeWarnLevel === 'danger'
             ? $t('trash.trashSizeWarning500', { size: trashFileSizeMB })
@@ -88,34 +110,41 @@
             <p class="trash-empty-text">{{ $t('trash.noData') }}</p>
           </div>
 
-          <div v-else-if="bookmark.isMobile" class="trash-mobile-list">
-            <BCard
+          <MobileListSurface v-else-if="bookmark.isMobile" class="trash-mobile-list">
+            <MobileListRow
               v-for="item in items"
               :key="item.id"
-              as="article"
-              variant="card"
-              padding="12px"
-              class="trash-mobile-card"
+              interactive
+              :selected="selectedIds.includes(item.id)"
+              :complex="true"
+              @click="mobileBatchMode ? toggleMobileSelection(item.id) : openItemActions(item)"
             >
-              <div class="trash-mobile-card__top">
+              <template #leading>
                 <span :class="['trash-type-badge', `trash-type-badge--${item.resourceType}`]">
                   <span class="type-dot" />
-                  {{ $t(`trash.${item.resourceType}`) }}
                 </span>
-                <span class="trash-mobile-card__time">{{ item.deletedAt }}</span>
-              </div>
-              <div class="trash-mobile-card__body">
-                <strong :title="item.name">{{ item.name || '-' }}</strong>
-                <span v-if="item.resourceType === 'file' && item.fileSize">{{ formatTrashSize(item.fileSize) }}</span>
-              </div>
-              <div class="trash-mobile-card__actions">
-                <BButton size="small" @click="confirmRestore(item)">{{ $t('trash.restore') }}</BButton>
-                <BButton size="small" type="danger" @click="confirmDelete(item)">
-                  {{ $t('trash.permanentDelete') }}
-                </BButton>
-              </div>
-            </BCard>
-          </div>
+              </template>
+              <template #title>{{ item.name || '-' }}</template>
+              <template #subtitle>
+                {{ $t(`trash.${item.resourceType}`) }}
+                <template v-if="item.resourceType === 'file' && item.fileSize"> · {{ formatTrashSize(item.fileSize) }}</template>
+                · {{ item.deletedAt }}
+              </template>
+              <template #trailing>
+                <span
+                  v-if="mobileBatchMode"
+                  class="trash-selection-indicator"
+                  :class="{ 'is-selected': selectedIds.includes(item.id) }"
+                  aria-hidden="true"
+                >
+                  <svg-icon v-if="selectedIds.includes(item.id)" :src="icon.filterPanel.check" size="17" />
+                </span>
+                <span v-else class="trash-mobile-more" aria-hidden="true">
+                  <svg-icon :src="icon.common.more" size="18" />
+                </span>
+              </template>
+            </MobileListRow>
+          </MobileListSurface>
 
           <div v-else class="trash-table-wrap">
             <BTable
@@ -160,7 +189,7 @@
 
       <!-- 批量操作栏 -->
       <transition name="batch-slide">
-        <div v-if="selectedIds.length > 0" class="trash-batch-bar">
+        <div v-if="selectedIds.length > 0 && !bookmark.isMobile" class="trash-batch-bar">
           <span class="batch-count">{{ $t('trash.totalCount', { count: selectedIds.length }) }}</span>
           <div class="batch-actions">
             <BButton size="small" @click="confirmRestore(selectedItems)">
@@ -173,11 +202,25 @@
         </div>
       </transition>
     </BCard>
+    <MobileStickyActionBar v-if="bookmark.isMobile && mobileBatchMode" :above-navigation="false">
+      <BButton :disabled="!selectedIds.length" @click="confirmRestore(selectedItems)">
+        {{ $t('trash.restore') }} {{ selectedIds.length || '' }}
+      </BButton>
+      <BButton type="danger" :disabled="!selectedIds.length" @click="confirmDelete(selectedItems)">
+        {{ $t('trash.permanentDelete') }}
+      </BButton>
+    </MobileStickyActionBar>
+    <MobilePageActionsDrawer
+      v-model:open="mobileActionsOpen"
+      :object-title="mobileActionTitle"
+      :actions="mobileActions"
+      @action="handleMobileAction"
+    />
   </ResourcePageShell>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { bookmarkStore } from '@/store';
@@ -188,7 +231,13 @@
   import icon from '@/config/icon';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
-  import { formatTrashSize, useTrash } from '@/composables/useTrash.ts';
+  import { formatTrashSize, useTrash, type TrashItem } from '@/composables/useTrash.ts';
+  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
+  import MobileListRow from '@/components/mobile/MobileListRow.vue';
+  import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { useMobileTopBar } from '@/composables/useMobileTopBar';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -214,6 +263,106 @@
     confirmRestoreAll,
     confirmEmptyAll,
   } = useTrash();
+
+  const mobileBatchMode = ref(false);
+  const mobileActionsOpen = ref(false);
+  const activeMobileItem = ref<TrashItem | null>(null);
+  const mobileActionTitle = computed(() => activeMobileItem.value?.name || t('trash.title'));
+  const mobileActions = computed<MobilePageActionItem[]>(() => {
+    if (activeMobileItem.value) {
+      return [
+        { key: 'restore-item', label: t('trash.restore'), icon: icon.contextMenu.archive },
+        {
+          key: 'delete-item',
+          label: t('trash.permanentDelete'),
+          icon: icon.table_delete,
+          danger: true,
+          dividerBefore: true,
+        },
+      ];
+    }
+    return [
+      { key: 'batch', label: t('trash.batchSelect'), icon: icon.filterPanel.check, disabled: total.value === 0 },
+      { key: 'restore-all', label: t('trash.restoreAll'), icon: icon.contextMenu.archive, disabled: total.value === 0 },
+      {
+        key: 'empty-all',
+        label: t('trash.emptyAll'),
+        icon: icon.table_delete,
+        danger: true,
+        dividerBefore: true,
+        disabled: total.value === 0,
+      },
+    ];
+  });
+
+  useMobileTopBar(['trash', 'ptrash'], {
+    title: () =>
+      mobileBatchMode.value ? t('trash.selectedCount', { count: selectedIds.value.length }) : t('trash.title'),
+    onBack: () => {
+      if (mobileBatchMode.value) {
+        exitMobileBatch();
+        return;
+      }
+      if (window.history.length > 1) router.back();
+      else router.push('/personCenter');
+    },
+    leadingActionLabel: () => (mobileBatchMode.value ? t('common.cancel') : ''),
+    showNotification: false,
+    onAuxiliaryAction: () => {
+      if (mobileBatchMode.value) toggleAllMobile();
+      else openPageActions();
+    },
+    auxiliaryActionLabel: () =>
+      mobileBatchMode.value
+        ? t(selectedIds.value.length === items.value.length ? 'trash.deselectAll' : 'trash.selectAll')
+        : t('common.more'),
+    auxiliaryActionIcon: () => (mobileBatchMode.value ? '' : icon.common.more),
+  });
+
+  function openPageActions() {
+    activeMobileItem.value = null;
+    mobileActionsOpen.value = true;
+  }
+
+  function openItemActions(item: TrashItem) {
+    activeMobileItem.value = item;
+    mobileActionsOpen.value = true;
+  }
+
+  function enterMobileBatch() {
+    selectedIds.value = [];
+    mobileBatchMode.value = true;
+  }
+
+  function exitMobileBatch() {
+    selectedIds.value = [];
+    mobileBatchMode.value = false;
+  }
+
+  function toggleMobileSelection(id: string) {
+    if (!mobileBatchMode.value) return;
+    selectedIds.value = selectedIds.value.includes(id)
+      ? selectedIds.value.filter((value) => value !== id)
+      : [...selectedIds.value, id];
+  }
+
+  function toggleAllMobile() {
+    selectedIds.value = selectedIds.value.length === items.value.length ? [] : items.value.map((item) => item.id);
+  }
+
+  function handleMobileAction(action: MobilePageActionItem) {
+    const item = activeMobileItem.value;
+    if (action.key === 'batch') enterMobileBatch();
+    else if (action.key === 'restore-all') confirmRestoreAll();
+    else if (action.key === 'empty-all') confirmEmptyAll();
+    else if (action.key === 'restore-item' && item) confirmRestore(item);
+    else if (action.key === 'delete-item' && item) confirmDelete(item);
+  }
+
+  watch(items, () => {
+    // 成功恢复/删除或切换筛选后列表会整体刷新，批量选择不跨数据集保留。
+    if (mobileBatchMode.value) exitMobileBatch();
+  });
 
   const columns = computed(() => [
     { key: 'resourceType', title: t('trash.resourceType'), width: '120px' },
@@ -533,48 +682,7 @@
   }
 
   .trash-mobile-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .trash-mobile-card {
-    --b-card-background: var(--card-background);
-    --b-card-border-color: var(--surface-border-color);
-    --b-card-shadow: var(--surface-card-shadow);
-
-    border-radius: 12px;
-  }
-
-  .trash-mobile-card__top,
-  .trash-mobile-card__body,
-  .trash-mobile-card__actions {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .trash-mobile-card__time,
-  .trash-mobile-card__body span {
-    color: var(--desc-color);
-    font-size: 11px;
-  }
-
-  .trash-mobile-card__body {
-    margin: 12px 0;
-
-    strong {
-      min-width: 0;
-      overflow: hidden;
-      font-size: 14px;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-  }
-
-  .trash-mobile-card__actions {
-    justify-content: flex-end;
+    display: block;
   }
 
   @media (max-width: 767px) {
@@ -584,6 +692,14 @@
       flex-direction: column;
       gap: 10px;
       overflow: hidden;
+      border: 0;
+      border-radius: 0;
+      background: var(--surface-page-bg);
+      box-shadow: none;
+    }
+
+    .trash-page.is-mobile-batch {
+      padding-bottom: 92px;
     }
 
     .trash-toolbar {
@@ -597,6 +713,10 @@
       width: 100%;
     }
 
+    .trash-search-input :deep(.b-input) {
+      min-height: var(--mobile-touch-size, 44px);
+    }
+
     .trash-type-filter {
       width: 100%;
       overflow-x: auto;
@@ -604,6 +724,7 @@
 
     .trash-type-btn {
       min-width: max-content;
+      height: var(--mobile-touch-size, 44px);
       flex: 1;
       padding-inline: 12px;
     }
@@ -614,8 +735,7 @@
       flex: 1;
     }
 
-    // 移动端每条已是独立卡片,外层不再套"带边框背景的盒子"(卡片套卡片),
-    // 只保留极小的横向留白避免卡片阴影被裁,把宽度让给内容。
+    // 移动端列表只有一个外层 Surface；这里只保留极小横向留白，避免贴住滚动容器。
     .trash-table-scroll {
       padding: 2px 2px 0;
       box-sizing: border-box;
@@ -626,6 +746,46 @@
     .trash-info-bar,
     .trash-size-warning {
       margin-top: 0;
+    }
+
+    .trash-mobile-list .trash-type-badge {
+      width: 38px;
+      height: 38px;
+      box-sizing: border-box;
+      justify-content: center;
+      padding: 0;
+      border: 1px solid var(--surface-border-color);
+      background: var(--workspace-panel-bg-color);
+    }
+
+    .trash-mobile-list .type-dot {
+      width: 8px;
+      height: 8px;
+    }
+
+    .trash-mobile-more {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      color: var(--text-color);
+    }
+
+    .trash-selection-indicator {
+      width: 26px;
+      height: 26px;
+      box-sizing: border-box;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 7px;
+      color: white;
+      background: var(--card-background);
+    }
+
+    .trash-selection-indicator.is-selected {
+      border-color: var(--primary-color);
+      background: var(--primary-color);
     }
 
     .trash-batch-bar {
