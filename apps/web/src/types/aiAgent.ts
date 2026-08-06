@@ -39,6 +39,11 @@ export interface AiToolConfirmationResolution {
   receipt: AiToolActionReceipt;
 }
 
+export interface AiToolConfirmationReplacement {
+  previousConfirmationId: string;
+  confirmation: AiToolConfirmation;
+}
+
 export type AiToolConfirmationSettlementStatus = 'confirmed' | 'cancelled' | 'editing' | 'failed' | 'expired';
 
 export interface AiToolConfirmationSettlement {

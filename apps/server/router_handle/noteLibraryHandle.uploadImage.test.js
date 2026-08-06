@@ -60,7 +60,10 @@ describe('uploadNoteImage 归属与事务', () => {
     vi.clearAllMocks();
     ensureNotVisitor.mockReturnValue(true);
     getConnection.mockResolvedValue(connection);
-    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    connection.query.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id')) return [[]];
+      return [{ affectedRows: 1 }];
+    });
     unlinkSpy.mockResolvedValue();
   });
 
@@ -119,12 +122,15 @@ describe('uploadNoteImage 归属与事务', () => {
     const res = mockRes();
     await uploadNoteImage(baseReq(), res);
     const sqls = connection.query.mock.calls.map(([sql]) => sql);
-    expect(sqls).toEqual(['INSERT INTO note SET ?', 'INSERT INTO note_images SET ?']);
-    expect(sqls.join(' ')).not.toMatch(/ORDER BY/i);
+    expect(sqls[0]).toContain('SELECT id, parent_id');
+    expect(sqls[0]).toContain('FOR UPDATE');
+    expect(sqls.slice(1)).toEqual(['INSERT INTO note SET ?', 'INSERT INTO note_images SET ?']);
+    expect(sqls.join(' ')).not.toMatch(/ORDER BY[\s\S]*LIMIT\s+1/i);
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
     const sent = lastSent(res);
     expect(sent.data.noteId).toBe('server-generated-id');
+    expect(connection.query.mock.calls[1][1][0]).toMatchObject({ parent_id: null, sort: 0 });
     expect(triggerResourceCreateEffects).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'u1',

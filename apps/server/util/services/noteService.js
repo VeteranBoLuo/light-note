@@ -6,6 +6,7 @@ import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
 import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 import { extractOwnedResourceRefs, syncNoteResourceRefs } from './noteReferenceService.js';
+import { prepareOwnedNotePlacement } from './noteTreeService.js';
 
 const NOTE_TYPES = new Set(['html', 'markdown']);
 const NOTE_VERSION_KEEP = 20;
@@ -33,7 +34,7 @@ function markCommitOutcomeUnknown(error) {
 }
 
 async function findOwnedNoteById({ userId, noteId }) {
-  const [rows] = await pool.query('SELECT id, title, type FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
+  const [rows] = await pool.query('SELECT id, title, type, parent_id FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
     noteId,
     userId,
   ]);
@@ -72,6 +73,7 @@ export async function createNote({
         id: existing.id,
         title: existing.title || title,
         type: existing.type || type,
+        parentId: existing.parent_id ?? null,
         addedToInbox: false,
       };
     }
@@ -92,6 +94,12 @@ export async function createNote({
   try {
     await connection.beginTransaction();
     transactionStarted = true;
+    const placement = await prepareOwnedNotePlacement(connection, {
+      userId,
+      parentId: note.parentId ?? null,
+    });
+    data.parent_id = placement.parentId;
+    data.sort = placement.sort;
     await connection.query('INSERT INTO note SET ?', [data]);
     // 正文引用本站上传图片时登记引用(引用计数语义,见 util/noteImages.js):
     // 模板实例化/粘贴复用等路径创建的笔记也成为图片合法引用者,原笔记删除时不误删共享文件。
@@ -176,7 +184,13 @@ export async function createNote({
       // 资源已提交；成长与转化是旁路副作用，任何同步异常都不能反向伪装成创建失败。
     }
   }
-  return { id: data.id, title, type, addedToInbox: Boolean(addToInbox) };
+  return {
+    id: data.id,
+    title,
+    type,
+    parentId: data.parent_id,
+    addedToInbox: Boolean(addToInbox),
+  };
 }
 
 /**

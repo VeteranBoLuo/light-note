@@ -52,5 +52,6 @@ router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
 router.post('/getAiFeedback', commonHandle.getAiFeedback);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverview', commonHandle.getAdminOverview);
+router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 
 export default router;

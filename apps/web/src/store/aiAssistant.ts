@@ -7,12 +7,7 @@ import type { AiConversationActionSettlement } from '@/components/aiAssistant/ai
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
-
-interface AiResourceContext {
-  type: GlobalSearchType;
-  id: string;
-  title: string;
-}
+import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
 
 interface AiToolStatusItem {
   name: string;
@@ -77,6 +72,8 @@ export interface AiAssistantMessage {
   contexts?: AiResourceContext[];
   /** 发送瞬间的不可变上下文快照，重试/重新生成只能读取该字段。 */
   contextRefs?: AiResourceContext[];
+  /** 与单个材料分离的目录检索范围快照。 */
+  scopeRefs?: AiScopeRef[];
   /** 发送瞬间的不可变附件快照，重试/重新生成只能读取该字段。 */
   attachmentRefs?: AiAttachment[];
   transient?: boolean;
@@ -94,6 +91,7 @@ export interface AiAssistantMessage {
 
 export interface AiAssistantMaterialSnapshot {
   contextRefs: AiResourceContext[];
+  scopeRefs: AiScopeRef[];
   attachmentRefs: AiAttachment[];
 }
 
@@ -109,6 +107,7 @@ interface AiAssistantPersistedState {
   identity: AiAssistantIdentity;
   draft: string;
   contextRefs: AiResourceContext[];
+  scopeRefs: AiScopeRef[];
   attachmentRefs: AiAttachment[];
   messages: Array<Record<string, unknown>>;
   scrollTop: number;
@@ -145,6 +144,7 @@ interface AiAssistantState {
   runtimeIdentityKey: string;
   draft: string;
   contextRefs: AiResourceContext[];
+  scopeRefs: AiScopeRef[];
   attachmentRefs: AiAttachment[];
   messages: AiAssistantMessage[];
   isLoading: boolean;
@@ -263,6 +263,17 @@ function cloneContextRef(value: AiResourceContext): AiResourceContext {
   };
 }
 
+function cloneScopeRef(value: AiScopeRef): AiScopeRef {
+  return {
+    type: value.type,
+    id: String(value.id),
+    title: String(value.title || ''),
+    ...(Number.isFinite(Number(value.estimatedResourceCount))
+      ? { estimatedResourceCount: Math.max(1, Number(value.estimatedResourceCount)) }
+      : {}),
+  };
+}
+
 function cloneAttachmentRef(value: AiAttachment): AiAttachment {
   return {
     id: String(value.id),
@@ -290,9 +301,11 @@ function freezeSnapshotItems<T extends object>(items: T[]) {
 export function createAiAssistantMaterialSnapshot(
   contexts: AiResourceContext[],
   attachments: AiAttachment[],
+  scopes: AiScopeRef[] = [],
 ): AiAssistantMaterialSnapshot {
   return {
     contextRefs: freezeSnapshotItems(contexts.map(cloneContextRef)),
+    scopeRefs: freezeSnapshotItems(scopes.map(cloneScopeRef)),
     attachmentRefs: freezeSnapshotItems(attachments.map(cloneAttachmentRef)),
   };
 }
@@ -376,6 +389,7 @@ export function resolveAiAssistantFollowUpMaterialSnapshot(
   if (parentIndex < 0) return null;
   const parent = messages[parentIndex];
   const parentContexts = parent.contextRefs || parent.contexts || [];
+  const parentScopes = parent.scopeRefs || [];
   const parentAttachments = parent.attachmentRefs || [];
 
   const supportedEntityTypes = new Set<GlobalSearchType>(['bookmark', 'note', 'file', 'tag', 'todo']);
@@ -419,12 +433,12 @@ export function resolveAiAssistantFollowUpMaterialSnapshot(
     assistant.persistAfterConfirmationSettlement ||
     assistant.actionSettlements?.length,
   );
-  if (!contextRefs.length && !attachmentRefs.length && isActionRound) {
+  if (!contextRefs.length && !attachmentRefs.length && !parentScopes.length && isActionRound) {
     contextRefs.push(...parentContexts);
     attachmentRefs = parentAttachments;
   }
-  if (!contextRefs.length && !attachmentRefs.length) return null;
-  return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs);
+  if (!contextRefs.length && !attachmentRefs.length && !parentScopes.length) return null;
+  return createAiAssistantMaterialSnapshot(contextRefs, attachmentRefs, parentScopes);
 }
 
 function safeCloneArray<T>(value: unknown): T[] {
@@ -448,6 +462,27 @@ function normalizeContextRefs(value: unknown) {
     )
     .slice(0, 5)
     .map(cloneContextRef);
+}
+
+function normalizeScopeRefs(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .filter(
+      (item): item is AiScopeRef =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        String((item as AiScopeRef).type) === 'note_branch' &&
+        Boolean(String((item as AiScopeRef).id || '').trim()),
+    )
+    .filter((item) => {
+      const key = `${item.type}:${String(item.id).trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3)
+    .map(cloneScopeRef);
 }
 
 function normalizeAttachmentRefs(value: unknown) {
@@ -514,6 +549,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
   const content = typeof raw.content === 'string' ? raw.content : '';
   if (!content) return null;
   const contextRefs = normalizeContextRefs(raw.contextRefs || raw.contexts);
+  const scopeRefs = normalizeScopeRefs(raw.scopeRefs);
   const attachmentRefs = normalizeAttachmentRefs(raw.attachmentRefs);
   const rawPendingConfirmationIds = Array.isArray(raw.pendingConfirmationIds)
     ? raw.pendingConfirmationIds.map((id) => String(id || '').trim()).filter(Boolean)
@@ -558,6 +594,7 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
         : undefined,
     contexts: normalizeContextRefs(raw.contexts || raw.contextRefs),
     contextRefs: freezeSnapshotItems(contextRefs),
+    scopeRefs: freezeSnapshotItems(scopeRefs),
     entityRefs: normalizeContextRefs(raw.entityRefs),
     attachmentRefs: freezeSnapshotItems(attachmentRefs),
     confirmations,
@@ -610,6 +647,7 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     toolEvents: safeCloneArray<AiToolStatusItem>(message.toolEvents),
     contexts: normalizeContextRefs(message.contexts || message.contextRefs),
     contextRefs: normalizeContextRefs(message.contextRefs || message.contexts),
+    scopeRefs: normalizeScopeRefs(message.scopeRefs),
     entityRefs: normalizeContextRefs(message.entityRefs),
     attachmentRefs: normalizeAttachmentRefs(message.attachmentRefs),
     confirmations: normalizePendingConfirmations(message.confirmations).filter((confirmation) =>
@@ -711,6 +749,7 @@ function readLegacySelfConversation(identity: AiAssistantIdentity): AiAssistantP
       },
       draft: '',
       contextRefs: [],
+      scopeRefs: [],
       attachmentRefs: [],
       messages: data.messages as Array<Record<string, unknown>>,
       scrollTop: 0,
@@ -742,6 +781,7 @@ function createInitialState(): AiAssistantState {
     runtimeIdentityKey: '',
     draft: '',
     contextRefs: [],
+    scopeRefs: [],
     attachmentRefs: [],
     messages: [],
     isLoading: false,
@@ -813,6 +853,7 @@ export default defineStore('aiAssistant', {
         },
         draft: this.draft,
         contextRefs: normalizeContextRefs(this.contextRefs),
+        scopeRefs: normalizeScopeRefs(this.scopeRefs),
         attachmentRefs: normalizeAttachmentRefs(this.attachmentRefs),
         messages: this.messages
           .filter((message) => shouldPersistMessage(message, activePendingGroups))
@@ -887,6 +928,7 @@ export default defineStore('aiAssistant', {
       this.runtimeIdentityKey = nextRuntimeIdentityKey;
       this.draft = typeof persisted?.draft === 'string' ? persisted.draft : '';
       this.contextRefs = normalizeContextRefs(persisted?.contextRefs);
+      this.scopeRefs = normalizeScopeRefs(persisted?.scopeRefs);
       this.attachmentRefs = normalizeAttachmentRefs(persisted?.attachmentRefs);
       this.messages = restoredMessages.length ? restoredMessages : [fallbackGreeting];
       this.isLoading = false;
@@ -929,8 +971,10 @@ export default defineStore('aiAssistant', {
      */
     consumeComposerMaterials(snapshot: AiAssistantMaterialSnapshot) {
       const sentContextKeys = new Set(snapshot.contextRefs.map((item) => `${item.type}:${item.id}`));
+      const sentScopeKeys = new Set(snapshot.scopeRefs.map((item) => `${item.type}:${item.id}`));
       const sentAttachmentIds = new Set(snapshot.attachmentRefs.map((item) => String(item.id)));
       this.contextRefs = this.contextRefs.filter((item) => !sentContextKeys.has(`${item.type}:${item.id}`));
+      this.scopeRefs = this.scopeRefs.filter((item) => !sentScopeKeys.has(`${item.type}:${item.id}`));
       this.attachmentRefs = this.attachmentRefs.filter((item) => !sentAttachmentIds.has(String(item.id)));
       this.persistCurrentConversation();
     },
@@ -939,8 +983,9 @@ export default defineStore('aiAssistant', {
      * 否则会话 A 挂的标签会跟着用户进入会话 B(切换云会话/跨设备恢复)。
      */
     detachAllComposerMaterials() {
-      if (!this.contextRefs.length && !this.attachmentRefs.length) return;
+      if (!this.contextRefs.length && !this.scopeRefs.length && !this.attachmentRefs.length) return;
       this.contextRefs = [];
+      this.scopeRefs = [];
       this.attachmentRefs = [];
       this.persistCurrentConversation();
     },
@@ -1037,6 +1082,7 @@ export default defineStore('aiAssistant', {
       }
       this.draft = '';
       this.contextRefs = [];
+      this.scopeRefs = [];
       this.attachmentRefs = [];
       this.messages = [
         {

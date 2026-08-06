@@ -15,6 +15,7 @@
         :animation="200"
         ref="el"
         v-model="dragList"
+        @start="onStart"
         @end="onEnd"
         :handle="handle"
         :scroll-sensitivity="scrollSensitivity"
@@ -99,9 +100,12 @@
   async function onEnd(e: any) {
     emit('onEnd', e);
   }
+  function onStart(e: any) {
+    emit('start', e);
+  }
   const searchValue = ref('');
   const listOptions = defineModel<any[]>('listOptions', { default: () => [] });
-  const emit = defineEmits(['node-click', 'onEnd']);
+  const emit = defineEmits(['node-click', 'start', 'onEnd']);
   const nodeCheckId = ref(props.checkId);
   function nodeClick(item) {
     nodeCheckId.value = item[props.nodeType.id];

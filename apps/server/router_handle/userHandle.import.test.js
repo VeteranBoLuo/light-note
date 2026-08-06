@@ -23,6 +23,21 @@ vi.mock('../util/auth.js', async () => {
 
 const completeGrowthTask = vi.fn(async () => ({ completed: true }));
 vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
+vi.mock('../util/services/newUserSeedService.js', () => ({
+  seedNewUserCloudFile: vi.fn(),
+  seedNewUserWorkspaceData: vi.fn(),
+}));
+vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
+vi.mock('../util/obsClient.js', () => ({
+  bucketBaseUrl: 'https://example.invalid',
+  buildObjectKey: vi.fn(),
+  buildObjectUrl: vi.fn(),
+  copyObjectInObs: vi.fn(),
+  createDownloadSignedUrl: vi.fn(),
+  createUploadSignedUrl: vi.fn(),
+  deleteObjectFromObs: vi.fn(),
+  putObjectToObs: vi.fn(),
+}));
 
 const extractOwnedResourceRefs = vi.fn(() => []);
 const syncNoteResourceRefs = vi.fn(async () => ({ inserted: 0, updated: 0, deleted: 0 }));
@@ -84,5 +99,82 @@ describe('importData 引用同步接入(N0 · P0-1)', () => {
     await importData(req({ notes: [{ title: 'T', content: '[x](/noteLibrary/n1)', type: 'markdown' }] }), res);
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('先创建全部笔记再按旧 ID 映射恢复父关系，并保留同级 sort 与删除批次字段', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (/^UPDATE note\s+SET parent_id/.test(String(sql).trim())) return [{ affectedRows: 1 }];
+      return [[]];
+    });
+    const res = mockRes();
+
+    await importData(
+      req({
+        notes: [
+          {
+            id: 'old-child',
+            parentId: 'old-parent',
+            title: '子页面',
+            content: 'child',
+            type: 'html',
+            sort: 7,
+            treeDeleteBatchId: 'legacy-batch',
+          },
+          { id: 'old-parent', parentId: null, title: '父页面', content: 'parent', type: 'html', sort: 2 },
+        ],
+      }),
+      res,
+    );
+
+    const noteInserts = connection.query.mock.calls
+      .filter(([sql]) => sql === 'INSERT INTO note SET ?')
+      .map(([, params]) => params[0]);
+    const child = noteInserts.find((note) => note.title === '子页面');
+    const parent = noteInserts.find((note) => note.title === '父页面');
+    expect(child).toMatchObject({ parent_id: null, sort: 7, tree_delete_batch_id: 'legacy-batch' });
+    expect(parent).toMatchObject({ parent_id: null, sort: 2 });
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('SET parent_id = ?'), [
+      parent.id,
+      child.id,
+      'u1',
+    ]);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('父 ID 在备份中缺失时把页面放到根目录并返回可解释预警', async () => {
+    const res = mockRes();
+    await importData(
+      req({ notes: [{ id: 'old-child', parentId: 'missing', title: '孤立页面', content: 'x', type: 'html' }] }),
+      res,
+    );
+
+    expect(connection.query.mock.calls.some(([sql]) => /UPDATE note\s+SET parent_id/.test(String(sql)))).toBe(false);
+    const response = res.send.mock.calls.at(-1)?.[0];
+    expect(response).toMatchObject({
+      status: 200,
+      data: {
+        notes: { added: 1, rerooted: 1 },
+        preflight: { warnings: expect.arrayContaining(['NOTE_TREE_MISSING_PARENT_REROOTED']) },
+      },
+    });
+  });
+
+  it('备份目录存在循环时在获取事务连接前整批拒绝', async () => {
+    const res = mockRes();
+    await importData(
+      req({
+        notes: [
+          { id: 'a', parentId: 'b', title: 'A', content: 'a' },
+          { id: 'b', parentId: 'a', title: 'B', content: 'b' },
+        ],
+      }),
+      res,
+    );
+
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: 400,
+      data: { errorCode: 'NOTE_IMPORT_TREE_CYCLE' },
+    });
   });
 });

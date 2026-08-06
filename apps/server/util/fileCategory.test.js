@@ -13,4 +13,16 @@ describe('file category filtering', () => {
     expect(expression).toContain("LOCATE('.', COALESCE(files.file_name, ''), 2) > 0");
     expect(expression).toContain("ELSE 'other' END");
   });
+
+  it.each([
+    ['photo.avif', 'image'],
+    ['clip.ogv', 'video'],
+    ['voice.m4a', 'audio'],
+    ['voice.opus', 'audio'],
+    ['source.py', 'text'],
+    ['component.vue', 'text'],
+    ['config.toml', 'text'],
+  ])('recognizes the new preview category for %s', (fileName, expectedCategory) => {
+    expect(resolveFileCategory({ fileName, fileType: 'application/octet-stream' })).toBe(expectedCategory);
+  });
 });

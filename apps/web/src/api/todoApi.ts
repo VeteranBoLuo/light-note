@@ -224,7 +224,8 @@ export const deleteTodoPlanV2 = (todoId: string, scope: TodoPlanScope, idempoten
   apiBasePost('/api/todo/v2/delete', { todoId, scope, idempotencyKey });
 export const updateTodo = (id: string, payload: Partial<TodoPayload>) =>
   apiBasePost('/api/todo/update', { id, ...payload });
-export const completeTodo = (id: string) => apiBasePost('/api/todo/complete', { id });
+export const completeTodo = (id: string, options?: { silent?: boolean }) =>
+  apiBasePost('/api/todo/complete', { id }, options);
 export const reopenTodo = (id: string) => apiBasePost('/api/todo/reopen', { id });
 export const deleteTodo = (id: string) => apiBasePost('/api/todo/delete', { id });
 export const restoreTodo = (id: string) => apiBasePost('/api/todo/restore', { id });

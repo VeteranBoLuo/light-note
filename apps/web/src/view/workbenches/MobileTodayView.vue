@@ -167,7 +167,8 @@
   const dailyGrowthBonus = computed(
     () => dashboard.value?.questBonus || { exp: 0, points: 0, claimed: false, claimable: false },
   );
-  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value));
+  // 「今日」只展示当天尚未收口的任务：保留待领奖入口，奖励领取后不再占用首屏空间。
+  const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
 
@@ -214,9 +215,7 @@
 
   const dateLabel = computed(() => {
     void clockTick.value;
-    return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(
-      new Date(),
-    );
+    return new Intl.DateTimeFormat(locale.value, { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date());
   });
 
   const greetingLine = computed(() => {
@@ -444,7 +443,8 @@
   .mobile-today__pending {
     margin-bottom: 14px;
     padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--card-border-color));
+    border: 1px solid var(--surface-border-color);
+    border-left: 3px solid var(--primary-color);
     border-radius: 14px;
     background: var(--card-background);
     box-shadow: 0 8px 24px -22px color-mix(in srgb, var(--primary-color) 60%, transparent);
@@ -495,7 +495,9 @@
   .mobile-today__summary {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: 0;
+    border-top: 1px solid var(--surface-divider-color);
+    border-bottom: 1px solid var(--surface-divider-color);
   }
 
   .mobile-today__pending-details {
@@ -512,10 +514,26 @@
     gap: 5px;
     flex-direction: column;
     justify-content: center;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
+    border: 0;
+    border-right: 1px solid var(--surface-divider-color);
+    border-radius: 0;
     color: var(--text-color);
     background: var(--card-background) !important;
+  }
+
+  .mobile-today__summary-item:last-child {
+    border-right: 0;
+  }
+
+  .mobile-today__pending-details :deep(.today-actions__group) {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobile-today__pending-details :deep(.today-actions__group + .today-actions__group) {
+    border-top: 1px solid var(--surface-divider-color);
   }
 
   .mobile-today__summary-item strong {
@@ -544,7 +562,7 @@
   .mobile-today__capture {
     margin-bottom: 14px;
     padding: 12px;
-    border: 1px solid color-mix(in srgb, var(--primary-color) 30%, transparent);
+    border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: color-mix(in srgb, var(--primary-color) 6%, var(--card-background));
   }

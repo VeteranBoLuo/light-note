@@ -31,7 +31,7 @@ describe('restore_trash', () => {
   it('预检只统计当前用户且返回分类型影响数量', async () => {
     query
       .mockResolvedValueOnce([[{ count: 2 }]])
-      .mockResolvedValueOnce([[{ count: 1 }]])
+      .mockResolvedValueOnce([[{ id: 'n1', parent_id: null, tree_delete_batch_id: null }]])
       .mockResolvedValueOnce([[{ count: 0 }]]);
     const preview = await restoreTrash.preview({ timeRange: '今天' }, { userId: 'u1' });
     expect(preview.impact).toBe('预计恢复 3 项内容');
@@ -40,15 +40,18 @@ describe('restore_trash', () => {
   });
 
   it('执行恢复使用事务并按资源类型限制归属', async () => {
-    connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    connection.query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ id: 'n1', parent_id: null, tree_delete_batch_id: null }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
     const result = await restoreTrash.execute({ type: 'note', id: 'n1' }, { userId: 'u1' });
     expect(connection.beginTransaction).toHaveBeenCalledTimes(1);
     expect(connection.query).toHaveBeenCalledWith(
-      expect.stringContaining('create_by = ? AND del_flag = 1 AND id = ?'),
+      expect.stringContaining('create_by = ? AND del_flag = 1 AND id IN (?)'),
       ['u1', 'n1'],
     );
     expect(connection.commit).toHaveBeenCalledTimes(1);
-    expect(result).toEqual([{ type: 'note', count: 1 }]);
+    expect(result).toEqual([{ type: 'note', count: 1, rerootedCount: 0 }]);
   });
 
   it('任一更新失败时整体回滚并释放连接', async () => {

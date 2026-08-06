@@ -20,6 +20,7 @@ function keyPayload({ toolName, args = {}, context = {} }) {
       title: normalizedText(args.title),
       content: normalizedText(args.content),
       type: normalizedText(args.type || 'markdown'),
+      parentId: normalizedText(args.parentId),
     };
   }
 

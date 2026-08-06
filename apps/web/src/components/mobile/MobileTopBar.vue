@@ -3,11 +3,13 @@
     <template v-if="isSecondary">
       <BButton
         class="mobile-top-bar__back"
-        :aria-label="t('common.back')"
-        :title="t('common.back')"
+        :class="{ 'mobile-top-bar__back--text': leadingActionLabel }"
+        :aria-label="leadingActionLabel || t('common.back')"
+        :title="leadingActionLabel || t('common.back')"
         @click="activeBinding?.onBack?.()"
       >
-        <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
+        <span v-if="leadingActionLabel">{{ leadingActionLabel }}</span>
+        <SvgIcon v-else :src="icon.arrow_left" size="20" aria-hidden="true" />
       </BButton>
       <h1 class="mobile-top-bar__title">{{ secondaryTitle }}</h1>
     </template>
@@ -49,28 +51,33 @@
         <SvgIcon :src="icon.navigation.search" size="19" aria-hidden="true" />
       </BButton>
       <BButton
-        v-if="
-          activeBinding?.onAuxiliaryAction &&
-          activeBinding.auxiliaryActionIcon?.() &&
-          activeBinding.auxiliaryActionLabel?.()
-        "
+        v-if="activeBinding?.onAuxiliaryAction && activeBinding.auxiliaryActionLabel?.()"
         class="mobile-top-bar__action mobile-top-bar__action--auxiliary"
+        :class="{ 'mobile-top-bar__action--text': !activeBinding.auxiliaryActionIcon?.() }"
         :aria-label="activeBinding.auxiliaryActionLabel()"
         :title="activeBinding.auxiliaryActionLabel()"
         @click="activeBinding.onAuxiliaryAction()"
         v-click-log="{ module: '移动端导航', operation: activeBinding.auxiliaryActionLabel() }"
       >
-        <SvgIcon :src="activeBinding.auxiliaryActionIcon()" size="19" aria-hidden="true" />
+        <SvgIcon
+          v-if="activeBinding.auxiliaryActionIcon?.()"
+          :src="activeBinding.auxiliaryActionIcon()"
+          size="19"
+          aria-hidden="true"
+        />
+        <span v-else>{{ activeBinding.auxiliaryActionLabel() }}</span>
       </BButton>
       <BButton
         v-if="activeBinding?.onAdd"
         class="mobile-top-bar__action"
+        :class="{ 'mobile-top-bar__action--text': addActionMode === 'text' }"
         :aria-label="addLabel"
         :title="addLabel"
         @click="runAdd"
         v-click-log="{ module: '移动端导航', operation: addLabel }"
       >
-        <SvgIcon :src="icon.common.plus" size="20" aria-hidden="true" />
+        <span v-if="addActionMode === 'text'">{{ addLabel }}</span>
+        <SvgIcon v-else :src="icon.common.plus" size="20" aria-hidden="true" />
       </BButton>
       <!-- 原「更多」菜单(书签管理/标签管理/回收站/设置)与「我的」页完全重复,改为移动端此前缺失的通知入口。
            NotificationBell 是多根组件(浮层+两个弹框),class 不会继承到按钮上,必须包一层容器再穿透。 -->
@@ -108,12 +115,14 @@
   });
   const isSecondary = computed(() => Boolean(activeBinding.value?.title && activeBinding.value?.onBack));
   const secondaryTitle = computed(() => activeBinding.value?.title?.() || '');
+  const leadingActionLabel = computed(() => activeBinding.value?.leadingActionLabel?.() || '');
   const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
   const showActions = computed(() =>
     Boolean(!showSearch.value || activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showNotification.value),
   );
   const addLabel = computed(() => activeBinding.value?.addLabel?.() || t('common.add'));
+  const addActionMode = computed(() => activeBinding.value?.addActionMode?.() || 'icon');
 
   /**
    * Logo 回「今日」，与移动端所有默认落点一致（冷启动、登录后、注册后都是今日）。
@@ -180,6 +189,14 @@
     background: transparent !important;
   }
 
+  .mobile-top-bar__back--text {
+    width: auto;
+    min-width: 52px;
+    padding-inline: 8px;
+    color: var(--primary-color);
+    font-weight: 650;
+  }
+
   .mobile-top-bar__title {
     min-width: 0;
     margin: 0;
@@ -209,6 +226,15 @@
     border-radius: 11px;
     color: var(--text-color);
     background: transparent !important;
+  }
+
+  .mobile-top-bar__action--text {
+    width: auto;
+    min-width: 52px;
+    padding-inline: 8px;
+    color: var(--primary-color);
+    font-size: 14px;
+    font-weight: 650;
   }
 
   .mobile-top-bar__action:active {

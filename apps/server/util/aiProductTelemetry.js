@@ -28,6 +28,17 @@ export const AI_PRODUCT_EVENTS = Object.freeze([
   'ai_error_recovered',
   'ai_memory_candidate_reviewed',
   'ai_memory_state_changed',
+  'note_tree_opened',
+  'note_tree_node_expanded',
+  'note_tree_branch_selected',
+  'note_tree_page_opened',
+  'note_tree_child_created',
+  'note_tree_node_moved',
+  'note_tree_move_rejected',
+  'note_tree_subtree_deleted',
+  'note_tree_mobile_sheet_opened',
+  'note_branch_ai_selected',
+  'note_branch_ai_answered',
 ]);
 
 const EVENT_SET = new Set(AI_PRODUCT_EVENTS);
@@ -44,6 +55,9 @@ const ENUM_DIMENSIONS = Object.freeze({
     'workspace',
     'conversation',
     'memory',
+    'desktop',
+    'mobile',
+    'ai',
   ]),
   device: new Set(['desktop', 'tablet', 'mobile', 'unknown']),
   mode: new Set(['ask', 'organize']),
@@ -82,6 +96,10 @@ const ENUM_DIMENSIONS = Object.freeze({
   scopeType: new Set(['global', 'conversation', 'resource', 'temporary']),
   memoryType: new Set(['preference', 'stable_fact', 'project', 'temporary_state', 'unknown']),
   memoryState: new Set(['candidate', 'active', 'paused', 'expired', 'deleted']),
+  depthBucket: new Set(['root', '1_2', '3_4', '5_6', '7_8', 'overflow']),
+  childCountBucket: new Set(['0', '1_3', '4_10', '11_50', '51_plus']),
+  subtreeSizeBucket: new Set(['0', '1', '2_10', '11_50', '51_200', '201_plus']),
+  result: new Set(['success', 'failed', 'rejected', 'conflict', 'cancelled', 'unavailable']),
 });
 const ID_DIMENSIONS = new Set([
   'conversationId',

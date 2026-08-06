@@ -208,6 +208,26 @@
               </div>
             </div>
 
+            <div class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.noteSidebarMode') }}</span>
+                <span class="field-desc">{{ t('settings.noteSidebarModeDesc') }}</span>
+              </div>
+              <div class="seg">
+                <BButton
+                  v-for="o in noteSidebarModeOpts"
+                  :key="o.v"
+                  class="seg-btn"
+                  :class="{ active: (user.preferences.noteSidebarMode || 'directory') === o.v }"
+                  :type="(user.preferences.noteSidebarMode || 'directory') === o.v ? 'primary' : undefined"
+                  :aria-pressed="(user.preferences.noteSidebarMode || 'directory') === o.v"
+                  @click="set('noteSidebarMode', o.v)"
+                >
+                  {{ o.label }}
+                </BButton>
+              </div>
+            </div>
+
             <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.resourceView') }}</span>
@@ -1151,6 +1171,10 @@
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },
     { v: 'list', label: t('settings.listView') },
+  ]);
+  const noteSidebarModeOpts = computed(() => [
+    { v: 'directory', label: t('note.directoryTab') },
+    { v: 'tags', label: t('note.tagsTab') },
   ]);
   const resourceViewOpts = computed(() => [
     { v: 'card', label: t('resourceCenter.view.card') },

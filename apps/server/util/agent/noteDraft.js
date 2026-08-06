@@ -11,6 +11,7 @@ const MAX_TITLE_CHARS = 255;
 const MAX_CONTENT_CHARS = 60_000;
 const MAX_MATERIALS = 12;
 const MAX_CONTEXT_REFS = 5;
+const MAX_SCOPE_REFS = 3;
 const MAX_ATTACHMENT_IDS = 5;
 const MAX_SOURCE_MESSAGE_CHARS = 12_000;
 const MAX_INTENT_HISTORY_CHARS = 6_000;
@@ -399,7 +400,12 @@ function normalizeAttachmentIds(values) {
  * 确认卡的私有上下文只保存可重新校验的稳定引用和原始用户文本，不保存资源正文副本。
  * 该对象仅写入服务端确认存储，publicToolConfirmation 不会下发给客户端。
  */
-export function createNoteDraftPrivateContext({ sourceMessage = '', contextRefs = [], attachmentIds = [] } = {}) {
+export function createNoteDraftPrivateContext({
+  sourceMessage = '',
+  contextRefs = [],
+  scopeRefs = [],
+  attachmentIds = [],
+} = {}) {
   return {
     kind: NOTE_DRAFT_CONTEXT_KIND,
     version: NOTE_DRAFT_CONTEXT_VERSION,
@@ -409,6 +415,7 @@ export function createNoteDraftPrivateContext({ sourceMessage = '', contextRefs 
       new Set(['bookmark', 'note', 'file', 'tag', 'todo']),
       MAX_CONTEXT_REFS,
     ),
+    scopeRefs: normalizeStableRefs(scopeRefs, new Set(['note_branch']), MAX_SCOPE_REFS),
     attachmentIds: normalizeAttachmentIds(attachmentIds),
   };
 }
@@ -417,7 +424,14 @@ export function normalizeNoteDraftPrivateContext(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   if (value.kind !== NOTE_DRAFT_CONTEXT_KIND || Number(value.version) !== NOTE_DRAFT_CONTEXT_VERSION) return null;
   const normalized = createNoteDraftPrivateContext(value);
-  if (!normalized.sourceMessage && !normalized.contextRefs.length && !normalized.attachmentIds.length) return null;
+  if (
+    !normalized.sourceMessage &&
+    !normalized.contextRefs.length &&
+    !normalized.scopeRefs.length &&
+    !normalized.attachmentIds.length
+  ) {
+    return null;
+  }
   return normalized;
 }
 

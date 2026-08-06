@@ -28,19 +28,33 @@ describe('materialFollowUp', () => {
           { type: 'user', id: 'u1' }, // 非法类型
           { type: 'bookmark', id: '' }, // 空 id
         ],
+        scopeRefs: [
+          { type: 'note_branch', id: 'branch-1' },
+          { type: 'note_branch', id: 'branch-1' }, // 重复
+          { type: 'tag_scope', id: 'tag-1' }, // 当前不允许继承标签范围
+          { type: 'note_branch', id: '' }, // 空 id
+        ],
         attachmentIds: ['a1', 'a1', ''],
       }),
-    ).toEqual({ contextRefs: [{ type: 'note', id: 'n1' }], attachmentIds: ['a1'] });
+    ).toEqual({
+      contextRefs: [{ type: 'note', id: 'n1' }],
+      scopeRefs: [{ type: 'note_branch', id: 'branch-1' }],
+      attachmentIds: ['a1'],
+    });
 
     const overflow = normalizeFollowUpMaterialCandidate({
       contextRefs: Array.from({ length: 9 }, (_, i) => ({ type: 'note', id: `n${i}` })),
+      scopeRefs: Array.from({ length: 9 }, (_, i) => ({ type: 'note_branch', id: `s${i}` })),
       attachmentIds: Array.from({ length: 9 }, (_, i) => `a${i}`),
     });
     expect(overflow.contextRefs).toHaveLength(5);
+    expect(overflow.scopeRefs).toHaveLength(3);
     expect(overflow.attachmentIds).toHaveLength(5);
 
     expect(normalizeFollowUpMaterialCandidate(null)).toBeNull();
-    expect(normalizeFollowUpMaterialCandidate({ contextRefs: [], attachmentIds: [] })).toBeNull();
+    expect(
+      normalizeFollowUpMaterialCandidate({ contextRefs: [], scopeRefs: [], attachmentIds: [] }),
+    ).toBeNull();
     expect(normalizeFollowUpMaterialCandidate([{ type: 'note', id: 'n1' }])).toBeNull();
   });
 

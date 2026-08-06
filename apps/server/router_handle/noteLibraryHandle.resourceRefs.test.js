@@ -13,6 +13,8 @@ const connection = {
 const getConnection = vi.fn(async () => connection);
 const poolQuery = vi.fn();
 const ensureNotVisitor = vi.fn(() => true);
+const replaceResourceTagRelations = vi.fn();
+const validateUserTags = vi.fn(async () => []);
 const extractOwnedResourceRefs = vi.fn(() => []);
 const syncNoteResourceRefs = vi.fn(async () => ({ inserted: 0, deleted: 0 }));
 const deleteNoteResourceRefsForNotes = vi.fn();
@@ -32,6 +34,7 @@ const listOwnedResourceBacklinks = vi.fn(async () => ({ available: true, items: 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
+  L: (_req, zh) => zh,
   snakeCaseKeys: vi.fn((obj) => obj),
   mergeExistingProperties: vi.fn((obj) => obj),
   insertData: vi.fn((obj) => ({ ...obj, id: 'gen-id' })),
@@ -39,8 +42,8 @@ vi.mock('../util/common.js', () => ({
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
 vi.mock('../util/resourceTags.js', () => ({
   RESOURCE_TYPE: { NOTE: 'note' },
-  replaceResourceTagRelations: vi.fn(),
-  validateUserTags: vi.fn(async () => []),
+  replaceResourceTagRelations,
+  validateUserTags,
 }));
 vi.mock('../util/resourceInbox.js', () => ({ attachPendingStatus: vi.fn(), removeInboxRelations: vi.fn() }));
 vi.mock('../util/services/noteService.js', () => ({ createNote: vi.fn() }));
@@ -76,7 +79,12 @@ describe('updateNote 引用同步接入(N0)', () => {
     vi.clearAllMocks();
     ensureNotVisitor.mockReturnValue(true);
     extractOwnedResourceRefs.mockReturnValue([]);
-    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: '旧标题', content: '旧正文', type: 'html' }]];
+      }
+      return [{ affectedRows: 1 }];
+    });
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
     syncNoteResourceRefs.mockResolvedValue({ inserted: 0, updated: 0, deleted: 0 });
@@ -85,7 +93,9 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('提交了正文(含站内链接) → commit 前同步引用', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT title, content, type FROM note/.test(sql)) return [[{ title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -118,7 +128,9 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('提交空正文 → 仍同步(空集合删除旧引用)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT title, content, type FROM note/.test(sql)) return [[{ title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -130,8 +142,9 @@ describe('updateNote 引用同步接入(N0)', () => {
 
   it('旧页面提交 Markdown 的 &gt; → 写库前恢复为真实引用标记', async () => {
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT title, content, type FROM note/.test(sql))
-        return [[{ title: '日报', content: '> 原始引用', type: 'markdown' }]];
+      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: '日报', content: '> 原始引用', type: 'markdown' }]];
+      }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -143,7 +156,7 @@ describe('updateNote 引用同步接入(N0)', () => {
     );
 
     const updateCall = connection.query.mock.calls.find(
-      ([sql]) => sql === 'update note set ? where id=? and create_by=?',
+      ([sql]) => sql === 'update note set ? where id=? and create_by=? and del_flag=0',
     );
     expect(updateCall?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', type: 'markdown' });
   });
@@ -151,9 +164,9 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('只带 content 不带 type → 用最终笔记的 type 解析(P1-4,不凭空按 html)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT content, type FROM note WHERE id = \?/.test(sql))
-        return [[{ content: '[x](/noteLibrary/n1)', type: 'markdown' }]];
-      if (/SELECT title, content, type FROM note/.test(sql)) return [[{ title: 'o', content: 'o', type: 'markdown' }]];
+      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'markdown' }]];
+      }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -166,8 +179,8 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('只切换 type 不带 content → 用最终正文与类型重算引用', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT content, type FROM note WHERE id = \?/.test(sql)) {
-        return [[{ content: '[x](/noteLibrary/n1)', type: 'markdown' }]];
+      if (/SELECT id, title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: '[x](/noteLibrary/n1)', type: 'html' }]];
       }
       return [{ affectedRows: 1 }];
     });
@@ -187,7 +200,9 @@ describe('updateNote 引用同步接入(N0)', () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     syncNoteResourceRefs.mockRejectedValueOnce(syncError);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT title, content, type FROM note/.test(sql)) return [[{ title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -200,6 +215,64 @@ describe('updateNote 引用同步接入(N0)', () => {
 
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('主表更新严格过滤页面树、归属、删除和排序字段', async () => {
+    const res = mockRes();
+
+    await updateNote(
+      {
+        user: { id: 'u1' },
+        body: {
+          id: 'note-1',
+          title: '安全标题',
+          parentId: 'other-parent',
+          parent_id: 'other-parent',
+          createBy: 'other-user',
+          create_by: 'other-user',
+          updateBy: 'other-user',
+          delFlag: 1,
+          treeDeleteBatchId: 'batch-1',
+          sort: -999,
+          isTop: 1,
+        },
+      },
+      res,
+    );
+
+    const updateCall = connection.query.mock.calls.find(
+      ([sql]) => sql === 'update note set ? where id=? and create_by=? and del_flag=0',
+    );
+    expect(updateCall?.[1]).toEqual([{ title: '安全标题', updateBy: 'u1' }, 'note-1', 'u1']);
+    expect(lastSent(res).status).toBe(200);
+  });
+
+  it('非本人或已删除笔记在任何关系写入前返回 404', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+    const res = mockRes();
+
+    await updateNote(
+      { user: { id: 'u1' }, body: { id: 'other-note', content: '不能写入', type: 'markdown', tags: ['tag-1'] } },
+      res,
+    );
+
+    expect(lastSent(res)).toMatchObject({ status: 404, data: { code: 'NOTE_TREE_NODE_NOT_FOUND' } });
+    expect(validateUserTags).not.toHaveBeenCalled();
+    expect(replaceResourceTagRelations).not.toHaveBeenCalled();
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('非法类型和空标题在获取数据库连接前拒绝', async () => {
+    const invalidTypeRes = mockRes();
+    await updateNote({ user: { id: 'u1' }, body: { id: 'note-1', type: 'plaintext' } }, invalidTypeRes);
+    const blankTitleRes = mockRes();
+    await updateNote({ user: { id: 'u1' }, body: { id: 'note-1', title: '   ' } }, blankTitleRes);
+
+    expect(lastSent(invalidTypeRes).status).toBe(400);
+    expect(lastSent(blankTitleRes).status).toBe(400);
+    expect(getConnection).not.toHaveBeenCalled();
   });
 });
 
@@ -273,6 +346,12 @@ describe('delNote 源笔记软删除生命周期(N0)', () => {
   });
 
   it('软删除只标记源笔记，不删除其派生引用关系', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, parent_id, title/.test(String(sql))) {
+        return [[{ id: 'note-1', parent_id: null, title: '笔记', del_flag: 0 }]];
+      }
+      return [{ affectedRows: 1 }];
+    });
     await delNote({ user: { id: 'u1' }, body: { ids: ['note-1'] } }, mockRes());
 
     expect(deleteNoteResourceRefsForNotes).not.toHaveBeenCalled();

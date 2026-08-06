@@ -57,22 +57,34 @@ export async function ensurePointsSchema() {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `points` INT NOT NULL DEFAULT 0 COMMENT "积分余额"');
   }
   if (await columnMissing('user_growth', 'equipped_title')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `equipped_title` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴称号 id"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `equipped_title` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴称号 id"',
+    );
   }
   if (await columnMissing('user_growth', 'storage_bonus_mb')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `storage_bonus_mb` INT NOT NULL DEFAULT 0 COMMENT "积分兑换的永久扩容(MB),叠加在段位基础配额之上"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `storage_bonus_mb` INT NOT NULL DEFAULT 0 COMMENT "积分兑换的永久扩容(MB),叠加在段位基础配额之上"',
+    );
   }
   if (await columnMissing('user_growth', 'lottery_count')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_count` INT NOT NULL DEFAULT 0 COMMENT "累计抽奖次数(用于每10抽保底)"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `lottery_count` INT NOT NULL DEFAULT 0 COMMENT "累计抽奖次数(用于每10抽保底)"',
+    );
   }
   if (await columnMissing('user_growth', 'lottery_free_day')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_free_day` CHAR(8) DEFAULT NULL COMMENT "上次使用每日免费抽奖的日期 YYYYMMDD"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `lottery_free_day` CHAR(8) DEFAULT NULL COMMENT "上次使用每日免费抽奖的日期 YYYYMMDD"',
+    );
   }
   if (await columnMissing('user_growth', 'lottery_free_used')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `lottery_free_used` INT NOT NULL DEFAULT 0 COMMENT "当日已用的免费抽奖次数"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `lottery_free_used` INT NOT NULL DEFAULT 0 COMMENT "当日已用的免费抽奖次数"',
+    );
   }
   if (await columnMissing('user_growth', 'equipped_frame')) {
-    await pool.query('ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"');
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"',
+    );
   }
 }
 
@@ -82,15 +94,71 @@ export async function ensurePointsSchema() {
 export const SHOP_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
   // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
-  { id: 'ai_pack', type: 'consumable', name: 'AI 加油包', desc: '+60 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)', cost: 150, effect: 'ai_pack', bonusTokens: 600_000 },
-  { id: 'storage_512', type: 'consumable', name: '扩容包 512MB', desc: '云空间永久 +512MB,叠加在等级配额之上', cost: 800, effect: 'storage', storageMb: 512 },
-  { id: 'storage_2g', type: 'consumable', name: '扩容包 2GB', desc: '云空间永久 +2GB,大文件党首选', cost: 2500, effect: 'storage', storageMb: 2048 },
+  {
+    id: 'ai_pack',
+    type: 'consumable',
+    name: 'AI 加油包',
+    desc: '+60 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)',
+    cost: 150,
+    effect: 'ai_pack',
+    bonusTokens: 600_000,
+  },
+  {
+    id: 'storage_512',
+    type: 'consumable',
+    name: '扩容包 512MB',
+    desc: '云空间永久 +512MB,叠加在等级配额之上',
+    cost: 800,
+    effect: 'storage',
+    storageMb: 512,
+  },
+  {
+    id: 'storage_2g',
+    type: 'consumable',
+    name: '扩容包 2GB',
+    desc: '云空间永久 +2GB,大文件党首选',
+    cost: 2500,
+    effect: 'storage',
+    storageMb: 2048,
+  },
   // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。
   // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
-  { id: 'frame_gold', type: 'cosmetic', effect: 'frame', name: '鎏金', desc: '头像框 · 金光流转', cost: 500, minLevel: 0 },
-  { id: 'frame_sakura', type: 'cosmetic', effect: 'frame', name: '樱绯', desc: '头像框 · 樱色浪漫', cost: 500, minLevel: 0 },
-  { id: 'frame_neon', type: 'cosmetic', effect: 'frame', name: '霓虹', desc: '头像框 · 赛博霓虹', cost: 500, minLevel: 0 },
-  { id: 'frame_galaxy', type: 'cosmetic', effect: 'frame', name: '星河', desc: '头像框 · 流光星河', cost: 1200, minLevel: 8 },
+  {
+    id: 'frame_gold',
+    type: 'cosmetic',
+    effect: 'frame',
+    name: '鎏金',
+    desc: '头像框 · 金光流转',
+    cost: 500,
+    minLevel: 0,
+  },
+  {
+    id: 'frame_sakura',
+    type: 'cosmetic',
+    effect: 'frame',
+    name: '樱绯',
+    desc: '头像框 · 樱色浪漫',
+    cost: 500,
+    minLevel: 0,
+  },
+  {
+    id: 'frame_neon',
+    type: 'cosmetic',
+    effect: 'frame',
+    name: '霓虹',
+    desc: '头像框 · 赛博霓虹',
+    cost: 500,
+    minLevel: 0,
+  },
+  {
+    id: 'frame_galaxy',
+    type: 'cosmetic',
+    effect: 'frame',
+    name: '星河',
+    desc: '头像框 · 流光星河',
+    cost: 1200,
+    minLevel: 8,
+  },
 ];
 
 export function getShopItem(id) {
@@ -136,7 +204,12 @@ export async function earnPoints(userId, amount, reason, ref = null, conn = pool
     await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
     return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, amount, reason, null]);
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+    userId,
+    amount,
+    reason,
+    null,
+  ]);
   await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
   return true;
 }
@@ -173,7 +246,11 @@ export async function earnStorage(userId, mb, reason, ref = null, conn = pool) {
     await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
     return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [userId, logReason, null]);
+  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+    userId,
+    logReason,
+    null,
+  ]);
   await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [mb, userId]);
   return true;
 }
@@ -196,8 +273,33 @@ export async function getPointsLog(userId, { limit = 30, offset = 0 } = {}) {
     `SELECT delta, reason, ref, create_time FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock' ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`,
     [userId],
   );
-  const [[c]] = await pool.query("SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock'", [userId]);
-  return { rows, total: Number(c.c || 0), limit: lim, offset: off };
+  const [[c]] = await pool.query("SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock'", [
+    userId,
+  ]);
+  return { rows: rows.map(enrichPointsLogRow), total: Number(c.c || 0), limit: lim, offset: off };
+}
+
+function enrichPointsLogRow(row) {
+  const reason = String(row.reason || '');
+  const ref = String(row.ref || '');
+  const baseReason = reason.startsWith('storage:') ? 'storage' : reason;
+  let sourceKey = ref;
+  let sourceMeta = null;
+  if (reason === 'admin' || reason === 'storage:admin') sourceKey = ref.replace(/^admin:/, '') || null;
+  if (reason === 'weekly') {
+    const splitAt = ref.lastIndexOf(':');
+    if (splitAt >= 0) {
+      sourceMeta = ref.slice(0, splitAt) || null;
+      sourceKey = ref.slice(splitAt + 1) || null;
+    }
+  }
+  return {
+    ...row,
+    sourceType: baseReason,
+    sourceKey: sourceKey || null,
+    sourceMeta,
+    sourceRef: ref || null,
+  };
 }
 
 // 经济总览(root 运营):发放/消耗/存量、按来源分布、抽奖返还率、持有人 Top。
@@ -205,8 +307,12 @@ export async function getPointsOverview() {
   const [[issued]] = await pool.query('SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0');
   const [[spent]] = await pool.query('SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0');
   const [[outstanding]] = await pool.query('SELECT COALESCE(SUM(points),0) AS s FROM user_growth');
-  const [byReason] = await pool.query('SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC');
-  const [[lotCost]] = await pool.query("SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason='lottery_cost'");
+  const [byReason] = await pool.query(
+    'SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC',
+  );
+  const [[lotCost]] = await pool.query(
+    "SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason='lottery_cost'",
+  );
   const [[lotWin]] = await pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_win'");
   const [[lotDraws]] = await pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth');
   const [[holders]] = await pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0');
@@ -219,43 +325,154 @@ export async function getPointsOverview() {
     spent: Number(spent.s),
     outstanding: Number(outstanding.s),
     byReason: byReason.map((r) => ({ reason: r.reason, delta: Number(r.delta), cnt: Number(r.cnt) })),
-    lottery: { cost, winPoints: Number(lotWin.s), draws: Number(lotDraws.s), payoutRatio: cost > 0 ? +((Number(lotWin.s) / cost) * 100).toFixed(1) : 0 },
+    lottery: {
+      cost,
+      winPoints: Number(lotWin.s),
+      draws: Number(lotDraws.s),
+      payoutRatio: cost > 0 ? +((Number(lotWin.s) / cost) * 100).toFixed(1) : 0,
+    },
     holders: Number(holders.c),
-    top: top.map((r) => ({ userId: r.user_id, points: Number(r.points), alias: r.alias || null, email: r.email || null })),
+    top: top.map((r) => ({
+      userId: r.user_id,
+      points: Number(r.points),
+      alias: r.alias || null,
+      email: r.email || null,
+    })),
   };
 }
 
-// 运营手动发放/扣减(root):points 可正可负(下限 0);storageMb 追加;cards 增减(封顶 2)。
+export async function searchAdminUsers(keyword, { limit = 20 } = {}) {
+  const term = String(keyword || '')
+    .trim()
+    .slice(0, 100);
+  if (!term) return [];
+  const safeLimit = Math.min(20, Math.max(1, Math.trunc(Number(limit) || 20)));
+  const like = `%${term}%`;
+  const prefix = `${term}%`;
+  const [rows] = await pool.query(
+    `SELECT u.id AS userId, u.alias, u.email, u.last_active_time AS lastActiveTime,
+            COALESCE(g.points, 0) AS points
+       FROM user u
+       LEFT JOIN user_growth g ON g.user_id = u.id
+      WHERE u.del_flag = 0 AND (u.id = ? OR u.email = ? OR u.alias LIKE ? OR u.email LIKE ? OR u.id LIKE ?)
+      ORDER BY
+        CASE WHEN u.id = ? THEN 0 WHEN u.email = ? THEN 1 WHEN u.alias LIKE ? THEN 2 WHEN u.email LIKE ? THEN 3 ELSE 4 END,
+        u.last_active_time DESC,
+        u.id ASC
+      LIMIT ${safeLimit}`,
+    [term, term, like, like, like, term, term, prefix, prefix],
+  );
+  return rows.map((row) => ({
+    userId: row.userId,
+    alias: row.alias || null,
+    email: row.email || null,
+    points: Number(row.points || 0),
+    lastActiveTime: row.lastActiveTime || null,
+  }));
+}
+
+export class AdminPointsError extends Error {
+  constructor(code, message, status = 400) {
+    super(message);
+    this.name = 'AdminPointsError';
+    this.code = code;
+    this.status = status;
+  }
+}
+
+// 运营手动发放/扣减(root):目标校验、余额边界、资产更新与审计流水必须在同一事务。
 export async function adminGrantPoints(userId, { points = 0, cards = 0, storageMb = 0, note = '' } = {}) {
-  const [rows] = await pool.query('SELECT 1 FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  if (!rows.length) await pool.query('INSERT INTO user_growth (user_id) VALUES (?)', [userId]);
-  const ref = ('admin:' + (note || '')).slice(0, 64);
   const p = Math.trunc(Number(points) || 0);
   const s = Math.trunc(Number(storageMb) || 0);
   const c = Math.trunc(Number(cards) || 0);
-  if (p) {
-    await pool.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, p, 'admin', ref]);
-    await pool.query('UPDATE user_growth SET points = GREATEST(0, points + ?) WHERE user_id = ?', [p, userId]);
+  if (!userId || !String(userId).trim()) throw new AdminPointsError('TARGET_REQUIRED', '缺少目标用户');
+  if (![p, s, c].every(Number.isSafeInteger)) throw new AdminPointsError('INVALID_AMOUNT', '调整数量无效');
+  if ([p, s, c].some((value) => Math.abs(value) > 1_000_000)) {
+    throw new AdminPointsError('AMOUNT_TOO_LARGE', '单次调整数量过大');
   }
-  if (s) {
-    await pool.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'storage:admin', ?)", [userId, ref]);
-    await pool.query('UPDATE user_growth SET storage_bonus_mb = GREATEST(0, storage_bonus_mb + ?) WHERE user_id = ?', [s, userId]);
+  if (!p && !s && !c) throw new AdminPointsError('EMPTY_ADJUSTMENT', '请至少填写一项调整数量');
+  const ref = ('admin:' + String(note || '').trim()).slice(0, 64);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const [users] = await conn.query('SELECT id, alias, email FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [
+      String(userId).trim(),
+    ]);
+    if (!users.length) throw new AdminPointsError('USER_NOT_FOUND', '目标用户不存在或已注销', 404);
+    await conn.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [String(userId).trim()]);
+    const [growthRows] = await conn.query(
+      'SELECT points, storage_bonus_mb, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
+      [String(userId).trim()],
+    );
+    const growth = growthRows[0];
+    const nextPoints = Number(growth.points || 0) + p;
+    const nextStorage = Number(growth.storage_bonus_mb || 0) + s;
+    const nextCards = Number(growth.streak_protect_cards || 0) + c;
+    if (nextPoints < 0) throw new AdminPointsError('INSUFFICIENT_POINTS', `积分最多可扣减 ${growth.points || 0}`);
+    if (nextStorage < 0) {
+      throw new AdminPointsError('INSUFFICIENT_STORAGE', `永久扩容最多可扣减 ${growth.storage_bonus_mb || 0}MB`);
+    }
+    if (nextCards < 0 || nextCards > 2) {
+      throw new AdminPointsError('CARD_LIMIT', `补签卡调整后必须在 0～2 张之间`);
+    }
+    if (p) {
+      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+        String(userId).trim(),
+        p,
+        'admin',
+        ref,
+      ]);
+    }
+    if (s) {
+      await conn.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'storage:admin', ?)", [
+        String(userId).trim(),
+        ref,
+      ]);
+    }
+    await conn.query(
+      `UPDATE user_growth
+          SET points = ?, storage_bonus_mb = ?, streak_protect_cards = ?
+        WHERE user_id = ?`,
+      [nextPoints, nextStorage, nextCards, String(userId).trim()],
+    );
+    await conn.commit();
+    return {
+      ok: true,
+      points: nextPoints,
+      storageBonusMb: nextStorage,
+      cards: nextCards,
+      user: { userId: users[0].id, alias: users[0].alias || null, email: users[0].email || null },
+    };
+  } catch (error) {
+    try {
+      await conn.rollback();
+    } catch {
+      // 回滚失败仅记日志，保留原始业务错误。
+    }
+    throw error;
+  } finally {
+    conn.release();
   }
-  if (c) {
-    await pool.query('UPDATE user_growth SET streak_protect_cards = LEAST(2, GREATEST(0, streak_protect_cards + ?)) WHERE user_id = ?', [c, userId]);
-  }
-  const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  return { ok: true, points: Number(g.points), storageBonusMb: Number(g.storage_bonus_mb), cards: Number(g.streak_protect_cards) };
 }
 
 // 单账号积分详情(root 查账):余额 + 最近 30 条流水。
 export async function getUserPointsDetail(userId) {
-  const [[u]] = await pool.query('SELECT alias, email FROM user WHERE id = ? LIMIT 1', [userId]);
-  const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards, lottery_count FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  const [[u]] = await pool.query('SELECT id, alias, email FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [userId]);
+  const [[g]] = await pool.query(
+    'SELECT points, storage_bonus_mb, streak_protect_cards, lottery_count FROM user_growth WHERE user_id = ? LIMIT 1',
+    [userId],
+  );
   const { rows } = await getPointsLog(userId, { limit: 30 });
   return {
-    user: u ? { alias: u.alias || null, email: u.email || null } : null,
-    balance: g ? { points: Number(g.points), storageBonusMb: Number(g.storage_bonus_mb), cards: Number(g.streak_protect_cards), lotteryCount: Number(g.lottery_count) } : null,
+    user: u ? { userId: u.id, alias: u.alias || null, email: u.email || null } : null,
+    balance: g
+      ? {
+          points: Number(g.points),
+          storageBonusMb: Number(g.storage_bonus_mb),
+          cards: Number(g.streak_protect_cards),
+          lotteryCount: Number(g.lottery_count),
+        }
+      : null,
     log: rows,
   };
 }
@@ -292,7 +509,10 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
       return { ok: false, reason: 'level', msg: `需达到 Lv.${item.minLevel} 才能兑换` };
     }
     if (item.type === 'title' || item.type === 'cosmetic') {
-      const [owned] = await conn.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [userId, item.id]);
+      const [owned] = await conn.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
+        userId,
+        item.id,
+      ]);
       if (owned.length) {
         await conn.rollback();
         return { ok: false, reason: 'owned', msg: '已拥有该装扮' };
@@ -307,12 +527,20 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
       return { ok: false, reason: 'insufficient', msg: '积分不足' };
     }
     await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [item.cost, userId]);
-    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, -item.cost, 'buy', item.id]);
+    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+      userId,
+      -item.cost,
+      'buy',
+      item.id,
+    ]);
     if (item.effect === 'makeup_card') {
       await grantItem(conn, userId, 'makeup_card', 1);
     } else if (item.effect === 'storage') {
       // 永久扩容:即时生效类,直接叠加(可反复购买;无幂等 ref,每次都加)
-      await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [item.storageMb, userId]);
+      await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [
+        item.storageMb,
+        userId,
+      ]);
     } else if (item.effect === 'ai_pack') {
       // AI 加油包 → 进背包(消耗品),用户择时「使用」才加当日额度;不再"购买即当天生效、当天不用作废"
       await grantItem(conn, userId, 'ai_pack', 1);
@@ -340,7 +568,10 @@ export async function equipTitle(userId, titleId) {
     await pool.query('UPDATE user_growth SET equipped_title = NULL WHERE user_id = ?', [userId]);
     return { ok: true, equipped: null };
   }
-  const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [userId, titleId]);
+  const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
+    userId,
+    titleId,
+  ]);
   if (!owned.length) return { ok: false, reason: 'not_owned', msg: '未拥有该称号' };
   await pool.query('UPDATE user_growth SET equipped_title = ? WHERE user_id = ?', [titleId, userId]);
   return { ok: true, equipped: titleId };
@@ -358,7 +589,10 @@ export async function equipFrame(userId, frameId) {
     await pool.query('UPDATE user_growth SET equipped_frame = NULL WHERE user_id = ?', [userId]);
     return { ok: true, equipped: null };
   }
-  const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [userId, frameId]);
+  const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
+    userId,
+    frameId,
+  ]);
   if (!owned.length) return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
   await pool.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
   return { ok: true, equipped: frameId };

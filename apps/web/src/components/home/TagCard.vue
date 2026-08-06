@@ -2,8 +2,6 @@
   <div
     class="card-body"
     :class="{
-      'has-top-badge': isTop,
-      'has-pending-badge': cardInfo.isPending,
       'is-selection-mode': selectionMode,
       'is-selected': selected,
     }"
@@ -14,22 +12,24 @@
     @keydown.enter="toNewPage"
     @keydown.space.prevent="toNewPage"
   >
-    <div v-if="!selectionMode && (isTop || cardInfo.isPending)" class="card-status-badges">
-      <PinBadge v-if="isTop" />
-      <InboxPendingBadge v-if="cardInfo.isPending" />
-    </div>
-    <div class="card-title">
-      <BookmarkFavicon
-        class="card-img-container"
-        :bookmark-id="cardInfo.id"
-        :src="cardInfo.iconUrl"
-        :loading="cardInfo.iconLoading"
-        :size="22"
-        :tile-size="34"
-      />
-      <div class="card-title-copy">
-        <span class="card-title-text">{{ cardInfo.name }}</span>
-        <span class="card-domain">{{ displayDomain }}</span>
+    <div class="card-heading" :class="{ 'has-status-badges': !selectionMode && (isTop || cardInfo.isPending) }">
+      <div class="card-title">
+        <BookmarkFavicon
+          class="card-img-container"
+          :bookmark-id="cardInfo.id"
+          :src="cardInfo.iconUrl"
+          :loading="cardInfo.iconLoading"
+          :size="22"
+          :tile-size="34"
+        />
+        <div class="card-title-copy">
+          <span class="card-title-text">{{ cardInfo.name }}</span>
+          <span class="card-domain">{{ displayDomain }}</span>
+        </div>
+      </div>
+      <div v-if="!selectionMode && (isTop || cardInfo.isPending)" class="card-status-badges">
+        <PinBadge v-if="isTop" />
+        <InboxPendingBadge v-if="cardInfo.isPending" />
       </div>
     </div>
     <div class="card-description">{{ cardInfo.description }}</div>
@@ -148,18 +148,30 @@
       box-shadow: 0 16px 30px -24px color-mix(in srgb, var(--resource-bookmark-color, #615ced) 70%, transparent);
     }
   }
+
+  .card-heading {
+    min-width: 0;
+
+    &.has-status-badges {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      column-gap: 8px;
+      align-items: start;
+    }
+  }
+
   .card-status-badges {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 2;
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 5px;
+    margin-top: -6px;
+    margin-right: -7px;
   }
 
   .card-title {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: 11px;
 
@@ -190,19 +202,6 @@
     line-height: 14px;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  /* 置顶徽章浮在右上角(absolute 不占宽),给标题右侧留出空间,避免长标题被徽章遮住 */
-  .card-body.has-top-badge .card-title {
-    padding-right: 46px;
-  }
-
-  .card-body.has-pending-badge .card-title {
-    padding-right: 66px;
-  }
-
-  .card-body.has-top-badge.has-pending-badge .card-title {
-    padding-right: 104px;
   }
 
   .card-img-container {

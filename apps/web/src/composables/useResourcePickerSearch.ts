@@ -21,6 +21,9 @@ export interface ResourcePickerItem {
   type: ResourcePickerType;
   id: string;
   title: string;
+  path?: string;
+  childCount?: number;
+  descendantCount?: number;
 }
 
 export interface UseResourcePickerSearchOptions {
@@ -112,6 +115,13 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
           type: item.type as ResourcePickerType,
           id: String(item.id || ''),
           title: String(item.title || ''),
+          ...(item.type === 'note'
+            ? {
+                path: String(item.path || ''),
+                childCount: Math.max(0, Number(item.childCount || 0)),
+                descendantCount: Math.max(0, Number(item.descendantCount || 0)),
+              }
+            : {}),
         }))
         .filter((item) => {
           const key = resourceItemKey(item);

@@ -53,6 +53,7 @@ describe('anchored resource sorting', () => {
     await moveOwnedResourceByAnchors(connection, {
       resourceType: 'note',
       userId: 'u1',
+      parentId: 'parent-1',
       id: 'a',
       previousId: 'b',
       nextId: 'c',
@@ -63,11 +64,17 @@ describe('anchored resource sorting', () => {
       1,
       'a',
       'u1',
+      'parent-1',
     ]);
     expect(connection.query).toHaveBeenNthCalledWith(3, expect.stringContaining('UPDATE note SET sort = ?'), [
       2,
       'c',
       'u1',
+      'parent-1',
+    ]);
+    expect(connection.query.mock.calls[0]).toEqual([
+      expect.stringContaining('parent_id <=> ?'),
+      ['u1', 'parent-1'],
     ]);
   });
 

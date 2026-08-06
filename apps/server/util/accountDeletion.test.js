@@ -198,9 +198,17 @@ describe('账号注销后台清理', () => {
 
     const connection = createConnection(async (sql) => {
       if (sql.includes('information_schema.TABLES')) {
-        return [[{ tableName: 'ai_token_reservations' }, { tableName: 'folders' }, { tableName: 'user' }]];
+        return [
+          [
+            { tableName: 'ai_token_reservations' },
+            { tableName: 'note' },
+            { tableName: 'folders' },
+            { tableName: 'user' },
+          ],
+        ];
       }
       if (sql.includes('DELETE FROM ai_token_reservations')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM note WHERE create_by')) return [{ affectedRows: 3 }];
       if (sql.includes('DELETE FROM folders')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM user')) return [{ affectedRows: 1 }];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
@@ -222,6 +230,7 @@ describe('账号注销后台清理', () => {
     expect(reservationCall?.[0]).toContain('JSON_CONTAINS');
     expect(reservationCall?.[1]).toEqual(['user-1']);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM folders'))).toBe(true);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note WHERE create_by'))).toBe(true);
     const completeCall = poolQuery.mock.calls.find(([sql]) => sql.includes("SET status = 'completed'"));
     expect(completeCall?.[0]).toContain("object_keys_json = '[]'");
     expect(completeCall?.[0]).toContain("note_image_urls_json = '[]'");

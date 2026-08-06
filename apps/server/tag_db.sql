@@ -216,10 +216,19 @@ CREATE TABLE `note` (
   `update_by` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `del_flag` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '0',
   `sort` int(11) NOT NULL DEFAULT '0',
+  `is_top` tinyint(1) NOT NULL DEFAULT '0',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `deleted_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`) USING BTREE
+  `type` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'html',
+  `parent_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '页面树父笔记 ID，NULL 表示我的知识库根层',
+  `tree_delete_batch_id` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '同一次页面子树软删除的恢复批次',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_note_owner_top_sort` (`create_by`,`del_flag`,`is_top`,`sort`,`update_time`),
+  KEY `idx_note_owner` (`create_by`,`del_flag`,`update_time`),
+  KEY `idx_note_owner_parent_order` (`create_by`(64),`parent_id`(64),`del_flag`(8),`is_top`,`sort`,`update_time`,`id`(64)),
+  KEY `idx_note_parent` (`parent_id`),
+  KEY `idx_note_tree_delete_batch` (`create_by`(64),`tree_delete_batch_id`(64),`del_flag`(8))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------

@@ -94,3 +94,60 @@ describe('getUsedSpace / queryFolder 可等待且失败不清空', () => {
     expect(cloud.folderList).toHaveLength(1);
   });
 });
+
+describe('账号身份切换', () => {
+  it('立即清空账号归属数据并进入加载态', () => {
+    const cloud = cloudSpaceStore();
+    cloud.fileList = [file('guest')] as any;
+    cloud.folderList = [{ id: 'guest-folder', name: '游客文件夹' }];
+    cloud.usedSpace = 42;
+    cloud.fileTotal = 1;
+
+    cloud.reset({ showLoading: true });
+
+    expect(cloud.fileList).toEqual([]);
+    expect(cloud.folderList).toEqual([]);
+    expect(cloud.usedSpace).toBe(0);
+    expect(cloud.fileTotal).toBe(0);
+    expect(cloud.folder?.id).toBe('all');
+    expect(cloud.loading).toBe(true);
+    expect(cloud.folderLoading).toBe(true);
+  });
+
+  it('忽略身份切换前尚未返回的文件夹和空间用量响应', async () => {
+    const cloud = cloudSpaceStore();
+    let resolveFolder!: (value: any) => void;
+    let resolveSpace!: (value: any) => void;
+    apiQueryPost.mockReturnValueOnce(new Promise((resolve) => (resolveFolder = resolve)));
+    apiBasePost.mockReturnValueOnce(new Promise((resolve) => (resolveSpace = resolve)));
+
+    const folderRequest = cloud.queryFolder();
+    const spaceRequest = cloud.getUsedSpace();
+    cloud.reset({ showLoading: true });
+    resolveFolder({ status: 200, data: { items: [{ id: 'guest-folder', name: '游客文件夹' }] } });
+    resolveSpace({ status: 200, data: { totalSizeMB: 42, quotaMB: 100 } });
+
+    await expect(folderRequest).resolves.toBe(false);
+    await expect(spaceRequest).resolves.toBe(false);
+    expect(cloud.folderList).toEqual([]);
+    expect(cloud.usedSpace).toBe(0);
+    expect(cloud.folderLoading).toBe(true);
+  });
+
+  it('忽略身份切换前尚未返回的文件列表响应', async () => {
+    const cloud = cloudSpaceStore();
+    let resolveFiles!: (value: any) => void;
+    apiQueryPost.mockReturnValueOnce(new Promise((resolve) => (resolveFiles = resolve)));
+
+    const fileRequest = cloud.queryFieldList();
+    cloud.reset({ showLoading: true });
+    resolveFiles({
+      status: 200,
+      data: { items: [file('guest')], page: 1, total: 1, hasMore: false },
+    });
+
+    await expect(fileRequest).resolves.toBe(false);
+    expect(cloud.fileList).toEqual([]);
+    expect(cloud.loading).toBe(true);
+  });
+});

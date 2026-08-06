@@ -51,6 +51,13 @@ function sendTodoError(res, error) {
   return res.send(resultData(responseData, status, publicError ? message : '待办服务暂时不可用，请稍后重试'));
 }
 
+function todoRequestError(code, message, status) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  return error;
+}
+
 async function withTransaction(res, callback, { afterCommit } = {}) {
   let connection;
   try {
@@ -288,9 +295,29 @@ export async function completeTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const id = String(req.body?.id || '').trim();
   if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
-  return withTransaction(res, async (connection) => ({
-    affected: await setTodoStatus(connection, req.user.id, id, 'completed'),
-  }));
+  return withTransaction(res, async (connection) => {
+    const affected = await setTodoStatus(connection, req.user.id, id, 'completed');
+    if (affected === 1) return { affected, state: 'completed' };
+
+    const [rows] = await connection.query(
+      'SELECT status, del_flag FROM todo_items WHERE id = ? AND user_id = ? LIMIT 1',
+      [id, req.user.id],
+    );
+    const current = rows[0];
+    if (!current || Number(current.del_flag) !== 0) {
+      throw todoRequestError(
+        'TODO_NOT_FOUND',
+        L(req, '该待办已删除或不存在', 'This todo was deleted or no longer exists.'),
+        404,
+      );
+    }
+    if (current.status === 'completed') return { affected: 0, state: 'completed' };
+    throw todoRequestError(
+      'TODO_STATUS_CONFLICT',
+      L(req, '待办状态已发生变化，请刷新后重试', 'The todo status changed. Refresh and try again.'),
+      409,
+    );
+  });
 }
 
 export async function reopenTodo(req, res) {

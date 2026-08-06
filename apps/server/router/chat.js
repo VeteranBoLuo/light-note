@@ -8,6 +8,7 @@ import {
   generateAgentFollowUps,
   prepareAgentToolAction,
   rejectAgentTool,
+  replaceAgentNoteTargetDirectory,
   respondAgentInteraction,
 } from '../router_handle/agentHandle.js';
 import * as aiQuota from '../util/aiQuota.js';
@@ -153,6 +154,7 @@ router.post('/agent/follow-ups', agentFollowUpLimiter, generateAgentFollowUps);
 router.post('/agent/actions/prepare', agentWriteActionLimiter, prepareAgentToolAction);
 router.post('/agent/interactions/respond', agentWriteActionLimiter, respondAgentInteraction);
 router.post('/agent/confirm', agentWriteActionLimiter, confirmAgentTool);
+router.post('/agent/confirm/note-directory', agentWriteActionLimiter, replaceAgentNoteTargetDirectory);
 router.post('/agent/confirm/reject', rejectAgentTool);
 router.post('/attachments/init', attachmentCreateLimiter, aiDocumentHandle.initTemporaryUpload);
 router.post('/attachments/confirm', aiDocumentHandle.confirmTemporaryUpload);

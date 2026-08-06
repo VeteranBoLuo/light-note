@@ -10,6 +10,7 @@ const connection = {
 const pool = { getConnection: vi.fn(() => connection), query: vi.fn() };
 const enqueueResources = vi.fn();
 const triggerResourceCreateEffects = vi.fn();
+const prepareOwnedNotePlacement = vi.fn(async () => ({ parentId: null, sort: 0, depth: 1 }));
 // 笔记内联提及(N0):隔离引用同步钩子,让本文件既有用例不触发真实关系查询;
 // sync 自身逻辑由 noteReferenceService.test.js 覆盖。默认 extract 返回空集合(既有用例正文无站内链接)。
 const extractOwnedResourceRefs = vi.fn(() => []);
@@ -19,6 +20,7 @@ vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources }));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects }));
 vi.mock('./noteReferenceService.js', () => ({ extractOwnedResourceRefs, syncNoteResourceRefs }));
+vi.mock('./noteTreeService.js', () => ({ prepareOwnedNotePlacement }));
 
 const { applyOwnedNoteContentChange, createNote } = await import('./noteService.js');
 const { actionIdempotencyUuid } = await import('../agent/actionIdempotency.js');
@@ -61,6 +63,24 @@ describe('noteService.createNote', () => {
     });
     const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note SET ?')?.[1]?.[0];
     expect(inserted.content).toBe('> 2026-07-24 星期五\n\n正文');
+  });
+
+  it('父页面和同层末尾排序由事务内树服务校验并写入', async () => {
+    prepareOwnedNotePlacement.mockResolvedValueOnce({ parentId: 'parent-1', sort: 7, depth: 3 });
+
+    const result = await createNote({
+      userId: 'user-1',
+      userRole: 'user',
+      note: { title: '新子页面', content: '', type: 'html', parentId: 'parent-1', sort: -99 },
+    });
+
+    expect(prepareOwnedNotePlacement).toHaveBeenCalledWith(connection, {
+      userId: 'user-1',
+      parentId: 'parent-1',
+    });
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note SET ?')?.[1]?.[0];
+    expect(inserted).toMatchObject({ parent_id: 'parent-1', sort: 7 });
+    expect(result).toMatchObject({ parentId: 'parent-1' });
   });
 
   it('非法历史类型在写库前失败', async () => {
@@ -196,13 +216,13 @@ describe('noteService.createNote', () => {
     pool.query
       .mockResolvedValueOnce([[]])
       .mockRejectedValueOnce(new Error('verification unavailable'))
-      .mockResolvedValueOnce([[{ id: stableId, title: '已落库笔记', type: 'markdown' }]]);
+      .mockResolvedValueOnce([[{ id: stableId, title: '已落库笔记', type: 'markdown', parent_id: 'parent-1' }]]);
 
     await expect(
       createNote({
         userId: 'user-1',
         userRole: 'user',
-        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        note: { title: '已落库笔记', content: '正文', type: 'markdown', parentId: 'parent-1' },
         idempotencyKey,
       }),
     ).rejects.toMatchObject({ commitOutcomeUnknown: true });
@@ -211,10 +231,16 @@ describe('noteService.createNote', () => {
       createNote({
         userId: 'user-1',
         userRole: 'user',
-        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        note: { title: '已落库笔记', content: '正文', type: 'markdown', parentId: 'parent-1' },
         idempotencyKey,
       }),
-    ).resolves.toEqual({ id: stableId, title: '已落库笔记', type: 'markdown', addedToInbox: false });
+    ).resolves.toEqual({
+      id: stableId,
+      title: '已落库笔记',
+      type: 'markdown',
+      parentId: 'parent-1',
+      addedToInbox: false,
+    });
 
     expect(connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?')).toHaveLength(1);
     expect(pool.getConnection).toHaveBeenCalledTimes(1);

@@ -7,6 +7,7 @@ import {
   markConversationConfirmationPending,
   markConversationInteractionPending,
   promoteConversationInteractionToConfirmation,
+  replaceConversationConfirmation,
   settleConversationConfirmation,
   settleConversationInteraction,
   shouldPersistConversationMessage,
@@ -146,6 +147,64 @@ describe('aiConversationState', () => {
       summary: '保存成功',
     });
     expect(messages.filter(shouldPersistConversationMessage)).toHaveLength(2);
+  });
+
+  it('更换目标目录时原子替换确认卡和 pending ID，并保持整轮待确认', () => {
+    const messages = [
+      {
+        content: '请确认创建笔记',
+        transient: true,
+        transientGroupId: 'agent-action:directory',
+        confirmations: [
+          {
+            id: 'confirmation-old',
+            token: 'token-old',
+            sessionId: 'session-1',
+            toolName: 'create_note',
+            args: { title: '周报', content: '正文' },
+            expiresIn: 120,
+          },
+        ],
+        pendingConfirmationIds: ['confirmation-old', 'confirmation-other'],
+      },
+    ];
+
+    expect(
+      replaceConversationConfirmation(messages, 0, {
+        previousConfirmationId: 'confirmation-old',
+        confirmation: {
+          id: 'confirmation-new',
+          token: 'token-new',
+          sessionId: 'session-1',
+          toolName: 'create_note',
+          args: { title: '周报', content: '正文', parentId: 'directory-1' },
+          expiresIn: 120,
+        },
+      }),
+    ).toBe(true);
+    expect(messages[0].confirmations?.map((item) => item.id)).toEqual(['confirmation-new']);
+    expect(messages[0].pendingConfirmationIds).toEqual(['confirmation-new', 'confirmation-other']);
+    expect(messages[0].transient).toBe(true);
+    expect(shouldPersistConversationMessage(messages[0])).toBe(false);
+    expect(messages[0].actionSettlements).toBeUndefined();
+  });
+
+  it('不会替换当前消息中不存在的确认卡', () => {
+    const messages = [{ confirmations: [], pendingConfirmationIds: ['confirmation-old'] }];
+    expect(
+      replaceConversationConfirmation(messages, 0, {
+        previousConfirmationId: 'confirmation-old',
+        confirmation: {
+          id: 'confirmation-new',
+          token: 'token-new',
+          sessionId: 'session-1',
+          toolName: 'create_note',
+          args: {},
+          expiresIn: 120,
+        },
+      }),
+    ).toBe(false);
+    expect(messages[0].pendingConfirmationIds).toEqual(['confirmation-old']);
   });
 
   it('结构化快捷动作取消选择后仍保持瞬态，自然语言选择取消后可保留上下文', () => {

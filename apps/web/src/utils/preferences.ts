@@ -17,6 +17,7 @@ export type MobileHomePath = Extract<AppHomePath, '/workbenches' | '/home' | '/n
 export interface UserPreferences {
   theme?: ThemePreference | string;
   noteViewMode?: 'card' | 'list';
+  noteSidebarMode?: 'directory' | 'tags';
   resourceView?: 'card' | 'list';
   todoView?: 'list' | 'agenda' | 'calendar';
   tagView?: 'card' | 'graph';

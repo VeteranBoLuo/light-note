@@ -31,6 +31,7 @@
       -->
       <div class="note-meta-row">
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
+        <div v-if="parentPathText" class="note-path" :title="parentPathText">{{ parentPathText }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
           它们同为 chip 形态，放在一个容器里既省一行高度，也比拆成两行整齐。
@@ -41,6 +42,10 @@
             <InboxPendingBadge v-if="note.isPending" />
             <!-- 手机的标题行只剩标题 + 时间 + ⋯，没有余量；格式标识跟徽章一起进 chip 行 -->
             <NoteFormatBadge :type="note.type" />
+            <BButton v-if="childCount" class="note-child-count" @click.stop="emit('action', 'enterDirectory')">
+              {{ $t('note.childPages', { count: childCount }) }}
+              <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+            </BButton>
           </template>
           <ResourceTagChip
             v-for="tag in visibleTags"
@@ -65,6 +70,14 @@
         </div>
       </div>
     </div>
+    <BButton
+      v-if="!bookmark.isMobile && childCount"
+      class="note-child-count note-child-count-column"
+      @click.stop="emit('action', 'enterDirectory')"
+    >
+      {{ $t('note.childPages', { count: childCount }) }}
+      <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
+    </BButton>
     <!-- 桌面时间独占一列;手机让位给操作入口，时间挪到底行 -->
     <div v-if="!bookmark.isMobile" class="note-time">{{ listTime }}</div>
     <!--
@@ -99,10 +112,16 @@
   import { useI18n } from 'vue-i18n';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import { getNoteParentPathText } from '@/utils/noteTree';
 
-  const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
-    batchMode: false,
-  });
+  const props = withDefaults(
+    defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
+    {
+      batchMode: false,
+      treeReadEnabled: true,
+      treeWriteEnabled: true,
+    },
+  );
   const bookmark = bookmarkStore();
   const { t } = useI18n();
 
@@ -130,8 +149,13 @@
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete'];
+    action: [
+      action:
+        'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
+    ];
   }>();
+  const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
+  const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -153,6 +177,25 @@
       icon: icon.contextMenu.inbox,
       function: () => emit('action', 'toggleInbox'),
     },
+    ...(props.treeWriteEnabled
+      ? [
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('action', 'createChild'),
+          },
+          {
+            label: t('note.addExistingPages'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'attach'),
+          },
+          {
+            label: t('note.moveThisPage'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'move'),
+          },
+        ]
+      : []),
     { divider: true },
     {
       label: t('common.delete'),
@@ -172,7 +215,10 @@
       props.note.isCheck = !props.note.isCheck;
       return;
     }
-    router.push(`/noteLibrary/${props.note.id}`);
+    router.push({
+      path: `/noteLibrary/${encodeURIComponent(props.note.id)}`,
+      query: { from: router.currentRoute.value.fullPath },
+    });
   }
 </script>
 
@@ -182,7 +228,7 @@
     --note-row-line: 22px;
 
     display: grid;
-    grid-template-columns: 26px minmax(0, 1fr) auto;
+    grid-template-columns: 26px minmax(0, 1fr) auto auto;
     column-gap: 12px;
     align-items: flex-start;
     padding: 11px 14px;
@@ -218,7 +264,7 @@
      * 摘要 35px，两个都读不出内容。手机改成纵向让每种信息各拿整行宽度。
      */
     &.is-mobile {
-      grid-template-columns: minmax(0, 1fr) 36px;
+      grid-template-columns: minmax(0, 1fr) 44px;
       column-gap: 2px;
       // 操作按钮对齐标题行，而不是整条居中：居中时它会掉到标题下方 36px，看着没有归属
       align-items: start;
@@ -254,6 +300,7 @@
 
         // 底行：徽章 + 标签靠左，时间被推到行尾
         .note-tags {
+          order: 0;
           width: 100%;
           flex-wrap: wrap;
           row-gap: 4px;
@@ -268,21 +315,22 @@
       }
     }
 
-    // 36px 触控区
+    // 44px 触控区：与卡片视图一致，窄屏下也保留可安全点击的菜单入口。
     .note-mobile-actions {
       --primary-color: var(--resource-note-color, #00a884);
       display: flex;
       align-items: center;
       justify-content: center;
       // 与标题行同高并居中于其中，视觉上「⋯」属于这条笔记的标题
-      height: var(--note-row-line);
+      height: 44px;
 
       .note-more-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
         padding: 0;
         border: none;
         border-radius: 8px;
@@ -329,6 +377,16 @@
         // 无摘要也无标签时保持同样的行高
         min-height: 20px;
       }
+      .note-path {
+        min-width: 0;
+        max-width: 42%;
+        overflow: hidden;
+        color: var(--muted-text-color, var(--desc-color));
+        font-size: 11px;
+        line-height: 20px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       .note-description {
         flex: 1 1 auto;
         min-width: 0;
@@ -342,11 +400,28 @@
         text-overflow: ellipsis;
       }
       .note-tags {
+        order: -1;
         flex: 0 0 auto;
         display: flex;
         gap: 6px;
         align-items: center;
       }
+    }
+
+    .note-child-count {
+      height: 24px;
+      padding: 0 6px;
+      gap: 3px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 7px;
+      color: var(--resource-note-color, #00a884);
+      background: transparent;
+      font-size: 11px;
+    }
+
+    .note-child-count-column {
+      align-self: center;
+      white-space: nowrap;
     }
     .note-time {
       font-size: 12px;

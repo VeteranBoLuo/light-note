@@ -3,7 +3,7 @@ import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightno
 import { snakeCaseKeys, resultData, mergeExistingProperties, insertData, L } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { attachPendingStatus, removeInboxRelations } from '../util/resourceInbox.js';
+import { attachPendingStatus } from '../util/resourceInbox.js';
 import { createNote } from '../util/services/noteService.js';
 import {
   DEFAULT_RESOURCE_BACKLINK_LIMIT,
@@ -22,14 +22,32 @@ import { promises as fsP } from 'node:fs';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
-import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
+import {
+  deleteOwnedNoteSubtrees,
+  moveOwnedNoteNode,
+  moveOwnedNoteNodes,
+  NoteTreeError,
+  loadOwnedNoteTree,
+  prepareOwnedNotePlacement,
+  queryOwnedNoteTree,
+  resolveNoteBreadcrumbFromSnapshot,
+  resolveNoteDescendantIdsFromSnapshot,
+  resolveOwnedNoteBreadcrumb,
+} from '../util/services/noteTreeService.js';
 import {
   EXPORT_FORMATS,
   MAX_EXPORT_BYTES,
   consumeExportTicket,
   createExportTicket,
 } from '../util/noteExportTickets.js';
+import {
+  assertNoteTreeFeature,
+  NOTE_TREE_FEATURE,
+  NoteTreeFeatureError,
+  noteTreeFeatureIdentity,
+  resolveNoteTreeFeatures,
+} from '../util/noteTreeFeatureFlags.js';
 
 // multer 先落盘后进 handler:任何登记失败分支都必须丢弃已落盘文件,
 // 否则登录用户反复提交无效 noteId 即可持续向磁盘写入孤儿文件
@@ -46,6 +64,57 @@ const sendTemplateServerError = (res, scene, error) => {
 const sendNoteServerError = (res, scene, error) => {
   console.error('[note-library] %s failed code=%s', scene, stableAgentErrorCode(error));
   return res.send(resultData(null, 500, '服务器暂时无法处理,请稍后重试'));
+};
+
+const NOTE_TREE_ERROR_COPY = Object.freeze({
+  NOTE_TREE_USER_REQUIRED: ['缺少用户身份', 'User identity is required'],
+  NOTE_TREE_NODE_NOT_FOUND: ['笔记不存在', 'Note not found'],
+  NOTE_TREE_PARENT_NOT_FOUND: ['目录不存在', 'Directory not found'],
+  NOTE_TREE_PARENT_INVALID: ['目标目录结构异常，暂时不能移动到这里', 'The target directory structure is invalid'],
+  NOTE_TREE_INVALID_DEPTH: ['目录展开层级无效', 'Invalid directory depth'],
+  NOTE_TREE_CYCLE: ['笔记目录存在循环关系', 'The note tree contains a cycle'],
+  NOTE_TREE_DEPTH_EXCEEDED: ['已超过目录最大层级', 'The maximum directory depth would be exceeded'],
+  NOTE_TREE_NODE_ID_REQUIRED: ['缺少笔记 ID', 'Note ID is required'],
+  INVALID_NOTE_TYPE: ['笔记类型无效', 'Invalid note type'],
+  NOTE_TREE_MOVE_CONFLICT: ['页面状态已变化，请刷新后重试', 'The page changed; refresh and try again'],
+  NOTE_TREE_DELETE_CONFLICT: [
+    '页面数量已变化，请重新确认删除范围',
+    'The page count changed; confirm the deletion scope again',
+  ],
+  NOTE_TREE_INVALID_DELETE_REQUEST: ['删除参数无效', 'Invalid deletion parameters'],
+  NOTE_TREE_TOO_MANY_NODES: ['单次处理的页面过多', 'Too many pages in one operation'],
+  NOTE_TREE_RESTORE_CONFLICT: ['页面状态已变化，请刷新后重试', 'The page changed; refresh and try again'],
+  INVALID_SORT_ANCHOR: ['排序位置已变化，请刷新后重试', 'The sort position changed; refresh and try again'],
+  NOTE_HAS_CHILDREN: [
+    '页面包含子页面，请使用“移入回收站”删除整棵子树',
+    'This page has subpages; delete the subtree instead',
+  ],
+});
+
+const sendNoteTreeError = (req, res, scene, error) => {
+  if (error instanceof NoteTreeFeatureError) {
+    return res.send(
+      resultData(
+        { code: error.code, feature: error.feature },
+        error.status,
+        L(req, '该功能暂未对当前账号开放', 'This feature is not available for this account yet'),
+      ),
+    );
+  }
+  if (error instanceof NoteTreeError) {
+    const [zh, en] = NOTE_TREE_ERROR_COPY[error.code] || [
+      '笔记目录暂时无法处理该请求',
+      'The note directory cannot process this request right now',
+    ];
+    return res.send(
+      resultData(
+        { code: error.code, ...(error.details ? { details: error.details } : {}) },
+        error.status || 400,
+        L(req, zh, en),
+      ),
+    );
+  }
+  return sendNoteServerError(res, scene, error);
 };
 
 // Markdown 正文的规范读模型：只对当前正式类型 `markdown` 生效。
@@ -90,6 +159,9 @@ export const uploadNoteImage = async (req, res) => {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const placement = await prepareOwnedNotePlacement(connection, { userId, parentId: null });
+      noteData.parent_id = placement.parentId;
+      noteData.sort = placement.sort;
       await connection.query('INSERT INTO note SET ?', [noteData]);
       await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: noteData.id, url: fileUrl })]);
       await connection.commit();
@@ -111,6 +183,7 @@ export const uploadNoteImage = async (req, res) => {
   } catch (e) {
     // 登记失败(归属查询/写库/事务回滚)统一丢弃已落盘文件,不留孤儿
     discardUploadedFile(req.file);
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'register-note-image', e);
     return sendNoteServerError(res, 'register-note-image', e);
   }
 };
@@ -120,6 +193,7 @@ export const addNote = async (req, res) => {
   try {
     const userId = req.user.id;
     const { addToInbox = false, inboxSource = 'quick_capture', ...noteBody } = req.body || {};
+    if (String(noteBody.parentId || '').trim()) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
     const result = await createNote({
       userId,
       userRole: req.user.role,
@@ -129,9 +203,119 @@ export const addNote = async (req, res) => {
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
     });
-    res.send(resultData({ id: result.id, addedToInbox: result.addedToInbox }));
+    return res.send(
+      resultData({ id: result.id, parentId: result.parentId ?? null, addedToInbox: result.addedToInbox }),
+    );
   } catch (e) {
+    if (e instanceof NoteTreeError || e instanceof NoteTreeFeatureError) {
+      return sendNoteTreeError(req, res, 'add-note', e);
+    }
     return sendNoteServerError(res, 'add-note', e);
+  }
+};
+
+export const getNoteTreeFeatures = (req, res) =>
+  res.send(resultData({ features: resolveNoteTreeFeatures(noteTreeFeatureIdentity(req)) }));
+
+// 页面树只读元数据：不返回正文，服务端始终按 auth/admin context 中的 subject 用户建树。
+export const queryNoteTree = async (req, res) => {
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ);
+    const result = await queryOwnedNoteTree({
+      userId: req.user?.id,
+      parentId: req.body?.parentId ?? null,
+      depth: req.body?.depth ?? 1,
+      keyword: req.body?.keyword ?? '',
+    });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendNoteTreeError(req, res, 'query-note-tree', error);
+  }
+};
+
+export const queryNoteBreadcrumb = async (req, res) => {
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ);
+    const noteId = String(req.body?.noteId || '').trim();
+    if (!noteId) {
+      return res.send(
+        resultData({ code: 'NOTE_TREE_NOTE_ID_REQUIRED' }, 400, L(req, '缺少笔记 ID', 'Note ID is required')),
+      );
+    }
+    const result = await resolveOwnedNoteBreadcrumb({ userId: req.user?.id, noteId });
+    return res.send(resultData(result));
+  } catch (error) {
+    return sendNoteTreeError(req, res, 'query-note-breadcrumb', error);
+  }
+};
+
+export const moveNoteNode = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  let connection;
+  let transactionStarted = false;
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const result = await moveOwnedNoteNode(connection, {
+      userId: req.user.id,
+      id: req.body?.id,
+      parentId: Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') ? req.body.parentId : undefined,
+      previousId: req.body?.previousId ?? null,
+      nextId: req.body?.nextId ?? null,
+    });
+    await connection.commit();
+    await invalidatePersonalKnowledgeCache(req.user.id);
+    return res.send(resultData(result));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始业务错误；移动操作可由客户端刷新权威树后安全重试。
+      }
+    }
+    if (error instanceof NoteTreeError || error instanceof NoteTreeFeatureError) {
+      return sendNoteTreeError(req, res, 'move-note-node', error);
+    }
+    return sendNoteServerError(res, 'move-note-node', error);
+  } finally {
+    connection?.release();
+  }
+};
+
+export const moveNoteNodes = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  let connection;
+  let transactionStarted = false;
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const result = await moveOwnedNoteNodes(connection, {
+      userId: req.user.id,
+      ids: req.body?.ids,
+      parentId: req.body?.parentId ?? null,
+    });
+    await connection.commit();
+    await invalidatePersonalKnowledgeCache(req.user.id);
+    return res.send(resultData(result));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留最初的目录业务错误，避免回滚异常覆盖稳定错误码。
+      }
+    }
+    if (error instanceof NoteTreeError || error instanceof NoteTreeFeatureError) {
+      return sendNoteTreeError(req, res, 'move-note-nodes', error);
+    }
+    return sendNoteServerError(res, 'move-note-nodes', error);
+  } finally {
+    connection?.release();
   }
 };
 
@@ -140,6 +324,9 @@ export const addNote = async (req, res) => {
 // 1) 内容去重:正文无变化不存 2) 时间合并:距上一条版本不足窗口则并入 3) 每篇保留上限,超出删最旧
 const NOTE_VERSION_MERGE_WINDOW_MS = 3 * 60 * 1000; // 连续编辑每 3 分钟落一个还原点
 const NOTE_VERSION_KEEP = 20; // 每篇笔记最多保留的历史版本数
+const NOTE_UPDATE_TYPES = new Set(['html', 'markdown']);
+const NOTE_TITLE_MAX_LENGTH = 255;
+const NOTE_CONTENT_MAX_LENGTH = 1_000_000;
 
 // 历史版本字数改由前端按"渲染后展示文本"计算(html: DOM textContent; md: marked 渲染后取 textContent),
 // 后端只回传 content + type,不再在 SQL/JS 层估算(见前端 utils/common.ts 的 noteDisplayText)。
@@ -191,85 +378,119 @@ async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
 
 export const updateNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+  const noteId = String(requestBody.id || '').trim();
+  if (!noteId || noteId.length > 255) {
+    return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+  }
+
+  const hasSubmittedTitle = Object.prototype.hasOwnProperty.call(requestBody, 'title');
+  const hasSubmittedContent = Object.prototype.hasOwnProperty.call(requestBody, 'content');
+  const hasSubmittedType = Object.prototype.hasOwnProperty.call(requestBody, 'type');
+  const hasSubmittedTags = Object.prototype.hasOwnProperty.call(requestBody, 'tags');
+  if (
+    hasSubmittedTitle &&
+    (typeof requestBody.title !== 'string' ||
+      !requestBody.title.trim() ||
+      requestBody.title.length > NOTE_TITLE_MAX_LENGTH)
+  ) {
+    return res.send(resultData(null, 400, L(req, '笔记标题无效', 'Invalid note title')));
+  }
+  if (
+    hasSubmittedContent &&
+    requestBody.content !== null &&
+    typeof requestBody.content !== 'string'
+  ) {
+    return res.send(resultData(null, 400, L(req, '笔记正文无效', 'Invalid note content')));
+  }
+  const rawContent = hasSubmittedContent ? String(requestBody.content ?? '') : undefined;
+  if (rawContent !== undefined && rawContent.length > NOTE_CONTENT_MAX_LENGTH) {
+    return res.send(resultData(null, 400, L(req, '笔记正文过长', 'Note content is too long')));
+  }
+  const submittedType = hasSubmittedType ? normalizeNoteType(requestBody.type) : null;
+  if (hasSubmittedType && !NOTE_UPDATE_TYPES.has(submittedType)) {
+    return res.send(resultData(null, 400, L(req, '笔记类型无效', 'Invalid note type')));
+  }
+  if (hasSubmittedTags && !Array.isArray(requestBody.tags)) {
+    return res.send(resultData(null, 400, L(req, '标签参数无效', 'Invalid tag list')));
+  }
+
+  let connection;
+  let transactionStarted = false;
   try {
     const userId = req.user.id;
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const hasSubmittedContent = Object.prototype.hasOwnProperty.call(req.body || {}, 'content');
-      let requestBody = req.body || {};
-      // 正常前端会随正文提交 type；兼容旧客户端的 content-only 更新时，从权威当前笔记补齐类型。
-      // 这样任何 Markdown 写入入口都会在服务端统一拦住 `&gt;` 形式的引用标记污染。
-      if (hasSubmittedContent) {
-        let submittedType = normalizeNoteType(requestBody.type);
-        if (!submittedType) {
-          const [typeRows] = await connection.query('SELECT type FROM note WHERE id = ? AND create_by = ?', [
-            requestBody.id,
-            userId,
-          ]);
-          submittedType = normalizeNoteType(typeRows[0]?.type);
-        }
-        if (submittedType === 'markdown') {
-          requestBody = {
-            ...requestBody,
-            content: normalizeMarkdownBlockquoteEntities(requestBody.content),
-          };
-        }
-      }
-      const params = {
-        ...requestBody,
-        updateBy: userId,
-      };
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    // 先锁定 owner 的有效笔记。后续标签与引用同步都以这条权威记录为边界，
+    // 避免“主表更新 0 行、关系表却写入”的越权旁路。
+    const [ownedRows] = await connection.query(
+      'SELECT id, title, content, type FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+      [noteId, userId],
+    );
+    if (!ownedRows.length) {
+      throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    }
+    const ownedNote = ownedRows[0];
+    const currentType = normalizeNoteType(ownedNote.type);
+    const finalType = submittedType || currentType;
+    if (!NOTE_UPDATE_TYPES.has(finalType)) {
+      throw new NoteTreeError('INVALID_NOTE_TYPE', '笔记类型无效', 400);
+    }
+    const finalContent = hasSubmittedContent
+      ? finalType === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(rawContent)
+        : rawContent
+      : String(ownedNote.content ?? '');
+
+    // 主表只允许正文编辑域字段。parent_id/sort/is_top/del_flag/owner 等字段必须走各自
+    // 的服务端领域接口，不能由客户端请求体透传，从根源封住 mass assignment。
+    const updateParams = {};
+    if (hasSubmittedTitle) updateParams.title = requestBody.title;
+    if (hasSubmittedContent) updateParams.content = finalContent;
+    if (hasSubmittedType) updateParams.type = finalType;
+    if (Object.keys(updateParams).length) {
+      updateParams.updateBy = userId;
       // 覆盖前先存历史版本快照(改动前旧内容;含去重/时间合并/保留上限)
-      await snapshotNoteVersion(connection, { noteId: requestBody.id, userId, newContent: requestBody.content });
-      // 更新 note 表，排除 tags
-      const updateParams = mergeExistingProperties(params, [], ['id', 'tags']);
-      await connection.query('update note set ? where id=? and create_by=?', [
+      await snapshotNoteVersion(connection, { noteId, userId, newContent: updateParams.content });
+      await connection.query('update note set ? where id=? and create_by=? and del_flag=0', [
         snakeCaseKeys(updateParams),
-        requestBody.id,
+        noteId,
         userId,
       ]);
-      if (params.tags && Array.isArray(params.tags)) {
-        const tagIds = await validateUserTags(connection, { tagIds: params.tags, userId });
-        await replaceResourceTagRelations(connection, {
-          tagIds,
-          resourceType: RESOURCE_TYPE.NOTE,
-          resourceId: requestBody.id,
-          userId,
-        });
-      }
-      // 笔记内联提及(N0):只有正文或正文类型发生提交时才同步。仅改标题/标签/排序时跳过,
-      // 避免用空正文误删已有引用；但「只切换 type」也会改变同一正文的解析语义，不能漏掉。
-      const hasSubmittedType = Object.prototype.hasOwnProperty.call(requestBody, 'type');
-      if (hasSubmittedContent || hasSubmittedType) {
-        // 以最终已落库的 content/type 为准：只带其中一个字段时，从同一事务内回读另一个字段。
-        // 这既覆盖 content-only 的旧类型，也覆盖 type-only 的旧正文，不能凭空按 html 解析。
-        let finalContent = hasSubmittedContent && requestBody.content != null ? String(requestBody.content) : null;
-        let finalType = hasSubmittedType && requestBody.type != null ? requestBody.type : null;
-        if (finalContent === null || finalType === null) {
-          const [noteRows] = await connection.query('SELECT content, type FROM note WHERE id = ? AND create_by = ?', [
-            requestBody.id,
-            userId,
-          ]);
-          const persistedNote = noteRows[0];
-          if (finalContent === null) finalContent = String(persistedNote?.content ?? '');
-          if (finalType === null) finalType = persistedNote?.type;
-        }
-        const refs = extractOwnedResourceRefs({ content: finalContent, type: finalType });
-        await syncNoteResourceRefs(connection, { userId, noteId: requestBody.id, refs });
-      }
-      await connection.commit();
-      await invalidatePersonalKnowledgeCache(userId);
-      res.send(resultData('更新笔记成功'));
-    } catch (error) {
-      await connection.rollback();
-      return sendNoteServerError(res, 'update-note', error);
-    } finally {
-      connection.release();
     }
+    if (hasSubmittedTags) {
+      const tagIds = await validateUserTags(connection, { tagIds: requestBody.tags, userId });
+      await replaceResourceTagRelations(connection, {
+        tagIds,
+        resourceType: RESOURCE_TYPE.NOTE,
+        resourceId: noteId,
+        userId,
+      });
+    }
+    // 笔记内联提及(N0):只有正文或正文类型发生提交时才同步。仅改标题/标签/排序时跳过,
+    // 避免用空正文误删已有引用；但「只切换 type」也会改变同一正文的解析语义，不能漏掉。
+    if (hasSubmittedContent || hasSubmittedType) {
+      const refs = extractOwnedResourceRefs({ content: finalContent, type: finalType });
+      await syncNoteResourceRefs(connection, { userId, noteId, refs });
+    }
+    await connection.commit();
+    transactionStarted = false;
+    if (Object.keys(updateParams).length || hasSubmittedTags) await invalidatePersonalKnowledgeCache(userId);
+    return res.send(resultData('更新笔记成功'));
   } catch (e) {
-    console.warn('[note-library] update note rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留最初的业务错误，避免回滚异常覆盖稳定响应。
+      }
+    }
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-note', e);
+    return sendNoteServerError(res, 'update-note', e);
+  } finally {
+    connection?.release();
   }
 };
 
@@ -283,6 +504,35 @@ export const queryNoteList = async (req, res) => {
     const pagination = normalizeOptionalPagination(req.body);
     const where = ['n.create_by = ?', 'n.del_flag = 0'];
     const params = [userId];
+    const treeMode = Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId');
+    if (treeMode) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ);
+    const parentId = String(req.body?.parentId ?? '').trim() || null;
+    const hasTreeFilter = Boolean(keyword) || tagId === 'null' || Boolean(tagId);
+    let treeSnapshot = null;
+
+    if (treeMode) {
+      treeSnapshot = await loadOwnedNoteTree(userId);
+      if (parentId && !treeSnapshot.nodesById.has(parentId)) {
+        throw new NoteTreeError('NOTE_TREE_PARENT_NOT_FOUND', '目录不存在', 404);
+      }
+      if (hasTreeFilter && parentId) {
+        // 搜索/标签筛选始终由服务端扩展当前页面的全部后代；不信任客户端上传的 includeDescendants。
+        const descendantIds = resolveNoteDescendantIdsFromSnapshot(treeSnapshot, parentId);
+        if (descendantIds.length) {
+          where.push(`n.id IN (${descendantIds.map(() => '?').join(',')})`);
+          params.push(...descendantIds);
+        } else {
+          where.push('1 = 0');
+        }
+      } else if (!hasTreeFilter) {
+        if (parentId) {
+          where.push('n.parent_id = ?');
+          params.push(parentId);
+        } else {
+          where.push('n.parent_id IS NULL');
+        }
+      }
+    }
 
     if (keyword) {
       const like = `%${keyword}%`;
@@ -321,7 +571,14 @@ export const queryNoteList = async (req, res) => {
           WHERE r.resource_type = 'note'
             AND r.resource_id = n.id
             AND t.del_flag = 0
-        ) AS tags
+        ) AS tags,
+        (
+          SELECT COUNT(*)
+          FROM note child
+          WHERE child.create_by = n.create_by
+            AND child.parent_id = n.id
+            AND child.del_flag = 0
+        ) AS child_count
       FROM note n
       WHERE ${whereSql}
       GROUP BY n.id
@@ -346,6 +603,14 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+      if (treeSnapshot && hasTreeFilter) {
+        const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
+        note.path = path;
+        note.path_text = path
+          .slice(0, -1)
+          .map((item) => item.title)
+          .join(' / ');
+      }
     });
     try {
       await attachPendingStatus(pool, { userId, resourceType: 'note', items: result });
@@ -355,8 +620,13 @@ export const queryNoteList = async (req, res) => {
 
     return res.send(resultData(pagination.enabled ? buildPagedResult(result, total, pagination) : result));
   } catch (error) {
+    if (error instanceof NoteTreeError || error instanceof NoteTreeFeatureError) {
+      return sendNoteTreeError(req, res, 'query-note-list', error);
+    }
     console.error('[note-library] list failed code=%s', String(error?.code || 'NOTE_LIBRARY_LIST_FAILED'));
-    return res.send(resultData(null, 500, '服务器暂时无法处理，请稍后重试'));
+    return res.send(
+      resultData(null, 500, L(req, '服务器暂时无法处理，请稍后重试', 'The server is temporarily unavailable')),
+    );
   }
 };
 
@@ -443,75 +713,163 @@ export const resourceBacklinks = async (req, res) => {
 export const delNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const ids = req.body.ids;
-    if (!Array.isArray(ids) || ids.length === 0) {
+    const ids = [
+      ...new Set(
+        (Array.isArray(req.body?.ids) ? req.body.ids : []).map((id) => String(id ?? '').trim()).filter(Boolean),
+      ),
+    ];
+    if (ids.length === 0 || ids.length > 100) {
       return res.send(resultData(null, 400, '无效的请求参数'));
     }
 
     const userId = req.user.id;
-    const placeholders = ids.map(() => '?').join(',');
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [updateResult] = await connection.query(
-        `UPDATE note SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ?`,
-        [...ids, userId],
-      );
-      await removeInboxRelations(connection, {
+      const result = await deleteOwnedNoteSubtrees(connection, {
         userId,
-        items: ids.map((id) => ({ resourceType: 'note', resourceId: String(id) })),
+        items: ids.map((id) => ({ id, expectedDescendantCount: 0 })),
       });
       await connection.commit();
       await invalidatePersonalKnowledgeCache(userId);
-      res.send(resultData(updateResult));
+      return res.send(resultData(result));
     } catch (error) {
       await connection.rollback();
+      if (
+        error instanceof NoteTreeError &&
+        error.code === 'NOTE_TREE_DELETE_CONFLICT' &&
+        Number(error.details?.actualDescendantCount || 0) > 0
+      ) {
+        throw new NoteTreeError('NOTE_HAS_CHILDREN', '页面包含子页面', 409, error.details);
+      }
       throw error;
     } finally {
       connection.release();
     }
   } catch (e) {
     console.warn('[note-library] batch delete rejected code=%s', stableAgentErrorCode(e));
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'delete-note', e);
     return res.send(resultData(null, 400, '客户端请求异常'));
+  }
+};
+
+export const deleteNoteSubtree = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  let connection;
+  let transactionStarted = false;
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.SUBTREE_TRASH);
+    const requestItems = Array.isArray(req.body?.items)
+      ? req.body.items
+      : [{ id: req.body?.id, expectedDescendantCount: req.body?.expectedDescendantCount }];
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const result = await deleteOwnedNoteSubtrees(connection, {
+      userId: req.user.id,
+      items: requestItems,
+    });
+    await connection.commit();
+    await invalidatePersonalKnowledgeCache(req.user.id);
+    return res.send(resultData(result));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始目录冲突；客户端会重新读取权威数量后再次确认。
+      }
+    }
+    return sendNoteTreeError(req, res, 'delete-note-subtree', error);
+  } finally {
+    connection?.release();
   }
 };
 
 export const updateNoteSort = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const userId = req.user.id;
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    if (req.body?.move) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+    connection = await pool.getConnection();
     await connection.beginTransaction(); // 开始事务
     if (req.body?.move) {
-      const result = await moveOwnedResourceByAnchors(connection, {
+      const result = await moveOwnedNoteNode(connection, {
         ...req.body.move,
-        resourceType: 'note',
         userId,
       });
       await connection.commit();
       return res.send(resultData(result, 200, 'Sort updated successfully'));
     }
 
-    const { notes } = req.body;
-    if (!Array.isArray(notes)) {
+    const notes = Array.isArray(req.body?.notes) ? req.body.notes : [];
+    const normalizedNotes = notes.map((note) => ({
+      id: String(note?.id ?? '').trim(),
+      sort: Number(note?.sort),
+    }));
+    if (
+      normalizedNotes.length === 0 ||
+      normalizedNotes.length > 500 ||
+      normalizedNotes.some((note) => !note.id || !Number.isInteger(note.sort) || note.sort < 0)
+    ) {
       await connection.rollback();
       return res.send(resultData(null, 400, '排序参数无效'));
     }
-    for (const note of notes) {
+    const uniqueIds = [...new Set(normalizedNotes.map((note) => note.id))];
+    if (uniqueIds.length !== normalizedNotes.length) {
+      await connection.rollback();
+      return res.send(resultData(null, 400, '排序参数无效'));
+    }
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    const [ownedRows] = await connection.query(
+      `SELECT id, parent_id
+         FROM note
+        WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0
+        FOR UPDATE`,
+      [...uniqueIds, userId],
+    );
+    if (ownedRows.length !== uniqueIds.length) {
+      throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    }
+    const authoritativeParentId =
+      ownedRows[0]?.parent_id == null ? null : String(ownedRows[0].parent_id).trim() || null;
+    if (
+      ownedRows.some(
+        (row) => (row.parent_id == null ? null : String(row.parent_id).trim() || null) !== authoritativeParentId,
+      )
+    ) {
+      throw new NoteTreeError('INVALID_SORT_ANCHOR', '只能调整同一目录中的页面顺序', 409);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') &&
+      (String(req.body.parentId ?? '').trim() || null) !== authoritativeParentId
+    ) {
+      throw new NoteTreeError('INVALID_SORT_ANCHOR', '目录状态已变化，请刷新后重试', 409);
+    }
+    for (const note of normalizedNotes) {
       const { id, sort } = note;
-      const sql = 'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ?';
-      await connection.query(sql, [sort, id, userId]);
+      const sql = `UPDATE note
+                      SET sort = ?, update_time = update_time
+                    WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`;
+      await connection.query(sql, [sort, id, userId, authoritativeParentId]);
     }
     await connection.commit(); // 提交事务
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {
-    await connection.rollback(); // 如果发生错误，回滚事务
-    if (e instanceof AnchoredSortError) {
-      return res.send(resultData(null, e.code === 'RESOURCE_NOT_FOUND' ? 404 : 400, e.message));
+    if (connection) {
+      try {
+        await connection.rollback(); // 如果发生错误，回滚事务
+      } catch {
+        // 保留最初的排序错误，避免回滚异常覆盖稳定业务错误。
+      }
+    }
+    if (e instanceof NoteTreeError || e instanceof NoteTreeFeatureError) {
+      return sendNoteTreeError(req, res, 'update-note-sort', e);
     }
     return sendNoteServerError(res, 'update-note-sort', e);
   } finally {
-    connection.release(); // 释放连接回连接池
+    connection?.release(); // 释放连接回连接池
   }
 };
 
@@ -1063,11 +1421,7 @@ export const createNoteExportTicket = async (req, res) => {
     // 先按 base64 长度估算原始体积再解码:超限内容不该先被解成大 Buffer 才拒绝
     if (Math.floor((contentBase64.length * 3) / 4) > MAX_EXPORT_BYTES) {
       return res.send(
-        resultData(
-          null,
-          413,
-          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
-        ),
+        resultData(null, 413, L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app')),
       );
     }
 
@@ -1087,11 +1441,7 @@ export const createNoteExportTicket = async (req, res) => {
     }
     if (content.length > MAX_EXPORT_BYTES) {
       return res.send(
-        resultData(
-          null,
-          413,
-          L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app'),
-        ),
+        resultData(null, 413, L(req, '笔记内容过大,无法在 App 内导出', 'The note is too large to export in the app')),
       );
     }
 

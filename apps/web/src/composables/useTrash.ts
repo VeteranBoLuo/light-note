@@ -15,8 +15,9 @@ export interface TrashItem {
   name?: string;
   deletedAt?: string;
   fileSize?: number;
+  batchCount?: number;
 }
-export type TrashEntry = Pick<TrashItem, 'id' | 'resourceType'>;
+export type TrashEntry = Pick<TrashItem, 'id' | 'resourceType' | 'batchCount'>;
 
 export function formatTrashSize(bytes: number): string {
   if (!bytes) return '0 KB';
@@ -52,7 +53,7 @@ export function useTrash() {
     const selected = new Set(selectedIds.value);
     return items.value
       .filter((item) => selected.has(item.id))
-      .map((item) => ({ id: item.id, resourceType: item.resourceType }));
+      .map((item) => ({ id: item.id, resourceType: item.resourceType, batchCount: item.batchCount }));
   });
   const pageSubtitle = computed(() =>
     total.value
@@ -107,7 +108,11 @@ export function useTrash() {
 
   function normalizeEntries(value: TrashItem | TrashEntry | Array<TrashItem | TrashEntry>): TrashEntry[] {
     const entries = Array.isArray(value) ? value : [value];
-    return entries.map(({ id, resourceType }) => ({ id, resourceType }));
+    return entries.map(({ id, resourceType, batchCount }) => ({ id, resourceType, batchCount }));
+  }
+
+  function affectedEntryCount(entries: TrashEntry[]) {
+    return entries.reduce((total, entry) => total + Math.max(1, Number(entry.batchCount || 1)), 0);
   }
 
   async function restore(entries: TrashEntry[]) {
@@ -135,7 +140,7 @@ export function useTrash() {
     const entries = normalizeEntries(value);
     Alert.alert({
       title: t('trash.restore'),
-      content: t('trash.restoreConfirm', { count: entries.length }),
+      content: t('trash.restoreConfirm', { count: affectedEntryCount(entries) }),
       onOk: () => restore(entries),
     });
   }
@@ -167,7 +172,7 @@ export function useTrash() {
     const entries = normalizeEntries(value);
     Alert.alert({
       title: t('trash.permanentDelete'),
-      content: t('trash.permanentDeleteConfirm', { count: entries.length }),
+      content: t('trash.permanentDeleteConfirm', { count: affectedEntryCount(entries) }),
       onOk: () => permanentlyDelete(entries),
     });
   }

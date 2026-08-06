@@ -8,6 +8,8 @@ import { cleanupOrphanNoteImages } from '../util/noteImages.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { deleteNoteResourceRefsForNotes } from '../util/services/noteReferenceService.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { NoteTreeError, prepareOwnedNotePhysicalDelete } from '../util/services/noteTreeService.js';
 
 // 彻底删除笔记时:删 note_images 行,返回其图片 URL(供事务提交后删磁盘文件)。
 // note_images 原本只增不删,笔记永久删除后图片文件会残留成孤儿。
@@ -106,7 +108,9 @@ async function cleanupExpiredFiles(connection, userId = null) {
   // 异步删 OBS，不阻塞
   for (const f of rows) {
     const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-    deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 清理失败: ${e.message}`));
+    deleteObjectFromObs(key).catch((e) =>
+      console.error('[trash] expired OBS cleanup failed code=%s', stableAgentErrorCode(e)),
+    );
   }
   return rows.length;
 }
@@ -114,10 +118,23 @@ async function cleanupExpiredFiles(connection, userId = null) {
 async function cleanupExpiredNotes(connection, userId = null) {
   const userCond = userId ? ` AND n.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('n.create_by')}`;
   const [notes] = await connection.query(
-    `SELECT n.id FROM note n LEFT JOIN user_growth g ON g.user_id = n.create_by WHERE ${expiryWhere('n')}${userCond}`,
+    `SELECT n.id, n.create_by FROM note n LEFT JOIN user_growth g ON g.user_id = n.create_by WHERE ${expiryWhere('n')}${userCond}`,
   );
-  if (notes.length === 0) return { count: 0, imageUrls: [] };
-  const ids = notes.map((n) => n.id);
+  if (notes.length === 0) return { count: 0, imageUrls: [], userIds: [] };
+  const candidatesByUser = new Map();
+  for (const note of notes) {
+    const ownerId = String(note.create_by || '').trim();
+    if (!ownerId) continue;
+    if (!candidatesByUser.has(ownerId)) candidatesByUser.set(ownerId, []);
+    candidatesByUser.get(ownerId).push(note.id);
+  }
+  const resolvedIds = new Set();
+  for (const [ownerId, candidateIds] of candidatesByUser) {
+    const prepared = await prepareOwnedNotePhysicalDelete(connection, { userId: ownerId, ids: candidateIds });
+    prepared.ids.forEach((id) => resolvedIds.add(id));
+  }
+  const ids = [...resolvedIds];
+  if (ids.length === 0) return { count: 0, imageUrls: [], userIds: [...candidatesByUser.keys()] };
   const ph = ids.map(() => '?').join(',');
   await purgeInboxRelations(connection, 'note', ids);
   const urls = await purgeNoteImages(connection, ids);
@@ -126,7 +143,7 @@ async function cleanupExpiredNotes(connection, userId = null) {
   await deleteNoteResourceRefsForNotes(connection, ids);
   const [result] = await connection.query(`DELETE FROM note WHERE id IN (${ph})`, ids);
   // 物理文件清理交由调用方在事务提交后执行(此处事务未提交,引用检查会读到旧数据)
-  return { count: result.affectedRows, imageUrls: urls };
+  return { count: result.affectedRows, imageUrls: urls, userIds: [...candidatesByUser.keys()] };
 }
 
 async function cleanupExpiredBookmarks(connection, userId = null) {
@@ -162,15 +179,16 @@ export async function cleanupAllExpiredTrash() {
   try {
     await connection.beginTransaction();
     const { count: bookmarkCount, icons: bookmarkIcons } = await cleanupExpiredBookmarks(connection);
-    const { count: noteCount, imageUrls } = await cleanupExpiredNotes(connection);
+    const { count: noteCount, imageUrls, userIds: noteUserIds } = await cleanupExpiredNotes(connection);
     const fileCount = await cleanupExpiredFiles(connection);
     await connection.commit();
     await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
     cleanupOrphanNoteImages(imageUrls);
+    await Promise.all(noteUserIds.map((userId) => invalidatePersonalKnowledgeCache(userId)));
     console.log(`[回收站定时清理] 书签${bookmarkCount} 笔记${noteCount} 文件${fileCount}`);
   } catch (e) {
     await connection.rollback();
-    console.error('[回收站定时清理] 失败:', e.message);
+    console.error('[trash] scheduled cleanup failed code=%s', stableAgentErrorCode(e));
   } finally {
     connection.release();
   }
@@ -186,14 +204,15 @@ async function purgeExpiredItems(userId) {
   try {
     await connection.beginTransaction();
     const { icons: bookmarkIcons } = await cleanupExpiredBookmarks(connection, userId);
-    const { imageUrls } = await cleanupExpiredNotes(connection, userId);
+    const { imageUrls, userIds: noteUserIds } = await cleanupExpiredNotes(connection, userId);
     await cleanupExpiredFiles(connection, userId);
     await connection.commit();
     await cleanupBookmarkIconFiles(bookmarkIcons, { db: connection }).catch(() => {});
     cleanupOrphanNoteImages(imageUrls);
+    await Promise.all(noteUserIds.map((ownerId) => invalidatePersonalKnowledgeCache(ownerId)));
   } catch (e) {
     await connection.rollback();
-    console.error(`[回收站] 用户${userId}过期清理失败:`, e.message);
+    console.error('[trash] user expiry cleanup failed code=%s', stableAgentErrorCode(e));
   } finally {
     connection.release();
   }
@@ -210,6 +229,8 @@ export const getTrashList = async (req, res) => {
     purgeExpiredItems(userId).catch((e) => console.warn('[trash] 过期清理失败 code=%s', stableAgentErrorCode(e)));
 
     const { resourceType, keyword, pageSize = 20, currentPage = 1 } = req.body || {};
+    const normalizedKeyword = String(keyword || '').trim();
+    const keywordPattern = `%${normalizedKeyword}%`;
 
     const types = resourceType ? [resourceType] : RESOURCE_TYPES;
     const queries = [];
@@ -218,16 +239,73 @@ export const getTrashList = async (req, res) => {
       const cfg = TABLE_CONFIG[type];
       if (!cfg) continue;
 
-      const kwCond = keyword ? ` AND ${cfg.nameField} LIKE ${pool.escape(`%${keyword}%`)}` : '';
-      const sizeField = type === 'file' ? ', file_size' : '';
+      if (type === 'note') {
+        const keywordCondition = normalizedKeyword
+          ? ` AND (
+                n.title LIKE ?
+                OR (
+                  n.tree_delete_batch_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1
+                      FROM note keyword_member
+                     WHERE keyword_member.create_by = n.create_by
+                       AND keyword_member.del_flag = 1
+                       AND keyword_member.tree_delete_batch_id = n.tree_delete_batch_id
+                       AND keyword_member.title LIKE ?
+                  )
+                )
+              )`
+          : '';
+        const params = [type, userId];
+        if (normalizedKeyword) params.push(keywordPattern, keywordPattern);
+        queries.push(
+          pool.query(
+            `SELECT n.id,
+                    n.title AS name,
+                    ? AS resourceType,
+                    n.deleted_at,
+                    CASE
+                      WHEN n.tree_delete_batch_id IS NULL THEN 1
+                      ELSE (
+                        SELECT COUNT(*)
+                          FROM note batch_member
+                         WHERE batch_member.create_by = n.create_by
+                           AND batch_member.del_flag = 1
+                           AND batch_member.tree_delete_batch_id = n.tree_delete_batch_id
+                      )
+                    END AS batch_count
+               FROM note n
+              WHERE n.create_by = ?
+                AND n.del_flag = 1
+                AND (
+                  n.tree_delete_batch_id IS NULL
+                  OR NOT EXISTS (
+                    SELECT 1
+                      FROM note batch_parent
+                     WHERE batch_parent.id = n.parent_id
+                       AND batch_parent.create_by = n.create_by
+                       AND batch_parent.del_flag = 1
+                       AND batch_parent.tree_delete_batch_id = n.tree_delete_batch_id
+                  )
+                )${keywordCondition}
+              ORDER BY n.deleted_at DESC`,
+            params,
+          ),
+        );
+        continue;
+      }
 
+      const keywordCondition = normalizedKeyword ? ` AND ${cfg.nameField} LIKE ?` : '';
+      const sizeField = type === 'file' ? ', file_size' : '';
+      const params = [type, userId];
+      if (normalizedKeyword) params.push(keywordPattern);
       queries.push(
         pool.query(
           `SELECT id, ${cfg.nameField} AS name, ? AS resourceType, deleted_at${sizeField}
            FROM \`${cfg.table}\`
-           WHERE ${cfg.userIdField} = ? AND del_flag = 1${kwCond}
+           WHERE ${cfg.userIdField} = ? AND del_flag = 1${keywordCondition}
            ORDER BY deleted_at DESC`,
-          [type, userId],
+          params,
         ),
       );
     }
@@ -246,7 +324,8 @@ export const getTrashList = async (req, res) => {
     // total 直接取全量结果长度:原先另发 3 条 COUNT 与主查询同条件,纯冗余(全量本就已拉回内存)
     res.send(resultData({ items, total: allItems.length }));
   } catch (e) {
-    res.send(resultData(null, 500, '获取回收站列表失败: ' + e.message));
+    console.error('[trash] list failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '获取回收站列表失败，请稍后重试'));
   }
 };
 
@@ -269,7 +348,8 @@ export const getTrashFileSize = async (req, res) => {
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 500, '获取回收站文件大小失败: ' + e.message));
+    console.error('[trash] file size failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '获取回收站文件大小失败，请稍后重试'));
   }
 };
 
@@ -291,7 +371,11 @@ export const restoreTrash = async (req, res) => {
     const restored = results.reduce((sum, item) => sum + Number(item.count || 0), 0);
     res.send(resultData({ restored }, 200, '恢复成功'));
   } catch (e) {
-    res.send(resultData(null, 500, '恢复失败: ' + e.message));
+    if (e instanceof NoteTreeError) {
+      return res.send(resultData({ code: e.code, details: e.details || null }, e.status || 400, '恢复范围已变化'));
+    }
+    console.error('[trash] restore failed code=%s', stableAgentErrorCode(e));
+    return res.send(resultData(null, 500, '恢复失败，请稍后重试'));
   }
 };
 
@@ -302,24 +386,41 @@ export const permanentDelete = async (req, res) => {
     const userId = req.user?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
 
-    const { resourceType, ids } = req.body || {};
+    const { resourceType } = req.body || {};
+    const ids = [...
+      new Set(
+        (Array.isArray(req.body?.ids) ? req.body.ids : [])
+          .map((id) => String(id ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
     if (!resourceType || !RESOURCE_TYPES.includes(resourceType)) {
       return res.send(resultData(null, 400, '无效的资源类型'));
     }
-    if (!Array.isArray(ids) || ids.length === 0) {
+    if (ids.length === 0 || ids.length > 100) {
       return res.send(resultData(null, 400, '无效的ID列表'));
     }
 
     const cfg = TABLE_CONFIG[resourceType];
-    const placeholders = ids.map(() => '?').join(',');
-
     await connection.beginTransaction();
 
+    let targetIds = ids;
+    if (resourceType === 'note') {
+      const prepared = await prepareOwnedNotePhysicalDelete(connection, { userId, ids });
+      targetIds = prepared.ids;
+    }
+    if (targetIds.length === 0) {
+      await connection.commit();
+      return res.send(resultData({ deleted: 0 }, 200, '彻底删除成功'));
+    }
+    const placeholders = targetIds.map(() => '?').join(',');
+
     await connection.query(
-      `DELETE FROM resource_tag_relations WHERE resource_type = ? AND resource_id IN (${placeholders})`,
-      [resourceType, ...ids],
+      `DELETE FROM resource_tag_relations
+        WHERE resource_type = ? AND user_id = ? AND resource_id IN (${placeholders})`,
+      [resourceType, userId, ...targetIds],
     );
-    await purgeInboxRelations(connection, resourceType, ids, userId);
+    await purgeInboxRelations(connection, resourceType, targetIds, userId);
 
     let objsToDelete = [];
     let noteImageUrls = [];
@@ -328,7 +429,7 @@ export const permanentDelete = async (req, res) => {
       const [files] = await connection.query(
         `SELECT id, obs_key, create_by, file_name FROM \`${cfg.table}\`
          WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
-        [...ids, userId],
+        [...targetIds, userId],
       );
       objsToDelete = files;
       await purgeDocumentSourcesForCloudFiles(
@@ -337,28 +438,23 @@ export const permanentDelete = async (req, res) => {
         files.map((file) => file.id),
       );
     } else if (resourceType === 'note') {
-      const [validNotes] = await connection.query(
-        `SELECT id FROM note WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
-        [...ids, userId],
-      );
-      const validNoteIds = validNotes.map((n) => n.id);
-      noteImageUrls = await purgeNoteImages(connection, validNoteIds);
-      await purgeNoteVersions(connection, validNoteIds);
+      noteImageUrls = await purgeNoteImages(connection, targetIds);
+      await purgeNoteVersions(connection, targetIds);
       // 笔记内联提及(N0):永久删除笔记时,同事务删除其全部出边引用关系。
-      await deleteNoteResourceRefsForNotes(connection, validNoteIds);
+      await deleteNoteResourceRefsForNotes(connection, targetIds);
     } else if (resourceType === 'bookmark') {
       const [bookmarks] = await connection.query(
         `SELECT id, icon_url AS iconUrl
          FROM bookmark
          WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
-        [...ids, userId],
+        [...targetIds, userId],
       );
       bookmarkIcons = bookmarks || [];
     }
 
     const [result] = await connection.query(
       `DELETE FROM \`${cfg.table}\` WHERE id IN (${placeholders}) AND ${cfg.userIdField} = ? AND del_flag = 1`,
-      [...ids, userId],
+      [...targetIds, userId],
     );
 
     await connection.commit();
@@ -366,14 +462,18 @@ export const permanentDelete = async (req, res) => {
 
     for (const f of objsToDelete) {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-      deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
+      deleteObjectFromObs(key).catch((e) =>
+        console.error('[trash] OBS delete failed code=%s', stableAgentErrorCode(e)),
+      );
     }
     cleanupOrphanNoteImages(noteImageUrls);
+    if (resourceType === 'note') await invalidatePersonalKnowledgeCache(userId);
 
     res.send(resultData({ deleted: result.affectedRows }, 200, '彻底删除成功'));
   } catch (e) {
     await connection.rollback();
-    res.send(resultData(null, 500, '彻底删除失败: ' + e.message));
+    console.error('[trash] permanent delete failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '彻底删除失败，请稍后重试'));
   } finally {
     connection.release();
   }
@@ -381,31 +481,15 @@ export const permanentDelete = async (req, res) => {
 
 export const restoreAllTrash = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
-  const connection = await pool.getConnection();
   try {
     const userId = req.user?.id;
     if (!userId) return res.send(resultData(null, 401, '请先登录'));
-
-    await connection.beginTransaction();
-
-    let total = 0;
-    for (const type of RESOURCE_TYPES) {
-      const cfg = TABLE_CONFIG[type];
-      const [result] = await connection.query(
-        `UPDATE \`${cfg.table}\` SET del_flag = 0, deleted_at = NULL
-         WHERE ${cfg.userIdField} = ? AND del_flag = 1`,
-        [userId],
-      );
-      total += result.affectedRows;
-    }
-
-    await connection.commit();
+    const results = await restoreTrashResources({ userId, filters: { all: true } });
+    const total = results.reduce((sum, item) => sum + Number(item.count || 0), 0);
     res.send(resultData({ restored: total }, 200, `已恢复 ${total} 项`));
   } catch (e) {
-    await connection.rollback();
-    res.send(resultData(null, 500, '一键恢复失败: ' + e.message));
-  } finally {
-    connection.release();
+    console.error('[trash] restore all failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '一键恢复失败，请稍后重试'));
   }
 };
 
@@ -430,7 +514,13 @@ export const emptyTrash = async (req, res) => {
     );
     // 笔记图片:先拿待清笔记的图片 URL 并删 note_images 行(下面循环会删 note 行)
     const [delNotes] = await connection.query(`SELECT id FROM note WHERE create_by = ? AND del_flag = 1`, [userId]);
-    const delNoteIds = delNotes.map((n) => n.id);
+    const preparedNotes = delNotes.length
+      ? await prepareOwnedNotePhysicalDelete(connection, {
+          userId,
+          ids: delNotes.map((note) => note.id),
+        })
+      : { ids: [] };
+    const delNoteIds = preparedNotes.ids;
     const noteImageUrls = await purgeNoteImages(connection, delNoteIds);
     await purgeNoteVersions(connection, delNoteIds);
     // 笔记内联提及(N0):清空回收站时,同事务删除这些笔记的全部出边引用关系。
@@ -468,14 +558,18 @@ export const emptyTrash = async (req, res) => {
     // 事务提交后删 OBS
     for (const f of files) {
       const key = f.obs_key || buildObjectKey(f.create_by, f.file_name);
-      deleteObjectFromObs(key).catch((e) => console.error(`[回收站] OBS 删除失败: ${e.message}`));
+      deleteObjectFromObs(key).catch((e) =>
+        console.error('[trash] OBS delete failed code=%s', stableAgentErrorCode(e)),
+      );
     }
     cleanupOrphanNoteImages(noteImageUrls);
+    if (delNoteIds.length) await invalidatePersonalKnowledgeCache(userId);
 
     res.send(resultData({ deleted: total }, 200, '回收站已清空'));
   } catch (e) {
     await connection.rollback();
-    res.send(resultData(null, 500, '清空回收站失败: ' + e.message));
+    console.error('[trash] empty failed code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '清空回收站失败，请稍后重试'));
   } finally {
     connection.release();
   }

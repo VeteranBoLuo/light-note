@@ -1,9 +1,10 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   poolQuery: vi.fn(),
   prepareArgs: vi.fn(),
   preview: vi.fn(),
+  createNotePreview: vi.fn(),
   createToolConfirmation: vi.fn(),
   inspectToolConfirmationExecution: vi.fn(),
   claimToolConfirmationExecution: vi.fn(),
@@ -164,20 +165,42 @@ vi.mock('../util/agent/tools/index.js', () => ({
     {
       name: 'create_note',
       description: '创建笔记',
-      parameters: { type: 'object', properties: { title: { type: 'string' } } },
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          content: { type: 'string' },
+          parentId: { type: 'string', maxLength: 255 },
+        },
+        required: ['title'],
+      },
       isWrite: true,
       directAction: false,
       riskLevel: 'low',
+      normalizeArgs: (args) => ({
+        title: String(args.title || '').trim(),
+        content: String(args.content || '').trim(),
+        ...(String(args.parentId || '').trim() ? { parentId: String(args.parentId).trim() } : {}),
+      }),
+      preview: mocks.createNotePreview,
       execute: vi.fn(),
       transform: vi.fn(() => ''),
     },
   ],
 }));
 
-const { confirmAgentTool, prepareAgentToolAction, rejectAgentTool, respondAgentInteraction } = await import(
-  './agentHandle.js'
-);
+const {
+  confirmAgentTool,
+  prepareAgentToolAction,
+  rejectAgentTool,
+  replaceAgentNoteTargetDirectory,
+  respondAgentInteraction,
+} = await import('./agentHandle.js');
 const { ToolConfirmationError } = await import('../util/agent/confirmationStore.js');
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 function createResponse() {
   const res = {};
@@ -535,6 +558,203 @@ describe('respondAgentInteraction', () => {
   });
 });
 
+describe('replaceAgentNoteTargetDirectory', () => {
+  const previousConfirmation = {
+    id: 'confirm-note-old',
+    sessionId: 'session-note',
+    toolName: 'create_note',
+    args: { title: '可信标题', content: '可信正文', parentId: 'directory-old' },
+    resourceUserId: 'user-1',
+    resourceUserRole: 'user',
+    adminContextId: null,
+    adminMode: null,
+    privateContext: { sourceMessage: '基于材料创建一篇笔记' },
+    originRequestId: 'request-original',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.poolQuery.mockResolvedValue([[]]);
+    mocks.inspectToolConfirmationExecution.mockResolvedValue({
+      state: 'ready',
+      confirmation: previousConfirmation,
+    });
+    mocks.createNotePreview.mockResolvedValue({
+      title: '创建笔记',
+      target: '可信标题',
+      details: [{ key: 'targetDirectory', value: '项目 / 研发' }],
+    });
+    mocks.createToolConfirmation.mockImplementation(async (input) => ({
+      token: 'replacement-token',
+      expiresIn: 300,
+      confirmation: {
+        id: 'confirm-note-new',
+        sessionId: input.sessionId,
+        toolName: input.toolName,
+        args: input.args,
+        riskLevel: 'low',
+        preview: input.preview,
+      },
+    }));
+    mocks.recordPendingActionBatchById.mockResolvedValue(true);
+    mocks.settleSessionAction.mockResolvedValue(true);
+  });
+
+  it('只接受新 parentId，并用原确认中的可信标题、正文和私有上下文原子签发替代令牌', async () => {
+    const req = {
+      body: {
+        confirmationToken: 'old-token',
+        sessionId: 'session-note',
+        parentId: ' directory-new ',
+        title: '恶意替换标题',
+        content: '恶意替换正文',
+      },
+      user: { id: 'user-1', role: 'user', alias: '测试用户' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await replaceAgentNoteTargetDirectory(req, res);
+
+    expect(mocks.createNotePreview).toHaveBeenCalledWith(
+      { title: '可信标题', content: '可信正文', parentId: 'directory-new' },
+      expect.objectContaining({ userId: 'user-1', userRole: 'user', request: req }),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerKey: 'user:user-1',
+        sessionId: 'session-note',
+        toolName: 'create_note',
+        args: { title: '可信标题', content: '可信正文', parentId: 'directory-new' },
+        replaceToken: 'old-token',
+        replaceConfirmationId: 'confirm-note-old',
+        privateContext: previousConfirmation.privateContext,
+        originRequestId: 'request-original',
+      }),
+    );
+    expect(mocks.recordPendingActionBatchById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ownerKey: 'user:user-1',
+        sessionId: 'session-note',
+        actions: [expect.objectContaining({ confirmationId: 'confirm-note-new', toolName: 'create_note' })],
+      }),
+    );
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith({
+      ownerKey: 'user:user-1',
+      sessionId: 'session-note',
+      confirmationId: 'confirm-note-old',
+      state: 'cancelled',
+      summary: '目标目录已更新。',
+    });
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          previousConfirmationId: 'confirm-note-old',
+          confirmation: expect.objectContaining({
+            id: 'confirm-note-new',
+            token: 'replacement-token',
+            args: { title: '可信标题', content: '可信正文', parentId: 'directory-new' },
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('目标目录超深时返回稳定业务错误，且不签发新令牌', async () => {
+    mocks.createNotePreview.mockRejectedValueOnce(
+      Object.assign(new Error('笔记目录最多支持 8 层'), {
+        code: 'NOTE_TREE_DEPTH_EXCEEDED',
+        status: 409,
+      }),
+    );
+    const req = {
+      body: { confirmationToken: 'old-token', sessionId: 'session-note', parentId: 'depth-8' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await replaceAgentNoteTargetDirectory(req, res);
+
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 409,
+        data: { code: 'NOTE_TREE_DEPTH_EXCEEDED' },
+        msg: '笔记目录最多支持 8 层',
+      }),
+    );
+  });
+
+  it('页面树写入灰度关闭时拒绝替换到子目录，且不读取旧确认令牌', async () => {
+    vi.stubEnv('NOTE_TREE_WRITE_ENABLED', 'false');
+    const req = {
+      body: { confirmationToken: 'old-token', sessionId: 'session-note', parentId: 'directory-new' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await replaceAgentNoteTargetDirectory(req, res);
+
+    expect(mocks.inspectToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 404,
+        data: { code: 'NOTE_TREE_FEATURE_DISABLED' },
+      }),
+    );
+  });
+
+  it('页面树写入灰度关闭后仍允许把待确认目标安全降级到知识库根层', async () => {
+    vi.stubEnv('NOTE_TREE_WRITE_ENABLED', 'false');
+    const req = {
+      body: { confirmationToken: 'old-token', sessionId: 'session-note', parentId: null },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await replaceAgentNoteTargetDirectory(req, res);
+
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: { title: '可信标题', content: '可信正文' },
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('原确认属于其他资源账号时在签发前拒绝', async () => {
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: { ...previousConfirmation, resourceUserId: 'other-user' },
+    });
+    const req = {
+      body: { confirmationToken: 'old-token', sessionId: 'session-note', parentId: null },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await replaceAgentNoteTargetDirectory(req, res);
+
+    expect(mocks.createNotePreview).not.toHaveBeenCalled();
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+  });
+});
+
 describe('confirmAgentTool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -603,6 +823,39 @@ describe('confirmAgentTool', () => {
             status: 'succeeded',
           }),
         }),
+      }),
+    );
+  });
+
+  it('页面树写入灰度关闭后拒绝执行已有的子目录创建确认', async () => {
+    vi.stubEnv('NOTE_TREE_WRITE_ENABLED', 'false');
+    const confirmation = {
+      id: 'confirm-note-directory',
+      sessionId: 'session-note',
+      toolName: 'create_note',
+      args: { title: '项目笔记', content: '正文', parentId: 'directory-1' },
+      resourceUserId: 'user-1',
+      resourceUserRole: 'user',
+      adminContextId: null,
+      adminMode: null,
+    };
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({ state: 'ready', confirmation });
+    const req = {
+      body: { confirmationToken: 'token-note', sessionId: 'session-note' },
+      user: { id: 'user-1', role: 'user' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await confirmAgentTool(req, res);
+
+    expect(mocks.claimToolConfirmationExecution).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 404,
+        data: expect.objectContaining({ code: 'NOTE_TREE_FEATURE_DISABLED' }),
       }),
     );
   });

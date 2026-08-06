@@ -13,6 +13,21 @@
     </template>
 
     <template #actions>
+      <BTooltip v-if="isMediumNoteLayout" :title="$t(noteSidebarExpanded ? 'note.hideSidebar' : 'note.showSidebar')">
+        <BButton
+          class="note-action-button note-sidebar-toggle"
+          :class="{ 'is-active': noteSidebarExpanded }"
+          :aria-label="$t(noteSidebarExpanded ? 'note.hideSidebar' : 'note.showSidebar')"
+          :aria-pressed="noteSidebarExpanded"
+          @click="toggleNoteSidebar"
+        >
+          <SvgIcon
+            :src="noteSidebarExpanded ? icon.noteTree.sidebarOpen : icon.noteTree.sidebarClosed"
+            size="19"
+            aria-hidden="true"
+          />
+        </BButton>
+      </BTooltip>
       <template v-if="batchMode">
         <span class="note-batch-summary">{{ $t('note.selectedCount', { count: selectedVisibleCount }) }}</span>
         <template v-if="bookmark.isMobile">
@@ -51,8 +66,16 @@
             :disabled="!selectedVisibleCount"
             @click="openSelectedNotesAi('organize')"
           >
+            <SvgIcon :src="icon.ai.materials" size="16" />
+            {{ $t('ai.entry.addSelectedToAssistant') }}
+          </BButton>
+          <BButton
+            class="note-action-button note-ai-button"
+            :disabled="!selectedVisibleCount"
+            @click="openSelectedAiOrganize"
+          >
             <SvgIcon :src="icon.ai.organize" size="16" />
-            {{ $t('ai.entry.organizeSelected') }}
+            {{ $t('bookmarkMg.aiOrganizeBtn') }}
           </BButton>
           <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openBatchTags('add')">{{
             $t('note.batchAddTags')
@@ -60,6 +83,15 @@
           <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="openBatchTags('remove')">{{
             $t('note.batchRemoveTags')
           }}</BButton>
+          <BButton
+            v-if="noteTreeWriteEnabled"
+            class="note-action-button"
+            :disabled="!selectedVisibleCount"
+            @click="openBatchMove"
+          >
+            <SvgIcon :src="icon.noteTree.move" size="16" />
+            {{ $t('note.movePages') }}
+          </BButton>
           <BButton class="note-action-button" :disabled="!selectedVisibleCount" @click="exportSelectedNotes">{{
             $t('note.batchExport')
           }}</BButton>
@@ -71,22 +103,41 @@
         </template>
       </template>
       <template v-else>
-        <!-- 移动端不放第二个文本搜索框：找笔记统一走顶栏全局搜索，这里只保留标签筛选 -->
+        <!-- 当前目录按钮内已经同时提供目录/标签选择，不再重复放一个标签按钮。 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
-          <TagFilterSelector :all-tags="visibleNoteTags" />
-          <ViewModeToggle compact />
           <BButton
-            class="note-action-button note-ai-button"
-            @click="aiOrgVisible = true"
-            v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
+            v-if="noteTreeMobileEnabled"
+            class="note-mobile-directory"
+            :title="mobileScopeLabel"
+            @click="openMobileDirectory(noteSidebarMode)"
           >
-            <SvgIcon :src="icon.ai.organize" size="17" />
-            {{ $t('bookmarkMg.aiOrganizeBtn') }}
+            <SvgIcon
+              :src="
+                noteSidebarMode === 'tags'
+                  ? icon.manage_categoryBtn_tag
+                  : currentParentId
+                    ? icon.resource.note
+                    : icon.noteTree.root
+              "
+              size="16"
+              aria-hidden="true"
+            />
+            <span>{{ mobileScopeLabel }}</span>
+            <SvgIcon :src="icon.noteTree.chevron" size="12" aria-hidden="true" />
           </BButton>
+          <ViewModeToggle compact />
         </div>
         <template v-else>
-          <!-- 列表视图的标签筛选已移到左侧目录,顶部不再重复放一个下拉 -->
-          <TagFilterSelector v-if="!isListLayout" :all-tags="visibleNoteTags" />
+          <BButton
+            v-if="noteTreeReadEnabled"
+            type="primary"
+            class="note-action-button note-create-button note-root-create-button"
+            @click="showRootNotePicker"
+            v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
+          >
+            <SvgIcon :src="icon.common.add" size="16" />
+            {{ $t('note.newNote') }}
+          </BButton>
           <ViewModeToggle />
           <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
             <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
@@ -97,20 +148,21 @@
           </div>
           <BButton
             class="note-action-button note-ai-button"
-            @click="aiOrgVisible = true"
+            @click="openGlobalAiOrganize"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.aiOrganize"
           >
             <SvgIcon :src="icon.ai.organize" size="17" />
             {{ $t('bookmarkMg.aiOrganizeBtn') }}
           </BButton>
           <BButton
+            v-if="!noteTreeReadEnabled && (!currentParentId || noteTreeWriteEnabled)"
             type="primary"
             class="note-action-button note-create-button"
             @click="showNewNotePicker"
             v-click-log="OPERATION_LOG_MAP.noteLibrary.addNote"
           >
             <SvgIcon :src="icon.common.add" size="16" />
-            {{ $t('note.newNote') }}
+            {{ currentParentId ? $t('note.newChildPage') : $t('note.newNote') }}
           </BButton>
         </template>
       </template>
@@ -119,29 +171,129 @@
     <div
       ref="noteWorkspaceRef"
       class="note-workspace"
-      :class="{ 'is-split': isListLayout }"
+      :class="{ 'is-split': showNoteSidebar }"
       @scroll.capture.passive="onNoteScroll"
       @touchstart.passive="pullRefresh.onTouchStart"
       @touchmove="pullRefresh.onTouchMove"
       @touchend.passive="pullRefresh.onTouchEnd"
       @touchcancel.passive="pullRefresh.onTouchCancel"
     >
-      <!-- 侧栏常驻 DOM 才能有进出过渡;卡片视图下用 inert 关掉焦点与辅助技术可见性,而不是直接卸载 -->
-      <aside
-        v-if="!bookmark.isMobile"
-        class="note-tag-panel"
-        :inert="!isListLayout || undefined"
-        :aria-hidden="!isListLayout || undefined"
-      >
-        <NoteTagSidebar
+      <aside v-if="showNoteSidebar" class="note-sidebar-panel">
+        <NoteLibrarySidebar
+          v-model:mode="noteSidebarMode"
+          :current-parent-id="currentParentId"
+          :children-by-parent="sidebarTreeChildrenByParent"
+          :expanded-ids="sidebarTreeExpandedIds"
+          :loading-keys="sidebarTreeLoadingKeys"
+          :tree-error="sidebarTreeError"
           :all-tags="visibleNoteTags"
           :total-count="allNoteCount"
           :untagged-count="untaggedNoteCount"
-          :loading="tagLoading"
+          :tag-loading="tagLoading"
+          :search-value="searchValue"
+          :directory-enabled="!noteTreeFeaturesReady || noteTreeReadEnabled"
+          :write-enabled="noteTreeWriteEnabled"
+          :search-active="treeSearchActive"
+          :search-loading="treeSearchLoading"
+          :search-match-count="treeSearchMatchCount"
+          :drop-target-key="dragDropTarget?.key || ''"
+          :drop-target-active="dragDropTargetActive"
+          :drop-target-position="dragDropTarget?.position || ''"
+          :menu-disabled="noteDragging"
+          @toggle="toggleTreeNode"
+          @select="selectDirectory"
+          @select-tag="selectMobileDirectoryTag"
+          @open="openDirectoryPage"
+          @create="showNewChildPicker"
+          @attach="openAttachPages"
+          @toggle-top="toggleTreeNoteTop"
+          @move="openMoveNote"
+          @rename="openRenameNote"
+          @copy-link="copyNoteLink"
+          @delete="deleteSingleNote"
+          @search="searchValue = $event"
+          @drag-start="onTreeDragStart"
+          @drag-end="onTreeDragEnd"
         />
       </aside>
 
       <div class="note-main-panel">
+        <header
+          v-if="!bookmark.isMobile && noteTreeReadEnabled && noteSidebarMode === 'directory'"
+          class="note-directory-header"
+        >
+          <nav class="note-directory-breadcrumbs" :aria-label="$t('note.currentDirectory')">
+            <BButton
+              class="note-directory-crumb"
+              :class="{
+                'is-current': currentParentId === null,
+                'is-drop-candidate': dragDropTarget?.key === NOTE_TREE_ROOT_KEY,
+                'is-drop-target': dragDropTarget?.key === NOTE_TREE_ROOT_KEY && dragDropTargetActive,
+                'is-drop-root-start':
+                  dragDropTarget?.key === NOTE_TREE_ROOT_KEY && dragDropTarget?.position === 'root-start',
+              }"
+              :data-note-drop-parent="NOTE_TREE_ROOT_KEY"
+              :data-note-drop-title="$t('note.knowledgeRoot')"
+              @click="selectDirectory(null)"
+            >
+              {{ $t('note.knowledgeRoot') }}
+            </BButton>
+            <template v-for="item in currentBreadcrumb" :key="item.id">
+              <span class="note-directory-separator" aria-hidden="true">/</span>
+              <BButton
+                class="note-directory-crumb"
+                :class="{
+                  'is-current': item.id === currentParentId,
+                  'is-drop-candidate': dragDropTarget?.key === item.id && dragDropTarget?.position === 'inside',
+                  'is-drop-target':
+                    dragDropTarget?.key === item.id && dragDropTarget?.position === 'inside' && dragDropTargetActive,
+                }"
+                :data-note-drop-parent="item.id"
+                :data-note-drop-title="item.title || $t('note.untitled')"
+                @click="selectDirectory(item.id)"
+              >
+                {{ item.title || $t('note.untitled') }}
+              </BButton>
+            </template>
+          </nav>
+          <div class="note-directory-title-row">
+            <div class="note-directory-title-copy">
+              <h2>{{ currentDirectoryTitle || $t('note.knowledgeRoot') }}</h2>
+              <span v-if="hasActiveFilter">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
+              <span v-else-if="currentParentId">{{ $t('note.directChildren', { count: noteTotal }) }}</span>
+              <span v-else>{{ $t('note.rootDirectoryHint') }}</span>
+            </div>
+            <div class="note-directory-actions">
+              <BButton
+                v-if="currentParentId"
+                class="note-open-directory-page"
+                @click="openDirectoryPage(currentParentId)"
+              >
+                <SvgIcon :src="icon.noteTree.openPage" size="15" aria-hidden="true" />
+                {{ $t('note.openPageBody') }}
+              </BButton>
+              <BButton
+                v-if="!currentParentId || noteTreeWriteEnabled"
+                type="primary"
+                class="note-new-child-page"
+                @click="showNewNotePicker"
+              >
+                <SvgIcon :src="icon.common.add" size="15" aria-hidden="true" />
+                {{ currentParentId ? $t('note.newChildPage') : $t('note.newNote') }}
+              </BButton>
+              <BDropdown
+                v-if="currentDirectoryNode"
+                :trigger="'click'"
+                :align="'right'"
+                :menu-options="currentDirectoryMenuOptions"
+              >
+                <BButton class="note-directory-more" :aria-label="$t('common.more')">
+                  <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
+                </BButton>
+              </BDropdown>
+            </div>
+          </div>
+        </header>
         <div
           v-if="loading && currentViewMode === 'card'"
           class="note-library-body note-card-skeleton-wrap"
@@ -166,6 +318,7 @@
           class="note-library-body"
           data-mobile-resource-scroll
           @start="onStart"
+          @move="onDragMove"
           @end="onEnd"
           ghost-class="note-card-drag-ghost"
           chosen-class="note-card-drag-chosen"
@@ -173,17 +326,31 @@
           :scroll-sensitivity="50"
           :forceFallback="true"
           :touchStartThreshold="10"
-          :delay="100"
+          :delay="0"
+          :fallback-tolerance="4"
         >
           <RightMenu
             v-for="note in visibleDragNoteList"
             :key="note.id"
+            :data-note-sort-id="String(note.id)"
+            :data-note-drop-parent="String(note.id)"
+            :data-note-drop-title="note.title || $t('note.untitled')"
+            :class="{
+              'note-sort-item': true,
+              'note-drop-candidate': dragDropTarget?.key === String(note.id) && dragDropTarget?.position === 'inside',
+              'note-drop-target':
+                dragDropTarget?.key === String(note.id) &&
+                dragDropTarget?.position === 'inside' &&
+                dragDropTargetActive,
+            }"
             :menu="menuForNote(note)"
             @select="handleNoteMenuSelect($event, note)"
           >
             <note-card
               :note="note"
               :batch-mode="batchMode"
+              :tree-read-enabled="noteTreeReadEnabled"
+              :tree-write-enabled="noteTreeWriteEnabled"
               @nodeTypeChange="handleNodeTypeChange"
               @action="handleNoteCardAction($event, note)"
             />
@@ -222,21 +389,36 @@
             class="note-list"
             data-mobile-resource-scroll
             @start="onStart"
+            @move="onDragMove"
             @end="onEnd"
             :scroll-sensitivity="50"
             :forceFallback="true"
             :touchStartThreshold="10"
-            :delay="100"
+            :delay="0"
+            :fallback-tolerance="4"
           >
             <RightMenu
               v-for="note in visibleDragNoteList"
               :key="note.id"
+              :data-note-sort-id="String(note.id)"
+              :data-note-drop-parent="String(note.id)"
+              :data-note-drop-title="note.title || $t('note.untitled')"
+              :class="{
+                'note-sort-item': true,
+                'note-drop-candidate': dragDropTarget?.key === String(note.id) && dragDropTarget?.position === 'inside',
+                'note-drop-target':
+                  dragDropTarget?.key === String(note.id) &&
+                  dragDropTarget?.position === 'inside' &&
+                  dragDropTargetActive,
+              }"
               :menu="menuForNote(note)"
               @select="handleNoteMenuSelect($event, note)"
             >
               <note-list-item
                 :note="note"
                 :batch-mode="batchMode"
+                :tree-read-enabled="noteTreeReadEnabled"
+                :tree-write-enabled="noteTreeWriteEnabled"
                 @nodeTypeChange="handleNodeTypeChange"
                 @action="handleNoteCardAction($event, note)"
               />
@@ -255,6 +437,23 @@
               {{ $t('note.clearFilter') }}
             </BButton>
           </template>
+          <template v-else-if="currentParentId">
+            <strong>{{ $t('note.noSubpagesForCurrent') }}</strong>
+            <p>{{ $t('note.noSubpagesHint', { title: currentDirectoryTitle || $t('note.untitled') }) }}</p>
+            <div v-if="noteTreeWriteEnabled" class="note-empty-actions">
+              <BButton type="primary" class="note-create-button" @click="showNewNotePicker">
+                {{ $t('note.newChildPage') }}
+              </BButton>
+              <BButton
+                v-if="currentDirectoryNode"
+                class="note-attach-button"
+                @click="openAttachPages(currentDirectoryNode)"
+              >
+                <SvgIcon :src="icon.noteTree.move" size="15" aria-hidden="true" />
+                {{ $t('note.addExistingPages') }}
+              </BButton>
+            </div>
+          </template>
           <template v-else>
             <strong>{{ $t('note.empty') }}</strong>
             <p>{{ $t('note.emptyHint') }}</p>
@@ -262,6 +461,9 @@
               {{ $t('note.newNote') }}
             </BButton>
           </template>
+        </div>
+        <div v-if="noteDragging && dragDropTarget" class="note-drop-hint" :class="{ 'is-ready': dragDropTargetActive }">
+          {{ dragDropHint }}
         </div>
       </div>
     </div>
@@ -291,12 +493,56 @@
     />
 
     <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
-    <AiOrganizeModal v-model:visible="aiOrgVisible" init-type="note" @applied="init" />
+    <AiOrganizeModal
+      v-model:visible="aiOrgVisible"
+      init-type="note"
+      :selected-ids="selectedAiOrganizeIds"
+      @applied="init"
+    />
     <NoteTagConfig
       v-if="tagConfigVisible && activeTagNote"
       v-model:visible="tagConfigVisible"
       :note="activeTagNote"
       @saveTag="handleNoteTagsSaved"
+    />
+    <NoteMoveModal
+      v-if="noteTreeWriteEnabled && (activeMoveNote || activeMoveNotes.length)"
+      v-model:visible="moveNoteVisible"
+      :note="activeMoveNote"
+      :notes="activeMoveNotes"
+      @moved="handleNoteMoved"
+    />
+    <NoteAttachPagesModal
+      v-if="noteTreeWriteEnabled && activeAttachTarget"
+      v-model:visible="attachPagesVisible"
+      :target-note="activeAttachTarget"
+      @attached="handlePagesAttached"
+    />
+    <NoteRenameModal
+      v-if="activeRenameNote"
+      v-model:visible="renameNoteVisible"
+      :note="activeRenameNote"
+      @renamed="handleNoteRenamed"
+    />
+    <NoteDirectoryDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileDirectoryOpen"
+      :initial-tab="mobileDirectoryInitialTab"
+      :current-parent-id="currentParentId"
+      :all-tags="visibleNoteTags"
+      :total-count="allNoteCount"
+      :untagged-count="untaggedNoteCount"
+      :tag-loading="tagLoading"
+      :directory-enabled="noteTreeMobileEnabled"
+      :write-enabled="noteTreeWriteEnabled"
+      @select="selectDirectory"
+      @select-tag="selectMobileDirectoryTag"
+      @open-page="openDirectoryPage($event.id)"
+      @create="showNewChildPicker"
+      @attach="openAttachPages"
+      @toggle-top="toggleTreeNoteTop"
+      @move="openMoveNote"
+      @delete="deleteSingleNote"
     />
     <MobilePageActionsDrawer
       v-if="bookmark.isMobile"
@@ -324,8 +570,11 @@
   import { useI18n } from 'vue-i18n';
   import { bookmarkStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
-  import TagFilterSelector from '@/components/noteLibrary/library/TagFilterSelector.vue';
-  import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
+  import NoteLibrarySidebar from '@/components/noteLibrary/tree/NoteLibrarySidebar.vue';
+  import NoteDirectoryDrawer from '@/components/noteLibrary/tree/NoteDirectoryDrawer.vue';
+  import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
+  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
+  import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
@@ -333,6 +582,8 @@
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -340,6 +591,15 @@
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
   import { DEFAULT_NOTE_VIEW_MODE } from '@/utils/preferences.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import {
+    collapseNoteDeletePreviews,
+    DISABLED_NOTE_TREE_FEATURES,
+    fetchNoteDeletePreview,
+    fetchNoteTreeFeatures,
+    type NoteDeletePreview,
+    type NoteTreeFeatures,
+  } from '@/api/noteTree';
+  import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
   import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale } from '@/config/noteTemplates.ts';
@@ -352,7 +612,9 @@
   import { useMobileNavigationState } from '@/composables/useMobileNavigationState';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { copyTextToClipboard } from '@/utils/clipboard';
   import {
     RESOURCE_LIST_PAGE_SIZE,
     buildResourceSortMove,
@@ -360,6 +622,12 @@
     isNearResourceScrollEnd,
     mergeResourcePage,
   } from '@/utils/resourcePagination';
+  import {
+    buildRootStartDropTarget,
+    buildTreeNodeDropTarget,
+    moveNoteTreeNodeOptimistically,
+    type NoteTreeDropTarget,
+  } from '@/utils/noteTreeDrop';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -375,8 +643,137 @@
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const user = useUserStore();
+  const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
+  const noteTreeFeaturesReady = ref(false);
+  const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
+  const noteTreeWriteEnabled = computed(() => noteTreeFeatures.value.note_tree_write);
+  const noteTreeMobileEnabled = computed(() => noteTreeReadEnabled.value && noteTreeFeatures.value.note_tree_mobile);
+  const noteTreeSubtreeTrashEnabled = computed(
+    () => noteTreeWriteEnabled.value && noteTreeFeatures.value.note_tree_subtree_trash,
+  );
+  const NOTE_SIDEBAR_EXPANDED_KEY = 'light-note-note-tree-sidebar-expanded';
+
+  function readSessionValue(key: string) {
+    if (typeof sessionStorage === 'undefined') return '';
+    try {
+      return String(sessionStorage.getItem(key) || '');
+    } catch {
+      return '';
+    }
+  }
+
+  function initialNoteClassificationMode(): 'directory' | 'tags' {
+    const query = router.currentRoute.value.query;
+    if (query.parent != null && query.tag == null) return 'directory';
+    if (query.tag != null && query.parent == null) return 'tags';
+    return user.preferences.noteSidebarMode === 'tags' ? 'tags' : 'directory';
+  }
+
+  const noteSidebarExpanded = ref(readSessionValue(NOTE_SIDEBAR_EXPANDED_KEY) !== '0');
+  const noteSidebarMode = ref<'directory' | 'tags'>(initialNoteClassificationMode());
+  const isMediumNoteLayout = computed(() => bookmark.isTablet);
+  const showNoteSidebar = computed(
+    () => !bookmark.isMobile && (!isMediumNoteLayout.value || noteSidebarExpanded.value),
+  );
+
+  function writeSessionValue(key: string, value: string) {
+    if (typeof sessionStorage === 'undefined') return;
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // 隐私模式或受限 WebView 可能禁用存储；布局本身仍保持当前内存状态。
+    }
+  }
+
+  function toggleNoteSidebar() {
+    noteSidebarExpanded.value = !noteSidebarExpanded.value;
+  }
+
+  watch(noteSidebarExpanded, (expanded) => writeSessionValue(NOTE_SIDEBAR_EXPANDED_KEY, expanded ? '1' : '0'));
+  watch(
+    () => user.preferences.noteSidebarMode,
+    (mode) => {
+      const query = router.currentRoute.value.query;
+      if (query.parent != null || query.tag != null) return;
+      noteSidebarMode.value = mode === 'tags' ? 'tags' : 'directory';
+    },
+  );
+
+  watch(
+    [
+      noteTreeFeaturesReady,
+      noteSidebarMode,
+      () => router.currentRoute.value.query.parent,
+      () => router.currentRoute.value.query.tag,
+    ],
+    ([featuresReady, mode, parent, tag], previous) => {
+      if (!featuresReady || !noteTreeReadEnabled.value) return;
+
+      // 浏览器前进/后退恢复了某一套明确范围时，同步对应的导航页签。
+      if (parent != null && tag == null && previous && parent !== previous[2]) {
+        if (mode !== 'directory') noteSidebarMode.value = 'directory';
+        return;
+      }
+      if (tag != null && parent == null && previous && tag !== previous[3]) {
+        if (mode !== 'tags') noteSidebarMode.value = 'tags';
+        return;
+      }
+
+      // 历史 URL 可能同时残留 parent/tag；按当前导航保留一套，彻底禁止组合过滤。
+      const query = { ...router.currentRoute.value.query };
+      const staleKey = mode === 'directory' ? 'tag' : 'parent';
+      if (!Object.prototype.hasOwnProperty.call(query, staleKey)) return;
+      delete query[staleKey];
+      delete query._rt;
+      void router.replace({ path: '/noteLibrary', query });
+    },
+    { immediate: true },
+  );
   const { resetCurrentResourceScroll } = useMobileNavigationState();
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
+  const {
+    childrenByParent,
+    currentBreadcrumb,
+    currentDirectoryTitle,
+    currentParentId,
+    expandedIds,
+    loadingKeys: treeLoadingKeys,
+    loadBreadcrumb,
+    treeError,
+    treeSearchChildrenByParent,
+    treeSearchError,
+    treeSearchExpandedIds,
+    treeSearchKeyword,
+    treeSearchLoading,
+    treeSearchMatchCount,
+    openDirectoryPage: openTreeDirectoryPage,
+    refreshTree,
+    searchTree,
+    selectDirectory: selectTreeDirectory,
+    toggleExpanded: toggleTreeNodeBase,
+  } = useNoteTree({ enabled: noteTreeReadEnabled });
+
+  async function loadNoteTreeFeatureSnapshot() {
+    let next = { ...DISABLED_NOTE_TREE_FEATURES } as NoteTreeFeatures;
+    try {
+      next = await fetchNoteTreeFeatures();
+    } catch {
+      // 前端先于后端发布、网络异常或灰度接口不可用时失败关闭；普通平铺笔记库仍可使用。
+    }
+    noteTreeFeatures.value = next;
+    if (!next.note_tree_read) {
+      noteSidebarMode.value = 'tags';
+      const query = { ...router.currentRoute.value.query };
+      if (Object.prototype.hasOwnProperty.call(query, 'parent')) {
+        delete query.parent;
+        delete query._rt;
+        await router.replace({ path: '/noteLibrary', query });
+      }
+    }
+    noteTreeFeaturesReady.value = true;
+  }
+
+  void loadNoteTreeFeatureSnapshot();
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
   const loading = ref(false);
@@ -388,17 +785,50 @@
   const notePage = ref(0);
   const noteHasMore = ref(false);
   const noteDragging = ref(false);
+  const treeMovePending = ref(false);
+  const dragDropTarget = ref<NoteTreeDropTarget | null>(null);
+  const dragDropTargetActive = ref(false);
+  const draggingNoteId = ref('');
+  const draggingNoteIsTop = ref(false);
+  let dragDropTimer: number | null = null;
+  let treeDragImageElement: HTMLElement | null = null;
   const searchValue = ref('');
   const debouncedSearch = ref('');
   const searchTimer = ref<number | null>(null);
+  const treeSearchActive = computed(() => noteTreeReadEnabled.value && Boolean(treeSearchKeyword.value.trim()));
+  const sidebarTreeChildrenByParent = computed(() =>
+    treeSearchActive.value ? treeSearchChildrenByParent.value : childrenByParent.value,
+  );
+  const sidebarTreeExpandedIds = computed(() =>
+    treeSearchActive.value ? treeSearchExpandedIds.value : expandedIds.value,
+  );
+  const sidebarTreeLoadingKeys = computed(() =>
+    treeSearchActive.value && treeSearchLoading.value
+      ? new Set([NOTE_TREE_ROOT_KEY])
+      : treeSearchActive.value
+        ? new Set<string>()
+        : treeLoadingKeys.value,
+  );
+  const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
+  const createParentOverride = ref<string | null | undefined>(undefined);
   const aiOrgVisible = ref(false); // AI 智能整理(笔记)弹框
+  const selectedAiOrganizeIds = ref<string[]>([]);
   const tagConfigVisible = ref(false);
   const activeTagNote = ref<any | null>(null);
+  const activeMoveNote = ref<any | null>(null);
+  const activeMoveNotes = ref<any[]>([]);
+  const moveNoteVisible = ref(false);
+  const activeAttachTarget = ref<{ id: string; title?: string } | null>(null);
+  const attachPagesVisible = ref(false);
+  const activeRenameNote = ref<{ id: string; title?: string } | null>(null);
+  const renameNoteVisible = ref(false);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
   const mobileBatchActionsOpen = ref(false);
+  const mobileDirectoryOpen = ref(false);
+  const mobileDirectoryInitialTab = ref<'directory' | 'tags'>('directory');
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -430,12 +860,21 @@
       templateUsage.value = { ...templateUsage.value, [usageKey]: Date.now() };
       localStorage.setItem('note-template-recent-usage', JSON.stringify(templateUsage.value));
     }
-    await closeCurrentMobileOverlayThen(
-      () => {
-        showTypePicker.value = false;
-      },
-      () => router.push({ path: '/noteLibrary/add', query }),
-    );
+    const targetQuery = { ...query };
+    const requestedParentId =
+      createParentOverride.value === undefined ? currentParentId.value : createParentOverride.value;
+    const parentId = noteTreeWriteEnabled.value ? requestedParentId : null;
+    if (parentId) targetQuery.parent = parentId;
+    try {
+      await closeCurrentMobileOverlayThen(
+        () => {
+          showTypePicker.value = false;
+        },
+        () => router.push({ path: '/noteLibrary/add', query: targetQuery }),
+      );
+    } finally {
+      createParentOverride.value = undefined;
+    }
   }
   function readTemplateUsage() {
     try {
@@ -551,8 +990,30 @@
   });
 
   function showNewNotePicker() {
+    createParentOverride.value = noteTreeWriteEnabled.value ? currentParentId.value : null;
     showTypePicker.value = true;
     loadMyTemplates();
+  }
+
+  function showRootNotePicker() {
+    createParentOverride.value = null;
+    showTypePicker.value = true;
+    loadMyTemplates();
+  }
+
+  function showNewChildPicker(note: any) {
+    if (!noteTreeWriteEnabled.value || !note?.id) return;
+    createParentOverride.value = String(note.id);
+    showTypePicker.value = true;
+    loadMyTemplates();
+  }
+
+  function openAttachPages(note: any) {
+    if (!noteTreeWriteEnabled.value || blockGuestWrite('move-note')) return;
+    const id = String(note?.id || '').trim();
+    if (!id) return;
+    activeAttachTarget.value = { id, title: String(note?.title || '') };
+    attachPagesVisible.value = true;
   }
 
   function handleMobileBlankSelection(type: 'html' | 'markdown') {
@@ -587,6 +1048,13 @@
         label: note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
         icon: icon.contextMenu.inbox,
       },
+      ...(noteTreeWriteEnabled.value
+        ? [
+            { key: 'createChild', label: t('note.newChildPage'), icon: icon.common.add },
+            { key: 'attach', label: t('note.addExistingPages'), icon: icon.noteTree.move },
+            { key: 'move', label: t('note.moveThisPage'), icon: icon.noteTree.move },
+          ]
+        : []),
       { key: 'note-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -596,7 +1064,7 @@
   const sortPinnedFirst = (notes: any[]) =>
     [...notes].sort((a: any, b: any) => Number(Boolean(b.isTop)) - Number(Boolean(a.isTop)));
 
-  async function toggleNoteTop(note: any) {
+  async function toggleNoteTop(note: any, refreshDirectory = false) {
     if (blockGuestWrite('pin-note')) return;
     const noteId = String(note?.id || '');
     if (!noteId || togglingTopIds.has(noteId)) return;
@@ -605,7 +1073,7 @@
       const res = await apiBasePost('/api/note/toggleNoteTop', { id: noteId });
       if (res.status !== 200) return;
       note.isTop = Boolean(res.data?.isTop);
-      await reloadNotes();
+      await Promise.all([reloadNotes(), ...(refreshDirectory ? [refreshTree()] : [])]);
       message.success(note.isTop ? t('common.pinned') : t('common.unpinned'));
       recordOperation({
         module: '笔记库',
@@ -616,6 +1084,10 @@
     } finally {
       togglingTopIds.delete(noteId);
     }
+  }
+
+  function toggleTreeNoteTop(note: any) {
+    return toggleNoteTop(note, true);
   }
 
   function openNoteTagConfig(note: any) {
@@ -629,21 +1101,261 @@
     void init();
   }
 
-  function deleteSingleNote(note: any) {
+  function findLoadedTreeNode(noteId: string) {
+    for (const store of [childrenByParent.value, treeSearchChildrenByParent.value]) {
+      for (const nodes of Object.values(store)) {
+        const match = nodes.find((node) => node.id === noteId);
+        if (match) return match;
+      }
+    }
+    return null;
+  }
+
+  function noteTreeSurface(): 'desktop' | 'mobile' {
+    return bookmark.isMobile ? 'mobile' : 'desktop';
+  }
+
+  function noteTreeNodeMetrics(noteId: string | null) {
+    if (!noteId) {
+      return {
+        depth: 0,
+        childCount: (childrenByParent.value[NOTE_TREE_ROOT_KEY] || []).length,
+      };
+    }
+    const node = findLoadedTreeNode(noteId);
+    if (!node) return {};
+    let depth = 1;
+    let parentId = node.parentId;
+    const visited = new Set([node.id]);
+    while (parentId && depth <= 9) {
+      if (visited.has(parentId)) break;
+      visited.add(parentId);
+      depth += 1;
+      parentId = findLoadedTreeNode(parentId)?.parentId || null;
+    }
+    return { depth, childCount: Math.max(0, Number(node.childCount || 0)) };
+  }
+
+  async function selectDirectory(noteId: string | null) {
+    noteSidebarMode.value = 'directory';
+    void recordNoteTreeProductEvent('note_tree_branch_selected', {
+      surface: noteTreeSurface(),
+      ...noteTreeNodeMetrics(noteId),
+      result: 'success',
+    });
+    return selectTreeDirectory(noteId);
+  }
+
+  function openDirectoryPage(noteId: string) {
+    void recordNoteTreeProductEvent('note_tree_page_opened', {
+      surface: noteTreeSurface(),
+      ...noteTreeNodeMetrics(noteId),
+      result: 'success',
+    });
+    return openTreeDirectoryPage(noteId);
+  }
+
+  async function toggleTreeNode(node: any) {
+    const nodeId = String(node?.id || '');
+    const wasExpanded = expandedIds.value.has(nodeId);
+    await toggleTreeNodeBase(node);
+    if (!wasExpanded && expandedIds.value.has(nodeId)) {
+      void recordNoteTreeProductEvent('note_tree_node_expanded', {
+        surface: noteTreeSurface(),
+        ...noteTreeNodeMetrics(nodeId),
+        result: 'success',
+      });
+    }
+  }
+
+  let desktopTreeOpenedRecorded = false;
+  watch(
+    [noteTreeReadEnabled, showNoteSidebar, noteSidebarMode],
+    ([enabled, visible, mode]) => {
+      if (!enabled || !visible || mode !== 'directory' || desktopTreeOpenedRecorded) return;
+      desktopTreeOpenedRecorded = true;
+      void recordNoteTreeProductEvent('note_tree_opened', {
+        surface: 'desktop',
+        depth: currentBreadcrumb.value.length,
+        result: 'success',
+      });
+    },
+    { immediate: true },
+  );
+
+  const currentDirectoryNode = computed(() => {
+    const noteId = currentParentId.value;
+    if (!noteId) return null;
+    const loaded = findLoadedTreeNode(noteId);
+    if (loaded) return loaded;
+    const path = currentBreadcrumb.value;
+    const current = path[path.length - 1];
+    if (!current) return null;
+    return {
+      id: current.id,
+      title: current.title,
+      parentId: path.length > 1 ? path[path.length - 2].id : null,
+    };
+  });
+
+  const currentDirectoryMenuOptions = computed(() => {
+    const note = currentDirectoryNode.value;
+    if (!note) return [];
+    return [
+      {
+        label: t('note.renamePage'),
+        icon: icon.cloudSpace.rename,
+        function: () => openRenameNote(note),
+      },
+      ...(noteTreeWriteEnabled.value
+        ? [
+            {
+              label: t('note.addExistingPages'),
+              icon: icon.noteTree.move,
+              function: () => openAttachPages(note),
+            },
+            {
+              label: t('note.moveThisPage'),
+              icon: icon.noteTree.move,
+              function: () => openMoveNote(note),
+            },
+          ]
+        : []),
+      {
+        label: t('common.copyLink'),
+        icon: icon.cloudSpace.preview.copy,
+        function: () => copyNoteLink(note),
+      },
+      { key: 'current-directory-actions-divider', divider: true },
+      {
+        label: t('note.moveToTrash'),
+        icon: icon.table_delete,
+        danger: true,
+        function: () => deleteSingleNote(note),
+      },
+    ];
+  });
+
+  function openRenameNote(note: any) {
+    if (blockGuestWrite('rename-note')) return;
+    const id = String(note?.id || '').trim();
+    if (!id) return;
+    activeRenameNote.value = { id, title: String(note?.title || '') };
+    renameNoteVisible.value = true;
+  }
+
+  async function handleNoteRenamed(updated: { id: string; title: string }) {
+    renameNoteVisible.value = false;
+    recordOperation({ module: '笔记库', operation: `重命名笔记【${updated.title}】` });
+    await Promise.all([refreshTree(), reloadNotes()]);
+    activeRenameNote.value = null;
+  }
+
+  async function copyNoteLink(note: any) {
+    const noteId = String(note?.id || '').trim();
+    if (!noteId) return;
+    const relative = router.resolve({ path: `/noteLibrary/${encodeURIComponent(noteId)}` }).href;
+    let link = relative;
+    if (typeof window !== 'undefined') {
+      try {
+        link = new URL(relative, window.location.origin).toString();
+      } catch {
+        // 某些 APK WebView 使用不完整的自定义 origin；相对路由仍可安全复制和打开。
+      }
+    }
+    if (await copyTextToClipboard(link)) message.success(t('common.linkCopied'));
+    else message.error(t('note.copyLinkFailed'));
+  }
+
+  function isDeleteScopeConflict(response: any) {
+    return response?.status === 409 && response?.data?.code === 'NOTE_TREE_DELETE_CONFLICT';
+  }
+
+  async function deleteSingleNote(note: any) {
     if (blockGuestWrite('delete-note')) return;
+    if (!noteTreeSubtreeTrashEnabled.value) {
+      Alert.alert({
+        title: t('note.deleteOneTitle'),
+        content: t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
+        footer: [
+          { label: t('common.cancel'), function: () => undefined },
+          {
+            label: t('note.moveToTrash'),
+            type: 'danger',
+            async function() {
+              const res = await apiBasePost('/api/note/delNote', { ids: [String(note.id)] });
+              if (res.status === 409 && res.data?.code === 'NOTE_HAS_CHILDREN') {
+                message.warning(res.msg || t('note.deleteScopeChanged'));
+                return;
+              }
+              if (res.status !== 200) return;
+              message.success(t('common.deleteSuccess'));
+              recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}】` });
+              if (noteTreeReadEnabled.value) {
+                void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
+                  surface: noteTreeSurface(),
+                  ...noteTreeNodeMetrics(String(note.id)),
+                  subtreeSize: 1,
+                  result: 'success',
+                });
+              }
+              await init();
+            },
+          },
+        ],
+      });
+      return;
+    }
+    let preview: NoteDeletePreview;
+    try {
+      preview = await fetchNoteDeletePreview(note.id);
+    } catch (error) {
+      console.warn('[note-library] delete preview failed', error);
+      message.error(t('note.deletePreviewFailed'));
+      return;
+    }
     Alert.alert({
       title: t('note.deleteOneTitle'),
-      content: t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
+      content: preview.descendantCount
+        ? t('note.deleteSubtreeConfirm', {
+            title: note.title || t('note.untitled'),
+            descendants: preview.descendantCount,
+          })
+        : t('note.deleteOneConfirm', { title: note.title || t('note.untitled') }),
       footer: [
         { label: t('common.cancel'), function: () => undefined },
         {
-          label: t('note.moveToTrash'),
+          label:
+            preview.totalCount > 1 ? t('note.moveItemsToTrash', { count: preview.totalCount }) : t('note.moveToTrash'),
           type: 'danger',
           async function() {
-            const res = await apiBasePost('/api/note/delNote', { ids: [note.id] });
+            const res = await apiBasePost('/api/note/deleteNoteSubtree', {
+              id: preview.id,
+              expectedDescendantCount: preview.descendantCount,
+            });
+            if (isDeleteScopeConflict(res)) {
+              message.warning(t('note.deleteScopeChanged'));
+              void deleteSingleNote(note);
+              return;
+            }
             if (res.status !== 200) return;
             message.success(t('common.deleteSuccess'));
-            recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}】` });
+            const deletedCount = Number(res.data?.deletedCount || preview.totalCount);
+            recordOperation({ module: '笔记库', operation: `删除笔记成功【${note.title}，共${deletedCount}篇】` });
+            void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
+              surface: noteTreeSurface(),
+              ...noteTreeNodeMetrics(String(note.id)),
+              subtreeSize: deletedCount,
+              result: 'success',
+            });
+            if (currentParentId.value === String(note.id)) {
+              const fallbackParentId = note.parentId
+                ? String(note.parentId)
+                : currentBreadcrumb.value.length > 1
+                  ? currentBreadcrumb.value[currentBreadcrumb.value.length - 2].id
+                  : null;
+              await selectDirectory(fallbackParentId);
+            }
             await init();
           },
         },
@@ -651,20 +1363,58 @@
     });
   }
 
+  function openMoveNote(note: any) {
+    if (!noteTreeWriteEnabled.value || blockGuestWrite('move-note')) return;
+    activeMoveNotes.value = [];
+    activeMoveNote.value = note;
+    moveNoteVisible.value = true;
+  }
+
+  function openBatchMove() {
+    if (!noteTreeWriteEnabled.value || blockGuestWrite('move-note')) return;
+    const selected = getSelectedNotes();
+    if (!selected.length) return;
+    mobileBatchActionsOpen.value = false;
+    activeMoveNote.value = null;
+    activeMoveNotes.value = [...selected];
+    moveNoteVisible.value = true;
+  }
+
+  async function handleNoteMoved() {
+    const wasBatchMove = activeMoveNotes.value.length > 0;
+    moveNoteVisible.value = false;
+    if (wasBatchMove) exitBatch();
+    await Promise.all([refreshTree(), reloadNotes()]);
+    activeMoveNote.value = null;
+    activeMoveNotes.value = [];
+  }
+
+  async function handlePagesAttached() {
+    attachPagesVisible.value = false;
+    await Promise.all([refreshTree(), reloadNotes()]);
+    activeAttachTarget.value = null;
+  }
+
   function handleNoteMenuSelect(action: string, note: any) {
     if (action === 'toggleTop') toggleNoteTop(note);
     else if (action === 'relateTags') openNoteTagConfig(note);
     else if (action === 'toggleInbox') toggleNoteInbox(note);
+    else if (action === 'enterDirectory' && noteTreeReadEnabled.value) selectDirectory(String(note.id));
+    else if (action === 'createChild') showNewChildPicker(note);
+    else if (action === 'attach') openAttachPages(note);
+    else if (action === 'move') openMoveNote(note);
     else if (action === 'delete') deleteSingleNote(note);
   }
 
-  function handleNoteCardAction(action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'delete', note: any) {
+  function handleNoteCardAction(
+    action:
+      'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
+    note: any,
+  ) {
     handleNoteMenuSelect(action, note);
   }
   // 手机与桌面共用同一个 noteViewMode 偏好：设置里能配、笔记库顶部也能快切，与 PC 一致
   const currentViewMode = computed(() => user.preferences.noteViewMode || DEFAULT_NOTE_VIEW_MODE);
-  // 左侧标签目录只服务桌面/平板的列表视图;移动端 currentViewMode 恒为 card,不会命中
-  const isListLayout = computed(() => !bookmark.isMobile && currentViewMode.value === 'list');
   const noteWorkspaceRef = ref<HTMLElement | null>(null);
 
   /*
@@ -677,19 +1427,17 @@
    */
   const pullRefresh = useAndroidPullRefresh({
     enabled: computed(() => !batchMode.value),
-    externalBusy: computed(
-      () => loading.value || refreshing.value || loadingMore.value || noteDragging.value,
-    ),
+    externalBusy: computed(() => loading.value || refreshing.value || loadingMore.value || noteDragging.value),
     getScrollContainer: () =>
       noteWorkspaceRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
-    onRefresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+    onRefresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
   });
   /*
    * 从后台切回来时补一次数据。走的是同一条软刷新路径,区别只在触发方式:
    * 这里没有手势,所以反馈只有顶部那条进度条。
    */
   useForegroundRefresh({
-    refresh: () => Promise.all([reloadNotes(true), getAllTags()]),
+    refresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
     canRefresh: () =>
       !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
   });
@@ -705,9 +1453,20 @@
   // 侧栏的三个计数取同一次标签查询的快照,避免"全部"和各标签之和对不上;
   // 旧后端没有该字段时回退到无筛选列表写入的 user.noteTotal
   const allNoteCount = computed(() => totalNoteCount.value ?? user.noteTotal ?? 0);
+  const activeMobileTagLabel = computed(() => {
+    const tagId = getActiveNoteTagId();
+    if (!tagId) return t('note.allNote');
+    if (tagId === 'null') return t('note.noTagNote');
+    const active = allTags.value.find((tag) => String(tag?.id || '') === tagId);
+    return String(active?.name || active?.title || '');
+  });
+  const mobileScopeLabel = computed(() => {
+    if (noteSidebarMode.value === 'tags') return activeMobileTagLabel.value;
+    return currentDirectoryTitle.value || t('note.knowledgeRoot');
+  });
 
   async function init() {
-    await Promise.all([reloadNotes(), getAllTags()]);
+    await Promise.all([reloadNotes(), getAllTags(), refreshTree()]);
   }
 
   function getActiveNoteTagId() {
@@ -733,8 +1492,11 @@
       const res = await apiBasePost('/api/note/queryNoteList', {
         page: targetPage,
         pageSize: RESOURCE_LIST_PAGE_SIZE,
+        ...(noteTreeReadEnabled.value && noteSidebarMode.value === 'directory'
+          ? { parentId: currentParentId.value }
+          : {}),
         keyword: debouncedSearch.value,
-        tagId: getActiveNoteTagId(),
+        tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : undefined,
       });
       if (requestSeq !== noteRequestSeq) return false;
       if (res.status !== 200) {
@@ -747,9 +1509,6 @@
       noteTotal.value = Number(res.data?.total || 0);
       notePage.value = Number(res.data?.page || targetPage);
       noteHasMore.value = Boolean(res.data?.hasMore);
-      if (!debouncedSearch.value && getActiveNoteTagId() === undefined) {
-        user.noteTotal = noteTotal.value;
-      }
       return true;
     } catch (error) {
       console.error('加载笔记列表失败:', error);
@@ -807,23 +1566,32 @@
     return Number.isFinite(parsed) ? parsed : null;
   }
 
-  // 空态区分用:搜索词或标签筛选(?tag=,含 'null'=无标签筛选)任一激活
+  // 空态区分用：搜索词或“标签分类”中的具体标签任一激活；目录范围本身不是筛选条件。
   const hasActiveFilter = computed(
-    () => Boolean(debouncedSearch.value.trim()) || router.currentRoute.value.query.tag != null,
+    () =>
+      Boolean(debouncedSearch.value.trim()) ||
+      (noteSidebarMode.value === 'tags' && router.currentRoute.value.query.tag != null),
   );
   function clearFilters() {
     searchValue.value = '';
     debouncedSearch.value = '';
-    if (router.currentRoute.value.query.tag != null) router.replace({ query: {} });
+    if (router.currentRoute.value.query.tag != null) {
+      const query = { ...router.currentRoute.value.query };
+      delete query.tag;
+      delete query._rt;
+      router.replace({ path: '/noteLibrary', query });
+    }
   }
   const canDragNote = computed(
     () =>
       !bookmark.isMobile &&
+      (!noteTreeReadEnabled.value || noteTreeWriteEnabled.value) &&
       !loading.value &&
       !loadingMore.value &&
+      !treeMovePending.value &&
       !debouncedSearch.value &&
-      router.currentRoute.value.query.tag == null &&
-      visibleDragNoteList.value.length > 1 &&
+      noteSidebarMode.value === 'directory' &&
+      visibleDragNoteList.value.length > (noteTreeReadEnabled.value ? 0 : 1) &&
       !noteList.value.some((note) => note.isCheck === true),
   );
 
@@ -840,11 +1608,36 @@
   );
 
   watch(
-    [debouncedSearch, () => router.currentRoute.value.query.tag, () => router.currentRoute.value.query._rt],
-    ([search, tag, refreshToken], previous) => {
+    [noteTreeReadEnabled, debouncedSearch, currentParentId],
+    ([enabled, keyword, parentId]) => {
+      if (!enabled || !keyword) {
+        void searchTree('', parentId);
+        return;
+      }
+      void searchTree(keyword, parentId);
+    },
+    { immediate: true },
+  );
+
+  watch(
+    [
+      noteTreeFeaturesReady,
+      debouncedSearch,
+      () => router.currentRoute.value.query.tag,
+      () => router.currentRoute.value.query._rt,
+      currentParentId,
+      noteSidebarMode,
+    ],
+    ([featuresReady, search, tag, refreshToken, parentId, mode], previous) => {
+      if (!featuresReady) return;
       // 只有"页面已有内容 + 本次仅标签变化"才软刷新;首屏、搜索和强制刷新仍用骨架屏
       const onlyTagChanged =
-        Array.isArray(previous) && search === previous[0] && refreshToken === previous[2] && tag !== previous[1];
+        Array.isArray(previous) &&
+        search === previous[1] &&
+        refreshToken === previous[3] &&
+        parentId === previous[4] &&
+        mode === previous[5] &&
+        tag !== previous[2];
       const soft = onlyTagChanged && visibleDragNoteList.value.length > 0;
       if (batchMode.value) exitBatch();
       void reloadNotes(soft);
@@ -876,11 +1669,12 @@
     auxiliaryActionLabel: () => t(batchMode.value ? 'note.exitBatch' : 'common.more'),
     auxiliaryActionIcon: () => (batchMode.value ? icon.common.close : icon.common.more),
     onAdd: showNewNotePicker,
-    addLabel: () => t('note.newNote'),
+    addLabel: () => t(currentParentId.value && noteTreeWriteEnabled.value ? 'note.newChildPage' : 'note.newNote'),
   });
 
   async function resetNoteLibrary() {
-    const alreadyReset = !debouncedSearch.value && router.currentRoute.value.query.tag == null;
+    const alreadyReset =
+      !debouncedSearch.value && router.currentRoute.value.query.tag == null && currentParentId.value === null;
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     searchTimer.value = null;
     searchValue.value = '';
@@ -893,6 +1687,9 @@
 
   onBeforeUnmount(() => {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
+    window.removeEventListener('pointermove', onDragPointerMove, true);
+    cleanupTreeNativeDrag();
+    clearDragDropTarget();
     noteRequestSeq += 1;
   });
 
@@ -926,6 +1723,11 @@
   );
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'aiOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
+      icon: icon.ai.organize,
+    },
+    {
       key: 'batch',
       label: t(batchMode.value ? 'note.exitBatch' : 'inbox.mobileBatchSelect'),
       icon: icon.filterPanel.check,
@@ -933,8 +1735,14 @@
   ]);
   const mobileBatchActions = computed<MobilePageActionItem[]>(() => [
     {
-      key: 'ai',
-      label: t('ai.entry.organizeSelected'),
+      key: 'assistant',
+      label: t('ai.entry.addSelectedToAssistant'),
+      icon: icon.ai.materials,
+      disabled: selectedVisibleCount.value < 1,
+    },
+    {
+      key: 'smartOrganize',
+      label: t('bookmarkMg.aiOrganizeBtn'),
       icon: icon.ai.organize,
       disabled: selectedVisibleCount.value < 1,
     },
@@ -950,6 +1758,16 @@
       icon: icon.manage_categoryBtn_tag,
       disabled: selectedVisibleCount.value < 1,
     },
+    ...(noteTreeWriteEnabled.value
+      ? [
+          {
+            key: 'move',
+            label: t('note.movePages'),
+            icon: icon.noteTree.move,
+            disabled: selectedVisibleCount.value < 1,
+          },
+        ]
+      : []),
     {
       key: 'export',
       label: t('note.batchExport'),
@@ -967,8 +1785,10 @@
 
   function openSelectedNotesAi(intent: AiAssistantIntent) {
     const checked = viewNoteList.value.filter((data: any) => data.isCheck === true);
+    if (!checked.length) return;
     if (checked.length > 5) message.info(t('ai.materialLimit', { count: 5 }));
     const selected = checked.slice(0, 5);
+    mobileBatchActionsOpen.value = false;
     openAiAssistant({
       surface: 'note_library',
       suggestedIntent: intent,
@@ -978,6 +1798,21 @@
         title: String(item.title || ''),
       })),
     });
+  }
+
+  function openGlobalAiOrganize() {
+    selectedAiOrganizeIds.value = [];
+    aiOrgVisible.value = true;
+  }
+
+  function openSelectedAiOrganize() {
+    const selectedIds = getSelectedNotes()
+      .map((note) => String(note.id || '').trim())
+      .filter(Boolean);
+    if (!selectedIds.length) return;
+    selectedAiOrganizeIds.value = selectedIds;
+    mobileBatchActionsOpen.value = false;
+    aiOrgVisible.value = true;
   }
   const allVisibleChecked = computed(
     () => viewNoteList.value.length > 0 && selectedVisibleCount.value === viewNoteList.value.length,
@@ -1006,15 +1841,48 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key !== 'batch') return;
-    if (batchMode.value) exitBatch();
-    else enterBatch();
+    if (action.key === 'aiOrganize') {
+      openGlobalAiOrganize();
+    } else if (action.key === 'batch') {
+      if (batchMode.value) exitBatch();
+      else enterBatch();
+    }
+  }
+
+  function openMobileDirectory(tab: 'directory' | 'tags') {
+    mobileDirectoryInitialTab.value = tab === 'directory' && !noteTreeMobileEnabled.value ? 'tags' : tab;
+    mobileDirectoryOpen.value = true;
+    if (mobileDirectoryInitialTab.value === 'directory') {
+      const metrics = noteTreeNodeMetrics(currentParentId.value);
+      void recordNoteTreeProductEvent('note_tree_opened', {
+        surface: 'mobile',
+        ...metrics,
+        result: 'success',
+      });
+      void recordNoteTreeProductEvent('note_tree_mobile_sheet_opened', {
+        surface: 'mobile',
+        ...metrics,
+        result: 'success',
+      });
+    }
+  }
+
+  function selectMobileDirectoryTag(key: string) {
+    noteSidebarMode.value = 'tags';
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
+    delete query.parent;
+    if (key === 'all') delete query.tag;
+    else query.tag = key;
+    void router.push({ path: '/noteLibrary', query });
   }
 
   function handleMobileBatchAction(action: MobilePageActionItem) {
-    if (action.key === 'ai') openSelectedNotesAi('organize');
+    if (action.key === 'assistant') openSelectedNotesAi('organize');
+    else if (action.key === 'smartOrganize') openSelectedAiOrganize();
     else if (action.key === 'addTags') openBatchTags('add');
     else if (action.key === 'removeTags') openBatchTags('remove');
+    else if (action.key === 'move') openBatchMove();
     else if (action.key === 'export') void exportSelectedNotes();
     else if (action.key === 'delete') batchDeleteNote();
   }
@@ -1050,7 +1918,7 @@
       return;
     }
     const payload = {
-      formatVersion: 1,
+      formatVersion: 2,
       backupKind: 'selected_notes_export',
       exportedAt: new Date().toISOString(),
       noteCount: notes.length,
@@ -1069,17 +1937,73 @@
     }
   }
 
-  function batchDeleteNote() {
+  async function batchDeleteNote() {
     if (blockGuestWrite('delete-note')) return;
-    const delIds = viewNoteList.value.filter((data) => data.isCheck).map((item) => item.id) || [];
-    if (!delIds.length) return;
+    const selectedNotes = viewNoteList.value.filter((data) => data.isCheck);
+    if (!selectedNotes.length) return;
+    if (!noteTreeSubtreeTrashEnabled.value) {
+      Alert.alert({
+        title: t('common.defaultTitle'),
+        content: t('note.deleteBatchTreeConfirm', { total: selectedNotes.length }),
+        okText: t('note.moveItemsToTrash', { count: selectedNotes.length }),
+        async onOk() {
+          const res = await apiBasePost('/api/note/delNote', {
+            ids: selectedNotes.map((note) => String(note.id)),
+          });
+          if (res.status === 409 && res.data?.code === 'NOTE_HAS_CHILDREN') {
+            message.warning(res.msg || t('note.deleteScopeChanged'));
+            return;
+          }
+          if (res.status !== 200) return;
+          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${selectedNotes.length}篇】` });
+          if (noteTreeReadEnabled.value) {
+            void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
+              surface: noteTreeSurface(),
+              subtreeSize: selectedNotes.length,
+              result: 'success',
+            });
+          }
+          message.success(t('common.deleteSuccess'));
+          exitBatch();
+          await init();
+        },
+      });
+      return;
+    }
+    let previews: NoteDeletePreview[];
+    try {
+      previews = await Promise.all(selectedNotes.map((note) => fetchNoteDeletePreview(note.id)));
+    } catch (error) {
+      console.warn('[note-library] batch delete preview failed', error);
+      message.error(t('note.deletePreviewFailed'));
+      return;
+    }
+    const scope = collapseNoteDeletePreviews(previews);
+    if (!scope.items.length) return;
     Alert.alert({
       title: t('common.defaultTitle'),
-      content: t('note.deleteSelectedConfirm'),
+      content: t('note.deleteBatchTreeConfirm', { total: scope.totalCount }),
+      okText: t('note.moveItemsToTrash', { count: scope.totalCount }),
       async onOk() {
-        const res = await apiBasePost('/api/note/delNote', { ids: delIds });
+        const res = await apiBasePost('/api/note/deleteNoteSubtree', {
+          items: scope.items.map((item) => ({
+            id: item.id,
+            expectedDescendantCount: item.descendantCount,
+          })),
+        });
+        if (isDeleteScopeConflict(res)) {
+          message.warning(t('note.deleteScopeChanged'));
+          void batchDeleteNote();
+          return;
+        }
         if (res.status === 200) {
-          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${delIds.length}篇】` });
+          const deletedCount = Number(res.data?.deletedCount || scope.totalCount);
+          recordOperation({ module: '笔记库', operation: `批量删除笔记成功【${deletedCount}篇】` });
+          void recordNoteTreeProductEvent('note_tree_subtree_deleted', {
+            surface: noteTreeSurface(),
+            subtreeSize: deletedCount,
+            result: 'success',
+          });
           message.success(t('common.deleteSuccess'));
           exitBatch();
           await init();
@@ -1089,16 +2013,337 @@
   }
 
   const handleNodeTypeChange = (tag) => {
-    if (tag === null) {
-      router.push('/noteLibrary');
-    } else {
-      router.push(`/noteLibrary?tag=${tag.id}`);
-    }
+    noteSidebarMode.value = 'tags';
+    const query = { ...router.currentRoute.value.query };
+    delete query._rt;
+    delete query.parent;
+    if (tag === null) delete query.tag;
+    else query.tag = String(tag.id);
+    router.push({ path: '/noteLibrary', query });
   };
 
-  function onStart() {
+  function clearDragDropTarget() {
+    if (dragDropTimer !== null) window.clearTimeout(dragDropTimer);
+    dragDropTimer = null;
+    dragDropTarget.value = null;
+    dragDropTargetActive.value = false;
+  }
+
+  const dragDropHint = computed(() => {
+    const target = dragDropTarget.value;
+    if (!target) return '';
+    const pinning = !draggingNoteIsTop.value && target.isTop;
+    const unpinning = draggingNoteIsTop.value && !target.isTop;
+    if (target.position === 'before') {
+      if (pinning) return t('note.dropBeforePageAndPin', { title: target.title });
+      if (unpinning) return t('note.dropBeforePageAndUnpin', { title: target.title });
+      return t('note.dropBeforePage', { title: target.title });
+    }
+    if (target.position === 'after') {
+      if (pinning) return t('note.dropAfterPageAndPin', { title: target.title });
+      if (unpinning) return t('note.dropAfterPageAndUnpin', { title: target.title });
+      return t('note.dropAfterPage', { title: target.title });
+    }
+    if (target.position === 'root-start') {
+      return unpinning ? t('note.dropAtRootStartAndUnpin') : t('note.dropAtRootStart');
+    }
+    if (unpinning) return t('note.dropIntoPageAndUnpin', { title: target.title });
+    return t(dragDropTargetActive.value ? 'note.dropIntoReady' : 'note.dropIntoPage', { title: target.title });
+  });
+
+  function dragSourceParentId() {
+    const sourceId = draggingNoteId.value;
+    const source = noteList.value.find((note) => String(note.id) === sourceId);
+    const loadedSource = findLoadedTreeNode(sourceId);
+    const rawParentId = source?.parentId ?? loadedSource?.parentId;
+    return rawParentId ? String(rawParentId) : null;
+  }
+
+  function isNoopSiblingPlacement(target: NoteTreeDropTarget, sourceParentId: string | null) {
+    if (target.position !== 'before' && target.position !== 'after') return false;
+    if (sourceParentId !== target.parentId) return false;
+    const siblings = childrenByParent.value[target.parentId || NOTE_TREE_ROOT_KEY] || [];
+    const group = siblings.filter((item) => Boolean(item.isTop) === target.isTop);
+    const sourceIndex = group.findIndex((item) => item.id === draggingNoteId.value);
+    const targetIndex = group.findIndex((item) => item.id === target.key);
+    if (sourceIndex < 0 || targetIndex < 0) return false;
+    return target.position === 'before' ? sourceIndex === targetIndex - 1 : sourceIndex === targetIndex + 1;
+  }
+
+  function isInvalidDropTarget(target: NoteTreeDropTarget) {
+    const sourceId = draggingNoteId.value;
+    if (!sourceId || target.parentId === sourceId || target.previousId === sourceId || target.nextId === sourceId) {
+      return true;
+    }
+    const sourceParentId = dragSourceParentId();
+    if (target.position === 'inside' && sourceParentId === target.parentId) return true;
+    if (isNoopSiblingPlacement(target, sourceParentId)) return true;
+    let cursor = target.parentId;
+    const visited = new Set<string>();
+    while (cursor && !visited.has(cursor)) {
+      if (cursor === sourceId) return true;
+      visited.add(cursor);
+      cursor = findLoadedTreeNode(cursor)?.parentId || null;
+    }
+    return false;
+  }
+
+  function dropTargetIdentity(target: NoteTreeDropTarget | null) {
+    if (!target) return '';
+    return [
+      target.position,
+      target.key,
+      target.isTop ? '1' : '0',
+      target.parentId || '',
+      target.previousId || '',
+      target.nextId || '',
+    ].join(':');
+  }
+
+  function scheduleDragDropTarget(target: NoteTreeDropTarget | null, immediate = false) {
+    if (!target || isInvalidDropTarget(target)) {
+      clearDragDropTarget();
+      return;
+    }
+    if (dropTargetIdentity(dragDropTarget.value) === dropTargetIdentity(target)) return;
+    clearDragDropTarget();
+    dragDropTarget.value = target;
+    if (immediate) {
+      dragDropTargetActive.value = true;
+      return;
+    }
+    dragDropTimer = window.setTimeout(() => {
+      if (dragDropTarget.value?.key === target.key) dragDropTargetActive.value = true;
+      dragDropTimer = null;
+    }, 160);
+  }
+
+  function resolveDropTargetAtPoint(clientX: number, clientY: number) {
+    const element = document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>('[data-note-drop-parent]');
+    if (!element) return null;
+    const key = String(element.dataset.noteDropParent || '').trim();
+    if (!key) return null;
+    const title = String(element.dataset.noteDropTitle || t('note.untitled'));
+    if (key === NOTE_TREE_ROOT_KEY) {
+      return buildRootStartDropTarget({
+        rootItems: childrenByParent.value[NOTE_TREE_ROOT_KEY] || [],
+        source: {
+          id: draggingNoteId.value,
+          isTop: draggingNoteIsTop.value,
+          parentId: dragSourceParentId(),
+        },
+        title,
+        rootKey: NOTE_TREE_ROOT_KEY,
+      });
+    }
+
+    const treeNodeId = String(element.dataset.noteTreeNodeId || '').trim();
+    if (treeNodeId) {
+      const rect = element.getBoundingClientRect();
+      const rawParentId = String(element.dataset.noteTreeParentId || '').trim();
+      const forcedPosition = element.dataset.noteTreeDropPosition;
+      return buildTreeNodeDropTarget({
+        node: {
+          id: treeNodeId,
+          parentId: rawParentId && rawParentId !== NOTE_TREE_ROOT_KEY ? rawParentId : null,
+          title,
+          isTop: element.dataset.noteTreePinned === '1',
+        },
+        source: { id: draggingNoteId.value, isTop: draggingNoteIsTop.value },
+        relativeY: forcedPosition === 'before' ? 0 : forcedPosition === 'after' ? 1 : clientY - rect.top,
+        height: forcedPosition === 'before' || forcedPosition === 'after' ? 1 : rect.height,
+      });
+    }
+
+    if (element.hasAttribute('data-note-sort-id')) {
+      const rect = element.getBoundingClientRect();
+      const relativeY = clientY - rect.top;
+      if (relativeY < rect.height * 0.28 || relativeY > rect.height * 0.72) return null;
+    }
+    return {
+      key,
+      isTop: false,
+      parentId: key,
+      title,
+      previousId: null,
+      nextId: null,
+      position: 'inside',
+    } satisfies NoteTreeDropTarget;
+  }
+
+  function onDragPointerMove(event: PointerEvent) {
+    scheduleDragDropTarget(resolveDropTargetAtPoint(event.clientX, event.clientY));
+  }
+
+  function onDragMove(_event: any, originalEvent?: PointerEvent) {
+    if (originalEvent && typeof originalEvent.clientX === 'number') {
+      const target = resolveDropTargetAtPoint(originalEvent.clientX, originalEvent.clientY);
+      scheduleDragDropTarget(target);
+      if (target) return false;
+    }
+    return true;
+  }
+
+  function onStart(event?: { item?: HTMLElement; oldIndex?: number }) {
     document.body.style.userSelect = 'none';
     noteDragging.value = true;
+    const indexedNote = Number.isInteger(Number(event?.oldIndex))
+      ? visibleDragNoteList.value[Number(event?.oldIndex)]
+      : null;
+    const sourceId = String(event?.item?.getAttribute('data-note-sort-id') || indexedNote?.id || '').trim();
+    const sourceNote = noteList.value.find((note) => String(note.id) === sourceId) || indexedNote;
+    draggingNoteId.value = sourceId;
+    draggingNoteIsTop.value = Boolean(sourceNote?.isTop);
+    window.addEventListener('pointermove', onDragPointerMove, true);
+  }
+
+  function cleanupTreeNativeDrag() {
+    window.removeEventListener('dragover', onTreeNativeDragOver, true);
+    window.removeEventListener('drop', onTreeNativeDrop, true);
+    treeDragImageElement?.remove();
+    treeDragImageElement = null;
+  }
+
+  function setCompactTreeDragImage(node: any, event: DragEvent) {
+    if (!event.dataTransfer) return;
+    const preview = document.createElement('div');
+    preview.className = 'note-tree-drag-image';
+    preview.textContent = String(node?.title || t('note.untitled')).trim();
+    document.body.appendChild(preview);
+    treeDragImageElement = preview;
+    event.dataTransfer.setDragImage(preview, 18, 16);
+    window.setTimeout(() => {
+      if (treeDragImageElement !== preview) return;
+      preview.remove();
+      treeDragImageElement = null;
+    }, 0);
+  }
+
+  function onTreeDragStart(node: any, event: DragEvent) {
+    const sourceId = String(node?.id || '').trim();
+    if (!noteTreeWriteEnabled.value || treeMovePending.value || !sourceId) {
+      event.preventDefault();
+      return;
+    }
+    document.body.style.userSelect = 'none';
+    noteDragging.value = true;
+    draggingNoteId.value = sourceId;
+    draggingNoteIsTop.value = Boolean(node?.isTop);
+    event.dataTransfer?.setData('text/plain', sourceId);
+    cleanupTreeNativeDrag();
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      setCompactTreeDragImage(node, event);
+    }
+    window.addEventListener('dragover', onTreeNativeDragOver, true);
+    window.addEventListener('drop', onTreeNativeDrop, true);
+  }
+
+  function onTreeNativeDragOver(event: DragEvent) {
+    if (!draggingNoteId.value) return;
+    const target = resolveDropTargetAtPoint(event.clientX, event.clientY);
+    if (!target || isInvalidDropTarget(target)) {
+      clearDragDropTarget();
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    scheduleDragDropTarget(target, true);
+  }
+
+  async function moveNoteIntoTarget(sourceId: string, sourceIsTop: boolean, target: NoteTreeDropTarget) {
+    if (treeMovePending.value) return false;
+    treeMovePending.value = true;
+    const previousTree = childrenByParent.value;
+    const optimisticMove = moveNoteTreeNodeOptimistically(previousTree, sourceId, target, NOTE_TREE_ROOT_KEY);
+    if (optimisticMove.applied) childrenByParent.value = optimisticMove.childrenByParent;
+
+    try {
+      let response;
+      try {
+        response = await apiBasePost('/api/note/moveNoteNode', {
+          id: sourceId,
+          parentId: target.parentId,
+          previousId: target.previousId,
+          nextId: target.nextId,
+        });
+      } catch (error) {
+        if (optimisticMove.applied) childrenByParent.value = previousTree;
+        throw error;
+      }
+      if (response.status !== 200) {
+        if (optimisticMove.applied) childrenByParent.value = previousTree;
+        message.error(response.msg || t('note.moveFailed'));
+        return false;
+      }
+      const successMessage =
+        target.position === 'before'
+          ? target.isTop !== sourceIsTop
+            ? t(target.isTop ? 'note.moveBeforeAndPinSuccess' : 'note.moveBeforeAndUnpinSuccess', {
+                title: target.title,
+              })
+            : t('note.moveBeforeSuccess', { title: target.title })
+          : target.position === 'after'
+            ? target.isTop !== sourceIsTop
+              ? t(target.isTop ? 'note.moveAfterAndPinSuccess' : 'note.moveAfterAndUnpinSuccess', {
+                  title: target.title,
+                })
+              : t('note.moveAfterSuccess', { title: target.title })
+            : target.position === 'root-start'
+              ? sourceIsTop && !target.isTop
+                ? t('note.moveRootStartAndUnpinSuccess')
+                : t('note.moveRootStartSuccess')
+              : sourceIsTop
+                ? t('note.moveIntoAndUnpinSuccess', { title: target.title })
+                : t('note.moveIntoSuccess', { title: target.title });
+      message.success(successMessage);
+      try {
+        await Promise.all([
+          reloadNotes(),
+          currentBreadcrumb.value.some((item) => item.id === sourceId)
+            ? loadBreadcrumb(currentParentId.value)
+            : Promise.resolve(),
+        ]);
+      } catch (error) {
+        // 移动已由服务端确认，后续读模型同步失败不能回滚成虚假的旧位置。
+        console.error('[note-library] refresh after tree move failed', error);
+      }
+      return true;
+    } finally {
+      treeMovePending.value = false;
+    }
+  }
+
+  async function onTreeNativeDrop(event: DragEvent) {
+    if (!draggingNoteId.value) return;
+    // 以松手瞬间的实际坐标为准，避免快速跨过不同落点时沿用上一帧的高亮目标。
+    const target = resolveDropTargetAtPoint(event.clientX, event.clientY);
+    if (!target || isInvalidDropTarget(target)) return;
+    event.preventDefault();
+    const sourceId = draggingNoteId.value;
+    const sourceIsTop = draggingNoteIsTop.value;
+    cleanupTreeNativeDrag();
+    clearDragDropTarget();
+    draggingNoteId.value = '';
+    draggingNoteIsTop.value = false;
+    noteDragging.value = false;
+    document.body.style.userSelect = '';
+    if (blockGuestWrite('move-note')) return;
+    try {
+      await moveNoteIntoTarget(sourceId, sourceIsTop, target);
+    } catch (error) {
+      console.error('[note-library] tree drag move failed', error);
+      message.error(t('note.moveFailed'));
+    }
+  }
+
+  function onTreeDragEnd() {
+    cleanupTreeNativeDrag();
+    clearDragDropTarget();
+    draggingNoteId.value = '';
+    draggingNoteIsTop.value = false;
+    noteDragging.value = false;
+    document.body.style.userSelect = '';
   }
 
   function moveVisibleNoteInAllNotes(
@@ -1144,10 +2389,24 @@
 
   async function onEnd(event?: { oldIndex?: number; newIndex?: number }) {
     document.body.style.userSelect = '';
+    window.removeEventListener('pointermove', onDragPointerMove, true);
+    // 卡片中央已经是明确的“作为父页面”落点，不要求用户额外停留后才能生效。
+    const nestedTarget = dragDropTarget.value;
+    const nestedSourceId = draggingNoteId.value;
+    const nestedSourceIsTop = draggingNoteIsTop.value;
+    clearDragDropTarget();
+    draggingNoteId.value = '';
+    draggingNoteIsTop.value = false;
     const sourceNotes = [...noteList.value];
     try {
       if (blockGuestWrite('reorder-note')) {
         visibleDragNoteList.value = [...viewNoteList.value]; // 拖拽库已就地改了 DOM 顺序,游客态复位视觉
+        return;
+      }
+
+      if (nestedTarget && nestedSourceId) {
+        visibleDragNoteList.value = [...viewNoteList.value];
+        await moveNoteIntoTarget(nestedSourceId, nestedSourceIsTop, nestedTarget);
         return;
       }
 
@@ -1178,7 +2437,9 @@
         return;
       }
 
-      const res = await apiBasePost('/api/note/updateNoteSort', { move });
+      const res = await apiBasePost('/api/note/updateNoteSort', {
+        move: { ...move, parentId: currentParentId.value },
+      });
       if (res.status === 200) {
         noteList.value = groupedNotes;
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
@@ -1392,9 +2653,8 @@
     }
 
     .note-list-skeleton-item {
-      /* 贴住真实列表项:padding 22 + 标题 22 + 摘要 38 + gap 4 + chip 22 ≈ 109(实测 109~111)。
-         最后一条骨架线的 margin-bottom 由下面收掉,不然整项会比真实的高出一截。 */
-      min-height: 108px;
+      /* 桌面列表是稳定的「标题 + 摘要/标签」两行，骨架与真实项保持相同的紧凑高度。 */
+      min-height: 70px;
       padding: 11px 14px;
       border: 1px solid var(--card-border-color);
 
@@ -1560,23 +2820,60 @@
   }
 
   .note-ai-button {
-    color: var(--resource-note-color, #00a884);
-    background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
+    border: 1px solid var(--primary-color, #615ced);
+    color: var(--primary-color, #615ced);
+    background: color-mix(in srgb, var(--primary-color, #615ced) 8%, var(--menu-body-bg-color));
+  }
+
+  .note-ai-button:hover,
+  .note-ai-button:active {
+    color: var(--primary-color, #615ced);
+    background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
   }
 
   .note-mobile-actions {
     width: 100%;
     display: grid;
-    /* 中间列按内容宽（图标态视图切换约 73px），两侧平分剩余，三个控件挤在同一行。
-       原来是两等列，加进视图切换后第三个控件被顶到第二行，切换器还被拉满一整列留下大片空白。 */
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
   }
 
   .note-mobile-actions :deep(.noteType-select) {
     width: 100%;
     min-width: 0;
     justify-content: center;
+  }
+
+  .note-mobile-directory {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 36px;
+    padding: 0 9px;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--menu-body-bg-color);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .note-mobile-directory {
+    justify-content: flex-start;
+
+    span {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      color: var(--text-color);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    :deep(.icon-base64:last-child) {
+      margin-left: auto;
+    }
   }
 
   .note-create-button {
@@ -1587,9 +2884,25 @@
     background: color-mix(in srgb, var(--resource-note-color, #00a884) 88%, #ffffff);
   }
 
+  .note-sidebar-toggle {
+    width: 36px;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--primary-color, #615ced) 42%, transparent);
+    border-radius: 11px;
+    color: var(--primary-color, #615ced);
+    background: color-mix(in srgb, var(--primary-color, #615ced) 8%, var(--menu-body-bg-color));
+
+    &.is-active {
+      color: var(--primary-color, #615ced);
+      border-color: var(--primary-color, #615ced);
+      background: color-mix(in srgb, var(--primary-color, #615ced) 13%, var(--menu-body-bg-color));
+      font-weight: 650;
+    }
+  }
+
   .note-workspace {
     --note-card-min-width: 320px;
-    --note-tag-panel-width: 208px;
+    --note-sidebar-panel-width: 248px;
 
     width: 100%;
     height: 100%;
@@ -1609,7 +2922,7 @@
     transition: grid-template-columns 300ms cubic-bezier(0.22, 0.61, 0.36, 1);
 
     &.is-split {
-      grid-template-columns: var(--note-tag-panel-width) minmax(0, 1fr);
+      grid-template-columns: var(--note-sidebar-panel-width) minmax(0, 1fr);
     }
 
     @supports (width: 1cqi) {
@@ -1618,23 +2931,14 @@
     }
   }
 
-  .note-tag-panel {
+  .note-sidebar-panel {
     grid-column: 1;
     min-width: 0;
     min-height: 0;
     overflow: hidden;
     box-sizing: border-box;
-    padding: 12px 0 12px 12px;
+    padding: 12px;
     border-right: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
-    transition:
-      opacity 200ms ease,
-      transform 260ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-workspace:not(.is-split) .note-tag-panel {
-    opacity: 0;
-    transform: translateX(-12px);
-    pointer-events: none;
   }
 
   .note-main-panel {
@@ -1643,13 +2947,192 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 
+  .note-directory-header {
+    flex: 0 0 auto;
+    padding: 12px 16px 11px;
+    border-bottom: 1px solid color-mix(in srgb, var(--card-border-color) 72%, transparent);
+    background: var(--workspace-panel-bg-color, var(--menu-body-bg-color));
+  }
 
+  .note-directory-breadcrumbs {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .note-directory-crumb {
+    position: relative;
+    min-width: 0;
+    max-width: 180px;
+    height: 24px;
+    padding: 0 4px;
+    overflow: hidden;
+    color: var(--desc-color);
+    background: transparent !important;
+    font-size: 12px;
+    text-overflow: ellipsis;
+
+    &.is-current {
+      color: var(--resource-note-color, #00a884);
+      font-weight: 650;
+    }
+
+    &.is-drop-candidate {
+      border: 1px solid var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      font-weight: 650;
+    }
+
+    &.is-drop-target {
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 14%, var(--menu-body-bg-color)) !important;
+    }
+
+    &.is-drop-root-start::after {
+      position: absolute;
+      right: 3px;
+      bottom: -2px;
+      left: 3px;
+      height: 2px;
+      border-radius: 999px;
+      background: var(--resource-note-color, #00a884);
+      content: '';
+      pointer-events: none;
+    }
+  }
+
+  :deep(.note-drop-candidate .note-card),
+  :deep(.note-drop-candidate .note-list-item) {
+    border: 2px solid var(--resource-note-color, #00a884) !important;
+  }
+
+  :deep(.note-drop-target .note-card),
+  :deep(.note-drop-target .note-list-item) {
+    color: var(--resource-note-color, #00a884);
+    background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, var(--menu-body-bg-color));
+  }
+
+  .note-sort-item {
+    cursor: grab;
+
+    &:active {
+      cursor: grabbing;
+    }
+  }
+
+  .note-drop-hint {
+    position: absolute;
+    z-index: 12;
+    left: 50%;
+    bottom: 18px;
+    max-width: min(88%, 520px);
+    padding: 8px 13px;
+    transform: translateX(-50%);
+    border: 1px solid var(--resource-note-color, #00a884);
+    border-radius: 10px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color);
+    box-shadow: var(--resource-card-shadow);
+    font-size: 12px;
+    font-weight: 650;
+    pointer-events: none;
+
+    &.is-ready {
+      color: #fff;
+      background: var(--resource-note-color, #00a884);
+    }
+  }
+
+  :global(.note-tree-drag-image) {
+    position: fixed;
+    top: -1000px;
+    left: -1000px;
+    z-index: 800;
+    max-width: 190px;
+    padding: 7px 11px;
+    overflow: hidden;
+    border: 1px solid var(--resource-note-color, #00a884);
+    border-radius: 9px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color, #fff);
+    box-shadow: 0 8px 22px rgb(15 23 42 / 18%);
+    font-size: 12px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .note-directory-separator {
+    flex: 0 0 auto;
+    color: var(--muted-text-color, var(--desc-color));
+    font-size: 11px;
+  }
+
+  .note-directory-title-row {
+    min-width: 0;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
+  .note-directory-title-copy {
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+
+    h2 {
+      min-width: 0;
+      margin: 0;
+      overflow: hidden;
+      color: var(--text-color);
+      font-size: 18px;
+      font-weight: 720;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      flex: 0 0 auto;
+      color: var(--desc-color);
+      font-size: 12px;
+    }
+  }
+
+  .note-open-directory-page {
+    height: 32px;
+    flex: 0 0 auto;
+    gap: 6px;
+    border: 1px solid var(--surface-border-color, var(--card-border-color));
+    border-radius: 9px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color);
+  }
+
+  .note-directory-actions {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .note-new-child-page {
+    height: 32px;
+    gap: 6px;
+    border-radius: 9px;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .note-workspace,
-    .note-tag-panel,
+    .note-sidebar-panel,
     .note-library-body,
     .note-library-body-list {
       transition: none;
@@ -1657,7 +3140,9 @@
   }
 
   .note-library-body {
-    height: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     padding: 14px;
     grid-template-columns: repeat(auto-fill, minmax(var(--note-card-min-width), 1fr));
     gap: 14px;
@@ -1672,7 +3157,9 @@
 
   .note-library-body-list {
     width: 100%;
-    height: 100%;
+    height: auto;
+    flex: 1;
+    min-height: 0;
     padding: 12px;
     gap: 0;
   }
@@ -1704,10 +3191,16 @@
     .note-library-body-list .note-list-skeleton-wrap {
       padding: 0;
     }
+
+    .note-library-body-list .note-list-skeleton-item {
+      /* 手机端为标题、摘要和 chip 三段式布局，保留与真实项一致的高度。 */
+      min-height: 108px;
+    }
   }
 
   .note-empty-state {
-    min-height: 100%;
+    min-height: 0;
+    flex: 1;
     padding: 56px 20px;
     box-sizing: border-box;
     display: flex;
@@ -1743,6 +3236,21 @@
   .note-empty-state p {
     margin: 0 0 6px;
     font-size: 13px;
+  }
+
+  .note-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .note-attach-button {
+    gap: 6px;
+    color: var(--resource-note-color, #00a884);
+    border-color: var(--resource-note-color, #00a884);
+    background: var(--menu-body-bg-color);
   }
 
   .note-empty-icon {
@@ -1806,18 +3314,17 @@
       height: 36px;
       padding: 0 10px;
       justify-content: center;
-      color: var(--text-color);
-      background: var(--primary-btn-bg-color);
+      color: var(--primary-color, #615ced);
+      background: color-mix(in srgb, var(--primary-color, #615ced) 8%, var(--menu-body-bg-color));
       font-size: 14px;
     }
 
     .note-mobile-actions .note-ai-button:hover,
     .note-mobile-actions .note-ai-button:active {
-      color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 8%, var(--menu-body-bg-color));
+      color: var(--primary-color, #615ced);
+      background: color-mix(in srgb, var(--primary-color, #615ced) 14%, var(--menu-body-bg-color));
     }
   }
-
 
   @media (min-width: 520px) and (max-width: 767px) {
     .note-library-body {

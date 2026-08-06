@@ -26,6 +26,10 @@ html.light-note-android-webview {
   --ln-android-color-mix-tag: var(--resource-tag-color, var(--primary-color));
   --ln-android-color-mix-warning: var(--warning-color, #f59e0b);
   --ln-android-color-mix-danger: var(--danger-color, var(--error-color, #e5484d));
+
+  /* 移动端选中、危险与警告状态在 color-mix 回退后仍保留实色描边和字色。 */
+  --mobile-selected-bg: var(--workspace-panel-bg-color);
+  --mobile-sheet-danger-bg: var(--card-background);
   --ln-android-color-mix-success: var(--success-color, #22a447);
   // 旧 WebView 不可靠计算低透明度 color-mix()，使用稳定 RGBA 保留徽标和标签的柔和底色。
   --ln-android-color-mix-primary-soft-background: rgba(97, 92, 237, 0.1);
@@ -162,6 +166,12 @@ html.light-note-android-webview {
   .mobile-bottom-nav__item,
   .mobile-top-bar button {
     touch-action: manipulation;
+  }
+
+  .mobile-sticky-action-bar,
+  .b-drawer-panel--bottom {
+    border: 1px solid var(--surface-border-color) !important;
+    box-shadow: none !important;
   }
 
   // AI 回到底部按钮：部分卓易通 WebView 不识别 inset 简写，会把 0 尺寸的

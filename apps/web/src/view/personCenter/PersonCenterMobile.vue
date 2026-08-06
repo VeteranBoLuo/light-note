@@ -354,9 +354,9 @@
   }
 
   .person-title-card {
-    gap: 40px;
-    padding: 15px;
-    height: 160px;
+    gap: 20px;
+    padding: 14px;
+    height: 136px;
     box-sizing: border-box;
     border-radius: 12px;
     display: flex;

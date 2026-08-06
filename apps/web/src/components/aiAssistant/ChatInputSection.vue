@@ -4,7 +4,9 @@
       <div v-if="!isMobile" class="context-actions">
         <AiContextPicker
           :model-value="contexts"
+          :scope-model-value="scopeRefs"
           @update:model-value="$emit('update:contexts', $event)"
+          @update:scope-model-value="$emit('update:scopeRefs', $event)"
           @file-selected="attachSelectedCloudFile"
         />
         <AiAttachmentPicker
@@ -50,7 +52,9 @@
           <div class="mobile-material-action-list">
             <AiContextPicker
               :model-value="contexts"
+              :scope-model-value="scopeRefs"
               @update:model-value="$emit('update:contexts', $event)"
+              @update:scope-model-value="$emit('update:scopeRefs', $event)"
               @file-selected="attachSelectedCloudFile"
             >
               <template #trigger>
@@ -128,7 +132,9 @@
             :show-search="false"
             :keyword="mentionQuery.keyword"
             :pinned-items="mentionPinnedItems"
+            include-note-scopes
             @select="applyMentionSelection"
+            @select-scope="applyMentionScopeSelection"
             @close="closeMention"
             @results-count="mentionHasResults = $event > 0"
           />
@@ -202,7 +208,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
-  import AiContextPicker, { type AiResourceContext } from './AiContextPicker.vue';
+  import AiContextPicker from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import {
@@ -217,29 +223,39 @@
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
   import icon from '@/config/icon';
+  import {
+    MAX_AI_SCOPE_REFS,
+    type AiResourceContext,
+    type AiScopeRef,
+  } from '@/types/aiScope';
 
   const { t } = useI18n();
 
-  const props = defineProps<{
-    modelValue: string;
-    isLoading: boolean;
-    quota?: { exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null;
-    showTranslation: boolean;
-    enableTranslation: boolean;
-    translationConfig: { source: string; target: string };
-    isMobile: boolean;
-    sendFn: () => void;
-    stopFn: () => void;
-    contexts: AiResourceContext[];
-    attachments: AiAttachment[];
-    prepareAttachmentActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      modelValue: string;
+      isLoading: boolean;
+      quota?: { exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null;
+      showTranslation: boolean;
+      enableTranslation: boolean;
+      translationConfig: { source: string; target: string };
+      isMobile: boolean;
+      sendFn: () => void;
+      stopFn: () => void;
+      contexts: AiResourceContext[];
+      scopeRefs?: AiScopeRef[];
+      attachments: AiAttachment[];
+      prepareAttachmentActionFn: (request: AiAttachmentActionRequest) => Promise<void>;
+    }>(),
+    { scopeRefs: () => [] },
+  );
 
   const emit = defineEmits<{
     (e: 'update:modelValue', value: string): void;
     (e: 'update:enableTranslation', value: boolean): void;
     (e: 'update:translationConfig', value: { source: string; target: string }): void;
     (e: 'update:contexts', value: AiResourceContext[]): void;
+    (e: 'update:scopeRefs', value: AiScopeRef[]): void;
     (e: 'update:attachments', value: AiAttachment[]): void;
   }>();
 
@@ -263,7 +279,9 @@
   const attachmentBlocked = computed(() =>
     props.attachments.some((attachment) => attachment.status === 'awaiting_upload'),
   );
-  const selectedMaterialCount = computed(() => props.contexts.length + props.attachments.length);
+  const selectedMaterialCount = computed(
+    () => props.contexts.length + props.scopeRefs.length + props.attachments.length,
+  );
 
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {
@@ -413,6 +431,17 @@
     const exists = props.contexts.some((ctx) => ctx.type === next.type && String(ctx.id) === next.id);
     if (exists || props.contexts.length >= 5) return;
     emit('update:contexts', [...props.contexts, next]);
+    focus();
+  }
+
+  function applyMentionScopeSelection(item: AiScopeRef) {
+    const query = mentionQuery.value;
+    if (query) emit('update:modelValue', replaceMentionQuery(props.modelValue, query));
+    closeMention();
+    if (item.type !== 'note_branch') return;
+    const exists = props.scopeRefs.some((scope) => scope.type === item.type && scope.id === item.id);
+    if (exists || props.scopeRefs.length >= MAX_AI_SCOPE_REFS) return;
+    emit('update:scopeRefs', [...props.scopeRefs, { ...item }]);
     focus();
   }
 
@@ -693,11 +722,11 @@
 
   @media (max-width: 767px) {
     .input-section {
-      padding: 0.25rem 0.625rem calc(0.4rem + env(safe-area-inset-bottom));
+      padding: 0.2rem 0.625rem calc(0.35rem + env(safe-area-inset-bottom));
     }
 
     .input-container {
-      padding: 0.45rem 0.5rem 0.4rem;
+      padding: 0.38rem 0.5rem 0.34rem;
       border-radius: 1rem;
     }
 
@@ -720,11 +749,12 @@
       gap: 7px;
       width: max-content;
       max-width: 100%;
-      height: 36px !important;
-      padding: 4px 8px 4px 5px !important;
+      height: var(--mobile-touch-size, 44px) !important;
+      min-height: var(--mobile-touch-size, 44px);
+      padding: 5px 9px 5px 6px !important;
       /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
       border: 1px solid var(--card-border-color);
-      border-color: color-mix(in srgb, var(--primary-color) 34%, var(--card-border-color));
+      border-color: var(--primary-color);
       border-radius: 12px;
       background: var(--card-background);
       background: linear-gradient(
@@ -733,7 +763,7 @@
         color-mix(in srgb, var(--primary-color) 6%, var(--card-background))
       );
       color: var(--primary-color);
-      box-shadow: 0 8px 20px -16px color-mix(in srgb, var(--primary-color) 72%, transparent);
+      box-shadow: none;
       font-size: 12px;
       font-weight: 650;
       line-height: 1;
@@ -741,9 +771,9 @@
 
     .mobile-context-toggle__icon {
       display: grid;
-      flex: 0 0 26px;
-      width: 26px;
-      height: 26px;
+      flex: 0 0 30px;
+      width: 30px;
+      height: 30px;
       place-items: center;
       border-radius: 8px;
       background: var(--primary-color);
@@ -964,8 +994,8 @@
     }
 
     .input-actions :deep(.b_btn) {
-      min-height: 32px !important;
-      height: 32px !important;
+      min-height: var(--mobile-touch-size, 44px) !important;
+      height: var(--mobile-touch-size, 44px) !important;
       padding-inline: 10px;
     }
 
@@ -975,7 +1005,7 @@
     }
 
     .composer-toolbar {
-      min-height: 24px;
+      min-height: var(--mobile-touch-size, 44px);
       margin-top: 2px;
       justify-content: flex-end;
     }
@@ -989,7 +1019,7 @@
 
     .send-btn {
       min-width: 54px;
-      height: 32px;
+      height: var(--mobile-touch-size, 44px);
     }
   }
 </style>

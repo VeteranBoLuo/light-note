@@ -8,9 +8,11 @@ const RESOURCE_SORT_CONFIG = {
   note: {
     table: 'note',
     ownerColumn: 'create_by',
+    scopeColumn: 'parent_id',
     fallbackOrder: 'COALESCE(update_time, create_time) DESC',
     // 笔记的 update_time 可能配置为 ON UPDATE；排序不应伪装成正文更新时间。
-    updateSql: 'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ? AND del_flag = 0',
+    updateSql:
+      'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?',
   },
 };
 
@@ -39,7 +41,7 @@ export class AnchoredSortError extends Error {
  */
 export async function moveOwnedResourceByAnchors(
   connection,
-  { resourceType, userId, id, previousId = null, nextId = null },
+  { resourceType, userId, id, parentId = null, previousId = null, nextId = null },
 ) {
   const config = RESOURCE_SORT_CONFIG[resourceType];
   if (!config) {
@@ -50,19 +52,21 @@ export async function moveOwnedResourceByAnchors(
   const normalizedUserId = normalizeId(userId);
   const normalizedPreviousId = normalizeId(previousId);
   const normalizedNextId = normalizeId(nextId);
+  const normalizedParentId = normalizeId(parentId) || null;
   if (!movedId || !normalizedUserId) {
     throw new AnchoredSortError('INVALID_SORT_MOVE', '排序参数无效');
   }
 
+  const scopeWhere = config.scopeColumn ? ` AND ${config.scopeColumn} <=> ?` : '';
   const [rows] = await connection.query(
     `
       SELECT id, COALESCE(is_top, 0) AS isTop, sort
       FROM ${config.table}
-      WHERE ${config.ownerColumn} = ? AND del_flag = 0
+      WHERE ${config.ownerColumn} = ? AND del_flag = 0${scopeWhere}
       ORDER BY COALESCE(is_top, 0) DESC, sort, ${config.fallbackOrder}, id DESC
       FOR UPDATE
     `,
-    [normalizedUserId],
+    [normalizedUserId, ...(config.scopeColumn ? [normalizedParentId] : [])],
   );
 
   const moved = rows.find((row) => normalizeId(row.id) === movedId);
@@ -103,7 +107,12 @@ export async function moveOwnedResourceByAnchors(
   let updatedCount = 0;
   for (const [index, row] of reordered.entries()) {
     if (Number(row.sort) === index) continue;
-    const [updateResult] = await connection.query(config.updateSql, [index, row.id, normalizedUserId]);
+    const [updateResult] = await connection.query(config.updateSql, [
+      index,
+      row.id,
+      normalizedUserId,
+      ...(config.scopeColumn ? [normalizedParentId] : []),
+    ]);
     updatedCount += Number(updateResult?.affectedRows || 0);
   }
 

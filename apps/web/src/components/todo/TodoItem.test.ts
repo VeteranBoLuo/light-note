@@ -46,6 +46,7 @@ function pointerEvent(type: string, x: number, y: number, pointerId = 1) {
 function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolean; swipeEnabled?: boolean } = {}) {
   const onEdit = vi.fn();
   const onDelete = vi.fn();
+  const onSeriesAction = vi.fn();
   const swipeOpen = ref(false);
   const host = document.createElement('div');
   document.body.append(host);
@@ -59,6 +60,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
           swipeOpen: swipeOpen.value,
           onEdit,
           onDelete,
+          onSeriesAction,
           'onUpdate:swipe-open': (open: boolean) => (swipeOpen.value = open),
         });
     },
@@ -95,6 +97,10 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoLegacyCompletionBadge: '旧版完成触发重复',
             todoLegacyReminderBadge: '旧版多次提醒',
             todoSeriesPausedBadge: '系列已暂停',
+            todoSeriesSkipInstance: '跳过本次',
+            todoSeriesPause: '暂停系列',
+            todoSeriesResume: '恢复系列',
+            todoSeriesStop: '结束系列',
             todoRecurrenceSummary: { daily: '每 {interval} 天生成下一项' },
           },
           ai: { sourceTypes: { note: '笔记' } },
@@ -108,7 +114,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
     app.unmount();
     host.remove();
   };
-  return { host, onEdit, onDelete, swipeOpen };
+  return { host, onEdit, onDelete, onSeriesAction, swipeOpen };
 }
 
 afterEach(() => {
@@ -207,5 +213,38 @@ describe('TodoItem card editing', () => {
     });
     await nextTick();
     expect(paused.host.querySelector('.todo-plan-state-label')?.textContent).toBe('系列已暂停');
+  });
+
+  it('移动端更多操作通过统一 Action Drawer 发出系列操作', async () => {
+    const { host, onSeriesAction } = mountTodoItem({
+      ...todo,
+      planVersion: 2,
+      seriesId: 'series-1',
+      occurrenceNo: 1,
+      series: {
+        id: 'series-1',
+        repeatMode: 'scheduled',
+        status: 'active',
+        timezone: 'Asia/Shanghai',
+        version: 1,
+        plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'never' } },
+        timing: null,
+        progress: { completed: 0, skipped: 0, generated: 8, total: null },
+      },
+    });
+    await nextTick();
+
+    const moreButton = Array.from(host.querySelectorAll<HTMLButtonElement>('.todo-item__actions--mobile button')).find(
+      (button) => button.textContent?.includes('更多'),
+    );
+    moreButton?.click();
+    await nextTick();
+
+    const pauseButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')).find(
+      (button) => button.textContent?.includes('暂停系列'),
+    );
+    expect(pauseButton).toBeTruthy();
+    pauseButton?.click();
+    expect(onSeriesAction).toHaveBeenCalledWith('pause');
   });
 });

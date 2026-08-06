@@ -113,6 +113,23 @@ import {
 } from '../util/agent/memoryRuntime.js';
 import { classifyMaterialFollowUp, normalizeFollowUpMaterialCandidate } from '../util/agent/materialFollowUp.js';
 import {
+  NoteBranchScopeError,
+  buildNoteBranchRetrievalCoverage,
+  resolveNoteBranchScopes,
+} from '../util/agent/noteBranchScope.js';
+import { resolveNoteDraftScopeMaterials } from '../util/agent/noteDraftScopeMaterials.js';
+import {
+  analyzeNoteBranches,
+  classifyNoteBranchAnalysisIntent,
+} from '../util/agent/noteBranchAnalysis.js';
+import {
+  assertNoteTreeFeature,
+  NOTE_TREE_FEATURE,
+  NoteTreeFeatureError,
+  noteTreeFeatureIdentity,
+  resolveNoteTreeFeatures,
+} from '../util/noteTreeFeatureFlags.js';
+import {
   classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
@@ -260,6 +277,9 @@ const PUBLIC_TOOL_ERROR_CODES = new Set([
   'INVALID_STATUS',
   'INVALID_TYPE',
   'NOT_FOUND',
+  'NOTE_TREE_DEPTH_EXCEEDED',
+  'NOTE_TREE_PARENT_INVALID',
+  'NOTE_TREE_PARENT_NOT_FOUND',
   'STORAGE_QUOTA_EXCEEDED',
   'TAG_DUPLICATE',
   'TAG_REQUIRED',
@@ -358,9 +378,15 @@ function missingRequiredParameterMessage(locale = 'zh-CN') {
 function publicToolErrorStatus(code, fallback = 400) {
   const normalized = String(code || '');
   if (['FOLDER_FORBIDDEN', 'TODO_ADMIN_CONTEXT_FORBIDDEN'].includes(normalized)) return 403;
-  if (['ATTACHMENT_NOT_FOUND', 'FOLDER_NOT_FOUND', 'TODO_NOT_FOUND'].includes(normalized)) return 404;
+  if (
+    ['ATTACHMENT_NOT_FOUND', 'FOLDER_NOT_FOUND', 'NOTE_TREE_PARENT_NOT_FOUND', 'TODO_NOT_FOUND'].includes(normalized)
+  ) {
+    return 404;
+  }
   if (
     [
+      'NOTE_TREE_DEPTH_EXCEEDED',
+      'NOTE_TREE_PARENT_INVALID',
       'TODO_KEYWORD_AMBIGUOUS',
       'TODO_SELECTION_REQUIRED',
       'TODO_STATUS_CONFLICT',
@@ -537,6 +563,30 @@ function confirmationContext(req, identity) {
   };
 }
 
+function assertToolConfirmationIdentity(confirmation, identity, req) {
+  if (
+    confirmation.resourceUserId !== identity.resourceUserId ||
+    confirmation.resourceUserRole !== identity.resourceUserRole
+  ) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '操作确认与当前资源账号不匹配。', 403);
+  }
+  if (confirmation.adminContextId) {
+    if (
+      req.adminContext?.id !== confirmation.adminContextId ||
+      req.adminContext?.mode !== 'maintain' ||
+      confirmation.adminMode !== 'maintain'
+    ) {
+      throw new ToolConfirmationError(
+        'TOOL_CONFIRMATION_FORBIDDEN',
+        '管理员内容代管上下文已变化，请重新发起操作。',
+        403,
+      );
+    }
+  } else if (req.adminContext) {
+    throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '普通会话确认不能在管理员上下文中执行。', 403);
+  }
+}
+
 function toolRuntimeContext(req, identity, extra = {}) {
   return {
     userId: identity.resourceUserId,
@@ -548,6 +598,22 @@ function toolRuntimeContext(req, identity, extra = {}) {
     allowVisitorMaintenance: req.adminContext?.mode === 'maintain' && identity.resourceUserRole === 'visitor',
     ...extra,
   };
+}
+
+function assertAgentNoteTargetDirectoryFeature(req, toolName, args) {
+  if (toolName !== 'create_note' || !String(args?.parentId || args?.parent_id || '').trim()) return;
+  try {
+    assertNoteTreeFeature(req, NOTE_TREE_FEATURE.WRITE);
+  } catch (error) {
+    if (error instanceof NoteTreeFeatureError) {
+      throw new AgentToolPolicyError(
+        'NOTE_TREE_FEATURE_DISABLED',
+        '当前账号暂未开放 AI 创建笔记到指定目录，请改为创建到“我的知识库”。',
+        404,
+      );
+    }
+    throw error;
+  }
 }
 
 async function createPendingWriteConfirmation({
@@ -563,6 +629,7 @@ async function createPendingWriteConfirmation({
   privateContext,
   originRequestId,
 }) {
+  assertAgentNoteTargetDirectoryFeature(req, toolName, args);
   const policy = await enforceToolPolicy({
     registry: toolRegistry,
     toolName,
@@ -944,6 +1011,13 @@ function noteDraftContextRefs(resolvedContexts) {
     .slice(0, 5);
 }
 
+function noteDraftScopeRefs(resolvedScopes) {
+  return (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs : [])
+    .map((item) => ({ type: String(item?.type || ''), id: String(item?.id || '') }))
+    .filter((item) => item.type === 'note_branch' && item.id)
+    .slice(0, 3);
+}
+
 function extractPastedNoteDraftText(message) {
   const text = String(message || '').trim();
   const fenced = text.match(/```(?:\w+)?\s*\n([\s\S]+?)\n```/);
@@ -1160,16 +1234,25 @@ const BROAD_PERSONAL_CONTENT_TOOLS = new Set([
   'query_todos',
 ]);
 
-function normalizeAgentContentScope(rawScope, resolvedContexts, message) {
-  const mode = rawScope?.mode === 'workspace' ? 'workspace' : 'selected';
+function normalizeAgentContentScope(rawScope, resolvedContexts, message, resolvedScopes = null) {
+  const branchResourceIds = Array.isArray(resolvedScopes?.resourceIds) ? resolvedScopes.resourceIds : [];
+  // 目录范围是比旧 scope.mode 更强的显式边界。客户端即使仍携带 workspace，
+  // 只要选了目录，服务端也必须强制 selected，绝不能在解析失败时退化成全库检索。
+  const mode = branchResourceIds.length ? 'selected' : rawScope?.mode === 'workspace' ? 'workspace' : 'selected';
   const entityRefs = Array.isArray(resolvedContexts?.scopeResourceIds)
     ? resolvedContexts.scopeResourceIds.map((item) => ({ type: String(item.type), id: String(item.id) }))
     : [];
-  const resourceIds = entityRefs.filter((item) => ['bookmark', 'note', 'file'].includes(item.type));
+  // 单篇材料仍由 resolveResourceContexts 直接注入；存在目录范围时，检索 allowlist 只取
+  // 服务端权威展开的目录页面，避免一个目录范围被其他普通材料意外放宽。
+  const resourceIds = branchResourceIds.length
+    ? branchResourceIds.map((item) => ({ type: 'note', id: String(item.id) }))
+    : entityRefs.filter((item) => ['bookmark', 'note', 'file'].includes(item.type));
   return {
     mode,
     entityRefs,
     resourceIds,
+    noteBranches: Array.isArray(resolvedScopes?.branches) ? resolvedScopes.branches : [],
+    scopeRefs: Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs : [],
     externalWeb: rawScope?.externalWeb === true,
     explicitUrlRead: hasExplicitWebUrl(message),
     allowedWebUrls: Array.isArray(resolvedContexts?.allowedWebUrls)
@@ -1182,12 +1265,13 @@ function normalizeAgentContentScope(rawScope, resolvedContexts, message) {
 }
 
 function applyAgentContentScope(toolName, args, contentScope) {
-  // 仅在 selected 模式且确有已选材料时,才把检索强制收窄到这些材料;未选任何材料时不收窄,
-  // 按全库检索(产品决策:空选择=检索整个知识空间,而非空 allowlist 过滤成零结果)。
+  // allowlist 只放在服务端运行时上下文中，由 search_content.execute 强制覆盖模型参数。
+  // 不把目录展开后的数百/数千 ID 回填进工具参数，避免进入模型消息、日志或客户端协议。
   if (toolName !== 'search_content' || contentScope?.mode !== 'selected' || !contentScope.resourceIds?.length) {
     return args;
   }
-  return { ...(args || {}), resourceIds: contentScope.resourceIds };
+  const { resourceIds: _modelSuppliedResourceIds, ...safeArgs } = args || {};
+  return safeArgs;
 }
 
 function buildAgentEvidenceBundle(rawSources, requestId) {
@@ -1552,6 +1636,10 @@ export async function agentChat(req, res) {
     materialFollowUpDecision: null,
     materialFollowUpMs: null,
     materialFollowUpError: null,
+    noteBranchAnalysisDecision: null,
+    noteBranchAnalysisIntentMs: null,
+    noteBranchAnalysisStatus: null,
+    noteBranchAnalysisErrors: [],
     usageStatus: 'missing',
     abortedStage: null,
     route: 'planner',
@@ -1576,6 +1664,7 @@ export async function agentChat(req, res) {
       aiStyle = '',
       history = [],
       contexts = [],
+      scopeRefs = [],
       attachmentIds = [],
       clientCapabilities = [],
       locale = '',
@@ -1602,6 +1691,14 @@ export async function agentChat(req, res) {
 
     // 资源归属(subject)与 AI 计费(actor)分离。普通请求二者相同；管理员上下文由鉴权层分别注入。
     const identity = getAgentIdentity(req);
+    const noteTreeFeatures = resolveNoteTreeFeatures(noteTreeFeatureIdentity(req));
+    if (Array.isArray(scopeRefs) && scopeRefs.length && !noteTreeFeatures.ai_note_branch_scope) {
+      throw new NoteBranchScopeError(
+        'AI_NOTE_BRANCH_SCOPE_DISABLED',
+        '当前账号暂未开放笔记目录范围，请移除该范围后重试。',
+        404,
+      );
+    }
     responseRecoveryIdentity = resolveAiResponseRecoveryIdentity(req);
     const userId = identity.resourceUserId;
     const userRole = identity.resourceUserRole;
@@ -1693,6 +1790,7 @@ export async function agentChat(req, res) {
     // 前端只携带当前有效草稿的候选引用，不解释用户句式。旧字段保留兼容已发布客户端；
     // 是否真要改写由额度门禁后的受约束语义分类决定，不能再用关键词正则做主路由。
     const requestContexts = contexts;
+    const requestScopeRefs = scopeRefs;
     const requestAttachmentIds = attachmentIds;
     const requestContextTypes = [
       ...(Array.isArray(requestContexts) ? requestContexts : [])
@@ -1818,6 +1916,9 @@ export async function agentChat(req, res) {
     // 语义确认是改写待确认草稿后，客户端本轮续带的引用必须完全退出解析链；这样无效、
     // 过期或被篡改的客户端材料既不能替换原材料，也不会在恢复权威私有引用前阻断请求。
     let effectiveRequestContexts = refinementRequested ? [] : requestContexts;
+    let effectiveRequestScopeRefs = refinementRequested
+      ? pendingNoteDraftPrivateContext?.scopeRefs || []
+      : requestScopeRefs;
     let effectiveRequestAttachmentIds = refinementRequested ? [] : requestAttachmentIds;
 
     // 材料续问兜底：前端指代/命令正则命中时会直接带真实材料（误判率实测 0，零成本通道）；
@@ -1825,7 +1926,11 @@ export async function agentChat(req, res) {
     // 决定是否沿用。候选只有 type+id，实际内容仍由 resolveResourceContexts 按归属解析；
     // 分类失败 fail-open 不继承（与旧行为一致）。
     const followUpCandidate =
-      !enableTranslation && !refinementRequested && !requestContexts.length && !requestAttachmentIds.length
+      !enableTranslation &&
+      !refinementRequested &&
+      !requestContexts.length &&
+      !requestScopeRefs.length &&
+      !requestAttachmentIds.length
         ? normalizeFollowUpMaterialCandidate(followUpMaterials)
         : null;
     if (followUpCandidate) {
@@ -1850,6 +1955,7 @@ export async function agentChat(req, res) {
         trace.materialFollowUpDecision = followUp.decision;
         if (followUp.decision === 'continue_with_materials') {
           effectiveRequestContexts = followUpCandidate.contextRefs;
+          effectiveRequestScopeRefs = followUpCandidate.scopeRefs;
           effectiveRequestAttachmentIds = followUpCandidate.attachmentIds;
         }
       } catch (error) {
@@ -1859,10 +1965,22 @@ export async function agentChat(req, res) {
       }
       trace.materialFollowUpMs = Date.now() - followUpStartedAt;
     }
-    const [resolvedContexts, resolvedAttachments] = enableTranslation
+    if (
+      Array.isArray(effectiveRequestScopeRefs) &&
+      effectiveRequestScopeRefs.length &&
+      !noteTreeFeatures.ai_note_branch_scope
+    ) {
+      throw new NoteBranchScopeError(
+        'AI_NOTE_BRANCH_SCOPE_DISABLED',
+        '当前账号暂未开放笔记目录范围，请移除该范围后重试。',
+        404,
+      );
+    }
+    const [resolvedContexts, resolvedAttachments, resolvedScopes] = enableTranslation
       ? [
           { text: '', sources: [] },
           { text: '', sources: [], coverage: { documents: [], overall: null } },
+          { refs: [], resourceIds: [], noteIds: [], branches: [] },
         ]
       : await raceWithSignal(
           Promise.all([
@@ -1872,10 +1990,178 @@ export async function agentChat(req, res) {
               sourceIds: effectiveRequestAttachmentIds,
               question: message,
             }),
+            resolveNoteBranchScopes({ userId, scopeRefs: effectiveRequestScopeRefs }),
           ]),
           agentAbortController.signal,
         );
-    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message);
+    const contentScope = normalizeAgentContentScope(scope, resolvedContexts, message, resolvedScopes);
+
+    // 整个目录分析与普通目录内问答是两条不同链路。只有高召回传感器命中且受约束
+    // 语义分类确认“覆盖全部页面”时，才进入同步 Map/Reduce；普通问答继续走 Top-N
+    // search_content。目录根、后代和正文都只取服务端 owner 校验后的数据。
+    let fullBranchAnalysisRequested = false;
+    if (!enableTranslation && resolvedScopes.branches.length && noteTreeFeatures.ai_note_branch_analysis) {
+      const intentStartedAt = Date.now();
+      try {
+        const intent = await classifyNoteBranchAnalysisIntent({
+          message,
+          branches: resolvedScopes.branches,
+          signal: agentAbortController.signal,
+          traceId: requestId,
+          onResponse(response) {
+            pendingDraftIntentCalls += 1;
+            apiCallsForLog = pendingDraftIntentCalls;
+            const usage = response?.usage || {};
+            totalUsage.promptTokens += Number(usage.promptTokens || 0);
+            totalUsage.completionTokens += Number(usage.completionTokens || 0);
+            totalUsage.totalTokens += Number(usage.totalTokens || 0);
+            pendingDraftIntentUsageReported =
+              pendingDraftIntentUsageReported && response?.usageStatus === 'reported';
+            trace.finishReason = response?.finishReason || trace.finishReason;
+          },
+        });
+        trace.noteBranchAnalysisDecision = intent.decision;
+        fullBranchAnalysisRequested = intent.decision === 'full_branch_analysis';
+      } catch (error) {
+        if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
+        // 分类失败时安全降级为普通范围检索，仍受目录 allowlist 约束；绝不把未枚举的目录
+        // 冒充成完整分析。
+        trace.noteBranchAnalysisDecision = 'classify_failed';
+        trace.noteBranchAnalysisErrors = [stableAgentErrorCode(error)];
+      }
+      trace.noteBranchAnalysisIntentMs = Date.now() - intentStartedAt;
+    }
+
+    if (fullBranchAnalysisRequested) {
+      trace.route = 'note_branch_analysis';
+      trace.taskType = 'note_branch_analysis';
+      trace.selectedTools = ['note_branch_analysis'];
+      memoryInfluence = buildAiMemoryNotUsedInfluence(
+        normalizeAiMemoryMode(memoryMode) === 'temporary' ? 'temporary_session' : 'disabled',
+      );
+      let modelCalls = pendingDraftIntentCalls;
+      let allUsageReported = pendingDraftIntentUsageReported;
+      const usedTools = [];
+      usedToolsForLog = usedTools;
+
+      if (stream) {
+        sseLifecycle = buildSseLifecycle(getSessionId(session));
+        sseLifecycle.start();
+        sendMemoryInfluence();
+        sseLifecycle.stage('planning', { route: trace.route });
+      }
+
+      const analysisStartedAt = Date.now();
+      const analysis = await analyzeNoteBranches({
+        userId,
+        resolvedScopes,
+        instruction: message,
+        locale,
+        signal: agentAbortController.signal,
+        traceId: requestId,
+        onStage(stage, payload) {
+          sseLifecycle?.stage(`note_branch_${stage}`, payload);
+        },
+        onResponse(response) {
+          modelCalls += 1;
+          apiCallsForLog = modelCalls;
+          const usage = response?.usage || {};
+          totalUsage.promptTokens += Number(usage.promptTokens || 0);
+          totalUsage.completionTokens += Number(usage.completionTokens || 0);
+          totalUsage.totalTokens += Number(usage.totalTokens || 0);
+          allUsageReported = allUsageReported && response?.usageStatus === 'reported';
+          trace.finishReason = response?.finishReason || trace.finishReason;
+        },
+      });
+      trace.finalMs = Date.now() - analysisStartedAt;
+      trace.usageStatus = allUsageReported ? 'reported' : 'missing';
+      trace.noteBranchAnalysisStatus = analysis.status;
+      trace.noteBranchAnalysisErrors = analysis.providerErrors || [];
+
+      const publicSources = analysis.sources || [];
+      const publicCoverage = {
+        documents: [],
+        overall: null,
+        noteBranches: analysis.coverage || [],
+      };
+      const entityRefs = buildAgentEntityRefs(publicSources);
+      const citationAudit = { citedKeys: [], invalidKeys: [], verifiedCitationCount: 0, evidenceCount: 0 };
+      usedTools.push({
+        name: 'note_branch_analysis',
+        status: analysis.status === 'complete' ? 'success' : analysis.status,
+        error: analysis.providerErrors?.[0],
+        dataSummary: `${publicSources.length}/${resolvedScopes.noteIds.length} pages`,
+        summary: '笔记目录 Map/Reduce 分析',
+        round: 1,
+      });
+
+      if (stream) {
+        sseLifecycle?.stage('preparing_answer', { route: trace.route });
+        if (analysis.answer) {
+          sseLifecycle?.send('delta', {
+            output: { text: analysis.answer, session_id: getSessionId(session) },
+          });
+        }
+        if (publicSources.length) {
+          sseLifecycle?.send('sources', {
+            sources: publicSources,
+            entityRefs,
+            evidence: [],
+            citationAudit,
+            coverage: publicCoverage,
+          });
+        }
+        sseLifecycle?.send('coverage', { coverage: publicCoverage });
+        responseGenerationFinished = true;
+        await sseLifecycle?.complete({
+          snapshotAnswer: analysis.answer,
+          answer: analysis.answer,
+          output: { session_id: getSessionId(session) },
+          usage: totalUsage,
+          usageStatus: trace.usageStatus,
+          followUpAvailable: false,
+          sources: publicSources,
+          entityRefs,
+          evidence: [],
+          coverage: publicCoverage,
+          citationAudit,
+        });
+      } else {
+        res.send(
+          resultData({
+            response: analysis.answer,
+            sessionId: getSessionId(session),
+            confirmations: [],
+            interactions: [],
+            sources: publicSources,
+            entityRefs,
+            evidence: [],
+            citationAudit,
+            coverage: publicCoverage,
+            usage: totalUsage,
+            requestId,
+            followUpAvailable: false,
+            memoryContext: memoryInfluence,
+          }),
+        );
+      }
+      if (!agentAbortController.signal.aborted) recordTurn(session, message, analysis.answer, usedTools);
+      logAgentRequest({
+        userId: logUserId,
+        userAlias: logUserAlias,
+        question: message,
+        toolsUsed: usedTools,
+        iterations: modelCalls,
+        totalUsage,
+        durationMs: Date.now() - requestStartedAt,
+        status: analysis.status === 'complete' ? 'success' : `note_branch_${analysis.status}`,
+        errorMsg: analysis.providerErrors?.[0] || '',
+        answer: analysis.answer,
+        trace: { ...trace, delivered: !clientDisconnected },
+      });
+      res.removeListener('close', onClientClose);
+      return;
+    }
 
     // 明确且单一的“材料 → 创建笔记”任务走统一草稿协议。材料可以是书签、笔记、文件、
     // 待办、混合引用或用户直接粘贴的文本；网页只在缺少快照时补读。旧草稿改写必须携带
@@ -2022,9 +2308,78 @@ export async function agentChat(req, res) {
         }
       }
 
+      let scopedDraftMaterials = {
+        materials: [],
+        entityRefs: [],
+        matchedPageCount: 0,
+        totalPages: Number(resolvedScopes?.noteIds?.length || 0),
+      };
       let materials = buildNoteDraftMaterials(effectiveContexts, effectiveAttachments, sourceMessage);
+      if (!routeResponse && resolvedScopes.refs.length) {
+        try {
+          scopedDraftMaterials = await raceWithSignal(
+            resolveNoteDraftScopeMaterials({
+              userId,
+              resolvedScopes,
+              query: [sourceMessage, message].filter(Boolean).join('\n'),
+            }),
+            agentAbortController.signal,
+          );
+          trace.noteDraftScopeMatchedPages = scopedDraftMaterials.matchedPageCount;
+          trace.noteDraftScopeTotalPages = scopedDraftMaterials.totalPages;
+          if (!scopedDraftMaterials.materials.length) {
+            routeStatus = 'material_read_failed';
+            routeError = 'NOTE_DRAFT_SCOPE_MATERIAL_UNAVAILABLE';
+            routeResponse = String(locale || '')
+              .toLowerCase()
+              .startsWith('en')
+              ? 'The selected directory did not return reliable matching note content. Try a more specific request, add readable materials, or use full directory analysis first. No note was created.'
+              : '所选目录没有检索到与当前要求匹配的可靠笔记正文。请把要求描述得更具体、补充可读材料，或先执行完整目录分析；本次没有创建笔记。';
+            usedTools.push({
+              name: 'search_content',
+              status: 'empty',
+              dataSummary: `0/${scopedDraftMaterials.totalPages} pages`,
+              summary: '目录范围内没有可靠匹配正文。',
+              round: 1,
+            });
+          } else {
+            // 目录材料优先进入有界草稿材料集合；generateNoteDraft 仍会执行统一总量上限。
+            materials = [...scopedDraftMaterials.materials, ...materials];
+            trace.selectedTools = ['search_content', 'create_note'];
+            usedTools.push({
+              name: 'search_content',
+              status: 'success',
+              dataSummary: `${scopedDraftMaterials.matchedPageCount}/${scopedDraftMaterials.totalPages} pages`,
+              summary: '已在所选目录范围内检索笔记材料。',
+              round: 1,
+            });
+          }
+        } catch (error) {
+          if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
+          routeStatus = 'material_read_failed';
+          routeError = 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED';
+          routeResponse = String(locale || '')
+            .toLowerCase()
+            .startsWith('en')
+            ? 'The selected directory could not be searched safely right now. No note was created; please try again later.'
+            : '当前无法安全检索所选目录。本次没有创建笔记，请稍后重试。';
+          usedTools.push({
+            name: 'search_content',
+            status: 'error',
+            error: 'NOTE_DRAFT_SCOPE_RETRIEVAL_FAILED',
+            dataSummary: '目录范围检索失败',
+            summary: '目录范围检索失败，未生成草稿。',
+            round: 1,
+          });
+        }
+      }
       if (!routeResponse) {
-        const effectiveContentScope = normalizeAgentContentScope(scope, effectiveContexts, sourceMessage);
+        const effectiveContentScope = normalizeAgentContentScope(
+          scope,
+          effectiveContexts,
+          sourceMessage,
+          resolvedScopes,
+        );
         const hydrated = await hydrateNoteDraftBookmarks({
           materials,
           entities: effectiveContexts.entities,
@@ -2037,7 +2392,13 @@ export async function agentChat(req, res) {
         });
         materials = hydrated.materials;
         usedTools.push(...hydrated.toolRecords);
-        if (hydrated.toolRecords.length) trace.selectedTools = ['read_url', 'create_note'];
+        if (hydrated.toolRecords.length) {
+          trace.selectedTools = [
+            ...(resolvedScopes.refs.length ? ['search_content'] : []),
+            'read_url',
+            'create_note',
+          ];
+        }
         if (hydrated.toolMs != null) trace.toolMs = hydrated.toolMs;
 
         const bookmarkCount = materials.filter((item) => item.type === 'bookmark').length;
@@ -2090,12 +2451,14 @@ export async function agentChat(req, res) {
         privateContext = createNoteDraftPrivateContext({
           sourceMessage,
           contextRefs: noteDraftContextRefs(effectiveContexts),
+          scopeRefs: noteDraftScopeRefs(resolvedScopes),
           attachmentIds: noteDraftAttachmentIds(effectiveAttachments),
         });
       }
       const entityRefs = buildAgentEntityRefs([
         ...(effectiveContexts.sources || []),
         ...noteDraftAttachmentEntitySources(effectiveAttachments),
+        ...scopedDraftMaterials.entityRefs,
       ]);
 
       if (!routeResponse) {
@@ -2122,10 +2485,18 @@ export async function agentChat(req, res) {
           });
           trace.finalMs = Date.now() - draftStartedAt;
           const createNoteTool = toolRegistry.get('create_note');
+          const draftParentId = String(
+            previousConfirmation?.args?.parentId ||
+              (resolvedScopes.branches.length === 1 ? resolvedScopes.branches[0]?.id : ''),
+          ).trim();
           confirmation = await createPendingWriteConfirmation({
             tool: createNoteTool,
             toolName: 'create_note',
-            args: { title: draft.title, content: draft.content },
+            args: {
+              title: draft.title,
+              content: draft.content,
+              ...(draftParentId ? { parentId: draftParentId } : {}),
+            },
             identity,
             req,
             session,
@@ -2308,12 +2679,17 @@ export async function agentChat(req, res) {
 
     const directRoute = decideDirectAgentRoute({
       message,
-      contextCount: Array.isArray(contexts) ? contexts.length : 0,
+      contextCount:
+        (Array.isArray(contexts) ? contexts.length : 0) +
+        (Array.isArray(resolvedScopes?.refs) ? resolvedScopes.refs.length : 0),
       attachmentCount: Array.isArray(attachmentIds) ? attachmentIds.length : 0,
       translation: enableTranslation,
     });
     const capabilityOverviewRequested =
-      !enableTranslation && !requestContextTypes.length && isAgentCapabilityOverviewRequest(message);
+      !enableTranslation &&
+      !requestContextTypes.length &&
+      !resolvedScopes.refs.length &&
+      isAgentCapabilityOverviewRequest(message);
     const deterministicInputClarification = enableTranslation
       ? ''
       : resolveAgentInputClarification({
@@ -2334,7 +2710,7 @@ export async function agentChat(req, res) {
         ? []
         : selectAgentTools(toolRegistry, {
             message,
-            contextTypes: requestContextTypes,
+            contextTypes: [...requestContextTypes, ...(resolvedScopes.refs.length ? ['note'] : [])],
             userRole,
             allowWrite: !req.adminContext || req.adminContext.mode === 'maintain',
             allowVisitorWrite: req.adminContext?.mode === 'maintain',
@@ -2345,6 +2721,12 @@ export async function agentChat(req, res) {
       if (contentScope.entityRefs.length && !contentScope.resourceIds.length) {
         selectedTools = selectedTools.filter((tool) => tool.name !== 'search_content');
       }
+    }
+    // 目录没有可直接注入 Prompt 的正文；只要目录范围有效，本轮必须保留受 allowlist
+    // 约束的 search_content，避免 Planner 因措辞宽泛而在无证据时直接概括。
+    if (contentScope.noteBranches.length && !selectedTools.some((tool) => tool.name === 'search_content')) {
+      const scopedSearchTool = toolRegistry.get('search_content');
+      if (scopedSearchTool) selectedTools.push(scopedSearchTool);
     }
     if (!contentScope.externalWeb && !contentScope.explicitUrlRead && !contentScope.allowedWebUrls.length) {
       selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
@@ -2362,8 +2744,12 @@ export async function agentChat(req, res) {
       semanticCatalog,
       semanticCatalogText: formatSemanticCapabilityCatalog(semanticCatalog),
     });
-    const scopePrompt =
-      contentScope.mode === 'selected'
+    const noteBranchScopePrompt = contentScope.noteBranches.length
+      ? `用户显式选择了 ${contentScope.noteBranches.length} 个笔记目录范围，共包含 ${contentScope.resourceIds.length} 个由服务端按当前页面树解析的页面。目录只定义检索范围，不代表全部页面正文已经读取；回答事实问题必须先调用 search_content，且只能使用返回的证据。除非进入完整目录分析流程并收到完整覆盖报告，否则不得声称已阅读或总结全部页面。`
+      : '';
+    const scopePrompt = noteBranchScopePrompt
+      ? noteBranchScopePrompt
+      : contentScope.mode === 'selected'
         ? `本轮个人内容读取被服务端严格限制在用户显式选择的 ${contentScope.entityRefs.length} 个实体内；不得尝试读取范围外的笔记、书签、文件或待办。`
         : '本轮允许检索当前用户的个人知识空间，但仍必须遵守资源归属与工具权限。';
     const webScopePrompt = contentScope.allowedWebUrls.length
@@ -2387,7 +2773,15 @@ export async function agentChat(req, res) {
       const sourceHint = source === 'auto' ? '' : `（源语言: ${TRANSLATION_LANGUAGE_NAMES[source]}）`;
       userMessage = `请将以下内容翻译成${targetName}${sourceHint}：\n\n${message}`;
     }
-    userMessage += resolvedContexts.text + resolvedAttachments.text;
+    const resolvedScopeText = resolvedScopes.refs.length
+      ? `\n\n以下是用户本轮显式选择、且已由服务端按当前页面树校验的笔记目录范围。目录只定义检索边界，不代表正文已全部读取：\n${resolvedScopes.refs
+          .map(
+            (item) =>
+              `[note_branch:${item.id}] ${item.title || '无标题笔记'} · ${Number(item.estimatedResourceCount || 0)} 个页面`,
+          )
+          .join('\n')}`
+      : '';
+    userMessage += resolvedContexts.text + resolvedAttachments.text + resolvedScopeText;
 
     // 构建 messages 数组:历史拼成真正的多轮 user/assistant 消息(而非塞进 system 的 JSON 块),模型才真有记忆。
     // 优先用前端带来的完整对话(显示=发送,一致);按字符预算截「最近」部分兜底防超长/超上下文窗口;
@@ -3635,10 +4029,14 @@ export async function agentChat(req, res) {
     // 避免模型漏写引用编号时“刚才第二个待办”失去目标。只返回安全 type/id/title，不返回工具原始数据。
     const entityRefs = buildAgentEntityRefs([...resolvedContexts.sources, ...publicSources, ...toolEntitySources]);
     // 覆盖报告与公开文档来源保持一致,否则会出现「来源 1 个,覆盖统计 2 份文件」。
-    const publicCoverage = selectDocumentCoverage(
+    const publicDocumentCoverage = selectDocumentCoverage(
       resolvedAttachments.coverage,
       publicSources.filter((source) => source.resourceType === 'document').map((source) => source.resourceId),
     );
+    const noteBranches = buildNoteBranchRetrievalCoverage(resolvedScopes, publicSources);
+    const publicCoverage = noteBranches.length
+      ? { ...publicDocumentCoverage, noteBranches }
+      : publicDocumentCoverage;
 
     // ---- 输出 ----
     if (stream) {
@@ -3655,7 +4053,7 @@ export async function agentChat(req, res) {
         });
       }
       if (publicEvidence.length) sseLifecycle?.send('citations', { evidence: publicEvidence, citationAudit });
-      if (publicCoverage?.documents?.length) {
+      if (publicCoverage?.documents?.length || publicCoverage?.noteBranches?.length) {
         sseLifecycle?.send('coverage', { coverage: publicCoverage });
       }
       // response.completed 是权威终态:显式携带公开来源,前端以替换(而非合并)落地,
@@ -3761,10 +4159,17 @@ export async function agentChat(req, res) {
   } catch (error) {
     const deadlineExceeded = agentAbortController.signal.reason?.code === 'AGENT_HARD_DEADLINE_EXCEEDED';
     if (!clientDisconnected) console.error('[Agent] request failed code=%s', stableAgentErrorCode(error));
+    const scopeError = error instanceof NoteBranchScopeError;
     const attachmentError =
       String(error?.code || '').startsWith('ATTACHMENT_') || error?.code === 'TOO_MANY_ATTACHMENTS';
     const safeErrorMessage = deadlineExceeded
       ? 'AI 处理超时，请稍后重试。'
+      : scopeError
+        ? String(req.body?.locale || '')
+            .toLowerCase()
+            .startsWith('en')
+          ? 'The selected note directory is unavailable, deleted, or no longer belongs to this account. Please select it again.'
+          : error.message
       : attachmentError
         ? String(error.message || '')
             .replace(/^[A-Z][A-Z0-9_]+:\s*/, '')
@@ -3806,7 +4211,7 @@ export async function agentChat(req, res) {
             ? 'CLIENT_DISCONNECTED'
             : deadlineExceeded
               ? 'AGENT_HARD_DEADLINE_EXCEEDED'
-              : attachmentError
+              : scopeError || attachmentError
                 ? error.code
                 : 'AI_SERVICE_ERROR',
           message: clientDisconnected ? '连接已中断，可尝试恢复本次请求状态。' : safeErrorMessage,
@@ -3815,7 +4220,8 @@ export async function agentChat(req, res) {
         /* ignore */
       }
     } else if (!res.headersSent) {
-      const status = attachmentError ? Number(error.status || 400) : deadlineExceeded ? 504 : 500;
+      const status =
+        scopeError || attachmentError ? Number(error.status || 400) : deadlineExceeded ? 504 : 500;
       res.status(status).send(resultData(null, status, safeErrorMessage));
     }
     res.removeListener('close', onClientClose);
@@ -4228,6 +4634,139 @@ export async function respondAgentInteraction(req, res) {
 }
 
 /**
+ * POST /api/chat/agent/confirm/note-directory
+ *
+ * 用户在 create_note 确认卡中调整目标目录。客户端只提交新 parentId；标题、正文、
+ * owner、会话和私有材料上下文全部从原确认令牌恢复。新目录会先经 create_note 的
+ * 权威预览校验，再以 Redis Lua 原子替换旧令牌，避免两张确认卡同时可执行。
+ */
+export async function replaceAgentNoteTargetDirectory(req, res) {
+  const requestStartedAt = Date.now();
+  const requestId = generateUUID();
+  let identity = null;
+  let previousConfirmation = null;
+  try {
+    identity = getAgentIdentity(req);
+    if (!Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId')) {
+      throw new AgentToolPolicyError('NOTE_PARENT_ID_REQUIRED', '请选择目标目录。', 400);
+    }
+    const rawParentId = req.body?.parentId;
+    if (rawParentId != null && typeof rawParentId !== 'string') {
+      throw new AgentToolPolicyError('NOTE_PARENT_ID_INVALID', '目标目录参数无效。', 400);
+    }
+    const parentId = String(rawParentId ?? '').trim();
+    if (parentId.length > 255) {
+      throw new AgentToolPolicyError('NOTE_PARENT_ID_INVALID', '目标目录参数无效。', 400);
+    }
+    assertAgentNoteTargetDirectoryFeature(req, 'create_note', { parentId });
+
+    const token = String(req.body?.confirmationToken || '');
+    const sessionId = String(req.body?.sessionId || '');
+    const attempt = await inspectToolConfirmationExecution(token, identity.ownerKey, sessionId);
+    if (attempt.state !== 'ready') {
+      throw new ToolConfirmationError(
+        'TOOL_CONFIRMATION_CONFLICT',
+        '原操作已经执行或正在处理，不能再修改目标目录。',
+        409,
+      );
+    }
+    previousConfirmation = attempt.confirmation;
+    assertToolConfirmationIdentity(previousConfirmation, identity, req);
+    if (previousConfirmation.toolName !== 'create_note') {
+      throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '当前确认卡不支持修改笔记目录。', 400);
+    }
+
+    const createNoteTool = toolRegistry.get('create_note');
+    const replacement = await createPendingWriteConfirmation({
+      tool: createNoteTool,
+      toolName: 'create_note',
+      args: {
+        title: String(previousConfirmation.args?.title || ''),
+        content: String(previousConfirmation.args?.content || ''),
+        ...(parentId ? { parentId } : {}),
+      },
+      identity,
+      req,
+      session: { id: sessionId },
+      replaceToken: token,
+      replaceConfirmationId: previousConfirmation.id,
+      privateContext: previousConfirmation.privateContext,
+      originRequestId: previousConfirmation.originRequestId || requestId,
+    });
+    await recordPendingActionBatchById({
+      ownerKey: identity.ownerKey,
+      sessionId,
+      batchId: requestId,
+      actions: [pendingActionRecord(replacement, {})],
+    });
+    await settleSessionAction({
+      ownerKey: identity.ownerKey,
+      sessionId,
+      confirmationId: previousConfirmation.id,
+      state: 'cancelled',
+      summary: '目标目录已更新。',
+    });
+
+    logAgentRequest({
+      userId: identity.billingUserId,
+      userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+      question: '',
+      toolsUsed: [{ name: 'create_note', status: 'confirmation_replaced' }],
+      iterations: 0,
+      totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      durationMs: Date.now() - requestStartedAt,
+      status: 'confirmation_pending',
+      trace: {
+        requestId,
+        taskType: 'agent_note_target_directory',
+        selectedTools: ['create_note'],
+        confirmationId: replacement.id,
+        delivered: true,
+      },
+    });
+    return res.send(
+      resultData({
+        previousConfirmationId: previousConfirmation.id,
+        confirmation: replacement,
+      }),
+    );
+  } catch (error) {
+    const known = error instanceof ToolConfirmationError || error instanceof AgentToolPolicyError;
+    const publicError = known ? null : publicToolError(error, '暂时无法更新目标目录，请稍后重试。');
+    const publicBusinessError = publicError && publicError.code !== 'TOOL_EXECUTION_FAILED';
+    const status = known ? error.status : publicBusinessError ? publicToolErrorStatus(publicError.code, 400) : 500;
+    const code = known
+      ? error.code
+      : publicBusinessError
+        ? publicError.code
+        : 'NOTE_TARGET_DIRECTORY_REPLACE_FAILED';
+    const message = known
+      ? error.message
+      : publicBusinessError
+        ? publicError.message
+        : '暂时无法更新目标目录，请稍后重试。';
+    if (!known && !publicBusinessError) {
+      console.error('[Agent] note target directory replacement failed code=%s', stableAgentErrorCode(error));
+    }
+    if (identity) {
+      logAgentRequest({
+        userId: identity.billingUserId,
+        userAlias: req.adminActor?.alias || identity.resourceUserAlias,
+        question: '',
+        toolsUsed: [{ name: 'create_note', status: 'error' }],
+        iterations: 0,
+        totalUsage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        durationMs: Date.now() - requestStartedAt,
+        status: 'error',
+        errorMsg: code,
+        trace: { requestId, taskType: 'agent_note_target_directory', selectedTools: ['create_note'] },
+      });
+    }
+    return res.status(status).send(resultData({ code }, status, message));
+  }
+}
+
+/**
  * POST /api/chat/agent/confirm
  * 原子认领一次性确认令牌后执行单个写工具。短期缓存确定结果，同一令牌重试只回放、不重复执行。
  */
@@ -4251,27 +4790,7 @@ export async function confirmAgentTool(req, res) {
     );
     confirmation = attempt.confirmation;
     toolName = confirmation.toolName;
-    if (
-      confirmation.resourceUserId !== identity.resourceUserId ||
-      confirmation.resourceUserRole !== identity.resourceUserRole
-    ) {
-      throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '操作确认与当前资源账号不匹配。', 403);
-    }
-    if (confirmation.adminContextId) {
-      if (
-        req.adminContext?.id !== confirmation.adminContextId ||
-        req.adminContext?.mode !== 'maintain' ||
-        confirmation.adminMode !== 'maintain'
-      ) {
-        throw new ToolConfirmationError(
-          'TOOL_CONFIRMATION_FORBIDDEN',
-          '管理员内容代管上下文已变化，请重新发起操作。',
-          403,
-        );
-      }
-    } else if (req.adminContext) {
-      throw new ToolConfirmationError('TOOL_CONFIRMATION_FORBIDDEN', '普通会话确认不能在管理员上下文中执行。', 403);
-    }
+    assertToolConfirmationIdentity(confirmation, identity, req);
 
     const tool = toolRegistry.get(confirmation.toolName);
     if (!tool?.isWrite) {
@@ -4280,6 +4799,7 @@ export async function confirmAgentTool(req, res) {
     if (confirmation.capabilityId && confirmation.capabilityId !== tool.capabilityId) {
       throw new ToolConfirmationError('TOOL_CONFIRMATION_INVALID', '确认令牌对应的能力已发生变化，请重新发起操作。');
     }
+    assertAgentNoteTargetDirectoryFeature(req, confirmation.toolName, confirmation.args || {});
     await enforceToolPolicy({
       registry: toolRegistry,
       toolName: confirmation.toolName,

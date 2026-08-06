@@ -276,6 +276,7 @@ request.interceptors.response.use(
           code: 'HTTP_429',
           message: msg,
           status: 429,
+          data: error.response.data?.data,
           retryAfter: Number(error.response.data?.data?.retryAfter || 0),
           requestId: error.response.headers?.['x-request-id'],
         });

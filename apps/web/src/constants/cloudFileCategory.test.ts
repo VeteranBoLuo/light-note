@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { getCloudPreviewType, isHtmlFile, isLegacyOfficeFile } from './cloudFileCategory';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  getCloudFileCategory,
+  getCloudMediaMimeType,
+  getCloudMediaPlaybackSupport,
+  getCloudPreviewType,
+  isHtmlFile,
+  isLegacyOfficeFile,
+} from './cloudFileCategory';
 
 describe('cloudFileCategory preview compatibility', () => {
   it.each([
@@ -42,5 +49,30 @@ describe('cloudFileCategory preview compatibility', () => {
     const file = { fileName: 'readme.txt', fileType: 'text/html', category: 'text' };
     expect(isHtmlFile(file)).toBe(false);
     expect(getCloudPreviewType(file)).toBe('text');
+  });
+
+  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini'])(
+    '源码或配置文件 .%s 可以进入文本预览',
+    (ext) => {
+      const file = { fileName: `source.${ext}`, fileType: 'application/octet-stream' };
+      expect(getCloudFileCategory(file)).toBe('text');
+      expect(getCloudPreviewType(file)).toBe('text');
+    },
+  );
+
+  it.each([
+    ['clip.mp4', 'video/mp4', 'video/mp4'],
+    ['clip.webm', 'application/octet-stream', 'video/webm'],
+    ['voice.m4a', 'application/octet-stream', 'audio/mp4'],
+    ['voice.opus', 'application/octet-stream', 'audio/ogg; codecs=opus'],
+  ])('为媒体文件 %s 解析浏览器能力检测所需 MIME', (fileName, fileType, expectedMime) => {
+    expect(getCloudMediaMimeType({ fileName, fileType })).toBe(expectedMime);
+  });
+
+  it('使用 canPlayType 区分浏览器可播放与仅可下载的格式', () => {
+    const supported = vi.fn((mimeType: string) => (mimeType === 'video/mp4' ? 'probably' : ''));
+    expect(getCloudMediaPlaybackSupport({ fileName: 'clip.mp4' }, supported)).toBe('supported');
+    expect(getCloudMediaPlaybackSupport({ fileName: 'legacy.avi' }, supported)).toBe('unsupported');
+    expect(getCloudMediaPlaybackSupport({ fileName: 'unknown.video' }, supported)).toBe('unknown');
   });
 });

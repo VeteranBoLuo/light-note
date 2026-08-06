@@ -5,10 +5,39 @@
         <SvgIcon :src="stateIcon(overallState)" size="15" />
       </span>
       <div class="ai-coverage__heading-copy">
-        <strong>{{ copy.title }}</strong>
+        <strong>{{ coverageTitle }}</strong>
         <small>{{ overallSummary }}</small>
       </div>
-      <span :class="['ai-coverage__state', `is-${overallState}`]">{{ stateLabel(overallState) }}</span>
+      <span :class="['ai-coverage__state', `is-${overallState}`]">{{ overallStateLabel }}</span>
+    </div>
+
+    <div v-if="noteBranches.length" class="ai-coverage__branches">
+      <BCard
+        v-for="branch in noteBranches"
+        :key="branch.rootId"
+        as="article"
+        variant="panel"
+        padding="10px"
+        radius="10px"
+        class="ai-coverage__branch"
+      >
+        <div class="ai-coverage__branch-heading">
+          <span class="ai-coverage__branch-icon" aria-hidden="true">
+            <SvgIcon :src="icon.noteTree.root" size="14" />
+          </span>
+          <strong :title="branch.title">{{ branch.title }}</strong>
+          <span class="ai-coverage__branch-mode">
+            {{ branch.mode === 'analysis' ? copy.directoryAnalysis : copy.directoryRetrieval }}
+          </span>
+        </div>
+        <p class="ai-coverage__branch-counts">{{ branchSummary(branch) }}</p>
+        <p v-if="branch.mode === 'retrieval'" class="ai-coverage__branch-hint">
+          {{ copy.directoryRetrievalHint }}
+        </p>
+        <p v-else-if="branch.limited" class="ai-coverage__branch-hint is-warning">
+          {{ branch.limitationMessage || copy.directoryLimitedHint }}
+        </p>
+      </BCard>
     </div>
 
     <div class="ai-coverage__documents">
@@ -80,6 +109,7 @@
     type AiCoverageOverall,
     type AiCoverageReport,
     type AiCoverageSelection,
+    type AiNoteBranchCoverage,
     type AiCoverageState,
     type AiSource,
     type AiSourceCoverage,
@@ -112,6 +142,15 @@
     rangeChunk: string;
     rangeParagraph: string;
     reasonSeparator: string;
+    directoryTitle: string;
+    combinedTitle: string;
+    directoryRetrieval: string;
+    directoryAnalysis: string;
+    directorySummary: string;
+    directoryRetrievalSummary: string;
+    directoryAnalysisSummary: string;
+    directoryRetrievalHint: string;
+    directoryLimitedHint: string;
   }
 
   interface DisplayLimitation {
@@ -172,6 +211,26 @@
     rangeChunk: t('ai.coverage.rangeUnits.chunk'),
     rangeParagraph: t('ai.coverage.rangeUnits.paragraph'),
     reasonSeparator: t('ai.coverage.reasonSeparator'),
+    directoryTitle: t('ai.coverage.directory.title'),
+    combinedTitle: t('ai.coverage.combinedTitle'),
+    directoryRetrieval: t('ai.coverage.directory.retrieval'),
+    directoryAnalysis: t('ai.coverage.directory.analysis'),
+    directorySummary: t('ai.coverage.directory.summary', {
+      count: '{count}',
+      pages: '{pages}',
+      matched: '{matched}',
+    }),
+    directoryRetrievalSummary: t('ai.coverage.directory.retrievalSummary', {
+      total: '{total}',
+      matched: '{matched}',
+    }),
+    directoryAnalysisSummary: t('ai.coverage.directory.analysisSummary', {
+      analyzed: '{analyzed}',
+      total: '{total}',
+      unread: '{unread}',
+    }),
+    directoryRetrievalHint: t('ai.coverage.directory.retrievalHint'),
+    directoryLimitedHint: t('ai.coverage.directory.limitedHint'),
     ...props.labels,
   }));
 
@@ -250,11 +309,15 @@
   });
 
   const reportedOverall = computed<AiCoverageOverall | null>(() => props.coverage?.overall || null);
+  const noteBranches = computed<AiNoteBranchCoverage[]>(() => props.coverage?.noteBranches || []);
   const overallLimitations = computed(() => reportedOverall.value?.limitations || []);
   const overallState = computed<AiCoverageState>(() => {
     const documentStates = documents.value.map((document) => document.state);
     if (documentStates.length && documentStates.every((state) => state === 'failed')) return 'failed';
     if (reportedOverall.value) return resolveAiCoverageState(reportedOverall.value);
+    if (!documentStates.length && noteBranches.value.length) {
+      return noteBranches.value.every((branch) => branch.completeAnalysis && !branch.limited) ? 'complete' : 'partial';
+    }
     if (!documentStates.length || documentStates.includes('unknown')) return 'unknown';
     return documentStates.every((state) => state === 'complete') ? 'complete' : 'partial';
   });
@@ -263,8 +326,34 @@
     const ratios = documents.value.map((document) => document.ratio);
     return ratios.length && ratios.every((ratio) => ratio != null) ? Math.min(...(ratios as number[])) : null;
   });
-  const hasCoverage = computed(() => Boolean(reportedOverall.value || documents.value.length));
+  const hasCoverage = computed(() => Boolean(reportedOverall.value || documents.value.length || noteBranches.value.length));
+  const coverageTitle = computed(() => {
+    if (noteBranches.value.length && documents.value.length) return copy.value.combinedTitle;
+    if (noteBranches.value.length) return copy.value.directoryTitle;
+    return copy.value.title;
+  });
+  const onlyRetrievalBranches = computed(
+    () =>
+      noteBranches.value.length > 0 &&
+      !documents.value.length &&
+      noteBranches.value.every((branch) => branch.mode === 'retrieval'),
+  );
+  const overallStateLabel = computed(() =>
+    onlyRetrievalBranches.value ? copy.value.directoryRetrieval : stateLabel(overallState.value),
+  );
   const overallSummary = computed(() => {
+    if (noteBranches.value.length && !documents.value.length) {
+      const totalPages = noteBranches.value.reduce((sum, branch) => sum + Math.max(0, Number(branch.totalPages || 0)), 0);
+      const matchedPages = noteBranches.value.reduce(
+        (sum, branch) => sum + Math.max(0, Number(branch.matchedPages ?? branch.analyzedPages ?? 0)),
+        0,
+      );
+      return interpolate(copy.value.directorySummary, {
+        count: noteBranches.value.length,
+        pages: totalPages,
+        matched: matchedPages,
+      });
+    }
     const count = documents.value.length || Number(reportedOverall.value?.documentCount || 0);
     const ratio = overallRatio.value;
     const ratioText = ratio == null ? copy.value.unknown : percent(ratio);
@@ -279,6 +368,22 @@
       .filter(Boolean)
       .join(' · ');
   });
+
+  function branchSummary(branch: AiNoteBranchCoverage) {
+    const total = Math.max(0, Number(branch.totalPages || 0));
+    if (branch.mode === 'retrieval') {
+      return interpolate(copy.value.directoryRetrievalSummary, {
+        matched: Math.max(0, Number(branch.matchedPages || 0)),
+        total,
+      });
+    }
+    const analyzed = Math.max(0, Number(branch.analyzedPages || 0));
+    return interpolate(copy.value.directoryAnalysisSummary, {
+      analyzed,
+      total,
+      unread: Math.max(0, Number(branch.unreadPages ?? total - analyzed)),
+    });
+  }
 
   function percent(ratio: number) {
     return new Intl.NumberFormat(locale.value, { style: 'percent', maximumFractionDigits: 1 }).format(
@@ -440,6 +545,67 @@
     gap: 7px;
   }
 
+  .ai-coverage__branches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+    gap: 7px;
+  }
+
+  .ai-coverage__branch {
+    --b-card-border-color: var(--resource-note-color);
+    --b-card-background: color-mix(in srgb, var(--resource-note-color) 5%, var(--workspace-panel-bg-color));
+    border-color: var(--resource-note-color);
+  }
+
+  .ai-coverage__branch-heading {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .ai-coverage__branch-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--resource-note-color);
+  }
+
+  .ai-coverage__branch-heading > strong {
+    min-width: 0;
+    overflow: hidden;
+    flex: 1;
+    color: var(--text-color);
+    font-size: 11px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ai-coverage__branch-mode {
+    flex: 0 0 auto;
+    color: var(--resource-note-color);
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  .ai-coverage__branch-counts,
+  .ai-coverage__branch-hint {
+    margin: 7px 0 0;
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .ai-coverage__branch-hint {
+    padding-top: 6px;
+    border-top: 1px solid var(--surface-divider-color);
+  }
+
+  .ai-coverage__branch-hint.is-warning {
+    color: var(--message-warning-color);
+    font-weight: 600;
+  }
+
   .ai-coverage__document {
     --b-card-border-color: color-mix(in srgb, var(--coverage-accent) 22%, var(--surface-border-color));
     --b-card-background: color-mix(in srgb, var(--coverage-accent) 4%, var(--workspace-panel-bg-color));
@@ -547,7 +713,8 @@
   }
 
   @media (max-width: 768px) {
-    .ai-coverage__documents {
+    .ai-coverage__documents,
+    .ai-coverage__branches {
       grid-template-columns: 1fr;
     }
 

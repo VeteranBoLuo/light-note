@@ -363,7 +363,24 @@
   );
   // markdown 笔记放大预览右侧的渲染结果(复用 AI 流式 markdown 渲染:补全未闭合标记 + 高亮 + 净化)
   const previewRenderedHtml = computed(() => renderStreamingMarkdown(previewTyped.value || ''));
-  const SNAPSHOT_HTML_TAGS = ['p', 'br', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'ul', 'ol', 'li', 'blockquote', 'code', 'pre'];
+  const SNAPSHOT_HTML_TAGS = [
+    'p',
+    'br',
+    'h1',
+    'h2',
+    'h3',
+    'h4',
+    'h5',
+    'h6',
+    'strong',
+    'em',
+    'ul',
+    'ol',
+    'li',
+    'blockquote',
+    'code',
+    'pre',
+  ];
   // 放大预览左栏「原文」= 笔记当前内容(改动前),同样渲染后展示:md 走流式 md 渲染,html 直接净化;
   // 与右栏「AI 生成」形成改动前后对比,让用户看清 AI 到底改了什么再决定替换。
   const originRenderedHtml = computed(() => {
@@ -374,7 +391,9 @@
       : DOMPurify.sanitize(raw, { ALLOWED_TAGS: SNAPSHOT_HTML_TAGS, ALLOWED_ATTR: [] });
   });
   // 右栏「AI 生成」渲染结果:md 用流式 md 渲染,html 用净化后的片段
-  const generatedRenderedHtml = computed(() => (isMarkdownNote.value ? previewRenderedHtml.value : safePreviewTyped.value));
+  const generatedRenderedHtml = computed(() =>
+    isMarkdownNote.value ? previewRenderedHtml.value : safePreviewTyped.value,
+  );
   const previewSource = ref('');
   let previewTypingTimer: number | null = null;
   const stopPreviewTyping = () => {
@@ -574,6 +593,12 @@
           stream: true,
           sessionId: sessionId.value,
           responseFormat: expectedFormat,
+          requestMetadata: {
+            operation: mode === 'followup' ? 'followup' : action,
+            scope: mode === 'followup' ? 'generated' : 'full',
+            instruction: mode === 'followup' ? followupReq : prompt.value.trim(),
+            contentChars: String(mode === 'followup' ? baseContent || '' : note?.content || '').length,
+          },
         },
         {
           headers: {

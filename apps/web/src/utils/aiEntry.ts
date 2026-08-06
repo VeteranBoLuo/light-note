@@ -1,5 +1,6 @@
 import type { AiAttachment } from '@/api/aiAttachmentApi';
 import type { GlobalSearchType } from '@/api/search';
+import type { AiScopeRef } from '@/types/aiScope';
 
 export const AI_ASSISTANT_OPEN_EVENT = 'light-note:open-ai';
 export const AI_ASSISTANT_VISIBILITY_EVENT = 'light-note:ai-visibility';
@@ -23,12 +24,41 @@ export interface AiAssistantContextRef {
 
 export interface AiAssistantLaunchPayload {
   contextRefs?: AiAssistantContextRef[];
+  scopeRefs?: AiScopeRef[];
   attachmentRefs?: AiAttachment[];
   suggestedIntent?: AiAssistantIntent;
   /** 仅用于无正文产品漏斗，不参与权限或材料范围判断。 */
   surface?: 'note_detail' | 'note_library' | 'search' | 'bookmark_manage' | 'cloud_space' | 'tag_detail' | 'workspace';
   /** 只用于继承全局搜索关键词，不允许据此绕开材料范围或直接执行写操作。 */
   query?: string;
+}
+
+function normalizedScopes(value: unknown): AiScopeRef[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  return value
+    .filter(
+      (item): item is AiScopeRef =>
+        Boolean(item) &&
+        typeof item === 'object' &&
+        String((item as AiScopeRef).type) === 'note_branch' &&
+        Boolean(String((item as AiScopeRef).id || '').trim()),
+    )
+    .filter((item) => {
+      const key = `${item.type}:${String(item.id)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 3)
+    .map((item) => ({
+      type: 'note_branch',
+      id: String(item.id),
+      title: String(item.title || '').slice(0, 255),
+      ...(Number.isFinite(Number(item.estimatedResourceCount))
+        ? { estimatedResourceCount: Math.max(1, Number(item.estimatedResourceCount)) }
+        : {}),
+    }));
 }
 
 /**
@@ -88,6 +118,7 @@ export function normalizeAiAssistantLaunchPayload(value: unknown): AiAssistantLa
     : undefined;
   return {
     contextRefs: normalizedContexts(raw.contextRefs),
+    scopeRefs: normalizedScopes(raw.scopeRefs),
     attachmentRefs: normalizedAttachments(raw.attachmentRefs),
     suggestedIntent: intent,
     surface: [

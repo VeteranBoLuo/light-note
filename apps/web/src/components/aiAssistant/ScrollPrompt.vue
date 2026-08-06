@@ -36,16 +36,16 @@
     height: 0;
     min-height: 0;
     flex: 0 0 0;
-    align-self: center;
+    align-self: flex-end;
+    margin-right: 12px;
     pointer-events: none;
     animation: slideInUp 0.3s ease;
   }
 
   .prompt-icon {
     position: absolute;
-    bottom: 8px;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 12px;
+    right: 0;
     width: 36px;
     min-width: 36px;
     height: 36px;

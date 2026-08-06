@@ -73,7 +73,9 @@ describe('ScrollPrompt', () => {
     expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?flex:\s*0 0 0;/);
     expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?pointer-events:\s*none;/);
     expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?position:\s*absolute;/);
-    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?bottom:\s*8px;/);
+    expect(scrollPromptSource).toMatch(/\.scroll-prompt\s*\{[\s\S]*?align-self:\s*flex-end;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?bottom:\s*12px;/);
+    expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?right:\s*0;/);
     expect(scrollPromptSource).toMatch(/\.prompt-icon\s*\{[\s\S]*?pointer-events:\s*auto;/);
     expect(scrollPromptSource).not.toMatch(/\.scroll-prompt\s*\{[\s\S]*?z-index:/);
     expect(chatContainerSource).toMatch(/<\/main>\s*[\s\S]*?<ScrollPrompt/);

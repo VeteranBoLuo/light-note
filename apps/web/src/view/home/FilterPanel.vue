@@ -30,31 +30,45 @@
               </b-tooltip>
             </template>
           </b-input>
-          <BButton
-            v-if="bookmark.isMobile"
-            class="filter-all-entry"
-            :class="{ active: bookmark.type === 'all' }"
-            @click="handleViewAll"
-          >
-            <svg-icon size="18" :src="icon.resource.bookmark" />
-            <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
-            <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
-          </BButton>
           <div v-if="bookmark.isMobile" class="mobile-empty-tag-toggle">
             <span>{{ $t('home.hideEmptyTags') }}</span>
             <BSwitch v-model:checked="hideEmptyTags" />
           </div>
+          <BButton
+            v-if="bookmark.isMobile"
+            class="filter-all-entry"
+            :class="{ active: bookmark.type === 'all' }"
+            :aria-current="bookmark.type === 'all' ? 'true' : undefined"
+            @click="handleViewAll"
+          >
+            <svg-icon size="18" :src="icon.resource.bookmark" />
+            <span class="filter-all-label">{{ $t('home.allBookmarks') }}</span>
+            <SvgIcon
+              v-if="bookmark.type === 'all'"
+              class="tag-item-check"
+              :src="icon.filterPanel.check"
+              size="16"
+              aria-hidden="true"
+            />
+            <span class="filter-all-count">{{ user.bookmarkTotal || bookmark.bookmarkList.length }}</span>
+          </BButton>
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
-        <RightMenu
-          :menu="tagContextMenu"
-          @select="handleTagMenu($event, item)"
+        <BActionMenu
           v-if="!item.isRename"
+          class="bookmark-tag-action-menu"
+          :items="tagContextMenu"
+          :triggers="tagMenuTriggers"
+          placement="right-start"
+          :disabled="!bookmark.isDesktop || isTagDragging"
+          @select="(action, source) => handleTagMenu(action, item, source)"
         >
           <div
             class="category-item"
+            :class="{ 'is-current': String((bookmark.tagData as any)?.id || '') === String(item.id) }"
             :title="item.name"
+            :aria-current="String((bookmark.tagData as any)?.id || '') === String(item.id) ? 'true' : undefined"
             :style="{
               backgroundColor: (bookmark.tagData as any)?.id === item.id ? 'var(--category-item-ba-color)' : '',
             }"
@@ -68,9 +82,16 @@
               class="tag-item-icon"
             />
             <span class="text-hidden tag-item-name">{{ item.name }}</span>
+            <SvgIcon
+              v-if="bookmark.isMobile && String((bookmark.tagData as any)?.id || '') === String(item.id)"
+              class="tag-item-check"
+              :src="icon.filterPanel.check"
+              size="16"
+              aria-hidden="true"
+            />
             <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
-        </RightMenu>
+        </BActionMenu>
         <b-input v-else class="edit-input" v-model:value="newName" @keydown.esc="cancelRename(<TagInterface>item)">
           <template #suffix>
             <svg-icon
@@ -117,7 +138,12 @@
   import { updatePreference } from '@/utils/savePreference';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useRouter } from 'vue-router';
-  import RightMenu from '@/components/base/RightMenu.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type {
+    BActionMenuItem,
+    BActionMenuSource,
+    BActionMenuTrigger,
+  } from '@/components/base/BasicComponents/actionMenu';
   import { TagInterface } from '@/config/bookmarkCfg.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -139,6 +165,7 @@
     });
   });
   const visibleDragTagList = ref<TagInterface[]>([]);
+  const isTagDragging = ref(false);
   const tagDraggable = computed(
     () => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1,
   );
@@ -147,7 +174,8 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
-  const tagContextMenu = computed(() => [
+  const tagMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
+  const tagContextMenu = computed<BActionMenuItem[]>(() => [
     { key: 'addBookmark', label: t('home.menuAddBookmark'), icon: icon.manage_categoryBtn_bookmark },
     { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
     { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
@@ -163,9 +191,18 @@
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
 
-  function handleTagMenu(action: string, tag: TagInterface) {
+  function handleTagMenu(action: string, tag: TagInterface, source: BActionMenuSource = 'contextmenu') {
     const actionLabel = tagContextMenu.value.find((item: any) => item.key === action)?.label || action;
-    recordOperation({ module: '首页', operation: `右键${actionLabel}标签【${tag.name}】` });
+    const sourceLabel: Record<BActionMenuSource, string> = {
+      hover: '悬浮菜单',
+      contextmenu: '右键菜单',
+      click: '点击菜单',
+      keyboard: '键盘菜单',
+    };
+    recordOperation({
+      module: '首页',
+      operation: `${sourceLabel[source]}${actionLabel}标签【${tag.name}】`,
+    });
     rightTagData.value = tag;
     const actions = {
       rename: () => {
@@ -245,6 +282,7 @@
     bookmark.refreshData();
   }
   function onStart() {
+    isTagDragging.value = true;
     document.body.style.userSelect = 'none';
   }
 
@@ -290,6 +328,7 @@
   }
 
   async function onDragEnd(event?: { oldIndex?: number; newIndex?: number }) {
+    isTagDragging.value = false;
     document.body.style.userSelect = '';
     const sourceTags = [...bookmark.tagList];
     try {
@@ -406,16 +445,19 @@
   }
 
   .filter-all-entry {
-    height: 42px;
+    min-height: 52px;
     justify-content: flex-start;
     gap: 9px;
     padding: 0 10px;
+    border: 1px solid transparent;
     color: var(--text-color);
     background: transparent;
 
     &.active {
+      border-color: var(--resource-bookmark-color, #615ced);
       color: var(--resource-bookmark-color, #615ced);
-      background: color-mix(in srgb, var(--resource-bookmark-color, #615ced) 10%, transparent);
+      background: var(--mobile-selected-bg);
+      font-weight: 650;
     }
   }
 
@@ -430,17 +472,29 @@
 
   .filter-all-count,
   .tag-item-count {
-    margin-left: auto;
+    width: 34px;
+    flex: 0 0 34px;
     color: var(--desc-color);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .filter-all-label,
+  .tag-item-name {
+    margin-right: auto;
+  }
+
+  .tag-item-check {
+    flex: 0 0 auto;
+    color: var(--resource-bookmark-color, #615ced);
   }
 
   .mobile-empty-tag-toggle {
-    min-height: 36px;
+    min-height: 44px;
     justify-content: space-between;
     padding: 0 10px;
-    border-top: 1px solid color-mix(in srgb, var(--card-border-color) 58%, transparent);
+    border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
     font-size: 12px;
   }
@@ -448,6 +502,15 @@
   .tag-item-name {
     min-width: 0;
     flex: 1;
+  }
+
+  .bookmark-tag-action-menu {
+    display: block;
+    width: 100%;
+  }
+
+  .bookmark-tag-action-menu.is-menu-open .category-item {
+    background-color: var(--category-item-ba-color);
   }
 
   .tag-skeleton-wrap {
@@ -532,14 +595,31 @@
       width: 100%;
     }
 
+    .filter-tools {
+      position: sticky;
+      z-index: 2;
+      top: 0;
+      padding-bottom: 4px;
+      background: var(--card-background);
+    }
+
     .category-item {
       width: 100%;
-      min-height: 44px;
-      margin: 2px 0;
-      padding: 7px 10px;
+      min-height: 54px;
+      margin: 0;
+      padding: 8px 10px;
+      border-left: 3px solid transparent;
+      border-radius: 8px;
 
       &:hover {
         background-color: unset;
+      }
+
+      &.is-current {
+        border-left-color: var(--resource-bookmark-color, #615ced);
+        color: var(--resource-bookmark-color, #615ced);
+        background: var(--mobile-selected-bg) !important;
+        font-weight: 650;
       }
     }
 

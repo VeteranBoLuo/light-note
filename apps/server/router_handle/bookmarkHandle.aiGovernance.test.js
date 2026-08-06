@@ -60,7 +60,7 @@ vi.mock('../util/bookmarkUrl.js', () => ({
 }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache: vi.fn() }));
 
-const { doOrganizeRun, doSummarizeBookmark } = await import('./bookmarkHandle.js');
+const { doOrganizeQuote, doOrganizeRun, doSummarizeBookmark } = await import('./bookmarkHandle.js');
 
 function response() {
   return {
@@ -156,6 +156,70 @@ describe('bookmark AI entry governance', () => {
     expect(res.payload).toMatchObject({
       status: 429,
       data: { code: 'AI_QUOTA_EXCEEDED', processed: 1, suggestions: [expect.objectContaining({ id: 'note-1' })] },
+    });
+  });
+
+  it('所选笔记预估只查询当前用户并在进入 IN 前去重、清洗和限批', async () => {
+    const expectedIds = Array.from({ length: 20 }, (_, index) => `note-${index + 1}`);
+    const requestedIds = [
+      ' note-1 ',
+      'note-1',
+      '',
+      null,
+      ...Array.from({ length: 24 }, (_, index) => `note-${index + 2}`),
+    ];
+    mocks.poolQuery.mockResolvedValueOnce([[{ id: 'note-1' }, { id: 'note-20' }]]);
+    const req = {
+      body: { resourceType: 'note', scope: 'selected', ids: requestedIds },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeQuote(req, res);
+
+    expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
+    expect(mocks.poolQuery).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE create_by = ? AND del_flag = 0 AND id IN (?)'),
+      ['user-1', expectedIds],
+    );
+    expect(res.payload).toMatchObject({
+      status: 200,
+      data: {
+        scope: 'selected',
+        candidateTotal: 2,
+        batchCap: 2,
+        batchIds: ['note-1', 'note-20'],
+        requestIds: expectedIds,
+        requestedTotal: 25,
+        requestTruncated: true,
+      },
+    });
+  });
+
+  it('空的所选范围返回空结果，不会退化成全库未打标签查询', async () => {
+    const req = {
+      body: { resourceType: 'note', scope: 'selected', ids: [] },
+      user: { id: 'user-1', role: 'user' },
+      billingUser: { id: 'user-1', role: 'user' },
+    };
+    const res = response();
+
+    await doOrganizeQuote(req, res);
+
+    expect(mocks.poolQuery).not.toHaveBeenCalled();
+    expect(res.payload).toMatchObject({
+      status: 200,
+      data: {
+        scope: 'selected',
+        candidateTotal: 0,
+        batchCap: 0,
+        batchIds: [],
+        requestIds: [],
+        requestedTotal: 0,
+        requestTruncated: false,
+        canRun: false,
+      },
     });
   });
 });

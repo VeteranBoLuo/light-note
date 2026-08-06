@@ -163,9 +163,13 @@
   );
   const hasOverflow = computed(() => shouldCollapseAiSources(uniqueSources.value.length));
   // 文档覆盖降级为"仅警告":只在确有材料未被完整读取(截断/不完整)时展示,提示可信度;
-  // 普通问答或材料已完整覆盖时不再显示"0 份文件·0%"这类噪音。证据账本已下线。
+  // 普通问答或材料已完整覆盖时不再显示"0 份文件·0%"这类噪音。目录范围是独立的
+  // 可信边界，必须始终披露“检索命中”不等于“逐页完整分析”。证据账本已下线。
   const hasCoverageDetails = computed(() =>
-    props.sources.some((source) => source.coverage?.truncated || source.coverage?.complete === false),
+    Boolean(
+      props.coverage?.noteBranches?.length ||
+        props.sources.some((source) => source.coverage?.truncated || source.coverage?.complete === false),
+    ),
   );
   const typeLabel = (type: AiSource['type']) => t(`ai.sourceTypes.${type}`);
   const sourceIcon = (type: AiSource['type']) => {

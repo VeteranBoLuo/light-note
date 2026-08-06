@@ -335,6 +335,11 @@ describe('noteDraft', () => {
         { type: 'bookmark', id: 'b1' },
         { type: 'unknown', id: 'x1' },
       ],
+      scopeRefs: [
+        { type: 'note_branch', id: 'branch-1', title: '客户端标题不可信' },
+        { type: 'note_branch', id: 'branch-1' },
+        { type: 'note', id: 'n1' },
+      ],
       attachmentIds: ['file-source-1', 'file-source-1', ''],
     });
 
@@ -346,6 +351,7 @@ describe('noteDraft', () => {
         { type: 'bookmark', id: 'b1' },
         { type: 'note', id: 'n1' },
       ],
+      scopeRefs: [{ type: 'note_branch', id: 'branch-1' }],
       attachmentIds: ['file-source-1'],
     });
     expect(normalizeNoteDraftPrivateContext(context)).toEqual(context);

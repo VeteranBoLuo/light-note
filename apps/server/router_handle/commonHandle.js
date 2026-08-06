@@ -150,9 +150,65 @@ export const getConversionFunnel = async (req, res) => {
        ) p`,
       timeParams,
     );
+    // 完整路径是诊断指标，不能代替各事件的真实总人数。例如已有 4 人注册，
+    // 其中只有 2 人在本时间窗内被完整记录了四步，主卡仍应显示 4，另外标注完整路径 2。
+    const timeFor = (alias) =>
+      timeCond.length
+        ? ' AND ' +
+          timeCond.map((condition) => condition.replaceAll('create_time', `${alias}.create_time`)).join(' AND ')
+        : '';
+    // 通过有序自连接寻找「后于上一阶段」的任意有效事件；这样即使访客在本期
+    // 早先打开过注册、后来重新访问并完成注册，也不会因「各事件最早时间」而被误删。
+    const [orderedRows] = await pool.query(
+      `SELECT
+         COUNT(DISTINCT p.fingerprint) AS pageView,
+         COUNT(DISTINCT s.fingerprint) AS signupOpen,
+         COUNT(DISTINCT submit_event.fingerprint) AS signupSubmit,
+         COUNT(DISTINCT register_event.fingerprint) AS registerSuccess
+       FROM conversion_events p
+       LEFT JOIN conversion_events s
+         ON s.fingerprint = p.fingerprint AND s.event = 'signup_open' AND s.visitor_type = 'visitor'
+        AND s.create_time > p.create_time${timeFor('s')}
+       LEFT JOIN conversion_events submit_event
+         ON submit_event.fingerprint = s.fingerprint AND submit_event.event = 'signup_submit'
+        AND submit_event.visitor_type = 'visitor' AND submit_event.create_time > s.create_time${timeFor('submit_event')}
+       LEFT JOIN conversion_events register_event
+         ON register_event.fingerprint = submit_event.fingerprint AND register_event.event = 'register'
+        AND register_event.create_time > submit_event.create_time${timeFor('register_event')}
+       WHERE p.fingerprint <> '' AND p.event = 'page_view' AND p.visitor_type = 'visitor'${timeFor('p')}`,
+      timeCond.length ? [...timeParams, ...timeParams, ...timeParams, ...timeParams] : [],
+    );
     const pathOf = (key) => Number(pathRows[0]?.[key] || 0);
+    const ordered = orderedRows[0] || {};
+    const independentStageValues = [
+      ['pageView', '访问', visitorsOf('page_view')],
+      ['signupOpen', '打开注册', visitorsOf('signup_open')],
+      ['signupSubmit', '提交注册', visitorsOf('signup_submit')],
+      ['registerSuccess', '注册成功', visitorsOf('register')],
+    ];
+    const orderedStageValues = [
+      ['pageView', '访问', Number(ordered.pageView || 0)],
+      ['signupOpen', '打开注册', Number(ordered.signupOpen || 0)],
+      ['signupSubmit', '提交注册', Number(ordered.signupSubmit || 0)],
+      ['registerSuccess', '注册成功', Number(ordered.registerSuccess || 0)],
+    ];
+    const buildFunnel = (stageValues) =>
+      stageValues.map(([key, label, count], index) => {
+        const previous = index > 0 ? Number(stageValues[index - 1][2] || 0) : 0;
+        return {
+          key,
+          label,
+          count,
+          fromPreviousRate: index === 0 ? null : previous > 0 ? Math.round((Number(count) / previous) * 1000) / 10 : 0,
+          lost: index === 0 ? null : Math.max(0, previous - Number(count)),
+        };
+      });
+    const mainFunnel = buildFunnel(independentStageValues);
+    const orderedFunnel = buildFunnel(orderedStageValues);
     res.send(
       resultData({
+        mainFunnel,
+        orderedFunnel,
         pageViewVisitors: visitorsOf('page_view'),
         demoEnterVisitors: visitorsOf('demo_enter'),
         wallHitVisitors: visitorsOf('wall_hit'),
@@ -183,7 +239,8 @@ export const getConversionFunnel = async (req, res) => {
       }),
     );
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[ConversionFunnel] 查询失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '游客转化数据暂时不可用'));
   }
 };
 
@@ -361,7 +418,9 @@ export const getApiLogs = async (req, res) => {
     const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
     const currentPage = cursorMode ? 1 : legacy.currentPage;
     const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
-    const key = String(filters.key || '').trim().slice(0, 200);
+    const key = String(filters.key || '')
+      .trim()
+      .slice(0, 200);
     const { hide_internal: hideInternal = true } = filters;
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
     const roleParams = hideInternal ? INTERNAL_ROLES : [];
@@ -373,7 +432,9 @@ export const getApiLogs = async (req, res) => {
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
     const cursorFilter = cursor ? ' AND (a.request_time < ? OR (a.request_time = ? AND a.id < ?))' : '';
     const whereClause = baseWhere + roleFilter + cursorFilter;
-    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const cursorParams = cursor
+      ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
+      : [];
     const take = cursorMode ? pageSize + 1 : pageSize;
 
     const [result] = await pool.query(
@@ -540,7 +601,9 @@ export const getOperationLogs = async (req, res) => {
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
     const roleParams = hideInternal ? INTERNAL_ROLES : [];
     const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
-    const key = String(filters.key || '').trim().slice(0, 200);
+    const key = String(filters.key || '')
+      .trim()
+      .slice(0, 200);
     const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%')
 OR u.email LIKE CONCAT('%', ?, '%')
 OR o.operation LIKE CONCAT('%', ?, '%')
@@ -549,7 +612,9 @@ AND o.del_flag = 0${roleFilter}`;
     const scope = adminCursorScope('operation-logs', [key, hideInternal]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
     const cursorFilter = cursor ? ' AND (o.create_time < ? OR (o.create_time = ? AND o.id < ?))' : '';
-    const cursorParams = cursor ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id] : [];
+    const cursorParams = cursor
+      ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
+      : [];
     const take = cursorMode ? pageSize + 1 : pageSize;
     const [rows] = await pool.query(
       `SELECT o.*, u.alias,u.email
@@ -1123,6 +1188,148 @@ export const getAgentLogsSummary = async (req, res) => {
   }
 };
 
+const ADMIN_TREND_PERIODS = new Set([7, 15, 30, 90]);
+
+function adminOverviewDateHelpers(now = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  const formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  return { pad, formatDate };
+}
+
+function buildAdminOverviewTrendScope(hideInternal) {
+  const irSql = INTERNAL_ROLES.map((role) => `'${role}'`).join(', ');
+  const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
+  const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+  const notIntCreateBy = hideInternal ? ` AND create_by NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
+  const activeBookmarkOwner = ` AND EXISTS (
+    SELECT 1 FROM \`user\` bookmark_owner
+    WHERE bookmark_owner.id = bookmark.user_id AND bookmark_owner.del_flag = 0
+  )`;
+  const notOnboardingBookmark = ` AND NOT EXISTS (
+    SELECT 1 FROM onboarding_seed_resources osr
+    WHERE osr.user_id = bookmark.user_id
+      AND osr.resource_type = 'bookmark'
+      AND osr.resource_id = bookmark.id
+  )`;
+  const notOnboardingNote = ` AND NOT EXISTS (
+    SELECT 1 FROM onboarding_seed_resources osr
+    WHERE osr.user_id = note.create_by
+      AND osr.resource_type = 'note'
+      AND osr.resource_id = note.id
+  )`;
+  const notOnboardingFile = ` AND NOT EXISTS (
+    SELECT 1 FROM onboarding_seed_resources osr
+    WHERE osr.user_id = files.create_by
+      AND osr.resource_type = 'file'
+      AND osr.resource_id = CAST(files.id AS CHAR)
+  )`;
+  return {
+    notIntRole,
+    notIntUser,
+    notIntCreateBy,
+    activeBookmarkOwner,
+    notOnboardingBookmark,
+    notOnboardingNote,
+    notOnboardingFile,
+  };
+}
+
+async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() }) {
+  const { formatDate } = adminOverviewDateHelpers(now);
+  const scope = buildAdminOverviewTrendScope(hideInternal);
+  const dates = [];
+  for (let offset = days - 1; offset >= 0; offset -= 1) {
+    const date = new Date(now);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - offset);
+    dates.push(formatDate(date));
+  }
+  const startDate = dates[0];
+  const [userTrendRows, contentTrendRows, activeRows] = await Promise.all([
+    pool.query(
+      "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
+        scope.notIntRole +
+        ' GROUP BY d',
+      [startDate],
+    ),
+    pool.query(
+      `SELECT d, kind, SUM(c) AS c FROM (
+       SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${scope.activeBookmarkOwner}${scope.notIntUser}${scope.notOnboardingBookmark} GROUP BY d
+       UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingNote} GROUP BY d
+       UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${scope.notIntCreateBy}${scope.notOnboardingFile} GROUP BY d
+     ) t GROUP BY d, kind`,
+      [startDate, startDate, startDate],
+    ),
+    pool
+      .query(
+        `SELECT COUNT(DISTINCT user_id) AS activeUsers
+         FROM user_sessions WHERE role != 'visitor' AND last_active_time >= ?${scope.notIntRole}`,
+        [startDate],
+      )
+      .catch(() => [[{ activeUsers: 0 }]]),
+  ]);
+
+  const userMap = Object.fromEntries((userTrendRows[0] || []).map((row) => [row.d, Number(row.c || 0)]));
+  const contentMap = new Map();
+  (contentTrendRows[0] || []).forEach((row) => {
+    const bucket = contentMap.get(row.d) || { bookmark: 0, note: 0, file: 0 };
+    if (row.kind in bucket) bucket[row.kind] = Number(row.c || 0);
+    contentMap.set(row.d, bucket);
+  });
+  const daily = dates.map((date) => {
+    const kinds = contentMap.get(date) || { bookmark: 0, note: 0, file: 0 };
+    return {
+      date,
+      label: date.slice(5),
+      users: userMap[date] || 0,
+      bookmarks: kinds.bookmark,
+      notes: kinds.note,
+      files: kinds.file,
+      contentTotal: kinds.bookmark + kinds.note + kinds.file,
+    };
+  });
+
+  const granularity = days === 90 ? 'week' : 'day';
+  const trend =
+    granularity === 'day'
+      ? daily
+      : Array.from({ length: Math.ceil(daily.length / 7) }, (_, index) => {
+          const rows = daily.slice(index * 7, index * 7 + 7);
+          const sum = (key) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
+          const start = rows[0];
+          const end = rows[rows.length - 1];
+          return {
+            date: start.date,
+            bucketEnd: end.date,
+            label: `${start.label}~${end.label}`,
+            users: sum('users'),
+            bookmarks: sum('bookmarks'),
+            notes: sum('notes'),
+            files: sum('files'),
+            contentTotal: sum('contentTotal'),
+          };
+        });
+  return {
+    days,
+    granularity,
+    activeUsers: Number(activeRows[0]?.[0]?.activeUsers || 0),
+    trend,
+  };
+}
+
+export const getAdminOverviewTrend = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
+  const days = Number(req.body?.days || 7);
+  if (!ADMIN_TREND_PERIODS.has(days)) return res.send(resultData(null, 400, '趋势周期不受支持'));
+  try {
+    const result = await queryAdminOverviewTrend({ days, hideInternal: req.body?.hideInternal !== false });
+    return res.send(resultData(result));
+  } catch (error) {
+    console.error('[AdminOverviewTrend] 查询失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '获取趋势数据失败'));
+  }
+};
+
 // POST /common/getAdminOverview —— 后台总览看板:用户/内容/存储/AI/活跃/系统/转化/待办 + 近7天趋势(仅 root)
 // 口径统一:累计量与今日增量成对返回,前端统一「累计为主 + 今日 +N」呈现;高风险表(security/user_sessions/api_logs/agent_logs)各自兜底,缺表不拖垮整体
 export const getAdminOverview = async (req, res) => {
@@ -1188,15 +1395,25 @@ export const getAdminOverview = async (req, res) => {
     const business4xxSql = `(status_code LIKE '4%' AND ${routeMatchedSql} AND NOT ${legacyUnknown404Sql})`;
     const invalid4xxSql = `(status_code LIKE '4%' AND (${routeUnmatchedSql} OR ${legacyUnknown404Sql}))`;
 
-    const [userAgg, resAgg, convAgg, opinionAgg, securityAgg, activeAgg, sysAgg, userTrendRows, contentTrendRows] =
-      await Promise.all([
-        pool.query(
-          'SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' +
-            notIntRole,
-          [today],
-        ),
-        pool.query(
-          `SELECT
+    const [
+      userAgg,
+      resAgg,
+      convAgg,
+      opinionAgg,
+      securityAgg,
+      todoAgg,
+      activeAgg,
+      sysAgg,
+      userTrendRows,
+      contentTrendRows,
+    ] = await Promise.all([
+      pool.query(
+        'SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' +
+          notIntRole,
+        [today],
+      ),
+      pool.query(
+        `SELECT
            (SELECT COUNT(*) FROM bookmark WHERE del_flag = 0${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}) AS bookmarkTotal,
            (SELECT COUNT(*) FROM note WHERE del_flag = 0${notIntCreateBy}${notOnboardingNote}) AS noteTotal,
            (SELECT COUNT(*) FROM files WHERE del_flag = 0${notIntCreateBy}${notOnboardingFile}) AS fileTotal,
@@ -1206,66 +1423,80 @@ export const getAdminOverview = async (req, res) => {
            (SELECT COUNT(*) FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile}) AS fileToday,
            COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}), 0) AS trashMb,
            (SELECT COUNT(*) FROM files WHERE del_flag = 1${notIntCreateBy}${notOnboardingFile}) AS trashCount`,
-          [today, today, today],
-        ),
-        pool.query(
-          `SELECT
+        [today, today, today],
+      ),
+      pool.query(
+        `SELECT
            COUNT(DISTINCT CASE WHEN event = 'page_view' THEN fingerprint END) AS visitors,
            COUNT(DISTINCT CASE WHEN event = 'register' THEN fingerprint END) AS registers
          FROM conversion_events`,
-        ),
-        pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [
-          OPINION_STATUS.PENDING,
-        ]),
-        pool
-          .query(
-            "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
-          )
-          .catch(() => [[{ unhandled: 0 }]]),
-        // 活跃用户(会话表 last_active_time;排除游客会话)
-        pool
-          .query(
-            `SELECT
+      ),
+      pool.query('SELECT COUNT(*) AS pending FROM opinion WHERE del_flag = 0 AND status = ?' + notIntUser, [
+        OPINION_STATUS.PENDING,
+      ]),
+      pool
+        .query(
+          "SELECT COUNT(*) AS unhandled FROM security_events WHERE handled_status = 'unhandled' AND severity IN ('high','critical')",
+        )
+        .catch(() => [[{ unhandled: 0 }]]),
+      pool
+        .query(
+          `SELECT
+               COUNT(*) AS total,
+               COALESCE(SUM(create_time >= ?), 0) AS createdToday,
+               COALESCE(SUM(status = 'pending'), 0) AS pending,
+               COALESCE(SUM(status = 'pending' AND due_at >= NOW() AND due_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS dueToday,
+               COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue,
+               COALESCE(SUM(status = 'completed' AND completed_at >= ? AND completed_at < DATE_ADD(?, INTERVAL 1 DAY)), 0) AS completedToday
+             FROM todo_items
+             WHERE del_flag = 0${notIntUser}`,
+          [today, today, today, today],
+        )
+        .catch(() => [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]]),
+      // 活跃用户(会话表 last_active_time;排除游客会话)
+      pool
+        .query(
+          `SELECT
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS activeToday,
              COUNT(DISTINCT CASE WHEN last_active_time >= ? THEN user_id END) AS active7d
            FROM user_sessions WHERE role != 'visitor'${notIntRole}`,
-            [today, weekAgo],
-          )
-          .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
-        // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
-        pool
-          .query(
-            `SELECT
+          [today, weekAgo],
+        )
+        .catch(() => [[{ activeToday: 0, active7d: 0 }]]),
+      // 系统健康：业务 4xx、未知路径 4xx 与服务端 5xx 分开，避免外部探测 404 被误解为功能故障。
+      pool
+        .query(
+          `SELECT
              COALESCE(SUM(${validApiRequestSql}), 0) AS total,
              COALESCE(SUM(${business4xxSql}), 0) AS businessErrors,
              COALESCE(SUM(${invalid4xxSql}), 0) AS invalidRequests,
              COALESCE(SUM(status_code LIKE '5%'), 0) AS serverErrors
            FROM api_logs WHERE request_time >= ?`,
-            [today],
-          )
-          .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
-        // 近7天新增用户按天
-        pool
-          .query(
-            "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
-              notIntRole +
-              ' GROUP BY d',
-            [weekAgo],
-          )
-          .catch(() => [[]]),
-        // 近7天新增内容(书签+笔记+文件合并)按天
-        pool
-          .query(
-            // 保留 kind 维度:用户数与内容量量级差异大,前端需要分面板展示书签/笔记/文件构成
-            `SELECT d, kind, SUM(c) AS c FROM (
+          [today],
+        )
+        .catch(() => [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]]),
+      // 近7天新增用户按天
+      pool
+        .query(
+          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
+            notIntRole +
+            ' GROUP BY d',
+          [weekAgo],
+        )
+        .catch(() => [[]]),
+      // 近7天新增内容(书签+笔记+文件合并)按天
+      pool
+        .query(
+          // 保留 kind 维度:用户数与内容量量级差异大,前端需要分面板展示书签/笔记/文件构成
+          `SELECT d, kind, SUM(c) AS c FROM (
              SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmark' AS kind, COUNT(*) AS c FROM bookmark WHERE del_flag = 0 AND create_time >= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'note' AS kind, COUNT(*) AS c FROM note WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingNote} GROUP BY d
              UNION ALL SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'file' AS kind, COUNT(*) AS c FROM files WHERE del_flag = 0 AND create_time >= ?${notIntCreateBy}${notOnboardingFile} GROUP BY d
            ) t GROUP BY d, kind`,
-            [weekAgo, weekAgo, weekAgo],
-          )
-          .catch(() => [[]]),
-      ]);
+          [weekAgo, weekAgo, weekAgo],
+        )
+        .catch(() => [[]]),
+    ]);
 
     // AI 用量单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)。
     // agent_logs 的 cost 是静态价表估算，不作为后台金额指标返回。
@@ -1321,6 +1552,7 @@ export const getAdminOverview = async (req, res) => {
       c = convAgg[0][0],
       o = opinionAgg[0][0],
       s = securityAgg[0][0],
+      todo = todoAgg[0][0],
       a = activeAgg[0][0],
       sys = sysAgg[0][0];
     res.send(
@@ -1349,7 +1581,16 @@ export const getAdminOverview = async (req, res) => {
           apiServerErrorsToday: Number(sys.serverErrors || 0),
         },
         pending: { opinion: Number(o.pending || 0), security: Number(s.unhandled || 0) },
+        todos: {
+          total: Number(todo.total || 0),
+          createdToday: Number(todo.createdToday || 0),
+          pending: Number(todo.pending || 0),
+          dueToday: Number(todo.dueToday || 0),
+          overdue: Number(todo.overdue || 0),
+          completedToday: Number(todo.completedToday || 0),
+        },
         trend,
+        trendPeriod: { days: 7, granularity: 'day' },
         generatedAt: `${today} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
       }),
     );
@@ -1359,6 +1600,64 @@ export const getAdminOverview = async (req, res) => {
   }
 };
 
+const AGENT_TASK_TYPE_LABELS = {
+  agent: 'AI 助手',
+  note_assist: '笔记助手',
+  tag_icon_search: '标签选图',
+  bookmark_summary: '书签摘要',
+  bookmark_meta: '书签识别',
+  organize_bookmark_meta: '书签整理',
+  organize_note_tags: '笔记整理',
+  follow_up: '系统追问',
+  followup_suggestions: '追问建议',
+  material_follow_up: '资料追问',
+  note_draft: '笔记草稿',
+  note_draft_intent: '草稿意图识别',
+  note_draft_task: '草稿生成',
+  organize: '智能整理',
+  agent_semantic_policy: '语义规划',
+  agent_action_prepare: '操作准备',
+  agent_interaction: '交互选择',
+  agent_confirmation: '操作确认',
+  change_set_proposal: '变更建议',
+};
+
+function normalizeAgentLogRequest(row) {
+  const taskType = String(row.task_type || 'agent');
+  const taskTypeLabel = AGENT_TASK_TYPE_LABELS[taskType] || taskType || 'AI 请求';
+  const raw = String(row.question || '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  const privacyPlaceholder = /^\[[^\]]*(?:AI\s*)?请求[，,]\s*正文不写入日志\]$/u.test(raw);
+  const emptyPlaceholder = /^\[[^\]]*(?:AI\s*)?请求[，,]\s*用户未提交问题\]$/u.test(raw);
+  const requestKind = privacyPlaceholder
+    ? 'redacted'
+    : taskType === 'note_assist'
+      ? 'quick_action'
+      : taskType === 'agent'
+        ? 'user_question'
+        : 'system_task';
+  const source = privacyPlaceholder
+    ? `${taskTypeLabel}（请求正文未记录）`
+    : emptyPlaceholder
+      ? `${taskTypeLabel}（用户未提交问题）`
+      : raw || `${taskTypeLabel}（无请求摘要）`;
+  const requestChars = source.length;
+  const requestTruncated = requestChars > 500;
+  const requestPreview = requestTruncated ? `${source.slice(0, 500)}…` : source;
+  return {
+    ...row,
+    // 兼容旧前端字段，但列表接口不再返回可能长达 12000 字的完整问题。
+    question: requestPreview,
+    requestPreview,
+    requestChars,
+    requestTruncated,
+    requestKind,
+    requestLabel: requestKind === 'user_question' ? '提问' : '请求摘要',
+    taskTypeLabel,
+  };
+}
+
 export const getAgentLogs = async (req, res) => {
   try {
     const userRole = req.user?.role;
@@ -1366,7 +1665,9 @@ export const getAgentLogs = async (req, res) => {
       return res.send(resultData(null, 403, '仅管理员可查看'));
     }
 
-    const keyword = String(req.body?.keyword || '').trim().slice(0, 200);
+    const keyword = String(req.body?.keyword || '')
+      .trim()
+      .slice(0, 200);
     const hideInternal = req.body?.hideInternal !== false;
     const cursorMode = isAdminCursorRequest(req.body);
     const take = cursorMode
@@ -1404,7 +1705,8 @@ export const getAgentLogs = async (req, res) => {
       [...params, queryLimit, ...(cursorMode ? [] : [offset])],
     );
     const hasMore = cursorMode && rows.length > take;
-    const page = cursorMode ? rows.slice(0, take) : rows;
+    const pageRows = cursorMode ? rows.slice(0, take) : rows;
+    const page = pageRows.map(normalizeAgentLogRequest);
     let total;
     if (!cursorMode || !cursor) {
       const countParams = [];
@@ -1423,7 +1725,7 @@ export const getAgentLogs = async (req, res) => {
       );
       total = Number(countRes[0].total || 0);
     }
-    const last = page[page.length - 1];
+    const last = pageRows[pageRows.length - 1];
 
     return res.send(
       resultData({

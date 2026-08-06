@@ -1,7 +1,7 @@
 <template>
   <div class="knowledge-map-page" :class="{ 'knowledge-map-page--mobile': bookmark.isMobile }">
     <header class="km-header">
-      <div class="km-heading">
+      <div v-if="!bookmark.isMobile" class="km-heading">
         <div class="km-eyebrow">{{ t('knowledgeMap.eyebrow') }}</div>
         <h1>{{ t('knowledgeMap.title') }}</h1>
         <p>
@@ -10,14 +10,7 @@
         </p>
       </div>
       <div v-if="bookmark.isMobile" class="km-mobile-overview" :aria-label="t('knowledgeMap.overview')">
-        <span>
-          <strong>{{ stats.tagCount }}</strong>
-          <small>{{ t('knowledgeMap.stats.tags') }}</small>
-        </span>
-        <span>
-          <strong>{{ stats.taggedResourceCount }}</strong>
-          <small>{{ t('knowledgeMap.stats.tagged') }}</small>
-        </span>
+        {{ t('knowledgeMap.mobileOverview', { topics: stats.tagCount, resources: stats.taggedResourceCount }) }}
       </div>
       <div v-else class="km-stats" :aria-label="t('knowledgeMap.overview')">
         <div class="km-stat km-stat--tag">
@@ -42,9 +35,10 @@
     <section class="km-toolbar">
       <div class="km-search">
         <BInput
+          id="knowledge-map-mobile-search"
           v-model:value="keyword"
           :placeholder="t('knowledgeMap.searchPlaceholder')"
-          height="38px"
+          :height="bookmark.isMobile ? '44px' : '38px'"
           @enter="focusFirstSearchResult"
         >
           <template #prefix>
@@ -69,21 +63,28 @@
 
     <section class="km-content">
       <div v-if="bookmark.isMobile" class="km-mobile-list">
-        <div class="km-mobile-summary">{{ mobileSummary }}</div>
-        <BButton
-          v-for="node in mobileNodes"
-          :key="node.id"
-          class="km-mobile-item"
-          :class="{ active: activeNode?.id === node.id }"
-          @click="selectNode(node)"
-        >
-          <span class="km-mobile-dot"></span>
-          <span class="km-mobile-main">
-            <strong>{{ node.label }}</strong>
-            <small>{{ t('knowledgeMap.resourceCount', { count: node.meta?.resourceCount || 0 }) }}</small>
-          </span>
-          <span class="km-mobile-related">{{ nodeRelationshipCount(node.id) }}</span>
-        </BButton>
+        <MobileListSurface v-if="mobileNodes.length">
+          <MobileListRow
+            v-for="node in mobileNodes"
+            :key="node.id"
+            class="km-mobile-item"
+            interactive
+            :selected="activeNode?.id === node.id"
+            @click="selectNode(node)"
+          >
+            <template #leading><span class="km-mobile-dot"></span></template>
+            <template #title>{{ node.label }}</template>
+            <template #subtitle>
+              {{
+                t('knowledgeMap.topicSummary', {
+                  resources: node.meta?.resourceCount || 0,
+                  topics: nodeRelationshipCount(node.id),
+                })
+              }}
+            </template>
+            <template #trailing><SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" /></template>
+          </MobileListRow>
+        </MobileListSurface>
         <div v-if="!mobileNodes.length" class="km-mobile-empty">{{ t('knowledgeMap.noMatch') }}</div>
       </div>
 
@@ -315,6 +316,8 @@
     type TagGraphNode,
   } from '@/api/tagGraph.ts';
   import GlobalGraphCanvas from './GlobalGraphCanvas.vue';
+  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
+  import MobileListRow from '@/components/mobile/MobileListRow.vue';
 
   type ResourceFilter = GraphResourceType | 'all';
   type FocusRelatedTag = { node: TagGraphNode; sharedCount: number };
@@ -430,7 +433,6 @@
     }
     return t('knowledgeMap.canvasSummary', { shown: displayNodes.value.length, total: stats.value.tagCount });
   });
-  const mobileSummary = computed(() => t('knowledgeMap.mobileSummary', { count: mobileNodes.value.length }));
 
   function nodeRelationshipCount(nodeId: string) {
     return thresholdEdges.value.filter((edge) => edge.source === nodeId || edge.target === nodeId).length;
@@ -661,21 +663,9 @@
     color: var(--sub-text-color);
     font-size: 12px;
 
-    span {
-      display: inline-flex;
-      align-items: baseline;
-      gap: 4px;
-    }
-
-    strong {
-      color: var(--text-color);
-      font-size: 16px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    small {
-      font-size: inherit;
-    }
+    color: var(--text-color);
+    font-size: 15px;
+    font-weight: 650;
   }
 
   .km-stat {
@@ -985,57 +975,17 @@
   }
 
   .km-mobile-list {
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
+    --primary-color: var(--resource-tag-color);
+
+    display: block;
     min-width: 0;
   }
 
-  .km-mobile-summary,
   .km-mobile-empty {
     padding: 8px 2px;
     color: var(--sub-text-color);
     font-size: 12px;
     text-align: center;
-  }
-
-  .km-mobile-item {
-    display: flex;
-    width: 100%;
-    height: auto;
-    min-height: 54px;
-    justify-content: flex-start;
-    gap: 10px;
-    padding: 9px 11px;
-    text-align: left;
-
-    &.active {
-      border: 1px solid color-mix(in srgb, var(--resource-tag-color) 34%, var(--card-border-color));
-      background: color-mix(in srgb, var(--resource-tag-color) 8%, var(--background-color));
-    }
-  }
-
-  .km-mobile-main {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    flex-direction: column;
-
-    strong {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    small {
-      color: var(--sub-text-color);
-      font-size: 10px;
-    }
-  }
-
-  .km-mobile-related {
-    color: var(--resource-tag-color);
-    font-size: 12px;
   }
 
   .km-mobile-filters {
@@ -1151,6 +1101,7 @@
 
     .km-header {
       display: block;
+      min-height: 28px;
     }
 
     .km-heading h1 {
@@ -1175,6 +1126,8 @@
 
     .km-filter-trigger {
       flex: 0 0 auto;
+      height: var(--mobile-touch-size, 44px);
+      line-height: var(--mobile-touch-size, 44px);
     }
 
     .km-content {

@@ -92,6 +92,7 @@
               :key="confirmation.id"
               :confirmation="confirmation"
               @resolved="(resolution) => handleConfirmationResolved(index, resolution)"
+              @replaced="(replacement) => handleConfirmationReplaced(index, replacement)"
               @edit="handleConfirmationEdit"
               @settled="(settlement) => handleConfirmationSettled(index, settlement)"
             />
@@ -143,11 +144,13 @@
         :send-fn="sendMessage"
         :stop-fn="stopResponse"
         :contexts="contexts"
+        :scope-refs="scopeRefs"
         :attachments="attachments"
         :prepare-attachment-action-fn="prepareAttachmentAction"
         @update:enable-translation="enableTranslation = $event"
         @update:translation-config="translationConfig = $event"
         @update:contexts="contexts = $event"
+        @update:scope-refs="scopeRefs = $event"
         @update:attachments="attachments = $event"
       />
     </div>
@@ -172,7 +175,7 @@
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
   import type { AiToolStatusItem } from '@/components/aiAssistant/AiToolStatusList.vue';
-  import type { AiResourceContext } from '@/components/aiAssistant/AiContextPicker.vue';
+  import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
   import {
     clearAiTemporaryAttachments,
     fetchAiAttachmentStatuses,
@@ -185,6 +188,7 @@
     markConversationConfirmationPending,
     markConversationInteractionPending,
     promoteConversationInteractionToConfirmation,
+    replaceConversationConfirmation,
     settleConversationConfirmation,
     settleConversationInteraction,
     shouldPersistConversationMessage,
@@ -215,6 +219,7 @@
     AiAgentInteractionResolution,
     AiAgentInteractionSettlement,
     AiToolConfirmation,
+    AiToolConfirmationReplacement,
     AiToolConfirmationResolution,
     AiToolConfirmationSettlement,
   } from '@/types/aiAgent';
@@ -245,6 +250,7 @@
     recordAiProductEvent,
     type AiProductEventDimensions,
   } from '@/api/aiTelemetry';
+  import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import { resolveHelpSources, type ResolvedHelpSource } from '@/api/helpApi';
   import {
     buildAiAssistantRuntimeIdentityKey,
@@ -307,8 +313,9 @@
     const value = message.coverage;
     if (!value || typeof value !== 'object') return null;
     const documents = Array.isArray(value.documents) ? value.documents : [];
+    const noteBranches = Array.isArray(value.noteBranches) ? value.noteBranches : [];
     const overall = value.overall && typeof value.overall === 'object' ? value.overall : null;
-    if (!documents.length && !overall) return null;
+    if (!documents.length && !noteBranches.length && !overall) return null;
     return value as unknown as AiCoverageReport;
   }
 
@@ -330,6 +337,7 @@
     isLoading,
     hasAnswerStarted,
     contextRefs: contexts,
+    scopeRefs,
     attachmentRefs: attachments,
     shouldFollowMessages,
     showScrollToBottom,
@@ -406,6 +414,16 @@
             all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
         )
         .slice(0, 5);
+    }
+    if (payload.scopeRefs?.length) {
+      const merged = [...payload.scopeRefs, ...scopeRefs.value];
+      scopeRefs.value = merged
+        .filter(
+          (item, index, all) =>
+            item.type === 'note_branch' &&
+            all.findIndex((candidate) => candidate.type === item.type && candidate.id === item.id) === index,
+        )
+        .slice(0, 3);
     }
     if (payload.attachmentRefs?.length) {
       const merged = [...payload.attachmentRefs, ...attachments.value];
@@ -499,9 +517,11 @@
   function aiTelemetryMaterialType(
     contextSnapshot: AiResourceContext[],
     attachmentCount: number,
+    scopeCount = 0,
   ): NonNullable<AiProductEventDimensions['materialType']> {
     const types = new Set<string>(contextSnapshot.map((item) => item.type));
     if (attachmentCount > 0) types.add('attachment');
+    if (scopeCount > 0) types.add('note');
     if (!types.size) return 'unknown';
     if (types.size > 1) return 'mixed';
     const only = [...types][0];
@@ -597,6 +617,15 @@
       ...(status === 'failed' ? { errorCode: safeAiErrorCode(options.errorCode) } : {}),
     };
     void recordAiProductEvent(status === 'stopped' ? 'ai_stopped' : 'ai_completed', dimensions);
+    const noteBranches = status === 'completed' && currentMessage ? messageCoverage(currentMessage)?.noteBranches : [];
+    if (noteBranches?.length) {
+      void recordNoteTreeProductEvent('note_branch_ai_answered', {
+        surface: 'ai',
+        subtreeSize: noteBranches.reduce((sum, branch) => sum + Math.max(0, Number(branch.totalPages || 0)), 0),
+        durationMs: Date.now() - round.startedAt,
+        result: 'success',
+      });
+    }
     if (activeRoundTelemetry === round) activeRoundTelemetry = null;
   }
 
@@ -765,11 +794,16 @@
         activity: chatMessage.activity || [],
         coverage: chatMessage.coverage || null,
         modelMeta:
-          chatMessage.recovered || chatMessage.terminal
+          chatMessage.recovered || chatMessage.terminal || chatMessage.scopeRefs?.length
             ? {
-                recovered: Boolean(chatMessage.recovered),
-                stage: chatMessage.stage || null,
-                terminal: chatMessage.terminal || null,
+                ...(chatMessage.recovered || chatMessage.terminal
+                  ? {
+                      recovered: Boolean(chatMessage.recovered),
+                      stage: chatMessage.stage || null,
+                      terminal: chatMessage.terminal || null,
+                    }
+                  : {}),
+                ...(chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : {}),
               }
             : null,
         sources,
@@ -1011,6 +1045,27 @@
       }));
   }
 
+  function normalizeCloudScopeRefs(value: unknown): AiScopeRef[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) &&
+          typeof item === 'object' &&
+          String(item.type) === 'note_branch' &&
+          Boolean(String(item.id || '').trim()),
+      )
+      .slice(0, 3)
+      .map((item) => ({
+        type: 'note_branch',
+        id: String(item.id).slice(0, 255),
+        title: String(item.title || '').slice(0, 255),
+        ...(Number.isFinite(Number(item.estimatedResourceCount))
+          ? { estimatedResourceCount: Math.max(1, Number(item.estimatedResourceCount)) }
+          : {}),
+      }));
+  }
+
   function cloudMessageToLocal(cloudMessage: AiCloudMessage): ChatMessage | null {
     if (cloudMessage.role !== 'user' && cloudMessage.role !== 'assistant') return null;
     const contexts = (cloudMessage.contextRefs || [])
@@ -1030,6 +1085,7 @@
       timestamp: new Date(cloudMessage.createdAt),
       contexts,
       contextRefs: contexts,
+      scopeRefs: normalizeCloudScopeRefs(cloudMessage.modelMeta?.scopeRefs),
       attachmentRefs: (cloudMessage.attachmentRefs || [])
         .filter(
           (item) =>
@@ -1342,6 +1398,7 @@
         status: 'completed',
         contextRefs: chatMessage.contextRefs || chatMessage.contexts || [],
         attachmentRefs: chatMessage.attachmentRefs || [],
+        modelMeta: chatMessage.scopeRefs?.length ? { scopeRefs: chatMessage.scopeRefs.slice(0, 3) } : null,
       });
       if (aiAssistant.runtimeIdentityKey === runtimeKey) chatMessage.cloudId = saved.id;
       return saved;
@@ -1684,12 +1741,13 @@
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
     const pendingNoteDraft =
-      !options.materialSnapshot && !contexts.value.length && !attachments.value.length
+      !options.materialSnapshot && !contexts.value.length && !scopeRefs.value.length && !attachments.value.length
         ? resolveAiAssistantPendingNoteDraftReference(messages.value)
         : null;
     const autoInheritedMaterialSnapshot =
       !options.materialSnapshot &&
       !contexts.value.length &&
+      !scopeRefs.value.length &&
       !attachments.value.length &&
       shouldAutoInheritAiAssistantMaterials(inputText)
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
@@ -1700,6 +1758,7 @@
     const followUpMaterialCandidate =
       !options.materialSnapshot &&
       !contexts.value.length &&
+      !scopeRefs.value.length &&
       !attachments.value.length &&
       !autoInheritedMaterialSnapshot
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
@@ -1707,8 +1766,9 @@
     const materialSnapshot =
       options.materialSnapshot ||
       autoInheritedMaterialSnapshot ||
-      createAiAssistantMaterialSnapshot(contexts.value, attachments.value);
+      createAiAssistantMaterialSnapshot(contexts.value, attachments.value, scopeRefs.value);
     const contextSnapshot = materialSnapshot.contextRefs;
+    const scopeSnapshot = materialSnapshot.scopeRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
     if (attachmentSnapshot.some((item) => item.status === 'awaiting_upload')) return;
     const cloudPreparation = await prepareCloudConversationForSend(aiAssistant.runtimeIdentityKey);
@@ -1740,6 +1800,7 @@
       timestamp: new Date(),
       contexts: contextSnapshot.map((item) => ({ ...item })),
       contextRefs: contextSnapshot,
+      scopeRefs: scopeSnapshot,
       attachmentRefs: attachmentSnapshot,
       parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
     };
@@ -1769,9 +1830,9 @@
       assistantMessageId: aiMessage.id,
       startedAt: Date.now(),
       requestId: '',
-      materialCount: contextSnapshot.length + attachmentSnapshot.length,
-      materialType: aiTelemetryMaterialType(contextSnapshot, attachmentSnapshot.length),
-      scopeMode: scopeMode.value === 'workspace' ? 'all_resources' : 'selected',
+      materialCount: contextSnapshot.length + scopeSnapshot.length + attachmentSnapshot.length,
+      materialType: aiTelemetryMaterialType(contextSnapshot, attachmentSnapshot.length, scopeSnapshot.length),
+      scopeMode: scopeSnapshot.length ? 'selected' : scopeMode.value === 'workspace' ? 'all_resources' : 'selected',
       firstActivityRecorded: false,
       firstTokenRecorded: false,
       finalized: false,
@@ -2057,13 +2118,20 @@
           aiStyle: (user.preferences as any)?.aiStyle || 'balanced',
           history: historyForRequest,
           contexts: contextSnapshot,
+          scopeRefs: scopeSnapshot.map((item) => ({ type: item.type, id: item.id })),
           attachmentIds: attachmentSnapshot.map((item) => item.id),
           ...(pendingNoteDraft ? { pendingNoteDraft } : {}),
           ...(followUpMaterialCandidate &&
-          (followUpMaterialCandidate.contextRefs.length || followUpMaterialCandidate.attachmentRefs.length)
+          (followUpMaterialCandidate.contextRefs.length ||
+            followUpMaterialCandidate.scopeRefs.length ||
+            followUpMaterialCandidate.attachmentRefs.length)
             ? {
                 followUpMaterials: {
                   contextRefs: followUpMaterialCandidate.contextRefs.map((item) => ({
+                    type: item.type,
+                    id: item.id,
+                  })),
+                  scopeRefs: followUpMaterialCandidate.scopeRefs.map((item) => ({
                     type: item.type,
                     id: item.id,
                   })),
@@ -2349,6 +2417,7 @@
     () =>
       !isLoading.value &&
       !contexts.value.length &&
+      !scopeRefs.value.length &&
       !attachments.value.length &&
       Boolean(buildFollowUpMaterialSnapshot()),
   );
@@ -2356,14 +2425,20 @@
     const inherited = buildFollowUpMaterialSnapshot();
     if (!inherited) return;
     contexts.value = inherited.contextRefs.map((item) => ({ ...item }));
+    scopeRefs.value = inherited.scopeRefs.map((item) => ({ ...item }));
     attachments.value = inherited.attachmentRefs.map((item) => ({ ...item }));
     chatInputRef.value?.focus();
   }
 
   // 编辑用户消息：把该条内容回填到输入框并聚焦，不自动发送（让用户改完再发）
-  const handleEditMessage = (content: string, attachedContexts: AiResourceContext[] = []) => {
+  const handleEditMessage = (
+    content: string,
+    attachedContexts: AiResourceContext[] = [],
+    attachedScopes: AiScopeRef[] = [],
+  ) => {
     userInput.value = content;
     contexts.value = attachedContexts.map((item) => ({ ...item }));
+    scopeRefs.value = attachedScopes.map((item) => ({ ...item }));
     nextTick(() => {
       chatInputRef.value?.focus();
     });
@@ -2468,6 +2543,12 @@
     resetScrollState();
   };
 
+  const handleConfirmationReplaced = (index: number, replacement: AiToolConfirmationReplacement) => {
+    if (!replaceConversationConfirmation(messages.value, index, replacement)) return;
+    persistHistory();
+    resetScrollState();
+  };
+
   const handleConfirmationSettled = (index: number, settlement: AiToolConfirmationSettlement) => {
     settleConversationConfirmation(messages.value, index, settlement);
     persistHistory();
@@ -2485,6 +2566,7 @@
     const materialSnapshot = createAiAssistantMaterialSnapshot(
       originalUserMessage.contextRefs || originalUserMessage.contexts || [],
       originalUserMessage.attachmentRefs || [],
+      originalUserMessage.scopeRefs || [],
     );
     regenerationPreparing.value = true;
     try {

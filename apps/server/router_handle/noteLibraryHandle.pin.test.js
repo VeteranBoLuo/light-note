@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const poolQuery = vi.fn();
 const connection = {
@@ -11,10 +11,13 @@ const connection = {
 const getConnection = vi.fn(async () => connection);
 const ensureNotVisitor = vi.fn(() => true);
 const attachPendingStatus = vi.fn();
+const removeInboxRelations = vi.fn();
+const invalidatePersonalKnowledgeCache = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
+  L: (_req, zh) => zh,
   snakeCaseKeys: vi.fn((obj) => obj),
   mergeExistingProperties: vi.fn((obj) => obj),
   insertData: vi.fn((obj) => ({ ...obj, id: 'generated-id' })),
@@ -27,7 +30,7 @@ vi.mock('../util/resourceTags.js', () => ({
 }));
 vi.mock('../util/resourceInbox.js', () => ({
   attachPendingStatus,
-  removeInboxRelations: vi.fn(),
+  removeInboxRelations,
 }));
 vi.mock('../util/services/noteService.js', () => ({ createNote: vi.fn() }));
 vi.mock('../util/services/tagService.js', () => ({ createTag: vi.fn() }));
@@ -36,14 +39,20 @@ vi.mock('../util/noteImages.js', () => ({
   extractNoteImageUrls: vi.fn(() => []),
   filterOwnedImageUrls: vi.fn(),
 }));
+vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
-const { queryNoteList, toggleNoteTop } = await import('./noteLibraryHandle.js');
+const { deleteNoteSubtree, delNote, moveNoteNode, moveNoteNodes, queryNoteList, toggleNoteTop, updateNoteSort } =
+  await import('./noteLibraryHandle.js');
 
 function mockRes() {
   return { send: vi.fn() };
 }
 
 const lastSent = (res) => res.send.mock.calls.at(-1)?.[0];
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('笔记置顶 handler', () => {
   beforeEach(() => {
@@ -93,6 +102,71 @@ describe('笔记置顶 handler', () => {
         pageSize: 48,
         hasMore: false,
       },
+    });
+  });
+
+  it('页面树模式在根目录只查询直接子页面，旧调用未传 parentId 时仍保持平铺兼容', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          { id: 'root', parent_id: null, title: '根页面', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'child', parent_id: 'root', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'root', parent_id: null, title: '根页面', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: null } }, res);
+
+    expect(poolQuery.mock.calls[0][0]).toContain('SELECT id, parent_id, title');
+    expect(poolQuery.mock.calls[1][0]).toContain('n.parent_id IS NULL');
+    expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 48, 0]);
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { total: 1 } });
+  });
+
+  it('页面树内搜索由服务端扩展权威后代，并为重名结果附加路径', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          { id: 'parent', parent_id: null, title: '项目', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'child', parent_id: 'parent', title: '模块', sort: 0, is_top: 0, del_flag: 0 },
+          { id: 'grandchild', parent_id: 'child', title: '复盘', sort: 0, is_top: 0, del_flag: 0 },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'grandchild', parent_id: 'child', title: '复盘', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList(
+      { user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: 'parent', keyword: '复盘' } },
+      res,
+    );
+
+    const [listSql, listParams] = poolQuery.mock.calls[1];
+    expect(listSql).toContain('n.id IN (?,?)');
+    expect(listParams).toEqual(['u1', 'child', 'grandchild', '%复盘%', '%复盘%', 48, 0]);
+    expect(lastSent(res).data.items[0]).toMatchObject({
+      id: 'grandchild',
+      path: [
+        { id: 'parent', title: '项目' },
+        { id: 'child', title: '模块' },
+        { id: 'grandchild', title: '复盘' },
+      ],
+      path_text: '项目 / 模块',
+    });
+  });
+
+  it('页面树模式拒绝不属于当前用户的 parentId', async () => {
+    poolQuery.mockResolvedValueOnce([[]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { parentId: 'other-user-note' } }, res);
+
+    expect(poolQuery).toHaveBeenCalledTimes(1);
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_PARENT_NOT_FOUND' },
     });
   });
 
@@ -168,5 +242,196 @@ describe('笔记置顶 handler', () => {
     expect(connection.release).not.toHaveBeenCalled();
     expect(lastSent(res).status).toBe(500);
     expect(lastSent(res).msg).not.toContain('CONNECT_SECRET');
+  });
+});
+
+describe('页面树写入 handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+    getConnection.mockResolvedValue(connection);
+    connection.beginTransaction.mockResolvedValue();
+    connection.commit.mockResolvedValue();
+    connection.rollback.mockResolvedValue();
+    connection.query.mockResolvedValue([{ affectedRows: 1 }]);
+    removeInboxRelations.mockResolvedValue({ changed: 1 });
+    invalidatePersonalKnowledgeCache.mockResolvedValue();
+  });
+
+  it('写灰度未命中时在获取事务连接前失败关闭', async () => {
+    vi.stubEnv('NOTE_TREE_WRITE_ENABLED', 'false');
+    const res = mockRes();
+
+    await moveNoteNode({ user: { id: 'u1', role: 'user' }, body: { id: 'moved', parentId: 'target' } }, res);
+
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_FEATURE_DISABLED', feature: 'note_tree_write' },
+    });
+  });
+
+  it('子树回收站拥有独立急停开关', async () => {
+    vi.stubEnv('NOTE_TREE_SUBTREE_TRASH_ENABLED', 'false');
+    const res = mockRes();
+
+    await deleteNoteSubtree(
+      { user: { id: 'u1', role: 'user' }, body: { id: 'parent', expectedDescendantCount: 1 } },
+      res,
+    );
+
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_FEATURE_DISABLED', feature: 'note_tree_subtree_trash' },
+    });
+  });
+
+  it('跨目录移动在事务中锁定 owner 树，提交后才刷新知识缓存', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id')) {
+        return [
+          [
+            { id: 'moved', parent_id: null, title: '待移动', sort: 0, is_top: 0, del_flag: 0 },
+            { id: 'target', parent_id: null, title: '目标', sort: 1, is_top: 0, del_flag: 0 },
+          ],
+        ];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await moveNoteNode({ user: { id: 'u1' }, body: { id: 'moved', parentId: 'target' } }, res);
+
+    expect(connection.query.mock.calls[0]).toEqual([expect.stringContaining('FOR UPDATE'), ['u1']]);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('SET parent_id = ?'))).toBe(true);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('u1');
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { id: 'moved', parentId: 'target', moved: true } });
+  });
+
+  it('移动到自己的后代返回稳定 409，并回滚事务', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        { id: 'parent', parent_id: null, title: '父页面', sort: 0, is_top: 0, del_flag: 0 },
+        { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+      ],
+    ]);
+    const res = mockRes();
+
+    await moveNoteNode({ user: { id: 'u1' }, body: { id: 'parent', parentId: 'child' } }, res);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_TREE_CYCLE' } });
+  });
+
+  it('批量移动在同一事务中折叠父子选择并提交后刷新知识缓存', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id')) {
+        return [
+          [
+            { id: 'target', parent_id: null, title: '目标', sort: 0, is_top: 0, del_flag: 0 },
+            { id: 'parent', parent_id: null, title: '父页面', sort: 1, is_top: 0, del_flag: 0 },
+            { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+          ],
+        ];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await moveNoteNodes(
+      { user: { id: 'u1' }, body: { ids: ['parent', 'child'], parentId: 'target' } },
+      res,
+    );
+
+    expect(connection.query.mock.calls[0]).toEqual([expect.stringContaining('FOR UPDATE'), ['u1']]);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('u1');
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { requestedCount: 2, rootCount: 1, movedCount: 1, affectedCount: 2, parentId: 'target' },
+    });
+  });
+
+  it('旧删除接口发现任一直接子页面时拒绝，避免制造孤儿', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+        { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+      ],
+    ]);
+    const res = mockRes();
+
+    await delNote({ user: { id: 'u1' }, body: { ids: ['parent'] } }, res);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(removeInboxRelations).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_HAS_CHILDREN' } });
+  });
+
+  it('新删除接口按确认数量原子删除整棵子树，并在提交后失效知识缓存', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('SELECT id, parent_id')) {
+        return [
+          [
+            { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+            { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+          ],
+        ];
+      }
+      if (statement.includes('SET del_flag = 1')) return [{ affectedRows: 2 }];
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await deleteNoteSubtree(
+      { user: { id: 'u1' }, body: { id: 'parent', expectedDescendantCount: 1 } },
+      res,
+    );
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('u1');
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { rootCount: 1, deletedCount: 2, items: [{ id: 'parent', descendantCount: 1, totalCount: 2 }] },
+    });
+  });
+
+  it('旧批量排序也必须锁定并限定在同一 parent_id', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          { id: 'a', parent_id: 'parent' },
+          { id: 'b', parent_id: 'parent' },
+        ],
+      ])
+      .mockResolvedValue([{ affectedRows: 1 }]);
+    const res = mockRes();
+
+    await updateNoteSort(
+      {
+        user: { id: 'u1' },
+        body: {
+          parentId: 'parent',
+          notes: [
+            { id: 'a', sort: 1 },
+            { id: 'b', sort: 0 },
+          ],
+        },
+      },
+      res,
+    );
+
+    expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(connection.query.mock.calls.slice(1).every(([sql]) => String(sql).includes('parent_id <=> ?'))).toBe(true);
+    expect(connection.query.mock.calls.slice(1).map(([, params]) => params.at(-1))).toEqual(['parent', 'parent']);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(lastSent(res).status).toBe(200);
   });
 });

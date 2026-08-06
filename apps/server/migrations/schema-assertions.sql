@@ -356,8 +356,8 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name='system'
 WHERE actual.column_name IS NULL;
 
--- 24) 待办任务计划 × 每项提醒 v2 的事实表、关键列与幂等索引必须存在（期望 0 行）
-SELECT '[24] missing_todo_plan_v2_table' AS check_name, expected.t AS detail
+-- 26) 待办任务计划 × 每项提醒 v2 的事实表、关键列与幂等索引必须存在（期望 0 行）
+SELECT '[26] missing_todo_plan_v2_table' AS check_name, expected.t AS detail
 FROM (
   SELECT 'todo_series' t UNION ALL
   SELECT 'todo_series_resource_refs' UNION ALL
@@ -371,7 +371,7 @@ LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
 WHERE actual.table_name IS NULL;
 
-SELECT '[24] missing_todo_plan_v2_column' AS check_name, expected.n AS detail
+SELECT '[26] missing_todo_plan_v2_column' AS check_name, expected.n AS detail
 FROM (
   SELECT 'todo_items' tab, 'start_at' col, 'todo_items.start_at' n UNION ALL
   SELECT 'todo_items', 'plan_version', 'todo_items.plan_version' UNION ALL
@@ -391,7 +391,7 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
-SELECT '[24] missing_todo_plan_v2_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+SELECT '[26] missing_todo_plan_v2_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
 FROM (
   SELECT 'todo_items' tn, 'uk_todo_series_occurrence' ix UNION ALL
   SELECT 'todo_series', 'uk_todo_series_creation' UNION ALL
@@ -411,6 +411,62 @@ LEFT JOIN information_schema.statistics actual
 WHERE actual.index_name IS NULL;
 
 -- 规则必须恰好归属于一个实例或一个系列；MySQL 5.7 无 CHECK 约束，由写入服务保证，门禁查脏数据。
-SELECT '[24] invalid_todo_reminder_rule_owner' AS check_name, id AS detail
+SELECT '[26] invalid_todo_reminder_rule_owner' AS check_name, id AS detail
 FROM todo_reminder_rules
 WHERE (todo_id IS NULL AND series_id IS NULL) OR (todo_id IS NOT NULL AND series_id IS NOT NULL);
+
+-- 24) 笔记页面树基础列与索引必须存在（页面树 PR1；期望 0 行）
+SELECT '[24] missing_note_tree_column' AS check_name, 'note.parent_id' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='note'
+ AND actual.column_name='parent_id'
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.column_type) <> 'varchar(255)'
+   OR actual.is_nullable <> 'YES';
+
+SELECT '[24] invalid_note_tree_index' AS check_name,
+  CONCAT(expected.idx, ' 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (
+  SELECT 'idx_note_owner_parent_order' idx,
+    'create_by(64),parent_id(64),del_flag(8),is_top,sort,update_time,id(64)' cols UNION ALL
+  SELECT 'idx_note_parent', 'parent_id'
+) expected
+LEFT JOIN (
+  SELECT index_name,
+    GROUP_CONCAT(
+      CONCAT(column_name, IF(sub_part IS NULL, '', CONCAT('(', sub_part, ')')))
+      ORDER BY seq_in_index SEPARATOR ','
+    ) AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE() AND table_name='note'
+  GROUP BY index_name
+) actual ON actual.index_name=expected.idx
+WHERE actual.index_name IS NULL OR actual.cols <> expected.cols;
+
+-- 25) 页面树子树删除批次列与恢复索引必须存在（页面树 PR6；期望 0 行）
+SELECT '[25] missing_note_tree_delete_batch_column' AS check_name, 'note.tree_delete_batch_id' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='note'
+ AND actual.column_name='tree_delete_batch_id'
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.column_type) <> 'varchar(255)'
+   OR actual.is_nullable <> 'YES';
+
+SELECT '[25] invalid_note_tree_delete_batch_index' AS check_name,
+  CONCAT('idx_note_tree_delete_batch 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT index_name,
+    GROUP_CONCAT(
+      CONCAT(column_name, IF(sub_part IS NULL, '', CONCAT('(', sub_part, ')')))
+      ORDER BY seq_in_index SEPARATOR ','
+    ) AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE() AND table_name='note'
+  GROUP BY index_name
+) actual ON actual.index_name='idx_note_tree_delete_batch'
+WHERE actual.index_name IS NULL OR actual.cols <> 'create_by(64),tree_delete_batch_id(64),del_flag(8)';
