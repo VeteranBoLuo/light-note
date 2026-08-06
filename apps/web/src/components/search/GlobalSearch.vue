@@ -56,13 +56,14 @@
                 <span class="item-title-row">
                   <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
                   <span v-if="item.tags && item.tags.length" class="item-tags">
-                    <span
+                    <ResourceTagChip
                       v-for="tg in item.tags"
                       :key="tg.id"
-                      class="item-tag"
-                      :class="{ 'item-tag--hit': isTagHit(tg.name) }"
-                      >#{{ tg.name }}</span
-                    >
+                      :tag="tg"
+                      :selected="isTagHit(tg.name)"
+                      show-hash
+                      max-width="100px"
+                    />
                   </span>
                 </span>
                 <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
@@ -139,13 +140,14 @@
                   <span class="item-title-row">
                     <span class="item-title" v-html="highlightText(item.title, keyword)"></span>
                     <span v-if="item.tags && item.tags.length" class="item-tags">
-                      <span
+                      <ResourceTagChip
                         v-for="tg in item.tags"
                         :key="tg.id"
-                        class="item-tag"
-                        :class="{ 'item-tag--hit': isTagHit(tg.name) }"
-                        >#{{ tg.name }}</span
-                      >
+                        :tag="tg"
+                        :selected="isTagHit(tg.name)"
+                        show-hash
+                        max-width="100px"
+                      />
                     </span>
                   </span>
                   <span class="item-desc" v-html="highlightText(item.description || item.extra, keyword)"></span>
@@ -185,6 +187,7 @@
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const router = useRouter();
   const route = useRoute();
@@ -616,21 +619,6 @@
     min-width: 0;
     overflow: hidden;
     flex-wrap: nowrap;
-  }
-  .item-tag {
-    flex: 0 0 auto;
-    font-size: 11px;
-    line-height: 1.5;
-    padding: 0 6px;
-    border-radius: 999px;
-    color: var(--sub-text-color, #888);
-    background: color-mix(in srgb, var(--text-color) 8%, transparent);
-    white-space: nowrap;
-  }
-  .item-tag--hit {
-    color: #fff;
-    background: #615ced;
-    font-weight: 600;
   }
   /* 描述改 2 行,配合"命中处摘要"能露出命中词而不被一行省略号切掉 */
   .item-desc {

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import pool from '../../db/index.js';
 import * as aiQuota from '../aiQuota.js';
 import { getActiveProviderInfo } from './deepseekClient.js';
-import { stableAgentErrorCode } from './logSafety.js';
+import { redactSensitiveText, stableAgentErrorCode } from './logSafety.js';
 
 const VALID_QUOTA_POLICIES = new Set(['user', 'system', 'none']);
 
@@ -83,7 +83,7 @@ async function insertAgentLog({ state, result, error, status, durationMs }) {
   const model = result?.model || providerInfo.model || null;
   const price = providerInfo.price || { input: 0, output: 0 };
   const cost = (usage.promptTokens / 1_000_000) * price.input + (usage.completionTokens / 1_000_000) * price.output;
-  const question = `[${state.taskType} AI 请求，正文不写入日志]`;
+  const question = state.requestSummary || `[${state.taskType} AI 请求，正文不写入日志]`;
   const data = {
     id: crypto.randomUUID(),
     requestId: state.requestId,
@@ -176,6 +176,7 @@ export async function beginAiGatewayGovernance({ governance, traceId, taskType, 
     identity,
     startedAt,
     quotaHandle: null,
+    requestSummary: redactSensitiveText(governance?.requestSummary, 200).replace(/\s+/gu, ' ').trim() || null,
   };
   if (identity.quotaPolicy !== 'none') {
     state.quotaHandle = await aiQuota.reserve(identity.request, {

@@ -20,12 +20,21 @@ import { completeGrowthTask } from '../util/growthTaskCompletion.js';
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
+  const explicitStatus = [400, 404, 409].includes(Number(error?.status)) ? Number(error.status) : null;
   const clientError =
     /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标|重复任务|请选择|顺序|发生变化/.test(
       message,
     );
-  if (!clientError) console.error('[todo] 请求失败:', message);
-  return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
+  const status = explicitStatus || (clientError ? 400 : 500);
+  if (status >= 500) console.error('[todo] 请求失败:', message);
+  return res.send(resultData(null, status, status < 500 ? message : '待办服务暂时不可用，请稍后重试'));
+}
+
+function todoRequestError(code, message, status) {
+  const error = new Error(message);
+  error.code = code;
+  error.status = status;
+  return error;
 }
 
 async function withTransaction(res, callback, { afterCommit } = {}) {
@@ -101,9 +110,29 @@ export async function completeTodo(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   const id = String(req.body?.id || '').trim();
   if (!id) return res.send(resultData(null, 400, '缺少待办 ID'));
-  return withTransaction(res, async (connection) => ({
-    affected: await setTodoStatus(connection, req.user.id, id, 'completed'),
-  }));
+  return withTransaction(res, async (connection) => {
+    const affected = await setTodoStatus(connection, req.user.id, id, 'completed');
+    if (affected === 1) return { affected, state: 'completed' };
+
+    const [rows] = await connection.query(
+      'SELECT status, del_flag FROM todo_items WHERE id = ? AND user_id = ? LIMIT 1',
+      [id, req.user.id],
+    );
+    const current = rows[0];
+    if (!current || Number(current.del_flag) !== 0) {
+      throw todoRequestError(
+        'TODO_NOT_FOUND',
+        L(req, '该待办已删除或不存在', 'This todo was deleted or no longer exists.'),
+        404,
+      );
+    }
+    if (current.status === 'completed') return { affected: 0, state: 'completed' };
+    throw todoRequestError(
+      'TODO_STATUS_CONFLICT',
+      L(req, '待办状态已发生变化，请刷新后重试', 'The todo status changed. Refresh and try again.'),
+      409,
+    );
+  });
 }
 
 export async function reopenTodo(req, res) {

@@ -38,8 +38,9 @@
         <div class="phone-list-item" @click="openDetail(item)">
           <div class="phone-item-main">
             <span class="phone-item-user">{{ item.userAlias || '未知' }}</span>
+            <span class="phone-item-task">{{ item.taskTypeLabel || item.taskType || 'AI 请求' }}</span>
           </div>
-          <div class="phone-item-question">{{ item.question || '-' }}</div>
+          <div class="phone-item-question">{{ item.requestPreview || item.question || '-' }}</div>
           <div class="phone-item-meta">
             <span>{{ formatToolsUsed(item.toolsUsed) }}</span>
             <span>·</span>
@@ -56,7 +57,12 @@
     <BModal v-model:visible="detailVisible" title="调用详情" width="90%" :show-footer="false">
       <div v-if="selected" class="detail-grid">
         <div class="detail-row"><strong>用户：</strong>{{ selected.userAlias }}</div>
-        <div class="detail-row"><strong>提问：</strong>{{ selected.question }}</div>
+        <div class="detail-row">
+          <strong>{{ selected.requestLabel || '请求摘要' }}：</strong>{{ selected.requestPreview || selected.question }}
+          <small v-if="selected.requestTruncated" class="detail-request-hint">
+            已显示前 500 字，原摘要共 {{ selected.requestChars }} 字
+          </small>
+        </div>
         <div class="detail-row"><strong>工具：</strong>{{ formatToolsUsed(selected.toolsUsed) }}</div>
         <div class="detail-row"
           ><strong>供应商：</strong>{{ selected.provider || '-' }} / {{ selected.model || '-' }}</div
@@ -81,7 +87,8 @@
           </span>
         </div>
         <div class="detail-row"
-          ><strong>正文：</strong>{{ formatAnswerChars(selected) }} · {{ formatDeliveredLabel(selected.delivered) }}</div
+          ><strong>正文：</strong>{{ formatAnswerChars(selected) }} ·
+          {{ formatDeliveredLabel(selected.delivered) }}</div
         >
         <div class="detail-row detail-digest">{{ formatAnswerDigest(selected) }}</div>
         <div class="detail-row" v-if="chainLoading || chainSteps.length">
@@ -348,6 +355,14 @@
     font-weight: 600;
     color: var(--text-color);
   }
+  .phone-item-task {
+    padding: 1px 6px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--text-color);
+    font-size: 10px;
+    font-weight: 600;
+  }
   .phone-item-question {
     font-size: 13px;
     color: var(--text-color);
@@ -372,6 +387,11 @@
   .detail-row {
     font-size: 14px;
     line-height: 1.6;
+  }
+  .detail-request-hint {
+    display: block;
+    color: var(--desc-color);
+    font-size: 11px;
   }
   // 结果与链路状态用实色描边 + 实心圆点：APK 的系统 WebView 会把混色回退成实色。
   .agent-outcome-tag {

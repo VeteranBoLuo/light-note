@@ -47,14 +47,16 @@
       </div>
       <div v-if="relatedTags.length" class="tag-related">
         <span class="related-label">{{ $t('tagManage.relatedTag') }}:</span>
-        <span
+        <ResourceTagChip
           v-for="rt in relatedTags"
           :key="rt.id"
-          class="related-tag-item dom-hover"
+          :tag="rt"
+          size="medium"
+          interactive
+          max-width="160px"
           @click="goToTag(rt.id)"
           v-click-log="{ module: '标签详情', operation: `查看相关标签【${rt.name}】` }"
-          >{{ rt.name }}</span
-        >
+        />
       </div>
     </div>
 
@@ -199,15 +201,16 @@
             <!-- 摘要走纯文本插值:v-html 会把笔记里写的标签当真渲染 -->
             <div class="note-item-desc">{{ getNoteDesc(note) }}</div>
             <div v-if="note.tags?.length" class="note-item-tags">
-              <span
+              <ResourceTagChip
                 v-for="noteTag in note.tags"
                 :key="noteTag.id"
-                class="note-item-tag dom-hover"
+                :tag="noteTag"
+                size="medium"
+                interactive
+                max-width="140px"
                 @click.stop="goToTag(noteTag.id)"
                 v-click-log="{ module: '标签详情', operation: `查看笔记标签【${noteTag.name}】` }"
-              >
-                {{ noteTag.name }}
-              </span>
+              />
             </div>
             <div class="note-item-time">{{ note.updateTime || note.createTime }}</div>
           </div>
@@ -271,6 +274,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { openAiAssistant } from '@/utils/aiEntry';
   import { noteSummaryText } from '@/utils/noteSummary';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
   const TagGraphCanvas = defineAsyncComponent(() => import('@/components/tagGraph/TagGraphCanvas.vue'));
@@ -803,18 +807,6 @@
         color: var(--desc-color);
       }
 
-      .related-tag-item {
-        padding: 3px 10px;
-        border-radius: 20px;
-        font-size: 13px;
-        background: var(--common-tag-bg-color);
-        color: var(--desc-color);
-        cursor: pointer;
-
-        &:hover {
-          color: var(--common-tag-h-color);
-        }
-      }
     }
   }
 
@@ -1063,16 +1055,6 @@
       flex-wrap: wrap;
       gap: 6px;
       margin-bottom: 10px;
-    }
-
-    .note-item-tag {
-      padding: 2px 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      line-height: 18px;
-      color: var(--desc-color);
-      background: var(--common-tag-bg-color);
-      border: 1px solid var(--card-border-color);
     }
 
     .note-item-time {

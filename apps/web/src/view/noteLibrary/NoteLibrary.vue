@@ -2102,9 +2102,8 @@
     }
 
     .note-list-skeleton-item {
-      /* 贴住真实列表项:padding 22 + 标题 22 + 摘要 38 + gap 4 + chip 22 ≈ 109(实测 109~111)。
-         最后一条骨架线的 margin-bottom 由下面收掉,不然整项会比真实的高出一截。 */
-      min-height: 108px;
+      /* 桌面列表是稳定的「标题 + 摘要/标签」两行，骨架与真实项保持相同的紧凑高度。 */
+      min-height: 70px;
       padding: 11px 14px;
       border: 1px solid var(--card-border-color);
 
@@ -2546,6 +2545,11 @@
     .note-library-body-list .note-list,
     .note-library-body-list .note-list-skeleton-wrap {
       padding: 0;
+    }
+
+    .note-library-body-list .note-list-skeleton-item {
+      /* 手机端为标题、摘要和 chip 三段式布局，保留与真实项一致的高度。 */
+      min-height: 108px;
     }
   }
 

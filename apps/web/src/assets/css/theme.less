@@ -27,10 +27,41 @@ html[data-theme='night'] {
      深色主题下必须提亮；而填充底色配白字时需要足够暗，两个角色要求相反。
      此前 3 个角标组件直接把前景色当底色 + 白字，深色主题下只有 2.04~2.78:1。
      这里成对定义底色与配套字色，两套主题都过 4.5:1。 */
-  /* 中性 chip（笔记格式胶囊、标签的 +N）上的文字色。
-     直接用 --desc-color 在 --common-tag-bg-color(#f0f0f0) 上只有 4.24:1，
-     11px 小字不合格；比 desc 再深一档到 5.06:1，仍是次要信息的观感，不会抢标题。 */
-  --chip-neutral-color: #65656e;
+  /* 资源胶囊按「内容语义」着色，而不是跟随所在模块。
+     用户标签=粉、置顶=紫、待整理=琥珀、格式/+N=中性灰。以下前景/背景均为
+     稳定实色，避免 Android WebView 的 color-mix 构建回退抹掉状态差异。 */
+  --chip-tag-fg: #b42365;
+  --chip-tag-bg: #fdf0f6;
+  --chip-tag-border: #f5c7dc;
+  --chip-tag-hover-fg: #8f174f;
+  --chip-tag-hover-bg: #f9d9e8;
+  --chip-pin-fg: #5146d9;
+  --chip-pin-bg: #eeecff;
+  --chip-pin-border: #d9d4ff;
+  --chip-pending-fg: #8a4b00;
+  --chip-pending-bg: #fff3df;
+  --chip-pending-border: #f3d4a1;
+  --chip-neutral-fg: #65656e;
+  --chip-neutral-bg: #f0f0f0;
+  --chip-neutral-border: #e4e4e7;
+  /* 兼容仍在迁移中的存量调用；新代码统一使用 --chip-neutral-fg。 */
+  --chip-neutral-color: var(--chip-neutral-fg);
+  /* BChip 的扩展语义。资源类型可继续使用模块色，但不用于用户标签。 */
+  --chip-success-fg: #1a7d4a;
+  --chip-success-bg: #eef8f2;
+  --chip-success-border: #bee1ca;
+  --chip-danger-fg: #cc3333;
+  --chip-danger-bg: #fff0f0;
+  --chip-danger-border: #f0c1c1;
+  --chip-bookmark-fg: #ffffff;
+  --chip-bookmark-bg: var(--resource-bookmark-color);
+  --chip-bookmark-border: var(--resource-bookmark-color);
+  --chip-note-fg: #062d25;
+  --chip-note-bg: var(--resource-note-color);
+  --chip-note-border: var(--resource-note-color);
+  --chip-file-fg: #3d2500;
+  --chip-file-bg: var(--resource-file-color);
+  --chip-file-border: var(--resource-file-color);
   --danger-fill-bg: #d93b3b;
   --danger-fill-fg: #ffffff; /* 4.53:1 */
   --warning-fill-bg: #a05f00;
@@ -53,6 +84,9 @@ html[data-theme='night'] {
   --surface-card-shadow: 0 12px 30px -28px rgba(38, 49, 95, 0.32);
   --surface-raised-shadow: 0 16px 34px -28px rgba(76, 88, 196, 0.38);
   --surface-hover-shadow: 0 16px 34px -24px rgba(45, 54, 100, 0.24);
+  --action-menu-border-color: #d9dce6;
+  --action-menu-danger-hover-bg: #fff0f1;
+  --action-menu-shadow: 0 14px 32px rgba(45, 54, 100, 0.14), 0 3px 10px rgba(45, 54, 100, 0.08);
   --card-background: var(--surface-card-bg);
   --card-bg-color: var(--card-background);
   --hover-background: #f2f3f8;
@@ -215,8 +249,37 @@ html[data-theme='night'] {
   --focus-ring-color: color-mix(in srgb, var(--primary-color) 65%, #fff);
   /* 深色主题的实色填充走「亮底 + 深字」：亮底在深色页面上够突出（6.00~8.16:1），
      深字保证数字读得清（6.03~7.06:1）。沿用 day 的白字只有 2.04~2.78:1。 */
-  /* 深色主题下 --desc-color 在 --common-tag-bg-color(#343a45) 上已有 5.08:1，直接沿用 */
-  --chip-neutral-color: var(--desc-color);
+  /* 深色主题使用单独校准的胶囊实色，不从亮色值混合推导。 */
+  --chip-tag-fg: #ff8ec3;
+  --chip-tag-bg: #4a2538;
+  --chip-tag-border: #6d3350;
+  --chip-tag-hover-fg: #ffc0dd;
+  --chip-tag-hover-bg: #5b2b43;
+  --chip-pin-fg: #aaa6ff;
+  --chip-pin-bg: #38335f;
+  --chip-pin-border: #575083;
+  --chip-pending-fg: #ffc56a;
+  --chip-pending-bg: #4a3521;
+  --chip-pending-border: #6a4b28;
+  --chip-neutral-fg: #a7adba;
+  --chip-neutral-bg: #343a45;
+  --chip-neutral-border: #464d59;
+  --chip-neutral-color: var(--chip-neutral-fg);
+  --chip-success-fg: #3ddc84;
+  --chip-success-bg: #203c2d;
+  --chip-success-border: #356147;
+  --chip-danger-fg: #ff8080;
+  --chip-danger-bg: #47282b;
+  --chip-danger-border: #704044;
+  --chip-bookmark-fg: #ffffff;
+  --chip-bookmark-bg: var(--resource-bookmark-color);
+  --chip-bookmark-border: #8a86f4;
+  --chip-note-fg: #062d25;
+  --chip-note-bg: var(--resource-note-color);
+  --chip-note-border: #56d0b6;
+  --chip-file-fg: #3d2500;
+  --chip-file-bg: var(--resource-file-color);
+  --chip-file-border: #ffc067;
   --danger-fill-bg: #ff6b6b;
   --danger-fill-fg: #3a0f0f; /* 6.03:1 */
   --warning-fill-bg: #f5a524;
@@ -236,6 +299,9 @@ html[data-theme='night'] {
   --surface-card-shadow: 0 12px 28px -22px rgba(0, 0, 0, 0.78);
   --surface-raised-shadow: 0 18px 38px -26px rgba(0, 0, 0, 0.88);
   --surface-hover-shadow: 0 18px 38px -22px rgba(0, 0, 0, 0.82);
+  --action-menu-border-color: #465061;
+  --action-menu-danger-hover-bg: #452f38;
+  --action-menu-shadow: 0 16px 36px rgba(0, 0, 0, 0.48), 0 3px 10px rgba(0, 0, 0, 0.32);
   --card-background: var(--surface-card-bg);
   --card-bg-color: var(--card-background);
   --hover-background: #363c48;

@@ -95,6 +95,7 @@
           v-model:value="bookmarkData.relatedTags"
           class="bookmark-tag-select"
           mode="multiple"
+          chip-tone="tag"
           :max-tag-count="3"
           :options="tagOptions"
           :placeholder="$t('bookmarkEditor.tagPlaceholder')"

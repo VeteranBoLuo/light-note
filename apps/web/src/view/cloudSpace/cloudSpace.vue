@@ -255,6 +255,16 @@
     cloudSearchTimer = window.setTimeout(() => cloud.queryFieldList(), 220);
   }
 
+  const cloudIdentityKey = computed(() =>
+    [
+      user.id || '',
+      user.role || '',
+      user.visitorWorkspace ? 'visitor-workspace' : '',
+      user.adminContext?.subjectUserId || '',
+      user.adminContext?.mode || '',
+    ].join('|'),
+  );
+
   useMobileTopBar(['cloudSpace'], {
     searchSourceType: 'file',
     onAuxiliaryAction: () => {
@@ -605,6 +615,14 @@
   }
 
   initializeCloudSpace();
+
+  watch(cloudIdentityKey, () => {
+    folderListLoaded = false;
+    unavailableFolderId = '';
+    unavailableFileId = '';
+    initializeCloudSpace();
+    void cloud.queryFolder();
+  });
 
   watch(viewMode, (val) => {
     localStorage.setItem(CLOUD_SPACE_VIEW_STORAGE_KEY, val);

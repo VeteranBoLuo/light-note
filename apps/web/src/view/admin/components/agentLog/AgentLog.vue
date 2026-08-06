@@ -65,7 +65,18 @@
       :has-more="hasMore"
       @load-more="loadMore"
       @row-click="onRowClick"
-    />
+      :row-height="48"
+    >
+      <template #bodyCell="{ column, record }">
+        <span v-if="column.key === 'taskTypeLabel'" class="agent-task-pill">
+          {{ record.taskTypeLabel || '未知类型' }}
+        </span>
+        <BTooltip v-else-if="column.key === 'requestPreview'" :title="record.requestPreview || '-'">
+          <span class="agent-request-text">{{ record.requestPreview || '-' }}</span>
+        </BTooltip>
+        <template v-else>{{ record[column.key] }}</template>
+      </template>
+    </BTable>
   </AdminDataPage>
 
   <BModal v-model:visible="detailVisible" title="调用详情" width="550px" :show-footer="false" :mask-closable="true">
@@ -104,8 +115,11 @@
         >
       </div>
       <div class="agent-detail__question">
-        <label>提问</label>
-        <p>{{ selectedRecord.question || '-' }}</p>
+        <label>{{ selectedRecord.requestLabel || '请求摘要' }}</label>
+        <p>{{ selectedRecord.requestPreview || selectedRecord.question || '-' }}</p>
+        <small v-if="selectedRecord.requestTruncated">
+          已显示前 500 字，原摘要共 {{ selectedRecord.requestChars }} 字；列表接口不返回更长正文。
+        </small>
       </div>
       <div class="agent-detail__outcome">
         <label>结果</label>
@@ -172,6 +186,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
@@ -268,12 +283,13 @@
   );
 
   const columns = [
-    { title: '用户', key: 'userAlias', width: '1fr' },
-    { title: '提问', key: 'question', width: '2fr', ellipsis: true },
-    { title: '工具', key: 'toolsUsedDisplay', width: '1fr' },
+    { title: '用户', key: 'userAlias', width: '170px' },
+    { title: '类型', key: 'taskTypeLabel', width: '112px', ellipsis: false },
+    { title: '提问 / 请求摘要', key: 'requestPreview', width: 'minmax(280px, 2.4fr)', ellipsis: false },
+    { title: '工具', key: 'toolsUsedDisplay', width: 'minmax(130px, 1fr)' },
     { title: '供应商', key: 'provider', width: '90px' },
     { title: '调用', key: 'iterations', width: '60px' },
-    { title: '时间', key: 'createdAt', width: '1fr' },
+    { title: '时间', key: 'createdAt', width: '160px' },
   ];
 
   const selectedOutcome = computed(() => outcomeMeta(selectedRecord.value?.outcomeKind));
@@ -402,6 +418,41 @@
 </script>
 
 <style lang="less" scoped>
+  .agent-task-pill {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 22px;
+    padding: 1px 7px;
+    overflow: hidden;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--text-color);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .agent-request-text {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .agent-detail__question small {
+    display: block;
+    margin-top: 5px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
   .log-search-input {
     flex: 1;
   }

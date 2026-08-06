@@ -15,6 +15,7 @@ function mountSelect(
   showSearch = false,
   accessibility: { ariaLabel?: string; ariaLabelledby?: string } = {},
   mode: 'single' | 'multiple' = 'single',
+  extraProps: Record<string, unknown> = {},
 ) {
   const value = ref<string | string[]>(mode === 'multiple' ? [] : '');
   const host = document.createElement('div');
@@ -26,6 +27,7 @@ function mountSelect(
           options,
           showSearch,
           mode,
+          ...extraProps,
           ...accessibility,
           value: value.value,
           'onUpdate:value': (nextValue: string | string[]) => {
@@ -136,6 +138,18 @@ describe('BSelect keyboard interaction', () => {
     const { host } = mountSelect(false, { ariaLabelledby: 'scope-label' });
     const trigger = host.querySelector<HTMLElement>('.select-trigger');
     expect(trigger?.getAttribute('aria-labelledby')).toBe('scope-label');
+  });
+
+  it('多选用户标签可显式启用 tag 语义色', async () => {
+    const { host } = mountSelect(false, {}, 'multiple', { chipTone: 'tag' });
+    const trigger = host.querySelector<HTMLElement>('.select-trigger');
+    trigger?.click();
+    await nextTick();
+    document.body.querySelectorAll<HTMLElement>('.select-option')[1]?.click();
+    await nextTick();
+
+    expect(host.querySelector('.b-select')?.classList.contains('is-tag-tone')).toBe(true);
+    expect(host.querySelector('.select-tag')?.textContent).toContain('First available');
   });
 
   it('disabled 时不进入焦点顺序、不打开下拉，也不允许清空或选择', async () => {

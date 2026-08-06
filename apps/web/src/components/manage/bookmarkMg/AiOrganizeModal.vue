@@ -78,26 +78,26 @@
               <span class="aio-item-name" :title="s.url">{{ s.currentName || s.suggestName || s.url }}</span>
             </BCheckbox>
             <div class="aio-tags">
-              <BButton
+              <ResourceTagChip
                 v-for="mt in s.matchedTags"
                 :key="mt.id"
-                size="small"
                 class="aio-tag"
-                :class="{ sel: s.pickTags.includes(mt.id) }"
+                :tag="mt"
+                size="medium"
+                interactive
+                :selected="s.pickTags.includes(mt.id)"
                 @click="toggle(s.pickTags, mt.id)"
-              >
-                {{ mt.name }}
-              </BButton>
-              <BButton
+              />
+              <ResourceTagChip
                 v-for="nt in s.newTags"
                 :key="'n' + nt"
-                size="small"
                 class="aio-tag aio-tag--new"
-                :class="{ sel: s.pickNew.includes(nt) }"
+                :tag="{ name: `＋ ${nt}` }"
+                size="medium"
+                interactive
+                :selected="s.pickNew.includes(nt)"
                 @click="toggle(s.pickNew, nt)"
-              >
-                {{ nt }}
-              </BButton>
+              />
               <span v-if="!s.matchedTags.length && !s.newTags.length" class="aio-muted">{{
                 $t('bookmarkMg.aiOrganizeNoTag')
               }}</span>
@@ -149,6 +149,7 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useUserStore } from '@/store';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const visible = defineModel<boolean>('visible');
   const props = defineProps<{ initType?: 'bookmark' | 'note'; selectedIds?: string[] }>();
@@ -497,32 +498,10 @@
   }
   .aio-tag {
     max-width: 100%;
-    overflow: hidden;
-    border: 1px solid var(--card-border-color);
-    background: transparent;
-    color: var(--desc-color);
-    border-radius: 20px;
-    padding: 3px 12px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.15s;
     height: 26px;
-    line-height: 26px;
-    text-overflow: ellipsis;
   }
   .aio-tag--new {
     border-style: dashed;
-  }
-  .aio-tag.sel {
-    color: var(--resource-bookmark-color);
-    border-color: var(--resource-bookmark-color);
-    background: color-mix(in srgb, var(--resource-bookmark-color) 14%, transparent);
-    font-weight: 600;
-  }
-  .aio-tag--new.sel {
-    color: var(--primary-color);
-    border-color: var(--primary-color);
-    background: color-mix(in srgb, var(--primary-color) 14%, transparent);
   }
   .aio-done .aio-check {
     width: 44px;

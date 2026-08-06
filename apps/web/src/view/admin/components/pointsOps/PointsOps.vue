@@ -57,17 +57,15 @@
         <div class="pops-top">
           <div v-for="(u, i) in ov?.top || []" :key="u.userId" class="pops-top-row">
             <span class="pops-top-rank">{{ i + 1 }}</span>
-            <!-- 回填入口用真 button：键盘用户否则只能手抄 userId -->
-            <button
-              type="button"
+            <BButton
               class="pops-top-user dom-hover"
               :title="'点击回填 · ' + u.userId"
               :aria-label="`回填用户 ${u.alias || u.email || u.userId}`"
-              @click="pickUser(u.userId)"
+              @click="selectUser(u)"
             >
               <span class="pops-top-alias">{{ u.alias || '(未设昵称)' }}</span>
               <span class="pops-top-email">{{ u.email || u.userId }}</span>
-            </button>
+            </BButton>
             <b class="pops-top-pts">🪙 {{ u.points.toLocaleString('en-US') }}</b>
           </div>
           <div v-if="!ov?.top?.length" class="pops-empty">暂无持有人</div>
@@ -77,11 +75,20 @@
 
     <!-- 单账号查询 + 手动发放 -->
     <div class="pops-block">
-      <div class="pops-block-head"><span>账号查询 / 手动发放</span></div>
-      <div class="pops-grant">
-        <div class="pops-field"
-          ><label>用户ID</label><b-input v-model:value="form.userId" placeholder="目标用户 user_id"
-        /></div>
+      <div class="pops-block-head"><span>选择用户 / 手动调整</span></div>
+      <AdminUserPicker @select="selectUser" />
+
+      <div v-if="selectedUser" class="pops-selected-user">
+        <div>
+          <strong>{{ selectedUser.alias || '(未设昵称)' }}</strong>
+          <span>{{ selectedUser.email || '未绑定邮箱' }}</span>
+          <code>{{ selectedUser.userId }}</code>
+        </div>
+        <BButton size="small" :loading="querying" @click="queryUser">刷新资产</BButton>
+      </div>
+      <p v-else class="pops-select-hint">先按昵称、邮箱或 ID 搜索并选择用户，Top 10 仅作为排行榜快捷入口。</p>
+
+      <div v-if="selectedUser" class="pops-grant">
         <div class="pops-field-row">
           <div class="pops-field"
             ><label>积分(±)</label><b-input v-model:value="form.points" type="number" placeholder="如 100 或 -50"
@@ -97,10 +104,9 @@
           ><label>备注</label><b-input v-model:value="form.note" placeholder="发放原因(记入流水 ref)"
         /></div>
         <div class="pops-actions">
-          <b-button size="small" :disabled="!form.userId || querying" @click="queryUser">查询</b-button>
-          <b-button type="primary" size="small" :disabled="!form.userId || granting" @click="grant()"
-            >发放 / 扣减</b-button
-          >
+          <BButton type="primary" size="small" :disabled="!selectedUser || querying || granting" @click="grant()">
+            发放 / 扣减
+          </BButton>
         </div>
       </div>
 
@@ -108,7 +114,7 @@
         <div v-if="detail.user" class="pops-detail-user">
           <b>{{ detail.user.alias || '(未设昵称)' }}</b>
           <span>{{ detail.user.email || '—' }}</span>
-          <code>{{ form.userId.trim() }}</code>
+          <code>{{ selectedUser?.userId }}</code>
         </div>
         <div class="pops-detail-bal">
           <span
@@ -125,14 +131,25 @@
           >
         </div>
         <div class="pops-detail-log">
-          <div v-for="(l, i) in detail.log || []" :key="i" class="pops-log-row">
-            <span class="pops-log-reason">{{ reasonLabel(l.reason) }}</span>
-            <span class="pops-log-delta" :class="l.delta > 0 ? 'up' : l.delta < 0 ? 'down' : ''">{{
-              l.delta > 0 ? '+' + l.delta : l.delta || '·'
-            }}</span>
-            <span class="pops-log-time">{{ fmtTime(l.createTime) }}</span>
-          </div>
-          <div v-if="!detail.log?.length" class="pops-empty">该账号暂无流水</div>
+          <BTable v-if="detail.log?.length" :data="logRows" :columns="logColumns" row-key="rowKey">
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'source'">
+                <span class="pops-log-source">
+                  <strong>{{ record.source.title }}</strong>
+                  <small v-if="record.source.detail">{{ record.source.detail }}</small>
+                  <code v-if="record.source.raw">{{ record.source.raw }}</code>
+                </span>
+              </template>
+              <span
+                v-else-if="column.key === 'deltaLabel'"
+                class="pops-log-delta"
+                :class="record.delta > 0 ? 'up' : record.delta < 0 ? 'down' : ''"
+                >{{ record.deltaLabel }}</span
+              >
+              <template v-else>{{ record[column.key] }}</template>
+            </template>
+          </BTable>
+          <div v-else class="pops-empty">该账号暂无流水</div>
         </div>
       </div>
     </div>
@@ -140,31 +157,21 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import growthApi from '@/api/growthApi.ts';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import AdminUserPicker, { type AdminUserSearchResult } from './AdminUserPicker.vue';
+  import { describePointsLogSource, pointsReasonLabel } from './pointsLogSource';
 
-  const REASON_LABELS: Record<string, string> = {
-    checkin: '每日签到',
-    quest: '每日任务',
-    streak_milestone: '连签里程碑',
-    achievement: '成就奖励',
-    buy: '兑换商品',
-    lottery_cost: '抽奖消耗',
-    lottery_win: '抽奖·积分',
-    lottery_storage: '抽奖·存储',
-    lottery_free: '免费抽奖',
-    weekly: '每周挑战',
-    admin: '运营调整',
-    storage: '存储扩容',
-  };
+  const { t, te } = useI18n();
   function reasonLabel(reason: string) {
-    const base = reason?.startsWith('storage:') ? 'storage' : reason;
-    return REASON_LABELS[base] || reason;
+    return pointsReasonLabel(reason);
   }
   function fmtTime(v: string) {
     const d = new Date(v);
@@ -178,7 +185,26 @@
   const detail = ref<any>(null);
   const querying = ref(false);
   const granting = ref(false);
+  const selectedUser = ref<AdminUserSearchResult | null>(null);
   const form = ref({ userId: '', points: '', storageMb: '', cards: '', note: '' });
+  const logColumns = [
+    { title: '时间', key: 'timeLabel', width: '130px', ellipsis: false },
+    { title: '真实来源', key: 'source', width: 'minmax(220px, 1fr)', ellipsis: false },
+    { title: '变动', key: 'deltaLabel', width: '90px', ellipsis: false },
+  ];
+  const logRows = computed(() =>
+    (detail.value?.log || []).map((item: any, index: number) => ({
+      ...item,
+      rowKey: `${item.createTime || ''}:${index}`,
+      timeLabel: fmtTime(item.createTime),
+      deltaLabel: item.delta > 0 ? `+${item.delta}` : item.delta || '·',
+      source: describePointsLogSource(
+        item,
+        (key) => t(key),
+        (key) => te(key),
+      ),
+    })),
+  );
 
   async function loadOverview() {
     loading.value = true;
@@ -190,18 +216,21 @@
     }
   }
 
-  function pickUser(uid: string) {
-    form.value.userId = uid;
-    queryUser();
+  function selectUser(user: AdminUserSearchResult) {
+    selectedUser.value = user;
+    form.value.userId = user.userId;
+    detail.value = null;
+    void queryUser();
   }
 
   async function queryUser() {
-    if (!form.value.userId) return;
+    if (!selectedUser.value?.userId) return;
     querying.value = true;
     try {
-      const res = await growthApi.adminUserPoints(form.value.userId.trim());
+      const res = await growthApi.adminUserPoints(selectedUser.value.userId);
       if (res.status === 200) {
         detail.value = res.data;
+        if (res.data?.user) selectedUser.value = { ...selectedUser.value, ...res.data.user };
         if (!res.data?.balance) message.info('该账号无成长数据');
       }
     } finally {
@@ -210,10 +239,10 @@
   }
 
   async function grant(confirmedGrant = false) {
-    if (!form.value.userId) return;
-    const points = Number(form.value.points) || 0;
-    const storageMb = Number(form.value.storageMb) || 0;
-    const cards = Number(form.value.cards) || 0;
+    if (!selectedUser.value?.userId) return;
+    const points = parseAdjustment(form.value.points);
+    const storageMb = parseAdjustment(form.value.storageMb);
+    const cards = parseAdjustment(form.value.cards);
     if (!points && !storageMb && !cards) {
       message.info('请至少填写一项发放数量');
       return;
@@ -228,7 +257,7 @@
     if (!confirmedGrant) {
       Alert.alert({
         title: points < 0 || storageMb < 0 || cards < 0 ? '确认扣减' : '确认发放',
-        content: `目标账号 ${form.value.userId.trim()}\n${parts.join(' · ')}\n\n将立即写入并记入积分流水，确认继续？`,
+        content: `目标用户 ${selectedUser.value.alias || '(未设昵称)'}\n${selectedUser.value.email || '未绑定邮箱'}\n${selectedUser.value.userId}\n\n${parts.join(' · ')}\n\n调整后：积分 ${projectedBalance.value.points} / 存储 ${projectedBalance.value.storageMb}MB / 补签卡 ${projectedBalance.value.cards}\n\n将立即写入并记入审计流水，确认继续？`,
         onOk: () => grant(true),
       });
       return;
@@ -236,7 +265,7 @@
     granting.value = true;
     try {
       const res = await growthApi.adminGrantPoints({
-        userId: form.value.userId.trim(),
+        userId: selectedUser.value.userId,
         points,
         storageMb,
         cards,
@@ -251,12 +280,23 @@
         form.value.cards = '';
         await Promise.all([queryUser(), loadOverview()]);
       } else {
-        message.error(res.data?.msg || '发放失败');
+        message.error(res.msg || '发放失败');
       }
     } finally {
       granting.value = false;
     }
   }
+
+  function parseAdjustment(value: unknown) {
+    const number = Number(value);
+    return Number.isFinite(number) ? Math.trunc(number) : 0;
+  }
+
+  const projectedBalance = computed(() => ({
+    points: Number(detail.value?.balance?.points || 0) + parseAdjustment(form.value.points),
+    storageMb: Number(detail.value?.balance?.storageBonusMb || 0) + parseAdjustment(form.value.storageMb),
+    cards: Number(detail.value?.balance?.cards || 0) + parseAdjustment(form.value.cards),
+  }));
 
   onMounted(loadOverview);
 </script>
@@ -280,6 +320,10 @@
   @media (max-width: @admin-bp-mobile) {
     .pops-cols {
       grid-template-columns: 1fr;
+    }
+
+    .pops-field-row {
+      flex-direction: column;
     }
   }
   .pops-block {
@@ -374,6 +418,42 @@
     flex-direction: column;
     gap: 10px;
   }
+  .pops-selected-user {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border: 2px solid var(--primary-color);
+    border-radius: 10px;
+    background: var(--card-background);
+
+    > div {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-size: 14px;
+    }
+
+    span,
+    code {
+      overflow: hidden;
+      color: var(--desc-color);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
+
+  .pops-select-hint {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
   .pops-field {
     display: flex;
     flex-direction: column;
@@ -431,6 +511,25 @@
     max-height: 240px;
     overflow-y: auto;
   }
+  .pops-log-source {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+
+    strong {
+      color: var(--text-color);
+      font-size: 12px;
+    }
+
+    small,
+    code {
+      overflow: hidden;
+      color: var(--desc-color);
+      font-size: 10.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  }
   .pops-log-reason {
     flex: 1 1 auto;
   }
@@ -440,5 +539,12 @@
     width: 92px;
     text-align: right;
     font-variant-numeric: tabular-nums;
+  }
+
+  @media (max-width: @admin-bp-mobile) {
+    .pops-selected-user {
+      align-items: flex-start;
+      flex-direction: column;
+    }
   }
 </style>

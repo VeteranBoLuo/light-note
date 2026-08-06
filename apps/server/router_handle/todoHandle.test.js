@@ -5,6 +5,7 @@ const connection = {
   commit: vi.fn(),
   rollback: vi.fn(),
   release: vi.fn(),
+  query: vi.fn(),
 };
 const getConnection = vi.fn(async () => connection);
 const poolQuery = vi.fn();
@@ -25,6 +26,7 @@ const snoozeTodoItem = vi.fn(async () => ({ id: 'todo-1' }));
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
+  L: (_req, zh) => zh,
 }));
 vi.mock('../util/auth.js', () => ({ ensureNotVisitor }));
 vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask: vi.fn(async () => ({})) }));
@@ -66,6 +68,7 @@ describe('todoHandle', () => {
     listTodos.mockResolvedValue([]);
     queryTodoPendingCount.mockResolvedValue(0);
     setTodoStatus.mockResolvedValue(1);
+    connection.query.mockReset();
   });
 
   it('创建待办使用当前用户和事务', async () => {
@@ -86,6 +89,33 @@ describe('todoHandle', () => {
   it('完成待办始终带 userId，避免跨用户修改', async () => {
     await completeTodo({ user: { id: 'u2', role: 'user' }, body: { id: 'todo-1' } }, mockRes());
     expect(setTodoStatus).toHaveBeenCalledWith(connection, 'u2', 'todo-1', 'completed');
+  });
+
+  it('待办已删除时完成接口返回未找到，不再把影响 0 行误报为成功', async () => {
+    setTodoStatus.mockResolvedValueOnce(0);
+    connection.query.mockResolvedValueOnce([[{ status: 'pending', del_flag: 1 }]]);
+    const res = mockRes();
+
+    await completeTodo({ user: { id: 'u2', role: 'user' }, body: { id: 'todo-deleted' } }, res);
+
+    expect(res.send).toHaveBeenCalledWith({ data: null, status: 404, msg: '该待办已删除或不存在' });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('待办已完成时返回幂等终态，前端可直接收起完成按钮', async () => {
+    setTodoStatus.mockResolvedValueOnce(0);
+    connection.query.mockResolvedValueOnce([[{ status: 'completed', del_flag: 0 }]]);
+    const res = mockRes();
+
+    await completeTodo({ user: { id: 'u2', role: 'user' }, body: { id: 'todo-completed' } }, res);
+
+    expect(res.send).toHaveBeenCalledWith({
+      data: { affected: 0, state: 'completed' },
+      status: 200,
+      msg: '',
+    });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 
   it('游客列表只读查询共享示例待办', async () => {

@@ -226,6 +226,28 @@ CSS 变量（两套主题共享，不随 theme 变化）：
 - pdf `#ef4444` / word `#3b82f6` / excel `#22c55e`
 - ppt `#f97316` / text `#eab308` / compress `#8b5cf6` / other `#8c8f99`
 
+### 8.1 资源胶囊语义
+
+胶囊颜色由内容语义决定，不跟随所在模块：
+
+| 语义 | 示例 | Tone | 颜色角色 |
+| ---- | ---- | ---- | -------- |
+| 用户标签 | 工作、待读、项目 A | `tag` | 粉色 |
+| 优先状态 | 置顶 | `pin` | 紫色 |
+| 工作流状态 | 待整理 | `pending` | 琥珀色 |
+| 技术元信息 | HTML、MD、+N | `neutral` | 中性灰 |
+| 资源类型 | 书签、笔记、文件 | `bookmark` / `note` / `file` | 对应资源色 |
+
+- 基础视觉统一使用 `BasicComponents/BChip.vue`；常规展示与筛选中的用户标签使用 `tag/ResourceTagChip.vue`。
+- `BSelect` 多选值和带移除按钮的复合标签不能嵌套按钮，分别使用 `chip-tone="tag"` 与 `BChip tone="tag"`，但仍共享同一套 Token。
+- 置顶、待整理、格式分别复用 `PinBadge.vue`、`InboxPendingBadge.vue`、`NoteFormatBadge.vue`。
+- 用户标签在书签、笔记、文件、搜索和标签详情里都使用 `tag` tone；禁止再使用模块紫、笔记绿或文件橙。
+- 标签 hover 只切换到 `--chip-tag-hover-*` 的弱化底色，不做实心反白。
+- 所有胶囊都有实色边框；选中态同时加强边框和字重，不能只靠阴影或混色。
+- 小型胶囊为 11px 字号、`2px 7px` 内边距；常规胶囊为 12px、`3px 9px`。
+- day/night 的 `--chip-{tag,pin,pending,neutral}-*` Token 定义在 `assets/css/theme.less`，关键状态不得用 `color-mix()` 临时推导，确保 Android WebView 回退后仍可辨。
+- 文件类型胶囊现阶段保持既有文件模块表现；若后续按 `FILE_TYPE_COLOR_HEX` 细分，仍不得把文件类型色用于用户标签。
+
 ---
 
 ## 9. 工作台（Workbench）视觉

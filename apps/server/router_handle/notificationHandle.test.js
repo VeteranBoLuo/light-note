@@ -14,9 +14,44 @@ vi.mock('../util/emailDelivery.js', () => ({
   maskEmail: (value) => String(value).replace(/^(.{2}).*(@.*)$/u, '$1***$2'),
 }));
 
-const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail } = await import('./notificationHandle.js');
+const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list } =
+  await import('./notificationHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
+
+describe('待办提醒通知状态', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('列表标记待处理、已完成和已删除待办，供前端收起失效操作', async () => {
+    query
+      .mockResolvedValueOnce([
+        [
+          { id: 'n1', type: 'todo_reminder', meta: { todoId: 'todo-pending' } },
+          { id: 'n2', type: 'todo_reminder', meta: JSON.stringify({ todoId: 'todo-completed' }) },
+          { id: 'n3', type: 'todo_reminder', meta: { todoId: 'todo-deleted' } },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          { id: 'todo-pending', status: 'pending' },
+          { id: 'todo-completed', status: 'completed' },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 3 }]])
+      .mockResolvedValueOnce([[{ unreadTotal: 1 }]]);
+    const res = mockRes();
+
+    await list({ user: { id: 'user-1', role: 'user' }, body: { currentPage: 1, pageSize: 20 } }, res);
+
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.items.map((item) => item.todoState)).toEqual(['pending', 'completed', 'unavailable']);
+    expect(query.mock.calls[1][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?)');
+    expect(query.mock.calls[1][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted']);
+  });
+});
 
 describe('通知中心管理员删除', () => {
   beforeEach(() => {

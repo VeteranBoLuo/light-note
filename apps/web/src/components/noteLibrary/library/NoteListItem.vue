@@ -16,7 +16,7 @@
           标题只剩 142px 且被截断；挪走后标题能拿到整行。
         -->
         <template v-if="!bookmark.isMobile">
-          <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
+          <PinBadge v-if="note.isTop" />
           <InboxPendingBadge v-if="note.isPending" />
           <!-- 桌面放标题行：摘要与标签本来就在下面一行抢空间(实测摘要被压到 35px 过)，不能再往那行塞 -->
           <NoteFormatBadge :type="note.type" />
@@ -38,7 +38,7 @@
         -->
         <div class="note-tags" v-if="bookmark.isMobile || visibleTags.length">
           <template v-if="bookmark.isMobile">
-            <span v-if="note.isTop" class="note-top-badge">{{ $t('common.pin') }}</span>
+            <PinBadge v-if="note.isTop" />
             <InboxPendingBadge v-if="note.isPending" />
             <!-- 手机的标题行只剩标题 + 时间 + ⋯，没有余量；格式标识跟徽章一起进 chip 行 -->
             <NoteFormatBadge :type="note.type" />
@@ -47,23 +47,26 @@
               <SvgIcon :src="icon.arrow_right" size="12" aria-hidden="true" />
             </BButton>
           </template>
-          <span
-            class="b-tag tag-detail-chip"
+          <ResourceTagChip
             v-for="tag in visibleTags"
             :key="tag.id || tag.name"
-            :title="tag.name"
+            :tag="tag"
+            show-detail-corner
+            max-width="120px"
             @click.stop="noteTypeChange(tag)"
+            @detail="openTagDetail(tag)"
             v-click-log="{ module: '笔记库', operation: `筛选标签【${tag.name}】` }"
+          />
+          <BChip
+            v-if="hiddenTagCount > 0"
+            class="tag-more"
+            tone="neutral"
+            size="small"
+            :title="hiddenTagsLabel"
+            @click.stop
           >
-            <span class="tag-detail-label">{{ tag.name }}</span>
-            <BButton class="tag-detail-corner" :title="$t('common.detail')" @click.stop="openTagDetail(tag)">
-              <!-- 站内跳转到标签详情页,用"进入下一级"的箭头;share 是外链分享语义,不匹配 -->
-              <SvgIcon :src="icon.arrow_right" size="13" />
-            </BButton>
-          </span>
-          <span v-if="hiddenTagCount > 0" class="b-tag tag-more" :title="hiddenTagsLabel" @click.stop
-            >+{{ hiddenTagCount }}</span
-          >
+            +{{ hiddenTagCount }}
+          </BChip>
         </div>
       </div>
     </div>
@@ -100,12 +103,15 @@
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import PinBadge from '@/components/base/PinBadge.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { useI18n } from 'vue-i18n';
   import { useNoteSummary } from '@/composables/useNoteSummary';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
@@ -353,18 +359,6 @@
         flex: 0 1 auto;
         min-width: 0;
       }
-      .note-top-badge {
-        flex: 0 0 auto;
-        display: inline-flex;
-        align-items: center;
-        padding: 2px 7px;
-        border-radius: 999px;
-        color: var(--resource-note-color, #00a884);
-        background: color-mix(in srgb, var(--resource-note-color, #00a884) 12%, transparent);
-        font-size: 11px;
-        font-weight: 600;
-        line-height: 18px;
-      }
       .note-meta-row {
         display: flex;
         align-items: center;
@@ -399,44 +393,7 @@
         display: flex;
         gap: 6px;
         align-items: center;
-        .b-tag {
-          background-color: var(--tag-bg-color, #eeedff);
-          color: var(--tag-color, #8b88f2);
-          padding: 2px 8px;
-          border-radius: 999px;
-          font-size: 11px;
-          font-weight: 500;
-          line-height: 16px;
-          cursor: pointer;
-          transition:
-            background-color 0.2s ease,
-            color 0.2s ease;
-          max-width: 120px;
-          // 只加深底色,不做实心反白:列表里标签是次要信息,hover 不该抢焦点,
-          // 也避免原来写死的 #605ce5 / white 在两套主题下都是同一个色。
-          //
-          // 限定真正带鼠标的设备(同 common.less 里角标的做法):触屏上 :hover 是粘滞的,
-          // 点一下标签这个态就留着不走了。而这条混色的两个操作数都不透明,
-          // androidColorMixFallback 认不出是弱底色,APK 里会按权重回退成页面背景色 ——
-          // 表现就是「点一下标签,它的底色没了」。触屏不套用 hover 即可根治。
-          @media (hover: hover) and (pointer: fine) {
-            &:hover {
-              background-color: color-mix(in srgb, var(--tag-color, #8b88f2) 20%, var(--tag-bg-color, #eeedff));
-            }
-          }
-        }
-        .tag-more {
-          background-color: var(--common-tag-bg-color, #f0f0f0);
-          // desc 在这个底色上只有 4.24:1，11px 小字不合格，改用专为中性 chip 定的文字色
-          color: var(--chip-neutral-color);
-          cursor: default;
-
-          &:hover {
-            background-color: var(--common-tag-bg-color, #f0f0f0);
-          }
-        }
       }
-      // 详情角标统一由 assets/css/common.less 负责,这里不做局部覆盖
     }
 
     .note-child-count {

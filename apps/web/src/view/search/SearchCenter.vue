@@ -241,15 +241,16 @@
                   <div class="tag-filter-label">{{ t('resourceCenter.tagFilter') }}</div>
                   <div class="tag-filter-main">
                     <div class="tag-filter-list">
-                      <BButton
+                      <ResourceTagChip
                         v-for="tag in tagOptions"
                         :key="tag"
+                        :tag="{ name: tag }"
                         class="tag-chip"
-                        :class="{ active: queryState.tags.includes(tag) }"
+                        size="medium"
+                        interactive
+                        :selected="queryState.tags.includes(tag)"
                         @click="toggleTagFilter(tag)"
-                      >
-                        {{ tag }}
-                      </BButton>
+                      />
                     </div>
                     <BPopover
                       v-if="tagOptions.length > 14"
@@ -267,15 +268,16 @@
                             :placeholder="t('resourceCenter.tagSearchPlaceholder')"
                             clearable
                           />
-                          <BButton
+                          <ResourceTagChip
                             v-for="tag in filteredTagOptions"
                             :key="tag"
+                            :tag="{ name: tag }"
                             class="tag-chip"
-                            :class="{ active: queryState.tags.includes(tag) }"
+                            size="medium"
+                            interactive
+                            :selected="queryState.tags.includes(tag)"
                             @click="toggleTagFilter(tag)"
-                          >
-                            {{ tag }}
-                          </BButton>
+                          />
                         </div>
                       </template>
                     </BPopover>
@@ -535,15 +537,16 @@
           <span class="mobile-filter-label">{{ t('resourceCenter.tagFilter') }}</span>
           <BInput v-model:value="tagSearch" :placeholder="t('resourceCenter.tagSearchPlaceholder')" clearable />
           <div class="mobile-filter-tags">
-            <BButton
+            <ResourceTagChip
               v-for="tag in filteredTagOptions"
               :key="tag"
+              :tag="{ name: tag }"
               class="tag-chip"
-              :class="{ active: queryState.tags.includes(tag) }"
+              size="medium"
+              interactive
+              :selected="queryState.tags.includes(tag)"
               @click="toggleTagFilter(tag)"
-            >
-              {{ tag }}
-            </BButton>
+            />
           </div>
         </div>
 
@@ -622,6 +625,7 @@
   import { openAiAssistant, type AiAssistantIntent } from '@/utils/aiEntry';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { SEARCH_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const SearchResultItem = SearchResultItemComp;
   const GlobalGraph = defineAsyncComponent(() => import('@/view/graph/GlobalGraph.vue'));
@@ -1765,7 +1769,6 @@
   .refresh-btn,
   .clear-btn,
   .filter-item,
-  .tag-chip,
   .batch-btn,
   .tagless-btn,
   .view-btn,
@@ -2084,18 +2087,6 @@
 
   .tag-chip {
     min-height: 28px;
-    border: 1px solid color-mix(in srgb, var(--search-border-color) 74%, transparent);
-    border-radius: 999px;
-    padding: 4px 10px;
-    background: var(--search-muted-bg);
-    color: color-mix(in srgb, var(--text-color) 72%, var(--desc-color));
-    font-size: 12px;
-  }
-
-  .tag-chip.active {
-    border-color: color-mix(in srgb, var(--resource-tag-color) 32%, var(--search-border-color));
-    background: color-mix(in srgb, var(--resource-tag-color) 12%, var(--search-muted-bg));
-    color: var(--resource-tag-color);
   }
 
   .batch-toolbar {
@@ -2630,8 +2621,6 @@
       min-height: 26px;
       height: 26px;
       line-height: 1;
-      padding: 0 9px;
-      background: color-mix(in srgb, var(--background-color) 74%, transparent);
     }
 
     .tag-toggle-btn {

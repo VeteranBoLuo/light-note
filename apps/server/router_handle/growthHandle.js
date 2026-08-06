@@ -23,6 +23,8 @@ import {
   getPointsOverview,
   adminGrantPoints,
   getUserPointsDetail,
+  searchAdminUsers,
+  AdminPointsError,
 } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getInventory, useItem } from '../util/items.js';
@@ -436,6 +438,20 @@ export const getUserPointsForAdmin = async (req, res) => {
   }
 };
 
+// POST /growth/admin/searchUsers —— 积分运营轻量远程选人(root)
+export const searchUsersForPointsAdmin = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  const keyword = String(req.body?.keyword || '').trim();
+  if (!keyword) return res.send(resultData({ rows: [] }));
+  try {
+    const rows = await searchAdminUsers(keyword, { limit: req.body?.limit });
+    return res.send(resultData({ rows }));
+  } catch (error) {
+    console.error('[PointsAdminSearch] 查询失败');
+    return res.send(resultData(null, 500, '搜索用户失败'));
+  }
+};
+
 // POST /growth/admin/grantPoints —— 手动发放/扣减积分/存储/补签卡(root)
 export const doAdminGrantPoints = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
@@ -443,10 +459,13 @@ export const doAdminGrantPoints = async (req, res) => {
     const { userId, points, cards, storageMb, note } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
     const result = await adminGrantPoints(userId, { points, cards, storageMb, note });
-    res.send(resultData(result));
+    return res.send(resultData(result));
   } catch (error) {
-    console.error('发放积分失败:', error);
-    res.send(resultData(null, 500, '发放失败: ' + error.message));
+    if (error instanceof AdminPointsError) {
+      return res.send(resultData({ ok: false, reason: error.code }, error.status, error.message));
+    }
+    console.error('[PointsAdminGrant] 发放失败');
+    return res.send(resultData(null, 500, '资产调整失败'));
   }
 };
 

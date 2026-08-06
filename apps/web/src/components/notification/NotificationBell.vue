@@ -67,6 +67,7 @@
                   <div class="nt-item-time">{{ fmtTime(n.createTime) }}</div>
                   <div v-if="n.type === 'todo_reminder'" class="nt-todo-actions">
                     <BButton
+                      v-if="todoActionState(n) === 'pending'"
                       size="small"
                       type="primary"
                       class="nt-todo-action nt-todo-action--complete"
@@ -75,7 +76,21 @@
                     >
                       {{ t('notification.todoComplete') }}
                     </BButton>
-                    <BButton size="small" class="nt-todo-action nt-todo-action--open" @click.stop="openReminderTodo(n)">
+                    <BChip v-else :tone="todoActionState(n) === 'completed' ? 'success' : 'neutral'">
+                      {{
+                        t(
+                          todoActionState(n) === 'completed'
+                            ? 'notification.todoCompletedState'
+                            : 'notification.todoUnavailable',
+                        )
+                      }}
+                    </BChip>
+                    <BButton
+                      v-if="todoActionState(n) !== 'unavailable'"
+                      size="small"
+                      class="nt-todo-action nt-todo-action--open"
+                      @click.stop="openReminderTodo(n)"
+                    >
                       {{ t('notification.todoOpen') }}
                     </BButton>
                   </div>
@@ -128,6 +143,7 @@
   import WeeklyReportModal from '@/components/growth/WeeklyReportModal.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { completeTodo } from '@/api/todoApi';
@@ -204,6 +220,15 @@
       return {};
     }
   }
+  function todoActionState(n: NotificationItem): 'pending' | 'completed' | 'unavailable' {
+    if (!String(parseMeta(n.meta).todoId || '').trim()) return 'unavailable';
+    return n.todoState === 'completed' || n.todoState === 'unavailable' ? n.todoState : 'pending';
+  }
+  async function markNotificationRead(n: NotificationItem) {
+    if (n.isRead) return;
+    n.isRead = 1;
+    await markRead([n.id]);
+  }
   // 升级通知按 type+meta 渲染 i18n(国际化);其余(反馈回复/系统/其他)用后端原文
   function renderTitle(n: NotificationItem): string {
     if (n.type === 'level_up') {
@@ -273,6 +298,10 @@
       n.isRead = 1;
       markRead([n.id]);
     }
+    if (n.type === 'todo_reminder' && todoActionState(n) === 'unavailable') {
+      message.warning(t('notification.todoUnavailable'));
+      return;
+    }
     // 周报通知:点击弹出周报大图,不跳转
     const m = parseMeta(n.meta);
     if (m?.weeklyReport) {
@@ -294,11 +323,8 @@
   }
   async function openReminderTodo(n: NotificationItem) {
     const todoId = String(parseMeta(n.meta).todoId || '');
-    if (!todoId) return;
-    if (!n.isRead) {
-      n.isRead = 1;
-      await markRead([n.id]);
-    }
+    if (!todoId || todoActionState(n) === 'unavailable') return;
+    await markNotificationRead(n);
     open.value = false;
     router.push({ path: '/inbox', query: { tab: 'todo', todoId } }).catch(() => {});
   }
@@ -307,13 +333,15 @@
     if (!todoId || completingTodoId.value) return;
     completingTodoId.value = todoId;
     try {
-      const res = await completeTodo(todoId);
+      const res = await completeTodo(todoId, { silent: true });
       if (res.status === 200) {
-        if (!n.isRead) {
-          n.isRead = 1;
-          await markRead([n.id]);
-        }
+        n.todoState = 'completed';
+        await markNotificationRead(n);
         message.success(t('notification.todoCompleted'));
+      } else if (res.status === 404) {
+        n.todoState = 'unavailable';
+        await markNotificationRead(n);
+        message.warning(t('notification.todoUnavailable'));
       } else {
         message.warning(t('notification.todoCompleteFailed'));
       }

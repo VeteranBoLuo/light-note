@@ -1,5 +1,7 @@
 <template>
-  <span class="note-format-badge" :title="label" :aria-label="label">{{ short }}</span>
+  <BChip class="note-format-badge" tone="neutral" size="small" :title="label" :aria-label="label">
+    {{ short }}
+  </BChip>
 </template>
 
 <script lang="ts" setup>
@@ -16,6 +18,7 @@
    */
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import { normalizeNoteType } from '@/utils/noteResourceRefs.ts';
 
   const props = defineProps<{ type?: string | null }>();
@@ -30,20 +33,8 @@
 
 <style lang="less" scoped>
   .note-format-badge {
-    flex: 0 0 auto;
-    display: inline-flex;
-    align-items: center;
-    padding: 2px 7px;
-    border-radius: 999px;
-    background: var(--common-tag-bg-color, #f0f0f0);
-    color: var(--chip-neutral-color);
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 16px;
     letter-spacing: 0.3px;
     // 数字/字母宽度一致，MD 与 HTML 混排时胶囊边缘不会看着忽宽忽窄
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    user-select: none;
   }
 </style>

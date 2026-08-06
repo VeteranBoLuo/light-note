@@ -102,14 +102,23 @@
             loading="lazy"
             decoding="async"
           />
-          <video
-            v-else-if="isPreviewableVideo(item)"
-            class="file-card-thumb"
-            :src="item.fileUrl"
-            preload="metadata"
-            muted
-            playsinline
-          />
+          <div v-else-if="isPreviewableVideo(item)" class="file-card-video-preview">
+            <video
+              class="file-card-thumb file-card-video-thumb"
+              :src="item.fileUrl"
+              preload="metadata"
+              muted
+              playsinline
+              @loadedmetadata="captureVideoDuration(item.id, $event)"
+              @error="markVideoPreviewFailed(item.id)"
+            />
+            <span class="file-card-video-play" aria-hidden="true">
+              <SvgIcon :src="icon.ai.play" size="22" />
+            </span>
+            <span v-if="videoDurationLabels[String(item.id)]" class="file-card-video-duration">
+              {{ videoDurationLabels[String(item.id)] }}
+            </span>
+          </div>
           <div v-else-if="isTextFile(item)" class="file-card-text-preview">
             <CloudTextCardPreview :file-info="item" />
           </div>
@@ -409,15 +418,16 @@
           <div class="file-tags-cell">
             <span v-if="!item.tags?.length" class="file-tags-empty">-</span>
             <div v-else class="file-tags-list">
-              <span
+              <ResourceTagChip
                 v-for="tag in item.tags"
                 :key="tag.id"
-                class="file-tag-chip text-hidden dom-hover"
+                :tag="tag"
+                size="medium"
+                interactive
+                max-width="90px"
                 @click.stop="goToTagDetail(tag.id)"
                 v-click-log="{ module: '云空间', operation: `点击文件关联标签【${tag.name}】` }"
-              >
-                {{ tag.name }}
-              </span>
+              />
             </div>
           </div>
           <div>{{
@@ -617,6 +627,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -653,8 +664,7 @@
     externalBusy: computed(
       () => cloud.loading || cloud.loadingMore || cloud.fileList?.some((item: any) => item?.isRename) === true,
     ),
-    getScrollContainer: () =>
-      fieldListRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
+    getScrollContainer: () => fieldListRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
     onRefresh: async () => {
       const [fileResult, folderResult] = await Promise.allSettled([
         cloud.queryFieldList({ silent: true }),
@@ -698,6 +708,8 @@
   }
   const selectedRows = ref<string[]>([]);
   const selectAll = ref(false);
+  const videoDurationLabels = ref<Record<string, string>>({});
+  const failedVideoPreviewIds = ref<Set<string>>(new Set());
   const hasSelection = computed(() => selectedRows.value.length > 0);
   const indeterminate = computed(
     () => selectedRows.value.length > 0 && selectedRows.value.length < cloud.fileList.length,
@@ -841,7 +853,35 @@
   }
 
   function isPreviewableVideo(file: any): boolean {
-    return getFileCategory(file) === 'video' && !!file.fileUrl;
+    return getFileCategory(file) === 'video' && !!file.fileUrl && !failedVideoPreviewIds.value.has(String(file.id));
+  }
+
+  function formatMediaDuration(duration: number): string {
+    if (!Number.isFinite(duration) || duration <= 0) return '';
+    const totalSeconds = Math.round(duration);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(seconds).padStart(2, '0')}`;
+  }
+
+  function captureVideoDuration(fileId: string | number, event: Event) {
+    const duration = (event.currentTarget as HTMLVideoElement | null)?.duration;
+    const label = formatMediaDuration(Number(duration));
+    if (!label) return;
+    videoDurationLabels.value = {
+      ...videoDurationLabels.value,
+      [String(fileId)]: label,
+    };
+  }
+
+  function markVideoPreviewFailed(fileId: string | number) {
+    const next = new Set(failedVideoPreviewIds.value);
+    next.add(String(fileId));
+    failedVideoPreviewIds.value = next;
   }
 
   function isTextFile(file: any): boolean {
@@ -858,8 +898,13 @@
     (list) => {
       // 当列表刷新时，同步全选状态，移除已不存在的选项
       const ids = list.map((item) => item.id);
+      const stringIds = new Set(ids.map(String));
       selectedRows.value = selectedRows.value.filter((id) => ids.includes(id));
       selectAll.value = list.length > 0 && selectedRows.value.length === list.length;
+      videoDurationLabels.value = Object.fromEntries(
+        Object.entries(videoDurationLabels.value).filter(([id]) => stringIds.has(id)),
+      );
+      failedVideoPreviewIds.value = new Set(Array.from(failedVideoPreviewIds.value).filter((id) => stringIds.has(id)));
     },
     { deep: true },
   );
@@ -1890,18 +1935,6 @@
     overflow: hidden;
   }
 
-  .file-tag-chip {
-    max-width: 90px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-size: 12px;
-    line-height: 18px;
-    color: var(--resource-file-color, #ff8a00);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 8%, var(--menu-body-bg-color));
-    display: inline-block;
-    cursor: pointer;
-  }
-
   .file-tags-empty {
     color: var(--desc-color);
     opacity: 0.7;
@@ -1972,6 +2005,55 @@
     object-fit: cover;
     background: var(--file-card-preview-background, transparent);
     box-shadow: var(--file-card-preview-shadow, none);
+  }
+
+  .file-card-video-preview {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background: #080a0f;
+  }
+
+  .file-card-video-thumb {
+    object-fit: contain;
+    background: #080a0f;
+  }
+
+  .file-card-video-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 46px;
+    border: 2px solid rgba(255, 255, 255, 0.92);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.76);
+    color: #fff;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .file-card-video-duration {
+    position: absolute;
+    right: 9px;
+    bottom: 9px;
+    padding: 3px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.26);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.78);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    pointer-events: none;
   }
 
   .file-card-placeholder {

@@ -42,13 +42,13 @@
               <div class="item-tags">
                 <span class="item-tags-label">{{ t('resourceCenter.batch.itemTags') }}</span>
                 <div v-if="getItemTags(item).length" class="item-tags-values">
-                  <span
+                  <ResourceTagChip
                     v-for="tag in getItemTags(item)"
                     :key="`${item.type}:${item.id}:${tag}`"
-                    class="item-tag-chip text-hidden"
-                  >
-                    {{ tag }}
-                  </span>
+                    :tag="{ name: tag }"
+                    size="medium"
+                    max-width="180px"
+                  />
                 </div>
                 <span v-else class="item-tags-value item-tags-value--empty">-</span>
               </div>
@@ -68,15 +68,16 @@
             {{ mode === 'remove' ? t('resourceCenter.batch.removeTagHint') : t('resourceCenter.batch.tagHint') }}
           </div>
           <div class="tag-list" v-if="displayTagList.length">
-            <BButton
+            <ResourceTagChip
               v-for="tag in displayTagList"
               :key="tag.id"
+              :tag="tag"
               class="tag-chip"
-              :class="{ active: selectedTagIds.includes(tag.id) }"
+              size="medium"
+              interactive
+              :selected="selectedTagIds.includes(tag.id)"
               @click="toggleTag(tag.id)"
-            >
-              {{ tag.name }}
-            </BButton>
+            />
           </div>
           <div class="empty-tip" v-else>{{ t('resourceCenter.batch.noTags') }}</div>
 
@@ -111,6 +112,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
+  import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   interface BatchItem {
     id: string;
@@ -331,13 +333,6 @@
     color: var(--text-color);
   }
 
-  .tag-chip {
-    border: 0;
-    cursor: pointer;
-    font: inherit;
-    color: inherit;
-  }
-
   .batch-layout {
     margin-top: 0;
     display: grid;
@@ -518,19 +513,6 @@
     min-width: 0;
   }
 
-  .item-tag-chip {
-    max-width: 180px;
-    min-height: 22px;
-    padding: 0 10px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    background: color-mix(in srgb, var(--resource-tag-color) 15%, transparent);
-    color: var(--resource-tag-color);
-    font-size: 12px;
-    border: 1px solid color-mix(in srgb, var(--resource-tag-color) 26%, transparent);
-  }
-
   .item-tags-value {
     min-width: 0;
     font-size: 12px;
@@ -552,16 +534,6 @@
 
   .tag-chip {
     min-height: 30px;
-    border-radius: 999px;
-    padding: 4px 12px;
-    background: var(--bl-input-noBorder-bg-color);
-    color: var(--desc-color);
-    font-size: 13px;
-  }
-
-  .tag-chip.active {
-    background: color-mix(in srgb, var(--resource-tag-color) 16%, transparent);
-    color: var(--resource-tag-color);
   }
 
   .preview-box {

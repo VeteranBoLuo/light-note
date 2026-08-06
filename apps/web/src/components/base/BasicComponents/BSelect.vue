@@ -3,7 +3,12 @@
     class="b-select"
     ref="containerRef"
     :data-b-select-id="selectId"
-    :class="{ 'is-multiple': isMultiple, 'is-open': isOpen, 'is-disabled': disabled }"
+    :class="{
+      'is-multiple': isMultiple,
+      'is-open': isOpen,
+      'is-disabled': disabled,
+      'is-tag-tone': chipTone === 'tag',
+    }"
   >
     <div
       class="select-trigger"
@@ -138,6 +143,7 @@
       showSearch?: boolean;
       filterOption?: (value: string, option: BaseOptions) => boolean;
       maxTagCount?: number;
+      chipTone?: 'default' | 'tag';
       ariaLabel?: string;
       ariaLabelledby?: string;
       disabled?: boolean;
@@ -149,6 +155,7 @@
       mode: 'single',
       showSearch: false,
       maxTagCount: 0,
+      chipTone: 'default',
       ariaLabel: '',
       ariaLabelledby: '',
       disabled: false,
@@ -602,6 +609,26 @@
       border-color: transparent;
       color: var(--desc-color, #999);
       font-weight: 500;
+    }
+  }
+
+  &.is-tag-tone .select-tag:not(.is-overflow) {
+    border-color: var(--chip-tag-border);
+    color: var(--chip-tag-fg);
+    background: var(--chip-tag-bg);
+  }
+
+  &.is-tag-tone .select-tag.is-overflow {
+    border-color: var(--chip-neutral-border);
+    color: var(--chip-neutral-fg);
+    background: var(--chip-neutral-bg);
+  }
+
+  &.is-tag-tone .select-tag-remove {
+    color: var(--chip-tag-fg);
+
+    &:hover {
+      color: var(--chip-tag-hover-fg);
     }
   }
 

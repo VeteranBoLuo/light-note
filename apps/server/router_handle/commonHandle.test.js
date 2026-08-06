@@ -56,6 +56,8 @@ const {
   clearImages,
   resolveHelpSources,
   getAdminOverview,
+  getAdminOverviewTrend,
+  getAgentLogs,
 } = await import('./commonHandle.js');
 const processBookmarkIcons = mockProcessBookmarkIcons;
 const isBookmarkIconCheckRecent = mockIsBookmarkIconCheckRecent;
@@ -267,6 +269,9 @@ describe('getAdminOverview 资源统计口径', () => {
       if (statement.includes('FROM conversion_events')) return [[{ visitors: 0, registers: 0 }]];
       if (statement.includes('FROM opinion')) return [[{ pending: 0 }]];
       if (statement.includes('FROM security_events')) return [[{ unhandled: 0 }]];
+      if (statement.includes('FROM todo_items')) {
+        return [[{ total: 0, createdToday: 0, pending: 0, dueToday: 0, overdue: 0, completedToday: 0 }]];
+      }
       if (statement.includes('FROM user_sessions')) return [[{ activeToday: 0, active7d: 0 }]];
       if (statement.includes('FROM api_logs')) {
         return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
@@ -290,6 +295,94 @@ describe('getAdminOverview 资源统计口径', () => {
     const payload = res.send.mock.calls[0][0];
     expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+});
+
+describe('getAdminOverviewTrend 趋势周期', () => {
+  beforeEach(() => query.mockReset());
+
+  it('90 天按周聚合，同时返回该周期活跃用户', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-06T12:00:00+08:00'));
+    try {
+      query.mockImplementation(async (sql) => {
+        const statement = String(sql);
+        if (statement.includes('FROM user_sessions')) return [[{ activeUsers: 23 }]];
+        if (statement.includes('SELECT d, kind, SUM(c)')) {
+          return [[{ d: '2026-08-06', kind: 'note', c: 3 }]];
+        }
+        if (statement.includes('FROM `user`')) return [[{ d: '2026-08-06', c: 2 }]];
+        return [[]];
+      });
+      const res = mockRes();
+
+      await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 90, hideInternal: true } }, res);
+
+      const payload = res.send.mock.calls[0][0];
+      expect(payload.status).toBe(200);
+      expect(payload.data).toMatchObject({ days: 90, granularity: 'week', activeUsers: 23 });
+      expect(payload.data.trend).toHaveLength(13);
+      expect(payload.data.trend.at(-1)).toMatchObject({ users: 2, notes: 3, contentTotal: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('拒绝未定义的趋势周期', async () => {
+    const res = mockRes();
+    await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 365 } }, res);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAgentLogs 请求摘要', () => {
+  beforeEach(() => query.mockReset());
+
+  it('保留短提问、识别旧隐私占位符，并截断过长文本', async () => {
+    query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('SELECT a.*')) {
+        return [
+          [
+            { id: '3', task_type: 'agent', question: '帮我总结这篇笔记', created_at: '2026-08-06 12:03:00' },
+            {
+              id: '2',
+              task_type: 'note_assist',
+              question: '[笔记助手请求，正文不写入日志]',
+              created_at: '2026-08-06 12:02:00',
+            },
+            { id: '1', task_type: 'agent', question: 'a'.repeat(620), created_at: '2026-08-06 12:01:00' },
+            {
+              id: '0',
+              task_type: 'agent_confirmation',
+              question: '[Agent 请求，用户未提交问题]',
+              created_at: '2026-08-06 12:00:00',
+            },
+          ],
+        ];
+      }
+      if (statement.includes('COUNT(*) as total')) return [[{ total: 4 }]];
+      return [[]];
+    });
+    const res = mockRes();
+
+    await getAgentLogs({ user: { role: 'root' }, body: { hideInternal: false, currentPage: 1, pageSize: 20 } }, res);
+
+    const items = res.send.mock.calls[0][0].data.items;
+    expect(items[0]).toMatchObject({
+      requestPreview: '帮我总结这篇笔记',
+      requestKind: 'user_question',
+      requestLabel: '提问',
+    });
+    expect(items[1]).toMatchObject({ requestPreview: '笔记助手（请求正文未记录）', requestKind: 'redacted' });
+    expect(items[2].requestTruncated).toBe(true);
+    expect(items[2].requestPreview).toHaveLength(501);
+    expect(items[2].question).toBe(items[2].requestPreview);
+    expect(items[3]).toMatchObject({
+      taskTypeLabel: '操作确认',
+      requestPreview: '操作确认（用户未提交问题）',
+    });
   });
 });
 
@@ -506,6 +599,46 @@ describe('getConversionFunnel', () => {
     expect(arg.data.hotspots).toEqual([{ context: 'add-bookmark', cnt: 5 }]);
   });
 
+  it('主漏斗展示独立事件总人数，同时返回严格时序路径用于诊断', async () => {
+    query.mockImplementation((sql) => {
+      const statement = String(sql);
+      if (statement.includes('COUNT(DISTINCT p.fingerprint) AS pageView')) {
+        return [[{ pageView: 100, signupOpen: 40, signupSubmit: 25, registerSuccess: 20 }]];
+      }
+      if (statement.includes('GROUP BY event')) {
+        return [
+          [
+            { event: 'page_view', visitors: 100 },
+            { event: 'signup_open', visitors: 45 },
+            { event: 'signup_submit', visitors: 30 },
+            { event: 'register', visitors: 24 },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    const res = mockRes();
+
+    await getConversionFunnel({ user: { role: 'root' }, body: {} }, res);
+
+    expect(res.send.mock.calls[0][0].data.mainFunnel).toEqual([
+      { key: 'pageView', label: '访问', count: 100, fromPreviousRate: null, lost: null },
+      { key: 'signupOpen', label: '打开注册', count: 45, fromPreviousRate: 45, lost: 55 },
+      { key: 'signupSubmit', label: '提交注册', count: 30, fromPreviousRate: 66.7, lost: 15 },
+      { key: 'registerSuccess', label: '注册成功', count: 24, fromPreviousRate: 80, lost: 6 },
+    ]);
+    expect(res.send.mock.calls[0][0].data.orderedFunnel).toEqual([
+      { key: 'pageView', label: '访问', count: 100, fromPreviousRate: null, lost: null },
+      { key: 'signupOpen', label: '打开注册', count: 40, fromPreviousRate: 40, lost: 60 },
+      { key: 'signupSubmit', label: '提交注册', count: 25, fromPreviousRate: 62.5, lost: 15 },
+      { key: 'registerSuccess', label: '注册成功', count: 20, fromPreviousRate: 80, lost: 5 },
+    ]);
+    const orderedSql = query.mock.calls.find(([sql]) => String(sql).includes('COUNT(DISTINCT p.fingerprint)'))[0];
+    expect(orderedSql).toContain('s.create_time > p.create_time');
+    expect(orderedSql).toContain('submit_event.create_time > s.create_time');
+    expect(orderedSql).toContain('register_event.create_time > submit_event.create_time');
+  });
+
   it('返回分享/激活字段,且时间窗参数下推到查询', async () => {
     const calls = [];
     query.mockImplementation((sql, params) => {
@@ -607,9 +740,7 @@ describe('getConversionFunnel', () => {
       wallThenSignupOpenVisitors: 2,
     });
     // 拆分口径的自洽性:两路相加必须等于主查询的总访客数,否则页面上的验算会对不上
-    expect(arg.data.demoThenSignupOpenVisitors + arg.data.directSignupOpenVisitors).toBe(
-      arg.data.signupOpenVisitors,
-    );
+    expect(arg.data.demoThenSignupOpenVisitors + arg.data.directSignupOpenVisitors).toBe(arg.data.signupOpenVisitors);
     expect(arg.data.demoThenRegisterVisitors + arg.data.directRegisterVisitors).toBe(arg.data.registerVisitors);
     const pathCall = calls.find((c) => /GROUP BY fingerprint/.test(c.sql));
     // 归属靠首次事件时间比较(示例发生在注册意图之前),而不是简单的集合相交

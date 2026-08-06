@@ -238,3 +238,27 @@ export default {
 | 标签     | 圆形点       | `#ec4899` |
 
 书签、笔记、文件、标签相关的点、边框、图表线条、卡片强调色必须复用这套配置。
+
+### 胶囊语义配色
+
+资源胶囊按内容语义统一，不按当前页面或资源模块染色：
+
+| 内容语义 | Tone | 视觉色 | 典型内容 |
+| -------- | ---- | ------ | -------- |
+| 用户标签 | `tag` | 粉 | 工作、待读、项目标签 |
+| 优先状态 | `pin` | 紫 | 置顶 |
+| 工作流状态 | `pending` | 琥珀 | 待整理 |
+| 技术元信息/计数 | `neutral` | 灰 | HTML、MD、+N |
+| 资源身份 | `bookmark` / `note` / `file` | 资源紫/绿/橙 | 类型图标、类型徽章 |
+
+实现约束：
+
+- 胶囊基础组件为 `apps/web/src/components/base/BasicComponents/BChip.vue`；常规展示与筛选中的业务用户标签使用 `apps/web/src/components/tag/ResourceTagChip.vue`。
+- 多选下拉值使用 `BSelect chip-tone="tag"`；带移除按钮的复合标签直接组合 `BChip tone="tag"` 与 `BButton`，避免交互控件嵌套，同时保持同一语义色。
+- `PinBadge`、`InboxPendingBadge`、`NoteFormatBadge` 分别锁定 `pin`、`pending`、`neutral`，业务页不重复维护颜色。
+- 同一用户标签跨书签、笔记、文件、搜索中心和标签详情必须保持粉色，不能跟随书签紫、笔记绿或文件橙。
+- 用户标签 hover 只使用 `--chip-tag-hover-fg/bg` 轻微加深，不切换为高权重实心反白。
+- 选中态同时使用实色描边和字重；状态识别不得只依赖 `color-mix()`、透明阴影或颜色本身。
+- 小型胶囊：11px 字号、16px 行高、`2px 7px` 内边距、最小高度 20px；常规胶囊：12px、`3px 9px`、最小高度 22px；圆角统一 999px。
+- day/night Token 统一位于 `apps/web/src/assets/css/theme.less` 的 `--chip-*` 变量族。关键语义使用显式实色，Android WebView 加载 `light-note-android-webview` 兼容类后仍须保留前景、背景和描边差异。
+- 文件具体类型现阶段可保持文件模块既有橙色；需要进一步细分时使用 `FILE_TYPE_COLOR_HEX`，但文件类型色不能承担用户标签语义。

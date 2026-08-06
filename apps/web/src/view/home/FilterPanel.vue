@@ -47,10 +47,14 @@
         </div>
       </template>
       <template #item="{ item }: { item: TagInterface }">
-        <RightMenu
-          :menu="tagContextMenu"
-          @select="handleTagMenu($event, item)"
+        <BActionMenu
           v-if="!item.isRename"
+          class="bookmark-tag-action-menu"
+          :items="tagContextMenu"
+          :triggers="tagMenuTriggers"
+          placement="right-start"
+          :disabled="!bookmark.isDesktop || isTagDragging"
+          @select="(action, source) => handleTagMenu(action, item, source)"
         >
           <div
             class="category-item"
@@ -70,7 +74,7 @@
             <span class="text-hidden tag-item-name">{{ item.name }}</span>
             <span v-if="bookmark.isMobile" class="tag-item-count">{{ item.bookmarkList?.length || 0 }}</span>
           </div>
-        </RightMenu>
+        </BActionMenu>
         <b-input v-else class="edit-input" v-model:value="newName" @keydown.esc="cancelRename(<TagInterface>item)">
           <template #suffix>
             <svg-icon
@@ -117,7 +121,12 @@
   import { updatePreference } from '@/utils/savePreference';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useRouter } from 'vue-router';
-  import RightMenu from '@/components/base/RightMenu.vue';
+  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
+  import type {
+    BActionMenuItem,
+    BActionMenuSource,
+    BActionMenuTrigger,
+  } from '@/components/base/BasicComponents/actionMenu';
   import { TagInterface } from '@/config/bookmarkCfg.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -139,6 +148,7 @@
     });
   });
   const visibleDragTagList = ref<TagInterface[]>([]);
+  const isTagDragging = ref(false);
   const tagDraggable = computed(
     () => !bookmark.isMobile && !tagName.value.trim() && visibleDragTagList.value.length > 1,
   );
@@ -147,7 +157,8 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const router = useRouter();
-  const tagContextMenu = computed(() => [
+  const tagMenuTriggers: BActionMenuTrigger[] = ['hover', 'contextmenu'];
+  const tagContextMenu = computed<BActionMenuItem[]>(() => [
     { key: 'addBookmark', label: t('home.menuAddBookmark'), icon: icon.manage_categoryBtn_bookmark },
     { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
     { key: 'edit', label: t('common.edit'), icon: icon.table_edit },
@@ -163,9 +174,18 @@
   const newName = ref('');
   const rightTagData = ref<TagInterface>();
 
-  function handleTagMenu(action: string, tag: TagInterface) {
+  function handleTagMenu(action: string, tag: TagInterface, source: BActionMenuSource = 'contextmenu') {
     const actionLabel = tagContextMenu.value.find((item: any) => item.key === action)?.label || action;
-    recordOperation({ module: '首页', operation: `右键${actionLabel}标签【${tag.name}】` });
+    const sourceLabel: Record<BActionMenuSource, string> = {
+      hover: '悬浮菜单',
+      contextmenu: '右键菜单',
+      click: '点击菜单',
+      keyboard: '键盘菜单',
+    };
+    recordOperation({
+      module: '首页',
+      operation: `${sourceLabel[source]}${actionLabel}标签【${tag.name}】`,
+    });
     rightTagData.value = tag;
     const actions = {
       rename: () => {
@@ -245,6 +265,7 @@
     bookmark.refreshData();
   }
   function onStart() {
+    isTagDragging.value = true;
     document.body.style.userSelect = 'none';
   }
 
@@ -290,6 +311,7 @@
   }
 
   async function onDragEnd(event?: { oldIndex?: number; newIndex?: number }) {
+    isTagDragging.value = false;
     document.body.style.userSelect = '';
     const sourceTags = [...bookmark.tagList];
     try {
@@ -448,6 +470,15 @@
   .tag-item-name {
     min-width: 0;
     flex: 1;
+  }
+
+  .bookmark-tag-action-menu {
+    display: block;
+    width: 100%;
+  }
+
+  .bookmark-tag-action-menu.is-menu-open .category-item {
+    background-color: var(--category-item-ba-color);
   }
 
   .tag-skeleton-wrap {

@@ -105,9 +105,7 @@
       trigger="manual"
       placement="bottom-left"
       :overlay-class-name="
-        inlineMentionHasResults
-          ? 'resource-mention-inline-popover'
-          : 'resource-mention-inline-popover is-empty'
+        inlineMentionHasResults ? 'resource-mention-inline-popover' : 'resource-mention-inline-popover is-empty'
       "
     >
       <span aria-hidden="true"></span>
@@ -744,7 +742,12 @@
     const anchor = dialog?.parentElement;
     const sink = anchor?.parentElement;
     const toolbar = document.getElementById('editor-toolbar');
-    if (!(dialog instanceof HTMLElement) || !(anchor instanceof HTMLElement) || !(sink instanceof HTMLElement) || !toolbar) {
+    if (
+      !(dialog instanceof HTMLElement) ||
+      !(anchor instanceof HTMLElement) ||
+      !(sink instanceof HTMLElement) ||
+      !toolbar
+    ) {
       return;
     }
 
@@ -1614,7 +1617,10 @@
       disabled: false,
       run: () =>
         void applyMarkdownEdit((input) =>
-          insertBlock(input, buildMarkdownTable([t('note.mdTableColumn', { index: 1 }), t('note.mdTableColumn', { index: 2 })])),
+          insertBlock(
+            input,
+            buildMarkdownTable([t('note.mdTableColumn', { index: 1 }), t('note.mdTableColumn', { index: 2 })]),
+          ),
         ),
     },
     {
@@ -1702,10 +1708,7 @@
     const template = MERMAID_TEMPLATES.find((item) => item.key === templateKey);
     if (!template || props.readonly) return;
     const code = locale.value.startsWith('zh') ? template.code.zh : template.code.en;
-    const escaped = code.replace(
-      /[&<>]/g,
-      (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char] as string,
-    );
+    const escaped = code.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char] as string);
     editor.insertContent(`<pre class="language-mermaid">${escaped}</pre><p></p>`);
   }
 
@@ -2416,6 +2419,11 @@
               message: `任务:${AI_SEL_TASK[action]}。只输出处理后的纯文本,不要任何解释、前后缀或 markdown 代码块。\n\n原文:\n${text}`,
               stream: true,
               sessionId: '',
+              requestMetadata: {
+                operation: `selection_${action}`,
+                scope: 'selection',
+                contentChars: text.length,
+              },
             },
             {
               headers: { 'Content-Type': 'application/json' },
