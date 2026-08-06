@@ -163,4 +163,28 @@ describe('AiCoverageDisclosure', () => {
     expect(host.textContent).toContain('Characters 401–1000 (CHAR_LIMIT)');
     expect(host.textContent).not.toContain('文档覆盖');
   });
+
+  it('目录检索单独披露范围与实际引用，不冒充逐页完整分析', () => {
+    const host = mountCoverage({
+      documents: [],
+      overall: null,
+      noteBranches: [
+        {
+          mode: 'retrieval',
+          rootId: 'note-root',
+          title: '移动端设计',
+          totalPages: 18,
+          matchedPages: 4,
+          completeAnalysis: false,
+        },
+      ],
+    });
+
+    expect(host.textContent).toContain('目录范围');
+    expect(host.textContent).toContain('1 个目录 · 范围 18 个页面 · 本回答引用 4 个页面');
+    expect(host.textContent).toContain('范围检索');
+    expect(host.textContent).toContain('目录共 18 个页面；本回答检索并引用了其中 4 个页面');
+    expect(host.textContent).toContain('不代表 AI 已逐页阅读或完整总结整个目录');
+    expect(host.textContent).not.toContain('完整分析');
+  });
 });

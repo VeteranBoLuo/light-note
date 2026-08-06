@@ -1,4 +1,4 @@
-import { NOTE_TREE_MAX_DEPTH, type NoteTreeItem } from '@/types/noteTree';
+import type { NoteTreeItem } from '@/types/noteTree';
 
 export interface FlatNoteTreeItem extends NoteTreeItem {
   depth: number;
@@ -42,8 +42,13 @@ export function collectNoteDescendantIds(items: NoteTreeItem[] = [], rootId: str
   return descendants;
 }
 
-export function canMoveNoteSubtreeToDepth(targetParentDepth: number, subtreeRelativeDepth: number) {
+export function canMoveNoteSubtreeToDepth(
+  targetParentDepth: number,
+  subtreeRelativeDepth: number,
+  maxDepth: number,
+) {
   const parentDepth = Math.max(0, Math.trunc(Number(targetParentDepth) || 0));
   const relativeDepth = Math.max(0, Math.trunc(Number(subtreeRelativeDepth) || 0));
-  return parentDepth + 1 + relativeDepth <= NOTE_TREE_MAX_DEPTH;
+  const normalizedMaxDepth = Math.trunc(Number(maxDepth) || 0);
+  return normalizedMaxDepth > 0 && parentDepth + 1 + relativeDepth <= normalizedMaxDepth;
 }

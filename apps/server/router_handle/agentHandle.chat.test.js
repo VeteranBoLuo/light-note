@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   buildNoteAiPayload: vi.fn(),
   findOwnedNoteForAi: vi.fn(),
   findOwnedTodoForAi: vi.fn(),
+  resolveNoteDraftScopeMaterials: vi.fn(),
   looksLikeLeakedToolCall: vi.fn(() => false),
   parseLeakedToolCalls: vi.fn(() => []),
 }));
@@ -85,6 +86,9 @@ vi.mock('../util/noteAiService.js', () => ({
   findOwnedNoteForAi: mocks.findOwnedNoteForAi,
 }));
 vi.mock('../util/services/todoService.js', () => ({ findOwnedTodoForAi: mocks.findOwnedTodoForAi }));
+vi.mock('../util/agent/noteDraftScopeMaterials.js', () => ({
+  resolveNoteDraftScopeMaterials: mocks.resolveNoteDraftScopeMaterials,
+}));
 vi.mock('../util/agent/followUpSuggestions.js', () => ({
   getFollowUpSuggestions: vi.fn(),
   shouldOfferFollowUps: vi.fn(() => false),
@@ -192,6 +196,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
         properties: {
           title: { type: 'string' },
           content: { type: 'string' },
+          parentId: { type: 'string', maxLength: 255 },
         },
         required: ['title'],
       },
@@ -202,7 +207,12 @@ vi.mock('../util/agent/tools/index.js', () => ({
       execute: vi.fn(),
       transform: () => '笔记已创建。',
       summarize: () => '笔记已创建。',
-      preview: (args) => ({ title: '创建笔记', target: args.title, impact: '确认后才会创建。' }),
+      preview: (args) => ({
+        title: '创建笔记',
+        target: args.title,
+        impact: '确认后才会创建。',
+        details: [{ key: 'targetDirectory', value: args.parentId ? '轻笺项目' : '' }],
+      }),
     },
   ],
 }));
@@ -423,6 +433,12 @@ describe('agentChat 主链路', () => {
     mocks.findOwnedNoteForAi.mockResolvedValue(null);
     mocks.buildNoteAiPayload.mockImplementation(async ({ note }) => ({ content: String(note?.content || '') }));
     mocks.findOwnedTodoForAi.mockResolvedValue(null);
+    mocks.resolveNoteDraftScopeMaterials.mockResolvedValue({
+      materials: [{ type: 'note', id: 'branch-root', title: '轻笺项目', content: '目录范围内的项目正文。' }],
+      entityRefs: [{ type: 'note', id: 'branch-root', title: '轻笺项目' }],
+      matchedPageCount: 1,
+      totalPages: 1,
+    });
   });
 
   it('高置信普通问答跳过 Planner，并完整发送新旧 SSE 生命周期事件', async () => {
@@ -467,6 +483,214 @@ describe('agentChat 主链路', () => {
     const agentLogInsert = mocks.poolQuery.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO agent_logs'));
     expect(agentLogInsert[1][16]).toBe('你好');
     expect(agentLogInsert[1][16]).not.toContain('你好，我在。');
+  });
+
+  it('目录范围灰度关闭时在会话和额度创建前失败关闭', async () => {
+    vi.stubEnv('AI_NOTE_BRANCH_SCOPE_ENABLED', 'false');
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '总结这个目录里的内容',
+        stream: false,
+        contexts: [],
+        scopeRefs: [{ type: 'note_branch', id: 'branch-root' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 404,
+        msg: expect.stringContaining('暂未开放笔记目录范围'),
+      }),
+    );
+    expect(mocks.getOrCreateSession).not.toHaveBeenCalled();
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.requestAi).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+  });
+
+  it('完整目录分析灰度关闭时保留目录 allowlist，但降级为普通范围问答', async () => {
+    vi.stubEnv('AI_NOTE_BRANCH_ANALYSIS_ENABLED', 'false');
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id, title')) {
+        return [
+          [
+            {
+              id: 'branch-root',
+              parent_id: null,
+              title: '轻笺项目',
+              sort: 0,
+              is_top: 0,
+              del_flag: 0,
+              update_time: '2026-08-06 12:00:00',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '完整分析这个目录里的所有页面、重复和待办',
+        stream: false,
+        contexts: [],
+        scopeRefs: [{ type: 'note_branch', id: 'branch-root' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ response: expect.any(String) }) }),
+    );
+    expect(
+      mocks.requestAi.mock.calls.some(([, options]) =>
+        options?.tools?.some((tool) => tool?.function?.name === 'classify_note_branch_analysis'),
+      ),
+    ).toBe(false);
+    expect(mocks.poolQuery).toHaveBeenCalledWith(
+      expect.stringContaining('WHERE create_by = ? AND del_flag = 0'),
+      ['user-1'],
+    );
+  });
+
+  it('完整目录分析只使用 owner 权威子树，并返回实际页面覆盖与来源', async () => {
+    const treeRows = [
+      {
+        id: 'root',
+        parent_id: null,
+        title: '轻笺项目',
+        sort: 0,
+        is_top: 0,
+        del_flag: 0,
+        update_time: '2026-08-06 10:00:00',
+      },
+      {
+        id: 'child',
+        parent_id: 'root',
+        title: '移动端设计',
+        sort: 0,
+        is_top: 0,
+        del_flag: 0,
+        update_time: '2026-08-06 11:00:00',
+      },
+    ];
+    const noteRows = [
+      {
+        id: 'root',
+        title: '轻笺项目',
+        content: '# 项目\n总体设计',
+        type: 'markdown',
+        update_time: '2026-08-06 10:00:00',
+      },
+      {
+        id: 'child',
+        title: '移动端设计',
+        content: '# 移动端\n使用底部目录抽屉',
+        type: 'markdown',
+        update_time: '2026-08-06 11:00:00',
+      },
+    ];
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes('SELECT id, parent_id, title')) return [treeRows];
+      if (text.includes('SELECT id, title, content, type, update_time')) return [noteRows];
+      return [[]];
+    });
+    mocks.requestAi.mockImplementation(async (messages, options = {}) => {
+      const toolName = options.tools?.[0]?.function?.name;
+      if (toolName === 'classify_note_branch_analysis') {
+        return {
+          content: '',
+          toolCalls: [toolCall(toolName, { decision: 'full_branch_analysis' })],
+          usage: usage(2),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (toolName === 'submit_note_branch_page_summaries') {
+        const payload = JSON.parse(messages[1].content);
+        return {
+          content: '',
+          toolCalls: [
+            toolCall(toolName, {
+              pages: payload.pageUnits.map((unit) => ({
+                unitId: unit.unitId,
+                pageId: unit.pageId,
+                summary: `${unit.title} 摘要`,
+                themes: ['页面树'],
+                decisions: [],
+                todos: [],
+                risks: [],
+              })),
+            }),
+          ],
+          usage: usage(3),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      if (toolName === 'submit_note_branch_analysis') {
+        return {
+          content: '',
+          toolCalls: [toolCall(toolName, { answer: '## 主要主题\n页面树与移动端目录抽屉。' })],
+          usage: usage(4),
+          usageStatus: 'reported',
+          finishReason: 'tool_calls',
+        };
+      }
+      throw new Error(`unexpected tool ${toolName || 'none'}`);
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '总结这里所有模块、重复决策和未完成事项',
+        stream: false,
+        contexts: [],
+        scopeRefs: [{ type: 'note_branch', id: 'root', title: '客户端标题不可信' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const payload = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(payload.response).toContain('分析范围：轻笺项目');
+    expect(payload.response).toContain('页面总数：2 · 已完整覆盖：2 · 未读取：0');
+    expect(payload.sources.map((source) => source.id)).toEqual(['root', 'child']);
+    expect(payload.coverage.noteBranches).toEqual([
+      expect.objectContaining({
+        rootId: 'root',
+        title: '轻笺项目',
+        totalPages: 2,
+        analyzedPages: 2,
+        unreadPages: 0,
+        completeAnalysis: true,
+      }),
+    ]);
+    expect(mocks.poolQuery).toHaveBeenCalledWith(expect.stringContaining('WHERE create_by = ? AND del_flag = 0'), [
+      'user-1',
+    ]);
+    expect(mocks.poolQuery).toHaveBeenCalledWith(expect.stringContaining('id IN (?, ?)'), [
+      'user-1',
+      'root',
+      'child',
+    ]);
+    expect(mocks.recordTurn).toHaveBeenCalledWith(
+      expect.anything(),
+      '总结这里所有模块、重复决策和未完成事项',
+      expect.stringContaining('已完整覆盖：2'),
+      [expect.objectContaining({ name: 'note_branch_analysis', status: 'success' })],
+    );
+    expect(
+      mocks.requestAi.mock.calls.some(([, options]) => options?.trace?.stage === 'planner'),
+    ).toBe(false);
   });
 
   it('有效草稿候选不会劫持语义上独立的新问题', async () => {
@@ -683,6 +907,130 @@ describe('agentChat 主链路', () => {
     });
   });
 
+  it('单一目录范围生成笔记时，确认卡默认写入该目录并显示目标目录', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id, title')) {
+        return [
+          [
+            {
+              id: 'branch-root',
+              parent_id: null,
+              title: '轻笺项目',
+              sort: 0,
+              is_top: 0,
+              del_flag: 0,
+              update_time: '2026-08-06 12:00:00',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse()).mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        toolCall('submit_note_draft', {
+          title: '轻笺项目整理',
+          content: `# 轻笺项目\n\n${'目录整理正文。'.repeat(80)}`,
+        }),
+      ],
+      usage: usage(30),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '在这个目录里生成一篇新的项目整理笔记。',
+        stream: false,
+        contexts: [],
+        scopeRefs: [{ type: 'note_branch', id: 'branch-root', title: '客户端标题不可信' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: expect.objectContaining({
+          title: '轻笺项目整理',
+          parentId: 'branch-root',
+        }),
+        preview: expect.objectContaining({
+          details: [{ key: 'targetDirectory', value: '轻笺项目' }],
+        }),
+        privateContext: expect.objectContaining({
+          scopeRefs: [{ type: 'note_branch', id: 'branch-root' }],
+        }),
+      }),
+    );
+    expect(mocks.resolveNoteDraftScopeMaterials).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        resolvedScopes: expect.objectContaining({ noteIds: ['branch-root'] }),
+      }),
+    );
+    const draftPrompt = mocks.requestAi.mock.calls.at(-1)?.[0]?.[1]?.content || '';
+    expect(draftPrompt).toContain('目录范围内的项目正文');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      confirmations: [
+        expect.objectContaining({
+          toolName: 'create_note',
+          args: expect.objectContaining({ parentId: 'branch-root' }),
+          preview: expect.objectContaining({
+            details: [{ key: 'targetDirectory', value: '轻笺项目' }],
+          }),
+        }),
+      ],
+    });
+  });
+
+  it('目录范围没有可靠检索命中时不把用户指令冒充材料生成笔记', async () => {
+    mocks.poolQuery.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id, title')) {
+        return [
+          [
+            {
+              id: 'branch-root',
+              parent_id: null,
+              title: '空目录',
+              sort: 0,
+              is_top: 0,
+              del_flag: 0,
+              update_time: '2026-08-06 12:00:00',
+            },
+          ],
+        ];
+      }
+      return [[]];
+    });
+    mocks.resolveNoteDraftScopeMaterials.mockResolvedValueOnce({
+      materials: [],
+      entityRefs: [],
+      matchedPageCount: 0,
+      totalPages: 1,
+    });
+    mocks.requestAi.mockResolvedValueOnce(noteDraftTaskResponse());
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '根据这个目录生成一篇项目笔记。',
+        stream: false,
+        contexts: [],
+        scopeRefs: [{ type: 'note_branch', id: 'branch-root' }],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(mocks.requestAi).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).toContain('没有检索到');
+  });
+
   it('只有书签且网页无快照、读取失败时明确提示补充材料，不凭标题和链接编造笔记', async () => {
     mocks.poolQuery.mockImplementation(async (sql) => {
       if (String(sql).includes('FROM bookmark b')) {
@@ -804,6 +1152,21 @@ describe('agentChat 主链路', () => {
     const oldToken = 'o'.repeat(43);
     const oldContent = '旧正文。'.repeat(80);
     mocks.poolQuery.mockImplementation(async (sql, params = []) => {
+      if (String(sql).includes('SELECT id, parent_id, title')) {
+        return [
+          [
+            {
+              id: 'directory-stable',
+              parent_id: null,
+              title: '稳定目录',
+              sort: 0,
+              is_top: 0,
+              del_flag: 0,
+              update_time: '2026-08-06 12:00:00',
+            },
+          ],
+        ];
+      }
       if (String(sql).includes('FROM bookmark b')) {
         const requestedId = String(params[1] || '');
         if (requestedId === 'bookmark-evil') {
@@ -841,15 +1204,22 @@ describe('agentChat 主链路', () => {
         id: 'old-confirmation',
         sessionId: 'session-1',
         toolName: 'create_note',
-        args: { title: '旧标题', content: oldContent },
+        args: { title: '旧标题', content: oldContent, parentId: 'directory-stable' },
         privateContext: {
           kind: 'note_draft_materials',
           version: 1,
           sourceMessage: '请根据这个书签生成笔记',
           contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+          scopeRefs: [{ type: 'note_branch', id: 'directory-stable' }],
           attachmentIds: [],
         },
       },
+    });
+    mocks.resolveNoteDraftScopeMaterials.mockResolvedValueOnce({
+      materials: [{ type: 'note', id: 'directory-stable', title: '稳定目录', content: '目录内权威正文。' }],
+      entityRefs: [{ type: 'note', id: 'directory-stable', title: '稳定目录' }],
+      matchedPageCount: 1,
+      totalPages: 1,
     });
     mocks.requestAi
       .mockResolvedValueOnce({
@@ -894,16 +1264,24 @@ describe('agentChat 主链路', () => {
     expect(mocks.requestAi).toHaveBeenCalledTimes(2);
     expect(mocks.requestAi.mock.calls[0][0][0].content).toContain('整体含义、指代和最近对话');
     expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('网页存档');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('目录内权威正文');
     expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('再试一下');
     expect(mocks.requestAi.mock.calls[1][0][1].content).not.toContain('客户端伪造的新材料');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         replaceToken: oldToken,
         replaceConfirmationId: 'old-confirmation',
-        args: expect.objectContaining({ title: '扩写后的标题' }),
+        args: expect.objectContaining({ title: '扩写后的标题', parentId: 'directory-stable' }),
         privateContext: expect.objectContaining({
           contextRefs: [{ type: 'bookmark', id: 'bookmark-1' }],
+          scopeRefs: [{ type: 'note_branch', id: 'directory-stable' }],
         }),
+      }),
+    );
+    expect(mocks.resolveNoteDraftScopeMaterials).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: 'user-1',
+        resolvedScopes: expect.objectContaining({ noteIds: ['directory-stable'] }),
       }),
     );
     expect(mocks.settleSessionAction).toHaveBeenCalledWith(
@@ -917,6 +1295,7 @@ describe('agentChat 主链路', () => {
     expect(events.some((event) => event.event === 'tool_confirmation')).toBe(true);
     expect(events.find((event) => event.event === 'response.completed')?.entityRefs).toEqual([
       { type: 'bookmark', id: 'bookmark-1', title: '示例书签' },
+      { type: 'note', id: 'directory-stable', title: '稳定目录' },
     ]);
   });
 

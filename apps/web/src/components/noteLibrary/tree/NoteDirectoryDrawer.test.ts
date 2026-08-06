@@ -37,8 +37,23 @@ vi.mock('@/components/base/BasicComponents/BDropdown.vue', async () => {
   return {
     default: defineComponent({
       name: 'BDropdownStub',
-      setup(_, { slots }) {
-        return () => h('div', slots.default?.());
+      props: { menuOptions: { type: Array, default: () => [] } },
+      setup(props: { menuOptions: Array<Record<string, unknown>> }, { slots }) {
+        return () =>
+          h('div', { class: 'dropdown-stub' }, [
+            slots.default?.(),
+            ...props.menuOptions.map((option, index) =>
+              h(
+                'button',
+                {
+                  key: String(option.label || index),
+                  class: ['dropdown-option', option.danger ? 'dropdown-option--danger' : ''],
+                  onClick: option.function as () => void,
+                },
+                String(option.label || ''),
+              ),
+            ),
+          ]);
       },
     }),
   };
@@ -151,5 +166,119 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     mocks.historyCallbacks[2]();
     await flushUi();
     expect(open.value).toBe(false);
+  });
+
+  it('移动端目录行菜单可将完整节点交给删除确认流程并先关闭抽屉', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const open = ref(true);
+    const deleted = vi.fn();
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(NoteDirectoryDrawer, {
+              open: open.value,
+              'onUpdate:open': (value: boolean) => (open.value = value),
+              currentParentId: null,
+              onDelete: deleted,
+            });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    const deleteAction = document.querySelector<HTMLButtonElement>('.dropdown-option--danger');
+    expect(deleteAction).not.toBeNull();
+    deleteAction!.click();
+    await flushUi();
+
+    expect(open.value).toBe(false);
+    expect(deleted).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'a', title: 'A', hasChildren: true, childCount: 1 }),
+    );
+  });
+
+  it('可注入确定性目录数据用于离线交互验收且不会请求业务接口', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const loadDirectoryLevel = vi.fn(async (parentId: string | null) => ({
+      items: [{ id: 'local', parentId, title: '离线目录', childCount: 0, hasChildren: false, isTop: false, sort: 0 }],
+      breadcrumb: parentId ? [{ id: parentId, title: '当前目录' }] : [],
+    }));
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(NoteDirectoryDrawer, {
+              open: true,
+              currentParentId: null,
+              loadDirectoryLevel,
+            });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    expect(loadDirectoryLevel).toHaveBeenCalledWith(null);
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
+    expect(document.querySelector('.note-drawer-row-title')?.textContent).toContain('离线目录');
+  });
+
+  it('目录能力关闭时只展示标签且不会发送隐藏的目录请求', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () =>
+            h(NoteDirectoryDrawer, {
+              open: true,
+              currentParentId: null,
+              directoryEnabled: false,
+            });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    expect(document.querySelector('.note-drawer-tags')).not.toBeNull();
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
   });
 });

@@ -35,6 +35,10 @@ export interface SearchResultItem {
   dueAt?: string | null;
   completedAt?: string | null;
   referenceCount?: number;
+  /** 笔记页面树元数据；目录不是新的 SearchType。 */
+  path?: string;
+  childCount?: number;
+  descendantCount?: number;
   raw?: any;
 }
 

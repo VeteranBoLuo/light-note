@@ -34,7 +34,7 @@ function markCommitOutcomeUnknown(error) {
 }
 
 async function findOwnedNoteById({ userId, noteId }) {
-  const [rows] = await pool.query('SELECT id, title, type FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
+  const [rows] = await pool.query('SELECT id, title, type, parent_id FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
     noteId,
     userId,
   ]);
@@ -73,6 +73,7 @@ export async function createNote({
         id: existing.id,
         title: existing.title || title,
         type: existing.type || type,
+        parentId: existing.parent_id ?? null,
         addedToInbox: false,
       };
     }

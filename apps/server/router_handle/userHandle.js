@@ -50,6 +50,8 @@ import { recordServerOperation } from '../util/operationLog.js';
 import { inspectBookmarkUrl } from '../util/bookmarkUrl.js';
 import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
+import { MAX_NOTE_TREE_DEPTH } from '../util/noteTreeConstants.js';
 import {
   adminCursorScope,
   adminCursorTime,
@@ -1451,6 +1453,106 @@ export const verifyCode = async (req, res) => {
 
 // POST /user/exportData —— 一键导出/备份当前用户全部数据（书签/笔记/文件元信息/标签 + 可移植 AI 数据），前端下成 JSON。
 // 仅本人数据(游客拦截);文件只导元信息(名称/大小/时间),不含二进制。
+class NoteImportPlanError extends Error {
+  constructor(code) {
+    super(code);
+    this.name = 'NoteImportPlanError';
+    this.code = code;
+  }
+}
+
+const normalizeBackupNoteId = (value) => String(value ?? '').trim() || null;
+
+function buildNoteImportPlan(rawNotes = []) {
+  const entries = [];
+  const explicitIds = new Set();
+  for (const [index, note] of (Array.isArray(rawNotes) ? rawNotes : []).entries()) {
+    const explicitId = normalizeBackupNoteId(note?.id);
+    if (explicitId && explicitIds.has(explicitId)) throw new NoteImportPlanError('NOTE_IMPORT_DUPLICATE_ID');
+    if (explicitId) explicitIds.add(explicitId);
+    const sourceId = explicitId || `__legacy_note_${index}`;
+    const rawParentId = normalizeBackupNoteId(note?.parentId ?? note?.parent_id);
+    const sort = Number(note?.sort);
+    entries.push({
+      sourceId,
+      note,
+      parentSourceId: rawParentId,
+      sort: Number.isInteger(sort) && sort >= 0 ? sort : 0,
+      treeDeleteBatchId:
+        normalizeBackupNoteId(note?.treeDeleteBatchId ?? note?.tree_delete_batch_id)?.slice(0, 255) || null,
+    });
+  }
+
+  const bySourceId = new Map(entries.map((entry) => [entry.sourceId, entry]));
+  let missingParentCount = 0;
+  for (const entry of entries) {
+    if (entry.parentSourceId && !bySourceId.has(entry.parentSourceId)) {
+      entry.parentSourceId = null;
+      entry.missingParent = true;
+      missingParentCount += 1;
+    }
+  }
+
+  const visiting = new Set();
+  const visitedDepth = new Map();
+  const resolveDepth = (sourceId) => {
+    if (visitedDepth.has(sourceId)) return visitedDepth.get(sourceId);
+    if (visiting.has(sourceId)) throw new NoteImportPlanError('NOTE_IMPORT_TREE_CYCLE');
+    visiting.add(sourceId);
+    const entry = bySourceId.get(sourceId);
+    const depth = entry?.parentSourceId ? resolveDepth(entry.parentSourceId) + 1 : 1;
+    visiting.delete(sourceId);
+    if (depth > MAX_NOTE_TREE_DEPTH) throw new NoteImportPlanError('NOTE_IMPORT_TREE_DEPTH_EXCEEDED');
+    visitedDepth.set(sourceId, depth);
+    return depth;
+  };
+  for (const entry of entries) resolveDepth(entry.sourceId);
+  return { entries, missingParentCount };
+}
+
+function resolveMappedNoteParentAssignments({ existingRows, createdEntries, oldToNew }) {
+  const parentById = new Map(
+    existingRows.map((row) => [
+      String(row.id),
+      normalizeBackupNoteId(row.parentId ?? row.parent_id),
+    ]),
+  );
+  const assignments = [];
+  for (const entry of createdEntries) {
+    const mappedParentId = entry.parentSourceId ? oldToNew.get(entry.parentSourceId) || null : null;
+    if (mappedParentId === entry.newId) throw new NoteImportPlanError('NOTE_IMPORT_TREE_CYCLE');
+    parentById.set(entry.newId, mappedParentId);
+    assignments.push({ ...entry, parentId: mappedParentId });
+  }
+
+  const depthMemo = new Map();
+  const resolveDepth = (noteId, path = new Set()) => {
+    if (depthMemo.has(noteId)) return depthMemo.get(noteId);
+    if (path.has(noteId)) throw new NoteImportPlanError('NOTE_IMPORT_TREE_CYCLE');
+    const nextPath = new Set(path).add(noteId);
+    const parentId = parentById.get(noteId);
+    const depth = parentId && parentById.has(parentId) ? resolveDepth(parentId, nextPath) + 1 : 1;
+    if (depth > MAX_NOTE_TREE_DEPTH) throw new NoteImportPlanError('NOTE_IMPORT_TREE_DEPTH_EXCEEDED');
+    depthMemo.set(noteId, depth);
+    return depth;
+  };
+  for (const entry of createdEntries) resolveDepth(entry.newId);
+  return assignments;
+}
+
+const sendNoteImportPlanError = (req, res, error) => {
+  const messages = {
+    NOTE_IMPORT_DUPLICATE_ID: ['备份中存在重复的笔记 ID', 'The backup contains duplicate note IDs'],
+    NOTE_IMPORT_TREE_CYCLE: ['备份中的笔记目录存在循环关系', 'The backup note tree contains a cycle'],
+    NOTE_IMPORT_TREE_DEPTH_EXCEEDED: [
+      `备份中的笔记目录超过 ${MAX_NOTE_TREE_DEPTH} 层`,
+      `The backup note tree exceeds ${MAX_NOTE_TREE_DEPTH} levels`,
+    ],
+  };
+  const [zh, en] = messages[error?.code] || ['备份中的笔记目录无效', 'The backup note tree is invalid'];
+  return res.send(resultData({ errorCode: error?.code || 'NOTE_IMPORT_TREE_INVALID' }, 400, L(req, zh, en)));
+};
+
 export const exportData = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -1465,7 +1567,10 @@ export const exportData = async (req, res) => {
       [userId],
     );
     const [notes] = await pool.query(
-      'SELECT id, title, content, type, create_time FROM note WHERE create_by = ? AND del_flag = 0 ORDER BY create_time DESC',
+      `SELECT id, title, content, type, parent_id, sort, tree_delete_batch_id, create_time
+         FROM note
+        WHERE create_by = ? AND del_flag = 0
+        ORDER BY create_time DESC`,
       [userId],
     );
     const [files] = await pool.query(
@@ -1488,7 +1593,7 @@ export const exportData = async (req, res) => {
     const ai = await exportAiUserData(userId, pool);
     res.send(
       resultData({
-        formatVersion: 2,
+        formatVersion: 3,
         backupKind: 'metadata_backup',
         exportedAt: new Date().toISOString(),
         restorePolicy: {
@@ -1542,6 +1647,14 @@ export const importData = async (req, res) => {
       ),
     );
   }
+  let noteImportPlan;
+  try {
+    noteImportPlan = buildNoteImportPlan(data.notes);
+  } catch (error) {
+    if (error instanceof NoteImportPlanError) return sendNoteImportPlanError(req, res, error);
+    console.error('[user-import] tree preflight failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, L(req, '导入预检失败，请稍后重试', 'Import preflight failed')));
+  }
   const detected = {
     tags: Array.isArray(data.tags) ? data.tags.length : 0,
     bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks.length : 0,
@@ -1580,6 +1693,7 @@ export const importData = async (req, res) => {
     warnings: [
       ...(detected.files ? ['FILE_CONTENTS_NOT_RESTORABLE'] : []),
       ...(detected.aiConversations ? ['AI_DATA_EXPORT_ONLY'] : []),
+      ...(noteImportPlan.missingParentCount ? ['NOTE_TREE_MISSING_PARENT_REROOTED'] : []),
     ],
   };
   if (req.body?.mode === 'preflight') {
@@ -1595,15 +1709,19 @@ export const importData = async (req, res) => {
     const [bmRows] = await connection.query('SELECT name, url FROM bookmark WHERE user_id = ? AND del_flag = 0', [
       userId,
     ]);
-    const [noteRows] = await connection.query('SELECT title, content FROM note WHERE create_by = ? AND del_flag = 0', [
-      userId,
-    ]);
+    const [noteRows] = await connection.query(
+      'SELECT id, title, content, parent_id FROM note WHERE create_by = ? AND del_flag = 0',
+      [userId],
+    );
     const normUrl = (u) => inspectBookmarkUrl(u, { allowTextExtraction: false }).canonicalUrl;
     const noteKey = (t, c) => `${t}\u0000${c}`;
     const tagMap = new Map(tagRows.map((r) => [r.name, r.id]));
     const existUrls = new Set(bmRows.map((r) => normUrl(r.url)).filter(Boolean));
     const existNames = new Set(bmRows.map((r) => r.name).filter(Boolean));
     const existNotes = new Set(noteRows.map((r) => noteKey(r.title || '', r.content || '')));
+    const existingNoteIdByKey = new Map(
+      noteRows.map((row) => [noteKey(row.title || '', row.content || ''), String(row.id)]),
+    );
 
     // 确保标签存在,返回其 id(已有同名复用,否则新建)
     const ensureTag = async (name) => {
@@ -1619,7 +1737,7 @@ export const importData = async (req, res) => {
     const stat = {
       tags: { added: 0, reused: 0 },
       bookmarks: { added: 0, skipped: 0, invalid: 0 },
-      notes: { added: 0, skipped: 0 },
+      notes: { added: 0, skipped: 0, rerooted: noteImportPlan.missingParentCount },
       files: { skipped: 0 },
     };
 
@@ -1677,8 +1795,12 @@ export const importData = async (req, res) => {
       }
     }
 
-    // 3) 笔记(按标题+内容去重)
-    for (const n of Array.isArray(data.notes) ? data.notes : []) {
+    // 3) 笔记第一阶段：全部新记录先落在根目录并建立旧 ID → 新 ID 映射。
+    // 父关系必须等所有新 ID 已确定后再恢复，否则备份顺序会决定导入结果。
+    const oldToNewNoteIds = new Map();
+    const createdNoteEntries = [];
+    for (const entry of noteImportPlan.entries) {
+      const n = entry.note;
       const title = String(n?.title || '').trim();
       const rawContent = n?.content || '';
       const type = n?.type || 'html';
@@ -1686,6 +1808,8 @@ export const importData = async (req, res) => {
       if (!title && !content) continue;
       const k = noteKey(title, content);
       if (existNotes.has(k)) {
+        const existingId = existingNoteIdByKey.get(k);
+        if (existingId) oldToNewNoteIds.set(entry.sourceId, existingId);
         stat.notes.skipped++;
         continue;
       }
@@ -1694,9 +1818,14 @@ export const importData = async (req, res) => {
         content,
         type,
         createBy: userId,
+        parentId: null,
+        sort: entry.sort,
+        treeDeleteBatchId: entry.treeDeleteBatchId,
         ...(n?.createTime ? { createTime: n.createTime } : {}),
       });
       await connection.query('INSERT INTO note SET ?', [payload]);
+      oldToNewNoteIds.set(entry.sourceId, payload.id);
+      createdNoteEntries.push({ ...entry, newId: payload.id });
       // 笔记内联提及(N0):导入的笔记也在同一导入事务内同步引用;旧/越权/不存在的目标由归属校验自然过滤,
       // 不阻断正文导入;解析或同步抛错则整个导入事务回滚(与其它写路径一致)。
       const importedRefs = extractOwnedResourceRefs({ content, type: payload.type });
@@ -1704,6 +1833,7 @@ export const importData = async (req, res) => {
         await syncNoteResourceRefs(connection, { userId, noteId: payload.id, refs: importedRefs });
       }
       existNotes.add(k);
+      existingNoteIdByKey.set(k, payload.id);
       stat.notes.added++;
       const tagIds = [];
       for (const tn of Array.isArray(n?.tags) ? n.tags : []) {
@@ -1721,10 +1851,31 @@ export const importData = async (req, res) => {
       }
     }
 
+    // 笔记第二阶段：在同一事务内恢复映射后的父关系。缺失父节点已在预检中降到根；
+    // 这里再结合账号现有树检查循环和总深度，任何冲突都回滚整个导入。
+    const parentAssignments = resolveMappedNoteParentAssignments({
+      existingRows: noteRows,
+      createdEntries: createdNoteEntries,
+      oldToNew: oldToNewNoteIds,
+    });
+    for (const assignment of parentAssignments) {
+      if (!assignment.parentId) continue;
+      const [result] = await connection.query(
+        `UPDATE note
+            SET parent_id = ?, update_time = update_time
+          WHERE id = ? AND create_by = ? AND del_flag = 0`,
+        [assignment.parentId, assignment.newId, userId],
+      );
+      if (Number(result?.affectedRows || 0) !== 1) {
+        throw new NoteImportPlanError('NOTE_IMPORT_TREE_CONFLICT');
+      }
+    }
+
     // 4) 文件:备份无二进制,无法恢复本体,仅计数跳过
     stat.files.skipped = Array.isArray(data.files) ? data.files.length : 0;
 
     await connection.commit();
+    if (stat.notes.added > 0) await invalidatePersonalKnowledgeCache(userId);
     if (!req.suppressUserRewards) {
       const completionJobs = [];
       if (stat.bookmarks.added > 0) {
@@ -1742,6 +1893,7 @@ export const importData = async (req, res) => {
     res.send(resultData({ ...stat, preflight }));
   } catch (e) {
     await connection.rollback();
+    if (e instanceof NoteImportPlanError) return sendNoteImportPlanError(req, res, e);
     console.error('[user-import] failed code=%s', String(e?.code || 'USER_IMPORT_FAILED'));
     res.send(resultData(null, 500, L(req, '导入失败，请稍后重试', 'Import failed. Please try again later.')));
   } finally {

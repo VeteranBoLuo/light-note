@@ -60,6 +60,24 @@
               </BButton>
             </div>
           </div>
+          <div v-if="message.role === 'user' && message.scopeRefs?.length" class="user-contexts">
+            <div class="user-contexts__title">{{ t('ai.scope.attachedScopes') }} · {{ message.scopeRefs.length }}</div>
+            <div class="user-contexts__list">
+              <BButton
+                v-for="item in message.scopeRefs"
+                :key="`${item.type}:${item.id}`"
+                class="user-context-chip is-note-branch"
+                :title="item.title"
+                @click="openScope(item)"
+              >
+                <span class="user-context-chip__icon" aria-hidden="true">
+                  <SvgIcon :src="icon.noteTree.root" size="13" />
+                </span>
+                <strong>{{ t('ai.scope.directory') }} · {{ item.title }}</strong>
+                <small>{{ t('ai.scope.pageCount', { count: item.estimatedResourceCount || 1 }) }}</small>
+              </BButton>
+            </div>
+          </div>
           <!-- 本地上传文件:与「引用资源」对称地显示在用户气泡上,让用户看清这条问题用了哪些文件 -->
           <div v-if="message.role === 'user' && message.attachmentRefs?.length" class="user-contexts">
             <div class="user-contexts__title">{{ t('ai.attachedFiles') }} · {{ message.attachmentRefs.length }}</div>
@@ -181,6 +199,13 @@
     content: string;
     timestamp: Date;
     contexts?: Array<{ type: 'bookmark' | 'note' | 'file' | 'tag' | 'todo'; id: string; title: string }>;
+    scopeRefs?: Array<{
+      type: 'note_branch';
+      id: string;
+      title: string;
+      estimatedResourceCount?: number;
+    }>;
+    attachmentRefs?: Array<{ id: string; fileName: string }>;
     toolEvents?: AiToolStatusItem[];
     sources?: AiSource[];
     evidence?: AiEvidenceReference[];
@@ -222,7 +247,12 @@
 
   // 点“编辑”把这条用户消息内容抛给容器，回填到输入框
   const emit = defineEmits<{
-    (e: 'edit', content: string, contexts: NonNullable<ChatMessage['contexts']>): void;
+    (
+      e: 'edit',
+      content: string,
+      contexts: NonNullable<ChatMessage['contexts']>,
+      scopes: NonNullable<ChatMessage['scopeRefs']>,
+    ): void;
     (e: 'regenerate'): void;
     (e: 'source-navigate'): void;
   }>();
@@ -236,7 +266,7 @@
 
   // 编辑：把内容回填到输入框（由 ChatContainer 处理并聚焦）
   const handleEdit = () => {
-    emit('edit', props.message.content, props.message.contexts || []);
+    emit('edit', props.message.content, props.message.contexts || [], props.message.scopeRefs || []);
   };
 
   // 重新生成：请求容器用上一条用户消息重发本轮（仅 AI 回答用）
@@ -315,6 +345,11 @@
     } else if (navigation.kind === 'external') {
       window.open(navigation.url, '_blank', 'noopener,noreferrer');
     }
+  }
+
+  function openScope(item: NonNullable<ChatMessage['scopeRefs']>[number]) {
+    emit('source-navigate');
+    void router.push(`/noteLibrary/${item.id}`);
   }
 
   // 拦截链接点击：站内地址用 router.push SPA 跳转，外部链接新窗口打开
@@ -460,6 +495,19 @@
 
   .user-context-chip.is-note {
     --context-color: var(--resource-note-color);
+  }
+
+  .user-context-chip.is-note-branch {
+    --context-color: var(--resource-note-color);
+    border-color: var(--resource-note-color);
+    font-weight: 600;
+  }
+
+  .user-context-chip.is-note-branch small {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 500;
   }
 
   .user-context-chip.is-file {

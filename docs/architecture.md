@@ -273,11 +273,15 @@ src/
 
 笔记模板：内置模板（日报/周报/会议纪要/读书笔记/项目计划/复盘/知识卡片）为前端常量（`config/noteTemplates.ts`，含 `{{date}}` 等占位变量的文案不进 i18n 文件）；用户自存模板存 `note_template`（每人上限 20，硬删除不接回收站），`name`（库内显示名）与 `title_template`（新笔记默认标题，可含变量）语义分离。笔记正文图片按引用计数清理：彻底删除笔记后，仅当 URL 既无 `note_images` 残留引用、也无模板正文引用时才删除物理文件；新建笔记与存为模板都会校验图片归属并登记引用。
 
-笔记库支持多条笔记置顶：`note.is_top` 只表达整理状态，不改变 `update_time`；列表按置顶分组、自定义 `sort`、更新时间依次排序，卡片和列表使用笔记绿色标记。桌面端通过右键菜单操作，移动端通过卡片“更多”菜单操作；拖拽只改变组内顺序，置顶组始终位于普通组之前。
+笔记库使用笔记自身组成页面树，不新增文件夹实体：`note.parent_id` 指向同 owner、未删除的父笔记，`NULL` 表示“我的知识库”根层；最大深度为 8。`note.is_top` 只表达当前父层内的整理状态，不改变 `update_time`；`sort` 同样只在 `(create_by, parent_id, is_top)` 兄弟组内有序，拖拽通过前后锚点在事务内重排。移动页面会携带全部后代，服务端用内存树快照校验父页面归属、循环与深度，不能依赖 MySQL 8 递归 CTE。桌面端左侧常驻树、右侧卡片/列表只展示直接子页面；标签和关键词继续作为可叠加筛选。移动端通过底部目录 `BDrawer` 逐级进入，不卡片化复刻整棵常驻树。
+
+子树删除使用 `tree_delete_batch_id` 记录一次删除批次：有后代的页面必须按实际子树数量确认并原子软删除；恢复只恢复同批节点，更早单独删除的页面不能被带回。硬删除、账号注销、JSON 导入/导出和回收站批量操作都必须携带页面树关系；导入先对外部 ID 做 owner 内重映射，再校验循环与 8 层上限。父页面本身仍是可编辑正文，详情底部展示直接子页面；“页面树目录”和只读取当前正文 H1/H2/H3 的“正文大纲”是两套独立结构。
 
 笔记详情目录按统一响应式断点切换：完整桌面布局显示常驻侧边目录；手机和平板/中等宽度布局在顶栏显示目录按钮，并通过底部 `BDrawer` 打开目录。两种形态复用同一标题数据、当前章节高亮和正文定位逻辑，正文没有标题时不显示入口。
 
-书签、笔记库和云空间主列表采用服务端分页：前端首屏固定请求 48 条，接近滚动容器底部时增量合并下一页，接口同时返回当前筛选条件下的 `total / page / pageSize / hasMore`。关键词、标签、文件夹、无标签和文件分类必须先在 SQL 中完成过滤与总数统计，再应用 `LIMIT / OFFSET`；云文件只为当前页生成签名地址。书签和笔记在“全部视图”中通过前后相邻资源 ID 提交锚点移动，后端在事务内按完整同置顶分组定位并重排，因此已加载前缀可以拖拽、未加载尾部不会被局部编号覆盖；拖到当前已加载末尾只表示插入该锚点之后，只有加载到真实末尾后才能拖到全局最后。书签定位可以按页继续加载直到找到目标。标签编辑、标签详情和管理页等尚未迁移的旧调用显式使用不分页模式并保持原响应结构，后续迁移前不得依赖分页默认值。
+页面树采用六个账号级 Feature Flag 分阶段灰度：`note_tree_read`、`note_tree_write`、`note_tree_mobile`、`note_tree_subtree_trash`、`ai_note_branch_scope`、`ai_note_branch_analysis`。生产环境未配置时默认关闭，Root/测试账号先行，普通账号按 subject ID 稳定分桶；显式急停对所有身份生效。下游开关必须依赖上游读取/写入能力，API 与 Agent 执行边界都重新校验。页面树遥测复用无正文 `ai_product_events`，只记录枚举和数量/耗时桶，不记录标题、路径、正文、搜索词或页面 ID。
+
+书签、笔记库和云空间主列表采用服务端分页：前端首屏固定请求 48 条，接近滚动容器底部时增量合并下一页，接口同时返回当前筛选条件下的 `total / page / pageSize / hasMore`。关键词、标签、目录/文件夹、无标签和文件分类必须先在 SQL 中完成过滤与总数统计，再应用 `LIMIT / OFFSET`；云文件只为当前页生成签名地址。书签通过全局同置顶分组锚点排序；笔记在页面树模式按当前 `parentId + isTop` 兄弟组锚点排序，旧调用未传树模式时继续兼容平铺读取。目录内关键词搜索由服务端从 owner 树快照扩展后代 ID，并返回面包屑路径与子页面数量。已加载前缀可以拖拽、未加载尾部不会被局部编号覆盖；拖到当前已加载末尾只表示插入该锚点之后，只有加载到真实末尾后才能拖到全局最后。标签编辑、标签详情和管理页等尚未迁移的旧调用显式使用不分页模式并保持原响应结构，后续迁移前不得依赖分页默认值。
 
 资源中心主结果流通过 `/search/global` 的 `ordered` 分页模式，按“书签 → 笔记 → 文件 → 标签”的固定分组顺序连续取数，每批合计最多 40 条；当前类型不足一批时由后续类型补齐，并以 `{ type, offset }` 游标从准确位置续取。首批返回经过关键词、资源类型、标签、无标签、日期和排序条件后的 `typeTotals`、`hasMoreByType` 与标签筛选选项，追加批次不重复执行这些统计查询；页面只为已经加载的类型显示一次分组标题。全局快捷搜索、提及选择器等小型预览调用继续使用按类型限量的兼容模式。前端不再用 `limit=0` 拉取书签、笔记、文件和标签全量后本地筛选；请求版本号负责阻止旧关键词或旧筛选响应覆盖新结果。
 
@@ -383,7 +387,7 @@ src/
 
 ### AI 工作区与持久对象
 
-AI 前端由 `useAiAssistantStore` 承担会话域、草稿、材料、附件、滚动位置和活动请求租约，`AiWorkspaceShell` 承载问答产品界面。Store v3 的持久键与运行时 lease 都包含 actor、subject、mode、context ID 四维；切换同一 subject/mode 的管理员授权 context 也会中止旧请求并进入全新本地域。旧 v2 三维状态只允许普通 self 账号一次性安全迁移，管理员旧状态不复用。普通桌面问答使用无蒙层、可调宽且关闭不销毁的 `BDrawer`，移动端继续使用全屏容器；移动端侧边浮标只在笔记详情展示，其他页面仍可通过各自的显式 AI 入口打开工作区。笔记详情、笔记库、全局搜索、书签管理、云空间和标签详情通过统一的 `AiEntry` 事件传递受控 `contextRefs`、建议意图和查询：书签/云文件单项入口默认 summarize，批量入口默认 compare，一次只带前 5 个权威 type/ID/title 并明确提示截断；标签详情携带当前 tag 的权威 ID/name 并建议 find-related；既有专用书签整理弹窗继续保留。服务端仍重新校验资源归属，不能把入口 payload、title 或前端选择状态当作权限依据。系统分享尚未接入统一入口。
+AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `contextRefs`、目录范围 `scopeRefs`、附件、滚动位置和活动请求租约，`AiWorkspaceShell` 承载问答产品界面。Store v3 的持久键与运行时 lease 都包含 actor、subject、mode、context ID 四维；切换同一 subject/mode 的管理员授权 context 也会中止旧请求并进入全新本地域。旧 v2 三维状态只允许普通 self 账号一次性安全迁移，管理员旧状态不复用。普通桌面问答使用无蒙层、可调宽且关闭不销毁的 `BDrawer`，移动端继续使用全屏容器；移动端侧边浮标只在笔记详情展示，其他页面仍可通过各自的显式 AI 入口打开工作区。笔记详情、笔记库、全局搜索、书签管理、云空间和标签详情通过统一的 `AiEntry` 事件传递受控引用、建议意图和查询：单个材料最多 5 个；笔记目录范围最多 3 个，客户端只提交 `note_branch` 根 ID，禁止提交后代 ID、正文或缓存树。服务端按 subject 重新解析当前子树并把 note IDs 作为 `personalKnowledgeSearch.scope.resourceIds` 强制 allowlist；普通目录问答只取 Top 8～20 证据并披露实际引用页数。明确要求整个目录分析时进入同步 Map/Reduce，逐页结构化摘要后合并主题、重复、冲突与待办，上限 30 页或 120,000 字符；超限或 Provider 部分失败时必须显示实际覆盖，不能声称完整读取。系统分享尚未接入统一入口。
 
 所有需要按会话身份隔离的 AI 工作区顶层对象使用四维 owner 域：
 
@@ -551,7 +555,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - **建表 schema 是双轨,两条并存,排查时都要看**：
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
-  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`lottery_*` 列）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema`。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
+  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema`。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
 - **Schema 基线门禁**：`note_versions`、旧版兼容列 `files.share_token` 以及独立分享表已由 `20260730_file_share_lifecycle.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema`，关键表、列或索引缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。

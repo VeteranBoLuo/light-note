@@ -102,6 +102,12 @@
       totalCount?: number;
       untaggedCount?: number | null;
       tagLoading?: boolean;
+      directoryEnabled?: boolean;
+      writeEnabled?: boolean;
+      loadDirectoryLevel?: (parentId: string | null) => Promise<{
+        items: NoteTreeItem[];
+        breadcrumb: NoteBreadcrumbItem[];
+      }>;
     }>(),
     {
       initialTab: 'directory',
@@ -109,6 +115,8 @@
       totalCount: 0,
       untaggedCount: null,
       tagLoading: false,
+      directoryEnabled: true,
+      writeEnabled: true,
     },
   );
   const open = defineModel<boolean>('open', { default: false });
@@ -118,6 +126,7 @@
     openPage: [node: NoteTreeItem];
     create: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
+    delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
   const activeTab = ref<'directory' | 'tags'>('directory');
@@ -127,11 +136,12 @@
   const loading = ref(false);
   const error = ref('');
   let requestSeq = 0;
+  let loadScheduleSeq = 0;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
   let forceClosing = false;
 
   const tabs = computed(() => [
-    { key: 'directory', label: t('note.directoryTab') },
+    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.directoryTab') }] : []),
     { key: 'tags', label: t('note.tagsTab') },
   ]);
   const browseTitle = computed(() => breadcrumb.value[breadcrumb.value.length - 1]?.title || t('note.knowledgeRoot'));
@@ -179,7 +189,7 @@
     await closeThen(() => emit('selectTag', key));
   }
 
-  async function closeAndEmit(kind: 'openPage' | 'create' | 'move', node: NoteTreeItem) {
+  async function closeAndEmit(kind: 'openPage' | 'create' | 'move' | 'delete', node: NoteTreeItem) {
     await closeThen(() => emit(kind, node));
   }
 
@@ -190,15 +200,25 @@
         icon: icon.noteTree.openPage,
         function: () => closeAndEmit('openPage', node),
       },
+      ...(props.writeEnabled
+        ? [
+            {
+              label: t('note.newChildPage'),
+              icon: icon.common.add,
+              function: () => closeAndEmit('create', node),
+            },
+            {
+              label: t('note.movePage'),
+              icon: icon.noteTree.move,
+              function: () => closeAndEmit('move', node),
+            },
+          ]
+        : []),
       {
-        label: t('note.newChildPage'),
-        icon: icon.common.add,
-        function: () => closeAndEmit('create', node),
-      },
-      {
-        label: t('note.movePage'),
-        icon: icon.noteTree.move,
-        function: () => closeAndEmit('move', node),
+        label: t('note.moveToTrash'),
+        icon: icon.table_delete,
+        danger: true,
+        function: () => closeAndEmit('delete', node),
       },
     ];
   }
@@ -214,6 +234,13 @@
     error.value = '';
     const parentId = browseParentId.value;
     try {
+      if (props.loadDirectoryLevel) {
+        const level = await props.loadDirectoryLevel(parentId);
+        if (seq !== requestSeq || !open.value) return;
+        items.value = Array.isArray(level.items) ? level.items : [];
+        breadcrumb.value = Array.isArray(level.breadcrumb) ? level.breadcrumb : [];
+        return;
+      }
       const [treeResponse, breadcrumbResponse] = await Promise.all([
         apiBasePost('/api/note/queryNoteTree', { parentId, depth: 1 }, { silent: true }),
         parentId
@@ -241,17 +268,26 @@
     }
   }
 
+  function scheduleDirectoryLevelLoad() {
+    const scheduleSeq = ++loadScheduleSeq;
+    void nextTick(() => {
+      if (scheduleSeq !== loadScheduleSeq || !open.value || activeTab.value !== 'directory') return;
+      void loadLevel();
+    });
+  }
+
   watch(
     open,
     (isOpen) => {
       if (isOpen) {
-        activeTab.value = props.initialTab;
+        activeTab.value = props.directoryEnabled ? props.initialTab : 'tags';
         browseParentId.value = props.currentParentId;
         forceClosing = false;
         registerHistory();
-        void loadLevel();
+        scheduleDirectoryLevelLoad();
         return;
       }
+      loadScheduleSeq += 1;
       requestSeq += 1;
       if (historyHandle) releaseMobileOverlayHistory(historyHandle);
       historyHandle = null;
@@ -259,11 +295,14 @@
     { immediate: true },
   );
 
-  watch(activeTab, () => {
-    if (open.value) void nextTick(registerHistory);
+  watch(activeTab, (tab) => {
+    if (!open.value) return;
+    void nextTick(registerHistory);
+    if (tab === 'directory') scheduleDirectoryLevelLoad();
   });
 
   onBeforeUnmount(() => {
+    loadScheduleSeq += 1;
     requestSeq += 1;
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);
     historyHandle = null;

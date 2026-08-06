@@ -6,13 +6,19 @@ const {
   MAX_NOTE_TREE_DEPTH,
   assertValidNoteParentFromSnapshot,
   buildNoteTree,
+  deleteOwnedNoteSubtrees,
   getNoteTreeChildren,
   moveOwnedNoteNode,
+  moveOwnedNoteNodes,
+  prepareOwnedNotePhysicalDelete,
   prepareOwnedNotePlacement,
   queryOwnedNoteTree,
+  resolveOwnedNoteCreateTarget,
   resolveNoteBreadcrumbFromSnapshot,
   resolveNoteDepthFromSnapshot,
   resolveNoteDescendantIdsFromSnapshot,
+  searchNoteTreeFromSnapshot,
+  restoreOwnedNoteTrash,
 } = await import('./noteTreeService.js');
 
 const rows = [
@@ -96,9 +102,120 @@ describe('noteTreeService 只读树模型', () => {
     const db = { query: vi.fn().mockResolvedValue([rows]) };
     const result = await queryOwnedNoteTree({ userId: 'user-1', parentId: 'root-a', depth: 2, db });
     expect(db.query).toHaveBeenCalledWith(expect.not.stringContaining('content'), ['user-1']);
+    expect(result.maxDepth).toBe(MAX_NOTE_TREE_DEPTH);
     expect(result.items[0]).toMatchObject({ id: 'child-top', childCount: 0, hasChildren: false });
     expect(result.items[1]).toMatchObject({ id: 'child-a', childCount: 1, hasChildren: true });
     expect(result.items[1].children).toEqual([expect.objectContaining({ id: 'grandchild', parentId: 'child-a' })]);
+
+    const complete = await queryOwnedNoteTree({ userId: 'user-1', parentId: null, depth: 'all', db });
+    expect(complete.maxDepth).toBe(MAX_NOTE_TREE_DEPTH);
+    expect(complete.items[0].children).toBeDefined();
+  });
+
+  it('目录搜索只返回当前子树命中节点与完整祖先路径，不携带正文或范围外兄弟', async () => {
+    const searchRows = [
+      ...rows,
+      { id: 'other-root', parent_id: null, title: '其他项目', sort: 2, is_top: 0, del_flag: 0 },
+      { id: 'other-match', parent_id: 'other-root', title: '移动端设计', sort: 0, is_top: 0, del_flag: 0 },
+    ];
+    const snapshot = buildNoteTree(searchRows);
+    expect(searchNoteTreeFromSnapshot(snapshot, '孙页面', { parentId: 'root-a' })).toEqual({
+      keyword: '孙页面',
+      matchCount: 1,
+      items: [
+        expect.objectContaining({
+          id: 'root-a',
+          matched: false,
+          children: [
+            expect.objectContaining({
+              id: 'child-a',
+              matched: false,
+              children: [expect.objectContaining({ id: 'grandchild', matched: true })],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const db = { query: vi.fn().mockResolvedValue([searchRows]) };
+    const result = await queryOwnedNoteTree({
+      userId: 'user-1',
+      parentId: 'root-a',
+      depth: 1,
+      keyword: '孙页面',
+      db,
+    });
+    expect(result).toMatchObject({ parentId: 'root-a', keyword: '孙页面', matchCount: 1 });
+    expect(result.items.map((item) => item.id)).toEqual(['root-a']);
+    expect(db.query).toHaveBeenCalledWith(expect.not.stringContaining('content'), ['user-1']);
+    expect(JSON.stringify(result)).not.toContain('other-match');
+  });
+
+  it('目录搜索大小写不敏感，并拒绝超长关键词', () => {
+    const snapshot = buildNoteTree([
+      { id: 'root', parent_id: null, title: 'TypeScript Notes', del_flag: 0 },
+    ]);
+    expect(searchNoteTreeFromSnapshot(snapshot, 'typescript')).toMatchObject({
+      matchCount: 1,
+      items: [expect.objectContaining({ id: 'root', matched: true })],
+    });
+    expect(() => searchNoteTreeFromSnapshot(snapshot, 'x'.repeat(121))).toThrowError(
+      expect.objectContaining({ code: 'NOTE_TREE_SEARCH_TOO_LONG', status: 400 }),
+    );
+  });
+
+  it('3000 个页面元数据构建召回完整且基准低于 100ms', () => {
+    const largeTreeRows = Array.from({ length: 3000 }, (_, index) => ({
+      id: `page-${index}`,
+      parent_id: index === 0 ? null : `page-${Math.floor((index - 1) / 4)}`,
+      title: `页面 ${index}`,
+      sort: index % 4,
+      is_top: 0,
+      del_flag: 0,
+      update_time: '2026-08-06T00:00:00.000Z',
+    }));
+
+    // 预热后取三次中的最佳值，隔离共享 CI 调度停顿；阈值衡量纯树构建能力，
+    // 数据库 P95 由部署环境监控负责，不混进这条微基准。
+    buildNoteTree(largeTreeRows);
+    let bestDurationMs = Number.POSITIVE_INFINITY;
+    let snapshot;
+    for (let index = 0; index < 3; index += 1) {
+      const startedAt = performance.now();
+      snapshot = buildNoteTree(largeTreeRows);
+      bestDurationMs = Math.min(bestDurationMs, performance.now() - startedAt);
+    }
+
+    expect(snapshot.nodesById.size).toBe(3000);
+    expect(resolveNoteDescendantIdsFromSnapshot(snapshot, 'page-0')).toHaveLength(2999);
+    expect(bestDurationMs).toBeLessThan(100);
+  });
+
+  it('新建目标预览复用 owner、面包屑和 8 层深度校验', async () => {
+    const db = { query: vi.fn().mockResolvedValue([rows]) };
+    await expect(resolveOwnedNoteCreateTarget({ userId: 'user-1', parentId: 'child-a', db })).resolves.toEqual({
+      parentId: 'child-a',
+      depth: 3,
+      items: [
+        { id: 'root-a', title: '根 A' },
+        { id: 'child-a', title: '子 A' },
+      ],
+    });
+
+    const deepRows = Array.from({ length: MAX_NOTE_TREE_DEPTH }, (_, index) => ({
+      id: `depth-${index + 1}`,
+      parent_id: index === 0 ? null : `depth-${index}`,
+      title: `第 ${index + 1} 层`,
+      del_flag: 0,
+    }));
+    const deepDb = { query: vi.fn().mockResolvedValue([deepRows]) };
+    await expect(
+      resolveOwnedNoteCreateTarget({
+        userId: 'user-1',
+        parentId: `depth-${MAX_NOTE_TREE_DEPTH}`,
+        db: deepDb,
+      }),
+    ).rejects.toMatchObject({ code: 'NOTE_TREE_DEPTH_EXCEEDED', status: 409 });
   });
 });
 
@@ -212,5 +329,166 @@ describe('noteTreeService 写入落点与移动', () => {
       moveOwnedNoteNode(connection, { userId: 'u1', id: 'parent', parentId: 'child' }),
     ).rejects.toMatchObject({ code: 'NOTE_TREE_CYCLE', status: 409 });
     expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('批量移动会折叠父子重复选择，并在一个加锁快照中按选择顺序追加到目标目录', async () => {
+    const connection = createTreeConnection([
+      { id: 'source', parent_id: null, title: '来源', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'target', parent_id: null, title: '目标', sort: 1, is_top: 0, del_flag: 0 },
+      { id: 'parent', parent_id: 'source', title: '父页面', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'sibling', parent_id: 'source', title: '同级页面', sort: 1, is_top: 0, del_flag: 0 },
+    ]);
+
+    const result = await moveOwnedNoteNodes(connection, {
+      userId: 'u1',
+      ids: ['parent', 'child', 'sibling'],
+      parentId: 'target',
+    });
+
+    expect(result).toMatchObject({
+      requestedCount: 3,
+      rootCount: 2,
+      movedCount: 2,
+      affectedCount: 3,
+      parentId: 'target',
+      items: [
+        { id: 'parent', previousParentId: 'source', parentId: 'target', sort: 0, moved: true },
+        { id: 'sibling', previousParentId: 'source', parentId: 'target', sort: 1, moved: true },
+      ],
+    });
+    expect(connection.query).toHaveBeenCalledTimes(3);
+    expect(connection.query.mock.calls.slice(1)).toEqual([
+      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 'parent', 'u1']],
+      [expect.stringContaining('SET parent_id = ?'), ['target', 1, 'sibling', 'u1']],
+    ]);
+  });
+
+  it('批量移动任一根节点到自己的后代时整体拒绝且不产生更新', async () => {
+    const connection = createTreeConnection([
+      { id: 'parent', parent_id: null, title: '父页面', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+      { id: 'other', parent_id: null, title: '其他页面', sort: 1, is_top: 0, del_flag: 0 },
+    ]);
+
+    await expect(
+      moveOwnedNoteNodes(connection, { userId: 'u1', ids: ['parent', 'other'], parentId: 'child' }),
+    ).rejects.toMatchObject({ code: 'NOTE_TREE_CYCLE', status: 409 });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('noteTreeService 子树删除、批次恢复与物理清理', () => {
+  it('以权威后代数删除完整子树，并让父子页面共用一个恢复批次', async () => {
+    const connection = {
+      query: vi.fn(async (sql, params) => {
+        const statement = String(sql);
+        if (statement.includes('SELECT id, parent_id, title')) {
+          return [
+            [
+              { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+              { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+              { id: 'grandchild', parent_id: 'child', title: '孙页面', del_flag: 0 },
+            ],
+          ];
+        }
+        if (statement.includes('SET del_flag = 1')) return [{ affectedRows: params.length - 2 }];
+        if (statement.includes('DELETE FROM resource_inbox')) return [{ affectedRows: 0 }];
+        return [{ affectedRows: 0 }];
+      }),
+    };
+
+    const result = await deleteOwnedNoteSubtrees(connection, {
+      userId: 'u1',
+      items: [
+        { id: 'parent', expectedDescendantCount: 2 },
+        { id: 'child', expectedDescendantCount: 1 },
+      ],
+    });
+
+    expect(result).toMatchObject({ requestedCount: 2, rootCount: 1, deletedCount: 3 });
+    expect(result.items[0]).toMatchObject({ id: 'parent', descendantCount: 2, totalCount: 3 });
+    const deleteCall = connection.query.mock.calls.find(([sql]) => String(sql).includes('SET del_flag = 1'));
+    expect(deleteCall[1].slice(2)).toEqual(['parent', 'child', 'grandchild']);
+    expect(deleteCall[1][0]).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it('前端后代数量过期时返回 409，且不产生任何软删除', async () => {
+    const connection = createTreeConnection([
+      { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+      { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+    ]);
+
+    await expect(
+      deleteOwnedNoteSubtrees(connection, {
+        userId: 'u1',
+        items: [{ id: 'parent', expectedDescendantCount: 0 }],
+      }),
+    ).rejects.toMatchObject({
+      code: 'NOTE_TREE_DELETE_CONFLICT',
+      status: 409,
+      details: { actualDescendantCount: 1, totalCount: 2 },
+    });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('恢复父页面时只恢复同一删除批次，不误恢复更早单删的子页面', async () => {
+    const deletedRows = [
+      { id: 'parent', parent_id: null, tree_delete_batch_id: 'batch-parent' },
+      { id: 'current-child', parent_id: 'parent', tree_delete_batch_id: 'batch-parent' },
+      { id: 'older-child', parent_id: 'parent', tree_delete_batch_id: 'batch-older' },
+    ];
+    const connection = {
+      query: vi.fn(async (sql, params) => {
+        const statement = String(sql);
+        if (statement.includes('SELECT id, parent_id, title')) return [[]];
+        if (statement.includes('tree_delete_batch_id IN')) {
+          return [deletedRows.filter((row) => params.slice(1).includes(row.tree_delete_batch_id))];
+        }
+        if (statement.includes('SELECT id, parent_id, tree_delete_batch_id')) {
+          return [deletedRows.filter((row) => params.slice(1).includes(row.id))];
+        }
+        if (statement.includes('SET del_flag = 0')) return [{ affectedRows: params.length - 1 }];
+        return [{ affectedRows: 0 }];
+      }),
+    };
+
+    const result = await restoreOwnedNoteTrash(connection, { userId: 'u1', ids: ['parent'] });
+
+    expect(result).toMatchObject({ count: 2, batchCount: 1, rerootedCount: 0 });
+    expect(result.ids).toEqual(['parent', 'current-child']);
+    const restoreCall = connection.query.mock.calls.find(([sql]) => String(sql).includes('SET del_flag = 0'));
+    expect(restoreCall[1]).toEqual(['u1', 'parent', 'current-child']);
+    expect(restoreCall[1]).not.toContain('older-child');
+  });
+
+  it('物理删除父批次前只扩展同批次，并提升其他批次残留子页面', async () => {
+    const deletedRows = [
+      { id: 'parent', parent_id: null, tree_delete_batch_id: 'batch-parent' },
+      { id: 'current-child', parent_id: 'parent', tree_delete_batch_id: 'batch-parent' },
+      { id: 'older-child', parent_id: 'parent', tree_delete_batch_id: 'batch-older' },
+    ];
+    const connection = {
+      query: vi.fn(async (sql, params) => {
+        const statement = String(sql);
+        if (statement.includes('SELECT id, parent_id, title')) return [[]];
+        if (statement.includes('tree_delete_batch_id IN')) {
+          return [deletedRows.filter((row) => params.slice(1).includes(row.tree_delete_batch_id))];
+        }
+        if (statement.includes('SELECT id, parent_id, tree_delete_batch_id')) {
+          return [deletedRows.filter((row) => params.slice(1).includes(row.id))];
+        }
+        if (statement.includes('SET parent_id = NULL')) return [{ affectedRows: 1 }];
+        return [{ affectedRows: 0 }];
+      }),
+    };
+
+    const result = await prepareOwnedNotePhysicalDelete(connection, { userId: 'u1', ids: ['parent'] });
+
+    expect(result).toEqual({ ids: ['parent', 'current-child'], expandedCount: 1, rerootedCount: 1 });
+    expect(result.ids).not.toContain('older-child');
+    const reparentCall = connection.query.mock.calls.find(([sql]) => String(sql).includes('SET parent_id = NULL'));
+    expect(reparentCall[0]).toContain('id NOT IN');
+    expect(reparentCall[1]).toEqual(['u1', 'parent', 'current-child', 'parent', 'current-child']);
   });
 });

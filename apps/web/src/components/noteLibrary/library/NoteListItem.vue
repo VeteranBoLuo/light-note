@@ -107,9 +107,14 @@
   import { useI18n } from 'vue-i18n';
   import { useNoteSummary } from '@/composables/useNoteSummary';
 
-  const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
-    batchMode: false,
-  });
+  const props = withDefaults(
+    defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
+    {
+      batchMode: false,
+      treeReadEnabled: true,
+      treeWriteEnabled: true,
+    },
+  );
   const bookmark = bookmarkStore();
   const { t } = useI18n();
 
@@ -137,9 +142,9 @@
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'move' | 'delete'];
+    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'move' | 'delete'];
   }>();
-  const childCount = computed(() => Math.max(0, Number(props.note?.childCount || 0)));
+  const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -161,11 +166,20 @@
       icon: icon.contextMenu.inbox,
       function: () => emit('action', 'toggleInbox'),
     },
-    {
-      label: t('note.movePage'),
-      icon: icon.noteTree.move,
-      function: () => emit('action', 'move'),
-    },
+    ...(props.treeWriteEnabled
+      ? [
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('action', 'createChild'),
+          },
+          {
+            label: t('note.movePage'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'move'),
+          },
+        ]
+      : []),
     { divider: true },
     {
       label: t('common.delete'),
@@ -234,7 +248,7 @@
      * 摘要 35px，两个都读不出内容。手机改成纵向让每种信息各拿整行宽度。
      */
     &.is-mobile {
-      grid-template-columns: minmax(0, 1fr) 36px;
+      grid-template-columns: minmax(0, 1fr) 44px;
       column-gap: 2px;
       // 操作按钮对齐标题行，而不是整条居中：居中时它会掉到标题下方 36px，看着没有归属
       align-items: start;
@@ -284,21 +298,22 @@
       }
     }
 
-    // 36px 触控区
+    // 44px 触控区：与卡片视图一致，窄屏下也保留可安全点击的菜单入口。
     .note-mobile-actions {
       --primary-color: var(--resource-note-color, #00a884);
       display: flex;
       align-items: center;
       justify-content: center;
       // 与标题行同高并居中于其中，视觉上「⋯」属于这条笔记的标题
-      height: var(--note-row-line);
+      height: 44px;
 
       .note-more-button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 32px;
-        height: 32px;
+        width: 44px;
+        min-width: 44px;
+        height: 44px;
         padding: 0;
         border: none;
         border-radius: 8px;

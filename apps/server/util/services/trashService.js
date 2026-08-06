@@ -1,5 +1,7 @@
 import pool from '../../db/index.js';
 import { parseTimeRange } from '../agent/timeRange.js';
+import { invalidatePersonalKnowledgeCache } from '../personalKnowledgeSearch.js';
+import { previewOwnedNoteTrashRestore, restoreOwnedNoteTrash } from './noteTreeService.js';
 
 export const TRASH_TABLE_CONFIG = {
   bookmark: { table: 'bookmark', userIdField: 'user_id' },
@@ -8,19 +10,20 @@ export const TRASH_TABLE_CONFIG = {
 };
 
 export function normalizeRestoreFilters(args = {}) {
+  const restoreAll = args.all === true;
   const type = String(args.type || args.resourceType || '').trim();
   const id = String(args.id || '').trim();
   const ids = Array.isArray(args.ids)
     ? [...new Set(args.ids.map((value) => String(value || '').trim()).filter(Boolean))]
     : [];
   const time = parseTimeRange(args.timeRange);
-  if (!type && !id && !ids.length && !time) {
+  if (!restoreAll && !type && !id && !ids.length && !time) {
     throw new Error('FILTER_REQUIRED: 至少需要提供资源类型、资源 ID 或有效时间范围');
   }
   if (type && !TRASH_TABLE_CONFIG[type]) throw new Error('INVALID_TYPE: 不支持的资源类型');
   if ((id || ids.length) && !type) throw new Error('TYPE_REQUIRED: 按 ID 恢复时必须同时指定资源类型');
   if (ids.length > 100) throw new Error('TOO_MANY_IDS: 单次最多恢复 100 项');
-  return { id, ids, time, types: type ? [type] : Object.keys(TRASH_TABLE_CONFIG) };
+  return { id, ids, time, restoreAll, types: type ? [type] : Object.keys(TRASH_TABLE_CONFIG) };
 }
 
 function buildWhere(config, filters, userId) {
@@ -45,6 +48,16 @@ export async function previewTrashRestore({ userId, filters: rawFilters } = {}) 
   const filters = normalizeRestoreFilters(rawFilters);
   const items = [];
   for (const type of filters.types) {
+    if (type === 'note') {
+      const notePreview = await previewOwnedNoteTrashRestore({
+        userId,
+        ids: filters.id ? [filters.id] : filters.ids,
+        time: filters.time,
+        restoreAll: filters.restoreAll || (!filters.id && !filters.ids.length && !filters.time),
+      });
+      items.push({ type, count: notePreview.count });
+      continue;
+    }
     const config = TRASH_TABLE_CONFIG[type];
     const { where, params } = buildWhere(config, filters, userId);
     const [rows] = await pool.query(`SELECT COUNT(*) AS count FROM \`${config.table}\` WHERE ${where}`, params);
@@ -58,9 +71,23 @@ export async function restoreTrashResources({ userId, filters: rawFilters } = {}
   const filters = normalizeRestoreFilters(rawFilters);
   const connection = await pool.getConnection();
   const results = [];
+  let noteRestored = false;
   try {
     await connection.beginTransaction();
     for (const type of filters.types) {
+      if (type === 'note') {
+        const restored = await restoreOwnedNoteTrash(connection, {
+          userId,
+          ids: filters.id ? [filters.id] : filters.ids,
+          time: filters.time,
+          restoreAll: filters.restoreAll || (!filters.id && !filters.ids.length && !filters.time),
+        });
+        if (restored.count > 0) {
+          noteRestored = true;
+          results.push({ type, count: restored.count, rerootedCount: restored.rerootedCount });
+        }
+        continue;
+      }
       const config = TRASH_TABLE_CONFIG[type];
       const { where, params } = buildWhere(config, filters, userId);
       const [result] = await connection.query(
@@ -70,6 +97,7 @@ export async function restoreTrashResources({ userId, filters: rawFilters } = {}
       if (result.affectedRows > 0) results.push({ type, count: result.affectedRows });
     }
     await connection.commit();
+    if (noteRestored) await invalidatePersonalKnowledgeCache(userId);
     return results;
   } catch (error) {
     await connection.rollback();

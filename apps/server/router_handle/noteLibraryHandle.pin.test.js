@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const poolQuery = vi.fn();
 const connection = {
@@ -41,13 +41,18 @@ vi.mock('../util/noteImages.js', () => ({
 }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
-const { delNote, moveNoteNode, queryNoteList, toggleNoteTop, updateNoteSort } = await import('./noteLibraryHandle.js');
+const { deleteNoteSubtree, delNote, moveNoteNode, moveNoteNodes, queryNoteList, toggleNoteTop, updateNoteSort } =
+  await import('./noteLibraryHandle.js');
 
 function mockRes() {
   return { send: vi.fn() };
 }
 
 const lastSent = (res) => res.send.mock.calls.at(-1)?.[0];
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('笔记置顶 handler', () => {
   beforeEach(() => {
@@ -253,6 +258,35 @@ describe('页面树写入 handler', () => {
     invalidatePersonalKnowledgeCache.mockResolvedValue();
   });
 
+  it('写灰度未命中时在获取事务连接前失败关闭', async () => {
+    vi.stubEnv('NOTE_TREE_WRITE_ENABLED', 'false');
+    const res = mockRes();
+
+    await moveNoteNode({ user: { id: 'u1', role: 'user' }, body: { id: 'moved', parentId: 'target' } }, res);
+
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_FEATURE_DISABLED', feature: 'note_tree_write' },
+    });
+  });
+
+  it('子树回收站拥有独立急停开关', async () => {
+    vi.stubEnv('NOTE_TREE_SUBTREE_TRASH_ENABLED', 'false');
+    const res = mockRes();
+
+    await deleteNoteSubtree(
+      { user: { id: 'u1', role: 'user' }, body: { id: 'parent', expectedDescendantCount: 1 } },
+      res,
+    );
+
+    expect(getConnection).not.toHaveBeenCalled();
+    expect(lastSent(res)).toMatchObject({
+      status: 404,
+      data: { code: 'NOTE_TREE_FEATURE_DISABLED', feature: 'note_tree_subtree_trash' },
+    });
+  });
+
   it('跨目录移动在事务中锁定 owner 树，提交后才刷新知识缓存', async () => {
     connection.query.mockImplementation(async (sql) => {
       if (String(sql).includes('SELECT id, parent_id')) {
@@ -292,8 +326,43 @@ describe('页面树写入 handler', () => {
     expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_TREE_CYCLE' } });
   });
 
+  it('批量移动在同一事务中折叠父子选择并提交后刷新知识缓存', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (String(sql).includes('SELECT id, parent_id')) {
+        return [
+          [
+            { id: 'target', parent_id: null, title: '目标', sort: 0, is_top: 0, del_flag: 0 },
+            { id: 'parent', parent_id: null, title: '父页面', sort: 1, is_top: 0, del_flag: 0 },
+            { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
+          ],
+        ];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await moveNoteNodes(
+      { user: { id: 'u1' }, body: { ids: ['parent', 'child'], parentId: 'target' } },
+      res,
+    );
+
+    expect(connection.query.mock.calls[0]).toEqual([expect.stringContaining('FOR UPDATE'), ['u1']]);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('u1');
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { requestedCount: 2, rootCount: 1, movedCount: 1, affectedCount: 2, parentId: 'target' },
+    });
+  });
+
   it('旧删除接口发现任一直接子页面时拒绝，避免制造孤儿', async () => {
-    connection.query.mockResolvedValueOnce([[{ id: 'child', parent_id: 'parent' }]]);
+    connection.query.mockResolvedValueOnce([
+      [
+        { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+        { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+      ],
+    ]);
     const res = mockRes();
 
     await delNote({ user: { id: 'u1' }, body: { ids: ['parent'] } }, res);
@@ -302,6 +371,36 @@ describe('页面树写入 handler', () => {
     expect(connection.commit).not.toHaveBeenCalled();
     expect(removeInboxRelations).not.toHaveBeenCalled();
     expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_HAS_CHILDREN' } });
+  });
+
+  it('新删除接口按确认数量原子删除整棵子树，并在提交后失效知识缓存', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('SELECT id, parent_id')) {
+        return [
+          [
+            { id: 'parent', parent_id: null, title: '父页面', del_flag: 0 },
+            { id: 'child', parent_id: 'parent', title: '子页面', del_flag: 0 },
+          ],
+        ];
+      }
+      if (statement.includes('SET del_flag = 1')) return [{ affectedRows: 2 }];
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await deleteNoteSubtree(
+      { user: { id: 'u1' }, body: { id: 'parent', expectedDescendantCount: 1 } },
+      res,
+    );
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(invalidatePersonalKnowledgeCache).toHaveBeenCalledWith('u1');
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { rootCount: 1, deletedCount: 2, items: [{ id: 'parent', descendantCount: 1, totalCount: 2 }] },
+    });
   });
 
   it('旧批量排序也必须锁定并限定在同一 parent_id', async () => {

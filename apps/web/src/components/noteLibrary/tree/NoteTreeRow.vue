@@ -2,13 +2,13 @@
   <li class="note-tree-node">
     <div
       class="note-tree-row"
-      :class="{ 'is-active': active, 'has-invalid-parent': node.invalidParent }"
+      :class="{ 'is-active': active, 'is-search-match': node.matched, 'has-invalid-parent': node.invalidParent }"
       :style="rowStyle"
     >
       <BButton
         class="note-tree-toggle"
         :class="{ 'is-expanded': expanded, 'is-loading': loading }"
-        :disabled="!node.hasChildren || loading"
+        :disabled="!node.hasChildren || loading || searchMode"
         :aria-label="expanded ? t('note.treeCollapse') : t('note.treeExpand')"
         :aria-expanded="node.hasChildren ? expanded : undefined"
         @click.stop="emit('toggle', node)"
@@ -17,7 +17,7 @@
         <span v-else class="note-tree-toggle-placeholder" aria-hidden="true"></span>
       </BButton>
 
-      <BButton class="note-tree-title" @click="emit('select', node.id)" @dblclick="emit('open', node.id)">
+      <BButton class="note-tree-title" @click="emit('select', node.id)">
         <SvgIcon :src="icon.resource.note" size="15" class="note-tree-page-icon" aria-hidden="true" />
         <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
         <span v-if="node.childCount" class="note-tree-count">{{ node.childCount }}</span>
@@ -29,7 +29,7 @@
             <SvgIcon :src="icon.noteTree.openPage" size="14" aria-hidden="true" />
           </BButton>
         </BTooltip>
-        <BTooltip :title="t('note.newChildPage')">
+        <BTooltip v-if="writeEnabled" :title="t('note.newChildPage')">
           <BButton class="note-tree-action" :aria-label="t('note.newChildPage')" @click.stop="emit('create', node)">
             <SvgIcon :src="icon.common.add" size="14" aria-hidden="true" />
           </BButton>
@@ -52,11 +52,16 @@
         :children-by-parent="childrenByParent"
         :expanded-ids="expandedIds"
         :loading-keys="loadingKeys"
+        :write-enabled="writeEnabled"
+        :search-mode="searchMode"
         @toggle="emit('toggle', $event)"
         @select="emit('select', $event)"
         @open="emit('open', $event)"
         @create="emit('create', $event)"
         @move="emit('move', $event)"
+        @rename="emit('rename', $event)"
+        @copy-link="emit('copyLink', $event)"
+        @delete="emit('delete', $event)"
       />
     </ul>
   </li>
@@ -73,14 +78,19 @@
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
 
-  const props = defineProps<{
-    node: NoteTreeItem;
-    depth: number;
-    currentParentId: string | null;
-    childrenByParent: Record<string, NoteTreeItem[]>;
-    expandedIds: Set<string>;
-    loadingKeys: Set<string>;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      node: NoteTreeItem;
+      depth: number;
+      currentParentId: string | null;
+      childrenByParent: Record<string, NoteTreeItem[]>;
+      expandedIds: Set<string>;
+      loadingKeys: Set<string>;
+      writeEnabled?: boolean;
+      searchMode?: boolean;
+    }>(),
+    { writeEnabled: true, searchMode: false },
+  );
 
   const emit = defineEmits<{
     toggle: [node: NoteTreeItem];
@@ -88,6 +98,9 @@
     open: [id: string];
     create: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
+    rename: [node: NoteTreeItem];
+    copyLink: [node: NoteTreeItem];
+    delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
   const active = computed(() => props.currentParentId === props.node.id);
@@ -101,15 +114,43 @@
       icon: icon.noteTree.openPage,
       function: () => emit('open', props.node.id),
     },
+    ...(props.writeEnabled
+      ? [
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('create', props.node),
+          },
+        ]
+      : []),
     {
-      label: t('note.newChildPage'),
-      icon: icon.common.add,
-      function: () => emit('create', props.node),
+      label: t('note.renamePage'),
+      icon: icon.cloudSpace.rename,
+      function: () => emit('rename', props.node),
+    },
+    ...(props.writeEnabled
+      ? [
+          {
+            label: t('note.movePage'),
+            icon: icon.noteTree.move,
+            function: () => emit('move', props.node),
+          },
+        ]
+      : []),
+    {
+      label: t('common.copyLink'),
+      icon: icon.cloudSpace.preview.copy,
+      function: () => emit('copyLink', props.node),
     },
     {
-      label: t('note.movePage'),
-      icon: icon.noteTree.move,
-      function: () => emit('move', props.node),
+      key: 'note-tree-actions-divider',
+      divider: true,
+    },
+    {
+      label: t('note.moveToTrash'),
+      icon: icon.table_delete,
+      danger: true,
+      function: () => emit('delete', props.node),
     },
   ]);
 </script>
@@ -150,6 +191,12 @@
       border-color: var(--resource-note-color, #00a884);
       background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, var(--workspace-panel-bg-color));
       font-weight: 650;
+    }
+
+    &.is-search-match:not(.is-active) {
+      border-inline-start-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      font-weight: 700;
     }
 
     &.has-invalid-parent {

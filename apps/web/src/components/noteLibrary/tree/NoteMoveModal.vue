@@ -2,8 +2,10 @@
   <component :is="shellComponent" v-bind="shellProps" @ok="confirmMove" @close="close" @update:visible="syncVisible">
     <div class="note-move-shell" :class="{ 'is-mobile': bookmark.isMobile }">
       <div class="note-move-summary">
-        <strong>{{ note?.title || t('note.untitled') }}</strong>
-        <span v-if="subtreeCount">{{ t('note.moveWithDescendants', { count: subtreeCount }) }}</span>
+        <strong v-if="isBatchMove">{{ t('note.moveSelectedPages', { count: selectedIds.size }) }}</strong>
+        <strong v-else>{{ note?.title || t('note.untitled') }}</strong>
+        <span v-if="isBatchMove">{{ t('note.moveSelectedScope', { count: affectedIds.size }) }}</span>
+        <span v-else-if="subtreeCount">{{ t('note.moveWithDescendants', { count: subtreeCount }) }}</span>
         <span v-else>{{ t('note.moveSinglePageHint') }}</span>
       </div>
 
@@ -84,16 +86,21 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
+  import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import { bookmarkStore } from '@/store';
-  import { NOTE_TREE_MAX_DEPTH, type NoteTreeItem, type NoteTreeQueryResult } from '@/types/noteTree';
+  import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
   import { canMoveNoteSubtreeToDepth, collectNoteDescendantIds, flattenNoteTree } from '@/utils/noteTree';
 
-  const props = defineProps<{ note: any | null }>();
+  const props = withDefaults(defineProps<{ note?: any | null; notes?: any[] }>(), {
+    note: null,
+    notes: () => [],
+  });
   const visible = defineModel<boolean>('visible', { default: false });
   const emit = defineEmits<{ moved: [result: any] }>();
   const { t } = useI18n();
   const bookmark = bookmarkStore();
   const treeItems = ref<NoteTreeItem[]>([]);
+  const maxDepth = ref<number | null>(null);
   const selectedParentId = ref<string | null>(null);
   const loading = ref(false);
   const saving = ref(false);
@@ -105,7 +112,7 @@
     bookmark.isMobile
       ? {
           open: visible.value,
-          title: t('note.movePage'),
+          title: t(isBatchMove.value ? 'note.movePages' : 'note.movePage'),
           placement: 'bottom' as const,
           height: 'min(88dvh, 760px)',
           bodyPadding: '12px 12px 0',
@@ -113,33 +120,55 @@
         }
       : {
           visible: visible.value,
-          title: t('note.movePage'),
+          title: t(isBatchMove.value ? 'note.movePages' : 'note.movePage'),
           width: 'min(580px, 88vw)',
           height: 'min(720px, 82vh)',
           maskClosable: false,
         },
   );
   const flatItems = computed(() => flattenNoteTree(treeItems.value));
-  const descendantIds = computed(() => collectNoteDescendantIds(treeItems.value, String(props.note?.id || '')));
+  const isBatchMove = computed(() => props.notes.length > 0);
+  const movingNotes = computed(() => (isBatchMove.value ? props.notes : props.note ? [props.note] : []));
+  const selectedIds = computed(
+    () => new Set(movingNotes.value.map((item) => String(item?.id || '').trim()).filter(Boolean)),
+  );
+  const descendantsBySelected = computed(() => {
+    const result = new Map<string, Set<string>>();
+    for (const id of selectedIds.value) result.set(id, collectNoteDescendantIds(treeItems.value, id));
+    return result;
+  });
+  const descendantIds = computed(() => {
+    const ids = new Set<string>();
+    for (const descendants of descendantsBySelected.value.values()) {
+      for (const descendantId of descendants) ids.add(descendantId);
+    }
+    return ids;
+  });
+  const affectedIds = computed(() => new Set([...selectedIds.value, ...descendantIds.value]));
   const subtreeRelativeDepth = computed(() => {
-    const movingItem = flatItems.value.find((item) => item.id === String(props.note?.id || ''));
-    if (!movingItem) return 0;
-    return flatItems.value.reduce(
-      (maxDepth, item) =>
-        descendantIds.value.has(item.id) ? Math.max(maxDepth, item.depth - movingItem.depth) : maxDepth,
-      0,
-    );
+    let maximum = 0;
+    for (const selectedId of selectedIds.value) {
+      const movingItem = flatItems.value.find((item) => item.id === selectedId);
+      if (!movingItem) continue;
+      const descendants = descendantsBySelected.value.get(selectedId) || new Set<string>();
+      for (const item of flatItems.value) {
+        if (descendants.has(item.id)) {
+          maximum = Math.max(maximum, item.depth - movingItem.depth);
+        }
+      }
+    }
+    return maximum;
   });
   const depthDisabledIds = computed(
     () =>
       new Set(
         flatItems.value
-          .filter((item) => !canMoveNoteSubtreeToDepth(item.depth, subtreeRelativeDepth.value))
+          .filter((item) => !canMoveNoteSubtreeToDepth(item.depth, subtreeRelativeDepth.value, maxDepth.value || 0))
           .map((item) => item.id),
       ),
   );
   const disabledIds = computed(
-    () => new Set([String(props.note?.id || ''), ...descendantIds.value, ...depthDisabledIds.value].filter(Boolean)),
+    () => new Set([...selectedIds.value, ...descendantIds.value, ...depthDisabledIds.value].filter(Boolean)),
   );
   const subtreeCount = computed(() => descendantIds.value.size);
   const selectedItem = computed(() => flatItems.value.find((item) => item.id === selectedParentId.value) || null);
@@ -147,8 +176,12 @@
   const selectedDepth = computed(() => Number(selectedItem.value?.depth || 0));
 
   function disabledReason(item: NoteTreeItem) {
-    if (item.id === String(props.note?.id || '')) return t('note.moveSelfDisabled');
-    if (descendantIds.value.has(item.id)) return t('note.moveDescendantDisabled');
+    if (selectedIds.value.has(item.id)) {
+      return t(isBatchMove.value ? 'note.moveSelectedDisabled' : 'note.moveSelfDisabled');
+    }
+    if (descendantIds.value.has(item.id)) {
+      return t(isBatchMove.value ? 'note.moveSelectedDescendantDisabled' : 'note.moveDescendantDisabled');
+    }
     return t('note.moveDepthDisabled');
   }
 
@@ -164,11 +197,15 @@
     const seq = ++requestSeq;
     loading.value = true;
     loadError.value = '';
-    selectedParentId.value = props.note?.parentId ? String(props.note.parentId) : null;
+    maxDepth.value = null;
+    const parentIds = new Set(
+      movingNotes.value.map((item) => (item?.parentId ? String(item.parentId) : null)),
+    );
+    selectedParentId.value = parentIds.size === 1 ? (parentIds.values().next().value ?? null) : null;
     try {
       const response = await apiBasePost(
         '/api/note/queryNoteTree',
-        { parentId: null, depth: NOTE_TREE_MAX_DEPTH },
+        { parentId: null, depth: 'all' },
         { silent: true },
       );
       if (seq !== requestSeq || !visible.value) return;
@@ -178,11 +215,19 @@
         return;
       }
       const data = (response.data || {}) as NoteTreeQueryResult;
+      const serverMaxDepth = Number(data.maxDepth);
+      if (!Number.isInteger(serverMaxDepth) || serverMaxDepth < 1) {
+        treeItems.value = [];
+        loadError.value = t('note.treeLoadFailed');
+        return;
+      }
+      maxDepth.value = serverMaxDepth;
       treeItems.value = Array.isArray(data.items) ? data.items : [];
       if (disabledIds.value.has(String(selectedParentId.value || ''))) selectedParentId.value = null;
     } catch {
       if (seq === requestSeq) {
         treeItems.value = [];
+        maxDepth.value = null;
         loadError.value = t('note.treeLoadFailed');
       }
     } finally {
@@ -191,24 +236,63 @@
   }
 
   async function confirmMove() {
-    if (saving.value || loading.value || !props.note?.id || disabledIds.value.has(String(selectedParentId.value || '')))
+    if (
+      saving.value ||
+      loading.value ||
+      selectedIds.value.size === 0 ||
+      disabledIds.value.has(String(selectedParentId.value || ''))
+    )
       return;
+    const startedAt = Date.now();
+    const telemetryBase = {
+      surface: (bookmark.isMobile ? 'mobile' : 'desktop') as 'mobile' | 'desktop',
+      depth: selectedDepth.value,
+      childCount: Math.max(0, Number(selectedItem.value?.childCount || 0)),
+      subtreeSize: affectedIds.value.size,
+    };
     saving.value = true;
     try {
-      const response = await apiBasePost('/api/note/moveNoteNode', {
-        id: String(props.note.id),
-        parentId: selectedParentId.value,
-        previousId: null,
-        nextId: null,
-      });
+      const response = isBatchMove.value
+        ? await apiBasePost('/api/note/moveNoteNodes', {
+            ids: [...selectedIds.value],
+            parentId: selectedParentId.value,
+          })
+        : await apiBasePost('/api/note/moveNoteNode', {
+            id: [...selectedIds.value][0],
+            parentId: selectedParentId.value,
+            previousId: null,
+            nextId: null,
+          });
       if (response.status !== 200) {
+        void recordNoteTreeProductEvent('note_tree_move_rejected', {
+          ...telemetryBase,
+          durationMs: Date.now() - startedAt,
+          result:
+            response.status === 409 || String(response.data?.code || '').includes('CONFLICT')
+              ? 'conflict'
+              : 'rejected',
+        });
         message.error(response.msg || t('note.moveFailed'));
         return;
       }
-      message.success(t('note.moveSuccess'));
+      message.success(
+        isBatchMove.value
+          ? t('note.moveBatchSuccess', { count: Number(response.data?.affectedCount || affectedIds.value.size) })
+          : t('note.moveSuccess'),
+      );
+      void recordNoteTreeProductEvent('note_tree_node_moved', {
+        ...telemetryBase,
+        durationMs: Date.now() - startedAt,
+        result: 'success',
+      });
       emit('moved', response.data);
       visible.value = false;
     } catch {
+      void recordNoteTreeProductEvent('note_tree_move_rejected', {
+        ...telemetryBase,
+        durationMs: Date.now() - startedAt,
+        result: 'failed',
+      });
       message.error(t('note.moveFailed'));
     } finally {
       saving.value = false;
@@ -216,7 +300,7 @@
   }
 
   watch(
-    () => [visible.value, String(props.note?.id || '')] as const,
+    () => [visible.value, [...selectedIds.value].join(',')] as const,
     ([isVisible]) => {
       if (isVisible) void loadTree();
       else requestSeq += 1;

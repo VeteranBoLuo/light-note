@@ -74,9 +74,14 @@
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
-  const props = withDefaults(defineProps<{ note: any; batchMode?: boolean }>(), {
-    batchMode: false,
-  });
+  const props = withDefaults(
+    defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
+    {
+      batchMode: false,
+      treeReadEnabled: true,
+      treeWriteEnabled: true,
+    },
+  );
 
   // 摘要统一走 noteSummaryText(只信 note.type,Markdown 过 marked 再取纯文本)
   const summary = useNoteSummary(() => props.note, { maxLength: 300 });
@@ -85,9 +90,13 @@
   const { t } = useI18n();
   const emit = defineEmits<{
     nodeTypeChange: [tag: any];
-    action: [action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'move' | 'delete'];
+    action: [
+      action: 'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'move' | 'delete',
+    ];
   }>();
-  const childCount = computed(() => Math.max(0, Number(props.note?.childCount || 0)));
+  const childCount = computed(() =>
+    props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0,
+  );
 
   const mobileMenuOptions = computed(() => [
     {
@@ -105,11 +114,20 @@
       icon: icon.contextMenu.inbox,
       function: () => emit('action', 'toggleInbox'),
     },
-    {
-      label: t('note.movePage'),
-      icon: icon.noteTree.move,
-      function: () => emit('action', 'move'),
-    },
+    ...(props.treeWriteEnabled
+      ? [
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('action', 'createChild'),
+          },
+          {
+            label: t('note.movePage'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'move'),
+          },
+        ]
+      : []),
     { divider: true },
     {
       label: t('common.delete'),

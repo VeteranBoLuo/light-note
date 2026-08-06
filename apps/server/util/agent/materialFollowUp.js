@@ -2,6 +2,7 @@ import { requestAi } from './aiGateway.js';
 
 const MATERIAL_FOLLOW_UP_TOOL_NAME = 'classify_material_follow_up';
 const MAX_CONTEXT_REFS = 5;
+const MAX_SCOPE_REFS = 3;
 const MAX_ATTACHMENT_IDS = 5;
 const MAX_HISTORY_CHARS = 6_000;
 const ALLOWED_REF_TYPES = new Set(['note', 'bookmark', 'file', 'todo', 'tag']);
@@ -54,6 +55,18 @@ export function normalizeFollowUpMaterialCandidate(value) {
     contextRefs.push({ type, id });
     if (contextRefs.length >= MAX_CONTEXT_REFS) break;
   }
+  const scopeRefs = [];
+  const seenScopes = new Set();
+  for (const item of Array.isArray(value.scopeRefs) ? value.scopeRefs : []) {
+    const type = String(item?.type || '').trim();
+    const id = String(item?.id || '').trim();
+    if (type !== 'note_branch' || !id || id.length > 255) continue;
+    const key = `${type}:${id}`;
+    if (seenScopes.has(key)) continue;
+    seenScopes.add(key);
+    scopeRefs.push({ type, id });
+    if (scopeRefs.length >= MAX_SCOPE_REFS) break;
+  }
   const attachmentIds = [];
   const seenAttachments = new Set();
   for (const item of Array.isArray(value.attachmentIds) ? value.attachmentIds : []) {
@@ -63,8 +76,8 @@ export function normalizeFollowUpMaterialCandidate(value) {
     attachmentIds.push(id);
     if (attachmentIds.length >= MAX_ATTACHMENT_IDS) break;
   }
-  if (!contextRefs.length && !attachmentIds.length) return null;
-  return { contextRefs, attachmentIds };
+  if (!contextRefs.length && !scopeRefs.length && !attachmentIds.length) return null;
+  return { contextRefs, scopeRefs, attachmentIds };
 }
 
 function normalizeHistory(values) {

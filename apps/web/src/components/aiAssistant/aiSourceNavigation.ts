@@ -92,9 +92,28 @@ export interface AiCoverageOverall extends AiSourceCoverage {
   };
 }
 
+export interface AiNoteBranchCoverage {
+  mode: 'retrieval' | 'analysis';
+  rootId: string;
+  title: string;
+  totalPages: number;
+  /** 普通问答中真正形成公开来源的页面数。 */
+  matchedPages?: number;
+  /** 完整目录分析流程实际处理的页面数。 */
+  analyzedPages?: number;
+  unreadPages?: number;
+  totalChars?: number;
+  analyzedChars?: number;
+  completeAnalysis: boolean;
+  limited?: boolean;
+  limitationCode?: string;
+  limitationMessage?: string;
+}
+
 export interface AiCoverageReport {
   documents: AiDocumentCoverageEntry[];
   overall?: AiCoverageOverall | null;
+  noteBranches?: AiNoteBranchCoverage[];
 }
 
 export interface AiEvidenceLocator {

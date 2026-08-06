@@ -1,9 +1,35 @@
-import { computed, onScopeDispose, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch, type Ref } from 'vue';
 import router from '@/router';
 import { apiBasePost } from '@/http/request';
 import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
 
 export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
+const NOTE_TREE_EXPANDED_SESSION_KEY = 'light-note-note-tree-expanded-ids';
+
+function readExpandedIds() {
+  if (typeof sessionStorage === 'undefined') return new Set<string>();
+  try {
+    const value = JSON.parse(String(sessionStorage.getItem(NOTE_TREE_EXPANDED_SESSION_KEY) || '[]'));
+    if (!Array.isArray(value)) return new Set<string>();
+    return new Set(
+      value
+        .map((item) => String(item || '').trim())
+        .filter((item) => item && item.length <= 255)
+        .slice(0, 200),
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function persistExpandedIds(value: Set<string>) {
+  if (typeof sessionStorage === 'undefined') return;
+  try {
+    sessionStorage.setItem(NOTE_TREE_EXPANDED_SESSION_KEY, JSON.stringify([...value].slice(0, 200)));
+  } catch {
+    // 受限 WebView 禁止 sessionStorage 时只保留当前页面内存状态。
+  }
+}
 
 function queryValue(value: unknown) {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -15,14 +41,23 @@ function parentKey(parentId: string | null) {
   return parentId || NOTE_TREE_ROOT_KEY;
 }
 
-export function useNoteTree() {
+export function useNoteTree(options: { enabled?: Ref<boolean> } = {}) {
+  const enabled = computed(() => options.enabled?.value !== false);
   const childrenByParent = ref<Record<string, NoteTreeItem[]>>({});
-  const expandedIds = ref<Set<string>>(new Set());
+  const expandedIds = ref<Set<string>>(readExpandedIds());
   const loadingKeys = ref<Set<string>>(new Set());
   const loadedKeys = ref<Set<string>>(new Set());
   const currentBreadcrumb = ref<NoteBreadcrumbItem[]>([]);
   const treeError = ref('');
+  const treeSearchChildrenByParent = ref<Record<string, NoteTreeItem[]>>({});
+  const treeSearchExpandedIds = ref<Set<string>>(new Set());
+  const treeSearchKeyword = ref('');
+  const treeSearchParentId = ref<string | null>(null);
+  const treeSearchMatchCount = ref(0);
+  const treeSearchLoading = ref(false);
+  const treeSearchError = ref('');
   let breadcrumbRequestSeq = 0;
+  let searchRequestSeq = 0;
   let disposed = false;
 
   const currentParentId = computed(() => queryValue(router.currentRoute.value.query.parent));
@@ -39,6 +74,7 @@ export function useNoteTree() {
   }
 
   async function loadChildren(parentId: string | null = null, force = false) {
+    if (!enabled.value) return [];
     const key = parentKey(parentId);
     if (!force && loadedKeys.value.has(key)) return childrenByParent.value[key] || [];
     if (loadingKeys.value.has(key)) return childrenByParent.value[key] || [];
@@ -65,6 +101,10 @@ export function useNoteTree() {
   }
 
   async function loadBreadcrumb(noteId: string | null) {
+    if (!enabled.value) {
+      currentBreadcrumb.value = [];
+      return [];
+    }
     const seq = ++breadcrumbRequestSeq;
     if (!noteId) {
       currentBreadcrumb.value = [];
@@ -104,6 +144,77 @@ export function useNoteTree() {
     if (nextExpanded) await loadChildren(node.id);
   }
 
+  function clearTreeSearch() {
+    searchRequestSeq += 1;
+    treeSearchChildrenByParent.value = {};
+    treeSearchExpandedIds.value = new Set();
+    treeSearchKeyword.value = '';
+    treeSearchParentId.value = null;
+    treeSearchMatchCount.value = 0;
+    treeSearchLoading.value = false;
+    treeSearchError.value = '';
+  }
+
+  function indexTreeSearchItems(items: NoteTreeItem[]) {
+    const childrenByParent: Record<string, NoteTreeItem[]> = { [NOTE_TREE_ROOT_KEY]: items };
+    const expanded = new Set<string>();
+    const visit = (nodes: NoteTreeItem[]) => {
+      nodes.forEach((node) => {
+        const children = Array.isArray(node.children) ? node.children : [];
+        childrenByParent[node.id] = children;
+        if (children.length) {
+          expanded.add(node.id);
+          visit(children);
+        }
+      });
+    };
+    visit(items);
+    return { childrenByParent, expanded };
+  }
+
+  async function searchTree(keyword: string, parentId: string | null = currentParentId.value) {
+    const normalizedKeyword = String(keyword || '').trim();
+    if (!enabled.value || !normalizedKeyword) {
+      clearTreeSearch();
+      return [];
+    }
+    const normalizedParentId = queryValue(parentId);
+    const seq = ++searchRequestSeq;
+    treeSearchKeyword.value = normalizedKeyword;
+    treeSearchParentId.value = normalizedParentId;
+    treeSearchChildrenByParent.value = {};
+    treeSearchExpandedIds.value = new Set();
+    treeSearchMatchCount.value = 0;
+    treeSearchLoading.value = true;
+    treeSearchError.value = '';
+    try {
+      const response = await apiBasePost(
+        '/api/note/queryNoteTree',
+        { parentId: normalizedParentId, depth: 'all', keyword: normalizedKeyword },
+        { silent: true },
+      );
+      if (disposed || seq !== searchRequestSeq) return [];
+      if (response.status !== 200) {
+        treeSearchError.value = String(response.msg || 'NOTE_TREE_SEARCH_FAILED');
+        return [];
+      }
+      const payload = (response.data || {}) as NoteTreeQueryResult;
+      const items = Array.isArray(payload.items) ? payload.items : [];
+      const indexed = indexTreeSearchItems(items);
+      treeSearchChildrenByParent.value = indexed.childrenByParent;
+      treeSearchExpandedIds.value = indexed.expanded;
+      treeSearchMatchCount.value = Math.max(0, Number(payload.matchCount || 0));
+      return items;
+    } catch (error) {
+      if (!disposed && seq === searchRequestSeq) {
+        treeSearchError.value = error instanceof Error ? error.message : 'NOTE_TREE_SEARCH_FAILED';
+      }
+      return [];
+    } finally {
+      if (seq === searchRequestSeq) treeSearchLoading.value = false;
+    }
+  }
+
   async function selectDirectory(parentId: string | null) {
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
@@ -120,24 +231,47 @@ export function useNoteTree() {
   }
 
   async function refreshTree() {
+    const activeSearch = treeSearchKeyword.value;
+    const activeSearchParentId = treeSearchParentId.value;
     childrenByParent.value = {};
     loadedKeys.value = new Set();
     treeError.value = '';
-    await Promise.all([loadChildren(null, true), loadBreadcrumb(currentParentId.value)]);
+    if (!enabled.value) {
+      currentBreadcrumb.value = [];
+      return;
+    }
+    await Promise.all([
+      loadChildren(null, true),
+      loadBreadcrumb(currentParentId.value),
+      ...(activeSearch ? [searchTree(activeSearch, activeSearchParentId)] : []),
+    ]);
   }
 
   watch(
-    currentParentId,
-    (parentId) => {
+    [enabled, currentParentId],
+    ([isEnabled, parentId]) => {
+      if (!isEnabled) {
+        currentBreadcrumb.value = [];
+        clearTreeSearch();
+        return;
+      }
       void loadBreadcrumb(parentId);
     },
     { immediate: true },
   );
-  void loadChildren(null);
+  watch(expandedIds, persistExpandedIds);
+  watch(
+    enabled,
+    (isEnabled) => {
+      if (isEnabled) void loadChildren(null);
+    },
+    { immediate: true },
+  );
 
   onScopeDispose(() => {
     disposed = true;
     breadcrumbRequestSeq += 1;
+    searchRequestSeq += 1;
   });
 
   return {
@@ -149,10 +283,17 @@ export function useNoteTree() {
     loadedKeys,
     loadingKeys,
     treeError,
+    treeSearchChildrenByParent,
+    treeSearchError,
+    treeSearchExpandedIds,
+    treeSearchKeyword,
+    treeSearchLoading,
+    treeSearchMatchCount,
     loadChildren,
     loadBreadcrumb,
     openDirectoryPage,
     refreshTree,
+    searchTree,
     selectDirectory,
     toggleExpanded,
   };

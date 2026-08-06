@@ -31,7 +31,10 @@
         @click="emit('select', item)"
       >
         <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
-        <span class="resource-picker-panel__title">{{ item.title }}</span>
+        <span class="resource-picker-panel__copy">
+          <span class="resource-picker-panel__title">{{ item.title }}</span>
+          <small v-if="includeNoteScopes && item.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
+        </span>
       </BButton>
       <template v-for="group in groups" :key="group.type">
         <div class="resource-picker-panel__group">{{ typeLabel(group.type) }}</div>
@@ -45,11 +48,44 @@
           @click="emit('select', entry.item)"
         >
           <span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
-          <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
+          <span class="resource-picker-panel__copy">
+            <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
+            <small v-if="entry.item.path">{{ entry.item.path }}</small>
+            <small v-if="includeNoteScopes && entry.item.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
+          </span>
         </BButton>
       </template>
-      <span v-if="loading && !flatItems.length" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
-      <span v-else-if="!flatItems.length" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
+      <template v-if="includeNoteScopes && scopeEntries.length">
+        <div class="resource-picker-panel__group resource-picker-panel__group--scope">
+          {{ t('ai.scope.directoryGroup') }}
+        </div>
+        <BButton
+          v-for="entry in scopeEntries"
+          :key="`scope:${entry.scope.id}`"
+          class="resource-picker-panel__item resource-picker-panel__item--scope"
+          :class="{ 'is-active': entry.index === activeIndex }"
+          :aria-selected="entry.index === activeIndex"
+          @mouseenter="activeIndex = entry.index"
+          @click="emit('select-scope', entry.scope)"
+        >
+          <span class="resource-picker-panel__scope-icon" aria-hidden="true">
+            <SvgIcon :src="icon.noteTree.root" size="15" />
+          </span>
+          <span class="resource-picker-panel__copy">
+            <span class="resource-picker-panel__title">{{ entry.scope.title }}</span>
+            <small v-if="entry.path">{{ entry.path }}</small>
+            <small>
+              {{
+                t('ai.scope.branchDescription', {
+                  count: entry.descendantCount,
+                })
+              }}
+            </small>
+          </span>
+        </BButton>
+      </template>
+      <span v-if="loading && !flatOptions.length" class="resource-picker-panel__hint">{{ t('ai.searching') }}</span>
+      <span v-else-if="!flatOptions.length" class="resource-picker-panel__hint">{{ t('ai.noContext') }}</span>
     </div>
   </div>
 </template>
@@ -59,6 +95,8 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
   import {
     useResourcePickerSearch,
@@ -66,6 +104,7 @@
     type ResourcePickerType,
   } from '@/composables/useResourcePickerSearch';
   import { useAutoHideScrollbar } from '@/composables/useAutoHideScrollbar';
+  import type { AiScopeRef } from '@/types/aiScope';
 
   /**
    * 全站唯一的资源选择面板。
@@ -84,10 +123,17 @@
       placeholder?: string;
       /** 置顶快捷项(如「当前页面」),始终显示在结果最上方 */
       pinnedItems?: ResourcePickerItem[];
+      /** AI 专用：在普通笔记结果之外追加同一根页面的目录范围结果。 */
+      includeNoteScopes?: boolean;
     }>(),
-    { keyword: '', showSearch: true, autoFocus: true },
+    { keyword: '', showSearch: true, autoFocus: true, includeNoteScopes: false },
   );
-  const emit = defineEmits<{ select: [value: ResourcePickerItem]; close: []; 'results-count': [value: number] }>();
+  const emit = defineEmits<{
+    select: [value: ResourcePickerItem];
+    'select-scope': [value: AiScopeRef];
+    close: [];
+    'results-count': [value: number];
+  }>();
 
   const { t } = useI18n();
   const { scrolling, onScroll } = useAutoHideScrollbar();
@@ -99,7 +145,7 @@
   });
 
   function moveActive(offset: number) {
-    const total = flatItems.value.length;
+    const total = flatOptions.value.length;
     if (!total) return;
     activeIndex.value = (activeIndex.value + offset + total) % total;
   }
@@ -143,9 +189,43 @@
     ...groups.value.flatMap((group) => group.items.map((entry) => entry.item)),
   ]);
 
+  const scopeEntries = computed(() => {
+    if (!props.includeNoteScopes) return [];
+    const candidates = [...pinned.value, ...results.value].filter((item) => item.type === 'note');
+    const byId = new Map<string, ResourcePickerItem>();
+    for (const item of candidates) {
+      const previous = byId.get(item.id);
+      // 搜索结果带权威路径/后代数，优先覆盖置顶项的轻量数据。
+      if (!previous || Number(item.descendantCount || 0) >= Number(previous.descendantCount || 0)) {
+        byId.set(item.id, item);
+      }
+    }
+    return [...byId.values()].map((item, offset) => {
+      const descendantCount = Math.max(0, Number(item.descendantCount || 0));
+      return {
+        index: flatItems.value.length + offset,
+        path: String(item.path || ''),
+        descendantCount,
+        scope: {
+          type: 'note_branch' as const,
+          id: item.id,
+          title: item.title,
+          estimatedResourceCount: descendantCount + 1,
+        },
+      };
+    });
+  });
+
+  const flatOptions = computed(() => [
+    ...flatItems.value.map((item) => ({ kind: 'resource' as const, item })),
+    ...scopeEntries.value.map((entry) => ({ kind: 'scope' as const, item: entry.scope })),
+  ]);
+
   function chooseActive() {
-    const item = flatItems.value[activeIndex.value];
-    if (item) emit('select', item);
+    const option = flatOptions.value[activeIndex.value];
+    if (!option) return;
+    if (option.kind === 'scope') emit('select-scope', option.item);
+    else emit('select', option.item);
   }
 
   onMounted(async () => {
@@ -169,7 +249,7 @@
   );
 
   watch(
-    () => flatItems.value.length,
+    () => flatOptions.value.length,
     (count) => emit('results-count', count),
     { immediate: true },
   );
@@ -261,14 +341,30 @@
     gap: 8px;
     padding: 5px 8px;
     overflow: hidden;
+    border: 1px solid transparent;
     border-radius: 8px;
     background: transparent !important;
     text-align: left;
 
-    &.is-active,
     &:hover {
       background: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
     }
+
+    &.is-active {
+      border-color: var(--primary-color);
+      background: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+  }
+
+  .resource-picker-panel__group--scope {
+    margin-top: 4px;
+    border-top: 1px solid var(--surface-border-color);
+  }
+
+  .resource-picker-panel__item--scope {
+    min-height: 48px;
   }
 
   .resource-picker-panel__pinned-tag {
@@ -283,6 +379,35 @@
     height: 6px;
     flex: 0 0 auto;
     border-radius: 50%;
+  }
+
+  .resource-picker-panel__scope-icon {
+    display: inline-flex;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--resource-note-color);
+    border-radius: 8px;
+    color: var(--resource-note-color);
+  }
+
+  .resource-picker-panel__copy {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+    text-align: left;
+  }
+
+  .resource-picker-panel__copy small {
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 400;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .resource-picker-panel__title {

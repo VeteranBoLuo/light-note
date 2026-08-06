@@ -6,6 +6,11 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { cleanupBookmarkIconFiles } from '../util/bookmarkIconService.js';
+import {
+  getNoteTreeChildren,
+  loadOwnedNoteTree,
+  resolveNoteBreadcrumbFromSnapshot,
+} from '../util/services/noteTreeService.js';
 
 // 资源类型与全局搜索类型必须分开:待办只能被搜索到,不进资源选择器、标签操作和待整理。
 // 未显式声明 types 的历史调用方(资源选择器、提及选择器、桌面下拉)继续只拿到资源四类。
@@ -738,6 +743,7 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
     : null;
 
   let rows = [];
+  let treeSnapshot = null;
   if (includeItems) {
     const order = buildSearchOrder({
       sort,
@@ -769,21 +775,50 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
       [userId, userId, ...params, ...order.params, pageSize, offset],
     );
     rows = result;
+    // 搜索结果要用路径区分重名页面，并为 AI 目录候选提供权威后代数量。
+    // 只读取当前 owner 的轻量树元数据；正文与后代 ID 不进入搜索响应。
+    treeSnapshot = await loadOwnedNoteTree(userId);
   }
   const [totalRows] = countPromise ? await countPromise : [[]];
   const text = getSearchText(lang);
   return {
     total: Number(totalRows?.[0]?.total || 0),
-    items: rows.map((item) => ({
-      id: toText(item.id),
-      type: 'note',
-      title: toText(item.title) || text.unnamedNote,
-      description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
-      extra: normalizeDate(item.update_time || item.create_time),
-      tags: Array.isArray(item.tags) ? item.tags : [],
-      route: `/noteLibrary/${item.id}`,
-      raw: item,
-    })),
+    items: rows.map((item) => {
+      const id = toText(item.id);
+      let path = '';
+      let childCount = 0;
+      let descendantCount = 0;
+      if (treeSnapshot?.nodesById?.has(id)) {
+        const breadcrumb = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, id);
+        path = breadcrumb
+          .slice(0, -1)
+          .map((node) => toText(node.title) || text.unnamedNote)
+          .join(' / ');
+        childCount = getNoteTreeChildren(treeSnapshot, id).length;
+        const queue = [...getNoteTreeChildren(treeSnapshot, id)];
+        const visited = new Set();
+        while (queue.length) {
+          const node = queue.shift();
+          if (!node || visited.has(node.id)) continue;
+          visited.add(node.id);
+          descendantCount += 1;
+          queue.push(...getNoteTreeChildren(treeSnapshot, node.id));
+        }
+      }
+      return {
+        id,
+        type: 'note',
+        title: toText(item.title) || text.unnamedNote,
+        description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
+        extra: normalizeDate(item.update_time || item.create_time),
+        tags: Array.isArray(item.tags) ? item.tags : [],
+        route: `/noteLibrary/${item.id}`,
+        path,
+        childCount,
+        descendantCount,
+        raw: item,
+      };
+    }),
   };
 }
 

@@ -1,5 +1,3 @@
-export const NOTE_TREE_MAX_DEPTH = 8;
-
 export interface NoteTreeItem {
   id: string;
   parentId: string | null;
@@ -10,6 +8,7 @@ export interface NoteTreeItem {
   sort: number;
   updateTime?: string | null;
   invalidParent?: boolean;
+  matched?: boolean;
   children?: NoteTreeItem[];
 }
 
@@ -20,5 +19,8 @@ export interface NoteBreadcrumbItem {
 
 export interface NoteTreeQueryResult {
   parentId: string | null;
+  maxDepth: number;
   items: NoteTreeItem[];
+  keyword?: string;
+  matchCount?: number;
 }

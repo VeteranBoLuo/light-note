@@ -216,13 +216,13 @@ describe('noteService.createNote', () => {
     pool.query
       .mockResolvedValueOnce([[]])
       .mockRejectedValueOnce(new Error('verification unavailable'))
-      .mockResolvedValueOnce([[{ id: stableId, title: '已落库笔记', type: 'markdown' }]]);
+      .mockResolvedValueOnce([[{ id: stableId, title: '已落库笔记', type: 'markdown', parent_id: 'parent-1' }]]);
 
     await expect(
       createNote({
         userId: 'user-1',
         userRole: 'user',
-        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        note: { title: '已落库笔记', content: '正文', type: 'markdown', parentId: 'parent-1' },
         idempotencyKey,
       }),
     ).rejects.toMatchObject({ commitOutcomeUnknown: true });
@@ -231,10 +231,16 @@ describe('noteService.createNote', () => {
       createNote({
         userId: 'user-1',
         userRole: 'user',
-        note: { title: '已落库笔记', content: '正文', type: 'markdown' },
+        note: { title: '已落库笔记', content: '正文', type: 'markdown', parentId: 'parent-1' },
         idempotencyKey,
       }),
-    ).resolves.toEqual({ id: stableId, title: '已落库笔记', type: 'markdown', addedToInbox: false });
+    ).resolves.toEqual({
+      id: stableId,
+      title: '已落库笔记',
+      type: 'markdown',
+      parentId: 'parent-1',
+      addedToInbox: false,
+    });
 
     expect(connection.query.mock.calls.filter(([sql]) => sql === 'INSERT INTO note SET ?')).toHaveLength(1);
     expect(pool.getConnection).toHaveBeenCalledTimes(1);

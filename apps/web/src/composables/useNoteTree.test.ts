@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { effectScope } from 'vue';
+import { effectScope, ref } from 'vue';
 
 const mocks = vi.hoisted(() => ({
   route: {
@@ -26,6 +26,7 @@ const { NOTE_TREE_ROOT_KEY, useNoteTree } = await import('./useNoteTree');
 describe('useNoteTree', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     mocks.route.value = {
       query: { parent: 'module', tag: 'tag-1' },
       fullPath: '/noteLibrary?parent=module&tag=tag-1',
@@ -39,6 +40,52 @@ describe('useNoteTree', () => {
             items: [
               { id: 'project', title: '项目' },
               { id: 'module', title: '模块' },
+            ],
+          },
+        };
+      }
+      if (url.endsWith('/queryNoteTree') && body.keyword) {
+        return {
+          status: 200,
+          data: {
+            parentId: body.parentId,
+            keyword: body.keyword,
+            matchCount: 1,
+            items: [
+              {
+                id: 'project',
+                parentId: null,
+                title: '项目',
+                childCount: 1,
+                hasChildren: true,
+                isTop: false,
+                sort: 0,
+                matched: false,
+                children: [
+                  {
+                    id: 'module',
+                    parentId: 'project',
+                    title: '模块',
+                    childCount: 1,
+                    hasChildren: true,
+                    isTop: false,
+                    sort: 0,
+                    matched: false,
+                    children: [
+                      {
+                        id: 'deep-page',
+                        parentId: 'module',
+                        title: '深层页面',
+                        childCount: 0,
+                        hasChildren: false,
+                        isTop: false,
+                        sort: 0,
+                        matched: true,
+                      },
+                    ],
+                  },
+                ],
+              },
             ],
           },
         };
@@ -127,6 +174,56 @@ describe('useNoteTree', () => {
       path: '/noteLibrary/module',
       query: { from: '/noteLibrary?parent=module&tag=tag-1' },
     });
+    scope.stop();
+  });
+
+  it('展开节点只在当前浏览会话保存并限制为稳定 ID 列表', async () => {
+    sessionStorage.setItem('light-note-note-tree-expanded-ids', JSON.stringify(['saved-node', '', 42]));
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    expect(tree?.expandedIds.value.has('saved-node')).toBe(true);
+    await vi.waitFor(() => expect(tree?.expandedIds.value.has('project')).toBe(true));
+    expect(JSON.parse(sessionStorage.getItem('light-note-note-tree-expanded-ids') || '[]')).toEqual(
+      expect.arrayContaining(['saved-node', '42', 'project']),
+    );
+    scope.stop();
+  });
+
+  it('读取灰度关闭时不请求树，开启后再加载当前 URL 路径', async () => {
+    const enabled = ref(false);
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree({ enabled }));
+
+    await Promise.resolve();
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
+    enabled.value = true;
+    await vi.waitFor(() => expect(tree?.currentBreadcrumb.value).toHaveLength(2));
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteBreadcrumb',
+      { noteId: 'module' },
+      { silent: true },
+    );
+    scope.stop();
+  });
+
+  it('目录搜索使用服务端命中与祖先树，并自动展开完整路径', async () => {
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    await tree?.searchTree('深层页面', 'project');
+
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteTree',
+      { parentId: 'project', depth: 'all', keyword: '深层页面' },
+      { silent: true },
+    );
+    expect(tree?.treeSearchMatchCount.value).toBe(1);
+    expect(tree?.treeSearchChildrenByParent.value[NOTE_TREE_ROOT_KEY]?.map((item) => item.id)).toEqual(['project']);
+    expect(tree?.treeSearchChildrenByParent.value.project?.map((item) => item.id)).toEqual(['module']);
+    expect(tree?.treeSearchChildrenByParent.value.module?.map((item) => item.id)).toEqual(['deep-page']);
+    expect(tree?.treeSearchExpandedIds.value).toEqual(new Set(['project', 'module']));
+    expect(tree?.treeSearchChildrenByParent.value.module?.[0]?.matched).toBe(true);
     scope.stop();
   });
 });

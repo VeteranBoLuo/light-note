@@ -2,6 +2,7 @@ import type {
   AiAgentInteraction,
   AiAgentInteractionSettlement,
   AiToolConfirmation,
+  AiToolConfirmationReplacement,
   AiToolConfirmationSettlement,
   AiToolConfirmationSettlementStatus,
 } from '@/types/aiAgent';
@@ -135,6 +136,36 @@ export function promoteConversationInteractionToConfirmation<T extends AiConvers
   if (!target) return;
   target.pendingInteractionIds = (target.pendingInteractionIds || []).filter((id) => id !== interactionId);
   target.pendingConfirmationIds = addPendingConfirmationId(target.pendingConfirmationIds, confirmationId);
+}
+
+/**
+ * 原子替换一张仍待确认的写操作卡。目录等安全参数变化后，服务端会签发新令牌并废弃旧令牌；
+ * 会话层同步替换卡片与 pending ID，但不把旧卡记为“取消”，因此整轮始终保持待确认状态。
+ */
+export function replaceConversationConfirmation<T extends AiConversationStateMessage>(
+  messages: T[],
+  messageIndex: number,
+  replacement: AiToolConfirmationReplacement,
+) {
+  const target = messages[messageIndex];
+  const previousId = String(replacement.previousConfirmationId || '').trim();
+  const nextConfirmation = replacement.confirmation;
+  const nextId = String(nextConfirmation?.id || '').trim();
+  if (!target || !previousId || !nextId) return false;
+  if (!(target.confirmations || []).some((confirmation) => confirmation.id === previousId)) return false;
+
+  target.confirmations = (target.confirmations || [])
+    .map((confirmation) => (confirmation.id === previousId ? nextConfirmation : confirmation))
+    .filter(
+      (confirmation, confirmationIndex, all) =>
+        all.findIndex((item) => item.id === confirmation.id) === confirmationIndex,
+    );
+  target.pendingConfirmationIds = [...new Set(
+    (target.pendingConfirmationIds || [])
+      .map((id) => (id === previousId ? nextId : id))
+      .filter(Boolean),
+  )];
+  return true;
 }
 
 function releaseConversationGroupIfSettled<T extends AiConversationStateMessage>(messages: T[], target: T) {

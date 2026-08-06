@@ -12,14 +12,26 @@ const api = vi.hoisted(() => ({
   warning: vi.fn(),
   error: vi.fn(),
 }));
+const noteTreeApi = vi.hoisted(() => ({
+  fetchFeatures: vi.fn(),
+}));
 
 vi.mock('@/http/request.ts', () => ({ apiBasePost: api.post }));
 vi.mock('@/api/commonApi.ts', () => ({ recordOperation: api.recordOperation }));
+vi.mock('@/api/noteTree', () => ({ fetchNoteTreeFeatures: noteTreeApi.fetchFeatures }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
   default: { success: api.success, warning: api.warning, error: api.error },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<span aria-hidden="true"></span>' },
+}));
+vi.mock('@/components/noteLibrary/tree/NoteDirectoryPicker.vue', () => ({
+  default: {
+    name: 'NoteDirectoryPickerStub',
+    emits: ['selected', 'update:visible'],
+    template:
+      '<div class="note-directory-picker-stub"><button @click="$emit(\'selected\', \'directory-2\')">选择研发目录</button></div>',
+  },
 }));
 
 const { default: AiToolConfirmationCard } = await import('./AiToolConfirmationCard.vue');
@@ -46,10 +58,10 @@ function createConfirmation(overrides: Partial<AiToolConfirmation> = {}): AiTool
   };
 }
 
-function mountCard(confirmation = createConfirmation()) {
+function mountCard(confirmation = createConfirmation(), onReplaced?: (replacement: unknown) => void) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(AiToolConfirmationCard, { confirmation });
+  const app = createApp(AiToolConfirmationCard, { confirmation, onReplaced });
   app.use(
     createI18n({
       legacy: false,
@@ -80,6 +92,7 @@ async function flush() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  noteTreeApi.fetchFeatures.mockResolvedValue({ note_tree_write: true });
 });
 
 afterEach(() => {
@@ -140,5 +153,89 @@ describe('AiToolConfirmationCard note preview', () => {
 
     expect(host.querySelector('.confirmation-note-preview')).toBeNull();
     expect(host.textContent).toContain('"url": "https://openai.com"');
+  });
+
+  it('新建笔记确认卡明确显示根目录目标', async () => {
+    const host = mountCard(
+      createConfirmation({
+        preview: {
+          target: '旅行计划',
+          impact: '确认后创建笔记',
+          details: [{ key: 'targetDirectory', value: '' }],
+        },
+      }),
+    );
+    await flush();
+
+    expect(host.textContent).toContain('目标目录');
+    expect(host.textContent).toContain('我的知识库');
+    expect(findButton(host, '更换目标目录')).toBeTruthy();
+  });
+
+  it('更换目录后只提交新 parentId，并把服务端签发的新确认卡交给会话层替换', async () => {
+    const replacement = createConfirmation({
+      id: 'confirmation-2',
+      token: 'token-2',
+      args: { title: '旅行计划', content: '可信正文', parentId: 'directory-2' },
+      preview: {
+        target: '旅行计划',
+        impact: '确认后创建笔记',
+        details: [{ key: 'targetDirectory', value: '研发 / 规划' }],
+      },
+    });
+    api.post.mockResolvedValue({
+      status: 200,
+      data: { previousConfirmationId: 'confirmation-1', confirmation: replacement },
+    });
+    const onReplaced = vi.fn();
+    const host = mountCard(createConfirmation(), onReplaced);
+    await flush();
+
+    findButton(host, '更换目标目录').click();
+    await flush();
+    findButton(host, '选择研发目录').click();
+    await flush();
+
+    expect(api.post).toHaveBeenCalledWith('/api/chat/agent/confirm/note-directory', {
+      confirmationToken: 'token',
+      sessionId: 'session-1',
+      parentId: 'directory-2',
+    });
+    expect(onReplaced).toHaveBeenCalledWith({
+      previousConfirmationId: 'confirmation-1',
+      confirmation: replacement,
+    });
+    expect(api.success).toHaveBeenCalledWith('目标目录已更新，请重新确认');
+  });
+
+  it('目录写开关关闭时只提供安全回退到知识库根目录', async () => {
+    noteTreeApi.fetchFeatures.mockResolvedValue({ note_tree_write: false });
+    const replacement = createConfirmation({ id: 'confirmation-2', token: 'token-2' });
+    api.post.mockResolvedValue({
+      status: 200,
+      data: { previousConfirmationId: 'confirmation-1', confirmation: replacement },
+    });
+    const onReplaced = vi.fn();
+    const host = mountCard(
+      createConfirmation({
+        args: { title: '旅行计划', content: '可信正文', parentId: 'directory-1' },
+      }),
+      onReplaced,
+    );
+    await flush();
+
+    expect(host.querySelector('.note-directory-picker-stub')).toBeNull();
+    findButton(host, '改存到我的知识库').click();
+    await flush();
+
+    expect(api.post).toHaveBeenCalledWith('/api/chat/agent/confirm/note-directory', {
+      confirmationToken: 'token',
+      sessionId: 'session-1',
+      parentId: null,
+    });
+    expect(onReplaced).toHaveBeenCalledWith({
+      previousConfirmationId: 'confirmation-1',
+      confirmation: replacement,
+    });
   });
 });

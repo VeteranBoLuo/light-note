@@ -50,8 +50,9 @@ describe('noteTree 前端纯函数', () => {
   });
 
   it('移动前按目标父层级和子树相对深度阻止超过 8 层', () => {
-    expect(canMoveNoteSubtreeToDepth(6, 1)).toBe(true);
-    expect(canMoveNoteSubtreeToDepth(7, 1)).toBe(false);
-    expect(canMoveNoteSubtreeToDepth(0, 7)).toBe(true);
+    expect(canMoveNoteSubtreeToDepth(6, 1, 8)).toBe(true);
+    expect(canMoveNoteSubtreeToDepth(7, 1, 8)).toBe(false);
+    expect(canMoveNoteSubtreeToDepth(0, 7, 8)).toBe(true);
+    expect(canMoveNoteSubtreeToDepth(0, 0, 0)).toBe(false);
   });
 });

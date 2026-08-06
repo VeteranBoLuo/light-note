@@ -202,15 +202,18 @@ describe('agent confirmationStore', () => {
     };
     await createToolConfirmation(input);
     await createToolConfirmation(input);
+    await createToolConfirmation({ ...input, args: { ...input.args, parentId: 'directory-1' } });
     await createToolConfirmation({ ...input, sessionId: 'session-2' });
     await createToolConfirmation({ ...input, toolName: 'create_bookmark', args: { url: 'https://example.com' } });
 
     const first = JSON.parse(redis.setEx.mock.calls[0][2]);
     const second = JSON.parse(redis.setEx.mock.calls[1][2]);
-    const differentSession = JSON.parse(redis.setEx.mock.calls[2][2]);
-    const bookmark = JSON.parse(redis.setEx.mock.calls[3][2]);
+    const differentDirectory = JSON.parse(redis.setEx.mock.calls[2][2]);
+    const differentSession = JSON.parse(redis.setEx.mock.calls[3][2]);
+    const bookmark = JSON.parse(redis.setEx.mock.calls[4][2]);
     expect(first.idempotencyKey).toMatch(/^agent-write-v1:[0-9a-f]{64}$/);
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
+    expect(differentDirectory.idempotencyKey).not.toBe(first.idempotencyKey);
     expect(differentSession.idempotencyKey).not.toBe(first.idempotencyKey);
     expect(bookmark.idempotencyKey).toBeNull();
   });

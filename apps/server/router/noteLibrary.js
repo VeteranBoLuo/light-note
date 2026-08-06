@@ -29,13 +29,16 @@ router.post('/uploadImage', blockVisitorUpload, upload.single('file'), noteLibra
 router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
 router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);
+router.post('/moveNoteNodes', noteLibraryHandle.moveNoteNodes);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);
 router.post('/delNote', noteLibraryHandle.delNote);
+router.post('/deleteNoteSubtree', noteLibraryHandle.deleteNoteSubtree);
 router.post('/updateNoteSort', noteLibraryHandle.updateNoteSort);
 router.post('/toggleNoteTop', noteLibraryHandle.toggleNoteTop);
 

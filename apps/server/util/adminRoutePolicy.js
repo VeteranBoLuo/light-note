@@ -69,6 +69,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 
 declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteList'],
+  ['POST', '/note/getNoteTreeFeatures'],
   ['POST', '/note/queryNoteTree'],
   ['POST', '/note/queryNoteBreadcrumb'],
   ['POST', '/note/getNoteDetail'],
@@ -90,7 +91,9 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/updateNote'],
   ['POST', '/note/addNote'],
   ['POST', '/note/moveNoteNode'],
+  ['POST', '/note/moveNoteNodes'],
   ['POST', '/note/delNote'],
+  ['POST', '/note/deleteNoteSubtree'],
   ['POST', '/note/updateNoteSort'],
   ['POST', '/note/toggleNoteTop'],
   ['POST', '/note/addNoteTag'],
@@ -356,6 +359,7 @@ declare(ADMIN_POLICIES.AI_STATE_WRITE, 'agent', [
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
   ['POST', '/chat/agent/actions/prepare'],
   ['POST', '/chat/agent/confirm'],
+  ['POST', '/chat/agent/confirm/note-directory'],
   ['POST', '/chat/agent/confirm/reject'],
   ['POST', '/chat/attachments/init'],
   ['POST', '/chat/attachments/confirm'],

@@ -20,6 +20,7 @@ import { globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { ensureAiEvaluationSchema } from './util/aiEvaluationSchema.js';
+import { ensureNoteTreeSchema } from './util/noteTreeSchema.js';
 import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
 import { startAiProductEventRetentionScheduler } from './util/aiProductTelemetry.js';
 import { startAiResponseRecoveryCleanupScheduler } from './util/aiResponseRecoveryService.js';
@@ -89,6 +90,7 @@ ensureNotificationTable().catch((err) => console.error('通知表初始化失败
 await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));
 ensurePointsSchema().catch((err) => console.error('积分表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureGrowthTaskSchema().catch((err) => console.error('成长任务表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureNoteTreeSchema().catch((err) => console.error('笔记页面树初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureFeatureRequestTables().catch((err) =>

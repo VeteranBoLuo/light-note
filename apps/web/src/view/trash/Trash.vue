@@ -107,6 +107,9 @@
               <div class="trash-mobile-card__body">
                 <strong :title="item.name">{{ item.name || '-' }}</strong>
                 <span v-if="item.resourceType === 'file' && item.fileSize">{{ formatTrashSize(item.fileSize) }}</span>
+                <span v-else-if="item.resourceType === 'note' && Number(item.batchCount || 1) > 1">
+                  {{ $t('trash.noteTreeBatch', { count: item.batchCount }) }}
+                </span>
               </div>
               <div class="trash-mobile-card__actions">
                 <BButton size="small" @click="confirmRestore(item)">{{ $t('trash.restore') }}</BButton>
@@ -141,6 +144,14 @@
                       class="trash-name-size"
                     >
                       {{ formatTrashSize((record as any).fileSize) }}
+                    </span>
+                    <span
+                      v-else-if="
+                        (record as any).resourceType === 'note' && Number((record as any).batchCount || 1) > 1
+                      "
+                      class="trash-name-size"
+                    >
+                      {{ $t('trash.noteTreeBatch', { count: (record as any).batchCount }) }}
                     </span>
                   </div>
                 </template>

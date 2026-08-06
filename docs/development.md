@@ -205,6 +205,8 @@ try {
 - 笔记、书签、云文件、标签、搜索结果等内容表面统一调用 `openAiAssistant()` / `AiEntry`，只传受控 `contextRefs`、意图、查询和 surface，不在页面散落自然语言 Prompt、权限判断或持久化逻辑。单项可建议 summarize、多项可建议 compare、标签可建议 find-related，但建议意图不能绕过 Agent Tool Policy。
 - 入口只携带后端可重新校验的资源 type/ID；title/name 仅用于本地展示，不能成为资源身份。批量入口有界取前 5 个并向用户明确提示，禁止静默把超限选择扩成全库范围。新增系统分享等入口时要补 owner、0/1/5/>5、移动端和中英文回归。
 - 引用材料仍以单条用户消息的不可变 `contextRefs` 为事实记录。AI 上下文允许资料四类与 `todo` 行动对象，但资料搜索、标签和待整理的类型边界不得随之扩大。自由追问只有出现明确承接上一轮的表达时，才可继承最新助手回答中由服务端返回的稳定实体来源；待确认轮和已结算轮都可回退到同轮父消息原始材料。继承后必须写入新用户消息快照并继续由服务端按 owner 校验，禁止把输入区状态、标题或旧正文直接当成可信上下文。待办只读取当前状态、说明、清单和必要时间字段，不进入提醒邮箱；书签网页读取只能使用服务端按引用 ID 查得的当前 URL，并与 `read_url` 参数精确求交。
+- 笔记目录范围使用独立 `scopeRefs` 协议，不得伪装成新的 `GlobalSearchType`。客户端只可提交 `{ type: 'note_branch', id }`，title/数量只作展示；后代 ID、路径、正文和缓存页面树严禁进入请求。服务端必须按 subject 重新加载活动笔记树、验证根归属并展开后代；删除、跨账号或失效根失败关闭，不能退化成空 allowlist 后的全库检索。普通问答由 `search_content` 在服务端 allowlist 内取 Top 8～20，模型参数里的 `resourceIds` 不得扩大范围。
+- 明确要求覆盖整个目录的任务必须走专用 Map/Reduce：正文按有界片段输入，页面内容一律视为不可信数据，批次协议失败可降级逐页重试；最终覆盖报告以服务端实际成功页面为准。同步硬上限为 30 页或 120,000 个可读字符，超限要求缩小范围；任何截断、缺页、Reduce 失败或 Provider 部分成功都不得标记 `completeAnalysis=true`。普通目录检索的 `matchedPages` 只表示本回答真实引用页数，绝不等价于完整分析。
 - 已由能力注册表判定为唯一 `note.create` 的明确“材料 → 生成笔记”请求，是通用 Semantic Planner 的确定性例外：书签、笔记、待办、文件附件、混合引用和用户直接粘贴文本统一进入强制 `submit_note_draft` 草稿协议。所有资源必须先由服务端校验归属；书签优先使用快照，快照不足时才补读其当前 URL。不得把全部业务工具暴露给草稿模型，也不得因通用 Planner 漏调工具而退化为普通文本回答。材料正文和旧草稿均是不可信数据，只有当前用户指令可作为改写要求；查询、教程问题和复合写操作仍走 Semantic Planner。
 - 网页正文读取默认并行使用直接 Cheerio 提取和本地 Mozilla Readability 服务，首个有效结果返回后必须中止败余请求；单次正文预算为 12000 字，无敏感查询参数的公开 URL 可缓存 10 分钟。`READABILITY_SERVICE_URL` 默认指向 `http://127.0.0.1:3466/`，可设为 `off`/`false`/`disabled` 关闭；`WEB_READER_EXTERNAL_FALLBACK_TEMPLATE` 只是显式选配的外部最后降级，模板必须含 `{encodedUrl}` 或 `{rawUrl}`，且替换目标后不得改变阅读器 origin。开启外部降级前必须完成隐私评估，因为目标 URL 会发给第三方；带 URL 凭据、fragment 或 token/auth/key/signature/credential/password/session/expires 等敏感参数的链接只允许服务端直连目标站点，不得进入二级 Readability 服务、缓存或外部降级。任一内部路径已判定为内网/非法地址时必须直接失败关闭，禁止交给外部阅读器绕过 SSRF 边界。
 - 单条资源“不得参与 AI”是服务端数据政策，不是前端展示偏好。永久排除与单轮临时排除必须在搜索、显式上下文和文件附件读取前统一求并集，并重新校验 subject 归属；偏好表、归属查询或排除查询失败时必须失败关闭，不能继续把材料交给模型。
@@ -425,6 +427,16 @@ APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` �
 - 新写混色时留意回退类别按变量名推断：`--surface-border-color` 这类名字里同时含 "surface" 的变量曾被归成背景色，导致 APK 上边框与底色同色、整条边消失（现已对边框声明强制兜底到边框色）。新增容易被误判的语义变量，先在 `androidColorMixFallback.test.ts` 补一条断言。
 - **本地自检（不需要真机）**：DevTools 执行 `document.documentElement.classList.add('light-note-android-webview')`，颜色回退立刻复现，用它确认状态标记在 APK 上依然可辨。阴影被画成黑框那类渲染 bug 只能真机复验。
 - 确实需要按 APK 单独修样式时，写进 `android-webview-compat.less` 的 `html.light-note-android-webview` 块，不要在业务组件里散落 UA 判断。
+
+### 笔记页面树灰度与隐私遥测
+
+- 页面树能力由 `util/noteTreeFeatureFlags.js` 统一裁决，前端只消费 `/api/note/getNoteTreeFeatures` 的账号级快照。生产环境未配置时默认全部关闭；本地开发和测试默认开启，便于离线回归。
+- 页面树 Schema 同时维护幂等迁移 `migrations/20260806_note_page_tree.sql`、启动保障 `util/noteTreeSchema.js` 与只读断言 `migrations/schema-assertions.sql`；启动保障只补缺失列/索引，发现同名结构不一致时失败关闭，不自动删除或重建未知结构。`note` 的 owner、父节点、删除状态和 ID 均为 `varchar(255) utf8mb4`，复合索引必须使用足以容纳 UUID 的 64/8 字符前缀，禁止用四个全长字段突破 MySQL 5.7 InnoDB 的 3072 字节键长上限。
+- 六个开关分别使用 `NOTE_TREE_READ`、`NOTE_TREE_WRITE`、`NOTE_TREE_MOBILE`、`NOTE_TREE_SUBTREE_TRASH`、`AI_NOTE_BRANCH_SCOPE`、`AI_NOTE_BRANCH_ANALYSIS` 前缀，可配置 `<PREFIX>_ENABLED=true|false` 与 `<PREFIX>_ROLLOUT_PERCENT=0..100`。`NOTE_TREE_TEST_USER_IDS` 可声明逗号分隔的测试账号。
+- 显式 `false` 是最高优先级事故急停，Root 和测试账号也不能绕过；其余情况下 Root/测试账号先行放行，普通账号按 subject ID 做稳定 SHA-256 分桶。依赖关系固定为：写入依赖读取、移动端依赖读取、子树回收站依赖写入、AI 完整分析依赖 AI 目录范围。
+- 灰度顺序保持“Root/测试 → 5% → 20% → 50% → 100%”，并先开读取再开写入。服务端在查询、创建、移动、排序、子树删除、AI 范围解析、AI 指定目录准备/替换/确认等边界重新校验，不能只靠前端隐藏入口。
+- 页面树搜索只读取标题元数据；服务端返回当前目录后代中的匹配节点及其完整祖先路径，不返回正文，也不补入无关兄弟或后代。
+- 页面树产品事件复用 `ai_product_events` 的无正文协议，只允许事件枚举、`desktop|mobile|ai` surface、深度/子页面数/子树规模/耗时桶和稳定结果枚举。禁止发送或持久化页面标题、路径、正文、搜索词和资源 ID。
 
 ## 自检清单
 

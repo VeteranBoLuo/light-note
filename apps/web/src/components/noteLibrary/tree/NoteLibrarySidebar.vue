@@ -3,7 +3,13 @@
     <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
 
     <div v-if="activeTab === 'directory'" class="note-directory-panel">
-      <BInput v-model:value="directorySearch" class="note-tree-search" :placeholder="t('note.searchPage')" clearable>
+      <BInput
+        v-model:value="directorySearch"
+        class="note-tree-search"
+        :placeholder="t('note.searchPage')"
+        :maxlength="120"
+        clearable
+      >
         <template #prefix>
           <SvgIcon :src="icon.navigation.search" size="14" aria-hidden="true" />
         </template>
@@ -11,7 +17,7 @@
       <BButton class="note-tree-root" :class="{ 'is-active': currentParentId === null }" @click="emit('select', null)">
         <SvgIcon :src="icon.noteTree.root" size="17" aria-hidden="true" />
         <span>{{ t('note.knowledgeRoot') }}</span>
-        <span class="note-tree-root-count">{{ rootItems.length }}</span>
+        <span class="note-tree-root-count">{{ searchActive ? searchMatchCount : rootItems.length }}</span>
       </BButton>
 
       <div v-if="loadingKeys.has(NOTE_TREE_ROOT_KEY) && !rootItems.length" class="note-tree-loading">
@@ -27,13 +33,21 @@
           :children-by-parent="childrenByParent"
           :expanded-ids="expandedIds"
           :loading-keys="loadingKeys"
+          :write-enabled="writeEnabled"
+          :search-mode="searchActive"
           @toggle="emit('toggle', $event)"
           @select="emit('select', $event)"
           @open="emit('open', $event)"
           @create="emit('create', $event)"
           @move="emit('move', $event)"
+          @rename="emit('rename', $event)"
+          @copy-link="emit('copyLink', $event)"
+          @delete="emit('delete', $event)"
         />
       </ul>
+      <p v-if="searchActive && !searchLoading && searchMatchCount === 0 && !treeError" class="note-tree-empty">
+        {{ t('note.treeSearchEmpty') }}
+      </p>
       <p v-if="treeError" class="note-tree-error">{{ t('note.treeLoadFailed') }}</p>
     </div>
 
@@ -49,7 +63,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref } from 'vue';
+  import { computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -74,6 +88,11 @@
       untaggedCount?: number | null;
       tagLoading?: boolean;
       searchValue?: string;
+      directoryEnabled?: boolean;
+      writeEnabled?: boolean;
+      searchActive?: boolean;
+      searchLoading?: boolean;
+      searchMatchCount?: number;
     }>(),
     {
       treeError: '',
@@ -82,6 +101,11 @@
       untaggedCount: null,
       tagLoading: false,
       searchValue: '',
+      directoryEnabled: true,
+      writeEnabled: true,
+      searchActive: false,
+      searchLoading: false,
+      searchMatchCount: 0,
     },
   );
 
@@ -91,12 +115,15 @@
     open: [id: string];
     create: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
+    rename: [node: NoteTreeItem];
+    copyLink: [node: NoteTreeItem];
+    delete: [node: NoteTreeItem];
     search: [value: string];
   }>();
   const { t } = useI18n();
-  const activeTab = ref<'directory' | 'tags'>('directory');
+  const activeTab = defineModel<'directory' | 'tags'>('mode', { default: 'directory' });
   const tabs = computed(() => [
-    { key: 'directory', label: t('note.directoryTab') },
+    ...(props.directoryEnabled ? [{ key: 'directory', label: t('note.directoryTab') }] : []),
     { key: 'tags', label: t('note.tagsTab') },
   ]);
   const rootItems = computed(() => props.childrenByParent[NOTE_TREE_ROOT_KEY] || []);
@@ -104,6 +131,13 @@
     get: () => props.searchValue,
     set: (value: string) => emit('search', value),
   });
+  watch(
+    () => props.directoryEnabled,
+    (enabled) => {
+      if (!enabled && activeTab.value === 'directory') activeTab.value = 'tags';
+    },
+    { immediate: true },
+  );
 </script>
 
 <style lang="less" scoped>
@@ -189,5 +223,12 @@
     margin: 6px 4px 0;
     color: var(--danger-color, #dc2626);
     font-size: 12px;
+  }
+
+  .note-tree-empty {
+    margin: 12px 6px 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    text-align: center;
   }
 </style>

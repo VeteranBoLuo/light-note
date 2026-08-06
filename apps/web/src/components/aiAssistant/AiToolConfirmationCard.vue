@@ -18,9 +18,19 @@
         </template>
         <template v-for="detail in displayPreview.details || []" :key="detail.key">
           <dt>{{ confirmationFieldLabel(detail.key) }}</dt>
-          <dd>{{ detail.value }}</dd>
+          <dd>{{ confirmationFieldValue(detail) }}</dd>
         </template>
       </dl>
+      <BButton
+        v-if="isCreateNote && status === 'pending' && (noteTreeWriteEnabled || targetParentId)"
+        class="note-target-directory-button"
+        size="small"
+        :disabled="loading || changingDirectory"
+        @click="openTargetDirectoryEditor"
+      >
+        <SvgIcon :src="icon.noteTree.move" size="14" aria-hidden="true" />
+        <span>{{ t(noteTreeWriteEnabled ? 'ai.noteTargetDirectory.change' : 'ai.noteTargetDirectory.useRoot') }}</span>
+      </BButton>
       <AiNoteConfirmationPreview v-if="status === 'pending'" :confirmation="confirmation" />
       <pre v-if="argsText">{{ argsText }}</pre>
       <BButton
@@ -87,6 +97,7 @@
         type="primary"
         size="small"
         :loading="loading"
+        :disabled="changingDirectory"
         role="button"
         :tabindex="loading ? -1 : 0"
         :aria-disabled="loading"
@@ -98,6 +109,13 @@
       </BButton>
     </div>
     <span v-else class="tool-confirmation-result" aria-live="polite">{{ resultText }}</span>
+    <NoteDirectoryPicker
+      v-if="targetPickerVisible && noteTreeWriteEnabled"
+      v-model:visible="targetPickerVisible"
+      :initial-parent-id="targetParentId"
+      :busy="changingDirectory"
+      @selected="replaceTargetDirectory"
+    />
   </section>
 </template>
 
@@ -119,16 +137,20 @@
   } from './attachmentConfirmationPreview';
   import type {
     AiToolConfirmation,
+    AiToolConfirmationReplacement,
     AiToolConfirmationResolution,
     AiToolConfirmationSettlement,
     AiToolConfirmationSettlementStatus,
   } from '@/types/aiAgent';
   import { resolveSucceededActionReceipt } from './confirmationReceipt';
   import AiNoteConfirmationPreview from './AiNoteConfirmationPreview.vue';
+  import NoteDirectoryPicker from '@/components/noteLibrary/tree/NoteDirectoryPicker.vue';
+  import { fetchNoteTreeFeatures } from '@/api/noteTree';
 
   const props = defineProps<{ confirmation: AiToolConfirmation }>();
   const emit = defineEmits<{
     resolved: [resolution: AiToolConfirmationResolution];
+    replaced: [replacement: AiToolConfirmationReplacement];
     edit: [confirmation: AiToolConfirmation];
     settled: [settlement: AiToolConfirmationSettlement];
   }>();
@@ -138,6 +160,9 @@
   const resultText = ref('');
   const retryNotice = ref('');
   const processExpanded = ref(false);
+  const targetPickerVisible = ref(false);
+  const changingDirectory = ref(false);
+  const noteTreeWriteEnabled = ref(false);
   const titleId = `ai-confirmation-title-${props.confirmation.id}`;
   const processDetailsId = `ai-confirmation-process-${props.confirmation.id}`;
   const persistedExpiresAt = Date.parse(String(props.confirmation.expiresAt || ''));
@@ -184,12 +209,25 @@
   onMounted(() => {
     refreshCountdown();
     if (status.value === 'pending') countdownTimer = window.setInterval(refreshCountdown, 1000);
+    if (props.confirmation.toolName === 'create_note') {
+      void fetchNoteTreeFeatures()
+        .then((features) => {
+          noteTreeWriteEnabled.value = features.note_tree_write;
+          if (!features.note_tree_write) targetPickerVisible.value = false;
+        })
+        .catch(() => {
+          noteTreeWriteEnabled.value = false;
+          targetPickerVisible.value = false;
+        });
+    }
   });
   onUnmounted(() => {
     stopCountdown();
   });
 
   const toolLabel = computed(() => t(`ai.tools.${props.confirmation.toolName}`, props.confirmation.toolName));
+  const isCreateNote = computed(() => props.confirmation.toolName === 'create_note');
+  const targetParentId = computed(() => String(props.confirmation.args?.parentId || '').trim() || null);
   const riskLevel = computed(() => props.confirmation.riskLevel || 'low');
   const editable = computed(() => isEditableAttachmentTool(props.confirmation.toolName));
   const allowAlternativeActions = computed(() => canAlterPendingConfirmation(Boolean(retryNotice.value)));
@@ -245,12 +283,59 @@
     return te(translationKey) ? t(translationKey) : key;
   }
 
+  function confirmationFieldValue(detail: { key: string; value: string }) {
+    if (detail.key === 'targetDirectory' && !String(detail.value || '').trim()) return t('note.knowledgeRoot');
+    return detail.value;
+  }
+
+  function openTargetDirectoryEditor() {
+    if (loading.value || changingDirectory.value || status.value !== 'pending') return;
+    if (noteTreeWriteEnabled.value) {
+      targetPickerVisible.value = true;
+      return;
+    }
+    if (targetParentId.value) void replaceTargetDirectory(null);
+  }
+
+  async function replaceTargetDirectory(parentId: string | null) {
+    if (changingDirectory.value || loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
+    changingDirectory.value = true;
+    try {
+      const res = await apiBasePost('/api/chat/agent/confirm/note-directory', {
+        confirmationToken: props.confirmation.token,
+        sessionId: props.confirmation.sessionId,
+        parentId,
+      });
+      const next = res.data?.confirmation as AiToolConfirmation | undefined;
+      if (
+        res.status !== 200 ||
+        !next ||
+        next.toolName !== 'create_note' ||
+        !next.id ||
+        !next.token ||
+        String(res.data?.previousConfirmationId || '') !== props.confirmation.id
+      ) {
+        throw new Error(res.msg || t('ai.noteTargetDirectory.replaceFailed'));
+      }
+      targetPickerVisible.value = false;
+      emit('replaced', {
+        previousConfirmationId: props.confirmation.id,
+        confirmation: next,
+      });
+      bMessage.success(t('ai.noteTargetDirectory.replaced'));
+    } catch (error: any) {
+      bMessage.error(error?.response?.data?.msg || error?.message || t('ai.noteTargetDirectory.replaceFailed'));
+    } finally {
+      changingDirectory.value = false;
+    }
+  }
+
   function requestErrorMessage(error: any) {
     return error?.response?.data?.msg || error?.message || t('ai.confirmationFailed');
   }
 
   async function confirm() {
-    if (loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
+    if (loading.value || changingDirectory.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
     loading.value = true;
     try {
       const res = await apiBasePost('/api/chat/agent/confirm', {
@@ -300,7 +385,7 @@
   }
 
   async function rejectPending() {
-    if (loading.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
+    if (loading.value || changingDirectory.value || status.value !== 'pending' || remainingSeconds.value <= 0) return;
     loading.value = true;
     try {
       const res = await apiBasePost('/api/chat/agent/confirm/reject', {
@@ -405,6 +490,15 @@
   .operation-preview dd {
     margin: 0;
     word-break: break-word;
+  }
+  .note-target-directory-button {
+    width: fit-content;
+    min-height: 32px;
+    gap: 6px;
+    border: 1px solid var(--resource-note-color, #00a884);
+    color: var(--resource-note-color, #00a884);
+    background: transparent;
+    font-weight: 650;
   }
   pre {
     max-height: 160px;

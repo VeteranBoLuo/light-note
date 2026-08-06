@@ -26,7 +26,18 @@ export type AiProductEventName =
   | 'ai_error_retried'
   | 'ai_error_recovered'
   | 'ai_memory_candidate_reviewed'
-  | 'ai_memory_state_changed';
+  | 'ai_memory_state_changed'
+  | 'note_tree_opened'
+  | 'note_tree_node_expanded'
+  | 'note_tree_branch_selected'
+  | 'note_tree_page_opened'
+  | 'note_tree_child_created'
+  | 'note_tree_node_moved'
+  | 'note_tree_move_rejected'
+  | 'note_tree_subtree_deleted'
+  | 'note_tree_mobile_sheet_opened'
+  | 'note_branch_ai_selected'
+  | 'note_branch_ai_answered';
 
 export type AiProductEventDimensions = Partial<{
   surface:
@@ -40,7 +51,10 @@ export type AiProductEventDimensions = Partial<{
     | 'tag_detail'
     | 'workspace'
     | 'conversation'
-    | 'memory';
+    | 'memory'
+    | 'desktop'
+    | 'mobile'
+    | 'ai';
   device: 'desktop' | 'tablet' | 'mobile' | 'unknown';
   mode: 'ask' | 'organize';
   intent: 'ask' | 'find' | 'summarize' | 'compare' | 'organize' | 'extract_todos' | 'find_related' | 'unknown';
@@ -68,6 +82,10 @@ export type AiProductEventDimensions = Partial<{
   scopeType: 'global' | 'conversation' | 'resource' | 'temporary';
   memoryType: 'preference' | 'stable_fact' | 'project' | 'temporary_state' | 'unknown';
   memoryState: 'candidate' | 'active' | 'paused' | 'expired' | 'deleted';
+  depthBucket: 'root' | '1_2' | '3_4' | '5_6' | '7_8' | 'overflow';
+  childCountBucket: '0' | '1_3' | '4_10' | '11_50' | '51_plus';
+  subtreeSizeBucket: '0' | '1' | '2_10' | '11_50' | '51_200' | '201_plus';
+  result: 'success' | 'failed' | 'rejected' | 'conflict' | 'cancelled' | 'unavailable';
   conversationId: string;
   requestId: string;
   messageId: string;

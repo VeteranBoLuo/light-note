@@ -61,6 +61,38 @@ describe('AI product telemetry privacy contract', () => {
     );
   });
 
+  it('接受页面树无正文事件及其有界桶，但继续拒绝标题和路径', () => {
+    expect(
+      normalizeAiProductEvent({
+        event: 'note_tree_subtree_deleted',
+        dimensions: {
+          surface: 'mobile',
+          depthBucket: '3_4',
+          childCountBucket: '4_10',
+          subtreeSizeBucket: '11_50',
+          durationBucket: '1_3s',
+          result: 'success',
+        },
+      }),
+    ).toMatchObject({
+      eventName: 'note_tree_subtree_deleted',
+      dimensions: {
+        surface: 'mobile',
+        depthBucket: '3_4',
+        childCountBucket: '4_10',
+        subtreeSizeBucket: '11_50',
+        durationBucket: '1_3s',
+        result: 'success',
+      },
+    });
+    expect(() =>
+      normalizeAiProductEvent({
+        event: 'note_tree_branch_selected',
+        dimensions: { surface: 'desktop', title: '私密页面', path: '项目 / 私密页面' },
+      }),
+    ).toThrow('AI_EVENT_DIMENSION_UNSUPPORTED');
+  });
+
   it.each(['query', 'title', 'content', 'excerpt', 'prompt', 'url', 'comment'])(
     'rejects content-bearing dimension %s',
     (key) => {
