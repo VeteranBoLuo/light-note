@@ -15,6 +15,9 @@ import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
 import { startTodoReminderScheduler } from './util/todoReminder.js';
+import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
+import { startTodoSeriesScheduler } from './util/todoSeriesScheduler.js';
+import { getTodoPlanFeatureState } from './util/todoPlanFeature.js';
 import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
 import { globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
@@ -189,6 +192,12 @@ function scheduleGrowthNudges() {
 }
 scheduleGrowthNudges();
 startTodoReminderScheduler();
+if (getTodoPlanFeatureState().schedulerEnabled) {
+  startTodoReminderV2Scheduler();
+  startTodoSeriesScheduler();
+} else {
+  console.log('[todo-plan-v2] scheduler disabled by feature flag');
+}
 startEmailDeliveryLogCleanupScheduler();
 
 // 启动 Express 服务器

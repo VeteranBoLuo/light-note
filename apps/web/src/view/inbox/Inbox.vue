@@ -268,6 +268,7 @@
                   @add-to-calendar="openTodoCalendar(item)"
                   @snooze="snoozeTodoItem(item, $event)"
                   @update-priority="updateTodoPriority(item, $event)"
+                  @series-action="handleTodoSeriesAction(item, $event)"
                 />
               </div>
             </section>
@@ -309,6 +310,7 @@
                 @add-to-calendar="openTodoCalendar(action.item)"
                 @snooze="snoozeTodoItem(action.item, $event)"
                 @update-priority="updateTodoPriority(action.item, $event)"
+                @series-action="handleTodoSeriesAction(action.item, $event)"
               />
             </template>
           </div>
@@ -364,11 +366,20 @@
     TodoPriority,
     TodoSort,
   } from '@/api/todoApi';
+  import {
+    deleteTodoPlanV2,
+    pauseTodoSeriesV2,
+    resumeTodoSeriesV2,
+    skipTodoInstanceV2,
+    stopTodoSeriesV2,
+    type TodoPlanScope,
+  } from '@/api/todoApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
+  import { generateUUID } from '@/utils/common';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -1068,6 +1079,19 @@
   function confirmDeleteTodo(item: TodoItemType) {
     if (hasPendingOperation.value) return;
     openSwipeTodoId.value = '';
+    if (item.planVersion === 2 && item.seriesId) {
+      Alert.alert({
+        title: t('inbox.deleteTodo'),
+        content: t('inbox.todoSeriesDeleteChoice', { name: item.title }),
+        footer: [
+          { label: t('common.cancel') },
+          { label: t('inbox.todoSeriesDeleteCurrent'), function: () => removeTodoV2(item, 'current') },
+          { label: t('inbox.todoSeriesDeleteFuture'), type: 'primary', function: () => removeTodoV2(item, 'future') },
+          { label: t('inbox.todoSeriesDeleteSeries'), type: 'danger', function: () => removeTodoV2(item, 'series') },
+        ],
+      });
+      return;
+    }
     Alert.alert({
       title: t('inbox.deleteTodo'),
       content: t('inbox.deleteTodoConfirm', { name: item.title }),
@@ -1169,9 +1193,7 @@
         }
         // 中转也没成时给明确出路，不能静默返回让人以为按钮坏了
         message.warning(
-          outcome.reason === 'too_large'
-            ? t('inbox.calendarExportFailed')
-            : t('inbox.calendarUnavailableInApp'),
+          outcome.reason === 'too_large' ? t('inbox.calendarExportFailed') : t('inbox.calendarUnavailableInApp'),
         );
         return;
       }
@@ -1207,6 +1229,64 @@
     } finally {
       deletingTodoId.value = '';
     }
+  }
+
+  async function removeTodoV2(item: TodoItemType, scope: TodoPlanScope) {
+    deletingTodoId.value = item.id;
+    try {
+      const response = await deleteTodoPlanV2(item.id, scope, generateUUID());
+      if (response.status !== 200) {
+        message.error(response.msg || t('inbox.todoSaveFailed'));
+        return;
+      }
+      await Promise.all([todo.refreshList(), inbox.refreshCount()]);
+      if (scope === 'current') showTodoUndo('delete', [item.id]);
+      else message.success(t('inbox.todoSeriesChanged'));
+    } catch (error: any) {
+      message.error(error?.message || t('inbox.todoSaveFailed'));
+    } finally {
+      deletingTodoId.value = '';
+    }
+  }
+
+  async function runTodoSeriesAction(item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop') {
+    if (!item.seriesId || hasPendingOperation.value) return;
+    updatingTodoId.value = item.id;
+    try {
+      const key = generateUUID();
+      const response =
+        action === 'skip'
+          ? await skipTodoInstanceV2(item.id, key)
+          : action === 'pause'
+            ? await pauseTodoSeriesV2(item.seriesId, key)
+            : action === 'resume'
+              ? await resumeTodoSeriesV2(item.seriesId, key)
+              : await stopTodoSeriesV2(item.seriesId, key);
+      if (response.status !== 200) {
+        message.error(response.msg || t('inbox.todoSaveFailed'));
+        return;
+      }
+      message.success(t('inbox.todoSeriesChanged'));
+      await Promise.all([todo.refreshList(), inbox.refreshCount()]);
+    } catch (error: any) {
+      message.error(error?.message || t('inbox.todoSaveFailed'));
+    } finally {
+      updatingTodoId.value = '';
+    }
+  }
+
+  function handleTodoSeriesAction(item: TodoItemType, action: 'skip' | 'pause' | 'resume' | 'stop') {
+    if (action !== 'stop') {
+      void runTodoSeriesAction(item, action);
+      return;
+    }
+    Alert.alert({
+      title: t('inbox.todoSeriesStop'),
+      content: t('inbox.todoSeriesStopConfirm'),
+      okText: t('inbox.todoSeriesStop'),
+      cancelText: t('common.cancel'),
+      onOk: () => runTodoSeriesAction(item, action),
+    });
   }
 </script>
 

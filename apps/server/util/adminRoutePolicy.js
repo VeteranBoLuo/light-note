@@ -153,6 +153,10 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'inbox', [
 declare(ADMIN_POLICIES.READ, 'todo', [
   ['POST', '/todo/list'],
   ['POST', '/todo/count'],
+  ['POST', '/todo/v2/config'],
+  ['POST', '/todo/v2/preview'],
+  ['POST', '/todo/v2/update-preview'],
+  ['POST', '/todo/v2/convert-preview'],
   // 日历导出中转不改用户内容,只把已可读的待办换成一次性下载地址,与 /note/exportFile 同属只读
   ['POST', '/todo/exportCalendar'],
   ['GET', '/todo/exportCalendar'],
@@ -170,6 +174,14 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/batch-restore'],
   ['POST', '/todo/reorder'],
   ['POST', '/todo/snooze'],
+  ['POST', '/todo/v2/create'],
+  ['POST', '/todo/v2/update'],
+  ['POST', '/todo/v2/convert'],
+  ['POST', '/todo/v2/series/pause'],
+  ['POST', '/todo/v2/series/resume'],
+  ['POST', '/todo/v2/series/stop'],
+  ['POST', '/todo/v2/instance/skip'],
+  ['POST', '/todo/v2/delete'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'search', [
   ['POST', '/search/batchUpdateResourceTags'],
@@ -395,6 +407,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/getAiFeedback'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverview'],
+  ['POST', '/todo/v2/admin/diagnostics'],
   ['POST', '/aiEvaluation/runs'],
   ['POST', '/aiEvaluation/runs/start'],
   ['POST', '/notification/send'],

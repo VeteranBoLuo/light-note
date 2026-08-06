@@ -22,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@js-temporal/polyfill": "^0.5.1",
     "@lightnote/shared": "workspace:*",
     "axios": "^1.13.2",
     "body-parser": "^1.20.3",

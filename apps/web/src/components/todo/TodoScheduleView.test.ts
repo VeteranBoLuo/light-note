@@ -24,13 +24,13 @@ const todo: TodoItem = {
   resourceRefs: [],
 };
 
-function mountSchedule(view: 'agenda' | 'calendar') {
+function mountSchedule(view: 'agenda' | 'calendar', item: TodoItem = todo) {
   const onDelete = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
     setup() {
-      return () => h(TodoScheduleView, { items: [todo], view, swipeEnabled: true, onDelete });
+      return () => h(TodoScheduleView, { items: [item], view, swipeEnabled: true, onDelete });
     },
   });
   app.use(createPinia());
@@ -100,5 +100,22 @@ describe('TodoScheduleView mobile swipe delete', () => {
     host.querySelector<HTMLButtonElement>('.todo-calendar-dayitem-swipe .mobile-swipe-delete__action button')!.click();
 
     expect(onDelete).toHaveBeenCalledWith(todo);
+  });
+
+  it('同时有开始与截止时间时，议程按开始时间定位并展示', async () => {
+    const startAt = dueAt.replace('T09:00:00', 'T14:00:00');
+    const dueTomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 17, 30);
+    const item = {
+      ...todo,
+      id: 'todo-start-first',
+      startAt,
+      dueAt: `${dueTomorrow.getFullYear()}-${String(dueTomorrow.getMonth() + 1).padStart(2, '0')}-${String(
+        dueTomorrow.getDate(),
+      ).padStart(2, '0')}T17:30:00`,
+    };
+    const { host } = mountSchedule('agenda', item);
+    await nextTick();
+
+    expect(host.querySelector('.todo-agenda-item time')?.getAttribute('datetime')).toBe(startAt);
   });
 });

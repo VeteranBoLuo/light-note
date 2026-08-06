@@ -26,7 +26,9 @@
         }"
         @click="selectDay(day)"
       >
-        <span><b class="todo-calendar-daynum">{{ day.date.getDate() }}</b></span>
+        <span
+          ><b class="todo-calendar-daynum">{{ day.date.getDate() }}</b></span
+        >
         <BButton
           v-for="item in day.items.slice(0, 3)"
           :key="item.id"
@@ -36,7 +38,7 @@
           @click.stop="activateCalendarItem(day, item)"
         >
           <span class="todo-calendar-item__main">
-            <time :datetime="item.dueAt || undefined">{{ dueTime(item) }}</time>
+            <time :datetime="item.startAt || item.dueAt || undefined">{{ scheduleTime(item) }}</time>
             <strong>{{ item.title }}</strong>
           </span>
           <span class="todo-calendar-item__meta">
@@ -76,7 +78,7 @@
           <span class="todo-calendar-dayitem__content">
             <strong>{{ item.title }}</strong>
             <span class="todo-calendar-dayitem__meta">
-              <small>{{ dueTime(item) }}</small>
+              <small>{{ scheduleTime(item) }}</small>
               <small :class="todoStateClass(item)">{{ todoStateLabel(item) }}</small>
             </span>
           </span>
@@ -86,7 +88,7 @@
 
     <div v-else class="todo-agenda">
       <article v-for="entry in agendaItems" :key="entry.item.id" class="todo-agenda-item">
-        <time :datetime="entry.item.dueAt || undefined">
+        <time :datetime="entry.item.startAt || entry.item.dueAt || undefined">
           <strong>{{ entry.day }}</strong>
           <span>{{ entry.time }}</span>
         </time>
@@ -165,7 +167,9 @@
     );
   });
   const scheduledItems = computed(() =>
-    props.items.filter((item) => item.dueAt && Number.isFinite(parseDate(item.dueAt).getTime())),
+    props.items.filter(
+      (item) => itemScheduleAt(item) && Number.isFinite(parseDate(itemScheduleAt(item) as string).getTime()),
+    ),
   );
   const calendarDays = computed(() => {
     const first = visibleMonth.value;
@@ -180,15 +184,18 @@
         date,
         currentMonth: date.getMonth() === first.getMonth(),
         today: key === todayKey,
-        items: scheduledItems.value.filter((item) => dateKey(parseDate(item.dueAt as string)) === key),
+        items: scheduledItems.value.filter((item) => dateKey(parseDate(itemScheduleAt(item) as string)) === key),
       };
     });
   });
   const agendaItems = computed(() =>
     [...scheduledItems.value]
-      .sort((left, right) => parseDate(left.dueAt as string).getTime() - parseDate(right.dueAt as string).getTime())
+      .sort(
+        (left, right) =>
+          parseDate(itemScheduleAt(left) as string).getTime() - parseDate(itemScheduleAt(right) as string).getTime(),
+      )
       .map((item) => {
-        const date = parseDate(item.dueAt as string);
+        const date = parseDate(itemScheduleAt(item) as string);
         return {
           item,
           day: new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric', weekday: 'short' }).format(date),
@@ -239,9 +246,13 @@
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
-  function dueTime(item: TodoItem) {
-    if (!item.dueAt) return '';
-    const date = parseDate(item.dueAt);
+  function itemScheduleAt(item: TodoItem) {
+    return item.startAt || item.dueAt || '';
+  }
+  function scheduleTime(item: TodoItem) {
+    const value = itemScheduleAt(item);
+    if (!value) return '';
+    const date = parseDate(value);
     if (!Number.isFinite(date.getTime())) return '';
     return new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date);
   }
@@ -259,7 +270,7 @@
     return t(isOverdue(item) ? 'inbox.todoGroups.overdue' : 'inbox.todoPending');
   }
   function calendarItemTitle(item: TodoItem) {
-    return [dueTime(item), todoStateLabel(item), t(`inbox.todoPriority${item.priority}`), item.title]
+    return [scheduleTime(item), todoStateLabel(item), t(`inbox.todoPriority${item.priority}`), item.title]
       .filter(Boolean)
       .join(' · ');
   }

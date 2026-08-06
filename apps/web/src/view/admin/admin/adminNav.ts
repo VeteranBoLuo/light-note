@@ -93,6 +93,7 @@ export function buildAdminNav({
       items: [
         { id: 'operationLog', title: '操作日志' },
         { id: 'apiLog', title: 'API 日志' },
+        { id: 'todoPlanDiagnostics', title: '待办计划诊断' },
         { id: 'logCleanup', title: '日志清理' },
         { id: 'logExclude', title: '日志白名单' },
       ],
@@ -185,6 +186,7 @@ const MOBILE_PATHS: Record<string, string> = {
   conversion: '/conversion',
   notificationCenter: '/notificationCenter',
   operationLog: '/operationLog',
+  todoPlanDiagnostics: '/todoPlanDiagnostics',
   apiLog: '/apiLog',
   logCleanup: '/logCleanup',
   logExclude: '/logExclude',

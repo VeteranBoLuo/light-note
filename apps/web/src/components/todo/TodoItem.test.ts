@@ -89,6 +89,13 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoSnoozeTenMinutes: '10 分钟后',
             todoSnoozeTomorrow: '明天',
             todoSnoozeNextWeek: '下周',
+            todoReminderInApp: '站内',
+            todoReminderEmail: '邮箱',
+            todoReminderRepeatSummary: '{channels} · 周期提醒',
+            todoLegacyCompletionBadge: '旧版完成触发重复',
+            todoLegacyReminderBadge: '旧版多次提醒',
+            todoSeriesPausedBadge: '系列已暂停',
+            todoRecurrenceSummary: { daily: '每 {interval} 天生成下一项' },
           },
           ai: { sourceTypes: { note: '笔记' } },
         },
@@ -160,5 +167,45 @@ describe('TodoItem card editing', () => {
     expect(onEdit).not.toHaveBeenCalled();
     host.querySelector<HTMLButtonElement>('.mobile-swipe-delete__action button')!.click();
     expect(onDelete).toHaveBeenCalledOnce();
+  });
+
+  it('旧版重复/周期提醒与新版暂停状态都有不依赖混色的文字标记', async () => {
+    const legacy = mountTodoItem({
+      ...todo,
+      planVersion: 1,
+      recurrence: { frequency: 'daily', interval: 1 },
+      reminder: {
+        mode: 'repeat',
+        channels: ['in_app'],
+        startAt: '2026-08-06 09:00:00',
+        endAt: '2026-08-06 18:00:00',
+        intervalMinutes: 60,
+      },
+    });
+    await nextTick();
+    expect(legacy.host.querySelectorAll('.todo-legacy-label')).toHaveLength(2);
+    expect(legacy.host.textContent).toContain('旧版完成触发重复');
+    expect(legacy.host.textContent).toContain('旧版多次提醒');
+    cleanup?.();
+    cleanup = undefined;
+
+    const paused = mountTodoItem({
+      ...todo,
+      planVersion: 2,
+      seriesId: 'series-1',
+      occurrenceNo: 1,
+      series: {
+        id: 'series-1',
+        repeatMode: 'scheduled',
+        status: 'paused',
+        timezone: 'Asia/Shanghai',
+        version: 1,
+        plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'never' } },
+        timing: null,
+        progress: { completed: 0, skipped: 0, generated: 8, total: null },
+      },
+    });
+    await nextTick();
+    expect(paused.host.querySelector('.todo-plan-state-label')?.textContent).toBe('系列已暂停');
   });
 });

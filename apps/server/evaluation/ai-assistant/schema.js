@@ -245,6 +245,8 @@ export const GOLDEN_ENUMS = Object.freeze({
     'query_todos',
     'set_todo_status',
     'create_todo',
+    'preview_todo_plan',
+    'create_todo_plan',
     'read_note',
     'analyze_resource_images',
     'create_note',

@@ -49,6 +49,14 @@ export async function ensureNotificationTable() {
   await ensureIndex('notification', 'idx_batch', 'KEY idx_batch (batch_id)');
   // recalled:管理员撤回标记(区别于用户自行删除的 del_flag —— 二者语义不同,不可混用)
   await ensureColumn('notification', 'recalled', "recalled tinyint NOT NULL DEFAULT 0 COMMENT '管理员是否已撤回'");
+  // v2 待办提醒按 Job 写稳定来源键，Worker 超时重试也不会生成两条站内通知。
+  await ensureColumn('notification', 'source_type', 'source_type varchar(32) DEFAULT NULL');
+  await ensureColumn('notification', 'source_id', 'source_id varchar(64) DEFAULT NULL');
+  await ensureIndex(
+    'notification',
+    'uk_notification_source',
+    'UNIQUE KEY uk_notification_source (user_id, source_type, source_id)',
+  );
 }
 
 /**
@@ -57,12 +65,12 @@ export async function ensureNotificationTable() {
  * - 传 conn 时复用外部事务(升级通知与经验同事务,要么都成功要么都回滚,保证"升级即有通知")。
  * - userId 为空或游客直接跳过。
  * @param {string} userId 接收者
- * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string}} payload
+ * @param {{type:string,title:string,content?:string,link?:string,meta?:object,batchId?:string,sourceType?:string,sourceId?:string}} payload
  * @param {import('mysql2/promise').PoolConnection|null} conn
  */
 export async function createNotification(
   userId,
-  { type, title, content = null, link = null, meta = null, batchId = null },
+  { type, title, content = null, link = null, meta = null, batchId = null, sourceType = null, sourceId = null },
   conn = null,
 ) {
   if (!userId || userId === 'visitor') return;
@@ -75,7 +83,12 @@ export async function createNotification(
     link,
     meta: meta ? JSON.stringify(meta) : null,
     batchId,
+    sourceType,
+    sourceId,
     isRead: 0,
   });
-  await db.query('INSERT INTO notification SET ?', [row]);
+  // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
+  await db.query(sourceType && sourceId ? 'INSERT IGNORE INTO notification SET ?' : 'INSERT INTO notification SET ?', [
+    row,
+  ]);
 }

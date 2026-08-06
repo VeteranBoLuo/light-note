@@ -55,6 +55,11 @@ const WRITE_GROUPS = [
     en: 'save attachments from the current conversation to cloud storage',
   },
   { names: ['restore_trash'], zh: '恢复回收站内容', en: 'restore items from Trash' },
+  {
+    names: ['create_todo', 'create_todo_plan'],
+    zh: '创建单条待办或带重复与提醒的任务计划',
+    en: 'create a single todo or a task plan with recurrence and reminders',
+  },
   { names: ['set_todo_status'], zh: '完成或重新打开单条待办', en: 'complete or reopen a single todo' },
 ];
 

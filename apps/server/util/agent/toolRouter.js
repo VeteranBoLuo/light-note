@@ -52,7 +52,7 @@ const GROUPS = {
   adminToken: ['get_token_usage'],
   adminPoints: ['get_points_overview'],
   // 待办的通用意图只开放读取；状态写入仅由下方显式动作规则加入，避免“查看待办”误带写 schema。
-  todo: ['query_todos'],
+  todo: ['query_todos', 'preview_todo_plan'],
   inbox: ['query_inbox'],
 };
 
@@ -113,6 +113,7 @@ const TOOL_DEPENDENCIES = {
   save_attachment_to_cloud: ['query_cloud_folders'],
   create_image_note: ['query_cloud_folders'],
   set_todo_status: ['query_todos'],
+  create_todo_plan: ['preview_todo_plan'],
   enqueue_inbox: ['query_inbox'],
   complete_inbox: ['query_inbox'],
   set_resource_tags: ['query_tags'],

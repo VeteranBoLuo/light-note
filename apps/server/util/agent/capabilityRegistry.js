@@ -186,8 +186,28 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
       /(?:待办|任务|提醒).{0,16}(?:创建|新建|新增|添加|记下|安排)/i,
       /\b(?:create|add|new|schedule)\b.{0,24}\b(?:todo|task|reminder)\b/i,
     ],
+    unlessPatterns: [
+      /(?:每天|每日|每周|每月|重复|周期|完成后|共\s*\d+\s*(?:次|天|周|月)|催办|recurring|repeat(?:ing)?|daily|weekly|monthly|after completion|nudge)/i,
+    ],
     operationPatterns: [CREATE_PATTERN],
     resourcePatterns: [/(?:待办|任务|提醒|todo|task|reminder)/i],
+  }),
+  defineCapability({
+    id: 'todo.plan.create',
+    status: 'enabled',
+    toolName: 'create_todo_plan',
+    operations: ['create'],
+    resources: ['todo'],
+    riskLevel: 'medium',
+    confirmationPolicy: 'always',
+    labels: { zh: '创建任务计划', en: 'create a task plan' },
+    actionPatterns: [
+      /(?:创建|新建|新增|添加|安排|设置).{0,40}(?:每天|每日|每周|每月|重复|周期|完成后|共\s*\d+\s*(?:次|天|周|月)|催办).{0,32}(?:待办|任务|提醒|计划)?/i,
+      /(?:待办|任务|提醒|计划).{0,32}(?:每天|每日|每周|每月|重复|周期|完成后|共\s*\d+\s*(?:次|天|周|月)|催办).{0,24}(?:创建|新建|新增|添加|安排|设置)?/i,
+      /\b(?:create|add|schedule|set up)\b.{0,40}\b(?:recurring|repeat(?:ing)?|daily|weekly|monthly|after completion|nudge)\b.{0,32}\b(?:todo|task|reminder|plan)\b/i,
+    ],
+    operationPatterns: [CREATE_PATTERN],
+    resourcePatterns: [/(?:待办|任务|提醒|计划|todo|task|reminder|plan)/i],
   }),
   defineCapability({
     id: 'todo.status.set',
@@ -201,6 +221,9 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
     actionPatterns: [
       /(?:完成|未完成|重新打开|恢复).{0,16}(?:待办|任务)|(?:待办|任务).{0,16}(?:完成|未完成|重新打开|恢复)/i,
       /(?:complete|reopen|mark).{0,20}(?:todo|task)|(?:todo|task).{0,20}(?:complete|reopen)/i,
+    ],
+    unlessPatterns: [
+      /(?:完成后|完成以后|完成之后|after\s+completion).{0,24}(?:再次|再|生成|安排|重复|创建|schedule|repeat|create)/i,
     ],
     operationPatterns: [/(?:完成|未完成|重新打开|complete|reopen|mark)/i],
     resourcePatterns: [/(?:待办|任务|todo|task)/i],

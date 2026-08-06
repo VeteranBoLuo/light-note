@@ -1,110 +1,159 @@
 <template>
   <div class="todo-editor-form">
-    <label>
-      <span>{{ t('inbox.todoTitle') }}</span>
-      <BInput v-model:value="form.title" :maxlength="200" :placeholder="t('inbox.todoTitlePlaceholder')" />
-    </label>
-    <label>
-      <span>{{ t('inbox.todoDescription') }}</span>
-      <div class="todo-description-field">
-        <BInput
-          v-model:value="form.description"
-          type="textarea"
-          :rows="3"
-          :maxlength="2000"
-          :placeholder="t('inbox.todoDescriptionPlaceholder')"
-          @keydown="handleMentionKeydown"
-        />
-        <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
-        <div v-if="mentionQuery" v-show="mentionHasResults" class="todo-mention-layer" :style="mentionAnchorStyle">
-          <ResourcePickerPanel
-            ref="mentionPanel"
-            :allowed-types="['bookmark', 'note', 'file']"
-            :show-search="false"
-            :keyword="mentionQuery.keyword"
-            @select="applyMentionSelection"
-            @close="closeMention"
-            @results-count="mentionHasResults = $event > 0"
-          />
-        </div>
-      </div>
-      <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
-    </label>
-
-    <BModal
-      v-model:visible="resourcePickerVisible"
-      :title="t('inbox.todoAddResource')"
-      width="460px"
-      :show-footer="false"
-    >
-      <ResourcePickerPanel
-        class="todo-resource-picker-modal"
-        :allowed-types="['bookmark', 'note', 'file']"
-        @select="applyMentionSelection"
-        @close="resourcePickerVisible = false"
-      />
-    </BModal>
-
-    <section class="todo-resource-refs">
-      <div class="todo-resource-refs__head">
-        <span class="todo-resource-refs__label">
-          {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
-        </span>
-        <!-- 输入 @ 是快捷方式,显式按钮同时承担可发现性与无障碍入口(方案 5.6) -->
-        <BButton size="small" @click="openResourcePicker">@ {{ t('inbox.todoAddResource') }}</BButton>
-      </div>
-      <div v-if="resourceRefs.length" class="todo-resource-refs__list">
-        <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
-          <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
-          <span class="todo-resource-chip__title">{{ ref.title }}</span>
-          <BButton class="todo-resource-chip__remove" :aria-label="t('common.delete')" @click="removeResourceRef(ref)">
-            ×
-          </BButton>
-        </span>
-      </div>
-    </section>
-    <section class="todo-checklist-editor">
-      <div class="todo-checklist-editor__header">
-        <div>
-          <span>{{ t('inbox.todoChecklist') }}</span>
-          <small>{{ t('inbox.todoChecklistHint') }}</small>
-        </div>
-        <BButton size="small" :disabled="checklistItems.length >= 50" @click="addChecklistItem()">
-          {{ t('inbox.todoAddChecklistItem') }}
-        </BButton>
-      </div>
-      <div class="todo-checklist-editor__list">
-        <div v-for="(check, index) in checklistItems" :key="check.id" class="todo-checklist-editor__row">
-          <span class="todo-checklist-editor__index">{{ index + 1 }}</span>
+    <ol v-if="mobileWizard && !legacyMode" class="todo-editor-form__steps" :aria-label="t('inbox.todoPlanWizard')">
+      <li
+        v-for="step in mobileSteps"
+        :key="step.value"
+        :class="{ active: mobileStep === step.value, done: mobileStep > step.value }"
+      >
+        <span>{{ step.value }}</span>
+        <strong>{{ step.label }}</strong>
+      </li>
+    </ol>
+    <div v-show="!mobileWizard || legacyMode || mobileStep === 1" class="todo-editor-form__step">
+      <label>
+        <span>{{ t('inbox.todoTitle') }}</span>
+        <BInput v-model:value="form.title" :maxlength="200" :placeholder="t('inbox.todoTitlePlaceholder')" />
+      </label>
+      <label>
+        <span>{{ t('inbox.todoDescription') }}</span>
+        <div class="todo-description-field">
           <BInput
-            :ref="(component) => setChecklistInputRef(check.id, component)"
-            v-model:value="check.text"
-            :maxlength="200"
-            :placeholder="t('inbox.todoChecklistPlaceholder')"
-            @enter="handleChecklistEnter(index)"
+            v-model:value="form.description"
+            type="textarea"
+            :rows="3"
+            :maxlength="2000"
+            :placeholder="t('inbox.todoDescriptionPlaceholder')"
+            @keydown="handleMentionKeydown"
           />
-          <BButton
-            size="small"
-            class="todo-checklist-editor__remove"
-            :disabled="saving"
-            @click="removeChecklistItem(index)"
-          >
-            {{ t('inbox.todoRemoveChecklistItem') }}
+          <!-- 说明保持纯文本:@ 唤起完整选择器(搜索框 + 分类列表),结果落成下方结构化 Chips -->
+          <div v-if="mentionQuery" v-show="mentionHasResults" class="todo-mention-layer" :style="mentionAnchorStyle">
+            <ResourcePickerPanel
+              ref="mentionPanel"
+              :allowed-types="['bookmark', 'note', 'file']"
+              :show-search="false"
+              :keyword="mentionQuery.keyword"
+              @select="applyMentionSelection"
+              @close="closeMention"
+              @results-count="mentionHasResults = $event > 0"
+            />
+          </div>
+        </div>
+        <small class="todo-description-hint">{{ t('inbox.todoMentionHint') }}</small>
+      </label>
+
+      <BModal
+        v-model:visible="resourcePickerVisible"
+        :title="t('inbox.todoAddResource')"
+        width="460px"
+        :show-footer="false"
+      >
+        <ResourcePickerPanel
+          class="todo-resource-picker-modal"
+          :allowed-types="['bookmark', 'note', 'file']"
+          @select="applyMentionSelection"
+          @close="resourcePickerVisible = false"
+        />
+      </BModal>
+
+      <section class="todo-resource-refs">
+        <div class="todo-resource-refs__head">
+          <span class="todo-resource-refs__label">
+            {{ t('inbox.todoResourceRefs', { count: resourceRefs.length }) }}
+          </span>
+          <!-- 输入 @ 是快捷方式,显式按钮同时承担可发现性与无障碍入口(方案 5.6) -->
+          <BButton size="small" @click="openResourcePicker">@ {{ t('inbox.todoAddResource') }}</BButton>
+        </div>
+        <div v-if="resourceRefs.length" class="todo-resource-refs__list">
+          <span v-for="ref in resourceRefs" :key="`${ref.type}:${ref.id}`" class="todo-resource-chip">
+            <span class="todo-resource-chip__type">{{ t(`ai.sourceTypes.${ref.type}`) }}</span>
+            <span class="todo-resource-chip__title">{{ ref.title }}</span>
+            <BButton
+              class="todo-resource-chip__remove"
+              :aria-label="t('common.delete')"
+              @click="removeResourceRef(ref)"
+            >
+              ×
+            </BButton>
+          </span>
+        </div>
+      </section>
+      <section class="todo-checklist-editor">
+        <div class="todo-checklist-editor__header">
+          <div>
+            <span>{{ t('inbox.todoChecklist') }}</span>
+            <small>{{ t('inbox.todoChecklistHint') }}</small>
+          </div>
+          <BButton size="small" :disabled="checklistItems.length >= 50" @click="addChecklistItem()">
+            {{ t('inbox.todoAddChecklistItem') }}
           </BButton>
         </div>
+        <div class="todo-checklist-editor__list">
+          <div v-for="(check, index) in checklistItems" :key="check.id" class="todo-checklist-editor__row">
+            <span class="todo-checklist-editor__index">{{ index + 1 }}</span>
+            <BInput
+              :ref="(component) => setChecklistInputRef(check.id, component)"
+              v-model:value="check.text"
+              :maxlength="200"
+              :placeholder="t('inbox.todoChecklistPlaceholder')"
+              @enter="handleChecklistEnter(index)"
+            />
+            <BButton
+              size="small"
+              class="todo-checklist-editor__remove"
+              :disabled="saving"
+              @click="removeChecklistItem(index)"
+            >
+              {{ t('inbox.todoRemoveChecklistItem') }}
+            </BButton>
+          </div>
+        </div>
+      </section>
+      <div class="todo-editor-form__grid">
+        <label>
+          <span>{{ t('inbox.todoPriority') }}</span>
+          <BSelect v-model:value="form.priority" :options="priorityOptions" />
+        </label>
+        <label v-if="legacyMode">
+          <span>{{ t('inbox.todoDueAt') }}</span>
+          <BDateTimePicker v-model:value="form.dueAt" :placeholder="t('inbox.todoDuePlaceholder')" />
+        </label>
       </div>
-    </section>
-    <div class="todo-editor-form__grid">
-      <label>
-        <span>{{ t('inbox.todoPriority') }}</span>
-        <BSelect v-model:value="form.priority" :options="priorityOptions" />
-      </label>
-      <label>
-        <span>{{ t('inbox.todoDueAt') }}</span>
-        <BDateTimePicker v-model:value="form.dueAt" :placeholder="t('inbox.todoDuePlaceholder')" />
-      </label>
     </div>
-    <section class="todo-recurrence-editor">
+    <section v-if="legacyItem && !legacyConversion" class="todo-legacy-plan-banner">
+      <div>
+        <strong>{{ t('inbox.todoLegacyPlanTitle') }}</strong>
+        <p>{{ legacyBehaviorSummary }}</p>
+        <small>{{ t('inbox.todoLegacyPlanKeepHint') }}</small>
+      </div>
+      <BButton v-if="legacyConversionEnabled" type="primary" @click="startLegacyConversion">
+        {{ t('inbox.todoLegacyPlanConvert') }}
+      </BButton>
+    </section>
+    <section v-else-if="legacyConversion" class="todo-legacy-plan-banner is-converting">
+      <div>
+        <strong>{{ t('inbox.todoLegacyConversionTitle') }}</strong>
+        <p>{{ t('inbox.todoLegacyConversionHint') }}</p>
+        <small>{{ t('inbox.todoLegacyConversionReminderHint') }}</small>
+      </div>
+      <BButton @click="cancelLegacyConversion">{{ t('inbox.todoLegacyPlanKeep') }}</BButton>
+    </section>
+    <TodoPlanScheduleEditor
+      v-if="!legacyMode"
+      v-show="!mobileWizard || mobileStep > 1"
+      :item="item"
+      :legacy-conversion="legacyConversion"
+      :title="form.title"
+      :description="form.description"
+      :checklist="normalizedChecklist"
+      :priority="form.priority"
+      :resource-refs="resourceRefInputs"
+      :initial-due-at="initialValues?.dueAt || null"
+      :mobile-step="mobileWizard ? mobileStep : 0"
+      :reset-key="resetKey"
+      @ready="planSubmission = $event"
+    />
+    <section v-if="legacyMode" class="todo-recurrence-editor">
       <div>
         <strong>{{ t('inbox.todoRecurrence') }}</strong>
         <small>{{ t('inbox.todoRecurrenceHint') }}</small>
@@ -124,7 +173,7 @@
         {{ recurrenceValidationMessage }}
       </p>
     </section>
-    <section ref="reminderEditorRef" class="todo-reminder-editor">
+    <section v-if="legacyMode" ref="reminderEditorRef" class="todo-reminder-editor">
       <div class="todo-reminder-editor__title">
         <div>
           <strong>{{ t('inbox.todoReminder') }}</strong>
@@ -177,10 +226,27 @@
       </template>
     </section>
     <div class="todo-editor-form__actions" :class="{ 'is-sticky': stickyActions }">
-      <BButton @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
-      <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
-        {{ t('common.save') }}
-      </BButton>
+      <template v-if="mobileWizard && !legacyMode">
+        <BButton v-if="mobileStep === 1" @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
+        <BButton v-else @click="mobileStep -= 1">{{ t('inbox.todoPlanPreviousStep') }}</BButton>
+        <BButton
+          v-if="mobileStep < 3"
+          type="primary"
+          :disabled="mobileStep === 1 && !form.title.trim()"
+          @click="mobileStep += 1"
+        >
+          {{ t('inbox.todoPlanNextStep') }}
+        </BButton>
+        <BButton v-else type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
+          {{ item ? t('common.save') : t('inbox.todoPlanCreate') }}
+        </BButton>
+      </template>
+      <template v-else>
+        <BButton @click="emit('cancel')">{{ t('common.cancel') }}</BButton>
+        <BButton type="primary" :loading="saving" :disabled="!canSubmit" @click="submit">
+          {{ t('common.save') }}
+        </BButton>
+      </template>
     </div>
   </div>
 </template>
@@ -195,10 +261,14 @@
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
   import type {
     TodoChecklistItem,
+    TodoEditorSubmission,
     TodoItem,
     TodoPayload,
     TodoPriority,
     TodoReminderChannel,
+    TodoReminderConfig,
+    TodoPlanScope,
+    TodoPlanWritePayload,
     TodoResourceRefView,
   } from '@/api/todoApi';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -209,6 +279,7 @@
   import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
+  import TodoPlanScheduleEditor from '@/components/todo/TodoPlanScheduleEditor.vue';
 
   const props = withDefaults(
     defineProps<{
@@ -216,6 +287,11 @@
       initialValues?: Partial<Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>>;
       saving?: boolean;
       resetKey?: number;
+      /** 移动抽屉使用三步渐进表单，避免一次展开全部高级配置。 */
+      mobileWizard?: boolean;
+      /** 新建入口关闭时回落到旧版一次性待办；已有 v2 系列仍可管理。 */
+      v2Enabled?: boolean;
+      legacyConversionEnabled?: boolean;
       /** 抽屉形态下把「取消 / 保存」吸在底部，避免长表单滚动后找不到提交按钮 */
       stickyActions?: boolean;
     }>(),
@@ -225,15 +301,24 @@
       saving: false,
       resetKey: 0,
       stickyActions: false,
+      mobileWizard: false,
+      v2Enabled: true,
+      legacyConversionEnabled: true,
     },
   );
   const emit = defineEmits<{
-    submit: [payload: TodoPayload];
+    submit: [submission: TodoEditorSubmission];
     cancel: [];
   }>();
   const { t } = useI18n();
   const checklistItems = ref<TodoChecklistItem[]>([]);
   const reminderEditorRef = ref<HTMLElement | null>(null);
+  const mobileStep = ref<1 | 2 | 3>(1);
+  const mobileSteps = computed(() => [
+    { value: 1 as const, label: t('inbox.todoPlanStepContent') },
+    { value: 2 as const, label: t('inbox.todoPlanStepSchedule') },
+    { value: 3 as const, label: t('inbox.todoPlanStepReminder') },
+  ]);
 
   // ── 说明区 @ 关联参考资料 ──────────────────────────
   const resourceRefs = ref<TodoResourceRefView[]>([]);
@@ -338,6 +423,20 @@
   }
 
   const checklistInputRefs = new Map<string, { focus: () => void }>();
+  const planSubmission = ref<{ scope: TodoPlanScope; payload: TodoPlanWritePayload } | null>(null);
+  const legacyConversion = ref(false);
+  const legacyItem = computed(() => Boolean(props.item && Number(props.item.planVersion || 1) !== 2));
+  const legacyMode = computed(() => (!props.v2Enabled && !props.item) || (legacyItem.value && !legacyConversion.value));
+  const legacyBehaviorSummary = computed(() => {
+    const parts: string[] = [];
+    if (props.item?.recurrence) parts.push(t('inbox.todoLegacyCompletionRepeat'));
+    if ((props.item?.reminder as TodoReminderConfig | null | undefined)?.mode === 'repeat') {
+      parts.push(t('inbox.todoLegacyRepeatedReminder'));
+    } else if (props.item?.reminder || props.item?.reminderAt) {
+      parts.push(t('inbox.todoLegacySingleReminder'));
+    }
+    return parts.length ? parts.join(' · ') : t('inbox.todoLegacySingleTask');
+  });
   const form = reactive({
     title: '',
     description: '',
@@ -374,6 +473,7 @@
     { value: 'monthly', label: t('inbox.todoRecurrenceMonthly') },
   ]);
   const recurrenceValidationMessage = computed(() => {
+    if (!legacyMode.value) return '';
     if (form.recurrenceFrequency === 'none') return '';
     if (!form.dueAt) return t('inbox.todoRecurrenceNeedsDue');
     const interval = Number(form.recurrenceInterval);
@@ -384,14 +484,17 @@
     return '';
   });
   const reminderEmailValidationMessage = computed(() => {
+    if (!legacyMode.value) return '';
     if (form.reminderMode === 'none' || !form.emailReminder) return '';
     return /^\S+@\S+\.\S+$/.test(form.reminderEmail.trim()) ? '' : t('inbox.todoReminderEmailInvalid');
   });
   const reminderTimeValidationMessage = computed(() => {
+    if (!legacyMode.value) return '';
     if (form.reminderMode === 'none' || form.reminderStartAt) return '';
     return t('inbox.todoReminderTimeRequired');
   });
   const reminderValidationMessage = computed(() => {
+    if (!legacyMode.value) return '';
     if (form.reminderMode === 'none') return '';
     if (!form.inAppReminder && !form.emailReminder) return t('inbox.todoReminderChannelRequired');
     if (reminderEmailValidationMessage.value) return reminderEmailValidationMessage.value;
@@ -424,12 +527,22 @@
     () =>
       Boolean(form.title.trim()) &&
       !props.saving &&
-      !reminderValidationMessage.value &&
-      !recurrenceValidationMessage.value,
+      (legacyMode.value
+        ? !reminderValidationMessage.value && !recurrenceValidationMessage.value
+        : Boolean(planSubmission.value)),
   );
 
+  const normalizedChecklist = computed(() =>
+    checklistItems.value
+      .map((item) => ({ ...item, text: item.text.trim() }))
+      .filter((item) => Boolean(item.text))
+      .slice(0, 50)
+      .map((item) => ({ ...item, text: item.text.slice(0, 200) })),
+  );
+  const resourceRefInputs = computed(() => resourceRefs.value.map((ref) => ({ type: ref.type, id: ref.id })));
+
   watch(
-    () => [props.item, props.initialValues, props.resetKey] as const,
+    () => [props.item, props.initialValues, props.resetKey, props.v2Enabled] as const,
     () => reset(),
     { immediate: true },
   );
@@ -452,13 +565,15 @@
 
   function reset() {
     const initialValues = props.item ? null : props.initialValues;
+    mobileStep.value = 1;
+    legacyConversion.value = false;
     form.title = props.item?.title ?? initialValues?.title ?? '';
     form.description = props.item?.description ?? initialValues?.description ?? '';
     resourceRefs.value = [...(props.item?.resourceRefs || [])];
     closeMention();
     form.priority = props.item?.priority ?? initialValues?.priority ?? 1;
     form.dueAt = toTodoLocalInput(props.item?.dueAt ?? initialValues?.dueAt);
-    const reminder = props.item?.reminder;
+    const reminder = legacyMode.value ? (props.item?.reminder as TodoReminderConfig | null | undefined) : null;
     form.reminderMode = reminder?.mode || (props.item?.reminderAt ? 'once' : 'none');
     form.reminderStartAt = toTodoLocalInput(reminder?.startAt || props.item?.reminderAt);
     form.reminderEndAt = toTodoLocalInput(reminder?.endAt);
@@ -472,6 +587,7 @@
     form.recurrenceFrequency = props.item?.recurrence?.frequency || 'none';
     form.recurrenceInterval = props.item?.recurrence?.interval || 1;
     form.recurrenceEndAt = toTodoLocalInput(props.item?.recurrence?.endAt);
+    planSubmission.value = null;
     const initialChecklist = props.item?.checklist || initialValues?.checklist;
     checklistItems.value = initialChecklist?.length
       ? initialChecklist.map((item) => ({ ...item }))
@@ -521,41 +637,70 @@
 
   function submit() {
     if (!canSubmit.value) return;
-    const checklist = checklistItems.value
-      .map((item) => ({ ...item, text: item.text.trim() }))
-      .filter((item) => Boolean(item.text))
-      .slice(0, 50)
-      .map((item) => ({ ...item, text: item.text.slice(0, 200) }));
+    const checklist = normalizedChecklist.value;
+    if (!legacyMode.value) {
+      if (!planSubmission.value) return;
+      emit('submit', {
+        kind: 'v2',
+        scope: planSubmission.value.scope,
+        ...(legacyConversion.value && props.item ? { convertLegacyTodoId: props.item.id } : {}),
+        payload: {
+          ...planSubmission.value.payload,
+          title: form.title.trim(),
+          description: form.description.trim(),
+          priority: form.priority,
+          checklist,
+          resourceRefs: resourceRefInputs.value,
+        },
+      });
+      return;
+    }
     const channels: TodoReminderChannel[] = [];
     if (form.inAppReminder) channels.push('in_app');
     if (form.emailReminder) channels.push('email');
     emit('submit', {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      resourceRefs: resourceRefs.value.map((ref) => ({ type: ref.type, id: ref.id })),
-      priority: form.priority,
-      checklist,
-      dueAt: form.dueAt || null,
-      reminder:
-        form.reminderMode === 'none'
-          ? null
-          : {
-              mode: form.reminderMode,
-              channels,
-              startAt: form.reminderStartAt,
-              endAt: form.reminderMode === 'repeat' ? form.reminderEndAt : null,
-              intervalMinutes: form.reminderMode === 'repeat' ? toMinutes(form.intervalValue, form.intervalUnit) : null,
-              email: form.emailReminder ? form.reminderEmail.trim() : null,
-            },
-      recurrence:
-        form.recurrenceFrequency === 'none'
-          ? null
-          : {
-              frequency: form.recurrenceFrequency,
-              interval: Number(form.recurrenceInterval),
-              endAt: form.recurrenceEndAt || null,
-            },
+      kind: 'legacy',
+      payload: {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        resourceRefs: resourceRefInputs.value,
+        priority: form.priority,
+        checklist,
+        dueAt: form.dueAt || null,
+        reminder:
+          form.reminderMode === 'none'
+            ? null
+            : {
+                mode: form.reminderMode,
+                channels,
+                startAt: form.reminderStartAt,
+                endAt: form.reminderMode === 'repeat' ? form.reminderEndAt : null,
+                intervalMinutes:
+                  form.reminderMode === 'repeat' ? toMinutes(form.intervalValue, form.intervalUnit) : null,
+                email: form.emailReminder ? form.reminderEmail.trim() : null,
+              },
+        recurrence:
+          form.recurrenceFrequency === 'none'
+            ? null
+            : {
+                frequency: form.recurrenceFrequency,
+                interval: Number(form.recurrenceInterval),
+                endAt: form.recurrenceEndAt || null,
+              },
+      },
     });
+  }
+
+  function startLegacyConversion() {
+    legacyConversion.value = true;
+    planSubmission.value = null;
+    if (props.mobileWizard) mobileStep.value = 2;
+  }
+
+  function cancelLegacyConversion() {
+    legacyConversion.value = false;
+    planSubmission.value = null;
+    mobileStep.value = 1;
   }
 
   function toMinutes(value: number | string, unit: typeof form.intervalUnit) {
@@ -577,6 +722,57 @@
     flex-direction: column;
     gap: 16px;
     color: var(--text-color);
+  }
+  .todo-editor-form__step {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .todo-editor-form__steps {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .todo-editor-form__steps li {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+  .todo-editor-form__steps li > span {
+    display: inline-flex;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: var(--workspace-panel-bg-color);
+    font-weight: 700;
+  }
+  .todo-editor-form__steps li > strong {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .todo-editor-form__steps li.active {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+  .todo-editor-form__steps li.active > span,
+  .todo-editor-form__steps li.done > span {
+    background: var(--primary-color);
+    color: #fff;
   }
   .todo-editor-form label {
     display: flex;
@@ -645,6 +841,35 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--workspace-panel-bg-color);
+  }
+  .todo-legacy-plan-banner {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 14px;
+    border: 1px solid #b45309;
+    border-radius: 12px;
+    background: #fffbeb;
+    color: #78350f;
+  }
+  .todo-legacy-plan-banner.is-converting {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
+    color: var(--text-color);
+  }
+  .todo-legacy-plan-banner > div {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+  }
+  .todo-legacy-plan-banner p,
+  .todo-legacy-plan-banner small {
+    margin: 0;
+    line-height: 1.5;
+  }
+  .todo-legacy-plan-banner small {
+    color: var(--desc-color);
   }
   .todo-recurrence-editor > div:first-child {
     display: grid;
@@ -797,6 +1022,12 @@
     flex: 1 1 0;
   }
   @media (max-width: 767px) {
+    .todo-legacy-plan-banner {
+      flex-direction: column;
+    }
+    .todo-legacy-plan-banner :deep(.b_btn) {
+      width: 100%;
+    }
     .todo-recurrence-editor__fields {
       grid-template-columns: 1fr;
     }
@@ -837,6 +1068,11 @@
     .todo-reminder-editor__field-error {
       margin-left: auto;
     }
+  }
+
+  :global(html.light-note-android-webview) .todo-legacy-plan-banner.is-converting {
+    border-color: var(--primary-color);
+    background: var(--background-color);
   }
 
   .todo-description-field {

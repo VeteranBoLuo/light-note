@@ -77,6 +77,23 @@ describe('todoHandle', () => {
     expect(connection.release).toHaveBeenCalledTimes(1);
   });
 
+  it('创建待办的内部数据库错误不会把敏感详情返回客户端', async () => {
+    const error = Object.assign(new Error('Unknown column secret_internal_field in field list'), {
+      code: 'ER_BAD_FIELD_ERROR',
+    });
+    createTodoItem.mockRejectedValueOnce(error);
+    const res = mockRes();
+
+    await createTodo({ user: { id: 'u1', role: 'user' }, body: { title: '测试' } }, res);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(res.send).toHaveBeenCalledWith({
+      data: null,
+      status: 500,
+      msg: '待办服务暂时不可用，请稍后重试',
+    });
+  });
+
   it('游客写入在获取连接前被拦截', async () => {
     ensureNotVisitor.mockReturnValueOnce(false);
     await createTodo({ user: { id: 'visitor', role: 'visitor' }, body: { title: 'x' } }, mockRes());

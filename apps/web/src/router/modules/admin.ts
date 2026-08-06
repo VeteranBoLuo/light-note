@@ -31,6 +31,10 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/operationLog/OperationLog.vue'),
       },
       {
+        path: 'todoPlanDiagnostics',
+        component: () => import('@/view/admin/components/todoPlanDiagnostics/TodoPlanDiagnostics.vue'),
+      },
+      {
         path: 'userMg',
         component: () => import('@/view/admin/components/userMg/UserMg.vue'),
       },
@@ -90,6 +94,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'operationLog',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/operationLog/OperationLogMobile.vue'),
+  },
+  {
+    path: 'todoPlanDiagnostics',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/todoPlanDiagnostics/TodoPlanDiagnostics.vue'),
   },
   {
     path: 'userMg',

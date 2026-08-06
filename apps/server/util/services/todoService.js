@@ -8,14 +8,16 @@ import {
   normalizeTodoResourceRefs,
   replaceTodoResourceRefs,
 } from './todoReferenceService.js';
+import { loadV2ReminderMap, loadV2SeriesMap, setV2TodoStatus, snoozeV2Todo } from './todoSeriesService.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
 const TODO_PAGE_CURSOR_SCOPE = 'todos';
 const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已完成' });
 const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
-  due_at AS dueAt, recurrence_rule AS recurrenceRule,
-  completed_at AS completedAt, update_time AS updatedAt`;
+  start_at AS startAt, due_at AS dueAt, sort_order AS sortOrder, recurrence_rule AS recurrenceRule,
+  completed_at AS completedAt, update_time AS updatedAt,
+  plan_version AS planVersion, series_id AS seriesId, occurrence_no AS occurrenceNo`;
 // 工作台今日行动流的时间窗筛选：逾期与前端列表统一按“当前时刻”判断；
 // today 只包含今天尚未到期的任务，避免同一条待办同时计入两个摘要。
 const DUE_FILTERS = new Set(['overdue', 'today']);
@@ -92,6 +94,9 @@ function todoStatusVersion(row) {
         status: String(row?.status || ''),
         dueAt: snapshotValue(row?.dueAt),
         recurrenceRule: snapshotValue(row?.recurrenceRule),
+        planVersion: Number(row?.planVersion || 1),
+        seriesId: snapshotValue(row?.seriesId),
+        occurrenceNo: snapshotValue(row?.occurrenceNo),
         completedAt: snapshotValue(row?.completedAt),
         updatedAt: snapshotValue(row?.updatedAt),
       }),
@@ -106,7 +111,11 @@ function todoStatusTarget(row) {
     status: String(row?.status || 'pending'),
     dueAt: row?.dueAt || null,
     priority: Number(row?.priority || 0),
-    recurring: Boolean(parseJsonObject(row?.recurrenceRule)),
+    recurring:
+      Boolean(parseJsonObject(row?.recurrenceRule)) || (Number(row?.planVersion || 1) === 2 && Boolean(row?.seriesId)),
+    planVersion: Number(row?.planVersion || 1),
+    seriesId: row?.seriesId || null,
+    occurrenceNo: row?.occurrenceNo === null || row?.occurrenceNo === undefined ? null : Number(row.occurrenceNo),
     expectedVersion: todoStatusVersion(row),
   };
 }
@@ -246,8 +255,7 @@ export function nextRecurrenceAt(dueAt, recurrence) {
     next.setMonth(next.getMonth() + interval);
     const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
     next.setDate(Math.min(desiredDay, lastDay));
-  }
-  else return null;
+  } else return null;
   const end = rule.endAt ? new Date(String(rule.endAt).replace(' ', 'T')) : null;
   return end && Number.isFinite(end.getTime()) && next.getTime() > end.getTime() ? null : next;
 }
@@ -389,6 +397,29 @@ export async function updateTodo(connection, userId, id, values) {
   );
   const current = rows[0];
   if (!current) return null;
+  if (Number(current.plan_version || 1) === 2) {
+    const keys = Object.keys(values || {}).filter((key) => !['id'].includes(key));
+    const inlineKeys = new Set(['checklist', 'priority']);
+    if (!keys.length || keys.some((key) => !inlineKeys.has(key))) {
+      throw todoStatusError(
+        'TODO_V2_SCOPE_REQUIRED',
+        '该待办属于新版任务计划，请先选择修改当前项、当前及以后或整个系列。',
+        409,
+      );
+    }
+    const checklist = hasOwn(values, 'checklist')
+      ? normalizeChecklist(values.checklist)
+      : parseChecklist(current.checklist);
+    const priority = hasOwn(values, 'priority') ? Number(values.priority) : Number(current.priority);
+    if (![0, 1, 2].includes(priority)) throw new Error('待办优先级无效');
+    await connection.query(
+      `UPDATE todo_items SET checklist = ?, priority = ?, is_exception = 1, update_time = NOW()
+        WHERE id = ? AND user_id = ? AND plan_version = 2 AND del_flag = 0`,
+      [JSON.stringify(checklist), priority, id, userId],
+    );
+    await invalidatePersonalKnowledgeCache(userId, { database: connection });
+    return { id };
+  }
   const currentReminder = await loadReminderConfig(connection, id, userId, true);
   const merged = {
     title: hasOwn(values, 'title') ? values.title : current.title,
@@ -442,6 +473,9 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
   );
   const current = currentRows[0];
   if (!current || current.status === status) return 0;
+  if (Number(current.plan_version || 1) === 2) {
+    return setV2TodoStatus(connection, userId, current, status, { undoCompletion });
+  }
   const reminder = await loadReminderConfig(connection, id, userId, true);
   const [result] = await connection.query(
     `UPDATE todo_items
@@ -582,10 +616,13 @@ export async function prepareTodoStatusChange(db, userId, input = {}) {
     );
   }
   const [reminderRows] = await db.query(
-    `SELECT COUNT(*) AS activeReminderCount
-     FROM todo_reminders
-     WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
-    [target.todoId, userId],
+    `SELECT (
+       (SELECT COUNT(*) FROM todo_reminders
+         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
+       (SELECT COUNT(*) FROM todo_reminder_jobs
+         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
+     ) AS activeReminderCount`,
+    [target.todoId, userId, target.todoId, userId],
   );
   return {
     todoId: target.todoId,
@@ -639,10 +676,13 @@ export async function applyTodoStatusChange(connection, userId, input = {}) {
   let pausedReminderCount = 0;
   if (status === 'completed') {
     const [reminderRows] = await connection.query(
-      `SELECT COUNT(*) AS activeReminderCount
-       FROM todo_reminders
-       WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
-      [target.todoId, userId],
+      `SELECT (
+         (SELECT COUNT(*) FROM todo_reminders
+           WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
+         (SELECT COUNT(*) FROM todo_reminder_jobs
+           WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
+       ) AS activeReminderCount`,
+      [target.todoId, userId, target.todoId, userId],
     );
     pausedReminderCount = Number(reminderRows?.[0]?.activeReminderCount || 0);
   }
@@ -674,6 +714,12 @@ export async function deleteTodo(connection, userId, id, { invalidateSearch = tr
        WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
       [id, userId],
     );
+    await connection.query(
+      `UPDATE todo_reminder_jobs
+          SET status = 'cancelled', cancel_reason = 'instance_deleted', lease_token = NULL, lease_until = NULL
+        WHERE todo_id = ? AND user_id = ? AND status IN ('pending','paused')`,
+      [id, userId],
+    );
     if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
   }
   return Number(result.affectedRows || 0);
@@ -689,6 +735,14 @@ export async function restoreTodo(connection, userId, id, { invalidateSearch = t
     await connection.query(
       `UPDATE todo_reminders SET status = 'pending'
        WHERE todo_id = ? AND user_id = ? AND status = 'paused_delete'`,
+      [id, userId],
+    );
+    await connection.query(
+      `UPDATE todo_reminder_jobs
+          SET status = IF(original_scheduled_at_utc > UTC_TIMESTAMP(), 'pending', 'skipped'),
+              scheduled_at_utc = original_scheduled_at_utc,
+              cancel_reason = IF(original_scheduled_at_utc > UTC_TIMESTAMP(), NULL, 'past_after_restore')
+        WHERE todo_id = ? AND user_id = ? AND status = 'cancelled' AND cancel_reason = 'instance_deleted'`,
       [id, userId],
     );
     if (invalidateSearch) await invalidatePersonalKnowledgeCache(userId, { database: connection });
@@ -739,9 +793,12 @@ export async function reorderTodos(connection, userId, items) {
     if (![0, 1, 2].includes(priority)) throw new Error('待办优先级无效');
     const dueAt = normalizeDate(item?.dueAt, '截止时间');
     const [result] = await connection.query(
-      `UPDATE todo_items SET due_at = ?, priority = ?, sort_order = ?, update_time = NOW()
-       WHERE id = ? AND user_id = ? AND del_flag = 0`,
-      [dueAt, priority, (index + 1) * 1000, id, userId],
+      `UPDATE todo_items
+          SET due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?),
+              is_exception = IF(COALESCE(plan_version, 1) = 2 AND priority <> ?, 1, is_exception),
+              priority = ?, sort_order = ?, update_time = NOW()
+        WHERE id = ? AND user_id = ? AND del_flag = 0`,
+      [dueAt, priority, priority, (index + 1) * 1000, id, userId],
     );
     if (Number(result.affectedRows || 0) !== 1) throw new Error('待办不存在或无权操作');
   }
@@ -751,12 +808,16 @@ export async function reorderTodos(connection, userId, items) {
 
 export async function snoozeTodo(connection, userId, id, targetAt) {
   const scheduledAt = normalizeDate(targetAt, '稍后提醒时间');
-  if (!scheduledAt || new Date(scheduledAt).getTime() <= Date.now()) throw new Error('稍后提醒时间必须晚于当前时间');
+  if (!scheduledAt) throw new Error('稍后提醒时间无效');
   const [rows] = await connection.query(
-    'SELECT id FROM todo_items WHERE id = ? AND user_id = ? AND status = ? AND del_flag = 0 LIMIT 1 FOR UPDATE',
+    'SELECT * FROM todo_items WHERE id = ? AND user_id = ? AND status = ? AND del_flag = 0 LIMIT 1 FOR UPDATE',
     [id, userId, 'pending'],
   );
   if (!rows.length) throw new Error('待办不存在或无权操作');
+  if (Number(rows[0].plan_version || 1) === 2) {
+    return snoozeV2Todo(connection, userId, rows[0], scheduledAt);
+  }
+  if (new Date(scheduledAt).getTime() <= Date.now()) throw new Error('稍后提醒时间必须晚于当前时间');
   const [result] = await connection.query(
     `UPDATE todo_reminders SET scheduled_at = ?, status = 'pending', retry_count = 0, last_error = NULL
      WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,
@@ -789,7 +850,10 @@ export async function findOwnedTodoForAi(db, userId, todoId) {
   const [rows] = await db.query(
     `SELECT id, title, description, checklist, priority, status,
             due_at AS dueAt, completed_at AS completedAt,
-            recurrence_rule AS recurrence, update_time AS updatedAt
+            recurrence_rule AS recurrence, start_at AS startAt,
+            plan_version AS planVersion, series_id AS seriesId,
+            occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate,
+            instance_timezone AS instanceTimezone, update_time AS updatedAt
        FROM todo_items
       WHERE id = ? AND user_id = ? AND del_flag = 0
       LIMIT 1`,
@@ -809,8 +873,14 @@ export async function findOwnedTodoForAi(db, userId, todoId) {
     priority: Number(row.priority || 0),
     status: row.status === 'completed' ? 'completed' : 'pending',
     dueAt: row.dueAt || null,
+    startAt: row.startAt || null,
     completedAt: row.completedAt || null,
     recurrence: parseJsonObject(row.recurrence),
+    planVersion: Number(row.planVersion || 1),
+    seriesId: row.seriesId || null,
+    occurrenceNo: row.occurrenceNo === null ? null : Number(row.occurrenceNo),
+    occurrenceDate: row.occurrenceDate || null,
+    instanceTimezone: row.instanceTimezone || null,
     updatedAt: row.updatedAt || null,
   };
 }
@@ -882,9 +952,8 @@ async function loadTodoReminderMap(db, items, userId, view) {
  * 因此待办说明和提醒邮箱不会进入模型上下文。
  */
 export async function listTodoPage(db, userId, input = {}) {
-  const { status, sort, keyword, due, paginated, limit, offset, view, includeTotal } =
-    normalizeTodoListOptions(input);
-  const where = ['user_id = ?', 'del_flag = 0'];
+  const { status, sort, keyword, due, paginated, limit, offset, view, includeTotal } = normalizeTodoListOptions(input);
+  const where = ['user_id = ?', 'del_flag = 0', "COALESCE(instance_state, 'normal') = 'normal'"];
   const params = [userId];
   if (status !== 'all') {
     where.push('status = ?');
@@ -900,10 +969,17 @@ export async function listTodoPage(db, userId, input = {}) {
   }
   const fields =
     view === 'summary'
-      ? 'id, title, checklist, priority, status, due_at AS dueAt, completed_at AS completedAt'
+      ? `id, title, checklist, priority, status, start_at AS startAt, due_at AS dueAt,
+           completed_at AS completedAt, plan_version AS planVersion, series_id AS seriesId,
+           occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate, instance_timezone AS instanceTimezone`
       : `id, title, description, checklist, priority, sort_order AS sortOrder, status, due_at AS dueAt,
-            completed_at AS completedAt, series_id AS seriesId, recurrence_rule AS recurrence,
-            recurrence_instance_at AS recurrenceInstanceAt, create_time AS createdAt, update_time AS updatedAt`;
+            start_at AS startAt, completed_at AS completedAt, series_id AS seriesId,
+            recurrence_rule AS recurrence, recurrence_instance_at AS recurrenceInstanceAt,
+            plan_version AS planVersion, series_version AS seriesVersion,
+            occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate,
+            instance_timezone AS instanceTimezone, is_exception AS isException,
+            instance_state AS instanceState, generated_by_todo_id AS generatedByTodoId,
+            create_time AS createdAt, update_time AS updatedAt`;
   const pageSql = `SELECT ${fields}
      FROM todo_items WHERE ${where.join(' AND ')}
      ORDER BY ${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
@@ -914,7 +990,13 @@ export async function listTodoPage(db, userId, input = {}) {
   ]);
   const hasMore = paginated && rows.length > limit;
   const items = hasMore ? rows.slice(0, limit) : rows;
-  const reminders = await loadTodoReminderMap(db, items, userId, view);
+  const legacyItems = items.filter((item) => Number(item.planVersion || 1) !== 2);
+  const v2Items = items.filter((item) => Number(item.planVersion || 1) === 2);
+  const [reminders, v2Reminders, seriesMap] = await Promise.all([
+    loadTodoReminderMap(db, legacyItems, userId, view),
+    loadV2ReminderMap(db, userId, v2Items),
+    loadV2SeriesMap(db, userId, v2Items),
+  ]);
   // 一次批量取回当前页全部待办的参考资料,避免逐条查询造成 N+1
   const refMap =
     view === 'summary'
@@ -923,7 +1005,8 @@ export async function listTodoPage(db, userId, input = {}) {
   const mappedItems = items.map((item) => {
     if (view === 'summary') {
       const checklist = parseChecklist(item.checklist);
-      return {
+      const v2Reminder = v2Reminders.get(String(item.id));
+      const summary = {
         id: String(item.id),
         title: item.title || '未命名待办',
         priority: Number(item.priority || 0),
@@ -934,16 +1017,34 @@ export async function listTodoPage(db, userId, input = {}) {
           completed: checklist.filter((entry) => Boolean(entry?.done)).length,
           total: checklist.length,
         },
-        reminderChannels: reminders.get(item.id) || [],
+        reminderChannels: v2Reminder?.channels || reminders.get(item.id) || [],
       };
+      if (Number(item.planVersion || 1) === 2) {
+        Object.assign(summary, {
+          startAt: item.startAt || null,
+          planVersion: 2,
+          seriesId: item.seriesId || null,
+          occurrenceNo: item.occurrenceNo == null ? null : Number(item.occurrenceNo),
+          occurrenceDate: item.occurrenceDate || null,
+          instanceTimezone: item.instanceTimezone || null,
+          series: item.seriesId ? seriesMap.get(String(item.seriesId)) || null : null,
+        });
+      }
+      return summary;
     }
-    const reminder = reminders.get(item.id) || null;
+    const reminder =
+      Number(item.planVersion || 1) === 2 ? v2Reminders.get(String(item.id)) || null : reminders.get(item.id) || null;
     return {
       ...item,
+      planVersion: Number(item.planVersion || 1),
+      seriesVersion: item.seriesVersion == null ? null : Number(item.seriesVersion),
+      occurrenceNo: item.occurrenceNo == null ? null : Number(item.occurrenceNo),
+      isException: Boolean(item.isException),
       checklist: parseChecklist(item.checklist),
       recurrence: parseJsonObject(item.recurrence),
       reminder,
       reminderAt: reminder?.startAt || null,
+      series: item.seriesId ? seriesMap.get(String(item.seriesId)) || null : null,
       resourceRefs: refMap.get(String(item.id)) || [],
     };
   });
@@ -963,7 +1064,7 @@ export async function listTodos(db, userId, options = {}) {
 export async function queryTodoPendingCount(db, userId) {
   const [[row]] = await db.query(
     `SELECT COUNT(*) AS pendingTotal FROM todo_items
-     WHERE user_id = ? AND status = 'pending' AND del_flag = 0`,
+     WHERE user_id = ? AND status = 'pending' AND del_flag = 0 AND COALESCE(instance_state, 'normal') = 'normal'`,
     [userId],
   );
   return Number(row?.pendingTotal || 0);
@@ -988,7 +1089,7 @@ export async function queryTodoAttentionCounts(db, userId) {
        SUM(CASE WHEN ${DUE_SQL.overdue} THEN 1 ELSE 0 END) AS todoOverdueTotal,
        SUM(CASE WHEN ${DUE_SQL.today} THEN 1 ELSE 0 END) AS todoDueTodayTotal
      FROM todo_items
-     WHERE user_id = ? AND status = 'pending' AND del_flag = 0`,
+     WHERE user_id = ? AND status = 'pending' AND del_flag = 0 AND COALESCE(instance_state, 'normal') = 'normal'`,
     [userId],
   );
   // 无匹配行时 SUM 返回 NULL，统一归一成 0，不把「没有数据」写成 NaN

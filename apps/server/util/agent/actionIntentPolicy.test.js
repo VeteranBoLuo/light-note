@@ -11,11 +11,21 @@ describe('Agent 动作意图安全策略', () => {
     ['新建一个待办提醒我明天交材料', 'enabled', 'create_todo'],
     ['创建一个今天晚上 21 点的待办', 'enabled', 'create_todo'],
     ['add a task to review the draft', 'enabled', 'create_todo'],
+    ['创建一个每天 14 点、共 30 天的学习任务', 'enabled', 'create_todo_plan'],
+    ['帮我安排完成后 1 天再次生成的任务', 'enabled', 'create_todo_plan'],
+    ['set up a weekly recurring task', 'enabled', 'create_todo_plan'],
   ])('%s 解析为已启用能力', (message, resolution, toolName) => {
     expect(resolveAgentActionIntent({ message })).toMatchObject({
       kind: 'action',
       resolution,
       toolNames: expect.arrayContaining([toolName]),
+    });
+  });
+
+  it('复杂计划只路由到完整计划工具，不降级成普通待办或误判为完成任务', () => {
+    expect(resolveAgentActionIntent({ message: '帮我安排完成后 1 天再次生成的任务' })).toMatchObject({
+      resolution: 'enabled',
+      toolNames: ['create_todo_plan'],
     });
   });
 

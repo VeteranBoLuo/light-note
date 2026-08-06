@@ -355,3 +355,62 @@ LEFT JOIN information_schema.columns actual
  AND actual.table_name='operation_logs'
  AND actual.column_name='system'
 WHERE actual.column_name IS NULL;
+
+-- 24) 待办任务计划 × 每项提醒 v2 的事实表、关键列与幂等索引必须存在（期望 0 行）
+SELECT '[24] missing_todo_plan_v2_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'todo_series' t UNION ALL
+  SELECT 'todo_series_resource_refs' UNION ALL
+  SELECT 'todo_reminder_rules' UNION ALL
+  SELECT 'todo_reminder_jobs' UNION ALL
+  SELECT 'todo_plan_requests' UNION ALL
+  SELECT 'todo_plan_mutations' UNION ALL
+  SELECT 'todo_plan_runtime_metrics'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[24] missing_todo_plan_v2_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'todo_items' tab, 'start_at' col, 'todo_items.start_at' n UNION ALL
+  SELECT 'todo_items', 'plan_version', 'todo_items.plan_version' UNION ALL
+  SELECT 'todo_items', 'series_version', 'todo_items.series_version' UNION ALL
+  SELECT 'todo_items', 'occurrence_no', 'todo_items.occurrence_no' UNION ALL
+  SELECT 'todo_items', 'occurrence_date', 'todo_items.occurrence_date' UNION ALL
+  SELECT 'todo_items', 'instance_timezone', 'todo_items.instance_timezone' UNION ALL
+  SELECT 'todo_items', 'is_exception', 'todo_items.is_exception' UNION ALL
+  SELECT 'todo_items', 'instance_state', 'todo_items.instance_state' UNION ALL
+  SELECT 'todo_items', 'generated_by_todo_id', 'todo_items.generated_by_todo_id' UNION ALL
+  SELECT 'notification', 'source_type', 'notification.source_type' UNION ALL
+  SELECT 'notification', 'source_id', 'notification.source_id'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[24] missing_todo_plan_v2_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'todo_items' tn, 'uk_todo_series_occurrence' ix UNION ALL
+  SELECT 'todo_series', 'uk_todo_series_creation' UNION ALL
+  SELECT 'todo_series', 'idx_series_generation' UNION ALL
+  SELECT 'todo_series_resource_refs', 'uk_series_resource' UNION ALL
+  SELECT 'todo_reminder_rules', 'idx_rule_series' UNION ALL
+  SELECT 'todo_reminder_jobs', 'uk_todo_reminder_job_dedupe' UNION ALL
+  SELECT 'todo_reminder_jobs', 'idx_reminder_job_due' UNION ALL
+  SELECT 'todo_plan_requests', 'uk_todo_plan_request' UNION ALL
+  SELECT 'todo_plan_mutations', 'uk_todo_plan_mutation' UNION ALL
+  SELECT 'notification', 'uk_notification_source'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 规则必须恰好归属于一个实例或一个系列；MySQL 5.7 无 CHECK 约束，由写入服务保证，门禁查脏数据。
+SELECT '[24] invalid_todo_reminder_rule_owner' AS check_name, id AS detail
+FROM todo_reminder_rules
+WHERE (todo_id IS NULL AND series_id IS NULL) OR (todo_id IS NOT NULL AND series_id IS NOT NULL);

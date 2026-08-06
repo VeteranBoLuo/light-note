@@ -23,6 +23,7 @@ describe('Agent 工具注册表', () => {
         'create_image_note',
         'create_note',
         'create_todo',
+        'create_todo_plan',
         'restore_trash',
         'save_attachment_to_cloud',
         'set_todo_status',
@@ -46,10 +47,16 @@ describe('Agent 工具注册表', () => {
     }
   });
 
-  it('待办与待整理查询工具、单条待办状态写工具已注册', () => {
-    for (const name of ['query_todos', 'query_inbox']) {
+  it('待办计划预览、待办与待整理查询工具、单条待办状态写工具已注册', () => {
+    for (const name of ['preview_todo_plan', 'query_todos', 'query_inbox']) {
       expect(tools.some((tool) => tool.name === name && !tool.isWrite)).toBe(true);
     }
+    expect(tools.find((tool) => tool.name === 'create_todo_plan')).toMatchObject({
+      isWrite: true,
+      directAction: true,
+      riskLevel: 'medium',
+      confirmationPolicy: 'always',
+    });
     const statusTool = tools.find((tool) => tool.name === 'set_todo_status');
     expect(statusTool).toMatchObject({
       isWrite: true,

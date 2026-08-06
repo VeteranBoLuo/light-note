@@ -17,15 +17,38 @@ import {
   updateTodo as updateTodoItem,
 } from '../util/services/todoService.js';
 import { completeGrowthTask } from '../util/growthTaskCompletion.js';
+import {
+  createTodoPlan,
+  convertLegacyTodoPlan,
+  deleteTodoPlan,
+  previewTodoPlan,
+  runIdempotentTodoMutation,
+  runSeriesAction,
+  skipTodoInstance,
+  updateTodoPlan,
+} from '../util/services/todoSeriesService.js';
+import { getTodoPlanDiagnostics } from '../util/services/todoPlanDiagnosticsService.js';
+import { assertTodoPlanFeatureEnabled, getTodoPlanFeatureState } from '../util/todoPlanFeature.js';
 
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
+  const explicitStatus = Number(error?.status || 0);
+  const domainError = /^TODO_[A-Z0-9_]+$/u.test(String(error?.code || ''));
   const clientError =
     /不能为空|不能超过|无效|不存在|无权操作|提醒|截止时间|清单|邮箱|渠道|周期|间隔|游标|重复任务|请选择|顺序|发生变化/.test(
       message,
     );
-  if (!clientError) console.error('[todo] 请求失败:', message);
-  return res.send(resultData(null, clientError ? 400 : 500, clientError ? message : '待办服务暂时不可用，请稍后重试'));
+  const status = explicitStatus >= 400 && explicitStatus < 600 ? explicitStatus : clientError ? 400 : 500;
+  const publicError = status < 500 || domainError;
+  if (!publicError) console.error('[todo] 请求失败:', message);
+  const responseData = publicError
+    ? error?.data
+      ? { ...error.data, errorCode: error?.code || null }
+      : error?.code
+        ? { errorCode: error.code }
+        : null
+    : null;
+  return res.send(resultData(responseData, status, publicError ? message : '待办服务暂时不可用，请稍后重试'));
 }
 
 async function withTransaction(res, callback, { afterCommit } = {}) {
@@ -84,6 +107,170 @@ export async function createTodo(req, res) {
   return withTransaction(res, (connection) => createTodoItem(connection, req.user.id, req.body || {}), {
     afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
   });
+}
+
+export function todoPlanConfigV2(_req, res) {
+  return res.send(resultData(getTodoPlanFeatureState()));
+}
+
+/** v2 预览是唯一权威计划计算入口；不写库，可在用户确认过去日期策略前反复调用。 */
+export async function previewTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertTodoPlanFeatureEnabled('base');
+    return res.send(resultData(previewTodoPlan(req.body || {})));
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+}
+
+export async function createTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertTodoPlanFeatureEnabled('base');
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+  return withTransaction(res, (connection) => createTodoPlan(connection, req.user.id, req.body || {}), {
+    afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+  });
+}
+
+export async function previewLegacyConversionV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const legacyTodoId = String(req.body?.legacyTodoId || '').trim();
+  if (!legacyTodoId) return res.send(resultData(null, 400, '缺少要转换的旧版待办 ID'));
+  try {
+    assertTodoPlanFeatureEnabled('conversion');
+    const [rows] = await pool.query(
+      `SELECT id, recurrence_rule AS recurrenceRule
+         FROM todo_items
+        WHERE id = ? AND user_id = ? AND COALESCE(plan_version, 1) = 1 AND del_flag = 0 LIMIT 1`,
+      [legacyTodoId, req.user.id],
+    );
+    if (!rows[0]) return res.send(resultData(null, 404, '旧版待办不存在、已转换或无权操作'));
+    const [reminderRows] = await pool.query(
+      `SELECT COUNT(*) AS reminderCount FROM todo_reminders
+        WHERE todo_id = ? AND user_id = ?`,
+      [legacyTodoId, req.user.id],
+    );
+    return res.send(
+      resultData({
+        ...previewTodoPlan(req.body || {}),
+        legacyTodoId,
+        legacyHadRecurrence: Boolean(rows[0].recurrenceRule),
+        legacyReminderCount: Number(reminderRows[0]?.reminderCount || 0),
+      }),
+    );
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+}
+
+export async function convertLegacyTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertTodoPlanFeatureEnabled('conversion');
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+  return withTransaction(
+    res,
+    (connection) =>
+      runIdempotentTodoMutation(connection, req.user.id, req.body || {}, 'convert_legacy', () =>
+        convertLegacyTodoPlan(connection, req.user.id, req.body || {}),
+      ),
+    {
+      afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
+    },
+  );
+}
+
+export async function updatePreviewTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const todoId = String(req.body?.todoId || '').trim();
+  if (!todoId) return res.send(resultData(null, 400, '缺少待办 ID'));
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, series_id AS seriesId FROM todo_items
+        WHERE id = ? AND user_id = ? AND plan_version = 2 AND del_flag = 0 LIMIT 1`,
+      [todoId, req.user.id],
+    );
+    if (!rows[0]) return res.send(resultData(null, 404, '待办不存在或无权操作'));
+    const scope = String(req.body?.scope || 'current');
+    if (!['current', 'future', 'series'].includes(scope)) return res.send(resultData(null, 400, '修改范围无效'));
+    if (scope !== 'current' && !rows[0].seriesId) return res.send(resultData(null, 400, '该待办不属于任务系列'));
+    return res.send(resultData({ ...previewTodoPlan(req.body || {}), todoId, scope }));
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+}
+
+export async function updateTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) =>
+    runIdempotentTodoMutation(connection, req.user.id, req.body || {}, 'update', () =>
+      updateTodoPlan(connection, req.user.id, req.body || {}),
+    ),
+  );
+}
+
+async function seriesActionTodoV2(req, res, action) {
+  if (!ensureNotVisitor(req, res)) return;
+  const input = { ...(req.body || {}), action };
+  return withTransaction(res, (connection) =>
+    runIdempotentTodoMutation(connection, req.user.id, input, `series_${action}`, () =>
+      runSeriesAction(connection, req.user.id, input),
+    ),
+  );
+}
+
+export async function pauseTodoSeriesV2(req, res) {
+  return seriesActionTodoV2(req, res, 'pause');
+}
+
+export async function resumeTodoSeriesV2(req, res) {
+  return seriesActionTodoV2(req, res, 'resume');
+}
+
+export async function stopTodoSeriesV2(req, res) {
+  return seriesActionTodoV2(req, res, 'stop');
+}
+
+export async function skipTodoInstanceV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  const todoId = String(req.body?.todoId || '').trim();
+  if (!todoId) return res.send(resultData(null, 400, '缺少待办 ID'));
+  return withTransaction(res, (connection) =>
+    runIdempotentTodoMutation(connection, req.user.id, req.body || {}, 'instance_skip', () =>
+      skipTodoInstance(connection, req.user.id, todoId),
+    ),
+  );
+}
+
+export async function deleteTodoV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  return withTransaction(res, (connection) =>
+    runIdempotentTodoMutation(connection, req.user.id, req.body || {}, 'delete', () =>
+      deleteTodoPlan(connection, req.user.id, req.body || {}),
+    ),
+  );
+}
+
+export async function todoPlanDiagnosticsV2(req, res) {
+  try {
+    if (!req.user?.id || req.user?.role !== 'root' || req.adminContext) {
+      return res.send(resultData(null, 403, '仅 root 普通上下文可查看待办计划诊断'));
+    }
+    const [rows] = await pool.query('SELECT role, del_flag FROM user WHERE id = ? LIMIT 1', [req.user.id]);
+    if (!rows[0] || rows[0].role !== 'root' || Number(rows[0].del_flag || 0) !== 0) {
+      return res.send(resultData(null, 403, '仅 root 用户可查看'));
+    }
+    return res.send(resultData(await getTodoPlanDiagnostics(pool, req.body || {})));
+  } catch (error) {
+    console.error('[todo-plan-diagnostics] 查询失败 code=%s', error?.code || 'UNKNOWN');
+    return res.send(resultData(null, 500, '待办计划诊断暂时不可用'));
+  }
 }
 
 export async function updateTodo(req, res) {

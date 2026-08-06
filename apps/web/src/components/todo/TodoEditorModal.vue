@@ -15,6 +15,9 @@
         :initial-values="initialValues"
         :saving="saving"
         :reset-key="formKey"
+        :mobile-wizard="bookmark.isMobile"
+        :v2-enabled="todoPlanFeatures.enabled"
+        :legacy-conversion-enabled="todoPlanFeatures.conversionEnabled"
         sticky-actions
         @submit="save"
         @cancel="close"
@@ -29,7 +32,18 @@
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { createTodo, updateTodo, type TodoItem, type TodoPayload } from '@/api/todoApi';
+  import {
+    createTodo,
+    createTodoPlanV2,
+    convertLegacyTodoPlanV2,
+    getTodoPlanV2Config,
+    updateTodo,
+    updateTodoPlanV2,
+    type TodoEditorSubmission,
+    type TodoItem,
+    type TodoPayload,
+    type TodoPlanFeatureState,
+  } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { bookmarkStore } from '@/store';
 
@@ -46,25 +60,46 @@
   const bookmark = bookmarkStore();
   const saving = ref(false);
   const formKey = ref(0);
+  const todoPlanFeatures = ref<TodoPlanFeatureState>({
+    enabled: true,
+    schedulerEnabled: true,
+    aiEnabled: true,
+    conversionEnabled: true,
+  });
 
   const shellTitle = computed(() => (props.item ? t('inbox.editTodo') : t('inbox.createTodo')));
 
-  watch(visible, (open) => {
-    if (open) formKey.value += 1;
+  watch(visible, async (open) => {
+    if (!open) return;
+    try {
+      const response = await getTodoPlanV2Config();
+      if (response.status === 200 && response.data) todoPlanFeatures.value = response.data as TodoPlanFeatureState;
+    } catch {
+      // 配置查询失败时保留随版本发布的默认值；后端仍会做最终开关校验。
+    }
+    if (visible.value) formKey.value += 1;
   });
 
-  async function save(payload: TodoPayload) {
+  async function save(submission: TodoEditorSubmission) {
     // 打开表单只是浏览与填写，不应把游客挡在填写前；仅在真正提交写入时提示注册。
     if (saving.value || blockGuestWrite(props.item ? 'todo-update' : 'todo-create', t('inbox.guestPrompt'))) return;
     saving.value = true;
     try {
-      const res = props.item ? await updateTodo(props.item.id, payload) : await createTodo(payload);
-      if (res.status === 'preview') return;
+      const res =
+        submission.kind === 'v2'
+          ? submission.convertLegacyTodoId
+            ? await convertLegacyTodoPlanV2(submission.convertLegacyTodoId, submission.payload)
+            : props.item?.planVersion === 2
+              ? await updateTodoPlanV2(props.item.id, submission.scope, submission.payload)
+              : await createTodoPlanV2(submission.payload)
+          : props.item
+            ? await updateTodo(props.item.id, submission.payload)
+            : await createTodo(submission.payload);
       if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
       message.success(t('inbox.todoSaved'));
       emit('saved', {
-        id: String(props.item?.id || res.data?.id || ''),
-        title: payload.title,
+        id: String(res.data?.todoId || res.data?.id || props.item?.id || ''),
+        title: submission.payload.title,
       });
       visible.value = false;
     } catch (error: any) {

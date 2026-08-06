@@ -293,6 +293,46 @@ describe('todoService', () => {
     expect(connection.query.mock.calls.some(([sql]) => sql === 'INSERT INTO todo_reminders SET ?')).toBe(false);
   });
 
+  it('v2 完成状态按 series_id 进入系列服务并生成下一项', async () => {
+    const current = {
+      id: 'todo-v2-1',
+      title: '浇花',
+      description: null,
+      checklist: '[]',
+      priority: 1,
+      status: 'pending',
+      start_at: '2026-08-06 09:00:00',
+      due_at: '2026-08-06 10:00:00',
+      sort_order: 100,
+      plan_version: 2,
+      series_id: 'series-v2-1',
+      occurrence_no: 1,
+    };
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.includes('FROM todo_items') && sql.includes('LIMIT 1 FOR UPDATE')) return [[current]];
+      if (sql.includes('UPDATE todo_items') && sql.includes('completed_at')) return [{ affectedRows: 1 }];
+      if (sql.includes('UPDATE todo_reminder_jobs')) return [{ affectedRows: 2 }];
+      if (sql.includes('SELECT * FROM todo_series')) {
+        return [[{ id: 'series-v2-1', status: 'active', repeat_mode: 'after_completion', schedule_rule: '{}' }]];
+      }
+      if (sql.includes('FROM todo_items WHERE series_id')) {
+        return [[{ id: 'already-generated', delFlag: 0, generatedByTodoId: 'todo-v2-1' }]];
+      }
+      return [{ affectedRows: 1 }];
+    });
+
+    await expect(setTodoStatus(connection, 'user-3', current.id, 'completed')).resolves.toBe(1);
+
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM todo_series'), [
+      'series-v2-1',
+      'user-3',
+    ]);
+    expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('FROM todo_items WHERE series_id'), [
+      'series-v2-1',
+      2,
+    ]);
+  });
+
   it('撤销完成时同一事务恢复原任务，并删除本次自动生成的下一实例', async () => {
     const current = {
       id: 'todo-series-2',
@@ -337,11 +377,26 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[0][1]).toEqual([
       '2026-08-01 09:00:00',
       2,
+      2,
       1000,
       'todo-a',
       'user-4',
     ]);
-    expect(connection.query.mock.calls[1][1]).toEqual([null, 0, 2000, 'todo-b', 'user-4']);
+    expect(connection.query.mock.calls[1][1]).toEqual([null, 0, 0, 2000, 'todo-b', 'user-4']);
+    expect(connection.query.mock.calls[0][0]).toContain(
+      'due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)',
+    );
+  });
+
+  it('新版待办排序接口始终保留数据库截止时间，时间修改必须改走带范围的 v2 编辑', async () => {
+    connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    await expect(
+      reorderTodos(connection, 'user-4', [{ id: 'todo-v2', dueAt: '2026-08-02T09:00', priority: 1 }]),
+    ).resolves.toEqual({ affected: 1 });
+    expect(connection.query.mock.calls[0][0]).toContain(
+      'due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)',
+    );
   });
 
   it('稍后提醒在没有现有计划时创建站内提醒', async () => {
@@ -355,6 +410,28 @@ describe('todoService', () => {
     const insert = connection.query.mock.calls[2];
     expect(insert[0]).toBe('INSERT INTO todo_reminders SET ?');
     expect(insert[1][0]).toMatchObject({ todo_id: 'todo-1', user_id: 'user-5', channel: 'in_app' });
+  });
+
+  it('v2 稍后提醒只写 reminder jobs，不会回流旧调度表', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-v2',
+            plan_version: 2,
+            instance_timezone: 'Asia/Shanghai',
+            status: 'pending',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ id: 'job-1', channel: 'in_app', status: 'pending' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    const result = await snoozeTodo(connection, 'user-5', 'todo-v2', '2099-08-07T09:00');
+
+    expect(result).toMatchObject({ id: 'todo-v2', snoozedJobs: 1 });
+    expect(connection.query.mock.calls[2][0]).toContain('UPDATE todo_reminder_jobs');
+    expect(connection.query.mock.calls.every(([sql]) => !sql.includes('todo_reminders'))).toBe(true);
   });
 
   it('筛选全部时不追加完成状态条件', async () => {
@@ -378,7 +455,7 @@ describe('todoService', () => {
 
     expect(result.items).toEqual([]);
     const [sql, params] = connection.query.mock.calls[0];
-    expect(sql).toContain("status = ?");
+    expect(sql).toContain('status = ?');
     expect(sql).toContain('due_at IS NOT NULL AND due_at < NOW()');
     expect(params).toEqual(['user-4', 'pending', 4, 0]);
   });

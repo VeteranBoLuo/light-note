@@ -22,9 +22,17 @@
         <div class="todo-item__meta">
           <span>{{ t('inbox.todo') }}</span>
           <span class="todo-priority">{{ priorityLabel }}</span>
+          <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
           <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
           <span v-if="reminderLabel" class="todo-reminder-label">{{ reminderLabel }}</span>
-          <span v-if="item.recurrence" class="todo-recurrence-label">{{ recurrenceLabel }}</span>
+          <span v-if="seriesLabel || item.recurrence" class="todo-recurrence-label">{{
+            seriesLabel || recurrenceLabel
+          }}</span>
+          <span v-if="seriesProgressLabel" class="todo-series-progress">{{ seriesProgressLabel }}</span>
+          <span v-if="item.series?.status === 'paused'" class="todo-plan-state-label">{{
+            t('inbox.todoSeriesPausedBadge')
+          }}</span>
+          <span v-for="label in legacyLabels" :key="label" class="todo-legacy-label">{{ label }}</span>
         </div>
         <!-- 标题始终独立于勾选框:完成/恢复只能点方框,点名字不触发状态切换 -->
         <div v-if="!selectable" class="todo-item__main-line">
@@ -113,6 +121,34 @@
             </template>
           </BPopover>
           <BButton size="small" :disabled="disabled" @click="$emit('edit')">{{ t('inbox.editTodo') }}</BButton>
+          <BPopover
+            v-if="item.seriesId"
+            trigger="click"
+            placement="bottom-right"
+            :open="openMenu === 'series'"
+            @update:open="(visible: boolean) => setMenu('series', visible)"
+          >
+            <BButton size="small" :disabled="disabled">{{ t('inbox.todoSeriesActions') }}</BButton>
+            <template #content>
+              <div class="todo-mobile-action-menu">
+                <BButton @click="runMenuAction(() => emit('series-action', 'skip'))">
+                  {{ t('inbox.todoSeriesSkipInstance') }}
+                </BButton>
+                <BButton
+                  v-if="item.series?.status === 'paused'"
+                  @click="runMenuAction(() => emit('series-action', 'resume'))"
+                >
+                  {{ t('inbox.todoSeriesResume') }}
+                </BButton>
+                <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
+                  {{ t('inbox.todoSeriesPause') }}
+                </BButton>
+                <BButton type="danger" @click="runMenuAction(() => emit('series-action', 'stop'))">
+                  {{ t('inbox.todoSeriesStop') }}
+                </BButton>
+              </div>
+            </template>
+          </BPopover>
           <BButton
             size="small"
             :disabled="disabled"
@@ -169,6 +205,23 @@
                 <BButton :disabled="disabled" @click="runMenuAction(() => emit('edit'))">
                   {{ t('inbox.editTodo') }}
                 </BButton>
+                <template v-if="item.seriesId">
+                  <BButton @click="runMenuAction(() => emit('series-action', 'skip'))">
+                    {{ t('inbox.todoSeriesSkipInstance') }}
+                  </BButton>
+                  <BButton
+                    v-if="item.series?.status === 'paused'"
+                    @click="runMenuAction(() => emit('series-action', 'resume'))"
+                  >
+                    {{ t('inbox.todoSeriesResume') }}
+                  </BButton>
+                  <BButton v-else @click="runMenuAction(() => emit('series-action', 'pause'))">
+                    {{ t('inbox.todoSeriesPause') }}
+                  </BButton>
+                  <BButton type="danger" @click="runMenuAction(() => emit('series-action', 'stop'))">
+                    {{ t('inbox.todoSeriesStop') }}
+                  </BButton>
+                </template>
                 <BButton
                   :disabled="disabled"
                   v-click-log="OPERATION_LOG_MAP.inbox.openCalendarExport"
@@ -230,6 +283,7 @@
     'update-priority': [priority: TodoPriority];
     'swipe-start': [];
     'update:swipe-open': [open: boolean];
+    'series-action': [action: 'skip' | 'pause' | 'resume' | 'stop'];
   }>();
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -242,9 +296,9 @@
    * 组件仍然存在，而 BPopover 的浮层 teleport 到 body、不受父元素隐藏影响，
    * 共用 key 会让两个浮层同时打开，隐藏那套因为锚点不可见而飘到左上角。
    */
-  const openMenu = ref<'snooze' | 'desktopSnooze' | 'more' | ''>('');
+  const openMenu = ref<'snooze' | 'desktopSnooze' | 'series' | 'more' | ''>('');
 
-  function setMenu(key: 'snooze' | 'desktopSnooze' | 'more', visible: boolean) {
+  function setMenu(key: 'snooze' | 'desktopSnooze' | 'series' | 'more', visible: boolean) {
     openMenu.value = visible ? key : '';
   }
 
@@ -274,20 +328,68 @@
     if (!value) return '';
     return overdue.value ? t('inbox.todoOverdue', { time: value }) : t('inbox.todoDue', { time: value });
   });
+  const startLabel = computed(() => {
+    if (!props.item.startAt) return '';
+    const value = formatTodoDateTime(props.item.startAt, locale.value, {
+      relative: true,
+      includeYear: false,
+      relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+    });
+    return value ? t('inbox.todoStarts', { time: value }) : '';
+  });
   const reminderLabel = computed(() => {
     const reminder = props.item.reminder;
     if (!reminder) return '';
     const channelLabels = reminder.channels.map((channel) =>
       channel === 'email' ? t('inbox.todoReminderEmail') : t('inbox.todoReminderInApp'),
     );
-    return reminder.mode === 'repeat'
-      ? t('inbox.todoReminderRepeatSummary', { channels: channelLabels.join(' + ') })
-      : t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });
+    if (reminder.mode === 'repeat') {
+      return t('inbox.todoReminderRepeatSummary', { channels: channelLabels.join(' + ') });
+    }
+    if (reminder.mode === 'nudge') {
+      return t('inbox.todoNudgeSummary', {
+        channels: channelLabels.join(' + '),
+        count: reminder.remainingCount || reminder.nudge?.maxCount || 0,
+      });
+    }
+    return t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });
+  });
+  const seriesLabel = computed(() => {
+    const series = props.item.series;
+    if (!series) return '';
+    if (series.repeatMode === 'after_completion') {
+      const interval = series.plan?.interval || 1;
+      const unit = series.plan?.unit || 'day';
+      return t('inbox.todoSeriesAfterCompletionSummary', {
+        interval,
+        unit: t(`inbox.todoPlanUnit.${unit}`),
+      });
+    }
+    const frequency = series.plan?.frequency || 'daily';
+    return t(`inbox.todoRecurrenceSummary.${frequency}`, { interval: series.plan?.interval || 1 });
+  });
+  const seriesProgressLabel = computed(() => {
+    const progress = props.item.series?.progress;
+    if (!progress) return '';
+    return progress.total
+      ? t('inbox.todoSeriesProgress', {
+          current: props.item.occurrenceNo || 0,
+          total: progress.total,
+          skipped: progress.skipped,
+        })
+      : t('inbox.todoSeriesProgressRolling', { current: props.item.occurrenceNo || progress.generated });
   });
   const recurrenceLabel = computed(() => {
     const recurrence = props.item.recurrence;
     if (!recurrence) return '';
     return t(`inbox.todoRecurrenceSummary.${recurrence.frequency}`, { interval: recurrence.interval });
+  });
+  const legacyLabels = computed(() => {
+    if (Number(props.item.planVersion || 1) === 2) return [];
+    const labels: string[] = [];
+    if (props.item.recurrence) labels.push(t('inbox.todoLegacyCompletionBadge'));
+    if (props.item.reminder?.mode === 'repeat') labels.push(t('inbox.todoLegacyReminderBadge'));
+    return labels;
   });
   const priorityOptions = computed(() => [0, 1, 2].map((value) => ({ value, label: t(`inbox.todoPriority${value}`) })));
   const MAX_VISIBLE_REFS = 3;
@@ -351,6 +453,24 @@
   }
   .todo-recurrence-label {
     color: var(--success-color, #2e8b57);
+  }
+  .todo-series-progress,
+  .todo-start-label {
+    color: var(--desc-color);
+  }
+  .todo-plan-state-label,
+  .todo-legacy-label {
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-weight: 600;
+  }
+  .todo-plan-state-label {
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
+  }
+  .todo-legacy-label {
+    border: 1px solid #b45309;
+    color: #92400e;
   }
   .todo-item::before {
     position: absolute;

@@ -4,6 +4,8 @@ import queryNotes from './query_notes.js';
 import queryTodos from './query_todos.js';
 import setTodoStatus from './set_todo_status.js';
 import createTodo from './create_todo.js';
+import previewTodoPlan from './preview_todo_plan.js';
+import createTodoPlan from './create_todo_plan.js';
 import readNote from './read_note.js';
 import analyzeResourceImages from './analyze_resource_images.js';
 import queryFiles from './query_files.js';
@@ -47,6 +49,9 @@ import getPendingFeedback from './get_pending_feedback.js';
 import getResourceCreationRanking from './get_resource_creation_ranking.js';
 import queryPlatformResources from './query_platform_resources.js';
 import getCheckinRanking from './get_checkin_ranking.js';
+import { getTodoPlanFeatureState } from '../../todoPlanFeature.js';
+
+const todoPlanTools = getTodoPlanFeatureState().aiEnabled ? [previewTodoPlan, createTodoPlan] : [];
 
 export default [
   searchKnowledgeBase,
@@ -55,6 +60,7 @@ export default [
   queryTodos,
   setTodoStatus,
   createTodo,
+  ...todoPlanTools,
   readNote,
   analyzeResourceImages,
   queryFiles,

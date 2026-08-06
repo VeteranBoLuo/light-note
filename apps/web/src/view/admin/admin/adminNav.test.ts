@@ -15,6 +15,7 @@ const MOBILE_ROUTES = new Set([
   '/overview',
   '/apiLog',
   '/operationLog',
+  '/todoPlanDiagnostics',
   '/userMg',
   '/userOpinion',
   '/imageMg',
@@ -48,9 +49,9 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 17 个后台模块，一个都不漏', () => {
+  it('覆盖全部 18 个后台模块，一个都不漏', () => {
     const ids = allItems(nav()).map((item) => item.id);
-    // 14 个 /admin 子路由
+    // 15 个 /admin 子路由
     expect(ids).toEqual(
       expect.arrayContaining([
         'overview',
@@ -62,6 +63,7 @@ describe('后台导航菜单', () => {
         'conversion',
         'pointsOps',
         'operationLog',
+        'todoPlanDiagnostics',
         'apiLog',
         'logCleanup',
         'logExclude',
@@ -71,8 +73,8 @@ describe('后台导航菜单', () => {
     );
     // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
     expect(ids).toEqual(expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter']));
-    expect(ids).toHaveLength(17);
-    expect(new Set(ids).size).toBe(17);
+    expect(ids).toHaveLength(18);
+    expect(new Set(ids).size).toBe(18);
   });
 
   it('跨外壳的入口给绝对路径并标记 external，后台子路由拼 /admin/{id}', () => {
@@ -182,6 +184,7 @@ describe('resolveActiveNavId', () => {
       '/admin/overview',
       '/admin/simpleSql',
       '/admin/aiEvaluation',
+      '/admin/todoPlanDiagnostics',
       '/securityCenter/events',
       '/notificationCenter',
       '/knowledgeBase',
@@ -204,7 +207,11 @@ describe('手机后台菜单', () => {
   });
 
   it('凡是手机上有路由的模块都进菜单，不漏', () => {
-    const urls = new Set(mobile().flat().map((item) => item.url));
+    const urls = new Set(
+      mobile()
+        .flat()
+        .map((item) => item.url),
+    );
     for (const route of MOBILE_ROUTES) {
       expect(urls.has(route), `手机上有 ${route} 却没有菜单入口`).toBe(true);
     }
@@ -218,7 +225,9 @@ describe('手机后台菜单', () => {
   });
 
   it('桌面独有的工作台不进手机菜单（手机上没有这些路由）', () => {
-    const ids = mobile().flat().map((item) => item.id);
+    const ids = mobile()
+      .flat()
+      .map((item) => item.id);
     expect(ids).not.toContain('simpleSql');
     expect(ids).not.toContain('knowledgeBase');
     expect(ids).not.toContain('pointsOps');
