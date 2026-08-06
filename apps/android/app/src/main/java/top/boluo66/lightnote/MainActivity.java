@@ -601,6 +601,8 @@ public final class MainActivity extends Activity {
 
     private void configureWebView() {
         WebViewSupport.configure(webView, true);
+        // 主壳装的是轻笺自己的界面,不该像网页那样被整页缩放(内嵌浏览器不加这条)
+        WebViewSupport.disablePageZoom(webView);
         configureTrustedWebMessages();
         webView.setWebViewClient(new WebViewClientCompat() {
             @Override

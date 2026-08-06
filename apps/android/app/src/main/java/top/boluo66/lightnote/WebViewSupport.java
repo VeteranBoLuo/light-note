@@ -187,6 +187,8 @@ final class WebViewSupport {
                 + " LightNoteSystemTheme/" + systemThemeName(webView.getContext())
         );
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
+        // setBuiltInZoomControls(false) 只关掉缩放控件那套内置机制,useWideViewPort 打开时
+        // 双指缩放实测仍然生效 —— 真正的总开关是 setSupportZoom,见 disablePageZoom。
         webView.setBackgroundColor(Color.TRANSPARENT);
         webView.setNestedScrollingEnabled(true);
         webView.setOverScrollMode(WebView.OVER_SCROLL_IF_CONTENT_SCROLLS);
@@ -223,6 +225,20 @@ final class WebViewSupport {
                 + "');",
             null
         );
+    }
+
+    /**
+     * 关掉整页缩放。只给轻笺自己的主壳用 —— 应用界面被双指放大后固定定位的顶栏/底栏会错位,
+     * 想看大字走「设置 - 界面缩放」。内嵌浏览器(InAppBrowserActivity)和站外弹窗刻意不调:
+     * 那里装的是别人的网页,缩放是基本的阅读能力。
+     * 页面侧的 viewport(user-scalable=no)是同一件事的第一道防线,这里是 WebView 层的兜底 ——
+     * 系统「强制启用缩放」之类的辅助设置能盖掉 viewport,但盖不掉 setSupportZoom(false)。
+     */
+    static void disablePageZoom(WebView webView) {
+        WebSettings settings = webView.getSettings();
+        settings.setSupportZoom(false);
+        settings.setBuiltInZoomControls(false);
+        settings.setDisplayZoomControls(false);
     }
 
     private static void enableSafeBrowsing(WebView webView, WebSettings settings) {

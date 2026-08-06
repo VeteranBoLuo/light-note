@@ -12,7 +12,16 @@
     <meta name="color-scheme" content="only light" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="apple-mobile-web-app-title" content="轻笺" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      禁掉整页的双指/双击缩放:轻笺自己就是应用界面(尤其 Android App 里的 WebView),
+      把整页放大只会把固定定位的顶栏、底部导航和安全区留白一起拉花,回不到原位。
+      需要看得更大时走「设置 - 界面缩放」(改 <html> 的 CSS zoom,布局按新尺寸重排)。
+      不影响图片预览等内部缩放:图片走 viewer.js、图谱走 G6 zoom-canvas、PDF 有自己的缩放按钮,
+      三者都是自己算 transform,和浏览器的视觉视口缩放是两回事。
+      PC 浏览器不受这条约束(Ctrl+滚轮属于浏览器级页面缩放,viewport 管不着);
+      iOS 10 起 Safari 会忽略 user-scalable,那边仍可缩放,属平台限制。
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
     <!-- ===== 核心 SEO 元标签 ===== -->
     <title>轻笺 - 轻量级知识管理工具</title>
