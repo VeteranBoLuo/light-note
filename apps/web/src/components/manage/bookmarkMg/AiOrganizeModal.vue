@@ -360,6 +360,10 @@
   .aio-item {
     width: 100%;
     min-width: 0;
+    // 必须禁止收缩：父级是 column flex + max-height，默认 flex-shrink:1 会在建议条数多到
+    // 超过 46vh 时把每一项等比压扁，再被下面的 overflow:hidden 裁掉——现象是标签行整行消失、
+    // 标题也被切掉半截。条数少时不触发，所以很容易被当成数据没返回标签。
+    flex-shrink: 0;
     border: 1px solid var(--card-border-color);
     border-radius: 10px;
     padding: 10px 12px;
