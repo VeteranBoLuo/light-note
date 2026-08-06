@@ -31,6 +31,7 @@ router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
 router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
+router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);

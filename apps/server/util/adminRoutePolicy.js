@@ -89,6 +89,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
   ['POST', '/note/addNote'],
+  ['POST', '/note/moveNoteNode'],
   ['POST', '/note/delNote'],
   ['POST', '/note/updateNoteSort'],
   ['POST', '/note/toggleNoteTop'],

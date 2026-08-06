@@ -14,6 +14,10 @@ function normalizeParentId(value) {
   return normalizeId(value);
 }
 
+function normalizeOptionalParentId(value) {
+  return value === undefined ? undefined : normalizeParentId(value);
+}
+
 function numberOrZero(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -32,6 +36,10 @@ function compareNodes(left, right) {
   const rightTime = new Date(right.updateTime || 0).getTime() || 0;
   if (leftTime !== rightTime) return rightTime - leftTime;
   return String(right.id).localeCompare(String(left.id));
+}
+
+function samePinnedGroup(left, right) {
+  return Boolean(left?.isTop) === Boolean(right?.isTop);
 }
 
 export class NoteTreeError extends Error {
@@ -291,4 +299,156 @@ export async function resolveOwnedNoteBreadcrumb({ userId, noteId, db = pool } =
 export async function resolveOwnedNoteDescendantIds({ userId, rootNoteId, includeRoot = false, db = pool } = {}) {
   const snapshot = await loadOwnedNoteTree(userId, { db });
   return resolveNoteDescendantIdsFromSnapshot(snapshot, rootNoteId, { includeRoot });
+}
+
+/**
+ * 在创建事务内解析新页面的权威落点。
+ *
+ * parentId 只作为候选值使用：父页面归属、删除状态和最大深度均通过当前用户的
+ * 加锁树快照校验；新页面固定追加到目标父层的普通（非置顶）兄弟组末尾。
+ */
+export async function prepareOwnedNotePlacement(connection, { userId, parentId = null } = {}) {
+  const snapshot = await loadOwnedNoteTree(userId, { db: queryDb(connection), lock: true });
+  const placement = assertValidNoteParentFromSnapshot(snapshot, { parentId });
+  const siblings = getNoteTreeChildren(snapshot, placement.parentId).filter((node) => !node.isTop);
+  const nextSort = siblings.reduce((maximum, node) => Math.max(maximum, numberOrZero(node.sort)), -1) + 1;
+  return {
+    parentId: placement.parentId,
+    sort: nextSort,
+    depth: placement.resultingMaxDepth,
+  };
+}
+
+function resolveAnchorIndex(nodes, anchorId) {
+  if (!anchorId) return -1;
+  return nodes.findIndex((node) => node.id === anchorId);
+}
+
+function assertValidMoveAnchors(nodes, { movedId, previousId, nextId }) {
+  if (previousId === movedId || nextId === movedId || (previousId && previousId === nextId)) {
+    throw new NoteTreeError('INVALID_SORT_ANCHOR', '排序锚点已失效', 409);
+  }
+
+  const previousIndex = resolveAnchorIndex(nodes, previousId);
+  const nextIndex = resolveAnchorIndex(nodes, nextId);
+  if ((previousId && previousIndex < 0) || (nextId && nextIndex < 0)) {
+    throw new NoteTreeError('INVALID_SORT_ANCHOR', '排序锚点已失效', 409);
+  }
+  if (previousId && nextId && nextIndex !== previousIndex + 1) {
+    throw new NoteTreeError('INVALID_SORT_ANCHOR', '排序锚点已失效', 409);
+  }
+
+  if (previousId) return previousIndex + 1;
+  if (nextId) return nextIndex;
+  return nodes.length;
+}
+
+async function updateSiblingSort(connection, { userId, parentId, rows, skipId = null }) {
+  let updatedCount = 0;
+  for (const [index, row] of rows.entries()) {
+    if (row.id === skipId || numberOrZero(row.sort) === index) continue;
+    const [result] = await connection.query(
+      `UPDATE note
+          SET sort = ?, update_time = update_time
+        WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`,
+      [index, row.id, userId, parentId],
+    );
+    updatedCount += Number(result?.affectedRows || 0);
+  }
+  return updatedCount;
+}
+
+/**
+ * 在调用方已开启的事务内移动页面节点或调整同级顺序。
+ *
+ * - 仅使用当前 owner 的完整加锁快照；
+ * - parentId === undefined 表示旧排序调用保持当前父页面，null 才表示移动到根；
+ * - 排序锚点必须属于目标父层且与被移动页面处于同一置顶分组；
+ * - 结构变化不会写正文历史，也显式保留 update_time。
+ */
+export async function moveOwnedNoteNode(
+  connection,
+  { userId, id, parentId = undefined, previousId = null, nextId = null } = {},
+) {
+  const db = queryDb(connection);
+  const normalizedUserId = normalizeId(userId);
+  const movedId = normalizeId(id);
+  if (!normalizedUserId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  if (!movedId) throw new NoteTreeError('NOTE_TREE_NODE_ID_REQUIRED', '缺少笔记 ID', 400);
+
+  const snapshot = await loadOwnedNoteTree(normalizedUserId, { db, lock: true });
+  const moved = snapshot.nodesById.get(movedId);
+  if (!moved) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+
+  const requestedParentId = normalizeOptionalParentId(parentId);
+  const targetParentId = requestedParentId === undefined ? moved.effectiveParentId : requestedParentId;
+  assertValidNoteParentFromSnapshot(snapshot, { noteId: movedId, parentId: targetParentId });
+
+  const normalizedPreviousId = normalizeId(previousId);
+  const normalizedNextId = normalizeId(nextId);
+  const targetGroup = getNoteTreeChildren(snapshot, targetParentId).filter(
+    (node) => node.id !== movedId && samePinnedGroup(node, moved),
+  );
+  const insertIndex = assertValidMoveAnchors(targetGroup, {
+    movedId,
+    previousId: normalizedPreviousId,
+    nextId: normalizedNextId,
+  });
+  targetGroup.splice(insertIndex, 0, moved);
+
+  const previousParentId = moved.effectiveParentId;
+  const parentChanged = previousParentId !== targetParentId;
+  const previousGroup = getNoteTreeChildren(snapshot, previousParentId).filter(
+    (node) => node.id !== movedId && samePinnedGroup(node, moved),
+  );
+  const originalGroupIds = getNoteTreeChildren(snapshot, previousParentId)
+    .filter((node) => samePinnedGroup(node, moved))
+    .map((node) => node.id);
+  const targetGroupIds = targetGroup.map((node) => node.id);
+  const orderChanged = parentChanged || originalGroupIds.some((nodeId, index) => nodeId !== targetGroupIds[index]);
+
+  if (!orderChanged) {
+    return {
+      id: movedId,
+      parentId: targetParentId,
+      previousParentId,
+      moved: false,
+      updatedCount: 0,
+    };
+  }
+
+  let updatedCount = 0;
+  if (parentChanged) {
+    updatedCount += await updateSiblingSort(db, {
+      userId: normalizedUserId,
+      parentId: previousParentId,
+      rows: previousGroup,
+    });
+  }
+
+  const movedSort = targetGroup.findIndex((node) => node.id === movedId);
+  const [moveResult] = await db.query(
+    `UPDATE note
+        SET parent_id = ?, sort = ?, update_time = update_time
+      WHERE id = ? AND create_by = ? AND del_flag = 0`,
+    [targetParentId, movedSort, movedId, normalizedUserId],
+  );
+  if (Number(moveResult?.affectedRows || 0) !== 1) {
+    throw new NoteTreeError('NOTE_TREE_MOVE_CONFLICT', '页面状态已变化，请刷新后重试', 409);
+  }
+  updatedCount += 1;
+  updatedCount += await updateSiblingSort(db, {
+    userId: normalizedUserId,
+    parentId: targetParentId,
+    rows: targetGroup,
+    skipId: movedId,
+  });
+
+  return {
+    id: movedId,
+    parentId: targetParentId,
+    previousParentId,
+    moved: true,
+    updatedCount,
+  };
 }

@@ -22,11 +22,12 @@ import { promises as fsP } from 'node:fs';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
-import { AnchoredSortError, moveOwnedResourceByAnchors } from '../util/anchoredSort.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
 import {
+  moveOwnedNoteNode,
   NoteTreeError,
   loadOwnedNoteTree,
+  prepareOwnedNotePlacement,
   queryOwnedNoteTree,
   resolveNoteBreadcrumbFromSnapshot,
   resolveNoteDescendantIdsFromSnapshot,
@@ -60,8 +61,14 @@ const NOTE_TREE_ERROR_COPY = Object.freeze({
   NOTE_TREE_USER_REQUIRED: ['缺少用户身份', 'User identity is required'],
   NOTE_TREE_NODE_NOT_FOUND: ['笔记不存在', 'Note not found'],
   NOTE_TREE_PARENT_NOT_FOUND: ['目录不存在', 'Directory not found'],
+  NOTE_TREE_PARENT_INVALID: ['目标目录结构异常，暂时不能移动到这里', 'The target directory structure is invalid'],
   NOTE_TREE_INVALID_DEPTH: ['目录展开层级无效', 'Invalid directory depth'],
   NOTE_TREE_CYCLE: ['笔记目录存在循环关系', 'The note tree contains a cycle'],
+  NOTE_TREE_DEPTH_EXCEEDED: ['已超过目录最大层级', 'The maximum directory depth would be exceeded'],
+  NOTE_TREE_NODE_ID_REQUIRED: ['缺少笔记 ID', 'Note ID is required'],
+  NOTE_TREE_MOVE_CONFLICT: ['页面状态已变化，请刷新后重试', 'The page changed; refresh and try again'],
+  INVALID_SORT_ANCHOR: ['排序位置已变化，请刷新后重试', 'The sort position changed; refresh and try again'],
+  NOTE_HAS_CHILDREN: ['页面包含子页面，请使用“移入回收站”删除整棵子树', 'This page has subpages; delete the subtree instead'],
 });
 
 const sendNoteTreeError = (req, res, scene, error) => {
@@ -123,6 +130,9 @@ export const uploadNoteImage = async (req, res) => {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const placement = await prepareOwnedNotePlacement(connection, { userId, parentId: null });
+      noteData.parent_id = placement.parentId;
+      noteData.sort = placement.sort;
       await connection.query('INSERT INTO note SET ?', [noteData]);
       await connection.query('INSERT INTO note_images SET ?', [insertData({ noteId: noteData.id, url: fileUrl })]);
       await connection.commit();
@@ -144,6 +154,7 @@ export const uploadNoteImage = async (req, res) => {
   } catch (e) {
     // 登记失败(归属查询/写库/事务回滚)统一丢弃已落盘文件,不留孤儿
     discardUploadedFile(req.file);
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'register-note-image', e);
     return sendNoteServerError(res, 'register-note-image', e);
   }
 };
@@ -162,8 +173,11 @@ export const addNote = async (req, res) => {
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
     });
-    res.send(resultData({ id: result.id, addedToInbox: result.addedToInbox }));
+    return res.send(
+      resultData({ id: result.id, parentId: result.parentId ?? null, addedToInbox: result.addedToInbox }),
+    );
   } catch (e) {
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'add-note', e);
     return sendNoteServerError(res, 'add-note', e);
   }
 };
@@ -194,6 +208,39 @@ export const queryNoteBreadcrumb = async (req, res) => {
     return res.send(resultData(result));
   } catch (error) {
     return sendNoteTreeError(req, res, 'query-note-breadcrumb', error);
+  }
+};
+
+export const moveNoteNode = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  let connection;
+  let transactionStarted = false;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const result = await moveOwnedNoteNode(connection, {
+      userId: req.user.id,
+      id: req.body?.id,
+      parentId: Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') ? req.body.parentId : undefined,
+      previousId: req.body?.previousId ?? null,
+      nextId: req.body?.nextId ?? null,
+    });
+    await connection.commit();
+    await invalidatePersonalKnowledgeCache(req.user.id);
+    return res.send(resultData(result));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始业务错误；移动操作可由客户端刷新权威树后安全重试。
+      }
+    }
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'move-note-node', error);
+    return sendNoteServerError(res, 'move-note-node', error);
+  } finally {
+    connection?.release();
   }
 };
 
@@ -541,8 +588,14 @@ export const resourceBacklinks = async (req, res) => {
 export const delNote = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const ids = req.body.ids;
-    if (!Array.isArray(ids) || ids.length === 0) {
+    const ids = [
+      ...new Set(
+        (Array.isArray(req.body?.ids) ? req.body.ids : [])
+          .map((id) => String(id ?? '').trim())
+          .filter(Boolean),
+      ),
+    ];
+    if (ids.length === 0 || ids.length > 100) {
       return res.send(resultData(null, 400, '无效的请求参数'));
     }
 
@@ -551,8 +604,21 @@ export const delNote = async (req, res) => {
     const connection = await pool.getConnection();
     try {
       await connection.beginTransaction();
+      const [childRows] = await connection.query(
+        `SELECT id, parent_id
+           FROM note
+          WHERE create_by = ? AND del_flag = 0 AND parent_id IN (${placeholders})
+          LIMIT 1
+          FOR UPDATE`,
+        [userId, ...ids],
+      );
+      if (childRows.length) {
+        throw new NoteTreeError('NOTE_HAS_CHILDREN', '页面包含子页面', 409);
+      }
       const [updateResult] = await connection.query(
-        `UPDATE note SET del_flag = 1, deleted_at = NOW() WHERE id IN (${placeholders}) AND create_by = ?`,
+        `UPDATE note
+            SET del_flag = 1, deleted_at = NOW()
+          WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0`,
         [...ids, userId],
       );
       await removeInboxRelations(connection, {
@@ -561,7 +627,7 @@ export const delNote = async (req, res) => {
       });
       await connection.commit();
       await invalidatePersonalKnowledgeCache(userId);
-      res.send(resultData(updateResult));
+      return res.send(resultData(updateResult));
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -570,6 +636,7 @@ export const delNote = async (req, res) => {
     }
   } catch (e) {
     console.warn('[note-library] batch delete rejected code=%s', stableAgentErrorCode(e));
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'delete-note', e);
     return res.send(resultData(null, 400, '客户端请求异常'));
   }
 };
@@ -577,39 +644,84 @@ export const delNote = async (req, res) => {
 export const updateNoteSort = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const userId = req.user.id;
-  const connection = await pool.getConnection();
+  let connection;
   try {
+    connection = await pool.getConnection();
     await connection.beginTransaction(); // 开始事务
     if (req.body?.move) {
-      const result = await moveOwnedResourceByAnchors(connection, {
+      const result = await moveOwnedNoteNode(connection, {
         ...req.body.move,
-        resourceType: 'note',
         userId,
       });
       await connection.commit();
       return res.send(resultData(result, 200, 'Sort updated successfully'));
     }
 
-    const { notes } = req.body;
-    if (!Array.isArray(notes)) {
+    const notes = Array.isArray(req.body?.notes) ? req.body.notes : [];
+    const normalizedNotes = notes.map((note) => ({
+      id: String(note?.id ?? '').trim(),
+      sort: Number(note?.sort),
+    }));
+    if (
+      normalizedNotes.length === 0 ||
+      normalizedNotes.length > 500 ||
+      normalizedNotes.some((note) => !note.id || !Number.isInteger(note.sort) || note.sort < 0)
+    ) {
       await connection.rollback();
       return res.send(resultData(null, 400, '排序参数无效'));
     }
-    for (const note of notes) {
+    const uniqueIds = [...new Set(normalizedNotes.map((note) => note.id))];
+    if (uniqueIds.length !== normalizedNotes.length) {
+      await connection.rollback();
+      return res.send(resultData(null, 400, '排序参数无效'));
+    }
+    const placeholders = uniqueIds.map(() => '?').join(',');
+    const [ownedRows] = await connection.query(
+      `SELECT id, parent_id
+         FROM note
+        WHERE id IN (${placeholders}) AND create_by = ? AND del_flag = 0
+        FOR UPDATE`,
+      [...uniqueIds, userId],
+    );
+    if (ownedRows.length !== uniqueIds.length) {
+      throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    }
+    const authoritativeParentId =
+      ownedRows[0]?.parent_id == null ? null : String(ownedRows[0].parent_id).trim() || null;
+    if (
+      ownedRows.some(
+        (row) => (row.parent_id == null ? null : String(row.parent_id).trim() || null) !== authoritativeParentId,
+      )
+    ) {
+      throw new NoteTreeError('INVALID_SORT_ANCHOR', '只能调整同一目录中的页面顺序', 409);
+    }
+    if (
+      Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') &&
+      (String(req.body.parentId ?? '').trim() || null) !== authoritativeParentId
+    ) {
+      throw new NoteTreeError('INVALID_SORT_ANCHOR', '目录状态已变化，请刷新后重试', 409);
+    }
+    for (const note of normalizedNotes) {
       const { id, sort } = note;
-      const sql = 'UPDATE note SET sort = ?, update_time = update_time WHERE id = ? AND create_by = ?';
-      await connection.query(sql, [sort, id, userId]);
+      const sql = `UPDATE note
+                      SET sort = ?, update_time = update_time
+                    WHERE id = ? AND create_by = ? AND del_flag = 0 AND parent_id <=> ?`;
+      await connection.query(sql, [sort, id, userId, authoritativeParentId]);
     }
     await connection.commit(); // 提交事务
     res.send(resultData(null, 200, 'Sort updated successfully'));
   } catch (e) {
-    await connection.rollback(); // 如果发生错误，回滚事务
-    if (e instanceof AnchoredSortError) {
-      return res.send(resultData(null, e.code === 'RESOURCE_NOT_FOUND' ? 404 : 400, e.message));
+    if (connection) {
+      try {
+        await connection.rollback(); // 如果发生错误，回滚事务
+      } catch {
+        // 保留最初的排序错误，避免回滚异常覆盖稳定业务错误。
+      }
     }
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-note-sort', e);
     return sendNoteServerError(res, 'update-note-sort', e);
   } finally {
-    connection.release(); // 释放连接回连接池
+    connection?.release(); // 释放连接回连接池
   }
 };
 
