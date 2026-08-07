@@ -216,7 +216,8 @@
           open: quickShellVisible.value,
           title: shellTitle.value,
           placement: 'bottom' as const,
-          height: '83vh',
+          // 仅待办轻量表单需要多一档高度；资源捕获继续保持更轻的 83vh 抽屉。
+          height: captureType.value === 'todo' ? '88vh' : '83vh',
           mobileFullScreen: false,
           mobileCenteredHeader: true,
           bodyPadding: '14px 14px 0',
@@ -912,8 +913,10 @@
       -webkit-overflow-scrolling: touch;
     }
     .capture-intro-strip {
-      min-height: 58px;
-      max-height: 64px;
+      /* 待办表单更高时，纵向 flex 不能拿提示条的高度补空间；
+         四个 Tab 统一从 64px 起步，窄屏文案需要换行时允许自然增高。 */
+      flex: 0 0 auto;
+      min-height: 64px;
       padding: 9px 13px;
       border: 0;
       border-radius: 13px;

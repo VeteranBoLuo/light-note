@@ -254,6 +254,9 @@
   .bAlert.bAlert--mobile {
     width: min(78%, 320px);
     top: 45%;
+    /* 桌面弹框用 min-height 承托多操作布局；移动端必须恢复内容自适应，
+       否则短确认文案也会被继承的 180px 最小高度强行撑大。 */
+    min-height: 0;
     height: auto;
     padding: 0;
     overflow: hidden;

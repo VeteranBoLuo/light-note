@@ -33,6 +33,12 @@ describe('BAlert 多操作布局', () => {
     );
   });
 
+  it('移动端清除桌面弹框最小高度并按内容自适应', () => {
+    expect(alertSource).toMatch(
+      /\.bAlert\.bAlert--mobile\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;/,
+    );
+  });
+
   it('移动端操作单元清除 BButton 默认底色和圆角，危险确认使用危险语义', () => {
     expect(alertSource).toContain(':type="okType"');
     expect(alertSource).toMatch(
