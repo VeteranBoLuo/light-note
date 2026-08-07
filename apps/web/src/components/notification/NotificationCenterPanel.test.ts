@@ -13,10 +13,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 let cleanup: (() => void) | undefined;
 
-function mountPanel(
-  mobile: boolean,
-  todoState: 'pending' | 'completed' | 'unavailable' = 'pending',
-) {
+function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unavailable' = 'pending') {
   const first: NotificationItem = {
     id: 'todo-1',
     type: 'todo_reminder',
@@ -114,6 +111,8 @@ describe('NotificationCenterPanel', () => {
     const actions = host.querySelector('.nt-todo-actions');
     expect(actions?.textContent).toContain('notification.todoCompletedState');
     expect(actions?.querySelectorAll('.nt-todo-action')).toHaveLength(1);
+    expect(actions?.querySelector('.nt-todo-state.b-chip--success')).not.toBeNull();
+    expect(actions?.querySelector('.nt-todo-state')?.tagName).toBe('SPAN');
   });
 
   it('延续失效待办状态，不再暴露完成或打开入口', async () => {

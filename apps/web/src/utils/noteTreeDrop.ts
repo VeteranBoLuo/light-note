@@ -23,11 +23,35 @@ export interface OptimisticNoteTreeMoveResult {
   childrenByParent: Record<string, NoteTreeItem[]>;
 }
 
+/**
+ * 普通页面拖到置顶页面前方才进入置顶组；落在置顶页面后方时仍留在普通组。
+ * 由于置顶组必须连续，后方落点会归一为“普通组最前”，而不是插进置顶组中间。
+ */
+export function normalizePinnedAfterDropTarget({
+  target,
+  source,
+  siblings,
+}: {
+  target: NoteTreeDropTarget;
+  source: NoteTreeDragSource;
+  siblings: Array<Pick<NoteTreeItem, 'id' | 'isTop'>>;
+}): NoteTreeDropTarget {
+  if (target.position !== 'after' || !target.isTop || source.isTop) return target;
+  const firstNormalSibling = siblings.find((item) => item.id !== source.id && !item.isTop);
+  return {
+    ...target,
+    isTop: false,
+    previousId: null,
+    nextId: firstNormalSibling?.id || null,
+  };
+}
+
 const TREE_ROW_EDGE_RATIO = 0.28;
 
 /**
  * 目录树节点的上、下边缘表示同级插入，中央表示移入为子页面。
- * 边缘落点以目标节点的置顶分组为准：跨分组拖放时，服务端会同步切换被拖页面的置顶状态。
+ * 上沿落点以目标节点的置顶分组为准；置顶节点下沿由 normalizePinnedAfterDropTarget
+ * 归一到普通组，中央移入则始终作为普通子页面。
  */
 export function buildTreeNodeDropTarget({
   node,
@@ -78,7 +102,7 @@ export function buildTreeNodeDropTarget({
   };
 }
 
-/** “我的知识库”是根层最前落点；置顶与普通页面仍分别保持自己的分组。 */
+/** “笔记库”是根层最前落点；置顶与普通页面仍分别保持自己的分组。 */
 export function buildRootStartDropTarget({
   rootItems,
   source,

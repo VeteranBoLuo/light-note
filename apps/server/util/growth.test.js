@@ -57,21 +57,8 @@ describe('growth 段位表', () => {
     expect(RANKS[9].spaceMb).toBe(5120);
     expect(RANKS[14].spaceMb).toBe(20480);
     expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
-      500_000,
-      600_000,
-      760_000,
-      900_000,
-      1_100_000,
-      1_300_000,
-      1_500_000,
-      1_760_000,
-      2_000_000,
-      2_300_000,
-      2_600_000,
-      3_000_000,
-      3_300_000,
-      3_600_000,
-      4_000_000,
+      500_000, 600_000, 760_000, 900_000, 1_100_000, 1_300_000, 1_500_000, 1_760_000, 2_000_000, 2_300_000, 2_600_000,
+      3_000_000, 3_300_000, 3_600_000, 4_000_000,
     ]);
     for (let i = 1; i < RANKS.length; i++) {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
@@ -323,7 +310,7 @@ describe('后台成长调整的升级通知', () => {
 });
 
 describe('claimDailyQuestBonus 对满级/root 的处理', () => {
-  // root 的经验整体不入账,所以它的每日任务只有「签到 + 记录内容」两项,
+  // root 的经验整体不入账,所以它的每日任务只有「签到 + 新增内容」两项,
   // 「今天领过没」也只能看积分流水 —— 这两条是本组用例要锁住的行为。
   const GROWTH_ROW = {
     exp: 0,
@@ -362,6 +349,9 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
     expect(earnPoints).toHaveBeenCalledWith('root-1', 30, 'quest', '20260806');
+    const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
+    expect(contentCountCall?.[0]).toContain('td.del_flag = 0 AND td.create_time >= CURDATE()');
+    expect(contentCountCall?.[1]).toEqual(['root-1', 'root-1', 'root-1', 'root-1']);
     // 没走 grantExp,所以不该有 growth_events 的写入连接
     expect(pool.getConnection).not.toHaveBeenCalled();
   });

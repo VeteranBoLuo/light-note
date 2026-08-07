@@ -22,6 +22,7 @@ import trashRouter from '@/router/modules/trash.ts';
 import knowledgeBaseRouter from '@/router/modules/knowledgeBase.ts';
 import graphRouter from '@/router/modules/graph.ts';
 import inboxRouter from '@/router/modules/inbox.ts';
+import todoCreateRouter from '@/router/modules/todoCreate.ts';
 import coBuildRouter from '@/router/modules/coBuild.ts';
 import aiRouter from '@/router/modules/ai.ts';
 import { getRuntimeApplicationEntryPath } from '@/utils/appEntry.ts';
@@ -72,6 +73,7 @@ export const routes: RouteRecordRaw[] = [
       knowledgeBaseRouter,
       graphRouter,
       inboxRouter,
+      todoCreateRouter,
       aiRouter,
       ...coBuildRouter,
       ...securityCenterRouter,

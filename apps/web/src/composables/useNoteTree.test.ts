@@ -192,6 +192,27 @@ describe('useNoteTree', () => {
     scope.stop();
   });
 
+  it('恢复会话中的展开状态时同步加载对应子层，避免只有展开箭头没有子页面', async () => {
+    mocks.route.value = {
+      query: {},
+      fullPath: '/noteLibrary',
+    };
+    sessionStorage.setItem('light-note-note-tree-expanded-ids', JSON.stringify(['project']));
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    await vi.waitFor(() => {
+      expect(tree?.childrenByParent.value[NOTE_TREE_ROOT_KEY]?.map((item) => item.id)).toEqual(['project']);
+      expect(tree?.childrenByParent.value.project?.map((item) => item.id)).toEqual(['module']);
+    });
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteTree',
+      { parentId: 'project', depth: 1 },
+      { silent: true },
+    );
+    scope.stop();
+  });
+
   it('读取灰度关闭时不请求树，开启后再加载当前 URL 路径', async () => {
     const enabled = ref(false);
     const scope = effectScope();

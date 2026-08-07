@@ -1,7 +1,7 @@
 <template>
   <div v-if="recommendationItems.length" class="recommendation-container">
     <div class="recommendation-title">{{ round > 0 ? $t('ai.followUpTip') : $t('ai.tip') }}</div>
-    <div class="recommendation-list">
+    <div ref="recommendationListRef" class="recommendation-list">
       <BButton
         v-for="item in recommendationItems"
         :key="round + ':' + item"
@@ -15,7 +15,7 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -39,6 +39,7 @@
   );
 
   const emit = defineEmits<{ 'recommendation-click': [item: string] }>();
+  const recommendationListRef = ref<HTMLElement | null>(null);
 
   const recommendationItems = computed(() => {
     const used = new Set(props.usedQuestions.map((question) => question.trim()));
@@ -68,6 +69,19 @@
     (event?.currentTarget as HTMLElement | null)?.blur?.();
     emit('recommendation-click', item);
   }
+
+  function clearRecommendationFocus() {
+    if (typeof document === 'undefined') return;
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLElement && recommendationListRef.value?.contains(activeElement)) {
+      activeElement.blur();
+    }
+  }
+
+  onMounted(() => void nextTick(clearRecommendationFocus));
+  onActivated(() => void nextTick(clearRecommendationFocus));
+  onBeforeUnmount(clearRecommendationFocus);
+  onDeactivated(clearRecommendationFocus);
 </script>
 
 <style scoped lang="less">
@@ -132,18 +146,35 @@
     box-shadow: none;
   }
 
-  .recommendation-item:hover {
-    color: var(--resource-note-color);
-  }
-
   /* 暗色下原本用页面同色底 + 无边框,芯片看起来像纯文字;改为可见的卡片底 + 描边 */
   [data-theme='night'] .recommendation-item {
     background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background));
     border: 1px solid color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color));
     color: var(--text-color);
-    &:hover {
+  }
+
+  /* 触屏 WebView 会把最后触摸位置的 :hover 带回重新挂载的页面，只在真实悬浮设备上启用 hover。 */
+  @media (hover: hover) and (pointer: fine) {
+    .recommendation-item:hover {
+      color: var(--resource-note-color);
+    }
+
+    [data-theme='night'] .recommendation-item:hover {
       background: color-mix(in srgb, var(--primary-color) 18%, var(--card-background));
       border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
+    }
+  }
+
+  @media (hover: none), (pointer: coarse) {
+    .recommendation-item:hover {
+      background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color)) !important;
+      color: #4b5563;
+    }
+
+    [data-theme='night'] .recommendation-item:hover {
+      background: color-mix(in srgb, var(--primary-color) 10%, var(--card-background)) !important;
+      border-color: color-mix(in srgb, var(--primary-color) 26%, var(--surface-border-color));
+      color: var(--text-color);
     }
   }
 
@@ -190,6 +221,13 @@
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       touch-action: manipulation;
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      .recommendation-item:hover {
+        background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color)) !important;
+        color: var(--text-color);
+      }
     }
   }
 </style>

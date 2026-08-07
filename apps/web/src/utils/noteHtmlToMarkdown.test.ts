@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { marked } from 'marked';
-import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from './noteHtmlToMarkdown';
+import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown, promoteEmptyMarkdownTaskToken } from './noteHtmlToMarkdown';
 
 describe('noteHtmlToMarkdown', () => {
   it('保留已勾选和未勾选的轻笺待办状态', () => {
@@ -55,6 +55,35 @@ describe('noteHtmlToMarkdown', () => {
     expect(previewHtml).toContain('class="note-task-list-item"');
     expect(previewHtml).toContain('class="note-todo-checkbox"');
     expect(previewHtml).toContain('disabled');
+  });
+
+  it('工具栏刚插入的空 Markdown 待办也渲染为复选框', () => {
+    const html = marked.parse('- [ ]\n- [x]', { walkTokens: promoteEmptyMarkdownTaskToken }) as string;
+    const previewHtml = normalizeMarkdownTaskListHtml(html, false);
+
+    expect(previewHtml.match(/type="checkbox"/g)).toHaveLength(2);
+    expect(previewHtml).toContain('checked');
+    expect(previewHtml).not.toContain('[ ]');
+    expect(previewHtml).not.toContain('[x]');
+    expect(previewHtml).not.toContain('\u200b');
+  });
+
+  it('空 Markdown 待办切到富文本再切回时不残留不可见占位符', () => {
+    const markedHtml = marked.parse('- [ ]', { walkTokens: promoteEmptyMarkdownTaskToken }) as string;
+    const richHtml = normalizeMarkdownTaskListHtml(markedHtml, true);
+    const markdown = noteHtmlToMarkdown(richHtml);
+
+    expect(richHtml).not.toContain('\u200b');
+    expect(markdown).toBe('- [ ]');
+  });
+
+  it('空待办兼容有序列表但不会误改代码块', () => {
+    const orderedHtml = marked.parse('1. [ ]', { walkTokens: promoteEmptyMarkdownTaskToken }) as string;
+    const codeHtml = marked.parse('```\n- [ ]\n```', { walkTokens: promoteEmptyMarkdownTaskToken }) as string;
+
+    expect(orderedHtml.match(/type="checkbox"/g)).toHaveLength(1);
+    expect(codeHtml).not.toContain('type="checkbox"');
+    expect(codeHtml).toContain('<code>- [ ]');
   });
 
   it('普通无序列表往返时统一使用短横线，不漂移成星号', () => {

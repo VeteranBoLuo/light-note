@@ -302,6 +302,24 @@
       channel === 'email' ? t('inbox.todoReminderEmail') : t('inbox.todoReminderInApp'),
     );
     if (reminder.mode === 'repeat') {
+      if ('version' in reminder && reminder.repeat) {
+        const repeat = reminder.repeat;
+        const schedule =
+          repeat.kind === 'interval'
+            ? repeat.intervalMinutes === 1440
+              ? t('inbox.todoReminderDailyAt', { time: String(repeat.startAt || '').slice(11, 16) || '09:00' })
+              : t('inbox.todoReminderIntervalSummary', { minutes: repeat.intervalMinutes || 0 })
+            : repeat.kind === 'weekly'
+              ? t('inbox.todoReminderWeeklySummary', {
+                  weekdays: (repeat.weekdays || []).map((day) => t(`inbox.todoWeekday${day}`)).join('、'),
+                  time: repeat.localTime || '09:00',
+                })
+              : t('inbox.todoReminderMonthlySummary', {
+                  days: (repeat.monthDays || []).join('、'),
+                  time: repeat.localTime || '09:00',
+                });
+        return `${schedule} · ${channelLabels.join(' + ')}`;
+      }
       return t('inbox.todoReminderRepeatSummary', { channels: channelLabels.join(' + ') });
     }
     if (reminder.mode === 'nudge') {
@@ -310,12 +328,23 @@
         count: reminder.remainingCount || reminder.nudge?.maxCount || 0,
       });
     }
+    if (reminder.mode === 'once' && 'version' in reminder && reminder.once) {
+      const once = reminder.once;
+      const schedule =
+        once.type === 'at_due'
+          ? t('inbox.todoReminderAtDue')
+          : once.type === 'at_start'
+            ? t('inbox.todoReminderAtStart')
+            : once.type === 'before_due'
+              ? t('inbox.todoReminderBeforeDueMinutes', { minutes: once.offsetMinutes || 0 })
+              : t('inbox.todoReminderFixedAtSummary', { time: once.fixedAt || '' });
+      return `${schedule} · ${channelLabels.join(' + ')}`;
+    }
     return t('inbox.todoReminderOnceSummary', { channels: channelLabels.join(' + ') });
   });
   const nextReminderLabel = computed(() => {
     const reminder = props.item.reminder;
-    const nextAt =
-      (reminder && 'nextAt' in reminder ? reminder.nextAt : null) || props.item.reminderAt || null;
+    const nextAt = (reminder && 'nextAt' in reminder ? reminder.nextAt : null) || props.item.reminderAt || null;
     if (!nextAt) return '';
     return formatTodoDateTime(nextAt, locale.value, {
       relative: true,

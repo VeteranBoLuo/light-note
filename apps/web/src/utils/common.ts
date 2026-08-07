@@ -386,7 +386,8 @@ export async function noteContentToHtml(content: string = '', type?: string): Pr
     const DOMPurify = await loadDompurify();
     return DOMPurify.sanitize(html);
   } catch {
-    return html;
+    // v-html 的安全边界不能在消毒器加载失败时退化为原始 HTML。
+    return '';
   }
 }
 

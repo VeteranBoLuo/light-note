@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h } from 'vue';
+import { createApp, h, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
@@ -43,6 +43,7 @@ vi.mock('@/store', () => ({
     todoDueTodayTotal: 0,
     refreshCount: vi.fn(),
   }),
+  useAiAssistantStore: () => ({ edgeStatus: ref('idle') }),
   useUserStore: () => ({ id: 'u1', role: 'user' }),
 }));
 vi.mock('@/composables/useMobileNavigationState', () => ({
@@ -59,7 +60,8 @@ vi.mock('@/components/base/BasicComponents/BButton.vue', () => ({
 const { resetAndroidAppUpdateForTest } = await import('@/composables/useAndroidAppUpdate');
 const { default: MobileBottomNav } = await import('./MobileBottomNav.vue');
 
-const APP_UA = 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/138 Mobile Safari/537.36 LightNoteAndroid/1.0.0';
+const APP_UA =
+  'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/138 Mobile Safari/537.36 LightNoteAndroid/1.0.0';
 
 let cleanup: (() => void) | undefined;
 

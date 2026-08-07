@@ -18,7 +18,9 @@ export default {
     }
     return {
       growth: g,
-      achievements: dash ? { unlocked: dash.unlockedCount, claimable: dash.claimableCount, total: dash.totalAchievements } : null,
+      achievements: dash
+        ? { unlocked: dash.unlockedCount, claimable: dash.claimableCount, total: dash.totalAchievements }
+        : null,
       quests: dash?.quests || null,
       questBonus: dash?.questBonus || null,
     };
@@ -34,13 +36,15 @@ export default {
     ];
     if (g.equippedTitleName) lines.push(`佩戴称号:${g.equippedTitleName}`);
     if (raw.quests) {
-      const map = { checkin: '签到', create: '记录一条内容', exp30: '今日经验达30' };
+      const map = { checkin: '签到', create: '新增一条内容', exp30: '今日经验达30' };
       const q = raw.quests.map((x) => `${map[x.key] || x.key}${x.done ? '✓' : '✗'}`).join(' · ');
       const bonus = raw.questBonus?.claimable ? '(可领奖励)' : raw.questBonus?.claimed ? '(奖励已领)' : '';
       lines.push(`今日任务:${q} ${bonus}`);
     }
     if (raw.achievements) {
-      lines.push(`成就:已解锁 ${raw.achievements.unlocked}/${raw.achievements.total}${raw.achievements.claimable ? ` · ${raw.achievements.claimable} 个待领取` : ''}`);
+      lines.push(
+        `成就:已解锁 ${raw.achievements.unlocked}/${raw.achievements.total}${raw.achievements.claimable ? ` · ${raw.achievements.claimable} 个待领取` : ''}`,
+      );
     }
     return lines.join('\n');
   },

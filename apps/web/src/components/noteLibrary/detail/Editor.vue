@@ -258,7 +258,11 @@
   } from '@/utils/markdownEditing.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
-  import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
+  import {
+    normalizeMarkdownTaskListHtml,
+    noteHtmlToMarkdown,
+    promoteEmptyMarkdownTaskToken,
+  } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -1414,7 +1418,7 @@
   // 集中一处避免多条渲染路径口径漂移；decorate 只给站内链接补 data-ln-*,无站内链接则原样返回(零改写)。
   // 调用方须先 await ensureMdLib()（本函数同步使用已加载的 markedLib/dompurifyLib）。
   function mdToSafeHtml(mdText: string, editableTaskLists = false): string {
-    const raw = markedLib.parse(mdText || '');
+    const raw = markedLib.parse(mdText || '', { walkTokens: promoteEmptyMarkdownTaskToken });
     const safe = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
     return decorateInternalResourceLinks(normalizeMarkdownTaskListHtml(safe, editableTaskLists));
   }
@@ -2925,14 +2929,19 @@
     ol {
       padding-left: 20px;
     }
-    :deep(.note-task-list) {
-      padding-left: 0;
-      list-style: none;
+    .note-task-list {
+      padding-left: 0 !important;
+      list-style: none !important;
+      list-style-type: none !important;
     }
-    :deep(.note-task-list-item) {
-      list-style: none;
+    .note-task-list-item {
+      list-style: none !important;
+      list-style-type: none !important;
     }
-    :deep(.note-todo-checkbox) {
+    .note-task-list-item::marker {
+      content: '';
+    }
+    .note-todo-checkbox {
       margin: 0 7px 0 0;
       vertical-align: middle;
     }

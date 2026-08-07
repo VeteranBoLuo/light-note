@@ -1,9 +1,8 @@
 <template>
   <Teleport to="body" v-if="isMobileLayout">
     <div class="bAlert-bg">
-      <!-- 移动端弹框:正常 flex 流(不再用 .row-center 绝对定位——它把标题限成 50% 宽度导致无谓换行、正文脱流);
-           高度自适应内容,底部按钮自适应等分并允许长文案换行。 -->
-      <div class="bAlert bAlert--mobile" :class="{ out: isExit }">
+      <!-- 移动端弹框使用正常 flex 流；三个以上操作改为整宽纵向排列，避免窄屏下长文案被压成多行。 -->
+      <div class="bAlert bAlert--mobile" :class="{ out: isExit, 'bAlert--stacked-actions': footer.length > 2 }">
         <div class="bAlert-m-body">
           <slot name="title">
             <div class="bAlert-m-title">{{ title }}</div>
@@ -12,19 +11,22 @@
         </div>
         <div class="bAlert-m-footer">
           <slot name="footer" v-if="footer?.length > 0">
-            <div
+            <BButton
               v-for="btn in footer"
+              :key="btn.label"
               class="btn dom-hover"
-              :type="btn.type"
+              :class="{
+                'is-primary': btn.type === 'primary' || btn.type === 'function',
+                'is-danger': btn.type === 'danger',
+              }"
+              :type="btn.type === 'dashed' ? undefined : btn.type"
               @click="btn.function ? btnFunc(btn.function) : obClose()"
-              >{{ btn.label }}</div
+              >{{ btn.label }}</BButton
             >
           </slot>
           <template v-else>
-            <div class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</div>
-            <div class="btn dom-hover" style="color: var(--primary-color)" @click="onOk">{{
-              okText || $t('common.confirm')
-            }}</div>
+            <BButton class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</BButton>
+            <BButton class="btn dom-hover is-primary" @click="onOk">{{ okText || $t('common.confirm') }}</BButton>
           </template>
         </div>
       </div>
@@ -33,27 +35,14 @@
 
   <Teleport to="body" v-else>
     <div class="bAlert-bg">
-      <div class="bAlert" :class="{ out: isExit }">
+      <div class="bAlert" :class="{ out: isExit, 'bAlert--multi-action': footer.length > 2 }">
         <slot name="title">
-          <div style="font-size: 16px; margin-bottom: 15px">{{ title }}</div>
+          <div class="bAlert-title">{{ title }}</div>
         </slot>
-        <div
-          style="color: var(--desc-color); font-size: 14px; overflow: auto; height: calc(100% - 70px)"
-          v-html="safeContent"
-        />
-        <div
-          style="
-            position: absolute;
-            bottom: 20px;
-            width: calc(100% - 40px);
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            box-sizing: border-box;
-          "
-        >
+        <div class="bAlert-content" v-html="safeContent" />
+        <div class="bAlert-footer">
           <slot name="footer" v-if="footer?.length > 0">
-            <b-space>
+            <b-space :wrap="footer.length > 2">
               <b-button
                 v-for="btn in footer"
                 class="btn"
@@ -90,7 +79,7 @@
   const $t = i18n.global.t;
 
   interface ButtonItem {
-    type?: 'function' | 'primary' | 'danger' | 'success';
+    type?: 'function' | 'primary' | 'dashed' | 'danger' | 'success';
     label: string;
     function?: () => void;
   }
@@ -185,7 +174,7 @@
     transform: translate(-50%, -50%);
     box-sizing: border-box;
     width: 460px;
-    height: 180px;
+    min-height: 180px;
     //box-shadow: 0px 0px 12px rgba(0, 0, 0, 0.12);
     border-radius: 16px;
     z-index: 1;
@@ -193,6 +182,40 @@
     background-color: var(--background-color);
     animation: in-animation 0.3s ease;
     padding: 22px;
+    display: flex;
+    flex-direction: column;
+  }
+  .bAlert--multi-action {
+    width: min(680px, calc(100vw - 40px));
+  }
+  .bAlert-title {
+    flex: 0 0 auto;
+    margin-bottom: 15px;
+    font-size: 16px;
+  }
+  .bAlert-content {
+    flex: 1 1 auto;
+    min-height: 42px;
+    max-height: min(45vh, 360px);
+    overflow: auto;
+    color: var(--desc-color);
+    font-size: 14px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+  .bAlert-footer {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 0;
+    padding-top: 18px;
+    box-sizing: border-box;
+  }
+  .bAlert-footer :deep(.space-body) {
+    width: 100%;
+    max-width: 100%;
+    justify-content: flex-end;
   }
   .out {
     animation: out-animation 0.3s ease;
@@ -273,6 +296,33 @@
     word-break: break-word;
     &:not(:last-child) {
       border-right: 1px solid var(--phone-menu-item-border-color);
+    }
+  }
+  .bAlert--mobile .btn.is-primary {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  .bAlert--mobile .btn.is-danger {
+    color: var(--danger-color, #fe2c55);
+  }
+  .bAlert--mobile.bAlert--stacked-actions .bAlert-m-footer {
+    flex-direction: column;
+  }
+  .bAlert--mobile.bAlert--stacked-actions .btn {
+    width: 100%;
+    flex: 0 0 48px;
+    min-height: 48px;
+    padding: 0 18px;
+    white-space: nowrap;
+    overflow-wrap: normal;
+    word-break: keep-all;
+
+    &:not(:last-child) {
+      border-right: 0;
+    }
+
+    & + .btn {
+      border-top: 1px solid var(--phone-menu-item-border-color);
     }
   }
 </style>

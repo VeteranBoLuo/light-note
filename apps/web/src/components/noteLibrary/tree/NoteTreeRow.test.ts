@@ -2,6 +2,7 @@ import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
+import icon from '@/config/icon';
 
 vi.mock('@/components/base/BasicComponents/BActionMenu.vue', async () => {
   const { defineComponent, h } = await import('vue');
@@ -49,7 +50,11 @@ vi.mock('@/components/base/BasicComponents/BTooltip.vue', () => ({
   default: { name: 'BTooltipStub', template: '<span><slot /></span>' },
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
-  default: { name: 'SvgIconStub', template: '<i aria-hidden="true" />' },
+  default: {
+    name: 'SvgIconStub',
+    props: { src: { type: String, default: '' } },
+    template: '<i :data-src="src" aria-hidden="true" />',
+  },
 }));
 
 const { default: NoteTreeRow } = await import('./NoteTreeRow.vue');
@@ -63,7 +68,7 @@ describe('NoteTreeRow 显式页面操作', () => {
     document.body.innerHTML = '';
   });
 
-  it('单击标题直接打开正文，只保留新建子页快捷操作并通过整行 ActionMenu 提供完整操作', async () => {
+  it('单击标题只上抛页面选择，展开与管理操作保持独立', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const events = {
@@ -189,6 +194,105 @@ describe('NoteTreeRow 显式页面操作', () => {
 
     expect(host.querySelector('.action-menu-stub')?.getAttribute('data-disabled')).toBe('true');
     expect(host.querySelector<HTMLButtonElement>('.action-menu-option')?.disabled).toBe(true);
+  });
+
+  it('富文本与 Markdown 页面使用不同的目录图标', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const commonProps = {
+      depth: 0,
+      childrenByParent: {},
+      expandedIds: new Set<string>(),
+      loadingKeys: new Set<string>(),
+    };
+    const app = createApp({
+      render: () =>
+        h('div', [
+          h(NoteTreeRow, {
+            ...commonProps,
+            node: {
+              id: 'html-note',
+              parentId: null,
+              title: '富文本页面',
+              type: 'html',
+              childCount: 0,
+              hasChildren: false,
+              isTop: false,
+              sort: 10,
+            },
+          }),
+          h(NoteTreeRow, {
+            ...commonProps,
+            node: {
+              id: 'markdown-note',
+              parentId: null,
+              title: 'Markdown 页面',
+              type: 'markdown',
+              childCount: 0,
+              hasChildren: false,
+              isTop: false,
+              sort: 20,
+            },
+          }),
+        ]),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    const icons = [...host.querySelectorAll<HTMLElement>('.note-tree-page-icon')];
+    expect(icons).toHaveLength(2);
+    expect(icons[0].dataset.src).toBe(icon.resource.note);
+    expect(icons[1].dataset.src).toBe(icon.resource.noteMarkdown);
+  });
+
+  it('展开子页面时使用独立过渡容器，保留父行并渐进显示子树', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const expandedIds = ref(new Set<string>());
+    const parent = {
+      id: 'parent-note',
+      parentId: null,
+      title: '父页面',
+      childCount: 1,
+      hasChildren: true,
+      isTop: false,
+      sort: 10,
+    };
+    const child = {
+      id: 'child-note',
+      parentId: 'parent-note',
+      title: '子页面',
+      childCount: 0,
+      hasChildren: false,
+      isTop: false,
+      sort: 10,
+    };
+    const app = createApp({
+      render: () =>
+        h(NoteTreeRow, {
+          node: parent,
+          depth: 0,
+          childrenByParent: { 'parent-note': [child] },
+          expandedIds: expandedIds.value,
+          loadingKeys: new Set<string>(),
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    expect(host.querySelector('.note-tree-children-motion')).toBeNull();
+    expect(host.querySelectorAll('.note-tree-row')).toHaveLength(1);
+
+    expandedIds.value = new Set(['parent-note']);
+    await nextTick();
+
+    expect(host.querySelector('.note-tree-children-motion')).not.toBeNull();
+    expect(host.querySelector('.note-tree-children')?.textContent).toContain('子页面');
+    expect(host.querySelectorAll('.note-tree-row')).toHaveLength(2);
   });
 
   it('分别显示同级让位动画和中央移入状态', async () => {

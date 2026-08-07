@@ -331,6 +331,7 @@
   }
 
   const aiAssistant = useAiAssistantStore();
+  const aiViewId = Symbol('ai-chat-view');
   const {
     draft: userInput,
     messages,
@@ -691,6 +692,10 @@
     lineageConversationId.value = '';
     if (!cloudHistoryEnabled()) aiAssistant.setCloudConversationId('');
     if (!switched) {
+      // Store 由 App 根层提前初始化后，页面首次挂载和路由返回都会走这里。
+      // 视图仍需恢复滚动位置并修复旧来源，但不能重置或中止后台中的请求。
+      void repairLegacyKnowledgeSources();
+      restoreConversationViewport();
       void requestCloudConversationHydration(nextRuntimeIdentityKey);
       return;
     }
@@ -1453,6 +1458,7 @@
   }
 
   onMounted(() => {
+    aiAssistant.attachView(aiViewId);
     aiAssistant.initializePersistence();
     activateConversation();
     fetchAiQuota();
@@ -1654,8 +1660,7 @@
     const currentMessageId = activeAssistantMessageId.value;
     const currentMsg = currentMessageId ? messages.value.find((item) => item.id === currentMessageId) : null;
     const restoreViewport = currentMsg?.sources?.length ? prepareViewportForPostAnswerContent() : null;
-    finalizeAiRound('stopped', currentMsg || null, { cancelled: reason === 'cancelled' });
-    aiAssistant.abortActiveRequest();
+    aiAssistant.abortActiveRequest(reason === 'user' ? 'user_stop' : 'conversation_switch');
     activeAnswerTypewriter = null;
     if (currentMsg?.role === 'assistant') {
       const suffix = t('ai.responsePaused');
@@ -1837,6 +1842,10 @@
       firstTokenRecorded: false,
       finalized: false,
     };
+    aiAssistant.attachRequestAbortHandler(requestLease, (reason) => {
+      const current = messages.value.find((item) => item.id === aiMessage.id) || null;
+      finalizeAiRound('stopped', current, { cancelled: reason !== 'user_stop' });
+    });
     void recordAiProductEvent('ai_prompt_submitted', {
       ...aiRoundDimensions(activeRoundTelemetry),
       lengthBucket: aiLengthBucket(inputText.length),
@@ -1868,6 +1877,7 @@
       },
       // 后台标签页没有可见动画，直接排空，避免浏览器暂停 rAF 后请求迟迟无法完成清理。
       shouldFlushImmediately: () =>
+        !aiAssistant.hasAttachedView() ||
         (typeof document !== 'undefined' && document.visibilityState === 'hidden') ||
         (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true),
     });
@@ -2620,12 +2630,9 @@
 
   onBeforeUnmount(() => {
     cancelLatestConversationChoice();
-    const activeMessage = activeAssistantMessageId.value
-      ? messages.value.find((item) => item.id === activeAssistantMessageId.value) || null
-      : null;
-    finalizeAiRound('stopped', activeMessage, { cancelled: true });
-    activeAnswerTypewriter = null;
-    aiAssistant.abortActiveRequest();
+    // 路由切换只解绑视图。请求控制器、SSE、打字机和终态落盘由应用级 Store runtime 继续持有；
+    // 主动停止、切会话、切身份才允许中止，避免移动端离开 /ai 就等同于点了“停止生成”。
+    aiAssistant.detachView(aiViewId);
     aiAssistant.flushPersistence();
     cancelScheduledScroll();
     stopFollowObservers();

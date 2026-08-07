@@ -12,45 +12,64 @@
     :data-layout-mode="layout.mode"
   >
     <aside
-      v-if="hasSidebar && effectiveSidebarPresentation === 'dock' && sidebarOpen"
+      v-if="hasSidebar && effectiveSidebarPresentation === 'dock'"
       class="note-workspace-shell__sidebar note-workspace-shell__sidebar--dock"
+      :class="{ 'is-collapsed': !sidebarOpen }"
+      :aria-hidden="!sidebarOpen"
     >
-      <slot name="sidebar" />
+      <div class="note-workspace-shell__sidebar-content">
+        <slot name="sidebar" />
+      </div>
       <BButton
+        v-if="sidebarOpen"
         class="note-workspace-shell__resizer"
+        :title="t('note.resetPageSidebarWidthHint')"
         :aria-label="t('note.resizePageSidebar')"
         @pointerdown="startSidebarResize"
+        @dblclick.stop.prevent="resetSidebarWidth"
         @keydown.left.prevent="resizeSidebarBy(-12)"
         @keydown.right.prevent="resizeSidebarBy(12)"
       />
+      <BButton
+        v-if="sidebarOpen"
+        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--close"
+        :title="t('note.collapsePageSidebar')"
+        :aria-label="t('note.collapsePageSidebar')"
+        @click.stop="closeSidebar"
+      >
+        <SvgIcon :src="icon.arrow_left" size="15" aria-hidden="true" />
+      </BButton>
     </aside>
 
     <aside
       v-else-if="hasSidebar && effectiveSidebarPresentation === 'rail'"
       class="note-workspace-shell__rail"
-      :aria-label="t('note.expandPageSidebar')"
-    >
-      <BTooltip :title="t('note.expandPageSidebar')">
-        <BButton
-          class="note-workspace-shell__rail-button"
-          :aria-label="t('note.expandPageSidebar')"
-          @click="emit('update:sidebarOverlayOpen', true)"
-        >
-          <SvgIcon :src="icon.noteTree.sidebarClosed" size="19" aria-hidden="true" />
-        </BButton>
-      </BTooltip>
-    </aside>
+      aria-hidden="true"
+    />
 
     <main class="note-workspace-shell__main">
+      <BButton
+        v-if="showMainSidebarTrigger"
+        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--open"
+        :title="t('note.expandPageSidebar')"
+        :aria-label="t('note.expandPageSidebar')"
+        @click.stop="openSidebar"
+      >
+        <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+      </BButton>
+      <BButton
+        v-if="showMainAiTrigger"
+        class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--open"
+        :title="t('note.showAiPanel')"
+        :aria-label="t('note.showAiPanel')"
+        @click.stop="openAi"
+      >
+        <SvgIcon :src="icon.ai.organize" size="18" aria-hidden="true" />
+      </BButton>
       <slot />
     </main>
 
-    <div
-      v-if="overlayVisible"
-      class="note-workspace-shell__mask"
-      aria-hidden="true"
-      @click="closeOverlays"
-    />
+    <div v-if="overlayVisible" class="note-workspace-shell__mask" aria-hidden="true" @click="closeOverlays" />
 
     <aside
       v-if="hasSidebar && (effectiveSidebarPresentation === 'overlay' || effectiveSidebarPresentation === 'rail')"
@@ -59,6 +78,14 @@
       :aria-hidden="!sidebarOverlayVisible"
     >
       <slot name="sidebar" />
+      <BButton
+        class="note-workspace-shell__sidebar-boundary-toggle note-workspace-shell__sidebar-boundary-toggle--close"
+        :title="t('note.collapsePageSidebar')"
+        :aria-label="t('note.collapsePageSidebar')"
+        @click.stop="closeSidebar"
+      >
+        <SvgIcon :src="icon.arrow_left" size="15" aria-hidden="true" />
+      </BButton>
     </aside>
 
     <aside
@@ -71,6 +98,15 @@
       :aria-hidden="!aiVisible"
     >
       <slot name="ai" />
+      <BButton
+        v-if="aiVisible"
+        class="note-workspace-shell__ai-boundary-toggle note-workspace-shell__ai-boundary-toggle--close"
+        :title="t('note.hideAiPanel')"
+        :aria-label="t('note.hideAiPanel')"
+        @click.stop="closeAi"
+      >
+        <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
+      </BButton>
     </aside>
   </div>
 </template>
@@ -79,10 +115,9 @@
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { resolveNoteWorkspaceLayout } from '@/utils/noteWorkspaceLayout';
+  import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from '@/utils/noteWorkspaceLayout';
 
   const props = withDefaults(
     defineProps<{
@@ -102,7 +137,7 @@
       hasAi: false,
       sidebarOpen: true,
       aiOpen: true,
-      sidebarWidth: 270,
+      sidebarWidth: NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH,
       aiWidth: 328,
     },
   );
@@ -113,7 +148,7 @@
     'update:sidebarOverlayOpen': [value: boolean];
     'update:aiOverlayOpen': [value: boolean];
     'update:sidebarWidth': [value: number];
-    'layoutChange': [value: ReturnType<typeof resolveNoteWorkspaceLayout>];
+    layoutChange: [value: ReturnType<typeof resolveNoteWorkspaceLayout>];
   }>();
 
   const { t } = useI18n();
@@ -126,9 +161,7 @@
   let resizeStartWidth = 0;
 
   const layout = computed(() => resolveNoteWorkspaceLayout(containerWidth.value, props.mobile));
-  const effectiveSidebarPresentation = computed(() =>
-    props.hasSidebar ? layout.value.sidebarPresentation : 'hidden',
-  );
+  const effectiveSidebarPresentation = computed(() => (props.hasSidebar ? layout.value.sidebarPresentation : 'hidden'));
   const effectiveAiPresentation = computed(() => (props.hasAi ? layout.value.aiPresentation : 'hidden'));
   const sidebarOverlayVisible = computed(
     () =>
@@ -138,11 +171,17 @@
   const aiOverlayVisible = computed(
     () => effectiveAiPresentation.value === 'overlay' && (props.aiOverlayOpen ?? props.aiOpen),
   );
-  const aiVisible = computed(() =>
-    effectiveAiPresentation.value === 'dock' ? props.aiOpen : aiOverlayVisible.value,
+  const aiVisible = computed(() => (effectiveAiPresentation.value === 'dock' ? props.aiOpen : aiOverlayVisible.value));
+  const overlayVisible = computed(() => sidebarOverlayVisible.value || aiOverlayVisible.value);
+  const showMainSidebarTrigger = computed(
+    () =>
+      props.hasSidebar &&
+      ((effectiveSidebarPresentation.value === 'dock' && !props.sidebarOpen) ||
+        ((effectiveSidebarPresentation.value === 'overlay' || effectiveSidebarPresentation.value === 'rail') &&
+          !sidebarOverlayVisible.value)),
   );
-  const overlayVisible = computed(
-    () => sidebarOverlayVisible.value || aiOverlayVisible.value,
+  const showMainAiTrigger = computed(
+    () => props.hasAi && effectiveAiPresentation.value !== 'hidden' && !aiVisible.value,
   );
   const shellStyle = computed(() => ({
     '--note-workspace-sidebar-width': `${Math.min(360, Math.max(220, props.sidebarWidth))}px`,
@@ -156,8 +195,44 @@
     if (effectiveAiPresentation.value === 'overlay') emit('update:aiOverlayOpen', false);
   }
 
+  function openSidebar() {
+    if (effectiveSidebarPresentation.value === 'dock') {
+      emit('update:sidebarOpen', true);
+      return;
+    }
+    emit('update:sidebarOverlayOpen', true);
+  }
+
+  function closeSidebar() {
+    if (effectiveSidebarPresentation.value === 'dock') {
+      emit('update:sidebarOpen', false);
+      return;
+    }
+    emit('update:sidebarOverlayOpen', false);
+  }
+
+  function openAi() {
+    if (effectiveAiPresentation.value === 'dock') {
+      emit('update:aiOpen', true);
+      return;
+    }
+    emit('update:aiOverlayOpen', true);
+  }
+
+  function closeAi() {
+    if (effectiveAiPresentation.value === 'dock') {
+      emit('update:aiOpen', false);
+      return;
+    }
+    emit('update:aiOverlayOpen', false);
+  }
+
   function resizeSidebarBy(delta: number) {
     emit('update:sidebarWidth', Math.min(360, Math.max(220, props.sidebarWidth + delta)));
+  }
+
+  function resetSidebarWidth() {
+    emit('update:sidebarWidth', NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH);
   }
 
   function onSidebarResize(event: PointerEvent) {
@@ -208,6 +283,11 @@
     min-height: 0;
     overflow: hidden;
     background: var(--color-background-soft, #f6f7fb);
+    transition: grid-template-columns 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .note-workspace-shell.has-sidebar-dock {
+    grid-template-columns: 0 minmax(680px, 1fr);
   }
 
   .note-workspace-shell.has-sidebar-dock.is-sidebar-open {
@@ -215,11 +295,27 @@
   }
 
   .note-workspace-shell.has-sidebar-rail {
-    grid-template-columns: 50px minmax(0, 1fr);
+    grid-template-columns: 0 minmax(0, 1fr);
+  }
+
+  .note-workspace-shell.has-ai-dock {
+    grid-template-columns: minmax(0, 1fr) 0;
   }
 
   .note-workspace-shell.has-ai-dock.is-ai-open {
     grid-template-columns: minmax(0, 1fr) var(--note-workspace-ai-width);
+  }
+
+  .note-workspace-shell.has-sidebar-dock.has-ai-dock {
+    grid-template-columns: 0 minmax(680px, 1fr) 0;
+  }
+
+  .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock {
+    grid-template-columns: var(--note-workspace-sidebar-width) minmax(680px, 1fr) 0;
+  }
+
+  .note-workspace-shell.has-sidebar-dock.has-ai-dock.is-ai-open {
+    grid-template-columns: 0 minmax(680px, 1fr) var(--note-workspace-ai-width);
   }
 
   .note-workspace-shell.has-sidebar-dock.is-sidebar-open.has-ai-dock.is-ai-open {
@@ -236,10 +332,60 @@
     min-height: 0;
   }
 
-  .note-workspace-shell__sidebar--dock,
   .note-workspace-shell__rail {
-    border-right: 1px solid var(--color-border, #e4e7ef);
-    background: var(--color-background, #fff);
+    border-right: 0;
+    background: transparent;
+  }
+
+  .note-workspace-shell__sidebar--dock {
+    z-index: 3;
+    box-sizing: border-box;
+    background: var(--menu-body-bg-color, #fff);
+    visibility: visible;
+    transition: visibility 0s linear 0s;
+
+    &::after {
+      position: absolute;
+      z-index: 3;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--note-workspace-divider-color, var(--surface-border-color, #e4e7ef));
+      content: '';
+      opacity: 1;
+      pointer-events: none;
+      transition: opacity 120ms ease;
+    }
+  }
+
+  .note-workspace-shell__sidebar--dock.is-collapsed {
+    pointer-events: none;
+    visibility: hidden;
+    transition-delay: 240ms;
+
+    &::after {
+      opacity: 0;
+    }
+  }
+
+  .note-workspace-shell__sidebar-content {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    opacity: 1;
+    transform: translateX(0);
+    transform-origin: left center;
+    transition:
+      opacity 150ms ease,
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .note-workspace-shell__sidebar--dock.is-collapsed .note-workspace-shell__sidebar-content {
+    opacity: 0;
+    transform: translateX(-12px);
   }
 
   .note-workspace-shell__resizer.b_btn {
@@ -257,54 +403,101 @@
     background: transparent;
     cursor: col-resize;
 
-    &::after {
-      width: 2px;
-      height: 42px;
-      border-radius: 999px;
-      background: transparent;
-      content: '';
-      transition: background 160ms ease;
+    &:focus-visible {
+      outline: none;
     }
 
-    &:hover::after,
     &:focus-visible::after {
+      width: 1px;
+      height: 42px;
+      border-radius: 999px;
       background: var(--resource-note-color, #00a884);
+      content: '';
     }
+  }
+
+  .note-workspace-shell__sidebar-boundary-toggle.b_btn,
+  .note-workspace-shell__ai-boundary-toggle.b_btn {
+    position: absolute;
+    z-index: 8;
+    top: 50%;
+    width: 28px;
+    min-width: 28px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    transform: translateY(-50%);
+    border: 1px solid var(--surface-border-color, #e4e7ef);
+    color: var(--desc-color);
+    background: var(--card-background, #fff);
+    box-shadow: 0 6px 18px rgba(23, 29, 45, 0.1);
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+    }
+  }
+
+  .note-workspace-shell__sidebar-boundary-toggle--close.b_btn {
+    right: -14px;
+    border-radius: 10px;
+  }
+
+  .note-workspace-shell__sidebar-boundary-toggle--open.b_btn {
+    left: 0;
+    border-left: 0;
+    border-radius: 0 10px 10px 0;
+  }
+
+  .note-workspace-shell__ai-boundary-toggle--close.b_btn {
+    left: -14px;
+    border-radius: 10px;
+  }
+
+  .note-workspace-shell__ai-boundary-toggle.b_btn {
+    border-color: var(--primary-color, #615ced);
+    color: var(--primary-color, #615ced);
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--primary-color, #615ced);
+      color: var(--primary-color, #615ced);
+    }
+  }
+
+  .note-workspace-shell__ai-boundary-toggle--open.b_btn {
+    right: 0;
+    width: 34px;
+    min-width: 34px;
+    border-right: 0;
+    border-radius: 10px 0 0 10px;
   }
 
   .note-workspace-shell__ai--dock {
-    border-left: 1px solid var(--color-border, #e4e7ef);
-    background: var(--color-background, #fff);
+    box-sizing: border-box;
+    overflow: hidden;
+    border-left: 1px solid var(--surface-border-color, #e4e7ef);
+    background: var(--workspace-panel-bg-color, #f6f7fb);
+    opacity: 1;
+    transform: translateX(0);
+    visibility: visible;
+    transition:
+      opacity 150ms ease,
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 0s;
   }
 
   .note-workspace-shell__ai--dock.is-collapsed {
-    display: none;
-  }
-
-  .note-workspace-shell__rail {
-    display: flex;
-    justify-content: center;
-    padding-top: 10px;
-
-    :deep(.b-tooltip-wrap) {
-      width: 36px;
-      height: 36px;
-      align-self: flex-start;
-    }
-  }
-
-  .note-workspace-shell__rail-button {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    color: var(--color-primary, #6559f5);
-    border: 1px solid var(--color-primary, #6559f5);
-    background: var(--color-background, #fff);
-
-    :deep(svg) {
-      width: 19px;
-      height: 19px;
-    }
+    pointer-events: none;
+    border-left-color: transparent;
+    opacity: 0;
+    transform: translateX(12px);
+    visibility: hidden;
+    transition:
+      opacity 150ms ease,
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      visibility 0s linear 240ms;
   }
 
   .note-workspace-shell__mask {
@@ -320,9 +513,11 @@
     z-index: 21;
     top: 0;
     bottom: 0;
-    background: var(--color-background, #fff);
+    background: var(--workspace-panel-bg-color, #f6f7fb);
     box-shadow: 0 18px 48px rgba(22, 30, 48, 0.18);
-    transition: transform 180ms ease, visibility 180ms ease;
+    transition:
+      transform 180ms ease,
+      visibility 180ms ease;
     visibility: hidden;
   }
 
@@ -330,14 +525,15 @@
     left: 0;
     width: min(var(--note-workspace-sidebar-width), calc(100% - 56px));
     transform: translateX(-104%);
-    border-right: 1px solid var(--color-border, #e4e7ef);
+    border-right: 1px solid var(--surface-border-color, #e4e7ef);
+    background: var(--menu-body-bg-color, #fff);
   }
 
   .note-workspace-shell__ai--overlay {
     right: 0;
     width: min(var(--note-workspace-ai-width), calc(100% - 56px));
     transform: translateX(104%);
-    border-left: 1px solid var(--color-border, #e4e7ef);
+    border-left: 1px solid var(--surface-border-color, #e4e7ef);
   }
 
   .note-workspace-shell__sidebar--overlay.is-open,
@@ -347,9 +543,18 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .note-workspace-shell,
+    .note-workspace-shell__sidebar-content,
+    .note-workspace-shell__sidebar--dock::after,
+    .note-workspace-shell__ai--dock,
+    .note-workspace-shell__ai--dock.is-collapsed,
     .note-workspace-shell__sidebar--overlay,
     .note-workspace-shell__ai--overlay {
       transition: none;
+    }
+
+    .note-workspace-shell__sidebar--dock.is-collapsed {
+      transition-delay: 0s;
     }
   }
 </style>

@@ -1,10 +1,6 @@
 <template>
   <main class="mobile-ai-workspace">
-    <AiWorkspaceShell
-      ref="workspaceRef"
-      class="mobile-ai-workspace__body"
-      :suppress-scroll-prompt="historyVisible"
-    />
+    <AiWorkspaceShell ref="workspaceRef" class="mobile-ai-workspace__body" :suppress-scroll-prompt="historyVisible" />
     <transition name="mobile-ai-history">
       <section
         v-if="historyVisible"
@@ -34,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onBeforeUnmount, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { storeToRefs } from 'pinia';
   import AiWorkspaceShell from '@/components/aiAssistant/AiWorkspaceShell.vue';
@@ -55,7 +51,7 @@
 
   const { t } = useI18n();
   const aiAssistant = useAiAssistantStore();
-  const { conversationId } = storeToRefs(aiAssistant);
+  const { conversationId, edgeStatus } = storeToRefs(aiAssistant);
   const workspaceRef = ref<{
     clearHistory?: () => Promise<boolean>;
     openConversation?: (conversationId: string) => Promise<void>;
@@ -129,6 +125,20 @@
     onAdd: createConversation,
     addLabel: () => t('ai.newConversation'),
   });
+
+  onMounted(() => {
+    aiAssistant.acknowledgeEdgeStatus();
+  });
+
+  watch(
+    edgeStatus,
+    (status) => {
+      if (status !== 'idle' && status !== 'generating') {
+        nextTick(() => aiAssistant.acknowledgeEdgeStatus());
+      }
+    },
+    { flush: 'post' },
+  );
 
   onBeforeUnmount(() => {
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);

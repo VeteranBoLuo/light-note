@@ -36,7 +36,7 @@ async function withTransaction(callback) {
 export default {
   name: 'create_todo_plan',
   description:
-    '创建完整待办计划，支持仅一次、按日程重复、完成后再次安排，以及每项提醒一次或多次催办。所有日期必须先由服务端确定性计算并展示确认卡；用户未明确过去日期处理方式时禁止执行。普通单条无提醒待办也可继续用 create_todo。',
+    '创建带提醒的待办。默认 taskMode=single：每天/每周/每月只是重复提醒同一条待办；只有用户明确说“每天生成一条”“每次分别完成”等独立完成语义时才使用 taskMode=independent。所有日期由服务端确定性预览。',
   parameters: TODO_PLAN_TOOL_PARAMETERS,
   requireRoot: false,
   isWrite: true,
@@ -53,9 +53,10 @@ export default {
       error.status = 400;
       throw error;
     }
-    if (args.reminder.channels.includes('email') && !args.reminder.targetEmail) {
+    const emailReminder = args.taskMode === 'single' ? args.singleTaskReminder : args.reminder;
+    if (emailReminder?.channels?.includes('email') && !emailReminder.targetEmail) {
       const [[user]] = await pool.query('SELECT email FROM user WHERE id = ? AND del_flag = 0 LIMIT 1', [ctx.userId]);
-      args.reminder.targetEmail = String(user?.email || '').trim();
+      emailReminder.targetEmail = String(user?.email || '').trim();
     }
     const preview = assertTodoPlanReady(previewTodoPlan(args));
     return {
