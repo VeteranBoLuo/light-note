@@ -1481,6 +1481,7 @@ export default {
     searchAllPages: 'Search all pages',
     browseChildPages: 'Browse child pages',
     currentPath: 'Current path',
+    parentPage: 'Parent page',
     parentLevel: 'Back one level',
     currentPageShort: 'Current',
     noPagesAtLevel: 'No pages at this level',

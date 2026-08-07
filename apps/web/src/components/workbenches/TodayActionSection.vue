@@ -339,7 +339,10 @@
       return;
     }
     if (item.resourceType === 'note') {
-      router.push({ path: `/noteLibrary/${item.resourceId}`, query: { organize: 'inbox' } });
+      router.push({
+        path: `/noteLibrary/${item.resourceId}`,
+        query: { organize: 'inbox', from: router.currentRoute.value.fullPath },
+      });
       return;
     }
     router.push({ path: '/cloudSpace', query: { fileId: item.resourceId, fileName: item.title, organize: 'inbox' } });

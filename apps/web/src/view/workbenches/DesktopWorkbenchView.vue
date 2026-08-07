@@ -815,7 +815,14 @@
   function openContinueItem(item: ContinueItem) {
     if (item.type === 'note') {
       recordOperation({ module: '工作台', operation: `查看近期笔记【${item.title}】` });
-      router.push(item.raw?.id ? `/noteLibrary/${item.raw.id}` : '/noteLibrary');
+      router.push(
+        item.raw?.id
+          ? {
+              path: `/noteLibrary/${item.raw.id}`,
+              query: { from: router.currentRoute.value.fullPath },
+            }
+          : '/noteLibrary',
+      );
       return;
     }
     if (item.type === 'file') {

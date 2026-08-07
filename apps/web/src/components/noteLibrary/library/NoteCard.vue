@@ -15,9 +15,14 @@
       <!-- 格式标识排在状态徽章之后：置顶/待整理是「要不要现在处理」，格式只是「打开后长什么样」 -->
       <NoteFormatBadge :type="note.type" />
     </div>
+    <div v-if="parentPathText" class="note-parent-path" :title="parentPathText">
+      <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
+      <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
+      <span class="note-parent-path__separator" aria-hidden="true">·</span>
+      <span class="note-parent-path__text">{{ parentPathText }}</span>
+    </div>
     <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
     <div class="note-content">{{ summary }}</div>
-    <div v-if="parentPathText" class="note-path" :title="parentPathText">{{ parentPathText }}</div>
     <div class="note-footer">
       <div class="note-footer-chips">
         <div class="note-tags" v-if="note.tags && note.tags.length">
@@ -234,15 +239,46 @@
     }
   }
 
-  .note-path {
+  .note-parent-path {
     flex: 0 0 auto;
     margin-top: 8px;
+    width: fit-content;
+    max-width: 100%;
+    height: 22px;
+    padding: 0 7px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     overflow: hidden;
-    color: var(--muted-text-color, var(--desc-color));
+    color: var(--chip-neutral-fg, var(--desc-color));
+    background: var(--chip-neutral-bg);
+    border: 1px solid var(--chip-neutral-border);
+    border-radius: 6px;
     font-size: 11px;
-    line-height: 18px;
-    text-overflow: ellipsis;
+    line-height: 20px;
     white-space: nowrap;
+
+    &__icon {
+      flex: 0 0 auto;
+      color: var(--resource-note-color, #00a884);
+    }
+
+    &__label {
+      flex: 0 0 auto;
+      font-weight: 600;
+    }
+
+    &__separator {
+      flex: 0 0 auto;
+      opacity: 0.55;
+    }
+
+    &__text {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 
   .note-footer {

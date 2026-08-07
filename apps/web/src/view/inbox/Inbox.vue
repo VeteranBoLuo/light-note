@@ -950,6 +950,7 @@
       title: t('inbox.deleteTodo'),
       content: t('inbox.deleteTodoBatchConfirm', { count: ids.length }),
       okText: t('common.delete'),
+      okType: 'danger',
       cancelText: t('common.cancel'),
       onOk: () => deleteSelectedTodos(ids),
     });
@@ -1189,6 +1190,7 @@
       title: t('inbox.deleteTodo'),
       content: t('inbox.deleteTodoConfirm', { name: item.title }),
       okText: t('common.delete'),
+      okType: 'danger',
       cancelText: t('common.cancel'),
       onOk: () => removeTodo(item),
     });

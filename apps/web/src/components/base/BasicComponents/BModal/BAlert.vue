@@ -26,7 +26,16 @@
           </slot>
           <template v-else>
             <BButton class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</BButton>
-            <BButton class="btn dom-hover is-primary" @click="onOk">{{ okText || $t('common.confirm') }}</BButton>
+            <BButton
+              class="btn dom-hover"
+              :class="{
+                'is-primary': okType === 'primary' || okType === 'function',
+                'is-danger': okType === 'danger',
+              }"
+              :type="okType"
+              @click="onOk"
+              >{{ okText || $t('common.confirm') }}</BButton
+            >
           </template>
         </div>
       </div>
@@ -54,7 +63,7 @@
           </slot>
           <b-space v-else>
             <b-button class="btn" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</b-button>
-            <b-button class="btn" type="primary" @click="onOk">{{ okText || $t('common.confirm') }}</b-button>
+            <b-button class="btn" :type="okType" @click="onOk">{{ okText || $t('common.confirm') }}</b-button>
           </b-space>
         </div>
       </div>
@@ -89,6 +98,7 @@
     defineProps<{
       title: string;
       okText: string;
+      okType: 'primary' | 'danger' | 'success' | 'function';
       cancelText: string;
       content: string;
       footer: ButtonItem[];
@@ -96,6 +106,7 @@
     {
       title: '',
       okText: '',
+      okType: 'primary',
       cancelText: '',
       content: '',
       footer: () => [],
@@ -294,9 +305,14 @@
     white-space: normal;
     overflow-wrap: anywhere;
     word-break: break-word;
+    border-radius: 0;
+    background: transparent;
     &:not(:last-child) {
       border-right: 1px solid var(--phone-menu-item-border-color);
     }
+  }
+  .bAlert--mobile .btn:hover {
+    background: transparent;
   }
   .bAlert--mobile .btn.is-primary {
     color: var(--primary-color);

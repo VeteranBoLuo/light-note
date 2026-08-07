@@ -6,6 +6,11 @@ const alertSource = readFileSync(
   resolve(process.cwd(), 'src/components/base/BasicComponents/BModal/BAlert.vue'),
   'utf8',
 );
+const alertApiSource = readFileSync(
+  resolve(process.cwd(), 'src/components/base/BasicComponents/BModal/Alert.ts'),
+  'utf8',
+);
+const inboxSource = readFileSync(resolve(process.cwd(), 'src/view/inbox/Inbox.vue'), 'utf8');
 
 describe('BAlert 多操作布局', () => {
   it('桌面端三个以上操作自动使用宽版弹窗，并允许按钮组换行', () => {
@@ -26,5 +31,17 @@ describe('BAlert 多操作布局', () => {
     expect(alertSource).toMatch(
       /\.bAlert--mobile\.bAlert--stacked-actions \.btn\s*\{[\s\S]*?width:\s*100%[\s\S]*?white-space:\s*nowrap/,
     );
+  });
+
+  it('移动端操作单元清除 BButton 默认底色和圆角，危险确认使用危险语义', () => {
+    expect(alertSource).toContain(':type="okType"');
+    expect(alertSource).toMatch(
+      /\.bAlert--mobile \.btn\s*\{[\s\S]*?border-radius:\s*0;[\s\S]*?background:\s*transparent;/,
+    );
+    expect(alertSource).toMatch(/\.bAlert--mobile \.btn:hover\s*\{[\s\S]*?background:\s*transparent;/);
+    expect(alertApiSource).toContain('okType?:');
+    expect(alertApiSource).toContain('{ title, okText, okType, cancelText, content, onOk, footer }');
+    expect(alertApiSource).toContain('{ title, okText, okType, cancelText, content, footer }');
+    expect(inboxSource.match(/okType:\s*'danger'/g)).toHaveLength(2);
   });
 });
