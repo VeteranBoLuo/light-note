@@ -28,6 +28,12 @@ rsync -az --no-owner --no-group --delete \
   --exclude 'sql/' \
   -e "ssh -i $KEY" "$OUT"/ "$HOST:$REMOTE/"
 
+echo "🔎  预检安全中心 V2 历史控制迁移影响范围（仅聚合数量）…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/preflightSecurityV2Migration.js"
+
+echo "🛡  执行安全中心 V2 幂等 Schema 与历史控制迁移…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node util/security/migrate.js"
+
 echo "🔎  使用生产环境检查书签图标任务 Schema、favicon-api 与图标目录…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
 

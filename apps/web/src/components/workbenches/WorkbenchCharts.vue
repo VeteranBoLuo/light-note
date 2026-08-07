@@ -11,6 +11,7 @@
           class="trend-range-tabs"
           variant="segment"
           :options="trendRangeOptions"
+          @change="handleTrendRangeChange"
         />
       </header>
 
@@ -36,6 +37,12 @@
         <div ref="trendRef" class="chart-body trend-plot">
           <span class="trend-axis-label">{{ t('workbench.chart.quantity') }}</span>
           <canvas ref="trendCanvasRef" class="trend-canvas"></canvas>
+          <canvas
+            v-if="!prefersReducedMotion"
+            ref="trendMotionCanvasRef"
+            class="trend-motion-canvas"
+            aria-hidden="true"
+          ></canvas>
           <div class="trend-legend">
             <span v-for="item in trendLegendItems" :key="item.type" class="trend-legend-item">
               <span class="trend-legend-line" :style="{ backgroundColor: item.color }"></span>
@@ -137,6 +144,18 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { FILE_TYPE_COLOR_HEX, RESOURCE_COLOR_CSS_VAR, RESOURCE_COLOR_HEX } from '@/config/resourceColor';
+  import {
+    getTrendMotionDirection,
+    getTrendMotionPhase,
+    getTrendMotionPoint,
+    getTrendMotionProgress,
+    getTrendSummaryTiming,
+    TREND_CANVAS_KEYFRAMES,
+    TREND_CANVAS_TIMING,
+    TREND_MOTION_ONE_WAY_DURATION,
+    TREND_MOTION_START_DELAY,
+    TREND_SUMMARY_KEYFRAMES,
+  } from './workbenchTrendAnimation';
 
   interface TrendItem {
     date: string;
@@ -180,20 +199,37 @@
   const cardThemeClass = computed(() => (props.themeKey === 'night' ? 'chart-card--night' : 'chart-card--day'));
   const trendRef = ref<HTMLElement | null>(null);
   const trendCanvasRef = ref<HTMLCanvasElement | null>(null);
+  const trendMotionCanvasRef = ref<HTMLCanvasElement | null>(null);
   const typeRef = ref<HTMLElement | null>(null);
   const typeCanvasRef = ref<HTMLCanvasElement | null>(null);
 
+  let trendCanvasAnimation: Animation | null = null;
+  let trendSummaryAnimations: Animation[] = [];
+  let trendEntryAnimationPlayed = false;
+  let trendMotionFrameId: number | null = null;
+  let trendMotionStartedAt = 0;
+  let trendMotionLastFrameAt = 0;
+  let trendMotionPhase = 0;
+  let trendMotionProgress = 0;
+  let trendMotionDirection: 1 | -1 = 1;
+  let trendMotionWasHovering = false;
+  let trendMotionHoverTarget: number | null = null;
+  let trendMotionWidth = 0;
+  let trendMotionHeight = 0;
+  let trendMotionPointBackground = '#fff';
+  let trendMotionTracks: Array<{ color: string; points: Array<{ x: number; y: number }> }> = [];
   let typeFrameId: number | null = null;
   let trendResizeObserver: ResizeObserver | null = null;
   let typeResizeObserver: ResizeObserver | null = null;
   let chartVisibilityObserver: IntersectionObserver | null = null;
   let trendEventTarget: HTMLElement | null = null;
   let typeEventTarget: HTMLElement | null = null;
+  let trendIsVisible = true;
   let typeIsVisible = true;
   let lastTypeFrameAt = 0;
   const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
-  const CHART_FRAME_INTERVAL = 48;
+  const TYPE_CHART_FRAME_INTERVAL = 48;
   const TYPE_LEGEND_WIDTH = 136;
   const TREND_PLOT_TOP = 30;
   const TREND_PLOT_RIGHT = 16;
@@ -355,8 +391,13 @@
     }
   }
 
+  function handleTrendRangeChange() {
+    void syncCharts();
+  }
+
   function handleResize() {
     drawTrend();
+    prepareTrendMotionTracks();
     drawType(performance.now());
   }
 
@@ -504,7 +545,7 @@
       ctx.strokeStyle = line.color;
       ctx.stroke();
 
-      const activePoint = activeIndex >= 0 ? points[activeIndex] : null;
+      const activePoint = activeIndex >= 0 && prefersReducedMotion ? points[activeIndex] : null;
       if (activePoint) activePoints.push({ x: activePoint.x, y: activePoint.y, color: line.color });
     });
 
@@ -541,11 +582,189 @@
   function startTrendAnimation() {
     stopTrendAnimation();
     drawTrend();
+    if (prefersReducedMotion) return;
+    if (!trendEntryAnimationPlayed) {
+      const canvas = trendCanvasRef.value;
+      if (!canvas) return;
+      trendEntryAnimationPlayed = true;
+      canvas.dataset.motionState = 'running';
+      trendCanvasAnimation = canvas.animate(TREND_CANVAS_KEYFRAMES, TREND_CANVAS_TIMING);
+      const activeAnimation = trendCanvasAnimation;
+      activeAnimation.onfinish = () => {
+        if (trendCanvasAnimation !== activeAnimation) return;
+        canvas.dataset.motionState = 'finished';
+        trendCanvasAnimation = null;
+      };
+      const summaryCards = trendRef.value
+        ?.closest('.trend-content')
+        ?.querySelectorAll<HTMLElement>('.trend-summary-card');
+      trendSummaryAnimations = Array.from(summaryCards || []).map((card, index) =>
+        card.animate(TREND_SUMMARY_KEYFRAMES, getTrendSummaryTiming(index)),
+      );
+    }
+    startTrendMotionAnimation();
   }
 
   function stopTrendAnimation() {
+    if (trendCanvasRef.value) delete trendCanvasRef.value.dataset.motionState;
+    trendCanvasAnimation?.cancel();
+    trendCanvasAnimation = null;
+    trendSummaryAnimations.forEach((animation) => animation.cancel());
+    trendSummaryAnimations = [];
+    stopTrendMotionAnimation();
     trendTooltip.visible = false;
     trendTooltip.index = -1;
+  }
+
+  function prepareTrendMotionTracks() {
+    const canvas = trendMotionCanvasRef.value;
+    const container = trendRef.value;
+    if (!canvas || !container || !visibleTrendData.value.length) {
+      trendMotionTracks = [];
+      return;
+    }
+
+    const metrics = getCanvasMetrics(canvas, container);
+    if (!metrics) {
+      trendMotionTracks = [];
+      return;
+    }
+
+    const { width, height } = metrics;
+    const plotWidth = Math.max(width - TREND_PLOT_LEFT - TREND_PLOT_RIGHT, 1);
+    const plotHeight = Math.max(height - TREND_PLOT_TOP - TREND_PLOT_BOTTOM, 1);
+    const { dates, series, maxValue } = buildTrendSeries();
+    trendMotionWidth = width;
+    trendMotionHeight = height;
+    trendMotionPointBackground = getThemeVar('--menu-body-bg-color', '#fff');
+    trendMotionTracks = series.map((line) => ({
+      color: line.color,
+      points: line.values.map((value, index) => ({
+        x: TREND_PLOT_LEFT + (dates.length === 1 ? plotWidth / 2 : (plotWidth / Math.max(dates.length - 1, 1)) * index),
+        y: TREND_PLOT_TOP + plotHeight - (Number(value || 0) / maxValue) * plotHeight,
+      })),
+    }));
+  }
+
+  function drawTrendMotion(time: number) {
+    const canvas = trendMotionCanvasRef.value;
+    const container = trendRef.value;
+    if (!canvas || !container) return;
+    if (trendMotionWidth !== container.clientWidth || trendMotionHeight !== container.clientHeight) {
+      prepareTrendMotionTracks();
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, trendMotionWidth, trendMotionHeight);
+    if (!trendMotionTracks.length) return;
+
+    const frameDelta = trendMotionLastFrameAt ? Math.min(time - trendMotionLastFrameAt, 64) : 0;
+    trendMotionLastFrameAt = time;
+    const pointCount = trendMotionTracks[0]?.points.length || 0;
+    const isHovering = trendTooltip.visible && trendTooltip.index >= 0 && pointCount > 0;
+
+    if (isHovering) {
+      const hoverProgress = pointCount === 1 ? 0.5 : trendTooltip.index / (pointCount - 1);
+      trendMotionDirection = getTrendMotionDirection(
+        trendMotionHoverTarget ?? trendMotionProgress,
+        hoverProgress,
+        trendMotionDirection,
+      );
+      trendMotionHoverTarget = hoverProgress;
+      const focusStrength = 1 - Math.exp(-frameDelta / 150);
+      trendMotionProgress += (hoverProgress - trendMotionProgress) * focusStrength;
+      trendMotionWasHovering = true;
+    } else {
+      if (time < trendMotionStartedAt) return;
+      if (trendMotionWasHovering) {
+        trendMotionPhase = getTrendMotionPhase(trendMotionProgress, trendMotionDirection);
+        trendMotionWasHovering = false;
+        trendMotionHoverTarget = null;
+      }
+      trendMotionPhase = (trendMotionPhase + (frameDelta / TREND_MOTION_ONE_WAY_DURATION) * Math.PI) % (Math.PI * 2);
+      trendMotionDirection = Math.sin(trendMotionPhase) >= 0 ? 1 : -1;
+      trendMotionProgress = getTrendMotionProgress(trendMotionPhase);
+    }
+
+    trendMotionTracks.forEach((track) => {
+      const point = getTrendMotionPoint(track.points, trendMotionProgress);
+      if (!point) return;
+
+      ctx.save();
+      ctx.globalAlpha = props.themeKey === 'night' ? 0.2 : 0.14;
+      ctx.fillStyle = track.color;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.fillStyle = trendMotionPointBackground;
+      ctx.strokeStyle = track.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(point.x, point.y, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  function startTrendMotionAnimation() {
+    stopTrendMotionAnimation();
+    prepareTrendMotionTracks();
+    if (!trendMotionTracks.length) return;
+    trendMotionStartedAt = performance.now() + TREND_MOTION_START_DELAY;
+    trendMotionLastFrameAt = 0;
+    trendMotionPhase = 0;
+    trendMotionProgress = 0;
+    trendMotionDirection = 1;
+    trendMotionWasHovering = false;
+    trendMotionHoverTarget = null;
+    runTrendMotionAnimation();
+  }
+
+  function runTrendMotionAnimation() {
+    if (trendMotionFrameId !== null || !trendMotionTracks.length) return;
+    const frame = (time: number) => {
+      if (!trendIsVisible) {
+        pauseTrendMotionAnimation();
+        return;
+      }
+      drawTrendMotion(time);
+      trendMotionFrameId = requestAnimationFrame(frame);
+    };
+    trendMotionFrameId = requestAnimationFrame(frame);
+  }
+
+  function resumeTrendMotionAnimation() {
+    if (prefersReducedMotion || trendMotionFrameId !== null) return;
+    prepareTrendMotionTracks();
+    if (!trendMotionTracks.length) return;
+    trendMotionStartedAt = performance.now();
+    trendMotionLastFrameAt = 0;
+    runTrendMotionAnimation();
+  }
+
+  function pauseTrendMotionAnimation() {
+    if (trendMotionFrameId !== null) cancelAnimationFrame(trendMotionFrameId);
+    trendMotionFrameId = null;
+    trendMotionLastFrameAt = 0;
+    if (trendMotionWasHovering) {
+      trendMotionPhase = getTrendMotionPhase(trendMotionProgress, trendMotionDirection);
+      trendMotionWasHovering = false;
+      trendMotionHoverTarget = null;
+    }
+  }
+
+  function stopTrendMotionAnimation() {
+    pauseTrendMotionAnimation();
+    trendMotionTracks = [];
+    trendMotionHoverTarget = null;
+    const canvas = trendMotionCanvasRef.value;
+    const ctx = canvas?.getContext('2d');
+    if (ctx && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
   }
 
   function getCanvasMetrics(canvas: HTMLCanvasElement, container: HTMLElement) {
@@ -674,7 +893,7 @@
         stopTypeAnimation();
         return;
       }
-      if (time - lastTypeFrameAt >= CHART_FRAME_INTERVAL) {
+      if (time - lastTypeFrameAt >= TYPE_CHART_FRAME_INTERVAL) {
         drawType(time);
         lastTypeFrameAt = time;
       }
@@ -778,7 +997,7 @@
   }
 
   watch(
-    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData, activeTrendRange.value, props.weekDays],
+    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData, props.weekDays],
     () => {
       syncCharts();
     },
@@ -836,8 +1055,17 @@
       (entries) => {
         entries.forEach((entry) => {
           if (entry.target === trendRef.value) {
-            if (entry.isIntersecting && visibleTrendData.value.length) startTrendAnimation();
-            if (!entry.isIntersecting) destroyTrend();
+            trendIsVisible = entry.isIntersecting;
+            if (trendIsVisible && visibleTrendData.value.length) {
+              drawTrend();
+              if (trendEntryAnimationPlayed) resumeTrendMotionAnimation();
+              else startTrendAnimation();
+            }
+            if (!trendIsVisible) {
+              trendTooltip.visible = false;
+              trendTooltip.index = -1;
+              pauseTrendMotionAnimation();
+            }
           }
           if (entry.target === typeRef.value) {
             typeIsVisible = entry.isIntersecting;
@@ -1099,9 +1327,19 @@
 
   .trend-canvas {
     position: absolute;
+    z-index: 1;
     inset: 0;
     width: 100%;
     height: 100%;
+  }
+
+  .trend-motion-canvas {
+    position: absolute;
+    z-index: 2;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
   }
 
   .trend-legend {

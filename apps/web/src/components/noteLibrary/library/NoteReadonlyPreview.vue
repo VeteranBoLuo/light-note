@@ -50,7 +50,6 @@
           <SvgIcon :src="icon.growth.lock" size="15" aria-hidden="true" />
           <span>{{ t('common.preview') }}</span>
         </div>
-        <h1>{{ displayNote.title || t('note.untitled') }}</h1>
         <div v-if="previewHtml" class="note-readonly-preview__content" v-html="previewHtml"></div>
         <p v-else class="note-readonly-preview__empty">{{ t('common.none') }}</p>
       </article>
@@ -270,13 +269,6 @@
     width: min(100%, 780px);
     margin: 0 auto;
     color: var(--text-color);
-
-    > h1 {
-      margin: 0 0 20px;
-      font-size: 28px;
-      line-height: 1.35;
-      letter-spacing: -0.025em;
-    }
   }
 
   .note-readonly-preview__notice {
@@ -299,6 +291,10 @@
     font-size: 15px;
     line-height: 1.85;
     overflow-wrap: anywhere;
+
+    :deep(> :first-child) {
+      margin-top: 0;
+    }
 
     :deep(h1),
     :deep(h2),

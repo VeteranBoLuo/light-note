@@ -13,6 +13,14 @@ const listItemSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteListItem.vue'),
   'utf8',
 );
+const readonlyPreviewSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/library/NoteReadonlyPreview.vue'),
+  'utf8',
+);
+const noteLibrarySidebarSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteLibrarySidebar.vue'),
+  'utf8',
+);
 const mobilePageListSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobilePageLevelList.vue'),
   'utf8',
@@ -35,6 +43,14 @@ const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-
 const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
 
 describe('笔记库批量 AI 操作语义', () => {
+  it('首次列表请求启动前保持加载态，避免目录功能快照期间闪出空状态', () => {
+    expect(source).toContain('const loading = ref(true);');
+    expect(source).toMatch(
+      /v-if="!desktopPreviewOpen && loading && currentViewMode === 'card'"[\s\S]*?note-card-skeleton-wrap/,
+    );
+    expect(source).toContain('v-if="!desktopPreviewOpen && !loading && !visibleDragNoteList.length"');
+  });
+
   it('桌面与移动端都区分“添加到 AI 助手”和“AI 智能整理”', () => {
     expect(source).toContain("$t('ai.entry.addSelectedToAssistant')");
     expect(source).toContain("$t('bookmarkMg.aiOrganizeBtn')");
@@ -195,6 +211,45 @@ describe('笔记库页面树交互接线', () => {
     expect(source).toMatch(
       /function initialNoteClassificationMode[\s\S]*user\.preferences\.noteSidebarMode === 'tags'[\s\S]*'directory'/,
     );
+  });
+
+  it('目录能力快照返回前先渲染主区标题栏，避免骨架列表纵向跳动', () => {
+    expect(source).toContain('v-else-if="showDesktopDirectoryHeader"');
+    expect(source).toMatch(
+      /const showDesktopDirectoryHeader = computed\([\s\S]*!bookmark\.isMobile[\s\S]*noteSidebarMode\.value === 'directory'[\s\S]*!noteTreeFeaturesReady\.value \|\| noteTreeReadEnabled\.value/,
+    );
+    expect(source).toMatch(/\.note-directory-header\s*\{[\s\S]*?flex: 0 0 auto;/);
+  });
+
+  it('按本地目录展开偏好预留首帧侧栏宽度，并连续显示目录骨架', () => {
+    expect(source).toContain(':has-sidebar="showNoteWorkspaceSidebar"');
+    expect(source).toMatch(
+      /const showNoteWorkspaceSidebar = computed\([\s\S]*noteTreeReadEnabled\.value \|\|[\s\S]*!bookmark\.isMobile[\s\S]*!noteTreeFeaturesReady\.value[\s\S]*noteSidebarExpanded\.value/,
+    );
+    expect(source).toMatch(
+      /const sidebarTreeLoadingKeys = computed\([\s\S]*!noteTreeFeaturesReady\.value[\s\S]*showNoteWorkspaceSidebar\.value[\s\S]*new Set\(\[NOTE_TREE_ROOT_KEY\]\)/,
+    );
+    expect(noteLibrarySidebarSource).toContain('class="note-tree-skeleton-row"');
+    expect(noteLibrarySidebarSource).toContain('v-for="n in 8"');
+  });
+
+  it('目录恢复直接呈现子树，只有用户手动点击的节点播放展开动画', () => {
+    expect(source).toContain(':motion-expansion-ids="treeMotionExpansionIds"');
+    expect(source).toMatch(
+      /async function toggleTreeNode[\s\S]*treeMotionExpansionIds\.value = new Set\([\s\S]*await toggleTreeNodeBase\(node\)[\s\S]*next\.delete\(nodeId\)/,
+    );
+    expect(noteLibrarySidebarSource).toContain(':motion-expansion-ids="motionExpansionIds"');
+    expect(treeRowSource).toContain('<Transition name="note-tree-children" :css="animateChildren">');
+    expect(treeRowSource).toMatch(
+      /const animateChildren = computed\([\s\S]*!props\.motionExpansionIds \|\| props\.motionExpansionIds\.has\(props\.node\.id\)/,
+    );
+  });
+
+  it('只在固定预览顶栏展示笔记标题，正文直接从用户内容开始', () => {
+    expect(readonlyPreviewSource).toContain('<h2>{{ displayNote.title || t(\'note.untitled\') }}</h2>');
+    expect(readonlyPreviewSource).not.toContain('<h1>{{ displayNote.title || t(\'note.untitled\') }}</h1>');
+    expect(readonlyPreviewSource).toContain('class="note-readonly-preview__content" v-html="previewHtml"');
+    expect(readonlyPreviewSource).toMatch(/\.note-readonly-preview__content[\s\S]*:deep\(> :first-child\)/);
   });
 
   it('目录树同时支持中央移入、前后插入和根层最前落点', () => {

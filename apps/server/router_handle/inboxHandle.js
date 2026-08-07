@@ -39,14 +39,16 @@ function sendInboxError(res, error) {
         ? 400
         : 500;
   if (status === 500) console.error('[inbox] 请求失败:', error?.message || error);
-  return res.send(resultData(null, status, status < 500 ? error.message : '待整理服务暂时不可用，请稍后重试'));
+  return res
+    .status(status)
+    .send(resultData(null, status, status < 500 ? error.message : '待整理服务暂时不可用，请稍后重试'));
 }
 
 export async function countInbox(req, res) {
   try {
     res.send(resultData(await withActionCounts(await queryPendingCount(pool, req.user.id), req.user.id)));
   } catch (error) {
-    sendInboxError(res, error);
+    return sendInboxError(res, error);
   }
 }
 
@@ -70,7 +72,7 @@ export async function listInbox(req, res) {
       }),
     );
   } catch (error) {
-    sendInboxError(res, error);
+    return sendInboxError(res, error);
   }
 }
 
@@ -88,7 +90,7 @@ export async function enqueueInbox(req, res) {
     res.send(resultData(result));
   } catch (error) {
     if (connection) await connection.rollback();
-    sendInboxError(res, error);
+    return sendInboxError(res, error);
   } finally {
     connection?.release();
   }
@@ -107,7 +109,7 @@ export async function completeInbox(req, res) {
     res.send(resultData(result));
   } catch (error) {
     if (connection) await connection.rollback();
-    sendInboxError(res, error);
+    return sendInboxError(res, error);
   } finally {
     connection?.release();
   }

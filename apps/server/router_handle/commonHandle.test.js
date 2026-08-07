@@ -56,6 +56,7 @@ const {
   clearImages,
   resolveHelpSources,
   getAdminOverview,
+  getAdminOverviewRecent,
   getAdminOverviewTrend,
   getAgentLogs,
 } = await import('./commonHandle.js');
@@ -332,6 +333,76 @@ describe('getAdminOverviewTrend 趋势周期', () => {
     const res = mockRes();
     await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 365 } }, res);
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).not.toHaveBeenCalled();
+  });
+});
+
+describe('getAdminOverviewRecent 最近新增', () => {
+  beforeEach(() => query.mockReset());
+
+  it('按统一口径过滤示例资源和内部账号，并合并三类资源的最新 20 条', async () => {
+    query
+      // ensureRootRole 复核当前 root 身份
+      .mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'bookmark-1',
+            title: '新书签',
+            userId: 'user-1',
+            userName: '小白',
+            createdAt: new Date('2026-08-07T08:00:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'note-1',
+            title: '新笔记',
+            userId: 'user-2',
+            userName: '小青',
+            createdAt: new Date('2026-08-07T10:00:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 3,
+            title: '新文件.pdf',
+            userId: 'user-3',
+            userName: '小橙',
+            createdAt: new Date('2026-08-07T09:00:00Z'),
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [{ id: 'user-4', name: '新用户', role: 'user', createdAt: new Date('2026-08-07T11:00:00Z') }],
+      ]);
+    const res = mockRes();
+
+    await getAdminOverviewRecent({ user: { id: 'root-id', role: 'root' }, body: { hideInternal: true } }, res);
+
+    const resourceSql = query.mock.calls.slice(1, 4).map(([sql]) => String(sql));
+    expect(resourceSql.every((sql) => sql.includes('onboarding_seed_resources'))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes('resource_owner.del_flag = 0'))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes("resource_owner.role NOT IN ('root', 'test')"))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes('LIMIT 20'))).toBe(true);
+    expect(String(query.mock.calls[4][0])).toContain("role <> 'visitor'");
+    expect(String(query.mock.calls[4][0])).toContain('LIMIT 20');
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.status).toBe(200);
+    expect(payload.data.recentResources.map((item) => item.type)).toEqual(['note', 'file', 'bookmark']);
+    expect(payload.data.recentUsers).toEqual([expect.objectContaining({ id: 'user-4', name: '新用户', role: 'user' })]);
+  });
+
+  it('非 root 用户无权读取且不执行资源查询', async () => {
+    const res = mockRes();
+
+    await getAdminOverviewRecent({ user: { id: 'user-1', role: 'user' }, body: {} }, res);
+
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 403 }));
     expect(query).not.toHaveBeenCalled();
   });
 });

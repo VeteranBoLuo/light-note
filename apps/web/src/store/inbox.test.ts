@@ -73,6 +73,16 @@ describe('inbox store', () => {
     expect(store.selectedKeys).toEqual([]);
   });
 
+  it('运行时混入待办排序值时不会把 due 发送给待整理接口', async () => {
+    const store = useInboxStore();
+    store.sort = 'due' as any;
+    listInbox.mockResolvedValueOnce(successList([]));
+
+    await store.refreshList();
+
+    expect(listInbox).toHaveBeenCalledWith(expect.objectContaining({ sort: 'newest' }));
+  });
+
   it('完成接口失败时不乐观修改本地列表', async () => {
     const store = useInboxStore();
     const item = { resourceType: 'note', resourceId: 'n1', title: '保留' } as any;

@@ -70,14 +70,6 @@
                       )
                     }}
                   </BChip>
-                  <BButton
-                    v-if="todoActionState(item) !== 'unavailable'"
-                    size="small"
-                    class="nt-todo-action"
-                    @click.stop="emit('open-todo', item)"
-                  >
-                    {{ t('notification.todoOpen') }}
-                  </BButton>
                 </div>
               </div>
               <BButton
@@ -142,7 +134,6 @@
     'switch-tab': [value: string];
     'item-click': [item: NotificationItem];
     'complete-todo': [item: NotificationItem];
-    'open-todo': [item: NotificationItem];
     more: [item: NotificationItem];
     delete: [item: NotificationItem];
     'load-more': [];
@@ -345,7 +336,7 @@
 
   .nt-item-action {
     position: absolute;
-    top: 8px;
+    top: 0;
     right: 6px;
     width: 44px;
     min-width: 44px;
@@ -456,9 +447,9 @@
   .is-mobile .nt-todo-action::before {
     position: absolute;
     z-index: -1;
-    inset: 5px 0;
+    inset: 10px 0;
     border: 1px solid var(--primary-color);
-    border-radius: 9px;
+    border-radius: 7px;
     background: var(--mobile-selected-bg);
     content: '';
   }

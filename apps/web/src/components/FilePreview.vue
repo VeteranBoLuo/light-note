@@ -321,7 +321,11 @@
     getCloudPreviewType,
     isLegacyOfficeFile,
   } from '@/constants/cloudFileCategory.ts';
-  import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview.ts';
+  import {
+    HTML_PREVIEW_REFERRER_POLICY,
+    HTML_PREVIEW_SANDBOX,
+    injectHtmlPreviewAnchorBridge,
+  } from '@/utils/htmlPreview.ts';
   import {
     registerMobileOverlayHistory,
     releaseMobileOverlayHistory,
@@ -616,7 +620,9 @@
       if (expectedFileId !== activePreviewFileId) return;
 
       // 强制使用 text/html，兼容对象存储把 .html 误标为 application/octet-stream 的情况。
-      const htmlBlob = new Blob([sourceBlob], { type: 'text/html;charset=utf-8' });
+      const source = await sourceBlob.text();
+      if (expectedFileId !== activePreviewFileId) return;
+      const htmlBlob = new Blob([injectHtmlPreviewAnchorBridge(source)], { type: 'text/html;charset=utf-8' });
       htmlBlobUrl.value = URL.createObjectURL(htmlBlob);
       // 保持加载态，直到 iframe 真正完成导航并触发 onLoad。
     } catch (err) {

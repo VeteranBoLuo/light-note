@@ -173,6 +173,7 @@
     getQuickCaptureInboxTarget,
     hasCaptureBookmarkCandidate,
     normalizeQuickCaptureType,
+    refreshQuickCaptureStores,
   } from '@/utils/inboxCapture';
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { recordOperation } from '@/api/commonApi';
@@ -468,11 +469,12 @@
       files.value = [];
       pastedFileKeys.clear();
       manualType.value = false;
-      if (router.currentRoute.value.path.startsWith('/inbox')) {
-        await Promise.all([inbox.refreshList(), todo.refreshList()]);
-      } else {
-        await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
-      }
+      await refreshQuickCaptureStores(
+        captureType.value,
+        router.currentRoute.value.path.startsWith('/inbox'),
+        inbox,
+        todo,
+      );
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
@@ -504,11 +506,7 @@
       };
       successText.value = t('inbox.todoSaved');
       recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
-      if (router.currentRoute.value.path.startsWith('/inbox')) {
-        await Promise.all([inbox.refreshList(), todo.refreshList()]);
-      } else {
-        await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
-      }
+      await refreshQuickCaptureStores('todo', router.currentRoute.value.path.startsWith('/inbox'), inbox, todo);
       emit('captured');
       message.success(successText.value);
     } catch (error: any) {
@@ -552,11 +550,7 @@
   async function afterDetailedTodoSaved(result: { id: string; title: string }) {
     capturedResource.value = { type: 'todo', id: result.id, title: result.title };
     recordOperation(OPERATION_LOG_MAP.inbox.captureTodo);
-    if (router.currentRoute.value.path.startsWith('/inbox')) {
-      await Promise.all([inbox.refreshList(), todo.refreshList()]);
-    } else {
-      await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
-    }
+    await refreshQuickCaptureStores('todo', router.currentRoute.value.path.startsWith('/inbox'), inbox, todo);
     emit('captured');
     todoDetailsVisible.value = false;
     quickShellSuppressed.value = false;

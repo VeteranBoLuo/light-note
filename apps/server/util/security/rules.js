@@ -6,7 +6,12 @@ export const SECURITY_CONFIG = {
   scanner404FiveMinutes: Number(process.env.SECURITY_404_FIVE_MINUTES || 20),
   loginFailFiveMinutes: Number(process.env.SECURITY_LOGIN_FAIL_FIVE_MINUTES || 8),
   ipAutoBanRiskScore: Number(process.env.SECURITY_IP_AUTO_BAN_RISK_SCORE || 80),
-  blockEnabled: process.env.SECURITY_BLOCK_ENABLED !== 'false',
+  // 当前请求拦截、历史信誉参与决策、累计风险自动封禁是三种不同能力，必须独立控制。
+  // 兼容旧 SECURITY_BLOCK_ENABLED，但新部署应使用更准确的变量名。
+  blockEnabled:
+    process.env.SECURITY_BLOCK_REQUEST_ENABLED !== 'false' && process.env.SECURITY_BLOCK_ENABLED !== 'false',
+  ipAutoBanEnabled: process.env.SECURITY_IP_AUTO_BAN_ENABLED === 'true',
+  reputationDecisionEnabled: process.env.SECURITY_REPUTATION_DECISION_ENABLED === 'true',
   // 决策阈值：threatScore >= blockThreshold 拦截，>= logThreshold 记录观察
   // (原先硬编码在 decisionEngine，提到这里便于按环境调整；默认值与原硬编码一致)
   blockThreshold: Number(process.env.SECURITY_BLOCK_THRESHOLD || 50),

@@ -6,6 +6,8 @@ import { calculateThreat } from './services/threatScorer.js';
 import { decideSecurityAction } from './services/decisionEngine.js';
 import { getIpReputation, recordIpRequest } from './services/ipReputation.js';
 import { writeSecurityEvent } from './services/securityLogService.js';
+import { SECURITY_CONFIG } from './rules.js';
+import { applySecurityPolicies } from './services/securityPolicyService.js';
 
 const loggedRequests = new WeakSet();
 const debugSecurity = (...args) => {
@@ -21,8 +23,8 @@ const isIpBanRecoveryRequest = (path = '') => IP_BAN_RECOVERY_PATHS.some((item) 
 const writeEventSafely = async ({ context, evidenceList, threat, decision, statusCode, responseTimeMs }) => {
   try {
     await writeSecurityEvent({ context, evidenceList, threat, decision, statusCode, responseTimeMs });
-  } catch (e) {
-    console.error('安全事件写入失败:', e.message);
+  } catch {
+    console.error('安全事件写入失败 code=SECURITY_EVENT_WRITE_FAILED');
   }
 };
 
@@ -43,9 +45,17 @@ export const attackMonitor = async (req, res, next) => {
     req.user?.role === 'root' ? { ...ipReputation, is_banned: 0, banned_until: null } : ipReputation;
   const signatureEvidence = detectSignatures(context);
   const behaviorResult = detectRequestBehavior(context);
-  const evidenceList = [...signatureEvidence, ...behaviorResult.evidence];
-  const threat = calculateThreat(evidenceList, effectiveIpReputation);
-  const decision = decideSecurityAction({ threatScore: threat.threatScore, ipReputation: effectiveIpReputation });
+  const rawEvidenceList = [...signatureEvidence, ...behaviorResult.evidence];
+  const policyResult = await applySecurityPolicies({ context, evidenceList: rawEvidenceList });
+  const evidenceList = policyResult.evidenceList;
+  const threat = calculateThreat(evidenceList, effectiveIpReputation, {
+    includeReputation: SECURITY_CONFIG.reputationDecisionEnabled,
+  });
+  const blockingThreat = calculateThreat(
+    evidenceList.filter((item) => item.policyMode === 'block'),
+    {},
+  );
+  const decision = decideSecurityAction({ threatScore: blockingThreat.threatScore, ipReputation: effectiveIpReputation });
   debugSecurity(context.method, context.originalUrl, evidenceList.length, threat.threatScore, decision.actionTaken);
 
   let responsePayload = '';
@@ -60,14 +70,21 @@ export const attackMonitor = async (req, res, next) => {
       return;
     }
     const responseEvidence = detectResponseBehavior(context, res.statusCode, responsePayload);
-    const allEvidence = [...evidenceList, ...responseEvidence];
+    const responsePolicyResult = await applySecurityPolicies({ context, evidenceList: responseEvidence });
+    const allEvidence = [...evidenceList, ...responsePolicyResult.evidenceList];
     if (allEvidence.length === 0) {
       return;
     }
-    const finalThreat = calculateThreat(allEvidence, effectiveIpReputation);
+    const finalThreat = calculateThreat(allEvidence, effectiveIpReputation, {
+      includeReputation: SECURITY_CONFIG.reputationDecisionEnabled,
+    });
+    const finalBlockingThreat = calculateThreat(
+      allEvidence.filter((item) => item.policyMode === 'block'),
+      {},
+    );
     const finalDecision = decision.blocked
       ? decision
-      : decideSecurityAction({ threatScore: finalThreat.threatScore, ipReputation: effectiveIpReputation });
+      : decideSecurityAction({ threatScore: finalBlockingThreat.threatScore, ipReputation: effectiveIpReputation });
     const observedDecision =
       !decision.blocked && finalDecision.blocked
         ? {

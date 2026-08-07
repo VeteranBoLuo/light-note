@@ -57,7 +57,7 @@
     >
       <article class="todo-summary-card is-overdue">
         <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.overdue" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
+          ><SvgIcon :src="icon.todoSummary.overdue" color="var(--todo-summary-icon-fg)" size="21" aria-hidden="true"
         /></span>
         <div
           ><span>{{ t('inbox.todoSummaryOverdue') }}</span
@@ -66,7 +66,7 @@
       </article>
       <article class="todo-summary-card">
         <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.today" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
+          ><SvgIcon :src="icon.todoSummary.today" color="var(--todo-summary-icon-fg)" size="21" aria-hidden="true"
         /></span>
         <div
           ><span>{{ t('inbox.todoSummaryToday') }}</span
@@ -75,7 +75,7 @@
       </article>
       <article class="todo-summary-card">
         <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.week" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
+          ><SvgIcon :src="icon.todoSummary.week" color="var(--todo-summary-icon-fg)" size="21" aria-hidden="true"
         /></span>
         <div
           ><span>{{ t('inbox.todoSummaryWeek') }}</span
@@ -131,7 +131,7 @@
               clearable
               @enter="search"
             />
-            <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
+            <BSelect v-model:value="todo.sort" :options="sortOptions" @change="search" />
             <BButton
               v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
               size="small"
@@ -279,7 +279,10 @@
       <BButton size="small" @click="refreshList()">{{ t('inbox.retry') }}</BButton>
     </section>
 
-    <section class="inbox-content" :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade }">
+    <section
+      class="inbox-content"
+      :class="{ 'has-top-fade': showTopFade, 'has-bottom-fade': showBottomFade && !isTodoFocused }"
+    >
       <div
         ref="scrollContainer"
         class="inbox-scroll"
@@ -619,8 +622,6 @@
   );
   function applyDefaultTodoSort() {
     todo.sort = 'due';
-    // 桌面待办与资源中心复用工具栏，但不能继承资源默认的“最新收集”。
-    inbox.sort = 'due' as any;
   }
   // 桌面与移动端共用的待办状态切换页签(未完成/已完成/全部)。
   const todoStatusTabOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
@@ -870,7 +871,6 @@
   // silent: 下拉刷新专用 —— 不进 loading(旧列表留在屏幕上),也不重置滚动位置。
   async function refreshList(resetScroll = false, silent = false) {
     todo.keyword = inbox.keyword;
-    if (inbox.filterType === 'todo' && !isMobileTodoPrimary.value) todo.sort = inbox.sort as TodoSort;
     let refreshed = false;
     let inboxCountsReady = false;
     if (inbox.filterType === 'todo') {
@@ -1578,14 +1578,16 @@
     background: var(--card-background);
   }
   .todo-summary-card__icon {
+    box-sizing: border-box;
     display: grid;
     width: 36px;
     height: 36px;
     flex: 0 0 auto;
     place-items: center;
+    border: 1px solid var(--todo-summary-icon-border);
     border-radius: 11px;
-    background: var(--todo-navigation-soft-color);
-    color: var(--todo-navigation-color);
+    background: var(--todo-summary-icon-bg);
+    color: var(--todo-summary-icon-fg);
   }
   .todo-summary-card > div {
     display: grid;

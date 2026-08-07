@@ -34,7 +34,9 @@ vi.mock('../util/services/todoService.js', () => ({ queryTodoPendingCount, query
 const { completeInbox, countInbox, enqueueInbox, listInbox } = await import('./inboxHandle.js');
 
 function mockRes() {
-  return { send: vi.fn() };
+  const res = { status: vi.fn(), send: vi.fn() };
+  res.status.mockReturnValue(res);
+  return res;
 }
 
 describe('inboxHandle 写事务', () => {
@@ -92,6 +94,7 @@ describe('inboxHandle 写事务', () => {
       status: 500,
       msg: '待整理服务暂时不可用，请稍后重试',
     });
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(connection.release).toHaveBeenCalledTimes(1);
   });
 
@@ -113,6 +116,7 @@ describe('inboxHandle 写事务', () => {
       status: 500,
       msg: '待整理服务暂时不可用，请稍后重试',
     });
+    expect(res.status).toHaveBeenCalledWith(500);
     expect(connection.rollback).not.toHaveBeenCalled();
   });
 
@@ -192,6 +196,7 @@ describe('inboxHandle 写事务', () => {
     await listInbox({ user: { id: 'u1' }, body: { sort: 'DROP TABLE' } }, res);
     expect(listInboxResources).toHaveBeenCalledTimes(1);
     expect(poolQuery).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
     expect(res.send).toHaveBeenCalledWith({ data: null, status: 400, msg: '无效的筛选或排序参数' });
   });
 

@@ -19,8 +19,16 @@
             </h1>
           </div>
           <p>{{ t('workbench.subtitle') }}</p>
-          <small v-if="lastUpdatedAt" class="workbench-data-scope">
-            {{ t('workbench.meta.todayRange') }} · {{ t('workbench.meta.lastUpdated', { time: lastUpdatedAt }) }}
+          <small class="workbench-data-scope">
+            {{ t('workbench.meta.todayRange') }}
+            <span
+              class="workbench-data-updated"
+              :aria-busy="!lastUpdatedAt"
+              aria-live="polite"
+            >
+              ·
+              {{ lastUpdatedAt ? t('workbench.meta.lastUpdated', { time: lastUpdatedAt }) : t('common.loading') }}
+            </span>
           </small>
         </div>
         <div class="header-actions">
@@ -1115,10 +1123,17 @@
 
   .workbench-data-scope {
     display: block;
+    min-height: 1.4em;
     margin: 5px 0 0 17px;
     color: var(--desc-color);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
+    line-height: 1.4;
+  }
+
+  .workbench-data-updated {
+    display: inline-block;
+    min-width: 12em;
   }
 
   .header-actions {

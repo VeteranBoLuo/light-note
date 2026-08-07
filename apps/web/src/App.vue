@@ -237,12 +237,15 @@
     '/admin/operationLog': '/operationLog',
     '/admin/imageMg': '/imageMg',
     '/admin/logExclude': '/logExclude',
-    '/securityCenter/overview': '/securityOverview',
-    '/securityCenter/events': '/securityEvents',
-    '/securityCenter/ips': '/securityIps',
-    '/securityCenter/account-reputation': '/securityAccountReputation',
-    '/securityCenter/whitelist': '/securityWhitelist',
-    '/securityCenter/rules': '/securityRules',
+    '/securityCenter/overview': '/securityCenterMobile',
+    '/securityCenter/review': '/securityCenterMobile',
+    '/securityCenter/detection-quality': '/securityCenterMobile',
+    '/securityCenter/access-control': '/securityCenterMobile',
+    '/securityCenter/events': '/securityCenterMobile',
+    '/securityCenter/ips': '/securityCenterMobile',
+    '/securityCenter/account-reputation': '/securityCenterMobile',
+    '/securityCenter/whitelist': '/securityCenterMobile',
+    '/securityCenter/rules': '/securityCenterMobile',
     '/trash': '/ptrash',
   };
   const deskReplaceMap = {
@@ -255,11 +258,11 @@
     '/admin': '/admin/operationLog',
     '/personCenter': '/home',
     '/securityOverview': '/securityCenter/overview',
-    '/securityEvents': '/securityCenter/events',
+    '/securityEvents': '/securityCenter/review',
     '/securityIps': '/securityCenter/ips',
     '/securityAccountReputation': '/securityCenter/account-reputation',
     '/securityWhitelist': '/securityCenter/whitelist',
-    '/securityRules': '/securityCenter/rules',
+    '/securityRules': '/securityCenter/detection-quality',
     '/securityCenterMobile': '/securityCenter/overview',
     '/ptrash': '/trash',
   };
@@ -668,7 +671,7 @@
               onClick: () => {
                 notification.close(NOTICE_KEY);
                 router.push({
-                  path: bookmark.isMobile ? '/securityEvents' : '/securityCenter/events',
+                  path: bookmark.isMobile ? '/securityCenterMobile' : '/securityCenter/review',
                   query: { handledStatus: 'unhandled' },
                 });
               },

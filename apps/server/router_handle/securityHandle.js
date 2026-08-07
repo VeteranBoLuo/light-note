@@ -14,6 +14,7 @@ import {
   securityHandledStatusSuccessMessage,
 } from '../util/security/handledStatus.js';
 import { applySecurityEventHandle } from '../util/security/services/securityEventHandling.js';
+import { clearSecurityRestrictionCache } from '../util/security/services/securityRestrictionService.js';
 
 const ensureRootRole = async (req, res) => {
   if (!req.user?.id || req.user?.role !== 'root') {
@@ -504,7 +505,11 @@ export const getIpAccounts = async (req, res) => {
          u.alias,
          u.email,
          u.role,
-         u.del_flag,
+         EXISTS(
+           SELECT 1 FROM security_account_restrictions r
+           WHERE r.user_id = u.id AND r.status = 'active'
+             AND (r.expires_at IS NULL OR r.expires_at > NOW())
+         ) AS del_flag,
          SUM(account_usage.security_events) AS security_events,
          SUM(account_usage.api_requests) AS api_requests,
          MAX(account_usage.last_seen_at) AS last_seen_at,
@@ -521,7 +526,7 @@ export const getIpAccounts = async (req, res) => {
          GROUP BY user_id
        ) account_usage
        LEFT JOIN user u ON account_usage.user_id = u.id
-       GROUP BY account_usage.user_id, u.alias, u.email, u.role, u.del_flag
+       GROUP BY account_usage.user_id, u.id, u.alias, u.email, u.role
        ORDER BY last_seen_at DESC
        LIMIT 100`,
       [ip, ip],
@@ -538,7 +543,7 @@ export const getAccountBanList = async (req, res) => {
     const { filters, pageSize, currentPage } = validateQueryParams(req.body);
     const skip = pageSize * (currentPage - 1);
     const params = [];
-    const conditions = ['u.del_flag = 1'];
+    const conditions = ["sr.status = 'active'", '(sr.expires_at IS NULL OR sr.expires_at > NOW())'];
     if (filters.key) {
       conditions.push(
         '(u.id LIKE CONCAT("%", ?, "%") OR u.alias LIKE CONCAT("%", ?, "%") OR u.email LIKE CONCAT("%", ?, "%") OR b.ban_reason LIKE CONCAT("%", ?, "%"))',
@@ -553,28 +558,30 @@ export const getAccountBanList = async (req, res) => {
          u.email,
          u.role,
          u.head_picture,
-         b.ban_reason,
+         COALESCE(NULLIF(sr.reason, ''), b.ban_reason) AS ban_reason,
          b.banned_by,
          b.banned_at,
          b.unbanned_at,
          b.updated_at,
-         r.risk_score,
-         r.total_events,
-         r.high_risk_count,
-         r.critical_count,
-         r.last_event_at
-       FROM user u
+         ar.risk_score,
+         ar.total_events,
+         ar.high_risk_count,
+         ar.critical_count,
+         ar.last_event_at
+       FROM security_account_restrictions sr
+       JOIN user u ON u.id = sr.user_id
        LEFT JOIN security_account_bans b ON b.user_id = u.id
-       LEFT JOIN security_account_reputation r ON r.user_id = u.id
+       LEFT JOIN security_account_reputation ar ON ar.user_id = u.id
        WHERE ${where}
-       ORDER BY COALESCE(b.banned_at, u.create_time) DESC
+       ORDER BY sr.created_at DESC
        LIMIT ? OFFSET ?`,
       [...params, Number(pageSize), Number(skip)],
     );
     rows.forEach((row) => parseJsonField(row, 'attack_type_breakdown', {}));
     const [totalRows] = await pool.query(
       `SELECT COUNT(*) AS total
-       FROM user u
+       FROM security_account_restrictions sr
+       JOIN user u ON u.id = sr.user_id
        LEFT JOIN security_account_bans b ON b.user_id = u.id
        WHERE ${where}`,
       params,
@@ -612,7 +619,11 @@ export const getAccountReputationList = async (req, res) => {
          u.email,
          u.role,
          u.head_picture,
-         u.del_flag,
+         EXISTS(
+           SELECT 1 FROM security_account_restrictions sr
+           WHERE sr.user_id = u.id AND sr.status = 'active'
+             AND (sr.expires_at IS NULL OR sr.expires_at > NOW())
+         ) AS del_flag,
          r.risk_score,
          r.total_events,
          r.high_risk_count,
@@ -621,7 +632,7 @@ export const getAccountReputationList = async (req, res) => {
        FROM user u
        LEFT JOIN security_account_reputation r ON r.user_id = u.id
        ${where}
-       ORDER BY u.del_flag DESC, COALESCE(r.risk_score, 0) DESC, u.create_time DESC
+       ORDER BY del_flag DESC, COALESCE(r.risk_score, 0) DESC, u.create_time DESC
        ${limitClause}`,
       queryParams,
     );
@@ -652,15 +663,44 @@ export const banAccount = async (req, res) => {
     }
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const [rows] = await connection.query('SELECT id, role, del_flag FROM user WHERE id = ? LIMIT 1', [userId]);
+    const [rows] = await connection.query('SELECT id, role FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
     if (!rows[0]) {
       await connection.rollback();
       return res.send(resultData(null, 404, '账号不存在'));
     }
+    if (rows[0].role === 'root') {
+      await connection.rollback();
+      return res.send(resultData(null, 400, 'Root账号不能应用安全限制'));
+    }
     if (force) {
       await disableSecurityWhitelist('user', userId, connection);
     }
-    await connection.query('UPDATE user SET del_flag = 1 WHERE id = ?', [userId]);
+    const [previousRestrictions] = await connection.query(
+      `SELECT id FROM security_account_restrictions
+       WHERE user_id = ? AND status = 'active'
+       FOR UPDATE`,
+      [userId],
+    );
+    await connection.query(
+      `UPDATE security_account_restrictions
+       SET status = 'revoked', revoked_by = ?, revoked_at = NOW(), updated_at = NOW()
+       WHERE user_id = ? AND status = 'active'`,
+      [req.user.id, userId],
+    );
+    for (const restriction of previousRestrictions) {
+      await connection.query(
+        `INSERT INTO security_policy_audit
+          (policy_type, policy_id, action, policy_version, operator_id, reason)
+         VALUES ('account_restriction', ?, 'revoke', 1, ?, '旧版兼容入口替换限制')`,
+        [restriction.id, req.user.id],
+      );
+    }
+    const [restrictionResult] = await connection.query(
+      `INSERT INTO security_account_restrictions
+        (user_id, restriction_type, status, reason, created_by)
+       VALUES (?, 'full_lock', 'active', ?, ?)`,
+      [userId, reason, req.user.id],
+    );
     await connection.query(
       `INSERT INTO security_account_bans (user_id,banned_by,ban_reason,is_active,banned_at)
        VALUES (?,?,?,?,NOW())
@@ -674,34 +714,70 @@ export const banAccount = async (req, res) => {
         updated_at = NOW()`,
       [userId, req.user.id, reason, 1],
     );
+    await connection.query(
+      `INSERT INTO security_policy_audit
+        (policy_type, policy_id, action, policy_version, operator_id, reason, snapshot_json)
+       VALUES ('account_restriction', ?, 'create', 1, ?, ?, ?)`,
+      [restrictionResult.insertId, req.user.id, reason, JSON.stringify({ userId, restrictionType: 'full_lock', legacy: true })],
+    );
     await connection.commit();
+    clearSecurityRestrictionCache(userId);
     await removeUserSessions(userId).catch((error) => {
       console.error('[security] remove user sessions failed after account ban:', error);
     });
     res.send(resultData(null, 200, '账号已封禁'));
   } catch (e) {
     if (connection) await connection.rollback().catch(() => {});
-    res.send(resultData(null, 500, '封禁账号失败：' + e.message));
+    console.error('[security] legacy account restriction failed');
+    res.send(resultData(null, 500, '封禁账号失败'));
   } finally {
     if (connection) connection.release();
   }
 };
 
 export const unbanAccount = async (req, res) => {
+  let connection;
   try {
     if (!(await ensureRootRole(req, res))) return;
     const { userId } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '账号不能为空'));
-    await pool.query('UPDATE user SET del_flag = 0 WHERE id = ?', [userId]);
-    await pool.query(
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [restrictions] = await connection.query(
+      `SELECT id FROM security_account_restrictions
+       WHERE user_id = ? AND status = 'active'
+       FOR UPDATE`,
+      [userId],
+    );
+    await connection.query(
+      `UPDATE security_account_restrictions
+       SET status = 'revoked', revoked_by = ?, revoked_at = NOW(), updated_at = NOW()
+       WHERE user_id = ? AND status = 'active'`,
+      [req.user.id, userId],
+    );
+    await connection.query(
       `UPDATE security_account_bans
        SET is_active = 0, unbanned_by = ?, unbanned_at = NOW(), updated_at = NOW()
        WHERE user_id = ?`,
       [req.user.id, userId],
     );
+    for (const restriction of restrictions) {
+      await connection.query(
+        `INSERT INTO security_policy_audit
+          (policy_type, policy_id, action, policy_version, operator_id, reason)
+         VALUES ('account_restriction', ?, 'revoke', 1, ?, '旧版兼容入口解除')`,
+        [restriction.id, req.user.id],
+      );
+    }
+    await connection.commit();
+    clearSecurityRestrictionCache(userId);
     res.send(resultData(null, 200, '账号已解封'));
   } catch (e) {
-    res.send(resultData(null, 500, '解封账号失败：' + e.message));
+    if (connection) await connection.rollback().catch(() => {});
+    console.error('[security] legacy account restriction revoke failed');
+    res.send(resultData(null, 500, '解封账号失败'));
+  } finally {
+    connection?.release();
   }
 };
 

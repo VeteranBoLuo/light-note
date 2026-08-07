@@ -1,183 +1,135 @@
 <template>
-  <b-drawer :open="visible" title="攻击事件详情" width="720" @close="$emit('close')">
-    <div v-if="eventDetail.event" class="security-detail">
-      <section>
-        <h3>事件概览</h3>
-        <div class="detail-grid">
-          <span>规则</span><strong>{{ eventDetail.event.matchedRule || eventDetail.event.attackType }}</strong>
-          <span>类型</span><strong>{{ eventDetail.event.attackType }}</strong> <span>等级</span
-          ><strong>{{ eventDetail.event.severity }}</strong> <span>分数</span
-          ><strong>{{ eventDetail.event.threatScore }}</strong> <span>动作</span
-          ><strong>{{ eventDetail.event.actionTaken }}</strong> <span>IP</span
-          ><strong>{{ eventDetail.event.sourceIp }}</strong> <span>账号</span
-          ><strong>{{ eventDetail.event.alias || eventDetail.event.email || eventDetail.event.userId }}</strong>
-          <span>用户ID</span><strong>{{ eventDetail.event.userId || '未识别' }}</strong> <span>接口</span
-          ><strong>{{ eventDetail.event.requestPath }}</strong> <span>IP风险影响</span
-          ><strong>
-            +{{ eventDetail.event.ipRiskDelta || 0 }}
-            <em>{{ eventDetail.event.ipRiskReverted ? '已回滚' : '未回滚' }}</em>
-          </strong>
-          <span>账号风险影响</span
-          ><strong>
-            +{{ eventDetail.event.userRiskDelta || 0 }}
-            <em>{{ eventDetail.event.userRiskReverted ? '已回滚' : '未回滚' }}</em>
-          </strong>
+  <BDrawer
+    :open="open"
+    :title="t('securityV2.review.eventTitle', { name: detail.event?.matchedRule || detail.event?.primaryRuleCode || '-' })"
+    width="680px"
+    :mobile-full-screen="true"
+    body-padding="0"
+    @close="emit('close')"
+  >
+    <BLoading :loading="loading" class="security-detail-loading">
+      <div class="security-detail-body">
+        <div class="security-detail-summary">
+          <div class="security-detail-stat"><span>{{ t('securityV2.review.threatScore') }}</span><strong>{{ number(event.threatScore) }}</strong></div>
+          <div class="security-detail-stat"><span>{{ t('securityV2.review.confidence') }}</span><strong>{{ number(event.confidence) }}%</strong></div>
+          <div class="security-detail-stat"><span>{{ t('securityV2.review.action') }}</span><strong>{{ event.blocked ? t('securityV2.common.blocked') : t('securityV2.common.logged') }}</strong></div>
+          <div class="security-detail-stat"><span>{{ t('securityV2.review.hit') }}</span><strong>{{ detail.similarEvents?.length || 1 }}</strong></div>
         </div>
-      </section>
 
-      <section>
-        <h3>命中证据</h3>
-        <ol class="security-evidence-list">
-          <li v-for="item in eventDetail.evidence" :key="item.id" class="security-evidence-item">
-            <span class="security-evidence-dot" :class="`is-${item.severity}`" aria-hidden="true"></span>
+        <section class="security-detail-section">
+          <h4>{{ t('securityV2.review.why') }}</h4>
+          <div class="security-banner is-warning no-margin">
+            <span class="security-pill is-warning">{{ t('securityV2.review.pending') }}</span>
+            <div><strong>{{ primaryEvidence?.evidenceMessage || event.decisionReason || event.matchedRule || '-' }}</strong><p>{{ t('securityV2.review.markedReason') }}</p></div>
+          </div>
+        </section>
+
+        <section class="security-detail-section">
+          <h4>{{ t('securityV2.review.evidence') }}</h4>
+          <article v-for="evidence in detail.evidence" :key="evidence.id" class="security-evidence">
+            <i></i>
             <div>
-              <strong>{{ item.ruleName }}</strong>
-              <p>{{ item.evidenceMessage }}</p>
-              <code>{{ item.matchedField }}: {{ item.matchedValuePreview }}</code>
+              <strong>{{ evidence.ruleCode }} · {{ evidence.matchedField || '-' }}</strong>
+              <p>{{ evidence.evidenceMessage || '-' }} · {{ evidenceMode(evidence.policyMode) }} · {{ number(evidence.confidence) }}%</p>
+              <code>{{ evidence.matchedValuePreview || '-' }}</code>
             </div>
-          </li>
-        </ol>
-      </section>
+            <span class="security-pill is-warning">+{{ number(evidence.scoreDelta) }}</span>
+          </article>
+          <div v-if="!detail.evidence?.length" class="security-empty">{{ t('securityV2.common.noData') }}</div>
+        </section>
 
-      <section>
-        <h3>请求快照</h3>
-        <pre>{{ eventDetail.event.payloadSummary }}</pre>
-      </section>
+        <section class="security-detail-section">
+          <h4>{{ t('securityV2.review.context') }}</h4>
+          <div class="security-detail-summary">
+            <div class="security-detail-stat"><span>{{ t('securityV2.review.endpoint') }}</span><strong>{{ event.requestMethod || '-' }} {{ event.requestPath || '-' }}</strong></div>
+            <div class="security-detail-stat"><span>{{ t('securityV2.review.account') }}</span><strong>{{ event.alias || event.email || event.userId || t('securityV2.common.anonymous') }}</strong></div>
+            <div class="security-detail-stat"><span>{{ t('securityV2.review.response') }}</span><strong>{{ event.statusCode || '-' }}</strong></div>
+            <div class="security-detail-stat"><span>{{ t('securityV2.review.requestId') }}</span><strong>{{ event.eventId || '-' }}</strong></div>
+          </div>
+        </section>
 
-      <section>
-        <h3>同IP近期事件</h3>
-        <BTable :data="eventDetail.ipRecent" :columns="ipRecentColumns" :rowKey="'eventId'" />
-      </section>
+        <section class="security-detail-section">
+          <h4>{{ t('securityV2.review.advice') }}</h4>
+          <div class="security-advice-row"><span class="is-tune">调</span><div><strong>{{ t('securityV2.review.storageAdvice') }}</strong><small>{{ t('securityV2.review.storageAdviceDesc') }}</small></div></div>
+          <div class="security-advice-row"><span class="is-block">阻</span><div><strong>{{ t('securityV2.review.activeAdvice') }}</strong><small>{{ t('securityV2.review.activeAdviceDesc') }}</small></div></div>
+        </section>
 
-      <section>
-        <h3>处置</h3>
-        <div class="quick-actions">
-          <b-button @click="banIp?.(eventDetail.event.sourceIp)">封禁此IP 1小时</b-button>
-          <b-button @click="unbanIp?.(eventDetail.event.sourceIp)">解封此IP</b-button>
-          <b-button v-if="eventDetail.event.userId" @click="banAccount?.(eventDetail.event.userId)"
-            >封禁关联账号</b-button
-          >
-          <b-button v-if="eventDetail.event.userId" @click="unbanAccount?.(eventDetail.event.userId)"
-            >解封关联账号</b-button
-          >
-        </div>
-        <div class="handle-row">
-          <BSelect v-model:value="handleForm.handledStatus" :options="handleStatusOptions" class="security-select" />
-          <b-input v-model:value="handleForm.remark" placeholder="处理备注" class="handle-input" />
-          <b-button type="primary" @click="submitHandle">保存</b-button>
-        </div>
-      </section>
-    </div>
-  </b-drawer>
+        <section class="security-detail-section security-more-actions">
+          <h4>{{ t('securityV2.review.more') }}</h4>
+          <BButton :disabled="!event.sourceIp" @click="denySource">{{ t('securityV2.review.sourceDeny') }}</BButton>
+          <BButton :disabled="!event.userId" @click="openAccountRisk">{{ t('securityV2.review.accountRisk') }}</BButton>
+        </section>
+      </div>
+      <footer class="security-detail-footer">
+        <BButton @click="saveDisposition('benign_anomaly')">{{ t('securityV2.review.benignAction') }}</BButton>
+        <BButton @click="saveDisposition('authorized_test')">{{ t('securityV2.review.authorizedAction') }}</BButton>
+        <BButton class="is-false" @click="saveDisposition('false_positive')">{{ t('securityV2.review.falseAction') }}</BButton>
+        <BButton type="danger" @click="saveDisposition('confirmed_attack')">{{ t('securityV2.review.confirmAction') }}</BButton>
+      </footer>
+    </BLoading>
+  </BDrawer>
 </template>
 
 <script lang="ts" setup>
-  import { inject, reactive, watch } from 'vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { apiBaseGet, apiBasePost } from '@/http/request.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { computed, reactive, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import {
-    BAN_IP,
-    UNBAN_IP,
-    BAN_ACCOUNT,
-    UNBAN_ACCOUNT,
-    excludesSecurityEventRisk,
-    ipRecentColumns,
-    securityHandledStatusConfirmText,
-    securityHandledStatusOptions,
-    type SecurityHandledStatus,
-  } from './securityShared';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import { apiBaseGet, apiBasePost } from '@/http/request';
+  import { securityCenterMessages } from './securityCenterI18n';
 
-  const props = defineProps<{ visible: boolean; eventId: string | null }>();
-  const emit = defineEmits<{
-    close: [];
-    saved: [];
-  }>();
-
-  const banIp = inject(BAN_IP);
-  const unbanIp = inject(UNBAN_IP);
-  const banAccount = inject(BAN_ACCOUNT);
-  const unbanAccount = inject(UNBAN_ACCOUNT);
-
-  const eventDetail = reactive<any>({ event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
-  const handleForm = reactive<{ handledStatus: SecurityHandledStatus; remark: string }>({
-    handledStatus: 'processed',
-    remark: '',
-  });
-  const handleStatusOptions = securityHandledStatusOptions;
+  const props = defineProps<{ open: boolean; eventId: string; raw?: boolean }>();
+  const emit = defineEmits<{ close: []; saved: [] }>();
+  const { t } = useI18n({ useScope: 'local', messages: securityCenterMessages });
+  const router = useRouter();
+  const loading = ref(false);
+  const detail = reactive<any>({ event: {}, evidence: [], similarEvents: [], sourceAnalysis: {}, accountAnalysis: {} });
+  const event = computed(() => detail.event || {});
+  const primaryEvidence = computed(() => detail.evidence?.[0]);
+  const number = (value: unknown) => Number(value || 0);
+  const evidenceMode = (mode: string) => mode ? t(`securityV2.common.${mode === 'block' ? 'block' : 'observe'}`) : '-';
 
   async function loadDetail() {
-    if (!props.eventId) return;
-    const res = await apiBaseGet(`/api/security/events/${props.eventId}`);
-    if (res.status === 200) {
-      Object.assign(eventDetail, res.data);
-      handleForm.handledStatus = ({
-        confirmed: 'processed',
-        resolved: 'processed',
-        ignored: 'processed',
-      }[res.data.event.handledStatus] ||
-        res.data.event.handledStatus ||
-        'processed') as SecurityHandledStatus;
-      handleForm.remark = res.data.event.remark || '';
-    }
+    if (!props.open || !props.eventId) return;
+    loading.value = true;
+    const res = await apiBaseGet(`/api/security/v2/review/clusters/${encodeURIComponent(props.eventId)}`, {}, { silent: true }).catch(() => null).finally(() => { loading.value = false; });
+    if (res?.status === 200) Object.assign(detail, res.data || {});
   }
-
-  async function doSubmitHandle() {
-    if (!eventDetail.event?.eventId) return;
-    const res = await apiBasePost(`/api/security/events/${eventDetail.event.eventId}/handle`, handleForm);
-    if (res.status === 200) {
-      message.success(res.msg || '处置状态已保存');
-      emit('saved');
-      emit('close');
-    }
+  async function saveDisposition(disposition: string) {
+    const kind = props.raw ? 'events' : 'clusters';
+    const res = await apiBasePost(`/api/security/v2/${kind}/${encodeURIComponent(props.eventId)}/disposition`, {
+      disposition,
+      reason: t('securityV2.review.reviewReason'),
+      createTuningSuggestion: disposition === 'false_positive',
+    }).catch(() => null);
+    if (res?.status === 200) { message.success(t('securityV2.review.success')); emit('saved'); emit('close'); }
   }
-
-  async function submitHandle() {
-    if (!eventDetail.event?.eventId) return;
-    const riskParts: string[] = [];
-    if (Number(eventDetail.event.ipRiskDelta || 0) > 0 && !eventDetail.event.ipRiskReverted) {
-      riskParts.push(`${eventDetail.event.ipRiskDelta} 分 IP风险`);
-    }
-    if (Number(eventDetail.event.userRiskDelta || 0) > 0 && !eventDetail.event.userRiskReverted) {
-      riskParts.push(`${eventDetail.event.userRiskDelta} 分 账号风险`);
-    }
-    const currentStatus = eventDetail.event.handledStatus || 'unhandled';
-    const shouldExcludeRisk = excludesSecurityEventRisk(handleForm.handledStatus);
-    const restoresRisk = excludesSecurityEventRisk(currentStatus) && !shouldExcludeRisk;
-    if (shouldExcludeRisk || restoresRisk) {
-      const riskText =
-        riskParts.length > 0
-          ? shouldExcludeRisk
-            ? ` 本次将回滚 ${riskParts.join('、')}。`
-            : ` 本次将重新计入 ${riskParts.join('、')}。`
-          : '';
-      Alert.alert({
-        title: handleForm.handledStatus === 'authorized_test' ? '标记为授权测试' : '确认处置状态',
-        content: `${securityHandledStatusConfirmText(handleForm.handledStatus)}${riskText}`,
-        okText: '确认保存',
-        cancelText: '取消',
-        onOk: doSubmitHandle,
-      });
-      return;
-    }
-    await doSubmitHandle();
+  function denySource() {
+    Alert.alert({
+      title: t('securityV2.review.sourceDeny'),
+      content: `${event.value.sourceIp} · 60 min · ${t('securityV2.review.sourceSummary', { events: number(detail.sourceAnalysis?.events24h), confirmed: number(detail.sourceAnalysis?.confirmedEvents), falsePositive: number(detail.sourceAnalysis?.falsePositives) })}`,
+      okText: t('securityV2.access.sourceApply'),
+      cancelText: t('securityV2.common.close'),
+      onOk: async () => {
+        const res = await apiBasePost('/api/security/v2/source-denies/apply', { ip: event.value.sourceIp, minutes: 60, reason: t('securityV2.review.reviewReason') }).catch(() => null);
+        if (res?.status === 200) message.success(t('securityV2.access.sourceApplied'));
+      },
+    });
   }
-
-  watch(
-    () => props.visible,
-    (v) => {
-      if (v && props.eventId) {
-        loadDetail();
-      } else if (!v) {
-        Object.assign(eventDetail, { event: null, evidence: [], ipRecent: [], ipInfo: null, userInfo: null });
-      }
-    },
-    { immediate: true },
-  );
+  function openAccountRisk() {
+    Alert.alert({
+      title: t('securityV2.review.accountRisk'),
+      content: t('securityV2.review.accountSummary', { score: number(detail.accountAnalysis?.riskScore), events: number(detail.accountAnalysis?.totalEvents), restrictions: number(detail.accountAnalysis?.activeRestrictions) }),
+      okText: t('securityV2.review.manageAccess'),
+      cancelText: t('securityV2.common.close'),
+      onOk: () => { emit('close'); router.push({ name: 'securityCenterAccess', query: { userId: event.value.userId } }); },
+    });
+  }
+  watch(() => [props.open, props.eventId], loadDetail, { immediate: true });
 </script>
 
 <style lang="less" scoped>

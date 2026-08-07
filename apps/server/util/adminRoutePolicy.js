@@ -414,6 +414,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/common/getAiFeedback'],
   ['POST', '/common/getDeepSeekBalance'],
   ['POST', '/common/getAdminOverview'],
+  ['POST', '/common/getAdminOverviewRecent'],
   ['POST', '/todo/v2/admin/diagnostics'],
   ['POST', '/common/getAdminOverviewTrend'],
   ['POST', '/aiEvaluation/runs'],
@@ -447,6 +448,24 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/security/whitelist'],
   ['POST', '/security/whitelist/save'],
   ['POST', '/security/whitelist/remove'],
+  ['POST', '/security/v2/overview'],
+  ['POST', '/security/v2/review/clusters'],
+  ['POST', '/security/v2/review/batch-disposition'],
+  ['GET', '/security/v2/review/clusters/:eventId'],
+  ['POST', '/security/v2/events/:eventId/disposition'],
+  ['POST', '/security/v2/clusters/:eventId/disposition'],
+  ['POST', '/security/v2/rules/quality'],
+  ['POST', '/security/v2/rules/:ruleCode/override'],
+  ['POST', '/security/v2/rules/:ruleCode/replay'],
+  ['POST', '/security/v2/exceptions/list'],
+  ['POST', '/security/v2/exceptions/save'],
+  ['POST', '/security/v2/exceptions/disable'],
+  ['POST', '/security/v2/restrictions/list'],
+  ['POST', '/security/v2/restrictions/apply'],
+  ['POST', '/security/v2/restrictions/revoke'],
+  ['POST', '/security/v2/source-denies/list'],
+  ['POST', '/security/v2/source-denies/apply'],
+  ['POST', '/security/v2/source-denies/revoke'],
   ['POST', '/growth/admin/userGrowth'],
   ['POST', '/growth/admin/adjust'],
   ['POST', '/growth/admin/pointsOverview'],
@@ -489,6 +508,17 @@ function resolvePolicy(method, path) {
   }
   if (/^\/security\/events\/[^/]+\/handle$/.test(path)) {
     return routePolicies.get(`${method} /security/events/:eventId/handle`);
+  }
+  if (/^\/security\/v2\/review\/clusters\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /security/v2/review/clusters/:eventId`);
+  }
+  if (/^\/security\/v2\/(?:events|clusters)\/[^/]+\/disposition$/.test(path)) {
+    const kind = path.startsWith('/security/v2/events/') ? 'events' : 'clusters';
+    return routePolicies.get(`${method} /security/v2/${kind}/:eventId/disposition`);
+  }
+  if (/^\/security\/v2\/rules\/[^/]+\/(?:override|replay)$/.test(path)) {
+    const action = path.endsWith('/override') ? 'override' : 'replay';
+    return routePolicies.get(`${method} /security/v2/rules/:ruleCode/${action}`);
   }
   if (/^\/helpCenter\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /helpCenter/:id`);

@@ -1,0 +1,243 @@
+/*
+ * 内置富文本模板的内容样式。
+ *
+ * 模板只保存语义化 HTML 与 class，不保存亮/暗主题实色；用户切换主题后，
+ * 编辑态、只读预览和导出前的站内预览都继续复用同一套主题变量。
+ */
+.note-template-page {
+  --note-template-accent: var(--primary-color);
+
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 10px 0 48px;
+  color: var(--text-color);
+  line-height: 1.75;
+
+  &--daily {
+    --note-template-accent: var(--resource-note-color);
+  }
+
+  &--weekly,
+  &--review {
+    --note-template-accent: var(--primary-color);
+  }
+
+  &--meeting {
+    --note-template-accent: var(--resource-tag-color);
+  }
+
+  &--reading {
+    --note-template-accent: var(--resource-bookmark-color);
+  }
+
+  &--project {
+    --note-template-accent: var(--resource-file-color);
+  }
+
+  .note-template-hero,
+  .note-template-card,
+  .note-template-callout,
+  .note-template-quote {
+    box-sizing: border-box;
+    margin: 0 0 24px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    background: var(--surface-card-bg);
+  }
+
+  .note-template-hero {
+    padding: 24px 28px;
+    border-left: 5px solid var(--note-template-accent);
+    background: var(--common-tag-bg-color);
+
+    h2 {
+      margin: 6px 0 4px;
+      font-size: 1.7em;
+      line-height: 1.3;
+    }
+  }
+
+  .note-template-eyebrow {
+    margin: 0;
+    color: var(--note-template-accent);
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+  }
+
+  .note-template-lead,
+  .note-template-prompt {
+    color: var(--desc-color);
+  }
+
+  .note-template-lead {
+    margin: 8px 0 0;
+  }
+
+  .note-template-prompt {
+    margin: 6px 0 12px;
+    font-size: 0.92em;
+  }
+
+  .note-template-grid,
+  .note-template-retro-grid {
+    display: grid;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  .note-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .note-template-retro-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .note-template-grid > .note-template-card,
+  .note-template-retro-grid > .note-template-card {
+    margin-bottom: 0;
+  }
+
+  .note-template-card {
+    min-width: 0;
+    min-height: 154px;
+    padding: 20px 22px;
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 1.15em;
+      line-height: 1.4;
+    }
+
+    &--wide {
+      min-height: 0;
+    }
+
+    &--muted {
+      border-style: dashed;
+    }
+
+    &--continue {
+      border-top: 4px solid var(--resource-note-color);
+    }
+
+    &--stop {
+      border-top: 4px solid var(--error-color, #e5484d);
+    }
+
+    &--start {
+      border-top: 4px solid var(--resource-file-color);
+    }
+  }
+
+  .note-template-callout {
+    padding: 20px 24px;
+    border-left: 5px solid var(--note-template-accent);
+    background: var(--common-tag-bg-color);
+
+    h2 {
+      margin: 0 0 8px;
+      font-size: 1.2em;
+    }
+  }
+
+  .note-template-hint {
+    display: inline-block;
+    margin-left: 6px;
+    color: var(--desc-color);
+    font-size: 0.68em;
+    font-weight: 500;
+    vertical-align: middle;
+  }
+
+  .note-template-table {
+    width: 100%;
+    margin: 12px 0 0;
+    border-collapse: collapse;
+    table-layout: fixed;
+
+    th,
+    td {
+      min-width: 88px;
+      padding: 12px 14px;
+      border: 1px solid var(--surface-border-color);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--common-tag-bg-color);
+      font-size: 0.9em;
+      font-weight: 650;
+    }
+  }
+
+  .note-template-quote {
+    position: relative;
+    padding: 24px 28px 24px 48px;
+    border-left: 5px solid var(--note-template-accent);
+    color: var(--text-color);
+    font-size: 1.08em;
+
+    &::before {
+      position: absolute;
+      top: 12px;
+      left: 16px;
+      color: var(--note-template-accent);
+      font-size: 2.4em;
+      font-weight: 700;
+      line-height: 1;
+      content: '“';
+    }
+
+    p {
+      margin: 0 0 8px;
+    }
+  }
+}
+
+@media (max-width: 760px) {
+  .note-template-page {
+    padding: 4px 0 32px;
+
+    .note-template-hero,
+    .note-template-card,
+    .note-template-callout,
+    .note-template-quote {
+      margin-bottom: 16px;
+      border-radius: 12px;
+    }
+
+    .note-template-hero {
+      padding: 20px;
+    }
+
+    .note-template-grid,
+    .note-template-retro-grid {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .note-template-card {
+      min-height: 132px;
+      padding: 18px;
+    }
+
+    .note-template-table {
+      table-layout: auto;
+
+      th,
+      td {
+        padding: 10px;
+      }
+    }
+
+    .note-template-quote {
+      padding: 20px 20px 20px 42px;
+    }
+  }
+}

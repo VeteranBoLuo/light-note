@@ -42,7 +42,10 @@
             </span>
             <span class="new-note-picker__choice-copy">
               <strong>{{ t(template.nameKey) }}</strong>
-              <small>{{ templateTypeLabel(template.type) }}</small>
+              <small>{{ t(template.descKey) }}</small>
+              <BChip class="new-note-picker__template-type" tone="neutral" size="small">
+                {{ templateTypeLabel(template.type) }}
+              </BChip>
             </span>
           </BButton>
         </div>
@@ -92,6 +95,7 @@
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
@@ -228,9 +232,10 @@
   }
 
   .new-note-picker__template {
-    min-height: 60px;
+    min-height: 104px;
+    align-items: flex-start;
     gap: 9px;
-    padding: 9px 10px;
+    padding: 10px;
   }
 
   .new-note-picker__template-icon {
@@ -270,6 +275,21 @@
     color: var(--desc-color);
     font-size: 11px;
     font-weight: 400;
+  }
+
+  .new-note-picker__template .new-note-picker__choice-copy small {
+    display: -webkit-box;
+    min-height: 30px;
+    line-height: 15px;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+  }
+
+  .new-note-picker__template-type {
+    align-self: flex-start;
+    margin-top: 1px;
   }
 
   .new-note-picker__mode:hover,

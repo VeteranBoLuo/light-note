@@ -3,6 +3,11 @@ import { resolveBookmarkUrlInput } from '@lightnote/shared';
 export type InboxCaptureType = 'bookmark' | 'note' | 'file';
 export type QuickCaptureType = InboxCaptureType | 'todo';
 
+type QuickCaptureRefreshTarget = {
+  refreshList: () => Promise<unknown>;
+  refreshCount: () => Promise<unknown>;
+};
+
 const RESOURCE_CAPTURE_TYPES: readonly InboxCaptureType[] = ['bookmark', 'note', 'file'];
 const ALL_CAPTURE_TYPES: readonly QuickCaptureType[] = [...RESOURCE_CAPTURE_TYPES, 'todo'];
 
@@ -18,6 +23,23 @@ export function getQuickCaptureInboxTarget(type: QuickCaptureType, isMobile: boo
   if (type === 'todo') return { path: '/inbox' as const, query: { tab: 'todo' as const } };
   if (isMobile) return { path: '/inbox' as const, query: { tab: 'all' as const } };
   return '/inbox' as const;
+}
+
+export async function refreshQuickCaptureStores(
+  type: QuickCaptureType,
+  isInboxRoute: boolean,
+  inbox: QuickCaptureRefreshTarget,
+  todo: QuickCaptureRefreshTarget,
+) {
+  if (!isInboxRoute) {
+    await Promise.all([inbox.refreshCount(), todo.refreshCount()]);
+    return;
+  }
+  if (type === 'todo') {
+    await Promise.all([inbox.refreshCount(), todo.refreshList()]);
+    return;
+  }
+  await Promise.all([inbox.refreshList(), todo.refreshCount()]);
 }
 
 export function normalizeCaptureUrl(input: string): URL | null {

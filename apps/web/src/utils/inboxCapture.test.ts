@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   buildCaptureFileMeta,
   buildMarkdownNotePayload,
@@ -8,6 +8,7 @@ import {
   hasCaptureBookmarkCandidate,
   normalizeQuickCaptureType,
   normalizeCaptureUrl,
+  refreshQuickCaptureStores,
 } from './inboxCapture';
 
 describe('inboxCapture', () => {
@@ -67,5 +68,33 @@ describe('inboxCapture', () => {
     expect(getQuickCaptureInboxTarget('file', true)).toEqual({ path: '/inbox', query: { tab: 'all' } });
     expect(getQuickCaptureInboxTarget('todo', true)).toEqual({ path: '/inbox', query: { tab: 'todo' } });
     expect(getQuickCaptureInboxTarget('bookmark', false)).toBe('/inbox');
+  });
+
+  it('快速添加后只刷新对应业务列表，避免待办排序串入待整理请求', async () => {
+    const inbox = { refreshList: vi.fn(), refreshCount: vi.fn() };
+    const todo = { refreshList: vi.fn(), refreshCount: vi.fn() };
+
+    await refreshQuickCaptureStores('note', true, inbox, todo);
+    expect(inbox.refreshList).toHaveBeenCalledTimes(1);
+    expect(todo.refreshList).not.toHaveBeenCalled();
+    expect(todo.refreshCount).toHaveBeenCalledTimes(1);
+
+    vi.clearAllMocks();
+    await refreshQuickCaptureStores('todo', true, inbox, todo);
+    expect(todo.refreshList).toHaveBeenCalledTimes(1);
+    expect(inbox.refreshList).not.toHaveBeenCalled();
+    expect(inbox.refreshCount).toHaveBeenCalledTimes(1);
+  });
+
+  it('不在待处理页时只刷新角标，不额外加载隐藏列表', async () => {
+    const inbox = { refreshList: vi.fn(), refreshCount: vi.fn() };
+    const todo = { refreshList: vi.fn(), refreshCount: vi.fn() };
+
+    await refreshQuickCaptureStores('todo', false, inbox, todo);
+
+    expect(inbox.refreshCount).toHaveBeenCalledTimes(1);
+    expect(todo.refreshCount).toHaveBeenCalledTimes(1);
+    expect(inbox.refreshList).not.toHaveBeenCalled();
+    expect(todo.refreshList).not.toHaveBeenCalled();
   });
 });

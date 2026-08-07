@@ -258,7 +258,8 @@ const ensureRootRole = async (req, res) => {
     }
     return userId;
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    console.error('[root-auth] 身份复核失败 code=%s', stableAgentErrorCode(e));
+    res.send(resultData(null, 500, '服务器内部错误'));
     return null;
   }
 };
@@ -1189,6 +1190,7 @@ export const getAgentLogsSummary = async (req, res) => {
 };
 
 const ADMIN_TREND_PERIODS = new Set([7, 15, 30, 90]);
+const ADMIN_RECENT_LIMIT = 20;
 
 function adminOverviewDateHelpers(now = new Date()) {
   const pad = (value) => String(value).padStart(2, '0');
@@ -1196,7 +1198,7 @@ function adminOverviewDateHelpers(now = new Date()) {
   return { pad, formatDate };
 }
 
-function buildAdminOverviewTrendScope(hideInternal) {
+function buildAdminOverviewScope(hideInternal) {
   const irSql = INTERNAL_ROLES.map((role) => `'${role}'`).join(', ');
   const notIntRole = hideInternal ? ` AND role NOT IN (${irSql})` : '';
   const notIntUser = hideInternal ? ` AND user_id NOT IN (SELECT id FROM \`user\` WHERE role IN (${irSql}))` : '';
@@ -1236,7 +1238,7 @@ function buildAdminOverviewTrendScope(hideInternal) {
 
 async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() }) {
   const { formatDate } = adminOverviewDateHelpers(now);
-  const scope = buildAdminOverviewTrendScope(hideInternal);
+  const scope = buildAdminOverviewScope(hideInternal);
   const dates = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
     const date = new Date(now);
@@ -1327,6 +1329,83 @@ export const getAdminOverviewTrend = async (req, res) => {
   } catch (error) {
     console.error('[AdminOverviewTrend] 查询失败 code=%s', stableAgentErrorCode(error));
     return res.send(resultData(null, 500, '获取趋势数据失败'));
+  }
+};
+
+function recentTimestamp(value) {
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+// POST /common/getAdminOverviewRecent —— 最近新增资源与注册用户（仅 root）
+// 独立于主看板查询：最近列表失败时不拖慢或阻断 KPI、趋势等核心统计。
+export const getAdminOverviewRecent = async (req, res) => {
+  const rootUserId = await ensureRootRole(req, res);
+  if (!rootUserId) return;
+  try {
+    const hideInternal = req.body?.hideInternal !== false;
+    const scope = buildAdminOverviewScope(hideInternal);
+    const resourceOwnerRole = hideInternal
+      ? ` AND resource_owner.role NOT IN (${INTERNAL_ROLES.map((role) => `'${role}'`).join(', ')})`
+      : '';
+    const [bookmarkRows, noteRows, fileRows, userRows] = await Promise.all([
+      pool.query(
+        `SELECT bookmark.id, bookmark.name AS title, bookmark.create_time AS createdAt,
+                resource_owner.id AS userId, resource_owner.alias AS userName
+         FROM bookmark
+         JOIN \`user\` resource_owner ON resource_owner.id = bookmark.user_id AND resource_owner.del_flag = 0
+         WHERE bookmark.del_flag = 0${resourceOwnerRole}${scope.notOnboardingBookmark}
+         ORDER BY bookmark.create_time DESC, bookmark.id DESC
+         LIMIT ${ADMIN_RECENT_LIMIT}`,
+      ),
+      pool.query(
+        `SELECT note.id, note.title, note.create_time AS createdAt,
+                resource_owner.id AS userId, resource_owner.alias AS userName
+         FROM note
+         JOIN \`user\` resource_owner ON resource_owner.id = note.create_by AND resource_owner.del_flag = 0
+         WHERE note.del_flag = 0${resourceOwnerRole}${scope.notOnboardingNote}
+         ORDER BY note.create_time DESC, note.id DESC
+         LIMIT ${ADMIN_RECENT_LIMIT}`,
+      ),
+      pool.query(
+        `SELECT files.id, files.file_name AS title, files.create_time AS createdAt,
+                resource_owner.id AS userId, resource_owner.alias AS userName
+         FROM files
+         JOIN \`user\` resource_owner ON resource_owner.id = files.create_by AND resource_owner.del_flag = 0
+         WHERE files.del_flag = 0${resourceOwnerRole}${scope.notOnboardingFile}
+         ORDER BY files.create_time DESC, files.id DESC
+         LIMIT ${ADMIN_RECENT_LIMIT}`,
+      ),
+      pool.query(
+        `SELECT id, alias AS name, role, create_time AS createdAt
+         FROM \`user\`
+         WHERE del_flag = 0 AND role <> 'visitor'${scope.notIntRole}
+         ORDER BY create_time DESC, id DESC
+         LIMIT ${ADMIN_RECENT_LIMIT}`,
+      ),
+    ]);
+
+    const withType = (rows, type) => (rows[0] || []).map((row) => ({ ...row, type }));
+    const recentResources = [
+      ...withType(bookmarkRows, 'bookmark'),
+      ...withType(noteRows, 'note'),
+      ...withType(fileRows, 'file'),
+    ]
+      .sort((left, right) => {
+        const timeDiff = recentTimestamp(right.createdAt) - recentTimestamp(left.createdAt);
+        return timeDiff || String(right.id).localeCompare(String(left.id));
+      })
+      .slice(0, ADMIN_RECENT_LIMIT);
+
+    return res.send(
+      resultData({
+        recentResources,
+        recentUsers: userRows[0] || [],
+      }),
+    );
+  } catch (error) {
+    console.error('[AdminOverviewRecent] 查询失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '获取最近新增数据失败'));
   }
 };
 

@@ -479,3 +479,68 @@ LEFT JOIN (
   GROUP BY index_name
 ) actual ON actual.index_name='idx_note_tree_delete_batch'
 WHERE actual.index_name IS NULL OR actual.cols <> 'create_by(64),tree_delete_batch_id(64),del_flag(8)';
+
+-- 28) 安全中心 V2 策略、复核与访问限制 Schema 必须在应用重启前完整就绪（期望 0 行）
+SELECT '[28] missing_security_v2_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'security_rule_overrides' t UNION ALL
+  SELECT 'security_exceptions' UNION ALL
+  SELECT 'security_account_restrictions' UNION ALL
+  SELECT 'security_rule_tuning_suggestions' UNION ALL
+  SELECT 'security_policy_audit' UNION ALL
+  SELECT 'security_migration_state'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[28] missing_security_v2_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'security_events' tab, 'primary_rule_code' col, 'security_events.primary_rule_code' n UNION ALL
+  SELECT 'security_events', 'workflow_status', 'security_events.workflow_status' UNION ALL
+  SELECT 'security_events', 'disposition', 'security_events.disposition' UNION ALL
+  SELECT 'security_events', 'cluster_key', 'security_events.cluster_key' UNION ALL
+  SELECT 'security_events', 'policy_version', 'security_events.policy_version' UNION ALL
+  SELECT 'security_events', 'detector_version', 'security_events.detector_version' UNION ALL
+  SELECT 'security_events', 'reviewed_by', 'security_events.reviewed_by' UNION ALL
+  SELECT 'security_events', 'reviewed_at', 'security_events.reviewed_at' UNION ALL
+  SELECT 'security_events', 'review_reason', 'security_events.review_reason' UNION ALL
+  SELECT 'security_event_evidence', 'field_context', 'security_event_evidence.field_context' UNION ALL
+  SELECT 'security_event_evidence', 'policy_mode', 'security_event_evidence.policy_mode' UNION ALL
+  SELECT 'security_event_evidence', 'policy_version', 'security_event_evidence.policy_version' UNION ALL
+  SELECT 'security_event_evidence', 'exception_ids', 'security_event_evidence.exception_ids'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[28] missing_security_v2_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'security_events' tn, 'idx_security_event_cluster' ix UNION ALL
+  SELECT 'security_events', 'idx_security_event_review' UNION ALL
+  SELECT 'security_rule_overrides', 'idx_rule_override_active' UNION ALL
+  SELECT 'security_rule_overrides', 'idx_rule_override_version' UNION ALL
+  SELECT 'security_exceptions', 'idx_security_exception_subject' UNION ALL
+  SELECT 'security_exceptions', 'idx_security_exception_rule' UNION ALL
+  SELECT 'security_account_restrictions', 'idx_security_restriction_active' UNION ALL
+  SELECT 'security_account_restrictions', 'idx_security_restriction_created' UNION ALL
+  SELECT 'security_rule_tuning_suggestions', 'idx_tuning_event' UNION ALL
+  SELECT 'security_rule_tuning_suggestions', 'idx_tuning_rule_status' UNION ALL
+  SELECT 'security_policy_audit', 'idx_security_policy_audit'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[28] missing_security_v2_migration' AS check_name,
+  'security-controls-v2-del-flag-separation' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM security_migration_state
+  WHERE migration_key='security-controls-v2-del-flag-separation'
+);

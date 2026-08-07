@@ -73,7 +73,7 @@
       </div>
     </BActionMenu>
 
-    <Transition name="note-tree-children">
+    <Transition name="note-tree-children" :css="animateChildren">
       <div v-if="expanded && children.length" class="note-tree-children-motion">
         <ul class="note-tree-children">
           <NoteTreeRow
@@ -86,6 +86,7 @@
             :children-by-parent="childrenByParent"
             :expanded-ids="expandedIds"
             :loading-keys="loadingKeys"
+            :motion-expansion-ids="motionExpansionIds"
             :write-enabled="writeEnabled"
             :drag-enabled="dragEnabled"
             :search-mode="searchMode"
@@ -135,6 +136,7 @@
       childrenByParent: Record<string, NoteTreeItem[]>;
       expandedIds: Set<string>;
       loadingKeys: Set<string>;
+      motionExpansionIds?: Set<string>;
       writeEnabled?: boolean;
       dragEnabled?: boolean;
       searchMode?: boolean;
@@ -176,6 +178,10 @@
   const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
+  // 未传集合时保持详情页等既有调用方的动画；笔记库传入集合后，只允许用户手动操作的节点过渡。
+  const animateChildren = computed(
+    () => !props.motionExpansionIds || props.motionExpansionIds.has(props.node.id),
+  );
   const children = computed(() => props.childrenByParent[props.node.id || NOTE_TREE_ROOT_KEY] || []);
   const rowStyle = computed(() => ({ '--note-tree-depth': String(props.depth) }));
   const showDropBefore = computed(() => props.dropTargetKey === props.node.id && props.dropTargetPosition === 'before');

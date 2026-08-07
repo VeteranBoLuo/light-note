@@ -1,7 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
 import type { NotificationItem } from '@/composables/useNotification';
 import NotificationCenterPanel from './NotificationCenterPanel.vue';
+
+const source = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationCenterPanel.vue'), 'utf8');
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -104,15 +108,28 @@ describe('NotificationCenterPanel', () => {
     expect(onMore).not.toHaveBeenCalled();
   });
 
-  it('延续已完成待办状态，只保留打开入口并显示状态胶囊', async () => {
+  it('卡片操作按钮贴近标题首行，避免落到摘要内容区域', () => {
+    expect(source).toMatch(/\.nt-item-action\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/);
+  });
+
+  it('延续已完成待办状态，只显示状态胶囊', async () => {
     const { host } = mountPanel(false, 'completed');
     await nextTick();
 
     const actions = host.querySelector('.nt-todo-actions');
     expect(actions?.textContent).toContain('notification.todoCompletedState');
-    expect(actions?.querySelectorAll('.nt-todo-action')).toHaveLength(1);
+    expect(actions?.querySelectorAll('.nt-todo-action')).toHaveLength(0);
     expect(actions?.querySelector('.nt-todo-state.b-chip--success')).not.toBeNull();
     expect(actions?.querySelector('.nt-todo-state')?.tagName).toBe('SPAN');
+  });
+
+  it('待办通知只保留完成操作，进入待办统一点击通知卡片', async () => {
+    const { host } = mountPanel(false, 'pending');
+    await nextTick();
+
+    const actions = host.querySelector('.nt-todo-actions');
+    expect(actions?.querySelectorAll('.nt-todo-action')).toHaveLength(1);
+    expect(actions?.textContent).toContain('notification.todoComplete');
   });
 
   it('延续失效待办状态，不再暴露完成或打开入口', async () => {
@@ -122,5 +139,15 @@ describe('NotificationCenterPanel', () => {
     const actions = host.querySelector('.nt-todo-actions');
     expect(actions?.textContent).toContain('notification.todoUnavailable');
     expect(actions?.querySelectorAll('.nt-todo-action')).toHaveLength(0);
+  });
+
+  it('移动端操作按钮保留触控热区，但可见尺寸与状态胶囊一致', () => {
+    expect(source).toMatch(
+      /\.is-mobile \.nt-todo-action\s*\{[\s\S]*?height: 44px;[\s\S]*?min-height: 44px;/,
+    );
+    expect(source).toMatch(
+      /\.is-mobile \.nt-todo-action::before\s*\{[\s\S]*?inset: 10px 0;[\s\S]*?border-radius: 7px;/,
+    );
+    expect(source).toMatch(/\.nt-todo-state\s*\{[\s\S]*?min-height: 24px;[\s\S]*?border-radius: 7px;/);
   });
 });

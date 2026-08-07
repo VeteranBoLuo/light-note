@@ -83,10 +83,11 @@ export const updateIpReputation = async ({
     current.banned_until &&
     new Date(current.banned_until).getTime() > Date.now();
   const whitelisted = await isSecurityWhitelisted('ip', ip).catch(() => false);
-  const canAutoBan = SECURITY_CONFIG.blockEnabled && !isPrivateOrLocalIp(ip) && !whitelisted;
+  const canApplySourceBan = SECURITY_CONFIG.blockEnabled && !isPrivateOrLocalIp(ip) && !whitelisted;
   const autoBanThreshold = Number(SECURITY_CONFIG.ipAutoBanRiskScore || 80);
-  const autoBanned = canAutoBan && !currentBanActive && predictedScore >= autoBanThreshold;
-  const explicitBanned = canAutoBan && Boolean(shouldBan);
+  const autoBanned =
+    SECURITY_CONFIG.ipAutoBanEnabled && canApplySourceBan && !currentBanActive && predictedScore >= autoBanThreshold;
+  const explicitBanned = canApplySourceBan && Boolean(shouldBan);
   const nextBanned = explicitBanned || autoBanned || currentBanActive;
   const bannedUntil = nextBanned
     ? explicitBanned || autoBanned
@@ -278,16 +279,33 @@ export const rebuildIpReputationFromEvents = async ({ ip, connection = null }) =
   return true;
 };
 
-export const recordIpRequest = async (ip) => {
+const pendingRequestCounts = new Map();
+let requestCountFlushTimer = null;
+
+const flushIpRequestCounts = async () => {
+  requestCountFlushTimer = null;
+  const entries = [...pendingRequestCounts.entries()];
+  pendingRequestCounts.clear();
+  for (const [ip, total] of entries) {
+    await pool
+      .query(
+        `INSERT INTO security_ip_reputation (ip,total_requests,first_seen_at,last_seen_at)
+         VALUES (?,?,NOW(),NOW())
+         ON DUPLICATE KEY UPDATE total_requests = total_requests + VALUES(total_requests), last_seen_at = NOW()`,
+        [ip, total],
+      )
+      .catch(() => {
+        pendingRequestCounts.set(ip, Number(pendingRequestCounts.get(ip) || 0) + Number(total || 0));
+      });
+  }
+};
+
+export const recordIpRequest = (ip) => {
   if (!ip) return;
-  pool
-    .query(
-      `INSERT INTO security_ip_reputation (ip,total_requests,first_seen_at,last_seen_at)
-       VALUES (?,1,NOW(),NOW())
-       ON DUPLICATE KEY UPDATE total_requests = total_requests + 1, last_seen_at = NOW()`,
-      [ip],
-    )
-    .catch(() => {});
+  pendingRequestCounts.set(ip, Number(pendingRequestCounts.get(ip) || 0) + 1);
+  if (requestCountFlushTimer) return;
+  requestCountFlushTimer = setTimeout(flushIpRequestCounts, 15_000);
+  requestCountFlushTimer.unref?.();
 };
 
 export const setIpBan = async (ip, banned, minutes = 60, reason = '', executor = pool) => {

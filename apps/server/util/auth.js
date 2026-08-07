@@ -10,6 +10,10 @@ import {
 import { recordConversionEvent } from './conversion.js';
 import { getAdminContext, getAdminContextMetadata } from './adminContextStore.js';
 import { recordAdminContextAudit } from './adminContextAudit.js';
+import {
+  getActiveSecurityRestrictions,
+  restrictionBlocksRequest,
+} from './security/services/securityRestrictionService.js';
 
 const COOKIE_NAME = 'sid';
 const AUTH_EXPIRED_HEADER = 'X-Auth-Expired';
@@ -126,19 +130,17 @@ const findVisitorUser = async () => {
 
 const attachUserToRequest = (req, res, user, sessionId = '', expiresInSeconds = 0) => {
   const role = user.role || 'visitor';
-  const isBanned = role !== 'root' && Number(user.del_flag || 0) === 1;
+  const isDeletedOrDisabled = role !== 'root' && Number(user.del_flag || 0) === 1;
   req.user = {
     id: user.id || '',
     alias: user.alias || '',
     role,
     sessionId,
     isAuthenticated: Boolean(sessionId && user.id && role !== 'visitor'),
-    isBanned,
+    isBanned: false,
+    isDeletedOrDisabled,
   };
   res.setHeader(AUTH_ROLE_HEADER, req.user.role);
-  if (isBanned) {
-    res.setHeader(USER_BANNED_HEADER, '1');
-  }
   if (req.user.isAuthenticated && expiresInSeconds > 0) {
     res.setHeader(AUTH_EXPIRES_IN_HEADER, String(expiresInSeconds));
   }
@@ -355,16 +357,31 @@ const ACCOUNT_BAN_ALLOWED_PATHS = [
   '/user/appeal', // 被封禁用户提交申诉(仅此窄接口放行,不开放通用反馈)
 ];
 
-export const accountBanMiddleware = (req, res, next) => {
-  if (!req.user?.isBanned) {
+export const accountBanMiddleware = async (req, res, next) => {
+  // 兼容仍由旧测试/内部调用显式附带的封禁快照；正常认证链不再从 del_flag 生成该值。
+  if (req.user?.isBanned) {
+    const legacyPath = req.path || req.originalUrl || '';
+    if (ACCOUNT_BAN_ALLOWED_PATHS.some((item) => legacyPath.startsWith(item))) return next();
+    res.setHeader(USER_BANNED_HEADER, '1');
+    return res.status(423).json(resultData(null, 423, '账号当前受到安全限制，请稍后重试或联系管理员'));
+  }
+  if (!req.user?.id || req.user.role === 'root' || req.user.role === 'visitor' || req.isAdminPreview) {
     return next();
   }
   const path = req.path || req.originalUrl || '';
   if (ACCOUNT_BAN_ALLOWED_PATHS.some((item) => path.startsWith(item))) {
     return next();
   }
+  if (req.user.isDeletedOrDisabled) {
+    res.setHeader(USER_BANNED_HEADER, '1');
+    return res.status(423).json(resultData(null, 423, '账号当前不可用，请登录其他账号或联系管理员'));
+  }
+  const restrictions = await getActiveSecurityRestrictions(req.user.id);
+  req.securityRestrictions = restrictions;
+  if (!restrictionBlocksRequest(restrictions, req)) return next();
+  req.user.isBanned = true;
   res.setHeader(USER_BANNED_HEADER, '1');
-  return res.status(423).json(resultData(null, 423, '账号已被封禁，请登录其他账号或联系管理员'));
+  return res.status(423).json(resultData(null, 423, '账号当前受到安全限制，请稍后重试或联系管理员'));
 };
 
 export const logoutCurrentSession = async (req, res) => {

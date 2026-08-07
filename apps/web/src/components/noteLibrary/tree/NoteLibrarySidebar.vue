@@ -32,8 +32,16 @@
         <span class="note-tree-root-count">{{ searchActive ? searchMatchCount : rootItems.length }}</span>
       </BButton>
 
-      <div v-if="loadingKeys.has(NOTE_TREE_ROOT_KEY) && !rootItems.length" class="note-tree-loading">
-        <BLoading inline loading :title="t('common.loading')" />
+      <div
+        v-if="loadingKeys.has(NOTE_TREE_ROOT_KEY) && !rootItems.length"
+        class="note-tree-loading"
+        role="status"
+        :aria-label="t('common.loading')"
+      >
+        <div v-for="n in 8" :key="`tree-skeleton-${n}`" class="note-tree-skeleton-row">
+          <span class="note-tree-skeleton-icon" aria-hidden="true"></span>
+          <span class="note-tree-skeleton-line" aria-hidden="true"></span>
+        </div>
       </div>
       <ul v-else v-auto-scrollbar class="note-tree-scroll">
         <NoteTreeRow
@@ -46,6 +54,7 @@
           :children-by-parent="childrenByParent"
           :expanded-ids="expandedIds"
           :loading-keys="loadingKeys"
+          :motion-expansion-ids="motionExpansionIds"
           :write-enabled="writeEnabled"
           :drag-enabled="dragEnabled"
           :search-mode="searchActive"
@@ -94,7 +103,6 @@
   import { computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -114,6 +122,7 @@
       childrenByParent: Record<string, NoteTreeItem[]>;
       expandedIds: Set<string>;
       loadingKeys: Set<string>;
+      motionExpansionIds?: Set<string>;
       treeError?: string;
       allTags?: any[];
       totalCount?: number;
@@ -308,7 +317,74 @@
   }
 
   .note-tree-loading {
-    padding: 20px 8px;
+    min-height: 0;
+    flex: 1;
+    padding: 5px 6px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .note-tree-skeleton-row {
+    position: relative;
+    height: 32px;
+    flex: 0 0 auto;
+    padding: 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: var(--card-background);
+
+    &::after {
+      position: absolute;
+      top: 0;
+      left: -60%;
+      width: 60%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, var(--skeleton-body-bg-color), transparent);
+      animation: note-tree-skeleton-shine 2s infinite;
+      content: '';
+    }
+  }
+
+  .note-tree-skeleton-icon {
+    width: 14px;
+    height: 16px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    background: var(--surface-border-color);
+  }
+
+  .note-tree-skeleton-line {
+    width: 62%;
+    height: 10px;
+    border-radius: 999px;
+    background: var(--surface-border-color);
+  }
+
+  .note-tree-skeleton-row:nth-child(3n + 2) {
+    padding-left: 25px;
+
+    .note-tree-skeleton-line {
+      width: 54%;
+    }
+  }
+
+  .note-tree-skeleton-row:nth-child(3n) .note-tree-skeleton-line {
+    width: 72%;
+  }
+
+  @keyframes note-tree-skeleton-shine {
+    0% {
+      left: -60%;
+    }
+
+    100% {
+      left: 120%;
+    }
   }
 
   .note-tree-error {
@@ -322,5 +398,11 @@
     color: var(--desc-color);
     font-size: 12px;
     text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .note-tree-skeleton-row::after {
+      animation: none;
+    }
   }
 </style>

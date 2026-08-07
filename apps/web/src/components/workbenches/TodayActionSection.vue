@@ -300,7 +300,9 @@
     const targetAt = todoSnoozeAt('tomorrow');
     const recurring = Boolean(item.recurrence);
     try {
-      const res = recurring ? await snoozeTodoApi(item.id, targetAt) : await updateTodoApi(item.id, { dueAt: targetAt });
+      const res = recurring
+        ? await snoozeTodoApi(item.id, targetAt)
+        : await updateTodoApi(item.id, { dueAt: targetAt });
       if (res.status === 200) {
         // 只有真的顺延了截止时间才从今日区移除；重复待办仍属于今天，留着才和提示一致
         if (!recurring) removedTodoIds.value = new Set([...removedTodoIds.value, item.id]);
@@ -412,11 +414,18 @@
   }
 
   .today-actions--contained .today-actions__group + .today-actions__group {
-    border-top: 1px solid color-mix(in srgb, var(--primary-color) 13%, var(--card-border-color));
+    border-top: 0;
   }
 
   .today-actions--contained .today-actions__group-head {
     padding-block: 8px;
+    border-bottom: 0;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--primary-color) 5%, var(--menu-body-bg-color, var(--background-color))) 0%,
+      color-mix(in srgb, var(--primary-color) 2%, var(--menu-body-bg-color, var(--background-color))) 68%,
+      var(--menu-body-bg-color, var(--background-color)) 100%
+    );
   }
 
   .today-actions--contained .today-action-row {

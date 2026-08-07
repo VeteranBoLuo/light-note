@@ -31,7 +31,7 @@ const aggregateEvidenceScore = (evidenceList = []) => {
   }, 0);
 };
 
-export const calculateThreat = (evidenceList = [], ipReputation = {}) => {
+export const calculateThreat = (evidenceList = [], ipReputation = {}, options = {}) => {
   const evidenceScore = aggregateEvidenceScore(evidenceList);
   const confidenceWeight = evidenceList.reduce((sum, item) => sum + Math.max(1, Number(item.scoreDelta || 0)), 0);
   const confidence =
@@ -43,7 +43,9 @@ export const calculateThreat = (evidenceList = [], ipReputation = {}) => {
           ) / confidenceWeight,
         )
       : 0;
-  const reputationScore = Math.min(25, Math.floor(Number(ipReputation.risk_score || 0) / 4));
+  const reputationScore = options.includeReputation
+    ? Math.min(25, Math.floor(Number(ipReputation.risk_score || 0) / 4))
+    : 0;
   const score = Math.min(100, evidenceScore + reputationScore);
   const strongestEvidence = [...evidenceList].sort((a, b) => {
     const severityDiff = (severityWeight[b.severity] || 0) - (severityWeight[a.severity] || 0);

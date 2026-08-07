@@ -2,12 +2,10 @@ import type { InjectionKey, Ref } from 'vue';
 
 // Tab config
 export const securityTabs = [
-  { key: 'overview', routeName: 'securityCenterOverview', label: '威胁总览' },
-  { key: 'events', routeName: 'securityCenterEvents', label: '攻击日志' },
-  { key: 'ips', routeName: 'securityCenterIps', label: 'IP画像' },
-  { key: 'accountReputation', routeName: 'securityCenterAccountReputation', label: '账号画像' },
-  { key: 'whitelist', routeName: 'securityCenterWhitelist', label: '白名单' },
-  { key: 'rules', routeName: 'securityCenterRules', label: '规则库' },
+  { key: 'overview', routeName: 'securityCenterOverview', label: '安全态势' },
+  { key: 'review', routeName: 'securityCenterReview', label: '事件复核' },
+  { key: 'quality', routeName: 'securityCenterQuality', label: '检测质量' },
+  { key: 'access', routeName: 'securityCenterAccess', label: '访问控制' },
 ] as const;
 
 export type SecurityTabKey = (typeof securityTabs)[number]['key'];

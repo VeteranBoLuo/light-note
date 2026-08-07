@@ -30,7 +30,6 @@
       @switch-tab="switchTab"
       @item-click="onItemClick"
       @complete-todo="completeReminderTodo"
-      @open-todo="openReminderTodo"
       @more="openNotificationActions"
       @load-more="loadMore"
     />
@@ -70,7 +69,6 @@
         @switch-tab="switchTab"
         @item-click="onItemClick"
         @complete-todo="completeReminderTodo"
-        @open-todo="openReminderTodo"
         @delete="onDelete"
         @load-more="loadMore"
       />
@@ -316,12 +314,6 @@
         detailVisible.value = true;
       });
     }
-  }
-  async function openReminderTodo(n: NotificationItem) {
-    const todoId = getTodoId(n);
-    if (!todoId || todoActionState(n) === 'unavailable') return;
-    await markNotificationRead(n);
-    await closePanelThen(() => router.push({ path: '/inbox', query: { tab: 'todo', todoId } }).catch(() => {}));
   }
   async function completeReminderTodo(n: NotificationItem) {
     const todoId = getTodoId(n);

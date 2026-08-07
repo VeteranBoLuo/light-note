@@ -19,7 +19,7 @@ import { startTodoReminderV2Scheduler } from './util/todoReminderV2.js';
 import { startTodoSeriesScheduler } from './util/todoSeriesScheduler.js';
 import { getTodoPlanFeatureState } from './util/todoPlanFeature.js';
 import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
-import { globalRateLimiter } from './util/requestRateLimit.js';
+import { earlyAnonymousRateLimiter, globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
 import { ensureAiEvaluationSchema } from './util/aiEvaluationSchema.js';
@@ -51,10 +51,12 @@ console.log('Loaded env from: 【.env】');
 // 建立一个Express服务器
 const app = express();
 app.set('trust proxy', 1);
+app.use(requestTraceMiddleware);
+// 在 Body 解析、鉴权和安全正则之前提供高上限的匿名来源保护，先挡住明显资源耗尽流量。
+app.use(earlyAnonymousRateLimiter);
 app.use(bodyParser.json({ limit: '10mb', extended: true }));
 //  解析请求体中的JSON数据
 app.use(express.json());
-app.use(requestTraceMiddleware);
 
 // 还原可信登录态
 app.use(authMiddleware);
@@ -62,13 +64,13 @@ app.use(authMiddleware);
 app.use(adminRoutePolicyMiddleware);
 // 账号封禁只拦业务访问，登录/退出等入口继续放行
 app.use(accountBanMiddleware);
-// 安全防护与攻击事件采集
-app.use(attackMonitor);
 // 日志记录中间件
 app.use(logFunction);
 // 全站兜底限流按真实操作者分桶，避免一个页面的并发初始化请求或同一网络下的用户互相误伤。
 // 登录、注册等高风险接口仍在各自路由保留更严格的独立限制。
 app.use(globalRateLimiter);
+// 路由感知的安全检测放在限流之后，避免过量请求先消耗正则、画像和事件计算。
+app.use(attackMonitor);
 
 const allRouter = [
   ...baseRouter,
@@ -87,7 +89,13 @@ for (const directory of getUploadStaticDirectories(process.env)) {
 }
 
 startSessionMaintenance();
-ensureSecurityTables().catch((err) => console.error('安全模块初始化失败 code=%s', stableAgentErrorCode(err)));
+// 安全策略与复核接口依赖新增列和策略表，启动监听前先完成幂等迁移，避免首批请求撞上半初始化 Schema。
+try {
+  await ensureSecurityTables();
+} catch (err) {
+  console.error('安全模块初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
+  process.exit(1);
+}
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败 code=%s', stableAgentErrorCode(err)));
 // 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
 await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));

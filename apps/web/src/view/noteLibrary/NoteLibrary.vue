@@ -157,7 +157,7 @@
       ref="noteWorkspaceRef"
       class="note-workspace"
       :mobile="bookmark.isMobile"
-      :has-sidebar="noteTreeReadEnabled"
+      :has-sidebar="showNoteWorkspaceSidebar"
       :has-ai="false"
       :sidebar-width="noteWorkspaceSidebarWidth"
       v-model:sidebar-open="noteSidebarExpanded"
@@ -182,6 +182,7 @@
             :children-by-parent="sidebarTreeChildrenByParent"
             :expanded-ids="sidebarTreeExpandedIds"
             :loading-keys="sidebarTreeLoadingKeys"
+            :motion-expansion-ids="treeMotionExpansionIds"
             :tree-error="sidebarTreeError"
             :all-tags="visibleNoteTags"
             :total-count="allNoteCount"
@@ -226,10 +227,7 @@
           @close="closeDesktopPreview"
           @edit="openDirectoryPage(previewNoteId)"
         />
-        <header
-          v-else-if="!bookmark.isMobile && noteTreeReadEnabled && noteSidebarMode === 'directory'"
-          class="note-directory-header"
-        >
+        <header v-else-if="showDesktopDirectoryHeader" class="note-directory-header">
           <nav class="note-directory-breadcrumbs" :aria-label="$t('note.currentDirectory')">
             <BButton
               class="note-directory-crumb"
@@ -641,7 +639,11 @@
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
-  import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale } from '@/config/noteTemplates.ts';
+  import {
+    BUILTIN_NOTE_TEMPLATES,
+    pickTemplateLocale,
+    sortBuiltinNoteTemplates,
+  } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -715,6 +717,19 @@
   }
 
   const noteSidebarMode = ref<'directory' | 'tags'>(initialNoteClassificationMode());
+  // 目录能力快照返回前先按账号的目录偏好渲染同尺寸标题栏，避免首屏骨架整体下移。
+  const showDesktopDirectoryHeader = computed(
+    () =>
+      !bookmark.isMobile &&
+      noteSidebarMode.value === 'directory' &&
+      (!noteTreeFeaturesReady.value || noteTreeReadEnabled.value),
+  );
+  // Store 在 setup 时已从 localStorage 同步恢复展开偏好；展开用户先占住最终侧栏宽度，折叠用户维持单栏。
+  const showNoteWorkspaceSidebar = computed(
+    () =>
+      noteTreeReadEnabled.value ||
+      (!bookmark.isMobile && !noteTreeFeaturesReady.value && noteSidebarExpanded.value),
+  );
   const isMediumNoteLayout = computed(() => bookmark.isTablet);
   const showNoteSidebar = computed(
     () => !bookmark.isMobile && (!isMediumNoteLayout.value || noteSidebarExpanded.value),
@@ -806,7 +821,8 @@
   void loadNoteTreeFeatureSnapshot();
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
-  const loading = ref(false);
+  // 首次列表请求要等待目录功能开关快照；默认进入加载态，避免请求启动前短暂误显空状态。
+  const loading = ref(true);
   const loadingMore = ref(false);
   // 只切标签时走软刷新:保留旧列表并降透明度,不整屏换骨架屏
   const refreshing = ref(false);
@@ -822,6 +838,8 @@
   const draggingNoteIsTop = ref(false);
   let dragDropTimer: number | null = null;
   let treeDragImageElement: HTMLElement | null = null;
+  const treeMotionExpansionIds = ref<Set<string>>(new Set());
+  const treeMotionCleanupTimers = new Map<string, number>();
   const searchValue = ref('');
   const treeSearchValue = ref('');
   const debouncedSearch = ref('');
@@ -834,13 +852,18 @@
   const sidebarTreeExpandedIds = computed(() =>
     treeSearchActive.value ? treeSearchExpandedIds.value : expandedIds.value,
   );
-  const sidebarTreeLoadingKeys = computed(() =>
-    treeSearchActive.value && treeSearchLoading.value
-      ? new Set([NOTE_TREE_ROOT_KEY])
-      : treeSearchActive.value
-        ? new Set<string>()
-        : treeLoadingKeys.value,
-  );
+  const sidebarTreeLoadingKeys = computed(() => {
+    if (
+      !noteTreeFeaturesReady.value &&
+      showNoteWorkspaceSidebar.value &&
+      noteSidebarMode.value === 'directory'
+    ) {
+      return new Set([NOTE_TREE_ROOT_KEY]);
+    }
+    if (treeSearchActive.value && treeSearchLoading.value) return new Set([NOTE_TREE_ROOT_KEY]);
+    if (treeSearchActive.value) return new Set<string>();
+    return treeLoadingKeys.value;
+  });
   const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
   let noteRequestSeq = 0;
   const showTypePicker = ref(false);
@@ -923,10 +946,7 @@
     }
   }
   const orderedBuiltinTemplates = computed(() =>
-    [...BUILTIN_NOTE_TEMPLATES].sort(
-      (a, b) =>
-        Number(templateUsage.value[`builtin:${b.key}`] || 0) - Number(templateUsage.value[`builtin:${a.key}`] || 0),
-    ),
+    sortBuiltinNoteTemplates(BUILTIN_NOTE_TEMPLATES, templateUsage.value),
   );
   const orderedMyTemplates = computed(() =>
     [...myTemplates.value].sort(
@@ -1231,13 +1251,26 @@
   async function toggleTreeNode(node: any) {
     const nodeId = String(node?.id || '');
     const wasExpanded = expandedIds.value.has(nodeId);
-    await toggleTreeNodeBase(node);
-    if (!wasExpanded && expandedIds.value.has(nodeId)) {
-      void recordNoteTreeProductEvent('note_tree_node_expanded', {
-        surface: noteTreeSurface(),
-        ...noteTreeNodeMetrics(nodeId),
-        result: 'success',
-      });
+    const previousTimer = treeMotionCleanupTimers.get(nodeId);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    treeMotionExpansionIds.value = new Set([...treeMotionExpansionIds.value, nodeId]);
+    try {
+      await toggleTreeNodeBase(node);
+      if (!wasExpanded && expandedIds.value.has(nodeId)) {
+        void recordNoteTreeProductEvent('note_tree_node_expanded', {
+          surface: noteTreeSurface(),
+          ...noteTreeNodeMetrics(nodeId),
+          result: 'success',
+        });
+      }
+    } finally {
+      const timer = window.setTimeout(() => {
+        const next = new Set(treeMotionExpansionIds.value);
+        next.delete(nodeId);
+        treeMotionExpansionIds.value = next;
+        treeMotionCleanupTimers.delete(nodeId);
+      }, 260);
+      treeMotionCleanupTimers.set(nodeId, timer);
     }
   }
 
@@ -1788,6 +1821,8 @@
     window.removeEventListener('pointermove', onDragPointerMove, true);
     cleanupTreeNativeDrag();
     clearDragDropTarget();
+    treeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
+    treeMotionCleanupTimers.clear();
     noteRequestSeq += 1;
   });
 

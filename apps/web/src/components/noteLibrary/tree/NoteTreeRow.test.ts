@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
 
+vi.mock('@/composables/useNoteTree', () => ({ NOTE_TREE_ROOT_KEY: '__light_note_root__' }));
+
 vi.mock('@/components/base/BasicComponents/BActionMenu.vue', async () => {
   const { defineComponent, h } = await import('vue');
   return {

@@ -20,6 +20,13 @@ export const writeSecurityEvent = async ({ context, evidenceList, threat, decisi
     return null;
   }
   const eventId = crypto.randomBytes(16).toString('hex');
+  const primaryEvidence = [...evidenceList].sort((a, b) => Number(b.scoreDelta || 0) - Number(a.scoreDelta || 0))[0];
+  const windowKey = Math.floor(Date.now() / (5 * 60 * 1000));
+  const actorKey = context.userId || context.sourceIp || 'anonymous';
+  const clusterKey = crypto
+    .createHash('sha256')
+    .update(`${primaryEvidence?.ruleCode || threat.attackType}|${context.path}|${actorKey}|${windowKey}`)
+    .digest('hex');
   const ipAttackCount5m = await countIpAttacks(context.sourceIp, '5 MINUTE');
   const ipAttackCount24h = await countIpAttacks(context.sourceIp, '24 HOUR');
   const event = {
@@ -48,12 +55,19 @@ export const writeSecurityEvent = async ({ context, evidenceList, threat, decisi
     ip_attack_count_24h: ipAttackCount24h,
     ip_risk_delta: 0,
     decision_reason: decision.reason || '',
+    primary_rule_code: primaryEvidence?.ruleCode || '',
+    workflow_status: 'new',
+    disposition: 'unknown',
+    cluster_key: clusterKey,
+    policy_version: Math.max(1, ...evidenceList.map((item) => Number(item.policyVersion || 1))),
+    detector_version: 'security-v2',
   };
   await pool.query('INSERT INTO security_events SET ?', [event]);
   if (evidenceList.length) {
     await pool.query(
       `INSERT INTO security_event_evidence
-        (event_id,rule_code,rule_name,detector,attack_type,severity,matched_field,matched_value_preview,evidence_message,score_delta,confidence)
+        (event_id,rule_code,rule_name,detector,attack_type,severity,matched_field,field_context,matched_value_preview,
+         evidence_message,score_delta,confidence,policy_mode,policy_version,exception_ids)
        VALUES ?`,
       [
         evidenceList.map((item) => [
@@ -64,10 +78,14 @@ export const writeSecurityEvent = async ({ context, evidenceList, threat, decisi
           item.attackType,
           item.severity,
           item.matchedField,
+          item.fieldContext || null,
           item.matchedValuePreview,
           item.evidenceMessage,
           item.scoreDelta,
           item.confidence,
+          item.policyMode || 'observe',
+          Number(item.policyVersion || 1),
+          JSON.stringify(item.exceptionIds || []),
         ]),
       ],
     );
@@ -146,8 +164,8 @@ export const cleanupExpiredSecurityEvents = async () => {
     if (events || evidence) {
       console.log(`[security] 清理过期安全事件：events=${events}, evidence=${evidence}（保留 ${days} 天）`);
     }
-  } catch (e) {
-    console.error('[security] 清理过期安全事件失败:', e.message);
+  } catch {
+    console.error('[security] 清理过期安全事件失败 code=SECURITY_EVENT_RETENTION_FAILED');
   }
   return { events, evidence };
 };

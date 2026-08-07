@@ -45,3 +45,21 @@ export const globalRateLimiter = rateLimit({
     });
   },
 });
+
+export const earlyAnonymousRateLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: positiveNumber(process.env.EARLY_ANONYMOUS_RATE_LIMIT_PER_MINUTE, 1200),
+  keyGenerator: (req) => `early-ip:${ipKeyGenerator(req.ip || 'unknown')}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
+  handler: (req, res) => {
+    const resetTime = req.rateLimit?.resetTime?.getTime?.() || Date.now() + 60_000;
+    const retryAfter = Math.max(1, Math.ceil((resetTime - Date.now()) / 1000));
+    return res.status(429).send({
+      data: { retryAfter },
+      status: 429,
+      msg: '请求过于频繁，请稍后再试',
+    });
+  },
+});

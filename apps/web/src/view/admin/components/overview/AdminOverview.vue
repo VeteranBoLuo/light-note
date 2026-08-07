@@ -180,6 +180,15 @@
       :period-days="Number(trendDays)"
       :granularity="data.trendPeriod?.granularity || 'day'"
     />
+    <AdminRecentAdditions
+      :data="recentData"
+      :loading="recentLoading"
+      :error="recentError"
+      :stacked="bookmark.isMobile || bookmark.isTablet"
+      :mobile="bookmark.isMobile"
+      @retry="loadRecent"
+      @view-users="go('userMg')"
+    />
   </AdminDataPage>
 </template>
 
@@ -189,6 +198,8 @@
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
+  import AdminRecentAdditions from './AdminRecentAdditions.vue';
+  import type { AdminRecentData } from './adminRecentTypes.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
@@ -199,6 +210,10 @@
   const hideInternal = ref(true);
   const loading = ref(false);
   const trendLoading = ref(false);
+  const recentData = ref<AdminRecentData | null>(null);
+  const recentLoading = ref(false);
+  const recentError = ref(false);
+  const recentScope = ref<boolean | null>(null);
   const trendDays = ref('7');
   const trendOptions = [
     { key: '7', label: '近 7 天' },
@@ -208,6 +223,7 @@
   ];
   const trendCache = new Map<string, any>();
   let trendRequestSequence = 0;
+  let recentRequestSequence = 0;
 
   const pageSubtitle = computed(() =>
     data.value ? `全站累计规模与近期动态一览 · 更新于 ${data.value.generatedAt}` : '全站累计规模与近期动态一览',
@@ -243,6 +259,7 @@
     trendRequestSequence += 1;
     trendLoading.value = false;
     loading.value = true;
+    void loadRecent();
     try {
       const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value });
       if (res.status === 200) {
@@ -260,6 +277,27 @@
       }
     } finally {
       loading.value = false;
+    }
+  }
+
+  async function loadRecent() {
+    const hideInternalValue = hideInternal.value;
+    const requestSequence = ++recentRequestSequence;
+    if (recentScope.value !== hideInternalValue) recentData.value = null;
+    recentScope.value = hideInternalValue;
+    recentLoading.value = true;
+    recentError.value = false;
+    try {
+      const response: any = await apiBasePost('/api/common/getAdminOverviewRecent', {
+        hideInternal: hideInternalValue,
+      });
+      if (requestSequence !== recentRequestSequence) return;
+      if (response.status === 200) recentData.value = response.data;
+      else recentError.value = true;
+    } catch (_error) {
+      if (requestSequence === recentRequestSequence) recentError.value = true;
+    } finally {
+      if (requestSequence === recentRequestSequence) recentLoading.value = false;
     }
   }
 

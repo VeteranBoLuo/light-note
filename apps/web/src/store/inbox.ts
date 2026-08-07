@@ -101,10 +101,13 @@ export default defineStore('inbox', {
       if (!options.silent) this.loading = true;
       this.loadFailed = false;
       try {
+        // 待办与待整理曾共用工具栏状态，运行时可能把待办排序值 `due` 串进来。
+        // 这里保留最后一道契约保护：待整理接口永远只发送自身支持的排序枚举。
+        const sort = this.sort === 'oldest' ? 'oldest' : 'newest';
         const res = await listInbox({
           type: this.filterType === 'todo' ? 'all' : this.filterType,
           keyword: this.keyword,
-          sort: this.sort,
+          sort,
         });
         if (requestId !== this.requestId) return false;
         if (res.status !== 200) {

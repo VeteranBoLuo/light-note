@@ -244,7 +244,11 @@ describe('FilePreview HTML sandbox', () => {
     expect(iframe).not.toBeNull();
     expect(fetch).toHaveBeenCalledWith(fileUrl, { mode: 'cors' });
     expect(createObjectUrl).toHaveBeenCalledOnce();
-    expect((createObjectUrl.mock.calls[0][0] as Blob).type).toBe('text/html;charset=utf-8');
+    const htmlBlob = createObjectUrl.mock.calls[0][0] as Blob;
+    const htmlSource = await htmlBlob.text();
+    expect(htmlBlob.type).toBe('text/html;charset=utf-8');
+    expect(htmlSource).toContain('data-light-note-anchor-bridge');
+    expect(htmlSource).toContain('<script>window.started = true</script>');
     expect(iframe?.getAttribute('src')).toBe('blob:https://boluo66.top/html-preview');
     expect(iframe?.getAttribute('sandbox')).toBe(HTML_PREVIEW_SANDBOX);
     expect(iframe?.getAttribute('referrerpolicy')).toBe(HTML_PREVIEW_REFERRER_POLICY);

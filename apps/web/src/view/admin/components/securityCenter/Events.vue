@@ -1,281 +1,247 @@
 <template>
-  <div class="tab-content">
-    <div class="admin-filters security-filters">
-      <div class="admin-filters-main security-filters-main">
-        <b-input
-          v-model:value="eventFilters.key"
-          placeholder="搜索IP/接口/规则/用户"
-          class="security-search-input"
-          @input="handleEventSearch"
-        />
-        <BSelect
-          v-model:value="eventFilters.severity"
-          allowClear
-          placeholder="威胁等级"
-          class="security-select"
-          :options="severityOptions"
-          @change="searchEvents"
-        />
-        <BSelect
-          v-model:value="eventFilters.actionTaken"
-          allowClear
-          placeholder="处置动作"
-          class="security-select"
-          :options="actionOptions"
-          @change="searchEvents"
-        />
-        <BSelect
-          v-model:value="eventFilters.handledStatus"
-          allowClear
-          placeholder="处理状态"
-          class="security-select"
-          :options="statusOptions"
-          @change="searchEvents"
-        />
-        <b-button type="primary" @click="searchEvents">搜索</b-button>
-      </div>
-      <span class="admin-filters-hint flex-align-center">
-        支持查看命中证据、脱敏请求快照、同IP近期行为和处置备注
-        <div class="flex-align-center-gap" v-if="eventFilters.userId">
-          <span class="filter-account-tag"> 当前账号：{{ eventFilters.userLabel || eventFilters.userId }} </span>
-          <b-button size="small" type="primary" @click="clearEventAccountFilter">清除</b-button>
-        </div>
-      </span>
+  <div class="security-v2-page security-review-v2">
+    <header class="security-v2-header">
+      <div><h2>{{ t('securityV2.review.title') }}</h2><p>{{ t('securityV2.review.subtitle') }}</p></div>
+      <BButton @click="exportEvidence">{{ t('securityV2.review.export') }}</BButton>
+    </header>
+
+    <div class="security-segment review-status-segment">
+      <BButton
+        v-for="status in dispositionOptions"
+        :key="status.value"
+        :class="{ 'is-active': disposition === status.value }"
+        @click="setDisposition(status.value)"
+      >{{ status.label }} {{ countFor(status.value) }}</BButton>
     </div>
 
-    <div class="admin-table-card">
-      <div class="event-batch-bar" v-if="selectedEventIds.length">
-        <span>已选择 {{ selectedEventIds.length }} 条攻击日志</span>
-        <div class="event-batch-actions">
-          <b-button size="small" type="primary" @click="confirmBatchHandle('processed')">标记已处理</b-button>
-          <b-button size="small" @click="confirmBatchHandle('false_positive')">标记误报</b-button>
-          <b-button size="small" @click="confirmBatchHandle('authorized_test')">标记授权测试</b-button>
-          <b-button size="small" @click="confirmBatchHandle('unhandled')">改为未处理</b-button>
-          <b-button size="small" @click="selectedEventIds = []">取消选择</b-button>
-        </div>
-      </div>
-      <b-loading :loading="eventLoading">
-        <BTable
-          :data="events"
-          :columns="eventColumns"
-          :rowKey="'eventId'"
-          :row-clickable="true"
-          :selectable="true"
-          :selected-rows="selectedEventIds"
-          @row-click="onRowClick"
-          @selection-change="selectedEventIds = $event"
-          class="eventClass"
-        >
-          <template #bodyCell="{ column, record }">
-            <template v-if="column.key === 'createdAt'">
-              <BTooltip :title="record.createdAt">
-                <span class="ellipsis-cell">{{ record.createdAt }}</span>
-              </BTooltip>
-            </template>
-            <template v-else-if="column.key === 'severity'">
-              <span class="security-pill" :class="`is-${record.severity}`">{{ record.severity }}</span>
-            </template>
-            <template v-else-if="column.key === 'matchedRule'">
-              <BTooltip :title="record.matchedRule || record.attackType">
-                <span class="ellipsis-cell">{{ record.matchedRule || record.attackType || '-' }}</span>
-              </BTooltip>
-            </template>
-            <template v-else-if="column.key === 'user'">
-              <BTooltip :title="eventUserTooltip(record)">
-                <span class="ellipsis-cell">{{ eventUserText(record) }}</span>
-              </BTooltip>
-            </template>
-            <template v-else-if="column.key === 'sourceIp'">
-              <BTooltip :title="record.sourceIp">
-                <span class="ellipsis-cell">{{ record.sourceIp }}</span>
-              </BTooltip>
-            </template>
-            <template v-else-if="column.key === 'requestPath'">
-              <BTooltip :title="record.requestPath">
-                <span class="ellipsis-cell">{{ record.requestPath }}</span>
-              </BTooltip>
-            </template>
-            <template v-else-if="column.key === 'blocked'">
-              <span class="security-pill" :class="record.blocked ? 'is-high' : 'is-low'">{{
-                record.blocked ? '已拦截' : '已放行'
-              }}</span>
-            </template>
-            <template v-else-if="column.key === 'handledStatus'">
-              <span class="security-pill" :class="statusPillClass(record.handledStatus)">{{
-                statusText(record.handledStatus)
-              }}</span>
-            </template>
-          </template>
-        </BTable>
-      </b-loading>
+    <div class="security-review-toolbar">
+      <BInput v-model:value="draftKeyword" class="security-review-search" :placeholder="t('securityV2.review.search')" @enter="applyFilters" />
+      <BSelect v-model:value="draftViewMode" class="security-review-select" :options="viewOptions" />
+      <BSelect v-model:value="draftConfidence" class="security-review-select" :options="confidenceOptions" />
+      <BButton type="primary" :loading="loading" @click="applyFilters">{{ t('securityV2.common.filter') }}</BButton>
     </div>
+    <p class="security-review-mode-hint">
+      {{ t(draftViewMode === 'raw' ? 'securityV2.review.rawModeHint' : 'securityV2.review.clusterModeHint') }}
+    </p>
+
+    <div class="security-review-batch-bar" :class="{ 'has-selection': selectedKeys.length }">
+      <div>
+        <strong>{{ t('securityV2.review.selected', { count: selectedKeys.length, unit: reviewUnit }) }}</strong>
+        <span>{{ t('securityV2.review.batchHint') }}</span>
+      </div>
+      <div class="security-review-batch-actions">
+        <BButton :disabled="!selectedKeys.length || Boolean(bulkAction)" @click="clearSelection">{{ t('securityV2.review.clearSelection') }}</BButton>
+        <BButton :disabled="!selectedKeys.length || Boolean(bulkAction)" :loading="bulkAction === 'benign_anomaly'" @click="confirmBatchDisposition('benign_anomaly')">{{ t('securityV2.review.benignAction') }}</BButton>
+        <BButton :disabled="!selectedKeys.length || Boolean(bulkAction)" :loading="bulkAction === 'authorized_test'" @click="confirmBatchDisposition('authorized_test')">{{ t('securityV2.review.authorizedAction') }}</BButton>
+        <BButton :disabled="!selectedKeys.length || Boolean(bulkAction)" :loading="bulkAction === 'false_positive'" @click="confirmBatchDisposition('false_positive')">{{ t('securityV2.review.batchFalseAction') }}</BButton>
+        <BButton type="danger" :disabled="!selectedKeys.length || Boolean(bulkAction)" :loading="bulkAction === 'confirmed_attack'" @click="confirmBatchDisposition('confirmed_attack')">{{ t('securityV2.review.confirmAction') }}</BButton>
+      </div>
+    </div>
+
+    <div class="security-v2-table-card">
+      <BTable
+        :data="items"
+        :columns="columns"
+        :row-key="viewMode === 'raw' ? 'eventId' : 'representativeEventId'"
+        :row-clickable="true"
+        :selectable="true"
+        :selected-rows="selectedKeys"
+        :loading="loading"
+        @selection-change="handleSelectionChange"
+        @row-click="openEvent"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'time'"><span>{{ formatTime(record.lastSeenAt || record.createdAt) }}</span></template>
+          <template v-else-if="column.key === 'score'">
+            <span class="security-pill" :class="number(record.confidence) >= 85 ? 'is-danger' : 'is-warning'">{{ confidenceLabel(record.confidence) }} · {{ number(record.maxScore ?? record.threatScore) }}</span>
+          </template>
+          <template v-else-if="column.key === 'ruleRoute'">
+            <span class="security-event-title"><strong>{{ record.ruleName || record.matchedRule || record.ruleCode || record.primaryRuleCode || '-' }}</strong><small>{{ record.requestMethod || '-' }} {{ record.requestPath || '-' }}</small></span>
+          </template>
+          <template v-else-if="column.key === 'actor'">
+            <span class="security-event-title"><strong>{{ record.actorLabel || record.alias || record.email || record.userId || t('securityV2.common.anonymous') }}</strong><small>{{ record.sourceIp || '-' }}</small></span>
+          </template>
+          <template v-else-if="column.key === 'hits'">{{ viewMode === 'raw' ? t('securityV2.common.hits', { count: 1 }) : t('securityV2.common.hits', { count: record.hitCount || 1 }) }}</template>
+          <template v-else-if="column.key === 'action'"><span class="security-pill" :class="record.blocked ? 'is-danger' : 'is-info'">{{ record.blocked ? t('securityV2.common.blocked') : t('securityV2.common.logged') }}</span></template>
+        </template>
+      </BTable>
+      <div v-if="!loading && !items.length" class="security-empty">{{ t('securityV2.common.noData') }}</div>
+    </div>
+
+    <EventDetailDrawer
+      :open="drawerOpen"
+      :event-id="activeEventId"
+      :raw="viewMode === 'raw'"
+      @close="closeDrawer"
+      @saved="loadEvents"
+    />
   </div>
 </template>
 
 <script lang="ts" setup>
-  import { inject, onMounted, reactive, ref, watch } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
-  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import {
-    OPEN_EVENT_DETAIL,
-    REFRESH_TRIGGER,
-    eventColumns,
-    eventUserText,
-    eventUserTooltip,
-    securityHandledStatusBatchRemark,
-    securityHandledStatusConfirmText,
-    securityHandledStatusOptions,
-    statusText,
-    statusPillClass,
-    type SecurityHandledStatus,
-  } from './securityShared';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import { apiBasePost } from '@/http/request';
+  import EventDetailDrawer from './EventDetailDrawer.vue';
+  import { securityCenterMessages } from './securityCenterI18n';
 
-  const openEventDetail = inject(OPEN_EVENT_DETAIL);
-  const refreshTrigger = inject(REFRESH_TRIGGER);
+  const emit = defineEmits<{ pendingCount: [count: number] }>();
+  const { t } = useI18n({ useScope: 'local', messages: securityCenterMessages });
   const route = useRoute();
   const router = useRouter();
+  const loading = ref(false);
+  const items = ref<any[]>([]);
+  const counts = ref<any[]>([]);
+  const keyword = ref('');
+  const draftKeyword = ref('');
+  const disposition = ref('unknown');
+  const viewMode = ref<'clusters' | 'raw'>('clusters');
+  const draftViewMode = ref<'clusters' | 'raw'>('clusters');
+  const confidence = ref('all');
+  const draftConfidence = ref('all');
+  const selectedKeys = ref<string[]>([]);
+  const bulkAction = ref('');
+  const drawerOpen = ref(false);
+  const activeEventId = ref('');
+  const number = (value: unknown) => Number(value || 0);
+  const columns = computed(() => [
+    { title: t('securityV2.review.time'), key: 'time', width: '85px' },
+    { title: t('securityV2.review.score'), key: 'score', width: '105px' },
+    { title: t('securityV2.review.ruleRoute'), key: 'ruleRoute', width: 'minmax(190px,1fr)' },
+    { title: t('securityV2.review.actor'), key: 'actor', width: 'minmax(145px,.8fr)' },
+    { title: t('securityV2.review.hit'), key: 'hits', width: '72px' },
+    { title: t('securityV2.review.action'), key: 'action', width: '90px' },
+  ]);
+  const dispositionOptions = computed(() => [
+    { value: 'unknown', label: t('securityV2.review.pending') },
+    { value: 'confirmed_attack', label: t('securityV2.review.confirmed') },
+    { value: 'false_positive', label: t('securityV2.review.falsePositive') },
+    { value: 'authorized_test', label: t('securityV2.review.authorized') },
+    { value: 'benign_anomaly', label: t('securityV2.review.benign') },
+  ]);
+  const viewOptions = computed(() => [
+    { value: 'clusters', label: t('securityV2.review.clusters') },
+    { value: 'raw', label: t('securityV2.review.raw') },
+  ]);
+  const confidenceOptions = computed(() => [
+    { value: 'all', label: t('securityV2.review.allConfidence') },
+    { value: 'high', label: t('securityV2.review.high') },
+    { value: 'medium', label: t('securityV2.review.medium') },
+  ]);
+  const reviewUnit = computed(() => t(viewMode.value === 'raw' ? 'securityV2.review.eventUnit' : 'securityV2.review.clusterUnit'));
 
-  const events = ref<any[]>([]);
-  const eventTotal = ref(0);
-  const eventLoading = ref(false);
-  const eventPage = reactive({ currentPage: 1, pageSize: 100 });
-  const eventFilters = reactive<any>({
-    key: '',
-    severity: undefined,
-    actionTaken: undefined,
-    handledStatus: undefined,
-    userId: undefined,
-    userLabel: '',
-  });
-  const severityOptions = [
-    { value: 'low', label: 'low' },
-    { value: 'medium', label: 'medium' },
-    { value: 'high', label: 'high' },
-    { value: 'critical', label: 'critical' },
-  ];
-  const actionOptions = [
-    { value: 'log', label: '记录' },
-    { value: 'block', label: '拦截' },
-  ];
-  const statusOptions = securityHandledStatusOptions;
-  const eventSearchTimer = ref<any>(null);
-  const selectedEventIds = ref<string[]>([]);
-  const batchLoading = ref(false);
-
-  function onRowClick(record: any) {
-    openEventDetail?.(record.eventId);
-  }
-
-  async function searchEvents() {
-    eventLoading.value = true;
-    const res = await apiQueryPost('/api/security/events', {
-      currentPage: eventPage.currentPage,
-      pageSize: eventPage.pageSize,
-      filters: {
-        key: eventFilters.key,
-        severity: eventFilters.severity,
-        actionTaken: eventFilters.actionTaken,
-        handledStatus: eventFilters.handledStatus,
-        userId: eventFilters.userId,
-      },
-    }).finally(() => {
-      eventLoading.value = false;
-    });
-    if (res.status === 200) {
-      events.value = res.data.items;
-      eventTotal.value = res.data.total;
-      selectedEventIds.value = selectedEventIds.value.filter((id) =>
-        events.value.some((event) => event.eventId === id),
-      );
+  function countFor(value: string) { return number(counts.value.find((item) => item.disposition === value)?.total); }
+  function setDisposition(value: string) { disposition.value = value; loadEvents(); }
+  function confidenceLabel(value: unknown) { return number(value) >= 85 ? t('securityV2.review.high') : t('securityV2.review.medium'); }
+  function formatTime(value: string) { return value ? new Date(value.replace(' ', 'T')).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '-'; }
+  function openEvent(record: any) { activeEventId.value = record.representativeEventId || record.eventId; drawerOpen.value = true; router.replace({ query: { ...route.query, eventId: activeEventId.value } }); }
+  function closeDrawer() { drawerOpen.value = false; router.replace({ query: { ...route.query, eventId: undefined } }); }
+  function clearSelection() { selectedKeys.value = []; }
+  function handleSelectionChange(keys: Array<string | number>) { selectedKeys.value = keys.map((key) => String(key)); }
+  async function loadEvents(filters = { key: keyword.value, viewMode: viewMode.value, confidence: confidence.value }) {
+    loading.value = true;
+    try {
+      const res = await apiBasePost('/api/security/v2/review/clusters', {
+        pageSize: 100,
+        filters: {
+          days: 7,
+          disposition: disposition.value,
+          key: filters.key.trim(),
+          viewMode: filters.viewMode,
+          confidence: filters.confidence === 'all' ? '' : filters.confidence,
+        },
+      }, { silent: true });
+      if (res?.status !== 200) return false;
+      keyword.value = filters.key;
+      viewMode.value = filters.viewMode;
+      confidence.value = filters.confidence;
+      items.value = res.data?.items || [];
+      counts.value = res.data?.counts || counts.value;
+      clearSelection();
+      emit('pendingCount', countFor('unknown'));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      loading.value = false;
     }
   }
-
-  function handleEventSearch() {
-    clearTimeout(eventSearchTimer.value);
-    eventSearchTimer.value = setTimeout(() => {
-      eventPage.currentPage = 1;
-      searchEvents();
-    }, 300);
+  async function applyFilters() {
+    const success = await loadEvents({
+      key: draftKeyword.value,
+      viewMode: draftViewMode.value,
+      confidence: draftConfidence.value,
+    });
+    if (success) {
+      message.success(t('securityV2.review.filterApplied', { count: items.value.length, unit: reviewUnit.value }));
+    } else {
+      message.error(t('securityV2.review.filterFailed'));
+    }
   }
-
-  function clearEventAccountFilter() {
-    eventFilters.userId = undefined;
-    eventFilters.userLabel = '';
-    eventPage.currentPage = 1;
-    router.replace({ query: {} });
-    searchEvents();
+  function dispositionLabel(value: string) {
+    return dispositionOptions.value.find((item) => item.value === value)?.label || value;
   }
-
-  function applyRouteFilters() {
-    eventFilters.userId = route.query.userId ? String(route.query.userId) : undefined;
-    eventFilters.userLabel = route.query.userLabel ? String(route.query.userLabel) : '';
-    eventFilters.handledStatus = route.query.handledStatus
-      ? String(route.query.handledStatus)
-      : eventFilters.handledStatus;
-    eventFilters.severity = route.query.severity ? String(route.query.severity) : eventFilters.severity;
-  }
-
-  function confirmBatchHandle(handledStatus: SecurityHandledStatus) {
-    if (!selectedEventIds.value.length || batchLoading.value) return;
+  function confirmBatchDisposition(nextDisposition: string) {
+    if (!selectedKeys.value.length || bulkAction.value) return;
+    const selectedCount = selectedKeys.value.length;
+    const unit = reviewUnit.value;
     Alert.alert({
-      title: '批量处理攻击日志',
-      content: securityHandledStatusConfirmText(handledStatus, selectedEventIds.value.length),
-      okText: '确认处理',
-      cancelText: '取消',
-      onOk: async () => {
-        batchLoading.value = true;
-        const res = await apiBasePost('/api/security/events/batchHandle', {
-          eventIds: selectedEventIds.value,
-          handledStatus,
-          remark: securityHandledStatusBatchRemark(handledStatus),
-        }).finally(() => {
-          batchLoading.value = false;
-        });
-        if (res.status === 200) {
-          message.success(res.msg || '批量处理成功');
-          selectedEventIds.value = [];
-          searchEvents();
-        }
-      },
+      title: t('securityV2.review.batchConfirmTitle'),
+      content: t('securityV2.review.batchConfirmContent', {
+        count: selectedCount,
+        unit,
+        disposition: dispositionLabel(nextDisposition),
+      }),
+      okText: dispositionLabel(nextDisposition),
+      okType: nextDisposition === 'confirmed_attack' ? 'danger' : 'primary',
+      cancelText: t('securityV2.common.close'),
+      onOk: () => executeBatchDisposition(nextDisposition),
     });
   }
-
-  watch(
-    () => [route.query.userId, route.query.userLabel, route.query.handledStatus, route.query.severity],
-    () => {
-      applyRouteFilters();
-      eventPage.currentPage = 1;
-      searchEvents();
-    },
-  );
-
-  watch(
-    () => refreshTrigger?.value,
-    () => {
-      searchEvents();
-    },
-  );
-
-  onMounted(() => {
-    applyRouteFilters();
-    searchEvents();
-  });
+  async function executeBatchDisposition(nextDisposition: string) {
+    const eventIds = [...selectedKeys.value];
+    const unit = reviewUnit.value;
+    bulkAction.value = nextDisposition;
+    try {
+      const res = await apiBasePost('/api/security/v2/review/batch-disposition', {
+        eventIds,
+        scope: viewMode.value === 'raw' ? 'events' : 'clusters',
+        disposition: nextDisposition,
+        reason: t('securityV2.review.batchReviewReason'),
+        createTuningSuggestion: nextDisposition === 'false_positive',
+      }, { silent: true });
+      if (res?.status !== 200) {
+        message.error(t('securityV2.review.batchFailed'));
+        return;
+      }
+      message.success(t('securityV2.review.batchSuccess', {
+        count: res.data?.selectedTotal || eventIds.length,
+        unit,
+        affected: res.data?.handledTotal || eventIds.length,
+      }));
+      await loadEvents();
+    } catch {
+      message.error(t('securityV2.review.batchFailed'));
+    } finally {
+      bulkAction.value = '';
+    }
+  }
+  function exportEvidence() {
+    const redacted = items.value.map((item) => ({ time: item.lastSeenAt || item.createdAt, rule: item.ruleCode || item.primaryRuleCode, route: item.requestPath, actor: item.userId ? `user:${String(item.userId).slice(0, 6)}…` : t('securityV2.common.anonymous'), sourceIp: item.sourceIp || '', score: item.maxScore ?? item.threatScore, blocked: Boolean(item.blocked), hits: item.hitCount || 1 }));
+    const url = URL.createObjectURL(new Blob([JSON.stringify(redacted, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a'); link.href = url; link.download = `security-review-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url);
+  }
+  onMounted(async () => { await loadEvents(); if (route.query.eventId) { activeEventId.value = String(route.query.eventId); drawerOpen.value = true; } });
+  watch(() => route.query.eventId, (value) => { if (value) { activeEventId.value = String(value); drawerOpen.value = true; } });
 </script>
 
 <style lang="less" scoped>
   @import './securityCenter.less';
-
-  .tab-content {
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-  }
 </style>
