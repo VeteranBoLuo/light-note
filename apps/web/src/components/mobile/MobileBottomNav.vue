@@ -9,11 +9,19 @@
         'mobile-bottom-nav__item--ai': item.key === 'ai',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
+      :aria-label="item.key === 'ai' && aiStatusText ? aiAccessibleLabel : undefined"
+      :aria-busy="item.key === 'ai' && aiEdgeStatus === 'generating' ? 'true' : undefined"
       @click="activate(item)"
       v-click-log="{ module: '移动端导航', operation: `打开${t(item.labelKey)}` }"
     >
       <span class="mobile-bottom-nav__icon">
         <SvgIcon :src="bottomIcons[item.key]" :size="item.key === 'ai' ? '21' : '20'" aria-hidden="true" />
+        <span
+          v-if="item.key === 'ai' && aiEdgeStatus !== 'idle'"
+          class="mobile-bottom-nav__ai-status"
+          :class="`is-${aiEdgeStatus}`"
+          aria-hidden="true"
+        ></span>
         <!--
           与桌面顶栏同一口径：只提醒「逾期 + 今天到期」。原来用全部未完成待办，
           那个数字永不清零，挂成常驻角标会被用户学会忽略。两端必须一致，
@@ -59,13 +67,16 @@
     type MobileShellSection,
   } from '@/config/mobileNavigation';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
-  import { inboxStore, useUserStore } from '@/store';
+  import { inboxStore, useAiAssistantStore, useUserStore } from '@/store';
+  import { storeToRefs } from 'pinia';
   import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
 
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const inbox = inboxStore();
+  const aiAssistant = useAiAssistantStore();
+  const { edgeStatus: aiEdgeStatus } = storeToRefs(aiAssistant);
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
   const appUpdate = useAndroidAppUpdate();
@@ -76,6 +87,13 @@
       count: inbox.todoAttentionTotal,
       overdue: inbox.todoOverdueTotal,
       dueToday: inbox.todoDueTodayTotal,
+    }),
+  );
+  const aiStatusText = computed(() => (aiEdgeStatus.value === 'idle' ? '' : t(`ai.edgeStatus.${aiEdgeStatus.value}`)));
+  const aiAccessibleLabel = computed(() =>
+    t('ai.edgeStatus.triggerLabel', {
+      title: t('mobileNavigation.ai'),
+      status: aiStatusText.value,
     }),
   );
 
@@ -175,6 +193,46 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 14%, transparent);
   }
 
+  .mobile-bottom-nav__ai-status {
+    position: absolute;
+    top: -2px;
+    right: -4px;
+    width: 9px;
+    height: 9px;
+    box-sizing: border-box;
+    border: 2px solid var(--surface-page-bg, var(--background-color));
+    border-radius: 50%;
+    background: var(--primary-color);
+  }
+
+  .mobile-bottom-nav__ai-status.is-generating {
+    animation: mobile-ai-status-pulse 1.2s ease-in-out infinite;
+  }
+
+  .mobile-bottom-nav__ai-status.is-completed {
+    background: var(--success-color);
+  }
+
+  .mobile-bottom-nav__ai-status.is-needs_attention {
+    background: var(--warning-color);
+  }
+
+  .mobile-bottom-nav__ai-status.is-failed {
+    background: var(--danger-color);
+  }
+
+  @keyframes mobile-ai-status-pulse {
+    0%,
+    100% {
+      transform: scale(0.82);
+      opacity: 0.72;
+    }
+    50% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
   .mobile-bottom-nav__icon {
     position: relative;
     min-height: 25px;
@@ -228,6 +286,10 @@
   @media (prefers-reduced-motion: reduce) {
     .mobile-bottom-nav__item {
       transition: none;
+    }
+
+    .mobile-bottom-nav__ai-status.is-generating {
+      animation: none;
     }
   }
 </style>

@@ -45,6 +45,8 @@
             v-if="captureType === 'todo'"
             :saving="submitting"
             :reset-key="todoFormKey"
+            :mobile="bookmark.isMobile"
+            :reminder-presets-enabled="quickReminderPresetsEnabled"
             @submit="submitTodo"
             @details="openTodoDetails"
           />
@@ -138,6 +140,7 @@
   </component>
 
   <TodoEditorModal
+    v-if="!bookmark.isMobile"
     v-model:visible="todoDetailsVisible"
     :initial-values="todoDraft"
     @saved="afterDetailedTodoSaved"
@@ -174,7 +177,14 @@
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
   import { recordOperation } from '@/api/commonApi';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
-  import { createTodo, type TodoPayload } from '@/api/todoApi';
+  import {
+    createTodoPlanV2,
+    getTodoPlanV2Config,
+    previewTodoPlanV2,
+    type TodoCreateInitialValues,
+  } from '@/api/todoApi';
+  import { normalizeQuickTodoInitial } from '@/components/todo/todoDraftNormalizer';
+  import { generateUUID } from '@/utils/common';
   import type { ActionCaptureType } from '@/store/inbox';
   import icon from '@/config/icon';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
@@ -205,9 +215,9 @@
       ? {
           open: quickShellVisible.value,
           title: shellTitle.value,
-          placement: 'right' as const,
-          height: '100%',
-          mobileFullScreen: true,
+          placement: 'bottom' as const,
+          height: '83vh',
+          mobileFullScreen: false,
           mobileCenteredHeader: true,
           bodyPadding: '14px 14px 0',
           maskClosable: !submitting.value,
@@ -216,7 +226,7 @@
           visible: quickShellVisible.value,
           title: shellTitle.value,
           showFooter: false,
-          width: 'min(620px, 92vw)',
+          width: 'min(680px, 92vw)',
           maskClosable: !submitting.value,
         },
   );
@@ -233,7 +243,8 @@
   const manualType = ref(false);
   const todoFormKey = ref(0);
   const todoDetailsVisible = ref(false);
-  const todoDraft = ref<Partial<Pick<TodoPayload, 'title' | 'priority' | 'dueAt'>> | undefined>();
+  const quickReminderPresetsEnabled = ref(true);
+  const todoDraft = ref<TodoCreateInitialValues | undefined>();
   const capturedResource = ref<{ type: ActionCaptureType; id?: string; title?: string } | null>(null);
 
   const typeOptions = computed(() =>
@@ -259,22 +270,19 @@
         (captureType.value !== 'bookmark' || validUrl.value),
   );
   const totalFileSize = computed(() => files.value.reduce((sum, file) => sum + file.size, 0));
-  const displayPendingTotal = computed(() =>
-    inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal),
-  );
+  const displayPendingTotal = computed(() => (inbox.pendingTotal > 99 ? '99+' : String(inbox.pendingTotal)));
   const isTodoCapture = computed(() => captureType.value === 'todo');
   // 顶部入口与成功区都跟随当前 Tab：待办跳待办列表，资源类跳待整理
   const captureTargetLabel = computed(() => (isTodoCapture.value ? t('inbox.goToTodo') : t('inbox.goToInbox')));
   const successTargetLabel = computed(() => (isTodoCapture.value ? t('inbox.goToTodo') : t('inbox.viewInbox')));
   // 埋点跟着实际跳转目标走，否则两个入口的使用率会被混在一条记录里
   const captureTargetLog = computed(() =>
-    isTodoCapture.value
-      ? OPERATION_LOG_MAP.inbox.openTodoFromCapture
-      : OPERATION_LOG_MAP.inbox.openInboxFromCapture,
+    isTodoCapture.value ? OPERATION_LOG_MAP.inbox.openTodoFromCapture : OPERATION_LOG_MAP.inbox.openInboxFromCapture,
   );
 
   watch(visible, (value) => {
     if (value) {
+      void loadTodoPlanConfig();
       captureType.value = normalizeQuickCaptureType(inbox.quickCaptureType, bookmark.isMobile);
       manualType.value = false;
       if (captureType.value === 'todo') todoFormKey.value += 1;
@@ -282,6 +290,17 @@
       reset();
     }
   });
+
+  async function loadTodoPlanConfig() {
+    try {
+      const response = await getTodoPlanV2Config();
+      if (response.status === 200 && response.data?.quickReminderPresetsEnabled !== undefined) {
+        quickReminderPresetsEnabled.value = Boolean(response.data.quickReminderPresetsEnabled);
+      }
+    } catch {
+      // 配置失败不阻断快速添加；保留随前端版本发布的默认值。
+    }
+  }
 
   watch(
     () => bookmark.isMobile,
@@ -462,15 +481,24 @@
     }
   }
 
-  async function submitTodo(payload: TodoPayload) {
+  async function submitTodo(payload: TodoCreateInitialValues & { title: string }) {
     if (submitting.value || blockGuestWrite('todo-create', t('inbox.guestPrompt'))) return;
     submitting.value = true;
     try {
-      const res = await createTodo(payload);
+      const draft = normalizeQuickTodoInitial(payload);
+      const preview = await previewTodoPlanV2(draft);
+      if (preview.status !== 200 || !preview.data?.previewHash) {
+        throw new Error(preview.msg || t('inbox.todoPlanPreviewFailed'));
+      }
+      const res = await createTodoPlanV2({
+        ...draft,
+        previewHash: preview.data.previewHash,
+        idempotencyKey: generateUUID(),
+      });
       if (res.status !== 200) throw new Error(res.msg || t('inbox.todoSaveFailed'));
       capturedResource.value = {
         type: 'todo',
-        id: String(res.data?.id || ''),
+        id: String(res.data?.todoId || res.data?.id || ''),
         title: payload.title,
       };
       successText.value = t('inbox.todoSaved');
@@ -489,23 +517,27 @@
     }
   }
 
-  async function openTodoDetails(payload: TodoPayload) {
+  async function openTodoDetails(payload: TodoCreateInitialValues & { title: string }) {
     todoDraft.value = {
       title: payload.title,
       priority: payload.priority,
       dueAt: payload.dueAt,
+      quickReminderPreset: payload.quickReminderPreset,
     };
-    /*
-     * 移动端两个 BDrawer 各自持有 history 占位，交接必须分两步。
-     *
-     * 原来只写 `todoDetailsVisible = true`，一个赋值同时关外壳、开详情：
-     * 外壳释放占位调用的 `history.back()` 是异步的，详情压栈是同步的，于是
-     * back() 最终弹掉的是详情刚压入的那一格，详情抽屉一打开就被自己的返回占位关掉
-     * —— 表现为「快速添加抽屉关了，完整待办抽屉没出来」。
-     *
-     * 与 docs/development.md 里「弹层内跳转」同源，只是这里是浮层→浮层而非浮层→路由，
-     * 同样必须先等占位出栈再执行下一步。桌面端没有占位，会立即继续。
-     */
+    // 移动端的完整新建统一进入轻量路由页，不再从快速添加抽屉
+    // 叠加一个全屏待办抽屉。历史状态只传递当前草稿，不产生任何写入。
+    if (bookmark.isMobile) {
+      await closeCurrentMobileOverlayThen(
+        () => {
+          visible.value = false;
+        },
+        () => {
+          void router.push({ name: 'todoCreate', state: { todoInitialValues: todoDraft.value } });
+        },
+      );
+      return;
+    }
+
     await closeCurrentMobileOverlayThen(
       () => {
         quickShellSuppressed.value = true;

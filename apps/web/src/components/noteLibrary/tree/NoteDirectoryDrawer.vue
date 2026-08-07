@@ -20,7 +20,7 @@
               'is-selected': props.currentParentId === null,
             }"
             :aria-current="browseParentId === null ? 'page' : undefined"
-            @click="selectDirectory(null)"
+            @click="selectBreadcrumb(null)"
           >
             {{ t('note.knowledgeRoot') }}
           </BButton>
@@ -32,7 +32,7 @@
                 'is-selected': item.id === props.currentParentId,
               }"
               :aria-current="item.id === browseParentId ? 'page' : undefined"
-              @click="selectDirectory(item.id)"
+              @click="selectBreadcrumb(item.id)"
             >
               {{ item.title || t('note.untitled') }}
             </BButton>
@@ -61,9 +61,15 @@
 
         <BLoading v-if="loading" inline loading :title="t('common.loading')" />
         <div v-else v-auto-scrollbar class="note-drawer-directory-list">
-          <div v-for="item in items" :key="item.id" class="note-drawer-directory-row">
-            <BButton class="note-drawer-select" @click="selectDirectory(item.id)">
-              <SvgIcon :src="icon.resource.note" size="17" aria-hidden="true" />
+          <div
+            v-for="item in items"
+            :key="item.id"
+            class="note-drawer-directory-row"
+            :class="{ 'has-children': item.hasChildren }"
+            @click="selectDirectory(item.id)"
+          >
+            <BButton class="note-drawer-select" @click.stop="selectDirectory(item.id)">
+              <SvgIcon :src="getNoteTreePageIcon(item.type)" size="17" aria-hidden="true" />
               <span class="note-drawer-row-title">{{ item.title || t('note.untitled') }}</span>
               <span v-if="item.isTop" class="note-drawer-row-pin" :aria-label="t('common.pinned')">
                 <SvgIcon :src="icon.contextMenu.pin" size="13" aria-hidden="true" />
@@ -71,14 +77,14 @@
               <span v-if="item.childCount" class="note-drawer-row-count">{{ item.childCount }}</span>
             </BButton>
             <BButton
+              v-if="item.hasChildren"
               class="note-drawer-enter"
-              :disabled="!item.hasChildren"
               :aria-label="t('note.browseChildPages')"
-              @click="browseTo(item.id)"
+              @click.stop="browseTo(item.id)"
             >
-              <SvgIcon v-if="item.hasChildren" :src="icon.arrow_right" size="15" aria-hidden="true" />
+              <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
             </BButton>
-            <BDropdown :trigger="'click'" :align="'right'" :menu-options="directoryActions(item)">
+            <BDropdown :trigger="'click'" :align="'right'" :menu-options="directoryActions(item)" @click.stop>
               <BButton class="note-drawer-more" :aria-label="t('common.more')">
                 <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
               </BButton>
@@ -116,6 +122,7 @@
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
+  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
   import {
     closeCurrentMobileOverlayThen,
     registerMobileOverlayHistory,
@@ -216,6 +223,13 @@
 
   async function selectDirectory(parentId: string | null) {
     await closeThen(() => emit('select', parentId));
+  }
+
+  async function selectBreadcrumb(parentId: string | null) {
+    // 面包屑只切换抽屉内的层级并同步浏览范围，不应像完成选择一样关闭抽屉。
+    browseParentId.value = parentId;
+    emit('select', parentId);
+    await loadLevel();
   }
 
   async function selectTag(key: string) {
@@ -456,25 +470,32 @@
 
   .note-drawer-directory-row {
     min-width: 0;
-    min-height: 48px;
+    min-height: 56px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 42px 42px;
+    grid-template-columns: minmax(0, 1fr) 48px;
     align-items: center;
     border-bottom: 1px solid var(--surface-border-color);
+    cursor: pointer;
+
+    &.has-children {
+      grid-template-columns: minmax(0, 1fr) 48px 48px;
+    }
   }
 
   .note-drawer-select,
   .note-drawer-enter,
   .note-drawer-more {
     min-width: 0;
-    min-height: 42px;
+    min-height: 52px;
     border: 0;
     color: var(--desc-color);
     background: transparent;
   }
 
   .note-drawer-select {
-    padding: 5px 7px;
+    width: 100%;
+    height: 100%;
+    padding: 7px 8px;
     justify-content: flex-start;
     gap: 8px;
   }
@@ -501,7 +522,7 @@
 
   .note-drawer-enter,
   .note-drawer-more {
-    width: 42px;
+    width: 48px;
     padding: 0;
   }
 

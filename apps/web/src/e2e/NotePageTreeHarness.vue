@@ -29,7 +29,7 @@
 
     <section v-if="isMobile" class="harness-mobile-summary" data-testid="mobile-summary">
       <div>
-        <small>我的知识库 / 轻笺项目</small>
+        <small>笔记库 / 轻笺项目</small>
         <h1>轻笺项目</h1>
       </div>
       <BButton class="harness-directory-trigger" @click="drawerOpen = true">
@@ -61,7 +61,7 @@
       <main class="harness-main" data-testid="directory-content">
         <header class="harness-directory-head">
           <div class="harness-directory-copy">
-            <small>我的知识库 / 轻笺项目</small>
+            <small>笔记库 / 轻笺项目</small>
             <h1>轻笺项目</h1>
             <p>3 个直接子页面 · 页面本身也可以编辑正文</p>
           </div>
@@ -111,6 +111,7 @@
                 :key="note.id"
                 :note="note"
                 :batch-mode="batchMode"
+                @open="noop"
                 @node-type-change="noop"
                 @action="noop"
               />
@@ -121,6 +122,7 @@
                 :key="note.id"
                 :note="note"
                 :batch-mode="batchMode"
+                @open="noop"
                 @node-type-change="noop"
                 @action="noop"
               />
@@ -254,7 +256,7 @@
       content: '轻笺是一套以个人资源、行动与 AI 为中心的知识管理平台。',
       type: 'markdown',
       childCount: 0,
-      pathText: '我的知识库 / 轻笺项目 / 产品定位',
+      pathText: '笔记库 / 轻笺项目 / 产品定位',
       tags: [{ id: 'tag-product', name: '产品' }],
       updateTime: '2026-08-06 10:30:00',
       createTime: '2026-08-01 09:00:00',
@@ -268,7 +270,7 @@
       content: '今日、资料、AI、待办与我的五个一级入口，以及 APK 专属交互规范。',
       type: 'markdown',
       childCount: 3,
-      pathText: '我的知识库 / 轻笺项目 / 移动端设计',
+      pathText: '笔记库 / 轻笺项目 / 移动端设计',
       tags: [
         { id: 'tag-mobile', name: '移动端' },
         { id: 'tag-product', name: '产品' },
@@ -285,7 +287,7 @@
       content: '确定性工作流、工具调用、个人知识检索与 Provider 容错。',
       type: 'markdown',
       childCount: 2,
-      pathText: '我的知识库 / 轻笺项目 / AI Agent 重构',
+      pathText: '笔记库 / 轻笺项目 / AI Agent 重构',
       tags: [{ id: 'tag-ai', name: 'AI' }],
       updateTime: '2026-08-04 15:45:00',
       createTime: '2026-07-25 11:15:00',
@@ -329,7 +331,6 @@
 
   function selectDirectory(id: string | null) {
     currentParentId.value = id;
-    drawerOpen.value = false;
   }
 
   async function loadDirectoryLevel(parentId: string | null) {

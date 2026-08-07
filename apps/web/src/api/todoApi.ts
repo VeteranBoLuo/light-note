@@ -13,12 +13,51 @@ export type TodoPastPolicy = 'keep_overdue' | 'restart_today_keep_count' | 'skip
 export type TodoReminderV2Mode = 'none' | 'once_per_instance' | 'nudge';
 export type TodoReminderTriggerType = 'at_start' | 'fixed_time' | 'before_due';
 export type TodoPlanScope = 'current' | 'future' | 'series';
+export type TodoTaskMode = 'single' | 'independent';
+export type TodoSingleReminderMode = 'none' | 'once' | 'repeat';
+export type TodoSingleRepeatKind = 'interval' | 'weekly' | 'monthly';
+export type TodoSingleReminderStopType = 'completion_or_due' | 'completion' | 'until' | 'max_count' | 'manual';
 
 export interface TodoPlanFeatureState {
   enabled: boolean;
   schedulerEnabled: boolean;
   aiEnabled: boolean;
   conversionEnabled: boolean;
+  simpleCreateEnabled: boolean;
+  singleTaskScheduleEnabled: boolean;
+  independentTaskAdvancedEnabled: boolean;
+  quickReminderPresetsEnabled: boolean;
+}
+
+export interface TodoSingleTaskReminderSchedule {
+  version: 1;
+  mode: TodoSingleReminderMode;
+  once?: {
+    type: 'at_due' | 'at_start' | 'before_due' | 'fixed_at';
+    offsetMinutes?: number;
+    fixedAt?: string;
+  };
+  repeat?: {
+    kind: TodoSingleRepeatKind;
+    startAt?: string;
+    startDate?: string;
+    intervalMinutes?: number;
+    weekdays?: number[];
+    monthDays?: number[];
+    localTime?: string;
+    shortMonthPolicy?: 'last_day' | 'skip';
+    stop: {
+      type: TodoSingleReminderStopType;
+      until?: string;
+      maxCount?: number;
+    };
+  };
+  channels: TodoReminderChannel[];
+  targetEmail?: string | null;
+  quietPolicy?: 'defer_once' | 'skip';
+  nextAt?: string | null;
+  remainingCount?: number;
+  paused?: boolean;
 }
 
 export interface TodoRecurrence {
@@ -91,6 +130,8 @@ export interface TodoPlanDraft {
   timing: TodoPlanTiming;
   plan: TodoPlanConfig;
   reminder: TodoReminderV2Config;
+  taskMode?: TodoTaskMode;
+  singleTaskReminder?: TodoSingleTaskReminderSchedule;
 }
 
 export interface TodoPlanWritePayload extends TodoPlanDraft {
@@ -154,7 +195,7 @@ export interface TodoItem {
   status: TodoStatus;
   dueAt?: string | null;
   startAt?: string | null;
-  reminder?: TodoReminderConfig | TodoReminderV2Config | null;
+  reminder?: TodoReminderConfig | TodoReminderV2Config | TodoSingleTaskReminderSchedule | null;
   /** 兼容旧接口；新代码使用 reminder。 */
   reminderAt?: string | null;
   completedAt?: string | null;
@@ -186,6 +227,14 @@ export interface TodoPayload {
   reminderAt?: string | null;
   /** 传入即整体替换关联的参考资料;不传表示不改动 */
   resourceRefs?: TodoResourceRefInput[];
+}
+
+export type TodoQuickReminderPreset = 'none' | 'before_due_1h' | 'daily_0900';
+
+export interface TodoCreateInitialValues extends Partial<
+  Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>
+> {
+  quickReminderPreset?: TodoQuickReminderPreset;
 }
 
 export type TodoEditorSubmission =

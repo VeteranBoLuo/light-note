@@ -52,4 +52,34 @@ describe('Agent 待办计划工具', () => {
 
     expect(replayed.checklist).toEqual(prepared.checklist);
   });
+
+  it('AI 的每周提醒默认保持单任务，只有明确独立任务才生成多个实例', async () => {
+    const single = normalizeTodoPlanToolArgs({
+      taskMode: 'single',
+      title: '每周复盘',
+      timing: { timezone: 'Asia/Shanghai', anchorDate: '2026-08-10', dueTime: '18:00' },
+      plan: { type: 'once' },
+      reminder: { mode: 'none', channels: [] },
+      singleTaskReminder: {
+        version: 1,
+        mode: 'repeat',
+        repeat: {
+          kind: 'weekly',
+          startDate: '2026-08-10',
+          weekdays: [1, 3, 5],
+          localTime: '09:00',
+          stop: { type: 'until', until: '2026-08-31 23:59' },
+        },
+        channels: ['in_app'],
+      },
+    });
+    const preview = await previewTodoPlan.execute(single);
+
+    expect(single.plan.type).toBe('once');
+    expect(preview.occurrenceCount).toBe(1);
+    expect(preview.reminderJobCount).toBeGreaterThan(1);
+
+    const independent = normalizeTodoPlanToolArgs({ ...input, taskMode: 'independent' });
+    expect(independent.plan.type).toBe('scheduled');
+  });
 });

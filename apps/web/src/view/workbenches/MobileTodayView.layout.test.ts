@@ -10,4 +10,10 @@ describe('移动端今日加载布局', () => {
       /\.mobile-today__pending-details :deep\(\.today-actions__skeleton-group\)[\s\S]*?border:\s*0[\s\S]*?border-radius:\s*0[\s\S]*?background:\s*transparent/,
     );
   });
+
+  it('每日任务卡片与今日其他内容卡片共用统一描边和背景', () => {
+    expect(source).toMatch(
+      /\.mobile-today__growth\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\);/,
+    );
+  });
 });

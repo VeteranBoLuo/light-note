@@ -5,7 +5,7 @@ import { normalizeTodoPlanToolArgs, TODO_PLAN_TOOL_PARAMETERS } from '../todoPla
 export default {
   name: 'preview_todo_plan',
   description:
-    '确定性预览完整待办计划，不写入数据。用于核对任务实例数、首末日期、每项开始/截止时间、提醒 Job 数以及过去日期歧义。用户要求每日/每周/每月重复、共 N 次、完成后再次安排或多次催办时，应先使用本工具，不要自行心算末项日期。',
+    '确定性预览待办与提醒，不写入数据。每日/每周/每月提醒默认预览为一条待办上的 singleTaskReminder；只有用户明确要求每次分别完成时才预览 independent 多实例计划。',
   parameters: TODO_PLAN_TOOL_PARAMETERS,
   normalizeArgs: normalizeTodoPlanToolArgs,
   requireRoot: false,

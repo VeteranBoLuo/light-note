@@ -15,6 +15,130 @@ import {
 } from './todoSeriesService.js';
 
 describe('todoSeriesService v2', () => {
+  it('单任务预览范围使用真实开始与截止日期', () => {
+    const preview = previewTodoPlan(
+      {
+        taskMode: 'single',
+        title: '跨日学习计划',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-07',
+          startTime: '01:10',
+          dueTime: '01:10',
+          dueDayOffset: 21,
+        },
+        plan: { type: 'once' },
+        reminder: { mode: 'none', channels: [] },
+        singleTaskReminder: { version: 1, mode: 'none', channels: [] },
+      },
+      { now: new Date('2026-08-06T00:00:00.000Z') },
+    );
+
+    expect(preview.firstOccurrence).toMatchObject({
+      startAt: '2026-08-07 01:10:00',
+      dueAt: '2026-08-28 01:10:00',
+    });
+    expect(preview.displaySummary.range).toBe('2026-08-07 至 2026-08-28');
+  });
+
+  it('按间隔重复提醒的预览使用与编辑器一致的自然单位', () => {
+    const baseInput = {
+      taskMode: 'single',
+      title: '每日学习提醒',
+      timing: {
+        timezone: 'Asia/Shanghai',
+        anchorDate: '2026-08-07',
+        startTime: '09:00',
+        dueTime: '18:00',
+        dueDayOffset: 2,
+      },
+      plan: { type: 'once' },
+      reminder: { mode: 'none', channels: [] },
+    };
+    const previewOptions = { now: new Date('2026-08-06T00:00:00.000Z') };
+
+    const dailyPreview = previewTodoPlan(
+      {
+        ...baseInput,
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: { kind: 'interval', intervalMinutes: 1440, stop: 'completion_or_due' },
+          channels: ['in_app'],
+        },
+      },
+      previewOptions,
+    );
+    const hourlyPreview = previewTodoPlan(
+      {
+        ...baseInput,
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: { kind: 'interval', intervalMinutes: 120, stop: 'completion_or_due' },
+          channels: ['in_app'],
+        },
+      },
+      previewOptions,
+    );
+
+    expect(dailyPreview.displaySummary.reminder).toBe('每 1 天提醒 · 站内');
+    expect(hourlyPreview.displaySummary.reminder).toBe('每 2 小时提醒 · 站内');
+  });
+
+  it('多次催办预览说明首次时机、间隔、次数和停止条件', () => {
+    const preview = previewTodoPlan(
+      {
+        taskMode: 'independent',
+        title: '每日学习',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-07',
+          startTime: '09:30',
+          dueTime: '18:30',
+          dueDayOffset: 0,
+        },
+        plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 1 } },
+        reminder: {
+          mode: 'nudge',
+          trigger: { type: 'at_start' },
+          nudge: { intervalMinutes: 60, maxCount: 4, stop: 'completion_or_due' },
+          channels: ['in_app'],
+        },
+      },
+      { now: new Date('2026-08-06T00:00:00.000Z') },
+    );
+
+    expect(preview.displaySummary.reminder).toBe(
+      '任务开始时首次提醒，之后每 1 小时提醒，最多 4 次，完成或截止时停止 · 站内',
+    );
+  });
+
+  it('每条提醒一次的预览会说明具体提醒时机', () => {
+    const preview = previewTodoPlan(
+      {
+        taskMode: 'independent',
+        title: '每日学习',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-07',
+          startTime: '09:30',
+          dueTime: '18:30',
+          dueDayOffset: 0,
+        },
+        plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 1 } },
+        reminder: {
+          mode: 'once_per_instance',
+          trigger: { type: 'fixed_time', fixedTime: '10:00' },
+          channels: ['in_app'],
+        },
+      },
+      { now: new Date('2026-08-06T00:00:00.000Z') },
+    );
+
+    expect(preview.displaySummary.reminder).toBe('当天 10:00 提醒一次 · 站内');
+  });
+
   it('按最大次数催办的 Job 不把截止时间保存为停止线', () => {
     const rows = todoSeriesInternals.jobRowsForOccurrence({
       userId: 'user-1',

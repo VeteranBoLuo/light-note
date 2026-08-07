@@ -4,6 +4,8 @@ export default {
     bookmark:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7 4.75A2.25 2.25 0 0 1 9.25 2.5h5.5A2.25 2.25 0 0 1 17 4.75V20.5l-5-3.1l-5 3.1V4.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 7h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
     note: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9.25 10.5h5.5M9.25 14h5.5M9.25 17.5h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    noteMarkdown:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9.25 11h5.5M9.25 14.75h5.5M10.5 9.25l-1.25 8M14.75 9.25l-1.25 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     file: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7.15 18.5h9.7a3.75 3.75 0 0 0 .62-7.45A5.8 5.8 0 0 0 6.25 9.5a4.5 4.5 0 0 0 .9 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.25 14.75h5.5M10.25 11.75h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".72"/></svg>',
     tag: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5.75A1.75 1.75 0 0 1 5.75 4h5.1l8.65 8.65a2.25 2.25 0 0 1 0 3.18l-3.67 3.67a2.25 2.25 0 0 1-3.18 0L4 10.85v-5.1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.25" stroke="currentColor" stroke-width="1.7"/><path d="m12.25 10.75l4.25 4.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
   },
@@ -38,6 +40,14 @@ export default {
     // 中心主题向两侧放射:与 knowledge(三点关系图)拉开区分,两张卡片在选择器里是并排的
     mindmap:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="2.6"/><path d="M14.6 12h2.15M9.4 12H7.25M14.35 10.6l1.9-2.5M9.65 10.6l-1.9-2.5M14.35 13.4l1.9 2.5M9.65 13.4l-1.9 2.5"/><circle cx="18.6" cy="12" r="1.35"/><circle cx="5.4" cy="12" r="1.35"/><circle cx="17.35" cy="7.1" r="1.35"/><circle cx="6.65" cy="7.1" r="1.35"/><circle cx="17.35" cy="16.9" r="1.35"/><circle cx="6.65" cy="16.9" r="1.35"/></g></svg>',
+  },
+  // 待办总览：对应原型中的「逾期 / 今日 / 本周」三个紫色概览符号。
+  todoSummary: {
+    overdue:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 4.25a7.75 7.75 0 1 0 7.75 7.75" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/><path d="M12 7.5V12h4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/><path d="M19.75 7.25v4.5h-4.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    today:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" fill="currentColor" opacity=".22"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" stroke="currentColor" stroke-width="1.6"/></svg>',
+    week: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M8.125 4.75v14.5M12 4.75v14.5M15.875 4.75v14.5M4.75 8.125h14.5M4.75 12h14.5M4.75 15.875h14.5" stroke="currentColor" stroke-width="1.15" opacity=".86"/></svg>',
   },
   message: {
     success:

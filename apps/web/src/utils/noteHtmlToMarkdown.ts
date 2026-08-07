@@ -1,4 +1,40 @@
 import TurndownService from 'turndown';
+import type { Token, Tokens } from 'marked';
+
+const EMPTY_MARKDOWN_TASK_ITEM_RE = /^\s*(?:[-+*]|\d+[.)])\s+\[([ xX])\]\s*$/u;
+const EMPTY_MARKDOWN_TASK_TEXT_RE = /^\[[ xX]\]$/u;
+
+/**
+ * marked 只会把带正文的 `- [ ] 任务` 识别为 GFM 待办；工具栏刚插入的空 `- [ ]`
+ * 会被当成普通列表文本。这里在 token 阶段补齐任务语义，避免直接改源码误伤代码块。
+ */
+export function promoteEmptyMarkdownTaskToken(token: Token) {
+  if (token.type !== 'list_item') return;
+  const item = token as Tokens.ListItem;
+  if (item.task || !EMPTY_MARKDOWN_TASK_TEXT_RE.test(item.text.trim())) return;
+
+  const match = item.raw.match(EMPTY_MARKDOWN_TASK_ITEM_RE);
+  if (!match) return;
+
+  const checked = match[1].toLowerCase() === 'x';
+  const placeholder: Tokens.Text = {
+    type: 'text',
+    raw: '\u200b',
+    text: '\u200b',
+  };
+
+  item.task = true;
+  item.checked = checked;
+  item.text = '\u200b';
+  item.tokens = [
+    {
+      type: 'checkbox',
+      raw: checked ? '[x] ' : '[ ] ',
+      checked,
+    },
+    placeholder,
+  ];
+}
 
 function isCheckboxElement(node: Element | null): node is HTMLInputElement {
   return node?.tagName === 'INPUT' && node.getAttribute('type')?.toLowerCase() === 'checkbox';
@@ -27,6 +63,15 @@ function getTaskListItemCheckbox(item: HTMLLIElement): HTMLInputElement | null {
   // 这里兼容该结构，避免第一次切换后任务语义就丢失。
   const contentBlock = Array.from(item.children).find((child) => ['P', 'DIV'].includes(child.tagName));
   return contentBlock ? getLeadingTaskCheckbox(contentBlock) : null;
+}
+
+function removeEmptyTaskPlaceholder(checkbox: HTMLInputElement) {
+  const sibling = checkbox.nextSibling;
+  if (sibling?.nodeType !== 3 || !sibling.textContent?.includes('\u200b')) return;
+
+  const text = sibling.textContent.replace(/\u200b/g, '');
+  if (text.trim()) sibling.textContent = text;
+  else sibling.remove();
 }
 
 function moveTaskItemContentToParagraph(
@@ -93,6 +138,7 @@ export function normalizeMarkdownTaskListHtml(html: string, editable = false) {
 
     list.classList.add('note-task-list');
     taskItems.forEach(({ item, checkbox }) => {
+      removeEmptyTaskPlaceholder(checkbox);
       checkbox.classList.add('note-todo-checkbox');
       checkbox.setAttribute('data-note-task', 'true');
       item.classList.add('note-task-list-item');

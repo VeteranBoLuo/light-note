@@ -87,11 +87,9 @@
     -->
     <div v-else class="note-mobile-actions" @click.stop>
       <b-checkbox v-if="batchMode" v-model:checked="note.isCheck" />
-      <BDropdown v-else :trigger="'click'" :align="'right'" :menu-options="mobileMenuOptions">
-        <BButton class="note-more-button" :aria-label="$t('common.more')">
-          <SvgIcon :src="icon.common.more" size="18" />
-        </BButton>
-      </BDropdown>
+      <BButton v-else class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
+        <SvgIcon :src="icon.common.more" size="18" />
+      </BButton>
     </div>
   </div>
 </template>
@@ -105,11 +103,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import PinBadge from '@/components/base/PinBadge.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { useI18n } from 'vue-i18n';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { getNoteParentPathText } from '@/utils/noteTree';
@@ -123,7 +119,6 @@
     },
   );
   const bookmark = bookmarkStore();
-  const { t } = useI18n();
 
   // 与 NoteCard 保持同一套标签折叠规则
   const MAX_VISIBLE_TAGS = 3;
@@ -147,11 +142,20 @@
   const listTime = computed(() => String(props.note?.updateTime ?? props.note?.createTime ?? '').slice(0, 10));
 
   const emit = defineEmits<{
+    open: [];
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
     action: [
       action:
-        'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
+        | 'more'
+        | 'toggleTop'
+        | 'relateTags'
+        | 'toggleInbox'
+        | 'enterDirectory'
+        | 'createChild'
+        | 'attach'
+        | 'move'
+        | 'delete',
     ];
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
@@ -159,51 +163,6 @@
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
-
-  // 菜单项与卡片视图逐项对齐,同一条笔记在两种视图下能做的事必须一样
-  const mobileMenuOptions = computed(() => [
-    {
-      label: props.note.isTop ? t('common.unpin') : t('common.pin'),
-      icon: props.note.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
-      function: () => emit('action', 'toggleTop'),
-    },
-    {
-      label: t('note.relateTags'),
-      icon: icon.manage_categoryBtn_tag,
-      function: () => emit('action', 'relateTags'),
-    },
-    {
-      label: props.note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
-      icon: icon.contextMenu.inbox,
-      function: () => emit('action', 'toggleInbox'),
-    },
-    ...(props.treeWriteEnabled
-      ? [
-          {
-            label: t('note.newChildPage'),
-            icon: icon.common.add,
-            function: () => emit('action', 'createChild'),
-          },
-          {
-            label: t('note.addExistingPages'),
-            icon: icon.noteTree.move,
-            function: () => emit('action', 'attach'),
-          },
-          {
-            label: t('note.moveThisPage'),
-            icon: icon.noteTree.move,
-            function: () => emit('action', 'move'),
-          },
-        ]
-      : []),
-    { divider: true },
-    {
-      label: t('common.delete'),
-      icon: icon.table_delete,
-      danger: true,
-      function: () => emit('action', 'delete'),
-    },
-  ]);
 
   function openTagDetail(tag) {
     if (!tag?.id) return;
@@ -215,10 +174,7 @@
       props.note.isCheck = !props.note.isCheck;
       return;
     }
-    router.push({
-      path: `/noteLibrary/${encodeURIComponent(props.note.id)}`,
-      query: { from: router.currentRoute.value.fullPath },
-    });
+    emit('open');
   }
 </script>
 

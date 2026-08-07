@@ -23,6 +23,7 @@ function readAttentionCounts(data: any) {
     todoAttentionTotal: Number(data?.todoAttentionTotal ?? data?.todoPendingTotal ?? 0),
     todoOverdueTotal: Number(data?.todoOverdueTotal ?? 0),
     todoDueTodayTotal: Number(data?.todoDueTodayTotal ?? 0),
+    todoDueWeekTotal: Number(data?.todoDueWeekTotal ?? 0),
   };
 }
 
@@ -36,6 +37,7 @@ export default defineStore('inbox', {
     todoAttentionTotal: 0,
     todoOverdueTotal: 0,
     todoDueTodayTotal: 0,
+    todoDueWeekTotal: 0,
     typeTotals: { bookmark: 0, note: 0, file: 0 } as TypeTotals,
     items: [] as InboxItem[],
     total: 0,
@@ -63,6 +65,7 @@ export default defineStore('inbox', {
       this.todoAttentionTotal = 0;
       this.todoOverdueTotal = 0;
       this.todoDueTodayTotal = 0;
+      this.todoDueWeekTotal = 0;
       this.typeTotals = { bookmark: 0, note: 0, file: 0 };
       this.items = [];
       this.total = 0;

@@ -19,6 +19,8 @@ export type AiAssistantAdminContextMode = 'self' | 'readonly' | 'maintain';
 export type AiAssistantScopeMode = 'selected' | 'workspace';
 export type AiAssistantEdgeStatus = 'idle' | 'generating' | 'completed' | 'needs_attention' | 'failed';
 export type AiAssistantRequestResult = 'completed' | 'failed' | 'stopped';
+export type AiAssistantAbortReason =
+  'user_stop' | 'new_conversation' | 'conversation_switch' | 'identity_change' | 'superseded' | 'app_shutdown';
 
 export interface AiAssistantIdentity {
   actorUserId: string;
@@ -170,6 +172,8 @@ interface AiAssistantState {
 interface AiAssistantRuntime {
   controller: AbortController | null;
   typewriter: { cancel: () => void } | null;
+  abortHandler: ((reason: AiAssistantAbortReason) => void) | null;
+  attachedViews: Set<symbol>;
   persistTimer: number | null;
   unsubscribe: (() => void) | null;
   conversationCache: Map<string, AiAssistantPersistedState>;
@@ -188,6 +192,8 @@ function getRuntime(store: object): AiAssistantRuntime {
     runtime = {
       controller: null,
       typewriter: null,
+      abortHandler: null,
+      attachedViews: new Set(),
       persistTimer: null,
       unsubscribe: null,
       conversationCache: new Map(),
@@ -891,7 +897,7 @@ export default defineStore('aiAssistant', {
       if (this.initialized && this.runtimeIdentityKey === nextRuntimeIdentityKey) return false;
 
       if (this.initialized) {
-        this.abortActiveRequest();
+        this.abortActiveRequest('identity_change');
         this.flushPersistence();
       } else {
         this.requestEpoch += 1;
@@ -990,12 +996,13 @@ export default defineStore('aiAssistant', {
       this.persistCurrentConversation();
     },
     beginRequest(assistantMessageId: string): AiAssistantRequestLease {
-      this.abortActiveRequest();
+      this.abortActiveRequest('superseded');
       this.requestEpoch += 1;
       const controller = new AbortController();
       const runtime = getRuntime(this as unknown as object);
       runtime.controller = controller;
       runtime.typewriter = null;
+      runtime.abortHandler = null;
       this.activeAssistantMessageId = assistantMessageId;
       this.isLoading = true;
       this.hasAnswerStarted = false;
@@ -1021,6 +1028,20 @@ export default defineStore('aiAssistant', {
       const runtime = getRuntime(this as unknown as object);
       if (runtime.typewriter === typewriter) runtime.typewriter = null;
     },
+    attachRequestAbortHandler(lease: AiAssistantRequestLease, handler: (reason: AiAssistantAbortReason) => void) {
+      if (!this.isRequestCurrent(lease)) return false;
+      getRuntime(this as unknown as object).abortHandler = handler;
+      return true;
+    },
+    attachView(viewId: symbol) {
+      getRuntime(this as unknown as object).attachedViews.add(viewId);
+    },
+    detachView(viewId: symbol) {
+      getRuntime(this as unknown as object).attachedViews.delete(viewId);
+    },
+    hasAttachedView() {
+      return getRuntime(this as unknown as object).attachedViews.size > 0;
+    },
     isRequestCurrent(lease: AiAssistantRequestLease) {
       return Boolean(
         this.initialized &&
@@ -1035,15 +1056,25 @@ export default defineStore('aiAssistant', {
       const runtime = getRuntime(this as unknown as object);
       if (runtime.controller === lease.controller) runtime.controller = null;
       runtime.typewriter = null;
+      runtime.abortHandler = null;
       this.isLoading = false;
       this.activeAssistantMessageId = null;
       this.edgeStatus = normalizeEdgeStatus(edgeStatus);
       this.persistCurrentConversation();
       return true;
     },
-    abortActiveRequest() {
+    abortActiveRequest(reason: AiAssistantAbortReason = 'user_stop') {
       const runtime = getRuntime(this as unknown as object);
       const activeMessageId = this.activeAssistantMessageId;
+      const abortHandler = runtime.abortHandler;
+      runtime.abortHandler = null;
+      if (runtime.controller && abortHandler) {
+        try {
+          abortHandler(reason);
+        } catch {
+          // 终止请求是账号与会话隔离边界；埋点或界面收尾异常不能阻止真正 abort。
+        }
+      }
       runtime.typewriter?.cancel();
       runtime.typewriter = null;
       runtime.controller?.abort();
@@ -1071,7 +1102,7 @@ export default defineStore('aiAssistant', {
       return true;
     },
     clearCurrentConversation(greeting: string) {
-      this.abortActiveRequest();
+      this.abortActiveRequest('new_conversation');
       getRuntime(this as unknown as object).conversationCache.delete(this.domainKey);
       if (this.domainKey && typeof localStorage !== 'undefined') {
         try {

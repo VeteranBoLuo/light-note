@@ -37,7 +37,8 @@ export default defineStore('todo', {
      * 会把已完成待办重新拉进列表,故单独记录真实请求口径。
      */
     effectiveStatus: 'all' as TodoFilterStatus,
-    sort: 'smart' as TodoSort,
+    // 待办默认按截止时间升序，最近要处理的任务始终排在前面。
+    sort: 'due' as TodoSort,
     keyword: '',
     ownerId: '',
     requestId: 0,
@@ -51,7 +52,7 @@ export default defineStore('todo', {
       this.total = 0;
       this.status = 'all';
       this.effectiveStatus = 'all';
-      this.sort = 'smart';
+      this.sort = 'due';
       this.keyword = '';
       this.loadFailed = false;
       this.requestId += 1;

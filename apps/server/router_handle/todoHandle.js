@@ -30,6 +30,11 @@ import {
 import { getTodoPlanDiagnostics } from '../util/services/todoPlanDiagnosticsService.js';
 import { assertTodoPlanFeatureEnabled, getTodoPlanFeatureState } from '../util/todoPlanFeature.js';
 
+function assertTodoPlanPayloadFeatures(input = {}) {
+  if (input?.singleTaskReminder) assertTodoPlanFeatureEnabled('singleSchedule');
+  if (input?.taskMode === 'independent') assertTodoPlanFeatureEnabled('independentAdvanced');
+}
+
 function sendTodoError(res, error) {
   const message = String(error?.message || '待办服务暂时不可用');
   const explicitStatus = Number(error?.status || 0);
@@ -122,9 +127,9 @@ export function todoPlanConfigV2(_req, res) {
 
 /** v2 预览是唯一权威计划计算入口；不写库，可在用户确认过去日期策略前反复调用。 */
 export async function previewTodoV2(req, res) {
-  if (!ensureNotVisitor(req, res)) return;
   try {
     assertTodoPlanFeatureEnabled('base');
+    assertTodoPlanPayloadFeatures(req.body || {});
     return res.send(resultData(previewTodoPlan(req.body || {})));
   } catch (error) {
     return sendTodoError(res, error);
@@ -135,6 +140,7 @@ export async function createTodoV2(req, res) {
   if (!ensureNotVisitor(req, res)) return;
   try {
     assertTodoPlanFeatureEnabled('base');
+    assertTodoPlanPayloadFeatures(req.body || {});
   } catch (error) {
     return sendTodoError(res, error);
   }
@@ -198,6 +204,8 @@ export async function updatePreviewTodoV2(req, res) {
   const todoId = String(req.body?.todoId || '').trim();
   if (!todoId) return res.send(resultData(null, 400, '缺少待办 ID'));
   try {
+    assertTodoPlanFeatureEnabled('base');
+    assertTodoPlanPayloadFeatures(req.body || {});
     const [rows] = await pool.query(
       `SELECT id, series_id AS seriesId FROM todo_items
         WHERE id = ? AND user_id = ? AND plan_version = 2 AND del_flag = 0 LIMIT 1`,
@@ -215,6 +223,12 @@ export async function updatePreviewTodoV2(req, res) {
 
 export async function updateTodoV2(req, res) {
   if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertTodoPlanFeatureEnabled('base');
+    assertTodoPlanPayloadFeatures(req.body || {});
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
   return withTransaction(res, (connection) =>
     runIdempotentTodoMutation(connection, req.user.id, req.body || {}, 'update', () =>
       updateTodoPlan(connection, req.user.id, req.body || {}),

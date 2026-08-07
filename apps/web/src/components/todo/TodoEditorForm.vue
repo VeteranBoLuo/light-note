@@ -1125,6 +1125,46 @@
       gap: 15px;
       padding: 14px 16px 0;
     }
+    /* 移动端编辑页与新建页共用同一套输入视觉：短文本和日期为浅灰无边框，说明保留描边。 */
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-input) {
+      border-color: transparent !important;
+      background: var(--bl-input-noBorder-bg-color) !important;
+      box-shadow: none !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-input:hover),
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-input:focus-visible) {
+      border-color: transparent !important;
+      background: var(--bl-input-noBorder-hover-bg-color) !important;
+      box-shadow: none !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-textarea) {
+      border: 1px solid var(--surface-border-color) !important;
+      background: var(--card-background) !important;
+      box-shadow: none !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-textarea:hover),
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-textarea:focus) {
+      background: var(--card-background) !important;
+      box-shadow: none !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-textarea:hover) {
+      border-color: var(--action-menu-border-color) !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-textarea:focus) {
+      border-color: var(--focus-ring-color) !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-datetime-trigger) {
+      border-color: transparent !important;
+      background: var(--bl-input-noBorder-bg-color) !important;
+      box-shadow: none !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) :deep(.b-datetime-trigger:hover) {
+      border-color: transparent !important;
+      background: var(--bl-input-noBorder-hover-bg-color) !important;
+    }
+    .todo-editor-form:not(.is-desktop-plan) .todo-editor-form__step > label:nth-of-type(1) :deep(.b-input) {
+      border-color: transparent !important;
+    }
     .todo-editor-form.is-mobile-wizard .todo-editor-form__step {
       padding: 0;
       border: 0;

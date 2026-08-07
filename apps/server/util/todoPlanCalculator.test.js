@@ -4,6 +4,7 @@ import {
   TODO_PLAN_MAX_FINITE_OCCURRENCES,
   TODO_PLAN_MAX_REMINDER_JOBS,
   TODO_PLAN_MAX_ROLLING_BATCH,
+  TODO_SINGLE_TASK_MAX_REMINDER_JOBS,
 } from './todoPlanCalculator.js';
 
 const NOW = new Date('2026-08-06T00:00:00.000Z');
@@ -439,6 +440,39 @@ describe('todoPlanCalculator', () => {
     ]);
   });
 
+  it('截止前催办到达截止时刻即停止，不在截止时刻额外发送', () => {
+    const preview = calculateTodoPlan(
+      dailyPlan({
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-07',
+          startTime: '09:40',
+          dueTime: '09:40',
+          dueDayOffset: 0,
+        },
+        plan: {
+          type: 'scheduled',
+          frequency: 'daily',
+          interval: 1,
+          end: { mode: 'count', count: 15 },
+          pastPolicy: 'keep_overdue',
+        },
+        reminder: {
+          mode: 'nudge',
+          trigger: { type: 'before_due', offsetMinutes: 60 },
+          nudge: { intervalMinutes: 60, maxCount: 3, stop: 'completion_or_due' },
+          channels: ['in_app'],
+        },
+      }),
+      { now: NOW },
+    );
+
+    expect(preview.reminderMoments).toHaveLength(15);
+    expect(preview.reminderMoments.every((entry) => entry.moments.length === 1)).toBe(true);
+    expect(preview.reminderMoments[0].moments.map((item) => item.scheduledAtLocal)).toEqual(['2026-08-07 08:40:00']);
+    expect(preview.reminderJobCount).toBe(15);
+  });
+
   it('选择“最多 N 次”时不会被截止时间提前截断', () => {
     const preview = calculateTodoPlan(
       dailyPlan({
@@ -556,5 +590,174 @@ describe('todoPlanCalculator', () => {
     expect(preview.occurrenceCount).toBe(5);
     expect(preview.generatedNowCount).toBe(1);
     expect(preview.lastOccurrence).toBeNull();
+  });
+
+  it('默认单任务按周提醒只生成一条待办与确定性的提醒 Job', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '复盘项目进度',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: null,
+          dueTime: '18:30',
+          dueDayOffset: 14,
+        },
+        plan: { type: 'once', pastPolicy: 'keep_overdue' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: {
+            kind: 'weekly',
+            startDate: '2026-08-06',
+            weekdays: [1, 3, 5],
+            localTime: '14:00',
+            stop: { type: 'completion_or_due' },
+          },
+          channels: ['in_app'],
+        },
+      },
+      { now: NOW },
+    );
+
+    expect(preview.normalizedPlan.taskMode).toBe('single');
+    expect(preview.occurrenceCount).toBe(1);
+    expect(preview.generatedNowCount).toBe(1);
+    expect(preview.reminderMoments[0].moments.map((item) => item.scheduledAtLocal)).toEqual([
+      '2026-08-07 14:00:00',
+      '2026-08-10 14:00:00',
+      '2026-08-12 14:00:00',
+      '2026-08-14 14:00:00',
+      '2026-08-17 14:00:00',
+      '2026-08-19 14:00:00',
+    ]);
+  });
+
+  it('按月提醒支持短月取最后一天且不会复制待办', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '月末关账',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: null,
+          startTime: null,
+          dueTime: null,
+        },
+        plan: { type: 'once' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: {
+            kind: 'monthly',
+            startDate: '2026-08-06',
+            monthDays: [31],
+            localTime: '09:00',
+            shortMonthPolicy: 'last_day',
+            stop: { type: 'max_count', maxCount: 3 },
+          },
+          channels: ['in_app'],
+        },
+      },
+      { now: NOW },
+    );
+
+    expect(preview.generatedNowCount).toBe(1);
+    expect(preview.reminderMoments[0].moments.map((item) => item.scheduledAtLocal)).toEqual([
+      '2026-08-31 09:00:00',
+      '2026-09-30 09:00:00',
+      '2026-10-31 09:00:00',
+    ]);
+  });
+
+  it('选择“完成后停止”时不会被任务截止时间错误截断', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '持续跟进事项',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: '09:00',
+          dueTime: '10:00',
+        },
+        plan: { type: 'once' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: {
+          version: 1,
+          mode: 'repeat',
+          repeat: {
+            kind: 'interval',
+            startAt: '2026-08-06 09:00',
+            intervalMinutes: 1440,
+            stop: { type: 'completion' },
+          },
+          channels: ['in_app'],
+        },
+      },
+      { now: NOW },
+    );
+
+    expect(preview.reminderMoments[0].moments.length).toBeGreaterThan(30);
+    expect(preview.reminderMoments[0].moments[0].scheduledAtLocal).toBe('2026-08-06 09:00:00');
+  });
+
+  it('邮箱重复提醒必须有限且单任务 Job 总数不超过安全上限', () => {
+    const base = {
+      taskMode: 'single',
+      title: '跟进客户',
+      timing: {
+        timezone: 'Asia/Shanghai',
+        anchorDate: '2026-08-06',
+        startTime: '09:00',
+        dueTime: null,
+      },
+      plan: { type: 'once' },
+      reminder: { mode: 'none' },
+    };
+    expect(() =>
+      calculateTodoPlan(
+        {
+          ...base,
+          singleTaskReminder: {
+            version: 1,
+            mode: 'repeat',
+            repeat: {
+              kind: 'interval',
+              startAt: '2026-08-06 09:00',
+              intervalMinutes: 1440,
+              stop: { type: 'completion' },
+            },
+            channels: ['email'],
+            targetEmail: 'owner@example.com',
+          },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(/邮箱重复提醒必须设置结束时间或最大次数/);
+
+    expect(() =>
+      calculateTodoPlan(
+        {
+          ...base,
+          singleTaskReminder: {
+            version: 1,
+            mode: 'repeat',
+            repeat: {
+              kind: 'interval',
+              startAt: '2026-08-06 09:00',
+              intervalMinutes: 1440,
+              stop: { type: 'max_count', maxCount: TODO_SINGLE_TASK_MAX_REMINDER_JOBS },
+            },
+            channels: ['in_app', 'email'],
+            targetEmail: 'owner@example.com',
+          },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(`超过 ${TODO_SINGLE_TASK_MAX_REMINDER_JOBS} 个上限`);
   });
 });

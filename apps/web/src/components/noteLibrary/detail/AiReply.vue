@@ -837,13 +837,13 @@
   .ai-container {
     height: 100%;
     background: var(--workspace-panel-bg-color);
-    border-radius: 12px;
+    border-radius: 0;
     padding: 16px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     gap: 10px;
-    border: 1px solid var(--surface-border-color);
+    border: 0;
   }
 
   .ai-header {
@@ -870,8 +870,8 @@
   }
 
   .ai-note-meta {
-    background: var(--card-background);
-    border: 1px solid var(--surface-border-color);
+    background: transparent;
+    border: 0;
     border-radius: 10px;
     padding: 10px 12px;
     display: flex;
@@ -916,8 +916,8 @@
   .action-btn {
     width: 100%;
     height: 32px;
-    border: 1px solid var(--surface-border-color);
-    background: var(--card-background);
+    border: 0;
+    background: var(--hover-background);
     border-radius: 8px;
     font-size: 12px;
     color: var(--text-color);
@@ -928,8 +928,8 @@
     opacity: 0.6;
   }
   .action-btn:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 46%, var(--surface-border-color));
     color: var(--primary-color);
+    background: var(--card-background);
   }
 
   .ai-input {
@@ -1265,7 +1265,6 @@
   }
   [data-theme='night'] .action-btn:hover,
   [data-theme='night'] .ghost-btn:hover {
-    border-color: color-mix(in srgb, var(--primary-color) 46%, var(--surface-border-color));
     color: var(--text-color);
   }
   [data-theme='night'] .ai-input :deep(.b-textarea:focus) {

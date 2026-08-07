@@ -5,22 +5,39 @@
     :placement="bookmark.isMobile ? 'bottom' : 'right'"
     :mobile-full-screen="bookmark.isMobile"
     :mobile-centered-header="bookmark.isMobile"
-    :close-icon="bookmark.isMobile ? icon.common.back : undefined"
-    width="min(1180px, 90vw)"
+    :close-icon="bookmark.isMobile ? icon.arrow_left : undefined"
+    width="min(1280px, 94vw)"
+    height="100%"
     body-padding="0"
     :mask-closable="false"
     @close="close"
   >
-    <template v-if="bookmark.isMobile" #header-actions>
-      <span class="todo-editor-step-count">{{ mobileStep }} / 3</span>
+    <template v-if="bookmark.isMobile && useSimpleEditor" #header-actions>
+      <BButton size="small" type="text" :disabled="saving" @click="simpleEditorRef?.submit()">
+        {{ props.item ? t('common.save') : t('inbox.todoCreateHeaderAction') }}
+      </BButton>
     </template>
     <div
       v-auto-scrollbar
       class="todo-editor-shell"
-      :class="{ 'is-mobile': bookmark.isMobile }"
+      :class="{ 'is-mobile': bookmark.isMobile, 'uses-simple-editor': useSimpleEditor }"
       :style="{ '--todo-editor-sticky-gutter': bookmark.isMobile ? '16px' : '22px' }"
     >
+      <TodoSimpleEditorForm
+        v-if="useSimpleEditor"
+        ref="simpleEditorRef"
+        :item="item"
+        :initial-values="initialValues"
+        :saving="saving"
+        :reset-key="formKey"
+        :mobile="bookmark.isMobile"
+        :advanced-enabled="todoPlanFeatures.independentTaskAdvancedEnabled"
+        @advanced-change="simpleAdvanced = $event"
+        @submit="save"
+        @cancel="close"
+      />
       <TodoEditorForm
+        v-else
         :item="item"
         :initial-values="initialValues"
         :saving="saving"
@@ -41,7 +58,9 @@
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import TodoEditorForm from '@/components/todo/TodoEditorForm.vue';
+  import TodoSimpleEditorForm from '@/components/todo/TodoSimpleEditorForm.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import {
     createTodo,
@@ -51,8 +70,8 @@
     updateTodo,
     updateTodoPlanV2,
     type TodoEditorSubmission,
+    type TodoCreateInitialValues,
     type TodoItem,
-    type TodoPayload,
     type TodoPlanFeatureState,
   } from '@/api/todoApi';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
@@ -61,7 +80,7 @@
 
   const props = defineProps<{
     item?: TodoItem | null;
-    initialValues?: Partial<Pick<TodoPayload, 'title' | 'description' | 'priority' | 'dueAt' | 'checklist'>>;
+    initialValues?: TodoCreateInitialValues;
   }>();
   const visible = defineModel<boolean>('visible');
   const emit = defineEmits<{
@@ -72,24 +91,45 @@
   const bookmark = bookmarkStore();
   const saving = ref(false);
   const mobileStep = ref<1 | 2 | 3>(1);
+  const simpleEditorRef = ref<{ submit: () => void } | null>(null);
+  const simpleAdvanced = ref(false);
   const formKey = ref(0);
   const todoPlanFeatures = ref<TodoPlanFeatureState>({
     enabled: true,
     schedulerEnabled: true,
     aiEnabled: true,
     conversionEnabled: true,
+    simpleCreateEnabled: true,
+    singleTaskScheduleEnabled: true,
+    independentTaskAdvancedEnabled: true,
+    quickReminderPresetsEnabled: true,
   });
 
+  const useSimpleEditor = computed(
+    () =>
+      todoPlanFeatures.value.simpleCreateEnabled &&
+      todoPlanFeatures.value.singleTaskScheduleEnabled &&
+      (!props.item ||
+        (Number(props.item.planVersion || 1) === 2 &&
+          !props.item.seriesId &&
+          (!props.item.reminder || 'version' in props.item.reminder))),
+  );
+
   const shellTitle = computed(() =>
-    props.item ? t('inbox.editTodo') : bookmark.isMobile ? t('inbox.createTodo') : t('inbox.todoPlanCreateTitle'),
+    simpleAdvanced.value ? t('inbox.todoIndependentPlan') : props.item ? t('inbox.editTodo') : t('inbox.createTodo'),
   );
 
   watch(visible, async (open) => {
     if (!open) return;
     mobileStep.value = 1;
+    simpleAdvanced.value = false;
     try {
       const response = await getTodoPlanV2Config();
-      if (response.status === 200 && response.data) todoPlanFeatures.value = response.data as TodoPlanFeatureState;
+      if (response.status === 200 && response.data) {
+        // 灰度期间旧后端只返回 V2 的四个开关；合并而不是整对象替换，
+        // 避免缺失的新开关被当作 false 而意外退回旧版复杂表单。
+        todoPlanFeatures.value = { ...todoPlanFeatures.value, ...(response.data as Partial<TodoPlanFeatureState>) };
+      }
     } catch {
       // 配置查询失败时保留随版本发布的默认值；后端仍会做最终开关校验。
     }
@@ -136,6 +176,11 @@
   .todo-editor-shell {
     min-width: 0;
     min-height: 100%;
+  }
+  .todo-editor-shell.uses-simple-editor:not(.is-mobile) {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
   }
   .todo-editor-shell.is-mobile {
     height: 100%;

@@ -4,19 +4,17 @@ import { createMemoryHistory, createRouter, RouterView, useRoute } from 'vue-rou
 import { getMainRouteViewKey } from './routeViewKey';
 
 describe('getMainRouteViewKey', () => {
-  it('切换笔记详情 ID 时生成不同 key，确保详情内容重新加载', () => {
+  it('切换笔记详情 ID 时保持工作区 key，避免整页重新挂载', () => {
     const first = getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } });
     const second = getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-b' } });
 
-    expect(first).toBe('note-detail:note-a');
-    expect(second).toBe('note-detail:note-b');
-    expect(first).not.toBe(second);
+    expect(first).toBe('note-detail-workspace');
+    expect(second).toBe('note-detail-workspace');
+    expect(first).toBe(second);
   });
 
   it('同一笔记保持稳定 key', () => {
-    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } })).toBe(
-      getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } }),
-    );
+    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } })).toBe('note-detail-workspace');
   });
 
   it('其他页面保持统一 key，查询参数变化不会误重建主内容', () => {
@@ -24,7 +22,7 @@ describe('getMainRouteViewKey', () => {
     expect(getMainRouteViewKey({ name: 'cloudSpace', params: { id: 'b' } })).toBe('main-route-view');
   });
 
-  it('Vue Router 复用同一路由时会按笔记 ID 重建详情组件', async () => {
+  it('Vue Router 切换笔记 ID 时复用详情组件并更新内容', async () => {
     let mountedCount = 0;
     const NoteDetailStub = defineComponent({
       setup() {
@@ -61,7 +59,7 @@ describe('getMainRouteViewKey', () => {
       await router.push('/noteLibrary/note-b');
       await nextTick();
       expect(host.textContent).toBe('note-b');
-      expect(mountedCount).toBe(2);
+      expect(mountedCount).toBe(1);
     } finally {
       app.unmount();
       host.remove();

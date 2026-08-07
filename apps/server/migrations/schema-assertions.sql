@@ -391,6 +391,15 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
+-- 27) 默认单待办的版本化提醒计划必须存放在既有规则事实中（期望 0 行）
+SELECT '[27] missing_todo_single_schedule_column' AS check_name, 'todo_reminder_rules.schedule_json' AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='todo_reminder_rules'
+ AND actual.column_name='schedule_json'
+WHERE actual.column_name IS NULL OR LOWER(actual.data_type) <> 'json';
+
 SELECT '[26] missing_todo_plan_v2_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
 FROM (
   SELECT 'todo_items' tn, 'uk_todo_series_occurrence' ix UNION ALL

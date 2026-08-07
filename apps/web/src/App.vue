@@ -37,7 +37,8 @@
   </div>
 </template>
 <script setup lang="ts">
-  import { bookmarkStore, inboxStore, useUserStore } from '@/store';
+  import { bookmarkStore, inboxStore, useAiAssistantStore, useUserStore } from '@/store';
+  import { buildAiAssistantRuntimeIdentityKey, resolveAiAssistantIdentity } from '@/store/aiAssistant';
   import { useGrowth } from '@/composables/useGrowth';
   import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, provide, ref } from 'vue';
   import BViewer from '@/components/base/Viewer/BViewer.vue';
@@ -86,6 +87,7 @@
 
   const router = useRouter();
   const user = useUserStore();
+  const aiAssistant = useAiAssistantStore();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
   const { t } = useI18n();
@@ -94,6 +96,15 @@
     computed(() => bookmark.isMobile),
   );
   const isAndroidApp = isLightNoteAndroidApp();
+  const aiRuntimeIdentity = computed(() => resolveAiAssistantIdentity(user));
+  const aiRuntimeIdentityKey = computed(() => buildAiAssistantRuntimeIdentityKey(aiRuntimeIdentity.value));
+  // AI 请求属于应用级运行时，而不是某个路由组件。根层持续守护 owner 四维身份：
+  // 普通导航不会触碰请求；登录、退出或管理员上下文变化则先中止旧域，再原子切换状态。
+  // 未使用过 AI 时保持懒加载，不在官网或普通业务首屏读取可能很大的本地会话。
+  watch(aiRuntimeIdentityKey, () => {
+    if (!aiAssistant.initialized) return;
+    aiAssistant.switchConversation(aiRuntimeIdentity.value, t('ai.greeting'));
+  });
   /* 同一条进度条服务两件事,读屏文案要说清当前是哪一件。 */
   const globalLoadingBarTitle = computed(() =>
     globalRefreshing.value && !routeNavigationLoading.value ? t('common.refreshing') : t('common.loading'),
@@ -852,6 +863,8 @@
 
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
+    aiAssistant.abortActiveRequest('app_shutdown');
+    aiAssistant.flushPersistence();
     stopOpinionNoticePolling();
     document.documentElement.classList.remove('has-mobile-bottom-nav');
     window.removeEventListener('resize', handleResize);

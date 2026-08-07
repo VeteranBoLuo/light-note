@@ -8,7 +8,12 @@
     :close-label="t('common.close')"
     @close="emit('update:open', false)"
   >
-    <BTabs v-model:active-tab="activeTab" class="note-mobile-navigation-drawer__tabs" variant="segment" :options="tabs" />
+    <BTabs
+      v-model:active-tab="activeTab"
+      class="note-mobile-navigation-drawer__tabs"
+      variant="segment"
+      :options="tabs"
+    />
     <NoteMobilePageLevelList
       v-if="activeTab === 'pages'"
       :open="open"
@@ -44,6 +49,7 @@
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
   import NoteMobilePageLevelList from './NoteMobilePageLevelList.vue';
   import type { NoteTreeItem } from '@/types/noteTree';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const props = withDefaults(
     defineProps<{
@@ -84,17 +90,21 @@
     { key: 'outline', label: t('note.outlineTab') },
   ]);
 
-  function openPage(id: string) {
-    emit('update:open', false);
-    emit('openPage', id);
+  async function openPage(id: string) {
+    await closeCurrentMobileOverlayThen(
+      () => emit('update:open', false),
+      () => emit('openPage', id),
+    );
   }
 
-  function forwardPageAction(
+  async function forwardPageAction(
     action: 'create' | 'attach' | 'toggleTop' | 'move' | 'rename' | 'copyLink' | 'delete',
     node: NoteTreeItem,
   ) {
-    emit('update:open', false);
-    emit(action, node);
+    await closeCurrentMobileOverlayThen(
+      () => emit('update:open', false),
+      () => emit(action, node),
+    );
   }
 
   watch(
