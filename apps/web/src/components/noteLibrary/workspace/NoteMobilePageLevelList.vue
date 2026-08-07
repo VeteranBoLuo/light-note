@@ -27,7 +27,11 @@
       <BLoading inline loading :title="t('common.loading')" />
     </div>
     <div v-else v-auto-scrollbar class="note-mobile-page-level-list__rows">
-      <BButton v-if="!searchActive && levelParentId" class="note-mobile-page-level-list__up" @click="browseParent">
+      <BButton
+        v-if="!searchActive && levelParentId"
+        class="note-mobile-page-level-list__up"
+        @click="browseParent"
+      >
         <SvgIcon :src="icon.noteDetail.back" size="16" aria-hidden="true" />
         {{ t('note.parentLevel') }}
       </BButton>
@@ -39,7 +43,7 @@
         :class="{ 'is-current': item.id === currentPageId, 'is-selected': item.id === selectedPageId }"
       >
         <BButton class="note-mobile-page-level-list__title" @click="selectItem(item)">
-          <SvgIcon :src="getNoteTreePageIcon(item.type)" size="17" aria-hidden="true" />
+          <SvgIcon :src="icon.resource.note" size="17" aria-hidden="true" />
           <span>{{ item.title || t('note.untitled') }}</span>
           <span v-if="item.isTop" class="note-mobile-page-level-list__pin">
             <SvgIcon :src="icon.contextMenu.pin" size="12" :aria-label="t('common.pinned')" />
@@ -89,7 +93,6 @@
   import icon from '@/config/icon';
   import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
-  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -124,8 +127,13 @@
   }>();
   const { t } = useI18n();
   const workspace = useNoteWorkspaceStore();
-  const { childrenByParent, loadingKeys, treeSearchChildrenByParent, treeSearchKeyword, treeSearchLoading } =
-    storeToRefs(workspace);
+  const {
+    childrenByParent,
+    loadingKeys,
+    treeSearchChildrenByParent,
+    treeSearchKeyword,
+    treeSearchLoading,
+  } = storeToRefs(workspace);
   const levelParentId = ref<string | null>(null);
   const levelBreadcrumb = ref<NoteBreadcrumbItem[]>([]);
   const searchValue = ref('');
@@ -135,7 +143,8 @@
   const levelKey = computed(() => levelParentId.value || NOTE_TREE_ROOT_KEY);
   const loading = computed(
     () =>
-      (searchActive.value && treeSearchLoading.value) || (!searchActive.value && loadingKeys.value.has(levelKey.value)),
+      (searchActive.value && treeSearchLoading.value) ||
+      (!searchActive.value && loadingKeys.value.has(levelKey.value)),
   );
 
   function flattenSearchMatches() {

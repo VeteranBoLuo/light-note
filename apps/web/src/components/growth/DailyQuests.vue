@@ -60,17 +60,14 @@
    */
   const bonusText = computed(() => {
     const pointsOnly = !props.bonus.exp && props.bonus.points > 0;
-    const mixedReward = props.bonus.exp > 0 && props.bonus.points > 0;
     if (props.bonus.claimed) {
-      if (pointsOnly) return t('growth.questBonusClaimedPointsOnly', { p: props.bonus.points });
-      if (mixedReward) {
-        return t('growth.questBonusClaimedMixed', { n: props.bonus.exp, p: props.bonus.points });
-      }
-      return t('growth.questBonusClaimed', { n: props.bonus.exp });
+      return pointsOnly
+        ? t('growth.questBonusClaimedPointsOnly', { p: props.bonus.points })
+        : t('growth.questBonusClaimed', { n: props.bonus.exp });
     }
-    if (pointsOnly) return t('growth.questBonusHintPointsOnly', { p: props.bonus.points });
-    if (mixedReward) return t('growth.questBonusHintMixed', { n: props.bonus.exp, p: props.bonus.points });
-    return t('growth.questBonusHint', { n: props.bonus.exp });
+    return pointsOnly
+      ? t('growth.questBonusHintPointsOnly', { p: props.bonus.points })
+      : t('growth.questBonusHint', { n: props.bonus.exp });
   });
 
   function questLabel(q: Quest): string {

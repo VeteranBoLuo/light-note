@@ -31,19 +31,9 @@ export function normalizeTodoPlanToolArgs(input = {}) {
   const reminder = object(input.reminder);
   const trigger = object(reminder.trigger);
   const nudge = object(reminder.nudge);
-  const requestedPlanType = cleanString(plan.type || input.planType || 'once', 24);
-  const taskMode = cleanString(
-    input.taskMode || (input.singleTaskReminder ? 'single' : requestedPlanType === 'once' ? 'single' : 'independent'),
-    24,
-  );
-  const planType = taskMode === 'single' ? 'once' : requestedPlanType;
-  const singleTaskReminder = object(input.singleTaskReminder);
-  const singleOnce = object(singleTaskReminder.once);
-  const singleRepeat = object(singleTaskReminder.repeat);
-  const singleStop = object(singleRepeat.stop);
+  const planType = cleanString(plan.type || input.planType || 'once', 24);
   const priority = Number(input.priority ?? 1);
   return {
-    taskMode,
     title: cleanString(input.title, MAX_TITLE),
     description: cleanString(input.description, MAX_DESCRIPTION),
     priority: [0, 1, 2].includes(priority) ? priority : 1,
@@ -102,54 +92,6 @@ export function normalizeTodoPlanToolArgs(input = {}) {
           }
         : {}),
     },
-    ...(taskMode === 'single'
-      ? {
-          singleTaskReminder: {
-            version: 1,
-            mode: cleanString(singleTaskReminder.mode || 'none', 16),
-            ...(singleTaskReminder.mode === 'once'
-              ? {
-                  once: {
-                    type: cleanString(singleOnce.type || 'at_due', 24),
-                    ...(singleOnce.offsetMinutes === undefined
-                      ? {}
-                      : { offsetMinutes: Number(singleOnce.offsetMinutes) }),
-                    ...(singleOnce.fixedAt ? { fixedAt: cleanString(singleOnce.fixedAt, 32) } : {}),
-                  },
-                }
-              : {}),
-            ...(singleTaskReminder.mode === 'repeat'
-              ? {
-                  repeat: {
-                    kind: cleanString(singleRepeat.kind || 'interval', 16),
-                    ...(singleRepeat.startAt ? { startAt: cleanString(singleRepeat.startAt, 32) } : {}),
-                    ...(singleRepeat.startDate ? { startDate: cleanString(singleRepeat.startDate, 10) } : {}),
-                    ...(singleRepeat.intervalMinutes === undefined
-                      ? {}
-                      : { intervalMinutes: Number(singleRepeat.intervalMinutes) }),
-                    ...(Array.isArray(singleRepeat.weekdays) ? { weekdays: singleRepeat.weekdays.map(Number) } : {}),
-                    ...(Array.isArray(singleRepeat.monthDays) ? { monthDays: singleRepeat.monthDays.map(Number) } : {}),
-                    ...(singleRepeat.localTime ? { localTime: cleanString(singleRepeat.localTime, 5) } : {}),
-                    ...(singleRepeat.shortMonthPolicy
-                      ? { shortMonthPolicy: cleanString(singleRepeat.shortMonthPolicy, 16) }
-                      : {}),
-                    stop: {
-                      type: cleanString(singleStop.type || 'completion_or_due', 32),
-                      ...(singleStop.until ? { until: cleanString(singleStop.until, 32) } : {}),
-                      ...(singleStop.maxCount === undefined ? {} : { maxCount: Number(singleStop.maxCount) }),
-                    },
-                  },
-                }
-              : {}),
-            channels: Array.isArray(singleTaskReminder.channels)
-              ? singleTaskReminder.channels.map((item) => cleanString(item, 16))
-              : [],
-            ...(singleTaskReminder.targetEmail
-              ? { targetEmail: cleanString(singleTaskReminder.targetEmail, 254) }
-              : {}),
-          },
-        }
-      : {}),
   };
 }
 
@@ -221,61 +163,9 @@ const reminderSchema = {
   required: ['mode'],
 };
 
-const singleTaskReminderSchema = {
-  type: 'object',
-  description: '一条待办上的提醒计划。重复提醒不会生成多条待办。',
-  properties: {
-    version: { type: 'integer', enum: [1] },
-    mode: { type: 'string', enum: ['none', 'once', 'repeat'] },
-    once: {
-      type: 'object',
-      properties: {
-        type: { type: 'string', enum: ['at_due', 'at_start', 'before_due', 'fixed_at'] },
-        offsetMinutes: { type: 'integer', minimum: 0, maximum: 43200 },
-        fixedAt: { type: 'string', description: 'YYYY-MM-DD HH:mm' },
-      },
-    },
-    repeat: {
-      type: 'object',
-      properties: {
-        kind: { type: 'string', enum: ['interval', 'weekly', 'monthly'] },
-        startAt: { type: 'string', description: '首次提醒 YYYY-MM-DD HH:mm' },
-        startDate: { type: 'string', description: '本地开始日期 YYYY-MM-DD' },
-        intervalMinutes: { type: 'integer', minimum: 5, maximum: 525600 },
-        weekdays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 } },
-        monthDays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 31 } },
-        localTime: { type: 'string', description: '本地提醒时间 HH:mm' },
-        shortMonthPolicy: { type: 'string', enum: ['last_day', 'skip'] },
-        stop: {
-          type: 'object',
-          properties: {
-            type: {
-              type: 'string',
-              enum: ['completion_or_due', 'completion', 'until', 'max_count', 'manual'],
-            },
-            until: { type: 'string' },
-            maxCount: { type: 'integer', minimum: 1, maximum: 500 },
-          },
-          required: ['type'],
-        },
-      },
-      required: ['kind', 'stop'],
-    },
-    channels: { type: 'array', items: { type: 'string', enum: ['in_app', 'email'] } },
-    targetEmail: { type: 'string' },
-  },
-  required: ['version', 'mode', 'channels'],
-};
-
 export const TODO_PLAN_TOOL_PARAMETERS = {
   type: 'object',
   properties: {
-    taskMode: {
-      type: 'string',
-      enum: ['single', 'independent'],
-      description:
-        '默认必须用 single：每天/每周/每月提醒同一件事。只有用户明确要求每次日程分别完成、每天生成一条独立待办时才用 independent。',
-    },
     title: { type: 'string', maxLength: MAX_TITLE },
     description: { type: 'string', maxLength: MAX_DESCRIPTION },
     priority: { type: 'integer', enum: [0, 1, 2] },
@@ -288,7 +178,6 @@ export const TODO_PLAN_TOOL_PARAMETERS = {
     timing: timingSchema,
     plan: planSchema,
     reminder: reminderSchema,
-    singleTaskReminder: singleTaskReminderSchema,
   },
   required: ['title', 'timing', 'plan', 'reminder'],
 };

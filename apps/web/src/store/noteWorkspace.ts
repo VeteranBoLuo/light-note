@@ -2,7 +2,6 @@ import { computed, ref, watch } from 'vue';
 import { defineStore } from 'pinia';
 import { apiBasePost } from '@/http/request';
 import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
-import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH } from '@/utils/noteWorkspaceLayout';
 
 export const NOTE_TREE_ROOT_KEY = '__light_note_root__';
 
@@ -28,11 +27,7 @@ function readJson<T>(storage: Storage | undefined, key: string, fallback: T): T 
 }
 
 function readExpandedIds() {
-  const items = readJson<unknown[]>(
-    typeof sessionStorage === 'undefined' ? undefined : sessionStorage,
-    EXPANDED_SESSION_KEY,
-    [],
-  );
+  const items = readJson<unknown[]>(typeof sessionStorage === 'undefined' ? undefined : sessionStorage, EXPANDED_SESSION_KEY, []);
   return new Set(
     (Array.isArray(items) ? items : [])
       .map((item) => String(item || '').trim())
@@ -50,7 +45,7 @@ function readLayoutPreference(): NoteWorkspaceLayoutPreference {
   return {
     sidebarPreferredOpen: value.sidebarPreferredOpen !== false,
     aiPreferredOpen: value.aiPreferredOpen !== false,
-    sidebarWidth: Math.min(360, Math.max(220, Number(value.sidebarWidth || NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH))),
+    sidebarWidth: Math.min(360, Math.max(220, Number(value.sidebarWidth || 270))),
   };
 }
 
@@ -68,86 +63,6 @@ function markSet(source: Set<string>, key: string, enabled: boolean) {
   if (enabled) next.add(key);
   else next.delete(key);
   return next;
-}
-
-export type NoteTreeMetadataPatch = Partial<Pick<NoteTreeItem, 'title' | 'type'>>;
-
-export type CreatedNoteTreeItem = Pick<NoteTreeItem, 'id' | 'parentId' | 'title' | 'type'>;
-
-function patchTreeItems(items: NoteTreeItem[], noteId: string, patch: NoteTreeMetadataPatch): NoteTreeItem[] {
-  let changed = false;
-  const nextItems = items.map((item) => {
-    const nextChildren = Array.isArray(item.children) ? patchTreeItems(item.children, noteId, patch) : item.children;
-    const matched = item.id === noteId;
-    if (!matched && nextChildren === item.children) return item;
-    changed = true;
-    return {
-      ...item,
-      ...(matched ? patch : {}),
-      ...(nextChildren !== item.children ? { children: nextChildren } : {}),
-    };
-  });
-  return changed ? nextItems : items;
-}
-
-function patchTreeIndex(
-  index: Record<string, NoteTreeItem[]>,
-  noteId: string,
-  patch: NoteTreeMetadataPatch,
-): Record<string, NoteTreeItem[]> {
-  let changed = false;
-  const nextIndex = Object.fromEntries(
-    Object.entries(index).map(([key, items]) => {
-      const nextItems = patchTreeItems(items, noteId, patch);
-      if (nextItems !== items) changed = true;
-      return [key, nextItems];
-    }),
-  );
-  return changed ? nextIndex : index;
-}
-
-function patchBreadcrumbItems(items: NoteBreadcrumbItem[], noteId: string, title: string): NoteBreadcrumbItem[] {
-  let changed = false;
-  const nextItems = items.map((item) => {
-    if (item.id !== noteId || item.title === title) return item;
-    changed = true;
-    return { ...item, title };
-  });
-  return changed ? nextItems : items;
-}
-
-function incrementParentChildCount(items: NoteTreeItem[], parentId: string): NoteTreeItem[] {
-  let changed = false;
-  const nextItems = items.map((item) => {
-    const nextChildren = Array.isArray(item.children)
-      ? incrementParentChildCount(item.children, parentId)
-      : item.children;
-    if (item.id !== parentId && nextChildren === item.children) return item;
-    changed = true;
-    return {
-      ...item,
-      ...(item.id === parentId
-        ? {
-            childCount: Math.max(1, Number(item.childCount || 0) + 1),
-            hasChildren: true,
-          }
-        : {}),
-      ...(nextChildren !== item.children ? { children: nextChildren } : {}),
-    };
-  });
-  return changed ? nextItems : items;
-}
-
-function incrementParentInTreeIndex(index: Record<string, NoteTreeItem[]>, parentId: string) {
-  let changed = false;
-  const nextIndex = Object.fromEntries(
-    Object.entries(index).map(([key, items]) => {
-      const nextItems = incrementParentChildCount(items, parentId);
-      if (nextItems !== items) changed = true;
-      return [key, nextItems];
-    }),
-  );
-  return changed ? nextIndex : index;
 }
 
 export default defineStore('noteWorkspace', () => {
@@ -208,8 +123,7 @@ export default defineStore('noteWorkspace', () => {
   }
 
   function setNavigation(next: { activePageId?: string | null; browseParentId?: string | null }) {
-    if (Object.prototype.hasOwnProperty.call(next, 'activePageId'))
-      activePageId.value = normalizedId(next.activePageId);
+    if (Object.prototype.hasOwnProperty.call(next, 'activePageId')) activePageId.value = normalizedId(next.activePageId);
     if (Object.prototype.hasOwnProperty.call(next, 'browseParentId')) {
       browseParentId.value = normalizedId(next.browseParentId);
       currentBreadcrumb.value = browseParentId.value ? breadcrumbByNote.value[browseParentId.value] || [] : [];
@@ -239,13 +153,6 @@ export default defineStore('noteWorkspace', () => {
       const items = Array.isArray(payload.items) ? payload.items : [];
       childrenByParent.value = { ...childrenByParent.value, [key]: items };
       loadedKeys.value = markSet(loadedKeys.value, key, true);
-      // 展开状态会跨当前浏览会话保存在 sessionStorage。恢复根层时不能只恢复箭头，
-      // 还要把已记住的展开分支一并取回，否则会出现“箭头朝下但子页面为空”，
-      // 用户必须先折叠再展开一次才能看到内容。
-      const restoredBranches = items.filter((item) => item.hasChildren && expandedIds.value.has(item.id));
-      if (restoredBranches.length) {
-        await Promise.all(restoredBranches.map((item) => loadChildren(item.id)));
-      }
       return items;
     } catch (error) {
       if (requestOwner === ownerKey.value && requestGeneration === treeRequestSeq) {
@@ -388,66 +295,6 @@ export default defineStore('noteWorkspace', () => {
     ]);
   }
 
-  function updateNoteMetadata(noteId: string, patch: NoteTreeMetadataPatch) {
-    const id = normalizedId(noteId);
-    if (!id) return;
-    const normalizedPatch: NoteTreeMetadataPatch = {};
-    if (typeof patch.title === 'string') normalizedPatch.title = patch.title;
-    if (Object.prototype.hasOwnProperty.call(patch, 'type')) normalizedPatch.type = patch.type;
-    if (!Object.keys(normalizedPatch).length) return;
-
-    childrenByParent.value = patchTreeIndex(childrenByParent.value, id, normalizedPatch);
-    treeSearchChildrenByParent.value = patchTreeIndex(treeSearchChildrenByParent.value, id, normalizedPatch);
-
-    if (typeof normalizedPatch.title === 'string') {
-      const title = normalizedPatch.title;
-      let breadcrumbChanged = false;
-      const nextBreadcrumbByNote = Object.fromEntries(
-        Object.entries(breadcrumbByNote.value).map(([key, items]) => {
-          const nextItems = patchBreadcrumbItems(items, id, title);
-          if (nextItems !== items) breadcrumbChanged = true;
-          return [key, nextItems];
-        }),
-      );
-      if (breadcrumbChanged) breadcrumbByNote.value = nextBreadcrumbByNote;
-      currentBreadcrumb.value = patchBreadcrumbItems(currentBreadcrumb.value, id, title);
-    }
-  }
-
-  function insertCreatedNote(input: CreatedNoteTreeItem) {
-    const id = normalizedId(input.id);
-    if (!id) return;
-    const parentId = normalizedId(input.parentId);
-    const key = parentKey(parentId);
-    const siblings = childrenByParent.value[key] || [];
-    const existingIndex = siblings.findIndex((item) => item.id === id);
-    const maxNormalSort = siblings.reduce(
-      (max, item) => (item.isTop ? max : Math.max(max, Number(item.sort) || 0)),
-      -1,
-    );
-    const createdNode: NoteTreeItem = {
-      id,
-      parentId,
-      title: String(input.title || ''),
-      type: input.type || 'html',
-      childCount: 0,
-      hasChildren: false,
-      isTop: false,
-      sort: maxNormalSort + 1,
-      updateTime: new Date().toISOString(),
-    };
-    const nextSiblings =
-      existingIndex >= 0
-        ? siblings.map((item, index) => (index === existingIndex ? { ...item, ...createdNode } : item))
-        : [...siblings, createdNode];
-    let nextChildrenByParent = { ...childrenByParent.value, [key]: nextSiblings };
-    if (existingIndex < 0 && parentId) {
-      nextChildrenByParent = incrementParentInTreeIndex(nextChildrenByParent, parentId);
-      treeSearchChildrenByParent.value = incrementParentInTreeIndex(treeSearchChildrenByParent.value, parentId);
-    }
-    childrenByParent.value = nextChildrenByParent;
-  }
-
   function setSidebarPreferredOpen(open: boolean) {
     sidebarPreferredOpen.value = open;
   }
@@ -512,7 +359,6 @@ export default defineStore('noteWorkspace', () => {
     ensureOwner,
     loadBreadcrumb,
     loadChildren,
-    insertCreatedNote,
     refreshTree,
     searchTree,
     setAiPreferredOpen,
@@ -520,6 +366,5 @@ export default defineStore('noteWorkspace', () => {
     setSidebarPreferredOpen,
     setSidebarWidth,
     toggleExpanded,
-    updateNoteMetadata,
   };
 });

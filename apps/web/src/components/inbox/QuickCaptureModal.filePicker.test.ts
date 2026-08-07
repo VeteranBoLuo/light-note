@@ -33,17 +33,10 @@ vi.mock('@/store', () => ({
   inboxStore: () => inbox,
   todoStore: () => todo,
 }));
-vi.mock('vue-router', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('vue-router')>()),
-  useRouter: () => ({ push: vi.fn() }),
-}));
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/http/request', () => ({ apiBasePost: vi.fn().mockResolvedValue({ status: 200, data: {} }) }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
-vi.mock('@/api/todoApi', () => ({
-  createTodoPlanV2: vi.fn(),
-  previewTodoPlanV2: vi.fn(),
-  getTodoPlanV2Config: vi.fn().mockResolvedValue({ status: 200, data: { quickReminderPresetsEnabled: true } }),
-}));
+vi.mock('@/api/todoApi', () => ({ createTodo: vi.fn() }));
 vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: () => false }));
 vi.mock('@/composables/useBookmarkUrlResolution', () => ({ preflightBookmarkUrl: vi.fn() }));
 vi.mock('@/utils/mobileOverlayHistory', () => ({ closeCurrentMobileOverlayThen: (fn: () => void) => fn() }));
@@ -151,7 +144,10 @@ describe('快速添加 · 选择文件', () => {
   });
 
   it('多选文件全部进入列表', async () => {
-    stubFiles = [new File(['a'], 'a.md', { type: 'text/markdown' }), new File(['b'], 'b.png', { type: 'image/png' })];
+    stubFiles = [
+      new File(['a'], 'a.md', { type: 'text/markdown' }),
+      new File(['b'], 'b.png', { type: 'image/png' }),
+    ];
     const host = mount();
 
     host.querySelector<HTMLButtonElement>('.upload-stub')!.click();

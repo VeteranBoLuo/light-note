@@ -396,7 +396,11 @@ export const updateNote = async (req, res) => {
   ) {
     return res.send(resultData(null, 400, L(req, '笔记标题无效', 'Invalid note title')));
   }
-  if (hasSubmittedContent && requestBody.content !== null && typeof requestBody.content !== 'string') {
+  if (
+    hasSubmittedContent &&
+    requestBody.content !== null &&
+    typeof requestBody.content !== 'string'
+  ) {
     return res.send(resultData(null, 400, L(req, '笔记正文无效', 'Invalid note content')));
   }
   const rawContent = hasSubmittedContent ? String(requestBody.content ?? '') : undefined;
@@ -504,7 +508,6 @@ export const queryNoteList = async (req, res) => {
     if (treeMode) assertNoteTreeFeature(req, NOTE_TREE_FEATURE.READ);
     const parentId = String(req.body?.parentId ?? '').trim() || null;
     const hasTreeFilter = Boolean(keyword) || tagId === 'null' || Boolean(tagId);
-    const rootTreeScope = treeMode && parentId === null;
     let treeSnapshot = null;
 
     if (treeMode) {
@@ -521,10 +524,13 @@ export const queryNoteList = async (req, res) => {
         } else {
           where.push('1 = 0');
         }
-      } else if (!hasTreeFilter && parentId) {
-        // 根“笔记库”代表完整内容范围；只有进入具体目录后才限制为直属子页面。
-        where.push('n.parent_id = ?');
-        params.push(parentId);
+      } else if (!hasTreeFilter) {
+        if (parentId) {
+          where.push('n.parent_id = ?');
+          params.push(parentId);
+        } else {
+          where.push('n.parent_id IS NULL');
+        }
       }
     }
 
@@ -576,7 +582,7 @@ export const queryNoteList = async (req, res) => {
       FROM note n
       WHERE ${whereSql}
       GROUP BY n.id
-      ORDER BY n.is_top DESC, ${rootTreeScope ? 'n.update_time DESC' : 'n.sort, n.update_time DESC'}, n.id DESC
+      ORDER BY n.is_top DESC, n.sort, n.update_time DESC, n.id DESC
     `;
     const listParams = [...params];
     if (pagination.enabled) {
@@ -597,7 +603,7 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
-      if (treeSnapshot && (hasTreeFilter || rootTreeScope)) {
+      if (treeSnapshot && hasTreeFilter) {
         const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
         note.path = path;
         note.path_text = path

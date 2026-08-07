@@ -52,7 +52,6 @@ const {
   countTodo,
   createTodo,
   listTodo,
-  previewTodoV2,
   reorderTodo,
   restoreTodo,
   snoozeTodo,
@@ -102,28 +101,6 @@ describe('todoHandle', () => {
     ensureNotVisitor.mockReturnValueOnce(false);
     await createTodo({ user: { id: 'visitor', role: 'visitor' }, body: { title: 'x' } }, mockRes());
     expect(getConnection).not.toHaveBeenCalled();
-  });
-
-  it('游客可以预览待办计划，预览不触发写入拦截', async () => {
-    const res = mockRes();
-
-    await previewTodoV2(
-      {
-        user: { id: 'visitor', role: 'visitor' },
-        body: {
-          taskMode: 'single',
-          title: '游客预览',
-          timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null },
-          plan: { type: 'once' },
-          reminder: { mode: 'none', channels: [] },
-          singleTaskReminder: { version: 1, mode: 'none', channels: [] },
-        },
-      },
-      res,
-    );
-
-    expect(ensureNotVisitor).not.toHaveBeenCalled();
-    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
   });
 
   it('完成待办始终带 userId，避免跨用户修改', async () => {

@@ -374,9 +374,18 @@ describe('todoService', () => {
         { id: 'todo-b', dueAt: null, priority: 0 },
       ]),
     ).resolves.toEqual({ affected: 2 });
-    expect(connection.query.mock.calls[0][1]).toEqual(['2026-08-01 09:00:00', 2, 2, 1000, 'todo-a', 'user-4']);
+    expect(connection.query.mock.calls[0][1]).toEqual([
+      '2026-08-01 09:00:00',
+      2,
+      2,
+      1000,
+      'todo-a',
+      'user-4',
+    ]);
     expect(connection.query.mock.calls[1][1]).toEqual([null, 0, 0, 2000, 'todo-b', 'user-4']);
-    expect(connection.query.mock.calls[0][0]).toContain('due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)');
+    expect(connection.query.mock.calls[0][0]).toContain(
+      'due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)',
+    );
   });
 
   it('新版待办排序接口始终保留数据库截止时间，时间修改必须改走带范围的 v2 编辑', async () => {
@@ -385,7 +394,9 @@ describe('todoService', () => {
     await expect(
       reorderTodos(connection, 'user-4', [{ id: 'todo-v2', dueAt: '2026-08-02T09:00', priority: 1 }]),
     ).resolves.toEqual({ affected: 1 });
-    expect(connection.query.mock.calls[0][0]).toContain('due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)');
+    expect(connection.query.mock.calls[0][0]).toContain(
+      'due_at = IF(COALESCE(plan_version, 1) = 2, due_at, ?)',
+    );
   });
 
   it('稍后提醒在没有现有计划时创建站内提醒', async () => {
@@ -471,11 +482,11 @@ describe('todoService', () => {
 
   describe('queryTodoAttentionCounts 导航角标计数', () => {
     it('只统计未完成且未删除的待办，一次查询同时得到逾期与今天', async () => {
-      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 1, todoDueTodayTotal: 2, todoDueWeekTotal: 5 }]]);
+      connection.query.mockResolvedValueOnce([[{ todoOverdueTotal: 1, todoDueTodayTotal: 2 }]]);
 
       const result = await queryTodoAttentionCounts(connection, 'user-9');
 
-      expect(result).toEqual({ todoOverdueTotal: 1, todoDueTodayTotal: 2, todoDueWeekTotal: 5, todoAttentionTotal: 3 });
+      expect(result).toEqual({ todoOverdueTotal: 1, todoDueTodayTotal: 2, todoAttentionTotal: 3 });
       expect(connection.query).toHaveBeenCalledTimes(1);
       const [sql, params] = connection.query.mock.calls[0];
       expect(sql).toContain("status = 'pending'");
@@ -528,7 +539,7 @@ describe('todoService', () => {
       // 上界封在明天 00:00，未来待办不计入
       expect(sql).toContain('DATE_ADD(CURDATE(), INTERVAL 1 DAY)');
       // 两段都要求有截止时间，无日期待办不进任何一档
-      expect(sql.match(/due_at IS NOT NULL/g)).toHaveLength(3);
+      expect(sql.match(/due_at IS NOT NULL/g)).toHaveLength(2);
     });
 
     it('没有任何待办时 SUM 返回 NULL，计数归一为 0 而不是 NaN', async () => {
@@ -537,7 +548,6 @@ describe('todoService', () => {
       await expect(queryTodoAttentionCounts(connection, 'user-9')).resolves.toEqual({
         todoOverdueTotal: 0,
         todoDueTodayTotal: 0,
-        todoDueWeekTotal: 0,
         todoAttentionTotal: 0,
       });
     });
@@ -548,7 +558,6 @@ describe('todoService', () => {
       await expect(queryTodoAttentionCounts(connection, 'user-9')).resolves.toEqual({
         todoOverdueTotal: 0,
         todoDueTodayTotal: 0,
-        todoDueWeekTotal: 0,
         todoAttentionTotal: 0,
       });
     });

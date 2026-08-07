@@ -91,27 +91,10 @@ function normalizeContent(input, normalizedPlan) {
   };
 }
 
-function formatReminderInterval(intervalMinutes) {
-  const minutes = Math.max(1, Number(intervalMinutes) || 1);
-  if (minutes % 1440 === 0) return `${minutes / 1440} 天`;
-  if (minutes % 60 === 0) return `${minutes / 60} 小时`;
-  return `${minutes} 分钟`;
-}
-
-function formatReminderTrigger(trigger = {}, action = '提醒') {
-  if (trigger.type === 'at_start') return `任务开始时${action}`;
-  if (trigger.type === 'before_due') {
-    const offsetMinutes = Math.max(0, Number(trigger.offsetMinutes) || 0);
-    return offsetMinutes ? `截止前 ${offsetMinutes} 分钟${action}` : `截止时${action}`;
-  }
-  return `当天 ${trigger.fixedTime || '09:00'} ${action}`;
-}
-
 function previewSummary(preview) {
   const plan = preview.normalizedPlan.plan;
   const timing = preview.normalizedPlan.timing;
   const reminder = preview.normalizedPlan.reminder;
-  const taskMode = preview.normalizedPlan.taskMode || (plan.type === 'once' ? 'single' : 'independent');
   const frequencyLabel =
     plan.frequency === 'daily'
       ? '每日'
@@ -122,62 +105,24 @@ function previewSummary(preview) {
           : '';
   const count = preview.occurrenceCount || preview.generatedNowCount;
   const planTitle =
-    taskMode === 'single'
-      ? '将创建 1 条待办'
-      : plan.type === 'once'
-        ? '将创建 1 条独立待办'
-        : plan.type === 'after_completion'
-          ? `将创建“完成后 ${plan.interval} ${plan.unit === 'day' ? '天' : plan.unit === 'week' ? '周' : '个月'}再次安排”的任务`
-          : `将创建 ${count}${preview.occurrenceCount ? '' : '+'} 项${frequencyLabel}任务`;
-  const localDate = (value) => String(value || '').slice(0, 10) || null;
-  const firstDate =
-    localDate(preview.firstOccurrence?.startAt) ||
-    localDate(preview.firstOccurrence?.dueAt) ||
-    localDate(preview.firstOccurrence?.occurrenceDate);
-  const lastDate =
-    localDate(preview.lastOccurrence?.dueAt) ||
-    localDate(preview.lastOccurrence?.startAt) ||
-    localDate(preview.lastOccurrence?.occurrenceDate);
-  const range = !firstDate
+    plan.type === 'once'
+      ? '将创建 1 项待办'
+      : plan.type === 'after_completion'
+        ? `将创建“完成后 ${plan.interval} ${plan.unit === 'day' ? '天' : plan.unit === 'week' ? '周' : '个月'}再次安排”的任务`
+        : `将创建 ${count}${preview.occurrenceCount ? '' : '+'} 项${frequencyLabel}任务`;
+  const range = !preview.firstOccurrence?.occurrenceDate
     ? '无日期'
-    : plan.type === 'after_completion'
-      ? `${firstDate} 起`
-      : lastDate && lastDate !== firstDate
-        ? `${firstDate} 至 ${lastDate}`
-        : firstDate;
+    : preview.lastOccurrence?.occurrenceDate
+      ? `${preview.firstOccurrence.occurrenceDate} 至 ${preview.lastOccurrence.occurrenceDate}`
+      : `${preview.firstOccurrence.occurrenceDate} 起`;
   const timeParts = [];
   if (timing.startTime) timeParts.push(`${timing.startTime} 开始`);
   if (timing.dueTime) timeParts.push(`${timing.dueTime} 截止`);
   const channelLabel = reminder.channels.map((channel) => (channel === 'in_app' ? '站内' : '邮箱')).join(' + ');
-  let reminderLabel = '不提醒';
-  if (reminder.mode === 'once') {
-    const onceLabels = {
-      at_due: '截止时提醒',
-      at_start: '开始时提醒',
-      before_due: `截止前 ${reminder.once?.offsetMinutes || 0} 分钟提醒`,
-      fixed_at: `${reminder.once?.fixedAt || ''} 提醒`,
-    };
-    reminderLabel = `${onceLabels[reminder.once?.type] || '提醒一次'} · ${channelLabel}`;
-  } else if (reminder.mode === 'repeat') {
-    const repeat = reminder.repeat || {};
-    const repeatLabel =
-      repeat.kind === 'interval'
-        ? `每 ${formatReminderInterval(repeat.intervalMinutes)}提醒`
-        : repeat.kind === 'weekly'
-          ? `每周 ${repeat.weekdays.join('、')} 的 ${repeat.localTime} 提醒`
-          : `每月 ${repeat.monthDays.join('、')} 日 ${repeat.localTime} 提醒`;
-    reminderLabel = `${repeatLabel} · ${channelLabel}`;
-  } else if (reminder.mode === 'nudge') {
-    const triggerLabel = formatReminderTrigger(reminder.trigger, '首次提醒');
-    const intervalLabel = formatReminderInterval(reminder.nudge.intervalMinutes);
-    const stopLabel =
-      reminder.nudge.stop === 'max_count'
-        ? `达到 ${reminder.nudge.maxCount} 次后停止`
-        : `最多 ${reminder.nudge.maxCount} 次，完成或截止时停止`;
-    reminderLabel = `${triggerLabel}，之后每 ${intervalLabel}提醒，${stopLabel} · ${channelLabel}`;
-  } else if (reminder.mode === 'once_per_instance') {
-    reminderLabel = `${formatReminderTrigger(reminder.trigger, '提醒一次')} · ${channelLabel}`;
-  }
+  const reminderLabel =
+    reminder.mode === 'none'
+      ? '不提醒'
+      : `${reminder.mode === 'nudge' ? `每项最多 ${reminder.nudge.maxCount} 次催办` : '每项提醒一次'} · ${channelLabel}`;
   return { title: planTitle, range, timing: timeParts.join(' · '), reminder: reminderLabel };
 }
 
@@ -188,28 +133,18 @@ export function previewTodoPlan(input = {}, options = {}) {
 
 function ruleRow(userId, { todoId = null, seriesId = null, reminder }) {
   if (!reminder || reminder.mode === 'none') return null;
-  const singleSchedule = ['once', 'repeat'].includes(reminder.mode);
-  const singleTrigger =
-    reminder.once?.type === 'at_start'
-      ? 'at_start'
-      : reminder.once?.type === 'before_due'
-        ? 'before_due'
-        : 'fixed_time';
   return insertData({
     userId,
     todoId,
     seriesId,
     version: 1,
-    mode: singleSchedule ? 'single_schedule' : reminder.mode,
-    triggerType: singleSchedule ? singleTrigger : reminder.trigger.type,
-    fixedLocalTime: singleSchedule ? null : reminder.trigger.fixedTime || null,
-    offsetMinutes: singleSchedule ? (reminder.once?.offsetMinutes ?? null) : (reminder.trigger.offsetMinutes ?? null),
-    repeatIntervalMinutes: singleSchedule
-      ? (reminder.repeat?.intervalMinutes ?? null)
-      : (reminder.nudge?.intervalMinutes ?? null),
-    stopType: singleSchedule ? (reminder.repeat?.stop?.type ?? null) : (reminder.nudge?.stop ?? null),
-    maxCount: singleSchedule ? (reminder.repeat?.stop?.maxCount ?? null) : (reminder.nudge?.maxCount ?? null),
-    scheduleJson: singleSchedule ? JSON.stringify({ version: 2, schedule: reminder }) : null,
+    mode: reminder.mode,
+    triggerType: reminder.trigger.type,
+    fixedLocalTime: reminder.trigger.fixedTime || null,
+    offsetMinutes: reminder.trigger.offsetMinutes ?? null,
+    repeatIntervalMinutes: reminder.nudge?.intervalMinutes ?? null,
+    stopType: reminder.nudge?.stop ?? null,
+    maxCount: reminder.nudge?.maxCount ?? null,
     channels: JSON.stringify(reminder.channels),
     targetEmail: reminder.targetEmail || null,
     quietPolicy: reminder.quietPolicy || 'defer_once',
@@ -220,12 +155,8 @@ function ruleRow(userId, { todoId = null, seriesId = null, reminder }) {
 
 function jobRowsForOccurrence({ userId, todoId, seriesId, rule, occurrence, momentEntry, reminder }) {
   if (!rule || !momentEntry?.moments?.length) return [];
-  const singleRepeatStop = reminder.mode === 'repeat' ? reminder.repeat?.stop?.type : null;
   const stopAt =
-    (reminder.mode === 'nudge' && reminder.nudge?.stop === 'max_count') ||
-    (singleRepeatStop && singleRepeatStop !== 'completion_or_due')
-      ? null
-      : occurrence.dueAtUtc || null;
+    reminder.mode === 'nudge' && reminder.nudge?.stop === 'max_count' ? null : occurrence.dueAtUtc || null;
   const rows = [];
   for (const moment of momentEntry.moments) {
     for (const channel of reminder.channels) {
@@ -758,10 +689,6 @@ async function loadSeriesRule(connection, seriesId, userId) {
 
 function reminderFromRule(rule) {
   if (!rule) return { mode: 'none', channels: [] };
-  const versionedSchedule = parseJson(rule.schedule_json, null);
-  if (versionedSchedule?.version === 2 && versionedSchedule.schedule) {
-    return versionedSchedule.schedule;
-  }
   return {
     mode: rule.mode,
     trigger: {
@@ -1045,69 +972,6 @@ export async function ensureSeriesBuffer(connection, seriesId, { now = new Date(
   return { createdCount: items.length, reminderJobsCreated };
 }
 
-function timingFromSingleTodo(todo, timezone) {
-  const start = todo.start_at ? plainDateTimeFromDatabase(todo.start_at) : null;
-  const due = todo.due_at ? plainDateTimeFromDatabase(todo.due_at) : null;
-  const anchor = start?.toPlainDate() || due?.toPlainDate() || null;
-  const dueDayOffset = start && due ? Math.max(0, start.toPlainDate().until(due.toPlainDate()).days) : 0;
-  const pad = (value) => String(value).padStart(2, '0');
-  return {
-    timezone,
-    anchorDate: anchor?.toString() || null,
-    startTime: start ? `${pad(start.hour)}:${pad(start.minute)}` : null,
-    dueTime: due ? `${pad(due.hour)}:${pad(due.minute)}` : null,
-    dueDayOffset,
-  };
-}
-
-/**
- * 补齐默认单待办的长期重复提醒。只复算确定性的未来 60 天窗口，现有 dedupe key
- * 会吞掉已存在的时刻；不会生成新的 todo_items，也不会引入第二套调度器。
- */
-export async function ensureSingleReminderBuffer(connection, ruleId, { now = new Date() } = {}) {
-  const [rows] = await connection.query(
-    `SELECT r.*, i.title, i.description, i.priority, i.start_at, i.due_at, i.status AS todo_status,
-            i.del_flag
-       FROM todo_reminder_rules r
-       JOIN todo_items i ON i.id = r.todo_id AND i.user_id = r.user_id
-      WHERE r.id = ? AND r.enabled = 1 AND r.mode = 'single_schedule'
-      LIMIT 1 FOR UPDATE`,
-    [ruleId],
-  );
-  const rule = rows[0];
-  if (!rule || rule.todo_status !== 'pending' || rule.del_flag) return { reminderJobsCreated: 0 };
-  const reminder = reminderFromRule(rule);
-  if (reminder.mode !== 'repeat') return { reminderJobsCreated: 0 };
-  if (!['completion', 'completion_or_due', 'manual'].includes(reminder.repeat?.stop?.type)) {
-    return { reminderJobsCreated: 0 };
-  }
-  const timing = timingFromSingleTodo(rule, rule.timezone || 'Asia/Shanghai');
-  const preview = calculateTodoPlan(
-    {
-      taskMode: 'single',
-      title: rule.title,
-      description: rule.description || '',
-      priority: Number(rule.priority || 1),
-      timing,
-      plan: { type: 'once', pastPolicy: 'keep_overdue' },
-      reminder: { mode: 'none' },
-      singleTaskReminder: reminder,
-    },
-    { now, enforceReminderJobLimit: false },
-  );
-  const occurrence = preview.occurrences[0];
-  const jobs = jobRowsForOccurrence({
-    userId: rule.user_id,
-    todoId: rule.todo_id,
-    seriesId: null,
-    rule,
-    occurrence,
-    momentEntry: preview.reminderMoments[0],
-    reminder,
-  });
-  return { reminderJobsCreated: await insertReminderJobs(connection, jobs) };
-}
-
 export async function runSeriesAction(connection, userId, input = {}) {
   const seriesId = String(input.seriesId || '').trim();
   const action = String(input.action || '').trim();
@@ -1255,11 +1119,6 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
   if (scope === 'current') {
     const content = normalizeContent(input, preview.normalizedPlan);
     const occurrence = preview.occurrences[0];
-    const [ruleVersions] = await connection.query(
-      'SELECT COALESCE(MAX(version), 0) AS maxVersion FROM todo_reminder_rules WHERE todo_id = ? AND user_id = ? FOR UPDATE',
-      [todoId, userId],
-    );
-    const nextRuleVersion = Number(ruleVersions[0]?.maxVersion || 0) + 1;
     await connection.query(
       `UPDATE todo_items SET title = ?, description = ?, checklist = ?, priority = ?, start_at = ?, due_at = ?,
               occurrence_date = ?, instance_timezone = ?, is_exception = 1, update_time = NOW()
@@ -1297,7 +1156,6 @@ export async function updateTodoPlan(connection, userId, input = {}, options = {
       todoId,
       reminder: { ...reminder, timezone: occurrence.timezone },
     });
-    if (rule) rule.version = nextRuleVersion;
     if (rule) await connection.query('INSERT INTO todo_reminder_rules SET ?', [rule]);
     const jobs = jobRowsForOccurrence({
       userId,
@@ -1437,8 +1295,7 @@ export async function loadV2ReminderMap(db, userId, items) {
             trigger_type AS triggerType, fixed_local_time AS fixedTime,
             offset_minutes AS offsetMinutes, repeat_interval_minutes AS intervalMinutes,
             max_count AS maxCount, stop_type AS stopType, channels,
-            target_email AS targetEmail, quiet_policy AS quietPolicy,
-            schedule_json AS scheduleJson
+            target_email AS targetEmail, quiet_policy AS quietPolicy
        FROM todo_reminder_rules
       WHERE user_id = ? AND enabled = 1 AND (${ruleConditions.join(' OR ')})
       ORDER BY update_time DESC, create_time DESC`,
@@ -1472,10 +1329,7 @@ export async function loadV2ReminderMap(db, userId, items) {
     if (!rule) continue;
     const activeJobs = jobsByTodo.get(todoId) || [];
     const channels = parseJson(rule.channels, []);
-    const versionedSchedule = parseJson(rule.scheduleJson, null);
-    const schedule = versionedSchedule?.version === 2 ? versionedSchedule.schedule : null;
     const current = {
-      ...(schedule || {}),
       mode: rule.mode,
       triggerType: rule.triggerType,
       trigger: {
@@ -1501,13 +1355,6 @@ export async function loadV2ReminderMap(db, userId, items) {
       remainingCount: new Set(activeJobs.map((job) => Number(job.sequenceNo))).size,
       paused: activeJobs.length > 0 && activeJobs.every((job) => job.status === 'paused'),
     };
-    if (schedule) {
-      current.mode = schedule.mode;
-      current.version = schedule.version || 1;
-      current.channels = schedule.channels || channels;
-      current.targetEmail = schedule.targetEmail || null;
-      current.scheduleVersion = versionedSchedule.version;
-    }
     map.set(todoId, current);
   }
   return map;

@@ -168,7 +168,7 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     expect(open.value).toBe(false);
   });
 
-  it('点击面包屑切换到对应目录并保持抽屉打开', async () => {
+  it('点击面包屑可一次切换到对应目录并关闭抽屉', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     const open = ref(true);
@@ -203,10 +203,9 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     click('.note-drawer-breadcrumb > button:first-of-type');
     await flushUi();
 
-    expect(open.value).toBe(true);
+    expect(open.value).toBe(false);
     expect(selected).toHaveBeenCalledOnce();
     expect(selected).toHaveBeenCalledWith(null);
-    expect(document.querySelector('.note-drawer-current')?.textContent).not.toContain('A');
   });
 
   it('浏览层级与已选目录不同时不再显示绿色勾选态', async () => {
@@ -241,54 +240,6 @@ describe('NoteDirectoryDrawer 返回层级', () => {
 
     expect(document.querySelector('.note-drawer-current')?.classList.contains('is-selected')).toBe(false);
     expect(document.querySelector('.note-drawer-current-check')).toBeNull();
-  });
-
-  it('目录行主区域直接选择范围，进入下一层和更多按钮不会冒泡触发选择', async () => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    const open = ref(true);
-    const selected = vi.fn();
-    const app = createApp(
-      defineComponent({
-        setup() {
-          return () =>
-            h(NoteDirectoryDrawer, {
-              open: open.value,
-              'onUpdate:open': (value: boolean) => (open.value = value),
-              currentParentId: null,
-              onSelect: selected,
-            });
-        },
-      }),
-    );
-    app.use(
-      createI18n({
-        legacy: false,
-        locale: 'zh-CN',
-        messages: { 'zh-CN': { note: {}, common: {} } },
-        missingWarn: false,
-        fallbackWarn: false,
-      }),
-    );
-    app.directive('auto-scrollbar', {});
-    app.mount(host);
-    unmount = () => app.unmount();
-    await flushUi();
-
-    click('.note-drawer-enter');
-    await flushUi();
-    expect(selected).not.toHaveBeenCalled();
-    expect(open.value).toBe(true);
-
-    click('.note-drawer-more');
-    await flushUi();
-    expect(selected).not.toHaveBeenCalled();
-    expect(open.value).toBe(true);
-
-    click('.note-drawer-select');
-    await flushUi();
-    expect(selected).toHaveBeenCalledWith('b');
-    expect(open.value).toBe(false);
   });
 
   it('移动端目录行菜单可将完整节点交给删除确认流程并先关闭抽屉', async () => {

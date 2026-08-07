@@ -24,11 +24,4 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.mobileTopSwitcher).not.toBe(true);
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
-
-  it('移动端新建待办使用独立页面路由，不挂底部主导航', () => {
-    const resolved = router.resolve('/todo/new');
-    expect(resolved.name).toBe('todoCreate');
-    expect(resolved.meta.requireAuth).toBe(true);
-    expect(resolved.meta.mobileBottomNav).not.toBe(true);
-  });
 });

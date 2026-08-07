@@ -13,6 +13,9 @@
         :has-backup="hasSwitchBackup"
         :has-catalog="nStore.headings.length > 0"
         :has-navigation="canShowPrivateNavigation"
+        :sidebar-open="detailSidebarEffectiveOpen"
+        :ai-open="detailAiEffectiveOpen"
+        :show-ai-toggle="!bookmark.isMobile"
         :child-count="subpageCount"
         :page-tree-writable="noteTreeWriteEnabled"
         @del="delNote"
@@ -24,6 +27,8 @@
         @save-as-template="saveTemplateVisible = true"
         @open-catalog="catalogDrawerOpen = true"
         @open-navigation="openMobileNavigation()"
+        @toggle-sidebar="toggleDetailSidebar"
+        @toggle-ai="toggleDetailAi"
         @browse-children="browseCurrentChildren"
         @create-child="createChildPage"
         @attach-pages="openAttachPages"
@@ -104,24 +109,25 @@
             />
           </aside>
         </template>
-        <div
-          class="note-body-header editor-panel"
-          :class="{ 'is-switching': isNoteSwitching }"
-          :aria-busy="isNoteSwitching"
-        >
+        <div class="note-body-header editor-panel">
           <nav
-            v-if="canShowPrivateNavigation"
+            v-if="canShowPrivateNavigation && detailBreadcrumb.length"
             class="note-detail-breadcrumb"
             :aria-label="t('note.currentDirectory')"
             @click.self="openMobileNavigation()"
           >
-            <BButton size="small" class="note-detail-crumb" @click="openBreadcrumbPage(null)">
-              {{ t('note.knowledgeRoot') }}
-            </BButton>
-            <template v-for="item in detailBreadcrumbTailDisplay" :key="item.key">
-              <span class="note-detail-crumb-separator" aria-hidden="true">/</span>
+            <template v-for="(item, index) in detailBreadcrumbDisplay" :key="item.key">
+              <span v-if="index" class="note-detail-crumb-separator" aria-hidden="true">/</span>
+              <BButton
+                v-if="item.kind === 'root'"
+                size="small"
+                class="note-detail-crumb"
+                @click="openBreadcrumbPage(null)"
+              >
+                {{ t('note.knowledgeRoot') }}
+              </BButton>
               <span
-                v-if="item.kind === 'ellipsis'"
+                v-else-if="item.kind === 'ellipsis'"
                 class="note-detail-crumb-ellipsis"
                 :title="t('note.hiddenBreadcrumbs')"
                 :aria-label="t('note.hiddenBreadcrumbs')"
@@ -147,46 +153,55 @@
               </BButton>
             </template>
           </nav>
-          <Transition name="note-content-switch" mode="out-in">
-            <div :key="noteContentKey" class="note-detail-content">
-              <div class="note-body-title n-title">
-                <BInput
-                  v-if="bookmark.isMobile"
-                  class="note-title-mobile"
-                  height="50px"
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-                <BInput
-                  v-else
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-              </div>
-              <editor
-                ref="editorRef"
-                class="editor-component"
-                v-model:content="note.content"
-                :type="note.type"
-                @update:type="note.type = $event"
-                @switch-backup-change="hasSwitchBackup = $event"
-                :readonly="readonly"
-                :note-id="note.id"
-                :ensure-note-id="ensureNoteId"
-                :resource-refs="resolvedResourceRefs"
-                @set-note-id="onEditorSetNoteId"
-                @ready="handleEditorReady"
-                @markdown-rendered="refreshCatalog"
-                @resource-refs-change="onEditorResourceRefsChange"
-              />
-            </div>
-          </Transition>
+          <div class="note-body-title n-title">
+            <BInput
+              v-if="bookmark.isMobile"
+              class="note-title-mobile"
+              height="50px"
+              :disabled="readonly"
+              v-model:value="note.title"
+              @change="inputBlur"
+              @focusout="focusout"
+              :placeholder="$t('noteDetail.titlePlaceholder')"
+            />
+            <BInput
+              v-else
+              :disabled="readonly"
+              v-model:value="note.title"
+              @change="inputBlur"
+              @focusout="focusout"
+              :placeholder="$t('noteDetail.titlePlaceholder')"
+            />
+          </div>
+          <editor
+            ref="editorRef"
+            class="editor-component"
+            v-model:content="note.content"
+            :type="note.type"
+            @update:type="note.type = $event"
+            @switch-backup-change="hasSwitchBackup = $event"
+            :readonly="readonly"
+            :note-id="note.id"
+            :ensure-note-id="ensureNoteId"
+            :resource-refs="resolvedResourceRefs"
+            @set-note-id="onEditorSetNoteId"
+            @ready="handleEditorReady"
+            @markdown-rendered="refreshCatalog"
+            @resource-refs-change="onEditorResourceRefsChange"
+          />
+          <NoteSubpageSection
+            v-if="canShowPrivateNavigation && bookmark.isMobile"
+            :note-id="note.id"
+            :readonly="readonly || !noteTreeWriteEnabled"
+            :refresh-key="subpageRefreshKey"
+            compact
+            @create="createChildPage"
+            @attach="openAttachPages"
+            @move-self="openMoveSelf"
+            @open="openSubpage"
+            @browse-children="browseCurrentChildren"
+            @count-change="subpageCount = $event"
+          />
         </div>
         <template #ai>
           <div class="note-detail-ai-slot">
@@ -280,6 +295,7 @@
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
+  import NoteSubpageSection from '@/components/noteLibrary/detail/NoteSubpageSection.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
@@ -292,6 +308,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import { markNoteDraftPromoted } from '@/utils/routeViewKey';
   import { recordOperation } from '@/api/commonApi.ts';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import {
@@ -354,7 +371,8 @@
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
-  const resolveInitialNoteType = (query = router.currentRoute.value.query): 'html' | 'markdown' => {
+  const resolveInitialNoteType = (): 'html' | 'markdown' => {
+    const query = router.currentRoute.value.query;
     if (query.type === 'markdown') return 'markdown';
     if (query.builtin) {
       const tpl = findBuiltinNoteTemplate(String(query.builtin));
@@ -405,6 +423,14 @@
   const detailWorkspaceMode = ref(initialDetailWorkspaceLayout.mode);
   const detailSidebarOverlayOpen = ref(false);
   const detailAiOverlayOpen = ref(false);
+  const detailSidebarEffectiveOpen = computed(() =>
+    detailWorkspaceMode.value === 'wide' || detailWorkspaceMode.value === 'standard'
+      ? sidebarPreferredOpen.value
+      : detailSidebarOverlayOpen.value,
+  );
+  const detailAiEffectiveOpen = computed(() =>
+    detailWorkspaceMode.value === 'wide' ? aiPreferredOpen.value : detailAiOverlayOpen.value,
+  );
 
   function handleDetailLayoutChange(layout: NoteWorkspaceLayoutState) {
     if (detailWorkspaceMode.value !== layout.mode) {
@@ -424,6 +450,21 @@
     if (value) detailSidebarOverlayOpen.value = false;
   }
 
+  function toggleDetailSidebar() {
+    if (detailWorkspaceMode.value === 'wide' || detailWorkspaceMode.value === 'standard') {
+      noteWorkspace.setSidebarPreferredOpen(!sidebarPreferredOpen.value);
+      return;
+    }
+    setDetailSidebarOverlayOpen(!detailSidebarOverlayOpen.value);
+  }
+
+  function toggleDetailAi() {
+    if (detailWorkspaceMode.value === 'wide') {
+      noteWorkspace.setAiPreferredOpen(!aiPreferredOpen.value);
+      return;
+    }
+    setDetailAiOverlayOpen(!detailAiOverlayOpen.value);
+  }
   const {
     childrenByParent,
     currentBreadcrumb: detailBreadcrumb,
@@ -466,18 +507,11 @@
   const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
   let detailTreeSearchTimer = 0;
   const editorRef = ref<InstanceType<typeof Editor> | null>(null);
-  const noteContentKey = ref('note-content:initial');
-  const isNoteSwitching = ref(false);
-  const contentAutosaveReady = ref(false);
-  let promotedDraftRouteId = '';
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
   const catalogDrawerOpen = ref(false);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   const detailBreadcrumbDisplay = computed(() => buildNoteBreadcrumbDisplay(detailBreadcrumb.value, bookmark.isMobile));
-  const detailBreadcrumbTailDisplay = computed(() =>
-    detailBreadcrumbDisplay.value.filter((item) => item.kind !== 'root'),
-  );
   let resourceResolveVersion = 0;
   let lastResourceRefSignature = '';
   let currentEditorResourceRefs: ResourceRef[] = [];
@@ -571,7 +605,6 @@
     if (typeof data.title === 'string') {
       note.title = data.title;
       note.lastTitle = cloneDeep(note.title);
-      if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: note.title, type: restoredType });
       syncHeaderTitle();
     }
     if (typeof data.content === 'string') {
@@ -731,12 +764,6 @@
   }
 
   async function handleEditorReady() {
-    const rawRouteId = router.currentRoute.value.params.id;
-    const currentRouteId = Array.isArray(rawRouteId) ? rawRouteId.join('/') : String(rawRouteId || '');
-    // 快速切换时旧编辑器可能晚到一个 ready；它不能重新开启自动保存，也不能覆盖新页面的大纲。
-    if (currentRouteId !== 'add' && currentRouteId !== note.id) return;
-    contentAutosaveReady.value = true;
-    isNoteSwitching.value = false;
     // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
     void refreshCatalog();
     const raw = String(router.currentRoute.value.query.focusRef || '');
@@ -763,6 +790,7 @@
   const activeAttachTarget = ref<NoteTreeItem | null>(null);
   const activeMoveTarget = ref<NoteTreeItem | null>(null);
   const renameTargetNote = ref<{ id: string; title?: string } | null>(null);
+  const subpageRefreshKey = ref(0);
   const subpageCount = ref(0);
   const mobileNavigationOpen = ref(false);
   const mobileNavigationParentId = ref<string | null>(null);
@@ -792,6 +820,7 @@
   function handlePagesAttached() {
     attachPagesVisible.value = false;
     activeAttachTarget.value = null;
+    subpageRefreshKey.value += 1;
     void refreshTree();
     void loadDetailBreadcrumb(note.id);
   }
@@ -809,6 +838,7 @@
       note.parentId = result.parentId || null;
     }
     activeMoveTarget.value = null;
+    subpageRefreshKey.value += 1;
     void refreshTree();
     void loadDetailBreadcrumb(note.id);
   }
@@ -935,16 +965,13 @@
     });
   }
 
+  function openSubpage(id: string) {
+    void openNoteDetailPage(id);
+  }
+
   function openBreadcrumbPage(pageId: string | null) {
     if (!pageId) {
-      void router.push(
-        bookmark.isMobile
-          ? {
-              path: '/noteLibrary',
-              query: { openDirectory: '1' },
-            }
-          : '/noteLibrary',
-      );
+      void router.push('/noteLibrary');
       return;
     }
     void openNoteDetailPage(pageId);
@@ -979,7 +1006,7 @@
       },
     });
   }
-  async function applyTemplateFromQuery(query: Record<string, any>, shouldApply: () => boolean = () => true) {
+  async function applyTemplateFromQuery(query: Record<string, any>) {
     const isUserTemplate = Boolean(query.templateId);
     try {
       let rawTitle = '';
@@ -1007,7 +1034,6 @@
       } else {
         return;
       }
-      if (!shouldApply()) return;
       const opts = { locale: String(locale.value) };
       note.type = tplType;
       const renderedContent = renderNoteTemplate(rawContent, opts);
@@ -1021,7 +1047,7 @@
     } catch (e) {
       console.error('应用笔记模板失败:', e);
       // 用户模板走网络请求,异常(断网/超时)同样明确提示,不静默留在空白页;内置模板为本地常量,异常仅记录
-      if (isUserTemplate && shouldApply()) promptTemplateLoadFailure();
+      if (isUserTemplate) promptTemplateLoadFailure();
     }
   }
 
@@ -1029,26 +1055,6 @@
   // 新建笔记时若并发触发（自动保存 + 粘贴图片同时想建），都复用这一个 Promise，绝不会建出多条。
   // 建成后写回 note.id，之后一律走 updateNote。
   let createPromise: Promise<string> | null = null;
-  function promoteSavedDraftInTree() {
-    if (!note.id) return;
-    const createdId = note.id;
-    const createdParentId = note.parentId;
-    nodeType.value = 'edit';
-    if (!noteTreeReadEnabled.value) return;
-    noteWorkspace.insertCreatedNote({
-      id: createdId,
-      parentId: createdParentId,
-      title: note.title,
-      type: note.type,
-    });
-    noteWorkspace.setNavigation({ activePageId: createdId, browseParentId: null });
-    // 本地树先即时出现并选中新文档；再静默读取服务端排序与完整面包屑进行校准。
-    void nextTick().then(async () => {
-      await loadTreeChildren(createdParentId, true);
-      if (note.id === createdId) await loadDetailBreadcrumb(createdId);
-    });
-  }
-
   function createNote(): Promise<string> {
     if (note.id) return Promise.resolve(note.id);
     if (createPromise) return createPromise;
@@ -1071,10 +1077,12 @@
           if (!note.title || !note.title.trim()) {
             note.title = params.title;
           }
-          promoteSavedDraftInTree();
-          // 详情工作区的路由 key 保持稳定，草稿首次保存只替换地址，不重挂编辑器内容区。
-          // replace 保留原 query(type/builtin)，让刷新后的编辑器类型仍能按原始模板恢复。
-          promotedDraftRouteId = note.id as string;
+          nodeType.value = 'edit';
+          // 先登记「草稿已提升」再改地址:让 router-view key 保持不变,新建首存不重挂载编辑器子树(不闪)。
+          // replace 保留原 query(type/builtin):万一组件仍被重挂(旧版本页面/共键失效),
+          // resolveInitialNoteType 也能拿到 markdown,不再落回 html 打开 TinyMCE 竞态转义窗口(日报模板 &gt; 案根因)
+          markNoteDraftPromoted(note.id as string);
+          void loadDetailBreadcrumb(note.id as string);
           router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
           recordOperation({
             module: '笔记',
@@ -1106,8 +1114,8 @@
     if (id && !note.id) {
       note.id = id;
       note.createBy = user.id;
-      promoteSavedDraftInTree();
-      promotedDraftRouteId = note.id;
+      nodeType.value = 'edit';
+      markNoteDraftPromoted(note.id);
       router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
     }
   }
@@ -1163,7 +1171,6 @@
       if (ok) {
         // 只在服务端确认成功后才推进已保存标题，避免失败时把草稿误认为已落库。
         note.lastTitle = cloneDeep(titleAtSave);
-        if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: titleAtSave, type: note.type });
         if (isMsg) {
           message.success(t('common.saveSuccess'));
         }
@@ -1298,8 +1305,6 @@
           }
           skipSaveOnLeave = true;
           clearScheduledSave();
-          noteWorkspace.setNavigation({ activePageId: null });
-          await refreshTree();
           returnToSourceDirectory();
         },
       });
@@ -1347,8 +1352,6 @@
         // 删除已在服务端成功完成，离开时不能再把排队中的旧草稿写回已删除笔记。
         skipSaveOnLeave = true;
         clearScheduledSave();
-        noteWorkspace.setNavigation({ activePageId: null });
-        await refreshTree();
         returnToSourceDirectory();
       },
     });
@@ -1397,10 +1400,6 @@
       isLeaving.value = false;
       return;
     }
-    if (!bookmark.isMobile) {
-      returnToSourceDirectory();
-      return;
-    }
     const parentId =
       nodeType.value === 'add'
         ? routeQueryValue(router.currentRoute.value.query.parent)
@@ -1426,169 +1425,7 @@
     return await persistBeforeLeave();
   });
   const isReady = ref(false);
-
-  function resetPerNoteRuntime() {
-    clearScheduledSave();
-    readonlyToolbarObserver?.disconnect();
-    readonlyToolbarObserver = null;
-    requestedSaveVersion = 0;
-    persistedSaveVersion = 0;
-    latestRequestedTitle = note.title;
-    saveQueue = Promise.resolve(true);
-    saveStatus.value = 'saved';
-    isStartEdit.value = false;
-    isLeaving.value = false;
-    skipSaveOnLeave = false;
-    hasSwitchBackup.value = false;
-    contentAutosaveReady.value = false;
-    currentEditorResourceRefs = [];
-    resolvedResourceRefs.value = [];
-    lastResourceRefSignature = '';
-    resourceResolveVersion += 1;
-    nStore.headings = [];
-    versionHistoryVisible.value = false;
-    saveTemplateVisible.value = false;
-    attachPagesVisible.value = false;
-    moveSelfVisible.value = false;
-    renamePageVisible.value = false;
-    activeAttachTarget.value = null;
-    activeMoveTarget.value = null;
-    renameTargetNote.value = null;
-    subpageCount.value = 0;
-    catalogDrawerOpen.value = false;
-    mobileNavigationOpen.value = false;
-  }
-
-  let noteLoadVersion = 0;
-  let readonlyToolbarObserver: MutationObserver | null = null;
-
-  function syncReadonlyEditorChrome() {
-    readonlyToolbarObserver?.disconnect();
-    readonlyToolbarObserver = null;
-    if (user.id === note.createBy) return;
-    readonlyToolbarObserver = new MutationObserver(() => {
-      const toolbar = document.querySelector<HTMLElement>('.tox-editor-header');
-      if (!toolbar) return;
-      toolbar.style.display = 'none';
-      readonlyToolbarObserver?.disconnect();
-      readonlyToolbarObserver = null;
-    });
-    readonlyToolbarObserver.observe(document.body, { childList: true, subtree: true });
-  }
-
-  function completeMarkdownContentSwitch() {
-    if (note.type !== 'markdown') return;
-    // Markdown 编辑器没有 TinyMCE 的 init 事件；内容 DOM 挂载后即可恢复交互和自动保存。
-    contentAutosaveReady.value = true;
-    isNoteSwitching.value = false;
-    void refreshCatalog();
-  }
-
-  async function loadRouteNote(routeId: string, query: Record<string, any>) {
-    if (!routeId) return;
-    if (promotedDraftRouteId && routeId === promotedDraftRouteId && note.id === routeId) {
-      promotedDraftRouteId = '';
-      void loadDetailBreadcrumb(routeId);
-      return;
-    }
-
-    const requestVersion = ++noteLoadVersion;
-    const isInitialLoad = !isReady.value;
-    if (!isInitialLoad) isNoteSwitching.value = true;
-    resetPerNoteRuntime();
-
-    if (routeId === 'add') {
-      appliedTemplateName = '';
-      templateTitleApplied = false;
-      const nextType = resolveInitialNoteType(query);
-      Object.assign(note, {
-        id: '',
-        title: DEFAULT_NOTE_TITLE,
-        lastTitle: DEFAULT_NOTE_TITLE,
-        content: nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
-        createBy: '',
-        type: nextType,
-        parentId: routeQueryValue(query.parent) || null,
-      });
-      updateTime.value = '';
-      nodeType.value = 'add';
-      await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
-      if (requestVersion !== noteLoadVersion) return;
-      latestRequestedTitle = note.title;
-      noteContentKey.value = `note-content:add:${requestVersion}`;
-      isReady.value = true;
-      await nextTick();
-      if (templateTitleApplied) await syncHeaderTitle();
-      completeMarkdownContentSwitch();
-      return;
-    }
-
-    let contentApplied = false;
-    try {
-      const response = await apiBasePost('/api/note/getNoteDetail', { id: routeId });
-      if (requestVersion !== noteLoadVersion) return;
-      if (response.status === 200 && response.data) {
-        const rawType = response.data.type;
-        Object.assign(note, {
-          ...response.data,
-          id: String(response.data.id || routeId),
-          type: normalizeNoteType(rawType),
-          content: normalizeLoadedContent(response.data.content || '', rawType),
-          parentId: response.data.parentId || null,
-        });
-        note.lastTitle = cloneDeep(note.title);
-        latestRequestedTitle = note.title;
-        noteWorkspace.updateNoteMetadata(String(note.id), { title: note.title, type: note.type });
-        updateTime.value = response.data.updateTime ?? response.data.createTime;
-        nodeType.value = user.id === note.createBy ? 'edit' : 'share';
-        noteContentKey.value = `note-content:${note.id}`;
-        contentApplied = true;
-        isReady.value = true;
-        void loadDetailBreadcrumb(String(note.id));
-        await nextTick();
-        await syncHeaderTitle();
-        completeMarkdownContentSwitch();
-        syncReadonlyEditorChrome();
-      }
-    } catch (error) {
-      console.error('加载笔记失败:', error);
-    } finally {
-      if (requestVersion === noteLoadVersion) {
-        if (!isReady.value) isReady.value = true;
-        if (!contentApplied) isNoteSwitching.value = false;
-      }
-    }
-  }
-
-  const routeNoteLoadKey = computed(() => {
-    const route = router.currentRoute.value;
-    const rawId = route.params.id;
-    const id = Array.isArray(rawId) ? rawId.join('/') : String(rawId || '');
-    if (id !== 'add') return id;
-    return [id, route.query.parent, route.query.type, route.query.builtin, route.query.templateId]
-      .map((item) => routeQueryValue(item))
-      .join('|');
-  });
-
-  watch(
-    routeNoteLoadKey,
-    () => {
-      const route = router.currentRoute.value;
-      const rawId = route.params.id;
-      const id = Array.isArray(rawId) ? rawId.join('/') : String(rawId || '');
-      void loadRouteNote(id, { ...route.query });
-    },
-    { immediate: true },
-  );
-
-  watch(
-    () => note.content,
-    () => {
-      if (contentAutosaveReady.value) saveFunc();
-    },
-    { flush: 'sync' },
-  );
-
+  const a = ref();
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('visibilitychange', handleResourceRefVisibilityChange);
@@ -1596,9 +1433,66 @@
     window.addEventListener('pageshow', refreshEditorResourceRefs);
     window.addEventListener('offline', handleNetworkOffline);
     window.addEventListener('online', handleNetworkOnline);
+    if (router.currentRoute.value.params.id !== 'add') {
+      isReady.value = false;
+      apiBasePost('/api/note/getNoteDetail', {
+        id: router.currentRoute.value.params.id,
+      })
+        .then((res) => {
+          if (res.status === 200) {
+            const rawType = res.data?.type;
+            Object.assign(note, {
+              ...res.data,
+              type: normalizeNoteType(rawType),
+              content: normalizeLoadedContent(res.data?.content || '', rawType),
+            });
+            note.lastTitle = cloneDeep(note.title);
+            updateTime.value = res.data?.updateTime ?? res.data?.createTime;
+            void loadDetailBreadcrumb(String(note.id));
+          }
+        })
+        .finally(async () => {
+          isReady.value = true;
+          await syncHeaderTitle();
+          if (user.id !== note.createBy) {
+            nodeType.value = 'share';
+            const observer = new MutationObserver(() => {
+              const el: any = document.querySelector('.tox-editor-header');
+              if (el) {
+                el.style.display = 'none';
+                observer.disconnect();
+              }
+            });
+            const config = { childList: true, subtree: true };
+            observer.observe(document.body, config);
+          }
+          watch(
+            () => note.content,
+            () => {
+              saveFunc();
+            },
+          );
+        });
+    } else {
+      nodeType.value = 'add';
+      const query = router.currentRoute.value.query;
+      // 编辑器类型已在 note 初始化时按 query 同步定好(早于 Editor 挂载,避免 markdown 模板正文被富文本转义),此处只预填正文。
+      // 模板预填必须先于注册 content watch:预填本身不触发自动保存,选模板后不编辑直接退出便不会创建笔记。
+      applyTemplateFromQuery(query).finally(() => {
+        isReady.value = true;
+        if (templateTitleApplied) {
+          nextTick(() => syncHeaderTitle());
+        }
+        watch(
+          () => note.content,
+          () => {
+            saveFunc();
+          },
+        );
+      });
+    }
   });
   onUnmounted(() => {
-    noteLoadVersion += 1;
     window.clearTimeout(detailTreeSearchTimer);
     document.removeEventListener('keydown', handleKeyDown);
     document.removeEventListener('visibilitychange', handleResourceRefVisibilityChange);
@@ -1606,9 +1500,10 @@
     window.removeEventListener('pageshow', refreshEditorResourceRefs);
     window.removeEventListener('offline', handleNetworkOffline);
     window.removeEventListener('online', handleNetworkOnline);
-    readonlyToolbarObserver?.disconnect();
     clearScheduledSave();
     nStore.headings = [];
+    // 离开笔记时清除「草稿已提升」登记,避免影响下一篇/新建笔记的 key 判断
+    markNoteDraftPromoted(null);
   });
 </script>
 
@@ -1819,35 +1714,7 @@
     .catalog-panel.is-animatable {
       transition: none;
     }
-
-    .note-content-switch-enter-active,
-    .note-content-switch-leave-active {
-      transition: none !important;
-    }
   }
-
-  .note-content-switch-enter-active,
-  .note-content-switch-leave-active {
-    transition:
-      opacity 140ms ease,
-      transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-content-switch-enter-from,
-  .note-content-switch-leave-to {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  .note-detail-content {
-    flex: 1 1 auto;
-    width: 100%;
-    min-width: 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-
   .editor-panel {
     --note-editor-header-bg: var(--surface-panel-bg);
 
@@ -1860,10 +1727,6 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 12px;
     background: var(--surface-page-bg, var(--background-color));
-
-    &.is-switching {
-      pointer-events: none;
-    }
   }
 
   .ai-panel {
@@ -1875,16 +1738,28 @@
   .note-detail-ai-slot {
     width: 100%;
     height: 100%;
+    padding: 16px;
     box-sizing: border-box;
   }
 
-  /* AI 侧栏加载时保持同一块完整底色，避免异步组件到位前出现白闪。 */
+  /*
+   * AI 面板加载期的占位。必须复刻 AiReply 内 .ai-container 的盒模型
+   * (padding + border + border-box) —— flex-basis: 0% 只把 content-box 归零,
+   * padding 16 + border 1 这 34px 仍要占位并参与分配:
+   *   宽度 = 34 + 3/15 × (可分配空间 - 34)
+   * 所以带盒模型的面板比光板 div 宽 27px 左右(1680 视口下 347 vs 320)。
+   * 这 27px 就是「正文先宽一截、AI 组件到位后又缩回去」的来源
+   * (表现为编辑区滚动条先贴上 AI 面板左边框,再弹回原位)。
+   * 约 1494px 以下两者都被 min-width: 310 顶平,看不出差别 —— 别据此以为不必对齐,
+   * 1536 起就会显形(实测 1280~3440 共 11 档,对齐后差值恒为 0)。
+   * 顺带把背景和圆角也照搬:加载过程于是变成「空面板 → 填入内容」,而不是「空白 → 面板冒出来」。
+   */
   .ai-panel-skeleton {
     height: 100%;
     padding: 16px;
     box-sizing: border-box;
-    border: 0;
-    border-radius: 0;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
     background: var(--workspace-panel-bg-color);
   }
   .editor-component {

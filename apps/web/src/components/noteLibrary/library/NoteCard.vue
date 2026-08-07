@@ -54,15 +54,18 @@
       <b-checkbox v-model:checked="note.isCheck" @click.stop />
     </div>
     <div v-else-if="!batchMode" class="note-mobile-actions" @click.stop>
-      <BButton class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
-        <SvgIcon :src="icon.common.more" size="18" />
-      </BButton>
+      <BDropdown :trigger="'click'" :align="'right'" :menu-options="mobileMenuOptions">
+        <BButton class="note-more-button" :aria-label="$t('common.more')">
+          <SvgIcon :src="icon.common.more" size="18" />
+        </BButton>
+      </BDropdown>
     </div>
   </div>
 </template>
 
 <script lang="ts" setup>
   import { computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -72,6 +75,7 @@
   import PinBadge from '@/components/base/PinBadge.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
@@ -89,24 +93,60 @@
   const summary = useNoteSummary(() => props.note, { maxLength: 300 });
 
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   const emit = defineEmits<{
-    open: [];
     nodeTypeChange: [tag: any];
     action: [
       action:
-        | 'more'
-        | 'toggleTop'
-        | 'relateTags'
-        | 'toggleInbox'
-        | 'enterDirectory'
-        | 'createChild'
-        | 'attach'
-        | 'move'
-        | 'delete',
+        'toggleTop' | 'relateTags' | 'toggleInbox' | 'enterDirectory' | 'createChild' | 'attach' | 'move' | 'delete',
     ];
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
+
+  const mobileMenuOptions = computed(() => [
+    {
+      label: props.note.isTop ? t('common.unpin') : t('common.pin'),
+      icon: props.note.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
+      function: () => emit('action', 'toggleTop'),
+    },
+    {
+      label: t('note.relateTags'),
+      icon: icon.manage_categoryBtn_tag,
+      function: () => emit('action', 'relateTags'),
+    },
+    {
+      label: props.note.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
+      icon: icon.contextMenu.inbox,
+      function: () => emit('action', 'toggleInbox'),
+    },
+    ...(props.treeWriteEnabled
+      ? [
+          {
+            label: t('note.newChildPage'),
+            icon: icon.common.add,
+            function: () => emit('action', 'createChild'),
+          },
+          {
+            label: t('note.addExistingPages'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'attach'),
+          },
+          {
+            label: t('note.moveThisPage'),
+            icon: icon.noteTree.move,
+            function: () => emit('action', 'move'),
+          },
+        ]
+      : []),
+    { divider: true },
+    {
+      label: t('common.delete'),
+      icon: icon.table_delete,
+      danger: true,
+      function: () => emit('action', 'delete'),
+    },
+  ]);
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));
@@ -132,7 +172,10 @@
       props.note.isCheck = !props.note.isCheck;
       return;
     }
-    emit('open');
+    router.push({
+      path: `/noteLibrary/${encodeURIComponent(props.note.id)}`,
+      query: { from: router.currentRoute.value.fullPath },
+    });
   }
 </script>
 

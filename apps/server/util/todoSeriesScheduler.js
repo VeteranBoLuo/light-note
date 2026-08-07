@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { ensureSeriesBuffer, ensureSingleReminderBuffer } from './services/todoSeriesService.js';
+import { ensureSeriesBuffer } from './services/todoSeriesService.js';
 import { incrementTodoPlanMetric } from './todoPlanMetrics.js';
 
 const POLL_INTERVAL_MS = 10 * 60 * 1000;
@@ -28,22 +28,6 @@ async function fillSeries(seriesId) {
   }
 }
 
-async function fillSingleReminder(ruleId) {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
-    const result = await ensureSingleReminderBuffer(connection, ruleId);
-    await connection.commit();
-    return result;
-  } catch (error) {
-    await connection.rollback().catch(() => {});
-    await incrementTodoPlanMetric(pool, 'series_generation_failures').catch(() => {});
-    throw error;
-  } finally {
-    connection.release();
-  }
-}
-
 export async function processTodoSeriesBuffers() {
   if (running) return;
   running = true;
@@ -59,30 +43,6 @@ export async function processTodoSeriesBuffers() {
     for (const row of rows) {
       await fillSeries(row.id).catch((error) => {
         console.error('[todo-series-v2] 补齐失败 series=%s code=%s', row.id, error?.code || 'UNKNOWN');
-      });
-    }
-    const [singleRules] = await pool.query(
-      `SELECT r.id
-         FROM todo_reminder_rules r
-         JOIN todo_items i ON i.id = r.todo_id AND i.user_id = r.user_id
-         LEFT JOIN (
-           SELECT rule_id, MAX(original_scheduled_at_utc) AS generated_through
-             FROM todo_reminder_jobs
-            WHERE status IN ('pending','processing','paused','sent')
-            GROUP BY rule_id
-         ) jobs ON jobs.rule_id = r.id
-        WHERE r.enabled = 1 AND r.mode = 'single_schedule'
-          AND i.status = 'pending' AND i.del_flag = 0
-          AND JSON_UNQUOTE(JSON_EXTRACT(r.schedule_json, '$.schedule.mode')) = 'repeat'
-          AND JSON_UNQUOTE(JSON_EXTRACT(r.schedule_json, '$.schedule.repeat.stop.type')) IN
-              ('completion','completion_or_due','manual')
-          AND (jobs.generated_through IS NULL OR jobs.generated_through < DATE_ADD(UTC_TIMESTAMP(), INTERVAL 30 DAY))
-        ORDER BY jobs.generated_through, r.id LIMIT ?`,
-      [BATCH_SIZE],
-    );
-    for (const rule of singleRules) {
-      await fillSingleReminder(rule.id).catch((error) => {
-        console.error('[todo-single-reminder] 补齐失败 rule=%s code=%s', rule.id, error?.code || 'UNKNOWN');
       });
     }
   } catch (error) {

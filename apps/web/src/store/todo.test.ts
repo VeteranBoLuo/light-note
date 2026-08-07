@@ -44,12 +44,10 @@ describe('todo store', () => {
     store.ownerId = 'user-a';
     store.items = [{ id: 'todo-1' } as any];
     store.status = 'completed';
-    store.sort = 'newest';
     store.keyword = '旧搜索';
     store.resetForOwner('user-b');
     expect(store.items).toEqual([]);
     expect(store.status).toBe('all');
-    expect(store.sort).toBe('due');
     expect(store.keyword).toBe('');
   });
 
@@ -74,7 +72,7 @@ describe('todo store', () => {
     await store.refreshList({ status: 'pending', preserveStatus: true });
 
     expect(store.status).toBe('all');
-    expect(listTodos).toHaveBeenCalledWith({ status: 'pending', keyword: '', sort: 'due' });
+    expect(listTodos).toHaveBeenCalledWith({ status: 'pending', keyword: '', sort: 'smart' });
   });
 
   it('删除成功后重新获取当前列表', async () => {

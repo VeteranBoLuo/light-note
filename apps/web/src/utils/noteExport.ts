@@ -1,4 +1,4 @@
-import { normalizeMarkdownTaskListHtml, promoteEmptyMarkdownTaskToken } from '@/utils/noteHtmlToMarkdown';
+import { normalizeMarkdownTaskListHtml } from '@/utils/noteHtmlToMarkdown';
 import { decorateInternalResourceLinks } from '@/utils/noteResourceRefs';
 
 /**
@@ -121,7 +121,7 @@ function escapeHtml(value: string) {
 /** md 源码 → 与站内预览同口径的安全 HTML(marked 渲染 + DOMPurify 消毒 + 站内链接增强)。 */
 export async function renderMarkdownForExport(markdown: string): Promise<string> {
   const [markedMod, dompurifyMod] = await Promise.all([import('marked'), import('dompurify')]);
-  const raw = String(markedMod.marked.parse(markdown || '', { walkTokens: promoteEmptyMarkdownTaskToken }));
+  const raw = String(markedMod.marked.parse(markdown || ''));
   const safe = dompurifyMod.default ? dompurifyMod.default.sanitize(raw) : raw;
   // 导出为静态文件,任务清单不可交互(editable=false)
   const html = decorateInternalResourceLinks(normalizeMarkdownTaskListHtml(safe, false));

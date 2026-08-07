@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildRootStartDropTarget,
-  buildTreeNodeDropTarget,
-  moveNoteTreeNodeOptimistically,
-  normalizePinnedAfterDropTarget,
-} from './noteTreeDrop';
+import { buildRootStartDropTarget, buildTreeNodeDropTarget, moveNoteTreeNodeOptimistically } from './noteTreeDrop';
 
 const source = { id: 'moving', isTop: false };
 const target = { id: 'target', parentId: 'parent', title: '目标页面', isTop: false };
@@ -53,25 +48,6 @@ describe('笔记页面树拖拽落点', () => {
     });
   });
 
-  it('普通页面只有拖到置顶页面前方才置顶，拖到后方进入普通组最前', () => {
-    const pinnedTarget = { ...target, isTop: true };
-    const before = buildTreeNodeDropTarget({ node: pinnedTarget, source, relativeY: 2, height: 40 });
-    const after = buildTreeNodeDropTarget({ node: pinnedTarget, source, relativeY: 38, height: 40 });
-
-    expect(before).toMatchObject({ position: 'before', isTop: true, nextId: 'target' });
-    expect(
-      normalizePinnedAfterDropTarget({
-        target: after!,
-        source,
-        siblings: [
-          { id: 'target', isTop: true },
-          { id: 'another-pinned', isTop: true },
-          { id: 'first-normal', isTop: false },
-        ],
-      }),
-    ).toMatchObject({ position: 'after', isTop: false, previousId: null, nextId: 'first-normal' });
-  });
-
   it('把子目录拖到父目录边缘时提升为父目录的同级节点，而不是建立额外关联', () => {
     const parentNode = {
       id: 'parent',
@@ -93,7 +69,7 @@ describe('笔记页面树拖拽落点', () => {
       { id: 'first', isTop: false },
       { id: 'moving', isTop: false },
     ];
-    expect(buildRootStartDropTarget({ rootItems, source, title: '笔记库', rootKey: 'root' })).toMatchObject({
+    expect(buildRootStartDropTarget({ rootItems, source, title: '我的知识库', rootKey: 'root' })).toMatchObject({
       parentId: null,
       previousId: null,
       nextId: 'first',
@@ -103,7 +79,7 @@ describe('笔记页面树拖拽落点', () => {
       buildRootStartDropTarget({
         rootItems,
         source: { id: 'first', isTop: false },
-        title: '笔记库',
+        title: '我的知识库',
         rootKey: 'root',
       }),
     ).toBeNull();
@@ -114,7 +90,7 @@ describe('笔记页面树拖拽落点', () => {
       buildRootStartDropTarget({
         rootItems: [{ id: 'normal', isTop: false }],
         source: { id: 'moving', isTop: true, parentId: 'old-parent' },
-        title: '笔记库',
+        title: '我的知识库',
         rootKey: 'root',
       }),
     ).toMatchObject({ isTop: false, parentId: null, previousId: null, nextId: null });

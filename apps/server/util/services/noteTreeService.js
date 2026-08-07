@@ -70,7 +70,6 @@ function normalizeTreeNode(row = {}) {
     id,
     parentId: normalizeParentId(row.parentId ?? row.parent_id),
     title: String(row.title || ''),
-    type: String(row.type || 'html'),
     sort: numberOrZero(row.sort),
     isTop: Boolean(numberOrZero(row.isTop ?? row.is_top)),
     delFlag: numberOrZero(row.delFlag ?? row.del_flag),
@@ -151,7 +150,7 @@ export async function loadOwnedNoteTree(userId, options = {}) {
   const lock = options.lock === true;
   const where = includeDeleted ? 'create_by = ?' : 'create_by = ? AND del_flag = 0';
   const [rows] = await db.query(
-    `SELECT id, parent_id, title, type, sort, is_top, del_flag, update_time, tree_delete_batch_id
+    `SELECT id, parent_id, title, sort, is_top, del_flag, update_time, tree_delete_batch_id
        FROM note
       WHERE ${where}
       ORDER BY is_top DESC, sort, update_time DESC, id DESC${lock ? ' FOR UPDATE' : ''}`,
@@ -272,7 +271,6 @@ function decorateTreeItem(snapshot, node, depth) {
     id: node.id,
     parentId: node.effectiveParentId,
     title: node.title,
-    type: node.type,
     childCount: children.length,
     hasChildren: children.length > 0,
     isTop: node.isTop,
@@ -293,7 +291,6 @@ function decorateTreeSearchItem(snapshot, node, visibleIds, matchedIds) {
     id: node.id,
     parentId: node.effectiveParentId,
     title: node.title,
-    type: node.type,
     childCount: children.length,
     hasChildren: children.length > 0,
     isTop: node.isTop,
@@ -303,7 +300,9 @@ function decorateTreeSearchItem(snapshot, node, visibleIds, matchedIds) {
     ...(node.invalidParent ? { invalidParent: true } : {}),
     ...(visibleChildren.length
       ? {
-          children: visibleChildren.map((child) => decorateTreeSearchItem(snapshot, child, visibleIds, matchedIds)),
+          children: visibleChildren.map((child) =>
+            decorateTreeSearchItem(snapshot, child, visibleIds, matchedIds),
+          ),
         }
       : {}),
   };
@@ -328,12 +327,7 @@ export function searchNoteTreeFromSnapshot(snapshot, keyword, { parentId = null 
   const matchedIds = new Set();
   for (const id of allowedIds) {
     const node = snapshot.nodesById.get(id);
-    if (
-      String(node?.title || '')
-        .toLocaleLowerCase()
-        .includes(normalizedKeyword)
-    )
-      matchedIds.add(id);
+    if (String(node?.title || '').toLocaleLowerCase().includes(normalizedKeyword)) matchedIds.add(id);
   }
 
   const visibleIds = new Set(matchedIds);
@@ -496,7 +490,9 @@ export async function moveOwnedNoteNode(
   const normalizedNextId = normalizeId(nextId);
   const previousParentId = moved.effectiveParentId;
   const targetSiblings = getNoteTreeChildren(snapshot, targetParentId).filter((node) => node.id !== movedId);
-  const previousAnchor = normalizedPreviousId ? targetSiblings.find((node) => node.id === normalizedPreviousId) : null;
+  const previousAnchor = normalizedPreviousId
+    ? targetSiblings.find((node) => node.id === normalizedPreviousId)
+    : null;
   const nextAnchor = normalizedNextId ? targetSiblings.find((node) => node.id === normalizedNextId) : null;
   if (
     (normalizedPreviousId && !previousAnchor) ||
@@ -610,11 +606,6 @@ export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = n
   }
 
   const movingRootIds = new Set(rootIdsInRequestOrder);
-  // 与单节点移动保持一致：页面跨父层进入新目录时默认退出原父层的置顶组。
-  // “关联已有页面”走批量移动，之前却保留了根层置顶，导致普通子页面全部带上置顶图标。
-  const targetTopById = new Map(
-    roots.map((root) => [root.id, root.effectiveParentId === targetParentId ? Boolean(root.isTop) : false]),
-  );
   const affectedGroups = new Map();
   const registerGroup = (groupParentId, isTop) => {
     const key = noteSiblingGroupKey(groupParentId, isTop);
@@ -622,7 +613,7 @@ export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = n
   };
   for (const root of roots) {
     registerGroup(root.effectiveParentId, root.isTop);
-    registerGroup(targetParentId, targetTopById.get(root.id));
+    registerGroup(targetParentId, root.isTop);
   }
 
   const desiredRootSort = new Map();
@@ -632,25 +623,18 @@ export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = n
       (node) => Boolean(node.isTop) === Boolean(group.isTop) && !movingRootIds.has(node.id),
     );
     if (group.parentId === targetParentId) {
-      rows.push(...roots.filter((root) => Boolean(targetTopById.get(root.id)) === Boolean(group.isTop)));
+      rows.push(...roots.filter((root) => Boolean(root.isTop) === Boolean(group.isTop)));
     }
 
     for (const [sort, row] of rows.entries()) {
       if (movingRootIds.has(row.id)) {
         desiredRootSort.set(row.id, sort);
-        const targetIsTop = Boolean(targetTopById.get(row.id));
-        if (
-          row.effectiveParentId === targetParentId &&
-          Boolean(row.isTop) === targetIsTop &&
-          numberOrZero(row.sort) === sort
-        ) {
-          continue;
-        }
+        if (row.effectiveParentId === targetParentId && numberOrZero(row.sort) === sort) continue;
         const [result] = await db.query(
           `UPDATE note
-              SET parent_id = ?, is_top = ?, sort = ?, update_time = update_time
+              SET parent_id = ?, sort = ?, update_time = update_time
             WHERE id = ? AND create_by = ? AND del_flag = 0`,
-          [targetParentId, targetIsTop ? 1 : 0, sort, row.id, normalizedUserId],
+          [targetParentId, sort, row.id, normalizedUserId],
         );
         if (Number(result?.affectedRows || 0) !== 1) {
           throw new NoteTreeError('NOTE_TREE_MOVE_CONFLICT', '页面状态已变化，请刷新后重试', 409, {
@@ -674,14 +658,11 @@ export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = n
 
   const items = roots.map((root) => {
     const sort = desiredRootSort.get(root.id);
-    const isTop = Boolean(targetTopById.get(root.id));
-    const moved =
-      root.effectiveParentId !== targetParentId || Boolean(root.isTop) !== isTop || numberOrZero(root.sort) !== sort;
+    const moved = root.effectiveParentId !== targetParentId || numberOrZero(root.sort) !== sort;
     return {
       id: root.id,
       parentId: targetParentId,
       previousParentId: root.effectiveParentId,
-      isTop,
       sort,
       moved,
     };
@@ -996,7 +977,10 @@ export async function previewOwnedNoteTrashRestore({
  * 把更早、不同批次删除的子页面一并恢复。若原父页面已物理删除、仍在其他删除批次，
  * 或移动后深度不再合法，则把当前恢复分支提升到根目录，保证活动树始终可见且无环。
  */
-export async function restoreOwnedNoteTrash(connection, { userId, ids = [], time = null, restoreAll = false } = {}) {
+export async function restoreOwnedNoteTrash(
+  connection,
+  { userId, ids = [], time = null, restoreAll = false } = {},
+) {
   const db = queryDb(connection);
   const normalizedUserId = normalizeId(userId);
   if (!normalizedUserId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);

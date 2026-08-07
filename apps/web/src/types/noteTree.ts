@@ -2,7 +2,6 @@ export interface NoteTreeItem {
   id: string;
   parentId: string | null;
   title: string;
-  type?: string | null;
   childCount: number;
   hasChildren: boolean;
   isTop: boolean;

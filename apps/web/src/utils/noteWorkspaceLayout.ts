@@ -6,8 +6,6 @@ export interface NoteWorkspaceLayoutState {
   aiPresentation: 'dock' | 'overlay' | 'hidden';
 }
 
-export const NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH = 270;
-
 /**
  * 依据工作区容器宽度而非 window 宽度决定双侧栏呈现，避免外层导航、缩放或分屏
  * 让编辑区被压缩到不可用。编辑正文始终优先保留至少约 680px 的可用宽度。

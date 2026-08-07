@@ -105,7 +105,7 @@ describe('笔记置顶 handler', () => {
     });
   });
 
-  it('页面树模式在根笔记库查询全部层级并附加父级路径', async () => {
+  it('页面树模式在根目录只查询直接子页面，旧调用未传 parentId 时仍保持平铺兼容', async () => {
     poolQuery
       .mockResolvedValueOnce([
         [
@@ -113,49 +113,15 @@ describe('笔记置顶 handler', () => {
           { id: 'child', parent_id: 'root', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
         ],
       ])
-      .mockResolvedValueOnce([
-        [
-          { id: 'root', parent_id: null, title: '根页面', tags: null },
-          { id: 'child', parent_id: 'root', title: '子页面', tags: null },
-        ],
-      ])
-      .mockResolvedValueOnce([[{ total: 2 }]]);
+      .mockResolvedValueOnce([[{ id: 'root', parent_id: null, title: '根页面', tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
     const res = mockRes();
 
     await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: null } }, res);
 
     expect(poolQuery.mock.calls[0][0]).toContain('SELECT id, parent_id, title');
-    expect(poolQuery.mock.calls[1][0]).not.toContain('n.parent_id IS NULL');
-    expect(poolQuery.mock.calls[1][0]).toContain('ORDER BY n.is_top DESC, n.update_time DESC');
+    expect(poolQuery.mock.calls[1][0]).toContain('n.parent_id IS NULL');
     expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 48, 0]);
-    expect(lastSent(res)).toMatchObject({
-      status: 200,
-      data: {
-        total: 2,
-        items: [
-          { id: 'root', path_text: '' },
-          { id: 'child', path_text: '根页面' },
-        ],
-      },
-    });
-  });
-
-  it('进入具体目录后仍只查询直属子页面', async () => {
-    poolQuery
-      .mockResolvedValueOnce([
-        [
-          { id: 'parent', parent_id: null, title: '父页面', sort: 0, is_top: 0, del_flag: 0 },
-          { id: 'child', parent_id: 'parent', title: '子页面', sort: 0, is_top: 0, del_flag: 0 },
-        ],
-      ])
-      .mockResolvedValueOnce([[{ id: 'child', parent_id: 'parent', title: '子页面', tags: null }]])
-      .mockResolvedValueOnce([[{ total: 1 }]]);
-    const res = mockRes();
-
-    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, parentId: 'parent' } }, res);
-
-    expect(poolQuery.mock.calls[1][0]).toContain('n.parent_id = ?');
-    expect(poolQuery.mock.calls[1][1]).toEqual(['u1', 'parent', 48, 0]);
     expect(lastSent(res)).toMatchObject({ status: 200, data: { total: 1 } });
   });
 
@@ -375,7 +341,10 @@ describe('页面树写入 handler', () => {
     });
     const res = mockRes();
 
-    await moveNoteNodes({ user: { id: 'u1' }, body: { ids: ['parent', 'child'], parentId: 'target' } }, res);
+    await moveNoteNodes(
+      { user: { id: 'u1' }, body: { ids: ['parent', 'child'], parentId: 'target' } },
+      res,
+    );
 
     expect(connection.query.mock.calls[0]).toEqual([expect.stringContaining('FOR UPDATE'), ['u1']]);
     expect(connection.commit).toHaveBeenCalledTimes(1);
@@ -420,7 +389,10 @@ describe('页面树写入 handler', () => {
     });
     const res = mockRes();
 
-    await deleteNoteSubtree({ user: { id: 'u1' }, body: { id: 'parent', expectedDescendantCount: 1 } }, res);
+    await deleteNoteSubtree(
+      { user: { id: 'u1' }, body: { id: 'parent', expectedDescendantCount: 1 } },
+      res,
+    );
 
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(connection.rollback).not.toHaveBeenCalled();

@@ -57,11 +57,7 @@
                   >
                     {{ t('notification.todoComplete') }}
                   </BButton>
-                  <BChip
-                    v-else
-                    class="nt-todo-state"
-                    :tone="todoActionState(item) === 'completed' ? 'success' : 'neutral'"
-                  >
+                  <BChip v-else :tone="todoActionState(item) === 'completed' ? 'success' : 'neutral'">
                     {{
                       t(
                         todoActionState(item) === 'completed'
@@ -357,17 +353,8 @@
 
   .nt-todo-actions {
     display: flex;
-    align-items: center;
     gap: 6px;
     margin-top: 8px;
-  }
-
-  .nt-todo-state {
-    min-height: 24px;
-    padding: 1px 9px;
-    border-radius: 7px;
-    font-size: 11px;
-    line-height: 20px;
   }
 
   .nt-todo-action {

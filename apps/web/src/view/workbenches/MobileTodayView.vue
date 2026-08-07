@@ -436,9 +436,9 @@
   .mobile-today__growth {
     margin: 12px 0;
     padding: 13px;
-    border: 1px solid var(--surface-border-color);
+    border: 1px solid color-mix(in srgb, var(--primary-color) 16%, var(--card-border-color));
     border-radius: 14px;
-    background: var(--card-background);
+    background: var(--menu-body-bg-color, var(--background-color));
   }
 
   .mobile-today__pending {

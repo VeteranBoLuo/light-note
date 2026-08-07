@@ -4,7 +4,6 @@ import { Temporal } from '@js-temporal/polyfill';
 export const TODO_PLAN_MAX_FINITE_OCCURRENCES = 366;
 export const TODO_PLAN_MAX_NUDGES_PER_INSTANCE = 20;
 export const TODO_PLAN_MAX_REMINDER_JOBS = 5_000;
-export const TODO_SINGLE_TASK_MAX_REMINDER_JOBS = 500;
 export const TODO_PLAN_MAX_ROLLING_BATCH = 200;
 export const TODO_PLAN_ROLLING_DAYS = 60;
 export const TODO_PLAN_ROLLING_MIN_OCCURRENCES = 8;
@@ -18,11 +17,6 @@ const REMINDER_MODES = new Set(['none', 'once_per_instance', 'nudge']);
 const REMINDER_TRIGGERS = new Set(['at_start', 'fixed_time', 'before_due']);
 const REMINDER_CHANNELS = new Set(['in_app', 'email']);
 const QUIET_POLICIES = new Set(['defer_once', 'skip']);
-const TASK_MODES = new Set(['single', 'independent']);
-const SINGLE_REMINDER_MODES = new Set(['none', 'once', 'repeat']);
-const SINGLE_ONCE_TYPES = new Set(['at_due', 'at_start', 'before_due', 'fixed_at']);
-const SINGLE_REPEAT_KINDS = new Set(['interval', 'weekly', 'monthly']);
-const SINGLE_STOP_TYPES = new Set(['completion_or_due', 'completion', 'until', 'max_count', 'manual']);
 
 function planError(code, message, data) {
   const error = new Error(message);
@@ -63,19 +57,6 @@ function parsePlainTime(value, label, { optional = false } = {}) {
     return new Temporal.PlainTime(time.hour, time.minute, 0);
   } catch {
     throw planError('TODO_PLAN_TIME_INVALID', `${label}格式无效`);
-  }
-}
-
-function parsePlainDateTime(value, label) {
-  try {
-    const parsed = Temporal.PlainDateTime.from(
-      String(value || '')
-        .trim()
-        .replace(' ', 'T'),
-    );
-    return new Temporal.PlainDateTime(parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute, 0);
-  } catch {
-    throw planError('TODO_PLAN_DATETIME_INVALID', `${label}格式无效`);
   }
 }
 
@@ -293,156 +274,6 @@ function normalizeReminder(input, timing) {
   return { mode, trigger, channels, targetEmail, quietPolicy, ...(nudge ? { nudge } : {}) };
 }
 
-function normalizeReminderChannels(raw) {
-  const channels = [...new Set((Array.isArray(raw?.channels) ? raw.channels : []).map(String))];
-  if (!channels.length || channels.some((channel) => !REMINDER_CHANNELS.has(channel))) {
-    throw planError('TODO_REMINDER_CHANNEL_INVALID', '请至少选择一种有效提醒渠道');
-  }
-  const targetEmail = channels.includes('email')
-    ? String(raw?.targetEmail || raw?.email || '')
-        .trim()
-        .slice(0, 254)
-    : null;
-  if (channels.includes('email') && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
-    throw planError('TODO_REMINDER_EMAIL_INVALID', '提醒邮箱格式无效');
-  }
-  return { channels, targetEmail };
-}
-
-function normalizeSingleStop(value, channels, timezone) {
-  const raw = value && typeof value === 'object' ? value : {};
-  const type = String(raw.type || 'completion_or_due');
-  if (!SINGLE_STOP_TYPES.has(type)) throw planError('TODO_REMINDER_STOP_INVALID', '重复提醒停止方式无效');
-  if (channels.includes('email') && !['until', 'max_count'].includes(type)) {
-    throw planError('TODO_REMINDER_EMAIL_STOP_REQUIRED', '邮箱重复提醒必须设置结束时间或最大次数');
-  }
-  if (type === 'until') {
-    const input = String(raw.until || '').trim();
-    if (!input) throw planError('TODO_REMINDER_UNTIL_REQUIRED', '请选择重复提醒结束时间');
-    const local =
-      input.length <= 10
-        ? parsePlainDate(input, '提醒结束日期').toPlainDateTime(new Temporal.PlainTime(23, 59))
-        : parsePlainDateTime(input, '提醒结束时间');
-    return { type, until: sqlLocal(local.toZonedDateTime(timezone, { disambiguation: 'compatible' })) };
-  }
-  if (type === 'max_count') {
-    const maxCount = Number(raw.maxCount);
-    if (!Number.isInteger(maxCount) || maxCount < 1 || maxCount > TODO_SINGLE_TASK_MAX_REMINDER_JOBS) {
-      throw planError(
-        'TODO_REMINDER_MAX_COUNT_INVALID',
-        `单条待办最多设置 ${TODO_SINGLE_TASK_MAX_REMINDER_JOBS} 次重复提醒`,
-      );
-    }
-    return { type, maxCount };
-  }
-  return { type };
-}
-
-function normalizeSingleTaskReminder(input, timing, timezone) {
-  const raw = input && typeof input === 'object' ? input : {};
-  const mode = String(raw.mode || 'none');
-  if (!SINGLE_REMINDER_MODES.has(mode)) throw planError('TODO_REMINDER_MODE_INVALID', '提醒方式无效');
-  if (mode === 'none') return { version: 1, mode, channels: [], quietPolicy: 'defer_once' };
-  const { channels, targetEmail } = normalizeReminderChannels(raw);
-  const quietPolicy = String(raw.quietPolicy || 'defer_once');
-  if (!QUIET_POLICIES.has(quietPolicy)) throw planError('TODO_REMINDER_QUIET_POLICY_INVALID', '免打扰处理方式无效');
-  if (mode === 'once') {
-    const onceRaw = raw.once && typeof raw.once === 'object' ? raw.once : {};
-    const type = String(onceRaw.type || (timing.dueTime ? 'at_due' : timing.startTime ? 'at_start' : 'fixed_at'));
-    if (!SINGLE_ONCE_TYPES.has(type)) throw planError('TODO_REMINDER_TRIGGER_INVALID', '单次提醒时机无效');
-    if ((type === 'at_due' || type === 'before_due') && (!timing.anchorDate || !timing.dueTime)) {
-      throw planError('TODO_REMINDER_DUE_REQUIRED', '该提醒方式需要先设置截止时间');
-    }
-    if (type === 'at_start' && (!timing.anchorDate || !timing.startTime)) {
-      throw planError('TODO_REMINDER_START_REQUIRED', '该提醒方式需要先设置开始时间');
-    }
-    const once = { type };
-    if (type === 'before_due') {
-      const offsetMinutes = Number(onceRaw.offsetMinutes ?? 60);
-      if (!Number.isInteger(offsetMinutes) || offsetMinutes < 0 || offsetMinutes > 43200) {
-        throw planError('TODO_REMINDER_OFFSET_INVALID', '截止前提醒偏移无效');
-      }
-      once.offsetMinutes = offsetMinutes;
-    }
-    if (type === 'fixed_at') {
-      const fixed = parsePlainDateTime(onceRaw.fixedAt, '固定提醒时间');
-      once.fixedAt = sqlLocal(fixed.toZonedDateTime(timezone, { disambiguation: 'compatible' }));
-    }
-    return { version: 1, mode, once, channels, targetEmail, quietPolicy };
-  }
-
-  const repeatRaw = raw.repeat && typeof raw.repeat === 'object' ? raw.repeat : {};
-  const kind = String(repeatRaw.kind || 'interval');
-  if (!SINGLE_REPEAT_KINDS.has(kind)) throw planError('TODO_REMINDER_REPEAT_KIND_INVALID', '重复提醒周期无效');
-  const stop = normalizeSingleStop(repeatRaw.stop, channels, timezone);
-  if (kind === 'interval') {
-    const fallbackStart = timing.anchorDate
-      ? `${timing.anchorDate} ${timing.startTime || timing.dueTime || '09:00'}`
-      : '';
-    const start = parsePlainDateTime(repeatRaw.startAt || fallbackStart, '首次提醒时间');
-    const intervalMinutes = Number(repeatRaw.intervalMinutes || 1440);
-    if (!Number.isInteger(intervalMinutes) || intervalMinutes < 5 || intervalMinutes > 525600) {
-      throw planError('TODO_REMINDER_INTERVAL_INVALID', '提醒间隔必须在 5 分钟到 365 天之间');
-    }
-    return {
-      version: 1,
-      mode,
-      repeat: {
-        kind,
-        startAt: sqlLocal(start.toZonedDateTime(timezone, { disambiguation: 'compatible' })),
-        intervalMinutes,
-        stop,
-      },
-      channels,
-      targetEmail,
-      quietPolicy,
-    };
-  }
-  const startDate = dateString(
-    parsePlainDate(
-      repeatRaw.startDate || String(repeatRaw.startAt || '').slice(0, 10) || timing.anchorDate,
-      '提醒开始日期',
-    ),
-  );
-  const localTime = timeString(
-    parsePlainTime(repeatRaw.localTime || timing.startTime || timing.dueTime || '09:00', '提醒时间'),
-  );
-  if (kind === 'weekly') {
-    const weekdays = [...new Set((Array.isArray(repeatRaw.weekdays) ? repeatRaw.weekdays : []).map(Number))].sort(
-      (a, b) => a - b,
-    );
-    if (!weekdays.length || weekdays.some((day) => !Number.isInteger(day) || day < 1 || day > 7)) {
-      throw planError('TODO_REMINDER_WEEKDAYS_INVALID', '请至少选择一个有效星期');
-    }
-    return {
-      version: 1,
-      mode,
-      repeat: { kind, startDate, weekdays, localTime, stop },
-      channels,
-      targetEmail,
-      quietPolicy,
-    };
-  }
-  const monthDays = [...new Set((Array.isArray(repeatRaw.monthDays) ? repeatRaw.monthDays : []).map(Number))].sort(
-    (a, b) => a - b,
-  );
-  if (!monthDays.length || monthDays.some((day) => !Number.isInteger(day) || day < 1 || day > 31)) {
-    throw planError('TODO_REMINDER_MONTH_DAYS_INVALID', '请至少选择一个 1 到 31 日之间的日期');
-  }
-  const shortMonthPolicy = String(repeatRaw.shortMonthPolicy || 'last_day');
-  if (!SHORT_MONTH_POLICIES.has(shortMonthPolicy)) {
-    throw planError('TODO_REMINDER_MONTH_POLICY_INVALID', '短月处理方式无效');
-  }
-  return {
-    version: 1,
-    mode,
-    repeat: { kind, startDate, monthDays, localTime, shortMonthPolicy, stop },
-    channels,
-    targetEmail,
-    quietPolicy,
-  };
-}
-
 function startOfIsoWeek(date) {
   return date.subtract({ days: date.dayOfWeek - 1 });
 }
@@ -586,9 +417,7 @@ function buildReminderMoments(occurrence, reminder, timezone, warnings, nowInsta
   for (let sequenceNo = 1; sequenceNo <= limit; sequenceNo += 1) {
     const instant =
       sequenceNo === 1 ? first : first.add({ minutes: reminder.nudge.intervalMinutes * (sequenceNo - 1) });
-    const dueComparison = due ? Temporal.Instant.compare(instant, due) : -1;
-    const dueBoundaryReached = reminder.mode === 'nudge' ? dueComparison >= 0 : dueComparison > 0;
-    if (stopsAtDue && due && dueBoundaryReached) break;
+    if (stopsAtDue && due && Temporal.Instant.compare(instant, due) > 0) break;
     const local = instant.toZonedDateTimeISO(timezone);
     moments.push({
       sequenceNo,
@@ -600,160 +429,6 @@ function buildReminderMoments(occurrence, reminder, timezone, warnings, nowInsta
     if (reminder.mode !== 'nudge') break;
   }
   return moments;
-}
-
-function instantFromLocalSql(value, timezone) {
-  return parsePlainDateTime(value, '提醒时间').toZonedDateTime(timezone, { disambiguation: 'compatible' }).toInstant();
-}
-
-function singleReminderBoundary(occurrence, reminder, timezone, nowInstant) {
-  const candidates = [];
-  if (reminder.repeat?.stop?.type === 'completion_or_due' && occurrence.dueAtUtc) {
-    candidates.push(Temporal.Instant.from(`${occurrence.dueAtUtc.replace(' ', 'T')}Z`));
-  }
-  if (reminder.repeat?.stop?.type === 'until') {
-    candidates.push(instantFromLocalSql(reminder.repeat.stop.until, timezone));
-  }
-  if (candidates.length) {
-    return candidates.sort((a, b) => Temporal.Instant.compare(a, b))[0];
-  }
-  if (reminder.repeat?.stop?.type === 'max_count') {
-    return nowInstant.toZonedDateTimeISO(timezone).add({ years: 100 }).toInstant();
-  }
-  const baseDate = nowInstant.toZonedDateTimeISO(timezone).toPlainDate();
-  const rollingEnd = baseDate
-    .add({ days: TODO_PLAN_ROLLING_DAYS })
-    .toPlainDateTime(new Temporal.PlainTime(23, 59))
-    .toZonedDateTime(timezone, { disambiguation: 'compatible' });
-  return rollingEnd.toInstant();
-}
-
-function singleMoment(instant, timezone, nowInstant, sequenceNo) {
-  const deliverable = Temporal.Instant.compare(instant, nowInstant) > 0;
-  return {
-    sequenceNo,
-    scheduledAtUtc: sqlUtc(instant),
-    scheduledAtLocal: sqlLocal(instant.toZonedDateTimeISO(timezone)),
-    deliverable,
-    skippedReason: deliverable ? null : 'past',
-  };
-}
-
-function buildSingleOnceMoments(occurrence, reminder, timezone, warnings, nowInstant) {
-  const once = reminder.once;
-  let instant = null;
-  if (once.type === 'at_due' && occurrence.dueAtUtc) {
-    instant = Temporal.Instant.from(`${occurrence.dueAtUtc.replace(' ', 'T')}Z`);
-  } else if (once.type === 'at_start' && occurrence.startAtUtc) {
-    instant = Temporal.Instant.from(`${occurrence.startAtUtc.replace(' ', 'T')}Z`);
-  } else if (once.type === 'before_due' && occurrence.dueAtUtc) {
-    instant = Temporal.Instant.from(`${occurrence.dueAtUtc.replace(' ', 'T')}Z`).subtract({
-      minutes: once.offsetMinutes,
-    });
-  } else if (once.type === 'fixed_at') {
-    const local = parsePlainDateTime(once.fixedAt, '固定提醒时间');
-    instant = zonedFrom(local.toPlainDate(), local.toPlainTime(), timezone, warnings).toInstant();
-  }
-  return instant ? [singleMoment(instant, timezone, nowInstant, 1)] : [];
-}
-
-function maxSingleMomentCount(reminder) {
-  return reminder.repeat?.stop?.type === 'max_count'
-    ? reminder.repeat.stop.maxCount
-    : TODO_SINGLE_TASK_MAX_REMINDER_JOBS + 1;
-}
-
-function buildIntervalMoments(reminder, timezone, nowInstant, boundary) {
-  const repeat = reminder.repeat;
-  const start = instantFromLocalSql(repeat.startAt, timezone);
-  const interval = repeat.intervalMinutes;
-  let cursor = start;
-  if (Temporal.Instant.compare(cursor, nowInstant) <= 0) {
-    const elapsedMinutes = Math.floor(nowInstant.since(cursor, { largestUnit: 'minutes' }).minutes);
-    const steps = Math.floor(elapsedMinutes / interval) + 1;
-    cursor = cursor.add({ minutes: steps * interval });
-  }
-  const result = [];
-  const limit = maxSingleMomentCount(reminder);
-  while (Temporal.Instant.compare(cursor, boundary) <= 0 && result.length < limit) {
-    result.push(singleMoment(cursor, timezone, nowInstant, result.length + 1));
-    cursor = cursor.add({ minutes: interval });
-  }
-  return result;
-}
-
-function buildWeeklyMoments(reminder, timezone, nowInstant, boundary, warnings) {
-  const repeat = reminder.repeat;
-  const start = parsePlainDate(repeat.startDate, '提醒开始日期');
-  const today = nowInstant.toZonedDateTimeISO(timezone).toPlainDate();
-  let cursor = Temporal.PlainDate.compare(start, today) < 0 ? today : start;
-  const time = parsePlainTime(repeat.localTime, '提醒时间');
-  const result = [];
-  const limit = maxSingleMomentCount(reminder);
-  let guard = 0;
-  while (guard < 150_000 && result.length < limit) {
-    guard += 1;
-    const instant = zonedFrom(cursor, time, timezone, warnings).toInstant();
-    if (Temporal.Instant.compare(instant, boundary) > 0) break;
-    if (repeat.weekdays.includes(cursor.dayOfWeek) && Temporal.Instant.compare(instant, nowInstant) > 0) {
-      result.push(singleMoment(instant, timezone, nowInstant, result.length + 1));
-    }
-    cursor = cursor.add({ days: 1 });
-  }
-  return result;
-}
-
-function buildMonthlyMoments(reminder, timezone, nowInstant, boundary, warnings) {
-  const repeat = reminder.repeat;
-  const start = parsePlainDate(repeat.startDate, '提醒开始日期');
-  const today = nowInstant.toZonedDateTimeISO(timezone).toPlainDate();
-  let cursor = new Temporal.PlainDate(start.year, start.month, 1);
-  const currentMonth = new Temporal.PlainDate(today.year, today.month, 1);
-  if (Temporal.PlainDate.compare(cursor, currentMonth) < 0) cursor = currentMonth;
-  const time = parsePlainTime(repeat.localTime, '提醒时间');
-  const result = [];
-  const limit = maxSingleMomentCount(reminder);
-  let guard = 0;
-  while (guard < 12_000 && result.length < limit) {
-    guard += 1;
-    const lastDay = cursor.daysInMonth;
-    const resolvedDays = [
-      ...new Set(
-        repeat.monthDays
-          .map((day) => (day <= lastDay ? day : repeat.shortMonthPolicy === 'last_day' ? lastDay : null))
-          .filter(Boolean),
-      ),
-    ].sort((a, b) => a - b);
-    for (const day of resolvedDays) {
-      const date = new Temporal.PlainDate(cursor.year, cursor.month, day);
-      if (Temporal.PlainDate.compare(date, start) < 0) continue;
-      const instant = zonedFrom(date, time, timezone, warnings).toInstant();
-      if (Temporal.Instant.compare(instant, boundary) > 0) return result;
-      if (Temporal.Instant.compare(instant, nowInstant) > 0) {
-        result.push(singleMoment(instant, timezone, nowInstant, result.length + 1));
-        if (result.length >= limit) return result;
-      }
-    }
-    cursor = cursor.add({ months: 1 });
-    const cursorInstant = zonedFrom(cursor, new Temporal.PlainTime(0, 0), timezone, warnings).toInstant();
-    if (Temporal.Instant.compare(cursorInstant, boundary) > 0) break;
-  }
-  return result;
-}
-
-function buildSingleTaskReminderMoments(occurrence, reminder, timezone, warnings, nowInstant) {
-  if (!reminder || reminder.mode === 'none' || occurrence.state === 'skipped') return [];
-  if (reminder.mode === 'once') {
-    return buildSingleOnceMoments(occurrence, reminder, timezone, warnings, nowInstant);
-  }
-  const boundary = singleReminderBoundary(occurrence, reminder, timezone, nowInstant);
-  if (reminder.repeat.kind === 'interval') {
-    return buildIntervalMoments(reminder, timezone, nowInstant, boundary);
-  }
-  if (reminder.repeat.kind === 'weekly') {
-    return buildWeeklyMoments(reminder, timezone, nowInstant, boundary, warnings);
-  }
-  return buildMonthlyMoments(reminder, timezone, nowInstant, boundary, warnings);
 }
 
 function stableObject(value) {
@@ -773,23 +448,9 @@ export function calculateTodoPlan(input = {}, options = {}) {
   const nowInstant = instantFrom(options.now || input.now);
   const today = nowInstant.toZonedDateTimeISO(timezone).toPlainDate();
   const requestedPlanType = String(input?.plan?.type || 'once');
-  const inferredTaskMode = input.taskMode
-    ? String(input.taskMode)
-    : input.singleTaskReminder
-      ? 'single'
-      : requestedPlanType === 'once'
-        ? 'single'
-        : 'independent';
-  if (!TASK_MODES.has(inferredTaskMode)) throw planError('TODO_TASK_MODE_INVALID', '待办创建模式无效');
-  if (inferredTaskMode === 'single' && requestedPlanType !== 'once') {
-    throw planError('TODO_SINGLE_TASK_PLAN_INVALID', '默认单任务不能生成多个待办，请在高级功能中启用独立任务计划');
-  }
   const timing = normalizeTiming(input.timing, timezone, { allowUndated: requestedPlanType === 'once' });
   const plan = normalizePlan(input.plan, timing, today);
-  const reminder =
-    inferredTaskMode === 'single' && input.singleTaskReminder
-      ? normalizeSingleTaskReminder(input.singleTaskReminder, timing, timezone)
-      : normalizeReminder(input.reminder, timing);
+  const reminder = normalizeReminder(input.reminder, timing);
   const warnings = [];
   const originalAnchor = timing.anchorDate ? parsePlainDate(timing.anchorDate, '首项日期') : null;
   const restartFromToday =
@@ -840,37 +501,22 @@ export function calculateTodoPlan(input = {}, options = {}) {
         : normalizedSchedulePlan.type === 'once'
           ? 1
           : null;
-  const reminderMoments = occurrences.map((occurrence) => ({
-    occurrenceNo: occurrence.occurrenceNo,
-    moments:
-      inferredTaskMode === 'single' && input.singleTaskReminder
-        ? buildSingleTaskReminderMoments(occurrence, reminder, timezone, warnings, nowInstant)
-        : buildReminderMoments(occurrence, reminder, timezone, warnings, nowInstant),
-  }));
-  const momentCount = reminderMoments.reduce((sum, entry) => sum + entry.moments.length, 0);
   const remindersPerOccurrence =
-    inferredTaskMode === 'single' && input.singleTaskReminder
-      ? momentCount
-      : reminder.mode === 'none'
-        ? 0
-        : reminder.mode === 'nudge'
-          ? reminder.nudge.maxCount
-          : 1;
+    reminder.mode === 'none' ? 0 : reminder.mode === 'nudge' ? reminder.nudge.maxCount : 1;
   const theoreticalReminderJobCount =
-    (inferredTaskMode === 'single' && input.singleTaskReminder
-      ? remindersPerOccurrence
-      : (knownOccurrenceCount ?? occurrences.length) * remindersPerOccurrence) * reminder.channels.length;
-  const reminderJobLimit =
-    inferredTaskMode === 'single' && input.singleTaskReminder
-      ? TODO_SINGLE_TASK_MAX_REMINDER_JOBS
-      : TODO_PLAN_MAX_REMINDER_JOBS;
-  if (theoreticalReminderJobCount > reminderJobLimit && options.enforceReminderJobLimit !== false) {
+    (knownOccurrenceCount ?? occurrences.length) * remindersPerOccurrence * reminder.channels.length;
+  if (theoreticalReminderJobCount > TODO_PLAN_MAX_REMINDER_JOBS && options.enforceReminderJobLimit !== false) {
     throw planError(
       'TODO_REMINDER_JOB_LIMIT_EXCEEDED',
-      `当前计划最多可能产生 ${theoreticalReminderJobCount} 个提醒任务，超过 ${reminderJobLimit} 个上限；请减少次数或提醒渠道`,
-      { theoreticalReminderJobCount, maxReminderJobs: reminderJobLimit },
+      `当前计划最多可能产生 ${theoreticalReminderJobCount} 个提醒任务，超过 ${TODO_PLAN_MAX_REMINDER_JOBS} 个上限；请减少次数、催办次数或提醒渠道`,
+      { theoreticalReminderJobCount, maxReminderJobs: TODO_PLAN_MAX_REMINDER_JOBS },
     );
   }
+  const reminderMoments = occurrences.map((occurrence) => ({
+    occurrenceNo: occurrence.occurrenceNo,
+    moments: buildReminderMoments(occurrence, reminder, timezone, warnings, nowInstant),
+  }));
+  const momentCount = reminderMoments.reduce((sum, entry) => sum + entry.moments.length, 0);
   const deliverableMoments = reminderMoments.flatMap((entry) =>
     entry.moments
       .filter((moment) => moment.deliverable)
@@ -888,8 +534,6 @@ export function calculateTodoPlan(input = {}, options = {}) {
     timing: normalizedTiming,
     plan: normalizedSchedulePlan,
     reminder,
-    taskMode: inferredTaskMode,
-    ...(inferredTaskMode === 'single' && input.singleTaskReminder ? { singleTaskReminder: reminder } : {}),
   };
   const previewHash = crypto
     .createHash('sha256')
@@ -916,7 +560,6 @@ export function calculateTodoPlan(input = {}, options = {}) {
     ),
     requiredChoices,
     summary: {
-      taskMode: inferredTaskMode,
       planType: normalizedSchedulePlan.type,
       frequency: normalizedSchedulePlan.frequency || null,
       interval: normalizedSchedulePlan.interval || null,

@@ -820,51 +820,6 @@ describe('aiAssistant store', () => {
     expect(store.edgeStatus).not.toBe('failed');
   });
 
-  it('视图解绑不会中止应用级请求，重新挂载后仍能接管同一生成态', () => {
-    const store = useAiAssistantStore();
-    store.switchConversation(identity('root-user', 'user-a'), '你好');
-    const firstView = Symbol('first-ai-view');
-    const secondView = Symbol('second-ai-view');
-    store.attachView(firstView);
-    const lease = store.beginRequest('assistant-background');
-
-    store.detachView(firstView);
-
-    expect(store.hasAttachedView()).toBe(false);
-    expect(lease.controller.signal.aborted).toBe(false);
-    expect(store.isRequestCurrent(lease)).toBe(true);
-    expect(store.isLoading).toBe(true);
-    expect(store.edgeStatus).toBe('generating');
-
-    store.attachView(secondView);
-    expect(store.hasAttachedView()).toBe(true);
-    expect(store.isRequestCurrent(lease)).toBe(true);
-    expect(store.finishRequest(lease, 'completed')).toBe(true);
-    store.detachView(secondView);
-  });
-
-  it('全局身份切换按明确原因中止旧请求，普通视图解绑不会触发中止回调', () => {
-    const store = useAiAssistantStore();
-    const subjectA = identity('root-user', 'user-a', 'maintain', 'context-a');
-    const subjectB = identity('root-user', 'user-b', 'maintain', 'context-b');
-    store.switchConversation(subjectA, '你好');
-    const lease = store.beginRequest('assistant-owner-a');
-    const abortHandler = vi.fn();
-    expect(store.attachRequestAbortHandler(lease, abortHandler)).toBe(true);
-
-    const view = Symbol('route-view');
-    store.attachView(view);
-    store.detachView(view);
-    expect(abortHandler).not.toHaveBeenCalled();
-
-    store.switchConversation(subjectB, '你好');
-
-    expect(abortHandler).toHaveBeenCalledTimes(1);
-    expect(abortHandler).toHaveBeenCalledWith('identity_change');
-    expect(lease.controller.signal.aborted).toBe(true);
-    expect(store.isRequestCurrent(lease)).toBe(false);
-  });
-
   it('刷新导致控制器丢失时把遗留生成态恢复为失败，不永久伪装后台仍在运行', () => {
     const subjectA = identity('root-user', 'user-a');
     const store = useAiAssistantStore();

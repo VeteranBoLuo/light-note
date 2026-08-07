@@ -17,22 +17,7 @@ const mobilePageListSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobilePageLevelList.vue'),
   'utf8',
 );
-const mobileNavigationDrawerSource = readFileSync(
-  resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue'),
-  'utf8',
-);
 const treeRowSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteTreeRow.vue'), 'utf8');
-const workspaceShellSource = readFileSync(
-  resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteWorkspaceShell.vue'),
-  'utf8',
-);
-const noteHeaderSource = readFileSync(
-  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteHeader.vue'),
-  'utf8',
-);
-const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
-const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
-const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
 
 describe('笔记库批量 AI 操作语义', () => {
   it('桌面与移动端都区分“添加到 AI 助手”和“AI 智能整理”', () => {
@@ -63,116 +48,6 @@ describe('笔记库批量 AI 操作语义', () => {
 });
 
 describe('笔记库页面树交互接线', () => {
-  it('目录折叠入口位于工作区分隔线中部，笔记库和详情顶栏不再重复展示', () => {
-    expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-boundary-toggle--close');
-    expect(workspaceShellSource).toContain('top: 50%');
-    expect(workspaceShellSource).toContain('icon.arrow_left');
-    expect(workspaceShellSource).toContain('icon.arrow_right');
-    expect(source).not.toContain('class="note-action-button note-sidebar-toggle"');
-    expect(detailSource).not.toContain('@toggle-sidebar="toggleDetailSidebar"');
-  });
-
-  it('桌面目录栏常驻并平滑收展，拖拽热区不再额外绘制粗分隔线', () => {
-    expect(workspaceShellSource).toContain('v-if="hasSidebar && effectiveSidebarPresentation === \'dock\'"');
-    expect(workspaceShellSource).toContain(':class="{ \'is-collapsed\': !sidebarOpen }"');
-    expect(workspaceShellSource).toContain('transition: grid-template-columns 240ms');
-    expect(workspaceShellSource).toContain('grid-template-columns: 0 minmax(680px, 1fr)');
-    expect(workspaceShellSource).toContain('note-workspace-shell__sidebar-content');
-    expect(workspaceShellSource).not.toContain('width: 2px;\n      height: 42px;');
-    expect(source).toContain('--note-workspace-divider-color: var(--note-workspace-frame-color)');
-    expect(source).toMatch(/\.note-sidebar-panel\s*\{[\s\S]*?border-right: 0;/);
-  });
-
-  it('目录栏拖拽热区支持双击恢复统一默认宽度', () => {
-    expect(workspaceShellSource).toContain('@dblclick.stop.prevent="resetSidebarWidth"');
-    expect(workspaceShellSource).toContain("t('note.resetPageSidebarWidthHint')");
-    expect(workspaceShellSource).toContain("emit('update:sidebarWidth', NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH)");
-  });
-
-  it('平板笔记库使用独立临时目录覆盖层，布局切换时自动收起', () => {
-    expect(source).toContain(':sidebar-overlay-open="librarySidebarOverlayOpen"');
-    expect(source).toContain('@update:sidebar-overlay-open="setLibrarySidebarOverlayOpen"');
-    expect(source).toContain('@layout-change="handleLibraryLayoutChange"');
-    expect(source).toMatch(
-      /function handleLibraryLayoutChange[\s\S]*libraryWorkspaceMode\.value !== layout\.mode[\s\S]*librarySidebarOverlayOpen\.value = false/,
-    );
-  });
-
-  it('平板折叠目录不再保留宽轨道，仍可从内容边界重新展开', () => {
-    expect(workspaceShellSource).toContain('.note-workspace-shell.has-sidebar-rail');
-    expect(workspaceShellSource).toContain('grid-template-columns: 0 minmax(0, 1fr)');
-    expect(workspaceShellSource).toMatch(
-      /effectiveSidebarPresentation\.value === 'overlay' \|\| effectiveSidebarPresentation\.value === 'rail'/,
-    );
-    expect(workspaceShellSource).not.toContain('note-workspace-shell__rail-button');
-  });
-
-  it('AI 助手使用紫色 AI 语义边界按钮，详情顶栏不再重复提供入口', () => {
-    expect(workspaceShellSource).toContain('note-workspace-shell__ai-boundary-toggle--open');
-    expect(workspaceShellSource).toContain('note-workspace-shell__ai-boundary-toggle--close');
-    expect(workspaceShellSource).toContain('<SvgIcon :src="icon.ai.organize" size="18"');
-    expect(workspaceShellSource).toContain('@click.stop="openAi"');
-    expect(workspaceShellSource).toContain('@click.stop="closeAi"');
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai-boundary-toggle\.b_btn\s*\{[\s\S]*?border-color: var\(--primary-color[\s\S]*?color: var\(--primary-color/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai-boundary-toggle--open\.b_btn\s*\{[\s\S]*?width: 34px;[\s\S]*?border-right: 0;/,
-    );
-    expect(noteHeaderSource).not.toContain('note-header-ai-toggle');
-    expect(noteHeaderSource).not.toContain("'toggleAi'");
-    expect(detailSource).not.toContain(':show-ai-toggle');
-    expect(detailSource).not.toContain('@toggle-ai');
-  });
-
-  it('笔记根节点在中英文界面统一命名为“笔记库”', () => {
-    expect(zhLocaleSource).toContain("knowledgeRoot: '笔记库'");
-    expect(zhLocaleSource).toContain("useRoot: '改存到笔记库'");
-    expect(zhLocaleSource).not.toContain("knowledgeRoot: '我的知识库'");
-    expect(enLocaleSource).toContain("knowledgeRoot: 'Note Library'");
-    expect(enLocaleSource).toContain("useRoot: 'Move to Note Library'");
-  });
-
-  it('宽屏 AI 侧栏以稳定零宽轨道平滑收展，不再用 display none 瞬切', () => {
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 0;/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell\.has-sidebar-dock\.has-ai-dock\s*\{[\s\S]*?grid-template-columns: 0 minmax\(680px, 1fr\) 0;/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai--dock\s*\{[\s\S]*?opacity 150ms ease[\s\S]*?transform 240ms/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai--dock\.is-collapsed\s*\{[\s\S]*?transform: translateX\(12px\);/,
-    );
-    expect(workspaceShellSource).not.toMatch(
-      /\.note-workspace-shell__ai--dock\.is-collapsed\s*\{[\s\S]*?display: none;/,
-    );
-  });
-
-  it('AI 内容铺满侧栏并减少外层卡片与快捷操作的重复描边', () => {
-    const aiSlotRule = detailSource.match(/\.note-detail-ai-slot\s*\{([^}]*)\}/)?.[1] || '';
-    expect(aiSlotRule).toContain('height: 100%');
-    expect(aiSlotRule).toContain('box-sizing: border-box');
-    expect(aiSlotRule).not.toContain('padding: 16px');
-    expect(aiReplySource).toMatch(/\.ai-container\s*\{[\s\S]*?border-radius: 0;[\s\S]*?border: 0;/);
-    expect(aiReplySource).toMatch(/\.ai-note-meta\s*\{[\s\S]*?border: 0;/);
-    expect(aiReplySource).toMatch(/\.action-btn\s*\{[\s\S]*?border: 0;/);
-  });
-
-  it('暗色目录覆盖层和 AI 外壳使用主题表面背景与边框', () => {
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai--dock\s*\{[\s\S]*?border-left: 1px solid var\(--surface-border-color[\s\S]*?background: var\(--workspace-panel-bg-color/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__sidebar--overlay\s*\{[\s\S]*?border-right: 1px solid var\(--surface-border-color/,
-    );
-    expect(workspaceShellSource).toMatch(
-      /\.note-workspace-shell__ai--overlay\s*\{[\s\S]*?border-left: 1px solid var\(--surface-border-color/,
-    );
-  });
-
   it('移动端唯一范围入口按当前分类只显示目录或标签，不把两套范围拼在一起', () => {
     expect(source).toContain('<span>{{ mobileScopeLabel }}</span>');
     expect(source).toContain('const activeMobileTagLabel = computed(() => {');
@@ -258,15 +133,15 @@ describe('笔记库页面树交互接线', () => {
     expect(listItemSource).toMatch(/&\.is-mobile[\s\S]*\.note-tags\s*\{[\s\S]{0,80}order: 0/);
   });
 
-  it('移动端详情移除底部子页面条，页面关系操作统一由顶部页面导航承载', () => {
-    expect(detailSource).not.toContain('<NoteSubpageSection');
-    expect(detailSource).not.toContain('import NoteSubpageSection from');
-    expect(detailSource).toContain('@open-navigation="openMobileNavigation()"');
-    expect(detailSource).toContain('@move-page="openMoveSelf"');
+  it('详情页把当前页作为父节点和子节点的移动入口分开，并将子页面压缩为紧凑导航条', () => {
+    expect(detailSource).toContain('@move-self="openMoveSelf"');
     expect(detailSource).toContain('<NoteMoveModal');
     expect(detailSource).toContain(':note="moveTargetNote"');
     expect(subpageSource).toContain("t('note.moveExistingUnderThisPage')");
     expect(subpageSource).toContain("t('note.moveThisPageUnderAnother')");
+    expect(subpageSource).toContain('grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))');
+    expect(subpageSource).toContain('max-height: min(18dvh, 108px)');
+    expect(subpageSource).not.toContain('class="note-subpage-empty"');
   });
 
   it('详情页父级面包屑直接打开父正文，根节点才返回笔记库列表', () => {
@@ -276,46 +151,9 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).not.toContain('function openBreadcrumbDirectory');
   });
 
-  it('新建草稿首次保存后先即时写入并选中目录树，再静默校准服务端树', () => {
-    const promoteFunction = detailSource.match(/function promoteSavedDraftInTree\(\)[\s\S]*?\n  }/)?.[0] || '';
-    expect(promoteFunction).toContain('noteWorkspace.insertCreatedNote');
-    expect(promoteFunction).toContain('activePageId: createdId');
-    expect(promoteFunction).toContain('await loadTreeChildren(createdParentId, true)');
-    expect(promoteFunction).toContain('await loadDetailBreadcrumb(createdId)');
-    expect(detailSource).toMatch(/if \(res\.status === 200 && res\.data\?\.id\)[\s\S]*?promoteSavedDraftInTree\(\)/);
-  });
-
-  it('详情顶栏返回键在 PC 与平板一次回到笔记库，手机端仍保留逐级返回', () => {
-    const backFunction = detailSource.match(/async function back\(\)[\s\S]*?\n  }/)?.[0] || '';
-    expect(backFunction).toMatch(/if \(!bookmark\.isMobile\) \{[\s\S]*?returnToSourceDirectory\(\);[\s\S]*?return;/);
-    expect(backFunction.indexOf('if (!bookmark.isMobile)')).toBeLessThan(backFunction.indexOf('const parentId'));
-    expect(backFunction).toContain('void openNoteDetailPage(parentId)');
-  });
-
-  it('详情切换笔记时保留面包屑稳定壳，只重建标题与编辑内容', () => {
-    const stablePanelStart = detailSource.indexOf('class="note-body-header editor-panel"');
-    const breadcrumbStart = detailSource.indexOf('class="note-detail-breadcrumb"', stablePanelStart);
-    const transitionStart = detailSource.indexOf('<Transition name="note-content-switch"', stablePanelStart);
-    const keyedContentStart = detailSource.indexOf(':key="noteContentKey"', transitionStart);
-
-    expect(stablePanelStart).toBeGreaterThan(-1);
-    expect(breadcrumbStart).toBeGreaterThan(stablePanelStart);
-    expect(transitionStart).toBeGreaterThan(breadcrumbStart);
-    expect(keyedContentStart).toBeGreaterThan(transitionStart);
-    expect(detailSource).toContain('v-if="canShowPrivateNavigation"\n            class="note-detail-breadcrumb"');
-    expect(detailSource).not.toContain('canShowPrivateNavigation && detailBreadcrumb.length');
-    expect(detailSource).toContain('v-for="item in detailBreadcrumbTailDisplay"');
-    expect(detailSource).toContain('class="note-detail-content"');
-  });
-
-  it('桌面页面标题进入库内预览，移动端仍直接打开正文，展开和更多操作保持独立', () => {
+  it('页面标题只负责打开正文，桌面与移动菜单提供完整页面管理且不重复“打开正文”', () => {
     expect(treeRowSource).toContain('@click="emit(\'open\', node.id)"');
     expect(treeRowSource).not.toContain("key: 'open'");
-    expect(source).toContain('@open="openLibraryNote"');
-    expect(source).toContain('if (bookmark.isMobile) return openDirectoryPage(noteId)');
-    expect(source).toContain('<NoteReadonlyPreview');
-    expect(cardSource).toContain("emit('open')");
-    expect(listItemSource).toContain("emit('open')");
     expect(mobilePageListSource).toMatch(/function selectItem[\s\S]*emit\('openPage', item\.id\)/);
     expect(mobilePageListSource).toContain("emit('toggleTop', item)");
     expect(mobilePageListSource).toContain("emit('create', item)");
@@ -326,31 +164,5 @@ describe('笔记库页面树交互接线', () => {
     expect(mobilePageListSource).toContain("emit('delete', item)");
     expect(detailSource).toContain(':write-enabled="noteTreeWriteEnabled && !readonly"');
     expect(detailSource).toContain(':drag-enabled="false"');
-  });
-
-  it('移动端目录范围顶部始终提供当前页面正文卡片，空目录也能直接进入正文', () => {
-    expect(source).toContain('class="note-mobile-current-page-card"');
-    expect(source).toContain("$t('note.currentPageShort')");
-    expect(source).toContain('@click="openDirectoryPage(currentParentId)"');
-    expect(source).toMatch(/note-mobile-current-page-card[\s\S]{0,700}note\.openPageBody/);
-  });
-
-  it('移动端笔记更多操作统一使用底部抽屉，不再在卡片上悬浮下拉菜单', () => {
-    expect(source).toContain('v-model:open="mobileNoteActionsOpen"');
-    expect(source).toContain(':actions="mobileNoteActions"');
-    expect(cardSource).toContain("emit('action', 'more')");
-    expect(listItemSource).toContain("emit('action', 'more')");
-    expect(cardSource).not.toContain('<BDropdown');
-    expect(listItemSource).not.toContain('<BDropdown');
-  });
-
-  it('移动端从详情返回知识库会打开根目录抽屉，抽屉内层级跳转会等待遮罩历史释放', () => {
-    expect(detailSource).toContain("query: { openDirectory: '1' }");
-    expect(source).toContain('router.currentRoute.value.query.openDirectory');
-    expect(source).toContain("openMobileDirectory('directory')");
-    expect(mobileNavigationDrawerSource).toContain('closeCurrentMobileOverlayThen');
-    expect(mobileNavigationDrawerSource).toMatch(
-      /async function openPage[\s\S]*closeCurrentMobileOverlayThen[\s\S]*emit\('openPage', id\)/,
-    );
   });
 });

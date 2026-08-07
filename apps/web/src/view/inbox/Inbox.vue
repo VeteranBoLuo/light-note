@@ -45,45 +45,6 @@
       </BButton>
     </header>
 
-    <header v-if="isMobileTodoPrimary" class="mobile-todo-heading">
-      <h1>{{ t('inbox.todoPageTitle') }}</h1>
-      <p>{{ t('inbox.todoPageSubtitle') }}</p>
-    </header>
-
-    <section
-      v-if="isTodoFocused && !bookmark.isMobile"
-      class="todo-summary-grid"
-      :aria-label="t('inbox.todoSummaryLabel')"
-    >
-      <article class="todo-summary-card is-overdue">
-        <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.overdue" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
-        /></span>
-        <div
-          ><span>{{ t('inbox.todoSummaryOverdue') }}</span
-          ><strong>{{ inbox.todoOverdueTotal }}</strong></div
-        >
-      </article>
-      <article class="todo-summary-card">
-        <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.today" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
-        /></span>
-        <div
-          ><span>{{ t('inbox.todoSummaryToday') }}</span
-          ><strong>{{ inbox.todoDueTodayTotal }}</strong></div
-        >
-      </article>
-      <article class="todo-summary-card">
-        <span class="todo-summary-card__icon"
-          ><SvgIcon :src="icon.todoSummary.week" color="var(--todo-navigation-color)" size="21" aria-hidden="true"
-        /></span>
-        <div
-          ><span>{{ t('inbox.todoSummaryWeek') }}</span
-          ><strong>{{ inbox.todoDueWeekTotal }}</strong></div
-        >
-      </article>
-    </section>
-
     <ResourceCenterSectionNav
       v-if="!isTodoFocused && (!bookmark.isMobile || isMobileResourceInbox)"
       class="section-switcher"
@@ -109,21 +70,13 @@
           />
         </template>
         <template v-else>
-          <div class="inbox-toolbar__todo-tabs">
-            <BTabs
-              v-if="todoView === 'list'"
-              v-model:active-tab="todo.status"
-              :options="todoStatusTabOptions"
-              variant="pill"
-              @change="changeTodoStatus"
-            />
-            <BTabs
-              v-model:active-tab="todoView"
-              class="inbox-toolbar__todo-views"
-              :options="todoViewOptions"
-              variant="pill"
-            />
-          </div>
+          <BTabs
+            v-if="todoView === 'list'"
+            v-model:active-tab="todo.status"
+            :options="todoStatusTabOptions"
+            variant="pill"
+            @change="changeTodoStatus"
+          />
           <div class="inbox-toolbar__right inbox-toolbar__right--todo">
             <BInput
               v-model:value="inbox.keyword"
@@ -132,13 +85,6 @@
               @enter="search"
             />
             <BSelect v-model:value="inbox.sort" :options="sortOptions" @change="search" />
-            <BButton
-              v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
-              size="small"
-              @click="toggleTodoSelectionMode"
-            >
-              {{ t('inbox.todoBatchSelect') }}
-            </BButton>
           </div>
         </template>
       </template>
@@ -159,7 +105,7 @@
 
     <!-- 快速创建输入行已移除:与「新建待办」编辑器重复,移动端顶栏加号与桌面主按钮足够覆盖创建入口。
          「批量选择」并入视图切换行,不再单独占一行;进入批量态后才展开完整操作条。 -->
-    <section v-if="isTodoFocused && bookmark.isMobile" class="todo-workspace-toolbar">
+    <section v-if="isTodoFocused" class="todo-workspace-toolbar">
       <BTabs
         v-model:active-tab="todoView"
         class="todo-workspace-toolbar__views"
@@ -410,7 +356,6 @@
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -458,7 +403,6 @@
   import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
   import { updatePreference } from '@/utils/savePreference';
   import { generateUUID } from '@/utils/common';
-  import icon from '@/config/icon';
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -617,11 +561,6 @@
           { label: t('inbox.oldest'), value: 'oldest' },
         ],
   );
-  function applyDefaultTodoSort() {
-    todo.sort = 'due';
-    // 桌面待办与资源中心复用工具栏，但不能继承资源默认的“最新收集”。
-    inbox.sort = 'due' as any;
-  }
   // 桌面与移动端共用的待办状态切换页签(未完成/已完成/全部)。
   const todoStatusTabOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
     { key: 'pending', label: t('inbox.todoPending'), badge: todo.pendingTotal },
@@ -654,7 +593,6 @@
       todo.resetForOwner(id || 'visitor');
       resourceSelectionMode.value = false;
       syncRequestedMobileMode();
-      if (isTodoFocused.value) applyDefaultTodoSort();
       await refreshList();
     },
   );
@@ -665,7 +603,6 @@
     resourceSelectionMode.value = false;
     if (bookmark.isMobile) syncRequestedMobileMode();
     else inbox.filterType = resolveRequestedFilter(route.query.tab);
-    if (isTodoFocused.value) applyDefaultTodoSort();
     const requestedTodoId = String(route.query.todoId || '');
     if (isTodoFocused.value) todo.status = requestedTodoId ? 'all' : 'pending';
     await refreshList();
@@ -754,10 +691,8 @@
       inbox.keyword = '';
       todo.keyword = '';
       // 带 todoId 进来时要能定位已完成待办，不能强制回到「未完成」
-      if (nextFilter === 'todo') {
-        todo.status = route.query.todoId ? 'all' : 'pending';
-        applyDefaultTodoSort();
-      } else {
+      if (nextFilter === 'todo') todo.status = route.query.todoId ? 'all' : 'pending';
+      else {
         inbox.sort = 'newest';
         resourceSelectionMode.value = false;
         inbox.selectedKeys = [];
@@ -851,8 +786,7 @@
     else openCapture();
   }
   async function changeFilter() {
-    if (inbox.filterType === 'todo') applyDefaultTodoSort();
-    else inbox.sort = 'newest';
+    inbox.sort = inbox.filterType === 'todo' ? ('smart' as any) : 'newest';
     router.replace({
       query: {
         ...route.query,
@@ -1135,10 +1069,6 @@
   function openTodoEditor(item: TodoItemType | null = null) {
     openSwipeTodoId.value = '';
     scheduleViewRef.value?.closeSwipe();
-    if (bookmark.isMobile && !item) {
-      void router.push({ name: 'todoCreate' });
-      return;
-    }
     editingTodo.value = item;
     todoEditorVisible.value = true;
   }
@@ -1396,8 +1326,7 @@
   }
   .inbox-page--todo-focused {
     --primary-color: var(--todo-accent-color, #0ea5e9);
-    --todo-navigation-color: #655cff;
-    --todo-navigation-soft-color: #efedff;
+    --todo-navigation-color: #615ced;
   }
   .section-switcher {
     min-height: 34px;
@@ -1411,9 +1340,9 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    min-height: 44px;
+    min-height: 54px;
     gap: 12px;
-    margin: 0 0 8px;
+    margin: 0 0 14px;
     flex-shrink: 0;
   }
   .inbox-hero__heading {
@@ -1491,26 +1420,21 @@
   }
   .todo-group-list {
     display: grid;
-    gap: 14px;
+    gap: 22px;
     padding: 6px 2px 24px;
   }
   .todo-group {
     display: grid;
-    gap: 0;
+    gap: 9px;
     padding: 0;
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 17px;
-    background: var(--card-background);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
   .todo-group > header {
     display: flex;
-    min-height: 48px;
-    box-sizing: border-box;
     align-items: center;
     gap: 7px;
-    padding: 0 15px;
-    border-bottom: 1px solid var(--surface-divider-color);
     color: var(--text-color);
   }
   .todo-group > header > span {
@@ -1525,16 +1449,7 @@
   .todo-group__items {
     display: grid;
     min-height: 18px;
-    gap: 0;
-  }
-  .todo-group__items :deep(.todo-item) {
-    border: 0;
-    border-bottom: 1px solid var(--surface-divider-color);
-    border-radius: 0;
-    box-shadow: none;
-  }
-  .todo-group__items :deep(.todo-item:last-child) {
-    border-bottom: 0;
+    gap: 10px;
   }
   .inbox-hero h1 {
     min-width: 0;
@@ -1549,7 +1464,7 @@
     white-space: nowrap;
   }
   .inbox-hero p {
-    margin: 3px 0 0 17px;
+    margin: 5px 0 0 17px;
     overflow: hidden;
     color: var(--desc-color);
     font-size: 13px;
@@ -1557,57 +1472,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .todo-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-    margin-bottom: 9px;
-    flex-shrink: 0;
-  }
-  .todo-summary-card {
-    display: flex;
-    min-height: 62px;
-    box-sizing: border-box;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 15px;
-    background: var(--card-background);
-  }
-  .todo-summary-card__icon {
-    display: grid;
-    width: 36px;
-    height: 36px;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 11px;
-    background: var(--todo-navigation-soft-color);
-    color: var(--todo-navigation-color);
-  }
-  .todo-summary-card > div {
-    display: grid;
-    gap: 2px;
-  }
-  .todo-summary-card span {
-    color: var(--desc-color);
-    font-size: 12px;
-  }
-  .todo-summary-card strong {
-    color: var(--text-color);
-    font-size: 19px;
-    line-height: 1.1;
-  }
-  .todo-summary-card.is-overdue strong {
-    color: var(--danger-color, #d83c45);
-  }
   .inbox-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 9px;
-    padding: 6px 8px;
+    gap: 14px;
+    margin-bottom: 14px;
+    padding: 9px 10px;
     box-sizing: border-box;
     border: 0;
     border-radius: 14px;
@@ -1626,19 +1497,7 @@
     flex-shrink: 0;
   }
   .inbox-toolbar__right--todo {
-    grid-template-columns: minmax(160px, 230px) 120px auto;
-  }
-  .inbox-toolbar__todo-tabs {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 6px;
-  }
-  .inbox-toolbar__todo-tabs > :deep(.tab-container) {
-    flex: 0 1 auto;
-  }
-  .inbox-toolbar__todo-views {
-    flex-shrink: 0;
+    grid-template-columns: minmax(180px, 250px) 130px;
   }
   .inbox-batch {
     display: flex;
@@ -1774,26 +1633,6 @@
     }
   }
   @media (max-width: 767px) {
-    .mobile-todo-heading {
-      display: grid;
-      gap: 4px;
-      margin: 2px 2px 15px;
-      flex-shrink: 0;
-    }
-    .mobile-todo-heading h1 {
-      margin: 0;
-      color: var(--text-color);
-      font-size: 27px;
-      font-weight: 780;
-      line-height: 1.2;
-      letter-spacing: -0.025em;
-    }
-    .mobile-todo-heading p {
-      margin: 0;
-      color: var(--desc-color);
-      font-size: 12px;
-      line-height: 1.5;
-    }
     /* 视图切换与「批量选择」保持同一行,不再各占一行 */
     .todo-workspace-toolbar {
       align-items: center;
@@ -1850,8 +1689,8 @@
       overflow: visible;
     }
     .inbox-toolbar--todo-primary {
-      min-height: 40px;
-      margin-bottom: 12px;
+      min-height: 44px;
+      margin-bottom: 14px;
       padding: 0;
       align-items: center;
       flex-direction: row;
@@ -1862,24 +1701,24 @@
       box-shadow: none;
     }
     .inbox-toolbar--todo-primary :deep(.tab-container) {
-      min-height: 40px;
+      min-height: 44px;
       box-sizing: border-box;
       min-width: 0;
       flex: 1 1 auto;
       overflow-x: auto;
-      gap: 2px;
-      padding: 3px;
+      gap: 4px;
+      padding: 4px;
       border: 0;
-      border-radius: 11px;
+      border-radius: 13px;
       background: var(--workspace-panel-bg-color);
     }
     .inbox-toolbar--todo-primary :deep(.tab) {
-      min-height: 34px;
+      min-height: 36px;
       flex: 1 1 0;
       justify-content: center;
       padding: 0 8px;
       border: 0;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 13px;
     }
     .inbox-toolbar--todo-primary :deep(.tab.is-active) {
@@ -1964,20 +1803,6 @@
       border-radius: 0;
       background: transparent;
     }
-    .inbox-page--mobile-todo .todo-group__items {
-      gap: 10px;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item) {
-      border: 1px solid var(--surface-border-color);
-      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
-      border-radius: 17px;
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item.is-overdue) {
-      border-left-color: var(--danger-color, #d83c45);
-    }
-    .inbox-page--mobile-todo .todo-group__items :deep(.todo-item.is-completed) {
-      border-left-color: var(--success-color, #00a884);
-    }
     .inbox-page--mobile-todo .todo-group > header {
       padding: 0 2px;
       justify-content: space-between;
@@ -1993,28 +1818,28 @@
     }
 
     .inbox-page--mobile-todo .todo-workspace-toolbar {
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views {
       max-width: 220px;
     }
     /* BTabs 的 class 直接落在组件根节点 .tab-container 上，不能用后代选择器。 */
     .inbox-page--mobile-todo :deep(.todo-workspace-toolbar__views.tab-container) {
-      min-height: 40px;
+      min-height: 44px;
       box-sizing: border-box;
-      gap: 2px;
-      padding: 3px;
+      gap: 4px;
+      padding: 4px;
       border: 0;
-      border-radius: 11px;
+      border-radius: 13px;
       background: var(--workspace-panel-bg-color);
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab) {
-      min-height: 34px;
+      min-height: 36px;
       flex: 1 1 0;
       justify-content: center;
       padding: 0 8px;
       border: 0;
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 13px;
     }
     .inbox-page--mobile-todo .todo-workspace-toolbar__views :deep(.tab.is-active) {

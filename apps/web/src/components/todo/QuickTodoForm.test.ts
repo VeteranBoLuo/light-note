@@ -31,19 +31,12 @@ function mountQuickTodoForm() {
             quickTodoNoDate: '无日期',
             quickTodoToday: '今天',
             quickTodoTomorrow: '明天',
-            quickTodoThisWeek: '本周',
             quickTodoDetails: '完善详情',
             quickTodoCreate: '立即创建',
             todoPriority: '优先级',
             todoPriority0: '低',
             todoPriority1: '普通',
             todoPriority2: '高',
-            todoReminder: '提醒',
-            todoReminderNone: '不提醒',
-            quickTodoReminderBeforeDue: '截止前 1 小时',
-            quickTodoReminderDaily: '每天 09:00',
-            quickTodoReminderHint: '复杂计划进入详情',
-            quickTodoReminderNeedsDue: '选择截止时间后可使用截止前提醒',
           },
           common: {
             noMatch: '无匹配项',
@@ -92,12 +85,7 @@ describe('QuickTodoForm', () => {
     await nextTick();
 
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(onDetails).toHaveBeenCalledWith({
-      title: '',
-      priority: 1,
-      dueAt: null,
-      quickReminderPreset: 'none',
-    });
+    expect(onDetails).toHaveBeenCalledWith({ title: '', priority: 1, dueAt: null });
   });
 
   it('只填写标题即可创建，并把快捷日期带入待办草稿', async () => {
@@ -112,17 +100,5 @@ describe('QuickTodoForm', () => {
     expect(payload.title).toBe('整理本周读书笔记');
     expect(payload.priority).toBe(1);
     expect(payload.dueAt).toMatch(/^\d{4}-\d{2}-\d{2}T17:00$/);
-  });
-
-  it('提醒预设会随立即创建和完善详情一起传递', async () => {
-    const { host, onSubmit, onDetails } = mountQuickTodoForm();
-    await setTitle(host, '每天查看运营数据');
-    clickButton(host, '每天 09:00');
-    clickButton(host, '完善详情');
-    clickButton(host, '立即创建');
-    await nextTick();
-
-    expect(onDetails.mock.calls[0]?.[0]?.quickReminderPreset).toBe('daily_0900');
-    expect(onSubmit.mock.calls[0]?.[0]?.quickReminderPreset).toBe('daily_0900');
   });
 });

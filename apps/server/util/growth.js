@@ -203,7 +203,8 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
     // growth_task 属于一次性成长奖励(幂等、非刷点),豁免日顶,保证必得
     // daily_quest(今日任务奖励)不豁免日顶:与日上限口径一致,达 200/日后不再增发(用户反馈:不应超上限)
-    const capExempt = source === 'growth_task' || source === 'milestone' || source === 'manual';
+    const capExempt =
+      source === 'growth_task' || source === 'milestone' || source === 'manual';
     let used = 0;
     if (!capExempt) {
       const [[sumRow]] = await c.query(
@@ -467,40 +468,6 @@ function safeParseMeta(m) {
   } catch {
     return null;
   }
-}
-
-/**
- * 每日「新增一条内容」统一口径。
- * 直接读取当天仍有效的用户内容，避免看板展示与领取奖励时的二次校验发生漂移。
- * 待办没有注册示例数据，因此只需排除软删除记录。
- */
-async function countCreatedContentToday(userId) {
-  const [[row]] = await pool.query(
-    `SELECT
-      (SELECT COUNT(*) FROM bookmark b
-        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-          )) +
-      (SELECT COUNT(*) FROM note n
-        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-          )) +
-      (SELECT COUNT(*) FROM files f
-        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-              AND osr.resource_id = CAST(f.id AS CHAR)
-          )) +
-      (SELECT COUNT(*) FROM todo_items td
-        WHERE td.user_id = ? AND td.del_flag = 0 AND td.create_time >= CURDATE()) AS c`,
-    [userId, userId, userId, userId],
-  );
-  return Number(row?.c || 0);
 }
 
 // 给一组升序去重的 YYYYMMDD,求最长连续天数(签到最长连签)
@@ -893,11 +860,34 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 
-  // 今日任务(派生):签到 / 新增一条内容 / 今日获得 30 经验。
-  // 「新增内容」按书签、笔记、文件或待办的当日创建事实判定(不依赖 growth_events),root 也能完成。
+  // 今日任务(派生):签到 / 记录一条内容 / 今日获得 30 经验。
+  // "记录内容"按真实资源当日创建判定(不依赖 growth_events),root 也能完成。
   let createdToday = 0;
   if (!isGuest) {
-    createdToday = await countCreatedContentToday(userId);
+    const [[c]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+            )) +
+        (SELECT COUNT(*) FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+            )) +
+        (SELECT COUNT(*) FROM files f
+          WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+                AND osr.resource_id = CAST(f.id AS CHAR)
+            )) AS c`,
+      [userId, userId, userId],
+    );
+    createdToday = Number(c.c || 0);
   }
   const dailyExp = Number(growth.dailyExp || 0);
   /*
@@ -974,7 +964,30 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   const expGranted = userRole !== 'root';
 
   const today = dayKey();
-  const createdToday = await countCreatedContentToday(userId);
+  const [[c]] = await pool.query(
+    `SELECT
+      (SELECT COUNT(*) FROM bookmark b
+        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+          )) +
+      (SELECT COUNT(*) FROM note n
+        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+          )) +
+      (SELECT COUNT(*) FROM files f
+        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+              AND osr.resource_id = CAST(f.id AS CHAR)
+          )) AS c`,
+    [userId, userId, userId],
+  );
+  const createdToday = Number(c.c || 0);
   const dailyExp = Number(g.dailyExp || 0);
   // 考核项与看板一致:root 不考核「今日 30 经验」(它的经验永远不入账)
   const allDone = g.checkedInToday && createdToday > 0 && (!expGranted || dailyExp >= 30);

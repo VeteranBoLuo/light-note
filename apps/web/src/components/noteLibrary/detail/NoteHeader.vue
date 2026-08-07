@@ -77,6 +77,20 @@
         <BButton class="back-icon" :aria-label="$t('common.back')" @click="$emit('back')">
           <SvgIcon :src="icon.noteDetail.back" />
         </BButton>
+        <BTooltip
+          v-if="hasNavigation || hasCatalog"
+          :title="$t(sidebarOpen ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
+        >
+          <BButton
+            class="note-header-title-icon note-header-sidebar-toggle"
+            :class="{ 'is-active': sidebarOpen }"
+            :aria-label="$t(sidebarOpen ? 'note.collapsePageSidebar' : 'note.expandPageSidebar')"
+            :aria-pressed="sidebarOpen"
+            @click="$emit('toggleSidebar')"
+          >
+            <SvgIcon :src="sidebarOpen ? icon.noteTree.sidebarOpen : icon.noteTree.sidebarClosed" size="19" />
+          </BButton>
+        </BTooltip>
         <div class="note-header-save-state" aria-live="polite">
           <span>{{ desktopSaveState }}</span>
           <BButton
@@ -94,6 +108,18 @@
         </BButton>
       </div>
       <div class="note-header-actions flex-align-center">
+        <BTooltip v-if="showAiToggle" :title="$t(aiOpen ? 'note.hideAiPanel' : 'note.showAiPanel')">
+          <BButton
+            class="note-header-ai-toggle"
+            :class="{ 'is-active': aiOpen }"
+            :aria-label="$t(aiOpen ? 'note.hideAiPanel' : 'note.showAiPanel')"
+            :aria-pressed="aiOpen"
+            @click="$emit('toggleAi')"
+          >
+            <SvgIcon :src="icon.ai.organize" size="17" aria-hidden="true" />
+            <span>{{ $t('note.aiAssistant') }}</span>
+          </BButton>
+        </BTooltip>
         <span class="mode-pill-group" v-if="!readonly">
           <BTooltip :title="$t('note.switchModeTooltip')">
             <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
@@ -198,6 +224,9 @@
     hasBackup?: boolean;
     hasCatalog?: boolean;
     hasNavigation?: boolean;
+    sidebarOpen?: boolean;
+    aiOpen?: boolean;
+    showAiToggle?: boolean;
     childCount?: number;
     pageTreeWritable?: boolean;
   }>();
@@ -222,6 +251,8 @@
     'saveAsTemplate',
     'openCatalog',
     'openNavigation',
+    'toggleSidebar',
+    'toggleAi',
     'browseChildren',
     'createChild',
     'attachPages',
@@ -310,7 +341,12 @@
   }
 
   /** 统一交付：取消分享既不提示也不记成功日志，只有真正交付成功才写操作日志。 */
-  async function deliverExportFile(content: string | Blob, fileName: string, mimeType: string, operation: string) {
+  async function deliverExportFile(
+    content: string | Blob,
+    fileName: string,
+    mimeType: string,
+    operation: string,
+  ) {
     try {
       const result = await deliverGeneratedFile({
         content,
@@ -496,11 +532,13 @@
       if (options.length) options.push({ divider: true });
     }
 
-    options.push({
-      label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
-      icon: icon.manage_categoryBtn_tag,
-      function: openMobileTagConfig,
-    });
+    options.push(
+      {
+        label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
+        icon: icon.manage_categoryBtn_tag,
+        function: openMobileTagConfig,
+      },
+    );
 
     if (!props.readonly) {
       options.push({
@@ -674,8 +712,11 @@
         const title = props.note.title || t('noteDetail.unnamedDoc');
         // md 笔记的 content 已经是 Markdown:再过一遍 turndown(HTML→MD)会把语法逐个
         // 转义成 \# / \*\*、并吃掉换行压成一行,只有 html 笔记才需要转换。
-        const markdown = buildNoteExportMarkdown(title, props.note.content || '', props.noteType || 'html', (html) =>
-          turndownService.turndown(html),
+        const markdown = buildNoteExportMarkdown(
+          title,
+          props.note.content || '',
+          props.noteType || 'html',
+          (html) => turndownService.turndown(html),
         );
         const mdFileName = buildExportFileName(title, t('noteDetail.unnamedDoc'), 'md');
         const mdOperation = `导出Markdown成功【${title}】`;
@@ -944,6 +985,16 @@
     color: #c0c0c0;
     font-size: 12px;
   }
+  .note-header-sidebar-toggle.b_btn {
+    padding: 0;
+
+    &.is-active {
+      border-color: var(--resource-note-color, #00a884);
+      color: var(--resource-note-color, #00a884);
+      background: color-mix(in srgb, var(--resource-note-color, #00a884) 9%, var(--card-background));
+      font-weight: 700;
+    }
+  }
   .note-header-child-chip.b_btn {
     flex: 0 0 auto;
     height: 30px;
@@ -954,6 +1005,23 @@
     color: var(--resource-note-color, #00a884);
     background: var(--card-background);
     font-size: 12px;
+  }
+  .note-header-ai-toggle.b_btn {
+    min-width: 114px;
+    height: 36px;
+    padding: 0 12px;
+    gap: 7px;
+    border: 1px solid var(--primary-color, #615ced);
+    border-radius: 10px;
+    color: var(--primary-color, #615ced);
+    background: var(--card-background);
+
+    &.is-active {
+      border-color: var(--primary-color, #615ced);
+      color: #fff;
+      background: var(--primary-color, #615ced);
+      font-weight: 650;
+    }
   }
   .note-header-title {
     padding: 0 10px;
@@ -1071,4 +1139,5 @@
     overflow: hidden;
     white-space: nowrap;
   }
+
 </style>

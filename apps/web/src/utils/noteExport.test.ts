@@ -71,14 +71,6 @@ describe('renderMarkdownForExport', () => {
     expect(html).not.toContain('- [ ]');
   });
 
-  it('空 Markdown 待办导出时仍保留复选框语义', async () => {
-    const html = await renderMarkdownForExport('- [ ]');
-
-    expect(html).toContain('type="checkbox"');
-    expect(html).toContain('class="note-task-list"');
-    expect(html).not.toContain('[ ]');
-  });
-
   it('消毒掉脚本，避免导出的 HTML 变成可执行载体', async () => {
     const html = await renderMarkdownForExport('正常内容\n\n<script>alert(1)</script>');
     expect(html).not.toContain('<script');

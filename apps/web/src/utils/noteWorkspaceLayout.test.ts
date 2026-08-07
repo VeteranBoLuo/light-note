@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH, resolveNoteWorkspaceLayout } from './noteWorkspaceLayout';
+import { resolveNoteWorkspaceLayout } from './noteWorkspaceLayout';
 
 describe('resolveNoteWorkspaceLayout', () => {
-  it('统一页面侧栏默认宽度', () => {
-    expect(NOTE_WORKSPACE_DEFAULT_SIDEBAR_WIDTH).toBe(270);
-  });
-
   it('宽屏同时停靠页面树与 AI', () => {
     expect(resolveNoteWorkspaceLayout(1420)).toEqual({
       mode: 'wide',

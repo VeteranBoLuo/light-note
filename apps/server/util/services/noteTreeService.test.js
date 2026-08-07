@@ -24,7 +24,7 @@ const {
 const rows = [
   { id: 'root-b', parent_id: null, title: '根 B', sort: 1, is_top: 0, del_flag: 0 },
   { id: 'root-a', parent_id: null, title: '根 A', sort: 0, is_top: 0, del_flag: 0 },
-  { id: 'child-a', parent_id: 'root-a', title: '子 A', type: 'markdown', sort: 0, is_top: 0, del_flag: 0 },
+  { id: 'child-a', parent_id: 'root-a', title: '子 A', sort: 0, is_top: 0, del_flag: 0 },
   { id: 'grandchild', parent_id: 'child-a', title: '孙页面', sort: 0, is_top: 0, del_flag: 0 },
   { id: 'child-top', parent_id: 'root-a', title: '置顶子页面', sort: 9, is_top: 1, del_flag: 0 },
 ];
@@ -104,8 +104,7 @@ describe('noteTreeService 只读树模型', () => {
     expect(db.query).toHaveBeenCalledWith(expect.not.stringContaining('content'), ['user-1']);
     expect(result.maxDepth).toBe(MAX_NOTE_TREE_DEPTH);
     expect(result.items[0]).toMatchObject({ id: 'child-top', childCount: 0, hasChildren: false });
-    expect(result.items[1]).toMatchObject({ id: 'child-a', type: 'markdown', childCount: 1, hasChildren: true });
-    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('title, type'), ['user-1']);
+    expect(result.items[1]).toMatchObject({ id: 'child-a', childCount: 1, hasChildren: true });
     expect(result.items[1].children).toEqual([expect.objectContaining({ id: 'grandchild', parentId: 'child-a' })]);
 
     const complete = await queryOwnedNoteTree({ userId: 'user-1', parentId: null, depth: 'all', db });
@@ -153,7 +152,9 @@ describe('noteTreeService 只读树模型', () => {
   });
 
   it('目录搜索大小写不敏感，并拒绝超长关键词', () => {
-    const snapshot = buildNoteTree([{ id: 'root', parent_id: null, title: 'TypeScript Notes', del_flag: 0 }]);
+    const snapshot = buildNoteTree([
+      { id: 'root', parent_id: null, title: 'TypeScript Notes', del_flag: 0 },
+    ]);
     expect(searchNoteTreeFromSnapshot(snapshot, 'typescript')).toMatchObject({
       matchCount: 1,
       items: [expect.objectContaining({ id: 'root', matched: true })],
@@ -263,8 +264,14 @@ describe('noteTreeService 写入落点与移动', () => {
     expect(result).toMatchObject({ id: 'a', parentId: null, previousParentId: null, moved: true, updatedCount: 2 });
     const updateCalls = connection.query.mock.calls.slice(1);
     expect(updateCalls).toHaveLength(2);
-    expect(updateCalls[0]).toEqual([expect.stringContaining('SET parent_id = ?'), [null, 0, 1, 'a', 'u1']]);
-    expect(updateCalls[1]).toEqual([expect.stringContaining('parent_id <=> ?'), [0, 'b', 'u1', null]]);
+    expect(updateCalls[0]).toEqual([
+      expect.stringContaining('SET parent_id = ?'),
+      [null, 0, 1, 'a', 'u1'],
+    ]);
+    expect(updateCalls[1]).toEqual([
+      expect.stringContaining('parent_id <=> ?'),
+      [0, 'b', 'u1', null],
+    ]);
     expect(updateCalls.some(([, params]) => params?.includes('pinned') || params?.includes('nested'))).toBe(false);
   });
 
@@ -394,34 +401,14 @@ describe('noteTreeService 写入落点与移动', () => {
       affectedCount: 3,
       parentId: 'target',
       items: [
-        { id: 'parent', previousParentId: 'source', parentId: 'target', isTop: false, sort: 0, moved: true },
-        { id: 'sibling', previousParentId: 'source', parentId: 'target', isTop: false, sort: 1, moved: true },
+        { id: 'parent', previousParentId: 'source', parentId: 'target', sort: 0, moved: true },
+        { id: 'sibling', previousParentId: 'source', parentId: 'target', sort: 1, moved: true },
       ],
     });
     expect(connection.query).toHaveBeenCalledTimes(3);
     expect(connection.query.mock.calls.slice(1)).toEqual([
-      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 0, 'parent', 'u1']],
-      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'sibling', 'u1']],
-    ]);
-  });
-
-  it('批量关联到新父页面时与单页移动一致，自动取消来源层的置顶状态', async () => {
-    const connection = createTreeConnection([
-      { id: 'target', parent_id: null, title: '目标目录', sort: 0, is_top: 0, del_flag: 0 },
-      { id: 'pinned', parent_id: null, title: '原置顶页面', sort: 0, is_top: 1, del_flag: 0 },
-    ]);
-
-    const result = await moveOwnedNoteNodes(connection, {
-      userId: 'u1',
-      ids: ['pinned'],
-      parentId: 'target',
-    });
-
-    expect(result.items).toEqual([
-      expect.objectContaining({ id: 'pinned', parentId: 'target', previousParentId: null, isTop: false, moved: true }),
-    ]);
-    expect(connection.query.mock.calls.slice(1)).toEqual([
-      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 0, 'pinned', 'u1']],
+      [expect.stringContaining('SET parent_id = ?'), ['target', 0, 'parent', 'u1']],
+      [expect.stringContaining('SET parent_id = ?'), ['target', 1, 'sibling', 'u1']],
     ]);
   });
 

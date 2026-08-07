@@ -168,7 +168,7 @@ describe('AiToolConfirmationCard note preview', () => {
     await flush();
 
     expect(host.textContent).toContain('目标目录');
-    expect(host.textContent).toContain('笔记库');
+    expect(host.textContent).toContain('我的知识库');
     expect(findButton(host, '更换目标目录')).toBeTruthy();
   });
 
@@ -225,7 +225,7 @@ describe('AiToolConfirmationCard note preview', () => {
     await flush();
 
     expect(host.querySelector('.note-directory-picker-stub')).toBeNull();
-    findButton(host, '改存到笔记库').click();
+    findButton(host, '改存到我的知识库').click();
     await flush();
 
     expect(api.post).toHaveBeenCalledWith('/api/chat/agent/confirm/note-directory', {

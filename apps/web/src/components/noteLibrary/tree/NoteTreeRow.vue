@@ -55,7 +55,7 @@
         </BButton>
 
         <BButton class="note-tree-title" @click="emit('open', node.id)">
-          <SvgIcon :src="pageIcon" size="15" class="note-tree-page-icon" aria-hidden="true" />
+          <SvgIcon :src="icon.resource.note" size="15" class="note-tree-page-icon" aria-hidden="true" />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
           <span v-if="node.isTop" class="note-tree-pin" :aria-label="t('common.pinned')">
             <SvgIcon :src="icon.contextMenu.pin" size="12" aria-hidden="true" />
@@ -73,42 +73,38 @@
       </div>
     </BActionMenu>
 
-    <Transition name="note-tree-children">
-      <div v-if="expanded && children.length" class="note-tree-children-motion">
-        <ul class="note-tree-children">
-          <NoteTreeRow
-            v-for="child in children"
-            :key="child.id"
-            :node="child"
-            :depth="depth + 1"
-            :active-page-id="activePageId"
-            :browse-parent-id="browseParentId"
-            :children-by-parent="childrenByParent"
-            :expanded-ids="expandedIds"
-            :loading-keys="loadingKeys"
-            :write-enabled="writeEnabled"
-            :drag-enabled="dragEnabled"
-            :search-mode="searchMode"
-            :drop-target-key="dropTargetKey"
-            :drop-target-active="dropTargetActive"
-            :drop-target-position="dropTargetPosition"
-            :menu-disabled="menuDisabled"
-            @toggle="emit('toggle', $event)"
-            @open="emit('open', $event)"
-            @browse-children="emit('browseChildren', $event)"
-            @create="emit('create', $event)"
-            @attach="emit('attach', $event)"
-            @toggle-top="emit('toggleTop', $event)"
-            @move="emit('move', $event)"
-            @rename="emit('rename', $event)"
-            @copy-link="emit('copyLink', $event)"
-            @delete="emit('delete', $event)"
-            @drag-start="(childNode, event) => emit('dragStart', childNode, event)"
-            @drag-end="emit('dragEnd')"
-          />
-        </ul>
-      </div>
-    </Transition>
+    <ul v-if="expanded && children.length" class="note-tree-children">
+      <NoteTreeRow
+        v-for="child in children"
+        :key="child.id"
+        :node="child"
+        :depth="depth + 1"
+        :active-page-id="activePageId"
+        :browse-parent-id="browseParentId"
+        :children-by-parent="childrenByParent"
+        :expanded-ids="expandedIds"
+        :loading-keys="loadingKeys"
+        :write-enabled="writeEnabled"
+        :drag-enabled="dragEnabled"
+        :search-mode="searchMode"
+        :drop-target-key="dropTargetKey"
+        :drop-target-active="dropTargetActive"
+        :drop-target-position="dropTargetPosition"
+        :menu-disabled="menuDisabled"
+        @toggle="emit('toggle', $event)"
+        @open="emit('open', $event)"
+        @browse-children="emit('browseChildren', $event)"
+        @create="emit('create', $event)"
+        @attach="emit('attach', $event)"
+        @toggle-top="emit('toggleTop', $event)"
+        @move="emit('move', $event)"
+        @rename="emit('rename', $event)"
+        @copy-link="emit('copyLink', $event)"
+        @delete="emit('delete', $event)"
+        @drag-start="(childNode, event) => emit('dragStart', childNode, event)"
+        @drag-end="emit('dragEnd')"
+      />
+    </ul>
   </li>
 </template>
 
@@ -124,7 +120,6 @@
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
-  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -172,7 +167,6 @@
   }>();
   const { t } = useI18n();
   const active = computed(() => props.activePageId === props.node.id);
-  const pageIcon = computed(() => getNoteTreePageIcon(props.node.type));
   const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
@@ -301,34 +295,6 @@
     &.is-drop-after::after {
       bottom: 5px;
     }
-  }
-
-  .note-tree-children-motion {
-    display: grid;
-    grid-template-rows: 1fr;
-    opacity: 1;
-    transform: translateY(0);
-    transform-origin: top;
-    transition:
-      grid-template-rows 210ms cubic-bezier(0.22, 0.61, 0.36, 1),
-      opacity 150ms ease,
-      transform 210ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-tree-children {
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  .note-tree-children-enter-from,
-  .note-tree-children-leave-to {
-    grid-template-rows: 0fr;
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  .note-tree-children-leave-active {
-    pointer-events: none;
   }
 
   .note-tree-action-menu {
@@ -516,13 +482,6 @@
     }
     to {
       opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .note-tree-children-motion,
-    .note-tree-toggle :deep(.icon-base64) {
-      transition: none;
     }
   }
 </style>
