@@ -285,11 +285,11 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).toMatch(/if \(res\.status === 200 && res\.data\?\.id\)[\s\S]*?promoteSavedDraftInTree\(\)/);
   });
 
-  it('详情顶栏返回键在 PC 与平板一次回到笔记库，手机端仍保留逐级返回', () => {
+  it('详情顶栏返回键在所有设备一次回到进入正文前的笔记库范围', () => {
     const backFunction = detailSource.match(/async function back\(\)[\s\S]*?\n  }/)?.[0] || '';
-    expect(backFunction).toMatch(/if \(!bookmark\.isMobile\) \{[\s\S]*?returnToSourceDirectory\(\);[\s\S]*?return;/);
-    expect(backFunction.indexOf('if (!bookmark.isMobile)')).toBeLessThan(backFunction.indexOf('const parentId'));
-    expect(backFunction).toContain('void openNoteDetailPage(parentId)');
+    expect(backFunction).toContain('returnToSource();');
+    expect(backFunction).not.toContain('openNoteDetailPage(parentId)');
+    expect(backFunction).not.toContain('router.back()');
   });
 
   it('详情切换笔记时保留面包屑稳定壳，只重建标题与编辑内容', () => {

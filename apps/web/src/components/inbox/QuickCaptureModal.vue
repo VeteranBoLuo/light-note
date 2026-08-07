@@ -701,6 +701,12 @@
     width: 100%;
   }
 
+  /* 待办表单比另外三个捕获面板更高。移动端抽屉高度受限时，纵向 flex 默认会压缩子项；
+     BTabs 根节点又有 overflow:hidden，最终表现为只在切到待办后整条 Tab 被裁成一条细线。 */
+  .capture-tabs {
+    flex: 0 0 auto;
+  }
+
   .capture-tabs :deep(.tab) {
     flex: 1 1 0;
     justify-content: center;

@@ -1449,6 +1449,7 @@ export default {
     searchAllPages: '搜索全部页面',
     browseChildPages: '浏览子页面',
     currentPath: '当前路径',
+    parentPage: '父级页面',
     parentLevel: '返回上一级',
     currentPageShort: '当前',
     noPagesAtLevel: '这一层还没有页面',

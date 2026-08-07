@@ -299,7 +299,16 @@
   }
 
   function openContinueItem(item: TodayContinueItem) {
-    void router.push(item.route);
+    if (item.type !== 'note') {
+      void router.push(item.route);
+      return;
+    }
+    const target = router.resolve(item.route);
+    void router.push({
+      path: target.path,
+      query: { ...target.query, from: router.currentRoute.value.fullPath },
+      hash: target.hash,
+    });
   }
 
   function runCapture(action: { type: ActionCaptureType | null }) {

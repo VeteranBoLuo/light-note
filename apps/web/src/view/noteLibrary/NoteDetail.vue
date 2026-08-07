@@ -308,7 +308,7 @@
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
   import { noteHtmlToMarkdown } from '@/utils/noteHtmlToMarkdown';
   import { buildNoteBreadcrumbDisplay } from '@/utils/noteBreadcrumb';
-  import { resolveNoteLibraryListPath } from '@/utils/noteDetailNavigation';
+  import { resolveNoteDetailReturnPath } from '@/utils/noteDetailNavigation';
   import { resolveNoteWorkspaceLayout, type NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
@@ -345,12 +345,12 @@
     const parent = routeQueryValue(router.currentRoute.value.query.parent);
     return parent ? { path: '/noteLibrary', query: { parent } } : { path: '/noteLibrary' };
   };
-  const sourceNoteLibraryPath = () => resolveNoteLibraryListPath(router.currentRoute.value.query.from);
+  const sourceReturnPath = () => resolveNoteDetailReturnPath(router.currentRoute.value.query.from);
   const detailSourceQuery = () => {
-    const from = sourceNoteLibraryPath();
+    const from = sourceReturnPath();
     return from ? { from } : {};
   };
-  const returnToSourceDirectory = () => router.push(sourceNoteLibraryPath() || noteLibraryFallback());
+  const returnToSource = () => router.push(sourceReturnPath() || noteLibraryFallback());
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
@@ -975,7 +975,7 @@
       title: t('common.defaultTitle'),
       content: t('note.tplLoadFailedChoice'),
       onOk() {
-        returnToSourceDirectory();
+        returnToSource();
       },
     });
   }
@@ -1300,7 +1300,7 @@
           clearScheduledSave();
           noteWorkspace.setNavigation({ activePageId: null });
           await refreshTree();
-          returnToSourceDirectory();
+          returnToSource();
         },
       });
       return;
@@ -1349,7 +1349,7 @@
         clearScheduledSave();
         noteWorkspace.setNavigation({ activePageId: null });
         await refreshTree();
-        returnToSourceDirectory();
+        returnToSource();
       },
     });
   }
@@ -1397,21 +1397,7 @@
       isLeaving.value = false;
       return;
     }
-    if (!bookmark.isMobile) {
-      returnToSourceDirectory();
-      return;
-    }
-    const parentId =
-      nodeType.value === 'add'
-        ? routeQueryValue(router.currentRoute.value.query.parent)
-        : note.parentId || detailBreadcrumb.value.at(-2)?.id || '';
-    if (parentId) {
-      void openNoteDetailPage(parentId);
-    } else if (nodeType.value === 'add' || sourceNoteLibraryPath()) {
-      returnToSourceDirectory();
-    } else {
-      router.back();
-    }
+    returnToSource();
   }
 
   onBeforeRouteLeave(async () => {

@@ -30,8 +30,13 @@
         摘要被压到 35px 完全读不出内容,而手机一屏只有 8 条,行高不齐不影响观感。
       -->
       <div class="note-meta-row">
+        <div v-if="parentPathText" class="note-parent-path" :title="parentPathText">
+          <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
+          <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
+          <span class="note-parent-path__separator" aria-hidden="true">·</span>
+          <span class="note-parent-path__text">{{ parentPathText }}</span>
+        </div>
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
-        <div v-if="parentPathText" class="note-path" :title="parentPathText">{{ parentPathText }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
           它们同为 chip 形态，放在一个容器里既省一行高度，也比拆成两行整齐。
@@ -254,6 +259,10 @@
           line-height: 19px;
         }
 
+        .note-parent-path {
+          max-width: 100%;
+        }
+
         // 底行：徽章 + 标签靠左，时间被推到行尾
         .note-tags {
           order: 0;
@@ -333,15 +342,46 @@
         // 无摘要也无标签时保持同样的行高
         min-height: 20px;
       }
-      .note-path {
+      .note-parent-path {
+        order: -2;
+        flex: 0 1 auto;
         min-width: 0;
-        max-width: 42%;
+        max-width: 46%;
+        height: 22px;
+        padding: 0 7px;
+        box-sizing: border-box;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
         overflow: hidden;
-        color: var(--muted-text-color, var(--desc-color));
+        color: var(--chip-neutral-fg, var(--desc-color));
+        background: var(--chip-neutral-bg);
+        border: 1px solid var(--chip-neutral-border);
+        border-radius: 6px;
         font-size: 11px;
         line-height: 20px;
-        text-overflow: ellipsis;
         white-space: nowrap;
+
+        &__icon {
+          flex: 0 0 auto;
+          color: var(--resource-note-color, #00a884);
+        }
+
+        &__label {
+          flex: 0 0 auto;
+          font-weight: 600;
+        }
+
+        &__separator {
+          flex: 0 0 auto;
+          opacity: 0.55;
+        }
+
+        &__text {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
       }
       .note-description {
         flex: 1 1 auto;

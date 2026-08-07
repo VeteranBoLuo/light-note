@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveNoteLibraryListPath } from './noteDetailNavigation';
+import { resolveNoteDetailReturnPath, resolveNoteLibraryListPath } from './noteDetailNavigation';
 
 describe('resolveNoteLibraryListPath', () => {
   it('保留笔记库列表的目录、标签与视图查询参数', () => {
@@ -20,6 +20,27 @@ describe('resolveNoteLibraryListPath', () => {
     '拒绝非笔记库内部地址：%s',
     (path) => {
       expect(resolveNoteLibraryListPath(path)).toBe('');
+    },
+  );
+});
+
+describe('resolveNoteDetailReturnPath', () => {
+  it('允许今日与工作台作为明确来源并保留查询参数', () => {
+    expect(resolveNoteDetailReturnPath('/workbenches?panel=recent#continue')).toBe(
+      '/workbenches?panel=recent#continue',
+    );
+  });
+
+  it('在详情页之间切换后仍解析到最初的工作台来源', () => {
+    const parent = `/noteLibrary/parent?from=${encodeURIComponent('/workbenches')}`;
+    const child = `/noteLibrary/child?from=${encodeURIComponent(parent)}`;
+    expect(resolveNoteDetailReturnPath(child)).toBe('/workbenches');
+  });
+
+  it.each(['/search', '/inbox', 'https://example.com/workbenches', '//example.com/workbenches'])(
+    '拒绝未授权的返回来源：%s',
+    (path) => {
+      expect(resolveNoteDetailReturnPath(path)).toBe('');
     },
   );
 });
