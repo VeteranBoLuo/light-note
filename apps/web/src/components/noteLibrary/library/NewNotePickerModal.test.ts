@@ -25,7 +25,7 @@ describe('NewNotePickerModal 自定义模板入口', () => {
     document.body.innerHTML = '';
   });
 
-  it('我的模板只负责选用，不再提供分散删除，并提供统一管理入口', async () => {
+  it('我的模板只负责选用，并把统一管理入口放在区块标题右侧', async () => {
     const host = document.createElement('div');
     document.body.append(host);
     const managed = vi.fn();
@@ -60,6 +60,8 @@ describe('NewNotePickerModal 自定义模板入口', () => {
     expect(host.querySelector('.new-note-picker__remove')).toBeNull();
     const manage = host.querySelector<HTMLButtonElement>('.new-note-picker__manage');
     expect(manage?.textContent).toContain(zhCN.note.templateManager.title);
+    expect(manage?.parentElement?.classList.contains('new-note-picker__mine-heading')).toBe(true);
+    expect(host.querySelector('.new-note-picker__mine-list')?.contains(manage!)).toBe(false);
     manage!.click();
     expect(managed).toHaveBeenCalledOnce();
   });

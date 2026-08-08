@@ -52,6 +52,13 @@
       </section>
 
       <section v-else class="new-note-picker__section">
+        <div class="new-note-picker__mine-heading">
+          <strong>{{ t('note.tplMineSection') }}</strong>
+          <BButton size="small" class="new-note-picker__manage" @click="emit('manage')">
+            <SvgIcon :src="icon.noteDetail.template" size="14" aria-hidden="true" />
+            {{ t('note.templateManager.title') }}
+          </BButton>
+        </div>
         <div v-if="myTemplatesState === 'loading'" class="new-note-picker__status">
           <BLoading inline loading :title="t('note.tplLoading')" />
         </div>
@@ -78,11 +85,6 @@
             </span>
           </BButton>
         </div>
-        <BButton class="new-note-picker__manage" @click="emit('manage')">
-          <SvgIcon :src="icon.noteDetail.template" size="17" aria-hidden="true" />
-          {{ t('note.templateManager.title') }}
-          <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
-        </BButton>
       </section>
     </div>
   </BModal>
@@ -325,6 +327,20 @@
     gap: 8px;
   }
 
+  .new-note-picker__mine-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+
+    > strong {
+      color: var(--text-color);
+      font-size: 13px;
+      font-weight: 650;
+    }
+  }
+
   .new-note-picker__mine-main {
     width: 100%;
     min-height: 56px;
@@ -332,16 +348,13 @@
   }
 
   .new-note-picker__manage {
-    width: 100%;
-    min-height: 42px;
-    margin-top: 12px;
-    justify-content: flex-start;
-    gap: 8px;
+    flex: 0 0 auto;
+    width: auto;
+    gap: 5px;
+    border: 1px solid var(--card-border-color) !important;
+    background: transparent;
     color: var(--resource-note-color);
-  }
-
-  .new-note-picker__manage :deep(svg:last-child) {
-    margin-left: auto;
+    font-weight: 600;
   }
 
   @media (max-width: 359px) {

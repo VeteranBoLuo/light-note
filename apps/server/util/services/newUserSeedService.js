@@ -152,32 +152,23 @@ function buildChineseSeed(siteUrl) {
         sort: 2,
         tagKeys: ['getting-started'],
         content:
-          '<h1 style="background: linear-gradient(90deg, #615ced, #00a884, #ff8a00); -webkit-background-clip: text; color: transparent; text-align: center;">富文本样式示例</h1>' +
-          '<p style="text-align: center; color: #6b7280;">这一篇演示轻笺富文本的进阶排版：渐变、发光、动画与配色。</p>' +
+          '<h1 style="color: #615ced; text-align: center;">富文本样式示例</h1>' +
+          '<p style="text-align: center; color: #6b7280;">这一篇演示轻笺当前可安全保存的富文本排版：颜色、字号、对齐、间距、引用与表格。</p>' +
           '<hr>' +
-          '<h2 style="background: linear-gradient(90deg, #615ced, #ec4899); -webkit-background-clip: text; color: transparent;">渐变与发光</h2>' +
-          '<p><span style="background: linear-gradient(135deg, #615ced, #00a884); -webkit-background-clip: text; color: transparent; font-size: 22px; font-weight: bold;">渐变文字：紫色到绿色，颜色顺着笔划流动</span></p>' +
-          '<p><span style="color: #615ced; text-shadow: 0 0 12px rgba(97, 92, 237, 0.85); font-size: 20px; font-weight: bold;">发光文字：像霓虹灯一样亮起来</span></p>' +
-          '<h2>渐变卡片</h2>' +
-          '<p style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(97, 92, 237, 0.55);"><strong style="font-size: 18px;">紫色渐变卡片</strong><br>白字配深色渐变底，圆角加柔和投影，内容区立刻有了层次。</p>' +
-          '<p style="background: linear-gradient(135deg, #00a884, #0d9488); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(13, 148, 136, 0.5);"><strong style="font-size: 18px;">绿色渐变卡片</strong><br>同一套排版换一个配色，就是完全不同的气质。</p>' +
-          '<h2>动画效果</h2>' +
-          '<p>呼吸发光：<span style="display: inline-block; padding: 6px 18px; border-radius: 999px; background: linear-gradient(90deg, #615ced, #00a884); color: #ffffff; font-weight: bold; animation: mermaid-figure-breathe 2s ease-in-out infinite;">同步进行中</span></p>' +
-          '<p>旋转指示：<span style="display: inline-block; width: 26px; height: 26px; border-radius: 50%; border: 4px solid rgba(97, 92, 237, 0.25); border-top-color: #615ced; animation: spin 1.2s linear infinite; vertical-align: middle;">&nbsp;</span>　加载中的转圈也能这样画</p>' +
-          '<p>漂浮移动：<span style="display: inline-block; font-size: 26px; animation: backgroundShift 3s ease-in-out infinite;">🪁</span>　风筝在页面里慢慢飘</p>' +
-          '<h2>渐变边框</h2>' +
-          '<p style="border: 3px solid transparent; background: linear-gradient(var(--card-background, #ffffff), var(--card-background, #ffffff)) padding-box, linear-gradient(135deg, #ff8a00, #ec4899) border-box; border-radius: 14px; padding: 16px 20px;">双背景技巧：外层渐变负责画边框，内层实色负责盖住内容区，浅色深色主题都能自适应。</p>' +
+          '<h2 style="color: #615ced;">文字层次</h2>' +
+          '<p><span style="color: #615ced; font-size: 22px; font-weight: bold;">重点标题可以组合颜色、字号与字重</span></p>' +
+          '<p style="background-color: #f3f1ff; color: #312e81; border-left: 4px solid #615ced; padding: 16px 20px;"><strong style="font-size: 18px;">信息卡片</strong><br>使用背景色、描边和内边距组织重点内容，保存后仍能稳定呈现。</p>' +
           '<h2>引用资源</h2>' +
           '<p>正文里输入 @ 或点工具栏「引用资源」，就能把书签、笔记嵌进文字，点击直达：</p>' +
           '<ul><li>书签：{{ref:bookmark:help}}、{{ref:bookmark:co-build}}</li><li>笔记：{{ref:note:welcome}}、{{ref:note:first-note}}</li></ul>' +
           '<h2>彩色列表</h2>' +
           '<ul><li><span style="color: #615ced; font-weight: bold;">书签</span> — 一键收藏，自动提取摘要与截图</li><li><span style="color: #00a884; font-weight: bold;">笔记</span> — 富文本 / Markdown 双模式</li><li><span style="color: #ff8a00; font-weight: bold;">云空间</span> — 文件直传直看</li></ul>' +
-          '<h2>渐变表格</h2>' +
-          '<table><thead><tr><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">效果</th><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">实现方式</th></tr></thead><tbody><tr><td>渐变文字</td><td>background-clip: text</td></tr><tr><td>霓虹发光</td><td>text-shadow / box-shadow</td></tr><tr><td>呼吸与旋转</td><td>animation 引用全局 keyframes</td></tr></tbody></table>' +
+          '<h2>表格排版</h2>' +
+          '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background-color: #615ced; color: #ffffff; padding: 10px;">能力</th><th style="background-color: #615ced; color: #ffffff; padding: 10px;">用途</th></tr></thead><tbody><tr><td style="border: 1px solid #d1d5db; padding: 10px;">颜色与字号</td><td style="border: 1px solid #d1d5db; padding: 10px;">建立内容层次</td></tr><tr><td style="border: 1px solid #d1d5db; padding: 10px;">表格与引用</td><td style="border: 1px solid #d1d5db; padding: 10px;">组织结构化信息</td></tr></tbody></table>' +
           '<h2>彩色引用</h2>' +
-          '<blockquote style="border-left: 4px solid #615ced; background: rgba(97, 92, 237, 0.08); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 0;">把每一次收藏与记录都留在这里，在你需要的时候重新派上用场。</blockquote>' +
+          '<blockquote style="border-left: 4px solid #615ced; background-color: #f3f1ff; padding: 12px 16px; margin: 0;">把每一次收藏与记录都留在这里，在你需要的时候重新派上用场。</blockquote>' +
           '<hr>' +
-          '<p style="text-align: center; background: linear-gradient(90deg, #ff8a00, #ec4899, #615ced); -webkit-background-clip: text; color: transparent; font-size: 18px; font-weight: bold;">—— 富文本的想象力，远不止黑白 ——</p>',
+          '<p style="text-align: center; color: #615ced; font-size: 18px; font-weight: bold;">—— 用清晰的层次，让内容更容易阅读 ——</p>',
       },
       {
         key: 'mindmap-demo',
@@ -315,32 +306,23 @@ function buildEnglishSeed(siteUrl) {
         sort: 2,
         tagKeys: ['getting-started'],
         content:
-          '<h1 style="background: linear-gradient(90deg, #615ced, #00a884, #ff8a00); -webkit-background-clip: text; color: transparent; text-align: center;">Rich Text Style Example</h1>' +
-          '<p style="text-align: center; color: #6b7280;">This note shows off advanced rich text: gradients, glow, animations and color schemes.</p>' +
+          '<h1 style="color: #615ced; text-align: center;">Rich Text Style Example</h1>' +
+          '<p style="text-align: center; color: #6b7280;">This note demonstrates rich-text formatting that Light Note can safely preserve: colors, sizes, alignment, spacing, references and tables.</p>' +
           '<hr>' +
-          '<h2 style="background: linear-gradient(90deg, #615ced, #ec4899); -webkit-background-clip: text; color: transparent;">Gradients &amp; Glow</h2>' +
-          '<p><span style="background: linear-gradient(135deg, #615ced, #00a884); -webkit-background-clip: text; color: transparent; font-size: 22px; font-weight: bold;">Gradient text: purple to green, flowing through the letters</span></p>' +
-          '<p><span style="color: #615ced; text-shadow: 0 0 12px rgba(97, 92, 237, 0.85); font-size: 20px; font-weight: bold;">Glowing text: like a neon sign</span></p>' +
-          '<h2>Gradient cards</h2>' +
-          '<p style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(97, 92, 237, 0.55);"><strong style="font-size: 18px;">Purple gradient card</strong><br>White text on a deep gradient with rounded corners and a soft shadow adds depth.</p>' +
-          '<p style="background: linear-gradient(135deg, #00a884, #0d9488); color: #ffffff; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 32px -8px rgba(13, 148, 136, 0.5);"><strong style="font-size: 18px;">Green gradient card</strong><br>The same layout with another palette feels completely different.</p>' +
-          '<h2>Animations</h2>' +
-          '<p>Breathing glow: <span style="display: inline-block; padding: 6px 18px; border-radius: 999px; background: linear-gradient(90deg, #615ced, #00a884); color: #ffffff; font-weight: bold; animation: mermaid-figure-breathe 2s ease-in-out infinite;">Syncing</span></p>' +
-          '<p>Spinner: <span style="display: inline-block; width: 26px; height: 26px; border-radius: 50%; border: 4px solid rgba(97, 92, 237, 0.25); border-top-color: #615ced; animation: spin 1.2s linear infinite; vertical-align: middle;">&nbsp;</span>　A loading spinner drawn with pure CSS</p>' +
-          '<p>Floating: <span style="display: inline-block; font-size: 26px; animation: backgroundShift 3s ease-in-out infinite;">🪁</span>　A kite drifting across the page</p>' +
-          '<h2>Gradient border</h2>' +
-          '<p style="border: 3px solid transparent; background: linear-gradient(var(--card-background, #ffffff), var(--card-background, #ffffff)) padding-box, linear-gradient(135deg, #ff8a00, #ec4899) border-box; border-radius: 14px; padding: 16px 20px;">A two-layer background trick: the outer gradient draws the border, the inner solid color covers the content. Works in both light and dark themes.</p>' +
+          '<h2 style="color: #615ced;">Text hierarchy</h2>' +
+          '<p><span style="color: #615ced; font-size: 22px; font-weight: bold;">Combine color, size and weight to highlight key text</span></p>' +
+          '<p style="background-color: #f3f1ff; color: #312e81; border-left: 4px solid #615ced; padding: 16px 20px;"><strong style="font-size: 18px;">Information card</strong><br>Background color, borders and padding organize important content and remain stable after saving.</p>' +
           '<h2>Resource references</h2>' +
           '<p>Type @ or use the resource picker to embed bookmarks and notes inline, then click to jump:</p>' +
           '<ul><li>Bookmarks: {{ref:bookmark:help}}, {{ref:bookmark:repository}}</li><li>Notes: {{ref:note:welcome}}, {{ref:note:first-note}}</li></ul>' +
           '<h2>Colorful list</h2>' +
           '<ul><li><span style="color: #615ced; font-weight: bold;">Bookmarks</span> — save in one click, summary and screenshot extracted</li><li><span style="color: #00a884; font-weight: bold;">Notes</span> — rich text and Markdown</li><li><span style="color: #ff8a00; font-weight: bold;">Cloud storage</span> — preview files directly</li></ul>' +
-          '<h2>Gradient table</h2>' +
-          '<table><thead><tr><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">Effect</th><th style="background: linear-gradient(135deg, #615ced, #764ba2); color: #ffffff;">How</th></tr></thead><tbody><tr><td>Gradient text</td><td>background-clip: text</td></tr><tr><td>Neon glow</td><td>text-shadow / box-shadow</td></tr><tr><td>Breathing &amp; spin</td><td>animation with global keyframes</td></tr></tbody></table>' +
+          '<h2>Table layout</h2>' +
+          '<table style="width: 100%; border-collapse: collapse;"><thead><tr><th style="background-color: #615ced; color: #ffffff; padding: 10px;">Formatting</th><th style="background-color: #615ced; color: #ffffff; padding: 10px;">Purpose</th></tr></thead><tbody><tr><td style="border: 1px solid #d1d5db; padding: 10px;">Color and size</td><td style="border: 1px solid #d1d5db; padding: 10px;">Build a clear hierarchy</td></tr><tr><td style="border: 1px solid #d1d5db; padding: 10px;">Tables and quotes</td><td style="border: 1px solid #d1d5db; padding: 10px;">Organize structured information</td></tr></tbody></table>' +
           '<h2>Colored quote</h2>' +
-          '<blockquote style="border-left: 4px solid #615ced; background: rgba(97, 92, 237, 0.08); border-radius: 0 10px 10px 0; padding: 12px 16px; margin: 0;">Every bookmark and note stays here, ready whenever you need it again.</blockquote>' +
+          '<blockquote style="border-left: 4px solid #615ced; background-color: #f3f1ff; padding: 12px 16px; margin: 0;">Every bookmark and note stays here, ready whenever you need it again.</blockquote>' +
           '<hr>' +
-          '<p style="text-align: center; background: linear-gradient(90deg, #ff8a00, #ec4899, #615ced); -webkit-background-clip: text; color: transparent; font-size: 18px; font-weight: bold;">—— Rich text is about way more than black and white ——</p>',
+          '<p style="text-align: center; color: #615ced; font-size: 18px; font-weight: bold;">—— Clear hierarchy makes content easier to read ——</p>',
       },
       {
         key: 'mindmap-demo',

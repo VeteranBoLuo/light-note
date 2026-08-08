@@ -121,7 +121,17 @@ describe('编辑器 V2 交互回归', () => {
     expect(templateEditSource).toMatch(
       /\.note-template-edit__actions\s*\{[\s\S]*?height:\s*50px;[\s\S]*?box-sizing:\s*border-box;[\s\S]*?flex:\s*0 0 50px;/u,
     );
-    expect(templateEditSource).toContain('padding: 10px 0 calc(80px + env(safe-area-inset-bottom))');
+    expect(templateEditSource).toContain('padding: 6px 0 calc(80px + env(safe-area-inset-bottom))');
+  });
+
+  it('模板编辑页只在移动端压缩元信息区域，并保留描述字段的完整行宽', () => {
+    const mobileStyles = sourceBetween(templateEditSource, '@media (max-width: 767px)', '</style>');
+    expect(mobileStyles).toContain('padding: 6px 0 calc(80px + env(safe-area-inset-bottom))');
+    expect(mobileStyles).toContain('grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr)');
+    expect(mobileStyles).toMatch(
+      /\.note-template-edit__input\s+:deep\(\.b-input\)\s*\{[\s\S]*?height:\s*30px\s*!important;/u,
+    );
+    expect(mobileStyles).toMatch(/\.note-template-edit__description\s*\{[\s\S]*?grid-column:\s*1 \/ -1;/u);
   });
 
   it('模板预览将标题、描述和三项元信息合并为紧凑摘要头', () => {

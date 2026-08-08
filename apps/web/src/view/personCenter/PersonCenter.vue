@@ -109,6 +109,7 @@
           <div
             v-for="menuItem in menuOptions"
             class="flex-center li"
+            :class="{ 'li--support': menuItem.name === 'support' }"
             style="position: relative"
             v-click-log="{ module: '个人中心', operation: menuItem.label }"
             @click="menuItemClick(menuItem)"
@@ -332,12 +333,6 @@
       authOnly: true,
     },
     {
-      name: 'support',
-      label: t('support.entry'),
-      path: '/support',
-      icon: icon.support.heart,
-    },
-    {
       name: 'trash',
       label: t('trash.title'),
       path: '/trash',
@@ -353,6 +348,12 @@
       label: t('personCenter.changelog'),
       path: '/updateLogs',
       icon: icon.userCenter.log,
+    },
+    {
+      name: 'support',
+      label: t('support.entry'),
+      path: '/support',
+      icon: icon.support.heart,
     },
   ]);
   const menuOptions = computed(() => {
@@ -488,6 +489,7 @@
     gap: 8px;
 
     .li {
+      box-sizing: border-box;
       height: 32px;
       cursor: pointer;
       font-size: 12px;
@@ -504,6 +506,16 @@
 
       &.logout {
         background: linear-gradient(120deg, rgba(249, 112, 102, 0.18), rgba(255, 158, 130, 0.12));
+      }
+
+      &.li--support {
+        border: 1px solid var(--support-entry-border-color);
+        color: var(--support-entry-text-color);
+        background: var(--support-entry-background);
+
+        &:hover {
+          background: var(--support-entry-hover-background);
+        }
       }
     }
   }
