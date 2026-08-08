@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   usage: new Map(),
   reservations: new Map(),
+  wallets: new Map(),
   lockTail: Promise.resolve(),
   failPattern: null,
   queryLog: [],
@@ -36,6 +37,7 @@ const pool = vi.hoisted(() => ({
         snapshot = {
           usage: new Map(state.usage),
           reservations: new Map([...state.reservations].map(([key, value]) => [key, { ...value }])),
+          wallets: new Map(state.wallets),
         };
       },
       async query(sql, params = []) {
@@ -104,6 +106,30 @@ const pool = vi.hoisted(() => ({
           });
           return [{ affectedRows: 1 }, []];
         }
+        if (/INSERT IGNORE INTO user_growth/i.test(sql)) {
+          if (!state.wallets.has(params[0])) state.wallets.set(params[0], 0);
+          return [{ affectedRows: 1 }, []];
+        }
+        if (/SELECT ai_bonus_tokens FROM user_growth[\s\S]+FOR UPDATE/i.test(sql)) {
+          return [[{ ai_bonus_tokens: state.wallets.get(params[0]) || 0 }], []];
+        }
+        if (/SET ai_bonus_tokens = ai_bonus_tokens - \?/i.test(sql)) {
+          const [amount, userId] = params;
+          const balance = state.wallets.get(userId) || 0;
+          if (balance < amount) return [{ affectedRows: 0 }, []];
+          state.wallets.set(userId, balance - Number(amount || 0));
+          return [{ affectedRows: 1 }, []];
+        }
+        if (/SET ai_bonus_tokens = GREATEST\(0, ai_bonus_tokens - \?\)/i.test(sql)) {
+          const [amount, userId] = params;
+          state.wallets.set(userId, Math.max(0, (state.wallets.get(userId) || 0) - Number(amount || 0)));
+          return [{ affectedRows: 1 }, []];
+        }
+        if (/SET ai_bonus_tokens = ai_bonus_tokens \+ \?/i.test(sql)) {
+          const [amount, userId] = params;
+          state.wallets.set(userId, (state.wallets.get(userId) || 0) + Number(amount || 0));
+          return [{ affectedRows: 1 }, []];
+        }
         throw new Error(`UNHANDLED_TEST_SQL:${sql}`);
       },
       async commit() {
@@ -116,6 +142,7 @@ const pool = vi.hoisted(() => ({
         active = false;
         state.usage = new Map(snapshot.usage);
         state.reservations = new Map(snapshot.reservations);
+        state.wallets = new Map(snapshot.wallets);
         unlock();
       },
       release: vi.fn(),
@@ -125,7 +152,9 @@ const pool = vi.hoisted(() => ({
     state.queryLog.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), params });
     maybeFail(sql);
     if (/SELECT exp FROM user_growth/i.test(sql)) return [[{ exp: 0 }], []];
-    if (/SELECT bonus_tokens FROM ai_daily_bonus/i.test(sql)) return [[], []];
+    if (/SELECT ai_bonus_tokens FROM user_growth/i.test(sql)) {
+      return [[{ ai_bonus_tokens: state.wallets.get(params[0]) || 0 }], []];
+    }
     if (/SELECT tokens_used[\s\S]+FROM ai_token_usage/i.test(sql)) {
       const [type, key, periodKey] = params;
       const value = state.usage.get(usageKey(type, key, periodKey));
@@ -191,6 +220,7 @@ function usageByType(type) {
 beforeEach(async () => {
   state.usage = new Map();
   state.reservations = new Map();
+  state.wallets = new Map();
   state.lockTail = Promise.resolve();
   state.failPattern = null;
   state.queryLog = [];
@@ -284,6 +314,35 @@ describe('AI quota abuse hardening', () => {
     expect(usageByType('user')).toEqual([{ tokens: 5000, calls: 1 }]);
     expect(usageByType('visitor_device')).toEqual([]);
     expect(usageByType('visitor_network')).toEqual([]);
+  });
+
+  it('登录用户先用每日额度，未越界时不扣永久加油余额', async () => {
+    state.wallets.set('user-wallet', 30_000);
+    const handle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-wallet',
+      userRole: 'user',
+      requestId: 'daily-first',
+    });
+    expect(handle.subjects[0]).toMatchObject({ dailyReserved: 5000, walletReserved: 0 });
+    expect(state.wallets.get('user-wallet')).toBe(30_000);
+    await aiQuota.reconcile(handle, 1200);
+    expect(state.wallets.get('user-wallet')).toBe(30_000);
+  });
+
+  it('每日额度耗尽后自动扣永久余额，真实用量较小时退回多占部分', async () => {
+    state.wallets.set('user-wallet', 30_000);
+    const now = new Date();
+    const periodKey = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    state.usage.set(usageKey('user', 'user-wallet', periodKey), { tokens: 100_000, calls: 2 });
+    const handle = await aiQuota.reserve(visitorRequest(), {
+      userId: 'user-wallet',
+      userRole: 'user',
+      requestId: 'wallet-fallback',
+    });
+    expect(handle.subjects[0]).toMatchObject({ dailyReserved: 0, walletReserved: 5000 });
+    expect(state.wallets.get('user-wallet')).toBe(25_000);
+    await aiQuota.reconcile(handle, 1800);
+    expect(state.wallets.get('user-wallet')).toBe(28_200);
   });
 
   it('并发 gate 在同一设备账本只允许一个请求占用最后额度', async () => {

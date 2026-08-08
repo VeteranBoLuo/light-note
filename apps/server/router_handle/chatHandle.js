@@ -149,7 +149,9 @@ export const generateBookmarkMeta = async (req, res) => {
     const providerMsg = error?.message || String(error);
     console.error('[bookmark-meta] 生成失败 code=%s', stableAgentErrorCode(error));
     if (error?.code === 'AI_QUOTA_EXCEEDED') {
-      return res.status(429).send(resultData(null, 429, '今日 AI 额度已用完，请明天再试。'));
+      return res
+        .status(429)
+        .send(resultData(null, 429, '今日 AI 额度与永久加油余额均已用完，请明天再试或前往「我的成长」兑换。'));
     }
     // 不把供应商原始报错透传前端(曾把 API key 尾号暴露到界面):鉴权/额度类给管理员可辨识的提示,其余归为通用失败
     const isAuthOrQuota =
@@ -385,7 +387,9 @@ export const assistNote = async (req, res) => {
     });
     if (quotaHandle.blocked) {
       logStatus = 'quota_blocked';
-      return res.status(429).send(resultData(null, 429, '今日 AI 额度已用完，请明天再试。'));
+      return res
+        .status(429)
+        .send(resultData(null, 429, '今日 AI 额度与永久加油余额均已用完，请明天再试或前往「我的成长」兑换。'));
     }
 
     const requestedSessionId = String(req.body?.sessionId || '');

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query, getConnection: mocks.getConnection } }));
 vi.mock('./items.js', () => ({ grantItem: mocks.grantItem }));
 
-const { AdminPointsError, adminGrantPoints, getPointsLog, searchAdminUsers } = await import('./points.js');
+const { AdminPointsError, adminGrantPoints, buyItem, getPointsLog, searchAdminUsers } = await import('./points.js');
 
 function connectionWith({ user = true, points = 120, storage = 512, cards = 1 } = {}) {
   const connection = {
@@ -100,5 +100,42 @@ describe('积分流水来源语义', () => {
     const result = await getPointsLog('user-1');
     expect(result.rows[0]).toMatchObject({ sourceType: 'achievement', sourceKey: 'streak_7' });
     expect(result.rows[1]).toMatchObject({ sourceType: 'weekly', sourceKey: 'wk_todo', sourceMeta: '202632' });
+  });
+});
+
+describe('AI 加油包兑换', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([
+    ['ai_pack_small', 90, 300_000],
+    ['ai_pack', 150, 600_000],
+  ])('%s 兑换后直接进入永久余额', async (itemId, cost, tokens) => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT points, level, streak_protect_cards')) {
+          return [[{ points: 500, level: 5, streak_protect_cards: 0 }]];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.getConnection.mockResolvedValue(connection);
+    mocks.query.mockResolvedValueOnce([[{ points: 500 - cost }]]);
+
+    await expect(buyItem('user-1', itemId)).resolves.toMatchObject({
+      ok: true,
+      points: 500 - cost,
+      item: itemId,
+    });
+
+    expect(connection.query).toHaveBeenCalledWith(
+      'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?',
+      [tokens, 'user-1'],
+    );
+    expect(mocks.grantItem).not.toHaveBeenCalled();
+    expect(connection.commit).toHaveBeenCalledOnce();
   });
 });

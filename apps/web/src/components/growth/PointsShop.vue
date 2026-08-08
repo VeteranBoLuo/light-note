@@ -2,34 +2,31 @@
   <div class="ps">
     <div class="ps-head">
       <div class="ps-head-left">
-        <div class="ps-title">🛍️ {{ t('growth.shopTitle') }}</div>
+        <div class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</div>
         <div class="ps-sub">{{ t('growth.shopSubtitle') }}</div>
       </div>
       <div class="ps-balance">
         <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
-        <span class="ps-balance-num">🪙 {{ (shop?.points || 0).toLocaleString('en-US') }}</span>
-        <BButton v-if="!shop?.isVisitor" class="ps-log-link" @click="logVisible = true">
-          {{ t('growth.pointsLogEntry') }} ›
-        </BButton>
+        <span class="ps-balance-num"
+          ><SvgIcon :src="icon.growth.coin" size="17" /> {{ (shop?.points || 0).toLocaleString('en-US') }}</span
+        >
       </div>
     </div>
 
-    <PointsLogModal v-model:visible="logVisible" />
-
-    <div class="ps-earn">💡 {{ t('growth.shopEarnHint') }}</div>
+    <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
     <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
 
     <!-- 实用道具 -->
     <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
     <div class="ps-grid">
       <div v-for="it in consumables" :key="it.id" class="ps-item">
-        <div class="ps-item-icon">{{ ICONS[it.id] || '🎁' }}</div>
+        <div class="ps-item-icon"><SvgIcon :src="itemIcon(it.id)" size="27" /></div>
         <div class="ps-item-body">
           <div class="ps-item-name">{{ itemName(it) }}</div>
           <div class="ps-item-desc">{{ itemDesc(it) }}</div>
         </div>
         <div class="ps-item-foot">
-          <span class="ps-item-cost">🪙 {{ it.cost }}</span>
+          <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
           <BButton
             size="small"
             type="primary"
@@ -64,7 +61,7 @@
           <div class="ps-item-desc">{{ itemDesc(it) }}</div>
         </div>
         <div class="ps-item-foot">
-          <span v-if="!it.owned" class="ps-item-cost">🪙 {{ it.cost }}</span>
+          <span v-if="!it.owned" class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
           <span v-else class="ps-item-cost ps-item-cost--owned">{{ t('growth.shopOwned') }}</span>
           <template v-if="it.owned">
             <BButton
@@ -122,8 +119,8 @@
   import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import PointsLogModal from '@/components/growth/PointsLogModal.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -136,13 +133,11 @@
   const user = useUserStore();
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
 
-  // 商品图标(id → emoji);缺省兜底
-  const ICONS: Record<string, string> = {
-    makeup_card: '🎫',
-    ai_pack: '⚡',
-    storage_512: '💾',
-    storage_2g: '💽',
-  };
+  function itemIcon(itemId: string) {
+    if (itemId.startsWith('ai_pack')) return icon.growth.ai;
+    if (itemId.startsWith('storage_')) return icon.growth.storage;
+    return icon.growth.reward;
+  }
 
   // 名称/描述优先取 i18n(双语),缺失键则回退后端返回的中文名(单一经济事实源仍在后端)
   function itemName(it: ShopItem) {
@@ -191,7 +186,6 @@
   const equippingId = ref<string | null>(null);
   const confirmVisible = ref(false);
   const pending = ref<ShopItem | null>(null);
-  const logVisible = ref(false);
 
   function askBuy(it: ShopItem) {
     if (readOnly.value || !canBuyNow(it)) return;
@@ -264,6 +258,9 @@
     flex-wrap: wrap;
   }
   .ps-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 16px;
     font-weight: 700;
   }
@@ -289,24 +286,18 @@
     color: var(--desc-color);
   }
   .ps-balance-num {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 18px;
     font-weight: 800;
     color: #d97706;
     font-variant-numeric: tabular-nums;
   }
-  .ps-log-link {
-    margin-top: 2px;
-    background: transparent;
-    border: none;
-    color: var(--desc-color);
-    font-size: 11px;
-    cursor: pointer;
-    padding: 0;
-  }
-  .ps-log-link:hover {
-    color: var(--primary-color);
-  }
   .ps-earn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     color: var(--desc-color);
     padding: 8px 12px;
@@ -358,8 +349,7 @@
     background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
   }
   .ps-item-icon {
-    font-size: 26px;
-    line-height: 1;
+    color: var(--primary-color);
   }
   .ps-frame-grid {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -473,6 +463,9 @@
     gap: 8px;
   }
   .ps-item-cost {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     font-size: 13px;
     font-weight: 700;
     color: #d97706;

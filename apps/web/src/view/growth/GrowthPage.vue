@@ -8,9 +8,9 @@
         </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport"
-          >📊 {{ t('growth.weeklyReportEntry') }}</BButton
-        >
+        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport">
+          <SvgIcon :src="icon.growth.rank" size="15" /> {{ t('growth.weeklyReportEntry') }}
+        </BButton>
       </header>
 
       <div v-if="isAdminContext" class="growth-admin-notice" role="status">
@@ -19,86 +19,78 @@
       </div>
 
       <BTabs
-        v-if="bookmark.isMobile"
-        v-model:active-tab="activeMobileSection"
-        class="growth-mobile-tabs"
+        v-model:active-tab="activeSection"
+        class="growth-section-tabs"
         variant="segment"
-        :options="mobileSectionOptions"
+        :options="sectionOptions"
       />
 
-      <section v-if="showGrowthSection('overview')" class="growth-panel">
+      <section v-if="activeSection === 'overview'" class="growth-panel">
         <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
       </section>
 
-      <section v-if="showGrowthSection('tasks') && showGrowthTasks" id="growth-tasks" class="growth-panel">
-        <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
-      </section>
-
-      <section v-if="showGrowthSection('achievements')" id="growth-heatmap" class="growth-panel">
-        <ActivityHeatmap ref="heatmapRef" />
-      </section>
-
-      <!--
-        每日任务属于「任务」页：概览只留成长概况与数据统计，任务类内容集中在一处，
-        不再让人在概览里翻到一半才发现有任务要做。
-        桌面端不分 Tab，这一行仍是「每日任务 + 数据统计」两栏并排(移动端本就纵列)。
-      -->
-      <div v-if="showQuestsStatsRow" class="growth-row">
-        <section v-if="showGrowthSection('tasks')" class="growth-panel growth-panel--flex">
-          <DailyQuests
-            :quests="quests"
-            :bonus="questBonus"
-            :claiming="claiming"
-            :read-only="isAdminContext"
-            @claim="onClaim"
-          />
-        </section>
-        <section v-if="showGrowthSection('overview')" class="growth-panel growth-panel--flex">
+      <div v-if="activeSection === 'overview'" class="growth-row growth-overview-row">
+        <section class="growth-panel growth-panel--flex">
           <GrowthStats :stats="stats" />
+        </section>
+        <section id="growth-heatmap" class="growth-panel growth-panel--flex">
+          <ActivityHeatmap ref="heatmapRef" />
         </section>
       </div>
 
-      <!-- 周挑战与每日任务的等级上限规则不同：管理员/满级账号仍可查看周挑战。 -->
-      <section v-if="showGrowthSection('tasks')" class="growth-panel">
-        <WeeklyChallenge :read-only="isAdminContext" />
-      </section>
+      <template v-if="activeSection === 'tasks'">
+        <div class="growth-row">
+          <section class="growth-panel growth-panel--flex">
+            <DailyQuests
+              :quests="quests"
+              :bonus="questBonus"
+              :claiming="claiming"
+              :read-only="isAdminContext"
+              @claim="onClaim"
+            />
+          </section>
+          <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel growth-panel--flex">
+            <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
+          </section>
+        </div>
+        <section class="growth-panel">
+          <WeeklyChallenge :read-only="isAdminContext" />
+        </section>
+      </template>
 
-      <section v-if="showGrowthSection('assets')" class="growth-panel">
-        <PointsShop :read-only="isAdminContext" />
-      </section>
+      <template v-if="activeSection === 'achievements'">
+        <section class="growth-panel">
+          <AchievementWall
+            :achievements="achievements"
+            :unlocked-count="dashboard?.unlockedCount || 0"
+            :total-achievements="dashboard?.totalAchievements || achievements.length"
+            :claimable-count="dashboard?.claimableCount || 0"
+            :claiming-key="claimingAch"
+            :read-only="isAdminContext"
+            @claim="onClaimAchievement"
+          />
+        </section>
+        <section v-if="streakMilestones.length" class="growth-panel">
+          <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
+        </section>
+        <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
+        <section v-if="showRecap" id="growth-recap" class="growth-panel"><RecapCard /></section>
+      </template>
 
-      <section v-if="showGrowthSection('assets')" class="growth-panel">
-        <LotteryDraw :read-only="isAdminContext" />
-      </section>
-
-      <section v-if="showGrowthSection('assets')" class="growth-panel">
-        <MyInventory :read-only="isAdminContext" />
-      </section>
-
-      <section v-if="showGrowthSection('achievements') && streakMilestones.length" class="growth-panel">
-        <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
-      </section>
-
-      <section v-if="showGrowthSection('achievements')" class="growth-panel">
-        <AchievementWall
-          :achievements="achievements"
-          :unlocked-count="dashboard?.unlockedCount || 0"
-          :total-achievements="dashboard?.totalAchievements || achievements.length"
-          :claimable-count="dashboard?.claimableCount || 0"
-          :claiming-key="claimingAch"
-          :read-only="isAdminContext"
-          @claim="onClaimAchievement"
+      <template v-if="activeSection === 'rewards'">
+        <BTabs
+          v-model:active-tab="activeRewardSection"
+          class="growth-reward-tabs"
+          variant="line"
+          :options="rewardSectionOptions"
         />
-      </section>
-
-      <section v-if="showGrowthSection('achievements')" class="growth-panel">
-        <GrowthTimeline :items="timeline" />
-      </section>
-
-      <!-- 情感回顾不抢占每日任务首屏，放在记录流之后按需浏览。 -->
-      <section v-if="showGrowthSection('achievements') && showRecap" id="growth-recap" class="growth-panel">
-        <RecapCard />
-      </section>
+        <section class="growth-panel">
+          <PointsShop v-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
+          <LotteryDraw v-else-if="activeRewardSection === 'lottery'" :read-only="isAdminContext" />
+          <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
+          <PointsLedger v-else />
+        </section>
+      </template>
     </div>
 
     <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
@@ -120,6 +112,7 @@
   import PointsShop from '@/components/growth/PointsShop.vue';
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
+  import PointsLedger from '@/components/growth/PointsLedger.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -136,21 +129,39 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
 
-  type MobileGrowthSection = 'overview' | 'tasks' | 'achievements' | 'assets';
+  type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
+  type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
 
   const { t } = useI18n();
   const route = useRoute();
   const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
-  const activeMobileSection = ref<MobileGrowthSection>('overview');
+  const routeSection = String(route.query.section || '');
+  const routeRewardSection = String(route.query.reward || '');
+  const activeSection = ref<GrowthSection>(
+    ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
+      ? (routeSection as GrowthSection)
+      : 'overview',
+  );
+  const activeRewardSection = ref<RewardSection>(
+    ['shop', 'lottery', 'inventory', 'ledger'].includes(routeRewardSection)
+      ? (routeRewardSection as RewardSection)
+      : 'shop',
+  );
   const growthPageRef = ref<HTMLElement | null>(null);
   let preserveNextMobileSectionScroll = false;
-  const mobileSectionOptions = computed(() => [
+  const sectionOptions = computed(() => [
     { key: 'overview', label: t('growth.mobileTabOverview') },
     { key: 'tasks', label: t('growth.mobileTabTasks') },
     { key: 'achievements', label: t('growth.mobileTabAchievements') },
-    { key: 'assets', label: t('growth.mobileTabAssets') },
+    { key: 'rewards', label: t('growth.mobileTabRewards') },
+  ]);
+  const rewardSectionOptions = computed(() => [
+    { key: 'shop', label: t('growth.rewardTabShop') },
+    { key: 'lottery', label: t('growth.rewardTabLottery') },
+    { key: 'inventory', label: t('growth.rewardTabInventory') },
+    { key: 'ledger', label: t('growth.rewardTabLedger') },
   ]);
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
@@ -174,30 +185,21 @@
   const showRecap = computed(() => hasRecap.value);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
 
-  function sectionForHash(hash: string): MobileGrowthSection | null {
+  function sectionForHash(hash: string): GrowthSection | null {
     if (hash === '#growth-tasks') return 'tasks';
-    if (hash === '#growth-heatmap' || hash === '#growth-recap') return 'achievements';
+    if (hash === '#growth-heatmap') return 'overview';
+    if (hash === '#growth-recap') return 'achievements';
     return null;
   }
-
-  function showGrowthSection(section: MobileGrowthSection) {
-    return !bookmark.isMobile || activeMobileSection.value === section;
-  }
-
-  /**
-   * 「每日任务 + 数据统计」这一行的外层。移动端两个子项分属不同 Tab（任务 / 概览），
-   * 所以要在任一子项可见时才渲染外层，否则空 div 会白占容器 18px 的 gap。
-   */
-  const showQuestsStatsRow = computed(() => showGrowthSection('overview') || showGrowthSection('tasks'));
 
   function scrollToHash() {
     const targetId = route.hash.replace(/^#/, '');
     if (!targetId) return;
     const targetSection = sectionForHash(route.hash);
-    if (bookmark.isMobile && targetSection && activeMobileSection.value !== targetSection) {
+    if (targetSection && activeSection.value !== targetSection) {
       // 带 hash 的入口需要继续定位到目标卡片，不能被普通 Tab 切换的回顶逻辑覆盖。
-      preserveNextMobileSectionScroll = true;
-      activeMobileSection.value = targetSection;
+      preserveNextMobileSectionScroll = bookmark.isMobile;
+      activeSection.value = targetSection;
     }
     void nextTick(() => {
       document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -280,8 +282,9 @@
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
-    loadGrowthTasks(true); // 成长任务由资源创建和资料更新旁路完成，进页时强制同步
-    loadRecap(); // 最近沉淀/那年今日/尘封回顾
+    // 只加载当前分区的专属数据；奖励子页在挂载时加载，避免 PC 首屏同时请求整页所有模块。
+    if (activeSection.value === 'tasks') loadGrowthTasks(true);
+    if (activeSection.value === 'achievements') loadRecap();
     scrollToHash();
   });
 
@@ -294,7 +297,12 @@
    * 刷新过程静默，提示由顶部那条全局细进度条负责（composable 内部已注册）。
    */
   useForegroundRefresh({
-    refresh: () => Promise.all([loadDashboard(), loadGrowthTasks(true), loadRecap()]),
+    refresh: () => {
+      const requests: Array<Promise<unknown>> = [loadDashboard()];
+      if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true));
+      if (activeSection.value === 'achievements') requests.push(loadRecap());
+      return Promise.all(requests);
+    },
     // 领取奖励在途或周报弹框开着时不插队刷新：会把面板数据换到用户正在看的内容底下。
     canRefresh: () => !claiming.value && !claimingAch.value && !wrVisible.value,
   });
@@ -306,7 +314,10 @@
     () => scrollToHash(),
   );
 
-  watch(activeMobileSection, () => {
+  watch(activeSection, (section) => {
+    void router.replace({ query: { ...route.query, section } });
+    if (section === 'tasks') void loadGrowthTasks();
+    if (section === 'achievements') void loadRecap();
     if (!bookmark.isMobile) return;
     if (preserveNextMobileSectionScroll) {
       preserveNextMobileSectionScroll = false;
@@ -315,6 +326,11 @@
     // 成长页四个分段共用同一个滚动容器；切换内容后必须回到页面起点，
     // 不能把上一分段的滚动位置带进结构和高度完全不同的新分段。
     void nextTick(() => resetMobileScrollElement(growthPageRef.value));
+  });
+
+  watch(activeRewardSection, (reward) => {
+    if (activeSection.value === 'rewards')
+      void router.replace({ query: { ...route.query, section: 'rewards', reward } });
   });
 
   const claimingAch = ref<string | null>(null);
@@ -356,7 +372,7 @@
     color: var(--text-color);
   }
   .growth-container {
-    max-width: 640px;
+    max-width: 720px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -365,7 +381,7 @@
   /* 大屏放宽容器,容纳 GrowthCard 的左右两栏,消除 PC 两侧大片留白 */
   @media (min-width: 900px) {
     .growth-container {
-      max-width: 960px;
+      max-width: 1120px;
     }
   }
   .growth-hero {
@@ -409,6 +425,9 @@
     color: var(--desc-color);
   }
   .growth-report-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     align-self: flex-start;
     margin-top: 10px;
     height: 32px !important;
@@ -464,6 +483,25 @@
     flex: 1 1 0;
     min-width: 0;
   }
+  .growth-section-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid var(--card-border-color);
+    border-radius: 13px;
+    background: var(--background-color);
+  }
+  .growth-section-tabs :deep(.tab) {
+    min-height: 44px;
+    flex: 1 1 25%;
+    justify-content: center;
+  }
+  .growth-reward-tabs {
+    align-self: stretch;
+    border-bottom: 1px solid var(--card-border-color);
+  }
   @media (max-width: 767px) {
     .growth-page {
       padding: 18px 12px 36px;
@@ -471,17 +509,7 @@
     .growth-container {
       gap: 12px;
     }
-    .growth-mobile-tabs {
-      position: sticky;
-      top: 0;
-      z-index: 3;
-      width: 100%;
-      box-sizing: border-box;
-      border-radius: 12px;
-      background: var(--background-color);
-      box-shadow: 0 7px 18px -18px color-mix(in srgb, var(--text-color) 55%, transparent);
-    }
-    .growth-mobile-tabs :deep(.tab) {
+    .growth-section-tabs :deep(.tab) {
       min-width: 0;
       min-height: 44px;
       padding: 0 8px;

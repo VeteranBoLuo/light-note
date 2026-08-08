@@ -4,7 +4,7 @@ import { grantItem } from './items.js';
 
 // 积分抽奖·盲盒。纯积分消耗池(健康的积分出口):单抽 88 / 十连 800(省 80)。
 // 每 10 抽保底一次稀有(补签卡/AI包/存储);奖池期望值 < 单抽成本,长期是净消耗,但用稀有大奖制造惊喜。
-// 复用 points 的落库口径:积分走 points_log,存储走 storage_bonus_mb,补签卡走上限 2,AI 包进背包后在使用时写 ai_daily_bonus。
+// 复用 points 的落库口径:积分走 points_log,存储走 storage_bonus_mb,补签卡走上限 2,AI 包即时进入永久余额。
 // 每日免费抽奖次数随等级递增(把「升级」直接变成「解锁更多免费抽」),是等级权益与抽奖的粘合点。
 
 export const DRAW_COST = 88;
@@ -76,8 +76,10 @@ async function grantReward(conn, userId, prize) {
     // 补签卡:统一走 grantItem(上限 2;已满则本次不叠加,概率低可接受)
     await grantItem(conn, userId, 'makeup_card', prize.amount);
   } else if (prize.kind === 'ai_pack') {
-    // AI 加油包 → 进背包(发 1 件),用户择时「使用」才加当日额度;不再抽中即当天生效、当天不用作废
-    await grantItem(conn, userId, 'ai_pack', 1);
+    await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
+      prize.amount,
+      userId,
+    ]);
   }
   return { id: prize.id, kind: prize.kind, amount: prize.amount, name: prize.name };
 }

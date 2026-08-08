@@ -2,28 +2,33 @@
   <div class="aw">
     <div class="aw-head">
       <span class="aw-title">{{ t('growth.dashWall') }}</span>
-      <span v-if="(claimableCount || 0) > 0" class="aw-claimable"
-        >🎁 {{ t('growth.achClaimableN', { n: claimableCount }) }}</span
-      >
+      <span v-if="(claimableCount || 0) > 0" class="aw-claimable">
+        <SvgIcon :src="icon.growth.reward" size="13" /> {{ t('growth.achClaimableN', { n: claimableCount }) }}
+      </span>
       <span class="aw-count">{{ t('growth.achUnlocked', { n: unlockedCount, total: totalAchievements }) }}</span>
     </div>
     <div class="aw-bar">
       <div class="aw-bar-fill" :style="{ width: pct + '%' }"></div>
     </div>
+    <BTabs v-model:active-tab="activeFilter" class="aw-filters" variant="pill" :options="filterOptions" />
 
-    <div v-for="g in groups" :key="g" class="aw-group">
+    <div v-for="g in visibleGroups" :key="g" class="aw-group">
       <div class="aw-group-title">{{ t(`growth.achGroup.${g}`) }}</div>
       <div class="aw-grid">
         <div
           v-for="a in byGroup(g)"
           :key="a.key"
           class="aw-badge"
-          :class="{ unlocked: a.unlocked }"
+          :class="[{ unlocked: a.unlocked }, `tier-${medalTier(a, g)}`]"
           :title="tipOf(a)"
+          role="button"
+          tabindex="0"
           @click="openDetail(a)"
+          @keydown.enter="openDetail(a)"
+          @keydown.space.prevent="openDetail(a)"
         >
           <div class="aw-medal">
-            <span class="aw-emoji">{{ icons[a.key] || '🏆' }}</span>
+            <SvgIcon class="aw-symbol" :src="groupIcon(g)" size="25" />
             <span v-if="!a.unlocked" class="aw-lock">
               <SvgIcon :src="icon.growth.lock" size="11" />
             </span>
@@ -37,14 +42,18 @@
               :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
               @click.stop="onClaim(a)"
             >
-              🪙 {{ t('growth.achClaim', { n: a.reward }) }}
+              <SvgIcon :src="icon.growth.coin" size="12" /> {{ t('growth.achClaim', { n: a.reward }) }}
             </BButton>
-            <div v-else class="aw-got">✓ {{ t('growth.achClaimed') }}</div>
+            <div v-else class="aw-got">
+              <SvgIcon :src="icon.filterPanel.check" size="11" /> {{ t('growth.achClaimed') }}
+            </div>
           </template>
           <div v-else class="aw-mini">
             <div class="aw-mini-bar"><div class="aw-mini-fill" :style="{ width: prog(a) + '%' }"></div></div>
             <span class="aw-mini-num">{{ Math.min(a.cur, a.target) }}/{{ a.target }}</span>
-            <span v-if="a.reward" class="aw-reward-hint">🪙 {{ a.reward }}</span>
+            <span v-if="a.reward" class="aw-reward-hint"
+              ><SvgIcon :src="icon.growth.coin" size="10" /> {{ a.reward }}</span
+            >
           </div>
         </div>
       </div>
@@ -53,12 +62,14 @@
     <!-- 成就详情 -->
     <BModal v-if="detail" v-model:visible="detailVisible" :show-footer="false" width="340px" :mask-closable="true">
       <div class="awd">
-        <div class="awd-medal" :class="{ unlocked: detail.unlocked }">
-          <span class="awd-emoji">{{ icons[detail.key] || '🏆' }}</span>
+        <div class="awd-medal" :class="[{ unlocked: detail.unlocked }, `tier-${detailTier}`]">
+          <SvgIcon class="awd-symbol" :src="groupIcon(detail.group)" size="40" />
         </div>
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
         <div class="awd-desc">{{ t(`growth.achDesc.${detail.key}`) }}</div>
-        <div v-if="detail.reward" class="awd-reward">{{ t('growth.achRewardLabel') }} 🪙 {{ detail.reward }}</div>
+        <div v-if="detail.reward" class="awd-reward">
+          {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="14" /> {{ detail.reward }}
+        </div>
         <BButton
           v-if="detail.claimable"
           class="awd-claim"
@@ -68,7 +79,9 @@
         >
           {{ t('growth.achClaim', { n: detail.reward }) }}
         </BButton>
-        <div v-else-if="detail.unlocked" class="awd-status unlocked">✓ {{ t('growth.achClaimed') }}</div>
+        <div v-else-if="detail.unlocked" class="awd-status unlocked">
+          <SvgIcon :src="icon.filterPanel.check" size="13" /> {{ t('growth.achClaimed') }}
+        </div>
         <div v-else class="awd-status">
           <div class="awd-bar"><div class="awd-fill" :style="{ width: prog(detail) + '%' }"></div></div>
           <span class="awd-num">{{ Math.min(detail.cur, detail.target) }} / {{ detail.target }}</span>
@@ -82,10 +95,11 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { Achievement } from '@/composables/useGrowth.ts';
-  import { ACHIEVEMENT_ICONS, ACHIEVEMENT_GROUPS } from '@/config/achievements.ts';
+  import { ACHIEVEMENT_GROUPS } from '@/config/achievements.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import icon from '@/config/icon.ts';
 
   const props = withDefaults(
@@ -102,7 +116,14 @@
   const emit = defineEmits<{ (e: 'claim', key: string): void }>();
   const { t } = useI18n();
 
-  const icons = ACHIEVEMENT_ICONS;
+  type AchievementFilter = 'all' | 'claimable' | 'near' | 'unlocked';
+  const activeFilter = ref<AchievementFilter>('all');
+  const filterOptions = computed(() => [
+    { key: 'all', label: t('growth.achFilterAll') },
+    { key: 'claimable', label: t('growth.achFilterClaimable') },
+    { key: 'near', label: t('growth.achFilterNear') },
+    { key: 'unlocked', label: t('growth.achFilterUnlocked') },
+  ]);
   const detail = ref<Achievement | null>(null);
   const detailVisible = ref(false);
   function openDetail(a: Achievement) {
@@ -115,12 +136,19 @@
   }
   // 只展示实际存在数据的分组(向后兼容后端新增/删减)
   const groups = computed(() => ACHIEVEMENT_GROUPS.filter((g) => props.achievements.some((a) => a.group === g)));
+  const visibleGroups = computed(() => groups.value.filter((group) => byGroup(group).length > 0));
   const pct = computed(() =>
     props.totalAchievements ? Math.round((props.unlockedCount / props.totalAchievements) * 100) : 0,
   );
 
   function byGroup(g: string) {
-    return props.achievements.filter((a) => a.group === g);
+    return props.achievements.filter((a) => {
+      if (a.group !== g) return false;
+      if (activeFilter.value === 'claimable') return Boolean(a.claimable);
+      if (activeFilter.value === 'near') return !a.unlocked && prog(a) >= 60;
+      if (activeFilter.value === 'unlocked') return a.unlocked;
+      return true;
+    });
   }
   function prog(a: Achievement) {
     return a.target ? Math.min(100, Math.round((a.cur / a.target) * 100)) : 0;
@@ -128,6 +156,19 @@
   function tipOf(a: Achievement) {
     return t(`growth.achDesc.${a.key}`);
   }
+  function groupIcon(group: string) {
+    return icon.growth[group as keyof typeof icon.growth] || icon.growth.level;
+  }
+  function medalTier(a: Achievement, group: string) {
+    const all = props.achievements.filter((item) => item.group === group);
+    const index = Math.max(
+      0,
+      all.findIndex((item) => item.key === a.key),
+    );
+    const ratio = all.length > 1 ? index / (all.length - 1) : 1;
+    return ratio >= 0.67 ? 'gold' : ratio >= 0.34 ? 'silver' : 'bronze';
+  }
+  const detailTier = computed(() => (detail.value ? medalTier(detail.value, detail.value.group) : 'bronze'));
 </script>
 
 <style scoped lang="less">
@@ -163,6 +204,9 @@
     border-radius: 999px;
     background: linear-gradient(90deg, var(--primary-color), #fbbf24);
     transition: width 0.5s ease;
+  }
+  .aw-filters {
+    align-self: flex-start;
   }
   .aw-group {
     display: flex;
@@ -201,7 +245,7 @@
     border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
   }
   .aw-badge.unlocked {
-    border-color: color-mix(in srgb, #fbbf24 45%, transparent);
+    border-color: #d99a12;
     background: linear-gradient(
       180deg,
       color-mix(in srgb, #fbbf24 12%, var(--background-color)),
@@ -223,16 +267,32 @@
     background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
   }
   .aw-badge.unlocked .aw-medal {
-    background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b);
-    box-shadow: 0 4px 12px -4px rgba(245, 158, 11, 0.6);
+    color: #fff;
+    border-color: currentColor;
   }
-  .aw-emoji {
-    font-size: 24px;
-    line-height: 1;
-    filter: grayscale(1) opacity(0.45);
+  .aw-badge.unlocked.tier-bronze .aw-medal {
+    background: #b66f3f;
   }
-  .aw-badge.unlocked .aw-emoji {
-    filter: none;
+  .aw-badge.unlocked.tier-silver .aw-medal {
+    background: #7d8ca3;
+  }
+  .aw-badge.unlocked.tier-gold .aw-medal {
+    background: #d99a12;
+  }
+  .aw-badge:not(.unlocked).tier-bronze .aw-medal {
+    color: #9a5f39;
+  }
+  .aw-badge:not(.unlocked).tier-silver .aw-medal {
+    color: #708096;
+  }
+  .aw-badge:not(.unlocked).tier-gold .aw-medal {
+    color: #b77b05;
+  }
+  .aw-symbol {
+    opacity: 0.55;
+  }
+  .aw-badge.unlocked .aw-symbol {
+    opacity: 1;
   }
   .aw-lock {
     position: absolute;
@@ -258,12 +318,18 @@
     color: var(--desc-color);
   }
   .aw-got {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     font-size: 10.5px;
     font-weight: 700;
     color: #f59e0b;
     letter-spacing: 0.04em;
   }
   .aw-claimable {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11.5px;
     font-weight: 700;
     color: #d97706;
@@ -271,6 +337,9 @@
     margin-right: 8px;
   }
   .aw-claim {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     padding: 3px 10px;
     border-radius: 999px;
     border: none;
@@ -301,6 +370,9 @@
     }
   }
   .aw-reward-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     font-size: 9.5px;
     color: #d97706;
     font-weight: 600;
@@ -352,16 +424,22 @@
     background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
   }
   .awd-medal.unlocked {
-    background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b);
-    box-shadow: 0 6px 18px -6px rgba(245, 158, 11, 0.7);
+    color: #fff;
   }
-  .awd-emoji {
-    font-size: 40px;
-    line-height: 1;
-    filter: grayscale(1) opacity(0.45);
+  .awd-medal.unlocked.tier-bronze {
+    background: #b66f3f;
   }
-  .awd-medal.unlocked .awd-emoji {
-    filter: none;
+  .awd-medal.unlocked.tier-silver {
+    background: #7d8ca3;
+  }
+  .awd-medal.unlocked.tier-gold {
+    background: #d99a12;
+  }
+  .awd-symbol {
+    opacity: 0.55;
+  }
+  .awd-medal.unlocked .awd-symbol {
+    opacity: 1;
   }
   .awd-name {
     font-size: 17px;
@@ -382,11 +460,16 @@
     margin-top: 4px;
   }
   .awd-status.unlocked {
+    flex-direction: row;
+    justify-content: center;
     font-size: 13px;
     font-weight: 700;
     color: #f59e0b;
   }
   .awd-reward {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 13px;
     font-weight: 600;
     color: #d97706;

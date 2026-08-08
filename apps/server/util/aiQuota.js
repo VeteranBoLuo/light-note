@@ -163,7 +163,7 @@ function resolveSubjects(req, { userId, userRole } = {}) {
   return [{ type: 'user', key: String(userId).trim().slice(0, 128), quota: DAILY_QUOTA.user }];
 }
 
-// 注册用户按成长等级下发额度；查不到成长记录时用 Lv.1，root 视为满级。
+// 注册用户按成长等级下发每日额度；永久加油余额单独核算，不能混进每日上限。
 async function userDailyQuota(userId, userRole) {
   let base;
   if (userRole === 'root') {
@@ -177,17 +177,12 @@ async function userDailyQuota(userId, userRole) {
       base = RANKS[0].aiTokenDaily;
     }
   }
-  let bonus = 0;
-  try {
-    const [rows] = await pool.query('SELECT bonus_tokens FROM ai_daily_bonus WHERE user_id = ? AND day = ?', [
-      userId,
-      dayKey(),
-    ]);
-    bonus = Math.max(0, Number(rows[0]?.bonus_tokens || 0));
-  } catch {
-    // 加油包表不可用时不发放额外额度，保持失败安全。
-  }
-  return base + bonus;
+  return base;
+}
+
+async function getUserBonusTokens(userId) {
+  const [rows] = await pool.query('SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
+  return Math.max(0, Number(rows[0]?.ai_bonus_tokens || 0));
 }
 
 function sortedSubjects(subjects) {
@@ -211,6 +206,12 @@ function normalizeStoredSubjects(value) {
       key: String(item.key || '').slice(0, 128),
       quota: Math.max(0, Number(item.quota || 0)),
       used: Math.max(0, Number(item.used || 0)),
+      reservedTokens: Math.max(0, Number(item.reservedTokens || 0)),
+      dailyAvailable: Math.max(0, Number(item.dailyAvailable || 0)),
+      dailyReserved: Math.max(0, Number(item.dailyReserved || 0)),
+      walletReserved: Math.max(0, Number(item.walletReserved || 0)),
+      walletBalance: Math.max(0, Number(item.walletBalance || 0)),
+      walletEnforced: item.walletEnforced === true,
     }))
     .filter((item) => item.type && item.key && item.quota > 0);
 }
@@ -229,10 +230,18 @@ function reservationKey(ctx, subjects, pk) {
 function effectiveStatus(subjects, visitor) {
   if (!visitor) {
     const subject = subjects[0] || { used: 0, quota: DAILY_QUOTA.user };
+    const dailyQuota = Math.max(0, Number(subject.quota || 0));
+    const dailyUsed = Math.min(dailyQuota, Math.max(0, Number(subject.used || 0)));
+    const bonusTokens = Math.max(0, Number(subject.walletBalance || 0));
+    const dailyRemaining = Math.max(0, dailyQuota - dailyUsed);
     return {
-      used: Math.max(0, Number(subject.used || 0)),
-      quota: Math.max(0, Number(subject.quota || 0)),
-      remaining: Math.max(0, Number(subject.quota || 0) - Number(subject.used || 0)),
+      used: dailyUsed,
+      quota: dailyQuota + bonusTokens,
+      remaining: dailyRemaining + bonusTokens,
+      dailyQuota,
+      dailyUsed,
+      dailyRemaining,
+      bonusTokens,
     };
   }
   const device = subjects.find((item) => item.type === 'visitor_device') || {
@@ -308,19 +317,51 @@ async function reserveSubjectsAtomic(subjects, pk, quotaReservationKey) {
       lockedSubjects.push({ ...subject, used: Math.max(0, Number(rows[0]?.tokens_used || 0)) });
     }
 
-    // 只要发起前「已用 < 上限」就放行(哪怕这次预留/实际用量会超上限),已用达到或超过上限才拦——
-    // 避免"还剩一点额度却不让发起对话";超出的部分由结算(reconcile)按真实用量校正记账。
-    const blocked = ENFORCE && lockedSubjects.some((item) => item.used >= item.quota);
+    // 注册用户余额与当日计数必须在同一事务内加锁，保证并发请求不会重复消费永久余额。
+    for (const subject of lockedSubjects) {
+      if (subject.type !== 'user') continue;
+      await connection.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [subject.key]);
+      const [walletRows] = await connection.query(
+        'SELECT ai_bonus_tokens FROM user_growth WHERE user_id = ? FOR UPDATE',
+        [subject.key],
+      );
+      subject.walletBalance = Math.max(0, Number(walletRows[0]?.ai_bonus_tokens || 0));
+    }
+
+    // 每日额度优先；当日额度为 0 后才允许永久余额兜底。只要还有任一 token 就允许最后一轮，
+    // Provider 超出预留的部分在结算时继续扣余额，余额不足则钳到 0 并让后续请求被拦截。
+    const blocked =
+      ENFORCE &&
+      lockedSubjects.some((item) => {
+        if (item.type !== 'user') return item.used >= item.quota;
+        return Math.max(0, item.quota - item.used) + item.walletBalance <= 0;
+      });
     if (!blocked) {
       for (const subject of lockedSubjects) {
+        const dailyAvailable = Math.max(0, subject.quota - subject.used);
+        const available = subject.type === 'user' ? dailyAvailable + subject.walletBalance : RESERVE_TOKENS;
+        const reservedTokens = ENFORCE ? Math.min(RESERVE_TOKENS, available) : RESERVE_TOKENS;
+        const dailyReserved = subject.type === 'user' ? Math.min(reservedTokens, dailyAvailable) : reservedTokens;
+        const walletEnforced = ENFORCE && subject.type === 'user';
+        const walletReserved = walletEnforced ? Math.max(0, reservedTokens - dailyReserved) : 0;
+        Object.assign(subject, { dailyAvailable, reservedTokens, dailyReserved, walletReserved, walletEnforced });
         const [updateResult] = await connection.query(
           `UPDATE ai_token_usage
               SET tokens_used = tokens_used + ?, call_count = call_count + 1
             WHERE subject_type = ? AND subject_key = ? AND period_type = 'day' AND period_key = ?`,
-          [RESERVE_TOKENS, subject.type, subject.key, pk],
+          [reservedTokens, subject.type, subject.key, pk],
         );
         if (Number(updateResult?.affectedRows || 0) !== 1) {
           throw createQuotaError('AI_QUOTA_COUNTER_UPDATE_FAILED', 'AI 配额服务暂不可用');
+        }
+        if (walletReserved > 0) {
+          const [walletUpdate] = await connection.query(
+            'UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens - ? WHERE user_id = ? AND ai_bonus_tokens >= ?',
+            [walletReserved, subject.key, walletReserved],
+          );
+          if (Number(walletUpdate?.affectedRows || 0) !== 1) {
+            throw createQuotaError('AI_QUOTA_WALLET_UPDATE_FAILED', 'AI 配额服务暂不可用');
+          }
         }
       }
     }
@@ -374,12 +415,16 @@ async function reconcileReservation(handle, actualTokens, aborted) {
     if (!subjects.length) throw createQuotaError('AI_QUOTA_RESERVATION_INVALID', 'AI 配额结算暂不可用');
     const pk = String(reservation.period_key || '');
     if (!/^\d{8}$/.test(pk)) throw createQuotaError('AI_QUOTA_RESERVATION_INVALID', 'AI 配额结算暂不可用');
-    const reserved = Math.max(0, Number(reservation.reserved_tokens || handle.reserved || 0));
     const actual = normalizeActualTokens(actualTokens);
-    // 主动断开时不得退还占位，避免“断开即免费”；正常结束则校正为 Provider 报告的真实值。
-    const delta = aborted ? Math.max(0, actual - reserved) : actual - reserved;
-    if (delta !== 0) {
-      for (const subject of sortedSubjects(subjects)) {
+    for (const subject of sortedSubjects(subjects)) {
+      const reserved = Math.max(
+        0,
+        Number(subject.reservedTokens || reservation.reserved_tokens || handle.reserved || 0),
+      );
+      // 主动断开时不得退还占位，避免“断开即免费”；正常结束按 Provider 真实用量校正。
+      const settledActual = aborted ? Math.max(actual, reserved) : actual;
+      const delta = settledActual - reserved;
+      if (delta !== 0) {
         const [updateResult] = await connection.query(
           `UPDATE ai_token_usage
             SET tokens_used = GREATEST(0, tokens_used + ?)
@@ -390,6 +435,21 @@ async function reconcileReservation(handle, actualTokens, aborted) {
         // 不应误判为结算失败(否则预留卡在 reserved)。仅 >1(理论不可能)才视为异常。方向保守:宁可少退、不放大额度。
         if (Number(updateResult?.affectedRows || 0) > 1) {
           throw createQuotaError('AI_QUOTA_COUNTER_UPDATE_FAILED', 'AI 配额结算暂不可用');
+        }
+      }
+      if (subject.type === 'user' && subject.walletEnforced) {
+        const walletActual = Math.max(0, settledActual - Math.max(0, Number(subject.dailyAvailable || 0)));
+        const walletDelta = walletActual - Math.max(0, Number(subject.walletReserved || 0));
+        if (walletDelta > 0) {
+          await connection.query(
+            'UPDATE user_growth SET ai_bonus_tokens = GREATEST(0, ai_bonus_tokens - ?) WHERE user_id = ?',
+            [walletDelta, subject.key],
+          );
+        } else if (walletDelta < 0) {
+          await connection.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
+            -walletDelta,
+            subject.key,
+          ]);
         }
       }
     }
@@ -481,7 +541,10 @@ export async function getStatus(req, ctx = {}) {
   try {
     const subjects = resolveSubjects(req, ctx);
     const visitor = subjects.some((item) => item.type.startsWith('visitor_'));
-    if (!visitor) subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
+    if (!visitor) {
+      subjects[0].quota = await userDailyQuota(ctx.userId, ctx.userRole);
+      subjects[0].walletBalance = await getUserBonusTokens(ctx.userId);
+    }
     const pk = dayKey();
     const resolved = await Promise.all(
       subjects.map(async (subject) => ({ ...subject, used: await getDayUsed(subject.type, subject.key, pk) })),
@@ -513,7 +576,12 @@ export async function getStatusForUser(userId, userRole) {
     }
     const quota = await userDailyQuota(userId, userRole);
     const used = await getDayUsed('user', String(userId).slice(0, 128), dayKey());
-    return { type: 'user', used, quota, remaining: Math.max(0, quota - used), enforcing: ENFORCE };
+    const walletBalance = await getUserBonusTokens(userId);
+    return {
+      type: 'user',
+      ...effectiveStatus([{ type: 'user', key: userId, used, quota, walletBalance }], false),
+      enforcing: ENFORCE,
+    };
   } catch {
     logQuotaFailure('user_status_failed');
     return { unavailable: true, error: 'AI_QUOTA_UNAVAILABLE', enforcing: ENFORCE };

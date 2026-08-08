@@ -6,7 +6,7 @@ export const getMyGrowth = () => apiBaseGet('/api/growth/me');
 // 签到(游客后端返回 status 'preview',由 request 拦截统一弹注册引导)
 export const checkin = () => apiBasePost('/api/growth/checkin');
 
-// 领取今日任务奖励(全部完成后)
+// 领取当前已达到的每日任务阶梯奖励（2/3 与 3/3）
 export const claimDailyBonus = () => apiBasePost('/api/growth/claimDailyBonus');
 
 // 使用补签卡(补回最近 3 个自然日内指定的一天漏签、续连签)
@@ -45,10 +45,10 @@ export const getShop = () => apiBaseGet('/api/growth/shop');
 // 购买商品(补签卡 / AI 加油包 / 称号)
 export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy', { itemId });
 
-// 背包(消耗品持有)+ 资产(积分/永久扩容/今日AI加油)总览
+// 背包(历史消耗品持有)+ 资产(积分/永久扩容/永久 AI 加油余额)总览
 export const getInventory = () => apiBaseGet('/api/growth/inventory');
 
-// 使用一件背包消耗品(如 AI 加油包 → 今日额度 +60万);补签卡走 useProtectCard
+// 使用一件历史背包消耗品(旧 AI 加油包会转入永久余额);补签卡走 useProtectCard
 export const useItemApi = (itemId: string) => apiBasePost('/api/growth/item/use', { itemId });
 
 // 佩戴 / 卸下称号(titleId 为空=卸下)

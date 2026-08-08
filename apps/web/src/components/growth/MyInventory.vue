@@ -1,41 +1,41 @@
 <template>
   <div class="inv">
     <div class="inv-head">
-      <h3 class="inv-title">🎒 {{ t('growth.inventoryTitle') }}</h3>
+      <h3 class="inv-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.inventoryTitle') }}</h3>
       <p class="inv-sub">{{ t('growth.inventorySubtitle') }}</p>
     </div>
 
-    <!-- 我的资产:即时到账类(积分 / 永久扩容 / 今日 AI 加油) -->
+    <!-- 我的资产:即时到账类(积分 / 永久扩容 / 永久 AI 加油余额) -->
     <div class="inv-label">{{ t('growth.inventoryAssetsTitle') }}</div>
     <div class="inv-assets">
       <div class="asset">
-        <span class="asset-ico">🪙</span>
+        <span class="asset-ico"><SvgIcon :src="icon.growth.coin" size="21" /></span>
         <div class="asset-body">
           <b class="asset-val">{{ (inv?.assets.points || 0).toLocaleString('en-US') }}</b>
           <span class="asset-label">{{ t('growth.assetPoints') }}</span>
         </div>
       </div>
       <div class="asset">
-        <span class="asset-ico">💾</span>
+        <span class="asset-ico"><SvgIcon :src="icon.growth.storage" size="21" /></span>
         <div class="asset-body">
           <b class="asset-val">{{ fmtStorage(inv?.assets.storageBonusMb || 0) }}</b>
           <span class="asset-label">{{ t('growth.assetStorage') }}</span>
         </div>
       </div>
       <div class="asset">
-        <span class="asset-ico">⚡</span>
+        <span class="asset-ico"><SvgIcon :src="icon.growth.ai" size="21" /></span>
         <div class="asset-body">
-          <b class="asset-val">{{ fmtTokens(inv?.assets.todayAiBonus || 0) }}</b>
-          <span class="asset-label">{{ t('growth.assetTodayAi') }}</span>
+          <b class="asset-val">{{ fmtTokens(inv?.assets.aiBonusTokens || 0) }}</b>
+          <span class="asset-label">{{ t('growth.assetAiBalance') }}</span>
         </div>
       </div>
     </div>
 
-    <!-- 我的物品:消耗品(AI 加油包 / 补签卡) -->
+    <!-- 我的物品:历史 AI 加油包与补签卡 -->
     <div class="inv-label">{{ t('growth.inventoryItemsTitle') }}</div>
     <div class="inv-items">
       <div v-for="it in inv?.items || []" :key="it.id" class="inv-item" :class="{ 'is-empty': it.qty < 1 }">
-        <span class="item-ico">{{ it.icon }}</span>
+        <span class="item-ico"><SvgIcon :src="itemIcon(it.id)" size="24" /></span>
         <div class="item-main">
           <div class="item-name-row">
             <span class="item-name">{{ it.name }}</span>
@@ -43,10 +43,10 @@
               it.qty > 0 ? '×' + it.qty : t('growth.itemEmptyQty')
             }}</span>
           </div>
-          <p class="item-desc">{{ it.desc }}</p>
+          <p class="item-desc">{{ itemDescription(it) }}</p>
         </div>
         <div class="item-action">
-          <!-- AI 加油包:直接使用(加今日额度) -->
+          <!-- 历史 AI 加油包:转入永久余额 -->
           <BButton
             v-if="it.action === 'use'"
             class="inv-btn"
@@ -81,6 +81,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const { t, locale } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
@@ -100,6 +102,12 @@
   function fmtTokens(n: number) {
     if (n >= 10000) return (n / 10000).toFixed(n % 10000 === 0 ? 0 : 1) + ' 万';
     return String(n);
+  }
+  function itemIcon(itemId: string) {
+    return itemId === 'ai_pack' ? icon.growth.ai : icon.growth.checkin;
+  }
+  function itemDescription(item: InventoryItem) {
+    return item.id === 'ai_pack' ? t('growth.legacyAiPackDesc') : item.desc;
   }
 
   async function onUse(it: InventoryItem) {
@@ -168,6 +176,9 @@
     gap: 4px;
   }
   .inv-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin: 0;
     font-size: 16px;
     font-weight: 700;
@@ -205,8 +216,9 @@
     background: color-mix(in srgb, var(--card-border-color) 8%, transparent);
   }
   .asset-ico {
-    font-size: 20px;
-    line-height: 1;
+    display: grid;
+    place-items: center;
+    color: var(--primary-color);
   }
   .asset-body {
     display: flex;
@@ -243,8 +255,9 @@
     opacity: 0.62;
   }
   .item-ico {
-    font-size: 24px;
-    line-height: 1;
+    display: grid;
+    place-items: center;
+    color: var(--primary-color);
     flex-shrink: 0;
   }
   .item-main {

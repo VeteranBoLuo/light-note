@@ -42,8 +42,11 @@ export const RANKS = [
 export const MAX_LEVEL = 15;
 export const MAKEUP_WINDOW_DAYS = 3;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
-const DAILY_QUEST_BONUS = 15; // 今日任务全部完成的一次性奖励(每日一次;计入并受日顶 200 约束,不超上限)
-const DAILY_QUEST_POINTS = 30; // 今日任务全部完成额外发的积分(消费货币,不受经验日顶约束)
+const DAILY_QUEST_STAGES = [
+  { key: 'basic', required: 2, exp: 10, points: 20, source: 'daily_quest_2' },
+  { key: 'complete', required: 3, exp: 5, points: 10, source: 'daily_quest_3' },
+];
+const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
 
 // 连签里程碑大奖:累计连续签到命中当天即发(积分/永久存储/补签卡),按 ref=days 一次性幂等。
 // 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
@@ -440,15 +443,26 @@ export async function getGrowth(userId, { userRole = null } = {}) {
 export const ACHIEVEMENTS = [
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
   { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
+  { key: 'streak_100', group: 'checkin', metric: 'maxStreak', target: 100, reward: 300 },
+  { key: 'streak_365', group: 'checkin', metric: 'maxStreak', target: 365, reward: 800 },
   { key: 'checkin_50', group: 'checkin', metric: 'totalCheckins', target: 50, reward: 80 },
   { key: 'checkin_100', group: 'checkin', metric: 'totalCheckins', target: 100, reward: 150 },
+  { key: 'bookmark_20', group: 'create', metric: 'bookmarkCount', target: 20, reward: 40 },
   { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50, reward: 80 },
   { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200, reward: 200 },
+  { key: 'note_10', group: 'create', metric: 'noteCount', target: 10, reward: 40 },
   { key: 'note_20', group: 'create', metric: 'noteCount', target: 20, reward: 60 },
   { key: 'note_50', group: 'create', metric: 'noteCount', target: 50, reward: 120 },
+  { key: 'file_10', group: 'create', metric: 'fileCount', target: 10, reward: 40 },
+  { key: 'file_50', group: 'create', metric: 'fileCount', target: 50, reward: 100 },
+  { key: 'file_200', group: 'create', metric: 'fileCount', target: 200, reward: 300 },
+  { key: 'todo_20', group: 'action', metric: 'completedTodoCount', target: 20, reward: 40 },
   { key: 'todo_100', group: 'action', metric: 'completedTodoCount', target: 100, reward: 150 },
+  { key: 'todo_500', group: 'action', metric: 'completedTodoCount', target: 500, reward: 300 },
   { key: 'todo_1000', group: 'action', metric: 'completedTodoCount', target: 1000, reward: 500 },
+  { key: 'organize_20', group: 'organize', metric: 'organizedResourceCount', target: 20, reward: 40 },
   { key: 'organize_100', group: 'organize', metric: 'organizedResourceCount', target: 100, reward: 150 },
+  { key: 'organize_500', group: 'organize', metric: 'organizedResourceCount', target: 500, reward: 300 },
   { key: 'organize_1000', group: 'organize', metric: 'organizedResourceCount', target: 1000, reward: 500 },
   { key: 'level_5', group: 'level', metric: 'level', target: 5, reward: 100 },
   { key: 'level_10', group: 'level', metric: 'level', target: 10, reward: 250 },
@@ -469,38 +483,63 @@ function safeParseMeta(m) {
   }
 }
 
-/**
- * 每日「新增一条内容」统一口径。
- * 直接读取当天仍有效的用户内容，避免看板展示与领取奖励时的二次校验发生漂移。
- * 待办没有注册示例数据，因此只需排除软删除记录。
- */
-async function countCreatedContentToday(userId) {
-  const [[row]] = await pool.query(
-    `SELECT
-      (SELECT COUNT(*) FROM bookmark b
-        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-          )) +
-      (SELECT COUNT(*) FROM note n
-        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-          )) +
-      (SELECT COUNT(*) FROM files f
-        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-              AND osr.resource_id = CAST(f.id AS CHAR)
-          )) +
-      (SELECT COUNT(*) FROM todo_items td
-        WHERE td.user_id = ? AND td.del_flag = 0 AND td.create_time >= CURDATE()) AS c`,
-    [userId, userId, userId, userId],
-  );
-  return Number(row?.c || 0);
+function dailyQuestKeyFor(userId, day) {
+  const digest = crypto.createHash('sha256').update(`growth-daily-v1\0${userId}\0${day}`).digest();
+  return DAILY_QUEST_KEYS[digest.readUInt32BE(0) % DAILY_QUEST_KEYS.length];
+}
+
+async function getDailyQuestState(userId, growth, { isGuest = false } = {}) {
+  const randomKey = dailyQuestKeyFor(userId || 'visitor', dayKey());
+  let metrics = {
+    created: 0,
+    daily_note: 0,
+    daily_bookmark: 0,
+    daily_file: 0,
+    daily_todo: 0,
+    daily_organize: 0,
+  };
+  if (!isGuest) {
+    const [[row]] = await pool.query(
+      `SELECT
+        (SELECT COUNT(*) FROM bookmark b
+          WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+            AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id=b.user_id AND osr.resource_type='bookmark' AND osr.resource_id=b.id)) AS bookmarks,
+        (SELECT COUNT(*) FROM note n
+          WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+            AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id=n.create_by AND osr.resource_type='note' AND osr.resource_id=n.id)) AS notes,
+        (SELECT COUNT(*) FROM files f
+          WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+            AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id=f.create_by AND osr.resource_type='file' AND osr.resource_id=CAST(f.id AS CHAR))) AS files,
+        (SELECT COUNT(*) FROM todo_items td
+          WHERE td.user_id = ? AND td.del_flag = 0 AND td.create_time >= CURDATE()) AS todosCreated,
+        (SELECT COUNT(*) FROM todo_items td
+          WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed' AND td.completed_at >= CURDATE()) AS todosCompleted,
+        (SELECT COUNT(*) FROM resource_inbox ri
+          WHERE ri.user_id = ? AND ri.status = 'completed' AND ri.complete_time >= CURDATE()) AS organized`,
+      [userId, userId, userId, userId, userId, userId],
+    );
+    const bookmarks = Number(row?.bookmarks || 0);
+    const notes = Number(row?.notes || 0);
+    const files = Number(row?.files || 0);
+    const todosCreated = Number(row?.todosCreated || 0);
+    metrics = {
+      created: bookmarks + notes + files + todosCreated,
+      daily_note: notes,
+      daily_bookmark: bookmarks,
+      daily_file: files,
+      daily_todo: Number(row?.todosCompleted || 0),
+      daily_organize: Number(row?.organized || 0),
+    };
+  }
+  const quests = [
+    { key: 'checkin', done: Boolean(growth?.checkedInToday), cur: growth?.checkedInToday ? 1 : 0, target: 1 },
+    { key: 'create', done: metrics.created > 0, cur: Math.min(metrics.created, 1), target: 1 },
+    { key: randomKey, done: metrics[randomKey] > 0, cur: Math.min(metrics[randomKey], 1), target: 1, random: true },
+  ];
+  return { quests, completedCount: quests.filter((quest) => quest.done).length };
 }
 
 // 给一组升序去重的 YYYYMMDD,求最长连续天数(签到最长连签)
@@ -893,49 +932,41 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 
-  // 今日任务(派生):签到 / 新增一条内容 / 今日获得 30 经验。
-  // 「新增内容」按书签、笔记、文件或待办的当日创建事实判定(不依赖 growth_events),root 也能完成。
-  let createdToday = 0;
-  if (!isGuest) {
-    createdToday = await countCreatedContentToday(userId);
-  }
-  const dailyExp = Number(growth.dailyExp || 0);
-  /*
-   * root 的经验整体不入账(grantExp 对站长直接跳过,getGrowth 里 dailyExp 也恒为 0),
-   * 所以给它留「今日获得 30 经验」这一项等于永远做不完 —— 只考核签到与记录内容两项。
-   * 满级的普通用户不受影响:经验照常入账,只是等级不再涨。
-   */
+  // 每日三任务：签到、创建任一内容、按用户+日期稳定抽取的一项随机任务。
+  // 随机项不依赖完成后的可选集合，因此同一天刷新、跨 PC/移动端都不会换题。
   const expGranted = userRole !== 'root';
-  const quests = [
-    { key: 'checkin', done: !!growth.checkedInToday },
-    { key: 'create', done: createdToday > 0 },
-    ...(expGranted ? [{ key: 'exp30', done: dailyExp >= 30, cur: Math.min(dailyExp, 30), target: 30 }] : []),
-  ];
-  const allQuestsDone = quests.every((q) => q.done);
-  /*
-   * 每日任务对满级(含 root)照常开放。原先按 isMax 整块关掉,但奖励里的 30 积分是消费货币,
-   * 满级账号照样要花;周挑战、成就、成长任务本来就照发给满级账号,只有每日任务是那个例外。
-   * root 的「今天领过没」只能看积分流水:它不写 growth_events,经验那条幂等对它天然失效。
-   */
-  let bonusClaimed = false;
+  const { quests, completedCount } = await getDailyQuestState(userId, growth, { isGuest });
+  let legacyClaimed = false;
+  let claimedRefs = new Set();
   if (!isGuest) {
-    const [[bq]] = expGranted
-      ? await pool.query(
-          `SELECT COUNT(*) AS c FROM growth_events WHERE user_id = ? AND source = 'daily_quest' AND day = ? AND status = 'granted'`,
-          [userId, dayKey()],
-        )
-      : await pool.query(`SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason = 'quest' AND ref = ?`, [
-          userId,
-          dayKey(),
-        ]);
-    bonusClaimed = Number(bq.c || 0) > 0;
+    const [rows] = await pool.query(
+      `SELECT ref FROM points_log
+       WHERE user_id = ? AND reason = 'quest' AND ref IN (?, ?, ?)`,
+      [userId, dayKey(), `${dayKey()}:2`, `${dayKey()}:3`],
+    );
+    claimedRefs = new Set(rows.map((row) => String(row.ref)));
+    legacyClaimed = claimedRefs.has(dayKey());
   }
-  // 全部完成 → 可领每日奖励(经验受日顶约束;积分固定,root 只拿积分那部分)
+  const stages = DAILY_QUEST_STAGES.map((stage) => {
+    const ref = `${dayKey()}:${stage.required}`;
+    const claimed = legacyClaimed || claimedRefs.has(ref);
+    return {
+      key: stage.key,
+      required: stage.required,
+      exp: expGranted ? stage.exp : 0,
+      points: stage.points,
+      claimed,
+      claimable: completedCount >= stage.required && !claimed,
+    };
+  });
   const questBonus = {
-    exp: expGranted ? DAILY_QUEST_BONUS : 0,
-    points: DAILY_QUEST_POINTS,
-    claimed: bonusClaimed,
-    claimable: allQuestsDone && !bonusClaimed,
+    exp: expGranted ? DAILY_QUEST_STAGES.reduce((sum, stage) => sum + stage.exp, 0) : 0,
+    points: DAILY_QUEST_STAGES.reduce((sum, stage) => sum + stage.points, 0),
+    claimed: stages.every((stage) => stage.claimed),
+    claimable: stages.some((stage) => stage.claimable),
+    completedCount,
+    total: quests.length,
+    stages,
   };
 
   // 连签里程碑阶梯(静态奖励表 + 按当前连签标注是否达成),供成长页展示「坚持到 X 天可得 Y」
@@ -963,9 +994,9 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
 }
 
 /**
- * 领取今日任务奖励(全部完成后一次性 EXP + 积分;每日一次,幂等)。
+ * 领取今日任务的所有可领阶段奖励；每阶段独立幂等。
  * 后端二次核算任务完成状态,防前端伪造;游客不发。
- * 满级(含 root)照发:经验对他们没意义,但积分是消费货币 —— 与周挑战/成就/成长任务同口径。
+ * 满级(含 root)照发积分；root 不写经验账本。
  */
 export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
@@ -974,29 +1005,44 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
   const expGranted = userRole !== 'root';
 
   const today = dayKey();
-  const createdToday = await countCreatedContentToday(userId);
-  const dailyExp = Number(g.dailyExp || 0);
-  // 考核项与看板一致:root 不考核「今日 30 经验」(它的经验永远不入账)
-  const allDone = g.checkedInToday && createdToday > 0 && (!expGranted || dailyExp >= 30);
-  if (!allDone) return { ok: false, reason: 'incomplete' };
+  const { completedCount } = await getDailyQuestState(userId, g);
+  if (completedCount < DAILY_QUEST_STAGES[0].required) return { ok: false, reason: 'incomplete' };
+  const [[legacy]] = await pool.query(
+    "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason = 'quest' AND ref = ?",
+    [userId, today],
+  );
+  if (Number(legacy?.c || 0) > 0) {
+    return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+  }
 
-  const grant = expGranted
-    ? await grantExp(userId, 'daily_quest', { day: today, amount: DAILY_QUEST_BONUS, userRole })
-    : { granted: 0 };
-  if (grant.duplicated) return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
-  // 积分与经验独立:即便经验被日顶截断(granted=0),完成任务照样发积分。按天幂等。
-  const gotQuestPoints = await earnPoints(userId, DAILY_QUEST_POINTS, 'quest', today);
-  // root 没走 grantExp,少了那道 duplicated 判重:积分流水就是它唯一的「今天领过」标记
-  if (!expGranted && !gotQuestPoints) {
+  let expGained = 0;
+  let pointsEarned = 0;
+  let eligibleCount = 0;
+  let duplicateCount = 0;
+  let leveledUp = false;
+  for (const stage of DAILY_QUEST_STAGES.filter((item) => completedCount >= item.required)) {
+    eligibleCount++;
+    const ref = `${today}:${stage.required}`;
+    const grant = expGranted
+      ? await grantExp(userId, stage.source, { day: today, amount: stage.exp, userRole })
+      : { granted: 0, duplicated: false };
+    const gotPoints = await earnPoints(userId, stage.points, 'quest', ref);
+    // root 不写经验账本，积分流水就是唯一的阶段幂等事实源。
+    if (!gotPoints && (!expGranted || grant.duplicated)) duplicateCount++;
+    expGained += Number(grant.granted || 0);
+    if (gotPoints) pointsEarned += stage.points;
+    leveledUp ||= Boolean(grant.leveledUp);
+  }
+  if (eligibleCount > 0 && duplicateCount === eligibleCount) {
     return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
   }
   return {
     ok: true,
-    expGained: grant.granted || 0,
-    pointsEarned: gotQuestPoints ? DAILY_QUEST_POINTS : 0,
+    expGained,
+    pointsEarned,
     // capped 专指「今日经验已达上限被截断」;root 本就不发经验,不能让前端误报成撞了日顶
-    capped: expGranted && (grant.granted || 0) === 0,
-    leveledUp: !!grant.leveledUp,
+    capped: expGranted && expGained === 0,
+    leveledUp,
     growth: await getGrowth(userId, { userRole }),
   };
 }

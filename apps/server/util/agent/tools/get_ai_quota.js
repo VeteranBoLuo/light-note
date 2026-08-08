@@ -3,7 +3,7 @@ import { getStatusForUser } from '../../aiQuota.js';
 export default {
   name: 'get_ai_quota',
   description:
-    '查询当前用户今日的 AI 额度:已用 token、每日上限、剩余额度(每日上限随成长等级提升,使用「AI 加油包」当天还会额外增加)。回答"我还有多少 AI 额度""今天 AI 用了多少""额度上限/剩余是多少""加油包生效了吗"用它。',
+    '查询当前用户 AI 额度:今日已用、等级每日上限、今日剩余与永久加油余额。每日额度随成长等级提升并优先使用,耗尽后自动扣永久余额。回答额度或加油包问题时使用。',
   parameters: {
     type: 'object',
     properties: {},
@@ -15,15 +15,16 @@ export default {
   transform(raw) {
     if (raw?.unavailable) return 'AI 额度服务暂时不可用，为避免无保护调用，当前不会继续消耗模型额度。请稍后重试。';
     if (raw?.guest) {
-      return '游客模式下 AI 额度按设备与可信网络临时分配(单设备每日约 20 万 token)。注册登录后,额度随成长等级提升,还能用「AI 加油包」当天扩充。';
+      return '游客模式下 AI 额度按设备与可信网络临时分配(单设备每日约 20 万 token)。注册登录后,额度随成长等级提升,还能兑换永久有效的 AI 加油余额。';
     }
     const fmt = (n) => Number(n || 0).toLocaleString('en-US');
-    const pct = raw.quota ? Math.round((raw.used / raw.quota) * 100) : 0;
+    const pct = raw.dailyQuota ? Math.round((raw.dailyUsed / raw.dailyQuota) * 100) : 0;
     return `今日 AI 额度:
-• 已用:${fmt(raw.used)} token(${pct}%)
-• 每日上限:${fmt(raw.quota)} token
-• 剩余:${fmt(raw.remaining)} token
-额度每天 0 点重置;使用「我的成长 → 积分商店」的「AI 加油包」可当天额外增加上限。`;
+• 已用:${fmt(raw.dailyUsed)} token(${pct}%)
+• 每日上限:${fmt(raw.dailyQuota)} token
+• 今日剩余:${fmt(raw.dailyRemaining)} token
+• 永久加油余额:${fmt(raw.bonusTokens)} token
+每日额度 0 点重置并优先使用;用完后自动扣永久加油余额。`;
   },
   summarize(raw) {
     if (raw?.unavailable) return 'AI额度:服务暂不可用（已失败关闭）';

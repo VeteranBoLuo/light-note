@@ -174,8 +174,8 @@ export const claimDailyBonus = async (req, res) => {
     const result = await claimDailyQuestBonus(req.user.id, { userRole: req.user.role });
     res.send(resultData(result));
   } catch (error) {
-    console.error('领取每日奖励失败:', error);
-    res.send(resultData(null, 500, '领取失败: ' + error.message));
+    console.error('领取每日奖励失败 code=%s', String(error?.code || 'DAILY_QUEST_CLAIM_FAILED'));
+    res.send(resultData(null, 500, L(req, '领取失败，请稍后重试', 'Claim failed. Please try again later.')));
   }
 };
 

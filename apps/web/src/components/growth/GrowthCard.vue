@@ -1,123 +1,155 @@
 <template>
   <div v-if="g" class="growth-card">
     <div class="gc-main">
-    <div class="gc-top">
-      <div class="gc-badge" :style="{ background: TIER_GRADIENTS[tier] }">
-        <span class="gc-lv">Lv.{{ g.level }}</span>
-      </div>
-      <div class="gc-meta">
-        <div class="gc-name">
-          {{ t('growth.ranks.' + g.level) }}
-          <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
-          <BPopover
-            v-if="!g.isMax"
-            v-model:open="earnPopoverOpen"
-            trigger="click"
-            placement="bottom-left"
-            overlay-class-name="gc-earn-popover-panel"
-          >
-            <BButton
-              class="gc-earn-trigger"
-              :aria-label="t('growth.earnTitle')"
-              :aria-expanded="earnPopoverOpen"
-              v-click-log="{ module: '成长', operation: '查看经验获取规则' }"
+      <div class="gc-top">
+        <div class="gc-badge" :style="{ background: TIER_GRADIENTS[tier] }">
+          <span class="gc-lv">Lv.{{ g.level }}</span>
+        </div>
+        <div class="gc-meta">
+          <div class="gc-name">
+            {{ t('growth.ranks.' + g.level) }}
+            <span v-if="g.isMax" class="gc-max">{{ t('growth.max') }}</span>
+            <BPopover
+              v-if="!g.isMax"
+              v-model:open="earnPopoverOpen"
+              trigger="click"
+              placement="bottom-left"
+              overlay-class-name="gc-earn-popover-panel"
             >
-              <SvgIcon :src="icon.message.info" size="17" />
-            </BButton>
-            <template #content>
-              <div class="gc-earn-popover">
-                <div class="gc-earn-popover-head">
-                  <span class="gc-earn-popover-title">{{ t('growth.earnTitle') }}</span>
-                  <span class="gc-earn-popover-progress">
-                    {{ t('growth.dailyTitle') }}
-                    <b>{{ (g.dailyExp || 0).toLocaleString('en-US') }} / {{ (g.dailyCap || 0).toLocaleString('en-US') }}</b>
-                  </span>
+              <BButton
+                class="gc-earn-trigger"
+                :aria-label="t('growth.earnTitle')"
+                :aria-expanded="earnPopoverOpen"
+                v-click-log="{ module: '成长', operation: '查看经验获取规则' }"
+              >
+                <SvgIcon :src="icon.message.info" size="17" />
+              </BButton>
+              <template #content>
+                <div class="gc-earn-popover">
+                  <div class="gc-earn-popover-head">
+                    <span class="gc-earn-popover-title">{{ t('growth.earnTitle') }}</span>
+                    <span class="gc-earn-popover-progress">
+                      {{ t('growth.dailyTitle') }}
+                      <b
+                        >{{ (g.dailyExp || 0).toLocaleString('en-US') }} /
+                        {{ (g.dailyCap || 0).toLocaleString('en-US') }}</b
+                      >
+                    </span>
+                  </div>
+                  <div class="gc-earn-list">
+                    <div class="gc-earn-item"
+                      ><span>{{ t('growth.earnCheckin') }}</span
+                      ><b>+5~10</b></div
+                    >
+                    <div class="gc-earn-item"
+                      ><span>{{ t('growth.earnCreate') }}</span
+                      ><b>+10~15</b></div
+                    >
+                    <div class="gc-earn-item"
+                      ><span>{{ t('growth.earnFirst') }}</span
+                      ><b>+30</b></div
+                    >
+                    <div class="gc-earn-item"
+                      ><span>{{ t('growth.earnProfile') }}</span
+                      ><b>+20</b></div
+                    >
+                  </div>
+                  <div v-if="g.dailyCapReached" class="gc-earn-popover-tip">{{ t('growth.dailyReached') }}</div>
                 </div>
-                <div class="gc-earn-list">
-                  <div class="gc-earn-item"><span>{{ t('growth.earnCheckin') }}</span><b>+5~10</b></div>
-                  <div class="gc-earn-item"><span>{{ t('growth.earnCreate') }}</span><b>+10~15</b></div>
-                  <div class="gc-earn-item"><span>{{ t('growth.earnFirst') }}</span><b>+30</b></div>
-                  <div class="gc-earn-item"><span>{{ t('growth.earnProfile') }}</span><b>+20</b></div>
-                </div>
-                <div v-if="g.dailyCapReached" class="gc-earn-popover-tip">{{ t('growth.dailyReached') }}</div>
-              </div>
-            </template>
-          </BPopover>
+              </template>
+            </BPopover>
+          </div>
+          <div class="gc-exp">
+            {{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}
+            <span class="gc-points"
+              >· <SvgIcon :src="icon.growth.coin" size="12" /> {{ (g.points || 0).toLocaleString('en-US') }}
+              {{ t('growth.points') }}</span
+            >
+          </div>
         </div>
-        <div class="gc-exp">
-          {{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}
-          <span class="gc-points">· 🪙 {{ (g.points || 0).toLocaleString('en-US') }} {{ t('growth.points') }}</span>
+        <BButton
+          class="gc-checkin"
+          :class="{ done: g.checkedInToday }"
+          :disabled="readOnly || g.checkedInToday || checking"
+          :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+          @click="onCheckin"
+        >
+          {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
+        </BButton>
+      </div>
+
+      <div v-if="!g.isMax" class="gc-progress" :title="`${g.progress}%`">
+        <div class="gc-progress-fill" :style="{ width: g.progress + '%' }"></div>
+      </div>
+      <div v-if="!g.isMax" class="gc-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
+
+      <div class="gc-perks">
+        <div class="gc-perk">
+          <span class="gc-perk-label">{{ t('growth.space') }}</span>
+          <b class="gc-perk-val">{{ spaceLabel }}</b>
+          <span v-if="(g.spaceBonusMb || 0) > 0" class="gc-perk-bonus">{{
+            t('growth.spaceBonusTag', { n: bonusSpaceLabel })
+          }}</span>
+        </div>
+        <div class="gc-perk">
+          <span class="gc-perk-label">{{ t('growth.aiQuota') }}</span>
+          <b class="gc-perk-val">{{ tokenLabel }}</b>
+        </div>
+        <div class="gc-perk">
+          <span class="gc-perk-label">{{ t('growth.trashRetain') }}</span>
+          <b class="gc-perk-val">{{
+            (g.trashDays || 30) >= 3650 ? t('growth.trashForever') : t('growth.daysVal', { n: g.trashDays || 30 })
+          }}</b>
+        </div>
+        <div class="gc-perk">
+          <span class="gc-perk-label">{{ t('growth.streak') }}</span>
+          <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.streak }) }}</b>
         </div>
       </div>
-      <BButton
-        class="gc-checkin"
-        :class="{ done: g.checkedInToday }"
-        :disabled="readOnly || g.checkedInToday || checking"
-        :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-        @click="onCheckin"
-      >
-        {{ g.checkedInToday ? t('growth.checkedIn') : t('growth.checkin') }}
+
+      <BButton class="gc-ranks-btn" @click="rankVisible = true">
+        <SvgIcon :src="icon.growth.rank" size="16" />
+        {{ t('growth.viewAllRanks') }}
       </BButton>
-    </div>
 
-    <div v-if="!g.isMax" class="gc-progress" :title="`${g.progress}%`">
-      <div class="gc-progress-fill" :style="{ width: g.progress + '%' }"></div>
-    </div>
-    <div v-if="!g.isMax" class="gc-tonext">{{ t('growth.toNext', { n: g.expToNext.toLocaleString('en-US') }) }}</div>
+      <!-- 补签卡:展示张数和获取说明;补签操作在下方日历 -->
+      <div class="gc-protect">
+        <span class="gc-protect-info"
+          ><SvgIcon :src="icon.growth.checkin" size="14" /> {{ t('growth.protectCard') }} ×
+          {{ g.protectCards || 0 }}</span
+        >
+        <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
+      </div>
 
-    <div class="gc-perks">
-      <div class="gc-perk">
-        <span class="gc-perk-label">{{ t('growth.space') }}</span>
-        <b class="gc-perk-val">{{ spaceLabel }}</b>
-        <span v-if="(g.spaceBonusMb || 0) > 0" class="gc-perk-bonus">{{ t('growth.spaceBonusTag', { n: bonusSpaceLabel }) }}</span>
+      <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
+      <div v-if="!g.isMax" class="gc-daily">
+        <div class="gc-daily-head">
+          <span>{{ t('growth.dailyTitle') }}</span>
+          <span class="gc-daily-num" :class="{ full: g.dailyCapReached }">{{ g.dailyExp }} / {{ g.dailyCap }}</span>
+        </div>
+        <div class="gc-daily-bar">
+          <div class="gc-daily-fill" :class="{ full: g.dailyCapReached }" :style="{ width: dailyPercent + '%' }"></div>
+        </div>
+        <div v-if="g.dailyCapReached" class="gc-daily-tip">{{ t('growth.dailyReached') }}</div>
       </div>
-      <div class="gc-perk">
-        <span class="gc-perk-label">{{ t('growth.aiQuota') }}</span>
-        <b class="gc-perk-val">{{ tokenLabel }}</b>
-      </div>
-      <div class="gc-perk">
-        <span class="gc-perk-label">{{ t('growth.trashRetain') }}</span>
-        <b class="gc-perk-val">{{ (g.trashDays || 30) >= 3650 ? t('growth.trashForever') : t('growth.daysVal', { n: g.trashDays || 30 }) }}</b>
-      </div>
-      <div class="gc-perk">
-        <span class="gc-perk-label">{{ t('growth.streak') }}</span>
-        <b class="gc-perk-val">{{ t('growth.daysVal', { n: g.streak }) }}</b>
-      </div>
-    </div>
 
-    <!-- 补签卡:展示张数和获取说明;补签操作在下方日历 -->
-    <div class="gc-protect">
-      <span class="gc-protect-info">🎫 {{ t('growth.protectCard') }} × {{ g.protectCards || 0 }}</span>
-      <span class="gc-protect-hint">{{ t('growth.protectCardHint') }}</span>
+      <!-- 所有用户共用顶部签到日历，避免普通用户再多一张独立卡片。 -->
+      <SigninCalendar
+        class="gc-calendar"
+        wide
+        :checkin-days="stats?.checkinDays || []"
+        :checked-in-today="g.checkedInToday"
+        :streak="g.streak"
+        :makeup-days="g.makeupDays || []"
+        :read-only="readOnly"
+        @makeup="onUseCard"
+      />
     </div>
-
-    <!-- 每日经验:展示今日已得 / 每日上限,到顶给出提示 -->
-    <div v-if="!g.isMax" class="gc-daily">
-      <div class="gc-daily-head">
-        <span>{{ t('growth.dailyTitle') }}</span>
-        <span class="gc-daily-num" :class="{ full: g.dailyCapReached }">{{ g.dailyExp }} / {{ g.dailyCap }}</span>
-      </div>
-      <div class="gc-daily-bar">
-        <div class="gc-daily-fill" :class="{ full: g.dailyCapReached }" :style="{ width: dailyPercent + '%' }"></div>
-      </div>
-      <div v-if="g.dailyCapReached" class="gc-daily-tip">{{ t('growth.dailyReached') }}</div>
-    </div>
-
-    <!-- 所有用户共用顶部签到日历，避免普通用户再多一张独立卡片。 -->
-    <SigninCalendar
-      class="gc-calendar"
-      wide
-      :checkin-days="stats?.checkinDays || []"
-      :checked-in-today="g.checkedInToday"
-      :streak="g.streak"
-      :makeup-days="g.makeupDays || []"
-      :read-only="readOnly"
-      @makeup="onUseCard"
-    />
-    </div>
-
-    <RankLadder class="gc-ladder" />
   </div>
+
+  <BModal v-model:visible="rankVisible" :title="t('growth.rankModalTitle')" :show-footer="false" width="720px">
+    <RankLadder class="gc-ladder-modal" />
+  </BModal>
 
   <LevelUpOverlay v-if="lvUp" :level="lvUp.level" :name="lvUp.name" @close="lvUp = null" />
 </template>
@@ -131,6 +163,7 @@
   import SigninCalendar from '@/components/growth/SigninCalendar.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -145,6 +178,7 @@
   const checking = ref(false);
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
   const earnPopoverOpen = ref(false);
+  const rankVisible = ref(false);
 
   // 浮层通过 Teleport 挂到 body 并使用 fixed 定位；页面滚动时收起，
   // 避免触发点已经离开视口后，规则卡被定位逻辑钳在页面顶部。
@@ -268,33 +302,6 @@
     gap: 14px;
     min-width: 0;
   }
-  /* 大屏两栏:左信息 + 右段位路线,消除单列居中的两侧留白 */
-  @media (min-width: 900px) {
-    .growth-card {
-      flex-direction: row;
-      align-items: stretch; /* 两栏等高:右侧段位路线撑满左侧高度,不再左高右矮 */
-      gap: 28px;
-    }
-    .gc-main {
-      flex: 1 1 auto;
-    }
-    .gc-ladder {
-      flex: 0 0 360px; /* 加宽:容纳「20G · 2000k · 永久 · 🎟️5」不再挤 */
-      width: 360px;
-      display: flex;
-      flex-direction: column;
-    }
-    .gc-ladder :deep(.rank-ladder) {
-      margin-top: 0;
-      flex: 1 1 auto;
-      min-height: 0;
-    }
-    .gc-ladder :deep(.rl-list) {
-      max-height: none; /* 取消固定高,撑满两栏等高后的剩余空间,内部滚动 */
-      flex: 1 1 auto;
-      min-height: 0;
-    }
-  }
   .gc-top {
     display: flex;
     align-items: center;
@@ -370,6 +377,9 @@
     font-variant-numeric: tabular-nums;
   }
   .gc-points {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     color: #d97706;
     font-weight: 600;
   }
@@ -421,6 +431,26 @@
     flex-wrap: wrap;
     gap: 10px;
   }
+  .gc-ranks-btn {
+    align-self: flex-start;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px !important;
+    padding: 0 12px !important;
+    border: 1px solid var(--card-border-color);
+    border-radius: 9px;
+    background: var(--background-color);
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .gc-ladder-modal :deep(.rank-ladder) {
+    margin-top: 0;
+  }
+  .gc-ladder-modal :deep(.rl-list) {
+    max-height: min(62vh, 620px);
+  }
   .gc-perk {
     flex: 1 1 calc(25% - 8px);
     min-width: 88px;
@@ -444,6 +474,9 @@
     font-size: 12.5px;
   }
   .gc-protect-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-weight: 600;
   }
   .gc-protect-btn {
