@@ -115,23 +115,6 @@
               <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
             </span>
           </div>
-          <BButton
-            class="person-menu-item person-menu-item--button"
-            @click="goToProfileModule('/support')"
-            v-click-log="{ module: '个人中心', operation: '打开支持轻笺' }"
-          >
-            <span class="person-menu-item-title">{{ $t('support.entry') }}</span>
-            <span class="person-menu-item-des">
-              <span class="person-menu-item-des-text">{{ $t('support.entryDescription') }}</span>
-              <svg-icon
-                class="person-menu-item-arrow"
-                color="#999fa8"
-                style="rotate: 180deg"
-                :src="icon.arrow_left"
-                size="14"
-              />
-            </span>
-          </BButton>
           <div
             v-if="user.role === 'root'"
             class="person-menu-item"
@@ -195,6 +178,25 @@
             <span class="person-menu-item-des"
               ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
           ></div>
+        </div>
+        <div class="person-menu person-menu--support">
+          <BButton
+            class="person-menu-item person-menu-item--button"
+            @click="goToProfileModule('/support')"
+            v-click-log="{ module: '个人中心', operation: '打开支持轻笺' }"
+          >
+            <span class="person-menu-item-title">{{ $t('support.entry') }}</span>
+            <span class="person-menu-item-des">
+              <span class="person-menu-item-des-text">{{ $t('support.entryDescription') }}</span>
+              <svg-icon
+                class="person-menu-item-arrow"
+                color="currentColor"
+                style="rotate: 180deg"
+                :src="icon.arrow_left"
+                size="14"
+              />
+            </span>
+          </BButton>
         </div>
         <div
           class="person-menu"
@@ -398,6 +400,26 @@
     border-radius: 12px;
     overflow: hidden;
     margin-top: 20px;
+  }
+
+  .person-menu--support {
+    box-sizing: border-box;
+    border: 1px solid var(--support-entry-border-color);
+
+    .person-menu-item {
+      color: var(--support-entry-text-color);
+      background-color: var(--support-entry-background);
+      transition: background-color 0.2s ease;
+
+      &:hover {
+        background-color: var(--support-entry-hover-background);
+      }
+    }
+
+    .person-menu-item-des {
+      color: var(--support-entry-text-color);
+      opacity: 0.78;
+    }
   }
 
   .person-menu-item {

@@ -957,10 +957,8 @@
     ),
   );
   const templateTypeTag = (type: string) => (type === 'markdown' ? t('note.tplTypeMd') : t('note.tplTypeHtml'));
-  const manageTemplateAction = computed(() => ({
-    key: 'manage-templates',
+  const manageTemplateHeaderAction = computed(() => ({
     label: t('note.templateManager.title'),
-    description: t('note.templateManager.subtitle'),
     icon: icon.noteDetail.template,
     onClick: openTemplateManager,
   }));
@@ -970,6 +968,7 @@
       return {
         key: 'mine',
         title: t('note.tplMineSection'),
+        headerAction: manageTemplateHeaderAction.value,
         actions: [
           {
             key: 'retry',
@@ -977,7 +976,6 @@
             description: t('note.tplRetryDesc'),
             onClick: () => loadMyTemplates(),
           },
-          manageTemplateAction.value,
         ],
       };
     }
@@ -985,22 +983,21 @@
       return {
         key: 'mine',
         title: t('note.tplMineSection'),
-        actions: [
-          ...orderedMyTemplates.value.map((tpl) => ({
-            key: tpl.id,
-            label: tpl.name,
-            description: tpl.description || '',
-            tag: templateTypeTag(tpl.type),
-            onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
-          })),
-          manageTemplateAction.value,
-        ],
+        headerAction: manageTemplateHeaderAction.value,
+        actions: orderedMyTemplates.value.map((tpl) => ({
+          key: tpl.id,
+          label: tpl.name,
+          description: tpl.description || '',
+          tag: templateTypeTag(tpl.type),
+          onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
+        })),
       };
     }
     return {
       key: 'mine',
       title: t('note.tplMineSection'),
-      actions: [manageTemplateAction.value],
+      headerAction: manageTemplateHeaderAction.value,
+      actions: [],
       hint: myTemplatesState.value === 'loading' ? t('note.tplLoading') : t('note.tplEmptyMine'),
     };
   });

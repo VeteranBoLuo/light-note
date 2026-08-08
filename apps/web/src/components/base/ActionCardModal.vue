@@ -2,8 +2,17 @@
   <b-modal v-model:visible="visible" :maskClosable="maskClosable ?? false" :title="title" :showFooter="false">
     <div class="action-card-modal" :style="{ width: width ?? WIDTH }">
       <div v-for="section in sections" :key="section.key" class="section" :class="section.class">
-        <div v-if="section.title" class="section-header">
-          <h3>{{ section.title }}</h3>
+        <div v-if="section.title || section.headerAction" class="section-header">
+          <h3 v-if="section.title">{{ section.title }}</h3>
+          <BButton
+            v-if="section.headerAction"
+            size="small"
+            class="section-header-action"
+            @click="section.headerAction.onClick?.()"
+          >
+            <SvgIcon v-if="section.headerAction.icon" :src="section.headerAction.icon" size="14" aria-hidden="true" />
+            {{ section.headerAction.label }}
+          </BButton>
         </div>
         <div v-if="!section.actions.length && section.hint" class="section-hint">{{ section.hint }}</div>
         <div v-else class="cards-grid" :style="{ gridTemplateColumns: bookmark.isMobile ? '1fr' : '1fr 1fr' }">
@@ -45,6 +54,7 @@
 
 <script setup lang="ts">
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { bookmarkStore } from '@/store';
@@ -75,6 +85,8 @@
     title?: string;
     class?: string;
     actions: ActionItem[];
+    /** 区块级操作显示在标题右侧，不占用卡片网格。 */
+    headerAction?: Pick<ActionItem, 'label' | 'icon' | 'onClick'>;
     /** actions 为空时显示的提示行(空态/加载中),无提示且无卡片则只渲染标题 */
     hint?: string;
   }
@@ -103,6 +115,7 @@
       .section-header {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 8px;
         margin-bottom: 16px;
 
@@ -111,6 +124,20 @@
           color: var(--text-color);
           font-size: 16px;
           font-weight: 600;
+        }
+
+        .section-header-action {
+          flex: 0 0 auto;
+          gap: 5px;
+          border: 1px solid var(--card-border-color) !important;
+          background: transparent;
+          color: var(--resource-note-color);
+          font-weight: 600;
+
+          &:hover {
+            border-color: var(--resource-note-color) !important;
+            background: var(--menu-item-h-bg-color);
+          }
         }
       }
 

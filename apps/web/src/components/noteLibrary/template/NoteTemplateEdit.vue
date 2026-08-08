@@ -274,15 +274,23 @@
   }
   @media (max-width: 767px) {
     .note-template-edit__workspace {
-      padding: 10px 0 calc(80px + env(safe-area-inset-bottom));
+      padding: 6px 0 calc(80px + env(safe-area-inset-bottom));
     }
     .note-template-edit__header {
       flex-wrap: wrap;
+      gap: 3px 8px;
+      margin-bottom: 5px;
+    }
+    .note-template-edit__header h2 {
+      font-size: 15px;
     }
     .note-template-edit__header p {
       width: 100%;
       margin-left: 0;
-      white-space: normal;
+      font-size: 10px;
+      line-height: 1.25;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .note-template-edit__header,
     .note-template-edit__fields {
@@ -290,10 +298,24 @@
       margin-left: var(--mobile-page-gutter, 14px);
     }
     .note-template-edit__fields {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 5px 8px;
+      margin-bottom: 5px;
+    }
+    .note-template-edit__fields label {
+      gap: 1px;
+      font-size: 11px;
+    }
+    .note-template-edit__fields small {
+      right: 4px;
+      font-size: 9px;
+    }
+    .note-template-edit__input :deep(.b-input) {
+      height: 30px !important;
+      font-size: 12px;
     }
     .note-template-edit__description {
-      grid-column: auto;
+      grid-column: 1 / -1;
     }
   }
 </style>
