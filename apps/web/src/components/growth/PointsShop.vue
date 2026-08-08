@@ -42,10 +42,18 @@
     </div>
 
     <!-- 头像框装扮 -->
-    <div v-if="frames.length" class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
-    <div class="ps-grid ps-frame-grid">
+    <div v-if="frames.length" class="ps-frame-toolbar">
+      <div class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
+      <BTabs
+        v-model:active-tab="activeFrameFilter"
+        class="ps-frame-filters"
+        variant="pill"
+        :options="frameFilterOptions"
+      />
+    </div>
+    <div v-if="frames.length" class="ps-grid ps-frame-grid">
       <div
-        v-for="it in frames"
+        v-for="it in visibleFrames"
         :key="it.id"
         class="ps-item ps-frame-item"
         :class="[`ps-frame-item--${frameVariant(it.id) || 'default'}`, { 'is-equipped': it.equipped }]"
@@ -55,7 +63,9 @@
           <div class="ps-item-name">
             {{ itemName(it) }}
             <span v-if="frameVariant(it.id)" class="ps-frame-style">{{ frameStyleName(it.id) }}</span>
-            <span v-if="it.id === 'frame_galaxy'" class="ps-frame-legendary">{{ t('growth.frameLegendary') }}</span>
+            <span v-if="it.rarity" class="ps-frame-rarity" :class="`ps-frame-rarity--${it.rarity}`">{{
+              frameRarityName(it.rarity)
+            }}</span>
             <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
           </div>
           <div class="ps-item-desc">{{ itemDesc(it) }}</div>
@@ -119,6 +129,7 @@
   import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -156,6 +167,25 @@
 
   const consumables = computed(() => shop.value?.items.filter((i) => i.type === 'consumable') || []);
   const frames = computed(() => shop.value?.items.filter((i) => i.type === 'cosmetic') || []);
+  type FrameFilter = 'all' | 'basic' | 'rare' | 'epic' | 'legendary';
+  const activeFrameFilter = ref<FrameFilter>('all');
+  const frameFilters: FrameFilter[] = ['all', 'basic', 'rare', 'epic', 'legendary'];
+  const frameFilterOptions = computed(() =>
+    frameFilters.map((filter) => ({
+      key: filter,
+      label: t(`growth.frameFilters.${filter}`),
+      badge: filter === 'all' ? frames.value.length : frames.value.filter((it) => it.rarity === filter).length,
+    })),
+  );
+  const visibleFrames = computed(() =>
+    activeFrameFilter.value === 'all'
+      ? frames.value
+      : frames.value.filter((it) => it.rarity === activeFrameFilter.value),
+  );
+
+  function frameRarityName(rarity: NonNullable<ShopItem['rarity']>) {
+    return t(`growth.frameRarity.${rarity}`);
+  }
 
   // 可兑换判定:全前端按 live shop.points/level/owned/上限 实时算,积分变动即时生效(不依赖服务端 canBuy 快照,免刷新)
   function canBuyNow(it: ShopItem) {
@@ -316,6 +346,20 @@
     letter-spacing: 0.03em;
     margin-top: 4px;
   }
+  .ps-frame-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+  }
+  .ps-frame-toolbar .ps-section-title {
+    margin-top: 0;
+  }
+  .ps-frame-filters {
+    flex-wrap: wrap;
+  }
   .ps-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -345,8 +389,9 @@
     box-shadow: 0 10px 24px -18px rgba(30, 35, 70, 0.5);
   }
   .ps-item.is-equipped {
-    border-color: color-mix(in srgb, var(--primary-color) 60%, transparent);
+    border-color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 6%, var(--background-color));
+    box-shadow: inset 0 0 0 1px var(--primary-color);
   }
   .ps-item-icon {
     color: var(--primary-color);
@@ -366,6 +411,20 @@
     min-height: 112px;
     padding: 16px;
     overflow: hidden;
+  }
+  .ps-frame-item--mint {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #14b8a6 8%, var(--background-color)),
+      var(--background-color) 50%
+    );
+  }
+  .ps-frame-item--ink {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #6b7280 7%, var(--background-color)),
+      var(--background-color) 50%
+    );
   }
   .ps-frame-item--gold {
     background: linear-gradient(
@@ -388,6 +447,28 @@
       var(--background-color) 54%
     );
   }
+  .ps-frame-item--sunset {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #fb7185 11%, var(--background-color)),
+      var(--background-color) 54%
+    );
+  }
+  .ps-frame-item--ocean {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #0ea5e9 11%, var(--background-color)),
+      var(--background-color) 54%
+    );
+  }
+  .ps-frame-item--aurora {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #10b981 13%, var(--background-color)),
+      color-mix(in srgb, #7c3aed 7%, var(--background-color)) 55%,
+      var(--background-color)
+    );
+  }
   .ps-frame-item--galaxy,
   .ps-frame-item--galaxy.is-equipped {
     background:
@@ -398,6 +479,35 @@
   .ps-frame-item--galaxy:hover {
     border-color: color-mix(in srgb, #a78bfa 68%, var(--card-border-color));
     box-shadow: 0 12px 26px -18px rgba(91, 33, 182, 0.68);
+  }
+  .ps-frame-item--flame {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, #ef4444 14%, var(--background-color)),
+      color-mix(in srgb, #f59e0b 7%, var(--background-color)) 56%,
+      var(--background-color)
+    );
+  }
+  .ps-frame-item--dragon,
+  .ps-frame-item--dragon.is-equipped {
+    background:
+      radial-gradient(circle at 86% 18%, rgba(254, 243, 199, 0.72) 0 1px, transparent 1.7px),
+      linear-gradient(135deg, color-mix(in srgb, #b91c1c 16%, var(--background-color)), var(--background-color) 58%);
+  }
+  .ps-frame-item--dragon:hover {
+    border-color: #d97706;
+    box-shadow: 0 12px 26px -18px rgba(153, 27, 27, 0.75);
+  }
+  .ps-frame-item--celestial,
+  .ps-frame-item--celestial.is-equipped {
+    background:
+      radial-gradient(circle at 87% 18%, rgba(254, 243, 199, 0.92) 0 1px, transparent 1.7px),
+      radial-gradient(circle at 73% 78%, rgba(221, 214, 254, 0.82) 0 1px, transparent 1.6px),
+      linear-gradient(135deg, color-mix(in srgb, #312e81 19%, var(--background-color)), var(--background-color) 60%);
+  }
+  .ps-frame-item--celestial:hover {
+    border-color: #f59e0b;
+    box-shadow: 0 12px 28px -17px rgba(49, 46, 129, 0.82);
   }
   .ps-frame-preview {
     grid-area: preview;
@@ -431,16 +541,31 @@
     font-weight: 700;
     letter-spacing: 0.02em;
   }
-  .ps-frame-legendary {
+  .ps-frame-rarity {
     padding: 2px 7px;
-    border: 1px solid rgba(196, 181, 253, 0.72);
+    border: 1px solid #cbd5e1;
     border-radius: 999px;
-    color: #fef3c7;
-    background: linear-gradient(135deg, #7c3aed, #312e81);
-    box-shadow: 0 2px 8px -4px rgba(76, 29, 149, 0.92);
+    color: #475569;
+    background: #f8fafc;
     font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.06em;
+  }
+  .ps-frame-rarity--rare {
+    border-color: #7dd3fc;
+    color: #075985;
+    background: #e0f2fe;
+  }
+  .ps-frame-rarity--epic {
+    border-color: #c4b5fd;
+    color: #5b21b6;
+    background: #ede9fe;
+  }
+  .ps-frame-rarity--legendary {
+    border-color: #fde68a;
+    color: #fff7ed;
+    background: linear-gradient(135deg, #7c3aed, #92400e);
+    box-shadow: 0 2px 8px -4px rgba(76, 29, 149, 0.92);
   }
   .ps-tag-equipped {
     font-size: 10.5px;
@@ -487,6 +612,13 @@
     padding: 4px 2px;
   }
   @media (max-width: 560px) {
+    .ps-frame-toolbar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .ps-frame-filters {
+      width: 100%;
+    }
     .ps-frame-item {
       column-gap: 12px;
       padding: 14px;

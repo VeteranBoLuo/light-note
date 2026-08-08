@@ -94,7 +94,7 @@ export async function ensurePointsSchema() {
 }
 
 // ============================================================================
-// 商店目录(单一事实源)。type: consumable(可反复买) / title(一次性称号)
+// 商店目录(单一事实源)。type: consumable(可反复买) / title|cosmetic(一次性拥有)
 // ============================================================================
 export const SHOP_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
@@ -147,9 +147,30 @@ export const SHOP_ITEMS = [
   // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。
   // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
   {
+    id: 'frame_mint',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '薄荷',
+    desc: '头像框 · 清新薄荷微光',
+    cost: 220,
+    minLevel: 0,
+  },
+  {
+    id: 'frame_ink',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '墨韵',
+    desc: '头像框 · 水墨留白',
+    cost: 320,
+    minLevel: 0,
+  },
+  {
     id: 'frame_gold',
     type: 'cosmetic',
     effect: 'frame',
+    rarity: 'rare',
     name: '鎏金',
     desc: '头像框 · 金光流转',
     cost: 500,
@@ -159,6 +180,7 @@ export const SHOP_ITEMS = [
     id: 'frame_sakura',
     type: 'cosmetic',
     effect: 'frame',
+    rarity: 'rare',
     name: '樱绯',
     desc: '头像框 · 樱色浪漫',
     cost: 500,
@@ -168,19 +190,81 @@ export const SHOP_ITEMS = [
     id: 'frame_neon',
     type: 'cosmetic',
     effect: 'frame',
+    rarity: 'rare',
     name: '霓虹',
     desc: '头像框 · 赛博霓虹',
     cost: 500,
     minLevel: 0,
   },
   {
+    id: 'frame_sunset',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '晚霞',
+    desc: '头像框 · 暮色渐染',
+    cost: 650,
+    minLevel: 2,
+  },
+  {
+    id: 'frame_ocean',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '潮汐',
+    desc: '头像框 · 深海流光',
+    cost: 750,
+    minLevel: 3,
+  },
+  {
+    id: 'frame_aurora',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '极光',
+    desc: '头像框 · 极光幻彩',
+    cost: 1000,
+    minLevel: 6,
+  },
+  {
+    id: 'frame_flame',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '赤焰',
+    desc: '头像框 · 烈焰跃动',
+    cost: 1100,
+    minLevel: 7,
+  },
+  {
     id: 'frame_galaxy',
     type: 'cosmetic',
     effect: 'frame',
+    rarity: 'legendary',
     name: '星河',
     desc: '头像框 · 流光星河',
     cost: 1200,
     minLevel: 8,
+  },
+  {
+    id: 'frame_dragon',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '龙曜',
+    desc: '头像框 · 龙鳞金焰',
+    cost: 2200,
+    minLevel: 10,
+  },
+  {
+    id: 'frame_celestial',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '天穹',
+    desc: '头像框 · 星环日蚀',
+    cost: 3200,
+    minLevel: 12,
   },
 ];
 
@@ -614,6 +698,10 @@ export async function equipFrame(userId, frameId) {
   if (!frameId) {
     await pool.query('UPDATE user_growth SET equipped_frame = NULL WHERE user_id = ?', [userId]);
     return { ok: true, equipped: null };
+  }
+  const item = getShopItem(frameId);
+  if (!item || item.type !== 'cosmetic' || item.effect !== 'frame') {
+    return { ok: false, reason: 'invalid_frame', msg: '头像框不存在或已下架' };
   }
   const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
     userId,

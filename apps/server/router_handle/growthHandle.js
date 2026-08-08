@@ -228,6 +228,7 @@ export const getShop = async (req, res) => {
         id: it.id,
         type: it.type,
         effect: it.effect || null,
+        rarity: it.rarity || null,
         name: it.name,
         desc: it.desc,
         cost: it.cost,

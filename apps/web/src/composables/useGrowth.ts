@@ -127,6 +127,7 @@ export interface ShopItem {
   id: string;
   type: 'consumable' | 'title' | 'cosmetic';
   effect?: string | null;
+  rarity?: 'basic' | 'rare' | 'epic' | 'legendary' | null;
   name: string;
   desc: string;
   cost: number;
