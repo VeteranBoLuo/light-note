@@ -6,7 +6,8 @@ import pool from '../db/index.js';
 // 设计分野(关键):
 //  - 即时生效类(积分/经验/永久扩容):抽中/领取即到账,不进背包 —— 仍走各自幂等函数
 //    (earnPoints/earnStorage/grantExp),在「我的资产」展示。此文件不接管它们。
-//  - 消耗品类(AI 加油包等):存背包(user_item 表),用户手动「使用」才生效 —— 价值在于择时使用。
+//  - AI 加油包已改为 user_growth.ai_bonus_tokens 永久余额，新获得的包即时到账；
+//    user_item 中仅可能保留历史包，用户点一次即可转入永久余额。
 //
 //  补签卡是特例:逻辑成熟(上限 2、最近 3 个自然日补签、续连签),存储沿用 user_growth.streak_protect_cards,
 //  "使用"仍走 growth.useProtectCard(需要"可补漏签日期"这个上下文)。这里只集中它的"发放写入口径"
@@ -14,13 +15,6 @@ import pool from '../db/index.js';
 //
 //  新增消耗品时:在 CONSUMABLES 加一条 + (如需特殊生效)在 useItem 加一个分支即可,发放/展示全通用。
 // ============================================================================
-
-function dayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
-}
 
 // 消耗品注册表(单一事实源)。backing: 'user_item'=存背包表 / 'card_column'=沿用 streak_protect_cards。
 export const CONSUMABLES = {
@@ -31,7 +25,7 @@ export const CONSUMABLES = {
     backing: 'user_item',
     effect: 'ai_tokens',
     tokens: 600_000,
-    desc: '使用后当日 AI 额度 +60 万 tokens。存进背包随时开,不再当天不用就作废。',
+    desc: '历史加油包。转入后成为永久 AI 余额，每日等级额度用完后自动使用。',
     action: 'use', // 前端:直接「使用」
   },
   makeup_card: {
@@ -94,12 +88,12 @@ export async function useItem(userId, itemId) {
       return { ok: false, reason: 'empty', msg: '数量不足' };
     }
     await conn.query('UPDATE user_item SET qty = qty - 1 WHERE user_id = ? AND item_id = ?', [userId, itemId]);
-    // 生效分支:AI 加油包 → 今日额度 +tokens(aiQuota 只读 ai_daily_bonus 当天值)
+    // 历史 AI 加油包兼容：从旧背包转入永久余额，不再写按天过期的 ai_daily_bonus。
     if (def.effect === 'ai_tokens') {
-      await conn.query(
-        'INSERT INTO ai_daily_bonus (user_id, day, bonus_tokens) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE bonus_tokens = bonus_tokens + VALUES(bonus_tokens)',
-        [userId, dayKey(), def.tokens],
-      );
+      await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
+        def.tokens,
+        userId,
+      ]);
     }
     await conn.commit();
     return { ok: true, itemId, remaining: qty - 1, effect: def.effect, amount: def.tokens || 0 };
@@ -118,15 +112,17 @@ export async function useItem(userId, itemId) {
 /**
  * 背包 + 资产总览(供「我的物品 / 我的资产」展示)。
  *  - items:已知消耗品列表(含数量,0 也列出以告知其存在)。
- *  - assets:即时生效类的当前存量(积分余额、永久扩容、今日已叠加的 AI 额度)。
+ *  - assets:即时生效类的当前存量(积分余额、永久扩容、永久 AI 加油余额)。
  */
 export async function getInventory(userId) {
-  const empty = { items: [], assets: { points: 0, storageBonusMb: 0, todayAiBonus: 0 } };
+  const empty = { items: [], assets: { points: 0, storageBonusMb: 0, aiBonusTokens: 0 } };
   if (!userId || userId === 'visitor') return empty;
   const [itemRows] = await pool.query('SELECT item_id, qty FROM user_item WHERE user_id = ? AND qty > 0', [userId]);
   const qtyMap = Object.fromEntries(itemRows.map((r) => [r.item_id, Number(r.qty)]));
-  const [[g]] = await pool.query('SELECT points, storage_bonus_mb, streak_protect_cards FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-  const [[b]] = await pool.query('SELECT bonus_tokens FROM ai_daily_bonus WHERE user_id = ? AND day = ?', [userId, dayKey()]);
+  const [[g]] = await pool.query(
+    'SELECT points, storage_bonus_mb, streak_protect_cards, ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1',
+    [userId],
+  );
   const qtyOf = (id) => (id === 'makeup_card' ? Number(g?.streak_protect_cards || 0) : qtyMap[id] || 0);
   const items = Object.values(CONSUMABLES).map((def) => ({
     id: def.id,
@@ -141,7 +137,7 @@ export async function getInventory(userId) {
     assets: {
       points: Number(g?.points || 0),
       storageBonusMb: Number(g?.storage_bonus_mb || 0),
-      todayAiBonus: Number(b?.bonus_tokens || 0),
+      aiBonusTokens: Number(g?.ai_bonus_tokens || 0),
     },
   };
 }

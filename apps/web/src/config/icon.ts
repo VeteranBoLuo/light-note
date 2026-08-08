@@ -64,6 +64,25 @@ export default {
   },
   growth: {
     lock: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></svg>',
+    rank: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6 20V11m6 9V4m6 16v-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3.5 20.5h17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    reward:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 10h16v10H4V10Zm-1-4h18v4H3V6Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 6v14M12 6C9.5 6 7.5 5 7.5 3.75C7.5 2.8 8.3 2 9.25 2C10.8 2 12 4.1 12 6Zm0 0c2.5 0 4.5-1 4.5-2.25c0-.95-.8-1.75-1.75-1.75C13.2 2 12 4.1 12 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    coin: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8"/><path d="M14.75 8.75c-.65-.5-1.5-.75-2.55-.75c-1.45 0-2.45.7-2.45 1.75c0 2.75 5 1.15 5 4c0 1.3-1.1 2.25-2.8 2.25c-1.1 0-2.1-.35-2.95-1.05M12 6.5v11" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"/></svg>',
+    ai: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m13.25 2.5l-7 10h5l-.5 9l7-11h-5l.5-8Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>',
+    storage:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 3C7 3 3 4.35 3 6s4 3 9 3s9-1.35 9-3s-4-3-9-3Z" stroke="currentColor" stroke-width="1.7"/><path d="M3 6v6c0 1.65 4 3 9 3s9-1.35 9-3V6M3 12v6c0 1.65 4 3 9 3s9-1.35 9-3v-6" stroke="currentColor" stroke-width="1.7"/></svg>',
+    checkin:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6 3.5v3M18 3.5v3M4 8h16M5.5 5h13A1.5 1.5 0 0 1 20 6.5v13H4v-13A1.5 1.5 0 0 1 5.5 5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m8 14l2.2 2.2L16 10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    create:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 19h4l10-10l-4-4L5 15v4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m13.5 6.5l4 4M4 21h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    action:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"/><path d="m8 12.25l2.6 2.6L16.5 9" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    organize:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5h6v6H4V5Zm10 0h6v6h-6V5ZM4 15h6v4H4v-4Zm10 0h6v4h-6v-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    level:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m12 3l2.2 4.45l4.9.7l-3.55 3.45l.85 4.9L12 14.2L7.6 16.5l.85-4.9L4.9 8.15l4.9-.7L12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 20h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    tenure:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20v-7m0 0c0-3.5 2.1-5.6 6.25-6.25C18.1 10.8 16 12.9 12 13Zm0 2c0-2.9-1.75-4.65-5.25-5.25c.1 3.45 1.85 5.2 5.25 5.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
   },
   // 空白图片
   nullImg:

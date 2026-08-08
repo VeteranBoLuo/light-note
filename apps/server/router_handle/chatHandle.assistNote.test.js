@@ -309,7 +309,10 @@ describe('generateBookmarkMeta URL gate', () => {
     await generateBookmarkMeta({ body: { url: 'boluo66.top' }, user: { id: 'u1' } }, res);
 
     expect(res.statusCode).toBe(429);
-    expect(res.payload).toMatchObject({ status: 429, message: '今日 AI 额度已用完，请明天再试。' });
+    expect(res.payload).toMatchObject({
+      status: 429,
+      message: '今日 AI 额度与永久加油余额均已用完，请明天再试或前往「我的成长」兑换。',
+    });
     log.mockRestore();
   });
 

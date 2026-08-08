@@ -442,9 +442,17 @@
   }
 
   // AI 今日额度(按成长等级下发;root/本机自测豁免返回 exempt)。进页与每轮回复结束后刷新,展示「已用 / 剩余」
-  const aiQuota = ref<{ exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null>(
-    null,
-  );
+  const aiQuota = ref<{
+    exempt?: boolean;
+    role?: string;
+    used?: number;
+    quota?: number;
+    remaining?: number;
+    dailyQuota?: number;
+    dailyUsed?: number;
+    dailyRemaining?: number;
+    bonusTokens?: number;
+  } | null>(null);
   async function fetchAiQuota() {
     try {
       const res = await apiBasePost('/api/chat/aiQuota');

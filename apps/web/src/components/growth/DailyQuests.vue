@@ -9,22 +9,44 @@
         <span class="dq-check">
           <SvgIcon v-if="q.done" :src="icon.filterPanel.check" size="13" />
         </span>
-        <span class="dq-label">{{ questLabel(q) }}</span>
+        <span class="dq-label">
+          {{ questLabel(q) }}
+          <span v-if="q.random" class="dq-random">{{ t('growth.questRandomTag') }}</span>
+        </span>
         <span v-if="q.target && !q.done" class="dq-prog">{{ q.cur ?? 0 }}/{{ q.target }}</span>
         <span v-else-if="q.done" class="dq-tag">{{ t('growth.questDone') }}</span>
       </div>
     </div>
 
-    <!-- 奖励区:未完成→提示;可领→按钮;已领→庆祝 -->
-    <div class="dq-bonus" :class="{ claimable: bonus.claimable, claimed: bonus.claimed }">
-      <div class="dq-bonus-left">
-        <span class="dq-bonus-emoji">{{ bonus.claimed ? '🎉' : '🎁' }}</span>
-        <span class="dq-bonus-text">
-          {{ bonusText }}
+    <div class="dq-stages">
+      <div
+        v-for="stage in stages"
+        :key="stage.key"
+        class="dq-stage"
+        :class="{ claimable: stage.claimable, claimed: stage.claimed }"
+      >
+        <span class="dq-stage-dot"
+          ><SvgIcon :src="stage.claimed ? icon.filterPanel.check : icon.growth.reward" size="14"
+        /></span>
+        <span class="dq-stage-main">
+          <b>{{ t('growth.questStageTitle', { n: stage.required, total: quests.length || 3 }) }}</b>
+          <small>{{ stageReward(stage) }}</small>
+        </span>
+        <span class="dq-stage-state">
+          {{
+            stage.claimed
+              ? t('growth.questStageClaimed')
+              : stage.claimable
+                ? t('growth.questStageReady')
+                : `${doneCount}/${stage.required}`
+          }}
         </span>
       </div>
+    </div>
+
+    <div v-if="bonus.claimable" class="dq-bonus claimable">
+      <span class="dq-bonus-text">{{ t('growth.questAvailableReward') }}</span>
       <BButton
-        v-if="bonus.claimable"
         class="dq-claim"
         :disabled="readOnly || claiming"
         :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
@@ -58,23 +80,26 @@
    * 奖励文案。满级的 root 经验不入账(后端把 bonus.exp 置 0),说「可领 +0 经验」等于白说,
    * 这时只报积分 —— 那 30 积分才是它真正能拿到的东西。
    */
-  const bonusText = computed(() => {
-    const pointsOnly = !props.bonus.exp && props.bonus.points > 0;
-    const mixedReward = props.bonus.exp > 0 && props.bonus.points > 0;
-    if (props.bonus.claimed) {
-      if (pointsOnly) return t('growth.questBonusClaimedPointsOnly', { p: props.bonus.points });
-      if (mixedReward) {
-        return t('growth.questBonusClaimedMixed', { n: props.bonus.exp, p: props.bonus.points });
-      }
-      return t('growth.questBonusClaimed', { n: props.bonus.exp });
-    }
-    if (pointsOnly) return t('growth.questBonusHintPointsOnly', { p: props.bonus.points });
-    if (mixedReward) return t('growth.questBonusHintMixed', { n: props.bonus.exp, p: props.bonus.points });
-    return t('growth.questBonusHint', { n: props.bonus.exp });
-  });
+  const stages = computed(
+    () =>
+      props.bonus.stages || [
+        {
+          key: 'complete',
+          required: props.quests.length || 3,
+          exp: props.bonus.exp,
+          points: props.bonus.points,
+          claimed: props.bonus.claimed,
+          claimable: props.bonus.claimable,
+        },
+      ],
+  );
+
+  function stageReward(stage: { exp: number; points: number }) {
+    if (!stage.exp) return t('growth.questStageRewardPoints', { p: stage.points });
+    return t('growth.questStageRewardMixed', { n: stage.exp, p: stage.points });
+  }
 
   function questLabel(q: Quest): string {
-    if (q.key === 'exp30') return t('growth.questExp', { n: q.target ?? 30 });
     return t(`growth.quest_${q.key}`);
   }
 </script>
@@ -147,6 +172,16 @@
   .dq-item.done .dq-label {
     color: var(--desc-color);
   }
+  .dq-random {
+    display: inline-flex;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    color: var(--primary-color);
+    font-size: 10px;
+    font-weight: 700;
+  }
   .dq-prog {
     font-size: 12px;
     font-weight: 600;
@@ -158,7 +193,62 @@
     font-weight: 600;
     color: #10b981;
   }
-  /* 奖励区 */
+  .dq-stages {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .dq-stage {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    padding: 9px 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--background-color);
+  }
+  .dq-stage.claimable {
+    border-color: #d97706;
+    background: rgba(245, 158, 11, 0.08);
+  }
+  .dq-stage.claimed {
+    border-color: #16a34a;
+  }
+  .dq-stage-dot {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border-radius: 50%;
+    color: #d97706;
+    background: rgba(245, 158, 11, 0.12);
+  }
+  .dq-stage.claimed .dq-stage-dot {
+    color: #16a34a;
+    background: rgba(22, 163, 74, 0.12);
+  }
+  .dq-stage-main {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .dq-stage-main b {
+    font-size: 12px;
+  }
+  .dq-stage-main small {
+    color: var(--desc-color);
+    font-size: 10.5px;
+  }
+  .dq-stage-state {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 10.5px;
+    font-weight: 700;
+  }
   .dq-bonus {
     display: flex;
     align-items: center;
@@ -177,17 +267,6 @@
   .dq-bonus.claimed {
     border-color: color-mix(in srgb, #34d399 40%, transparent);
     background: color-mix(in srgb, #34d399 8%, transparent);
-  }
-  .dq-bonus-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
-  .dq-bonus-emoji {
-    font-size: 18px;
-    line-height: 1;
-    flex: 0 0 auto;
   }
   .dq-bonus-text {
     font-size: 12.5px;
@@ -212,5 +291,10 @@
   .dq-claim:disabled {
     opacity: 0.6;
     cursor: default;
+  }
+  @media (max-width: 520px) {
+    .dq-stages {
+      grid-template-columns: 1fr;
+    }
   }
 </style>

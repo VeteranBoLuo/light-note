@@ -99,9 +99,15 @@ describe('成就体系职责', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
     const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
 
-    expect(keys).toHaveLength(19);
+    expect(keys).toHaveLength(30);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
     expect(ACHIEVEMENTS.every((achievement) => achievement.target > 1)).toBe(true);
+    expect(
+      ACHIEVEMENTS.reduce((counts, achievement) => {
+        counts[achievement.group] = (counts[achievement.group] || 0) + 1;
+        return counts;
+      }, {}),
+    ).toEqual({ checkin: 6, create: 9, action: 4, organize: 4, level: 3, tenure: 4 });
   });
 });
 
@@ -310,8 +316,8 @@ describe('后台成长调整的升级通知', () => {
 });
 
 describe('claimDailyQuestBonus 对满级/root 的处理', () => {
-  // root 的经验整体不入账,所以它的每日任务只有「签到 + 新增内容」两项,
-  // 「今天领过没」也只能看积分流水 —— 这两条是本组用例要锁住的行为。
+  // root 的经验整体不入账，但每日任务仍是「签到 + 新增内容 + 稳定随机任务」三项；
+  // 「今天领过没」只能看积分流水。
   const GROWTH_ROW = {
     exp: 0,
     streak: 1,
@@ -324,10 +330,24 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     storage_bonus_mb: 0,
   };
 
-  function mockRootQueries({ createdToday = 1 } = {}) {
+  function mockRootQueries({ createdToday = 1, completedTodo = 0, legacyClaimed = false } = {}) {
     pool.query.mockImplementation(async (sql) => {
       if (sql.includes('SELECT exp, streak, last_checkin_date')) return [[{ ...GROWTH_ROW }]];
-      if (sql.includes('AS c')) return [[{ c: createdToday }]];
+      if (sql.includes('AS bookmarks')) {
+        return [
+          [
+            {
+              bookmarks: createdToday,
+              notes: 0,
+              files: 0,
+              todosCreated: 0,
+              todosCompleted: completedTodo,
+              organized: 0,
+            },
+          ],
+        ];
+      }
+      if (sql.includes('COUNT(*) AS c FROM points_log')) return [[{ c: legacyClaimed ? 1 : 0 }]];
       throw new Error(`未预期的 pool 查询: ${sql}`);
     });
   }
@@ -347,11 +367,11 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
 
     // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
-    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
-    expect(earnPoints).toHaveBeenCalledWith('root-1', 30, 'quest', '20260806');
+    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 20, capped: false });
+    expect(earnPoints).toHaveBeenCalledWith('root-1', 20, 'quest', '20260806:2');
     const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
     expect(contentCountCall?.[0]).toContain('td.del_flag = 0 AND td.create_time >= CURDATE()');
-    expect(contentCountCall?.[1]).toEqual(['root-1', 'root-1', 'root-1', 'root-1']);
+    expect(contentCountCall?.[1]).toEqual(['root-1', 'root-1', 'root-1', 'root-1', 'root-1', 'root-1']);
     // 没走 grantExp,所以不该有 growth_events 的写入连接
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
@@ -359,13 +379,27 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
   it('root 当天重复领取按积分流水判重,返回 already', async () => {
     vi.clearAllMocks();
     useAugust6();
-    mockRootQueries();
-    earnPoints.mockResolvedValue(false); // 积分流水已存在 = 今天领过了
+    mockRootQueries({ legacyClaimed: true });
 
     const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
 
     expect(result).toMatchObject({ ok: true, already: true });
     expect(result.pointsEarned).toBeUndefined();
+    expect(earnPoints).not.toHaveBeenCalled();
+  });
+
+  it('root 完成随机任务后补领第二阶段，两个阶段合计 30 积分', async () => {
+    vi.clearAllMocks();
+    useAugust6();
+    // root-1 在 2026-08-06 的稳定随机任务是「完成待办」。
+    mockRootQueries({ completedTodo: 1 });
+    earnPoints.mockResolvedValue(true);
+
+    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+
+    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
+    expect(earnPoints).toHaveBeenNthCalledWith(1, 'root-1', 20, 'quest', '20260806:2');
+    expect(earnPoints).toHaveBeenNthCalledWith(2, 'root-1', 10, 'quest', '20260806:3');
   });
 
   it('root 未记录内容时仍算未完成,不发积分', async () => {

@@ -41,9 +41,9 @@ export async function ensurePointsSchema() {
       day CHAR(8) NOT NULL,
       bonus_tokens INT NOT NULL DEFAULT 0,
       PRIMARY KEY (user_id, day)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='当日 AI 额度加成(使用 AI 加油包/历史购买 写入,aiQuota 只读)'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='历史当日 AI 额度加成兼容表(新版不再写入)'
   `);
-  // 背包:用户持有的消耗品(AI 加油包等)。补签卡为特例,仍存 user_growth.streak_protect_cards,不入此表。
+  // 背包:历史消耗品兼容表。新版 AI 加油包即时进入永久余额；补签卡仍存 user_growth.streak_protect_cards。
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_item (
       user_id VARCHAR(64) NOT NULL,
@@ -64,6 +64,11 @@ export async function ensurePointsSchema() {
   if (await columnMissing('user_growth', 'storage_bonus_mb')) {
     await pool.query(
       'ALTER TABLE `user_growth` ADD COLUMN `storage_bonus_mb` INT NOT NULL DEFAULT 0 COMMENT "积分兑换的永久扩容(MB),叠加在段位基础配额之上"',
+    );
+  }
+  if (await columnMissing('user_growth', 'ai_bonus_tokens')) {
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `ai_bonus_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT "永久 AI 加油余额(tokens),每日等级额度耗尽后自动扣减"',
     );
   }
   if (await columnMissing('user_growth', 'lottery_count')) {
@@ -95,13 +100,31 @@ export const SHOP_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
   // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
   {
+    id: 'ai_pack_small',
+    type: 'consumable',
+    name: 'AI 轻量加油包',
+    desc: '+30 万 tokens · 永久有效,每日等级额度用完后自动使用',
+    cost: 90,
+    effect: 'ai_pack',
+    bonusTokens: 300_000,
+  },
+  {
     id: 'ai_pack',
     type: 'consumable',
     name: 'AI 加油包',
-    desc: '+60 万 tokens · 存入背包,择时「使用」当天生效(不再当天不用即作废)',
+    desc: '+60 万 tokens · 永久有效,每日等级额度用完后自动使用',
     cost: 150,
     effect: 'ai_pack',
     bonusTokens: 600_000,
+  },
+  {
+    id: 'storage_128',
+    type: 'consumable',
+    name: '扩容包 128MB',
+    desc: '云空间永久 +128MB,低门槛扩容',
+    cost: 250,
+    effect: 'storage',
+    storageMb: 128,
   },
   {
     id: 'storage_512',
@@ -542,8 +565,11 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
         userId,
       ]);
     } else if (item.effect === 'ai_pack') {
-      // AI 加油包 → 进背包(消耗品),用户择时「使用」才加当日额度;不再"购买即当天生效、当天不用作废"
-      await grantItem(conn, userId, 'ai_pack', 1);
+      // AI 加油包是永久余额：兑换即到账；AI 闸门始终先用等级每日额度，耗尽后才自动扣这里。
+      await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
+        item.bonusTokens,
+        userId,
+      ]);
     } else if (item.type === 'title' || item.type === 'cosmetic') {
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }

@@ -165,14 +165,20 @@
                   </div>
                   <div>
                     <dt>{{ t('ai.quotaRemaining') }}</dt>
-                    <dd>{{ fmtTokens(remainingTokens) }}</dd>
+                    <dd>{{ fmtTokens(quota.dailyRemaining ?? remainingTokens) }}</dd>
                   </div>
                   <div>
                     <dt>{{ t('ai.quotaTotal') }}</dt>
-                    <dd>{{ fmtTokens(quota.quota) }}</dd>
+                    <dd>{{ fmtTokens(quota.dailyQuota ?? quota.quota) }}</dd>
+                  </div>
+                  <div v-if="Number(quota.bonusTokens || 0) > 0">
+                    <dt>{{ t('ai.quotaBonusBalance') }}</dt>
+                    <dd>{{ fmtTokens(quota.bonusTokens) }}</dd>
                   </div>
                 </dl>
-                <small>{{ t('ai.quotaEstimateHint') }}</small>
+                <small>{{
+                  Number(quota.bonusTokens || 0) > 0 ? t('ai.quotaBonusHint') : t('ai.quotaEstimateHint')
+                }}</small>
               </div>
             </template>
           </BPopover>
@@ -235,7 +241,17 @@
     defineProps<{
       modelValue: string;
       isLoading: boolean;
-      quota?: { exempt?: boolean; role?: string; used?: number; quota?: number; remaining?: number } | null;
+      quota?: {
+        exempt?: boolean;
+        role?: string;
+        used?: number;
+        quota?: number;
+        remaining?: number;
+        dailyQuota?: number;
+        dailyUsed?: number;
+        dailyRemaining?: number;
+        bonusTokens?: number;
+      } | null;
       showTranslation: boolean;
       enableTranslation: boolean;
       translationConfig: { source: string; target: string };
@@ -286,8 +302,10 @@
   // AI 额度:已用占比 + token 紧凑格式(12.3k / 800k)
   const quotaPercent = computed(() => {
     const q = props.quota;
-    if (!q || !q.quota) return 0;
-    return Math.min(100, Math.round(((q.used || 0) / q.quota) * 100));
+    const quota = Number(q?.dailyQuota ?? q?.quota ?? 0);
+    const used = Number(q?.dailyUsed ?? q?.used ?? 0);
+    if (!quota) return 0;
+    return Math.min(100, Math.round((used / quota) * 100));
   });
   const showQuota = computed(() => {
     const q = props.quota;

@@ -72,6 +72,7 @@ export interface Quest {
   done: boolean;
   cur?: number;
   target?: number;
+  random?: boolean;
 }
 
 export interface TimelineItem {
@@ -89,6 +90,16 @@ export interface QuestBonus {
   points: number;
   claimed: boolean;
   claimable: boolean;
+  completedCount?: number;
+  total?: number;
+  stages?: Array<{
+    key: 'basic' | 'complete' | string;
+    required: number;
+    exp: number;
+    points: number;
+    claimed: boolean;
+    claimable: boolean;
+  }>;
 }
 
 export interface StreakMilestone {
@@ -147,7 +158,7 @@ export interface InventoryItem {
 
 export interface Inventory {
   items: InventoryItem[];
-  assets: { points: number; storageBonusMb: number; todayAiBonus: number };
+  assets: { points: number; storageBonusMb: number; aiBonusTokens: number };
 }
 
 export interface LotteryPrize {
@@ -526,7 +537,7 @@ export function useGrowth() {
     return inventory.value;
   }
 
-  // 使用一件背包消耗品(如 AI 加油包 → 今日额度 +60万);成功则刷新背包 + 成长快照(数量/额度变化)
+  // 使用一件历史背包消耗品(旧 AI 加油包 → 永久余额);成功则刷新背包与资产
   async function useItem(itemId: string) {
     const res = await growthApi.useItemApi(itemId);
     if (res?.status === 200 && res.data?.ok) {
@@ -539,7 +550,7 @@ export function useGrowth() {
   async function buyItem(itemId: string) {
     const res = await growthApi.buyShopItem(itemId);
     if (res?.status === 200 && res.data?.ok) {
-      // 买到的 AI 加油包/补签卡进背包 → 一并刷新背包
+      // AI 加油余额/永久扩容等资产即时到账，购买后同步资产区
       await Promise.all([loadShop(), load(true), loadInventory()]);
       syncPointsToViews();
     }
@@ -584,7 +595,7 @@ export function useGrowth() {
   async function draw(times: number, free = false) {
     const res = await growthApi.drawLottery(times, free);
     if (res?.status === 200 && res.data?.ok) {
-      // 抽中的 AI 加油包/补签卡进背包 → 一并刷新背包
+      // 抽中的 AI 加油余额/补签卡会改变资产或物品，同步刷新
       await Promise.all([loadLottery(), load(true), loadInventory()]);
       syncPointsToViews();
     }

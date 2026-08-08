@@ -185,6 +185,7 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'todo_items', 'series_id', 'todo_items.series_id' UNION ALL
   SELECT 'todo_items', 'recurrence_rule', 'todo_items.recurrence_rule' UNION ALL
   SELECT 'todo_items', 'recurrence_instance_at', 'todo_items.recurrence_instance_at'
+  UNION ALL SELECT 'user_growth', 'ai_bonus_tokens', 'user_growth.ai_bonus_tokens'
 ) expected
 LEFT JOIN information_schema.columns actual
   ON actual.table_schema=DATABASE()
