@@ -16,6 +16,7 @@ interface ParsedOperand {
  */
 const SOFT_BACKGROUND_CATEGORIES = new Set([
   'primary',
+  'todo',
   'bookmark',
   'note',
   'file',
@@ -26,6 +27,22 @@ const SOFT_BACKGROUND_CATEGORIES = new Set([
   'border',
   'muted',
   'text',
+]);
+
+/*
+ * 淡染不只会混向 transparent，也经常混向卡片、面板或输入框底色。例如：
+ * `color-mix(todo 10%, card-background)`。旧实现只处理 transparent，后者会直接
+ * 选中权重更大的卡片底色，导致 App 中标签、选中项等语义色彻底消失。
+ */
+const SOFT_BACKGROUND_BASE_CATEGORIES = new Set([
+  'background',
+  'card-background',
+  'panel-background',
+  'menu-background',
+  'input-background',
+  'tag-background',
+  'white',
+  'black',
 ]);
 
 /*
@@ -122,18 +139,34 @@ function softBackgroundCategory(first: ParsedOperand, second: ParsedOperand, kin
 
   const firstTransparent = isTransparent(first.color);
   const secondTransparent = isTransparent(second.color);
-  if (firstTransparent === secondTransparent) return null;
+  if (firstTransparent !== secondTransparent) {
+    const visible = firstTransparent ? second : first;
+    const visibleWeight = firstTransparent ? Number(secondWeight) : Number(firstWeight);
+    if (visibleWeight >= 50) return null;
 
-  const visible = firstTransparent ? second : first;
-  const visibleWeight = firstTransparent ? Number(secondWeight) : Number(firstWeight);
-  if (visibleWeight >= 50) return null;
-
-  const category = variableCategory(visible.color, kind);
-  if (!SOFT_BACKGROUND_CATEGORIES.has(category)) return null;
-  if (NEUTRAL_SOFT_BACKGROUND_CATEGORIES.has(category) && visibleWeight < NEUTRAL_SOFT_BACKGROUND_MIN_WEIGHT) {
-    return null;
+    const category = variableCategory(visible.color, kind);
+    if (!SOFT_BACKGROUND_CATEGORIES.has(category)) return null;
+    if (NEUTRAL_SOFT_BACKGROUND_CATEGORIES.has(category) && visibleWeight < NEUTRAL_SOFT_BACKGROUND_MIN_WEIGHT) {
+      return null;
+    }
+    return `${category}-soft-background`;
   }
-  return `${category}-soft-background`;
+
+  const firstCategory = variableCategory(first.color, kind);
+  const secondCategory = variableCategory(second.color, kind);
+  const candidates = [
+    { category: firstCategory, weight: Number(firstWeight), baseCategory: secondCategory },
+    { category: secondCategory, weight: Number(secondWeight), baseCategory: firstCategory },
+  ];
+  const semanticTint = candidates.find(
+    ({ category, weight, baseCategory }) =>
+      weight > 0 &&
+      weight < 50 &&
+      SOFT_BACKGROUND_CATEGORIES.has(category) &&
+      !NEUTRAL_SOFT_BACKGROUND_CATEGORIES.has(category) &&
+      SOFT_BACKGROUND_BASE_CATEGORIES.has(baseCategory),
+  );
+  return semanticTint ? `${semanticTint.category}-soft-background` : null;
 }
 
 function literalCategory(color: string, kind: ColorMixKind) {
@@ -162,6 +195,7 @@ function variableCategory(color: string, kind: ColorMixKind) {
   if (variable.includes('resource-note')) return 'note';
   if (variable.includes('resource-file')) return 'file';
   if (variable.includes('resource-tag')) return 'tag';
+  if (variable.includes('todo-accent')) return 'todo';
   if (variable.includes('warning')) return 'warning';
   if (variable.includes('danger') || variable.includes('error')) return 'danger';
   if (variable.includes('success')) return 'success';

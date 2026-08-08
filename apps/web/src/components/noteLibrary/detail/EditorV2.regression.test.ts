@@ -71,10 +71,10 @@ describe('编辑器 V2 交互回归', () => {
 
   it('Android App 富文本与 Markdown 普通正文使用常规字重，真实加粗语义仍显示粗体', () => {
     expect(androidWebViewStylesSource).toMatch(
-      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*sans-serif;[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*style;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*400;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
+      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*sans-serif;[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*none;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*400;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
     );
     expect(androidWebViewStylesSource).toMatch(
-      /\.person-menu-item-title,[\s\S]*?\.phone-menu-item-title,[\s\S]*?\.mobile-todo-sort \.select-trigger,[\s\S]*?\.mobile-todo-sort \.select-text,[\s\S]*?\.admin-container\s*\{[\s\S]*?font-weight:\s*400;/u,
+      /\.person-menu-item-title,[\s\S]*?\.phone-menu-item-title,[\s\S]*?\.mobile-todo-sort \.select-trigger,[\s\S]*?\.mobile-todo-sort \.select-text,[\s\S]*?\.user-icon-text,[\s\S]*?\.user-icon-text \*,[\s\S]*?\.admin-container\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
     expect(androidWebViewStylesSource).toMatch(
       /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
@@ -86,6 +86,15 @@ describe('编辑器 V2 交互回归', () => {
       /\.note-editor-body strong,[\s\S]*?\.mce-content-body b,[\s\S]*?\.md-preview strong,[\s\S]*?\.md-preview b\s*\{[\s\S]*?font-weight:\s*700\s*!important;/u,
     );
     expect(codeMirrorSource).toMatch(/tag:\s*tags\.strong,[\s\S]*?fontWeight:\s*'700'/u);
+  });
+
+  it('Android App 保留移动待办筛选间距与优先级语义底色', () => {
+    expect(androidWebViewStylesSource).toMatch(
+      /\.inbox-toolbar--todo-primary\s*\{[\s\S]*?background:\s*transparent\s*!important;/u,
+    );
+    expect(androidWebViewStylesSource).toMatch(
+      /\.todo-item__actions--mobile \.todo-mobile-action--priority::before\s*\{[\s\S]*?border-color:\s*var\(--chip-todo-border\)\s*!important;[\s\S]*?background:\s*var\(--chip-todo-bg\)\s*!important;/u,
+    );
   });
 
   it('目录树 Markdown 与 HTML 都使用可直接识别格式的独立图标', () => {

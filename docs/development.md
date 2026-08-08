@@ -426,11 +426,11 @@ APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` �
 2. 运行时 `main.ts` 检测到 Android WebView（APK 或 `; wv)` UA）给 `<html>` 加 `light-note-android-webview`。
 3. `assets/css/android-webview-compat.less` 只在该类下定义那批 `--ln-android-color-mix-*` 变量；普通浏览器没有定义，继续使用真实混色。
 
-旧系统 WebView 对系统字体的中间字重也不稳定：字体没有 500/550/600/650 等字面时，可能直接向上匹配到 700，表现为 App 的导航、按钮、正文辅助信息大面积加粗，而同一页面在新版移动浏览器正常。构建时 `src/vite/androidFontWeightFallback.ts` 会把纯数字 `font-weight` 包成 `var(--ln-android-font-weight-<regular|medium|bold>, 原值)`；普通浏览器因变量未定义继续使用原值，APK 在兼容层将 700 以下稳定收敛到 400、只让 700+ 保持粗体，并关闭伪粗体合成。不要在业务组件中追加 App UA 分支；真机发现厂商默认字重或继承不一致时，只在 `android-webview-compat.less` 集中补语义明确的普通文字兜底，并补回归测试。`@font-face` 的字重描述不会被转换。
+旧系统 WebView 对系统字体的中间字重也不稳定：字体没有 500/550/600/650 等字面时，可能直接向上匹配到 700，表现为 App 的导航、按钮、正文辅助信息大面积加粗，而同一页面在新版移动浏览器正常。构建时 `src/vite/androidFontWeightFallback.ts` 会把纯数字 `font-weight` 包成 `var(--ln-android-font-weight-<regular|medium|bold>, 原值)`；普通浏览器因变量未定义继续使用原值，APK 在兼容层将 700 以下稳定收敛到 400、只让 700+ 保持粗体，并通过 `font-synthesis: none` 禁止厂商回退层伪造字重。不要在业务组件中追加 App UA 分支；真机发现厂商默认字重或继承不一致时，只在 `android-webview-compat.less` 集中补语义明确的普通文字兜底，并补回归测试。`@font-face` 的字重描述不会被转换。
 
-- **后果：APK 内每个 `color-mix()` 都塌缩成一个稳定实色，混色表达的层次差异基本消失。** 具体取哪个色由权重更大的一侧决定：
-  - 混**主题底色**的淡染（`color-mix(in srgb, var(--primary-color) 5%~15%, var(--background-color))`）→ 取底色，**淡色完全消失**；
-  - 混 **`transparent`** 的淡染（`color-mix(in srgb, var(--primary-color) 9%, transparent)`）→ 走 `*-soft-background`，保留一层固定 `rgba(…, 0.1)`，**淡底还在**。所以想让淡底在 APK 上活下来，第二操作数用 `transparent` 而不是底色变量。注意这层 rgba 是硬编码的品牌色，局部覆盖了 `--primary-color` 的页面（如待办页覆盖成天空蓝）在 APK 内会拿到品牌紫的淡底；
+- **后果：APK 内每个 `color-mix()` 都会收敛成兼容值，精确混色层次仍可能与现代浏览器略有差异。** 具体规则如下：
+  - 语义色以低权重混入**主题底色或 `transparent`**（例如 `color-mix(in srgb, var(--primary-color) 8%, var(--background-color))`）→ 走对应的 `*-soft-background`，保留一层稳定 `rgba(…, 0.1)`，避免标签、选中项和弱强调底色直接消失；
+  - 新增页面级语义色（如待办天空蓝）时要在插件分类与兼容层同时声明自己的普通色和 `*-soft-background`，不能让它误归为品牌主色或普通背景；
   - 偏中性色的混色边框 → 塌缩成普通边框色，与相邻元素再无差异；偏主色的混色边框 → 变成饱和实色主色（仍可见）；
   - `box-shadow` 里的混色 → 一律回退成 `transparent`，**阴影直接消失**。
 - **铁律：状态与层级不能只由 `color-mix()` 或阴影承载。** 选中、今天、激活、错误、当前项等状态必须同时有一个不依赖混色的实色信号 —— 实色描边（`var(--primary-color)`）、实心圆点 / 圆底、图标、字重或文字色；淡混色只能作为锦上添花。待办日历的「今天」踩过：只写了混色描边 + 5% 淡底，APK 上退化成与普通格子完全一样，只剩一个纯 `var()` 的小圆点。

@@ -27,7 +27,19 @@ describe('wrapAndroidColorMixFallbacks', () => {
     const value = 'color-mix(in srgb, var(--resource-tag-color) 9%, var(--mobile-tag-muted-bg))';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
-      `var(--ln-android-color-mix-input-background, ${value})`,
+      `var(--ln-android-color-mix-tag-soft-background, ${value})`,
+    );
+  });
+
+  it('keeps a semantic tint when it is mixed into a solid surface', () => {
+    const todo = 'color-mix(in srgb, var(--todo-accent-color) 10%, var(--card-background))';
+    const primary = 'color-mix(in srgb, var(--primary-color) 8%, var(--background-color))';
+
+    expect(wrapAndroidColorMixFallbacks(todo, 'background')).toBe(
+      `var(--ln-android-color-mix-todo-soft-background, ${todo})`,
+    );
+    expect(wrapAndroidColorMixFallbacks(primary, 'background-color')).toBe(
+      `var(--ln-android-color-mix-primary-soft-background, ${primary})`,
     );
   });
 
@@ -89,9 +101,9 @@ describe('wrapAndroidColorMixFallbacks', () => {
     expect(wrapAndroidColorMixFallbacks(pageBackground, 'border-color')).toBe(
       `var(--ln-android-color-mix-border, ${pageBackground})`,
     );
-    // 同一个变量用在背景声明上仍按背景回退，不受这条兜底影响
+    // 同一个表达式用在背景声明上应保留淡主色，不再退化成纯页面底色
     expect(wrapAndroidColorMixFallbacks(pageBackground, 'background')).toBe(
-      `var(--ln-android-color-mix-background, ${pageBackground})`,
+      `var(--ln-android-color-mix-primary-soft-background, ${pageBackground})`,
     );
   });
 
