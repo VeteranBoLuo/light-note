@@ -19,6 +19,18 @@ const noteLibraryRouter: RouteRecordRaw[] = [
   },
   {
     meta: {
+      title: '模板管理',
+      requireAuth: true,
+      roles: ALL_ROLES,
+      mobileShell: 'resources',
+      mobileBottomNav: false,
+    },
+    path: '/noteLibrary/templates',
+    name: 'noteTemplateManage',
+    component: () => import('@/view/noteLibrary/NoteTemplateManage.vue'),
+  },
+  {
+    meta: {
       roles: ALL_ROLES,
     },
     path: '/noteLibrary/:id(.*)',

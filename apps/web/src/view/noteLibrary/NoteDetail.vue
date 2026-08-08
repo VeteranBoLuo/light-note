@@ -22,6 +22,7 @@
         @undo-switch="triggerEditorUndo"
         @history="openVersionHistory"
         @save-as-template="saveTemplateVisible = true"
+        @manage-templates="router.push('/noteLibrary/templates')"
         @open-catalog="catalogDrawerOpen = true"
         @open-navigation="openMobileNavigation()"
         @browse-children="browseCurrentChildren"

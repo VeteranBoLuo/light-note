@@ -30,9 +30,14 @@ vi.mock('../util/noteImages.js', async (importOriginal) => ({
   cleanupOrphanNoteImages: cleanupSpy,
 }));
 
-const { queryNoteTemplates, getNoteTemplateDetail, addNoteTemplate, delNoteTemplate } = await import(
-  './noteLibraryHandle.js'
-);
+const {
+  queryNoteTemplates,
+  getNoteTemplateDetail,
+  addNoteTemplate,
+  updateNoteTemplate,
+  duplicateNoteTemplate,
+  delNoteTemplate,
+} = await import('./noteLibraryHandle.js');
 
 function mockRes() {
   return { send: vi.fn() };
@@ -40,9 +45,19 @@ function mockRes() {
 const lastSent = (res) => res.send.mock.calls.at(-1)[0];
 
 describe('笔记模板 handler', () => {
+  let connection;
+
   beforeEach(() => {
     vi.clearAllMocks();
     ensureNotVisitor.mockReturnValue(true);
+    connection = {
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn(),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    };
+    getConnection.mockResolvedValue(connection);
   });
 
   it('queryNoteTemplates 只查询当前用户且不含 content 字段', async () => {
@@ -52,6 +67,7 @@ describe('笔记模板 handler', () => {
     const [sql, params] = poolQuery.mock.calls[0];
     expect(params).toEqual(['u1']);
     expect(sql).not.toMatch(/content/i);
+    expect(sql).toMatch(/revision/i);
     expect(lastSent(res).status).toBe(200);
   });
 
@@ -142,6 +158,94 @@ describe('笔记模板 handler', () => {
       res,
     );
     expect(lastSent(res).status).toBe(200);
+  });
+
+  it('updateNoteTemplate revision 冲突时保留服务端版本且不更新', async () => {
+    connection.query.mockResolvedValueOnce([
+      [{ id: 't1', type: 'markdown', content: '# 远端', revision: 4, update_time: '2026-08-08 10:00:00' }],
+    ]);
+    const res = mockRes();
+    await updateNoteTemplate(
+      {
+        user: { id: 'u1' },
+        body: { id: 't1', baseRevision: 3, name: '周报', type: 'markdown', content: '# 本地' },
+      },
+      res,
+    );
+    expect(lastSent(res).status).toBe(409);
+    expect(lastSent(res).data).toMatchObject({ code: 'NOTE_TEMPLATE_VERSION_CONFLICT', revision: 4 });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('updateNoteTemplate 同格式更新并递增 revision，提交后清理移除的图片', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 't1',
+            type: 'html',
+            content: '<p>旧</p><img src="https://boluo66.top/uploads/note-1-x.png">',
+            revision: 2,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    const res = mockRes();
+    await updateNoteTemplate(
+      {
+        user: { id: 'u1' },
+        body: {
+          id: 't1',
+          baseRevision: 2,
+          name: '新版模板',
+          titleTemplate: '标题',
+          description: '说明',
+          type: 'html',
+          content: '<p>新</p>',
+        },
+      },
+      res,
+    );
+    expect(lastSent(res).status).toBe(200);
+    expect(lastSent(res).data).toMatchObject({ id: 't1', name: '新版模板', revision: 3 });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(cleanupSpy).toHaveBeenCalledWith(['https://boluo66.top/uploads/note-1-x.png']);
+    expect(connection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('updateNoteTemplate 禁止直接切换模板格式', async () => {
+    connection.query.mockResolvedValueOnce([[{ id: 't1', type: 'markdown', content: '# 旧', revision: 1 }]]);
+    const res = mockRes();
+    await updateNoteTemplate(
+      {
+        user: { id: 'u1' },
+        body: { id: 't1', baseRevision: 1, name: '模板', type: 'html', content: '<p>新</p>' },
+      },
+      res,
+    );
+    expect(lastSent(res).status).toBe(400);
+    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('duplicateNoteTemplate 在事务中复制本人模板并生成不重名名称', async () => {
+    connection.query
+      .mockResolvedValueOnce([[{ id: 'u1' }]])
+      .mockResolvedValueOnce([
+        [{ name: '周报', title_template: '周报 {{date}}', description: '说明', type: 'markdown', content: '# 周报' }],
+      ])
+      .mockResolvedValueOnce([[{ name: '周报' }, { name: '周报 副本' }]])
+      .mockResolvedValueOnce([{}]);
+    const res = mockRes();
+    await duplicateNoteTemplate({ user: { id: 'u1' }, headers: {}, body: { id: 't1' } }, res);
+    expect(lastSent(res).status).toBe(200);
+    expect(lastSent(res).data).toMatchObject({ id: 'tpl-new-id', name: '周报 副本 2', revision: 1 });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    const insertPayload = connection.query.mock.calls[3][1][0];
+    expect(insertPayload).toMatchObject({ name: '周报 副本 2', content: '# 周报', createBy: 'u1' });
   });
 
   it('delNoteTemplate 归属不符返回 404 且不执行删除', async () => {

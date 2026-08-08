@@ -547,3 +547,30 @@ WHERE NOT EXISTS (
   FROM security_migration_state
   WHERE migration_key='security-controls-v2-del-flag-separation'
 );
+
+-- 29) 自定义模板管理依赖 revision 乐观锁（期望 0 行）
+SELECT '[29] missing_note_template_management_schema' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'note_template' tab, 'id' col, 'note_template.id' n UNION ALL
+  SELECT 'note_template', 'create_by', 'note_template.create_by' UNION ALL
+  SELECT 'note_template', 'title_template', 'note_template.title_template' UNION ALL
+  SELECT 'note_template', 'content', 'note_template.content' UNION ALL
+  SELECT 'note_template', 'revision', 'note_template.revision'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[29] invalid_note_template_revision' AS check_name,
+  CONCAT('实际=', IFNULL(CONCAT(actual.column_type, '/', actual.is_nullable, '/', actual.column_default), '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='note_template'
+ AND actual.column_name='revision'
+WHERE actual.column_name IS NULL
+   OR LOWER(actual.column_type) NOT IN ('int(10) unsigned', 'int unsigned')
+   OR actual.is_nullable <> 'NO'
+   OR actual.column_default <> '1';

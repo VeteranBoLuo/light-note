@@ -15,12 +15,17 @@
       <!-- 格式标识排在状态徽章之后：置顶/待整理是「要不要现在处理」，格式只是「打开后长什么样」 -->
       <NoteFormatBadge :type="note.type" />
     </div>
-    <div v-if="parentPathText" class="note-parent-path" :title="parentPathText">
+    <BButton
+      v-if="parentPathText && parentTargetId"
+      class="note-parent-path"
+      :title="parentPathText"
+      @click.stop="emit('openParent', parentTargetId)"
+    >
       <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
       <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
       <span class="note-parent-path__separator" aria-hidden="true">·</span>
       <span class="note-parent-path__text">{{ parentPathText }}</span>
-    </div>
+    </BButton>
     <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
     <div class="note-content">{{ summary }}</div>
     <div class="note-footer">
@@ -80,7 +85,7 @@
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
-  import { getNoteParentPathText } from '@/utils/noteTree';
+  import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
     {
@@ -96,6 +101,7 @@
   const bookmark = bookmarkStore();
   const emit = defineEmits<{
     open: [];
+    openParent: [noteId: string];
     nodeTypeChange: [tag: any];
     action: [
       action:
@@ -112,6 +118,7 @@
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
+  const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));
@@ -258,6 +265,13 @@
     font-size: 11px;
     line-height: 20px;
     white-space: nowrap;
+    cursor: pointer;
+    text-align: left;
+
+    &:hover {
+      color: var(--text-color);
+      border-color: var(--resource-note-color, #00a884);
+    }
 
     &__icon {
       flex: 0 0 auto;

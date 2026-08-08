@@ -1487,12 +1487,65 @@ const NOTE_TEMPLATE_LIMIT = 20; // 每人最多保存的模板数
 const NOTE_TEMPLATE_CONTENT_MAX = 1_000_000; // 与笔记正文同一上限
 const NOTE_TEMPLATE_TYPES = new Set(['html', 'markdown']);
 
+function normalizeNoteTemplateInput(body, { expectedType = '', scene = 'write-note-template' } = {}) {
+  const name = String(body?.name || '').trim();
+  const titleTemplate = String(body?.titleTemplate || '').trim();
+  const description = String(body?.description || '').trim();
+  const requestedType = body?.type || expectedType || 'html';
+  const type = requestedType === 'md' ? 'markdown' : String(requestedType);
+  const rawContent = String(body?.content || '');
+  const content =
+    normalizeNoteType(type) === 'markdown'
+      ? normalizeMarkdownBlockquoteEntities(rawContent)
+      : sanitizePersistedNoteContent(rawContent, 'html', scene);
+  if (!name) return { error: '模板名称不能为空' };
+  if (name.length > 60) return { error: '模板名称不能超过 60 个字符' };
+  if (titleTemplate.length > 255) return { error: '默认标题不能超过 255 个字符' };
+  if (description.length > 255) return { error: '模板描述不能超过 255 个字符' };
+  if (!NOTE_TEMPLATE_TYPES.has(type)) return { error: '模板类型仅支持 html 或 markdown' };
+  if (expectedType && type !== expectedType) return { error: '模板格式不能直接切换,请复制后重新创建' };
+  if (content.length > NOTE_TEMPLATE_CONTENT_MAX) return { error: '模板内容过长' };
+  return {
+    value: {
+      name,
+      titleTemplate: titleTemplate || null,
+      description: description || null,
+      type,
+      content,
+    },
+  };
+}
+
+async function validateNoteTemplateImages({ content, userId, connection = null }) {
+  const imageUrls = extractNoteImageUrls(content);
+  if (!imageUrls.length) return { imageUrls, valid: true };
+  const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId, connection });
+  return { imageUrls, valid: ownedUrls.length === imageUrls.length };
+}
+
+function buildDuplicateTemplateName(name, existingNames, req) {
+  const english = String(req?.headers?.['x-lang'] || req?.headers?.['accept-language'] || '')
+    .toLowerCase()
+    .startsWith('en');
+  const suffix = english ? ' copy' : ' 副本';
+  const names = new Set(existingNames.map((item) => String(item || '').trim()));
+  const fit = (tail) =>
+    `${Array.from(String(name || 'Template'))
+      .slice(0, Math.max(1, 60 - tail.length))
+      .join('')}${tail}`;
+  let candidate = fit(suffix);
+  for (let index = 2; names.has(candidate) && index < 100; index += 1) {
+    candidate = fit(`${suffix} ${index}`);
+  }
+  return candidate;
+}
+
 // 模板列表(轻量:不含 content,选择器只需要元信息;实例化时再按 id 取正文)
 export const queryNoteTemplates = async (req, res) => {
   try {
     const userId = req.user.id;
     const [rows] = await pool.query(
-      `SELECT id, name, title_template, description, type, update_time
+      `SELECT id, name, title_template, description, type, revision, create_time, update_time
        FROM note_template
        WHERE create_by = ?
        ORDER BY update_time DESC, id DESC`,
@@ -1513,7 +1566,8 @@ export const getNoteTemplateDetail = async (req, res) => {
       return res.send(resultData(null, 400, '参数错误'));
     }
     const [rows] = await pool.query(
-      'SELECT id, name, title_template, description, type, content FROM note_template WHERE id = ? AND create_by = ?',
+      `SELECT id, name, title_template, description, type, content, revision, create_time, update_time
+         FROM note_template WHERE id = ? AND create_by = ?`,
       [templateId, userId],
     );
     if (rows.length === 0) {
@@ -1530,58 +1584,190 @@ export const addNoteTemplate = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const userId = req.user.id;
-    const name = String(req.body.name || '').trim();
-    const titleTemplate = String(req.body.titleTemplate || '').trim();
-    const description = String(req.body.description || '').trim();
-    const type = req.body.type === 'md' ? 'markdown' : String(req.body.type || 'html');
-    const rawContent = String(req.body.content || '');
-    const content =
-      normalizeNoteType(type) === 'markdown'
-        ? normalizeMarkdownBlockquoteEntities(rawContent)
-        : sanitizePersistedNoteContent(rawContent, 'html', 'create-note-template');
-    if (!name) {
-      return res.send(resultData(null, 400, '模板名称不能为空'));
-    }
-    if (name.length > 60) {
-      return res.send(resultData(null, 400, '模板名称不能超过 60 个字符'));
-    }
-    if (titleTemplate.length > 255) {
-      return res.send(resultData(null, 400, '默认标题不能超过 255 个字符'));
-    }
-    if (description.length > 255) {
-      return res.send(resultData(null, 400, '模板描述不能超过 255 个字符'));
-    }
-    if (!NOTE_TEMPLATE_TYPES.has(type)) {
-      return res.send(resultData(null, 400, '模板类型仅支持 html 或 markdown'));
-    }
-    if (content.length > NOTE_TEMPLATE_CONTENT_MAX) {
-      return res.send(resultData(null, 400, '模板内容过长'));
-    }
+    const normalized = normalizeNoteTemplateInput(req.body, { scene: 'create-note-template' });
+    if (normalized.error) return res.send(resultData(null, 400, normalized.error));
+    const input = normalized.value;
     // 正文引用本站上传图片时,校验全部属于当前用户(经其笔记登记于 note_images),
     // 防止把他人图片 URL 写进模板绕过归属;外链图片不校验、不追踪。
-    const imageUrls = extractNoteImageUrls(content);
-    if (imageUrls.length) {
-      const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId });
-      if (ownedUrls.length !== imageUrls.length) {
-        return res.send(resultData(null, 400, '模板包含无权使用的图片,请先移除后重试'));
-      }
-    }
+    const imageValidation = await validateNoteTemplateImages({ content: input.content, userId });
+    if (!imageValidation.valid) return res.send(resultData(null, 400, '模板包含无权使用的图片,请先移除后重试'));
     const [cntRows] = await pool.query('SELECT COUNT(*) AS n FROM note_template WHERE create_by = ?', [userId]);
     if (cntRows[0].n >= NOTE_TEMPLATE_LIMIT) {
       return res.send(resultData(null, 400, `最多保存 ${NOTE_TEMPLATE_LIMIT} 个模板,请先删除不用的模板`));
     }
     const data = insertData({
-      name,
-      titleTemplate: titleTemplate || null,
-      description: description || null,
-      type,
-      content,
+      ...input,
       createBy: userId,
     });
     await pool.query('INSERT INTO note_template SET ?', [data]);
-    res.send(resultData({ id: data.id, name }));
+    res.send(resultData({ id: data.id, name: input.name, revision: 1 }));
   } catch (e) {
     sendTemplateServerError(res, '保存模板', e);
+  }
+};
+
+// 显式编辑模板:按 revision 做乐观锁,绝不把秒级 update_time 当并发版本。
+export const updateNoteTemplate = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user.id;
+  const templateId = String(req.body?.id || '').trim();
+  const baseRevision = Number(req.body?.baseRevision);
+  if (!templateId || !Number.isInteger(baseRevision) || baseRevision < 1) {
+    return res.send(resultData(null, 400, '模板版本参数错误'));
+  }
+  let connection;
+  let transactionStarted = false;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [rows] = await connection.query(
+      `SELECT id, type, content, revision, update_time
+         FROM note_template WHERE id = ? AND create_by = ? FOR UPDATE`,
+      [templateId, userId],
+    );
+    if (!rows.length) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData(null, 404, '模板不存在'));
+    }
+    const current = rows[0];
+    if (Number(current.revision) !== baseRevision) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(
+        resultData(
+          {
+            code: 'NOTE_TEMPLATE_VERSION_CONFLICT',
+            revision: Number(current.revision),
+            updateTime: current.update_time,
+          },
+          409,
+          '模板已在其他页面或设备更新',
+        ),
+      );
+    }
+    const normalized = normalizeNoteTemplateInput(req.body, {
+      expectedType: normalizeNoteType(current.type),
+      scene: 'update-note-template',
+    });
+    if (normalized.error) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData(null, 400, normalized.error));
+    }
+    const input = normalized.value;
+    const imageValidation = await validateNoteTemplateImages({
+      content: input.content,
+      userId,
+      connection,
+    });
+    if (!imageValidation.valid) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData(null, 400, '模板包含无权使用的图片,请先移除后重试'));
+    }
+    const [result] = await connection.query(
+      `UPDATE note_template
+          SET name = ?, title_template = ?, description = ?, content = ?, revision = revision + 1
+        WHERE id = ? AND create_by = ? AND revision = ?`,
+      [input.name, input.titleTemplate, input.description, input.content, templateId, userId, baseRevision],
+    );
+    if (result.affectedRows !== 1) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData({ code: 'NOTE_TEMPLATE_VERSION_CONFLICT' }, 409, '模板状态已变化'));
+    }
+    await connection.commit();
+    transactionStarted = false;
+    const nextRevision = baseRevision + 1;
+    const oldImages = extractNoteImageUrls(current.content);
+    const nextImages = new Set(imageValidation.imageUrls);
+    cleanupOrphanNoteImages(oldImages.filter((url) => !nextImages.has(url)));
+    return res.send(
+      resultData({
+        id: templateId,
+        name: input.name,
+        titleTemplate: input.titleTemplate,
+        description: input.description,
+        type: input.type,
+        content: input.content,
+        revision: nextRevision,
+        updateTime: new Date().toISOString(),
+      }),
+    );
+  } catch (e) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原业务错误。
+      }
+    }
+    return sendTemplateServerError(res, '更新模板', e);
+  } finally {
+    connection?.release();
+  }
+};
+
+// 服务端复制避免客户端先拉正文再创建,同时按用户行锁串行校验 20 个上限。
+export const duplicateNoteTemplate = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const userId = req.user.id;
+  const templateId = String(req.body?.id || '').trim();
+  if (!templateId) return res.send(resultData(null, 400, '参数错误'));
+  let connection;
+  let transactionStarted = false;
+  try {
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    await connection.query('SELECT id FROM user WHERE id = ? FOR UPDATE', [userId]);
+    const [rows] = await connection.query(
+      `SELECT name, title_template, description, type, content
+         FROM note_template WHERE id = ? AND create_by = ? FOR UPDATE`,
+      [templateId, userId],
+    );
+    if (!rows.length) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData(null, 404, '模板不存在'));
+    }
+    const [existingRows] = await connection.query('SELECT name FROM note_template WHERE create_by = ?', [userId]);
+    if (existingRows.length >= NOTE_TEMPLATE_LIMIT) {
+      await connection.rollback();
+      transactionStarted = false;
+      return res.send(resultData(null, 400, `最多保存 ${NOTE_TEMPLATE_LIMIT} 个模板,请先删除不用的模板`));
+    }
+    const source = rows[0];
+    const name = buildDuplicateTemplateName(
+      source.name,
+      existingRows.map((item) => item.name),
+      req,
+    );
+    const data = insertData({
+      name,
+      titleTemplate: source.title_template || null,
+      description: source.description || null,
+      type: normalizeNoteType(source.type),
+      content: source.content || '',
+      createBy: userId,
+    });
+    await connection.query('INSERT INTO note_template SET ?', [data]);
+    await connection.commit();
+    transactionStarted = false;
+    return res.send(resultData({ id: data.id, name, revision: 1 }));
+  } catch (e) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原业务错误。
+      }
+    }
+    return sendTemplateServerError(res, '复制模板', e);
+  } finally {
+    connection?.release();
   }
 };
 

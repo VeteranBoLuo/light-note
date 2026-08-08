@@ -513,6 +513,17 @@
     overflow: hidden;
   }
 
+  /*
+   * 组件根节点在 Editor 中同时作为 flex 容器使用；CodeMirror 自己的根节点
+   * 默认按正文的最大行宽计算尺寸，会表现成「输入底色随最长一行变宽」。
+   * 让编辑面明确填满宿主，模板编辑和普通笔记编辑即可共用同一尺寸语义。
+   */
+  .markdown-codemirror :deep(.cm-editor) {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
   /* CodeMirror 的 drawSelection 使用独立图层而不是浏览器原生 ::selection。
      用完整层级选择器覆盖默认主题，保证鼠标拖选、双击和三击都显示同一底色。 */
   .markdown-codemirror :deep(.cm-editor > .cm-scroller > .cm-selectionLayer .cm-selectionBackground) {
