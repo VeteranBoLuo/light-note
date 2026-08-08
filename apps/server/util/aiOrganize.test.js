@@ -57,6 +57,23 @@ describe('suggestBookmarkMeta cancellation', () => {
     );
   });
 
+  it('把网页抓取得到的真实落地地址返回给书签编辑器', async () => {
+    mocks.fetchWebMeta.mockResolvedValueOnce({
+      ok: true,
+      url: 'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token',
+      title: '真实笔记',
+      description: '真实描述',
+      bodyText: '正文',
+    });
+
+    await expect(suggestBookmarkMeta({ url: 'https://xhslink.cn/o/7rNw5RKnE8e', userTags: [] })).resolves.toMatchObject(
+      {
+        resolvedUrl: 'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token',
+        metadataSource: 'fetched',
+      },
+    );
+  });
+
   it('请求开始前已经停止时不再抓网页或调用模型', async () => {
     const controller = new AbortController();
     controller.abort();

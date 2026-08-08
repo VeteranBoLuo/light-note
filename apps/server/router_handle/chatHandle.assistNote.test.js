@@ -299,6 +299,24 @@ describe('generateBookmarkMeta URL gate', () => {
     expect(mocks.suggestBookmarkMeta.mock.calls[0][0].governance.requestId).toBe(res.payload.data.requestId);
   });
 
+  it('优先把抓取阶段解析出的真实落地地址返回前端', async () => {
+    mocks.suggestBookmarkMeta.mockResolvedValueOnce({
+      name: '小红书笔记',
+      description: '示例',
+      resolvedUrl: 'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token',
+    });
+    const res = new MockResponse();
+
+    await generateBookmarkMeta({ body: { url: 'https://xhslink.cn/o/7rNw5RKnE8e' }, user: { id: 'u1' } }, res);
+
+    expect(res.payload).toMatchObject({
+      status: 200,
+      data: {
+        resolvedUrl: 'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token',
+      },
+    });
+  });
+
   it('Gateway 额度 gate 拒绝时返回 429 稳定错误', async () => {
     mocks.suggestBookmarkMeta.mockRejectedValueOnce(
       Object.assign(new Error('今日 AI 额度已用完'), { code: 'AI_QUOTA_EXCEEDED' }),

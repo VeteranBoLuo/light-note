@@ -2,6 +2,7 @@
 
 import { Ref } from 'vue';
 import { PWA_LAUNCH_QUERY_KEY, PWA_LAUNCH_QUERY_VALUE, PWA_RUNTIME_SESSION_KEY } from '@/config/appEntryBootstrap.ts';
+import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
 
 export const copyTextToClipboard = function (text) {
   // 检查浏览器是否支持Clipboard API
@@ -359,7 +360,9 @@ export function normalizeNoteContentResourceUrls(htmlContent: string = ''): stri
 // marked / DOMPurify 动态加载单例(与 Editor/FilePreview 一致,按需加载,首次后复用)
 let _markedPromise: Promise<(md: string) => string> | null = null;
 function loadMarked(): Promise<(md: string) => string> {
-  if (!_markedPromise) _markedPromise = import('marked').then((m: any) => m.marked || m.default || m);
+  if (!_markedPromise) {
+    _markedPromise = import('marked').then((m: any) => configureMarkdownRenderer(m.marked || m.default || m));
+  }
   return _markedPromise;
 }
 let _purifyPromise: Promise<{ sanitize: (html: string) => string }> | null = null;

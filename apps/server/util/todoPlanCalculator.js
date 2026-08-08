@@ -23,6 +23,8 @@ const SINGLE_REMINDER_MODES = new Set(['none', 'once', 'repeat']);
 const SINGLE_ONCE_TYPES = new Set(['at_due', 'at_start', 'before_due', 'fixed_at']);
 const SINGLE_REPEAT_KINDS = new Set(['interval', 'weekly', 'monthly']);
 const SINGLE_STOP_TYPES = new Set(['completion_or_due', 'completion', 'until', 'max_count', 'manual']);
+const TODO_PLAN_STORAGE_MIN_YEAR = 1000;
+const TODO_PLAN_STORAGE_MAX_YEAR = 9999;
 
 function planError(code, message, data) {
   const error = new Error(message);
@@ -112,6 +114,16 @@ function timeString(time) {
   return `${pad(time.hour)}:${pad(time.minute)}`;
 }
 
+function resolveDueDate(date, dueDayOffset) {
+  try {
+    const dueDate = date.add({ days: dueDayOffset });
+    if (dueDate.year < TODO_PLAN_STORAGE_MIN_YEAR || dueDate.year > TODO_PLAN_STORAGE_MAX_YEAR) throw new RangeError();
+    return dueDate;
+  } catch {
+    throw planError('TODO_PLAN_DUE_OFFSET_INVALID', '截止日期超出支持范围，请调整开始或截止日期');
+  }
+}
+
 function zonedFrom(date, time, timezone, warnings) {
   const requested = date.toPlainDateTime(time);
   const zoned = requested.toZonedDateTime(timezone, { disambiguation: 'compatible' });
@@ -147,8 +159,8 @@ function normalizeTiming(input, timezone, { allowUndated = false } = {}) {
   const startTime = parsePlainTime(timing.startTime, '开始时间', { optional: true });
   const dueTime = parsePlainTime(timing.dueTime, '截止时间', { optional: true });
   const dueDayOffset = Number(timing.dueDayOffset || 0);
-  if (!Number.isInteger(dueDayOffset) || dueDayOffset < 0 || dueDayOffset > 30) {
-    throw planError('TODO_PLAN_DUE_OFFSET_INVALID', '截止日期偏移必须是 0 到 30 天的整数');
+  if (!Number.isSafeInteger(dueDayOffset) || dueDayOffset < 0) {
+    throw planError('TODO_PLAN_DUE_OFFSET_INVALID', '截止日期偏移必须是非负整数');
   }
   const anchorValue = String(timing.anchorDate || '').trim();
   if (!anchorValue) {
@@ -163,6 +175,7 @@ function normalizeTiming(input, timezone, { allowUndated = false } = {}) {
     };
   }
   const anchorDate = parsePlainDate(anchorValue, '首项日期');
+  resolveDueDate(anchorDate, dueDayOffset);
   if (!startTime && !dueTime) throw planError('TODO_PLAN_TIMING_REQUIRED', '请至少设置开始时间或截止时间');
   if (startTime && dueTime && dueDayOffset === 0 && Temporal.PlainTime.compare(dueTime, startTime) < 0) {
     throw planError('TODO_PLAN_DUE_BEFORE_START', '截止时间早于开始时间，请明确选择次日截止');
@@ -543,7 +556,7 @@ function buildOccurrence(date, timing, timezone, warnings, occurrenceNo, nowInst
   const startTime = timing.startTime ? parsePlainTime(timing.startTime, '开始时间') : null;
   const dueTime = timing.dueTime ? parsePlainTime(timing.dueTime, '截止时间') : null;
   const startZoned = startTime ? zonedFrom(date, startTime, timezone, warnings) : null;
-  const dueDate = date.add({ days: timing.dueDayOffset || 0 });
+  const dueDate = resolveDueDate(date, timing.dueDayOffset || 0);
   const dueZoned = dueTime ? zonedFrom(dueDate, dueTime, timezone, warnings) : null;
   const comparison = dueZoned?.toInstant() || startZoned?.toInstant();
   const missed = Boolean(comparison && Temporal.Instant.compare(comparison, nowInstant) <= 0);

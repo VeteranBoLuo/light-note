@@ -7,6 +7,24 @@
  */
 html.light-note-android-webview {
   /*
+   * 桌面端根节点优先使用“微软雅黑”，但该字体在 Android / 鸿蒙 WebView 中不存在，
+   * 部分厂商兼容层会把它回退成异常偏粗的中文字面。之前只修了笔记正文，因此待办、
+   * 个人中心和后台等普通界面仍会中招。APK 从根节点统一使用已经在富文本真机验证过的
+   * 系统 sans-serif regular；组件显式声明的 500/600/700 等层级仍然正常覆盖。
+   */
+  font-family: sans-serif;
+  font-weight: 400;
+
+  body,
+  #app,
+  .app-root,
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+  }
+
+  /*
    * 构建阶段会把所有 color-mix() 包进这些回退变量。普通浏览器没有定义
    * 变量，继续使用原始混色；APK WebView 命中这里后改用稳定主题色。
    */
@@ -49,16 +67,9 @@ html.light-note-android-webview {
   --ln-android-color-mix-white: #ffffff;
   --ln-android-color-mix-black: #111318;
 
-  /*
-   * 笔记正文默认继承桌面端字体栈。部分 Android / 鸿蒙 WebView 会把回退后的
-   * 中文字体整段绘制成偏粗字面，因此只在 APK 内明确普通正文的常规字重。
-   *
-   * CodeMirror 的 Markdown 编辑层与预览层不经过 TinyMCE，必须分别覆盖；
-   * 规则只落在承载普通文本的父级，语法高亮生成的 strong 子级仍可显示粗体。
-   */
+  /* 编辑器自身可能声明字重，普通正文继续锁定 regular，真实 strong 仍保留粗体。 */
   .note-editor-body,
   .mce-content-body {
-    font-family: sans-serif !important;
     font-weight: 400 !important;
   }
 

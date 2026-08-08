@@ -54,6 +54,54 @@ describe('todoPlanCalculator', () => {
     expect(preview.firstOccurrence).toMatchObject({ occurrenceDate: null, startAt: null, dueAt: null });
   });
 
+  it('一次性任务的开始与截止日期允许跨越 30 天', () => {
+    const preview = calculateTodoPlan(
+      {
+        taskMode: 'single',
+        title: '年度项目复盘',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: '09:00',
+          dueTime: '18:00',
+          dueDayOffset: 365,
+        },
+        plan: { type: 'once', pastPolicy: 'keep_overdue' },
+        reminder: { mode: 'none' },
+        singleTaskReminder: { version: 1, mode: 'none', channels: [] },
+      },
+      { now: NOW },
+    );
+
+    expect(preview.firstOccurrence).toMatchObject({
+      startAt: '2026-08-06 09:00:00',
+      dueAt: '2027-08-06 18:00:00',
+    });
+    expect(preview.summary.dueDayOffset).toBe(365);
+  });
+
+  it('截止日期超出数据库可存储年份时返回可识别的计划错误', () => {
+    expect(() =>
+      calculateTodoPlan(
+        {
+          taskMode: 'single',
+          title: '越界任务',
+          timing: {
+            timezone: 'Asia/Shanghai',
+            anchorDate: '9999-12-31',
+            startTime: '09:00',
+            dueTime: '18:00',
+            dueDayOffset: 1,
+          },
+          plan: { type: 'once' },
+          reminder: { mode: 'none' },
+          singleTaskReminder: { version: 1, mode: 'none', channels: [] },
+        },
+        { now: NOW },
+      ),
+    ).toThrow(/截止日期超出支持范围/);
+  });
+
   it('无日期任务开启提醒时必须先补充具体日期和时间', () => {
     expect(() =>
       calculateTodoPlan(

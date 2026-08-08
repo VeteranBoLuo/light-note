@@ -332,6 +332,7 @@
     requestMobileOverlayHistoryClose,
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
+  import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -469,8 +470,9 @@
   async function ensureMarkdownLibLoaded() {
     if (markdownLibLoaded) return;
     const [{ marked }, dompurifyModule] = await Promise.all([import('marked'), import('dompurify')]);
+    const markdownRenderer = configureMarkdownRenderer(marked);
     markdownParser = (markdown: string) =>
-      marked.parse(markdown, {
+      markdownRenderer.parse(markdown, {
         gfm: true,
         breaks: true,
       }) as string;

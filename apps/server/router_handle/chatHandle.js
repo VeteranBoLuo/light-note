@@ -129,7 +129,7 @@ export const generateBookmarkMeta = async (req, res) => {
         return res.status(500).send(resultData(null, 500, 'AI 返回结果解析失败'));
       }
       if (canSendBookmarkMetaResponse(res)) {
-        return res.send(resultData({ ...result, resolvedUrl, requestId }));
+        return res.send(resultData({ ...result, resolvedUrl: result.resolvedUrl || resolvedUrl, requestId }));
       }
     } catch (error) {
       if (controller.signal.aborted) {

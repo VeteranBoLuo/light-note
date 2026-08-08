@@ -60,6 +60,20 @@ describe('wrapSelection', () => {
     const out = applied(input, wrapSelection(input, '$', '', '$'));
     expect(out.value).toBe('$公式$');
   });
+
+  it('选区尾部带空格时只包裹正文并把空格留在标记外', () => {
+    const input = sel('事： 学习正文', 0, 3);
+    const out = applied(input, wrapSelection(input, '**'));
+    expect(out.value).toBe('**事：** 学习正文');
+    expect(out.value.slice(out.selectionStart, out.selectionEnd)).toBe('事：');
+  });
+
+  it('选区首尾空白都不会进入加粗标记', () => {
+    const input = sel('前 重点 后', 1, 5);
+    const out = applied(input, wrapSelection(input, '**'));
+    expect(out.value).toBe('前 **重点** 后');
+    expect(out.value.slice(out.selectionStart, out.selectionEnd)).toBe('重点');
+  });
 });
 
 describe('toggleLinePrefix', () => {

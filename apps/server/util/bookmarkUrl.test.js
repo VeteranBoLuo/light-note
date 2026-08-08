@@ -7,6 +7,7 @@ describe('bookmark URL deterministic resolver', () => {
     ['boluo66.top', 'normalized', 'https://boluo66.top'],
     ['https:123.com', 'normalized', 'https://123.com'],
     ['  HTTP://Example.COM/path  ', 'normalized', 'http://example.com/path'],
+    ['http://xhslink.cn/o/7rNw5RKnE8e', 'normalized', 'https://xhslink.cn/o/7rNw5RKnE8e'],
   ])('规范化可确定的单一地址: %s', (input, state, canonicalUrl) => {
     expect(inspectBookmarkUrl(input)).toMatchObject({ state, canonicalUrl, candidates: [] });
   });
@@ -30,9 +31,7 @@ describe('bookmark URL deterministic resolver', () => {
   });
 
   it('从分享文案中提取唯一候选并忽略“网址放这里”等占位文本', () => {
-    const result = inspectBookmarkUrl(
-      'https://网址放这里→ https:// boluo66.top  ，手机电脑平板通用，欢迎体验[害羞R]',
-    );
+    const result = inspectBookmarkUrl('https://网址放这里→ https:// boluo66.top  ，手机电脑平板通用，欢迎体验[害羞R]');
     expect(result).toMatchObject({
       state: 'needs_confirmation',
       candidates: [{ url: 'https://boluo66.top', source: 'explicit' }],

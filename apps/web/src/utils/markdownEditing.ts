@@ -63,14 +63,24 @@ export function wrapSelection(
     };
   }
 
-  const inner = selected || placeholder;
+  // 用户拖选时很容易顺手带上首尾空格。把空白塞进 `**` / `*` 会生成 CommonMark
+  // 无法闭合的标记；空白留在外侧，只格式化真正的正文，也更符合视觉选区。
+  const leadingWhitespace = selected.match(/^\s*/u)?.[0] || '';
+  const contentAfterLeading = selected.slice(leadingWhitespace.length);
+  const trailingWhitespace = contentAfterLeading.match(/\s*$/u)?.[0] || '';
+  const selectedCore = contentAfterLeading.slice(0, contentAfterLeading.length - trailingWhitespace.length);
+  const shouldPreserveWhitespace = Boolean(selectedCore);
+  const inner = shouldPreserveWhitespace ? selectedCore : selected || placeholder;
+  const prefix = shouldPreserveWhitespace ? leadingWhitespace : '';
+  const suffix = shouldPreserveWhitespace ? trailingWhitespace : '';
+  const innerStart = selectionStart + prefix.length + marker.length;
   return {
     rangeStart: selectionStart,
     rangeEnd: selectionEnd,
-    text: marker + inner + closing,
+    text: prefix + marker + inner + closing + suffix,
     // 没选中时把占位词选起来,直接打字就能替换
-    selectionStart: selectionStart + marker.length,
-    selectionEnd: selectionStart + marker.length + inner.length,
+    selectionStart: innerStart,
+    selectionEnd: innerStart + inner.length,
   };
 }
 

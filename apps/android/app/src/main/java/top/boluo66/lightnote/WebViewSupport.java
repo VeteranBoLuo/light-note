@@ -322,6 +322,68 @@ final class WebViewSupport {
         }
     }
 
+    /**
+     * 正式版继续全局禁止 HTTP 明文流量，只对已确认同时支持 HTTPS 的分享短链做确定性升级。
+     * 这既兼容历史书签，也避免为修一个站点而放宽整个 App 的网络安全策略。
+     */
+    static String upgradeKnownHttpsUrl(String value) {
+        if (isBlank(value)) {
+            return value == null ? "" : value.trim();
+        }
+        String trimmed = value.trim();
+        try {
+            URI uri = new URI(trimmed);
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (!"http".equalsIgnoreCase(scheme) || host == null) {
+                return trimmed;
+            }
+            String normalizedHost = host.toLowerCase(Locale.ROOT);
+            boolean isXiaohongshuShortLink =
+                "xhslink.cn".equals(normalizedHost)
+                    || "www.xhslink.cn".equals(normalizedHost)
+                    || "xhslink.com".equals(normalizedHost)
+                    || "www.xhslink.com".equals(normalizedHost);
+            if (!isXiaohongshuShortLink) {
+                return trimmed;
+            }
+            return "https:" + trimmed.substring(trimmed.indexOf(':') + 1);
+        } catch (URISyntaxException error) {
+            return trimmed;
+        }
+    }
+
+    static boolean isCleartextHttpUrl(String value) {
+        if (isBlank(value)) {
+            return false;
+        }
+        try {
+            URI uri = new URI(value.trim());
+            return "http".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null;
+        } catch (URISyntaxException error) {
+            return false;
+        }
+    }
+
+    /** 未知 HTTP 站点不放宽 WebView 明文策略，交给系统浏览器处理。 */
+    static boolean openExternalWebUrl(Activity activity, String url) {
+        if (!isHttpUrl(url)) {
+            showCannotOpenLink(activity);
+            return true;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url.trim()));
+            intent.addCategory(Intent.CATEGORY_BROWSABLE);
+            intent.setComponent(null);
+            intent.setSelector(null);
+            intent.setPackage(null);
+            activity.startActivity(intent);
+        } catch (Exception error) {
+            showCannotOpenLink(activity);
+        }
+        return true;
+    }
+
     static boolean openSystemIntent(Activity activity, String url) {
         if (isBlank(url)) {
             return true;
@@ -386,12 +448,17 @@ final class WebViewSupport {
     }
 
     static void openInAppBrowser(Activity activity, String url) {
-        if (!isHttpUrl(url)) {
+        String normalizedUrl = upgradeKnownHttpsUrl(url);
+        if (!isHttpUrl(normalizedUrl)) {
             showCannotOpenLink(activity);
             return;
         }
+        if (isCleartextHttpUrl(normalizedUrl)) {
+            openExternalWebUrl(activity, normalizedUrl);
+            return;
+        }
         Intent intent = new Intent(activity, InAppBrowserActivity.class);
-        intent.putExtra(EXTRA_URL, url);
+        intent.putExtra(EXTRA_URL, normalizedUrl);
         activity.startActivity(intent);
     }
 

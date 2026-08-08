@@ -5,6 +5,7 @@ import { recordOperation } from '@/api/commonApi';
 import Alert from '@/components/base/BasicComponents/BModal/Alert';
 import i18n from '@/i18n';
 import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
+import { resolveBookmarkUrlInput } from '@lightnote/shared';
 import {
   requestBookmarkMetaOverwriteDecision,
   type BookmarkMetaOverwriteField,
@@ -137,6 +138,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       bookmarkData.value.url = urlResult.url;
       if (controller.signal.aborted) return;
       phase.value = 'generating';
+      const submittedUrl = bookmarkData.value.url;
 
       const currentGeneration = activeGeneration;
       if (currentGeneration?.controller === controller) {
@@ -163,6 +165,13 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       }
 
       const generatedData = res.data || {};
+      const returnedUrl = resolveBookmarkUrlInput(generatedData.resolvedUrl, {
+        allowTextExtraction: false,
+      }).canonicalUrl;
+      // 请求期间用户可能手动改过地址；只在输入仍是本次提交值时回写短链的真实落地地址。
+      if (returnedUrl && bookmarkData.value.url === submittedUrl) {
+        bookmarkData.value.url = returnedUrl;
+      }
       const generatedName = String(generatedData.name || '').trim();
       const generatedDescription = String(generatedData.description || '').trim();
       // 远端工作已经结束，比较弹框属于用户决策阶段，不应继续显示“生成中”或触发超时。
@@ -171,11 +180,7 @@ export function useBookmarkMeta({ bookmarkData, tagOptions, refreshTags }: UseBo
       activeOverwriteController = overwriteController;
       let selectedFields: BookmarkMetaOverwriteFieldId[] | null;
       try {
-        selectedFields = await selectFieldsToApply(
-          generatedName,
-          generatedDescription,
-          overwriteController.signal,
-        );
+        selectedFields = await selectFieldsToApply(generatedName, generatedDescription, overwriteController.signal);
       } finally {
         if (activeOverwriteController === overwriteController) activeOverwriteController = null;
       }

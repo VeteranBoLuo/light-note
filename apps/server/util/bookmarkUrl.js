@@ -1,8 +1,4 @@
-import {
-  BOOKMARK_URL_CODE,
-  BOOKMARK_URL_STATE,
-  resolveBookmarkUrlInput,
-} from '@lightnote/shared';
+import { BOOKMARK_URL_CODE, BOOKMARK_URL_STATE, resolveBookmarkUrlInput } from '@lightnote/shared';
 import { checkUrlLiveness } from './fetchWebMeta.js';
 
 const URL_ERROR_MESSAGES = Object.freeze({
@@ -45,13 +41,26 @@ export async function resolveBookmarkUrlForClient(
 ) {
   const resolution = inspectBookmarkUrl(value, { allowTextExtraction });
   let liveness = null;
-  if (
-    checkLiveness &&
-    [BOOKMARK_URL_STATE.VALID, BOOKMARK_URL_STATE.NORMALIZED].includes(resolution.state)
-  ) {
+  if (checkLiveness && [BOOKMARK_URL_STATE.VALID, BOOKMARK_URL_STATE.NORMALIZED].includes(resolution.state)) {
     liveness = await checkUrlLiveness(resolution.canonicalUrl, { timeout: livenessTimeout });
   }
-  return { ...resolution, liveness };
+  const redirectedResolution = liveness?.resolvedUrl
+    ? inspectBookmarkUrl(liveness.resolvedUrl, { allowTextExtraction: false })
+    : null;
+  const hasSafeRedirectTarget = [BOOKMARK_URL_STATE.VALID, BOOKMARK_URL_STATE.NORMALIZED].includes(
+    redirectedResolution?.state,
+  );
+  return {
+    ...resolution,
+    ...(hasSafeRedirectTarget
+      ? {
+          state: BOOKMARK_URL_STATE.NORMALIZED,
+          canonicalUrl: redirectedResolution.canonicalUrl,
+          redirectedFrom: resolution.canonicalUrl,
+        }
+      : {}),
+    liveness,
+  };
 }
 
 export function bookmarkUrlErrorPayload(error) {

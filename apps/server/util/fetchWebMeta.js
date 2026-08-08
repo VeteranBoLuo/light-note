@@ -27,6 +27,8 @@ const BODY_TEXT_LIMIT = 2000; // 正文摘录上限，够 LLM 判断即可，避
 // 浏览器 UA 命中率更高(个别站如 CSDN 对无 cookie 的浏览器 UA 反而更严,属可接受的个别情况)。
 const BROWSER_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const MAX_STORABLE_BOOKMARK_URL_LENGTH = 255;
+const XHS_SHORT_LINK_HOSTS = new Set(['xhslink.cn', 'www.xhslink.cn', 'xhslink.com', 'www.xhslink.com']);
 
 /** 判断 IPv4/IPv6 是否属于内网或保留网段（SSRF 防护） */
 function isPrivateIp(ip) {
@@ -84,6 +86,62 @@ function guardedLookup(hostname, options, callback) {
 
 const httpAgent = new http.Agent({ lookup: guardedLookup });
 const httpsAgent = new https.Agent({ lookup: guardedLookup });
+
+function axiosResponseUrl(response, fallbackUrl) {
+  const candidates = [
+    response?.request?.res?.responseUrl,
+    response?.request?._redirectable?._currentUrl,
+    response?.config?.url,
+    fallbackUrl,
+  ];
+  for (const candidate of candidates) {
+    try {
+      const parsed = new URL(String(candidate || ''));
+      if (['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password) {
+        return parsed.href;
+      }
+    } catch {
+      // 继续尝试下一个 Axios 兼容字段。
+    }
+  }
+  return String(fallbackUrl || '');
+}
+
+function isXiaohongshuHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return host === 'xiaohongshu.com' || host.endsWith('.xiaohongshu.com');
+}
+
+/**
+ * 小红书短链会跳到带大量分享跟踪参数的长地址，直接保存既超过 bookmark.url 的 255 字符，
+ * 去掉全部参数又会丢失站外访问所需的 xsec_token。这里只保留真实笔记 ID 与访问必需参数，
+ * 得到可展示、可打开、可持久化的 HTTPS 地址；其他站点不做猜测性改写。
+ */
+function resolveKnownShortLinkTarget(originalUrl, responseUrl) {
+  let original;
+  let resolved;
+  try {
+    original = new URL(String(originalUrl || ''));
+    resolved = new URL(String(responseUrl || ''));
+  } catch {
+    return '';
+  }
+  if (!XHS_SHORT_LINK_HOSTS.has(original.hostname.toLowerCase()) || !isXiaohongshuHost(resolved.hostname)) {
+    return '';
+  }
+
+  const noteId = resolved.pathname.match(/\/(?:explore|discovery\/item)\/([a-z\d]{24})(?:\/|$)/iu)?.[1];
+  const accessToken = resolved.searchParams.get('xsec_token');
+  if (!noteId || !accessToken) {
+    return resolved.href.length <= MAX_STORABLE_BOOKMARK_URL_LENGTH ? resolved.href : '';
+  }
+
+  const stableUrl = new URL(`/explore/${noteId}`, 'https://www.xiaohongshu.com');
+  stableUrl.searchParams.set('xsec_token', accessToken);
+  const accessSource = resolved.searchParams.get('xsec_source');
+  if (accessSource) stableUrl.searchParams.set('xsec_source', accessSource);
+  return stableUrl.href.length <= MAX_STORABLE_BOOKMARK_URL_LENGTH ? stableUrl.href : '';
+}
 
 /** 常见 HTML 实体解码（仅覆盖高频实体，够用即可） */
 function decodeEntities(s) {
@@ -282,6 +340,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
 
   let buf;
   let contentType = '';
+  let fetchedUrl = target.href;
   try {
     const resp = await axios.get(target.href, {
       timeout,
@@ -301,6 +360,8 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
       },
       signal,
     });
+    const responseUrl = axiosResponseUrl(resp, target.href);
+    fetchedUrl = resolveKnownShortLinkTarget(target.href, responseUrl) || target.href;
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃
     if (contentType && !/text\/html|application\/xhtml|text\/plain|application\/xml/i.test(contentType)) {
@@ -346,7 +407,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
     return { ok: false, reason: 'EMPTY_CONTENT' };
   }
 
-  return { ok: true, url: target.href, title, description, siteName, keywords, bodyText };
+  return { ok: true, url: fetchedUrl, title, description, siteName, keywords, bodyText };
 }
 
 /**
@@ -386,9 +447,11 @@ export async function checkUrlLiveness(rawUrl, { timeout = LIVENESS_TIMEOUT } = 
       },
     });
     const code = resp.status;
+    const responseUrl = axiosResponseUrl(resp, target.href);
+    const resolvedUrl = resolveKnownShortLinkTarget(target.href, responseUrl);
     resp.data?.destroy?.(); // 拿到状态码即丢弃响应体,不下载
     if (code === 404 || code === 410) return { status: 'suspect', code }; // 仅疑似,交用户确认(SPA/子页删除都可能)
-    return { status: 'alive', code };
+    return { status: 'alive', code, ...(resolvedUrl ? { resolvedUrl } : {}) };
   } catch (e) {
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) return { status: 'skip', code: 'BLOCKED' };
     const code = e?.code || 'ERR';

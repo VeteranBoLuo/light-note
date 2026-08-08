@@ -30,8 +30,15 @@ public final class InAppBrowserActivity extends Activity {
         setContentView(createContentView());
         configureWebView();
 
-        String url = getIntent().getStringExtra(WebViewSupport.EXTRA_URL);
+        String url = WebViewSupport.upgradeKnownHttpsUrl(
+            getIntent().getStringExtra(WebViewSupport.EXTRA_URL)
+        );
         if (!WebViewSupport.isHttpUrl(url)) {
+            finish();
+            return;
+        }
+        if (WebViewSupport.isCleartextHttpUrl(url)) {
+            WebViewSupport.openExternalWebUrl(this, url);
             finish();
             return;
         }
@@ -133,6 +140,14 @@ public final class InAppBrowserActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                String normalizedUrl = WebViewSupport.upgradeKnownHttpsUrl(url);
+                if (!normalizedUrl.equals(url)) {
+                    view.loadUrl(normalizedUrl);
+                    return true;
+                }
+                if (WebViewSupport.isCleartextHttpUrl(url)) {
+                    return WebViewSupport.openExternalWebUrl(InAppBrowserActivity.this, url);
+                }
                 if (WebViewSupport.isHttpUrl(url)) {
                     return false;
                 }
@@ -141,6 +156,14 @@ public final class InAppBrowserActivity extends Activity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                String normalizedUrl = WebViewSupport.upgradeKnownHttpsUrl(url);
+                if (!normalizedUrl.equals(url)) {
+                    view.loadUrl(normalizedUrl);
+                    return true;
+                }
+                if (WebViewSupport.isCleartextHttpUrl(url)) {
+                    return WebViewSupport.openExternalWebUrl(InAppBrowserActivity.this, url);
+                }
                 if (WebViewSupport.isHttpUrl(url)) {
                     return false;
                 }

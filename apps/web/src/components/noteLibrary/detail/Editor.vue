@@ -467,6 +467,7 @@
     type EditResult,
     type EditorSelection,
   } from '@/utils/markdownEditing.ts';
+  import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import {
@@ -1789,7 +1790,7 @@
   async function ensureMdLib() {
     if (markedLib) return;
     const mods = await Promise.all([import('marked'), import('dompurify')]);
-    markedLib = mods[0].marked;
+    markedLib = configureMarkdownRenderer(mods[0].marked);
     dompurifyLib = mods[1].default;
   }
 

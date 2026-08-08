@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import previewTodoPlan from './preview_todo_plan.js';
-import { normalizeTodoPlanToolArgs, todoPlanPreviewCard } from '../todoPlanToolShared.js';
+import { normalizeTodoPlanToolArgs, TODO_PLAN_TOOL_PARAMETERS, todoPlanPreviewCard } from '../todoPlanToolShared.js';
 
 describe('Agent 待办计划工具', () => {
   const input = {
@@ -33,6 +33,28 @@ describe('Agent 待办计划工具', () => {
     expect(preview.reminderJobCount).toBe(60);
     expect(preview.occurrences).toHaveLength(12);
     expect(preview.lastOccurrence.occurrenceDate).toBe('2026-09-04');
+  });
+
+  it('AI 计划参数不再把截止日期限制在开始后的 30 天内', async () => {
+    expect(TODO_PLAN_TOOL_PARAMETERS.properties.timing.properties.dueDayOffset.maximum).toBeUndefined();
+    const preview = await previewTodoPlan.execute(
+      normalizeTodoPlanToolArgs({
+        ...input,
+        taskMode: 'single',
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: '09:00',
+          dueTime: '18:00',
+          dueDayOffset: 365,
+        },
+        plan: { type: 'once', pastPolicy: 'keep_overdue' },
+        reminder: { mode: 'none', channels: [] },
+        singleTaskReminder: { version: 1, mode: 'none', channels: [] },
+      }),
+    );
+
+    expect(preview.firstOccurrence.dueAt).toBe('2027-08-06 18:00:00');
   });
 
   it('确认卡同时展示实例与提醒 Job 数，不把两者混为一谈', async () => {

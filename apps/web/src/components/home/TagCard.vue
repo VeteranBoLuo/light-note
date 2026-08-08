@@ -53,6 +53,7 @@
   import { computed } from 'vue';
   import { openBookmarkUrl } from '@/utils/openBookmark.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { getBookmarkDisplayDomain } from '@/utils/bookmarkUrlDisplay.ts';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import PinBadge from '@/components/base/PinBadge.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
@@ -95,13 +96,7 @@
   }>();
 
   const isTop = computed(() => !!(props.cardInfo as any).isTop);
-  const displayDomain = computed(() => {
-    try {
-      return new URL(props.cardInfo.url).hostname.replace(/^www\./, '');
-    } catch {
-      return props.cardInfo.url || '';
-    }
-  });
+  const displayDomain = computed(() => getBookmarkDisplayDomain(props.cardInfo.url));
 
   function toNewPage() {
     if (props.selectionMode) {

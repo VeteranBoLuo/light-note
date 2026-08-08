@@ -202,7 +202,8 @@
     box-sizing: border-box;
     background-color: unset !important;
     color: var(--bl-input-color);
-    font-family: '微软雅黑 Light', serif;
+    // 文本输入与应用根字体保持一致；Android 不存在“微软雅黑 Light”，回退到 serif 会显得异常偏粗。
+    font-family: inherit;
     &:focus {
       border: 1px solid var(--bl-input-border-h-color);
       box-shadow: 0 0 0 1px rgba(92, 90, 86, 0.1);

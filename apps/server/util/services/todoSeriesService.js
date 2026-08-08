@@ -786,17 +786,17 @@ function reminderFromRule(rule) {
 
 function reminderMomentsForAdHocOccurrence(occurrence, reminder, now = new Date()) {
   if (!reminder || reminder.mode === 'none') return [];
+  const start = occurrence.startAt ? plainDateTimeFromDatabase(occurrence.startAt) : null;
+  const due = occurrence.dueAt ? plainDateTimeFromDatabase(occurrence.dueAt) : null;
+  const anchorDate = start?.toPlainDate() || Temporal.PlainDate.from(occurrence.occurrenceDate);
+  const dueDayOffset = start && due ? Math.max(0, start.toPlainDate().until(due.toPlainDate()).days) : 0;
+  const pad = (value) => String(value).padStart(2, '0');
   const timing = {
     timezone: occurrence.timezone,
-    anchorDate: occurrence.occurrenceDate,
-    startTime: occurrence.startAt ? String(occurrence.startAt).slice(11, 16) : null,
-    dueTime: occurrence.dueAt ? String(occurrence.dueAt).slice(11, 16) : null,
-    dueDayOffset:
-      occurrence.startAt &&
-      occurrence.dueAt &&
-      String(occurrence.startAt).slice(0, 10) !== String(occurrence.dueAt).slice(0, 10)
-        ? 1
-        : 0,
+    anchorDate: anchorDate.toString(),
+    startTime: start ? `${pad(start.hour)}:${pad(start.minute)}` : null,
+    dueTime: due ? `${pad(due.hour)}:${pad(due.minute)}` : null,
+    dueDayOffset,
   };
   const preview = calculateTodoPlan(
     {
@@ -1518,6 +1518,7 @@ export const todoSeriesInternals = {
   nextAfterCompletionOccurrence,
   plainDateTimeFromDatabase,
   previewSummary,
+  reminderMomentsForAdHocOccurrence,
   reminderFromRule,
   requestHash,
 };

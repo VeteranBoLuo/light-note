@@ -391,6 +391,29 @@ describe('todoSeriesService v2', () => {
     });
   });
 
+  it('完成后再次安排的提醒保留超过 30 天的真实截止跨度', () => {
+    const moments = todoSeriesInternals.reminderMomentsForAdHocOccurrence(
+      {
+        occurrenceNo: 2,
+        occurrenceDate: '2026-09-01',
+        startAt: '2026-09-01 09:00:00',
+        dueAt: '2026-11-05 18:00:00',
+        timezone: 'Asia/Shanghai',
+        state: 'normal',
+      },
+      {
+        mode: 'once_per_instance',
+        trigger: { type: 'before_due', offsetMinutes: 60 },
+        channels: ['in_app'],
+        quietPolicy: 'defer_once',
+      },
+      new Date('2026-08-06T00:00:00.000Z'),
+    );
+
+    expect(moments).toHaveLength(1);
+    expect(moments[0].scheduledAtLocal).toBe('2026-11-05 17:00:00');
+  });
+
   it('完成后再次安排兼容 MySQL2 返回的 Date 类型开始与截止时间', () => {
     const occurrence = todoSeriesInternals.nextAfterCompletionOccurrence(
       {

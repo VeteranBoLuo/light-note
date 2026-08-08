@@ -160,7 +160,11 @@ const timingSchema = {
     anchorDate: { type: 'string', description: '首项日期 YYYY-MM-DD，必须是具体日期' },
     startTime: { type: 'string', description: '每项开始时刻 HH:mm，可选' },
     dueTime: { type: 'string', description: '每项截止时刻 HH:mm，可选' },
-    dueDayOffset: { type: 'integer', minimum: 0, maximum: 30, description: '截止相对开始日期的天数偏移' },
+    dueDayOffset: {
+      type: 'integer',
+      minimum: 0,
+      description: '截止相对开始日期的自然日偏移，可跨月或跨年',
+    },
   },
   required: ['timezone', 'anchorDate'],
 };

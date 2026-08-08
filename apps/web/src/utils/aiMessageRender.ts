@@ -12,6 +12,7 @@ import typescript from 'highlight.js/lib/languages/typescript';
 import xml from 'highlight.js/lib/languages/xml';
 import plaintext from 'highlight.js/lib/languages/plaintext';
 import i18n from '@/i18n';
+import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
 
 hljs.registerLanguage('bash', bash);
 hljs.registerLanguage('shell', bash);
@@ -30,6 +31,7 @@ hljs.registerLanguage('html', xml);
 hljs.registerLanguage('xml', xml);
 // core 构建默认不含 plaintext;显式注册,避免将来接回高亮时对无/未知语言的代码块抛 "Unknown language: plaintext"。
 hljs.registerLanguage('plaintext', plaintext);
+configureMarkdownRenderer(marked);
 
 // marked v5+ 移除了 highlight / smartLists / smartypants 选项(v4 时代的 setOptions 写法在 v17 下被静默
 // 忽略,导致代码块一直没有语法高亮)。语法高亮改为自定义 code renderer 接 highlight.js;注意必须同时放开

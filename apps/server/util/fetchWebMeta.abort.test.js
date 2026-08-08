@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const axiosGet = vi.hoisted(() => vi.fn());
 vi.mock('axios', () => ({ default: { get: (...args) => axiosGet(...args) } }));
 
-const { extractReadableBodyText, fetchWebMeta } = await import('./fetchWebMeta.js');
+const { checkUrlLiveness, extractReadableBodyText, fetchWebMeta } = await import('./fetchWebMeta.js');
 
 describe('fetchWebMeta', () => {
   beforeEach(() => {
@@ -62,5 +62,43 @@ describe('fetchWebMeta', () => {
       reason: 'URL_CREDENTIALS_FORBIDDEN',
     });
     expect(axiosGet).not.toHaveBeenCalled();
+  });
+
+  it('把小红书短链重定向收敛为可保存且可站外打开的真实 HTTPS 地址', async () => {
+    const responseUrl =
+      'https://www.xiaohongshu.com/discovery/item/6a753a7c00000000050305b0?xsec_token=token-value%3D&xsec_source=app_share&share_id=tracking';
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><head><title>真实笔记</title></head><body><article>正文内容</article></body></html>'),
+      request: { res: { responseUrl } },
+    });
+
+    await expect(fetchWebMeta('https://xhslink.cn/o/7rNw5RKnE8e')).resolves.toMatchObject({
+      ok: true,
+      url: 'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token-value%3D&xsec_source=app_share',
+      title: '真实笔记',
+    });
+  });
+
+  it('探活阶段也返回小红书短链的真实落地地址，供直接保存流程使用', async () => {
+    const destroy = vi.fn();
+    axiosGet.mockResolvedValueOnce({
+      status: 200,
+      data: { destroy },
+      request: {
+        res: {
+          responseUrl:
+            'https://www.xiaohongshu.com/discovery/item/6a753a7c00000000050305b0?xsec_token=token-value%3D&xsec_source=app_share&share_id=tracking',
+        },
+      },
+    });
+
+    await expect(checkUrlLiveness('https://xhslink.cn/o/7rNw5RKnE8e')).resolves.toEqual({
+      status: 'alive',
+      code: 200,
+      resolvedUrl:
+        'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token-value%3D&xsec_source=app_share',
+    });
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

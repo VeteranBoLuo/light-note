@@ -43,4 +43,14 @@ describe('todoDraftNormalizer', () => {
 
     expect(normalized.timing.dueDayOffset).toBe(1);
   });
+
+  it('普通待办保留超过 30 天的开始与截止日期跨度', () => {
+    const draft = scheduledDraft('2026-08-07 09:15', '2027-08-07 18:30');
+    draft.independentTasks.enabled = false;
+    draft.independentTasks.plan = { type: 'once' };
+
+    const normalized = normalizeTodoCreateDraft(draft);
+
+    expect(normalized.timing.dueDayOffset).toBe(365);
+  });
 });

@@ -116,6 +116,7 @@ export async function suggestBookmarkMeta({
   let pageInfo;
   let metadataSource = 'provided';
   let fetchReason = '';
+  let resolvedUrl = String(url || '').trim();
   if (hasMeta) {
     pageInfo = [`网页名称:${curName}`, `网页描述:${curDesc}`].join('\n');
   } else {
@@ -123,6 +124,7 @@ export async function suggestBookmarkMeta({
     throwIfAborted(signal);
     metadataSource = meta.ok ? 'fetched' : 'inferred';
     fetchReason = meta.ok ? '' : String(meta.reason || 'FETCH_FAILED');
+    if (meta.ok && meta.url) resolvedUrl = String(meta.url).trim() || resolvedUrl;
     pageInfo = meta.ok
       ? [
           `网页标题:${meta.title || curName || '(无)'}`,
@@ -185,5 +187,6 @@ export async function suggestBookmarkMeta({
     newTags,
     metadataSource,
     fetchReason,
+    resolvedUrl,
   };
 }

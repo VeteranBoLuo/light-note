@@ -38,6 +38,9 @@ const MAX_BOOKMARK_INPUT_LENGTH = 4000;
 const MAX_BOOKMARK_URL_CANDIDATES = 5;
 const TRAILING_PUNCTUATION = /[，。；！？、）》】」』〉,.;!?)\]}]+$/u;
 const FORBIDDEN_URL_CHARACTERS = /[\u0000-\u001f\u007f<>"'`]/u;
+// Android 正式版禁止 HTTP 明文流量。小红书分享短链同时提供 HTTPS，
+// 在进入保存和打开链路前统一升级，避免旧书签在 App 内触发 ERR_CLEARTEXT_NOT_PERMITTED。
+const HTTPS_UPGRADE_HOSTS = new Set(['xhslink.cn', 'www.xhslink.cn', 'xhslink.com', 'www.xhslink.com']);
 
 function cleanBookmarkUrlInput(value) {
   return String(value || '')
@@ -73,6 +76,9 @@ function parseHttpUrlCandidate(value, { allowEncodedSchemeWhitespaceRepair = fal
   const isIpv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u.test(hostname);
   const isIpv6 = hostname.includes(':');
   if (!hostname.includes('.') && hostname !== 'localhost' && !isIpv4 && !isIpv6) return null;
+  if (parsed.protocol === 'http:' && HTTPS_UPGRADE_HOSTS.has(hostname)) {
+    parsed.protocol = 'https:';
+  }
   const canonicalUrl = parsed.pathname === '/' && !parsed.search && !parsed.hash ? parsed.origin : parsed.href;
   if (FORBIDDEN_URL_CHARACTERS.test(canonicalUrl) || canonicalUrl.length > MAX_BOOKMARK_URL_LENGTH) return null;
   return canonicalUrl;

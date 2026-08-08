@@ -71,7 +71,10 @@ describe('编辑器 V2 交互回归', () => {
 
   it('Android App 富文本与 Markdown 普通正文使用常规字重，真实加粗语义仍显示粗体', () => {
     expect(androidWebViewStylesSource).toMatch(
-      /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-family:\s*sans-serif\s*!important;[\s\S]*?font-weight:\s*400\s*!important;/u,
+      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*sans-serif;[\s\S]*?font-weight:\s*400;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
+    );
+    expect(androidWebViewStylesSource).toMatch(
+      /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
     expect(androidWebViewStylesSource).toMatch(
       /\.markdown-codemirror \.cm-content,[\s\S]*?\.markdown-codemirror \.cm-line,[\s\S]*?\.md-preview\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,

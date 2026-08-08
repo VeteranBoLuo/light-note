@@ -157,6 +157,25 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
     );
   });
 
+  it('智能识别短链后把表单地址更新为服务端解析出的真实落地地址', async () => {
+    const finalUrl =
+      'https://www.xiaohongshu.com/explore/6a753a7c00000000050305b0?xsec_token=token&xsec_source=app_share';
+    preflightBookmarkUrl.mockResolvedValueOnce({
+      ok: true,
+      url: 'https://xhslink.cn/o/7rNw5RKnE8e',
+    });
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { name: '真实标题', description: '真实描述', matchedTagIds: [], newTags: [], resolvedUrl: finalUrl },
+    });
+    const t = setup([]);
+    t.bookmarkData.value.url = 'http://xhslink.cn/o/7rNw5RKnE8e';
+
+    await t.generateBookmarkMeta();
+
+    expect(t.bookmarkData.value.url).toBe(finalUrl);
+  });
+
   it('网址检查与确认阶段不冒充 AI 生成中，并阻止重复发起检查', async () => {
     let finishPreflight: ((result: { ok: boolean; url?: string; cancelled?: boolean }) => void) | undefined;
     preflightBookmarkUrl.mockImplementationOnce(
@@ -226,10 +245,11 @@ describe('useBookmarkMeta.generateBookmarkMeta', () => {
   it('超过等待上限会自动中止并给出超时提示', async () => {
     vi.useFakeTimers();
     try {
-      apiBasePost.mockImplementation((_url, _data, options) =>
-        new Promise((_resolve, reject) => {
-          options.signal.addEventListener('abort', () => reject({ code: 'ERR_CANCELED' }), { once: true });
-        }),
+      apiBasePost.mockImplementation(
+        (_url, _data, options) =>
+          new Promise((_resolve, reject) => {
+            options.signal.addEventListener('abort', () => reject({ code: 'ERR_CANCELED' }), { once: true });
+          }),
       );
       const t = setup([]);
       const pending = t.generateBookmarkMeta();

@@ -36,6 +36,7 @@
   import { onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { isHtmlFile } from '@/constants/cloudFileCategory';
+  import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
 
   type CloudTextFile = {
     id?: string | number;
@@ -207,7 +208,7 @@
     let html = source;
     if (kind === 'markdown') {
       const { marked } = await import('marked');
-      html = marked.parse(source, { gfm: true, breaks: true }) as string;
+      html = configureMarkdownRenderer(marked).parse(source, { gfm: true, breaks: true }) as string;
     } else if (kind === 'html') {
       const parsed = new DOMParser().parseFromString(source, 'text/html');
       html = parsed.body?.innerHTML || source;
