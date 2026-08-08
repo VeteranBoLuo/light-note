@@ -10,17 +10,18 @@ html.light-note-android-webview {
    * 桌面端根节点优先使用“微软雅黑”，但该字体在 Android / 鸿蒙 WebView 中不存在，
    * 部分厂商兼容层会把它回退成异常偏粗的中文字面。之前只修了笔记正文，因此待办、
    * 个人中心和后台等普通界面仍会中招。APK 从根节点统一使用已经在富文本真机验证过的
-   * 系统 UI 字体。旧 WebView 还会把 550/600/650 等不存在的中间字重向上匹配成
-   * 粗体，因此构建阶段会保留浏览器原值，并让 APK 通过下面三个变量收敛为
-   * 400/500/700。这样普通浏览器不受影响，App 也不会把半粗体渲染成满屏粗体。
+   * 系统 sans-serif。旧 WebView 还会把 500/550/600/650 等中间字重向上匹配成
+   * 粗体，因此构建阶段会保留浏览器原值，并让 APK 把 700 以下全部收敛为 400、
+   * 只让真正的 700+ 保持粗体。这样普通浏览器不受影响，App 也不会把中等强调
+   * 渲染成满屏粗体。
    */
-  font-family: system-ui, 'Noto Sans SC', sans-serif;
+  font-family: sans-serif;
   font-weight: 400;
   // 只禁止伪粗体，仍允许缺少斜体字面时合成 italic，避免破坏富文本/Markdown 斜体语义。
   font-synthesis: style;
 
   --ln-android-font-weight-regular: 400;
-  --ln-android-font-weight-medium: 500;
+  --ln-android-font-weight-medium: 400;
   --ln-android-font-weight-bold: 700;
 
   body,
@@ -30,6 +31,20 @@ html.light-note-android-webview {
   input,
   textarea {
     font-family: inherit;
+  }
+
+  /*
+   * 这三类入口在问题设备上分别暴露了厂商默认字重和继承字重不一致：个人中心的
+   * div 菜单比 BButton 版“版本更新”粗、待办 BSelect 触发器单独变粗、后台普通
+   * 文本整体偏粗。显式 regular 只兜住普通文字；组件自身声明的 700+ 标题和
+   * strong/b 仍由更具体的规则保留真实加粗语义。
+   */
+  .person-menu-item-title,
+  .phone-menu-item-title,
+  .mobile-todo-sort .select-trigger,
+  .mobile-todo-sort .select-text,
+  .admin-container {
+    font-weight: 400;
   }
 
   /*

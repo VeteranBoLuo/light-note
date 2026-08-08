@@ -71,7 +71,10 @@ describe('编辑器 V2 交互回归', () => {
 
   it('Android App 富文本与 Markdown 普通正文使用常规字重，真实加粗语义仍显示粗体', () => {
     expect(androidWebViewStylesSource).toMatch(
-      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*system-ui,[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*style;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*500;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
+      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*sans-serif;[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*style;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*400;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
+    );
+    expect(androidWebViewStylesSource).toMatch(
+      /\.person-menu-item-title,[\s\S]*?\.phone-menu-item-title,[\s\S]*?\.mobile-todo-sort \.select-trigger,[\s\S]*?\.mobile-todo-sort \.select-text,[\s\S]*?\.admin-container\s*\{[\s\S]*?font-weight:\s*400;/u,
     );
     expect(androidWebViewStylesSource).toMatch(
       /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,

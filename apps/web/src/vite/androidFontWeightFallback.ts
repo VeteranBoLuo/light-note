@@ -31,9 +31,9 @@ function weightKind(weight: number): FontWeightKind {
 /**
  * 保留现代浏览器的原始字重，同时允许旧 Android WebView 用兼容变量收敛字重。
  *
- * 部分旧系统 WebView 在系统字体没有 550/600/650 等中间字重时，会直接向上
- * 匹配到 700，导致普通导航、按钮和正文辅助信息看起来全部加粗。运行时只有 APK
- * 会定义这些变量；普通浏览器变量不存在，继续使用第二参数中的原始字重。
+ * 部分厂商系统 WebView 连 500 也会向上匹配成粗体，导致普通导航、按钮和正文
+ * 辅助信息看起来全部加粗。运行时只有 APK 会定义这些变量，并把 medium 与 regular
+ * 都解析为 400；普通浏览器变量不存在，继续使用第二参数中的原始字重。
  */
 export function wrapAndroidFontWeightFallback(value: string, property: string) {
   if (property.trim().toLowerCase() !== 'font-weight' || value.includes(COMPAT_PROPERTY_PREFIX)) {
