@@ -1,8 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import PdfPreview from './PdfPreview.vue';
 import zhCN from '@/i18n/locales/zh-CN';
+
+const navigatorSource = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/PdfPageNavigator.vue'), 'utf8');
 
 const pdfMocks = vi.hoisted(() => ({
   workerOptions: { workerSrc: '' },
@@ -134,6 +138,10 @@ describe('PdfPreview', () => {
     expect(host.querySelectorAll('.pdf-preview__page')).toHaveLength(3);
     expect(host.querySelector('.pdf-preview__pages')?.classList.contains('is-single')).toBe(true);
     expect(host.querySelector('.pdf-preview__sidebar')).not.toBeNull();
+    const navigatorTabs = host.querySelectorAll('.pdf-preview__sidebar .pdf-navigator__tabs [role="tab"]');
+    expect(navigatorTabs).toHaveLength(2);
+    expect(Array.from(navigatorTabs).every((tab) => tab.classList.contains('tab'))).toBe(true);
+    expect(navigatorSource).toMatch(/\.pdf-navigator__tabs \.tab[\s\S]*?flex:\s*1 1 50%/);
     expect(host.querySelector('[aria-label="连续滚动"]')).toBeNull();
     expect(host.querySelector('[aria-label="适合页面"]')?.classList.contains('is-active')).toBe(true);
     expect(host.querySelector('[aria-label="适合宽度"]')?.classList.contains('is-active')).toBe(false);

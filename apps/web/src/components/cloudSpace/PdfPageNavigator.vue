@@ -1,6 +1,6 @@
 <template>
   <div class="pdf-navigator">
-    <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
+    <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" class="pdf-navigator__tabs" />
 
     <div v-if="activeTab === 'pages'" ref="listRef" class="pdf-navigator__list">
       <BButton
@@ -206,6 +206,12 @@
     min-height: 0;
     overflow: auto;
     overscroll-behavior: contain;
+  }
+
+  :deep(.pdf-navigator__tabs .tab) {
+    min-width: 0;
+    flex: 1 1 50%;
+    justify-content: center;
   }
 
   :deep(.pdf-navigator__thumbnail.b_btn) {
