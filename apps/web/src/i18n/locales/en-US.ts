@@ -3065,6 +3065,7 @@ export default {
     quest_daily_file: 'Upload one file',
     quest_daily_todo: 'Complete one to-do',
     quest_daily_organize: 'Organize one resource',
+    questUnknown: 'Complete one daily task',
     questRandomTag: 'Daily random',
     questStageTitle: 'Complete {n}/{total}',
     questStageRewardMixed: '+{n} EXP · +{p} points',

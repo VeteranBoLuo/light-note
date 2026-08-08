@@ -2999,6 +2999,7 @@ export default {
     quest_daily_file: '上传一个文件',
     quest_daily_todo: '完成一个待办',
     quest_daily_organize: '整理一项资源',
+    questUnknown: '完成一项每日任务',
     questRandomTag: '今日随机',
     questStageTitle: '完成 {n}/{total}',
     questStageRewardMixed: '+{n} 经验 · +{p} 积分',

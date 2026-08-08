@@ -71,7 +71,18 @@
     { readOnly: false },
   );
   defineEmits<{ (e: 'claim'): void }>();
-  const { t } = useI18n();
+  const { t, te } = useI18n();
+
+  const QUEST_LABEL_KEYS: Record<string, string> = {
+    checkin: 'growth.quest_checkin',
+    create: 'growth.quest_create',
+    exp30: 'growth.quest_exp30',
+    daily_note: 'growth.quest_daily_note',
+    daily_bookmark: 'growth.quest_daily_bookmark',
+    daily_file: 'growth.quest_daily_file',
+    daily_todo: 'growth.quest_daily_todo',
+    daily_organize: 'growth.quest_daily_organize',
+  };
 
   const doneCount = computed(() => props.quests.filter((q) => q.done).length);
   const allDone = computed(() => props.quests.length > 0 && doneCount.value === props.quests.length);
@@ -100,7 +111,8 @@
   }
 
   function questLabel(q: Quest): string {
-    return t(`growth.quest_${q.key}`);
+    const key = QUEST_LABEL_KEYS[q.key];
+    return key && te(key) ? t(key) : t('growth.questUnknown');
   }
 </script>
 
