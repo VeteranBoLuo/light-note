@@ -332,6 +332,12 @@
       authOnly: true,
     },
     {
+      name: 'support',
+      label: t('support.entry'),
+      path: '/support',
+      icon: icon.support.heart,
+    },
+    {
       name: 'trash',
       label: t('trash.title'),
       path: '/trash',
