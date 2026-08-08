@@ -153,6 +153,53 @@ describe('assistNote SSE', () => {
     expect(options.trace.traceId).toBe(res.payload.data.requestId);
     expect(res.payload).toMatchObject({ status: 200, data: { response: '【正文】润色结果' } });
   });
+
+  it('选区改写使用独立纯文本契约，不复用全文标题/正文标记', async () => {
+    mocks.requestAiStream.mockImplementation(async (messages, options) => {
+      expect(messages[0].content).toContain('选区改写工具');
+      expect(messages[0].content).toContain('禁止输出【标题】、【正文】');
+      expect(messages[1].content).toContain('在中文与英文之间翻译');
+      expect(messages[1].content).toContain(JSON.stringify('目录'));
+      options.onDelta('Table of Contents');
+      return {
+        usage: { promptTokens: 10, completionTokens: 3, totalTokens: 13 },
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      };
+    });
+    const req = {
+      body: {
+        selectionAction: 'translate',
+        selectionText: '目录',
+        stream: true,
+        requestMetadata: { operation: 'selection_translate', scope: 'selection', contentChars: 2 },
+      },
+      user: { id: 'user-1', role: 'user', alias: 'tester' },
+      setTimeout: vi.fn(),
+    };
+    const res = new MockResponse();
+
+    await assistNote(req, res);
+
+    expect(parseSseEvents(res.writes).find((event) => event.event === 'delta')).toMatchObject({
+      output: { text: 'Table of Contents' },
+    });
+  });
+
+  it('拒绝未登记的选区操作，不消耗 AI 额度', async () => {
+    const req = {
+      body: { selectionAction: 'continue', selectionText: '正文', stream: true },
+      user: { id: 'user-1', role: 'user', alias: 'tester' },
+      setTimeout: vi.fn(),
+    };
+    const res = new MockResponse();
+
+    await assistNote(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+    expect(mocks.requestAiStream).not.toHaveBeenCalled();
+  });
 });
 
 describe('generateTagIcon legacy compatibility', () => {

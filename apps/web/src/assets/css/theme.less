@@ -76,7 +76,13 @@ html[data-theme='night'] {
   --sub-text-color: var(--desc-color);
   --bg-image: linear-gradient(150deg, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffecf9);
   --bg-image2: linear-gradient(30deg, #ffecf9, #ffffff, #ffffff, #ffffff, #ffffff, #ffffff, #ffecf9);
-  --pre-bg-color: rgba(55, 59, 66, 0.8) !important;
+  /* 代码块在浅色主题下使用真正的浅色卡片，不再复用深灰底 + 纯白字。 */
+  --pre-bg-color: #f6f7fb;
+  --pre-text-color: #252a36;
+  --pre-border-color: #dfe3ec;
+  --pre-muted-color: #697386;
+  --pre-highlight-color: #ffffff;
+  --note-editor-link-color: #315bc7;
   --background-color: #ffffff;
   --surface-page-bg: var(--background-color);
   --surface-panel-bg: #f6f7fb;
@@ -335,7 +341,13 @@ html[data-theme='night'] {
   --hover-background: #363c48;
   --text-color: #f2f4f7;
   --icon-color: #dfe3eb;
-  --pre-bg-color: rgba(53, 56, 63, 0.8) !important;
+  /* 深色代码块比正文表面再沉一级，保留层次但避免旧方案发灰、发脏。 */
+  --pre-bg-color: #151922;
+  --pre-text-color: #e8ebf2;
+  --pre-border-color: #343c4a;
+  --pre-muted-color: #9ba4b5;
+  --pre-highlight-color: #202631;
+  --note-editor-link-color: #8ab4ff;
   --category-item-ba-color: #2e333e;
   --desc-color: #a7adba;
   --bl-input-bg-color: var(--surface-panel-bg);

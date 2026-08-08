@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getUserSpaceMb: vi.fn(),
   awardCreate: vi.fn(),
   deleteObjectFromObs: vi.fn(),
+  getObjectMetadataFromObs: vi.fn(),
   removeInboxRelations: vi.fn(),
   purgeDocumentSourcesForCloudFiles: vi.fn(),
   recordFirstOwnResource: vi.fn(),
@@ -37,6 +38,7 @@ vi.mock('../util/obsClient.js', () => ({
   createDownloadSignedUrl: () => ({ url: 'https://signed.example' }),
   createUploadSignedUrl: () => ({ url: 'https://upload.example', headers: {}, expiresIn: 900 }),
   deleteObjectFromObs: mocks.deleteObjectFromObs,
+  getObjectMetadataFromObs: mocks.getObjectMetadataFromObs,
   putObjectToObs: vi.fn(),
 }));
 vi.mock('../util/fileCategory.js', () => ({
@@ -94,6 +96,7 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     mocks.getUserSpaceMb.mockResolvedValue(512);
     mocks.awardCreate.mockResolvedValue({});
     mocks.deleteObjectFromObs.mockResolvedValue({});
+    mocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: 1024, contentType: 'image/png' });
   });
 
   it('事务提交成功后清理被同名上传替换的 AI 随机对象', async () => {
@@ -152,5 +155,91 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(mocks.deleteObjectFromObs).not.toHaveBeenCalled();
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 500 }));
+  });
+
+  it('以 OBS 实际大小写库，不信任客户端上报的 fileSize', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        const text = String(sql);
+        if (text.includes('SUM(file_size)')) return [[{ used: 0 }]];
+        if (text.startsWith('SELECT * FROM files')) return [[]];
+        if (text === 'INSERT INTO files SET ?') return [{ insertId: 7 }];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: 4096, contentType: 'image/png' });
+    const req = request();
+    req.body.files[0].fileSize = 1;
+    const res = response();
+    const handler = mocks.routes.get('/confirmUpload').at(-1);
+
+    await handler(req, res);
+
+    expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
+      expect.objectContaining({ file_name: 'avatar.png', file_size: 4096 }),
+    ]);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('账号配额足够时允许确认 4GB 文件', async () => {
+    const fourGb = 4 * 1024 * 1024 * 1024;
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        const text = String(sql);
+        if (text.includes('SUM(file_size)')) return [[{ used: 0 }]];
+        if (text.startsWith('SELECT * FROM files')) return [[]];
+        if (text === 'INSERT INTO files SET ?') return [{ insertId: 8 }];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.getUserSpaceMb.mockResolvedValue(5 * 1024);
+    mocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: fourGb, contentType: 'application/zip' });
+    const res = response();
+    const handler = mocks.routes.get('/confirmUpload').at(-1);
+
+    await handler(request(), res);
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.query).toHaveBeenCalledWith('INSERT INTO files SET ?', [
+      expect.objectContaining({ file_size: fourGb }),
+    ]);
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('OBS 实际大小超过账号剩余配额时拒绝写库', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SUM(file_size)')) return [[{ used: 0 }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.getObjectMetadataFromObs.mockResolvedValue({
+      contentLength: 513 * 1024 * 1024,
+      contentType: 'application/zip',
+    });
+    const res = response();
+    const handler = mocks.routes.get('/confirmUpload').at(-1);
+
+    await handler(request(), res);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.query).not.toHaveBeenCalledWith('INSERT INTO files SET ?', expect.anything());
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 413 }));
   });
 });

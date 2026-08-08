@@ -83,6 +83,14 @@ describe('renderMarkdownForExport', () => {
     const html = await renderMarkdownForExport('正常内容\n\n<script>alert(1)</script>');
     expect(html).not.toContain('<script');
   });
+
+  it('保留 Markdown 图片尺寸元数据供离线样式使用', async () => {
+    const html = await renderMarkdownForExport(
+      '<img src="https://example.com/image.png" alt="截图" data-ln-size="large" />',
+    );
+
+    expect(html).toContain('data-ln-size="large"');
+  });
 });
 
 describe('buildNoteExportHtml', () => {
@@ -97,6 +105,7 @@ describe('buildNoteExportHtml', () => {
     expect(doc).toContain('pre code');
     expect(doc).toContain("input[type='checkbox']");
     expect(doc).toContain('a.ln-resource-link');
+    expect(doc).toContain("img[data-ln-size='medium']");
   });
 
   it('正文已以 h1 开头时不再重复补标题（md 笔记首行常是 # 标题）', () => {

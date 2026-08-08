@@ -20,7 +20,7 @@
         @retry-save="retryPendingSave"
         @switch-mode="triggerEditorSwitch"
         @undo-switch="triggerEditorUndo"
-        @history="versionHistoryVisible = true"
+        @history="openVersionHistory"
         @save-as-template="saveTemplateVisible = true"
         @open-catalog="catalogDrawerOpen = true"
         @open-navigation="openMobileNavigation()"
@@ -174,8 +174,11 @@
                 class="editor-component"
                 v-model:content="note.content"
                 :type="note.type"
+                :revision="note.revision"
+                :persist-mode-conversion="persistEditorModeConversion"
                 @update:type="note.type = $event"
                 @switch-backup-change="hasSwitchBackup = $event"
+                @mode-converted="onEditorModeConverted"
                 :readonly="readonly"
                 :note-id="note.id"
                 :ensure-note-id="ensureNoteId"
@@ -251,6 +254,16 @@
       :note="renameTargetNote"
       @renamed="handlePageRenamed"
     />
+    <NoteConflictModal
+      v-if="conflictVisible && conflictCloudVersion && conflictLocalVersion"
+      v-model:visible="conflictVisible"
+      :cloud-version="conflictCloudVersion"
+      :local-version="conflictLocalVersion"
+      :busy-action="conflictBusyAction"
+      @keep-cloud="keepConflictCloudVersion"
+      @save-copy="saveConflictAsCopy"
+      @overwrite="overwriteConflictWithLocal"
+    />
   </div>
 </template>
 
@@ -287,6 +300,7 @@
   import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
   import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
   import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
+  import NoteConflictModal from '@/components/noteLibrary/detail/NoteConflictModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -313,6 +327,13 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
+  import { buildNoteDraftIdentityKey, noteDraftFingerprint, type NoteDraftRecord } from '@/utils/noteDraftStorage';
+  import {
+    promoteNoteDraftInDb,
+    readNoteDraftFromDb,
+    removeNoteDraftFromDb,
+    writeNoteDraftToDb,
+  } from '@/utils/noteDraftDb';
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -370,6 +391,7 @@
     content: initialNoteType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
     createBy: '',
     type: initialNoteType,
+    revision: 1,
     parentId: null as string | null,
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
@@ -472,6 +494,27 @@
   let promotedDraftRouteId = '';
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
+  type ConflictVersion = {
+    id?: string;
+    title: string;
+    content: string;
+    type: 'html' | 'markdown';
+    revision: number;
+    updatedAt?: number | string | null;
+    parentId?: string | null;
+  };
+  const conflictVisible = ref(false);
+  const conflictCloudVersion = ref<ConflictVersion | null>(null);
+  const conflictLocalVersion = ref<ConflictVersion | null>(null);
+  const conflictBusyAction = ref<'' | 'copy' | 'overwrite'>('');
+  const draftPersistenceReady = ref(false);
+  let activeDraftNoteId = '';
+  let activeAddDraftSessionKey = '';
+  let persistedNoteSnapshot: ConflictVersion | null = null;
+  let recoveredDraftNeedsSave = false;
+  let conflictEditorUsesLocal = false;
+  let draftWriteTimer = 0;
+  let draftStorageWarningShown = false;
   const catalogDrawerOpen = ref(false);
   const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
   const detailBreadcrumbDisplay = computed(() => buildNoteBreadcrumbDisplay(detailBreadcrumb.value, bookmark.isMobile));
@@ -559,6 +602,168 @@
     return noteHtmlToMarkdown(normalized);
   };
 
+  function currentDraftIdentityKey() {
+    return buildNoteDraftIdentityKey({
+      actorUserId: user.id || 'anonymous',
+      subjectUserId: user.adminContext?.subjectUserId || user.id || 'anonymous',
+      role: user.role,
+      visitorWorkspace: user.visitorWorkspace,
+      adminContextId: user.adminContext?.id || '',
+      adminContextMode: user.adminContext?.mode || 'self',
+    });
+  }
+
+  function currentNoteVersion(updatedAt: number | string | null = Date.now()): ConflictVersion {
+    return {
+      id: note.id || undefined,
+      title: String(note.title || ''),
+      content: String(note.content || ''),
+      type: normalizeNoteType(note.type),
+      revision: Math.max(1, Number(note.revision || 1)),
+      updatedAt,
+      parentId: note.parentId,
+    };
+  }
+
+  function normalizeConflictVersion(value: any, fallbackId = note.id): ConflictVersion | null {
+    if (!value || typeof value !== 'object') return null;
+    const type = normalizeNoteType(value.type);
+    const revision = Math.max(1, Number(value.revision || 1));
+    return {
+      id: String(value.id || fallbackId || '') || undefined,
+      title: String(value.title || ''),
+      content: normalizeLoadedContent(String(value.content || ''), value.type || type),
+      type,
+      revision,
+      updatedAt: value.updatedAt ?? value.updateTime ?? null,
+      parentId: value.parentId ?? note.parentId,
+    };
+  }
+
+  function sameNoteVersion(left: ConflictVersion | null, right: ConflictVersion | null) {
+    if (!left || !right) return false;
+    return noteDraftFingerprint(left) === noteDraftFingerprint(right);
+  }
+
+  async function clearActiveLocalDraft() {
+    if (!activeDraftNoteId) return;
+    const identityKey = currentDraftIdentityKey();
+    const noteId = activeDraftNoteId;
+    await removeNoteDraftFromDb(identityKey, noteId);
+  }
+
+  async function persistLocalDraftNow() {
+    window.clearTimeout(draftWriteTimer);
+    draftWriteTimer = 0;
+    if (!draftPersistenceReady.value || readonly.value || !activeDraftNoteId || !user.id) return;
+    const current = conflictLocalVersion.value ? { ...conflictLocalVersion.value } : currentNoteVersion();
+    if (sameNoteVersion(current, persistedNoteSnapshot)) {
+      await clearActiveLocalDraft();
+      return;
+    }
+    const record: NoteDraftRecord = {
+      schemaVersion: 1,
+      identityKey: currentDraftIdentityKey(),
+      noteId: activeDraftNoteId,
+      title: current.title,
+      content: current.content,
+      type: current.type,
+      revision: current.revision,
+      updatedAt: Date.now(),
+      parentId: current.parentId,
+    };
+    if (!(await writeNoteDraftToDb(record)) && !draftStorageWarningShown) {
+      draftStorageWarningShown = true;
+      message.warning(t('noteDetail.draftStorageFailed'));
+    }
+  }
+
+  function scheduleLocalDraftWrite() {
+    if (!draftPersistenceReady.value || readonly.value) return;
+    window.clearTimeout(draftWriteTimer);
+    draftWriteTimer = window.setTimeout(() => void persistLocalDraftNow(), 250);
+  }
+
+  function resolveTemporaryDraftId(query: Record<string, any>) {
+    const signature = [
+      currentDraftIdentityKey(),
+      routeQueryValue(query.parent),
+      routeQueryValue(query.type),
+      routeQueryValue(query.builtin),
+      routeQueryValue(query.templateId),
+    ].join('|');
+    activeAddDraftSessionKey = `light-note:note-add-session:v1:${encodeURIComponent(signature)}`;
+    let token = '';
+    try {
+      token = window.sessionStorage.getItem(activeAddDraftSessionKey) || '';
+      if (!token) {
+        token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        window.sessionStorage.setItem(activeAddDraftSessionKey, token);
+      }
+    } catch {
+      token = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
+    return `temporary:${token}`;
+  }
+
+  function forgetTemporaryDraftSession() {
+    if (!activeAddDraftSessionKey) return;
+    try {
+      window.sessionStorage.removeItem(activeAddDraftSessionKey);
+    } catch {
+      // sessionStorage 不可用时仅失去刷新恢复，不影响在线保存。
+    }
+    activeAddDraftSessionKey = '';
+  }
+
+  function setPersistedNoteSnapshot(snapshot: ConflictVersion) {
+    persistedNoteSnapshot = { ...snapshot };
+    if (sameNoteVersion(currentNoteVersion(snapshot.updatedAt ?? null), persistedNoteSnapshot)) {
+      void clearActiveLocalDraft();
+    } else {
+      scheduleLocalDraftWrite();
+    }
+  }
+
+  async function recoverLocalDraft(serverSnapshot: ConflictVersion) {
+    if (readonly.value || !activeDraftNoteId) return;
+    const draftNoteId = activeDraftNoteId;
+    const identityKey = currentDraftIdentityKey();
+    const draft = await readNoteDraftFromDb(identityKey, draftNoteId);
+    // IndexedDB 是异步的；快速切换笔记/账号后，旧读取结果不得覆盖新页面。
+    if (activeDraftNoteId !== draftNoteId || currentDraftIdentityKey() !== identityKey) return;
+    if (!draft) return;
+    const localSnapshot = normalizeConflictVersion(draft, note.id);
+    if (!localSnapshot) return;
+    if (sameNoteVersion(localSnapshot, serverSnapshot)) {
+      await clearActiveLocalDraft();
+      return;
+    }
+    if (localSnapshot.revision === serverSnapshot.revision) {
+      note.title = localSnapshot.title;
+      note.content = localSnapshot.content;
+      note.type = localSnapshot.type;
+      note.revision = localSnapshot.revision;
+      note.parentId = localSnapshot.parentId ?? note.parentId;
+      recoveredDraftNeedsSave = true;
+      message.success(t('noteDetail.draftRestored'));
+      return;
+    }
+    conflictCloudVersion.value = serverSnapshot;
+    conflictLocalVersion.value = localSnapshot;
+    conflictEditorUsesLocal = false;
+    conflictVisible.value = true;
+  }
+
+  async function promoteActiveDraft(persistedId: string, revision: number) {
+    const previousId = activeDraftNoteId;
+    activeDraftNoteId = persistedId;
+    if (previousId && previousId !== persistedId) {
+      await promoteNoteDraftInDb(currentDraftIdentityKey(), previousId, persistedId, revision);
+    }
+    forgetTemporaryDraftSession();
+  }
+
   // 历史版本恢复后:回写标题/正文并刷新编辑器与目录
   async function onVersionRestored(data: any) {
     if (!data) return;
@@ -574,6 +779,7 @@
       if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: note.title, type: restoredType });
       syncHeaderTitle();
     }
+    note.revision = Math.max(1, Number(data.revision || note.revision || 1));
     if (typeof data.content === 'string') {
       const content = normalizeLoadedContent(data.content, data.type);
       const applied = await editorRef.value?.replaceContentWithUndo?.(content, restoredType);
@@ -582,20 +788,226 @@
       }
     }
     setUpdateTime();
+    setPersistedNoteSnapshot(currentNoteVersion());
     nextTick(() => void refreshCatalog());
   }
 
-  function triggerEditorSwitch() {
-    // Editor.vue 的 triggerModeSwitch 会自己处理 Alert 确认
-    if (editorRef.value?.triggerModeSwitch) {
-      editorRef.value.triggerModeSwitch();
+  function resetSaveQueueAfterConflict() {
+    clearScheduledSave();
+    requestedSaveVersion = 0;
+    persistedSaveVersion = 0;
+    latestRequestedTitle = note.title;
+    saveQueue = Promise.resolve(true);
+  }
+
+  async function applyVersionSnapshot(snapshot: ConflictVersion) {
+    contentAutosaveReady.value = false;
+    draftPersistenceReady.value = false;
+    isNoteSwitching.value = true;
+    note.title = snapshot.title;
+    note.lastTitle = snapshot.title;
+    note.content = snapshot.content;
+    note.type = snapshot.type;
+    note.revision = snapshot.revision;
+    note.parentId = snapshot.parentId ?? note.parentId;
+    noteContentKey.value = `note-content:${note.id || 'add'}:conflict:${Date.now()}`;
+    await nextTick();
+    await syncHeaderTitle();
+    if (snapshot.type === 'markdown') completeMarkdownContentSwitch();
+  }
+
+  function openVersionConflict(cloud: ConflictVersion, local: ConflictVersion = currentNoteVersion()) {
+    conflictCloudVersion.value = cloud;
+    conflictLocalVersion.value = local;
+    conflictEditorUsesLocal = true;
+    conflictBusyAction.value = '';
+    conflictVisible.value = true;
+    saveStatus.value = 'error';
+    void persistLocalDraftNow();
+  }
+
+  async function keepConflictCloudVersion() {
+    const cloud = conflictCloudVersion.value;
+    if (!cloud || conflictBusyAction.value) return;
+    await clearActiveLocalDraft();
+    resetSaveQueueAfterConflict();
+    conflictVisible.value = false;
+    await applyVersionSnapshot(cloud);
+    setPersistedNoteSnapshot(cloud);
+    saveStatus.value = 'saved';
+    conflictCloudVersion.value = null;
+    conflictLocalVersion.value = null;
+    conflictEditorUsesLocal = false;
+  }
+
+  async function saveConflictAsCopy() {
+    const local = conflictLocalVersion.value;
+    if (!local || conflictBusyAction.value) return;
+    conflictBusyAction.value = 'copy';
+    try {
+      const response = await apiBasePost('/api/note/addNote', {
+        title: `${local.title || DEFAULT_NOTE_TITLE}${t('noteDetail.conflict.copyTitleSuffix')}`.slice(0, 255),
+        content: local.content,
+        type: local.type,
+        parentId: local.parentId ?? note.parentId ?? null,
+      });
+      if (response.status !== 200 || !response.data?.id) {
+        message.error(response.msg || t('noteDetail.saveFailed'));
+        return;
+      }
+      await clearActiveLocalDraft();
+      resetSaveQueueAfterConflict();
+      conflictVisible.value = false;
+      conflictEditorUsesLocal = false;
+      skipSaveOnLeave = true;
+      message.success(t('noteDetail.conflict.copySaved'));
+      recordOperation({
+        module: '笔记',
+        operation: `冲突草稿另存为新笔记【${response.data.title || local.title}】`,
+      });
+      await router.push({
+        path: `/noteLibrary/${encodeURIComponent(String(response.data.id))}`,
+        query: detailSourceQuery(),
+      });
+    } catch {
+      message.error(t('noteDetail.saveFailed'));
+    } finally {
+      conflictBusyAction.value = '';
     }
   }
 
-  function triggerEditorUndo() {
-    if (editorRef.value?.triggerUndoSwitch) {
-      editorRef.value.triggerUndoSwitch();
+  function overwriteConflictWithLocal() {
+    const local = conflictLocalVersion.value;
+    const cloud = conflictCloudVersion.value;
+    if (!local || !cloud || conflictBusyAction.value) return;
+    Alert.alert({
+      title: t('noteDetail.conflict.overwriteConfirmTitle'),
+      content: t('noteDetail.conflict.overwriteConfirm'),
+      okText: t('noteDetail.conflict.overwrite'),
+      okType: 'danger',
+      onOk: () => void performConflictOverwrite(local, cloud),
+    });
+  }
+
+  async function performConflictOverwrite(local: ConflictVersion, cloud: ConflictVersion) {
+    if (conflictBusyAction.value) return;
+    conflictBusyAction.value = 'overwrite';
+    try {
+      resetSaveQueueAfterConflict();
+      await applyVersionSnapshot({ ...local, revision: cloud.revision });
+      persistedNoteSnapshot = { ...cloud };
+      conflictVisible.value = false;
+      conflictEditorUsesLocal = false;
+      conflictCloudVersion.value = null;
+      conflictLocalVersion.value = null;
+      draftPersistenceReady.value = true;
+      await persistLocalDraftNow();
+      const saved = await saveImmediately(false);
+      if (saved) {
+        message.success(t('noteDetail.conflict.overwriteSuccess'));
+      } else {
+        // 网络失败仍由本地草稿兜底；若是再次冲突，saveNote 会填入新的云端/本地版本并重开弹窗。
+        await persistLocalDraftNow();
+      }
+    } finally {
+      conflictBusyAction.value = '';
     }
+  }
+
+  async function openVersionHistory() {
+    if (readonly.value) {
+      versionHistoryVisible.value = true;
+      return;
+    }
+    // 历史恢复只基于已经落库的 revision。先保存当前编辑内容，避免“刚写完还没到
+    // 自动保存计时点就点恢复”时，本地新内容没有进入恢复前快照。
+    const saved = await saveImmediately(false);
+    if (saved) versionHistoryVisible.value = true;
+  }
+
+  async function triggerEditorSwitch() {
+    // 格式转换前先把“尚未转换的原文”完整落库；确认弹窗随后携带这个 revision
+    // 调用独立原子转换接口，服务端会强制创建 format_conversion 还原点。
+    if (note.id || hasNewNoteDraft()) {
+      const saved = await saveImmediately(false);
+      if (!saved) return;
+    }
+    await nextTick();
+    await editorRef.value?.triggerModeSwitch?.();
+  }
+
+  async function persistEditorModeConversion(payload: {
+    targetType: 'html' | 'markdown';
+    convertedContent: string;
+    baseRevision: number;
+    analysisHash: string;
+  }) {
+    if (!note.id) return null;
+    try {
+      const response = await apiBasePost('/api/note/convertMode', {
+        id: note.id,
+        ...payload,
+      });
+      if (response.status === 409 && response.data?.code === 'NOTE_VERSION_CONFLICT') {
+        const cloud = normalizeConflictVersion(response.data?.details?.current, note.id);
+        if (cloud) {
+          openVersionConflict(cloud, {
+            ...currentNoteVersion(),
+            content: payload.convertedContent,
+            type: payload.targetType,
+            revision: payload.baseRevision,
+          });
+        }
+        return null;
+      }
+      if (response.status !== 200 || !response.data) {
+        message.error(response.msg || t('noteDetail.saveFailed'));
+        return null;
+      }
+      return {
+        content: String(response.data.content || ''),
+        type: normalizeNoteType(response.data.type),
+        revision: Math.max(1, Number(response.data.revision || payload.baseRevision + 1)),
+        updateTime: response.data.updateTime ?? null,
+      };
+    } catch (error) {
+      console.error('转换笔记格式失败:', error);
+      message.error(t('noteDetail.saveFailed'));
+      return null;
+    }
+  }
+
+  function onEditorModeConverted(result: {
+    content: string;
+    type: 'html' | 'markdown';
+    revision: number;
+    updateTime?: number | string | null;
+  }) {
+    clearScheduledSave();
+    note.content = result.content;
+    note.type = result.type;
+    note.revision = Math.max(1, Number(result.revision || note.revision || 1));
+    // Editor 在服务端原子转换成功后才更新本地 v-model；这几次同步赋值会经过普通
+    // autosave watcher。转换结果已经落库，清掉它们刚排入的 500ms 定时保存，避免
+    // 紧跟着再发一笔内容完全相同的 updateNote。
+    clearScheduledSave();
+    if (result.updateTime) updateTime.value = String(result.updateTime);
+    else setUpdateTime();
+    persistedSaveVersion = Math.max(persistedSaveVersion, requestedSaveVersion);
+    saveQueue = Promise.resolve(true);
+    saveStatus.value = 'saved';
+    if (note.id) noteWorkspace.updateNoteMetadata(note.id, { title: note.title, type: note.type });
+    setPersistedNoteSnapshot(currentNoteVersion(updateTime.value || Date.now()));
+  }
+
+  async function triggerEditorUndo() {
+    if (!editorRef.value?.triggerUndoSwitch) return;
+    if (note.id || hasNewNoteDraft()) {
+      const saved = await saveImmediately(false);
+      if (!saved) return;
+    }
+    await nextTick();
+    editorRef.value.triggerUndoSwitch();
   }
 
   provide('note', note);
@@ -736,7 +1148,13 @@
     // 快速切换时旧编辑器可能晚到一个 ready；它不能重新开启自动保存，也不能覆盖新页面的大纲。
     if (currentRouteId !== 'add' && currentRouteId !== note.id) return;
     contentAutosaveReady.value = true;
+    draftPersistenceReady.value = !readonly.value;
     isNoteSwitching.value = false;
+    scheduleLocalDraftWrite();
+    if (recoveredDraftNeedsSave) {
+      recoveredDraftNeedsSave = false;
+      saveFunc();
+    }
     // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
     void refreshCatalog();
     const raw = String(router.currentRoute.value.query.focusRef || '');
@@ -762,7 +1180,7 @@
   const renamePageVisible = ref(false);
   const activeAttachTarget = ref<NoteTreeItem | null>(null);
   const activeMoveTarget = ref<NoteTreeItem | null>(null);
-  const renameTargetNote = ref<{ id: string; title?: string } | null>(null);
+  const renameTargetNote = ref<{ id: string; title?: string; revision?: number } | null>(null);
   const subpageCount = ref(0);
   const mobileNavigationOpen = ref(false);
   const mobileNavigationParentId = ref<string | null>(null);
@@ -815,16 +1233,22 @@
 
   function openRenamePage(target: NoteTreeItem) {
     if (!guardWrite(undefined, 'rename-note') || readonly.value) return;
-    renameTargetNote.value = { id: target.id, title: target.title || '' };
+    renameTargetNote.value = {
+      id: target.id,
+      title: target.title || '',
+      revision: target.id === note.id ? note.revision : target.revision,
+    };
     renamePageVisible.value = true;
   }
 
-  async function handlePageRenamed(updated: { id: string; title: string }) {
+  async function handlePageRenamed(updated: { id: string; title: string; revision?: number }) {
     renamePageVisible.value = false;
     renameTargetNote.value = null;
     if (updated.id === note.id) {
       note.title = updated.title;
       note.lastTitle = updated.title;
+      if (updated.revision) note.revision = updated.revision;
+      setPersistedNoteSnapshot(currentNoteVersion());
     }
     recordOperation({ module: '笔记', operation: `重命名笔记【${updated.title}】` });
     await refreshTree();
@@ -1054,6 +1478,7 @@
     if (createPromise) return createPromise;
     const params: any = cloneDeep(note);
     delete params.lastTitle;
+    delete params.revision;
     if (!params.title || !params.title.trim()) {
       params.title = DEFAULT_NOTE_TITLE;
     }
@@ -1063,14 +1488,25 @@
         if (parentId) params.parentId = parentId;
         return apiBasePost('/api/note/addNote', params);
       })
-      .then((res) => {
+      .then(async (res) => {
         if (res.status === 200 && res.data?.id) {
           note.id = res.data.id;
+          note.revision = Math.max(1, Number(res.data.revision || 1));
           note.createBy = user.id;
           note.parentId = params.parentId || null;
           if (!note.title || !note.title.trim()) {
             note.title = params.title;
           }
+          await promoteActiveDraft(String(note.id), note.revision);
+          setPersistedNoteSnapshot({
+            id: String(note.id),
+            title: String(params.title || note.title),
+            content: String(params.content || ''),
+            type: normalizeNoteType(params.type),
+            revision: note.revision,
+            updatedAt: Date.now(),
+            parentId: params.parentId || null,
+          });
           promoteSavedDraftInTree();
           // 详情工作区的路由 key 保持稳定，草稿首次保存只替换地址，不重挂编辑器内容区。
           // replace 保留原 query(type/builtin)，让刷新后的编辑器类型仍能按原始模板恢复。
@@ -1102,10 +1538,14 @@
     return await createNote();
   }
   // 兜底：编辑器若从后端拿回 noteId（历史自动建笔记逻辑），本地还没 id 时采纳它，避免各建各的
-  function onEditorSetNoteId(id: string) {
+  async function onEditorSetNoteId(id: string) {
     if (id && !note.id) {
       note.id = id;
+      note.revision = 1;
       note.createBy = user.id;
+      // 兼容旧编辑器的后端建笔记回调：草稿提升先于路由切换完成，避免新路由立刻恢复时
+      // 仍只能读到 temporary:* 键下的旧草稿。
+      await promoteActiveDraft(id, note.revision);
       promoteSavedDraftInTree();
       promotedDraftRouteId = note.id;
       router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
@@ -1135,6 +1575,7 @@
       saveStatus.value = 'saved';
       return false;
     }
+    await persistLocalDraftNow();
     if (!navigator.onLine) {
       saveStatus.value = 'offline';
       return false;
@@ -1143,6 +1584,7 @@
     saveStatus.value = 'saving';
     const titleAtSave = note.title;
     let ok = false;
+    let savedSnapshot: ConflictVersion | null = null;
 
     try {
       if (note.id) {
@@ -1151,7 +1593,25 @@
         delete params.createBy;
         delete params.updateTime;
         const res = await apiBasePost('/api/note/updateNote', params);
+        if (res.status === 409 && res.data?.code === 'NOTE_VERSION_CONFLICT') {
+          const cloud = normalizeConflictVersion(res.data?.details?.current, note.id);
+          if (cloud) openVersionConflict(cloud, currentNoteVersion());
+          return false;
+        }
         ok = res.status === 200;
+        if (ok) {
+          const nextRevision = Math.max(1, Number(res.data?.revision || note.revision || 1));
+          note.revision = nextRevision;
+          savedSnapshot = {
+            id: String(note.id),
+            title: String(params.title || ''),
+            content: String(params.content || ''),
+            type: normalizeNoteType(params.type),
+            revision: nextRevision,
+            updatedAt: Date.now(),
+            parentId: note.parentId,
+          };
+        }
         if (ok && isMsg) {
           recordOperation({ module: '笔记', operation: `保存笔记成功【${titleAtSave}】` });
         }
@@ -1168,6 +1628,7 @@
           message.success(t('common.saveSuccess'));
         }
         setUpdateTime();
+        if (savedSnapshot) setPersistedNoteSnapshot({ ...savedSnapshot, updatedAt: updateTime.value || Date.now() });
         saveStatus.value = 'saved';
       } else {
         saveStatus.value = 'error';
@@ -1205,6 +1666,12 @@
 
   function saveImmediately(isMsg?: boolean) {
     if (!guardWrite(undefined, 'save-note')) {
+      return Promise.resolve(false);
+    }
+    if (conflictCloudVersion.value && conflictLocalVersion.value) {
+      void persistLocalDraftNow();
+      conflictVisible.value = true;
+      saveStatus.value = 'error';
       return Promise.resolve(false);
     }
     clearScheduledSave();
@@ -1262,6 +1729,12 @@
     if (!guardWrite(undefined, 'save-note')) {
       return;
     }
+    scheduleLocalDraftWrite();
+    if (conflictCloudVersion.value && conflictLocalVersion.value) {
+      requestSaveVersion();
+      saveStatus.value = 'error';
+      return;
+    }
     clearScheduledSave();
     const version = requestSaveVersion();
     timer.value = setTimeout(() => {
@@ -1298,6 +1771,7 @@
           }
           skipSaveOnLeave = true;
           clearScheduledSave();
+          await clearActiveLocalDraft();
           noteWorkspace.setNavigation({ activePageId: null });
           await refreshTree();
           returnToSource();
@@ -1347,6 +1821,7 @@
         // 删除已在服务端成功完成，离开时不能再把排队中的旧草稿写回已删除笔记。
         skipSaveOnLeave = true;
         clearScheduledSave();
+        await clearActiveLocalDraft();
         noteWorkspace.setNavigation({ activePageId: null });
         await refreshTree();
         returnToSource();
@@ -1355,8 +1830,8 @@
   }
 
   const handleKeyDown = (event) => {
-    // 检查是否按下了ctrl+s
-    if (event.ctrlKey && event.key === 's') {
+    // Windows/Linux 使用 Ctrl，macOS 使用 Command；两端统一拦截浏览器“保存网页”。
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 's') {
       event.preventDefault(); // 阻止默认的保存行为
       void saveImmediately(true);
     }
@@ -1415,6 +1890,8 @@
 
   function resetPerNoteRuntime() {
     clearScheduledSave();
+    window.clearTimeout(draftWriteTimer);
+    draftWriteTimer = 0;
     readonlyToolbarObserver?.disconnect();
     readonlyToolbarObserver = null;
     requestedSaveVersion = 0;
@@ -1427,6 +1904,15 @@
     skipSaveOnLeave = false;
     hasSwitchBackup.value = false;
     contentAutosaveReady.value = false;
+    draftPersistenceReady.value = false;
+    activeDraftNoteId = '';
+    persistedNoteSnapshot = null;
+    recoveredDraftNeedsSave = false;
+    conflictVisible.value = false;
+    conflictCloudVersion.value = null;
+    conflictLocalVersion.value = null;
+    conflictBusyAction.value = '';
+    conflictEditorUsesLocal = false;
     currentEditorResourceRefs = [];
     resolvedResourceRefs.value = [];
     lastResourceRefSignature = '';
@@ -1466,7 +1952,13 @@
     if (note.type !== 'markdown') return;
     // Markdown 编辑器没有 TinyMCE 的 init 事件；内容 DOM 挂载后即可恢复交互和自动保存。
     contentAutosaveReady.value = true;
+    draftPersistenceReady.value = !readonly.value;
     isNoteSwitching.value = false;
+    scheduleLocalDraftWrite();
+    if (recoveredDraftNeedsSave) {
+      recoveredDraftNeedsSave = false;
+      saveFunc();
+    }
     void refreshCatalog();
   }
 
@@ -1494,12 +1986,16 @@
         content: nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
         createBy: '',
         type: nextType,
+        revision: 1,
         parentId: routeQueryValue(query.parent) || null,
       });
       updateTime.value = '';
       nodeType.value = 'add';
+      activeDraftNoteId = resolveTemporaryDraftId(query);
+      persistedNoteSnapshot = currentNoteVersion(null);
       await applyTemplateFromQuery(query, () => requestVersion === noteLoadVersion);
       if (requestVersion !== noteLoadVersion) return;
+      await recoverLocalDraft(persistedNoteSnapshot);
       latestRequestedTitle = note.title;
       noteContentKey.value = `note-content:add:${requestVersion}`;
       isReady.value = true;
@@ -1520,6 +2016,7 @@
           id: String(response.data.id || routeId),
           type: normalizeNoteType(rawType),
           content: normalizeLoadedContent(response.data.content || '', rawType),
+          revision: Math.max(1, Number(response.data.revision || 1)),
           parentId: response.data.parentId || null,
         });
         note.lastTitle = cloneDeep(note.title);
@@ -1527,6 +2024,9 @@
         noteWorkspace.updateNoteMetadata(String(note.id), { title: note.title, type: note.type });
         updateTime.value = response.data.updateTime ?? response.data.createTime;
         nodeType.value = user.id === note.createBy ? 'edit' : 'share';
+        activeDraftNoteId = String(note.id);
+        persistedNoteSnapshot = currentNoteVersion(updateTime.value || null);
+        await recoverLocalDraft(persistedNoteSnapshot);
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
@@ -1575,6 +2075,17 @@
     { flush: 'sync' },
   );
 
+  watch(
+    () => [note.title, note.content, note.type, note.revision] as const,
+    () => {
+      if (conflictEditorUsesLocal && conflictLocalVersion.value) {
+        conflictLocalVersion.value = currentNoteVersion();
+      }
+      scheduleLocalDraftWrite();
+    },
+    { flush: 'sync' },
+  );
+
   onMounted(() => {
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('visibilitychange', handleResourceRefVisibilityChange);
@@ -1582,8 +2093,10 @@
     window.addEventListener('pageshow', refreshEditorResourceRefs);
     window.addEventListener('offline', handleNetworkOffline);
     window.addEventListener('online', handleNetworkOnline);
+    window.addEventListener('pagehide', persistLocalDraftNow);
   });
   onUnmounted(() => {
+    void persistLocalDraftNow();
     noteLoadVersion += 1;
     window.clearTimeout(detailTreeSearchTimer);
     document.removeEventListener('keydown', handleKeyDown);
@@ -1592,6 +2105,8 @@
     window.removeEventListener('pageshow', refreshEditorResourceRefs);
     window.removeEventListener('offline', handleNetworkOffline);
     window.removeEventListener('online', handleNetworkOnline);
+    window.removeEventListener('pagehide', persistLocalDraftNow);
+    window.clearTimeout(draftWriteTimer);
     readonlyToolbarObserver?.disconnect();
     clearScheduledSave();
     nStore.headings = [];

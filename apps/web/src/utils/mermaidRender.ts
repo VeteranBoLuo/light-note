@@ -21,6 +21,8 @@ const MERMAID_PRE_SELECTOR = 'pre[class*="language-mermaid"]';
 const FIGURE_CLASS = 'mermaid-figure';
 /** 伴随模式生成的图(挂在源码块后面,不进笔记内容) */
 const COMPANION_CLASS = 'mermaid-figure--companion';
+/** 富文本图表的编辑按钮/双击手势向 Vue 编辑器派发的受控事件。 */
+export const MERMAID_EDIT_EVENT = 'lightnote:mermaid-edit';
 /*
  * 伴随模式**不给源码代码块加任何标记**。
  * 试过两种标记都会被写进笔记内容:class 会原样持久化;`data-mce-mermaid-source` 也一样 ——
@@ -300,7 +302,36 @@ function buildFigure(code: string): HTMLElement {
   return figure;
 }
 
-function fillWithError(figure: HTMLElement, code: string, error: unknown) {
+function appendFigurePlaceholder(figure: HTMLElement) {
+  const placeholder = document.createElement('div');
+  placeholder.className = `${FIGURE_CLASS}__placeholder`;
+  figure.appendChild(placeholder);
+}
+
+function requestFigureEdit(figure: HTMLElement, code: string) {
+  figure.dispatchEvent(
+    new CustomEvent(MERMAID_EDIT_EVENT, {
+      bubbles: true,
+      composed: true,
+      detail: { source: code },
+    }),
+  );
+}
+
+function bindFigureEditGesture(figure: HTMLElement, code: string) {
+  if (!figure.classList.contains(COMPANION_CLASS)) {
+    figure.ondblclick = null;
+    return;
+  }
+  figure.ondblclick = (event) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest(`.${FIGURE_CLASS}__tools`)) return;
+    event.preventDefault();
+    requestFigureEdit(figure, code);
+  };
+}
+
+function fillWithError(figure: HTMLElement, code: string, error: unknown, interactive = true) {
   const message = String((error as Error)?.message || error || '')
     .split('\n')
     .slice(0, 3)
@@ -323,6 +354,17 @@ function fillWithError(figure: HTMLElement, code: string, error: unknown) {
   codeEl.textContent = code;
   pre.appendChild(codeEl);
   figure.appendChild(pre);
+
+  bindFigureEditGesture(figure, code);
+  if (interactive && figure.classList.contains(COMPANION_CLASS)) {
+    figure.appendChild(
+      buildFigureToolbar(() => '', code, {
+        editable: true,
+        figure,
+        diagramActions: false,
+      }),
+    );
+  }
 }
 
 /**
@@ -465,10 +507,17 @@ function fillWithSvg(figure: HTMLElement, svg: string, interactive = true) {
   figure.appendChild(canvas);
   // 正常路径下 SVG 在 prepareSvg 里已经加工好了;这里兜底处理没走过加工的来源(比如旧缓存)
   centerMindmapRootLabels(canvas);
+  bindFigureEditGesture(figure, figure.getAttribute(RENDERED_FLAG) || '');
 
   // 导出的静态 HTML 里按钮点了没反应,不放
   if (!interactive) return;
-  figure.appendChild(buildFigureToolbar(() => canvas.innerHTML, figure.getAttribute(RENDERED_FLAG) || ''));
+  const code = figure.getAttribute(RENDERED_FLAG) || '';
+  figure.appendChild(
+    buildFigureToolbar(() => canvas.innerHTML, code, {
+      editable: figure.classList.contains(COMPANION_CLASS),
+      figure,
+    }),
+  );
 }
 
 /**
@@ -492,7 +541,11 @@ function supportsEdgeStyle(code: string): boolean {
 }
 
 /** 图右上角的工具条。用原生 DOM 是因为整个渲染流程就在 DOM 层,拿不到 Vue 组件 */
-function buildFigureToolbar(getSvg: () => string, code = ''): HTMLElement {
+function buildFigureToolbar(
+  getSvg: () => string,
+  code = '',
+  options: { editable?: boolean; figure?: HTMLElement; diagramActions?: boolean } = {},
+): HTMLElement {
   const t = (key: string) => i18n.global.t(key);
   const bar = document.createElement('div');
   bar.className = `${FIGURE_CLASS}__tools`;
@@ -514,6 +567,10 @@ function buildFigureToolbar(getSvg: () => string, code = ''): HTMLElement {
   };
 
   const tools = icon.noteDetail.diagramTools;
+  if (options.editable && options.figure) {
+    addButton(tools.edit, t('note.mermaidEdit'), () => requestFigureEdit(options.figure as HTMLElement, code));
+  }
+  if (options.diagramActions === false) return bar;
   // 连线样式切换只给思维导图和流程图:图标显示的是"点下去会变成什么"
   if (supportsEdgeStyle(code)) {
     const edgeStyle = getMermaidEdgeStyle();
@@ -656,12 +713,12 @@ async function renderFigure(figure: HTMLElement, code: string, interactive: bool
     if (prepared) rememberSvg(key, prepared);
     if (figureRuns.get(figure) !== token) return;
     if (prepared) fillWithSvg(figure, prepared, interactive);
-    else fillWithError(figure, code, null);
+    else fillWithError(figure, code, null, interactive);
   } catch (error) {
     // mermaid 渲染失败会把临时容器(#d + 图表 id)留在 body 上,清掉免得越积越多
     document.querySelectorAll('body > [id^="dln-mermaid-"]').forEach((el) => el.remove());
     if (figureRuns.get(figure) !== token) return;
-    fillWithError(figure, code, error);
+    fillWithError(figure, code, error, interactive);
   }
 }
 
@@ -744,7 +801,10 @@ async function renderMermaidCompanions(root: HTMLElement, interactive: boolean):
     figure.setAttribute(RENDERED_FLAG, code);
     figure.setAttribute('data-mce-bogus', 'all');
     figure.setAttribute('contenteditable', 'false');
-    if (!existing) pre.after(figure);
+    if (!existing) {
+      appendFigurePlaceholder(figure);
+      pre.after(figure);
+    }
     pending.push({ figure, code });
   }
 

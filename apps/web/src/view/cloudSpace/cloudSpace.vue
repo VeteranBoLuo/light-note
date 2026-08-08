@@ -110,6 +110,7 @@
           @preview-file="previewFile"
           @move-field="moveField"
           @exit-batch="toggleBatchMode"
+          @request-upload="openCurrentFolderUpload"
         />
       </div>
     </div>
@@ -219,7 +220,7 @@
 
   interface HandleBtnGroupExposed {
     uploadFiles: (files: any[], folderId?: string | null) => Promise<void>;
-    openFileDialog: () => void;
+    openFileDialog: (folderId?: string | null) => void;
   }
 
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
@@ -276,7 +277,7 @@
     },
     auxiliaryActionLabel: () => t(batchMode.value ? 'cloudSpace.exitBatch' : 'common.more'),
     auxiliaryActionIcon: () => (batchMode.value ? icon.common.close : icon.common.more),
-    onAdd: () => handleBtnGroup.value?.openFileDialog(),
+    onAdd: () => openCurrentFolderUpload(),
     addLabel: () => t('cloudSpace.uploadFile'),
   });
 
@@ -419,6 +420,11 @@
   const onUploadFiles = ({ files, folderId }) => {
     handleBtnGroup.value?.uploadFiles(files, folderId);
   };
+
+  function openCurrentFolderUpload() {
+    const folderId = cloud.folder.id === 'all' ? null : String(cloud.folder.id);
+    handleBtnGroup.value?.openFileDialog(folderId);
+  }
 
   // 拖拽事件处理
   function isExternalFileDrag(event) {

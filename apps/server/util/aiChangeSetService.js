@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import pool from '../db/index.js';
 import { createTodo, deleteTodo } from './services/todoService.js';
-import { applyOwnedNoteContentChange } from './services/noteService.js';
+import { applyOwnedNoteContentChange, snapshotOwnedNoteVersion } from './services/noteService.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserResources, validateUserTags } from './resourceTags.js';
 import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
 
@@ -569,23 +569,35 @@ async function applyItem(connection, identity, item) {
     return { before, after, afterHash: stateHash(after) };
   }
   if (item.operation === 'update_note_metadata') {
-    await connection.query('UPDATE note SET title = ?, update_by = ? WHERE id = ? AND create_by = ? AND del_flag = 0', [
+    // `before` 已通过 loadCurrentState(..., true) 锁住目标笔记；只在真正 apply 时
+    // 建快照，预览/revalidate 绝不能产生历史版本副作用。
+    await snapshotOwnedNoteVersion(connection, {
+      userId: identity.subjectUserId,
+      noteId: item.resourceId,
+      reason: 'ai_change',
+    });
+    await connection.query(
+      'UPDATE note SET title = ?, update_by = ?, revision = revision + 1 WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [
       after.title,
       identity.actorUserId,
       item.resourceId,
       identity.subjectUserId,
-    ]);
+      ],
+    );
     return { before, after, afterHash: stateHash(after) };
   }
   if (item.operation === 'update_note_content') {
-    await applyOwnedNoteContentChange(connection, {
+    const appliedAfter = await applyOwnedNoteContentChange(connection, {
       userId: identity.subjectUserId,
       actorUserId: identity.actorUserId,
       noteId: item.resourceId,
       before,
       after,
     });
-    return { before, after, afterHash: stateHash(after), undoSupported: true };
+    // HTML 会在领域写入边界消毒；回执必须记录真实落库态，否则后续撤销会被错误判成冲突。
+    const receiptAfter = { title: appliedAfter.title, content: appliedAfter.content, type: appliedAfter.type };
+    return { before, after: receiptAfter, afterHash: stateHash(receiptAfter), undoSupported: true };
   }
   if (item.operation === 'update_bookmark_metadata') {
     const [duplicates] = await connection.query(
@@ -933,12 +945,15 @@ async function undoItem(connection, identity, item) {
       identity.subjectUserId,
     ]);
   } else if (item.operation === 'update_note_metadata') {
-    await connection.query('UPDATE note SET title = ?, update_by = ? WHERE id = ? AND create_by = ? AND del_flag = 0', [
-      before.title,
-      identity.actorUserId,
-      item.resourceId,
-      identity.subjectUserId,
-    ]);
+    await snapshotOwnedNoteVersion(connection, {
+      userId: identity.subjectUserId,
+      noteId: item.resourceId,
+      reason: 'ai_undo',
+    });
+    await connection.query(
+      'UPDATE note SET title = ?, update_by = ?, revision = revision + 1 WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [before.title, identity.actorUserId, item.resourceId, identity.subjectUserId],
+    );
   } else if (item.operation === 'update_note_content') {
     await applyOwnedNoteContentChange(connection, {
       userId: identity.subjectUserId,
@@ -946,6 +961,7 @@ async function undoItem(connection, identity, item) {
       noteId: item.resourceId,
       before: current,
       after: before,
+      snapshotReason: 'ai_undo',
     });
   } else if (item.operation === 'update_bookmark_metadata') {
     await connection.query(

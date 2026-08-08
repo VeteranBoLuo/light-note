@@ -1,5 +1,6 @@
 <template>
   <div
+    v-if="!triggerless"
     class="b-upload-trigger"
     :class="{ 'is-disabled': disabled }"
     :tabindex="hasDefaultSlot ? undefined : disabled ? -1 : 0"
@@ -61,12 +62,15 @@
     defineProps<{
       accept?: string;
       multiple: boolean;
-      maxTotalSize?: number;
+      // null 表示不在文件选择器层设置固定上限，由业务层按动态配额统一校验。
+      maxTotalSize?: number | null;
       // 直传场景(如云空间→OBS)开启:图片也按原始 File 透传,不转 Base64。
       // 默认 false 保持旧行为({isImg, file: base64}),避免影响依赖 Base64 预览的调用方(如意见反馈)。
       rawFile?: boolean;
       disabled?: boolean;
       ariaLabel?: string;
+      // 业务通过组件 ref.open() 唤起文件选择器时，不渲染默认上传卡片。
+      triggerless?: boolean;
     }>(),
     {
       accept: '',
@@ -75,6 +79,7 @@
       rawFile: false,
       disabled: false,
       ariaLabel: '',
+      triggerless: false,
     }, // 默认总大小限制为10MB
   );
   const user = useUserStore();
@@ -111,7 +116,7 @@
 
     const totalSize = files.reduce((sum, file) => sum + file.size, 0);
     // 检查总文件大小是否超过指定限制
-    if (totalSize > props.maxTotalSize) {
+    if (props.maxTotalSize !== null && totalSize > props.maxTotalSize) {
       message.warning(t('common.maxTotalSize', { n: props.maxTotalSize / (1024 * 1024) }));
       return;
     }

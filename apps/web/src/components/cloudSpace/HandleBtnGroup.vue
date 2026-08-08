@@ -3,15 +3,13 @@
     <CloudStorageBar v-if="!bookmark.isMobile" />
     <!-- 上传按钮及提示 -->
     <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
-      <b-upload
-        ref="uploadPicker"
-        multiple
-        raw-file
-        class="upload-btn"
-        @change="handleChange"
-        :max-total-size="500 * 1024 * 1024"
-      >
-        <b-button type="primary" class="upload-action" :loading="uploadProgress.visible">
+      <b-upload ref="uploadPicker" multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="null">
+        <b-button
+          type="primary"
+          class="upload-action"
+          :loading="uploadProgress.visible"
+          @click.stop="openFileDialog(null)"
+        >
           <SvgIcon :src="icon.file_upload" size="17" />
           {{ bookmark.isDesktop ? $t('cloudSpace.uploadFile') : '' }}
           <div class="upload-tip" v-if="bookmark.isDesktop">
@@ -79,6 +77,7 @@
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
   const uploadPicker = ref<{ open: () => void } | null>(null);
+  const pendingUploadFolderId = ref<string | null>(null);
   const MIN_PROGRESS_VISIBLE_MS = 800;
   // 格式化速度
   const formatSpeed = (speed: number) => {
@@ -105,6 +104,10 @@
 
   const uploadFiles = async (files, folderId = null) => {
     if (blockGuestWrite('upload-file')) return;
+    if (uploadProgress.visible) {
+      message.info(t('cloudSpace.uploading'));
+      return;
+    }
     uploadProgress.visible = true;
     uploadProgress.overall = 0;
     uploadProgress.speed = 0;
@@ -117,7 +120,6 @@
     const startTime = Date.now();
 
     let filesData = [];
-    let totalSize = 0;
     let invalidFiles = [];
 
     // 遍历所有选中的文件
@@ -145,8 +147,6 @@
           // 原始文件
           processedFile = file;
         }
-        // 累计文件大小
-        totalSize += processedFile.size;
         filesData.push({
           fileName: processedFile.name,
           fileType: processedFile.type || 'application/octet-stream',
@@ -165,149 +165,153 @@
       status: 'active' as const,
     }));
 
-    // 检查总空间
-    const uploadAfterSize = Number((totalSize / 1024 / 1024 + cloud.usedSpace).toFixed(2));
-    if (uploadAfterSize <= cloud.maxSpace) {
-      try {
-        // 第一步：调用后端获取预签名上传URL
-        const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: filesData });
-        if (uploadRes.status !== 200) {
-          throw new Error('获取上传URL失败');
+    if (filesData.length === 0) {
+      uploadProgress.visible = false;
+      uploadController.value = null;
+      if (invalidFiles.length > 0) {
+        message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
+      }
+      return;
+    }
+
+    try {
+      // 第一步：调用后端获取预签名上传URL
+      const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: filesData });
+      if (uploadRes.status !== 200) {
+        throw new Error(uploadRes.msg || t('cloudSpace.uploadFailed'));
+      }
+
+      const uploadInfos = uploadRes.data; // 数组，每个文件有 uploadUrl, headers 等
+
+      // 第二步：逐个上传到OBS
+      const uploadPromises = uploadInfos.map(async (info, index) => {
+        if (info.status === '处理失败') {
+          uploadProgress.files[index].status = 'exception';
+          return { ...info, uploadStatus: 'failed' };
         }
-
-        const uploadInfos = uploadRes.data; // 数组，每个文件有 uploadUrl, headers 等
-
-        // 第二步：逐个上传到OBS
-        const uploadPromises = uploadInfos.map(async (info, index) => {
-          if (info.status === '处理失败') {
+        try {
+          const fileData = filesData[index].file;
+          await axios.put(info.uploadUrl, fileData, {
+            headers: {
+              ...info.headers,
+              'Content-Type': info.fileType,
+            },
+            signal: uploadController.value?.signal,
+            onUploadProgress: (progressEvent) => {
+              // 部分 Android 浏览器不会提供 total，使用文件实际大小兜底。
+              const progressTotal = progressEvent.total || fileData.size;
+              const percent =
+                progressTotal > 0 ? Math.min(100, Math.round((progressEvent.loaded / progressTotal) * 100)) : 0;
+              uploadProgress.files[index].progress = percent;
+              // 计算总体进度
+              const totalProgress = uploadProgress.files.reduce((sum, file) => sum + file.progress, 0);
+              uploadProgress.overall = totalProgress / uploadProgress.files.length;
+              // 计算总上传字节数
+              uploadProgress.totalLoaded = uploadProgress.files.reduce((sum, file, idx) => {
+                const fileSize = filesData[idx].fileSize;
+                return sum + (file.progress / 100) * fileSize;
+              }, 0);
+              // 计算速度
+              const now = Date.now();
+              const elapsed = (now - startTime) / 1000;
+              if (elapsed > 0) {
+                uploadProgress.speed = uploadProgress.totalLoaded / elapsed;
+              }
+            },
+          });
+          // 很小的文件可能没有触发可用的进度事件，完成后确保进度收口到 100%。
+          uploadProgress.files[index].progress = 100;
+          uploadProgress.overall =
+            uploadProgress.files.reduce((sum, file) => sum + file.progress, 0) / uploadProgress.files.length;
+          uploadProgress.files[index].status = 'success';
+          return { ...info, uploadStatus: 'success' };
+        } catch (error) {
+          console.error('上传失败:', error);
+          // 如果是用户取消的请求，不显示错误信息
+          if (error.name !== 'AbortError') {
             uploadProgress.files[index].status = 'exception';
-            return { ...info, uploadStatus: 'failed' };
           }
-          try {
-            const fileData = filesData[index].file;
-            await axios.put(info.uploadUrl, fileData, {
-              headers: {
-                ...info.headers,
-                'Content-Type': info.fileType,
-              },
-              signal: uploadController.value?.signal,
-              onUploadProgress: (progressEvent) => {
-                // 部分 Android 浏览器不会提供 total，使用文件实际大小兜底。
-                const progressTotal = progressEvent.total || fileData.size;
-                const percent =
-                  progressTotal > 0 ? Math.min(100, Math.round((progressEvent.loaded / progressTotal) * 100)) : 0;
-                uploadProgress.files[index].progress = percent;
-                // 计算总体进度
-                const totalProgress = uploadProgress.files.reduce((sum, file) => sum + file.progress, 0);
-                uploadProgress.overall = totalProgress / uploadProgress.files.length;
-                // 计算总上传字节数
-                uploadProgress.totalLoaded = uploadProgress.files.reduce((sum, file, idx) => {
-                  const fileSize = filesData[idx].fileSize;
-                  return sum + (file.progress / 100) * fileSize;
-                }, 0);
-                // 计算速度
-                const now = Date.now();
-                const elapsed = (now - startTime) / 1000;
-                if (elapsed > 0) {
-                  uploadProgress.speed = uploadProgress.totalLoaded / elapsed;
-                }
-              },
-            });
-            // 很小的文件可能没有触发可用的进度事件，完成后确保进度收口到 100%。
-            uploadProgress.files[index].progress = 100;
-            uploadProgress.overall =
-              uploadProgress.files.reduce((sum, file) => sum + file.progress, 0) / uploadProgress.files.length;
-            uploadProgress.files[index].status = 'success';
-            return { ...info, uploadStatus: 'success' };
-          } catch (error) {
-            console.error('上传失败:', error);
-            // 如果是用户取消的请求，不显示错误信息
-            if (error.name !== 'AbortError') {
-              uploadProgress.files[index].status = 'exception';
-            }
-            return { ...info, uploadStatus: 'failed', error: error.message };
+          return { ...info, uploadStatus: 'failed', error: error.message };
+        }
+      });
+
+      const uploadResults = await Promise.all(uploadPromises);
+
+      // 第三步：上传成功后，调用confirmUpload写入数据库
+      const confirmFiles = uploadResults
+        .filter((result) => result.uploadStatus === 'success')
+        .map((result) => ({
+          fileName: result.filename,
+          fileType: result.fileType,
+          fileSize: filesData.find((f) => f.fileName === result.filename)?.fileSize || 0,
+        }));
+
+      if (confirmFiles.length > 0) {
+        const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles, folderId });
+        if (confirmRes.status === 200) {
+          // 处理确认结果
+          const successFiles = confirmRes.data.filter((item) => item.status === '已上传');
+          const existedFiles = confirmRes.data.filter((item) => item.status === '已覆盖');
+          const failedFiles = confirmRes.data.filter((item) => item.status === '处理失败');
+
+          if (successFiles.length > 0) {
+            recordOperation({ module: '云空间', operation: `上传文件成功【${successFiles.length}个】` });
+            message.success(`成功上传 ${successFiles.length} 个文件`);
           }
-        });
 
-        const uploadResults = await Promise.all(uploadPromises);
-
-        // 第三步：上传成功后，调用confirmUpload写入数据库
-        const confirmFiles = uploadResults
-          .filter((result) => result.uploadStatus === 'success')
-          .map((result) => ({
-            fileName: result.filename,
-            fileType: result.fileType,
-            fileSize: filesData.find((f) => f.fileName === result.filename)?.fileSize || 0,
-          }));
-
-        if (confirmFiles.length > 0) {
-          const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles, folderId });
-          if (confirmRes.status === 200) {
-            // 处理确认结果
-            const successFiles = confirmRes.data.filter((item) => item.status === '已上传');
-            const existedFiles = confirmRes.data.filter((item) => item.status === '已覆盖');
-            const failedFiles = confirmRes.data.filter((item) => item.status === '处理失败');
-
-            if (successFiles.length > 0) {
-              recordOperation({ module: '云空间', operation: `上传文件成功【${successFiles.length}个】` });
-              message.success(`成功上传 ${successFiles.length} 个文件`);
-            }
-
-            if (existedFiles.length > 0) {
-              recordOperation({ module: '云空间', operation: `覆盖已有文件成功【${existedFiles.length}个】` });
-              message.warning(`覆盖了 ${existedFiles.length} 个已有文件`);
-              existedFiles.forEach((item) => cloud.cacheImgArr.push(item.fileId));
-            }
-
-            if (failedFiles.length > 0) {
-              message.error(`以下文件确认失败：${failedFiles.map((f) => f.filename).join(', ')}`);
-            }
-
-            if (successFiles.length > 0 || existedFiles.length > 0) {
-              cloud.queryFieldList();
-            }
-          } else {
-            message.error('确认上传失败');
+          if (existedFiles.length > 0) {
+            recordOperation({ module: '云空间', operation: `覆盖已有文件成功【${existedFiles.length}个】` });
+            message.warning(`覆盖了 ${existedFiles.length} 个已有文件`);
+            existedFiles.forEach((item) => cloud.cacheImgArr.push(item.fileId));
           }
-        }
 
-        // 处理上传失败的文件
-        const failedUploads = uploadResults.filter((result) => result.uploadStatus === 'failed');
-        if (failedUploads.length > 0) {
-          message.error(`以下文件上传失败：${failedUploads.map((f) => f.filename).join(', ')}`);
-        }
-      } catch (error) {
-        // 如果是用户取消的请求，不显示错误信息
-        if (error.name !== 'AbortError') {
-          message.error('上传失败：' + error.message);
-        }
-      } finally {
-        const visibleDuration = Date.now() - startTime;
-        if (visibleDuration < MIN_PROGRESS_VISIBLE_MS && uploadProgress.visible) {
-          await new Promise((resolve) => window.setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - visibleDuration));
-        }
-        uploadProgress.visible = false;
-        uploadController.value = null;
+          if (failedFiles.length > 0) {
+            message.error(`以下文件确认失败：${failedFiles.map((f) => f.filename).join(', ')}`);
+          }
 
-        // 显示预检错误信息
-        if (invalidFiles.length > 0) {
-          message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
+          if (successFiles.length > 0 || existedFiles.length > 0) {
+            cloud.queryFieldList();
+          }
+        } else {
+          throw new Error(confirmRes.msg || t('cloudSpace.confirmUploadFailed'));
         }
       }
-    } else {
-      message.warning('剩余空间不足');
+
+      // 处理上传失败的文件
+      const failedUploads = uploadResults.filter((result) => result.uploadStatus === 'failed');
+      if (failedUploads.length > 0) {
+        message.error(`以下文件上传失败：${failedUploads.map((f) => f.filename).join(', ')}`);
+      }
+    } catch (error) {
+      // 如果是用户取消的请求，不显示错误信息
+      if (error.name !== 'AbortError') {
+        message.error(t('cloudSpace.uploadError', { message: error.message }));
+      }
+    } finally {
+      const visibleDuration = Date.now() - startTime;
+      if (visibleDuration < MIN_PROGRESS_VISIBLE_MS && uploadProgress.visible) {
+        await new Promise((resolve) => window.setTimeout(resolve, MIN_PROGRESS_VISIBLE_MS - visibleDuration));
+      }
       uploadProgress.visible = false;
+      uploadController.value = null;
+
+      // 显示预检错误信息
+      if (invalidFiles.length > 0) {
+        message.warning(`以下文件无法处理：${invalidFiles.map((f) => f.name + ' - ' + f.error).join(', ')}`);
+      }
     }
   };
 
   async function handleChange(e) {
     const files = Array.isArray(e) ? e : [];
     if (files.length === 0) return;
+    const folderId = pendingUploadFolderId.value;
+    pendingUploadFolderId.value = null;
 
     // 提取文件名
     const fileNames = files.map((f) => (f instanceof File ? f.name : f.fileName)).filter(Boolean);
     if (fileNames.length === 0) {
-      await uploadFiles(files, null);
+      await uploadFiles(files, folderId);
       return;
     }
 
@@ -329,12 +333,12 @@
       }
     } catch {
       // 查重失败就正常上传
-      await uploadFiles(files, null);
+      await uploadFiles(files, folderId);
       return;
     }
 
     if (dupItems.length === 0) {
-      await uploadFiles(files, null);
+      await uploadFiles(files, folderId);
       return;
     }
 
@@ -351,7 +355,7 @@
           type: 'primary',
           function() {
             Alert.destroy();
-            uploadFiles(files, null);
+            uploadFiles(files, folderId);
           },
         },
         {
@@ -369,7 +373,7 @@
               }
               return { ...f, fileName: newName };
             });
-            uploadFiles(renamedFiles, null);
+            uploadFiles(renamedFiles, folderId);
           },
         },
         {
@@ -382,12 +386,13 @@
     });
   }
 
-  function openFileDialog() {
+  function openFileDialog(folderId: string | null = null) {
     if (blockGuestWrite('upload-file')) return;
     if (uploadProgress.visible) {
       message.info(t('cloudSpace.uploading'));
       return;
     }
+    pendingUploadFolderId.value = folderId;
     uploadPicker.value?.open();
   }
 

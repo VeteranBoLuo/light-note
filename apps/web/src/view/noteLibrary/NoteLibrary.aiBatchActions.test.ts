@@ -167,14 +167,14 @@ describe('笔记库页面树交互接线', () => {
     );
   });
 
-  it('AI 内容铺满侧栏并减少外层卡片与快捷操作的重复描边', () => {
+  it('AI 内容铺满侧栏，并以实色分区描边强化浅色主题层次', () => {
     const aiSlotRule = detailSource.match(/\.note-detail-ai-slot\s*\{([^}]*)\}/)?.[1] || '';
     expect(aiSlotRule).toContain('height: 100%');
     expect(aiSlotRule).toContain('box-sizing: border-box');
     expect(aiSlotRule).not.toContain('padding: 16px');
     expect(aiReplySource).toMatch(/\.ai-container\s*\{[\s\S]*?border-radius: 0;[\s\S]*?border: 0;/);
-    expect(aiReplySource).toMatch(/\.ai-note-meta\s*\{[\s\S]*?border: 0;/);
-    expect(aiReplySource).toMatch(/\.action-btn\s*\{[\s\S]*?border: 0;/);
+    expect(aiReplySource).toMatch(/\.ai-note-meta\s*\{[\s\S]*?border: 1px solid var\(--ai-section-border\);/);
+    expect(aiReplySource).toMatch(/\.action-btn\s*\{[\s\S]*?border: 1px solid var\(--ai-section-border\);/);
   });
 
   it('暗色目录覆盖层和 AI 外壳使用主题表面背景与边框', () => {
@@ -246,8 +246,8 @@ describe('笔记库页面树交互接线', () => {
   });
 
   it('只在固定预览顶栏展示笔记标题，正文直接从用户内容开始', () => {
-    expect(readonlyPreviewSource).toContain('<h2>{{ displayNote.title || t(\'note.untitled\') }}</h2>');
-    expect(readonlyPreviewSource).not.toContain('<h1>{{ displayNote.title || t(\'note.untitled\') }}</h1>');
+    expect(readonlyPreviewSource).toContain("<h2>{{ displayNote.title || t('note.untitled') }}</h2>");
+    expect(readonlyPreviewSource).not.toContain("<h1>{{ displayNote.title || t('note.untitled') }}</h1>");
     expect(readonlyPreviewSource).toContain('class="note-readonly-preview__content" v-html="previewHtml"');
     expect(readonlyPreviewSource).toMatch(/\.note-readonly-preview__content[\s\S]*:deep\(> :first-child\)/);
   });

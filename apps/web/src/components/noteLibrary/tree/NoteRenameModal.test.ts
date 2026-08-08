@@ -16,8 +16,9 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
 vi.mock('@/components/base/BasicComponents/BModal/BModal.vue', () => ({
   default: {
     name: 'BModalStub',
-    props: ['visible'],
-    template: '<section v-if="visible" class="modal-stub"><slot /></section>',
+    props: ['visible', 'initialFocus'],
+    template:
+      '<section v-if="visible" class="modal-stub" :data-initial-focus="initialFocus"><slot /></section>',
   },
 }));
 
@@ -95,6 +96,15 @@ describe('NoteRenameModal 标题更新边界', () => {
     expect(renamed).toHaveBeenCalledWith({ id: 'note-1', title: '新标题' });
     expect(mocks.success).toHaveBeenCalledWith(zhCN.note.renameSuccess);
     expect(visible.value).toBe(false);
+  });
+
+  it('打开重命名弹框时声明标题输入框为初始焦点', async () => {
+    const { host } = mountModal();
+    await settle();
+
+    expect(host.querySelector('.modal-stub')?.getAttribute('data-initial-focus')).toBe(
+      '#note-page-rename-input',
+    );
   });
 
   it('标题未变化时直接关闭且不产生写请求', async () => {

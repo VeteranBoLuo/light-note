@@ -5,6 +5,7 @@ import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
 import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
+import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
@@ -415,7 +416,10 @@ export function buildNewUserSeedContent({ lang = 'zh-CN', siteUrl } = {}) {
 }
 
 function escapeHtml(text) {
-  return String(text).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]);
+  return String(text).replace(
+    /[&<>"']/g,
+    (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch],
+  );
 }
 
 /**
@@ -428,7 +432,8 @@ const NOTE_REF_PLACEHOLDER_RE = /\{\{ref:(bookmark|note):([A-Za-z0-9_-]+)\}\}/g;
 
 function resolveNoteRefPlaceholders(content, ids, rawContent) {
   return String(rawContent).replace(NOTE_REF_PLACEHOLDER_RE, (match, type, key) => {
-    const definition = type === 'bookmark' ? content.bookmarks.find((b) => b.key === key) : content.notes.find((n) => n.key === key);
+    const definition =
+      type === 'bookmark' ? content.bookmarks.find((b) => b.key === key) : content.notes.find((n) => n.key === key);
     const id = type === 'bookmark' ? ids.bookmarks[key] : ids.notes[key];
     if (!definition || !id) return match;
     const label = escapeHtml(type === 'bookmark' ? definition.name : definition.title);
@@ -537,7 +542,9 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
       const noteId = ids.notes[note.key];
       const resolvedContent = resolveNoteRefPlaceholders(content, ids, note.content);
       const noteContent =
-        note.type === 'markdown' ? normalizeMarkdownBlockquoteEntities(resolvedContent) : resolvedContent;
+        note.type === 'markdown'
+          ? normalizeMarkdownBlockquoteEntities(resolvedContent)
+          : sanitizePersistedNoteContent(resolvedContent, 'html', 'seed-new-user-note');
       await connection.query('INSERT INTO note SET ?', [
         insertData({
           id: noteId,

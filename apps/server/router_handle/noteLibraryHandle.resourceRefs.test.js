@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildNoteFormatConversionAnalysisHash } from '../util/noteFormatConversion.js';
 
 // 笔记内联提及(N0)handler 接入测试:验证 updateNote / restoreNoteVersion 在 commit 前正确同步引用,
 // 尤其 updateNote「仅改标题/标签(不带 content)时绝不解析、绝不 sync」——否则会用空正文误删用户已有引用。
@@ -68,7 +69,7 @@ vi.mock('../util/services/noteReferenceService.js', () => ({
   listOwnedResourceBacklinks,
 }));
 
-const { updateNote, restoreNoteVersion, delNote, resolveResourceRefs, resourceBacklinks } =
+const { updateNote, convertNoteMode, restoreNoteVersion, delNote, resolveResourceRefs, resourceBacklinks } =
   await import('./noteLibraryHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -80,9 +81,11 @@ describe('updateNote 引用同步接入(N0)', () => {
     ensureNotVisitor.mockReturnValue(true);
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT id, title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: '旧标题', content: '旧正文', type: 'html' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: '旧标题', content: '旧正文', type: 'html', revision: 1 }]];
       }
+      if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
     });
     connection.commit.mockResolvedValue();
@@ -93,8 +96,8 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('提交了正文(含站内链接) → commit 前同步引用', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html', revision: 1 }]];
       }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
@@ -128,8 +131,8 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('提交空正文 → 仍同步(空集合删除旧引用)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html', revision: 1 }]];
       }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
@@ -142,8 +145,8 @@ describe('updateNote 引用同步接入(N0)', () => {
 
   it('旧页面提交 Markdown 的 &gt; → 写库前恢复为真实引用标记', async () => {
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: '日报', content: '> 原始引用', type: 'markdown' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: '日报', content: '> 原始引用', type: 'markdown', revision: 1 }]];
       }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
@@ -158,14 +161,15 @@ describe('updateNote 引用同步接入(N0)', () => {
     const updateCall = connection.query.mock.calls.find(
       ([sql]) => sql === 'update note set ? where id=? and create_by=? and del_flag=0',
     );
-    expect(updateCall?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', type: 'markdown' });
+    expect(updateCall?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', revision: 2 });
+    expect(updateCall?.[1]?.[0]).not.toHaveProperty('type');
   });
 
   it('只带 content 不带 type → 用最终笔记的 type 解析(P1-4,不凭空按 html)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'markdown' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'markdown', revision: 1 }]];
       }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
@@ -179,9 +183,10 @@ describe('updateNote 引用同步接入(N0)', () => {
   it('只切换 type 不带 content → 用最终正文与类型重算引用', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT id, title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: 'o', content: '[x](/noteLibrary/n1)', type: 'html' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: '[x](/noteLibrary/n1)', type: 'html', revision: 1 }]];
       }
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
     });
 
@@ -200,8 +205,8 @@ describe('updateNote 引用同步接入(N0)', () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     syncNoteResourceRefs.mockRejectedValueOnce(syncError);
     connection.query.mockImplementation(async (sql) => {
-      if (/SELECT (?:id, )?title, content, type FROM note/.test(sql)) {
-        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html' }]];
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'note-1', title: 'o', content: 'o', type: 'html', revision: 1 }]];
       }
       if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
@@ -243,8 +248,59 @@ describe('updateNote 引用同步接入(N0)', () => {
     const updateCall = connection.query.mock.calls.find(
       ([sql]) => sql === 'update note set ? where id=? and create_by=? and del_flag=0',
     );
-    expect(updateCall?.[1]).toEqual([{ title: '安全标题', updateBy: 'u1' }, 'note-1', 'u1']);
+    expect(updateCall?.[1]).toEqual([{ title: '安全标题', updateBy: 'u1', revision: 2 }, 'note-1', 'u1']);
     expect(lastSent(res).status).toBe(200);
+  });
+
+  it('提交旧 revision → 返回当前安全快照且不执行任何覆盖写入', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [
+          [
+            {
+              id: 'note-1',
+              title: '云端标题',
+              content: '<p>云端正文</p><script>alert(1)</script>',
+              type: 'html',
+              revision: 4,
+              update_time: '2026-08-07 12:00:00',
+            },
+          ],
+        ];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await updateNote(
+      {
+        user: { id: 'u1' },
+        body: { id: 'note-1', revision: 3, content: '<p>本地正文</p>', type: 'html' },
+      },
+      res,
+    );
+
+    expect(lastSent(res)).toMatchObject({
+      status: 409,
+      data: {
+        code: 'NOTE_VERSION_CONFLICT',
+        details: {
+          current: {
+            id: 'note-1',
+            title: '云端标题',
+            content: '<p>云端正文</p>',
+            type: 'html',
+            revision: 4,
+          },
+        },
+      },
+    });
+    expect(connection.query.mock.calls.some(([sql]) => /^\s*(?:update|insert|delete)\b/i.test(String(sql)))).toBe(
+      false,
+    );
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
   });
 
   it('非本人或已删除笔记在任何关系写入前返回 404', async () => {
@@ -276,6 +332,153 @@ describe('updateNote 引用同步接入(N0)', () => {
   });
 });
 
+describe('convertNoteMode 原子格式转换', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+    extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
+    syncNoteResourceRefs.mockResolvedValue({ inserted: 1, updated: 0, deleted: 0 });
+    connection.commit.mockResolvedValue();
+    connection.rollback.mockResolvedValue();
+  });
+
+  it('锁定 revision、强制保存还原点、更新格式并在 commit 前同步引用', async () => {
+    const convertedContent = '# 新标题\n\n[引用](/noteLibrary/n1)';
+    const analysisHash = buildNoteFormatConversionAnalysisHash({
+      targetType: 'markdown',
+      convertedContent,
+      baseRevision: 3,
+    });
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [
+          [
+            {
+              id: 'note-1',
+              title: '标题',
+              content: '<h1>旧标题</h1>',
+              type: 'html',
+              revision: 3,
+              update_time: '2026-08-08 01:00:00',
+            },
+          ],
+        ];
+      }
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
+      if (/SELECT update_time FROM note/.test(sql)) return [[{ update_time: '2026-08-08 01:05:00' }]];
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await convertNoteMode(
+      {
+        user: { id: 'u1' },
+        body: { id: 'note-1', targetType: 'markdown', convertedContent, baseRevision: 3, analysisHash },
+      },
+      res,
+    );
+
+    const historyInsert = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?');
+    expect(historyInsert?.[1]?.[0]).toMatchObject({
+      title: '标题',
+      content: '<h1>旧标题</h1>',
+      type: 'html',
+      sourceRevision: 3,
+      reason: 'format_conversion',
+    });
+    expect(connection.query).toHaveBeenCalledWith(
+      'UPDATE note SET content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=? AND del_flag=0',
+      [convertedContent, 'markdown', 'u1', 4, 'note-1', 'u1'],
+    );
+    expect(extractOwnedResourceRefs).toHaveBeenCalledWith({ content: convertedContent, type: 'markdown' });
+    expect(syncNoteResourceRefs).toHaveBeenCalledWith(connection, {
+      userId: 'u1',
+      noteId: 'note-1',
+      refs: [{ type: 'note', id: 'n1' }],
+    });
+    expect(syncNoteResourceRefs.mock.invocationCallOrder[0]).toBeLessThan(
+      connection.commit.mock.invocationCallOrder[0],
+    );
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { id: 'note-1', content: convertedContent, type: 'markdown', revision: 4 },
+    });
+  });
+
+  it('baseRevision 过期时返回当前安全版本，不创建快照也不覆盖', async () => {
+    const convertedContent = '# 本地版本';
+    const analysisHash = buildNoteFormatConversionAnalysisHash({
+      targetType: 'markdown',
+      convertedContent,
+      baseRevision: 3,
+    });
+    connection.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'note-1',
+          title: '云端',
+          content: '<p>云端</p><script>alert(1)</script>',
+          type: 'html',
+          revision: 4,
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await convertNoteMode(
+      {
+        user: { id: 'u1' },
+        body: { id: 'note-1', targetType: 'markdown', convertedContent, baseRevision: 3, analysisHash },
+      },
+      res,
+    );
+
+    expect(lastSent(res)).toMatchObject({
+      status: 409,
+      data: {
+        code: 'NOTE_VERSION_CONFLICT',
+        details: { current: { content: '<p>云端</p>', revision: 4 } },
+      },
+    });
+    expect(connection.query.mock.calls.some(([sql]) => /^\s*(?:UPDATE|INSERT|DELETE)\b/u.test(String(sql)))).toBe(
+      false,
+    );
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('预览正文和指纹不一致时拒绝转换', async () => {
+    const analysisHash = buildNoteFormatConversionAnalysisHash({
+      targetType: 'markdown',
+      convertedContent: '# 预览内容',
+      baseRevision: 3,
+    });
+    connection.query.mockResolvedValueOnce([
+      [{ id: 'note-1', title: '标题', content: '<p>旧正文</p>', type: 'html', revision: 3 }],
+    ]);
+    const res = mockRes();
+
+    await convertNoteMode(
+      {
+        user: { id: 'u1' },
+        body: {
+          id: 'note-1',
+          targetType: 'markdown',
+          convertedContent: '# 被篡改内容',
+          baseRevision: 3,
+          analysisHash,
+        },
+      },
+      res,
+    );
+
+    expect(lastSent(res)).toMatchObject({ status: 409, data: { code: 'NOTE_CONVERSION_STALE' } });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+});
+
 describe('restoreNoteVersion 引用同步接入(N0)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -292,8 +495,8 @@ describe('restoreNoteVersion 引用同步接入(N0)', () => {
       if (/FROM note_versions WHERE id=/.test(sql)) {
         return [[{ note_id: 'note-1', title: 'V', content: '<a href="/cloudSpace?fileId=f9">f</a>', type: 'html' }]];
       }
-      if (/SELECT title, content, type FROM note WHERE id=/.test(sql)) {
-        return [[{ title: 'c', content: 'c', type: 'html' }]];
+      if (/SELECT title, content, type, revision, update_time FROM note WHERE id=/.test(sql)) {
+        return [[{ title: 'c', content: 'c', type: 'html', revision: 3 }]];
       }
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -322,8 +525,8 @@ describe('restoreNoteVersion 引用同步接入(N0)', () => {
       if (/FROM note_versions WHERE id=/.test(sql)) {
         return [[{ note_id: 'note-1', title: 'V', content: '<a href="/cloudSpace?fileId=f9">f</a>', type: 'html' }]];
       }
-      if (/SELECT title, content, type FROM note WHERE id=/.test(sql)) {
-        return [[{ title: 'c', content: 'c', type: 'html' }]];
+      if (/SELECT title, content, type, revision, update_time FROM note WHERE id=/.test(sql)) {
+        return [[{ title: 'c', content: 'c', type: 'html', revision: 3 }]];
       }
       if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
       return [{ affectedRows: 1 }];
@@ -333,6 +536,45 @@ describe('restoreNoteVersion 引用同步接入(N0)', () => {
 
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('恢复时 revision 已变化 → 保留当前版本且不创建恢复快照', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (/FROM note_versions WHERE id=/.test(sql)) {
+        return [[{ note_id: 'note-1', title: '历史标题', content: '<p>历史正文</p>', type: 'html' }]];
+      }
+      if (/SELECT title, content, type, revision, update_time FROM note WHERE id=/.test(sql)) {
+        return [
+          [
+            {
+              title: '云端标题',
+              content: '<p>云端正文</p>',
+              type: 'html',
+              revision: 5,
+              update_time: '2026-08-07 12:00:00',
+            },
+          ],
+        ];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const res = mockRes();
+
+    await restoreNoteVersion({ user: { id: 'u1' }, body: { id: 'ver-1', revision: 4 } }, res);
+
+    expect(lastSent(res)).toMatchObject({
+      status: 409,
+      data: {
+        code: 'NOTE_VERSION_CONFLICT',
+        details: { current: { title: '云端标题', revision: 5 } },
+      },
+    });
+    expect(connection.query.mock.calls.some(([sql]) => /^\s*(?:update|insert|delete)\b/i.test(String(sql)))).toBe(
+      false,
+    );
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
   });
 });
 

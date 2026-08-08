@@ -55,7 +55,13 @@
         </BButton>
 
         <BButton class="note-tree-title" @click="emit('open', node.id)">
-          <SvgIcon :src="pageIcon" size="15" class="note-tree-page-icon" aria-hidden="true" />
+          <SvgIcon
+            :src="pageIcon"
+            size="16"
+            class="note-tree-page-icon"
+            :class="{ 'is-markdown': markdownPage }"
+            aria-hidden="true"
+          />
           <span class="note-tree-title-text">{{ node.title || t('note.untitled') }}</span>
           <span v-if="node.isTop" class="note-tree-pin" :aria-label="t('common.pinned')">
             <SvgIcon :src="icon.contextMenu.pin" size="12" aria-hidden="true" />
@@ -125,7 +131,7 @@
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
   import type { NoteTreeDropPosition } from '@/utils/noteTreeDrop';
-  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -175,6 +181,7 @@
   const { t } = useI18n();
   const active = computed(() => props.activePageId === props.node.id);
   const pageIcon = computed(() => getNoteTreePageIcon(props.node.type));
+  const markdownPage = computed(() => isMarkdownNoteTreePage(props.node.type));
   const browsing = computed(() => props.browseParentId === props.node.id && !active.value);
   const expanded = computed(() => props.expandedIds.has(props.node.id));
   const loading = computed(() => props.loadingKeys.has(props.node.id));
@@ -472,6 +479,10 @@
   .note-tree-page-icon {
     flex: 0 0 auto;
     color: var(--resource-note-color, #00a884);
+
+    &.is-markdown {
+      color: var(--primary-color, #615ced);
+    }
   }
 
   .note-tree-title-text {

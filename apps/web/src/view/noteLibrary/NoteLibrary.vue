@@ -6,7 +6,7 @@
     layout="workspace"
     compact-mobile-heading
     :title-actionable="!bookmark.isMobile"
-    @title-click="resetNoteLibrary"
+    @title-click="handleNoteLibraryTitleClick"
   >
     <template #meta>
       <span class="note-count-chip">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
@@ -670,6 +670,8 @@
     normalizePinnedAfterDropTarget,
     type NoteTreeDropTarget,
   } from '@/utils/noteTreeDrop';
+  import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
+  import { getRootZoom } from '@/utils/zoom';
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -877,7 +879,7 @@
   const moveNoteVisible = ref(false);
   const activeAttachTarget = ref<{ id: string; title?: string } | null>(null);
   const attachPagesVisible = ref(false);
-  const activeRenameNote = ref<{ id: string; title?: string } | null>(null);
+  const activeRenameNote = ref<{ id: string; title?: string; revision?: number } | null>(null);
   const renameNoteVisible = ref(false);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
@@ -890,6 +892,12 @@
   const previewNoteSeed = ref<Record<string, any> | null>(null);
   const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
   const previewChildCount = computed(() => Math.max(0, Number(previewNoteSeed.value?.childCount || 0)));
+  interface DesktopPreviewScrollSnapshot {
+    top: number;
+    left: number;
+    viewMode: string;
+  }
+  let desktopPreviewScrollSnapshot: DesktopPreviewScrollSnapshot | null = null;
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -1208,7 +1216,7 @@
   }
 
   async function selectDirectory(noteId: string | null) {
-    closeDesktopPreview();
+    closeDesktopPreview(false);
     noteSidebarMode.value = 'directory';
     void recordNoteTreeProductEvent('note_tree_branch_selected', {
       surface: noteTreeSurface(),
@@ -1231,6 +1239,7 @@
     const noteId = String(typeof noteOrId === 'string' ? noteOrId : noteOrId?.id || '').trim();
     if (!noteId) return;
     if (bookmark.isMobile) return openDirectoryPage(noteId);
+    captureDesktopPreviewScroll();
     const source = (typeof noteOrId === 'object' && noteOrId) ||
       noteList.value.find((item) => String(item.id) === noteId) ||
       findLoadedTreeNode(noteId) || { id: noteId };
@@ -1243,9 +1252,12 @@
     });
   }
 
-  function closeDesktopPreview() {
+  function closeDesktopPreview(restoreScroll = true) {
+    const snapshot = restoreScroll ? desktopPreviewScrollSnapshot : null;
+    desktopPreviewScrollSnapshot = null;
     previewNoteId.value = null;
     previewNoteSeed.value = null;
+    if (snapshot) void restoreDesktopPreviewScroll(snapshot);
   }
 
   async function toggleTreeNode(node: any) {
@@ -1346,11 +1358,15 @@
     if (blockGuestWrite('rename-note')) return;
     const id = String(note?.id || '').trim();
     if (!id) return;
-    activeRenameNote.value = { id, title: String(note?.title || '') };
+    activeRenameNote.value = {
+      id,
+      title: String(note?.title || ''),
+      revision: Math.max(1, Number(note?.revision || 1)),
+    };
     renameNoteVisible.value = true;
   }
 
-  async function handleNoteRenamed(updated: { id: string; title: string }) {
+  async function handleNoteRenamed(updated: { id: string; title: string; revision?: number }) {
     renameNoteVisible.value = false;
     recordOperation({ module: '笔记库', operation: `重命名笔记【${updated.title}】` });
     await Promise.all([refreshTree(), reloadNotes()]);
@@ -1541,6 +1557,33 @@
   function noteWorkspaceElement() {
     const target = noteWorkspaceRef.value as any;
     return (target?.$el || target) as HTMLElement | null;
+  }
+
+  function noteListScrollElement() {
+    return noteWorkspaceElement()?.querySelector<HTMLElement>('.note-main-panel [data-mobile-resource-scroll]') ?? null;
+  }
+
+  function captureDesktopPreviewScroll() {
+    if (desktopPreviewOpen.value) return;
+    const element = noteListScrollElement();
+    desktopPreviewScrollSnapshot = element
+      ? {
+          top: element.scrollTop,
+          left: element.scrollLeft,
+          viewMode: currentViewMode.value,
+        }
+      : null;
+  }
+
+  async function restoreDesktopPreviewScroll(snapshot: DesktopPreviewScrollSnapshot) {
+    await nextTick();
+    window.requestAnimationFrame(() => {
+      if (desktopPreviewOpen.value || snapshot.viewMode !== currentViewMode.value) return;
+      const element = noteListScrollElement();
+      if (!element) return;
+      element.scrollTop = snapshot.top;
+      element.scrollLeft = snapshot.left;
+    });
   }
 
   /*
@@ -1808,11 +1851,19 @@
     searchTimer.value = null;
     searchValue.value = '';
     debouncedSearch.value = '';
-    closeDesktopPreview();
+    closeDesktopPreview(false);
     exitBatch();
     await router.replace('/noteLibrary');
     if (alreadyReset) await reloadNotes();
     await getAllTags();
+  }
+
+  async function handleNoteLibraryTitleClick() {
+    if (desktopPreviewOpen.value) {
+      closeDesktopPreview();
+      return;
+    }
+    await resetNoteLibrary();
   }
 
   onBeforeUnmount(() => {
@@ -1823,6 +1874,7 @@
     clearDragDropTarget();
     treeMotionCleanupTimers.forEach((timer) => window.clearTimeout(timer));
     treeMotionCleanupTimers.clear();
+    desktopPreviewScrollSnapshot = null;
     noteRequestSeq += 1;
   });
 
@@ -2047,7 +2099,7 @@
   );
 
   function selectMobileDirectoryTag(key: string) {
-    closeDesktopPreview();
+    closeDesktopPreview(false);
     noteSidebarMode.value = 'tags';
     const query = { ...router.currentRoute.value.query };
     delete query._rt;
@@ -2373,6 +2425,62 @@
     return !browsingAllDirectoryNotes.value;
   }
 
+  let treeDragScrollFrame: number | null = null;
+  let treeDragScrollPointer: { clientX: number; clientY: number } | null = null;
+
+  function stopTreeDragAutoScroll() {
+    treeDragScrollPointer = null;
+    if (treeDragScrollFrame !== null) window.cancelAnimationFrame(treeDragScrollFrame);
+    treeDragScrollFrame = null;
+  }
+
+  function noteTreeScrollElement() {
+    return noteWorkspaceElement()?.querySelector<HTMLElement>('.note-tree-scroll') ?? null;
+  }
+
+  function runTreeDragAutoScroll() {
+    treeDragScrollFrame = null;
+    const pointer = treeDragScrollPointer;
+    const container = noteTreeScrollElement();
+    if (!pointer || !container) return stopTreeDragAutoScroll();
+
+    const step = resolveNoteTreeDragScrollStep({
+      ...pointer,
+      rect: container.getBoundingClientRect(),
+      rootZoom: getRootZoom(),
+    });
+    if (!step) return stopTreeDragAutoScroll();
+
+    const previousTop = container.scrollTop;
+    const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+    container.scrollTop = Math.min(maxTop, Math.max(0, previousTop + step));
+    if (container.scrollTop === previousTop) return stopTreeDragAutoScroll();
+
+    scheduleDragDropTarget(resolveDropTargetAtPoint(pointer.clientX, pointer.clientY), true);
+    treeDragScrollFrame = window.requestAnimationFrame(runTreeDragAutoScroll);
+  }
+
+  function updateTreeDragAutoScroll(event: DragEvent) {
+    const container = noteTreeScrollElement();
+    if (!container) {
+      stopTreeDragAutoScroll();
+      return false;
+    }
+    const pointer = { clientX: event.clientX, clientY: event.clientY };
+    const step = resolveNoteTreeDragScrollStep({
+      ...pointer,
+      rect: container.getBoundingClientRect(),
+      rootZoom: getRootZoom(),
+    });
+    if (!step) {
+      stopTreeDragAutoScroll();
+      return false;
+    }
+    treeDragScrollPointer = pointer;
+    if (treeDragScrollFrame === null) treeDragScrollFrame = window.requestAnimationFrame(runTreeDragAutoScroll);
+    return true;
+  }
+
   function onStart(event?: { item?: HTMLElement; oldIndex?: number }) {
     document.body.style.userSelect = 'none';
     noteDragging.value = true;
@@ -2387,6 +2495,7 @@
   }
 
   function cleanupTreeNativeDrag() {
+    stopTreeDragAutoScroll();
     window.removeEventListener('dragover', onTreeNativeDragOver, true);
     window.removeEventListener('drop', onTreeNativeDrop, true);
     treeDragImageElement?.remove();
@@ -2430,9 +2539,11 @@
 
   function onTreeNativeDragOver(event: DragEvent) {
     if (!draggingNoteId.value) return;
+    const autoScrolling = updateTreeDragAutoScroll(event);
     const target = resolveDropTargetAtPoint(event.clientX, event.clientY);
     if (!target || isInvalidDropTarget(target)) {
       clearDragDropTarget();
+      if (autoScrolling) event.preventDefault();
       return;
     }
     event.preventDefault();

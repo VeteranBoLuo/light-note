@@ -2,8 +2,31 @@
   <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly }">
     <!-- HTML 模式：TinyMCE -->
     <template v-if="currentType === 'html'">
-      <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly"></div>
-      <div class="note-editor-scroll">
+      <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly">
+        <EditorToolbarV2
+          compact
+          :mobile="isMobile"
+          :ariaLabel="t('noteDetail.editor.toolbarLabel')"
+          v-bind="editorToolbarProps"
+          @action="handleEditorToolbarAction"
+        />
+      </div>
+      <EditorFindBar
+        v-if="richFindVisible && !readonly"
+        ref="richFindInputRef"
+        v-model:query="richFindText"
+        v-model:replacement="richReplaceText"
+        v-model:match-case="richFindMatchCase"
+        v-model:whole-word="richFindWholeWord"
+        :match-count="richFindCount"
+        :status-text="richFindStatusText"
+        @next="runRichFind('next')"
+        @previous="runRichFind('previous')"
+        @replace="replaceRichFindMatch"
+        @replace-all="replaceAllRichFindMatches"
+        @close="closeRichFind"
+      />
+      <div v-auto-scrollbar class="note-editor-scroll">
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
@@ -19,77 +42,86 @@
     <!-- Markdown 模式：textarea + 预览 -->
     <template v-else>
       <div class="md-editor-container">
-        <div class="md-editor-toolbar" v-if="!readonly">
+        <div class="md-editor-toolbar" v-if="!readonly && isMobile">
           <BTabs v-model:active-tab="mdView" class="md-view-toggle" :options="mdViewOptions" variant="line" />
         </div>
-        <!--
-          Markdown 的编辑工具栏。富文本模式本来就有一条(#editor-toolbar),Markdown 一直没有,
-          插入类操作才无处安放 —— 塞进视图 tab 那行像第四个 tab,塞进编辑栏头部会把左栏撑高、
-          和预览栏标签行错位,悬浮又是贴上去的补丁。这里补齐这条横跨整个编辑区的工具栏,
-          两栏的对齐完全不受影响,以后加插入图片/表格也有地方放。
-        -->
-        <div class="md-edit-toolbar" v-if="!readonly && mdView !== 'preview'">
-          <!-- 用 BTooltip 而不是原生 title:原生的要悬停一秒才出、样式也和站内其它工具栏不一致 -->
-          <BTooltip v-for="tool in markdownTextTools" :key="tool.key" :title="tool.label">
-            <BButton class="md-tool-button" size="small" :aria-label="tool.label" @click="tool.run">
-              <SvgIcon :src="tool.icon" size="16" />
-            </BButton>
-          </BTooltip>
-          <span class="md-tool-divider" />
-          <BTooltip v-for="tool in markdownInsertTools" :key="tool.key" :title="tool.label">
-            <BButton
-              class="md-tool-button"
-              size="small"
-              :aria-label="tool.label"
-              :disabled="tool.disabled"
-              @click="tool.run"
-            >
-              <SvgIcon :src="tool.icon" size="16" />
-            </BButton>
-          </BTooltip>
-          <BTooltip :title="$t('note.insertDiagram')">
-            <BDropdown :trigger="'click'" :align="'left'" :menu-options="diagramMenuOptions">
-              <BButton class="md-tool-button" size="small" :aria-label="$t('note.insertDiagram')">
-                <SvgIcon :src="icon.noteDiagram" size="16" />
-              </BButton>
-            </BDropdown>
-          </BTooltip>
-        </div>
+        <EditorToolbarV2
+          v-if="!readonly && (!isMobile || mdView !== 'preview')"
+          compact
+          :mobile="isMobile"
+          :ariaLabel="t('noteDetail.editor.toolbarLabel')"
+          v-bind="editorToolbarProps"
+          @action="handleEditorToolbarAction"
+        >
+          <template v-if="!isMobile" #trailing>
+            <div class="md-view-switch" role="group" :aria-label="t('noteDetail.editor.viewMode')">
+              <BTooltip v-for="option in desktopMdViewOptions" :key="option.key" :title="option.label">
+                <BButton
+                  class="md-view-switch__button"
+                  :class="{ 'is-active': mdView === option.key }"
+                  size="small"
+                  :aria-label="option.label"
+                  :aria-pressed="mdView === option.key"
+                  @click="mdView = option.key"
+                >
+                  <SvgIcon :src="option.icon" size="17" aria-hidden="true" />
+                </BButton>
+              </BTooltip>
+            </div>
+          </template>
+        </EditorToolbarV2>
+        <EditorFindBar
+          v-if="richFindVisible && !readonly"
+          ref="richFindInputRef"
+          v-model:query="richFindText"
+          v-model:replacement="richReplaceText"
+          v-model:match-case="richFindMatchCase"
+          v-model:whole-word="richFindWholeWord"
+          :match-count="richFindCount"
+          :status-text="richFindStatusText"
+          @next="runRichFind('next')"
+          @previous="runRichFind('previous')"
+          @replace="replaceRichFindMatch"
+          @replace-all="replaceAllRichFindMatches"
+          @close="closeRichFind"
+        />
         <!-- 工具栏的「插入图片」走这里;正文粘贴图片仍是原来的 onMarkdownPaste 通道 -->
-        <input
+        <BUpload
           ref="markdownImageInputRef"
-          type="file"
           accept="image/*"
-          class="md-hidden-file-input"
+          :multiple="false"
+          raw-file
+          :max-total-size="null"
+          triggerless
           @change="onMarkdownImagePicked"
         />
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
-            <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdEdit') }}</div>
-            <BInput
-              ref="mdTextareaInputRef"
-              v-model:value="mdContent"
+            <MarkdownCodeMirror
+              ref="mdCodeMirrorRef"
+              :model-value="mdContent"
               class="md-textarea"
-              type="textarea"
-              @input="onMdInput"
+              :mobile="isMobile"
+              :locale="currentLang"
+              @update:model-value="onMdInput"
               @scroll="syncMdScroll('edit')"
               @keydown="onMarkdownMentionKeydown"
-              @keyup="syncOrOpenMarkdownMention"
-              @click="syncOrOpenMarkdownMention"
+              @command="runMarkdownToolbarAction"
+              @selection-change="syncOrOpenMarkdownMention"
+              @history-change="markdownHistoryState = $event"
               @paste="onMarkdownPaste"
-              @focusout="closeInlineMention"
+              @blur="closeInlineMention"
               :readonly="readonly"
               :placeholder="$t('note.mdPlaceholder')"
             />
           </div>
           <div class="md-preview-pane" v-show="mdView === 'preview' || mdView === 'split'">
-            <div v-if="mdView === 'split'" class="md-editor-label">{{ $t('note.mdPreview') }}</div>
             <div
               ref="mdPreviewRef"
+              v-auto-scrollbar
               class="md-preview"
               @scroll="syncMdScroll('preview')"
-              @click="handleRenderedResourceLinkClick"
-              @touchend="handleRenderedResourceLinkClick"
+              @click="handleMarkdownPreviewClick"
               v-html="renderedMd"
               v-mermaid
             ></div>
@@ -142,6 +174,138 @@
       />
     </BModal>
     <BModal
+      v-model:visible="markdownShortcutsVisible"
+      :title="t('noteDetail.editor.shortcutsTitle')"
+      width="420px"
+      :show-footer="false"
+    >
+      <p class="markdown-shortcuts-copy">{{ t('noteDetail.editor.shortcutsBody') }}</p>
+    </BModal>
+    <BModal
+      v-model:visible="richMermaidEditorVisible"
+      :title="t('noteDetail.editor.diagramEditTitle')"
+      width="min(720px, calc(100vw - 24px))"
+      :show-footer="false"
+      :mask-closable="false"
+      @close="closeRichMermaidEditor"
+    >
+      <div class="rich-mermaid-editor">
+        <p>{{ t('noteDetail.editor.diagramEditHint') }}</p>
+        <label for="note-rich-mermaid-source">{{ t('noteDetail.editor.diagramSourceLabel') }}</label>
+        <BInput
+          id="note-rich-mermaid-source"
+          v-model:value="richMermaidSource"
+          type="textarea"
+          :rows="14"
+          :maxlength="50000"
+          :placeholder="t('noteDetail.editor.diagramSourcePlaceholder')"
+        />
+        <div class="rich-mermaid-editor__actions">
+          <BButton @click="richMermaidEditorVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" @click="applyRichMermaidSource">{{ t('common.save') }}</BButton>
+        </div>
+      </div>
+    </BModal>
+    <BModal
+      v-model:visible="richColorDialogVisible"
+      :title="
+        richColorMode === 'text' ? t('noteDetail.editor.customTextColor') : t('noteDetail.editor.customBackgroundColor')
+      "
+      width="420px"
+      :show-footer="false"
+      :mask-closable="false"
+      @close="closeRichColorDialog"
+    >
+      <div class="rich-color-dialog">
+        <p>{{ t('noteDetail.editor.colorDialogHint') }}</p>
+        <div class="rich-color-dialog__palette" role="list" :aria-label="t('noteDetail.editor.colorPalette')">
+          <BButton
+            v-for="color in richColorPalette"
+            :key="color"
+            class="rich-color-dialog__swatch"
+            :class="{ 'is-active': richColorValue.toLowerCase() === color.toLowerCase() }"
+            :style="{ '--rich-color-swatch': color }"
+            :aria-label="color"
+            @click="richColorValue = color"
+          >
+            <span aria-hidden="true"></span>
+          </BButton>
+        </div>
+        <label for="note-rich-custom-color">{{ t('noteDetail.editor.colorHexLabel') }}</label>
+        <BInput
+          id="note-rich-custom-color"
+          v-model:value="richColorValue"
+          :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
+          :maxlength="9"
+          submit-on-enter
+          @enter="applyRichCustomColor"
+        />
+        <div class="rich-color-dialog__actions">
+          <BButton @click="removeRichColor">
+            {{
+              richColorMode === 'text'
+                ? t('noteDetail.editor.removeTextColor')
+                : t('noteDetail.editor.removeBackgroundColor')
+            }}
+          </BButton>
+          <BButton @click="richColorDialogVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" @click="applyRichCustomColor">{{ t('noteDetail.editor.applyColor') }}</BButton>
+        </div>
+      </div>
+    </BModal>
+    <BModal
+      v-model:visible="conversionPreviewVisible"
+      :title="conversionTargetType === 'markdown' ? t('note.switchToMd') : t('note.switchToHtml')"
+      :show-footer="false"
+      :mask-closable="false"
+      width="min(860px, calc(100vw - 24px))"
+    >
+      <div v-if="conversionReport" class="note-conversion-preview">
+        <p class="note-conversion-preview__notice">{{ t('noteDetail.editor.conversion.restorePoint') }}</p>
+        <div class="note-conversion-preview__summary">
+          <div class="is-preserved">
+            <strong>{{ t('noteDetail.editor.conversion.preserved', { count: conversionReport.preserved }) }}</strong>
+            <span>{{ t('noteDetail.editor.conversion.preservedHint') }}</span>
+          </div>
+          <div class="is-standardized">
+            <strong>{{
+              t('noteDetail.editor.conversion.standardized', { count: conversionReport.standardized })
+            }}</strong>
+            <span>{{ t('noteDetail.editor.conversion.standardizedHint') }}</span>
+          </div>
+          <div class="is-risk">
+            <strong>{{
+              t('noteDetail.editor.conversion.potentialLoss', { count: conversionReport.potentialLoss })
+            }}</strong>
+            <span>{{ t('noteDetail.editor.conversion.potentialLossHint') }}</span>
+          </div>
+        </div>
+        <div v-if="conversionIssueRows.length" class="note-conversion-preview__issues">
+          <div v-for="issue in conversionIssueRows" :key="issue.key">
+            <span>{{ issue.label }}</span>
+            <strong>{{ issue.count }}</strong>
+          </div>
+        </div>
+        <p v-else class="note-conversion-preview__safe">{{ t('noteDetail.editor.conversion.noKnownLoss') }}</p>
+        <section class="note-conversion-preview__content">
+          <strong>{{ t('noteDetail.editor.conversion.preview') }}</strong>
+          <div
+            v-if="conversionTargetType === 'html'"
+            class="note-conversion-preview__rendered"
+            v-html="conversionConvertedContent"
+            v-mermaid
+          ></div>
+          <pre v-else>{{ conversionConvertedContent }}</pre>
+        </section>
+        <div class="note-conversion-preview__actions">
+          <BButton @click="cancelModeSwitch">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" :loading="conversionSaving" @click="confirmModeSwitch">
+            {{ t('note.confirmSwitch') }}
+          </BButton>
+        </div>
+      </div>
+    </BModal>
+    <BModal
       v-model:visible="mobileResourcePreviewVisible"
       :title="t('note.resourceMention.resourceActionsTitle')"
       width="360px"
@@ -187,6 +351,51 @@
         </div>
       </div>
     </BModal>
+    <BDrawer
+      :open="mobileImageSettingsVisible"
+      :title="t('noteDetail.editor.imageSettingsTitle')"
+      placement="bottom"
+      height="auto"
+      body-padding="12px 16px max(18px, env(safe-area-inset-bottom))"
+      @close="closeMobileImageSettings"
+    >
+      <div class="mobile-image-settings">
+        <div class="mobile-image-settings__preview">
+          <img
+            v-if="mobileImageSettingsPreview.src"
+            :src="mobileImageSettingsPreview.src"
+            :alt="mobileImageSettingsPreview.alt"
+            :data-ln-size="mobileImageSettingsSize"
+          />
+        </div>
+        <p>{{ t('noteDetail.editor.imageSettingsHint') }}</p>
+        <div
+          class="mobile-image-settings__options"
+          role="group"
+          :aria-label="t('noteDetail.editor.imageSize')"
+        >
+          <BButton
+            v-for="option in mobileImageSizeOptions"
+            :key="option.key"
+            class="mobile-image-settings__option"
+            :class="[`is-${option.key}`, { 'is-active': mobileImageSettingsSize === option.key }]"
+            :aria-label="option.label"
+            :aria-pressed="mobileImageSettingsSize === option.key"
+            @click="applyMobileImageSize(option.key)"
+          >
+            <span class="mobile-image-settings__size-mark" aria-hidden="true"></span>
+            <span>{{ option.label }}</span>
+            <SvgIcon
+              v-if="mobileImageSettingsSize === option.key"
+              class="mobile-image-settings__check"
+              :src="icon.filterPanel.check"
+              size="14"
+              aria-hidden="true"
+            />
+          </BButton>
+        </div>
+      </div>
+    </BDrawer>
     <FilePreview
       v-if="inlineFilePreviewInfo"
       v-model:visible="inlineFilePreviewVisible"
@@ -239,18 +448,24 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
+  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import EditorFindBar, { type EditorFindBarExpose } from './EditorFindBar.vue';
+  import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
+  import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
-  import { inlineCachedMermaid, renderMermaidBlocks } from '@/utils/mermaidRender.ts';
+  import { MERMAID_EDIT_EVENT, inlineCachedMermaid, renderMermaidBlocks } from '@/utils/mermaidRender.ts';
   import {
     applyEditResult,
     buildCodeBlock,
     buildMarkdownTable,
+    insertMarkdownLink,
     insertBlock,
+    setLinePrefix,
     toggleLinePrefix,
     wrapSelection,
     type EditResult,
@@ -265,9 +480,17 @@
   } from '@/utils/noteHtmlToMarkdown';
   import { scrollIntoContainer } from '@/utils/zoom.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
+  import {
+    applyContentImageSizeToElement,
+    decorateRenderedMarkdownImageIndexes,
+    MARKDOWN_IMAGE_INDEX_ATTRIBUTE,
+    normalizeContentImageSize,
+    readContentImageSizeFromElement,
+    resizeMarkdownContentImage,
+    type ContentImageSize,
+  } from '@/utils/contentImageSize.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { resolveMentionQuery } from '@/utils/resourceMentionTrigger';
-  import { getTextareaCaretRect } from '@/utils/textareaCaret';
   import {
     applyResourceReferenceChipPresentation,
     buildResourceAnchorAttrs,
@@ -292,7 +515,15 @@
     type AiSource,
     type AiSourceTarget,
   } from '@/components/aiAssistant/aiSourceNavigation';
+  import {
+    analyzeNoteFormatConversion,
+    buildNoteFormatConversionAnalysisHash,
+    type NoteFormat,
+    type NoteFormatConversionReport,
+  } from '@/utils/noteFormatConversion';
 
+  // 富文本笔记不需要下载 CodeMirror；仅在真正进入 Markdown 编辑区时加载。
+  const MarkdownCodeMirror = defineAsyncComponent(() => import('./MarkdownCodeMirror.vue'));
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const CODE_LANGUAGES = [
@@ -341,6 +572,26 @@
       type: String as () => 'html' | 'markdown',
       default: 'html',
     },
+    revision: {
+      type: Number,
+      default: 1,
+    },
+    persistModeConversion: {
+      type: Function as PropType<
+        (payload: {
+          targetType: NoteFormat;
+          convertedContent: string;
+          baseRevision: number;
+          analysisHash: string;
+        }) => Promise<{
+          content: string;
+          type: NoteFormat;
+          revision: number;
+          updateTime?: number | string | null;
+        } | null>
+      >,
+      default: null,
+    },
     // 父级在打开笔记时一次批量解析；Editor 只消费展示状态，不自行按 chip 发请求。
     resourceRefs: {
       type: Array as PropType<ResolvedResourceReference[]>,
@@ -356,6 +607,7 @@
     'ready',
     'update:type',
     'switch-backup-change',
+    'mode-converted',
     'markdown-rendered',
     'resource-refs-change',
   ]);
@@ -363,31 +615,92 @@
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
   const editorKey = ref(0);
+  const richFindVisible = ref(false);
+  const richFindText = ref('');
+  const richReplaceText = ref('');
+  const richFindMatchCase = ref(false);
+  const richFindWholeWord = ref(false);
+  const richFindCount = ref(0);
+  const richFindInputRef = ref<EditorFindBarExpose | null>(null);
+  const richFindSignature = ref('');
+  let applyingRichFindReplacement = false;
+  const richToolbarState = ref({
+    canUndo: false,
+    canRedo: false,
+    bold: false,
+    italic: false,
+    todo: false,
+    bulletList: false,
+    orderedList: false,
+    block: 'p',
+  });
+  const markdownHistoryState = ref({ canUndo: false, canRedo: false });
+  type RichColorMode = 'text' | 'background';
+  const richColorDialogVisible = ref(false);
+  const richColorMode = ref<RichColorMode>('text');
+  const richColorValue = ref('#2563eb');
+  const richColorPalette = [
+    '#111827',
+    '#6b7280',
+    '#dc2626',
+    '#ea580c',
+    '#ca8a04',
+    '#16a34a',
+    '#0891b2',
+    '#2563eb',
+    '#7c3aed',
+    '#db2777',
+    '#fef3c7',
+    '#dbeafe',
+  ] as const;
+  let richColorBookmark: unknown = null;
+  const richMermaidEditorVisible = ref(false);
+  const richMermaidSource = ref('');
+  let richMermaidSourceElement: HTMLElement | null = null;
+  let richMermaidOriginalSource = '';
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
   const { t, locale } = useI18n();
   const isMobile = computed(() => bookmark.isMobile);
+  const usesNativeTextSelectionMenu = computed(() => bookmark.isMobile || bookmark.isTouchDevice);
   // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
   const canEditResourceMentions = computed(() => !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace));
   type MarkdownView = 'edit' | 'split' | 'preview';
   // MD 编辑器视图：edit / split / preview
   const mdView = ref<MarkdownView>(isMobile.value ? 'edit' : 'split');
+  const desktopMdViewOptions = computed<Array<{ key: MarkdownView; label: string; icon: string }>>(() => [
+    { key: 'edit', label: t('note.mdEdit'), icon: icon.noteDetail.toolbar.viewEdit },
+    { key: 'split', label: t('note.mdEditPreview'), icon: icon.noteDetail.toolbar.viewSplit },
+    { key: 'preview', label: t('note.mdPreview'), icon: icon.noteDetail.toolbar.viewPreview },
+  ]);
   const mdViewOptions = computed(() => {
-    const options = [
-      { key: 'edit', label: t('note.mdEdit') },
-      { key: 'split', label: t('note.mdEditPreview') },
-      { key: 'preview', label: t('note.mdPreview') },
-    ];
-    return isMobile.value ? options.filter((option) => option.key !== 'split') : options;
+    return desktopMdViewOptions.value
+      .filter((option) => !isMobile.value || option.key !== 'split')
+      .map(({ key, label }) => ({ key, label }));
   });
   watch(isMobile, (mobile) => {
     if (mobile && mdView.value === 'split') mdView.value = 'edit';
+    if (!mobile && mobileImageSettingsVisible.value) closeMobileImageSettings();
   });
   let visibilityObserver: IntersectionObserver | null = null;
 
   const currentType = ref(props.type);
-  const switchBackup = ref<{ content: string; type: string } | null>(null);
+  const switchBackup = ref<{ content: string; type: NoteFormat } | null>(null);
+  const conversionPreviewVisible = ref(false);
+  const conversionTargetType = ref<NoteFormat>('markdown');
+  const conversionBackup = ref<{ content: string; type: NoteFormat } | null>(null);
+  const conversionConvertedContent = ref('');
+  const conversionReport = ref<NoteFormatConversionReport | null>(null);
+  const conversionAnalysisHash = ref('');
+  const conversionBaseRevision = ref(1);
+  const conversionSaving = ref(false);
+  const conversionIssueRows = computed(() =>
+    (conversionReport.value?.issues || []).map((issue) => ({
+      ...issue,
+      label: t(`noteDetail.editor.conversion.issues.${issue.key}`),
+    })),
+  );
 
   // 备份状态变化时通知父组件
   watch(
@@ -401,6 +714,7 @@
   watch(
     () => props.type,
     (val) => {
+      if (mobileImageSettingsVisible.value) closeMobileImageSettings();
       currentType.value = val;
     },
   );
@@ -420,6 +734,7 @@
   watch(
     () => props.noteId,
     () => {
+      if (mobileImageSettingsVisible.value) closeMobileImageSettings();
       // 新建草稿拿到真实 id 后必须重新发布同一批链接，让父级用真实上下文批量解析。
       lastPublishedResourceRefSignature = '';
       if (currentType.value === 'markdown') {
@@ -438,7 +753,21 @@
   // Markdown 编辑器状态
   const mdContent = ref('');
   const markdownImageUploading = ref(false);
-  const markdownImageInputRef = ref<HTMLInputElement | null>(null);
+  const markdownImageInputRef = ref<{ open: () => void } | null>(null);
+  type MobileImageTarget =
+    | { kind: 'markdown'; imageIndex: number }
+    | { kind: 'html'; editor: any; element: HTMLImageElement };
+  const mobileImageSettingsVisible = ref(false);
+  const mobileImageSettingsSize = ref<ContentImageSize>('original');
+  const mobileImageSettingsPreview = ref({ src: '', alt: '' });
+  const mobileImageTarget = shallowRef<MobileImageTarget | null>(null);
+  const mobileImageSizeOptions = computed<Array<{ key: ContentImageSize; label: string }>>(() => [
+    { key: 'original', label: t('noteDetail.editor.imageSizes.original') },
+    { key: 'small', label: t('noteDetail.editor.imageSizes.small') },
+    { key: 'medium', label: t('noteDetail.editor.imageSizes.medium') },
+    { key: 'large', label: t('noteDetail.editor.imageSizes.large') },
+    { key: 'full', label: t('noteDetail.editor.imageSizes.full') },
+  ]);
   let markedLib: any = null;
   let dompurifyLib: any = null;
   const mentionPickerVisible = ref(false);
@@ -676,11 +1005,78 @@
     handleResourceRefClick(ref, anchor);
   }
 
-  // 滚动同步
-  type BInputExpose = {
-    inputEl?: HTMLInputElement | HTMLTextAreaElement | null;
-  };
-  const mdTextareaInputRef = ref<BInputExpose | null>(null);
+  function openMobileImageSettings(target: MobileImageTarget, image: HTMLImageElement) {
+    if (!isMobile.value || props.readonly) return;
+    mobileImageTarget.value = target;
+    mobileImageSettingsSize.value = readContentImageSizeFromElement(image);
+    mobileImageSettingsPreview.value = {
+      src: image.currentSrc || image.getAttribute('src') || '',
+      alt: image.getAttribute('alt') || t('note.mdImageAlt'),
+    };
+    mobileImageSettingsVisible.value = true;
+  }
+
+  function closeMobileImageSettings() {
+    mobileImageSettingsVisible.value = false;
+    mobileImageTarget.value = null;
+  }
+
+  function handleMarkdownPreviewClick(event: Event) {
+    const target = event.target;
+    const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
+    const rawIndex = image?.getAttribute(MARKDOWN_IMAGE_INDEX_ATTRIBUTE);
+    const imageIndex = rawIndex === null || rawIndex === undefined ? Number.NaN : Number(rawIndex);
+    if (image && isMobile.value && !props.readonly && Number.isSafeInteger(imageIndex) && imageIndex >= 0) {
+      event.preventDefault();
+      event.stopPropagation();
+      openMobileImageSettings({ kind: 'markdown', imageIndex }, image);
+      return;
+    }
+    handleRenderedResourceLinkClick(event);
+  }
+
+  function applyMobileImageSize(size: ContentImageSize) {
+    const target = mobileImageTarget.value;
+    if (!target || props.readonly) return;
+    const normalizedSize = normalizeContentImageSize(size);
+
+    if (target.kind === 'markdown') {
+      const result = resizeMarkdownContentImage(mdContent.value, target.imageIndex, normalizedSize);
+      if (result.start < 0) {
+        message.warning(t('noteDetail.editor.imageResizeFailed'));
+        closeMobileImageSettings();
+        return;
+      }
+      if (result.changed) {
+        const nextCursor = result.start + result.replacement.length;
+        if (mdCodeMirrorRef.value) {
+          mdCodeMirrorRef.value.replaceRange(result.start, result.end, result.replacement, nextCursor, nextCursor);
+        } else {
+          onMdInput(result.markdown);
+        }
+      }
+    } else {
+      const { editor, element } = target;
+      const body = editor?.getBody?.() as HTMLElement | null;
+      if (!body || !element.isConnected || !body.contains(element)) {
+        message.warning(t('noteDetail.editor.imageResizeFailed'));
+        closeMobileImageSettings();
+        return;
+      }
+      editor.undoManager.transact(() => {
+        applyContentImageSizeToElement(element, normalizedSize);
+        editor.nodeChanged?.();
+        editor.setDirty?.(true);
+        if (editor.dispatch) editor.dispatch('input');
+        else editor.fire?.('input');
+      });
+    }
+
+    mobileImageSettingsSize.value = normalizedSize;
+  }
+
+  // Markdown 编辑器与预览的滚动同步
+  const mdCodeMirrorRef = ref<MarkdownCodeMirrorExpose | null>(null);
   const mdPreviewRef = ref<HTMLElement | null>(null);
   let isSyncingMdScroll = false;
   let isProgrammaticMdScroll = false;
@@ -694,9 +1090,8 @@
     }, delay);
   }
 
-  function getMdTextarea() {
-    const element = mdTextareaInputRef.value?.inputEl;
-    return element instanceof HTMLTextAreaElement ? element : null;
+  function getMarkdownSelection() {
+    return mdCodeMirrorRef.value?.getSelection() || { from: mdContent.value.length, to: mdContent.value.length };
   }
 
   /**
@@ -713,7 +1108,7 @@
     const scrollContainer = content.closest<HTMLElement>('.note-editor-scroll');
     if (!selectedMatch || !scrollContainer) return;
 
-    // 让命中项落在编辑区中部偏上的安全位置，避免被工具栏或右上查找面板遮住。
+    // 让命中项落在编辑区中部偏上的安全位置，查找栏展开后也能保留充足上下文。
     const offset = Math.min(240, Math.max(80, Math.round(scrollContainer.clientHeight * 0.35)));
     scrollIntoContainer(scrollContainer, selectedMatch, offset);
   }
@@ -725,132 +1120,206 @@
     });
   }
 
-  function getTinyMceFindDialog() {
-    const dialogs = Array.from(document.querySelectorAll<HTMLElement>('.tox-tinymce-aux .tox-dialog-inline'));
-    return dialogs.find((candidate) => candidate.querySelector('[data-mce-name="findtext"]')) || null;
+  type RichFindDirection = 'current' | 'next' | 'previous';
+  type RichSearchReplaceApi = {
+    done: (select?: boolean) => void;
+    find: (text: string, matchCase: boolean, wholeWord: boolean, inSelection?: boolean) => number;
+    next: () => void;
+    prev: () => void;
+    replace: (replacement: string, forward: boolean, all: boolean) => boolean;
+  };
+
+  const richFindStatusText = computed(() => {
+    if (!richFindSignature.value) return '';
+    if (richFindCount.value <= 0) return t('noteDetail.editor.noFindResults');
+    return t('noteDetail.editor.findResults', { count: richFindCount.value });
+  });
+
+  function getRichSearchReplaceApi(editor = editorRef.value): RichSearchReplaceApi | null {
+    const api = editor?.plugins?.searchreplace as RichSearchReplaceApi | undefined;
+    return api?.find && api?.done ? api : null;
   }
 
-  function setTinyMceFindDialogVisible(visible: boolean) {
-    const dialog = getTinyMceFindDialog();
-    if (!dialog) return;
-    if (visible) {
-      dialog.style.removeProperty('visibility');
-    } else {
-      dialog.style.visibility = 'hidden';
-    }
-  }
-
-  // 固定为工具栏下方右侧锚点，并将查找框收窄，避免遮住左侧正文。
-  function positionTinyMceInlineDialog() {
-    const dialog = getTinyMceFindDialog();
-    const anchor = dialog?.parentElement;
-    const sink = anchor?.parentElement;
-    const toolbar = document.getElementById('editor-toolbar');
-    if (
-      !(dialog instanceof HTMLElement) ||
-      !(anchor instanceof HTMLElement) ||
-      !(sink instanceof HTMLElement) ||
-      !toolbar
-    ) {
-      return;
-    }
-
-    // 清掉旧版本曾写入 dialog 本身的定位样式，避免热更新后保留过期坐标。
-    dialog.style.removeProperty('position');
-    dialog.style.removeProperty('inset');
-    dialog.style.removeProperty('transform');
-
-    const zoom = getRootZoom();
-    const viewportWidth = document.documentElement.clientWidth / zoom;
-    const edge = 12;
-    const availableWidth = viewportWidth - edge * 2;
-    if (availableWidth > 0) {
-      // TinyMCE 默认 480px；420px 可避免覆盖正文，同时在窄屏时保留两侧安全边距。
-      const width = Math.min(420, availableWidth);
-      dialog.style.width = `${width}px`;
-      dialog.style.maxWidth = `${width}px`;
-    }
-
-    // TinyMCE 会在每次打开时根据“上一次选区”重算 inline dialog 的锚点，
-    // 查找过较靠下的内容后第二次打开就会跑到顶部。固定在工具栏下方右侧，
-    // 让首次打开、关闭后再次打开的位置完全一致。
-    dialog.removeAttribute('data-drag-left');
-    dialog.removeAttribute('data-drag-top');
-    const toolbarRect = toolbar.getBoundingClientRect();
-    const sinkRect = sink.getBoundingClientRect();
-    const dialogWidth = dialog.offsetWidth;
-    const dialogHeight = dialog.offsetHeight;
-    if (toolbarRect.width && sinkRect.width && dialogWidth && dialogHeight) {
-      const sinkLeft = sinkRect.left / zoom;
-      const sinkTop = sinkRect.top / zoom;
-      const right = Math.min(viewportWidth - edge, toolbarRect.right / zoom - edge);
-      const left = Math.max(edge, right - dialogWidth);
-      const preferredTop = toolbarRect.bottom / zoom + edge;
-      const maxTop = Math.max(edge, document.documentElement.clientHeight / zoom - dialogHeight - edge);
-      const top = Math.max(edge, Math.min(preferredTop, maxTop));
-
-      anchor.style.left = `${left - sinkLeft}px`;
-      anchor.style.top = `${top - sinkTop}px`;
-      anchor.style.right = 'auto';
-      anchor.style.bottom = 'auto';
-    }
-
-    if (dialog.dataset.lightNoteFindDialogBound === 'true') return;
-    dialog.dataset.lightNoteFindDialogBound = 'true';
-
-    // Inline dialog 的整个标题栏默认可拖动。查找框位置是固定工作流的一部分，关闭该拖拽交互。
-    const header = dialog.querySelector<HTMLElement>('.tox-dialog__header');
-    const dragHandle = dialog.querySelector<HTMLElement>('.tox-dialog__draghandle');
-    if (dragHandle) dragHandle.style.cursor = 'default';
-    header?.addEventListener(
-      'mousedown',
-      (event) => {
-        const target = event.target;
-        if (target instanceof Element && target.closest('.tox-button')) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      },
-      true,
-    );
-
-    const scrollAfterFindAction = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof Element)) return;
-      const action = target.closest<HTMLElement>('[data-mce-name]')?.getAttribute('data-mce-name');
-      if (action === 'Find' || action === 'Next' || action === 'Previous' || action === 'Replace') {
-        scheduleTinyMceFindMatchScroll();
-      }
-    };
-    // capture 阶段先登记，确保 TinyMCE 自己停止冒泡时也不会漏掉定位修复。
-    dialog.addEventListener('click', scrollAfterFindAction, true);
-    dialog.addEventListener('submit', () => scheduleTinyMceFindMatchScroll(), true);
-  }
-
-  function scheduleTinyMceInlineDialogPosition() {
-    // OpenWindow 时浮层已经进入 DOM。先在当前事件循环隐藏它，再等待 TinyMCE
-    // 完成两轮内部停靠；最终坐标写入后直接显示，避免用户看到“区域外 → 区域内”的闪跳。
-    setTinyMceFindDialogVisible(false);
-    window.requestAnimationFrame(() => {
-      setTinyMceFindDialogVisible(false);
-      window.requestAnimationFrame(() => {
-        setTinyMceFindDialogVisible(false);
-        positionTinyMceInlineDialog();
-        // Inline dialog 的内部停靠会在下一轮布局里再次计算一次；随后再写回固定锚点并显示。
-        window.setTimeout(() => {
-          positionTinyMceInlineDialog();
-          setTinyMceFindDialogVisible(true);
-        }, 0);
-      });
+  function currentRichFindSignature() {
+    return JSON.stringify({
+      text: richFindText.value,
+      matchCase: richFindMatchCase.value,
+      wholeWord: richFindWholeWord.value,
     });
   }
 
+  function currentMarkdownSearchRequest(): MarkdownSearchRequest {
+    return {
+      query: richFindText.value,
+      replacement: richReplaceText.value,
+      matchCase: richFindMatchCase.value,
+      wholeWord: richFindWholeWord.value,
+    };
+  }
+
+  function clearRichFindMatches(select = false) {
+    getRichSearchReplaceApi()?.done(select);
+    mdCodeMirrorRef.value?.clearSearch();
+    richFindSignature.value = '';
+    richFindCount.value = 0;
+  }
+
+  function openRichFind(editor = editorRef.value) {
+    if (props.readonly || (currentType.value === 'html' && !editor)) return;
+    if (!richFindVisible.value) {
+      const selectedText = String(
+        currentType.value === 'markdown'
+          ? mdCodeMirrorRef.value?.getSelectedText() || ''
+          : editor?.selection?.getContent?.({ format: 'text' }) || '',
+      ).trim();
+      if (selectedText && selectedText.length <= 200 && !/[\r\n]/u.test(selectedText)) {
+        richFindText.value = selectedText;
+      }
+    }
+    richFindVisible.value = true;
+    void nextTick(() => richFindInputRef.value?.focusAndSelect());
+  }
+
+  function closeRichFind() {
+    const editor = editorRef.value;
+    clearRichFindMatches();
+    richFindVisible.value = false;
+    void nextTick(() => {
+      if (currentType.value === 'markdown') mdCodeMirrorRef.value?.focus({ preventScroll: true });
+      else editor?.focus?.();
+    });
+  }
+
+  function runRichFind(direction: Exclude<RichFindDirection, 'current'> = 'next') {
+    const query = richFindText.value;
+    if (!query) {
+      clearRichFindMatches();
+      return false;
+    }
+
+    const signature = currentRichFindSignature();
+    if (currentType.value === 'markdown') {
+      const api = mdCodeMirrorRef.value;
+      if (!api) return false;
+      richFindCount.value = api.runSearch(currentMarkdownSearchRequest(), direction);
+      richFindSignature.value = signature;
+      return richFindCount.value > 0;
+    }
+
+    const api = getRichSearchReplaceApi();
+    if (!api) return false;
+    if (signature !== richFindSignature.value) {
+      api.done(false);
+      richFindCount.value = api.find(query, richFindMatchCase.value, richFindWholeWord.value, false);
+      richFindSignature.value = signature;
+      // find() 默认定位第一项；“上一个”首次触发时应从第一项向前循环到最后一项。
+      if (richFindCount.value > 0 && direction === 'previous') api.prev();
+    } else if (richFindCount.value > 0) {
+      if (direction === 'previous') api.prev();
+      else api.next();
+    }
+    scheduleTinyMceFindMatchScroll();
+    return richFindCount.value > 0;
+  }
+
+  function ensureRichFindMatches() {
+    if (richFindSignature.value === currentRichFindSignature() && richFindCount.value > 0) return true;
+    const query = richFindText.value;
+    if (!query) return false;
+    if (currentType.value === 'markdown') {
+      const api = mdCodeMirrorRef.value;
+      if (!api) return false;
+      richFindCount.value = api.runSearch(currentMarkdownSearchRequest(), 'next');
+      richFindSignature.value = currentRichFindSignature();
+      return richFindCount.value > 0;
+    }
+
+    const api = getRichSearchReplaceApi();
+    if (!api) return false;
+    api.done(false);
+    richFindCount.value = api.find(query, richFindMatchCase.value, richFindWholeWord.value, false);
+    richFindSignature.value = currentRichFindSignature();
+    scheduleTinyMceFindMatchScroll();
+    return richFindCount.value > 0;
+  }
+
+  function replaceRichFindMatch() {
+    if (currentType.value === 'markdown') {
+      const api = mdCodeMirrorRef.value;
+      if (!api || !ensureRichFindMatches()) return;
+      richFindCount.value = api.replaceSearchMatch(currentMarkdownSearchRequest());
+      richFindSignature.value = richFindCount.value > 0 ? currentRichFindSignature() : '';
+      return;
+    }
+
+    const api = getRichSearchReplaceApi();
+    if (!api || !ensureRichFindMatches()) return;
+    const editor = editorRef.value;
+    let hasRemaining = false;
+    applyingRichFindReplacement = true;
+    try {
+      editor.undoManager.transact(() => {
+        hasRemaining = api.replace(richReplaceText.value, true, false);
+      });
+      richFindCount.value = hasRemaining ? Math.max(0, richFindCount.value - 1) : 0;
+      editor.nodeChanged?.();
+      editor.setDirty?.(true);
+      if (editor.dispatch) editor.dispatch('input');
+      else editor.fire?.('input');
+    } finally {
+      applyingRichFindReplacement = false;
+    }
+    scheduleTinyMceFindMatchScroll();
+  }
+
+  function replaceAllRichFindMatches() {
+    if (currentType.value === 'markdown') {
+      const api = mdCodeMirrorRef.value;
+      if (!api || !ensureRichFindMatches()) return;
+      api.replaceAllSearchMatches(currentMarkdownSearchRequest());
+      richFindCount.value = 0;
+      richFindSignature.value = '';
+      return;
+    }
+
+    const api = getRichSearchReplaceApi();
+    if (!api || !ensureRichFindMatches()) return;
+    const editor = editorRef.value;
+    applyingRichFindReplacement = true;
+    try {
+      editor.undoManager.transact(() => {
+        api.replace(richReplaceText.value, true, true);
+      });
+      editor.nodeChanged?.();
+      editor.setDirty?.(true);
+      if (editor.dispatch) editor.dispatch('input');
+      else editor.fire?.('input');
+    } finally {
+      applyingRichFindReplacement = false;
+    }
+    richFindCount.value = 0;
+    richFindSignature.value = '';
+  }
+
+  watch([richFindText, richFindMatchCase, richFindWholeWord], () => {
+    if (!richFindVisible.value || !richFindSignature.value) return;
+    clearRichFindMatches();
+  });
+  watch(currentType, () => {
+    if (!richFindVisible.value) return;
+    clearRichFindMatches();
+    richFindVisible.value = false;
+  });
+  watch(
+    () => props.readonly,
+    (readonly) => {
+      if (!readonly || !richFindVisible.value) return;
+      clearRichFindMatches();
+      richFindVisible.value = false;
+    },
+  );
+
   type MarkdownMentionRange = { start: number; end: number };
-  type MarkdownMentionUndo = {
-    before: string;
-    after: string;
-    start: number;
-    end: number;
-  };
   type HtmlMentionSelection = {
     range: Range;
     bookmark: any | null;
@@ -858,9 +1327,6 @@
     text: string;
   };
   let markdownMentionRange: MarkdownMentionRange | null = null;
-  // Markdown 的资源插入是受控值写入，浏览器不会把它加入 textarea 原生 undo 栈。
-  // 这里只保留最近一次“提及替换”，且正文随后有任何改动便立刻失效，避免抢占普通文字撤回。
-  let markdownMentionUndo: MarkdownMentionUndo | null = null;
   // 弹窗会把焦点从 TinyMCE iframe 移走。临时锚点放在完整 @查询 前面，
   // 让恢复逻辑能重新精确选中待替换文本，而不是仅凭已经可能漂移的 Range/bookmark 猜位置。
   let htmlMentionSelection: HtmlMentionSelection | null = null;
@@ -1038,59 +1504,9 @@
     };
   }
 
-  function getMarkdownCaretRect(textarea: HTMLTextAreaElement) {
-    const sourceRect = textarea.getBoundingClientRect();
-    const style = getComputedStyle(textarea);
-    const mirror = document.createElement('div');
-    const marker = document.createElement('span');
-    const copied = [
-      'boxSizing',
-      'width',
-      'fontFamily',
-      'fontSize',
-      'fontWeight',
-      'fontStyle',
-      'letterSpacing',
-      'lineHeight',
-      'textTransform',
-      'wordSpacing',
-      'textIndent',
-      'whiteSpace',
-      'wordBreak',
-      'overflowWrap',
-      'paddingTop',
-      'paddingRight',
-      'paddingBottom',
-      'paddingLeft',
-      'borderTopWidth',
-      'borderRightWidth',
-      'borderBottomWidth',
-      'borderLeftWidth',
-    ] as const;
-    mirror.style.position = 'fixed';
-    mirror.style.visibility = 'hidden';
-    mirror.style.pointerEvents = 'none';
-    mirror.style.overflow = 'hidden';
-    mirror.style.left = `${sourceRect.left}px`;
-    mirror.style.top = `${sourceRect.top}px`;
-    mirror.style.width = `${textarea.offsetWidth}px`;
-    for (const key of copied) mirror.style[key] = style[key];
-    mirror.textContent = textarea.value.slice(0, textarea.selectionStart);
-    marker.textContent = '\u200b';
-    mirror.append(marker);
-    document.body.append(mirror);
-    const markerRect = marker.getBoundingClientRect();
-    mirror.remove();
-    return {
-      left: markerRect.left - textarea.scrollLeft,
-      top: markerRect.top - textarea.scrollTop,
-      height: markerRect.height || Number.parseFloat(style.lineHeight) || 20,
-    };
-  }
-
   /*
    * 用户主动关掉浮层(Esc / 点外面)后,这个 @ 的位置要记下来。
-   * 否则 textarea 里的 @ 还在,下一次 keyup/click 又会把它当成「正在提及」重新弹出来 ——
+   * 否则 CodeMirror 里的 @ 还在,下一次选区更新又会把它当成「正在提及」重新弹出来 ——
    * 表现就是按了 Esc 浮层立刻又冒出来,关不掉。
    * 只抑制同一个 @ 位置;继续打字或换个地方再敲 @,位置变了自然恢复。
    */
@@ -1131,9 +1547,10 @@
    */
   function syncOrOpenMarkdownMention() {
     if (!canEditResourceMentions.value || mentionPickerVisible.value || currentType.value !== 'markdown') return;
-    const textarea = getMdTextarea();
-    if (!textarea) return;
-    const query = resolveMentionQuery(textarea.value, textarea.selectionStart);
+    const markdownEditor = mdCodeMirrorRef.value;
+    if (!markdownEditor) return;
+    const selection = markdownEditor.getSelection();
+    const query = resolveMentionQuery(markdownEditor.getValue(), selection.to);
     if (!query) {
       dismissedMentionStart = null;
       return closeInlineMention();
@@ -1151,7 +1568,8 @@
     }
     inlineMentionQuery.value = query.keyword;
     // 锚定在 @ 起点:继续输入时光标在动,浮层不应跟着漂
-    setInlineMentionAnchor(getTextareaCaretRect(textarea, query.start));
+    const anchorRect = markdownEditor.coordsAtPos(query.start);
+    if (anchorRect) setInlineMentionAnchor(anchorRect);
     if (!inlineMentionVisible.value) {
       inlineMentionVisible.value = true;
       recordResourceMentionOperation('打开资源提及选择器');
@@ -1213,27 +1631,13 @@
   }
 
   function onMarkdownMentionKeydown(event: KeyboardEvent) {
-    const isUndo = (event.metaKey || event.ctrlKey) && !event.shiftKey && event.key.toLowerCase() === 'z';
-    if (!event.isComposing && isUndo && undoMarkdownMentionInsertion()) {
-      event.preventDefault();
-      return;
-    }
-    /*
-     * Ctrl/Cmd + Y 是 Windows 那套的「重做」,但浏览器把它占去开历史记录了
-     * (mac 上 Cmd+Y 打开历史,Windows Chrome 同样),在正文里按下去笔记没反应、还弹出个历史面板。
-     * 编辑区里拦下来交给原生 redo,和 Cmd+Shift+Z 等价。
-     */
     const isRedo =
       !event.isComposing &&
       (event.metaKey || event.ctrlKey) &&
       (event.key.toLowerCase() === 'y' || (event.shiftKey && event.key.toLowerCase() === 'z'));
     if (isRedo) {
       event.preventDefault();
-      try {
-        document.execCommand('redo');
-      } catch {
-        /* 浏览器不支持时保持原状,至少不再弹历史面板 */
-      }
+      mdCodeMirrorRef.value?.redo();
       return;
     }
     if (!inlineMentionVisible.value || event.isComposing) return;
@@ -1253,41 +1657,15 @@
   }
 
   function replaceMarkdownMention(text: string) {
-    const textarea = getMdTextarea();
-    const range =
-      markdownMentionRange || (textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : null);
+    const markdownEditor = mdCodeMirrorRef.value;
+    const selection = markdownEditor?.getSelection();
+    const range = markdownMentionRange || (selection ? { start: selection.from, end: selection.to } : null);
     if (!range) return false;
-    // 不使用 document.execCommand：它在 textarea 上的返回值无法保证受控状态已同步，
-    // 弹窗关闭后的 Vue 渲染就可能把“看似已插入”的文本覆盖回去。
-    const source = String(textarea?.value ?? mdContent.value ?? content.value ?? '');
+    const source = String(markdownEditor?.getValue() ?? mdContent.value ?? content.value ?? '');
     const start = Math.max(0, Math.min(range.start, source.length));
     const end = Math.max(start, Math.min(range.end, source.length));
-    const next = `${source.slice(0, start)}${text}${source.slice(end)}`;
-    markdownMentionUndo = { before: source, after: next, start, end };
-    onMdInput(next);
     const caret = start + text.length;
-    void nextTick().then(() => {
-      const currentTextarea = getMdTextarea();
-      if (!currentTextarea) return;
-      currentTextarea.focus({ preventScroll: true });
-      currentTextarea.setSelectionRange(caret, caret);
-    });
-    return true;
-  }
-
-  function undoMarkdownMentionInsertion() {
-    const undo = markdownMentionUndo;
-    if (!undo || mdContent.value !== undo.after || content.value !== undo.after) return false;
-    markdownMentionUndo = null;
-    mdContent.value = undo.before;
-    content.value = undo.before;
-    debounceRenderMd();
-    void nextTick().then(() => {
-      const textarea = getMdTextarea();
-      if (!textarea) return;
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(undo.end, undo.end);
-    });
+    markdownEditor?.replaceRange(start, end, text, caret, caret);
     return true;
   }
 
@@ -1366,24 +1744,24 @@
     if (isSyncingMdScroll) return;
     isSyncingMdScroll = true;
 
-    const textarea = getMdTextarea();
+    const editorScroll = mdCodeMirrorRef.value?.getScrollElement();
     const preview = mdPreviewRef.value;
-    if (!textarea || !preview) {
+    if (!editorScroll || !preview) {
       isSyncingMdScroll = false;
       return;
     }
 
     if (source === 'edit') {
-      // textarea → preview：按百分比同步
-      const ratio = textarea.scrollHeight - textarea.clientHeight;
+      // CodeMirror → preview：按百分比同步
+      const ratio = editorScroll.scrollHeight - editorScroll.clientHeight;
       if (ratio > 0) {
-        preview.scrollTop = (textarea.scrollTop / ratio) * (preview.scrollHeight - preview.clientHeight);
+        preview.scrollTop = (editorScroll.scrollTop / ratio) * (preview.scrollHeight - preview.clientHeight);
       }
     } else {
-      // preview → textarea：按百分比同步
+      // preview → CodeMirror：按百分比同步
       const ratio = preview.scrollHeight - preview.clientHeight;
       if (ratio > 0) {
-        textarea.scrollTop = (preview.scrollTop / ratio) * (textarea.scrollHeight - textarea.clientHeight);
+        editorScroll.scrollTop = (preview.scrollTop / ratio) * (editorScroll.scrollHeight - editorScroll.clientHeight);
       }
     }
 
@@ -1397,7 +1775,6 @@
     [() => props.type, content],
     async ([type]) => {
       if (type === 'markdown' && content.value !== mdContent.value) {
-        markdownMentionUndo = null;
         mdContent.value = content.value || '';
         if (!markedLib) await ensureMdLib();
         renderMd();
@@ -1418,8 +1795,9 @@
   // 集中一处避免多条渲染路径口径漂移；decorate 只给站内链接补 data-ln-*,无站内链接则原样返回(零改写)。
   // 调用方须先 await ensureMdLib()（本函数同步使用已加载的 markedLib/dompurifyLib）。
   function mdToSafeHtml(mdText: string, editableTaskLists = false): string {
+    if (!markedLib || !dompurifyLib) throw new Error('MARKDOWN_RENDERER_NOT_READY');
     const raw = markedLib.parse(mdText || '', { walkTokens: promoteEmptyMarkdownTaskToken });
-    const safe = dompurifyLib ? dompurifyLib.sanitize(raw) : raw;
+    const safe = dompurifyLib.sanitize(raw);
     return decorateInternalResourceLinks(normalizeMarkdownTaskListHtml(safe, editableTaskLists));
   }
 
@@ -1431,9 +1809,6 @@
 
   function onMdInput(value: string | number) {
     const val = String(value ?? '');
-    if (markdownMentionUndo && val !== markdownMentionUndo.after) {
-      markdownMentionUndo = null;
-    }
     mdContent.value = val;
     content.value = val;
     debounceRenderMd();
@@ -1495,9 +1870,9 @@
 
   async function uploadMarkdownImage(file: File, fileName = file.name) {
     if (markdownImageUploading.value) return;
-    const textarea = getMdTextarea();
-    const start = textarea?.selectionStart ?? mdContent.value.length;
-    const end = textarea?.selectionEnd ?? start;
+    const selection = getMarkdownSelection();
+    const start = selection.from;
+    const end = selection.to;
     markdownImageUploading.value = true;
     try {
       const imageUrl = await uploadNoteImageFile(file, fileName);
@@ -1505,13 +1880,8 @@
       const linePrefix = start > 0 && source[start - 1] !== '\n' ? '\n' : '';
       const lineSuffix = end < source.length && source[end] !== '\n' ? '\n' : '';
       const markdown = `${linePrefix}![${escapeMarkdownImageAlt(fileName)}](${imageUrl})${lineSuffix}`;
-      const nextValue = `${source.slice(0, start)}${markdown}${source.slice(end)}`;
-      onMdInput(nextValue);
-      await nextTick();
       const nextCursor = start + markdown.length;
-      const activeTextarea = getMdTextarea();
-      activeTextarea?.focus({ preventScroll: true });
-      activeTextarea?.setSelectionRange(nextCursor, nextCursor);
+      mdCodeMirrorRef.value?.replaceRange(start, end, markdown, nextCursor, nextCursor);
     } catch {
       message.warning(t('note.uploadFailed'));
     } finally {
@@ -1519,42 +1889,20 @@
     }
   }
 
-  /**
-   * 工具栏操作的统一出口:拿当前选区 → 交给 utils/markdownEditing 算出一次区间替换 → 写回。
-   *
-   * 写回必须走 execCommand('insertText'):它是浏览器自己的编辑通道,改动会进原生 undo 栈,
-   * 用户 Ctrl+Z 撤得回来。直接给 textarea.value 赋值(或只改 v-model)会绕过 undo 栈 ——
-   * 点完「插入表格」再按 Ctrl+Z 毫无反应,只能手动去删。
-   * execCommand 已废弃但至今是唯一能写进 textarea undo 栈的方式;失败时退回直接赋值。
-   */
+  /** 工具栏操作统一收口为一次 CodeMirror transaction，原生进入 history 并精确恢复选区。 */
   async function applyMarkdownEdit(transform: (input: EditorSelection) => EditResult) {
     if (props.readonly) return;
-    const textarea = getMdTextarea();
-    const value = mdContent.value || '';
+    const markdownEditor = mdCodeMirrorRef.value;
+    const value = markdownEditor?.getValue() ?? mdContent.value ?? '';
+    const selection = markdownEditor?.getSelection() || { from: value.length, to: value.length };
     const input: EditorSelection = {
       value,
-      selectionStart: textarea?.selectionStart ?? value.length,
-      selectionEnd: textarea?.selectionEnd ?? textarea?.selectionStart ?? value.length,
+      selectionStart: selection.from,
+      selectionEnd: selection.to,
     };
     const result = transform(input);
-
-    let insertedViaBrowser = false;
-    if (textarea) {
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(result.rangeStart, result.rangeEnd);
-      try {
-        insertedViaBrowser = document.execCommand('insertText', false, result.text);
-      } catch {
-        insertedViaBrowser = false;
-      }
-    }
-    // execCommand 会自己派发 input 事件带动 v-model;失败时才手动同步一次
-    if (!insertedViaBrowser) onMdInput(applyEditResult(value, result));
-
-    await nextTick();
-    const activeTextarea = getMdTextarea();
-    activeTextarea?.focus({ preventScroll: true });
-    activeTextarea?.setSelectionRange(result.selectionStart, result.selectionEnd);
+    if (markdownEditor) markdownEditor.applyEdit(result);
+    else onMdInput(applyEditResult(value, result));
   }
 
   /** 插入 mermaid 图表模板。图表代码块必须自成段落,交给 insertBlock 统一补空行 */
@@ -1565,84 +1913,6 @@
     void applyMarkdownEdit((input) => insertBlock(input, snippet));
   }
 
-  /** 文本格式类:作用在选中的文字上 */
-  const markdownTextTools = computed(() => [
-    {
-      key: 'bold',
-      label: t('note.mdBold'),
-      icon: icon.noteDetail.toolbar.bold,
-      run: () => void applyMarkdownEdit((input) => wrapSelection(input, '**', t('note.mdBoldPlaceholder'))),
-    },
-    {
-      key: 'italic',
-      label: t('note.mdItalic'),
-      icon: icon.noteDetail.toolbar.italic,
-      run: () => void applyMarkdownEdit((input) => wrapSelection(input, '*', t('note.mdItalicPlaceholder'))),
-    },
-    {
-      key: 'heading',
-      label: t('note.mdHeading'),
-      icon: icon.noteDetail.toolbar.heading,
-      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '## ')),
-    },
-    {
-      key: 'quote',
-      label: t('note.mdQuote'),
-      icon: icon.noteDetail.toolbar.quote,
-      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '> ')),
-    },
-    {
-      key: 'bulletList',
-      label: t('note.mdBulletList'),
-      icon: icon.noteDetail.toolbar.bulletList,
-      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '- ')),
-    },
-    {
-      key: 'todo',
-      label: t('note.mdTodoList'),
-      icon: icon.noteDetail.toolbar.todo,
-      run: () => void applyMarkdownEdit((input) => toggleLinePrefix(input, '- [ ] ')),
-    },
-  ]);
-
-  /** 插入块/资源类 */
-  const markdownInsertTools = computed(() => [
-    {
-      key: 'codeBlock',
-      label: t('note.mdCodeBlock'),
-      icon: icon.noteDetail.toolbar.codeBlock,
-      disabled: false,
-      run: () => void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock())),
-    },
-    {
-      key: 'table',
-      label: t('note.mdTable'),
-      icon: icon.noteDetail.toolbar.table,
-      disabled: false,
-      run: () =>
-        void applyMarkdownEdit((input) =>
-          insertBlock(
-            input,
-            buildMarkdownTable([t('note.mdTableColumn', { index: 1 }), t('note.mdTableColumn', { index: 2 })]),
-          ),
-        ),
-    },
-    {
-      key: 'image',
-      label: t('note.mdUploadImage'),
-      icon: icon.noteDetail.toolbar.image,
-      disabled: markdownImageUploading.value,
-      run: () => markdownImageInputRef.value?.click(),
-    },
-    {
-      key: 'mention',
-      label: t('note.mdInsertResource'),
-      icon: icon.noteDetail.toolbar.mention,
-      disabled: !canEditResourceMentions.value,
-      run: () => openResourceMentionPicker(),
-    },
-  ]);
-
   /**
    * 工具栏点「插入资源」:等价于在光标处敲一个 @,复用整套提及流程。
    * 桌面端走贴着光标的内联浮层(和输入 @ 完全一致);只有手机才用弹窗 ——
@@ -1650,11 +1920,11 @@
    */
   function openResourceMentionPicker() {
     if (!canEditResourceMentions.value) return;
-    const textarea = getMdTextarea();
+    const markdownEditor = mdCodeMirrorRef.value;
+    const selection = markdownEditor?.getSelection() || { from: mdContent.value.length, to: mdContent.value.length };
 
-    if (isMobile.value || !textarea) {
-      const caret = textarea?.selectionStart ?? (mdContent.value || '').length;
-      markdownMentionRange = { start: caret, end: textarea?.selectionEnd ?? caret };
+    if (isMobile.value || !markdownEditor) {
+      markdownMentionRange = { start: selection.from, end: selection.to };
       dismissedMentionStart = null;
       recordResourceMentionOperation('打开资源提及选择器');
       mentionPickerVisible.value = true;
@@ -1666,46 +1936,319 @@
      * 之前那样开出来的浮层背后没有 @ 文本,光标一动 resolveMentionQuery 就找不到提及、
      * 立刻把浮层关掉 —— 表现就是"按上下键菜单直接消失"。插入真实字符后,
      * 后续筛选、上下键、Esc、选中替换全部复用手敲 @ 的那一套,行为完全一致。
-     * 走 execCommand 保证这个 @ 也能被 Ctrl+Z 撤掉。
+     * 由 CodeMirror transaction 插入，能与后续资源替换分别撤销。
      */
     dismissedMentionStart = null;
-    textarea.focus({ preventScroll: true });
-    let inserted = false;
-    try {
-      inserted = document.execCommand('insertText', false, '@');
-    } catch {
-      inserted = false;
-    }
-    if (!inserted) {
-      const caret = textarea.selectionStart ?? 0;
-      const value = mdContent.value || '';
-      onMdInput(`${value.slice(0, caret)}@${value.slice(textarea.selectionEnd ?? caret)}`);
-      void nextTick().then(() => {
-        const active = getMdTextarea();
-        active?.focus({ preventScroll: true });
-        active?.setSelectionRange(caret + 1, caret + 1);
-        syncOrOpenMarkdownMention();
-      });
-      return;
-    }
-    syncOrOpenMarkdownMention();
+    const caret = selection.from + 1;
+    markdownEditor.replaceRange(selection.from, selection.to, '@', caret, caret);
+    void nextTick().then(syncOrOpenMarkdownMention);
   }
 
-  async function onMarkdownImagePicked(event: Event) {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    // 先清空 value,同一张图连续选两次也能触发 change
-    input.value = '';
+  async function onMarkdownImagePicked(files: File[]) {
+    const file = files[0];
     if (file) await uploadMarkdownImage(file, file.name);
   }
 
-  const diagramMenuOptions = computed(() =>
-    MERMAID_TEMPLATES.map((template) => ({
-      label: t(template.labelKey),
-      icon: icon.noteDiagram,
-      function: () => void insertDiagramTemplate(template.key),
-    })),
-  );
+  const markdownShortcutsVisible = ref(false);
+
+  function toolbarAction(
+    key: string,
+    label: string,
+    actionIcon: string,
+    options: Partial<EditorToolbarAction> = {},
+  ): EditorToolbarAction {
+    return { key, label, icon: actionIcon, ...options };
+  }
+
+  const editorToolbarProps = computed(() => {
+    const isMarkdown = currentType.value === 'markdown';
+    const editingDisabled = props.readonly || (isMarkdown && mdView.value === 'preview');
+    const richNotReady = !isMarkdown && !editorRef.value;
+    const disabled = editingDisabled || richNotReady;
+    const state = richToolbarState.value;
+    const action = (key: string, label: string, actionIcon: string, options: Partial<EditorToolbarAction> = {}) =>
+      toolbarAction(key, label, actionIcon, { disabled, ...options });
+
+    const headingActions = [
+      action('paragraph', t('noteDetail.editor.paragraph'), icon.noteDetail.toolbar.heading, {
+        selected: !isMarkdown && state.block === 'p',
+      }),
+      ...Array.from({ length: 6 }, (_, index) => {
+        const level = index + 1;
+        return action(`heading${level}`, t(`noteDetail.editor.heading${level}`), icon.noteDetail.toolbar.heading, {
+          selected: !isMarkdown && state.block === `h${level}`,
+        });
+      }),
+    ];
+
+    const listActions = [
+      action('bulletList', t('noteDetail.editor.bulletList'), icon.noteDetail.toolbar.bulletList, {
+        selected: !isMarkdown && state.bulletList,
+      }),
+      action('orderedList', t('noteDetail.editor.orderedList'), icon.noteDetail.toolbar.orderedList, {
+        selected: !isMarkdown && state.orderedList,
+      }),
+    ];
+
+    const insertActions: EditorToolbarAction[] = [
+      action('insertTable', t('noteDetail.editor.table'), icon.noteDetail.toolbar.table),
+      action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
+        disabled: disabled || markdownImageUploading.value,
+      }),
+      action('insertResource', t('noteDetail.editor.resource'), icon.noteDetail.toolbar.mention, {
+        disabled: disabled || !canEditResourceMentions.value,
+      }),
+      action('insertCodeBlock', t('noteDetail.editor.codeBlock'), icon.noteDetail.toolbar.codeBlock),
+      ...MERMAID_TEMPLATES.map((template, index) =>
+        action(`insertDiagram:${template.key}`, t(template.labelKey), icon.noteDiagram, {
+          dividerBefore: index === 0,
+          description: t('noteDetail.editor.diagram'),
+        }),
+      ),
+      action('insertDivider', t('noteDetail.editor.divider'), icon.noteDetail.toolbar.divider, {
+        dividerBefore: true,
+      }),
+    ];
+    if (!isMarkdown) {
+      insertActions.push(action('insertEmoji', t('noteDetail.editor.emoji'), icon.noteDetail.toolbar.emoji));
+    }
+
+    const formatMoreActions = isMarkdown
+      ? [
+          action('quote', t('noteDetail.editor.quote'), icon.noteDetail.toolbar.quote),
+          action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
+          action('inlineCode', t('noteDetail.editor.inlineCode'), icon.noteDetail.toolbar.inlineCode),
+          action('findReplace', t('noteDetail.editor.findReplace'), icon.noteDetail.toolbar.search, {
+            dividerBefore: true,
+          }),
+          action('markdownShortcuts', t('noteDetail.editor.shortcuts'), icon.noteDetail.toolbar.help),
+        ]
+      : [
+          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline),
+          action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
+          action('textColorPicker', t('noteDetail.editor.textColor'), icon.noteDetail.toolbar.textColor, {
+            dividerBefore: true,
+          }),
+          action(
+            'backgroundColorPicker',
+            t('noteDetail.editor.backgroundColor'),
+            icon.noteDetail.toolbar.backgroundColor,
+          ),
+          action('alignLeft', t('noteDetail.editor.alignLeft'), icon.noteDetail.toolbar.align, { dividerBefore: true }),
+          action('alignCenter', t('noteDetail.editor.alignCenter'), icon.noteDetail.toolbar.align),
+          action('alignRight', t('noteDetail.editor.alignRight'), icon.noteDetail.toolbar.align),
+          action('alignJustify', t('noteDetail.editor.alignJustify'), icon.noteDetail.toolbar.align),
+          action('indent', t('noteDetail.editor.indent'), icon.noteDetail.toolbar.indent, { dividerBefore: true }),
+          action('outdent', t('noteDetail.editor.outdent'), icon.noteDetail.toolbar.outdent),
+          action('clearFormatting', t('noteDetail.editor.clearFormatting'), icon.noteDetail.toolbar.clearFormat),
+          action('findReplace', t('noteDetail.editor.findReplace'), icon.noteDetail.toolbar.search, {
+            dividerBefore: true,
+          }),
+          action('sourceCode', t('noteDetail.editor.sourceCode'), icon.noteDetail.toolbar.source),
+          action('wordCount', t('noteDetail.editor.wordCount'), icon.noteDetail.toolbar.wordCount),
+        ];
+    const moreActions = isMobile.value
+      ? [
+          action('redo', t('noteDetail.editor.redo'), icon.noteDetail.toolbar.redo, {
+            disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canRedo : !state.canRedo),
+          }),
+          action('italic', t('noteDetail.editor.italic'), icon.noteDetail.toolbar.italic, {
+            selected: !isMarkdown && state.italic,
+          }),
+          ...listActions,
+          action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link),
+          ...formatMoreActions.map((item, index) => (index === 0 ? { ...item, dividerBefore: true } : item)),
+        ]
+      : formatMoreActions;
+
+    return {
+      undoAction: action('undo', t('noteDetail.editor.undo'), icon.noteDetail.toolbar.undo, {
+        disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canUndo : !state.canUndo),
+      }),
+      redoAction: action('redo', t('noteDetail.editor.redo'), icon.noteDetail.toolbar.redo, {
+        disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canRedo : !state.canRedo),
+      }),
+      headingAction: action('headingMenu', t('noteDetail.editor.headingMenu'), icon.noteDetail.toolbar.heading, {
+        selected: !isMarkdown && /^h[1-6]$/u.test(state.block),
+      }),
+      boldAction: action('bold', t('noteDetail.editor.bold'), icon.noteDetail.toolbar.bold, {
+        selected: !isMarkdown && state.bold,
+      }),
+      italicAction: action('italic', t('noteDetail.editor.italic'), icon.noteDetail.toolbar.italic, {
+        selected: !isMarkdown && state.italic,
+      }),
+      listAction: action('listMenu', t('noteDetail.editor.list'), icon.noteDetail.toolbar.bulletList, {
+        selected: !isMarkdown && (state.bulletList || state.orderedList),
+      }),
+      todoAction: action('todo', t('noteDetail.editor.todo'), icon.noteDetail.toolbar.todo, {
+        selected: !isMarkdown && state.todo,
+      }),
+      linkAction: action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link),
+      insertAction: action('insertMenu', t('noteDetail.editor.insert'), icon.noteDetail.toolbar.insert),
+      moreAction: action('moreMenu', t('noteDetail.editor.moreFormatting'), icon.noteDetail.toolbar.more),
+      headingActions,
+      listActions,
+      insertActions,
+      moreActions,
+    };
+  });
+
+  function markdownHeadingEdit(level: number) {
+    const prefix = level > 0 ? `${'#'.repeat(level)} ` : '';
+    return applyMarkdownEdit((input) => setLinePrefix(input, prefix, /^#{1,6}\s+/u));
+  }
+
+  function openRichResourceMentionPicker(editor: any) {
+    if (!canEditResourceMentions.value || !editor) return;
+    editor.focus();
+    editor.undoManager?.transact(() => editor.insertContent('@'));
+    window.setTimeout(() => tryOpenTinyMceMention(editor), 0);
+  }
+
+  function runMarkdownToolbarAction(key: string) {
+    if (props.readonly || mdView.value === 'preview') return;
+    if (key === 'undo') return void mdCodeMirrorRef.value?.undo();
+    if (key === 'redo') return void mdCodeMirrorRef.value?.redo();
+    if (key === 'bold')
+      return void applyMarkdownEdit((input) => wrapSelection(input, '**', t('note.mdBoldPlaceholder')));
+    if (key === 'italic')
+      return void applyMarkdownEdit((input) => wrapSelection(input, '*', t('note.mdItalicPlaceholder')));
+    if (key === 'todo') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '- [ ] '));
+    if (key === 'bulletList') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '- '));
+    if (key === 'orderedList') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '1. '));
+    if (key === 'paragraph') return void markdownHeadingEdit(0);
+    if (/^heading[1-6]$/u.test(key)) return void markdownHeadingEdit(Number(key.slice(-1)));
+    if (key === 'link') return void applyMarkdownEdit((input) => insertMarkdownLink(input, t('note.mdLinkText')));
+    if (key === 'quote') return void applyMarkdownEdit((input) => toggleLinePrefix(input, '> '));
+    if (key === 'strike')
+      return void applyMarkdownEdit((input) => wrapSelection(input, '~~', t('note.mdStrikePlaceholder')));
+    if (key === 'inlineCode')
+      return void applyMarkdownEdit((input) => wrapSelection(input, '`', t('note.mdCodePlaceholder')));
+    if (key === 'insertTable') {
+      return void applyMarkdownEdit((input) =>
+        insertBlock(
+          input,
+          buildMarkdownTable([t('note.mdTableColumn', { index: 1 }), t('note.mdTableColumn', { index: 2 })]),
+        ),
+      );
+    }
+    if (key === 'insertImage') return markdownImageInputRef.value?.open();
+    if (key === 'insertResource') return openResourceMentionPicker();
+    if (key === 'insertCodeBlock') return void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock()));
+    if (key.startsWith('insertDiagram:')) return insertDiagramTemplate(key.slice('insertDiagram:'.length));
+    if (key === 'insertDivider') return void applyMarkdownEdit((input) => insertBlock(input, '---'));
+    if (key === 'markdownShortcuts') {
+      markdownShortcutsVisible.value = true;
+      return;
+    }
+    if (key === 'findReplace') {
+      openRichFind();
+      return;
+    }
+  }
+
+  function runRichToolbarAction(key: string) {
+    const editor = editorRef.value;
+    if (!editor || props.readonly) return;
+    editor.focus();
+    if (key === 'undo') return editor.execCommand('Undo');
+    if (key === 'redo') return editor.execCommand('Redo');
+    if (key === 'bold') return editor.execCommand('Bold');
+    if (key === 'italic') return editor.execCommand('Italic');
+    if (key === 'underline') return editor.execCommand('Underline');
+    if (key === 'strike') return editor.execCommand('Strikethrough');
+    if (key === 'todo') return editor.execCommand('ToggleNoteTodo');
+    if (key === 'bulletList') return editor.execCommand('InsertUnorderedList');
+    if (key === 'orderedList') return editor.execCommand('InsertOrderedList');
+    if (key === 'paragraph') return editor.execCommand('FormatBlock', false, 'p');
+    if (/^heading[1-6]$/u.test(key)) return editor.execCommand('FormatBlock', false, `h${key.slice(-1)}`);
+    if (key === 'link') return editor.execCommand('mceLink');
+    if (key === 'insertTable') return editor.execCommand('mceInsertTableDialog');
+    if (key === 'insertImage') return editor.execCommand('mceImage');
+    if (key === 'insertResource') return openRichResourceMentionPicker(editor);
+    if (key === 'insertCodeBlock') return editor.execCommand('FormatBlock', false, 'pre');
+    if (key.startsWith('insertDiagram:')) return insertHtmlDiagramTemplate(editor, key.slice('insertDiagram:'.length));
+    if (key === 'insertDivider') return editor.insertContent('<hr><p></p>');
+    if (key === 'insertEmoji') return editor.execCommand('mceEmoticons');
+    if (key === 'textColorPicker') return openRichColorDialog('text', editor);
+    if (key === 'backgroundColorPicker') return openRichColorDialog('background', editor);
+    if (key.startsWith('textColor:')) {
+      const value = key.slice('textColor:'.length);
+      return value === 'default'
+        ? editor.execCommand('mceRemoveTextcolor', 'forecolor')
+        : editor.execCommand('mceApplyTextcolor', 'forecolor', value);
+    }
+    if (key.startsWith('backgroundColor:')) {
+      const value = key.slice('backgroundColor:'.length);
+      return value === 'default'
+        ? editor.execCommand('mceRemoveTextcolor', 'hilitecolor')
+        : editor.execCommand('mceApplyTextcolor', 'hilitecolor', value);
+    }
+    if (key === 'alignLeft') return editor.execCommand('JustifyLeft');
+    if (key === 'alignCenter') return editor.execCommand('JustifyCenter');
+    if (key === 'alignRight') return editor.execCommand('JustifyRight');
+    if (key === 'alignJustify') return editor.execCommand('JustifyFull');
+    if (key === 'indent') return editor.execCommand('Indent');
+    if (key === 'outdent') return editor.execCommand('Outdent');
+    if (key === 'clearFormatting') return editor.execCommand('RemoveFormat');
+    if (key === 'findReplace') return openRichFind(editor);
+    if (key === 'sourceCode') return editor.execCommand('mceCodeEditor');
+    if (key === 'wordCount') return editor.execCommand('mceWordCount');
+  }
+
+  function openRichColorDialog(mode: RichColorMode, editor = editorRef.value) {
+    if (!editor || props.readonly) return;
+    richColorMode.value = mode;
+    richColorValue.value = mode === 'text' ? '#2563eb' : '#dbeafe';
+    richColorBookmark = editor.selection?.getBookmark?.(2, true) ?? null;
+    richColorDialogVisible.value = true;
+  }
+
+  function closeRichColorDialog() {
+    richColorBookmark = null;
+  }
+
+  function restoreRichColorSelection(editor: any) {
+    editor.focus();
+    if (richColorBookmark) editor.selection?.moveToBookmark?.(richColorBookmark);
+  }
+
+  function removeRichColor() {
+    const editor = editorRef.value;
+    if (!editor || props.readonly) {
+      richColorDialogVisible.value = false;
+      return;
+    }
+    restoreRichColorSelection(editor);
+    const format = richColorMode.value === 'text' ? 'forecolor' : 'hilitecolor';
+    editor.execCommand('mceRemoveTextcolor', format);
+    richColorDialogVisible.value = false;
+    richColorBookmark = null;
+  }
+
+  function applyRichCustomColor() {
+    const editor = editorRef.value;
+    const value = richColorValue.value.trim();
+    if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/iu.test(value)) {
+      message.warning(t('noteDetail.editor.colorInvalid'));
+      return;
+    }
+    if (!editor || props.readonly) {
+      richColorDialogVisible.value = false;
+      return;
+    }
+    restoreRichColorSelection(editor);
+    const format = richColorMode.value === 'text' ? 'forecolor' : 'hilitecolor';
+    editor.execCommand('mceApplyTextcolor', format, value);
+    richColorDialogVisible.value = false;
+    richColorBookmark = null;
+  }
+
+  function handleEditorToolbarAction(action: EditorToolbarAction) {
+    if (action.disabled) return;
+    if (currentType.value === 'markdown') runMarkdownToolbarAction(action.key);
+    else runRichToolbarAction(action.key);
+  }
 
   /** 富文本里插入图表:存的是源码代码块,图是编辑期装饰(见 utils/mermaidRender 的伴随模式) */
   function insertHtmlDiagramTemplate(editor: any, templateKey: string) {
@@ -1714,6 +2257,65 @@
     const code = locale.value.startsWith('zh') ? template.code.zh : template.code.en;
     const escaped = code.replace(/[&<>]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[char] as string);
     editor.insertContent(`<pre class="language-mermaid">${escaped}</pre><p></p>`);
+    // 同一事件循环内先挂上 companion 占位，再异步绘图。源码块会立刻被相邻选择器隐藏，
+    // 避免用户看到「代码块闪一下 → 图表」；真实源码仍留在 TinyMCE 内容中。
+    const body = editor.getBody?.() as HTMLElement | null;
+    if (body) void renderMermaidBlocks(body, { companion: true });
+  }
+
+  function openRichMermaidEditor(event: Event) {
+    if (props.readonly) return;
+    const target = event.target;
+    const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
+    const sourceElement = figure?.previousElementSibling as HTMLElement | null;
+    if (!sourceElement?.matches('pre[class*="language-mermaid"]')) return;
+    event.preventDefault();
+    const source = sourceElement.textContent || '';
+    richMermaidSourceElement = sourceElement;
+    richMermaidOriginalSource = source;
+    richMermaidSource.value = source;
+    richMermaidEditorVisible.value = true;
+  }
+
+  function closeRichMermaidEditor() {
+    richMermaidSourceElement = null;
+    richMermaidOriginalSource = '';
+    richMermaidSource.value = '';
+  }
+
+  function applyRichMermaidSource() {
+    const editor = editorRef.value;
+    const sourceElement = richMermaidSourceElement;
+    const nextSource = richMermaidSource.value.replace(/\r\n?/gu, '\n');
+    if (!nextSource.trim()) {
+      message.warning(t('noteDetail.editor.diagramSourceEmpty'));
+      return;
+    }
+    const body = editor?.getBody?.() as HTMLElement | null;
+    if (
+      !editor ||
+      !body ||
+      !sourceElement?.isConnected ||
+      !body.contains(sourceElement) ||
+      sourceElement.textContent !== richMermaidOriginalSource
+    ) {
+      message.warning(t('noteDetail.editor.diagramSourceChanged'));
+      richMermaidEditorVisible.value = false;
+      closeRichMermaidEditor();
+      return;
+    }
+
+    editor.undoManager.transact(() => {
+      // 用 textContent 写回，图表源码绝不会被当成 HTML 执行。
+      sourceElement.textContent = nextSource;
+      editor.nodeChanged?.();
+      editor.setDirty?.(true);
+      if (editor.dispatch) editor.dispatch('input');
+      else editor.fire?.('input');
+    });
+    richMermaidEditorVisible.value = false;
+    closeRichMermaidEditor();
+    void renderMermaidBlocks(body, { companion: true });
   }
 
   watch([mentionPickerVisible, inlineMentionVisible], ([modalOpen, inlineOpen]) => {
@@ -1735,10 +2337,11 @@
     try {
       const safeHtml = mdToSafeHtml(mdContent.value || '');
       publishResourceRefs(safeHtml);
+      const indexedSafeHtml = decorateRenderedMarkdownImageIndexes(safeHtml);
       // 已经画过的图直接用缓存顶上;改了图表内容、缓存还没有时沿用上一版预览里的旧图,
       // 都是为了不让右边的图在编辑过程中闪回代码块
       renderedMd.value = inlineCachedMermaid(
-        presentResourceReferenceChips(safeHtml, props.resourceRefs, resourcePresentationOptions()),
+        presentResourceReferenceChips(indexedSafeHtml, props.resourceRefs, resourcePresentationOptions()),
         mdPreviewRef.value,
       );
     } catch {
@@ -1747,44 +2350,6 @@
     }
     await nextTick();
     emits('markdown-rendered');
-  }
-
-  function measureTextareaOffset(textarea: HTMLTextAreaElement, sourceOffset: number) {
-    const styles = window.getComputedStyle(textarea);
-    const mirror = document.createElement('div');
-    Object.assign(mirror.style, {
-      position: 'fixed',
-      top: '0',
-      left: '-10000px',
-      visibility: 'hidden',
-      pointerEvents: 'none',
-      boxSizing: 'border-box',
-      width: `${textarea.clientWidth}px`,
-      minHeight: '0',
-      padding: styles.padding,
-      border: styles.border,
-      font: styles.font,
-      fontFamily: styles.fontFamily,
-      fontSize: styles.fontSize,
-      fontWeight: styles.fontWeight,
-      fontStyle: styles.fontStyle,
-      lineHeight: styles.lineHeight,
-      letterSpacing: styles.letterSpacing,
-      textTransform: styles.textTransform,
-      textIndent: styles.textIndent,
-      tabSize: styles.tabSize,
-      whiteSpace: 'pre-wrap',
-      overflowWrap: 'break-word',
-      wordBreak: styles.wordBreak,
-    });
-    mirror.append(document.createTextNode(textarea.value.slice(0, sourceOffset)));
-    const marker = document.createElement('span');
-    marker.textContent = '\u200b';
-    mirror.append(marker);
-    document.body.append(mirror);
-    const top = marker.offsetTop;
-    mirror.remove();
-    return top;
   }
 
   function lockProgrammaticMarkdownScroll() {
@@ -1797,10 +2362,10 @@
     if (currentType.value !== 'markdown') return false;
     await nextTick();
 
-    const textarea = getMdTextarea();
+    const markdownEditor = mdCodeMirrorRef.value;
     const preview = mdPreviewRef.value;
     const previewHeading = preview?.querySelectorAll<HTMLElement>('h1, h2, h3, h4, h5, h6')[index];
-    if (!textarea && (!preview || !previewHeading)) return false;
+    if (!markdownEditor && (!preview || !previewHeading)) return false;
 
     lockProgrammaticMarkdownScroll();
 
@@ -1808,17 +2373,9 @@
       scrollIntoContainer(preview, previewHeading, 5);
     }
 
-    if (textarea && typeof sourceOffset === 'number') {
-      const safeOffset = Math.min(Math.max(0, sourceOffset), textarea.value.length);
-      const targetTop = measureTextareaOffset(textarea, safeOffset);
-      textarea.focus({ preventScroll: true });
-      textarea.setSelectionRange(safeOffset, safeOffset);
-      window.requestAnimationFrame(() => {
-        textarea.scrollTo({
-          top: Math.max(0, targetTop - 8),
-          behavior: 'smooth',
-        });
-      });
+    if (markdownEditor && typeof sourceOffset === 'number') {
+      const safeOffset = Math.min(Math.max(0, sourceOffset), markdownEditor.getValue().length);
+      window.requestAnimationFrame(() => markdownEditor.scrollToPosition(safeOffset));
     }
 
     return true;
@@ -1828,7 +2385,7 @@
     if (!href) return false;
     await nextTick();
     if (currentType.value === 'markdown') {
-      const textarea = getMdTextarea();
+      const markdownEditor = mdCodeMirrorRef.value;
       const previewLink = [...(mdPreviewRef.value?.querySelectorAll<HTMLAnchorElement>('a[href]') || [])].find(
         (link) => link.getAttribute('href') === href,
       );
@@ -1837,13 +2394,10 @@
         scrollIntoContainer(mdPreviewRef.value, previewLink, 8);
         found = true;
       }
-      const sourceOffset = textarea?.value.indexOf(href) ?? -1;
-      if (textarea && sourceOffset >= 0) {
+      const sourceOffset = markdownEditor?.getValue().indexOf(href) ?? -1;
+      if (markdownEditor && sourceOffset >= 0) {
         lockProgrammaticMarkdownScroll();
-        const targetTop = measureTextareaOffset(textarea, sourceOffset);
-        textarea.focus({ preventScroll: true });
-        textarea.setSelectionRange(sourceOffset, sourceOffset + href.length);
-        textarea.scrollTo({ top: Math.max(0, targetTop - 24), behavior: 'smooth' });
+        markdownEditor.scrollToPosition(sourceOffset, sourceOffset + href.length);
         found = true;
       }
       return found;
@@ -1876,42 +2430,108 @@
 
   // 切换模式
   async function handleModeSwitch() {
-    const targetType = currentType.value === 'html' ? 'markdown' : 'html';
-    const backup = { content: content.value || '', type: currentType.value };
-
-    Alert.alert({
-      title: targetType === 'markdown' ? t('note.switchToMd') : t('note.switchToHtml'),
-      content: targetType === 'markdown' ? t('note.switchToMdTip') : t('note.switchToHtmlTip'),
-      okText: t('note.confirmSwitch'),
-      cancelText: t('common.cancel'),
-      onOk: () => doSwitch(targetType, backup),
+    const sourceType = (currentType.value === 'markdown' ? 'markdown' : 'html') as NoteFormat;
+    const targetType: NoteFormat = sourceType === 'html' ? 'markdown' : 'html';
+    const backup = { content: content.value || '', type: sourceType };
+    await ensureMdLib();
+    let converted = '';
+    if (targetType === 'markdown') {
+      converted = noteHtmlToMarkdown(backup.content || '');
+    } else if (backup.content.trim()) {
+      try {
+        converted = mdToSafeHtml(backup.content, true);
+      } catch {
+        message.error(t('note.renderError'));
+        return;
+      }
+    }
+    conversionTargetType.value = targetType;
+    conversionBackup.value = backup;
+    conversionConvertedContent.value = converted;
+    conversionReport.value = analyzeNoteFormatConversion(backup.content, sourceType);
+    conversionBaseRevision.value = Math.max(1, Number(props.revision || 1));
+    conversionAnalysisHash.value = await buildNoteFormatConversionAnalysisHash({
+      targetType,
+      convertedContent: converted,
+      baseRevision: conversionBaseRevision.value,
     });
+    conversionPreviewVisible.value = true;
   }
 
-  async function doSwitch(targetType: string, backup: { content: string; type: string }) {
+  function cancelModeSwitch() {
+    if (conversionSaving.value) return;
+    conversionPreviewVisible.value = false;
+    conversionBackup.value = null;
+    conversionConvertedContent.value = '';
+    conversionReport.value = null;
+    conversionAnalysisHash.value = '';
+  }
+
+  async function confirmModeSwitch() {
+    const backup = conversionBackup.value;
+    if (!backup || conversionSaving.value) return;
+    const targetType = conversionTargetType.value;
+    let converted = conversionConvertedContent.value;
+    let persisted: { content: string; type: NoteFormat; revision: number; updateTime?: number | string | null } | null =
+      null;
+    if (props.noteId && props.persistModeConversion) {
+      conversionSaving.value = true;
+      try {
+        persisted = await props.persistModeConversion({
+          targetType,
+          convertedContent: converted,
+          baseRevision: conversionBaseRevision.value,
+          analysisHash: conversionAnalysisHash.value,
+        });
+      } finally {
+        conversionSaving.value = false;
+      }
+      if (!persisted) {
+        cancelModeSwitch();
+        return;
+      }
+      converted = persisted.content;
+    }
+    cancelModeSwitch();
+    await doSwitch(targetType, backup, converted);
+    if (persisted) emits('mode-converted', persisted);
+  }
+
+  async function doSwitch(
+    targetType: NoteFormat,
+    backup: { content: string; type: NoteFormat },
+    preconvertedContent?: string,
+  ) {
+    let nextContent = preconvertedContent;
+    if (targetType === 'markdown' && nextContent === undefined) {
+      try {
+        nextContent = noteHtmlToMarkdown(backup.content || '');
+      } catch {
+        message.error(t('note.renderError'));
+        return;
+      }
+    }
+    if (targetType !== 'markdown' && nextContent === undefined) {
+      await ensureMdLib();
+      try {
+        nextContent = backup.content.trim() ? mdToSafeHtml(backup.content, true) : '';
+      } catch {
+        message.error(t('note.renderError'));
+        return;
+      }
+    }
     switchBackup.value = backup;
     currentType.value = targetType;
 
     if (targetType === 'markdown') {
       // HTML → MD：用 turndown 转换
-      await ensureMdLib();
-      mdContent.value = noteHtmlToMarkdown(backup.content || '');
+      mdContent.value = nextContent || '';
       content.value = mdContent.value;
       await nextTick();
       renderMd();
     } else {
       // MD → HTML：用 marked 转换
-      await ensureMdLib();
-      const mdText = backup.content || '';
-      if (mdText.trim()) {
-        try {
-          content.value = mdToSafeHtml(mdText, true);
-        } catch {
-          content.value = mdText;
-        }
-      } else {
-        content.value = '';
-      }
+      content.value = nextContent || '';
       // 重建 TinyMCE
       forceReinit();
     }
@@ -1932,21 +2552,41 @@
     });
   }
 
-  function doUndo(backup: { content: string; type: string }) {
+  async function doUndo(backup: { content: string; type: NoteFormat }) {
+    let restoredContent = backup.content;
+    let persisted: { content: string; type: NoteFormat; revision: number; updateTime?: number | string | null } | null =
+      null;
+    if (props.noteId && props.persistModeConversion) {
+      const baseRevision = Math.max(1, Number(props.revision || 1));
+      const analysisHash = await buildNoteFormatConversionAnalysisHash({
+        targetType: backup.type,
+        convertedContent: backup.content,
+        baseRevision,
+      });
+      persisted = await props.persistModeConversion({
+        targetType: backup.type,
+        convertedContent: backup.content,
+        baseRevision,
+        analysisHash,
+      });
+      if (!persisted) return;
+      restoredContent = persisted.content;
+    }
     switchBackup.value = null;
 
     currentType.value = backup.type;
 
     if (backup.type === 'html') {
-      content.value = backup.content;
+      content.value = restoredContent;
       forceReinit();
     } else {
-      mdContent.value = backup.content;
-      content.value = backup.content;
+      mdContent.value = restoredContent;
+      content.value = restoredContent;
       if (markedLib) renderMd();
     }
 
     emits('update:type', backup.type);
+    if (persisted) emits('mode-converted', persisted);
   }
 
   const ensureToolbar = async () => {
@@ -1961,15 +2601,11 @@
   };
 
   const ensureToolbarRendered = async () => {
-    if (props.readonly) return;
+    // V2 工具栏由 Vue 自己渲染，TinyMCE 已显式 toolbar:false，不再存在 .tox-toolbar。
+    // 旧逻辑若继续以 .tox-toolbar 是否存在作为门禁，会在每次 init / 可见性回调时
+    // 无限销毁并重建编辑器，表现为正文空白、点击后焦点立即消失。
     await nextTick();
-    const toolbar = document.querySelector('#editor-toolbar .tox-toolbar');
-    if (!toolbar) {
-      editorKey.value += 1;
-      editorReady.value = false;
-      await nextTick();
-      editorReady.value = true;
-    }
+    if (currentType.value === 'html' && !editorReady.value) editorReady.value = true;
   };
 
   const currentLang = computed(() => i18n.global.locale.value);
@@ -1977,6 +2613,11 @@
 
   const forceReinit = async () => {
     if (currentType.value !== 'html') return;
+    if (richFindVisible.value) {
+      clearRichFindMatches();
+      richFindVisible.value = false;
+    }
+    editorRef.value = null;
     editorKey.value += 1;
     editorReady.value = false;
     await nextTick();
@@ -2008,22 +2649,10 @@
     await nextTick();
     if (currentType.value === 'markdown') {
       const md = inputType === 'markdown' ? value || '' : noteHtmlToMarkdown(value || '');
-      // 用 execCommand('insertText') 替换 textarea 全文,让浏览器把这次替换记入原生撤销栈,
-      // 使 AI 替换后能像 html(TinyMCE undoManager)一样 Ctrl+Z 撤回;不支持时退回直接赋值(内容正确,仅撤回失效)。
-      const textarea = getMdTextarea();
-      let undoable = false;
-      if (textarea) {
-        textarea.focus({ preventScroll: true });
-        textarea.select();
-        try {
-          undoable = document.execCommand('insertText', false, md);
-        } catch {
-          undoable = false;
-        }
-      }
-      if (undoable && textarea) {
-        mdContent.value = textarea.value;
-        content.value = textarea.value;
+      const markdownEditor = mdCodeMirrorRef.value;
+      if (markdownEditor) {
+        // AI 全文替换作为单个 transaction 进入 CodeMirror history，Ctrl/⌘+Z 可完整撤回。
+        markdownEditor.replaceAll(md, true);
       } else {
         mdContent.value = md;
         content.value = md;
@@ -2078,20 +2707,19 @@
     //      而 silver theme 把 longpress 也当作 contextmenu 触发源(见 theme.js getPointAnchor)。
     // contextmenu: false 会让菜单项为空,其处理函数直接 return 且不 preventDefault,原生菜单接管。
     // 格式化能力不受影响:移动端仍有底部主工具栏 #editor-toolbar。
-    quickbars_selection_toolbar: bookmark.isMobile
+    quickbars_selection_toolbar: usesNativeTextSelectionMenu.value
       ? false
       : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
     quickbars_insert_toolbar: false,
-    ...(bookmark.isMobile ? { contextmenu: false } : {}),
+    ...(usesNativeTextSelectionMenu.value ? { contextmenu: false } : {}),
+    // 移动端不启用 TinyMCE 的触摸缩放手柄；单击图片后由轻笺底部面板调整尺寸，
+    // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面端仍保留原生图片拖拽手柄。
+    object_resizing: usesNativeTextSelectionMenu.value ? false : 'img',
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
-      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled]',
-    toolbar: props.readonly
-      ? false
-      : 'undo redo | blocks  | bold italic underline removeformat | forecolor backcolor | alignleft aligncenter alignright alignjustify | bullist numlist outdent indent | todoCheckbox  table | link image emoticons |  codeBlock mermaidDiagram',
-    fixed_toolbar_container: '#editor-toolbar',
-    toolbar_persist: true,
-    toolbar_mode: 'wrap',
+      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size]',
+    // 主工具栏由 EditorToolbarV2 统一渲染，TinyMCE 只负责命令、对话框和桌面划词快捷条。
+    toolbar: false,
     placeholder: t('note.contentPlaceholder'),
     readonly: false,
     content_css: false,
@@ -2109,7 +2737,90 @@
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
-      editor.on('OpenWindow', scheduleTinyMceInlineDialogPosition);
+      let mermaidEditBody: HTMLElement | null = null;
+      const bindMermaidEditRequest = () => {
+        mermaidEditBody = editor.getBody?.() as HTMLElement | null;
+        mermaidEditBody?.addEventListener(MERMAID_EDIT_EVENT, openRichMermaidEditor);
+      };
+      const unbindMermaidEditRequest = () => {
+        mermaidEditBody?.removeEventListener(MERMAID_EDIT_EVENT, openRichMermaidEditor);
+        mermaidEditBody = null;
+      };
+      let selectedMermaidFigure: HTMLElement | null = null;
+      const setSelectedMermaidFigure = (figure: HTMLElement | null) => {
+        if (selectedMermaidFigure && selectedMermaidFigure !== figure) {
+          selectedMermaidFigure.classList.remove('is-selected');
+        }
+        selectedMermaidFigure = figure;
+        selectedMermaidFigure?.classList.add('is-selected');
+      };
+      const resolveSelectedMermaidFigure = () => {
+        const body = editor.getBody?.() as HTMLElement | null;
+        if (!body) return null;
+        if (selectedMermaidFigure?.isConnected && body.contains(selectedMermaidFigure)) {
+          return selectedMermaidFigure;
+        }
+        const selectionNode = editor.selection?.getNode?.();
+        const fromSelection =
+          selectionNode instanceof Element ? selectionNode.closest<HTMLElement>('.mermaid-figure--companion') : null;
+        return (
+          fromSelection ||
+          body.querySelector<HTMLElement>(
+            '.mermaid-figure--companion.is-selected, .mermaid-figure--companion[data-mce-selected="1"]',
+          )
+        );
+      };
+      const deleteSelectedMermaidFigure = (event: KeyboardEvent) => {
+        if (event.isComposing || (event.key !== 'Backspace' && event.key !== 'Delete')) return false;
+        const figure = resolveSelectedMermaidFigure();
+        const source = figure?.previousElementSibling as HTMLElement | null;
+        if (!figure || !source?.matches('pre[class*="language-mermaid"]')) return false;
+
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const body = editor.getBody?.() as HTMLElement | null;
+        const after = figure.nextElementSibling as HTMLElement | null;
+        const before = source.previousElementSibling as HTMLElement | null;
+        editor.undoManager.transact(() => {
+          // companion 是不入库的装饰层，真正的正文节点是它前面的源码块；两者必须在同一事务中消失。
+          // 若只删 figure，下一轮 NodeChange 会根据仍在的源码把图重新生成，正是此前“闪成代码又变回图”的原因。
+          figure.remove();
+          source.remove();
+
+          let caretTarget = after?.isConnected ? after : before?.isConnected ? before : null;
+          if (!caretTarget && body) {
+            caretTarget = editor.dom.create('p', {}) as HTMLElement;
+            caretTarget.appendChild(editor.dom.create('br', { 'data-mce-bogus': '1' }));
+            body.appendChild(caretTarget);
+          }
+          if (caretTarget) {
+            editor.selection.select(caretTarget, true);
+            editor.selection.collapse(Boolean(after?.isConnected));
+          }
+          editor.nodeChanged?.();
+          editor.setDirty?.(true);
+          if (editor.dispatch) editor.dispatch('input');
+          else editor.fire?.('input');
+        });
+        setSelectedMermaidFigure(null);
+        return true;
+      };
+      editor.on('init', () => {
+        bindMermaidEditRequest();
+        // searchreplace 插件会注册自己的 Meta+F。若只在 keydown 里 preventDefault，
+        // 同一个编辑器事件上的 TinyMCE shortcut 监听仍会继续执行，原生浮层就会藏在
+        // 自研查找栏后面，按 Esc 后才暴露出来。初始化完成后明确替换为唯一入口。
+        editor.shortcuts.remove('Meta+F');
+        editor.shortcuts.add('Meta+F', '', () => openRichFind(editor));
+      });
+      editor.on('remove', () => {
+        if (editorRef.value === editor) {
+          clearRichFindMatches();
+          richFindVisible.value = false;
+        }
+        setSelectedMermaidFigure(null);
+        unbindMermaidEditRequest();
+      });
 
       const refreshResourceReferences = () => {
         window.setTimeout(() => {
@@ -2133,6 +2844,9 @@
       });
       editor.on('SetContent change undo redo', refreshResourceReferences);
       editor.on('input', () => {
+        if (richFindVisible.value && richFindSignature.value && !applyingRichFindReplacement) {
+          clearRichFindMatches();
+        }
         refreshResourceReferences();
         window.setTimeout(() => {
           if (inlineMentionVisible.value) syncTinyMceInlineMention(editor);
@@ -2140,7 +2854,27 @@
           // 浮层已收起但仍处在 @ 上下文时,上面的 tryOpen 会重新唤起
         }, 0);
       });
+      editor.on('undo redo SetContent', () => {
+        if (richFindVisible.value && richFindSignature.value && !applyingRichFindReplacement) {
+          clearRichFindMatches();
+        }
+      });
       editor.on('keydown', (event: KeyboardEvent) => {
+        if (deleteSelectedMermaidFigure(event)) return;
+        // TinyMCE searchreplace 自带的是可拖拽浮层，在 inline 模式里既遮正文又可能留下重复锚点。
+        // Ctrl(Windows/Linux) 与 ⌘(macOS) 统一打开编辑器内部的紧凑查找栏，只复用其搜索引擎。
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          openRichFind(editor);
+          return;
+        }
+        if (event.key === 'Escape' && richFindVisible.value) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          closeRichFind();
+          return;
+        }
         if (!inlineMentionVisible.value || event.isComposing) return;
         if (event.key === 'ArrowDown') {
           event.preventDefault();
@@ -2205,18 +2939,20 @@
         });
       };
       const ensureTodoCheckbox = (block: HTMLElement | null) => {
-        if (!block) return;
-        if (getLeadingCheckbox(block)) return;
+        if (!block || getLeadingCheckbox(block)) return null;
         const checkboxEl = editor.dom.create('input', {
           type: 'checkbox',
           class: 'note-todo-checkbox',
           'data-note-task': 'true',
         }) as HTMLInputElement;
-        const spacer = editor.dom.doc.createTextNode(' ');
+        // NBSP 给光标一个稳定的文字落点；普通空格在空段落中会被浏览器折叠，
+        // selection 最终容易退回到 checkbox 前面。
+        const spacer = editor.dom.doc.createTextNode('\u00a0');
         editor.undoManager.transact(() => {
           block.insertBefore(spacer, block.firstChild);
           block.insertBefore(checkboxEl, spacer);
         });
+        return spacer;
       };
       const splitTodoLineAtCursor = (block: HTMLElement | null) => {
         if (!block || !block.parentNode) return;
@@ -2247,6 +2983,42 @@
         editor.selection.setCursorLocation(spacer, spacer.length);
       };
 
+      const toggleNoteTodo = () => {
+        if (!editor.hasFocus()) return;
+        const blocks = getSelectedBlocks();
+        if (hasIneligibleSelection(blocks)) return;
+        const eligibleBlocks = blocks.filter((block) => isBlockEligible(block));
+        if (!eligibleBlocks.length) return;
+        const allHaveCheckbox = eligibleBlocks.every((block) => getLeadingCheckbox(block));
+        const currentBlock = getCurrentBlock();
+        const selectionWasCollapsed = Boolean(editor.selection?.getRng?.().collapsed);
+        const shouldMoveCaretAfterCheckbox = Boolean(
+          !allHaveCheckbox &&
+          selectionWasCollapsed &&
+          eligibleBlocks.length === 1 &&
+          currentBlock === eligibleBlocks[0] &&
+          !String(currentBlock?.textContent || '').trim(),
+        );
+        let caretSpacer: Text | null = null;
+        editor.undoManager.transact(() => {
+          if (allHaveCheckbox) {
+            eligibleBlocks.forEach((block) => removeLeadingCheckbox(block));
+            return;
+          }
+          eligibleBlocks.forEach((block) => {
+            if (!getLeadingCheckbox(block)) {
+              const spacer = ensureTodoCheckbox(block);
+              if (block === currentBlock && spacer) caretSpacer = spacer;
+            }
+          });
+        });
+        if (shouldMoveCaretAfterCheckbox && caretSpacer?.isConnected) {
+          editor.selection.setCursorLocation(caretSpacer, caretSpacer.length);
+          editor.nodeChanged?.();
+        }
+      };
+      editor.addCommand('ToggleNoteTodo', toggleNoteTodo);
+
       editor.ui.registry.addIcon('todo-checkbox', icon.noteDetail.toolbar.todo);
       editor.ui.registry.addButton('todoCheckbox', {
         icon: 'todo-checkbox',
@@ -2272,26 +3044,36 @@
             editor.off('SelectionChange', refresh);
           };
         },
-        onAction: () => {
-          if (!editor.hasFocus()) return;
-          const blocks = getSelectedBlocks();
-          if (hasIneligibleSelection(blocks)) return;
-          const eligibleBlocks = blocks.filter((block) => isBlockEligible(block));
-          if (!eligibleBlocks.length) return;
-          const allHaveCheckbox = eligibleBlocks.every((block) => getLeadingCheckbox(block));
-          editor.undoManager.transact(() => {
-            if (allHaveCheckbox) {
-              eligibleBlocks.forEach((block) => removeLeadingCheckbox(block));
-              return;
-            }
-            eligibleBlocks.forEach((block) => {
-              if (!getLeadingCheckbox(block)) {
-                ensureTodoCheckbox(block);
-              }
-            });
-          });
-        },
+        onAction: () => editor.execCommand('ToggleNoteTodo'),
       });
+
+      const refreshExternalToolbarState = () => {
+        if (editorRef.value !== editor) return;
+        const queryCommandState = (command: string) => {
+          if (!editor.initialized || !editor.getBody?.()) return false;
+          try {
+            return Boolean(editor.queryCommandState?.(command));
+          } catch {
+            // 切换笔记/格式时 TinyMCE 可能正处于销毁阶段，此时命令注册表已不可查询。
+            return false;
+          }
+        };
+        const node = editor.selection?.getNode?.() as HTMLElement | null;
+        const block = node ? (editor.dom.getParent(node, 'h1,h2,h3,h4,h5,h6,p,div,pre') as HTMLElement | null) : null;
+        const selectedBlocks = getSelectedBlocks().filter((item) => isBlockEligible(item));
+        richToolbarState.value = {
+          canUndo: Boolean(editor.undoManager?.hasUndo?.()),
+          canRedo: Boolean(editor.undoManager?.hasRedo?.()),
+          bold: queryCommandState('Bold'),
+          italic: queryCommandState('Italic'),
+          todo: Boolean(selectedBlocks.length && selectedBlocks.every((item) => getLeadingCheckbox(item))),
+          bulletList: queryCommandState('InsertUnorderedList'),
+          orderedList: queryCommandState('InsertOrderedList'),
+          block: String(block?.tagName || 'p').toLowerCase(),
+        };
+      };
+      editor.on('init focus NodeChange SelectionChange Undo Redo change SetContent', refreshExternalToolbarState);
+      window.setTimeout(refreshExternalToolbarState, 0);
       editor.ui.registry.addIcon('code-block', icon.noteDetail.toolbar.codeBlock);
       editor.ui.registry.addToggleButton('codeBlock', {
         icon: 'code-block',
@@ -2332,7 +3114,18 @@
           if (body) void renderMermaidBlocks(body, { companion: true });
         }, MERMAID_COMPANION_DEBOUNCE_MS);
       };
-      editor.on('SetContent input undo redo', scheduleCompanionRender);
+      const renderCompanionsImmediately = () => {
+        if (mermaidCompanionTimer) {
+          window.clearTimeout(mermaidCompanionTimer);
+          mermaidCompanionTimer = null;
+        }
+        const body = editor.getBody?.();
+        // renderMermaidBlocks 在首次 await 之前就同步插入 placeholder companion，
+        // 所以撤销/重做恢复源码块的同一帧里已经有图表占位，源码不会裸露 260ms。
+        if (body) void renderMermaidBlocks(body, { companion: true });
+      };
+      editor.on('SetContent undo redo', renderCompanionsImmediately);
+      editor.on('input', scheduleCompanionRender);
       // NodeChange 触发很密,但 renderMermaidCompanions 对没变过的源码是空操作
       editor.on('NodeChange', scheduleCompanionRender);
       editor.ui.registry.addMenuButton('myHeadingMenu', {
@@ -2384,12 +3177,18 @@
         },
       });
 
-      // 划词 AI:选中文字后在浮动工具条点「AI」→ 就地润色/翻译/精简/扩写,结果替换选区
-      const AI_SEL_TASK: Record<string, string> = {
-        polish: '把下面这段文字润色得更通顺自然,保持原意和原语言',
-        translate: '把下面这段文字在中文与英文之间翻译(中文内容译成英文,英文内容译成中文)',
-        condense: '把下面这段文字精简得更短,只保留关键信息',
-        expand: '把下面这段文字扩写得更充实,补充合理的细节',
+      // 划词 AI 是一条独立的「选段改写」链路：只传动作枚举和选中文字，
+      // 由服务端组装受限提示并强制纯文本输出。全文助手的【标题】/【正文】契约不再进入这里。
+      const normalizeSelectionAiOutput = (value: string) => {
+        let output = String(value || '').trim();
+        output = output
+          .replace(/^```(?:text|plaintext)?\s*/iu, '')
+          .replace(/```\s*$/u, '')
+          .trim();
+        // 兼容切换期间仍返回旧标记的上游，避免再把「标题/正文」字样写进选区。
+        const bodyMarker = output.lastIndexOf('【正文】');
+        if (bodyMarker >= 0) output = output.slice(bodyMarker + '【正文】'.length).trim();
+        return output.replace(/^【标题】\s*/u, '').trim();
       };
       const aiEditSelection = async (action: string) => {
         const raw = editor.selection ? editor.selection.getContent({ format: 'text' }) : '';
@@ -2398,6 +3197,7 @@
           message.warning(t('noteDetail.editor.aiSelectFirst'));
           return;
         }
+        const bookmark = editor.selection?.getBookmark?.(2, true) ?? null;
         editor.setProgressState(true);
         try {
           // 该 AI 端点始终以 SSE 流返回(stream:false 会拿到未解析的原始 SSE),故用流式并自行收集,与 AiReply 一致
@@ -2420,9 +3220,11 @@
           await apiBasePost(
             '/api/note/assist',
             {
-              message: `任务:${AI_SEL_TASK[action]}。只输出处理后的纯文本,不要任何解释、前后缀或 markdown 代码块。\n\n原文:\n${text}`,
+              selectionAction: action,
+              selectionText: text,
               stream: true,
               sessionId: '',
+              responseFormat: 'plain',
               requestMetadata: {
                 operation: `selection_${action}`,
                 scope: 'selection',
@@ -2447,9 +3249,19 @@
             },
           );
           if (buffer) buffer.split('\n').forEach(parseLine); // 收尾残余
-          const out = full.trim();
+          const out = normalizeSelectionAiOutput(full);
           if (out) {
-            editor.selection.setContent(editor.dom.encode(out).replace(/\n/g, '<br>')); // 文本编码回填,防 HTML 注入,保留换行
+            editor.focus();
+            if (bookmark) editor.selection?.moveToBookmark?.(bookmark);
+            const currentSelection = String(editor.selection?.getContent?.({ format: 'text' }) || '').trim();
+            if (currentSelection !== text) {
+              message.warning(t('noteDetail.editor.aiSelectionChanged'));
+              return;
+            }
+            editor.undoManager.transact(() => {
+              // 文本编码后回填：结果不能注入 HTML，且整次替换作为一个撤销步骤。
+              editor.selection.setContent(editor.dom.encode(out).replace(/\r?\n/g, '<br>'));
+            });
           } else {
             message.info(t('noteDetail.editor.aiEmpty'));
           }
@@ -2488,12 +3300,23 @@
       };
 
       editor.on('click', (event: MouseEvent) => {
+        const target = event.target;
+        const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
+        setSelectedMermaidFigure(figure);
+        const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
+        if (
+          image &&
+          isMobile.value &&
+          !props.readonly &&
+          !image.closest('.mermaid-figure--companion')
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          openMobileImageSettings({ kind: 'html', editor, element: image }, image);
+          return;
+        }
         if (handleTinyMceResourceReferenceActivation(event)) return;
-        syncCheckboxAttribute(event.target);
-      });
-      editor.on('touchend', (event: TouchEvent) => {
-        if (!isMobile.value) return;
-        handleTinyMceResourceReferenceActivation(event);
+        syncCheckboxAttribute(target);
       });
       editor.on('change', (event: Event) => {
         syncCheckboxAttribute(event.target);
@@ -2524,7 +3347,11 @@
       });
     },
     content_style: [
-      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px 20px; } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: var(--pre-bg-color); color: #ffffff; border: 1px solid rgba(148, 163, 184, 0.4); padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px clamp(180px, 35vh, 380px); } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: var(--pre-bg-color); color: #ffffff; border: 1px solid rgba(148, 163, 184, 0.4); padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
+      // TinyMCE 的 placeholder 是绝对定位伪元素，不能继承正文 padding；首个空段落又有浏览器默认 margin。
+      // 把两者统一到 12×20 的正文起点，空笔记获得焦点时 placeholder 与真实光标完全重合。
+      '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
+      '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -2570,12 +3397,15 @@
   onBeforeUnmount(() => {
     if (mdRenderTimer) clearTimeout(mdRenderTimer);
     if (mdScrollUnlockTimer) window.clearTimeout(mdScrollUnlockTimer);
+    if (mermaidCompanionTimer) window.clearTimeout(mermaidCompanionTimer);
     if (visibilityObserver) {
       visibilityObserver.disconnect();
       visibilityObserver = null;
     }
     if (editorRef.value) {
+      clearRichFindMatches();
       editorRef.value.remove();
+      editorRef.value = null;
     }
   });
 </script>
@@ -2607,8 +3437,15 @@
     position: relative;
     z-index: 1;
     overflow: visible;
-    border-bottom: 1px solid var(--surface-border-color);
+    border-bottom: 0;
     background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color));
+  }
+
+  .markdown-shortcuts-copy {
+    margin: 0;
+    color: var(--text-color);
+    line-height: 1.9;
+    white-space: pre-line;
   }
   .note-editor-scroll {
     flex: 1;
@@ -2620,7 +3457,7 @@
     overflow: visible;
     background-color: var(--surface-page-bg, var(--background-color));
     color: var(--text-color);
-    padding: 5px 10px 20px;
+    padding: 12px 20px clamp(180px, 35vh, 380px);
     min-height: 100%;
   }
 
@@ -2736,45 +3573,9 @@
     background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
     flex-shrink: 0;
   }
-  /* Markdown 编辑工具栏:与富文本的 #editor-toolbar 同一层级,横跨编辑区,不介入左右分栏 */
-  .md-edit-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 3px 10px;
-    border-bottom: 1px solid var(--surface-border-color);
-    background: var(--note-editor-header-bg, var(--surface-panel-bg, var(--background-color)));
-    flex-shrink: 0;
-  }
-
-  /* 高度交给 BButton 的 size="small"(24px),这里只管配色与图标间距 */
-  .md-edit-toolbar .md-tool-button {
-    padding: 0 6px;
-    border-radius: 6px;
-    color: var(--desc-color);
-
-    &:hover:not(.disabled) {
-      color: var(--resource-note-color, #00a884);
-      background: color-mix(in srgb, var(--resource-note-color, #00a884) 10%, transparent);
-    }
-  }
-
-  /* 分组之间用一道细分隔:文本格式一组、插入一组,按钮多了不至于糊成一条 */
-  .md-tool-divider {
-    width: 1px;
-    height: 16px;
-    margin: 0 2px;
-    background: var(--surface-border-color);
-    flex-shrink: 0;
-  }
-
-  .md-hidden-file-input {
-    display: none;
-  }
-
   @media (max-width: 767px) {
-    .md-edit-toolbar {
-      padding: 3px 8px;
+    .md-editor-toolbar {
+      min-height: 48px;
     }
   }
 
@@ -2811,6 +3612,41 @@
       background: var(--resource-note-color, #00a884);
     }
   }
+  .note-editor .editor-toolbar-v2__trailing .md-view-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 28px;
+    margin: 0;
+    box-sizing: border-box;
+    border: 0;
+    background: transparent;
+  }
+  .note-editor .editor-toolbar-v2__trailing .md-view-switch__button {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 4px 4px 0 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--desc-color);
+    transition:
+      color 0.15s ease,
+      background-color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .note-editor .editor-toolbar-v2__trailing .md-view-switch__button:hover {
+    background: var(--hover-background);
+    color: var(--text-color);
+  }
+  .note-editor .editor-toolbar-v2__trailing .md-view-switch__button.is-active {
+    border-bottom-color: var(--primary-color) !important;
+    background: transparent;
+    color: var(--primary-color);
+  }
   /* Markdown 编辑器 */
   .md-editor-container {
     flex: 1;
@@ -2840,44 +3676,17 @@
   .md-editor-pane {
     border-right: 1px solid var(--card-border-color, #e8eaf2);
   }
-  /* 栏标签只是「这半边是什么」的标识,灰色小字已经够,不用再画一条线 */
-  .md-editor-label {
-    padding: 4px 10px;
-    font-size: 11px;
-    color: var(--desc-color, #888);
-    flex-shrink: 0;
-  }
   .md-textarea {
     flex: 1;
     min-height: 0;
     display: flex;
     overflow: hidden;
-
-    .b-textarea {
-      flex: 1;
-      min-height: 0;
-      height: 100%;
-      resize: none;
-      border: none !important;
-      border-radius: 0;
-      outline: none;
-      padding: 15px !important;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
-      font-size: 13px;
-      line-height: 1.6;
-      background: var(--background-color) !important;
-      color: var(--text-color);
-
-      &::placeholder {
-        color: var(--desc-color, #999);
-      }
-    }
   }
   .md-preview {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 10px;
+    padding: 10px 10px clamp(160px, 35vh, 360px);
     color: var(--text-color);
     font-size: 14px;
     line-height: 1.7;
@@ -2920,6 +3729,11 @@
       color: var(--desc-color, #666);
       background: var(--common-tag-bg-color, #f9f9f9);
       border-radius: 0 6px 6px 0;
+    }
+    a:not(.ln-resource-link) {
+      color: var(--note-editor-link-color, var(--info-color, var(--primary-color)));
+      text-decoration-color: currentColor;
+      text-underline-offset: 2px;
     }
     img {
       max-width: 100%;
@@ -3210,7 +4024,401 @@
     }
   }
 
+  .rich-color-dialog {
+    display: grid;
+    gap: 12px;
+    color: var(--text-color);
+
+    > p {
+      margin: 0;
+      color: var(--desc-color);
+      line-height: 1.55;
+    }
+
+    > label {
+      font-weight: 600;
+    }
+  }
+
+  .rich-mermaid-editor {
+    display: grid;
+    gap: 10px;
+    color: var(--text-color);
+
+    > p {
+      margin: 0 0 2px;
+      color: var(--desc-color);
+      line-height: 1.55;
+    }
+
+    > label {
+      font-weight: 600;
+    }
+
+    .b-textarea {
+      min-height: min(46vh, 360px);
+      font:
+        13px/1.6 ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        Monaco,
+        Consolas,
+        monospace;
+      tab-size: 2;
+    }
+  }
+
+  .rich-mermaid-editor__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  .rich-color-dialog__palette {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .rich-color-dialog__swatch.b_btn {
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    padding: 4px;
+    border: 2px solid var(--surface-border-color);
+    background: var(--card-background);
+
+    > span {
+      display: block;
+      width: 100%;
+      height: 100%;
+      border: 1px solid rgba(0, 0, 0, 0.24);
+      border-radius: 5px;
+      background: var(--rich-color-swatch);
+    }
+
+    &.is-active {
+      border-color: var(--primary-color);
+      outline: 1px solid var(--primary-color);
+    }
+  }
+
+  .rich-color-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+
+    .b_btn {
+      min-height: 40px;
+    }
+  }
+
+  .note-conversion-preview {
+    display: grid;
+    gap: 14px;
+    color: var(--text-color);
+  }
+
+  .note-conversion-preview__notice {
+    margin: 0;
+    padding: 11px 13px;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--background-color);
+    font-weight: 600;
+    line-height: 1.55;
+  }
+
+  .note-conversion-preview__summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+
+    > div {
+      display: grid;
+      gap: 5px;
+      padding: 12px;
+      border: 1px solid var(--surface-border-color);
+      border-top-width: 3px;
+      border-radius: 10px;
+      background: var(--surface-page-bg, var(--background-color));
+
+      span {
+        color: var(--desc-color);
+        font-size: 12px;
+      }
+    }
+
+    .is-preserved {
+      border-top-color: var(--resource-note-color, #00a884);
+    }
+
+    .is-standardized {
+      border-top-color: var(--warning-color, #d97706);
+    }
+
+    .is-risk {
+      border-top-color: var(--error-color, #dc2626);
+    }
+  }
+
+  .note-conversion-preview__issues {
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+
+    > div {
+      min-height: 40px;
+      padding: 0 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--surface-border-color);
+
+      &:last-child {
+        border-bottom: 0;
+      }
+    }
+  }
+
+  .note-conversion-preview__safe {
+    margin: 0;
+    color: var(--resource-note-color, #00a884);
+    font-weight: 600;
+  }
+
+  .note-conversion-preview__content {
+    min-height: 0;
+    display: grid;
+    gap: 8px;
+
+    pre,
+    .note-conversion-preview__rendered {
+      max-height: min(34vh, 300px);
+      margin: 0;
+      padding: 12px;
+      box-sizing: border-box;
+      overflow: auto;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 10px;
+      color: var(--text-color);
+      background: var(--pre-bg-color, var(--surface-page-bg));
+    }
+
+    pre {
+      font:
+        13px/1.55 ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        Monaco,
+        Consolas,
+        monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .note-conversion-preview__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+
+    .b_btn {
+      min-height: 40px;
+    }
+  }
+
+  .note-editor-body img[data-ln-size],
+  .md-preview img[data-ln-size],
+  .note-conversion-preview__rendered img[data-ln-size],
+  .mobile-image-settings__preview img[data-ln-size] {
+    display: block;
+    max-width: 100% !important;
+    height: auto !important;
+    margin-inline: auto;
+  }
+
+  .note-editor-body img[data-ln-size='original'],
+  .md-preview img[data-ln-size='original'],
+  .note-conversion-preview__rendered img[data-ln-size='original'],
+  .mobile-image-settings__preview img[data-ln-size='original'] {
+    width: auto !important;
+  }
+
+  .note-editor-body img[data-ln-size='small'],
+  .md-preview img[data-ln-size='small'],
+  .note-conversion-preview__rendered img[data-ln-size='small'],
+  .mobile-image-settings__preview img[data-ln-size='small'] {
+    width: 40% !important;
+  }
+
+  .note-editor-body img[data-ln-size='medium'],
+  .md-preview img[data-ln-size='medium'],
+  .note-conversion-preview__rendered img[data-ln-size='medium'],
+  .mobile-image-settings__preview img[data-ln-size='medium'] {
+    width: 64% !important;
+  }
+
+  .note-editor-body img[data-ln-size='large'],
+  .md-preview img[data-ln-size='large'],
+  .note-conversion-preview__rendered img[data-ln-size='large'],
+  .mobile-image-settings__preview img[data-ln-size='large'] {
+    width: 82% !important;
+  }
+
+  .note-editor-body img[data-ln-size='full'],
+  .md-preview img[data-ln-size='full'],
+  .note-conversion-preview__rendered img[data-ln-size='full'],
+  .mobile-image-settings__preview img[data-ln-size='full'] {
+    width: 100% !important;
+  }
+
+  .mobile-image-settings {
+    display: grid;
+    gap: 12px;
+    color: var(--text-color);
+
+    > p {
+      margin: 0;
+      color: var(--desc-color);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+  }
+
+  .mobile-image-settings__preview {
+    min-height: 104px;
+    max-height: 180px;
+    padding: 10px;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--surface-page-bg, var(--background-color));
+
+    img {
+      max-height: 158px;
+      object-fit: contain;
+    }
+  }
+
+  .mobile-image-settings__options {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
+  }
+
+  .mobile-image-settings__option.b_btn {
+    position: relative;
+    width: 100%;
+    min-width: 0;
+    height: 64px;
+    padding: 7px 4px 6px;
+    display: grid;
+    grid-template-rows: 18px auto;
+    justify-items: center;
+    align-content: center;
+    gap: 5px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    background: var(--surface-page-bg, var(--background-color));
+    color: var(--desc-color);
+    font-size: 12px;
+
+    &.is-active {
+      border-color: var(--primary-color);
+      background: var(--primary-color-light, var(--surface-page-bg, var(--background-color)));
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+  }
+
+  .mobile-image-settings__size-mark {
+    align-self: center;
+    height: 7px;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    background: currentColor;
+    opacity: 0.72;
+  }
+
+  .mobile-image-settings__option.is-original .mobile-image-settings__size-mark {
+    width: 24px;
+    background: transparent;
+  }
+
+  .mobile-image-settings__option.is-small .mobile-image-settings__size-mark {
+    width: 28%;
+  }
+
+  .mobile-image-settings__option.is-medium .mobile-image-settings__size-mark {
+    width: 48%;
+  }
+
+  .mobile-image-settings__option.is-large .mobile-image-settings__size-mark {
+    width: 70%;
+  }
+
+  .mobile-image-settings__option.is-full .mobile-image-settings__size-mark {
+    width: 88%;
+  }
+
+  .mobile-image-settings__check {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    color: var(--primary-color);
+  }
+
   @media (max-width: 767px) {
+    .rich-mermaid-editor__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+
+      .b_btn {
+        width: 100%;
+        min-height: 46px;
+      }
+    }
+
+    .rich-color-dialog__palette {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .rich-color-dialog__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+
+      .b_btn:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .b_btn {
+        width: 100%;
+        min-height: 46px;
+      }
+    }
+
+    .note-conversion-preview__summary {
+      grid-template-columns: 1fr;
+    }
+
+    .note-conversion-preview__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+
+      .b_btn {
+        width: 100%;
+        min-height: 46px;
+      }
+    }
+
     .note-editor-body,
     .md-preview {
       max-width: 100%;
@@ -3234,22 +4442,4 @@
   }
 
   /* 移动端 MD 视图由选项数据移除分栏，只保留编辑和预览。 */
-  @media (max-width: 1024px) {
-    /* 富文本工具栏(TinyMCE inline + fixed_toolbar_container):窄屏下默认会把 9 个按钮组挤压,
-       组内按钮再竖向堆叠,呈现"网格状"多行错乱(真机移动端亦如此)。这里强制单行 + 横向滚动:
-       组不收缩(flex-shrink:0)、组内不换行(nowrap),整条工具栏超宽时横向滚动。
-       用 @media 按视口宽度即时生效,切换尺寸/真机都无需刷新。 */
-    .note-editor .tox-editor-header {
-      grid-template-columns: 100% !important;
-      grid-template-rows: auto !important;
-    }
-    .note-editor .tox-toolbar {
-      flex-wrap: nowrap !important;
-      overflow-x: auto !important;
-    }
-    .note-editor .tox-toolbar__group {
-      flex-wrap: nowrap !important;
-      flex-shrink: 0 !important;
-    }
-  }
 </style>

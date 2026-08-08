@@ -81,37 +81,37 @@ const securityCenterRouter: RouteRecordRaw[] = [
     meta: securityCenterMeta,
     path: '/securityOverview',
     name: 'securityOverview',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'overview' } },
   },
   {
     meta: securityCenterMeta,
     path: '/securityEvents',
     name: 'securityEvents',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'review' } },
   },
   {
     meta: securityCenterMeta,
     path: '/securityIps',
     name: 'securityIps',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'access' } },
   },
   {
     meta: securityCenterMeta,
     path: '/securityAccountReputation',
     name: 'securityAccountReputation',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'access' } },
   },
   {
     meta: securityCenterMeta,
     path: '/securityRules',
     name: 'securityRules',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'quality' } },
   },
   {
     meta: securityCenterMeta,
     path: '/securityWhitelist',
     name: 'securityWhitelist',
-    redirect: { name: 'securityCenterMobile' },
+    redirect: { name: 'securityCenterMobile', query: { tab: 'access' } },
   },
 ];
 

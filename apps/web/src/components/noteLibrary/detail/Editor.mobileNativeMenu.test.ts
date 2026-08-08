@@ -12,6 +12,14 @@ function editorInitSource() {
   return editorSource.slice(start, end);
 }
 
+function applyMobileImageSizeSource() {
+  const start = editorSource.indexOf('function applyMobileImageSize');
+  const end = editorSource.indexOf('// Markdown 编辑器与预览的滚动同步', start + 1);
+  expect(start).toBeGreaterThan(-1);
+  expect(end).toBeGreaterThan(start);
+  return editorSource.slice(start, end);
+}
+
 /**
  * 移动端富文本的长按/选择必须落到系统菜单（复制/粘贴/全选）。
  *
@@ -25,18 +33,39 @@ function editorInitSource() {
 describe('移动端富文本交给系统菜单', () => {
   it('移动端关闭 quickbars 选区条，桌面端保留自研快捷条', () => {
     const source = editorInitSource();
-    expect(source).toMatch(/quickbars_selection_toolbar:\s*bookmark\.isMobile\s*\?\s*false/);
+    expect(editorSource).toMatch(
+      /usesNativeTextSelectionMenu\s*=\s*computed\(\(\)\s*=>\s*bookmark\.isMobile\s*\|\|\s*bookmark\.isTouchDevice\)/,
+    );
+    expect(source).toMatch(/quickbars_selection_toolbar:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false/);
     // 桌面分支仍要有自研入口，别在修移动端时把桌面一起关掉
     expect(source).toMatch(/aiEdit \| myHeadingMenu/);
   });
 
-  it('移动端显式把 contextmenu 设为 false，不落回 TinyMCE 默认值', () => {
+  it('触屏设备显式把 contextmenu 设为 false，不落回 TinyMCE 默认值', () => {
     const source = editorInitSource();
-    expect(source).toMatch(/bookmark\.isMobile\s*\?\s*\{\s*contextmenu:\s*false\s*\}\s*:\s*\{\}/);
+    expect(source).toMatch(/usesNativeTextSelectionMenu\.value\s*\?\s*\{\s*contextmenu:\s*false\s*\}\s*:\s*\{\}/);
   });
 
-  it('移动端仍保留底部主工具栏，格式化能力不因关菜单而丢失', () => {
+  it('移动端仍保留六项固定工具栏，格式化能力进入底部抽屉', () => {
     expect(editorSource).toContain('id="editor-toolbar"');
-    expect(editorInitSource()).toContain("fixed_toolbar_container: '#editor-toolbar'");
+    expect(editorSource).toContain('<EditorToolbarV2');
+    expect(editorInitSource()).toContain('toolbar: false');
+    expect(editorSource).not.toContain('@touchend="handleRenderedResourceLinkClick"');
+    expect(editorInitSource()).not.toContain("editor.on('touchend'");
+    expect(editorSource).toMatch(
+      /const moreActions = isMobile\.value[\s\S]*action\('redo'[\s\S]*action\('italic'[\s\S]*\.\.\.listActions[\s\S]*action\('link'/,
+    );
+  });
+
+  it('移动端图片尺寸使用共用底部抽屉，并允许连续切换档位', () => {
+    expect(editorSource).toContain('<BDrawer');
+    expect(editorSource).toContain('@click="handleMarkdownPreviewClick"');
+    expect(editorInitSource()).toMatch(/object_resizing:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false\s*:\s*'img'/);
+
+    const source = applyMobileImageSizeSource();
+    expect(source).toContain('mobileImageSettingsSize.value = normalizedSize');
+    const successTail = source.slice(source.lastIndexOf('mobileImageSettingsSize.value = normalizedSize'));
+    // 选中一个尺寸后面板要留在原处，方便用户连续试选；只在失败或主动关闭时退出。
+    expect(successTail).not.toContain('closeMobileImageSettings()');
   });
 });

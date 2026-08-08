@@ -71,6 +71,7 @@ function normalizeTreeNode(row = {}) {
     parentId: normalizeParentId(row.parentId ?? row.parent_id),
     title: String(row.title || ''),
     type: String(row.type || 'html'),
+    revision: Math.max(1, Number(row.revision || 1)),
     sort: numberOrZero(row.sort),
     isTop: Boolean(numberOrZero(row.isTop ?? row.is_top)),
     delFlag: numberOrZero(row.delFlag ?? row.del_flag),
@@ -151,7 +152,7 @@ export async function loadOwnedNoteTree(userId, options = {}) {
   const lock = options.lock === true;
   const where = includeDeleted ? 'create_by = ?' : 'create_by = ? AND del_flag = 0';
   const [rows] = await db.query(
-    `SELECT id, parent_id, title, type, sort, is_top, del_flag, update_time, tree_delete_batch_id
+    `SELECT id, parent_id, title, type, revision, sort, is_top, del_flag, update_time, tree_delete_batch_id
        FROM note
       WHERE ${where}
       ORDER BY is_top DESC, sort, update_time DESC, id DESC${lock ? ' FOR UPDATE' : ''}`,
@@ -273,6 +274,7 @@ function decorateTreeItem(snapshot, node, depth) {
     parentId: node.effectiveParentId,
     title: node.title,
     type: node.type,
+    revision: node.revision,
     childCount: children.length,
     hasChildren: children.length > 0,
     isTop: node.isTop,
@@ -294,6 +296,7 @@ function decorateTreeSearchItem(snapshot, node, visibleIds, matchedIds) {
     parentId: node.effectiveParentId,
     title: node.title,
     type: node.type,
+    revision: node.revision,
     childCount: children.length,
     hasChildren: children.length > 0,
     isTop: node.isTop,

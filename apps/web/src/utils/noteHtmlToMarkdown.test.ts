@@ -4,6 +4,16 @@ import { marked } from 'marked';
 import { normalizeMarkdownTaskListHtml, noteHtmlToMarkdown, promoteEmptyMarkdownTaskToken } from './noteHtmlToMarkdown';
 
 describe('noteHtmlToMarkdown', () => {
+  it('切换到 Markdown 时保留轻笺图片尺寸元数据', () => {
+    expect(
+      noteHtmlToMarkdown(
+        '<p><img src="/api/file/image.png" alt="截图" title="示例" width="320" data-ln-size="small"></p>',
+      ),
+    ).toContain(
+      '<img src="/api/file/image.png" alt="截图" title="示例" data-ln-size="small" />',
+    );
+  });
+
   it('保留已勾选和未勾选的轻笺待办状态', () => {
     const markdown = noteHtmlToMarkdown(`
       <p><input type="checkbox" class="note-todo-checkbox" checked="checked" /> 已完成</p>
@@ -90,5 +100,19 @@ describe('noteHtmlToMarkdown', () => {
     const markdown = noteHtmlToMarkdown('<ul><li>第一项</li><li>第二项</li></ul>');
     expect(markdown).toBe('-   第一项\n-   第二项');
     expect(markdown).not.toContain('*');
+  });
+
+  it('普通 HTML 表格转换为 GFM 表格，不退化成连续纯文本', () => {
+    const markdown = noteHtmlToMarkdown(
+      '<table><thead><tr><th>名称</th><th>状态</th></tr></thead><tbody><tr><td>编辑器</td><td>完成</td></tr></tbody></table>',
+    );
+
+    expect(markdown).toContain('| 名称 | 状态 |');
+    expect(markdown).toMatch(/\|\s*-+\s*\|\s*-+\s*\|/u);
+    expect(markdown).toContain('| 编辑器 | 完成 |');
+  });
+
+  it('删除线转换为 GFM 双波浪线', () => {
+    expect(noteHtmlToMarkdown('<p><s>旧内容</s></p>')).toBe('~~旧内容~~');
   });
 });

@@ -3,7 +3,9 @@ import {
   applyEditResult,
   buildCodeBlock,
   buildMarkdownTable,
+  insertMarkdownLink,
   insertBlock,
+  setLinePrefix,
   toggleLinePrefix,
   wrapSelection,
   type EditResult,
@@ -89,6 +91,29 @@ describe('toggleLinePrefix', () => {
     const input = sel('标题', 0);
     const out = applied(input, toggleLinePrefix(input, '# '));
     expect(out.value).toBe('# 标题');
+  });
+});
+
+describe('setLinePrefix', () => {
+  it('标题级别互换时替换旧前缀，不叠加井号', () => {
+    const input = sel('## 标题', 4);
+    const out = applied(input, setLinePrefix(input, '### ', /^#{1,6}\s+/u));
+    expect(out.value).toBe('### 标题');
+  });
+
+  it('切回段落会移除标题前缀', () => {
+    const input = sel('# 标题', 3);
+    const out = applied(input, setLinePrefix(input, '', /^#{1,6}\s+/u));
+    expect(out.value).toBe('标题');
+  });
+});
+
+describe('insertMarkdownLink', () => {
+  it('保留选中文字并选中 URL 占位符', () => {
+    const input = sel('查看轻笺', 2, 4);
+    const out = applied(input, insertMarkdownLink(input));
+    expect(out.value).toBe('查看[轻笺](https://)');
+    expect(out.value.slice(out.selectionStart, out.selectionEnd)).toBe('https://');
   });
 });
 

@@ -4,6 +4,7 @@
     :title="t('note.renamePage')"
     :mask-closable="false"
     :show-footer="false"
+    initial-focus="#note-page-rename-input"
     width="min(440px, calc(100% - 24px))"
   >
     <div class="note-rename-modal">
@@ -35,9 +36,9 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
 
-  const props = defineProps<{ note: { id: string; title?: string } | null }>();
+  const props = defineProps<{ note: { id: string; title?: string; revision?: number } | null }>();
   const visible = defineModel<boolean>('visible', { default: false });
-  const emit = defineEmits<{ renamed: [note: { id: string; title: string }] }>();
+  const emit = defineEmits<{ renamed: [note: { id: string; title: string; revision?: number }] }>();
   const { t } = useI18n();
   const title = ref('');
   const saving = ref(false);
@@ -61,12 +62,22 @@
     }
     saving.value = true;
     try {
-      const response = await apiBasePost('/api/note/updateNote', { id: noteId, title: nextTitle });
+      const revision = Number(props.note?.revision);
+      const response = await apiBasePost('/api/note/updateNote', {
+        id: noteId,
+        title: nextTitle,
+        ...(Number.isSafeInteger(revision) && revision > 0 ? { revision } : {}),
+      });
       if (response.status !== 200) {
         message.error(response.msg || t('note.renameFailed'));
         return;
       }
-      emit('renamed', { id: noteId, title: nextTitle });
+      const nextRevision = Number(response.data?.revision);
+      emit('renamed', {
+        id: noteId,
+        title: nextTitle,
+        ...(Number.isSafeInteger(nextRevision) && nextRevision > 0 ? { revision: nextRevision } : {}),
+      });
       message.success(t('note.renameSuccess'));
       visible.value = false;
     } catch {

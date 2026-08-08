@@ -2,9 +2,8 @@
  * Markdown 工具栏的文本编辑操作(纯函数,不碰 DOM)。
  *
  * 统一约定:输入是「当前正文 + 选区」,输出是**一次区间替换**(替换哪一段、换成什么、之后选区在哪)。
- * 特意不返回整篇新正文 —— 调用方要用 document.execCommand('insertText') 写回,
- * 只有走浏览器自己的编辑通道,Ctrl+Z 才撤得回来;直接给 textarea.value 赋值会绕过 undo 栈,
- * 用户点完「插入表格」按 Ctrl+Z 什么都不会发生。
+ * 特意不返回整篇新正文 —— 调用方把这一段作为单个 CodeMirror transaction 写回，
+ * 这样 Ctrl/⌘+Z 能完整撤回一次工具栏动作，也不会在大文档里反复替换整篇字符串。
  */
 
 export interface EditorSelection {
@@ -24,7 +23,7 @@ export interface EditResult {
   selectionEnd: number;
 }
 
-/** 把一次区间替换应用到字符串上。给测试和无 execCommand 时的兜底用 */
+/** 把一次区间替换应用到字符串上。给纯函数测试和编辑器尚未挂载时的兜底用。 */
 export function applyEditResult(value: string, result: EditResult): string {
   return value.slice(0, result.rangeStart) + result.text + value.slice(result.rangeEnd);
 }
@@ -93,6 +92,48 @@ export function toggleLinePrefix(input: EditorSelection, prefix: string): EditRe
     text,
     selectionStart: Math.max(lineStart, selectionStart + delta),
     selectionEnd: Math.max(lineStart, selectionEnd + delta * lines.length),
+  };
+}
+
+/**
+ * 把选区所在行切换到一类互斥块格式（例如 H1-H6 / 段落）。
+ * 与 toggleLinePrefix 不同，它会先移除同类旧前缀，避免 H2 点成 H3 后得到 `### ## 标题`。
+ */
+export function setLinePrefix(input: EditorSelection, prefix: string, replacePattern: RegExp): EditResult {
+  const { value, selectionStart, selectionEnd } = input;
+  const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+  const lineEndIndex = value.indexOf('\n', selectionEnd);
+  const lineEnd = lineEndIndex === -1 ? value.length : lineEndIndex;
+  const lines = value.slice(lineStart, lineEnd).split('\n');
+  const oldPrefixes = lines.map((line) => line.match(replacePattern)?.[0] || '');
+  const text = lines.map((line, index) => `${prefix}${line.slice(oldPrefixes[index].length)}`).join('\n');
+  const firstDelta = prefix.length - oldPrefixes[0].length;
+  const totalDelta = lines.reduce((sum, _line, index) => sum + prefix.length - oldPrefixes[index].length, 0);
+
+  return {
+    rangeStart: lineStart,
+    rangeEnd: lineEnd,
+    text,
+    selectionStart: Math.max(lineStart, selectionStart + firstDelta),
+    selectionEnd: Math.max(lineStart, selectionEnd + totalDelta),
+  };
+}
+
+/** 插入 Markdown 链接，并把 URL 选中，用户可直接粘贴目标地址。 */
+export function insertMarkdownLink(
+  input: EditorSelection,
+  textPlaceholder = 'link text',
+  urlPlaceholder = 'https://',
+): EditResult {
+  const selected = input.value.slice(input.selectionStart, input.selectionEnd) || textPlaceholder;
+  const text = `[${selected}](${urlPlaceholder})`;
+  const urlStart = input.selectionStart + selected.length + 3;
+  return {
+    rangeStart: input.selectionStart,
+    rangeEnd: input.selectionEnd,
+    text,
+    selectionStart: urlStart,
+    selectionEnd: urlStart + urlPlaceholder.length,
   };
 }
 

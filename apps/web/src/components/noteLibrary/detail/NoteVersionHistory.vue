@@ -22,7 +22,10 @@
             >
               <div class="version-time">{{ v.createTime }}</div>
               <div class="version-sub">
-                <span class="version-title-line">{{ v.title || $t('noteDetail.unnamedDoc') }}</span>
+                <span class="version-title-line">
+                  <span>{{ v.title || $t('noteDetail.unnamedDoc') }}</span>
+                  <span v-if="v.reason" class="version-reason">{{ versionReasonLabel(v.reason) }}</span>
+                </span>
                 <span class="version-chars">{{
                   v.contentLength != null ? $t('noteDetail.history.chars', { count: v.contentLength }) : '·'
                 }}</span>
@@ -128,13 +131,15 @@
     createTime: string;
     content: string;
     type?: string;
+    reason?: string;
+    sourceRevision?: number;
     contentLength?: number; // 前端按"渲染后展示文本"算,异步填充
   }
 
   const props = defineProps<{
     noteId: string;
     noteType?: string;
-    currentNote?: { title?: string; content?: string; type?: string };
+    currentNote?: { title?: string; content?: string; type?: string; revision?: number };
   }>();
   const visible = defineModel('visible');
   const emit = defineEmits(['restored']);
@@ -161,6 +166,12 @@
   }));
   const diffRows = computed(() => buildNoteSideBySideRows(diffLines.value));
 
+  function versionReasonLabel(reason: string) {
+    const normalized = String(reason || 'autosave');
+    const knownReasons = new Set(['autosave', 'format_conversion', 'ai_change', 'ai_undo', 'restore']);
+    return t(`noteDetail.history.reasons.${knownReasons.has(normalized) ? normalized : 'autosave'}`);
+  }
+
   onMounted(fetchVersions);
 
   async function fetchVersions() {
@@ -175,6 +186,8 @@
           createTime: v.createTime,
           content: v.content || '',
           type: v.type,
+          reason: v.reason,
+          sourceRevision: v.sourceRevision,
           contentLength: undefined,
         }));
         // 逐条按"渲染后展示文本"异步算字数(不阻塞列表渲染;html/md 各自渲染后取文本)
@@ -231,7 +244,14 @@
       async onOk() {
         restoring.value = true;
         try {
-          const res = await apiBasePost('/api/note/restoreNoteVersion', { id: activeId.value });
+          const res = await apiBasePost('/api/note/restoreNoteVersion', {
+            id: activeId.value,
+            revision: Math.max(1, Number(props.currentNote?.revision || 1)),
+          });
+          if (res.status === 409 && res.data?.code === 'NOTE_VERSION_CONFLICT') {
+            message.warning(res.msg || t('noteDetail.conflict.notice'));
+            return;
+          }
           if (res.status === 200) {
             message.success(t('noteDetail.history.restoreSuccess'));
             recordOperation({ module: '笔记', operation: `恢复历史版本【${res.data?.title || ''}】` });
@@ -308,7 +328,7 @@
     }
 
     &.active {
-      border-color: rgba(96, 92, 229, 0.75);
+      border-color: var(--primary-color);
       background: color-mix(in srgb, var(--noteType-hover-color) 8%, var(--background-color));
     }
   }
@@ -328,12 +348,30 @@
   }
 
   .version-title-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 12px;
     color: var(--desc-color);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
+
+    > span:first-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  .version-reason {
+    flex: 0 0 auto;
+    padding: 1px 5px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 999px;
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.4;
   }
 
   .version-chars {
@@ -497,6 +535,32 @@
     :deep(video),
     :deep(table) {
       max-width: 100%;
+    }
+
+    :deep(img[data-ln-size]) {
+      display: block;
+      height: auto;
+      margin-inline: auto;
+    }
+
+    :deep(img[data-ln-size='original']) {
+      width: auto;
+    }
+
+    :deep(img[data-ln-size='small']) {
+      width: 40%;
+    }
+
+    :deep(img[data-ln-size='medium']) {
+      width: 64%;
+    }
+
+    :deep(img[data-ln-size='large']) {
+      width: 82%;
+    }
+
+    :deep(img[data-ln-size='full']) {
+      width: 100%;
     }
 
     :deep(pre) {

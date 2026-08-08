@@ -11,6 +11,7 @@
       <b-input
         id="global-search-input"
         v-model:value="keyword"
+        :class="{ 'global-search-input--shortcut': !keyword }"
         :placeholder="placeholder"
         height="36px"
         @focus="openSuggest"
@@ -24,7 +25,7 @@
           <button v-if="keyword" class="clear-btn" :title="t('resourceCenter.clear')" @mousedown.prevent="clearKeyword"
             >×</button
           >
-          <span v-else class="shortcut">/</span>
+          <kbd v-else class="shortcut">{{ searchShortcutLabel }}</kbd>
         </template>
       </b-input>
 
@@ -186,7 +187,11 @@
   import { useI18n } from 'vue-i18n';
   import { GLOBAL_SEARCH_HIDDEN_ROUTE_NAMES } from '@/config/navigation.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { isEditableShortcutTarget, matchesGlobalShortcut } from '@/config/keyboardShortcuts.ts';
+  import {
+    getGlobalShortcutKeys,
+    isEditableShortcutTarget,
+    matchesGlobalShortcut,
+  } from '@/config/keyboardShortcuts.ts';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
   const router = useRouter();
@@ -228,6 +233,7 @@
   const placeholder = computed(() =>
     route.path.includes('/search') ? t('resourceCenter.continueSearch') : t('resourceCenter.searchPlaceholder'),
   );
+  const searchShortcutLabel = getGlobalShortcutKeys('globalSearch').join('+');
 
   function getGroupLabel(type: string) {
     if (['bookmark', 'note', 'file', 'tag'].includes(type)) {
@@ -458,8 +464,19 @@
   }
 
   .shortcut {
+    padding: 2px 5px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 5px;
+    background: var(--card-background);
     color: var(--desc-color);
-    font-size: 12px;
+    font-family: inherit;
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .global-search-input--shortcut :deep(.b-input) {
+    padding-right: 64px !important;
   }
 
   .clear-btn,

@@ -318,6 +318,31 @@
       border-radius: 8px;
     }
 
+    :deep(img[data-ln-size]) {
+      display: block;
+      margin-inline: auto;
+    }
+
+    :deep(img[data-ln-size='original']) {
+      width: auto;
+    }
+
+    :deep(img[data-ln-size='small']) {
+      width: 40%;
+    }
+
+    :deep(img[data-ln-size='medium']) {
+      width: 64%;
+    }
+
+    :deep(img[data-ln-size='large']) {
+      width: 82%;
+    }
+
+    :deep(img[data-ln-size='full']) {
+      width: 100%;
+    }
+
     :deep(blockquote) {
       padding: 10px 14px;
       border-left: 3px solid var(--primary-color);

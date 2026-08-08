@@ -34,6 +34,12 @@ const EXPORT_STYLES = `
   .note-export h4, .note-export h5, .note-export h6 { margin: 1em 0 0.5em; line-height: 1.35; }
   .note-export p { margin: 0 0 0.9em; }
   .note-export img { max-width: 100%; height: auto; }
+  .note-export img[data-ln-size] { display: block; margin-inline: auto; }
+  .note-export img[data-ln-size='original'] { width: auto; }
+  .note-export img[data-ln-size='small'] { width: 40%; }
+  .note-export img[data-ln-size='medium'] { width: 64%; }
+  .note-export img[data-ln-size='large'] { width: 82%; }
+  .note-export img[data-ln-size='full'] { width: 100%; }
   .note-export a { color: #615ced; }
   /* mermaid 图表在导出时已渲染成内联 SVG，这里只补容器外观（站内那套 CSS 变量在离线文件里失效） */
   .note-export .mermaid-figure {

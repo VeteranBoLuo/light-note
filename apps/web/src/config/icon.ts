@@ -4,8 +4,10 @@ export default {
     bookmark:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7 4.75A2.25 2.25 0 0 1 9.25 2.5h5.5A2.25 2.25 0 0 1 17 4.75V20.5l-5-3.1l-5 3.1V4.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.5 7h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
     note: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9.25 10.5h5.5M9.25 14h5.5M9.25 17.5h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    noteHtml:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="2.75" y="5" width="18.5" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="m7.25 9.5l-2.5 2.5l2.5 2.5M16.75 9.5l2.5 2.5l-2.5 2.5M10 9v6M14 9v6M10 12h4" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     noteMarkdown:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9.25 11h5.5M9.25 14.75h5.5M10.5 9.25l-1.25 8M14.75 9.25l-1.25 8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="2.75" y="5" width="18.5" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M6 15V9l3 3l3-3v6M16.25 9v6m-2.1-2.15l2.1 2.15l2.1-2.15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     file: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7.15 18.5h9.7a3.75 3.75 0 0 0 .62-7.45A5.8 5.8 0 0 0 6.25 9.5a4.5 4.5 0 0 0 .9 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.25 14.75h5.5M10.25 11.75h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".72"/></svg>',
     tag: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5.75A1.75 1.75 0 0 1 5.75 4h5.1l8.65 8.65a2.25 2.25 0 0 1 0 3.18l-3.67 3.67a2.25 2.25 0 0 1-3.18 0L4 10.85v-5.1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.25" stroke="currentColor" stroke-width="1.7"/><path d="m12.25 10.75l4.25 4.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
   },
@@ -277,6 +279,8 @@ export default {
     table_insert_left:
       '<svg style="transform: rotate(90deg); transform-origin: center;" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 2048 2048"><rect width="2048" height="2048" fill="none"/><path fill="currentColor" d="M2048 128v1664h-640l128-128h384v-384h-768V768H768v512H128v384h256l128 128H0V128zM640 256H128v384h512zm640 0H768v384h512zm640 0h-512v384h512zm-621 1139l90 90l-429 429l-429-429l90-90l275 275V896h128v774z"/></svg>',
     toolbar: {
+      undo: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 7H5v-4M5.4 7.1A8 8 0 1 1 4.2 14"/></svg>',
+      redo: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 7h4v-4m-.4 4.1A8 8 0 1 0 19.8 14"/></svg>',
       todo: '<svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m9 11l3 3l8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></g></svg>',
       codeBlock:
         '<svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="m17 7.83l1.697 1.526c1.542 1.389 2.313 2.083 2.313 2.974c0 .89-.771 1.585-2.314 2.973L17 16.83M13.987 5L12 12.415l-1.987 7.415M7 7.83L5.304 9.356C3.76 10.745 2.99 11.44 2.99 12.33s.771 1.585 2.314 2.973L7 16.83"/></svg>',
@@ -290,18 +294,60 @@ export default {
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 5.5v13"/><path d="M9 8h11M9 12h11M9 16h7"/></g></svg>',
       bulletList:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.6" cy="6.5" r="1.15" fill="currentColor" stroke="none"/><circle cx="4.6" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="4.6" cy="17.5" r="1.15" fill="currentColor" stroke="none"/></g></svg>',
+      orderedList:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><path d="M4 4.5h1v4M3.7 13c.2-1 2.3-1.1 2.3.1c0 .8-2.2 1.8-2.2 2.4H6M3.8 18.2c.7-.6 2.2-.3 2.2.7c0 .9-1.5 1.2-2.2.6c.7-.7 2.4-.3 2.4.8c0 1.1-1.7 1.4-2.5.7"/></g></svg>',
+      link: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="m9.5 14.5l5-5"/><path d="m7.3 16.7l-1.1 1.1a3.5 3.5 0 0 1-5-5l3.1-3.1a3.5 3.5 0 0 1 5 0" transform="translate(3)"/><path d="m16.7 7.3l1.1-1.1a3.5 3.5 0 0 1 5 5l-3.1 3.1a3.5 3.5 0 0 1-5 0" transform="translate(-3)"/></g></svg>',
+      insert:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" d="M12 5v14M5 12h14"/></svg>',
+      more: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M5 10a2 2 0 1 0 0 4a2 2 0 0 0 0-4m7 0a2 2 0 1 0 0 4a2 2 0 0 0 0-4m7 0a2 2 0 1 0 0 4a2 2 0 0 0 0-4"/></svg>',
       table:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M12 9.5v10"/></g></svg>',
       image:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2.2"/><circle cx="8.75" cy="9.75" r="1.5"/><path d="m4.5 16.5l4.2-3.9a1.6 1.6 0 0 1 2.2.06L15 16.4m0 0l1.9-1.7a1.6 1.6 0 0 1 2.16.03l1.44 1.32"/></g></svg>',
       mention:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M15.2 9.4V13a2.6 2.6 0 0 0 5.2 0v-1a8.4 8.4 0 1 0-3.3 6.68"/></g></svg>',
+      underline:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.9" d="M7 4v7a5 5 0 0 0 10 0V4M5 21h14"/></svg>',
+      strike:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M5 12h14M17.5 7.2C16.8 5.6 14.8 5 12.5 5C9.8 5 8 6.2 8 8.1c0 1.4 1 2.2 2.4 2.7m.8 2.4c2.8.5 4.8 1.1 4.8 3.1c0 1.8-1.8 2.7-4.3 2.7c-2.3 0-4.4-.8-5.2-2.5"/></svg>',
+      textColor:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m6 18l6-14l6 14M8.2 13h7.6M5 21h14"/></svg>',
+      backgroundColor:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="m8 4l8 8l-5.5 5.5a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8L11 7"/><path d="M4 21h16"/></g></svg>',
+      align:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M4 6h16M4 10h11M4 14h16M4 18h9"/></svg>',
+      indent:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 6h9M11 10h9M11 14h9M11 18h9M4 9l3 3l-3 3"/></svg>',
+      outdent:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M11 6h9M11 10h9M11 14h9M11 18h9M7 9l-3 3l3 3"/></svg>',
+      clearFormat:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m5 5l14 14M8 16l-2 5M10 4h8M13 4l-4.2 10.5M14 18h7"/></svg>',
+      search:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5l5 5"/></g></svg>',
+      source:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 6l-5 6l5 6m8-12l5 6l-5 6m-2-15l-4 18"/></svg>',
+      wordCount:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 4h16v16H4zM7 8h5M7 12h10M7 16h7"/></g></svg>',
+      divider:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M3 12h18"/></svg>',
+      emoji:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c.8 1.2 2 1.8 3.5 1.8s2.7-.6 3.5-1.8M9 9h.01M15 9h.01"/></g></svg>',
+      inlineCode:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 7l-5 5l5 5m8-10l5 5l-5 5m-2-13l-4 16"/></svg>',
+      help: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.3 2.1c-.8.4-1.1.9-1.1 1.9M12 17h.01"/></g></svg>',
+      viewEdit:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M7.5 8h7M7.5 12h9M7.5 16h5"/></g></svg>',
+      viewSplit:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M12 4v16M7 8h2M7 12h2M15 8h2M15 12h2"/></g></svg>',
+      viewPreview:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M6.8 12s1.9-3.2 5.2-3.2s5.2 3.2 5.2 3.2s-1.9 3.2-5.2 3.2S6.8 12 6.8 12Z"/><circle cx="12" cy="12" r="1.35"/></g></svg>',
     },
     /*
      * 图表(mermaid)自带工具条的图标。这里必须是可直接 innerHTML 的 raw SVG:
      * 工具条由 utils/mermaidRender.ts 用原生 DOM 生成,拿不到 SvgIcon 组件,data URL 也用不了。
      */
     diagramTools: {
+      edit: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1l1-4Z"/></g></svg>',
       zoom: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="10.7" cy="10.7" r="6.7"/><path d="m16 16l4 4M10.7 7.8v5.8M7.8 10.7h5.8"/></g></svg>',
       download:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M12 4v10.5m0 0l-3.8-3.8M12 14.5l3.8-3.8"/><path d="M4.5 16.5v1.8A2.2 2.2 0 0 0 6.7 20.5h10.6a2.2 2.2 0 0 0 2.2-2.2v-1.8"/></g></svg>',

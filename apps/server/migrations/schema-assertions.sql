@@ -170,8 +170,11 @@ WHERE actual.table_name IS NULL;
 -- 14) 核心业务关键列必须存在（P0-7；期望 0 行）
 SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'files' tab, 'share_token' col, 'files.share_token' n UNION ALL
+  SELECT 'note', 'revision', 'note.revision' UNION ALL
   SELECT 'note_versions', 'note_id', 'note_versions.note_id' UNION ALL
   SELECT 'note_versions', 'type', 'note_versions.type' UNION ALL
+  SELECT 'note_versions', 'source_revision', 'note_versions.source_revision' UNION ALL
+  SELECT 'note_versions', 'reason', 'note_versions.reason' UNION ALL
   SELECT 'file_shares', 'token_hash', 'file_shares.token_hash' UNION ALL
   SELECT 'file_shares', 'access_code_hash', 'file_shares.access_code_hash' UNION ALL
   SELECT 'file_shares', 'expires_at', 'file_shares.expires_at' UNION ALL

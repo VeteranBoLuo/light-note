@@ -239,6 +239,7 @@ describe('noteService.createNote', () => {
       title: '已落库笔记',
       type: 'markdown',
       parentId: 'parent-1',
+      revision: 1,
       addedToInbox: false,
     });
 
@@ -254,8 +255,8 @@ describe('noteService.applyOwnedNoteContentChange', () => {
 
   it('在同一事务内再次校验 owner/正文版本，先保存历史再写入新正文', async () => {
     connection.query.mockImplementation(async (sql) => {
-      if (sql.startsWith('SELECT title, content, type FROM note')) {
-        return [[{ title: '目标笔记', content: '旧正文', type: 'markdown' }]];
+      if (sql.startsWith('SELECT title, content, type, revision FROM note')) {
+        return [[{ title: '目标笔记', content: '旧正文', type: 'markdown', revision: 4 }]];
       }
       if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
       if (sql.startsWith('UPDATE note SET content')) return [{ affectedRows: 1 }];
@@ -270,14 +271,19 @@ describe('noteService.applyOwnedNoteContentChange', () => {
         before: { title: '目标笔记', content: '旧正文', type: 'markdown' },
         after: { title: '目标笔记', content: '旧正文\n\n新增内容', type: 'markdown' },
       }),
-    ).resolves.toEqual({ title: '目标笔记', content: '旧正文\n\n新增内容', type: 'markdown' });
+    ).resolves.toEqual({ title: '目标笔记', content: '旧正文\n\n新增内容', type: 'markdown', revision: 5 });
 
     expect(connection.query).toHaveBeenCalledWith(
       expect.stringContaining('WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE'),
       ['note-1', 'subject-1'],
     );
     const snapshot = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?')?.[1]?.[0];
-    expect(snapshot).toMatchObject({ note_id: 'note-1', content: '旧正文', create_by: 'subject-1' });
+    expect(snapshot).toMatchObject({
+      note_id: 'note-1',
+      content: '旧正文',
+      create_by: 'subject-1',
+      reason: 'ai_change',
+    });
     expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('UPDATE note SET content = ?'), [
       '旧正文\n\n新增内容',
       'markdown',
@@ -287,8 +293,33 @@ describe('noteService.applyOwnedNoteContentChange', () => {
     ]);
   });
 
+  it('允许 AI 撤销使用独立的历史原因标识', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      if (sql.startsWith('SELECT title, content, type, revision FROM note')) {
+        return [[{ title: '目标笔记', content: 'AI 正文', type: 'markdown', revision: 5 }]];
+      }
+      if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
+      if (sql.startsWith('UPDATE note SET content')) return [{ affectedRows: 1 }];
+      return [{ affectedRows: 1 }];
+    });
+
+    await applyOwnedNoteContentChange(connection, {
+      userId: 'subject-1',
+      actorUserId: 'actor-1',
+      noteId: 'note-1',
+      before: { title: '目标笔记', content: 'AI 正文', type: 'markdown' },
+      after: { title: '目标笔记', content: '原正文', type: 'markdown' },
+      snapshotReason: 'ai_undo',
+    });
+
+    const snapshot = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?')?.[1]?.[0];
+    expect(snapshot).toMatchObject({ reason: 'ai_undo', source_revision: 5 });
+  });
+
   it('正文与预览快照不一致时拒绝写入，不生成历史快照', async () => {
-    connection.query.mockResolvedValueOnce([[{ title: '目标笔记', content: '用户刚刚编辑', type: 'markdown' }]]);
+    connection.query.mockResolvedValueOnce([
+      [{ title: '目标笔记', content: '用户刚刚编辑', type: 'markdown', revision: 2 }],
+    ]);
 
     await expect(
       applyOwnedNoteContentChange(connection, {
@@ -305,8 +336,8 @@ describe('noteService.applyOwnedNoteContentChange', () => {
 
   it('AI 变更会把历史污染与新正文一起按 Markdown 源码规范化', async () => {
     connection.query.mockImplementation(async (sql) => {
-      if (sql.startsWith('SELECT title, content, type FROM note')) {
-        return [[{ title: '日报', content: '&gt; 原始引用', type: 'markdown' }]];
+      if (sql.startsWith('SELECT title, content, type, revision FROM note')) {
+        return [[{ title: '日报', content: '&gt; 原始引用', type: 'markdown', revision: 8 }]];
       }
       if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
       if (sql.startsWith('UPDATE note SET content')) return [{ affectedRows: 1 }];
@@ -320,7 +351,7 @@ describe('noteService.applyOwnedNoteContentChange', () => {
         before: { title: '日报', content: '> 原始引用', type: 'markdown' },
         after: { title: '日报', content: '&gt; 新引用', type: 'markdown' },
       }),
-    ).resolves.toEqual({ title: '日报', content: '> 新引用', type: 'markdown' });
+    ).resolves.toEqual({ title: '日报', content: '> 新引用', type: 'markdown', revision: 9 });
 
     const snapshot = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note_versions SET ?')?.[1]?.[0];
     expect(snapshot).toMatchObject({ content: '> 原始引用' });
@@ -385,8 +416,8 @@ describe('noteService 笔记提及引用同步接入(N0)', () => {
   it('applyOwnedNoteContentChange UPDATE 后无条件 sync(正文清空链接→删旧引用)', async () => {
     extractOwnedResourceRefs.mockReturnValue([]);
     connection.query.mockImplementation(async (sql) => {
-      if (sql.startsWith('SELECT title, content, type FROM note')) {
-        return [[{ title: 'T', content: '<a href="/noteLibrary/n1">x</a>', type: 'html' }]];
+      if (sql.startsWith('SELECT title, content, type, revision FROM note')) {
+        return [[{ title: 'T', content: '<a href="/noteLibrary/n1">x</a>', type: 'html', revision: 1 }]];
       }
       if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
       return [{ affectedRows: 1 }];
@@ -406,8 +437,8 @@ describe('noteService 笔记提及引用同步接入(N0)', () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     syncNoteResourceRefs.mockRejectedValueOnce(syncError);
     connection.query.mockImplementation(async (sql) => {
-      if (sql.startsWith('SELECT title, content, type FROM note')) {
-        return [[{ title: 'T', content: '旧正文', type: 'html' }]];
+      if (sql.startsWith('SELECT title, content, type, revision FROM note')) {
+        return [[{ title: 'T', content: '旧正文', type: 'html', revision: 1 }]];
       }
       if (sql.startsWith('SELECT id FROM note_versions')) return [[]];
       return [{ affectedRows: 1 }];

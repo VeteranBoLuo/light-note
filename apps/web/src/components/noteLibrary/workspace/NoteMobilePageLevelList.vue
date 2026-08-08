@@ -39,7 +39,13 @@
         :class="{ 'is-current': item.id === currentPageId, 'is-selected': item.id === selectedPageId }"
       >
         <BButton class="note-mobile-page-level-list__title" @click="selectItem(item)">
-          <SvgIcon :src="getNoteTreePageIcon(item.type)" size="17" aria-hidden="true" />
+          <SvgIcon
+            :src="getNoteTreePageIcon(item.type)"
+            size="18"
+            class="note-mobile-page-level-list__format-icon"
+            :class="{ 'is-markdown': isMarkdownNoteTreePage(item.type) }"
+            aria-hidden="true"
+          />
           <span>{{ item.title || t('note.untitled') }}</span>
           <span v-if="item.isTop" class="note-mobile-page-level-list__pin">
             <SvgIcon :src="icon.contextMenu.pin" size="12" :aria-label="t('common.pinned')" />
@@ -89,7 +95,7 @@
   import icon from '@/config/icon';
   import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
-  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
 
   const props = withDefaults(
     defineProps<{
@@ -344,6 +350,15 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+  }
+
+  .note-mobile-page-level-list__format-icon {
+    flex: 0 0 auto;
+    color: var(--resource-note-color, #00a884);
+
+    &.is-markdown {
+      color: var(--primary-color, #615ced);
     }
   }
 

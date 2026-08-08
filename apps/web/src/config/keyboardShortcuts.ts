@@ -14,8 +14,12 @@ export interface ShortcutKeyboardEvent {
 }
 
 const SHORTCUT_DEFINITIONS: Record<GlobalShortcutId, { key: string; primaryModifier: boolean }> = {
-  globalSearch: { key: '/', primaryModifier: false },
+  globalSearch: { key: 'f', primaryModifier: true },
   aiAssistant: { key: '/', primaryModifier: true },
+};
+
+const SHORTCUT_ALIASES: Partial<Record<GlobalShortcutId, Array<{ key: string; primaryModifier: boolean }>>> = {
+  globalSearch: [{ key: '/', primaryModifier: false }],
 };
 
 export function getShortcutPlatform(): ShortcutPlatform {
@@ -30,8 +34,9 @@ export function getGlobalShortcutKeys(
   platform: ShortcutPlatform = getShortcutPlatform(),
 ): string[] {
   const definition = SHORTCUT_DEFINITIONS[id];
-  if (!definition.primaryModifier) return [definition.key];
-  return [platform === 'mac' ? '⌘' : 'Ctrl', definition.key];
+  const keyLabel = definition.key.length === 1 ? definition.key.toUpperCase() : definition.key;
+  if (!definition.primaryModifier) return [keyLabel];
+  return [platform === 'mac' ? '⌘' : 'Ctrl', keyLabel];
 }
 
 export function getGlobalShortcutLabel(
@@ -43,12 +48,14 @@ export function getGlobalShortcutLabel(
 
 export function matchesGlobalShortcut(event: ShortcutKeyboardEvent, id: GlobalShortcutId): boolean {
   if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return false;
-
-  const definition = SHORTCUT_DEFINITIONS[id];
-  if (event.key !== definition.key || event.altKey) return false;
-
+  if (event.altKey) return false;
   const hasPrimaryModifier = event.ctrlKey || event.metaKey;
-  return definition.primaryModifier ? hasPrimaryModifier : !hasPrimaryModifier;
+  const pressedKey = event.key.toLowerCase();
+  return [SHORTCUT_DEFINITIONS[id], ...(SHORTCUT_ALIASES[id] || [])].some(
+    (definition) =>
+      pressedKey === definition.key &&
+      (definition.primaryModifier ? hasPrimaryModifier : !hasPrimaryModifier),
+  );
 }
 
 export function isEditableShortcutTarget(target: EventTarget | null): boolean {

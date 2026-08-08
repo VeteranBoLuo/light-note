@@ -117,6 +117,15 @@ view/search/
 - `image_keys` 与 Markdown 引用同属 `update_logs` 一条记录。保存或删除时先提交数据库事务，再清理不再引用的 OBS 对象；上传失败和登记失败必须清理临时文件及已上传对象。
 - 旧 `config_json` 更新日志只作为迁移与回滚来源，新功能不得继续写入原始 JSON 配置。
 
+#### 笔记编辑与正文安全
+
+- 当前 Web 客户端更新笔记标题、正文或类型时必须提交 `note.revision`；服务端必须在同一事务内锁定 owner 记录、比较 revision、保存必要快照、更新正文和同步资源引用。冲突返回稳定的 `NOTE_VERSION_CONFLICT`，不得先写正文或关系表。
+- 浏览器未保存草稿以 IndexedDB `lightnote-note-drafts-v1/noteDrafts` 为权威本地存储，键必须包含 actor、subject、角色、游客工作区、管理员 context 与 noteId；写入按 250ms 合并，每身份域最多 20 条、30 天过期。localStorage 只允许作为 IndexedDB 失败时的应急副本，IndexedDB 恢复后须自动迁移并删除副本。
+- HTML/Markdown 正式转换必须调用 `POST /api/note/convertMode`，提交 `baseRevision + targetType + convertedContent + analysisHash`。服务端必须先复核预览指纹，再在同一事务内强制保存转换前版本、写正文与类型、递增 revision 并同步 `note_resource_refs`；禁止依赖两次普通自动保存拼接出转换语义。
+- HTML 正文的创建、更新、AI 写入、导入、模板保存、新用户示例、历史恢复均必须调用 `sanitizePersistedNoteContent()`；旧 HTML 在详情、模板和历史版本读取时也走同一白名单。日志只允许记录稳定场景、净化类别、计数和前后长度，不得记录正文、URL、用户或属性值。Markdown 必须保持源码，只做既有的 blockquote 实体规范化。
+- HTML/Markdown 格式转换、AI 修改/撤销和历史恢复属于高风险低频写入，必须在业务事务内强制保存 `note_versions` 还原点并填写 `source_revision/reason`；普通自动保存才允许使用时间合并窗口。新增写入口时要同时审计主表 revision、历史快照、正文净化、图片引用与 `note_resource_refs`。
+- 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。
+
 **响应格式：**
 
 ```javascript

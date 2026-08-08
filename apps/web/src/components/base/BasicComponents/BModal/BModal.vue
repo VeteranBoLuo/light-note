@@ -71,6 +71,8 @@
       contentClass?: string;
       maskClass?: string;
       historyClosable?: boolean;
+      /** 弹框打开后优先聚焦的元素选择器；找不到时回退到第一个可聚焦元素。 */
+      initialFocus?: string;
     }>(),
     {
       title: '',
@@ -81,6 +83,7 @@
       width: 'auto',
       height: 'auto',
       historyClosable: true,
+      initialFocus: '',
     },
   );
   const visible = defineModel('visible');
@@ -138,6 +141,15 @@
   const focusableSelector =
     'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
+  function resolveInitialFocusElement() {
+    if (!props.initialFocus || !modalRef.value) return null;
+    try {
+      return modalRef.value.querySelector<HTMLElement>(props.initialFocus);
+    } catch {
+      return null;
+    }
+  }
+
   function handleModalKeydown(event: KeyboardEvent) {
     if (event.key !== 'Tab' || !isTopModalLayer(modalLayer)) return;
     const focusable = [...(modalRef.value?.querySelectorAll<HTMLElement>(focusableSelector) || [])].filter(
@@ -167,7 +179,7 @@
         layerAcquired = true;
         document.addEventListener('keydown', clickEsc);
         nextTick(() => {
-          const first = modalRef.value?.querySelector<HTMLElement>(focusableSelector);
+          const first = resolveInitialFocusElement() || modalRef.value?.querySelector<HTMLElement>(focusableSelector);
           (first || modalRef.value)?.focus({ preventScroll: true });
         });
       } else {

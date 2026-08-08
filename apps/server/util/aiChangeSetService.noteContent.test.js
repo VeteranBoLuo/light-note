@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const applyOwnedNoteContentChange = vi.fn();
+const snapshotOwnedNoteVersion = vi.fn();
 
 vi.mock('../db/index.js', () => ({ default: {} }));
-vi.mock('./services/noteService.js', () => ({ applyOwnedNoteContentChange }));
+vi.mock('./services/noteService.js', () => ({ applyOwnedNoteContentChange, snapshotOwnedNoteVersion }));
 
 const { __testing } = await import('./aiChangeSetService.js');
 
@@ -64,6 +65,7 @@ describe('AI Change Set note content operation', () => {
       noteId: 'note-1',
       before: after,
       after: before,
+      snapshotReason: 'ai_undo',
     });
   });
 

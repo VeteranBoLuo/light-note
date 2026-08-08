@@ -632,12 +632,11 @@
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
   const { t } = useI18n();
-  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch']);
+  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch', 'requestUpload']);
 
-  // 首屏空状态引导:复用 CloudFolder 的隐藏上传 input(桌面端);移动端则靠拖拽/上方入口
+  // 首屏空状态引导复用页面统一上传选择器，确保容量校验、重名处理和上传进度一致。
   function triggerUpload() {
-    const el = document.getElementById('folder-upload-input') as HTMLInputElement | null;
-    if (el) el.click();
+    emit('requestUpload');
   }
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();

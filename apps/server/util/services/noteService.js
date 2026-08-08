@@ -7,9 +7,56 @@ import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
 import { actionIdempotencyUuid } from '../agent/actionIdempotency.js';
 import { extractOwnedResourceRefs, syncNoteResourceRefs } from './noteReferenceService.js';
 import { prepareOwnedNotePlacement } from './noteTreeService.js';
+import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 
 const NOTE_TYPES = new Set(['html', 'markdown']);
 const NOTE_VERSION_KEEP = 20;
+
+/**
+ * 在当前事务内强制保存一份笔记旧态。用于 AI 写入/撤销等低频但高风险路径；
+ * 普通自动保存的时间合并策略仍由 noteLibraryHandle 负责。
+ */
+export async function snapshotOwnedNoteVersion(
+  connection,
+  { userId, noteId, currentNote = null, reason = 'manual' } = {},
+) {
+  let current = currentNote;
+  if (!current) {
+    const [rows] = await connection.query(
+      'SELECT title, content, type, revision FROM note WHERE id = ? AND create_by = ? AND del_flag = 0',
+      [String(noteId), String(userId)],
+    );
+    current = rows[0] || null;
+  }
+  if (!current) return false;
+  const currentType = normalizeNoteType(current.type || 'html');
+  const currentContent =
+    currentType === 'markdown'
+      ? normalizeMarkdownBlockquoteEntities(current.content || '')
+      : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
+  await connection.query('INSERT INTO note_versions SET ?', [
+    insertData({
+      noteId: String(noteId),
+      title: String(current.title || ''),
+      content: currentContent,
+      type: currentType,
+      sourceRevision: Math.max(1, Number(current.revision || 1)),
+      reason: String(reason || 'manual').slice(0, 32),
+      createBy: String(userId),
+    }),
+  ]);
+
+  const [versionRows] = await connection.query(
+    'SELECT id FROM note_versions WHERE note_id = ? ORDER BY create_time DESC, id DESC',
+    [String(noteId)],
+  );
+  const staleVersionIds = versionRows.slice(NOTE_VERSION_KEEP).map((row) => row.id);
+  if (staleVersionIds.length) {
+    const placeholders = staleVersionIds.map(() => '?').join(',');
+    await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, staleVersionIds);
+  }
+  return true;
+}
 
 function noteServiceError(code, message, status = 400) {
   const error = new Error(`${code}: ${message}`);
@@ -34,10 +81,10 @@ function markCommitOutcomeUnknown(error) {
 }
 
 async function findOwnedNoteById({ userId, noteId }) {
-  const [rows] = await pool.query('SELECT id, title, type, parent_id FROM note WHERE id = ? AND create_by = ? LIMIT 1', [
-    noteId,
-    userId,
-  ]);
+  const [rows] = await pool.query(
+    'SELECT id, title, type, parent_id, revision FROM note WHERE id = ? AND create_by = ? LIMIT 1',
+    [noteId, userId],
+  );
   return rows[0] || null;
 }
 
@@ -61,7 +108,10 @@ export async function createNote({
   const rawContent = String(note.content || '');
   // 无论请求来自当前页面、旧版缓存页面还是内部调用，Markdown 源码均在持久化边界收口，
   // 防止旧客户端把引用语法 `>` 经 DOM 序列化成 `&gt;` 后永久写入数据库。
-  const content = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
+  const content =
+    type === 'markdown'
+      ? normalizeMarkdownBlockquoteEntities(rawContent)
+      : sanitizePersistedNoteContent(rawContent, type, 'create-note');
   if (content.length > maxContentLength) {
     throw new Error(`CONTENT_TOO_LONG: 笔记正文不能超过 ${maxContentLength} 个字符`);
   }
@@ -74,6 +124,7 @@ export async function createNote({
         title: existing.title || title,
         type: existing.type || type,
         parentId: existing.parent_id ?? null,
+        revision: Math.max(1, Number(existing.revision || 1)),
         addedToInbox: false,
       };
     }
@@ -189,6 +240,7 @@ export async function createNote({
     title,
     type,
     parentId: data.parent_id,
+    revision: 1,
     addedToInbox: Boolean(addToInbox),
   };
 }
@@ -203,21 +255,32 @@ export async function createNote({
  */
 export async function applyOwnedNoteContentChange(
   connection,
-  { userId, actorUserId, noteId, before, after, maxContentLength = 1_000_000 } = {},
+  {
+    userId,
+    actorUserId,
+    noteId,
+    before,
+    after,
+    maxContentLength = 1_000_000,
+    snapshotReason = 'ai_change',
+  } = {},
 ) {
   if (!connection?.query) throw noteServiceError('CONNECTION_REQUIRED', '缺少事务连接', 500);
   if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');
 
   const nextType = normalizeNoteType(after?.type || '');
   const rawNextContent = String(after?.content ?? '');
-  const nextContent = nextType === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawNextContent) : rawNextContent;
+  const nextContent =
+    nextType === 'markdown'
+      ? normalizeMarkdownBlockquoteEntities(rawNextContent)
+      : sanitizePersistedNoteContent(rawNextContent, nextType, 'ai-note-content');
   if (!NOTE_TYPES.has(nextType)) throw noteServiceError('INVALID_NOTE_TYPE', '笔记类型仅支持 html 或 markdown');
   if (nextContent.length > maxContentLength) {
     throw noteServiceError('CONTENT_TOO_LONG', `笔记正文不能超过 ${maxContentLength} 个字符`);
   }
 
   const [rows] = await connection.query(
-    'SELECT title, content, type FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+    'SELECT title, content, type, revision FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
     [String(noteId), String(userId)],
   );
   if (!rows.length) throw noteServiceError('RESOURCE_NOT_FOUND', '笔记不存在或无权操作', 404);
@@ -228,6 +291,7 @@ export async function applyOwnedNoteContentChange(
     content:
       currentType === 'markdown' ? normalizeMarkdownBlockquoteEntities(rows[0].content || '') : rows[0].content || '',
     type: currentType,
+    revision: Math.max(1, Number(rows[0].revision || 1)),
   };
   const expectedType = normalizeNoteType(before?.type || 'html');
   const expected = {
@@ -242,28 +306,15 @@ export async function applyOwnedNoteContentChange(
     throw noteServiceError('NOTE_VERSION_CONFLICT', '笔记在预览后已发生变化，请重新生成差异', 409);
   }
 
-  await connection.query('INSERT INTO note_versions SET ?', [
-    insertData({
-      noteId: String(noteId),
-      title: current.title,
-      content: current.content,
-      type: current.type,
-      createBy: String(userId),
-    }),
-  ]);
-
-  const [versionRows] = await connection.query(
-    'SELECT id FROM note_versions WHERE note_id = ? ORDER BY create_time DESC, id DESC',
-    [String(noteId)],
-  );
-  const staleVersionIds = versionRows.slice(NOTE_VERSION_KEEP).map((row) => row.id);
-  if (staleVersionIds.length) {
-    const placeholders = staleVersionIds.map(() => '?').join(',');
-    await connection.query(`DELETE FROM note_versions WHERE id IN (${placeholders})`, staleVersionIds);
-  }
+  await snapshotOwnedNoteVersion(connection, {
+    userId,
+    noteId,
+    currentNote: current,
+    reason: snapshotReason,
+  });
 
   const [updateResult] = await connection.query(
-    'UPDATE note SET content = ?, type = ?, update_by = ? WHERE id = ? AND create_by = ? AND del_flag = 0',
+    'UPDATE note SET content = ?, type = ?, update_by = ?, revision = revision + 1 WHERE id = ? AND create_by = ? AND del_flag = 0',
     [nextContent, nextType, String(actorUserId || userId), String(noteId), String(userId)],
   );
   if (Number(updateResult?.affectedRows || 0) !== 1) {
@@ -289,5 +340,5 @@ export async function applyOwnedNoteContentChange(
   const nextRefs = extractOwnedResourceRefs({ content: nextContent, type: nextType });
   await syncNoteResourceRefs(connection, { userId: String(userId), noteId: String(noteId), refs: nextRefs });
 
-  return { title: current.title, content: nextContent, type: nextType };
+  return { title: current.title, content: nextContent, type: nextType, revision: current.revision + 1 };
 }

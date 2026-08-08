@@ -131,16 +131,7 @@
             :title="t('ai.reply.expand')"
             v-click-log="{ module: '笔记-AI助手', operation: '放大预览' }"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
+            <SvgIcon :src="icon.ai.maximize" aria-hidden="true" />
           </BButton>
           <BButton
             class="ghost-btn icon-btn"
@@ -149,16 +140,7 @@
             :title="t('ai.reply.clear')"
             v-click-log="{ module: '笔记-AI助手', operation: '清空输出' }"
           >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13" />
-            </svg>
+            <SvgIcon :src="icon.noteDetail.deleteLine" aria-hidden="true" />
           </BButton>
         </div>
       </div>
@@ -189,6 +171,7 @@
       </div>
       <TypewriterOutput
         v-if="displayOutput || (!isLoading && !generationFeedback)"
+        v-auto-scrollbar
         class="output-body"
         :typing-speed="16"
         :content="displayOutput"
@@ -254,7 +237,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import { noteDisplayText } from '@/utils/common.ts';
   import DOMPurify from 'dompurify';
@@ -835,6 +820,12 @@
 
 <style lang="less" scoped>
   .ai-container {
+    --ai-section-bg: #f8f9ff;
+    --ai-section-border: #e1e5f0;
+    --ai-action-bg: #ffffff;
+    --ai-action-hover-bg: #f0f1ff;
+    --ai-output-header-bg: #f6f7fc;
+    --ai-output-body-bg: #ffffff;
     height: 100%;
     background: var(--workspace-panel-bg-color);
     border-radius: 0;
@@ -850,12 +841,16 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
+    padding: 2px 0 12px;
+    border-bottom: 1px solid var(--ai-section-border);
   }
   .ai-title {
     display: flex;
     align-items: center;
     gap: 8px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
     color: var(--text-color);
   }
   .ai-title .dot {
@@ -863,6 +858,8 @@
     height: 10px;
     border-radius: 50%;
     background: linear-gradient(135deg, #7b8cff, #5b6fff);
+    border: 2px solid #e8eaff;
+    box-sizing: border-box;
   }
   .ai-subtitle {
     font-size: 12px;
@@ -870,8 +867,8 @@
   }
 
   .ai-note-meta {
-    background: transparent;
-    border: 0;
+    background: var(--ai-section-bg);
+    border: 1px solid var(--ai-section-border);
     border-radius: 10px;
     padding: 10px 12px;
     display: flex;
@@ -896,6 +893,7 @@
   }
   .meta-row .label {
     color: var(--desc-color);
+    font-weight: 500;
     white-space: nowrap;
   }
   .meta-row .value {
@@ -906,6 +904,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 600;
   }
 
   .ai-actions {
@@ -916,10 +915,11 @@
   .action-btn {
     width: 100%;
     height: 32px;
-    border: 0;
-    background: var(--hover-background);
+    border: 1px solid var(--ai-section-border);
+    background: var(--ai-action-bg);
     border-radius: 8px;
     font-size: 12px;
+    font-weight: 500;
     color: var(--text-color);
     cursor: pointer;
   }
@@ -929,7 +929,8 @@
   }
   .action-btn:hover {
     color: var(--primary-color);
-    background: var(--card-background);
+    border-color: #bfc3f5;
+    background: var(--ai-action-hover-bg);
   }
 
   .ai-input {
@@ -942,7 +943,8 @@
   }
   .input-label {
     font-size: 12px;
-    color: var(--desc-color);
+    color: var(--sub-text-color, var(--text-color));
+    font-weight: 600;
   }
   .ai-input :deep(.b-textarea) {
     width: 100%;
@@ -1022,9 +1024,9 @@
     min-width: 0;
     display: flex;
     flex-direction: column;
-    background: var(--card-background);
+    background: var(--ai-output-body-bg);
     border-radius: 10px;
-    border: 1px solid var(--surface-border-color);
+    border: 1px solid var(--ai-section-border);
     overflow: hidden;
   }
   .output-header {
@@ -1033,8 +1035,10 @@
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--ai-output-header-bg);
     font-size: 12px;
-    color: var(--desc-color);
+    color: var(--sub-text-color, var(--text-color));
+    font-weight: 600;
   }
   .output-actions {
     display: flex;
@@ -1076,6 +1080,7 @@
     padding: 12px;
     overflow: auto;
     box-sizing: border-box;
+    background: var(--ai-output-body-bg);
   }
   .format-warning {
     padding: 8px 12px;
@@ -1224,6 +1229,12 @@
   }
 
   [data-theme='night'] .ai-container {
+    --ai-section-bg: var(--card-background);
+    --ai-section-border: var(--surface-border-color);
+    --ai-action-bg: var(--card-background);
+    --ai-action-hover-bg: var(--hover-background);
+    --ai-output-header-bg: var(--workspace-panel-bg-color);
+    --ai-output-body-bg: var(--card-background);
     background: var(--workspace-panel-bg-color);
     border-color: var(--surface-border-color);
   }
@@ -1266,6 +1277,13 @@
   [data-theme='night'] .action-btn:hover,
   [data-theme='night'] .ghost-btn:hover {
     color: var(--text-color);
+  }
+  [data-theme='night'] .action-btn:hover {
+    border-color: var(--primary-color);
+    background: var(--ai-action-hover-bg);
+  }
+  [data-theme='night'] .ai-title .dot {
+    border-color: #3b3f5a;
   }
   [data-theme='night'] .ai-input :deep(.b-textarea:focus) {
     border-color: var(--primary-color);

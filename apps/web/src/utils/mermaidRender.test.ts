@@ -23,9 +23,7 @@ async function loadModule() {
 
 function markdownHost(...codes: string[]) {
   const host = document.createElement('div');
-  host.innerHTML = codes
-    .map((code) => `<pre><code class="language-mermaid">${code}</code></pre>`)
-    .join('<p>正文</p>');
+  host.innerHTML = codes.map((code) => `<pre><code class="language-mermaid">${code}</code></pre>`).join('<p>正文</p>');
   document.body.appendChild(host);
   return host;
 }
@@ -201,7 +199,7 @@ describe('mermaidRender', () => {
 
     expect(inlined).toContain('<svg');
     expect(inlined).not.toContain('language-mermaid');
-    expect(inlined).toContain("data-mermaid-state=\"stale\"");
+    expect(inlined).toContain('data-mermaid-state="stale"');
     // 记的是新源码,后面才知道该照着什么重画
     expect(inlined).toContain('mindmap\n  root(新)');
   });
@@ -234,7 +232,7 @@ describe('mermaidRender', () => {
 
     const inlined = inlineCachedMermaid(html);
     expect(inlined).toContain('mermaid-figure__placeholder');
-    expect(inlined).toContain("data-mermaid-state=\"queued\"");
+    expect(inlined).toContain('data-mermaid-state="queued"');
     expect(inlined).not.toContain('language-mermaid');
 
     // 占位随后要被真正渲染出来
@@ -367,6 +365,28 @@ describe('mermaidRender', () => {
       expect(figure.querySelector('svg')).toBeTruthy();
     });
 
+    it('异步绘图开始前同步挂上占位，不让富文本源码闪现', async () => {
+      const { renderMermaidBlocks } = await loadModule();
+      let finishRender: ((value: { svg: string }) => void) | null = null;
+      renderMock.mockReturnValue(
+        new Promise((resolve) => {
+          finishRender = resolve;
+        }),
+      );
+      const host = richTextHost('flowchart TD\n  A-->B');
+
+      const rendering = renderMermaidBlocks(host, { companion: true });
+      const figure = host.querySelector('.mermaid-figure--companion') as HTMLElement;
+      expect(figure).toBeTruthy();
+      expect(figure.dataset.mermaidState).toBe('pending');
+      expect(figure.querySelector('.mermaid-figure__placeholder')).toBeTruthy();
+
+      finishRender?.({ svg: '<svg><text>完成</text></svg>' });
+      await rendering;
+      expect(figure.querySelector('.mermaid-figure__placeholder')).toBeNull();
+      expect(figure.querySelector('svg')).toBeTruthy();
+    });
+
     it('图带 data-mce-bogus,不会被 TinyMCE 存进笔记内容', async () => {
       const { renderMermaidBlocks } = await loadModule();
       const host = richTextHost('mindmap\n  root((不进内容))');
@@ -375,6 +395,27 @@ describe('mermaidRender', () => {
       const figure = host.querySelector('.mermaid-figure--companion') as HTMLElement;
       expect(figure.getAttribute('data-mce-bogus')).toBe('all');
       expect(figure.getAttribute('contenteditable')).toBe('false');
+    });
+
+    it('图表提供编辑按钮和双击入口，事件上浮但不改写源码块', async () => {
+      const { MERMAID_EDIT_EVENT, renderMermaidBlocks } = await loadModule();
+      const host = richTextHost('flowchart TD\n  A-->B');
+      const requests: string[] = [];
+      host.addEventListener(MERMAID_EDIT_EVENT, (event) => {
+        requests.push((event as CustomEvent<{ source: string }>).detail.source);
+      });
+
+      await renderMermaidBlocks(host, { companion: true });
+
+      const pre = host.querySelector('pre.language-mermaid') as HTMLElement;
+      const figure = host.querySelector('.mermaid-figure--companion') as HTMLElement;
+      const editButton = figure.querySelector<HTMLButtonElement>('[title="note.mermaidEdit"]');
+      expect(editButton).toBeTruthy();
+      editButton?.click();
+      figure.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      expect(requests).toEqual(['flowchart TD\n  A-->B', 'flowchart TD\n  A-->B']);
+      expect(pre.getAttribute('class')).toBe('language-mermaid');
+      expect(pre.attributes).toHaveLength(1);
     });
 
     it('源码没变时不重复渲染(编辑器 NodeChange 触发很密)', async () => {

@@ -52,6 +52,7 @@ import { exportAiUserData } from '../util/aiUserDataExport.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { MAX_NOTE_TREE_DEPTH } from '../util/noteTreeConstants.js';
+import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
 import {
   adminCursorScope,
   adminCursorTime,
@@ -1806,7 +1807,10 @@ export const importData = async (req, res) => {
       const title = String(n?.title || '').trim();
       const rawContent = n?.content || '';
       const type = n?.type || 'html';
-      const content = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
+      const content =
+        type === 'markdown'
+          ? normalizeMarkdownBlockquoteEntities(rawContent)
+          : sanitizePersistedNoteContent(rawContent, 'html', 'import-note');
       if (!title && !content) continue;
       const k = noteKey(title, content);
       if (existNotes.has(k)) {

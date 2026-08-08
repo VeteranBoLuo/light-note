@@ -475,6 +475,7 @@
 .security-mobile-nav > strong { text-align: center; }
 .security-mobile-icon.b_btn { width: 42px; height: 42px; border: 1px solid transparent !important; border-radius: 11px; padding: 0; background: transparent; }
 .security-mobile-content { padding-bottom: 80px; color: var(--security-text); }
+.security-mobile-panel { min-height: calc(100dvh - 190px); }
 .security-mobile-status { border: 1px solid var(--security-good); border-radius: 14px; padding: 11px; background: color-mix(in srgb, var(--security-good) 9%, var(--security-surface)); }
 .security-mobile-status b { display: block; color: var(--security-good); font-size: 12px; }
 .security-mobile-status span { display: block; margin-top: 3px; color: var(--security-sub); font-size: 9px; }
@@ -496,6 +497,16 @@
 .security-mobile-event-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 10px; }
 .security-mobile-event-actions :deep(.b_btn) { width: 100%; height: 35px; border: 1px solid var(--security-line) !important; border-radius: 9px; padding: 0 5px; font-size: 10px; }
 .security-mobile-principle { border-left: 3px solid var(--security-primary); padding-left: 10px; color: var(--security-sub); font-size: 10px; line-height: 1.6; }
+.security-mobile-access {
+  :deep(.security-v2-header) { align-items: stretch; flex-direction: column; }
+  :deep(.security-v2-header h2) { font-size: 20px; }
+  :deep(.security-v2-header .b_btn) { width: 100%; }
+  :deep(.security-control-columns) { grid-template-columns: 1fr; }
+  :deep(.security-panel) { padding: 12px; }
+  :deep(.security-panel-head) { align-items: stretch; flex-direction: column; }
+  :deep(.security-control-row) { align-items: stretch; grid-template-columns: 1fr; }
+  :deep(.security-control-actions) { display: flex; flex-wrap: wrap; }
+}
 .security-mobile-bottom-nav { position: fixed; z-index: 8; right: 20px; bottom: 0; left: 20px; display: flex; height: 68px; border-top: 1px solid var(--security-line); padding: 6px 0; background: var(--security-surface); }
 .security-mobile-bottom-nav :deep(.b_btn) { min-width: 0; height: 56px; flex: 1; border: 1px solid transparent !important; border-radius: 16px; padding: 0 4px; background: transparent; color: var(--security-sub); font-size: 10px; white-space: normal; }
 .security-mobile-bottom-nav :deep(.b_btn.is-active) { border-color: var(--security-primary) !important; background: color-mix(in srgb, var(--security-primary) 10%, var(--security-surface)); color: var(--security-primary); font-weight: 750; }

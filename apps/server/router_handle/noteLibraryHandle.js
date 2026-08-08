@@ -23,6 +23,11 @@ import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearc
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
+import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
+import {
+  isValidNoteFormatConversionAnalysisHash,
+  verifyNoteFormatConversionAnalysisHash,
+} from '../util/noteFormatConversion.js';
 import {
   deleteOwnedNoteSubtrees,
   moveOwnedNoteNode,
@@ -76,6 +81,16 @@ const NOTE_TREE_ERROR_COPY = Object.freeze({
   NOTE_TREE_DEPTH_EXCEEDED: ['已超过目录最大层级', 'The maximum directory depth would be exceeded'],
   NOTE_TREE_NODE_ID_REQUIRED: ['缺少笔记 ID', 'Note ID is required'],
   INVALID_NOTE_TYPE: ['笔记类型无效', 'Invalid note type'],
+  NOTE_VERSION_CONFLICT: [
+    '这篇笔记已在其他页面或设备更新，请先处理版本冲突',
+    'This note changed in another tab or device. Resolve the version conflict first',
+  ],
+  NOTE_VERSION_NOT_FOUND: ['历史版本不存在', 'Note version not found'],
+  NOTE_CONVERSION_STALE: [
+    '转换预览已经失效，请重新检查后再转换',
+    'The conversion preview is stale. Review it again before converting',
+  ],
+  NOTE_CONVERSION_TARGET_UNCHANGED: ['笔记已经是目标格式', 'The note is already in the target format'],
   NOTE_TREE_MOVE_CONFLICT: ['页面状态已变化，请刷新后重试', 'The page changed; refresh and try again'],
   NOTE_TREE_DELETE_CONFLICT: [
     '页面数量已变化，请重新确认删除范围',
@@ -123,7 +138,18 @@ const normalizeCanonicalMarkdownContent = (content, type) =>
   type === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
 
 const normalizeCanonicalMarkdownRecord = (record) => {
-  if (!record || record.type !== 'markdown') return record;
+  if (!record) return record;
+  if (record.type !== 'markdown') {
+    // 历史 HTML 也可能早于写入净化边界。详情、版本和模板回传前再过一次同一白名单，
+    // 这样旧数据不会在 TinyMCE/预览区域里重新获得主动脚本能力。
+    if (record.type === 'html' || record.type === 'md') {
+      return {
+        ...record,
+        content: sanitizePersistedNoteContent(record.content, 'html', 'read-note-content'),
+      };
+    }
+    return record;
+  }
   return {
     ...record,
     content: normalizeMarkdownBlockquoteEntities(record.content),
@@ -204,7 +230,12 @@ export const addNote = async (req, res) => {
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
     });
     return res.send(
-      resultData({ id: result.id, parentId: result.parentId ?? null, addedToInbox: result.addedToInbox }),
+      resultData({
+        id: result.id,
+        parentId: result.parentId ?? null,
+        revision: Math.max(1, Number(result.revision || 1)),
+        addedToInbox: result.addedToInbox,
+      }),
     );
   } catch (e) {
     if (e instanceof NoteTreeError || e instanceof NoteTreeFeatureError) {
@@ -347,29 +378,48 @@ async function pruneNoteVersions(connection, noteId) {
 }
 
 // 覆盖笔记前,把"改动前"的旧内容存为一个历史版本(按闸门策略决定是否真正落库)
-async function snapshotNoteVersion(connection, { noteId, userId, newContent }) {
-  // 本次未提交正文(仅改标题/标签等)则不快照
-  if (newContent === undefined || newContent === null) return;
-  const [rows] = await connection.query('SELECT title, content, type FROM note WHERE id=? AND create_by=?', [
-    noteId,
-    userId,
-  ]);
-  if (rows.length === 0) return; // 笔记不存在或非本人,交由后续 update 的 where 兜底
-  const oldContent = normalizeCanonicalMarkdownContent(rows[0].content ?? '', rows[0].type);
-  if (oldContent === newContent) return; // 正文无变化,去重
+async function snapshotNoteVersion(
+  connection,
+  { noteId, userId, currentNote, nextState, reason = 'autosave', force = false },
+) {
+  let current = currentNote;
+  if (!current) {
+    const [rows] = await connection.query(
+      'SELECT title, content, type, revision FROM note WHERE id=? AND create_by=?',
+      [noteId, userId],
+    );
+    current = rows[0] || null;
+  }
+  if (!current) return;
+  const oldContent = normalizeCanonicalMarkdownContent(current.content ?? '', current.type);
+  const changed =
+    String(current.title || '') !== String(nextState?.title ?? current.title ?? '') ||
+    oldContent !== String(nextState?.content ?? oldContent) ||
+    normalizeNoteType(current.type) !== normalizeNoteType(nextState?.type ?? current.type);
+  if (!changed) return;
   // 时间合并:距该笔记上一条版本不足窗口则并入,不新增
-  const [lastRows] = await connection.query(
-    'SELECT create_time FROM note_versions WHERE note_id=? ORDER BY create_time DESC, id DESC LIMIT 1',
-    [noteId],
-  );
-  if (lastRows.length > 0 && Date.now() - new Date(lastRows[0].create_time).getTime() < NOTE_VERSION_MERGE_WINDOW_MS) {
-    return;
+  if (!force) {
+    const [lastRows] = await connection.query(
+      'SELECT create_time FROM note_versions WHERE note_id=? ORDER BY create_time DESC, id DESC LIMIT 1',
+      [noteId],
+    );
+    if (
+      lastRows.length > 0 &&
+      Date.now() - new Date(lastRows[0].create_time).getTime() < NOTE_VERSION_MERGE_WINDOW_MS
+    ) {
+      return;
+    }
   }
   const versionData = insertData({
     noteId,
-    title: rows[0].title,
-    content: oldContent,
-    type: rows[0].type,
+    title: current.title,
+    content:
+      normalizeNoteType(current.type) === 'markdown'
+        ? oldContent
+        : sanitizePersistedNoteContent(oldContent, 'html', 'snapshot-note-version'),
+    type: current.type,
+    sourceRevision: Math.max(1, Number(current.revision || 1)),
+    reason,
     createBy: userId,
   });
   await connection.query('INSERT INTO note_versions SET ?', [versionData]);
@@ -388,6 +438,11 @@ export const updateNote = async (req, res) => {
   const hasSubmittedContent = Object.prototype.hasOwnProperty.call(requestBody, 'content');
   const hasSubmittedType = Object.prototype.hasOwnProperty.call(requestBody, 'type');
   const hasSubmittedTags = Object.prototype.hasOwnProperty.call(requestBody, 'tags');
+  const hasSubmittedRevision = Object.prototype.hasOwnProperty.call(requestBody, 'revision');
+  const expectedRevision = hasSubmittedRevision ? Number(requestBody.revision) : null;
+  if (hasSubmittedRevision && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) {
+    return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
+  }
   if (
     hasSubmittedTitle &&
     (typeof requestBody.title !== 'string' ||
@@ -422,34 +477,64 @@ export const updateNote = async (req, res) => {
     // 先锁定 owner 的有效笔记。后续标签与引用同步都以这条权威记录为边界，
     // 避免“主表更新 0 行、关系表却写入”的越权旁路。
     const [ownedRows] = await connection.query(
-      'SELECT id, title, content, type FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+      'SELECT id, title, content, type, revision, update_time FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
       [noteId, userId],
     );
     if (!ownedRows.length) {
       throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
     }
     const ownedNote = ownedRows[0];
+    const currentRevision = Math.max(1, Number(ownedNote.revision || 1));
+    if (expectedRevision !== null && expectedRevision !== currentRevision) {
+      const safeCurrent = normalizeCanonicalMarkdownRecord(ownedNote);
+      throw new NoteTreeError('NOTE_VERSION_CONFLICT', '笔记版本冲突', 409, {
+        current: {
+          id: noteId,
+          title: String(ownedNote.title || ''),
+          content: String(safeCurrent.content || ''),
+          type: normalizeNoteType(ownedNote.type),
+          revision: currentRevision,
+          updateTime: ownedNote.update_time || null,
+        },
+      });
+    }
     const currentType = normalizeNoteType(ownedNote.type);
     const finalType = submittedType || currentType;
     if (!NOTE_UPDATE_TYPES.has(finalType)) {
       throw new NoteTreeError('INVALID_NOTE_TYPE', '笔记类型无效', 400);
     }
-    const finalContent = hasSubmittedContent
-      ? finalType === 'markdown'
-        ? normalizeMarkdownBlockquoteEntities(rawContent)
-        : rawContent
-      : String(ownedNote.content ?? '');
+    const submittedOrCurrentContent = hasSubmittedContent ? rawContent : String(ownedNote.content ?? '');
+    const finalContent =
+      finalType === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(submittedOrCurrentContent)
+        : sanitizePersistedNoteContent(submittedOrCurrentContent, finalType, 'update-note');
+    const finalTitle = hasSubmittedTitle ? requestBody.title : String(ownedNote.title || '');
 
     // 主表只允许正文编辑域字段。parent_id/sort/is_top/del_flag/owner 等字段必须走各自
     // 的服务端领域接口，不能由客户端请求体透传，从根源封住 mass assignment。
     const updateParams = {};
-    if (hasSubmittedTitle) updateParams.title = requestBody.title;
-    if (hasSubmittedContent) updateParams.content = finalContent;
-    if (hasSubmittedType) updateParams.type = finalType;
+    if (hasSubmittedTitle && finalTitle !== String(ownedNote.title || '')) updateParams.title = finalTitle;
+    if (
+      (hasSubmittedContent || (hasSubmittedType && finalType !== currentType)) &&
+      finalContent !== normalizeCanonicalMarkdownContent(String(ownedNote.content ?? ''), ownedNote.type)
+    ) {
+      updateParams.content = finalContent;
+    }
+    if (hasSubmittedType && finalType !== currentType) updateParams.type = finalType;
+    let nextRevision = currentRevision;
     if (Object.keys(updateParams).length) {
+      nextRevision = currentRevision + 1;
       updateParams.updateBy = userId;
+      updateParams.revision = nextRevision;
       // 覆盖前先存历史版本快照(改动前旧内容;含去重/时间合并/保留上限)
-      await snapshotNoteVersion(connection, { noteId, userId, newContent: updateParams.content });
+      await snapshotNoteVersion(connection, {
+        noteId,
+        userId,
+        currentNote: ownedNote,
+        nextState: { title: finalTitle, content: finalContent, type: finalType },
+        reason: finalType !== currentType ? 'format_conversion' : 'autosave',
+        force: finalType !== currentType,
+      });
       await connection.query('update note set ? where id=? and create_by=? and del_flag=0', [
         snakeCaseKeys(updateParams),
         noteId,
@@ -474,7 +559,7 @@ export const updateNote = async (req, res) => {
     await connection.commit();
     transactionStarted = false;
     if (Object.keys(updateParams).length || hasSubmittedTags) await invalidatePersonalKnowledgeCache(userId);
-    return res.send(resultData('更新笔记成功'));
+    return res.send(resultData({ id: noteId, revision: nextRevision }));
   } catch (e) {
     if (transactionStarted) {
       try {
@@ -485,6 +570,134 @@ export const updateNote = async (req, res) => {
     }
     if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-note', e);
     return sendNoteServerError(res, 'update-note', e);
+  } finally {
+    connection?.release();
+  }
+};
+
+// HTML / Markdown 正式格式转换必须在一笔事务内完成：校验用户刚确认的预览指纹、
+// 锁定 baseRevision、强制创建转换前还原点、覆盖正文与类型并同步站内引用。
+// 普通自动保存仍走 updateNote；这里不接受标题、标签或目录字段，避免转换请求扩大写入域。
+export const convertNoteMode = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const requestBody = req.body && typeof req.body === 'object' ? req.body : {};
+  const noteId = String(requestBody.id || '').trim();
+  const targetType = String(requestBody.targetType || '').trim();
+  const convertedContent = requestBody.convertedContent;
+  const baseRevision = Number(requestBody.baseRevision);
+  const analysisHash = String(requestBody.analysisHash || '')
+    .trim()
+    .toLowerCase();
+
+  if (!noteId || noteId.length > 255) {
+    return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+  }
+  if (!NOTE_UPDATE_TYPES.has(targetType)) {
+    return res.send(resultData(null, 400, L(req, '笔记类型无效', 'Invalid note type')));
+  }
+  if (typeof convertedContent !== 'string') {
+    return res.send(resultData(null, 400, L(req, '转换后的正文无效', 'Invalid converted content')));
+  }
+  if (convertedContent.length > NOTE_CONTENT_MAX_LENGTH) {
+    return res.send(resultData(null, 400, L(req, '笔记正文过长', 'Note content is too long')));
+  }
+  if (!Number.isSafeInteger(baseRevision) || baseRevision < 1) {
+    return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
+  }
+  if (!isValidNoteFormatConversionAnalysisHash(analysisHash)) {
+    return res.send(resultData(null, 400, L(req, '转换预览校验值无效', 'Invalid conversion preview hash')));
+  }
+
+  let connection;
+  let transactionStarted = false;
+  try {
+    const userId = req.user.id;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+
+    const [ownedRows] = await connection.query(
+      'SELECT id, title, content, type, revision, update_time FROM note WHERE id = ? AND create_by = ? AND del_flag = 0 FOR UPDATE',
+      [noteId, userId],
+    );
+    if (!ownedRows.length) {
+      throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    }
+    const ownedNote = ownedRows[0];
+    const currentRevision = Math.max(1, Number(ownedNote.revision || 1));
+    if (baseRevision !== currentRevision) {
+      const safeCurrent = normalizeCanonicalMarkdownRecord(ownedNote);
+      throw new NoteTreeError('NOTE_VERSION_CONFLICT', '笔记版本冲突', 409, {
+        current: {
+          id: noteId,
+          title: String(ownedNote.title || ''),
+          content: String(safeCurrent.content || ''),
+          type: normalizeNoteType(ownedNote.type),
+          revision: currentRevision,
+          updateTime: ownedNote.update_time || null,
+        },
+      });
+    }
+    const currentType = normalizeNoteType(ownedNote.type);
+    if (targetType === currentType) {
+      throw new NoteTreeError('NOTE_CONVERSION_TARGET_UNCHANGED', '笔记已经是目标格式', 409);
+    }
+    if (
+      !verifyNoteFormatConversionAnalysisHash(analysisHash, {
+        targetType,
+        convertedContent,
+        baseRevision,
+      })
+    ) {
+      throw new NoteTreeError('NOTE_CONVERSION_STALE', '转换预览已经失效', 409);
+    }
+
+    const finalContent =
+      targetType === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(convertedContent)
+        : sanitizePersistedNoteContent(convertedContent, targetType, 'convert-note-mode');
+    const nextRevision = currentRevision + 1;
+    await snapshotNoteVersion(connection, {
+      noteId,
+      userId,
+      currentNote: ownedNote,
+      nextState: { title: ownedNote.title, content: finalContent, type: targetType },
+      reason: 'format_conversion',
+      force: true,
+    });
+    await connection.query(
+      'UPDATE note SET content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=? AND del_flag=0',
+      [finalContent, targetType, userId, nextRevision, noteId, userId],
+    );
+    const refs = extractOwnedResourceRefs({ content: finalContent, type: targetType });
+    await syncNoteResourceRefs(connection, { userId, noteId, refs });
+    const [updatedRows] = await connection.query('SELECT update_time FROM note WHERE id=? AND create_by=?', [
+      noteId,
+      userId,
+    ]);
+    await connection.commit();
+    transactionStarted = false;
+    await invalidatePersonalKnowledgeCache(userId);
+    return res.send(
+      resultData({
+        id: noteId,
+        title: String(ownedNote.title || ''),
+        content: finalContent,
+        type: targetType,
+        revision: nextRevision,
+        updateTime: updatedRows[0]?.update_time || null,
+      }),
+    );
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留最初的业务错误。
+      }
+    }
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'convert-note-mode', error);
+    return sendNoteServerError(res, 'convert-note-mode', error);
   } finally {
     connection?.release();
   }
@@ -1133,7 +1346,7 @@ export const getNoteVersions = async (req, res) => {
       return res.send(resultData(null, 404, '笔记不存在'));
     }
     const [rows] = await pool.query(
-      `SELECT id, title, type, content, create_by, create_time
+      `SELECT id, title, type, content, source_revision, reason, create_by, create_time
        FROM note_versions
        WHERE note_id = ?
        ORDER BY create_time DESC, id DESC`,
@@ -1156,7 +1369,7 @@ export const getNoteVersionDetail = async (req, res) => {
       return res.send(resultData(null, 400, '参数错误'));
     }
     const [rows] = await pool.query(
-      'SELECT id, note_id, title, content, type, create_time FROM note_versions WHERE id=?',
+      'SELECT id, note_id, title, content, type, source_revision, reason, create_time FROM note_versions WHERE id=?',
       [versionId],
     );
     if (rows.length === 0) {
@@ -1176,70 +1389,96 @@ export const getNoteVersionDetail = async (req, res) => {
 // 恢复到指定版本:先把当前内容存为一版(后悔药),再覆盖为目标版本
 export const restoreNoteVersion = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
+  const versionId = req.body?.id;
+  const hasExpectedRevision = Object.prototype.hasOwnProperty.call(req.body || {}, 'revision');
+  const expectedRevision = hasExpectedRevision ? Number(req.body.revision) : null;
+  if (!versionId) return res.send(resultData(null, 400, L(req, '参数错误', 'Invalid request')));
+  if (hasExpectedRevision && (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1)) {
+    return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
+  }
+  let connection;
+  let transactionStarted = false;
   try {
     const userId = req.user.id;
-    const versionId = req.body.id;
-    if (!versionId) {
-      return res.send(resultData(null, 400, '参数错误'));
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [verRows] = await connection.query('SELECT note_id, title, content, type FROM note_versions WHERE id=?', [
+      versionId,
+    ]);
+    if (verRows.length === 0) {
+      throw new NoteTreeError('NOTE_VERSION_NOT_FOUND', '版本不存在', 404);
     }
-    const connection = await pool.getConnection();
-    try {
-      await connection.beginTransaction();
-      const [verRows] = await connection.query('SELECT note_id, title, content, type FROM note_versions WHERE id=?', [
-        versionId,
-      ]);
-      if (verRows.length === 0) {
-        await connection.rollback();
-        return res.send(resultData(null, 404, '版本不存在'));
-      }
-      const noteId = verRows[0].note_id;
-      const verTitle = verRows[0].title;
-      const rawVerContent = verRows[0].content ?? '';
-      const verType = verRows[0].type || 'html';
-      const verContent = normalizeCanonicalMarkdownContent(rawVerContent, verType);
-      // 归属校验 + 取当前值(未删除的、属于自己的笔记)
-      const [curRows] = await connection.query(
-        'SELECT title, content, type FROM note WHERE id=? AND create_by=? AND del_flag=?',
-        [noteId, userId, '0'],
-      );
-      if (curRows.length === 0) {
-        await connection.rollback();
-        return res.send(resultData(null, 404, '笔记不存在'));
-      }
-      // 后悔药:恢复前把当前内容强制存为一版(不受时间合并限制),恢复错了还能回来
-      const curSnap = insertData({
-        noteId,
-        title: curRows[0].title,
-        content: normalizeCanonicalMarkdownContent(curRows[0].content ?? '', curRows[0].type),
-        type: curRows[0].type,
-        createBy: userId,
+    const noteId = verRows[0].note_id;
+    const verTitle = verRows[0].title;
+    const rawVerContent = verRows[0].content ?? '';
+    const verType = normalizeNoteType(verRows[0].type || 'html');
+    const verContent =
+      verType === 'markdown'
+        ? normalizeCanonicalMarkdownContent(rawVerContent, verType)
+        : sanitizePersistedNoteContent(rawVerContent, verType, 'restore-note-version');
+    // 归属校验 + 锁定当前值，恢复也必须遵守与普通保存相同的 revision 边界。
+    const [curRows] = await connection.query(
+      'SELECT title, content, type, revision, update_time FROM note WHERE id=? AND create_by=? AND del_flag=? FOR UPDATE',
+      [noteId, userId, '0'],
+    );
+    if (curRows.length === 0) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    const currentRevision = Math.max(1, Number(curRows[0].revision || 1));
+    if (expectedRevision !== null && currentRevision !== expectedRevision) {
+      const safeCurrent = normalizeCanonicalMarkdownRecord(curRows[0]);
+      throw new NoteTreeError('NOTE_VERSION_CONFLICT', '笔记版本冲突', 409, {
+        current: {
+          id: noteId,
+          title: String(curRows[0].title || ''),
+          content: String(safeCurrent.content || ''),
+          type: normalizeNoteType(curRows[0].type),
+          revision: currentRevision,
+          updateTime: curRows[0].update_time || null,
+        },
       });
-      await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
-      // 覆盖为目标版本(含 type:恢复时 md/html 模式一并回到该版本)
-      await connection.query('UPDATE note SET title=?, content=?, type=?, update_by=? WHERE id=? AND create_by=?', [
-        verTitle,
-        verContent,
-        verType,
-        userId,
-        noteId,
-        userId,
-      ]);
-      await pruneNoteVersions(connection, noteId);
-      // 笔记内联提及(N0):恢复版本会用目标版本正文覆盖当前正文,必须同步引用(§4.6 恢复不能漏)。
-      const restoredRefs = extractOwnedResourceRefs({ content: String(verContent), type: verType });
-      await syncNoteResourceRefs(connection, { userId, noteId, refs: restoredRefs });
-      await connection.commit();
-      await invalidatePersonalKnowledgeCache(userId);
-      res.send(resultData({ id: noteId, title: verTitle, content: verContent, type: verType }));
-    } catch (error) {
-      await connection.rollback();
-      return sendNoteServerError(res, 'restore-note-version', error);
-    } finally {
-      connection.release();
     }
+    const nextRevision = currentRevision + 1;
+    // 后悔药:恢复前把当前内容强制存为一版(不受时间合并限制),恢复错了还能回来。
+    const curSnap = insertData({
+      noteId,
+      title: curRows[0].title,
+      content:
+        normalizeNoteType(curRows[0].type) === 'markdown'
+          ? normalizeCanonicalMarkdownContent(curRows[0].content ?? '', curRows[0].type)
+          : sanitizePersistedNoteContent(curRows[0].content ?? '', 'html', 'snapshot-before-restore'),
+      type: curRows[0].type,
+      sourceRevision: currentRevision,
+      reason: 'restore',
+      createBy: userId,
+    });
+    await connection.query('INSERT INTO note_versions SET ?', [curSnap]);
+    // 覆盖为目标版本(含 type:恢复时 md/html 模式一并回到该版本)。
+    await connection.query(
+      'UPDATE note SET title=?, content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=?',
+      [verTitle, verContent, verType, userId, nextRevision, noteId, userId],
+    );
+    await pruneNoteVersions(connection, noteId);
+    // 笔记内联提及(N0):恢复版本会用目标版本正文覆盖当前正文,必须同步引用(§4.6 恢复不能漏)。
+    const restoredRefs = extractOwnedResourceRefs({ content: String(verContent), type: verType });
+    await syncNoteResourceRefs(connection, { userId, noteId, refs: restoredRefs });
+    await connection.commit();
+    transactionStarted = false;
+    await invalidatePersonalKnowledgeCache(userId);
+    return res.send(
+      resultData({ id: noteId, title: verTitle, content: verContent, type: verType, revision: nextRevision }),
+    );
   } catch (e) {
-    console.warn('[note-library] restore version rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原业务错误。
+      }
+    }
+    if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'restore-note-version', e);
+    return sendNoteServerError(res, 'restore-note-version', e);
+  } finally {
+    connection?.release();
   }
 };
 
@@ -1297,7 +1536,9 @@ export const addNoteTemplate = async (req, res) => {
     const type = req.body.type === 'md' ? 'markdown' : String(req.body.type || 'html');
     const rawContent = String(req.body.content || '');
     const content =
-      normalizeNoteType(type) === 'markdown' ? normalizeMarkdownBlockquoteEntities(rawContent) : rawContent;
+      normalizeNoteType(type) === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(rawContent)
+        : sanitizePersistedNoteContent(rawContent, 'html', 'create-note-template');
     if (!name) {
       return res.send(resultData(null, 400, '模板名称不能为空'));
     }

@@ -55,6 +55,14 @@ describe('BUpload semantics', () => {
     expect(click).toHaveBeenCalledTimes(1);
   });
 
+  it('supports an imperative-only picker without rendering the default upload card', async () => {
+    const host = mountUpload({ triggerless: true });
+    await nextTick();
+
+    expect(host.querySelector('.b-upload-trigger')).toBeNull();
+    expect(document.body.querySelector('.b-upload-native-input')).not.toBeNull();
+  });
+
   it('emits selected raw files and resets the input for selecting the same file again', async () => {
     const onChange = vi.fn();
     mountUpload({ rawFile: true, onChange });
@@ -71,6 +79,25 @@ describe('BUpload semantics', () => {
     input.dispatchEvent(new Event('change'));
     expect(onChange).toHaveBeenCalledWith([file]);
     expect(input.value).toBe('');
+  });
+
+  it('allows business components to disable the fixed picker size limit', async () => {
+    const onChange = vi.fn();
+    mountUpload({ rawFile: true, maxTotalSize: null, onChange });
+    await nextTick();
+    const input = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
+    expect(input).not.toBeNull();
+    if (!input) throw new Error('native file input was not mounted');
+    const file = new File(['content'], 'archive.zip', { type: 'application/zip' });
+    Object.defineProperty(file, 'size', { configurable: true, value: 20 * 1024 * 1024 });
+    Object.defineProperty(input, 'files', {
+      configurable: true,
+      value: [file],
+    });
+
+    input.dispatchEvent(new Event('change'));
+
+    expect(onChange).toHaveBeenCalledWith([file]);
   });
 
   it('removes disabled triggers from the tab order', () => {

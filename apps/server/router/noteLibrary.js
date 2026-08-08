@@ -27,6 +27,7 @@ const upload = multer({ storage: storage });
 router.post('/uploadImage', blockVisitorUpload, upload.single('file'), noteLibraryHandle.uploadNoteImage);
 
 router.post('/updateNote', noteLibraryHandle.updateNote);
+router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);

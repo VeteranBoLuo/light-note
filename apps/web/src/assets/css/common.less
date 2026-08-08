@@ -24,6 +24,8 @@
  */
 .auto-scrollbar {
   scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 
   &::-webkit-scrollbar {
     width: 3px;
@@ -45,6 +47,10 @@
     background-color: var(--scrollbar-color);
     transition: background-color 80ms ease;
   }
+
+  &.is-scrolling {
+    scrollbar-color: var(--scrollbar-color) transparent;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -64,12 +70,13 @@
     background: var(--pre-bg-color);
     padding: 10px;
     border-radius: 10px;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    color: #ffffff !important;
+    border: 1px solid var(--pre-border-color);
+    box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent);
+    color: var(--pre-text-color) !important;
     overflow: auto;
     code {
       font-family: 'Fira Code' !important;
-      color: #ffffff !important;
+      color: var(--pre-text-color) !important;
       text-shadow: none !important;
     }
   }
@@ -575,9 +582,11 @@ h1 {
 }
 
 /*
- * 富文本里的图表源码块。编辑时要能看见、能改;只读展示(分享、管理员预览)时只看图。
- * 注意是隐藏而不是删除 —— 源码块是笔记的真实内容,删了再保存就把图表弄丢了。
+ * 富文本只展示渲染图表，源码由图上的「编辑」或双击打开。
+ * `:has(+ companion)` 只改变编辑期视图，不给真实 <pre> 加 class/style/hidden 属性，
+ * 因此 TinyMCE 序列化的仍是原始 mermaid 源码，不存在隐藏时把源码一起删掉的风险。
  */
+.note-editor:not(.is-readonly) pre[class*='language-mermaid']:has(+ .mermaid-figure--companion),
 .note-editor.is-readonly pre[class*='language-mermaid'] {
   display: none;
 }
@@ -590,6 +599,13 @@ h1 {
 .mermaid-figure--companion {
   /* 紧跟在源码块后面,视觉上归属同一块内容 */
   margin-top: 6px;
+
+  /* 富文本里点击图表后的块级选中态。实色描边 + outline 在 Android WebView 的混色回退后仍可辨。 */
+  &.is-selected {
+    border-color: var(--primary-color, #615ced);
+    outline: 2px solid var(--primary-color, #615ced);
+    outline-offset: 2px;
+  }
 }
 
 /*

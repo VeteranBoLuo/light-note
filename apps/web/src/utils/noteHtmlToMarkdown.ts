@@ -1,5 +1,7 @@
 import TurndownService from 'turndown';
+import { tables } from 'turndown-plugin-gfm';
 import type { Token, Tokens } from 'marked';
+import { createSizedContentImageHtml, isContentImageSize } from '@/utils/contentImageSize';
 
 const EMPTY_MARKDOWN_TASK_ITEM_RE = /^\s*(?:[-+*]|\d+[.)])\s+\[([ xX])\]\s*$/u;
 const EMPTY_MARKDOWN_TASK_TEXT_RE = /^\[[ xX]\]$/u;
@@ -51,6 +53,11 @@ function isNoteTodoCheckbox(node: Node): node is HTMLInputElement {
   );
 }
 
+function isSizedContentImage(node: Node): node is HTMLImageElement {
+  if (node.nodeName !== 'IMG') return false;
+  return isContentImageSize((node as HTMLImageElement).getAttribute('data-ln-size'));
+}
+
 function getLeadingTaskCheckbox(element: Element): HTMLInputElement | null {
   return Array.from(element.children).find((child) => isCheckboxElement(child)) || null;
 }
@@ -94,6 +101,28 @@ export function createNoteTurndownService() {
     headingStyle: 'atx',
     codeBlockStyle: 'fenced',
     bulletListMarker: '-',
+  });
+  // 普通表格和删除线都有标准 GFM 表达，不能因为格式切换就退化成连续纯文本。
+  // 合并单元格仍无法一一表达，由转换预检明确告警并依靠转换前还原点兜底。
+  service.use(tables);
+  service.addRule('gfmStrikethrough', {
+    filter: ['s', 'strike', 'del'],
+    replacement: (content) => (content.trim() ? `~~${content}~~` : ''),
+  });
+
+  // 标准 Markdown 图片没有宽度语法。轻笺用一段受控的 img HTML 保存移动端选择的
+  // 五档尺寸；切换到 Markdown 时保留它，之后再切回富文本不会丢掉显示宽度。
+  service.addRule('noteSizedImage', {
+    filter: isSizedContentImage,
+    replacement: (_content, node) => {
+      const image = node as HTMLImageElement;
+      return createSizedContentImageHtml(
+        image.getAttribute('src') || '',
+        image.getAttribute('alt') || '',
+        image.getAttribute('data-ln-size') as Parameters<typeof createSizedContentImageHtml>[2],
+        image.getAttribute('title') || '',
+      );
+    },
   });
 
   // Turndown 默认会移除 input。轻笺待办需转换为标准 GFM 任务列表，

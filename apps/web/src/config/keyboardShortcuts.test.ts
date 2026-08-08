@@ -21,9 +21,12 @@ function keyboardEvent(overrides: Partial<ShortcutKeyboardEvent> = {}): Shortcut
 }
 
 describe('keyboardShortcuts', () => {
-  it('区分单斜杠搜索与主修饰键 AI 快捷键', () => {
+  it('全局搜索同时支持主修饰键 F 与单斜杠，并区分 AI 快捷键', () => {
     expect(matchesGlobalShortcut(keyboardEvent(), 'globalSearch')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true }), 'globalSearch')).toBe(false);
+    expect(matchesGlobalShortcut(keyboardEvent({ key: 'f', keyCode: 70, ctrlKey: true }), 'globalSearch')).toBe(true);
+    expect(matchesGlobalShortcut(keyboardEvent({ key: 'F', keyCode: 70, metaKey: true }), 'globalSearch')).toBe(true);
+    expect(matchesGlobalShortcut(keyboardEvent({ key: 'f', keyCode: 70 }), 'globalSearch')).toBe(false);
     expect(matchesGlobalShortcut(keyboardEvent({ ctrlKey: true }), 'aiAssistant')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent({ metaKey: true }), 'aiAssistant')).toBe(true);
     expect(matchesGlobalShortcut(keyboardEvent(), 'aiAssistant')).toBe(false);
@@ -37,7 +40,10 @@ describe('keyboardShortcuts', () => {
   });
 
   it('按当前平台生成设置页和提示所需的按键标签', () => {
-    expect(getGlobalShortcutKeys('globalSearch', 'mac')).toEqual(['/']);
+    expect(getGlobalShortcutKeys('globalSearch', 'mac')).toEqual(['⌘', 'F']);
+    expect(getGlobalShortcutKeys('globalSearch', 'other')).toEqual(['Ctrl', 'F']);
+    expect(getGlobalShortcutLabel('globalSearch', 'mac')).toBe('⌘ + F');
+    expect(getGlobalShortcutLabel('globalSearch', 'other')).toBe('Ctrl + F');
     expect(getGlobalShortcutKeys('aiAssistant', 'mac')).toEqual(['⌘', '/']);
     expect(getGlobalShortcutLabel('aiAssistant', 'mac')).toBe('⌘ + /');
     expect(getGlobalShortcutLabel('aiAssistant', 'other')).toBe('Ctrl + /');

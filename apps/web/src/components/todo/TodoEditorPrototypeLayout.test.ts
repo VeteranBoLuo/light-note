@@ -112,4 +112,11 @@ describe('待办创建页原型布局', () => {
       /todo-simple-editor__content :deep\(\.b-textarea:focus\)[\s\S]*?border-color:\s*var\(--focus-ring-color\)/,
     );
   });
+
+  it('普通与高级创建页都使用简洁的开始时间可选标题，不额外堆叠说明', () => {
+    expect(simpleSource).toMatch(/todoStartAt[\s\S]*?v-model:value="startAt"/);
+    expect(independentSource).toMatch(/todoStartAt[\s\S]*?v-model:value="startAt"/);
+    expect(simpleSource).not.toMatch(/v-model:value="startAt"[\s\S]{0,120}todoStartAtOptional/);
+    expect(independentSource).not.toMatch(/v-model:value="startAt"[\s\S]{0,120}todoStartAtOptional/);
+  });
 });

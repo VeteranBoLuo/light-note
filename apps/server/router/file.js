@@ -12,6 +12,7 @@ import {
   createDownloadSignedUrl,
   createUploadSignedUrl,
   deleteObjectFromObs,
+  getObjectMetadataFromObs,
   putObjectToObs,
 } from '../util/obsClient.js';
 import {
@@ -155,6 +156,7 @@ router.post('/confirmUpload', async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   const connection = await pool.getConnection();
   const supersededObjectKeys = new Set();
+  let transactionStarted = false;
   try {
     const userId = req.user.id;
     const { files, folderId, addToInbox = false, inboxSource = 'quick_capture' } = req.body || {};
@@ -167,18 +169,35 @@ router.post('/confirmUpload', async (req, res) => {
       return res.send(resultData(null, 400, '没有上传文件'));
     }
 
+    // 浏览器直传完成后以 OBS 元数据为准，客户端 fileSize 只用于签名阶段的提前提示，不能作为最终容量依据。
+    const verifiedFiles = await Promise.all(
+      files.map(async (file) => {
+        const fileName = String(file?.fileName || '').trim();
+        if (!fileName) return { ...file, fileName: '', fileSize: 0 };
+        const objectKey = buildObjectKey(userId, fileName);
+        const metadata = await getObjectMetadataFromObs(objectKey);
+        const fileSize = Number(metadata?.contentLength);
+        if (!Number.isSafeInteger(fileSize) || fileSize < 0) {
+          throw new Error('OBS_UPLOAD_INVALID_SIZE');
+        }
+        return { ...file, fileName, fileSize, objectKey };
+      }),
+    );
+
     await connection.beginTransaction();
+    transactionStarted = true;
     // 与 AI“保存到云空间”共用账号行锁，串行化同一账号的选名、覆盖和容量核算。
     // 否则普通直传与 AI 保存并发时，即使 OBS 对象键互不冲突，也可能写出两条同名文件记录。
     await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
 
     // 容量强校验(权威:写库前拦截,补现有"只签 URL 不校验"缺口)。回收站不占(del_flag=1 不计入)。
-    const incomingBytes = files.reduce((s, f) => s + (Number(f.fileSize) || 0), 0);
+    const incomingBytes = verifiedFiles.reduce((s, f) => s + f.fileSize, 0);
     if (incomingBytes > 0) {
       const used = await getUsedBytes(connection, userId);
       const quotaMB = await storageQuotaMB(req.user);
       if (used + incomingBytes > quotaMB * 1024 * 1024) {
         await connection.rollback();
+        transactionStarted = false;
         // 早退触发下方 finally 的 connection.release(),不重复释放
         return res.send(resultData(null, 413, `云空间已达上限(${quotaMB}MB),清理回收站或删除文件后再上传`));
       }
@@ -186,7 +205,7 @@ router.post('/confirmUpload', async (req, res) => {
 
     const results = [];
 
-    for (const file of files) {
+    for (const file of verifiedFiles) {
       const fileName = file.fileName;
       const fileType = file.fileType || 'application/octet-stream';
       const fileSize = file.fileSize || 0;
@@ -196,7 +215,7 @@ router.post('/confirmUpload', async (req, res) => {
         continue;
       }
 
-      const objectKey = buildObjectKey(userId, fileName);
+      const objectKey = file.objectKey || buildObjectKey(userId, fileName);
       const directory = `${bucketBaseUrl}/files/${userId}/`;
 
       const fileInfo = {
@@ -244,6 +263,7 @@ router.post('/confirmUpload', async (req, res) => {
     }
 
     await connection.commit();
+    transactionStarted = false;
     if (supersededObjectKeys.size) {
       const cleanupKeys = [...supersededObjectKeys];
       const cleanupResults = await Promise.allSettled(cleanupKeys.map((objectKey) => deleteObjectFromObs(objectKey)));
@@ -266,7 +286,7 @@ router.post('/confirmUpload', async (req, res) => {
         );
     }
   } catch (error) {
-    await connection.rollback();
+    if (transactionStarted) await connection.rollback();
     return sendFileServerError(res, 'confirm-upload', error);
   } finally {
     connection.release();

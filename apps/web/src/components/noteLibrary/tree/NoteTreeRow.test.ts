@@ -245,7 +245,7 @@ describe('NoteTreeRow 显式页面操作', () => {
 
     const icons = [...host.querySelectorAll<HTMLElement>('.note-tree-page-icon')];
     expect(icons).toHaveLength(2);
-    expect(icons[0].dataset.src).toBe(icon.resource.note);
+    expect(icons[0].dataset.src).toBe(icon.resource.noteHtml);
     expect(icons[1].dataset.src).toBe(icon.resource.noteMarkdown);
   });
 

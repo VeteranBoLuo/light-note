@@ -69,7 +69,13 @@
             @click="selectDirectory(item.id)"
           >
             <BButton class="note-drawer-select" @click.stop="selectDirectory(item.id)">
-              <SvgIcon :src="getNoteTreePageIcon(item.type)" size="17" aria-hidden="true" />
+              <SvgIcon
+                :src="getNoteTreePageIcon(item.type)"
+                size="18"
+                class="note-drawer-page-icon"
+                :class="{ 'is-markdown': isMarkdownNoteTreePage(item.type) }"
+                aria-hidden="true"
+              />
               <span class="note-drawer-row-title">{{ item.title || t('note.untitled') }}</span>
               <span v-if="item.isTop" class="note-drawer-row-pin" :aria-label="t('common.pinned')">
                 <SvgIcon :src="icon.contextMenu.pin" size="13" aria-hidden="true" />
@@ -122,7 +128,7 @@
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import type { NoteBreadcrumbItem, NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
-  import { getNoteTreePageIcon } from '@/utils/noteTreePresentation';
+  import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
   import {
     closeCurrentMobileOverlayThen,
     registerMobileOverlayHistory,
@@ -498,6 +504,15 @@
     padding: 7px 8px;
     justify-content: flex-start;
     gap: 8px;
+  }
+
+  .note-drawer-page-icon {
+    flex: 0 0 auto;
+    color: var(--resource-note-color, #00a884);
+
+    &.is-markdown {
+      color: var(--primary-color, #615ced);
+    }
   }
 
   .note-drawer-row-title {
