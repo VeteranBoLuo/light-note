@@ -399,6 +399,8 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'agent', [
 
 declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/user/getUserList'],
+  // 管理员私有备注只能在普通 Root 管理会话中维护，不能借目标用户代管上下文读写。
+  ['POST', '/user/admin/remark'],
   ['POST', '/common/getApiLogs'],
   ['GET', '/common/clearApiLogs'],
   ['POST', '/common/getConversionFunnel'],

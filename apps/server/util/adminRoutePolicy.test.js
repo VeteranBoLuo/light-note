@@ -63,6 +63,19 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(missing).toEqual([]);
   });
 
+  it('管理员私有用户备注不允许在目标用户代管上下文中写入', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/user/admin/remark', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+      );
+    }
+  });
+
   it('只读接口在 readonly 与 maintain 模式都放行', () => {
     for (const mode of ['readonly', 'maintain']) {
       const next = vi.fn();

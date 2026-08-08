@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sanitizeNoteHtml } from '../noteHtmlSanitizer.js';
 
 const poolQuery = vi.fn();
 const getConnection = vi.fn();
@@ -74,6 +75,14 @@ describe('newUserSeedService', () => {
     });
     expect(en.cloud.files).toHaveLength(2);
     expect(en.notes.some((note) => note.type === 'markdown')).toBe(true);
+    for (const seed of [zh, en]) {
+      const richText = seed.notes.find((note) => note.key === 'rich-text-demo');
+      expect(richText).toBeDefined();
+      const sanitized = sanitizeNoteHtml(richText.content).html;
+      expect(sanitized).not.toMatch(/linear-gradient|background-clip|box-shadow|text-shadow|animation\s*:|border-radius/i);
+      expect(sanitized).toContain('background-color:#f3f1ff');
+      expect(sanitized).toContain('border-left:4px solid #615ced');
+    }
   });
 
   it('在同一个事务中创建标签、书签、笔记、文件夹及标签关系', async () => {
