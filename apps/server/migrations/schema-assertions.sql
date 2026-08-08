@@ -574,3 +574,43 @@ WHERE actual.column_name IS NULL
    OR LOWER(actual.column_type) NOT IN ('int(10) unsigned', 'int unsigned')
    OR actual.is_nullable <> 'NO'
    OR actual.column_default <> '1';
+
+-- 30) Root 私有用户备注必须按管理员与目标用户复合隔离（期望 0 行）
+SELECT '[30] missing_admin_user_remarks_schema' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'admin_user_remarks' tab, 'admin_user_id' col, 'admin_user_remarks.admin_user_id' n UNION ALL
+  SELECT 'admin_user_remarks', 'target_user_id', 'admin_user_remarks.target_user_id' UNION ALL
+  SELECT 'admin_user_remarks', 'remark_name', 'admin_user_remarks.remark_name' UNION ALL
+  SELECT 'admin_user_remarks', 'create_time', 'admin_user_remarks.create_time' UNION ALL
+  SELECT 'admin_user_remarks', 'update_time', 'admin_user_remarks.update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[30] invalid_admin_user_remarks_primary_key' AS check_name,
+  CONCAT('PRIMARY 实际=', IFNULL(actual.cols, '缺失')) AS detail
+FROM (SELECT 1) expected
+LEFT JOIN (
+  SELECT index_name,
+    GROUP_CONCAT(column_name ORDER BY seq_in_index SEPARATOR ',') AS cols
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE() AND table_name='admin_user_remarks' AND index_name='PRIMARY'
+  GROUP BY index_name
+) actual ON actual.index_name='PRIMARY'
+WHERE actual.index_name IS NULL OR actual.cols <> 'admin_user_id,target_user_id';
+
+SELECT '[30] missing_admin_user_remarks_target_index' AS check_name,
+  'admin_user_remarks.idx_admin_user_remarks_target' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='admin_user_remarks'
+    AND index_name='idx_admin_user_remarks_target'
+    AND column_name='target_user_id'
+    AND seq_in_index=1
+);

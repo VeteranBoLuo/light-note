@@ -596,6 +596,13 @@ async function purgeOwnedResources(connection, tables, userId) {
 }
 
 async function purgeLogsAndSecurityLinks(connection, tables, userId) {
+  await deleteIfPresent(
+    connection,
+    tables,
+    'admin_user_remarks',
+    'DELETE FROM admin_user_remarks WHERE admin_user_id = ? OR target_user_id = ?',
+    [userId, userId],
+  );
   await deleteIfPresent(connection, tables, 'conversion_events', 'DELETE FROM conversion_events WHERE user_id = ?', [
     userId,
   ]);

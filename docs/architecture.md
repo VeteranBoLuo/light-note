@@ -251,6 +251,7 @@ src/
 | `security_events`                            | 安全事件                       | 自增          |
 | `conversion_events`                          | 游客转化事件                   | 自增          |
 | `admin_context_audit`                        | 管理员预览与内容维护审计       | UUID          |
+| `admin_user_remarks`                         | Root 对用户设置的私有备注名    | 复合主键      |
 | `agent_logs`                                 | AI 请求、用量和阶段追踪        | UUID          |
 | `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位  | 复合键 / 自增 |
 | `ai_provider_balance_snapshots`              | AI 供应商每日账户余额快照      | 自增          |
@@ -520,6 +521,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - API 日志的 `system` JSON 将 `os` 与 `runtime` 分开记录；后台返回时统一归一历史 `*app` / `*(app)` / `*（app）` 值，因此旧记录也展示为系统名与 PWA 两个独立字段
 - 用户管理、API 日志、操作日志与 AI 调用监控采用“服务端稳定键游标 + 前端虚拟窗口”列表链路；时间字段与 UUID `id` 组成确定性排序键，筛选变化后重新建立游标，避免深 OFFSET 和实时插入导致的重复或跳项。
 - `user.last_active_time` 持久保存账号最近一次认证活跃时间，会话校验链路按 5 分钟窗口节流更新。后台用户列表直接按该字段进行全量后端排序，不依赖可能在退出时删除的 `user_sessions`，也不再按当前页面的 API/操作日志做前端排序。
+- 用户管理备注存于 `admin_user_remarks`，以 `(admin_user_id, target_user_id)` 为复合主键；列表查询只能用当前普通 Root 管理会话的 ID 关联自己的备注。备注不进入 `user` 资料、普通用户接口或管理员预览上下文，清空备注时直接删除关系行。
 
 ## 标签智能选图
 

@@ -201,6 +201,7 @@ describe('账号注销后台清理', () => {
         return [
           [
             { tableName: 'ai_token_reservations' },
+            { tableName: 'admin_user_remarks' },
             { tableName: 'note' },
             { tableName: 'folders' },
             { tableName: 'user' },
@@ -208,6 +209,7 @@ describe('账号注销后台清理', () => {
         ];
       }
       if (sql.includes('DELETE FROM ai_token_reservations')) return [{ affectedRows: 1 }];
+      if (sql.includes('DELETE FROM admin_user_remarks')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM note WHERE create_by')) return [{ affectedRows: 3 }];
       if (sql.includes('DELETE FROM folders')) return [{ affectedRows: 1 }];
       if (sql.includes('DELETE FROM user')) return [{ affectedRows: 1 }];
@@ -229,6 +231,8 @@ describe('账号注销后台清理', () => {
     expect(reservationCall?.[0]).toContain('JSON_VALID(subjects_json)');
     expect(reservationCall?.[0]).toContain('JSON_CONTAINS');
     expect(reservationCall?.[1]).toEqual(['user-1']);
+    const remarkCall = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM admin_user_remarks'));
+    expect(remarkCall?.[1]).toEqual(['user-1', 'user-1']);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM folders'))).toBe(true);
     expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note WHERE create_by'))).toBe(true);
     const completeCall = poolQuery.mock.calls.find(([sql]) => sql.includes("SET status = 'completed'"));

@@ -3,11 +3,16 @@
     eyebrow="Admin / Users"
     title="用户管理"
     subtitle="管理系统用户账户、权限与资源使用情况"
-    toolbar-hint="支持昵称或邮箱模糊匹配 · 停止输入 0.5s 自动查询"
+    :toolbar-hint="t('adminUserManagement.toolbarHint')"
     :summary-count="total"
   >
     <template #toolbar>
-      <b-input v-model:value="searchValue" placeholder="搜索昵称或邮箱" class="log-search-input" @input="handleSearch">
+      <b-input
+        v-model:value="searchValue"
+        :placeholder="t('adminUserManagement.searchPlaceholder')"
+        class="log-search-input"
+        @input="handleSearch"
+      >
         <template #prefix>
           <svg-icon :src="icon.navigation.search" size="16" />
         </template>
@@ -33,6 +38,11 @@
         <template v-if="column.key === 'headPicture'">
           <svg-icon style="border-radius: 50%" :src="record.headPicture || icon.navigation.user" :size="30" />
         </template>
+        <template v-else-if="column.key === 'adminRemark'">
+          <span class="usermg-remark" :class="{ 'is-empty': !record.adminRemark }">
+            {{ record.adminRemark || '-' }}
+          </span>
+        </template>
         <template v-else-if="column.key === 'operation'">
           <!--
             五个操作平铺时这一列又挤又难扫。只把最常用的「预览用户」留在外面
@@ -42,14 +52,13 @@
           <BSpace>
             <!-- 行本身可点击（打开用户详情），所以每个操作入口都要 @click.stop -->
             <BTooltip :title="t('guest.userPreviewEntry')">
-              <button
-                type="button"
+              <BButton
                 class="usermg-icon-btn dom-hover"
                 :aria-label="`${t('guest.userPreviewEntry')}：${record.alias || record.email || record.id}`"
                 @click.stop="loginAsUser(record)"
               >
                 <svg-icon :src="icon.navigation.user" size="16" />
-              </button>
+              </BButton>
             </BTooltip>
             <!--
               整个下拉外面包一层 @click.stop：不能把 .stop 加在触发按钮上 ——
@@ -58,13 +67,12 @@
             <span class="usermg-more" @click.stop>
               <BDropdown trigger="click" align="right" :menu-options="moreOptions(record)">
                 <BTooltip :title="t('common.more')">
-                  <button
-                    type="button"
+                  <BButton
                     class="usermg-icon-btn dom-hover"
                     :aria-label="`${t('common.more')}：${record.alias || record.email || record.id}`"
                   >
                     <svg-icon :src="icon.common.more" size="16" />
-                  </button>
+                  </BButton>
                 </BTooltip>
               </BDropdown>
             </span>
@@ -79,6 +87,10 @@
       <div class="user-detail__grid">
         <div
           ><label>昵称</label><p>{{ selectedRecord.alias }}</p></div
+        >
+        <div
+          ><label>{{ t('adminUserManagement.remarkDetailLabel') }}</label
+          ><p>{{ selectedRecord.adminRemark || '-' }}</p></div
         >
         <div
           ><label>邮箱</label><p>{{ selectedRecord.email }}</p></div
@@ -122,6 +134,7 @@
   </BModal>
 
   <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
+  <AdminUserRemarkModal v-model:visible="remarkVisible" :user="remarkUser" @saved="onRemarkSaved" />
   <GrowthAdminModal
     v-model:visible="growthAdminVisible"
     :user-id="growthAdminUser.id"
@@ -145,9 +158,11 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import AdminUserRemarkModal from '@/view/admin/components/userMg/AdminUserRemarkModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
@@ -189,6 +204,7 @@
         width: '60px',
       },
       { title: '昵称', key: 'alias', width: '150px' },
+      { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: '150px' },
       { title: '邮箱', key: 'email', width: '1fr' },
       { title: 'IP', key: 'ip', width: '150px' },
       { title: '最近在线', key: 'lastActiveTime', width: '1fr', sortable: true },
@@ -231,11 +247,19 @@
   const previewMode = ref<'readonly' | 'maintain'>('readonly');
   const growthAdminVisible = ref(false);
   const growthAdminUser = ref<{ id: string; alias: string }>({ id: '', alias: '' });
+  const remarkVisible = ref(false);
+  const remarkUser = ref<any>(null);
   /**
    * 「更多」里的低频与危险操作。
    * 删除单独用分隔线隔开并标 danger，避免和上面几个「进入某人的工作区」混在一起误点。
    */
   const moreOptions = (record: any) => [
+    {
+      key: 'remark',
+      label: t('adminUserManagement.remarkAction'),
+      icon: icon.table_edit,
+      function: () => openRemarkEditor(record),
+    },
     {
       key: 'edit',
       label: t('common.edit'),
@@ -265,9 +289,23 @@
   ];
 
   const openGrowthAdmin = (record) => {
-    growthAdminUser.value = { id: record.id, alias: record.alias || record.userName || '' };
+    growthAdminUser.value = { id: record.id, alias: record.adminRemark || record.alias || record.userName || '' };
     growthAdminVisible.value = true;
   };
+
+  const openRemarkEditor = (record: any) => {
+    remarkUser.value = record;
+    remarkVisible.value = true;
+  };
+
+  function onRemarkSaved(payload: { targetUserId: string; adminRemark: string }) {
+    const loadedRecord = userList.value.find((record) => record.id === payload.targetUserId);
+    if (loadedRecord) loadedRecord.adminRemark = payload.adminRemark;
+    if (selectedRecord.value?.id === payload.targetUserId) {
+      selectedRecord.value.adminRemark = payload.adminRemark;
+    }
+    void resetList(true);
+  }
 
   const editUser = (record) => {
     editData.value = record;
@@ -293,7 +331,7 @@
       message.warning(t('guest.adminContextMissingUser'));
       return;
     }
-    const name = record.alias || record.email || t('guest.adminContextUnknownUser');
+    const name = record.adminRemark || record.alias || record.email || t('guest.adminContextUnknownUser');
     Alert.alert({
       title: t('guest.adminContextMaintainConfirmTitle'),
       content: t('guest.adminContextMaintainConfirm', { name }),
@@ -374,6 +412,20 @@
   .user-detail__grid p {
     margin: 0;
     color: var(--text-color);
+  }
+
+  .usermg-remark {
+    display: block;
+    overflow: hidden;
+    color: var(--text-color);
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &.is-empty {
+      color: var(--desc-color);
+      font-weight: 400;
+    }
   }
 
   /* 图标形态的操作按钮：重置浏览器默认外观，保持原来「一个图标」的观感 */

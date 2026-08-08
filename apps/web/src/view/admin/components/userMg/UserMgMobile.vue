@@ -13,12 +13,25 @@
         @row-click="onRowClick"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'operation'">
+          <template v-if="column.key === 'alias'">
+            <div class="mobile-user-name">
+              <strong>{{ record.adminRemark || record.alias || '-' }}</strong>
+              <span v-if="record.adminRemark && record.alias">
+                {{ t('adminUserManagement.originalAlias', { name: record.alias }) }}
+              </span>
+            </div>
+          </template>
+          <template v-else-if="column.key === 'operation'">
             <b-dropdown
               class="card-more-menu"
               :trigger="'click'"
               @click.stop
               :menu-options="[
+                {
+                  label: t('adminUserManagement.remarkAction'),
+                  icon: icon.table_edit,
+                  function: () => openRemarkEditor(record),
+                },
                 {
                   label: t('guest.userPreviewEntry'),
                   icon: icon.navigation.user,
@@ -43,7 +56,12 @@
               ]"
             >
               <BTooltip :title="t('common.more')">
-                <svg-icon :src="icon.common.more" size="16" class="dom-hover" />
+                <BButton
+                  class="mobile-user-more dom-hover"
+                  :aria-label="`${t('common.more')}：${record.adminRemark || record.alias || record.email || record.id}`"
+                >
+                  <svg-icon :src="icon.common.more" size="16" />
+                </BButton>
               </BTooltip>
             </b-dropdown>
           </template>
@@ -64,12 +82,17 @@
       </div>
     </BModal>
     <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
+    <AdminUserRemarkModal v-model:visible="remarkVisible" :user="remarkUser" @saved="onRemarkSaved" />
 
     <BModal v-model:visible="detailVisible" title="用户详情" width="90%" :show-footer="false" :mask-closable="true">
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px" v-if="selectedRecord">
         <div
           ><div style="font-size: 12px; color: var(--desc-color)">昵称</div
           ><div style="color: var(--text-color)">{{ selectedRecord.alias }}</div></div
+        >
+        <div
+          ><div style="font-size: 12px; color: var(--desc-color)">{{ t('adminUserManagement.remarkDetailLabel') }}</div
+          ><div style="color: var(--text-color)">{{ selectedRecord.adminRemark || '-' }}</div></div
         >
         <div
           ><div style="font-size: 12px; color: var(--desc-color)">邮箱</div
@@ -118,17 +141,16 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BActionButton from '@/components/base/BasicComponents/BActionButton.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import userApi from '@/api/userApi.ts';
-  import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import router from '@/router';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import AdminUserRemarkModal from '@/view/admin/components/userMg/AdminUserRemarkModal.vue';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   const { t } = useI18n();
   const {
@@ -161,6 +183,8 @@
   const previewMode = ref<'readonly' | 'maintain'>('readonly');
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
+  const remarkVisible = ref(false);
+  const remarkUser = ref<any>(null);
 
   function onRowClick(record: any) {
     selectedRecord.value = record;
@@ -171,6 +195,20 @@
     editData.value = record;
     editVisible.value = true;
   };
+
+  const openRemarkEditor = (record: any) => {
+    remarkUser.value = record;
+    remarkVisible.value = true;
+  };
+
+  function onRemarkSaved(payload: { targetUserId: string; adminRemark: string }) {
+    const loadedRecord = userList.value.find((record) => record.id === payload.targetUserId);
+    if (loadedRecord) loadedRecord.adminRemark = payload.adminRemark;
+    if (selectedRecord.value?.id === payload.targetUserId) {
+      selectedRecord.value.adminRemark = payload.adminRemark;
+    }
+    void reload({ silent: true });
+  }
 
   const loginAsUser = (record) => {
     if (!record?.id) {
@@ -191,7 +229,7 @@
       message.warning(t('guest.adminContextMissingUser'));
       return;
     }
-    const name = record.alias || record.email || t('guest.adminContextUnknownUser');
+    const name = record.adminRemark || record.alias || record.email || t('guest.adminContextUnknownUser');
     Alert.alert({
       title: t('guest.adminContextMaintainConfirmTitle'),
       content: t('guest.adminContextMaintainConfirm', { name }),
@@ -258,5 +296,38 @@
     min-height: 0;
     display: flex;
     overflow: hidden;
+  }
+
+  .mobile-user-name {
+    min-width: 0;
+
+    strong,
+    span {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    strong {
+      color: var(--text-color);
+      font-weight: 600;
+    }
+
+    span {
+      margin-top: 2px;
+      color: var(--desc-color);
+      font-size: 11px;
+      font-weight: 400;
+    }
+  }
+
+  .mobile-user-more {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--text-color);
   }
 </style>
