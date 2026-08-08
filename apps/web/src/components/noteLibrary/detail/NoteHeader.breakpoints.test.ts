@@ -36,6 +36,23 @@ vi.mock('@/components/base/BasicComponents/BDropdown.vue', () => ({
       '<div class="dropdown-stub"><slot /><span v-for="option in menuOptions" class="dropdown-option-stub">{{ option.label }}</span></div>',
   },
 }));
+vi.mock('@/components/mobile/MobilePageActionsDrawer.vue', () => ({
+  default: {
+    name: 'MobilePageActionsDrawerStub',
+    props: ['open', 'actions', 'objectTitle'],
+    emits: ['update:open', 'action'],
+    template: `
+      <div class="mobile-actions-drawer-stub" :data-open="String(open)" :data-title="objectTitle">
+        <button
+          v-for="action in actions"
+          :key="action.key"
+          class="mobile-action-option-stub"
+          @click="$emit('action', action)"
+        >{{ action.label }}</button>
+      </div>
+    `,
+  },
+}));
 vi.mock('@/components/noteLibrary/detail/ResourceBacklinks.vue', () => ({
   default: { name: 'ResourceBacklinksStub', template: '<div />' },
 }));
@@ -73,7 +90,9 @@ function mount() {
 
 /** 三个曾被 isDesktop 挡掉的操作 */
 function reachableActions(host: HTMLElement) {
-  const menuText = [...host.querySelectorAll('.dropdown-option-stub')].map((item) => item.textContent || '').join(' ');
+  const menuText = [...host.querySelectorAll('.dropdown-option-stub, .mobile-action-option-stub')]
+    .map((item) => item.textContent || '')
+    .join(' ');
   return {
     history: menuText.includes(zhCN.noteDetail.history.entry),
     tag: menuText.includes(zhCN.noteDetail.tags),
@@ -133,5 +152,10 @@ describe('NoteHeader 断点下的操作可达性', () => {
     expect(host.querySelector('.note-header-title-icon--tag')).toBeNull();
     expect(host.querySelector('.note-header-title-icon--export')).toBeNull();
     expect(host.querySelector('.note-header-mobile-more')).not.toBeNull();
+
+    host.querySelector<HTMLButtonElement>('.note-header-mobile-more')!.click();
+    await nextTick();
+    expect(host.querySelector('.mobile-actions-drawer-stub')?.getAttribute('data-open')).toBe('true');
+    expect(host.querySelector('.mobile-actions-drawer-stub')?.getAttribute('data-title')).toContain('示例笔记');
   });
 });

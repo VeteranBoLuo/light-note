@@ -30,12 +30,17 @@
         摘要被压到 35px 完全读不出内容,而手机一屏只有 8 条,行高不齐不影响观感。
       -->
       <div class="note-meta-row">
-        <div v-if="parentPathText" class="note-parent-path" :title="parentPathText">
+        <BButton
+          v-if="parentPathText && parentTargetId"
+          class="note-parent-path"
+          :title="parentPathText"
+          @click.stop="emit('openParent', parentTargetId)"
+        >
           <SvgIcon class="note-parent-path__icon" :src="icon.resource.note" size="12" aria-hidden="true" />
           <span class="note-parent-path__label">{{ $t('note.parentPage') }}</span>
           <span class="note-parent-path__separator" aria-hidden="true">·</span>
           <span class="note-parent-path__text">{{ parentPathText }}</span>
-        </div>
+        </BButton>
         <div class="note-description" v-if="!bookmark.isMobile || description">{{ description }}</div>
         <!--
           手机上这一块承担整个底行：徽章 + 标签 + 时间凑一行(需要时换行)。
@@ -113,7 +118,7 @@
   import icon from '@/config/icon.ts';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
-  import { getNoteParentPathText } from '@/utils/noteTree';
+  import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
 
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
@@ -148,6 +153,7 @@
 
   const emit = defineEmits<{
     open: [];
+    openParent: [noteId: string];
     nodeTypeChange: [tag: any];
     // 与 NoteCard 同一套契约:父组件的 handleNoteCardAction(action, note) 与渲染器无关
     action: [
@@ -165,6 +171,7 @@
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
+  const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
   const noteTypeChange = function (tag) {
     emit('nodeTypeChange', tag);
   };
@@ -361,6 +368,13 @@
         font-size: 11px;
         line-height: 20px;
         white-space: nowrap;
+        cursor: pointer;
+        text-align: left;
+
+        &:hover {
+          color: var(--text-color);
+          border-color: var(--resource-note-color, #00a884);
+        }
 
         &__icon {
           flex: 0 0 auto;

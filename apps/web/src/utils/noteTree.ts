@@ -10,7 +10,7 @@ export interface FlatNoteTreeItem extends NoteTreeItem {
  */
 export function getNoteParentPathText(note: {
   title?: unknown;
-  path?: Array<{ title?: unknown }> | null;
+  path?: Array<{ id?: unknown; title?: unknown }> | null;
   pathText?: unknown;
 }) {
   if (Array.isArray(note.path)) {
@@ -26,6 +26,18 @@ export function getNoteParentPathText(note: {
     .filter(Boolean);
   if (segments.at(-1) === String(note.title || '').trim()) segments.pop();
   return segments.join(' / ');
+}
+
+/**
+ * 列表搜索/根目录视图会返回完整 path；最后一项是当前笔记，倒数第二项才是可打开的父页面。
+ * 旧接口可能只有 parentId，因此保留兼容回退，但绝不根据标题反查，避免重名页面跳错。
+ */
+export function getNoteParentTargetId(note: {
+  parentId?: unknown;
+  path?: Array<{ id?: unknown }> | null;
+}) {
+  const pathParentId = Array.isArray(note.path) && note.path.length > 1 ? note.path.at(-2)?.id : null;
+  return String(pathParentId || note.parentId || '').trim();
 }
 
 export function flattenNoteTree(items: NoteTreeItem[] = []): FlatNoteTreeItem[] {

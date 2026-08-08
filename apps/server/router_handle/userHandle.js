@@ -653,13 +653,20 @@ export const getUserList = async (req, res) => {
                 ELSE NULL
               END AS head_picture,
               u.phone_number, u.role, u.ip,
-              u.create_time, u.last_active_time, u.del_flag
+              u.create_time, u.last_active_time, u.del_flag,
+              COALESCE(aur.remark_name, '') AS admin_remark
        FROM user u
+       LEFT JOIN admin_user_remarks aur
+         ON aur.admin_user_id = ? AND aur.target_user_id = u.id
        WHERE u.del_flag = 0
-         AND (u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%'))${cursorFilter}
+         AND (
+           u.alias LIKE CONCAT('%', ?, '%')
+           OR u.email LIKE CONCAT('%', ?, '%')
+           OR aur.remark_name LIKE CONCAT('%', ?, '%')
+         )${cursorFilter}
        ORDER BY ${sortColumn} ${direction}, u.id ${direction}
        LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
-      [key, key, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      [req.user.id, key, key, key, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
@@ -701,8 +708,17 @@ export const getUserList = async (req, res) => {
     let total;
     if (!cursorMode || !cursor) {
       const [totalRes] = await pool.query(
-        "SELECT COUNT(*) AS total FROM user WHERE del_flag = 0 AND (alias LIKE CONCAT('%', ?, '%') OR email LIKE CONCAT('%', ?, '%'))",
-        [key, key],
+        `SELECT COUNT(*) AS total
+         FROM user u
+         LEFT JOIN admin_user_remarks aur
+           ON aur.admin_user_id = ? AND aur.target_user_id = u.id
+         WHERE u.del_flag = 0
+           AND (
+             u.alias LIKE CONCAT('%', ?, '%')
+             OR u.email LIKE CONCAT('%', ?, '%')
+             OR aur.remark_name LIKE CONCAT('%', ?, '%')
+           )`,
+        [req.user.id, key, key, key],
       );
       total = Number(totalRes[0].total || 0);
     }
@@ -1515,10 +1531,7 @@ function buildNoteImportPlan(rawNotes = []) {
 
 function resolveMappedNoteParentAssignments({ existingRows, createdEntries, oldToNew }) {
   const parentById = new Map(
-    existingRows.map((row) => [
-      String(row.id),
-      normalizeBackupNoteId(row.parentId ?? row.parent_id),
-    ]),
+    existingRows.map((row) => [String(row.id), normalizeBackupNoteId(row.parentId ?? row.parent_id)]),
   );
   const assignments = [];
   for (const entry of createdEntries) {

@@ -58,7 +58,7 @@
   const closing = ref(false);
   let timer: number | null = null;
   const previewTitle = computed(() => {
-    const name = props.userInfo?.alias || props.userInfo?.email || '用户';
+    const name = props.userInfo?.adminRemark || props.userInfo?.alias || props.userInfo?.email || '用户';
     return props.mode === 'maintain'
       ? t('guest.adminContextMaintainTitle', { name })
       : t('guest.userPreviewTitle', { name });

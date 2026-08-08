@@ -61,6 +61,8 @@ router.get('/exportFile', noteLibraryHandle.downloadNoteExportFile);
 router.post('/queryNoteTemplates', noteLibraryHandle.queryNoteTemplates);
 router.post('/getNoteTemplateDetail', noteLibraryHandle.getNoteTemplateDetail);
 router.post('/addNoteTemplate', noteLibraryHandle.addNoteTemplate);
+router.post('/updateNoteTemplate', noteLibraryHandle.updateNoteTemplate);
+router.post('/duplicateNoteTemplate', noteLibraryHandle.duplicateNoteTemplate);
 router.post('/delNoteTemplate', noteLibraryHandle.delNoteTemplate);
 
 import { assistNote } from '../router_handle/chatHandle.js';

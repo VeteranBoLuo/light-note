@@ -21,6 +21,22 @@ const commonStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/c
 const themeStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
 const noteDetailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
+const templateContentEditorSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/template/NoteTemplateContentEditor.vue'),
+  'utf8',
+);
+const templateEditSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/template/NoteTemplateEdit.vue'),
+  'utf8',
+);
+const templatePreviewSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/template/NoteTemplatePreview.vue'),
+  'utf8',
+);
+const templateListSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/template/NoteTemplateList.vue'),
+  'utf8',
+);
 
 function sourceBetween(source: string, startText: string, endText: string) {
   const start = source.indexOf(startText);
@@ -68,6 +84,72 @@ describe('编辑器 V2 交互回归', () => {
     expect(codeMirrorSource).not.toContain('.cm-gutters');
     expect(codeMirrorSource).not.toContain('ln-cm-fold-marker');
     expect(codeMirrorSource).toContain('wrappingCompartment.of(props.mobile ? EditorView.lineWrapping : [])');
+  });
+
+  it('Markdown 编辑面始终填满可用宽度，不随最长正文行收缩或增长', () => {
+    expect(codeMirrorSource).toMatch(
+      /\.markdown-codemirror\s+:deep\(\.cm-editor\)\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?flex:\s*1 1 auto;/u,
+    );
+  });
+
+  it('模板 Markdown 默认使用完整编辑宽度，同时保留分栏与预览切换', () => {
+    expect(editorSource).toContain("isMobile.value || props.context === 'template' ? 'edit' : 'split'");
+    expect(editorSource).toContain("{ key: 'split', label: t('note.mdEditPreview')");
+    expect(editorSource).toContain("{ key: 'preview', label: t('note.mdPreview')");
+  });
+
+  it('模板正文工作区只让共享编辑器内部滚动，不再用固定高度撑开外层页面', () => {
+    expect(templateEditSource).not.toContain("t('note.templateManager.editorTitle')");
+    expect(templateEditSource).not.toContain('note-template-edit__content-label');
+    expect(templateContentEditorSource).not.toContain('height: clamp(');
+    expect(templateContentEditorSource).not.toContain('min-height: 560px');
+    expect(templateContentEditorSource).toMatch(
+      /\.note-template-content-editor\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden;/u,
+    );
+    expect(templateContentEditorSource).toContain(':deep(#editor-container.note-editor)');
+    expect(templateContentEditorSource).toMatch(/:deep\(#editor-container\.note-editor\)\s*\{[\s\S]*?height:\s*100%;/u);
+  });
+
+  it('模板编辑页固定外层工作区与底栏，同时保留移动端悬浮操作所需安全留白', () => {
+    expect(templateEditSource).not.toContain('v-auto-scrollbar class="note-template-edit__scroll"');
+    expect(templateEditSource).toMatch(
+      /\.note-template-edit__workspace\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-direction:\s*column;[\s\S]*?overflow:\s*hidden;/u,
+    );
+    expect(templateEditSource).toMatch(
+      /\.note-template-edit__content\s*\{[\s\S]*?min-height:\s*0;[\s\S]*?flex:\s*1 1 auto;[\s\S]*?overflow:\s*hidden;/u,
+    );
+    expect(templateEditSource).toMatch(
+      /\.note-template-edit__actions\s*\{[\s\S]*?height:\s*50px;[\s\S]*?box-sizing:\s*border-box;[\s\S]*?flex:\s*0 0 50px;/u,
+    );
+    expect(templateEditSource).toContain('padding: 10px 0 calc(80px + env(safe-area-inset-bottom))');
+  });
+
+  it('模板预览将标题、描述和三项元信息合并为紧凑摘要头', () => {
+    const header = sourceBetween(templatePreviewSource, '<header class="note-template-preview__header">', '</header>');
+    expect(header).toContain('note-template-preview__meta');
+    expect(header).toContain("t('note.templateManager.defaultTitle')");
+    expect(header).toContain("t('note.templateManager.revision')");
+    expect(header).toContain("t('note.templateManager.updatedAt')");
+    expect(templatePreviewSource.match(/class="note-template-preview__meta"/gu)).toHaveLength(1);
+  });
+
+  it('模板编辑在宽屏把三个字段压成一排，并把格式状态收进标题区', () => {
+    expect(templateEditSource.match(/height="34px"/gu)).toHaveLength(3);
+    expect(templateEditSource).toContain(
+      'grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.1fr) minmax(220px, 1.3fr)',
+    );
+    const heading = sourceBetween(templateEditSource, '<div class="note-template-edit__heading-row">', '</div>');
+    expect(heading).toContain('<BChip');
+    expect(heading).toContain("t('note.templateManager.formatLocked')");
+  });
+
+  it('模板搜索框具有独立表面、实色边框和明确聚焦态', () => {
+    expect(templateListSource).toMatch(
+      /\.note-template-list__tools :deep\(\.b-input\)\s*\{[\s\S]*?border:\s*1px solid var\(--surface-border-color\)\s*!important;[\s\S]*?background:\s*var\(--card-background\)\s*!important;/u,
+    );
+    expect(templateListSource).toMatch(
+      /\.note-template-list__tools :deep\(\.b-input:focus-visible\)\s*\{[\s\S]*?border-color:\s*var\(--resource-note-color\)\s*!important;[\s\S]*?outline:\s*2px solid var\(--resource-note-color\);/u,
+    );
   });
 
   it('Markdown 链接在源码和预览中共用高对比主题色', () => {

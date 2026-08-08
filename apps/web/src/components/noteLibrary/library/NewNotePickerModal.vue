@@ -55,11 +55,7 @@
         <div v-if="myTemplatesState === 'loading'" class="new-note-picker__status">
           <BLoading inline loading :title="t('note.tplLoading')" />
         </div>
-        <BButton
-          v-else-if="myTemplatesState === 'error'"
-          class="new-note-picker__retry"
-          @click="emit('retry')"
-        >
+        <BButton v-else-if="myTemplatesState === 'error'" class="new-note-picker__retry" @click="emit('retry')">
           <SvgIcon :src="icon.cloudSpace.preview.retry" size="17" />
           <span class="new-note-picker__choice-copy">
             <strong>{{ t('note.tplRetryLabel') }}</strong>
@@ -70,22 +66,23 @@
           {{ t('note.tplEmptyMine') }}
         </p>
         <div v-else class="new-note-picker__mine-list">
-          <div v-for="template in myTemplates" :key="template.id" class="new-note-picker__mine-row">
-            <BButton class="new-note-picker__mine-main" @click="emit('selectMine', template)">
-              <span class="new-note-picker__choice-copy">
-                <strong>{{ template.name }}</strong>
-                <small>{{ templateTypeLabel(template.type) }}</small>
-              </span>
-            </BButton>
-            <BButton
-              class="new-note-picker__remove"
-              :aria-label="t('note.tplDeleteAria', { name: template.name })"
-              @click="emit('removeMine', template)"
-            >
-              <SvgIcon :src="icon.noteDetail.delete" size="16" />
-            </BButton>
-          </div>
+          <BButton
+            v-for="template in myTemplates"
+            :key="template.id"
+            class="new-note-picker__mine-main"
+            @click="emit('selectMine', template)"
+          >
+            <span class="new-note-picker__choice-copy">
+              <strong>{{ template.name }}</strong>
+              <small>{{ templateTypeLabel(template.type) }}</small>
+            </span>
+          </BButton>
         </div>
+        <BButton class="new-note-picker__manage" @click="emit('manage')">
+          <SvgIcon :src="icon.noteDetail.template" size="17" aria-hidden="true" />
+          {{ t('note.templateManager.title') }}
+          <SvgIcon :src="icon.arrow_right" size="14" aria-hidden="true" />
+        </BButton>
       </section>
     </div>
   </BModal>
@@ -125,7 +122,7 @@
     (e: 'selectBlank', type: NoteEditorType): void;
     (e: 'selectBuiltin', template: { key: string; type: NoteEditorType }): void;
     (e: 'selectMine', template: MyTemplate): void;
-    (e: 'removeMine', template: MyTemplate): void;
+    (e: 'manage'): void;
     (e: 'retry'): void;
   }>();
 
@@ -192,7 +189,7 @@
   .new-note-picker__template,
   .new-note-picker__retry,
   .new-note-picker__mine-main,
-  .new-note-picker__remove {
+  .new-note-picker__manage {
     color: var(--text-color);
     background: var(--card-background);
     border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
@@ -201,7 +198,8 @@
   .new-note-picker__mode,
   .new-note-picker__template,
   .new-note-picker__retry,
-  .new-note-picker__mine-main {
+  .new-note-picker__mine-main,
+  .new-note-picker__manage {
     width: 100%;
     height: auto;
     line-height: 1.25;
@@ -295,7 +293,8 @@
   .new-note-picker__mode:hover,
   .new-note-picker__template:hover,
   .new-note-picker__retry:hover,
-  .new-note-picker__mine-main:hover {
+  .new-note-picker__mine-main:hover,
+  .new-note-picker__manage:hover {
     border-color: color-mix(in srgb, var(--resource-note-color) 45%, var(--card-border-color)) !important;
     background: color-mix(in srgb, var(--resource-note-color) 6%, var(--card-background));
   }
@@ -326,30 +325,23 @@
     gap: 8px;
   }
 
-  .new-note-picker__mine-row {
-    min-width: 0;
-    display: flex;
-    gap: 8px;
-  }
-
   .new-note-picker__mine-main {
-    min-width: 0;
+    width: 100%;
     min-height: 56px;
     padding: 9px 12px;
   }
 
-  .new-note-picker__remove {
-    flex: 0 0 auto;
-    width: var(--mobile-touch-size, 44px);
-    min-width: var(--mobile-touch-size, 44px);
-    height: 56px;
-    padding: 0;
-    color: var(--sub-text-color);
+  .new-note-picker__manage {
+    width: 100%;
+    min-height: 42px;
+    margin-top: 12px;
+    justify-content: flex-start;
+    gap: 8px;
+    color: var(--resource-note-color);
   }
 
-  .new-note-picker__remove:hover {
-    color: var(--error-color, #e5484d);
-    background: color-mix(in srgb, var(--error-color, #e5484d) 8%, var(--card-background));
+  .new-note-picker__manage :deep(svg:last-child) {
+    margin-left: auto;
   }
 
   @media (max-width: 359px) {

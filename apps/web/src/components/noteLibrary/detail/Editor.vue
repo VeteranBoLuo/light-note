@@ -369,11 +369,7 @@
           />
         </div>
         <p>{{ t('noteDetail.editor.imageSettingsHint') }}</p>
-        <div
-          class="mobile-image-settings__options"
-          role="group"
-          :aria-label="t('noteDetail.editor.imageSize')"
-        >
+        <div class="mobile-image-settings__options" role="group" :aria-label="t('noteDetail.editor.imageSize')">
           <BButton
             v-for="option in mobileImageSizeOptions"
             :key="option.key"
@@ -568,6 +564,10 @@
       type: String as () => 'api' | 'base64',
       default: 'api',
     },
+    context: {
+      type: String as () => 'note' | 'template',
+      default: 'note',
+    },
     type: {
       type: String as () => 'html' | 'markdown',
       default: 'html',
@@ -665,10 +665,13 @@
   const isMobile = computed(() => bookmark.isMobile);
   const usesNativeTextSelectionMenu = computed(() => bookmark.isMobile || bookmark.isTouchDevice);
   // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
-  const canEditResourceMentions = computed(() => !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace));
+  const canEditResourceMentions = computed(
+    () => props.context === 'note' && !props.readonly && (user.role !== 'visitor' || user.visitorWorkspace),
+  );
   type MarkdownView = 'edit' | 'split' | 'preview';
   // MD 编辑器视图：edit / split / preview
-  const mdView = ref<MarkdownView>(isMobile.value ? 'edit' : 'split');
+  // 模板编辑优先提供完整写作宽度；仍保留右上角入口按需切换分栏和预览。
+  const mdView = ref<MarkdownView>(isMobile.value || props.context === 'template' ? 'edit' : 'split');
   const desktopMdViewOptions = computed<Array<{ key: MarkdownView; label: string; icon: string }>>(() => [
     { key: 'edit', label: t('note.mdEdit'), icon: icon.noteDetail.toolbar.viewEdit },
     { key: 'split', label: t('note.mdEditPreview'), icon: icon.noteDetail.toolbar.viewSplit },
@@ -755,8 +758,7 @@
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
   type MobileImageTarget =
-    | { kind: 'markdown'; imageIndex: number }
-    | { kind: 'html'; editor: any; element: HTMLImageElement };
+    { kind: 'markdown'; imageIndex: number } | { kind: 'html'; editor: any; element: HTMLImageElement };
   const mobileImageSettingsVisible = ref(false);
   const mobileImageSettingsSize = ref<ContentImageSize>('original');
   const mobileImageSettingsPreview = ref({ src: '', alt: '' });
@@ -1852,6 +1854,19 @@
     return imageItem?.getAsFile() || null;
   }
 
+  function readImageAsDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const value = typeof reader.result === 'string' ? reader.result : '';
+        if (value.startsWith('data:image/')) resolve(value);
+        else reject(new Error('INVALID_IMAGE_DATA_URL'));
+      };
+      reader.onerror = () => reject(reader.error || new Error('IMAGE_READ_FAILED'));
+      reader.readAsDataURL(file);
+    });
+  }
+
   function pastedImageFileName(file: File) {
     if (file.name) return file.name;
     const extension = file.type.split('/')[1]?.replace(/[^a-z0-9]/giu, '') || 'png';
@@ -1875,7 +1890,9 @@
     const end = selection.to;
     markdownImageUploading.value = true;
     try {
-      const imageUrl = await uploadNoteImageFile(file, fileName);
+      // 模板编辑器没有真实 noteId，图片必须内嵌进模板正文；禁止为了上传图片偷偷创建一篇无主笔记。
+      const imageUrl =
+        props.imageUploadMode === 'base64' ? await readImageAsDataUrl(file) : await uploadNoteImageFile(file, fileName);
       const source = mdContent.value || '';
       const linePrefix = start > 0 && source[start - 1] !== '\n' ? '\n' : '';
       const lineSuffix = end < source.length && source[end] !== '\n' ? '\n' : '';
@@ -1995,9 +2012,13 @@
       action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
         disabled: disabled || markdownImageUploading.value,
       }),
-      action('insertResource', t('noteDetail.editor.resource'), icon.noteDetail.toolbar.mention, {
-        disabled: disabled || !canEditResourceMentions.value,
-      }),
+      ...(props.context === 'note'
+        ? [
+            action('insertResource', t('noteDetail.editor.resource'), icon.noteDetail.toolbar.mention, {
+              disabled: disabled || !canEditResourceMentions.value,
+            }),
+          ]
+        : []),
       action('insertCodeBlock', t('noteDetail.editor.codeBlock'), icon.noteDetail.toolbar.codeBlock),
       ...MERMAID_TEMPLATES.map((template, index) =>
         action(`insertDiagram:${template.key}`, t(template.labelKey), icon.noteDiagram, {
@@ -3304,12 +3325,7 @@
         const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
         setSelectedMermaidFigure(figure);
         const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
-        if (
-          image &&
-          isMobile.value &&
-          !props.readonly &&
-          !image.closest('.mermaid-figure--companion')
-        ) {
+        if (image && isMobile.value && !props.readonly && !image.closest('.mermaid-figure--companion')) {
           event.preventDefault();
           event.stopPropagation();
           openMobileImageSettings({ kind: 'html', editor, element: image }, image);

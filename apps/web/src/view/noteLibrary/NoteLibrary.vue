@@ -123,6 +123,10 @@
             <SvgIcon :src="icon.common.add" size="16" />
             {{ $t('note.newNote') }}
           </BButton>
+          <BButton class="note-action-button" @click="openTemplateManager">
+            <SvgIcon :src="icon.noteDetail.template" size="16" />
+            {{ $t('note.templateManager.title') }}
+          </BButton>
           <ViewModeToggle />
           <div class="note-search" v-click-log="OPERATION_LOG_MAP.noteLibrary.searchNote">
             <BInput v-model:value="searchValue" :placeholder="$t('note.searchNote')" clearable>
@@ -373,6 +377,7 @@
               :tree-read-enabled="noteTreeReadEnabled"
               :tree-write-enabled="noteTreeWriteEnabled"
               @open="openLibraryNote(note)"
+              @open-parent="openLibraryNote"
               @nodeTypeChange="handleNodeTypeChange"
               @action="handleNoteCardAction($event, note)"
             />
@@ -442,6 +447,7 @@
                 :tree-read-enabled="noteTreeReadEnabled"
                 :tree-write-enabled="noteTreeWriteEnabled"
                 @open="openLibraryNote(note)"
+                @open-parent="openLibraryNote"
                 @nodeTypeChange="handleNodeTypeChange"
                 @action="handleNoteCardAction($event, note)"
               />
@@ -506,7 +512,7 @@
       @select-blank="handleMobileBlankSelection"
       @select-builtin="handleMobileBuiltinSelection"
       @select-mine="handleMobileTemplateSelection"
-      @remove-mine="confirmDeleteTemplate"
+      @manage="openTemplateManager"
       @retry="loadMyTemplates"
     />
     <ActionCardModal
@@ -639,11 +645,7 @@
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
-  import {
-    BUILTIN_NOTE_TEMPLATES,
-    pickTemplateLocale,
-    sortBuiltinNoteTemplates,
-  } from '@/config/noteTemplates.ts';
+  import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
@@ -729,8 +731,7 @@
   // Store 在 setup 时已从 localStorage 同步恢复展开偏好；展开用户先占住最终侧栏宽度，折叠用户维持单栏。
   const showNoteWorkspaceSidebar = computed(
     () =>
-      noteTreeReadEnabled.value ||
-      (!bookmark.isMobile && !noteTreeFeaturesReady.value && noteSidebarExpanded.value),
+      noteTreeReadEnabled.value || (!bookmark.isMobile && !noteTreeFeaturesReady.value && noteSidebarExpanded.value),
   );
   const isMediumNoteLayout = computed(() => bookmark.isTablet);
   const showNoteSidebar = computed(
@@ -855,11 +856,7 @@
     treeSearchActive.value ? treeSearchExpandedIds.value : expandedIds.value,
   );
   const sidebarTreeLoadingKeys = computed(() => {
-    if (
-      !noteTreeFeaturesReady.value &&
-      showNoteWorkspaceSidebar.value &&
-      noteSidebarMode.value === 'directory'
-    ) {
+    if (!noteTreeFeaturesReady.value && showNoteWorkspaceSidebar.value && noteSidebarMode.value === 'directory') {
       return new Set([NOTE_TREE_ROOT_KEY]);
     }
     if (treeSearchActive.value && treeSearchLoading.value) return new Set([NOTE_TREE_ROOT_KEY]);
@@ -953,32 +950,20 @@
       return {};
     }
   }
-  const orderedBuiltinTemplates = computed(() =>
-    sortBuiltinNoteTemplates(BUILTIN_NOTE_TEMPLATES, templateUsage.value),
-  );
+  const orderedBuiltinTemplates = computed(() => sortBuiltinNoteTemplates(BUILTIN_NOTE_TEMPLATES, templateUsage.value));
   const orderedMyTemplates = computed(() =>
     [...myTemplates.value].sort(
       (a, b) => Number(templateUsage.value[`mine:${b.id}`] || 0) - Number(templateUsage.value[`mine:${a.id}`] || 0),
     ),
   );
   const templateTypeTag = (type: string) => (type === 'markdown' ? t('note.tplTypeMd') : t('note.tplTypeHtml'));
-  function confirmDeleteTemplate(tpl: { id: string; name: string }) {
-    Alert.alert({
-      title: t('common.defaultTitle'),
-      content: t('note.tplDeleteConfirm', { name: tpl.name }),
-      onOk() {
-        apiBasePost('/api/note/delNoteTemplate', { id: tpl.id }).then((res) => {
-          if (res.status === 200) {
-            recordOperation({ module: '笔记库', operation: `删除笔记模板【${tpl.name}】` });
-            message.success(t('note.tplDeleted'));
-            loadMyTemplates();
-          } else {
-            message.error(res.msg);
-          }
-        });
-      },
-    });
-  }
+  const manageTemplateAction = computed(() => ({
+    key: 'manage-templates',
+    label: t('note.templateManager.title'),
+    description: t('note.templateManager.subtitle'),
+    icon: icon.noteDetail.template,
+    onClick: openTemplateManager,
+  }));
   // "我的模板"区按状态渲染:加载/空态给提示行(hint),失败给可点重试卡,成功给模板卡
   const myTemplateSection = computed(() => {
     if (myTemplatesState.value === 'error') {
@@ -992,6 +977,7 @@
             description: t('note.tplRetryDesc'),
             onClick: () => loadMyTemplates(),
           },
+          manageTemplateAction.value,
         ],
       };
     }
@@ -999,21 +985,22 @@
       return {
         key: 'mine',
         title: t('note.tplMineSection'),
-        actions: orderedMyTemplates.value.map((tpl) => ({
-          key: tpl.id,
-          label: tpl.name,
-          description: tpl.description || '',
-          tag: templateTypeTag(tpl.type),
-          removable: true,
-          onRemove: () => confirmDeleteTemplate(tpl),
-          onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
-        })),
+        actions: [
+          ...orderedMyTemplates.value.map((tpl) => ({
+            key: tpl.id,
+            label: tpl.name,
+            description: tpl.description || '',
+            tag: templateTypeTag(tpl.type),
+            onClick: () => gotoNewNote({ type: tpl.type, templateId: tpl.id }),
+          })),
+          manageTemplateAction.value,
+        ],
       };
     }
     return {
       key: 'mine',
       title: t('note.tplMineSection'),
-      actions: [],
+      actions: [manageTemplateAction.value],
       hint: myTemplatesState.value === 'loading' ? t('note.tplLoading') : t('note.tplEmptyMine'),
     };
   });
@@ -1072,6 +1059,16 @@
     createParentOverride.value = String(note.id);
     showTypePicker.value = true;
     loadMyTemplates();
+  }
+
+  async function openTemplateManager() {
+    await closeCurrentMobileOverlayThen(
+      () => {
+        showTypePicker.value = false;
+        mobilePageActionsOpen.value = false;
+      },
+      () => router.push('/noteLibrary/templates'),
+    );
   }
 
   function openAttachPages(note: any) {
@@ -1908,6 +1905,11 @@
   );
   const mobilePageActions = computed<MobilePageActionItem[]>(() => [
     {
+      key: 'templates',
+      label: t('note.templateManager.title'),
+      icon: icon.noteDetail.template,
+    },
+    {
       key: 'aiOrganize',
       label: t('bookmarkMg.aiOrganizeBtn'),
       icon: icon.ai.organize,
@@ -2045,7 +2047,9 @@
   }
 
   function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key === 'aiOrganize') {
+    if (action.key === 'templates') {
+      void openTemplateManager();
+    } else if (action.key === 'aiOrganize') {
       openGlobalAiOrganize();
     } else if (action.key === 'batch') {
       if (batchMode.value) exitBatch();

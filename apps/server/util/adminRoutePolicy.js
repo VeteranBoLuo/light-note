@@ -103,6 +103,8 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/updateNoteTags'],
   ['POST', '/note/restoreNoteVersion'],
   ['POST', '/note/addNoteTemplate'],
+  ['POST', '/note/updateNoteTemplate'],
+  ['POST', '/note/duplicateNoteTemplate'],
 ]);
 
 // 模板为硬删除(轻量可再生数据不接回收站),按不可逆内容操作声明,maintain 模式不予放行

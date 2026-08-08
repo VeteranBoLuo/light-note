@@ -188,7 +188,9 @@
   const mobileBottomNavActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
-  const mobileShellEnabled = computed(() => mobileTopSwitcherActive.value || mobileBottomNavActive.value);
+  // `mobileShell` 表示该路由需要统一移动端顶栏；资源切换器与底部导航是两个独立开关。
+  // 二级页（例如模板管理）只需要「返回 + 标题 + 页面动作」，不能因为两项导航都关闭就把顶栏一并卸载。
+  const mobileShellEnabled = computed(() => bookmark.isMobile && Boolean(router.currentRoute.value.meta.mobileShell));
   watch(
     mobileBottomNavActive,
     (active) => {

@@ -64,11 +64,13 @@
           {{ noteType === 'html' ? 'HTML' : 'MD' }}
         </BButton>
 
-        <BDropdown trigger="click" align="right" :menu-options="mobileMenuOptions">
-          <BButton class="note-header-mobile-icon-button note-header-mobile-more" :aria-label="$t('common.more')">
-            <SvgIcon :src="icon.common.more" size="18" />
-          </BButton>
-        </BDropdown>
+        <BButton
+          class="note-header-mobile-icon-button note-header-mobile-more"
+          :aria-label="$t('mobileNavigation.moreActions')"
+          @click="mobileActionsOpen = true"
+        >
+          <SvgIcon :src="icon.common.more" size="18" />
+        </BButton>
       </div>
     </template>
 
@@ -151,6 +153,13 @@
       :sections="exportSections"
       :note="$t('noteDetail.exportNoteDesc')"
     />
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileActionsOpen"
+      :object-title="mobileActionsTitle"
+      :actions="mobileActionItems"
+      @action="handleMobileAction"
+    />
   </div>
 </template>
 
@@ -166,6 +175,7 @@
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
@@ -184,6 +194,7 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
   import { copyTextToClipboard } from '@/utils/clipboard';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const ActionCardModal = defineAsyncComponent(() => import('@/components/base/ActionCardModal.vue'));
@@ -220,6 +231,7 @@
     'undoSwitch',
     'history',
     'saveAsTemplate',
+    'manageTemplates',
     'openCatalog',
     'openNavigation',
     'browseChildren',
@@ -230,6 +242,7 @@
   ]);
 
   const bookmark = bookmarkStore();
+  const mobileActionsOpen = ref(false);
   const turndownService = createNoteTurndownService();
 
   /** 手机与平板优先走系统分享：可存进「文件」也可转发到其他 App，比隐式下载更符合手机习惯。 */
@@ -463,81 +476,113 @@
     recordOperation(OPERATION_LOG_MAP.note.exportNote);
   }
 
-  const mobileMenuOptions = computed(() => {
-    const options: HeaderMenuOption[] = [];
+  const mobileActionsTitle = computed(() => {
+    const title = String(props.note?.title || '').trim();
+    return title ? `${t('mobileNavigation.moreActions')} · ${title}` : t('mobileNavigation.moreActions');
+  });
+
+  const mobileActionItems = computed<MobilePageActionItem[]>(() => {
+    const options: MobilePageActionItem[] = [];
 
     if (props.hasNavigation) {
       if (Number(props.childCount || 0) > 0) {
         options.push({
+          key: 'browseChildren',
           label: t('note.browseChildPages'),
           icon: icon.noteTree.sidebarOpen,
-          function: () => emit('browseChildren'),
         });
       }
       if (!props.readonly && props.pageTreeWritable) {
         options.push(
           {
+            key: 'createChild',
             label: t('note.newChildPage'),
             icon: icon.common.add,
-            function: () => emit('createChild'),
           },
           {
+            key: 'attachPages',
             label: t('note.addExistingPages'),
             icon: icon.noteTree.move,
-            function: () => emit('attachPages'),
           },
           {
+            key: 'movePage',
             label: t('note.moveThisPageUnderAnother'),
             icon: icon.noteTree.move,
-            function: () => emit('movePage'),
           },
         );
       }
-      if (options.length) options.push({ divider: true });
     }
 
     options.push({
+      key: 'tags',
       label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
       icon: icon.manage_categoryBtn_tag,
-      function: openMobileTagConfig,
+      dividerBefore: options.length > 0,
     });
 
     if (!props.readonly) {
       options.push({
+        key: 'saveAsTemplate',
         label: t('note.saveAsTemplate'),
         icon: icon.noteDetail.template,
-        function: openMobileSaveAsTemplate,
       });
       if (props.note?.id) {
         options.push({
+          key: 'history',
           label: t('noteDetail.history.entry'),
           icon: icon.noteDetail.history,
-          function: () => {
-            emit('history');
-            recordOperation(OPERATION_LOG_MAP.note.history);
-          },
         });
       }
     }
 
-    // 导出与 readonly 无关(桌面端同样不受限):只读笔记也允许导出留档
     options.push({
-      label: t('noteDetail.export'),
-      icon: icon.noteDetail.exportLine,
-      function: openMobileExport,
+      key: 'manageTemplates',
+      label: t('note.templateManager.title'),
+      icon: icon.noteDetail.template,
     });
 
-    options.push(
-      { divider: true },
-      {
+    // 导出与 readonly 无关(桌面端同样不受限):只读笔记也允许导出留档
+    options.push({
+      key: 'export',
+      label: t('noteDetail.export'),
+      icon: icon.noteDetail.exportLine,
+    });
+
+    if (!props.readonly) {
+      options.push({
+        key: 'delete',
         label: t('noteDetail.delete'),
         icon: icon.noteDetail.deleteLine,
         danger: true,
-        function: () => emit('del'),
-      },
-    );
+        dividerBefore: true,
+      });
+    }
     return options;
   });
+
+  const mobileActionHandlers: Record<string, () => void> = {
+    browseChildren: () => emit('browseChildren'),
+    createChild: () => emit('createChild'),
+    attachPages: () => emit('attachPages'),
+    movePage: () => emit('movePage'),
+    tags: openMobileTagConfig,
+    saveAsTemplate: openMobileSaveAsTemplate,
+    manageTemplates: () => emit('manageTemplates'),
+    history: () => {
+      emit('history');
+      recordOperation(OPERATION_LOG_MAP.note.history);
+    },
+    export: openMobileExport,
+    delete: () => emit('del'),
+  };
+
+  async function handleMobileAction(action: MobilePageActionItem) {
+    const run = mobileActionHandlers[action.key];
+    if (!run) return;
+    await closeCurrentMobileOverlayThen(() => {
+      mobileActionsOpen.value = false;
+    }, run);
+  }
 
   const desktopMenuOptions = computed<HeaderMenuOption[]>(() => {
     const options: HeaderMenuOption[] = [
@@ -561,6 +606,11 @@
         });
       }
     }
+    options.push({
+      label: t('note.templateManager.title'),
+      icon: icon.noteDetail.template,
+      function: () => emit('manageTemplates'),
+    });
     options.push({
       label: t('noteDetail.export'),
       icon: icon.noteDetail.exportLine,

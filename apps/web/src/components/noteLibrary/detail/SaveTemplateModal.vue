@@ -45,6 +45,7 @@
     note: { title?: string; content?: string; type?: string };
   }>();
   const visible = defineModel<boolean>('visible');
+  const emit = defineEmits<{ created: [template: { id: string; name: string }] }>();
   const { t } = useI18n();
 
   const draft = reactive({ name: '', titleTemplate: '', description: '' });
@@ -83,6 +84,7 @@
         content: props.note?.content || '',
       });
       if (res.status === 200) {
+        emit('created', { id: String(res.data?.id || ''), name: draft.name.trim() });
         message.success(t('note.tplSaved'));
         recordOperation({ module: '笔记', operation: `存为模板【${draft.name.trim()}】` });
         visible.value = false;

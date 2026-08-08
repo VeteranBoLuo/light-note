@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 const router = express.Router();
 
 import * as userHandle from '../router_handle/userHandle.js';
+import { saveAdminUserRemark } from '../router_handle/adminUserRemarkHandle.js';
 
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -68,6 +69,8 @@ router.get('/adminContext/status', userHandle.getAdminContextStatus);
 router.post('/adminContext/end', userHandle.endAdminContext);
 
 router.post('/getUserList', userHandle.getUserList);
+
+router.post('/admin/remark', saveAdminUserRemark);
 
 router.post('/registerUser', registerLimiter, userHandle.registerUser);
 

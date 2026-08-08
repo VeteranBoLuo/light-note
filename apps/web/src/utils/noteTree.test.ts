@@ -4,6 +4,7 @@ import {
   collectNoteDescendantIds,
   flattenNoteTree,
   getNoteParentPathText,
+  getNoteParentTargetId,
 } from './noteTree';
 
 const tree = [
@@ -70,5 +71,20 @@ describe('noteTree 前端纯函数', () => {
     ).toBe('项目 / 模块');
     expect(getNoteParentPathText({ title: '椅子', pathText: '椅子' })).toBe('');
     expect(getNoteParentPathText({ title: '复盘', pathText: '项目 / 模块 / 复盘' })).toBe('项目 / 模块');
+  });
+
+  it('父级入口始终取直接父页面 ID，不按标题猜测目标', () => {
+    expect(
+      getNoteParentTargetId({
+        parentId: 'legacy-parent',
+        path: [
+          { id: 'root', title: '项目' },
+          { id: 'direct-parent', title: '模块' },
+          { id: 'current', title: '复盘' },
+        ],
+      }),
+    ).toBe('direct-parent');
+    expect(getNoteParentTargetId({ parentId: 'legacy-parent' })).toBe('legacy-parent');
+    expect(getNoteParentTargetId({ path: [{ id: 'current', title: '根页面' }] })).toBe('');
   });
 });
