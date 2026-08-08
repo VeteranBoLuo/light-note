@@ -19,6 +19,10 @@ const findBarSource = readFileSync(
 );
 const commonStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8');
 const themeStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
+const androidWebViewStylesSource = readFileSync(
+  resolve(process.cwd(), 'src/assets/css/android-webview-compat.less'),
+  'utf8',
+);
 const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
 const noteDetailSource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteDetail.vue'), 'utf8');
 const templateContentEditorSource = readFileSync(
@@ -63,6 +67,15 @@ describe('编辑器 V2 交互回归', () => {
   it('工具栏启用态与禁用态具有不同的文字、边框和透明度', () => {
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\)[\s\S]*color:\s*var\(--text-color\)/u);
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\.disabled\)[\s\S]*opacity:\s*0\.4/u);
+  });
+
+  it('Android App 富文本正文使用系统常规字重，只有真实加粗标签显示粗体', () => {
+    expect(androidWebViewStylesSource).toMatch(
+      /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-family:\s*sans-serif\s*!important;[\s\S]*?font-weight:\s*400\s*!important;/u,
+    );
+    expect(androidWebViewStylesSource).toMatch(
+      /\.note-editor-body strong,[\s\S]*?\.mce-content-body b\s*\{[\s\S]*?font-weight:\s*700\s*!important;/u,
+    );
   });
 
   it('目录树 Markdown 与 HTML 都使用可直接识别格式的独立图标', () => {
