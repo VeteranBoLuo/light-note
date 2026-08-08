@@ -201,6 +201,11 @@ export default {
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNHB4IiBoZWlnaHQ9IjI0cHgiIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHBhdGggZmlsbD0iY3VycmVudENvbG9yIiBkPSJNNS4yIDE0TDkuNyAyaDEuMUw2LjMgMTR6bTUuOS0xaDEuMkwxNiA4bC0zLjctNUgxMWwzLjggNXptLTYuMiAwSDMuN0wwIDhsMy43LTVINUwxLjIgOHoiLz48L3N2Zz4=',
   },
 
+  support: {
+    heart:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20.25S4 15.7 4 9.5A4.25 4.25 0 0 1 12 7.55A4.25 4.25 0 0 1 20 9.5c0 6.2-8 10.75-8 10.75Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 3.75v3M16 5.25h3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  },
+
   userCenter: {
     growth:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M18 2H6v2H2v4a4 4 0 0 0 4 4h.29A6 6 0 0 0 11 17.9V20H7v2h10v-2h-4v-2.1a6 6 0 0 0 4.71-5.9H18a4 4 0 0 0 4-4V4h-4zM6 10a2 2 0 0 1-2-2V6h2zm14-2a2 2 0 0 1-2 2V6h2z"/></svg>',

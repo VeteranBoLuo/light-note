@@ -31,4 +31,12 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.requireAuth).toBe(true);
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
+
+  it('支持轻笺页面允许游客直达，且使用统一的双端路径', () => {
+    const resolved = router.resolve('/support');
+    expect(resolved.name).toBe('support');
+    expect(resolved.meta.roles).toContain('visitor');
+    expect(resolved.meta.mobileTopSwitcher).not.toBe(true);
+    expect(resolved.meta.mobileBottomNav).not.toBe(true);
+  });
 });

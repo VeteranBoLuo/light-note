@@ -19,6 +19,8 @@
   <a href="https://boluo66.top">
     <img src="https://img.shields.io/badge/🚀_免费在线使用_→_boluo66.top-615ced?style=for-the-badge&logoColor=white" alt="免费在线使用">
   </a>
+  <br>
+  <sub>永久免费，为爱发电 · <a href="https://afdian.com/a/lightnote">在爱发电支持轻笺</a></sub>
 </p>
 
 <p align="center">
@@ -164,6 +166,16 @@
 - **想自行部署：** 完整生产环境依赖数据库、对象存储、缓存、邮件及第三方 AI 服务，目前暂不提供面向普通用户的一键自托管方案。
 
 源代码采用 [MIT License](LICENSE)。线上服务的存储空间、AI 能力及使用额度以站内说明为准。
+
+---
+
+## 💜 支持轻笺
+
+轻笺坚持永久免费、为爱发电。赞助完全自愿，不作为使用现有免费功能的门槛。
+
+如果轻笺对你有帮助，可以通过 **[轻笺官方爱发电主页](https://afdian.com/a/lightnote)** 自愿支持。赞助将用于服务器、对象存储、第三方 API 与持续开发；也欢迎通过 Star、Issue 和代码贡献支持项目。
+
+> 请以本 README 公开的链接为准，无需向任何人提供轻笺账号密码或验证码。
 
 ---
 
