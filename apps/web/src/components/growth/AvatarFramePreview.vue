@@ -121,6 +121,44 @@
     object-fit: cover;
   }
 
+  /* 薄荷：入门款使用清透双色环，不使用持续动效。 */
+  .avatar-frame--mint .avatar-frame__ring {
+    background: conic-gradient(from 195deg, #0f766e, #2dd4bf 24%, #a7f3d0 48%, #5eead4 70%, #0f766e);
+    box-shadow:
+      0 0 0 1px rgba(153, 246, 228, 0.72),
+      0 6px 14px -8px rgba(13, 148, 136, 0.72);
+  }
+
+  .avatar-frame--mint .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    background:
+      radial-gradient(circle at 22% 25%, rgba(236, 253, 245, 0.96) 0 3%, transparent 4%),
+      radial-gradient(circle at 79% 72%, rgba(204, 251, 241, 0.88) 0 2.5%, transparent 3.5%);
+  }
+
+  /* 墨韵：一圈不规则水墨浓淡，保留克制的基础档质感。 */
+  .avatar-frame--ink .avatar-frame__ring {
+    background: conic-gradient(
+      from 28deg,
+      #111827,
+      #6b7280 18%,
+      #e5e7eb 31%,
+      #374151 47%,
+      #030712 70%,
+      #9ca3af 86%,
+      #111827
+    );
+    box-shadow:
+      0 0 0 1px rgba(107, 114, 128, 0.5),
+      0 7px 15px -9px rgba(17, 24, 39, 0.75);
+  }
+
+  .avatar-frame--ink .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    border: 1px solid rgba(75, 85, 99, 0.48);
+    clip-path: polygon(8% 27%, 27% 5%, 62% 1%, 93% 24%, 98% 61%, 77% 94%, 42% 99%, 11% 82%, 1% 48%);
+  }
+
   /* 鎏金：金属分层与一束缓慢扫过的高光。 */
   .avatar-frame--gold .avatar-frame__ring {
     background: conic-gradient(
@@ -187,6 +225,66 @@
     animation: frame-neon-orbit 6s linear infinite;
   }
 
+  /* 晚霞：暖色地平线与柔和的暮光呼吸。 */
+  .avatar-frame--sunset .avatar-frame__ring {
+    background: conic-gradient(from 205deg, #7c3aed, #c026d3 20%, #fb7185 43%, #fb923c 64%, #fcd34d 79%, #7c3aed);
+    box-shadow:
+      0 0 0 1px rgba(253, 186, 116, 0.65),
+      0 7px 17px -8px rgba(190, 24, 93, 0.72);
+  }
+
+  .avatar-frame--sunset .avatar-frame__motif {
+    inset: var(--frame-motif-inset);
+    background: linear-gradient(155deg, transparent 48%, rgba(255, 247, 237, 0.7) 50%, transparent 53%);
+    animation: frame-sunset-glow 4.8s ease-in-out infinite;
+  }
+
+  /* 潮汐：深浅蓝波环与气泡点，动效只做轻微浮动。 */
+  .avatar-frame--ocean .avatar-frame__ring {
+    background: conic-gradient(from 155deg, #0c4a6e, #0284c7 20%, #22d3ee 41%, #bae6fd 57%, #2563eb 76%, #0c4a6e);
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.7),
+      0 7px 17px -8px rgba(2, 132, 199, 0.78);
+  }
+
+  .avatar-frame--ocean .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    background:
+      radial-gradient(circle at 25% 18%, rgba(240, 249, 255, 0.96) 0 3%, transparent 4%),
+      radial-gradient(circle at 88% 47%, rgba(186, 230, 253, 0.92) 0 4%, transparent 5%),
+      radial-gradient(circle at 33% 91%, rgba(224, 242, 254, 0.88) 0 2%, transparent 3%);
+    animation: frame-ocean-float 4s ease-in-out infinite;
+  }
+
+  /* 极光：中高档的冷色光幕，通过反向旋转产生缓慢流动。 */
+  .avatar-frame--aurora .avatar-frame__ring {
+    background: conic-gradient(
+      from 25deg,
+      #042f2e,
+      #10b981 17%,
+      #67e8f9 36%,
+      #818cf8 55%,
+      #d946ef 73%,
+      #34d399 89%,
+      #042f2e
+    );
+    box-shadow:
+      0 0 0 1px rgba(167, 243, 208, 0.66),
+      0 0 12px rgba(45, 212, 191, 0.48),
+      0 8px 20px -10px rgba(99, 102, 241, 0.78);
+    animation: frame-aurora-turn 10s linear infinite;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    border: 2px solid transparent;
+    border-top-color: rgba(216, 180, 254, 0.78);
+    border-right-color: rgba(153, 246, 228, 0.7);
+    border-radius: 44% 56% 48% 52%;
+    filter: blur(0.25px);
+    animation: frame-aurora-wave 5.2s ease-in-out infinite;
+  }
+
   /* 星河：深紫星云、星点、环绕星轨和掠过的彗星，作为高阶款的专属语言。 */
   .avatar-frame--galaxy .avatar-frame__ring {
     background:
@@ -217,13 +315,21 @@
     width: 20%;
     aspect-ratio: 1;
     content: '';
-    background: linear-gradient(
-      90deg,
-      transparent 43%,
-      rgba(255, 255, 255, 0.96) 46% 54%,
-      transparent 57%
+    background: linear-gradient(90deg, transparent 43%, rgba(255, 255, 255, 0.96) 46% 54%, transparent 57%);
+    clip-path: polygon(
+      46% 0,
+      54% 0,
+      59% 41%,
+      100% 46%,
+      100% 54%,
+      59% 59%,
+      54% 100%,
+      46% 100%,
+      41% 59%,
+      0 54%,
+      0 46%,
+      41% 41%
     );
-    clip-path: polygon(46% 0, 54% 0, 59% 41%, 100% 46%, 100% 54%, 59% 59%, 54% 100%, 46% 100%, 41% 59%, 0 54%, 0 46%, 41% 41%);
     filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.95));
     animation: frame-galaxy-starburst 4.6s ease-in-out infinite;
   }
@@ -271,13 +377,189 @@
     animation: frame-galaxy-comet 5.8s ease-in-out infinite;
   }
 
+  /* 赤焰：金橙火芯叠加暗红外焰，用明暗跳动表达热度。 */
+  .avatar-frame--flame .avatar-frame__ring {
+    background: conic-gradient(
+      from 15deg,
+      #7f1d1d,
+      #dc2626 18%,
+      #fb923c 38%,
+      #fef08a 51%,
+      #f97316 66%,
+      #991b1b 84%,
+      #7f1d1d
+    );
+    box-shadow:
+      0 0 0 1px rgba(254, 215, 170, 0.7),
+      0 0 12px rgba(249, 115, 22, 0.58),
+      0 8px 19px -10px rgba(153, 27, 27, 0.9);
+    animation: frame-flame-pulse 2.7s ease-in-out infinite;
+  }
+
+  .avatar-frame--flame .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    background:
+      radial-gradient(ellipse at 18% 23%, rgba(254, 240, 138, 0.9) 0 5%, transparent 6%),
+      radial-gradient(ellipse at 82% 20%, rgba(251, 146, 60, 0.9) 0 6%, transparent 7%),
+      radial-gradient(ellipse at 90% 77%, rgba(254, 215, 170, 0.82) 0 5%, transparent 6%),
+      radial-gradient(ellipse at 25% 89%, rgba(239, 68, 68, 0.88) 0 6%, transparent 7%);
+    clip-path: polygon(
+      50% 0,
+      62% 9%,
+      76% 3%,
+      82% 18%,
+      98% 26%,
+      91% 43%,
+      100% 58%,
+      87% 70%,
+      82% 91%,
+      63% 88%,
+      50% 100%,
+      37% 89%,
+      18% 92%,
+      14% 72%,
+      0 60%,
+      9% 43%,
+      2% 27%,
+      19% 18%,
+      25% 3%,
+      39% 10%
+    );
+    animation: frame-flame-dance 3.1s ease-in-out infinite;
+  }
+
+  /* 龙曜：暗红底色、金色龙鳞分段和轨道火星。 */
+  .avatar-frame--dragon .avatar-frame__ring {
+    background: repeating-conic-gradient(
+      from 8deg,
+      #450a0a 0 8deg,
+      #b91c1c 8deg 18deg,
+      #f59e0b 18deg 24deg,
+      #7f1d1d 24deg 34deg
+    );
+    box-shadow:
+      0 0 0 2px rgba(245, 158, 11, 0.74),
+      0 0 13px rgba(220, 38, 38, 0.56),
+      0 9px 22px -11px rgba(69, 10, 10, 0.96);
+    animation: frame-dragon-turn 15s linear infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    background:
+      radial-gradient(ellipse at 22% 23%, rgba(254, 243, 199, 0.95) 0 4%, transparent 5%),
+      radial-gradient(ellipse at 78% 77%, rgba(251, 191, 36, 0.9) 0 4%, transparent 5%);
+    filter: drop-shadow(0 0 3px rgba(245, 158, 11, 0.72));
+  }
+
+  .avatar-frame--dragon .avatar-frame__orbit {
+    z-index: 3;
+    display: block;
+    inset: -6%;
+    border: 1px solid rgba(251, 191, 36, 0.5);
+    border-left-color: transparent;
+    border-bottom-color: transparent;
+    border-radius: 50%;
+    animation: frame-dragon-orbit 6.8s linear infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__orbit::after {
+    position: absolute;
+    top: 5%;
+    right: 12%;
+    width: max(3px, 9%);
+    aspect-ratio: 1;
+    content: '';
+    border-radius: 50%;
+    background: #fef3c7;
+    box-shadow:
+      0 0 6px #f59e0b,
+      0 0 11px rgba(220, 38, 38, 0.7);
+  }
+
+  /* 天穹：最高档的黑金日蚀、双星环和掠过的白金光。 */
+  .avatar-frame--celestial .avatar-frame__ring {
+    background:
+      radial-gradient(circle at 67% 20%, #fff7ed 0 2.5%, transparent 3.5%),
+      radial-gradient(circle at 23% 72%, rgba(254, 243, 199, 0.92) 0 2%, transparent 3%),
+      conic-gradient(from 225deg, #020617, #312e81 18%, #a16207 34%, #fef3c7 49%, #7c3aed 66%, #172554 82%, #020617);
+    box-shadow:
+      0 0 0 2px rgba(253, 230, 138, 0.86),
+      0 0 15px rgba(167, 139, 250, 0.64),
+      0 10px 24px -10px rgba(2, 6, 23, 0.96);
+    animation: frame-celestial-turn 16s linear infinite;
+  }
+
+  .avatar-frame--celestial .avatar-frame__motif {
+    inset: var(--frame-motif-outset);
+    background:
+      radial-gradient(circle at 18% 18%, #fff 0 2.5%, transparent 3.5%),
+      radial-gradient(circle at 82% 42%, #fde68a 0 2%, transparent 3%),
+      radial-gradient(circle at 43% 96%, #ddd6fe 0 2%, transparent 3%);
+    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.88));
+    animation: frame-celestial-twinkle 3.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--celestial .avatar-frame__orbit {
+    z-index: 3;
+    display: block;
+    inset: -9%;
+    border: 1px solid rgba(253, 230, 138, 0.62);
+    border-right-color: transparent;
+    border-radius: 50%;
+    box-shadow: 0 0 var(--frame-galaxy-orbit-glow) rgba(167, 139, 250, 0.54);
+    transform: rotate(22deg);
+    animation: frame-celestial-orbit 8.8s linear infinite;
+  }
+
+  .avatar-frame--celestial .avatar-frame__orbit::before,
+  .avatar-frame--celestial .avatar-frame__orbit::after {
+    position: absolute;
+    aspect-ratio: 1;
+    content: '';
+    border-radius: 50%;
+  }
+
+  .avatar-frame--celestial .avatar-frame__orbit::before {
+    inset: 14%;
+    border: 1px solid rgba(196, 181, 253, 0.42);
+  }
+
+  .avatar-frame--celestial .avatar-frame__orbit::after {
+    top: -2px;
+    left: 48%;
+    width: max(4px, 10%);
+    background: #fef3c7;
+    box-shadow:
+      0 0 0 2px rgba(253, 230, 138, 0.48),
+      0 0 9px rgba(255, 255, 255, 0.92);
+  }
+
+  .avatar-frame--celestial .avatar-frame__comet {
+    z-index: 4;
+    display: block;
+    top: 3%;
+    right: -7%;
+    width: 28%;
+    height: max(2px, 4%);
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(253, 230, 138, 0.46) 48%, #fff);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.82);
+    transform: rotate(-32deg);
+    transform-origin: right center;
+    animation: frame-celestial-comet 6.8s ease-in-out infinite;
+  }
+
   /* 顶部/移动端的小头像只保留紧凑星轨，完整彗星与爆闪留给商店的展示尺寸。 */
   .avatar-frame--galaxy.avatar-frame--compact .avatar-frame__motif::after,
-  .avatar-frame--galaxy.avatar-frame--compact .avatar-frame__comet {
+  .avatar-frame--galaxy.avatar-frame--compact .avatar-frame__comet,
+  .avatar-frame--celestial.avatar-frame--compact .avatar-frame__comet {
     display: none;
   }
 
-  .avatar-frame--galaxy.avatar-frame--compact .avatar-frame__orbit {
+  .avatar-frame--galaxy.avatar-frame--compact .avatar-frame__orbit,
+  .avatar-frame--dragon.avatar-frame--compact .avatar-frame__orbit,
+  .avatar-frame--celestial.avatar-frame--compact .avatar-frame__orbit {
     inset: -4%;
   }
 
@@ -337,6 +619,48 @@
     }
   }
 
+  @keyframes frame-sunset-glow {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: rotate(-8deg);
+    }
+    50% {
+      opacity: 0.9;
+      transform: rotate(7deg);
+    }
+  }
+
+  @keyframes frame-ocean-float {
+    0%,
+    100% {
+      opacity: 0.58;
+      transform: translateY(2%);
+    }
+    50% {
+      opacity: 1;
+      transform: translateY(-2%);
+    }
+  }
+
+  @keyframes frame-aurora-turn {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  @keyframes frame-aurora-wave {
+    0%,
+    100% {
+      opacity: 0.56;
+      transform: rotate(0) scale(0.98);
+    }
+    50% {
+      opacity: 1;
+      transform: rotate(18deg) scale(1.04);
+    }
+  }
+
   @keyframes frame-galaxy-turn {
     to {
       transform: rotate(360deg);
@@ -392,6 +716,83 @@
     76% {
       opacity: 0;
       transform: translate(22%, -18%) rotate(-28deg) scaleX(1.15);
+    }
+  }
+
+  @keyframes frame-flame-pulse {
+    0%,
+    100% {
+      filter: brightness(0.96);
+      transform: scale(0.98);
+    }
+    50% {
+      filter: brightness(1.2) saturate(1.16);
+      transform: scale(1.025);
+    }
+  }
+
+  @keyframes frame-flame-dance {
+    0%,
+    100% {
+      opacity: 0.66;
+      transform: rotate(-3deg) scale(0.98);
+    }
+    50% {
+      opacity: 1;
+      transform: rotate(4deg) scale(1.04);
+    }
+  }
+
+  @keyframes frame-dragon-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes frame-dragon-orbit {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  @keyframes frame-celestial-turn {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes frame-celestial-twinkle {
+    0%,
+    100% {
+      opacity: 0.42;
+      transform: scale(0.95);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.06);
+    }
+  }
+
+  @keyframes frame-celestial-orbit {
+    to {
+      transform: rotate(382deg);
+    }
+  }
+
+  @keyframes frame-celestial-comet {
+    0%,
+    58%,
+    100% {
+      opacity: 0;
+      transform: translate(-28%, 20%) rotate(-32deg) scaleX(0.45);
+    }
+    68% {
+      opacity: 1;
+      transform: translate(0, 0) rotate(-32deg) scaleX(1);
+    }
+    80% {
+      opacity: 0;
+      transform: translate(24%, -20%) rotate(-32deg) scaleX(1.18);
     }
   }
 
