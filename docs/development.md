@@ -418,13 +418,15 @@ import icon from "@/config/icon.ts";
   - fixed/absolute 浮层用 `100vw` 定位在 zoom 下会偏移（放大遮挡内容）；改用「视口中心 `left: 50%` + `transform` 偏移」，视口中心与内容同 zoom 上下文等比缩放、相对位置恒定。
   - **排查"只有缩放≠标准时才出现的定位/滚动问题",先怀疑这里。**
 
-**Android APK 样式回退（CSS `color-mix()` · 重要坑）：**
+**Android APK 样式回退（CSS `color-mix()` / 中间字重 · 重要坑）：**
 
 APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` 渲染错，也会把低透明度、多层 `box-shadow` 画成实心黑框。项目为此做了一层构建期回退，**因此 APK 里看到的混色和你在 Chrome 里写的不是同一个颜色**：
 
 1. 构建时 PostCSS 插件 `src/vite/androidColorMixFallback.ts` 把每个 `color-mix(...)` 包成 `var(--ln-android-color-mix-<类别>, color-mix(...))`，类别由混色操作数的**变量名**推断（primary / border / background / card-background / danger …）。
 2. 运行时 `main.ts` 检测到 Android WebView（APK 或 `; wv)` UA）给 `<html>` 加 `light-note-android-webview`。
 3. `assets/css/android-webview-compat.less` 只在该类下定义那批 `--ln-android-color-mix-*` 变量；普通浏览器没有定义，继续使用真实混色。
+
+旧系统 WebView 对系统字体的中间字重也不稳定：字体没有 550/600/650 等字面时，可能直接向上匹配到 700，表现为 App 的导航、按钮、正文辅助信息大面积加粗，而同一页面在新版移动浏览器正常。构建时 `src/vite/androidFontWeightFallback.ts` 会把纯数字 `font-weight` 包成 `var(--ln-android-font-weight-<regular|medium|bold>, 原值)`；普通浏览器因变量未定义继续使用原值，APK 在兼容层将它们稳定收敛到 400/500/700，并关闭伪粗体合成。不要在业务组件中追加 App UA 分支或逐页覆盖字重；确需更改映射时统一修改兼容变量并补插件测试。`@font-face` 的字重描述不会被转换。
 
 - **后果：APK 内每个 `color-mix()` 都塌缩成一个稳定实色，混色表达的层次差异基本消失。** 具体取哪个色由权重更大的一侧决定：
   - 混**主题底色**的淡染（`color-mix(in srgb, var(--primary-color) 5%~15%, var(--background-color))`）→ 取底色，**淡色完全消失**；

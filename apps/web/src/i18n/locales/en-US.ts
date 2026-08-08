@@ -2354,10 +2354,10 @@ export default {
     disclosurePrivacy:
       'Light Note never asks for your Alipay, WeChat, or card password and does not store payment codes.',
     disclosureRewards:
-      'AFDIAN and Light Note accounts are not linked yet, so points, XP, and rankings are not automatic.',
-    thanksTitle: 'A recognition wall should respect privacy',
+      'AFDIAN orders are not yet linked to Light Note accounts, so points and XP are not awarded automatically. The sponsor leaderboard will be built from verified orders.',
+    thanksTitle: 'A verified sponsor leaderboard is coming',
     thanksDescription:
-      'Public names, monthly acknowledgements, or commemorative badges will only be considered after explicit consent and reliable account linking. They will never become a gate to core features.',
+      'After order sync is ready, monthly and all-time rankings will only show information supporters consent to publish, with anonymous, opt-out, and withdrawal options. No synthetic data will be used.',
     closingTitle: 'Thank you for helping Light Note go further',
     closingDescription:
       'Using, sharing, giving feedback, or sponsoring are all meaningful ways to support this free project.',

@@ -38,7 +38,7 @@
         <div class="detail-section">
           <div class="detail-row">
             <span class="detail-label">风险分</span>
-            <span class="detail-value" :style="{ color: scoreColor(account.riskScore || 0), fontWeight: 600 }">
+            <span class="detail-value detail-value--emphasis" :style="{ color: scoreColor(account.riskScore || 0) }">
               {{ account.riskScore || 0 }}
             </span>
           </div>
@@ -48,13 +48,19 @@
           </div>
           <div class="detail-row">
             <span class="detail-label">高危事件</span>
-            <span class="detail-value" :style="{ color: (account.highRiskCount || 0) > 0 ? 'var(--security-high)' : undefined }">
+            <span
+              class="detail-value"
+              :style="{ color: (account.highRiskCount || 0) > 0 ? 'var(--security-high)' : undefined }"
+            >
               {{ account.highRiskCount || 0 }}
             </span>
           </div>
           <div class="detail-row">
             <span class="detail-label">严重事件</span>
-            <span class="detail-value" :style="{ color: (account.criticalCount || 0) > 0 ? 'var(--security-critical)' : undefined }">
+            <span
+              class="detail-value"
+              :style="{ color: (account.criticalCount || 0) > 0 ? 'var(--security-critical)' : undefined }"
+            >
               {{ account.criticalCount || 0 }}
             </span>
           </div>
@@ -142,6 +148,10 @@
     word-break: break-all;
   }
 
+  .detail-value--emphasis {
+    font-weight: 600;
+  }
+
   .detail-actions {
     display: flex;
     flex-wrap: wrap;
@@ -149,4 +159,3 @@
     padding-top: 8px;
   }
 </style>
-

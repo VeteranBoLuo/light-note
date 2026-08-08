@@ -501,9 +501,15 @@
   .ps-frame-item--celestial,
   .ps-frame-item--celestial.is-equipped {
     background:
+      radial-gradient(circle at 11% 50%, rgba(250, 204, 21, 0.14) 0, transparent 30%),
       radial-gradient(circle at 87% 18%, rgba(254, 243, 199, 0.92) 0 1px, transparent 1.7px),
       radial-gradient(circle at 73% 78%, rgba(221, 214, 254, 0.82) 0 1px, transparent 1.6px),
-      linear-gradient(135deg, color-mix(in srgb, #312e81 19%, var(--background-color)), var(--background-color) 60%);
+      linear-gradient(
+        135deg,
+        color-mix(in srgb, #312e81 22%, var(--background-color)),
+        color-mix(in srgb, #d97706 7%, var(--background-color)) 54%,
+        var(--background-color) 78%
+      );
   }
   .ps-frame-item--celestial:hover {
     border-color: #f59e0b;

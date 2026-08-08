@@ -109,6 +109,10 @@ describe('支持轻笺页面', () => {
 
     expect(host.querySelector('h1')?.textContent).toContain('轻笺会一直免费');
     expect(host.textContent).toContain('赞助完全自愿');
+    expect(host.textContent).toContain('赞助排行榜会基于真实订单生成');
+    expect(host.textContent).toContain('真实赞助排行榜将在订单同步后上线');
+    expect(host.textContent).toContain('支持匿名、不参与和撤回');
+    expect(host.textContent).not.toContain('不会自动发积分、经验或生成赞助排行榜');
 
     const action = host.querySelector<HTMLButtonElement>('.support-primary-action');
     expect(action).not.toBeNull();
