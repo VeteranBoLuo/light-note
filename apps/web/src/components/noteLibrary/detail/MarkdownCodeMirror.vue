@@ -107,6 +107,10 @@
 
   const markdownHighlightStyle = HighlightStyle.define([
     {
+      tag: tags.strong,
+      fontWeight: '700',
+    },
+    {
       tag: [tags.link, tags.url],
       color: 'var(--note-editor-link-color, var(--info-color, var(--primary-color)))',
       textDecoration: 'underline',

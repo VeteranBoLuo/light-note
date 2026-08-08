@@ -69,13 +69,17 @@ describe('编辑器 V2 交互回归', () => {
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\.disabled\)[\s\S]*opacity:\s*0\.4/u);
   });
 
-  it('Android App 富文本正文使用系统常规字重，只有真实加粗标签显示粗体', () => {
+  it('Android App 富文本与 Markdown 普通正文使用常规字重，真实加粗语义仍显示粗体', () => {
     expect(androidWebViewStylesSource).toMatch(
       /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-family:\s*sans-serif\s*!important;[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
     expect(androidWebViewStylesSource).toMatch(
-      /\.note-editor-body strong,[\s\S]*?\.mce-content-body b\s*\{[\s\S]*?font-weight:\s*700\s*!important;/u,
+      /\.markdown-codemirror \.cm-content,[\s\S]*?\.markdown-codemirror \.cm-line,[\s\S]*?\.md-preview\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
+    expect(androidWebViewStylesSource).toMatch(
+      /\.note-editor-body strong,[\s\S]*?\.mce-content-body b,[\s\S]*?\.md-preview strong,[\s\S]*?\.md-preview b\s*\{[\s\S]*?font-weight:\s*700\s*!important;/u,
+    );
+    expect(codeMirrorSource).toMatch(/tag:\s*tags\.strong,[\s\S]*?fontWeight:\s*'700'/u);
   });
 
   it('目录树 Markdown 与 HTML 都使用可直接识别格式的独立图标', () => {

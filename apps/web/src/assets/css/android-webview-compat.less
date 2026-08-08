@@ -50,12 +50,11 @@ html.light-note-android-webview {
   --ln-android-color-mix-black: #111318;
 
   /*
-   * 富文本正文默认继承全局的“微软雅黑”。该字体在 Android / 鸿蒙 WebView
-   * 中不存在，部分兼容层会把回退后的中文字体整段绘制成偏粗字面；HTML
-   * 本身仍然没有 strong，所以同一篇笔记在 Chrome 中看起来又是正常的。
+   * 笔记正文默认继承桌面端字体栈。部分 Android / 鸿蒙 WebView 会把回退后的
+   * 中文字体整段绘制成偏粗字面，因此只在 APK 内明确普通正文的常规字重。
    *
-   * 这里只修正 APK 的编辑正文：普通内容固定使用系统 sans-serif regular，
-   * 真正的 strong / b 仍明确使用粗体，避免用视觉补丁破坏笔记的加粗语义。
+   * CodeMirror 的 Markdown 编辑层与预览层不经过 TinyMCE，必须分别覆盖；
+   * 规则只落在承载普通文本的父级，语法高亮生成的 strong 子级仍可显示粗体。
    */
   .note-editor-body,
   .mce-content-body {
@@ -63,10 +62,18 @@ html.light-note-android-webview {
     font-weight: 400 !important;
   }
 
+  .markdown-codemirror .cm-content,
+  .markdown-codemirror .cm-line,
+  .md-preview {
+    font-weight: 400 !important;
+  }
+
   .note-editor-body strong,
   .note-editor-body b,
   .mce-content-body strong,
-  .mce-content-body b {
+  .mce-content-body b,
+  .md-preview strong,
+  .md-preview b {
     font-weight: 700 !important;
   }
 
