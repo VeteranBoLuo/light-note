@@ -83,13 +83,20 @@ export default defineConfig(({ mode }) => {
                 changeOrigin: true,
                 secure: false,
               },
-        // WebSocket 代理
-        '/ws': {
-          target: 'http://127.0.0.1:3000',
-          changeOrigin: true,
-          ws: true,
-          rewrite: (path: string) => path.replace(/^\/ws/, ''),
-        },
+        // 公共聊天室与 REST 共用 9001 服务；浏览器始终连接同源路径，避免暴露 sid 或额外端口。
+        '/realtime/chat':
+          env.VITE_ENV === 'local'
+            ? {
+                target: 'http://127.0.0.1:9001',
+                changeOrigin: true,
+                ws: true,
+              }
+            : {
+                target: 'https://boluo66.top',
+                changeOrigin: true,
+                secure: false,
+                ws: true,
+              },
         '/obs': {
           target: 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,

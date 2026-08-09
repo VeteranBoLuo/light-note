@@ -344,6 +344,16 @@ export const apiBaseGet = async (url: string, params?: any, options?: RequestOpt
   return handleErrorResponse(res.data, options?.silent);
 };
 
+export const apiBasePut = async (url: string, data?: any, options?: RequestOptions): Promise<ApiResponse> => {
+  const res = await request({
+    url,
+    method: 'put',
+    data,
+    ...options,
+  });
+  return handleErrorResponse(res.data, options?.silent);
+};
+
 export function handleErrorResponse(res: AxiosResponse['data'], silent = false): ApiResponse {
   // 如果状态码在映射中，则显示错误消息
   if (authExpiredFlow && (res.status === 'visitor' || res.status === 401 || res.status === 403)) {

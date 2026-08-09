@@ -3,6 +3,7 @@ import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { createPinia } from 'pinia';
 import BDrawer from './BDrawer.vue';
+import BButton from './BButton.vue';
 import { bookmarkStore } from '@/store';
 import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } from '@/utils/mobileOverlayHistory';
 
@@ -56,6 +57,40 @@ describe('BDrawer compositor cleanup', () => {
     expect(header?.firstElementChild?.classList.contains('b-drawer-close--leading')).toBe(true);
     expect(header?.querySelector('.b-drawer-title')?.textContent).toBe('快速添加');
     expect(header?.querySelector('.b-drawer-header-actions .b-drawer-close')).toBeNull();
+  });
+
+  it('supports a custom leading action without turning it into the drawer close control', async () => {
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(
+            BDrawer,
+            { open: true, title: '新建文件夹', mobileCenteredHeader: true },
+            { 'header-leading': () => h(BButton, { class: 'custom-leading-action' }, () => '返回操作列表') },
+          );
+      },
+    });
+    app.use(createPinia());
+    app.use(createI18n({ legacy: false, locale: 'zh', messages: { zh: { common: { close: '关闭' } } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    const header = document.querySelector('.b-drawer-header');
+    expect(header?.firstElementChild?.classList.contains('custom-leading-action')).toBe(true);
+    expect(header?.querySelector('.b-drawer-close--leading')).toBeNull();
+    expect(header?.querySelector('.b-drawer-title')?.textContent).toBe('新建文件夹');
   });
 
   it('releases the transform layer even when transitionend is not emitted', async () => {

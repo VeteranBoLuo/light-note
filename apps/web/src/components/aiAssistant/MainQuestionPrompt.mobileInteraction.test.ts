@@ -16,4 +16,9 @@ describe('移动端 AI 快捷问题交互状态', () => {
     expect(source).toContain('onBeforeUnmount(clearRecommendationFocus)');
     expect(source).toContain('onDeactivated(clearRecommendationFocus)');
   });
+
+  it('移动端追问卡片使用紧凑但可触达的 40px 高度', () => {
+    expect(source).toMatch(/\.recommendation-container\s*\{\s*height:\s*40px;\s*min-height:\s*40px;/);
+    expect(source).toMatch(/\.recommendation-item\s*\{[\s\S]*?height:\s*40px;\s*min-height:\s*40px;/);
+  });
 });

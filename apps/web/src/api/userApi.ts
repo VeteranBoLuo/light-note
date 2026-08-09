@@ -10,6 +10,9 @@ const userApi = {
   saveAdminUserRemark(targetUserId: string, remarkName: string) {
     return apiBasePost('/api/user/admin/remark', { targetUserId, remarkName });
   },
+  getAdminUserDetail(userId: string) {
+    return apiBasePost('/api/user/admin/detail', { userId });
+  },
   deleteUserById(id) {
     return apiBaseGet(`/api/user/deleteUserById?id=${id}`);
   },

@@ -36,17 +36,14 @@
         >
           {{ inbox.todoAttentionTotal > 99 ? '99+' : inbox.todoAttentionTotal }}
         </span>
-        <!--
-          新版本红点冒泡到「我的」：用户不会主动去个人中心翻更新，红点只挂在页面内部等于没有。
-          与页面内那颗共享同一份 dismissed 状态，所以点了「下载新版本」两处一起消失。
-          无数字，只表示「有事待看」，具体版本号进去才说。
-        -->
         <span
-          v-if="item.key === 'profile' && appUpdate.showBadge.value"
-          class="mobile-bottom-nav__badge mobile-bottom-nav__badge--dot"
+          v-if="item.key === 'community' && communityUnreadTotal > 0"
+          class="mobile-bottom-nav__badge"
           role="status"
-          :aria-label="t('appUpdate.newVersionShort', { version: appUpdate.latestVersion.value })"
-        ></span>
+          :aria-label="communityUnreadLabel"
+        >
+          {{ communityUnreadTotal > 99 ? '99+' : communityUnreadTotal }}
+        </span>
       </span>
       <span class="mobile-bottom-nav__label">{{ t(item.labelKey) }}</span>
     </BButton>
@@ -54,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -67,9 +64,9 @@
     type MobileShellSection,
   } from '@/config/mobileNavigation';
   import { getMobileResourceEntryPath, useMobileNavigationState } from '@/composables/useMobileNavigationState';
+  import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useAiAssistantStore, useUserStore } from '@/store';
   import { storeToRefs } from 'pinia';
-  import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
 
   const route = useRoute();
   const router = useRouter();
@@ -79,7 +76,8 @@
   const { edgeStatus: aiEdgeStatus } = storeToRefs(aiAssistant);
   const { t } = useI18n();
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
-  const appUpdate = useAndroidAppUpdate();
+  const communityUnread = useCommunityChatUnread();
+  const { totalUnread: communityUnreadTotal } = communityUnread;
 
   // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
   const todoAttentionLabel = computed(() =>
@@ -89,6 +87,7 @@
       dueToday: inbox.todoDueTodayTotal,
     }),
   );
+  const communityUnreadLabel = computed(() => t('communityChat.unreadBadge', { count: communityUnreadTotal.value }));
   const aiStatusText = computed(() => (aiEdgeStatus.value === 'idle' ? '' : t(`ai.edgeStatus.${aiEdgeStatus.value}`)));
   const aiAccessibleLabel = computed(() =>
     t('ai.edgeStatus.triggerLabel', {
@@ -102,7 +101,7 @@
     resources: icon.navigation.portal,
     todo: icon.noteDetail.toolbar.todo,
     ai: icon.ai.ask,
-    profile: icon.navigation.user,
+    community: icon.ai.conversations,
   } as const;
 
   function isItemActive(key: MobileShellSection) {
@@ -140,10 +139,26 @@
   watch(
     () => [user.id, user.role],
     ([id, role]) => {
-      if (id && role !== 'visitor') void inbox.refreshCount();
+      communityUnread.reset();
+      if (id && role !== 'visitor') {
+        void inbox.refreshCount();
+        void communityUnread.refresh();
+      }
     },
     { immediate: true },
   );
+
+  let unreadRefreshTimer: number | undefined;
+  onMounted(() => {
+    unreadRefreshTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible' && user.id && user.role !== 'visitor') {
+        void communityUnread.refresh();
+      }
+    }, 60_000);
+  });
+  onBeforeUnmount(() => {
+    if (unreadRefreshTimer !== undefined) window.clearInterval(unreadRefreshTimer);
+  });
 </script>
 
 <style scoped lang="less">
@@ -271,16 +286,6 @@
     background: var(--danger-fill-bg, #d93b3b);
     font-size: 9px;
     line-height: 1;
-  }
-
-  /* 无数字的纯红点（新版本提示）：沿用上面那套定位与 2px 描边，只把尺寸收成圆点。
-     同样走 --danger-fill-bg 实色变量，APK 里混色回退后依然可见。 */
-  .mobile-bottom-nav__badge--dot {
-    min-width: 0;
-    width: 8px;
-    height: 8px;
-    padding: 0;
-    left: calc(50% + 7px);
   }
 
   @media (prefers-reduced-motion: reduce) {

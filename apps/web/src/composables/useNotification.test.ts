@@ -97,7 +97,10 @@ describe('useNotification.fetchList', () => {
     user.preferences.notificationsBrowser = true;
     getUnreadCount
       .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 1, byType: { todo_reminder: 1 } } })
-      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 2, byType: { todo_reminder: 2 } } });
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { unreadTotal: 3, byType: { todo_reminder: 2, community_chat: 1 } },
+      });
     getNotificationList
       .mockResolvedValueOnce({
         status: 200,
@@ -108,9 +111,17 @@ describe('useNotification.fetchList', () => {
         data: {
           items: [
             { id: 'new', title: '新提醒', content: '待办内容', isRead: 0, link: '/inbox' },
+            {
+              id: 'chat-new',
+              title: '聊天室有新消息',
+              content: '有人回复了你',
+              isRead: 0,
+              link: '/community-chat?message=message-1',
+              meta: JSON.stringify({ delivery: 'in_app_only' }),
+            },
             { id: 'old', title: '旧提醒', isRead: 0 },
           ],
-          total: 2,
+          total: 3,
         },
       });
 

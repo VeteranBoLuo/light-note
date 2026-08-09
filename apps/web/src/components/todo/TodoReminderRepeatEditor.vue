@@ -229,13 +229,15 @@
 
   .todo-reminder-repeat__segment {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding: 3px;
     border-radius: 10px;
     background: var(--workspace-panel-bg-color);
   }
 
   .todo-reminder-repeat__segment :deep(.b_btn) {
+    width: 100%;
+    min-width: 0;
     border: 1px solid transparent;
     background: transparent;
   }
@@ -292,6 +294,14 @@
   }
 
   @media (max-width: 767px) {
+    .todo-reminder-repeat__segment :deep(.b_btn) {
+      height: auto;
+      min-height: 44px;
+      padding-block: 6px;
+      line-height: 1.35;
+      white-space: normal;
+    }
+
     .todo-reminder-repeat__grid {
       grid-template-columns: 1fr;
     }

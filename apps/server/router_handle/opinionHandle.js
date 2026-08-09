@@ -13,10 +13,18 @@ const OPINION_STATUS = {
 export const recordOpinion = async (req, res) => {
   const userId = req.user?.id;
   const insertSql = 'INSERT INTO opinion SET ?';
+  const type = String(req.body?.type || '').trim();
+  const content = String(req.body?.content || '').trim();
+  if (!type) {
+    return res.send(resultData(null, 400, '请选择反馈类型'));
+  }
+  if (content.length < 6 || content.length > 500) {
+    return res.send(resultData(null, 400, '反馈内容需为 6 至 500 个字符'));
+  }
   // 字段白名单:此前 params = req.body 整体入库(mass-assignment),请求体可直写任意列(如 reply_content/status)
   const params = {
-    type: req.body?.type,
-    content: req.body?.content,
+    type,
+    content,
     imgArray: req.body?.imgArray,
     phone: req.body?.phone,
     userId,
@@ -68,7 +76,7 @@ export const getOpinionList = async (req, res) => {
 
     if (filters.key) {
       whereClauses.push(
-        '(u.alias LIKE ? OR o.phone LIKE ? OR o.content LIKE ? OR o.type LIKE ? OR COALESCE(o.reply_content, \'\') LIKE ?)',
+        "(u.alias LIKE ? OR o.phone LIKE ? OR o.content LIKE ? OR o.type LIKE ? OR COALESCE(o.reply_content, '') LIKE ?)",
       );
       const keyValue = `%${filters.key}%`;
       params.push(keyValue, keyValue, keyValue, keyValue, keyValue);
@@ -103,7 +111,7 @@ export const getOpinionList = async (req, res) => {
 
         if (filters.key) {
           totalQuery +=
-            ' AND (u.alias LIKE ? OR o.phone LIKE ? OR o.content LIKE ? OR o.type LIKE ? OR COALESCE(o.reply_content, \'\') LIKE ?)';
+            " AND (u.alias LIKE ? OR o.phone LIKE ? OR o.content LIKE ? OR o.type LIKE ? OR COALESCE(o.reply_content, '') LIKE ?)";
           const keyValue = `%${filters.key}%`;
           totalParams.push(keyValue, keyValue, keyValue, keyValue, keyValue);
         }

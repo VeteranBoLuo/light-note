@@ -34,11 +34,7 @@
       placement="bottom-right"
       overlay-class-name="ai-result-actions-menu"
     >
-      <BButton
-        class="ai-result-actions__text"
-        :disabled="busy || !messageId"
-        :aria-label="t('ai.resultActions.more')"
-      >
+      <BButton class="ai-result-actions__text" :disabled="busy || !messageId" :aria-label="t('ai.resultActions.more')">
         <SvgIcon :src="icon.common.more" size="14" aria-hidden="true" />
         {{ t('ai.resultActions.more') }}
       </BButton>
@@ -998,22 +994,6 @@
 
   .ai-result-reuse__receipt {
     color: var(--resource-note-color);
-  }
-
-  :global(.chat-wrapper.is-narrow-520) .ai-result-actions {
-    width: 100%;
-    margin: 0 0 10px;
-  }
-
-  :global(.chat-wrapper.is-narrow-520) .ai-result-actions__button,
-  :global(.chat-wrapper.is-narrow-520) .ai-result-actions__text {
-    min-height: 44px;
-    padding-inline: 7px;
-  }
-
-  :global(.chat-wrapper.is-narrow-520) .ai-result-reuse__preview dl > div {
-    grid-template-columns: 1fr;
-    gap: 2px;
   }
 
   @media (max-width: 600px), (pointer: coarse) {

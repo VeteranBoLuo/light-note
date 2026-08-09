@@ -26,7 +26,7 @@
         @replace-all="replaceAllRichFindMatches"
         @close="closeRichFind"
       />
-      <div v-auto-scrollbar class="note-editor-scroll">
+      <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
@@ -129,6 +129,68 @@
         </div>
       </div>
     </template>
+    <BUpload
+      v-if="currentType === 'html'"
+      ref="richMediaTextImageInputRef"
+      accept="image/*"
+      :multiple="false"
+      raw-file
+      :max-total-size="null"
+      triggerless
+      @change="onRichMediaTextImagePicked"
+    />
+    <BPopover
+      v-if="currentType === 'html' && !readonly"
+      v-model:open="richMediaTextToolbarVisible"
+      class="rich-media-text-anchor"
+      :style="richMediaTextAnchorStyle"
+      trigger="click"
+      placement="top-left"
+      overlay-class-name="rich-media-text-popover"
+      @open-change="handleRichMediaTextToolbarOpenChange"
+    >
+      <span aria-hidden="true"></span>
+      <template #content>
+        <div class="rich-media-text-toolbar" role="toolbar" :aria-label="t('noteDetail.editor.mediaTextSettings')">
+          <div class="rich-media-text-toolbar__heading">
+            <SvgIcon :src="icon.noteDetail.toolbar.mediaText" size="18" aria-hidden="true" />
+            <strong>{{ t('noteDetail.editor.mediaText') }}</strong>
+          </div>
+          <label class="rich-media-text-toolbar__field">
+            <span>{{ t('noteDetail.editor.mediaTextPosition') }}</span>
+            <BSelect
+              v-model:value="richMediaTextPosition"
+              :options="richMediaTextPositionOptions"
+              :aria-label="t('noteDetail.editor.mediaTextPosition')"
+              @change="applyRichMediaTextPosition"
+            />
+          </label>
+          <label class="rich-media-text-toolbar__field">
+            <span>{{ t('noteDetail.editor.mediaTextImageWidth') }}</span>
+            <BSelect
+              v-model:value="richMediaTextWidth"
+              :options="richMediaTextWidthOptions"
+              :aria-label="t('noteDetail.editor.mediaTextImageWidth')"
+              @change="applyRichMediaTextWidth"
+            />
+          </label>
+          <div class="rich-media-text-toolbar__actions">
+            <BButton size="small" :disabled="richMediaTextUploading" @click="replaceRichMediaTextImage">
+              <SvgIcon :src="icon.noteDetail.toolbar.image" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.mediaTextReplaceImage') }}
+            </BButton>
+            <BButton size="small" :disabled="richMediaTextUploading" @click="addRichMediaTextItem">
+              <SvgIcon :src="icon.noteDetail.toolbar.insert" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.mediaTextAddGroup') }}
+            </BButton>
+            <BButton size="small" type="danger" @click="deleteRichMediaTextItem">
+              <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.mediaTextDeleteGroup') }}
+            </BButton>
+          </div>
+        </div>
+      </template>
+    </BPopover>
     <BPopover
       v-if="!isMobile"
       v-model:open="inlineMentionVisible"
@@ -174,12 +236,40 @@
       />
     </BModal>
     <BModal
-      v-model:visible="markdownShortcutsVisible"
+      v-model:visible="shortcutHelpVisible"
       :title="t('noteDetail.editor.shortcutsTitle')"
-      width="420px"
+      width="min(560px, calc(100vw - 24px))"
       :show-footer="false"
     >
-      <p class="markdown-shortcuts-copy">{{ t('noteDetail.editor.shortcutsBody') }}</p>
+      <div class="note-shortcuts">
+        <div class="note-shortcuts__intro">
+          <span class="note-shortcuts__intro-icon" aria-hidden="true">
+            <SvgIcon :src="icon.settings.shortcuts" size="22" />
+          </span>
+          <div>
+            <strong>{{ shortcutHelpModeLabel }}</strong>
+            <p>{{ t('noteDetail.editor.shortcutsHint') }}</p>
+          </div>
+        </div>
+
+        <section v-for="section in shortcutHelpSections" :key="section.key" class="note-shortcuts__section">
+          <h3>{{ section.title }}</h3>
+          <dl class="note-shortcuts__list">
+            <div v-for="item in section.items" :key="item.key" class="note-shortcuts__row">
+              <dt>
+                <span>{{ item.label }}</span>
+                <small v-if="item.description">{{ item.description }}</small>
+              </dt>
+              <dd>
+                <template v-for="(keys, index) in item.keys" :key="keys">
+                  <span v-if="index" class="note-shortcuts__or">/</span>
+                  <kbd>{{ keys }}</kbd>
+                </template>
+              </dd>
+            </div>
+          </dl>
+        </section>
+      </div>
     </BModal>
     <BModal
       v-model:visible="richMermaidEditorVisible"
@@ -250,6 +340,54 @@
           </BButton>
           <BButton @click="richColorDialogVisible = false">{{ t('common.cancel') }}</BButton>
           <BButton type="primary" @click="applyRichCustomColor">{{ t('noteDetail.editor.applyColor') }}</BButton>
+        </div>
+      </div>
+    </BModal>
+    <BModal
+      v-model:visible="richTextGradientDialogVisible"
+      :title="t('noteDetail.editor.gradientText')"
+      width="460px"
+      :show-footer="false"
+      :mask-closable="false"
+      @close="closeRichTextGradientDialog"
+    >
+      <div class="rich-text-gradient-dialog">
+        <p>{{ t('noteDetail.editor.gradientTextHint') }}</p>
+        <div class="rich-text-gradient-dialog__preview" :aria-label="t('noteDetail.editor.gradientTextPreview')">
+          <span class="ln-text-gradient" :style="richTextGradientPreviewStyle">
+            {{ t('noteDetail.editor.gradientTextPreview') }}
+          </span>
+        </div>
+        <div class="rich-text-gradient-dialog__fields">
+          <label for="note-rich-gradient-from">{{ t('noteDetail.editor.gradientStartColor') }}</label>
+          <BInput
+            id="note-rich-gradient-from"
+            v-model:value="richTextGradientFrom"
+            :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
+            :maxlength="7"
+          />
+          <label for="note-rich-gradient-to">{{ t('noteDetail.editor.gradientEndColor') }}</label>
+          <BInput
+            id="note-rich-gradient-to"
+            v-model:value="richTextGradientTo"
+            :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
+            :maxlength="7"
+          />
+          <label id="note-rich-gradient-direction-label">{{ t('noteDetail.editor.gradientDirection') }}</label>
+          <BSelect
+            v-model:value="richTextGradientAngle"
+            :options="richTextGradientDirectionOptions"
+            :aria-label="t('noteDetail.editor.gradientDirection')"
+          />
+        </div>
+        <div class="rich-text-gradient-dialog__actions">
+          <BButton :disabled="!richTextGradientEditingExisting" @click="removeRichTextGradient">
+            {{ t('noteDetail.editor.removeGradientText') }}
+          </BButton>
+          <BButton @click="richTextGradientDialogVisible = false">{{ t('common.cancel') }}</BButton>
+          <BButton type="primary" @click="applyRichTextGradient">
+            {{ t('noteDetail.editor.applyGradientText') }}
+          </BButton>
         </div>
       </div>
     </BModal>
@@ -443,6 +581,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
@@ -523,6 +662,23 @@
     type NoteFormat,
     type NoteFormatConversionReport,
   } from '@/utils/noteFormatConversion';
+  import {
+    createRichMediaTextBlockHtml,
+    createRichMediaTextItemHtml,
+    normalizeRichMediaTextHtml,
+    normalizeRichMediaTextPosition,
+    normalizeRichMediaTextWidth,
+    type RichMediaTextPosition,
+    type RichMediaTextWidth,
+  } from '@/utils/richMediaText';
+  import {
+    DEFAULT_TEXT_GRADIENT,
+    applyTextGradientConfig,
+    createTextGradientHtml,
+    normalizeTextGradientConfig,
+    readTextGradientConfig,
+    type TextGradientAngle,
+  } from '@/utils/richTextEffects';
 
   // 富文本笔记不需要下载 CodeMirror；仅在真正进入 Markdown 编辑区时加载。
   const MarkdownCodeMirror = defineAsyncComponent(() => import('./MarkdownCodeMirror.vue'));
@@ -660,6 +816,13 @@
     '#dbeafe',
   ] as const;
   let richColorBookmark: unknown = null;
+  const richTextGradientDialogVisible = ref(false);
+  const richTextGradientFrom = ref(DEFAULT_TEXT_GRADIENT.from);
+  const richTextGradientTo = ref(DEFAULT_TEXT_GRADIENT.to);
+  const richTextGradientAngle = ref<TextGradientAngle>(DEFAULT_TEXT_GRADIENT.angle as TextGradientAngle);
+  const richTextGradientEditingExisting = ref(false);
+  let richTextGradientBookmark: unknown = null;
+  let richTextGradientTarget: HTMLElement | null = null;
   const richMermaidEditorVisible = ref(false);
   const richMermaidSource = ref('');
   let richMermaidSourceElement: HTMLElement | null = null;
@@ -669,6 +832,25 @@
   const router = useRouter();
   const { t, locale } = useI18n();
   const isMobile = computed(() => bookmark.isMobile);
+  const richTextGradientDirectionOptions = computed(() => [
+    { value: '90deg', label: t('noteDetail.editor.gradientDirectionHorizontal') },
+    { value: '135deg', label: t('noteDetail.editor.gradientDirectionDiagonal') },
+    { value: '180deg', label: t('noteDetail.editor.gradientDirectionVertical') },
+    { value: '45deg', label: t('noteDetail.editor.gradientDirectionReverseDiagonal') },
+  ]);
+  const richTextGradientPreviewStyle = computed<Record<string, string>>(() => {
+    const config =
+      normalizeTextGradientConfig({
+        from: richTextGradientFrom.value,
+        to: richTextGradientTo.value,
+        angle: richTextGradientAngle.value,
+      }) || DEFAULT_TEXT_GRADIENT;
+    return {
+      '--ln-gradient-from': config.from,
+      '--ln-gradient-to': config.to,
+      '--ln-gradient-angle': config.angle,
+    };
+  });
   const usesNativeTextSelectionMenu = computed(() => bookmark.isMobile || bookmark.isTouchDevice);
   // 普通游客只能阅读已有引用；管理员进入“游客内容维护”工作区时沿用现有维护权限放行。
   const canEditResourceMentions = computed(
@@ -724,6 +906,8 @@
     () => props.type,
     (val) => {
       if (mobileImageSettingsVisible.value) closeMobileImageSettings();
+      closeRichMediaTextToolbar();
+      if (currentType.value === 'html' && val !== 'html') prepareRichEditorForUnmount();
       currentType.value = val;
     },
   );
@@ -744,6 +928,7 @@
     () => props.noteId,
     () => {
       if (mobileImageSettingsVisible.value) closeMobileImageSettings();
+      closeRichMediaTextToolbar();
       // 新建草稿拿到真实 id 后必须重新发布同一批链接，让父级用真实上下文批量解析。
       lastPublishedResourceRefSignature = '';
       if (currentType.value === 'markdown') {
@@ -763,6 +948,30 @@
   const mdContent = ref('');
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
+  type RichMediaTextUploadContext = { editor: any; noteId: string };
+  type RichMediaTextUploadIntent =
+    | ({ kind: 'insert' } & RichMediaTextUploadContext)
+    | ({ kind: 'add'; block: HTMLElement; item: HTMLElement } & RichMediaTextUploadContext)
+    | ({ kind: 'replace'; block: HTMLElement; item: HTMLElement } & RichMediaTextUploadContext);
+  const richMediaTextImageInputRef = ref<{ open: () => void } | null>(null);
+  const richMediaTextUploading = ref(false);
+  const richMediaTextUploadIntent = shallowRef<RichMediaTextUploadIntent | null>(null);
+  const richMediaTextToolbarVisible = ref(false);
+  const richMediaTextAnchorStyle = ref<Record<string, string>>({});
+  const richMediaTextBlock = shallowRef<HTMLElement | null>(null);
+  const richMediaTextItem = shallowRef<HTMLElement | null>(null);
+  const richMediaTextPosition = ref<RichMediaTextPosition>('left');
+  const richMediaTextWidth = ref<RichMediaTextWidth>(36);
+  const richMediaTextPositionOptions = computed(() => [
+    { value: 'left', label: t('noteDetail.editor.mediaTextPositionLeft') },
+    { value: 'right', label: t('noteDetail.editor.mediaTextPositionRight') },
+  ]);
+  const richMediaTextWidthOptions = computed(() =>
+    ([30, 36, 42] as RichMediaTextWidth[]).map((value) => ({
+      value,
+      label: t('noteDetail.editor.mediaTextWidthOption', { width: value }),
+    })),
+  );
   type MobileImageTarget =
     { kind: 'markdown'; imageIndex: number } | { kind: 'html'; editor: any; element: HTMLImageElement };
   const mobileImageSettingsVisible = ref(false);
@@ -1165,11 +1374,32 @@
     };
   }
 
+  function resetRichFindState() {
+    richFindSignature.value = '';
+    richFindCount.value = 0;
+  }
+
   function clearRichFindMatches(select = false) {
     getRichSearchReplaceApi()?.done(select);
     mdCodeMirrorRef.value?.clearSearch();
-    richFindSignature.value = '';
-    richFindCount.value = 0;
+    resetRichFindState();
+  }
+
+  function prepareRichEditorForUnmount(editor = editorRef.value) {
+    if (!editor) return;
+    // TinyMCE 的 remove 事件发生时，selection/searchreplace 已进入销毁流程；
+    // 此时再调用 searchreplace.done() 会访问已经脱离 DOM 的 marker.parentNode。
+    // 必须在 Vue 切走 HTML 分支前清理，remove 回调只重置无 DOM 副作用的状态。
+    if (richFindVisible.value || richFindSignature.value) {
+      try {
+        getRichSearchReplaceApi(editor)?.done(false);
+      } catch {
+        // 路由可能正在同步卸载编辑器；销毁阶段不再尝试修复选区 DOM。
+      }
+    }
+    resetRichFindState();
+    richFindVisible.value = false;
+    if (editorRef.value === editor) editorRef.value = null;
   }
 
   function openRichFind(editor = editorRef.value) {
@@ -1972,7 +2202,451 @@
     if (file) await uploadMarkdownImage(file, file.name);
   }
 
-  const markdownShortcutsVisible = ref(false);
+  function notifyRichMediaTextMutation(editor = editorRef.value) {
+    if (!editor) return;
+    editor.nodeChanged?.();
+    editor.setDirty?.(true);
+    if (editor.dispatch) editor.dispatch('input');
+    else editor.fire?.('input');
+  }
+
+  function getLiveRichMediaTextTarget(block: HTMLElement | null, item: HTMLElement | null) {
+    const body = editorRef.value?.getBody?.() as HTMLElement | null;
+    if (
+      !body ||
+      !block?.isConnected ||
+      !item?.isConnected ||
+      !body.contains(block) ||
+      item.parentElement !== block ||
+      !block.classList.contains('ln-media-text') ||
+      !item.classList.contains('ln-media-text__item')
+    ) {
+      return null;
+    }
+    return { block, item };
+  }
+
+  function decorateRichMediaTextCaptions(editor = editorRef.value) {
+    const body = editor?.getBody?.() as HTMLElement | null;
+    if (!body) return;
+    const decorate = () => {
+      body.querySelectorAll<HTMLElement>('.ln-media-text__content').forEach((caption) => {
+        if (String(caption.textContent || '').trim()) caption.removeAttribute('data-mce-placeholder');
+        else caption.setAttribute('data-mce-placeholder', t('noteDetail.editor.mediaTextTextPlaceholder'));
+      });
+    };
+    if (editor.undoManager?.ignore) editor.undoManager.ignore(decorate);
+    else decorate();
+  }
+
+  function clearRichMediaTextSelection() {
+    richMediaTextBlock.value?.removeAttribute('data-ln-media-selected');
+    richMediaTextItem.value?.removeAttribute('data-ln-media-item-selected');
+  }
+
+  function closeRichMediaTextToolbar() {
+    clearRichMediaTextSelection();
+    richMediaTextToolbarVisible.value = false;
+    richMediaTextBlock.value = null;
+    richMediaTextItem.value = null;
+  }
+
+  function handleRichMediaTextToolbarOpenChange(open: boolean) {
+    if (!open) closeRichMediaTextToolbar();
+  }
+
+  function openRichMediaTextToolbar(block: HTMLElement, item: HTMLElement, anchor?: { x: number; y: number }) {
+    if (props.readonly || !getLiveRichMediaTextTarget(block, item)) return;
+    const wasSameItem = richMediaTextItem.value === item;
+    clearRichMediaTextSelection();
+    richMediaTextBlock.value = block;
+    richMediaTextItem.value = item;
+    block.setAttribute('data-ln-media-selected', 'true');
+    item.setAttribute('data-ln-media-item-selected', 'true');
+    richMediaTextPosition.value = normalizeRichMediaTextPosition(block.getAttribute('data-ln-media-position'));
+    richMediaTextWidth.value = normalizeRichMediaTextWidth(block.getAttribute('data-ln-media-width'));
+
+    const rect = item.getBoundingClientRect();
+    richMediaTextAnchorStyle.value = {
+      position: 'fixed',
+      left: `${anchor?.x ?? Math.max(8, rect.left + 12)}px`,
+      top: `${anchor?.y ?? Math.max(8, rect.top + 8)}px`,
+      width: '1px',
+      height: '1px',
+      pointerEvents: 'none',
+      zIndex: '2',
+    };
+    if (richMediaTextToolbarVisible.value && !wasSameItem) {
+      richMediaTextToolbarVisible.value = false;
+      void nextTick().then(() => {
+        if (richMediaTextItem.value === item) richMediaTextToolbarVisible.value = true;
+      });
+      return;
+    }
+    richMediaTextToolbarVisible.value = true;
+  }
+
+  function openRichMediaTextInsert() {
+    const editor = editorRef.value;
+    if (!editor || props.readonly || richMediaTextUploading.value) return;
+    richMediaTextUploadIntent.value = { kind: 'insert', editor, noteId: props.noteId || '' };
+    richMediaTextImageInputRef.value?.open();
+  }
+
+  function replaceRichMediaTextImage() {
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!target || richMediaTextUploading.value) return;
+    richMediaTextUploadIntent.value = {
+      kind: 'replace',
+      ...target,
+      editor: editorRef.value,
+      noteId: props.noteId || '',
+    };
+    richMediaTextImageInputRef.value?.open();
+  }
+
+  function addRichMediaTextItem() {
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!target || richMediaTextUploading.value) return;
+    richMediaTextUploadIntent.value = {
+      kind: 'add',
+      ...target,
+      editor: editorRef.value,
+      noteId: props.noteId || '',
+    };
+    richMediaTextImageInputRef.value?.open();
+  }
+
+  function focusRichMediaTextCaption(editor: any, item: HTMLElement) {
+    const caption = item.querySelector<HTMLElement>('.ln-media-text__content');
+    if (!caption) return;
+    const paragraph = caption.querySelector<HTMLElement>('p') || caption;
+    editor.focus?.();
+    editor.selection?.select?.(paragraph, true);
+    editor.selection?.collapse?.(false);
+    editor.selection?.scrollIntoView?.(item);
+  }
+
+  function richMediaTextImageAlt(fileName: string) {
+    return String(fileName || t('note.mdImageAlt'))
+      .replace(/\.[^.]+$/u, '')
+      .replace(/[\r\n]+/gu, ' ')
+      .trim();
+  }
+
+  async function onRichMediaTextImagePicked(files: File[]) {
+    const file = files[0];
+    const intent = richMediaTextUploadIntent.value;
+    if (!file || !intent || richMediaTextUploading.value) return;
+    richMediaTextUploading.value = true;
+    try {
+      const imageUrl =
+        props.imageUploadMode === 'base64'
+          ? await readImageAsDataUrl(file)
+          : await uploadNoteImageFile(file, file.name || 'note-image.png');
+      const editor = editorRef.value;
+      const body = editor?.getBody?.() as HTMLElement | null;
+      if (!editor || !body || editor !== intent.editor || (intent.noteId && intent.noteId !== props.noteId)) {
+        message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
+        return;
+      }
+      const imageAlt = richMediaTextImageAlt(file.name);
+      let targetBlock: HTMLElement | null = null;
+      let targetItem: HTMLElement | null = null;
+
+      if (intent.kind === 'insert') {
+        const token = `ln-media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const blockHtml = createRichMediaTextBlockHtml(imageUrl, imageAlt).replace(
+          '<section class="ln-media-text"',
+          `<section class="ln-media-text" data-ln-media-inserting="${token}"`,
+        );
+        editor.focus();
+        editor.undoManager?.transact(() => editor.insertContent(blockHtml));
+        targetBlock = body.querySelector<HTMLElement>(`section.ln-media-text[data-ln-media-inserting="${token}"]`);
+        targetBlock?.removeAttribute('data-ln-media-inserting');
+        targetItem = targetBlock?.querySelector<HTMLElement>('.ln-media-text__item') || null;
+        if (targetBlock && targetItem) {
+          void recordOperation({ module: '笔记', operation: '插入图文组合' });
+        }
+      } else {
+        const liveTarget = getLiveRichMediaTextTarget(intent.block, intent.item);
+        if (!liveTarget) {
+          message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
+          return;
+        }
+        targetBlock = liveTarget.block;
+        if (intent.kind === 'replace') {
+          targetItem = liveTarget.item;
+          const image = targetItem.querySelector<HTMLImageElement>('.ln-media-text__media img');
+          if (!image) throw new Error('RICH_MEDIA_TEXT_IMAGE_MISSING');
+          editor.undoManager?.transact(() => {
+            image.setAttribute('src', imageUrl);
+            image.setAttribute('alt', imageAlt);
+            image.removeAttribute('style');
+            image.removeAttribute('width');
+            image.removeAttribute('height');
+            image.removeAttribute('data-ln-size');
+          });
+        } else {
+          const holder = editor.getDoc().createElement('div');
+          holder.innerHTML = createRichMediaTextItemHtml(imageUrl, imageAlt);
+          targetItem = holder.firstElementChild as HTMLElement | null;
+          if (!targetItem) throw new Error('RICH_MEDIA_TEXT_ITEM_CREATE_FAILED');
+          editor.undoManager?.transact(() => liveTarget.item.after(targetItem as HTMLElement));
+        }
+      }
+
+      if (!targetBlock || !targetItem) throw new Error('RICH_MEDIA_TEXT_INSERT_FAILED');
+      decorateRichMediaTextCaptions(editor);
+      notifyRichMediaTextMutation(editor);
+      focusRichMediaTextCaption(editor, targetItem);
+      void nextTick().then(() => openRichMediaTextToolbar(targetBlock as HTMLElement, targetItem as HTMLElement));
+    } catch {
+      message.warning(t('note.uploadFailed'));
+    } finally {
+      richMediaTextUploading.value = false;
+      richMediaTextUploadIntent.value = null;
+    }
+  }
+
+  function applyRichMediaTextPosition(value: unknown) {
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!target) return closeRichMediaTextToolbar();
+    const position = normalizeRichMediaTextPosition(value);
+    richMediaTextPosition.value = position;
+    editorRef.value?.undoManager?.transact(() => target.block.setAttribute('data-ln-media-position', position));
+    notifyRichMediaTextMutation();
+  }
+
+  function applyRichMediaTextWidth(value: unknown) {
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!target) return closeRichMediaTextToolbar();
+    const width = normalizeRichMediaTextWidth(value);
+    richMediaTextWidth.value = width;
+    editorRef.value?.undoManager?.transact(() => target.block.setAttribute('data-ln-media-width', String(width)));
+    notifyRichMediaTextMutation();
+  }
+
+  function deleteRichMediaTextItem() {
+    const editor = editorRef.value;
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    if (!editor || !target) return closeRichMediaTextToolbar();
+    const items = Array.from(target.block.children).filter(
+      (child): child is HTMLElement => child instanceof HTMLElement && child.classList.contains('ln-media-text__item'),
+    );
+    const itemIndex = items.indexOf(target.item);
+    const nextItem = items[itemIndex + 1] || items[itemIndex - 1] || null;
+    const nextBlock = nextItem ? target.block : null;
+    closeRichMediaTextToolbar();
+
+    editor.undoManager?.transact(() => {
+      if (nextItem) {
+        target.item.remove();
+        return;
+      }
+      const body = editor.getBody() as HTMLElement;
+      let paragraph = target.block.nextElementSibling as HTMLElement | null;
+      if (!paragraph?.matches('p,div')) {
+        paragraph = editor.dom.create('p', {}) as HTMLElement;
+        paragraph.appendChild(editor.dom.create('br', { 'data-mce-bogus': '1' }));
+        target.block.after(paragraph);
+      }
+      target.block.remove();
+      editor.selection?.setCursorLocation?.(paragraph, 0);
+      if (!body.children.length) body.appendChild(paragraph);
+    });
+    notifyRichMediaTextMutation(editor);
+    if (nextBlock && nextItem) {
+      focusRichMediaTextCaption(editor, nextItem);
+      void nextTick().then(() => openRichMediaTextToolbar(nextBlock, nextItem));
+    }
+  }
+
+  interface NoteShortcutItem {
+    key: string;
+    label: string;
+    keys: string[];
+    description?: string;
+  }
+
+  interface NoteShortcutSection {
+    key: string;
+    title: string;
+    items: NoteShortcutItem[];
+  }
+
+  type RepeatableEditorMode = 'html' | 'markdown';
+
+  interface StoredTextGradient {
+    from: string;
+    to: string;
+    angle: TextGradientAngle;
+  }
+
+  interface RepeatableEditorAction {
+    key: string;
+    gradient?: StoredTextGradient;
+  }
+
+  const repeatableEditorActions = ref<Record<RepeatableEditorMode, RepeatableEditorAction | null>>({
+    html: null,
+    markdown: null,
+  });
+  const currentRepeatableAction = computed(() => repeatableEditorActions.value[currentType.value]);
+
+  function rememberRepeatableAction(mode: RepeatableEditorMode, action: RepeatableEditorAction) {
+    repeatableEditorActions.value = { ...repeatableEditorActions.value, [mode]: action };
+  }
+
+  function repeatableActionLabel(action: RepeatableEditorAction | null) {
+    if (!action) return '';
+    if (/^heading[1-6]$/u.test(action.key)) {
+      return t(`noteDetail.editor.heading${action.key.slice(-1)}`);
+    }
+    if (action.key.startsWith('textColor:')) return t('noteDetail.editor.textColor');
+    if (action.key.startsWith('backgroundColor:')) return t('noteDetail.editor.backgroundColor');
+    const labelKeys: Record<string, string> = {
+      paragraph: 'noteDetail.editor.paragraph',
+      bold: 'noteDetail.editor.bold',
+      italic: 'noteDetail.editor.italic',
+      underline: 'noteDetail.editor.underline',
+      strike: 'noteDetail.editor.strike',
+      inlineCode: 'noteDetail.editor.inlineCode',
+      quote: 'noteDetail.editor.quote',
+      todo: 'noteDetail.editor.todo',
+      bulletList: 'noteDetail.editor.bulletList',
+      orderedList: 'noteDetail.editor.orderedList',
+      alignLeft: 'noteDetail.editor.alignLeft',
+      alignCenter: 'noteDetail.editor.alignCenter',
+      alignRight: 'noteDetail.editor.alignRight',
+      alignJustify: 'noteDetail.editor.alignJustify',
+      indent: 'noteDetail.editor.indent',
+      outdent: 'noteDetail.editor.outdent',
+      clearFormatting: 'noteDetail.editor.clearFormatting',
+      textGradient: 'noteDetail.editor.gradientText',
+      removeTextColor: 'noteDetail.editor.removeTextColor',
+      removeBackgroundColor: 'noteDetail.editor.removeBackgroundColor',
+      removeTextGradient: 'noteDetail.editor.removeGradientText',
+    };
+    return labelKeys[action.key] ? t(labelKeys[action.key]) : action.key;
+  }
+
+  const repeatLastActionDescription = computed(() => {
+    const action = currentRepeatableAction.value;
+    return action
+      ? t('noteDetail.editor.repeatLastReady', { action: repeatableActionLabel(action) })
+      : t('noteDetail.editor.repeatLastEmpty');
+  });
+
+  const shortcutHelpVisible = ref(false);
+  const shortcutHelpModeLabel = computed(() =>
+    currentType.value === 'markdown'
+      ? t('noteDetail.editor.shortcutsModeMarkdown')
+      : t('noteDetail.editor.shortcutsModeRichText'),
+  );
+  const shortcutHelpSections = computed<NoteShortcutSection[]>(() => {
+    const commonItems: NoteShortcutItem[] = [
+      ...(props.context === 'note'
+        ? [
+            {
+              key: 'save',
+              label: t('common.save'),
+              keys: ['Ctrl / ⌘ + S'],
+            },
+          ]
+        : []),
+      {
+        key: 'undo',
+        label: t('noteDetail.editor.undo'),
+        keys: ['Ctrl / ⌘ + Z'],
+      },
+      {
+        key: 'redo',
+        label: t('noteDetail.editor.redo'),
+        description: t('noteDetail.editor.redoDescription'),
+        keys: ['Ctrl / ⌘ + Shift + Z', 'Ctrl + Y'],
+      },
+      {
+        key: 'repeatLastAction',
+        label: t('noteDetail.editor.repeatLast'),
+        description: t('noteDetail.editor.repeatLastDescription'),
+        keys: ['F4', 'Ctrl / ⌘ + Alt + R'],
+      },
+      {
+        key: 'find',
+        label: t('noteDetail.editor.findReplace'),
+        keys: ['Ctrl / ⌘ + F'],
+      },
+    ];
+    const formattingItems: NoteShortcutItem[] = [
+      {
+        key: 'bold',
+        label: t('noteDetail.editor.bold'),
+        keys: ['Ctrl / ⌘ + B'],
+      },
+      {
+        key: 'italic',
+        label: t('noteDetail.editor.italic'),
+        keys: ['Ctrl / ⌘ + I'],
+      },
+      ...(currentType.value === 'html'
+        ? [
+            {
+              key: 'underline',
+              label: t('noteDetail.editor.underline'),
+              keys: ['Ctrl / ⌘ + U'],
+            },
+          ]
+        : []),
+      {
+        key: 'link',
+        label: t('noteDetail.editor.link'),
+        keys: ['Ctrl / ⌘ + K'],
+      },
+      ...(currentType.value === 'markdown'
+        ? [
+            {
+              key: 'strike',
+              label: t('noteDetail.editor.strike'),
+              keys: ['Ctrl / ⌘ + Shift + X'],
+            },
+            {
+              key: 'inlineCode',
+              label: t('noteDetail.editor.inlineCode'),
+              keys: ['Ctrl / ⌘ + E'],
+            },
+            {
+              key: 'orderedList',
+              label: t('noteDetail.editor.orderedList'),
+              keys: ['Ctrl / ⌘ + Shift + 7'],
+            },
+            {
+              key: 'bulletList',
+              label: t('noteDetail.editor.bulletList'),
+              keys: ['Ctrl / ⌘ + Shift + 8'],
+            },
+            {
+              key: 'headings',
+              label: t('noteDetail.editor.heading1To6'),
+              keys: ['Ctrl / ⌘ + Alt + 1…6'],
+            },
+          ]
+        : []),
+    ];
+
+    return [
+      {
+        key: 'common',
+        title: t('noteDetail.editor.shortcutsCommon'),
+        items: commonItems,
+      },
+      {
+        key: 'formatting',
+        title: t('noteDetail.editor.shortcutsFormatting'),
+        items: formattingItems,
+      },
+    ];
+  });
 
   function toolbarAction(
     key: string,
@@ -2048,14 +2722,20 @@
           action('findReplace', t('noteDetail.editor.findReplace'), icon.noteDetail.toolbar.search, {
             dividerBefore: true,
           }),
-          action('markdownShortcuts', t('noteDetail.editor.shortcuts'), icon.noteDetail.toolbar.help),
         ]
       : [
-          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline),
+          action('insertMediaText', t('noteDetail.editor.mediaText'), icon.noteDetail.toolbar.mediaText, {
+            description: t('noteDetail.editor.mediaTextDescription'),
+            disabled: disabled || richMediaTextUploading.value,
+          }),
+          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline, {
+            dividerBefore: true,
+          }),
           action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
           action('textColorPicker', t('noteDetail.editor.textColor'), icon.noteDetail.toolbar.textColor, {
             dividerBefore: true,
           }),
+          action('textGradient', t('noteDetail.editor.gradientText'), icon.noteDetail.toolbar.gradientText),
           action(
             'backgroundColorPicker',
             t('noteDetail.editor.backgroundColor'),
@@ -2078,8 +2758,20 @@
       ? [
           action('redo', t('noteDetail.editor.redo'), icon.noteDetail.toolbar.redo, {
             disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canRedo : !state.canRedo),
+            description: t('noteDetail.editor.redoDescription'),
+            shortcut: 'Ctrl / ⌘ + Shift + Z / Ctrl + Y',
+          }),
+          toolbarAction('repeatLastAction', t('noteDetail.editor.repeatLast'), icon.noteDetail.toolbar.repeat, {
+            disabled: disabled || !currentRepeatableAction.value,
+            description: repeatLastActionDescription.value,
+            shortcut: 'F4 / Ctrl / ⌘ + Alt + R',
+          }),
+          toolbarAction('shortcuts', t('noteDetail.editor.shortcuts'), icon.settings.shortcuts, {
+            dividerBefore: true,
+            description: t('noteDetail.editor.shortcutsDescription'),
           }),
           action('italic', t('noteDetail.editor.italic'), icon.noteDetail.toolbar.italic, {
+            dividerBefore: true,
             selected: !isMarkdown && state.italic,
           }),
           ...listActions,
@@ -2091,18 +2783,33 @@
     return {
       undoAction: action('undo', t('noteDetail.editor.undo'), icon.noteDetail.toolbar.undo, {
         disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canUndo : !state.canUndo),
+        shortcut: 'Ctrl / ⌘ + Z',
       }),
       redoAction: action('redo', t('noteDetail.editor.redo'), icon.noteDetail.toolbar.redo, {
         disabled: disabled || (isMarkdown ? !markdownHistoryState.value.canRedo : !state.canRedo),
+        description: t('noteDetail.editor.redoDescription'),
+        shortcut: 'Ctrl / ⌘ + Shift + Z / Ctrl + Y',
       }),
+      repeatAction: toolbarAction(
+        'repeatLastAction',
+        t('noteDetail.editor.repeatLast'),
+        icon.noteDetail.toolbar.repeat,
+        {
+          disabled: disabled || !currentRepeatableAction.value,
+          description: repeatLastActionDescription.value,
+          shortcut: 'F4 / Ctrl / ⌘ + Alt + R',
+        },
+      ),
       headingAction: action('headingMenu', t('noteDetail.editor.headingMenu'), icon.noteDetail.toolbar.heading, {
         selected: !isMarkdown && /^h[1-6]$/u.test(state.block),
       }),
       boldAction: action('bold', t('noteDetail.editor.bold'), icon.noteDetail.toolbar.bold, {
         selected: !isMarkdown && state.bold,
+        shortcut: 'Ctrl / ⌘ + B',
       }),
       italicAction: action('italic', t('noteDetail.editor.italic'), icon.noteDetail.toolbar.italic, {
         selected: !isMarkdown && state.italic,
+        shortcut: 'Ctrl / ⌘ + I',
       }),
       listAction: action('listMenu', t('noteDetail.editor.list'), icon.noteDetail.toolbar.bulletList, {
         selected: !isMarkdown && (state.bulletList || state.orderedList),
@@ -2110,9 +2817,14 @@
       todoAction: action('todo', t('noteDetail.editor.todo'), icon.noteDetail.toolbar.todo, {
         selected: !isMarkdown && state.todo,
       }),
-      linkAction: action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link),
+      linkAction: action('link', t('noteDetail.editor.link'), icon.noteDetail.toolbar.link, {
+        shortcut: 'Ctrl / ⌘ + K',
+      }),
       insertAction: action('insertMenu', t('noteDetail.editor.insert'), icon.noteDetail.toolbar.insert),
       moreAction: action('moreMenu', t('noteDetail.editor.moreFormatting'), icon.noteDetail.toolbar.more),
+      shortcutsAction: toolbarAction('shortcuts', t('noteDetail.editor.shortcuts'), icon.settings.shortcuts, {
+        description: t('noteDetail.editor.shortcutsDescription'),
+      }),
       headingActions,
       listActions,
       insertActions,
@@ -2132,8 +2844,45 @@
     window.setTimeout(() => tryOpenTinyMceMention(editor), 0);
   }
 
-  function runMarkdownToolbarAction(key: string) {
+  const markdownRepeatableActionKeys = new Set([
+    'bold',
+    'italic',
+    'todo',
+    'bulletList',
+    'orderedList',
+    'paragraph',
+    'quote',
+    'strike',
+    'inlineCode',
+    ...Array.from({ length: 6 }, (_, index) => `heading${index + 1}`),
+  ]);
+  const richRepeatableActionKeys = new Set([
+    'bold',
+    'italic',
+    'underline',
+    'strike',
+    'todo',
+    'bulletList',
+    'orderedList',
+    'paragraph',
+    'alignLeft',
+    'alignCenter',
+    'alignRight',
+    'alignJustify',
+    'indent',
+    'outdent',
+    'clearFormatting',
+    'removeTextColor',
+    'removeBackgroundColor',
+    'removeTextGradient',
+    ...Array.from({ length: 6 }, (_, index) => `heading${index + 1}`),
+  ]);
+
+  function runMarkdownToolbarAction(key: string, options: { remember?: boolean } = {}) {
     if (props.readonly || mdView.value === 'preview') return;
+    if (options.remember !== false && markdownRepeatableActionKeys.has(key)) {
+      rememberRepeatableAction('markdown', { key });
+    }
     if (key === 'undo') return void mdCodeMirrorRef.value?.undo();
     if (key === 'redo') return void mdCodeMirrorRef.value?.redo();
     if (key === 'bold')
@@ -2164,20 +2913,22 @@
     if (key === 'insertCodeBlock') return void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock()));
     if (key.startsWith('insertDiagram:')) return insertDiagramTemplate(key.slice('insertDiagram:'.length));
     if (key === 'insertDivider') return void applyMarkdownEdit((input) => insertBlock(input, '---'));
-    if (key === 'markdownShortcuts') {
-      markdownShortcutsVisible.value = true;
-      return;
-    }
     if (key === 'findReplace') {
       openRichFind();
       return;
     }
   }
 
-  function runRichToolbarAction(key: string) {
+  function runRichToolbarAction(key: string, options: { remember?: boolean } = {}) {
     const editor = editorRef.value;
     if (!editor || props.readonly) return;
     editor.focus();
+    if (
+      options.remember !== false &&
+      (richRepeatableActionKeys.has(key) || key.startsWith('textColor:') || key.startsWith('backgroundColor:'))
+    ) {
+      rememberRepeatableAction('html', { key });
+    }
     if (key === 'undo') return editor.execCommand('Undo');
     if (key === 'redo') return editor.execCommand('Redo');
     if (key === 'bold') return editor.execCommand('Bold');
@@ -2192,12 +2943,14 @@
     if (key === 'link') return editor.execCommand('mceLink');
     if (key === 'insertTable') return editor.execCommand('mceInsertTableDialog');
     if (key === 'insertImage') return editor.execCommand('mceImage');
+    if (key === 'insertMediaText') return openRichMediaTextInsert();
     if (key === 'insertResource') return openRichResourceMentionPicker(editor);
     if (key === 'insertCodeBlock') return editor.execCommand('FormatBlock', false, 'pre');
     if (key.startsWith('insertDiagram:')) return insertHtmlDiagramTemplate(editor, key.slice('insertDiagram:'.length));
     if (key === 'insertDivider') return editor.insertContent('<hr><p></p>');
     if (key === 'insertEmoji') return editor.execCommand('mceEmoticons');
     if (key === 'textColorPicker') return openRichColorDialog('text', editor);
+    if (key === 'textGradient') return openRichTextGradientDialog(editor);
     if (key === 'backgroundColorPicker') return openRichColorDialog('background', editor);
     if (key.startsWith('textColor:')) {
       const value = key.slice('textColor:'.length);
@@ -2221,6 +2974,23 @@
     if (key === 'findReplace') return openRichFind(editor);
     if (key === 'sourceCode') return editor.execCommand('mceCodeEditor');
     if (key === 'wordCount') return editor.execCommand('mceWordCount');
+    if (key === 'removeTextColor') return editor.execCommand('mceRemoveTextcolor', 'forecolor');
+    if (key === 'removeBackgroundColor') return editor.execCommand('mceRemoveTextcolor', 'hilitecolor');
+    if (key === 'removeTextGradient') return removeRichTextGradientFromCurrentSelection(editor);
+  }
+
+  function repeatLastEditorAction() {
+    const action = currentRepeatableAction.value;
+    if (!action || props.readonly) return;
+    if (currentType.value === 'markdown') {
+      runMarkdownToolbarAction(action.key, { remember: false });
+      return;
+    }
+    if (action.key === 'textGradient' && action.gradient) {
+      applyRichTextGradientToCurrentSelection(action.gradient);
+      return;
+    }
+    runRichToolbarAction(action.key, { remember: false });
   }
 
   function openRichColorDialog(mode: RichColorMode, editor = editorRef.value) {
@@ -2249,6 +3019,9 @@
     restoreRichColorSelection(editor);
     const format = richColorMode.value === 'text' ? 'forecolor' : 'hilitecolor';
     editor.execCommand('mceRemoveTextcolor', format);
+    rememberRepeatableAction('html', {
+      key: richColorMode.value === 'text' ? 'removeTextColor' : 'removeBackgroundColor',
+    });
     richColorDialogVisible.value = false;
     richColorBookmark = null;
   }
@@ -2267,12 +3040,153 @@
     restoreRichColorSelection(editor);
     const format = richColorMode.value === 'text' ? 'forecolor' : 'hilitecolor';
     editor.execCommand('mceApplyTextcolor', format, value);
+    rememberRepeatableAction('html', {
+      key: `${richColorMode.value === 'text' ? 'textColor' : 'backgroundColor'}:${value}`,
+    });
     richColorDialogVisible.value = false;
     richColorBookmark = null;
   }
 
+  function resolveRichTextGradientTarget(editor: any) {
+    const node = editor?.selection?.getNode?.();
+    return node instanceof Element ? node.closest<HTMLElement>('.ln-text-gradient') : null;
+  }
+
+  function openRichTextGradientDialog(editor = editorRef.value) {
+    if (!editor || props.readonly) return;
+    richTextGradientBookmark = editor.selection?.getBookmark?.(2, true) ?? null;
+    richTextGradientTarget = resolveRichTextGradientTarget(editor);
+    const current = readTextGradientConfig(richTextGradientTarget);
+    richTextGradientFrom.value = current?.from || DEFAULT_TEXT_GRADIENT.from;
+    richTextGradientTo.value = current?.to || DEFAULT_TEXT_GRADIENT.to;
+    richTextGradientAngle.value = (current?.angle || DEFAULT_TEXT_GRADIENT.angle) as TextGradientAngle;
+    richTextGradientEditingExisting.value = Boolean(current);
+    richTextGradientDialogVisible.value = true;
+  }
+
+  function closeRichTextGradientDialog() {
+    richTextGradientBookmark = null;
+    richTextGradientTarget = null;
+    richTextGradientEditingExisting.value = false;
+  }
+
+  function restoreRichTextGradientSelection(editor: any) {
+    editor.focus();
+    if (richTextGradientBookmark) editor.selection?.moveToBookmark?.(richTextGradientBookmark);
+  }
+
+  function applyRichTextGradient() {
+    const editor = editorRef.value;
+    const config = normalizeTextGradientConfig({
+      from: richTextGradientFrom.value,
+      to: richTextGradientTo.value,
+      angle: richTextGradientAngle.value,
+    });
+    if (!config) {
+      message.warning(t('noteDetail.editor.gradientColorInvalid'));
+      return;
+    }
+    if (!editor || props.readonly) {
+      richTextGradientDialogVisible.value = false;
+      return;
+    }
+
+    restoreRichTextGradientSelection(editor);
+    const body = editor.getBody?.() as HTMLElement | null;
+    const liveTarget =
+      richTextGradientTarget?.isConnected && body?.contains(richTextGradientTarget) ? richTextGradientTarget : null;
+    const selectedHtml = liveTarget ? '' : String(editor.selection?.getContent?.({ format: 'html' }) || '');
+    const selectedText = liveTarget ? '' : String(editor.selection?.getContent?.({ format: 'text' }) || '').trim();
+    if (!liveTarget && !selectedText) {
+      message.warning(t('noteDetail.editor.gradientSelectText'));
+      return;
+    }
+
+    editor.undoManager?.transact(() => {
+      if (liveTarget) {
+        applyTextGradientConfig(liveTarget, config);
+        editor.selection?.select?.(liveTarget, true);
+      } else {
+        const html = createTextGradientHtml(selectedHtml, config);
+        if (html) editor.selection?.setContent?.(html);
+      }
+    });
+    notifyRichMediaTextMutation(editor);
+    rememberRepeatableAction('html', {
+      key: 'textGradient',
+      gradient: { from: config.from, to: config.to, angle: config.angle },
+    });
+    richTextGradientDialogVisible.value = false;
+    closeRichTextGradientDialog();
+  }
+
+  function removeRichTextGradient() {
+    const editor = editorRef.value;
+    if (!editor || props.readonly) {
+      richTextGradientDialogVisible.value = false;
+      return;
+    }
+    restoreRichTextGradientSelection(editor);
+    const body = editor.getBody?.() as HTMLElement | null;
+    const target =
+      richTextGradientTarget?.isConnected && body?.contains(richTextGradientTarget) ? richTextGradientTarget : null;
+    if (!target) {
+      message.warning(t('noteDetail.editor.gradientTargetChanged'));
+      return;
+    }
+    editor.undoManager?.transact(() => editor.dom.remove(target, true));
+    notifyRichMediaTextMutation(editor);
+    rememberRepeatableAction('html', { key: 'removeTextGradient' });
+    richTextGradientDialogVisible.value = false;
+    closeRichTextGradientDialog();
+  }
+
+  function applyRichTextGradientToCurrentSelection(storedConfig: StoredTextGradient) {
+    const editor = editorRef.value;
+    const config = normalizeTextGradientConfig(storedConfig);
+    if (!editor || !config || props.readonly) return;
+    editor.focus();
+    const target = resolveRichTextGradientTarget(editor);
+    const selectedHtml = target ? '' : String(editor.selection?.getContent?.({ format: 'html' }) || '');
+    const selectedText = target ? '' : String(editor.selection?.getContent?.({ format: 'text' }) || '').trim();
+    if (!target && !selectedText) {
+      message.warning(t('noteDetail.editor.gradientSelectText'));
+      return;
+    }
+    editor.undoManager?.transact(() => {
+      if (target) {
+        applyTextGradientConfig(target, config);
+        editor.selection?.select?.(target, true);
+      } else {
+        const html = createTextGradientHtml(selectedHtml, config);
+        if (html) editor.selection?.setContent?.(html);
+      }
+    });
+    notifyRichMediaTextMutation(editor);
+  }
+
+  function removeRichTextGradientFromCurrentSelection(editor = editorRef.value) {
+    if (!editor || props.readonly) return;
+    editor.focus();
+    const target = resolveRichTextGradientTarget(editor);
+    if (!target) {
+      message.warning(t('noteDetail.editor.gradientTargetChanged'));
+      return;
+    }
+    editor.undoManager?.transact(() => editor.dom.remove(target, true));
+    notifyRichMediaTextMutation(editor);
+  }
+
   function handleEditorToolbarAction(action: EditorToolbarAction) {
     if (action.disabled) return;
+    if (action.key === 'shortcuts') {
+      shortcutHelpVisible.value = true;
+      return;
+    }
+    if (action.key === 'repeatLastAction') {
+      repeatLastEditorAction();
+      return;
+    }
     if (currentType.value === 'markdown') runMarkdownToolbarAction(action.key);
     else runRichToolbarAction(action.key);
   }
@@ -2548,6 +3462,7 @@
       }
     }
     switchBackup.value = backup;
+    if (currentType.value === 'html' && targetType !== 'html') prepareRichEditorForUnmount();
     currentType.value = targetType;
 
     if (targetType === 'markdown') {
@@ -2601,6 +3516,7 @@
     }
     switchBackup.value = null;
 
+    if (currentType.value === 'html' && backup.type !== 'html') prepareRichEditorForUnmount();
     currentType.value = backup.type;
 
     if (backup.type === 'html') {
@@ -2748,7 +3664,7 @@
     object_resizing: usesNativeTextSelectionMenu.value ? false : 'img',
     codesample_languages: CODE_LANGUAGES.map((lang) => ({ text: lang.text, value: lang.value })),
     extended_valid_elements:
-      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size]',
+      'input[type|class|checked|data-note-task],a[href|contenteditable|title|data-ln-resource-type|data-ln-resource-id|data-ln-resource-snapshot-title|data-ln-resource-display-title|data-ln-resource-state|class|aria-disabled],img[src|alt|title|class|style|width|height|data-ln-size],span[class|style|data-ln-text-gradient],section[class|data-ln-media-position|data-ln-media-width|data-ln-media-inserting],figure[class],figcaption[class]',
     // 主工具栏由 EditorToolbarV2 统一渲染，TinyMCE 只负责命令、对话框和桌面划词快捷条。
     toolbar: false,
     placeholder: t('note.contentPlaceholder'),
@@ -2841,8 +3757,8 @@
       const isReusableRichImageCaretBlock = (node: Element | null): node is HTMLElement =>
         Boolean(
           node?.matches('p,div') &&
-            !String(node.textContent || '').trim() &&
-            !node.querySelector('img,table,pre,ul,ol,figure,input'),
+          !String(node.textContent || '').trim() &&
+          !node.querySelector('img,table,pre,ul,ol,figure,input'),
         );
 
       const focusRichImageCaret = (target: Node, offset = 0) => {
@@ -3078,13 +3994,36 @@
         // 自研查找栏后面，按 Esc 后才暴露出来。初始化完成后明确替换为唯一入口。
         editor.shortcuts.remove('Meta+F');
         editor.shortcuts.add('Meta+F', '', () => openRichFind(editor));
+        // TinyMCE 默认也提供重做，但这里显式注册两套用户最常见的组合键，
+        // 避免不同系统或插件覆盖后只剩其中一种入口。
+        editor.shortcuts.remove('Meta+Y');
+        editor.shortcuts.remove('Meta+Shift+Z');
+        editor.shortcuts.add('Meta+Y', '', () => editor.execCommand('Redo'));
+        editor.shortcuts.add('Meta+Shift+Z', '', () => editor.execCommand('Redo'));
+        // 这些格式快捷键统一经过外置工具栏动作，才能成为可被 F4 再次执行的“上一步功能”。
+        (
+          [
+            ['Meta+B', 'bold'],
+            ['Meta+I', 'italic'],
+            ['Meta+U', 'underline'],
+          ] as const
+        ).forEach(([shortcut, actionKey]) => {
+          editor.shortcuts.remove(shortcut);
+          editor.shortcuts.add(shortcut, '', () => runRichToolbarAction(actionKey));
+        });
+        editor.shortcuts.remove('F4');
+        editor.shortcuts.remove('Meta+Alt+R');
+        editor.shortcuts.add('F4', '', repeatLastEditorAction);
+        editor.shortcuts.add('Meta+Alt+R', '', repeatLastEditorAction);
       });
       editor.on('remove', () => {
         if (editorRef.value === editor) {
-          clearRichFindMatches();
+          resetRichFindState();
           richFindVisible.value = false;
+          editorRef.value = null;
         }
         setSelectedMermaidFigure(null);
+        closeRichMediaTextToolbar();
         unbindMermaidEditRequest();
         unbindRichImageNativeMenuGuard();
       });
@@ -3101,24 +4040,33 @@
       // 这样资源重命名不会无声改写用户笔记，手动改过的链接文字仍按用户输入保存。
       editor.on('GetContent', (event: { content?: string }) => {
         if (typeof event.content === 'string') {
-          event.content = stripTransientMermaidMarkers(
-            stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+          event.content = normalizeRichMediaTextHtml(
+            stripTransientMermaidMarkers(
+              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+            ),
           );
         }
       });
       editor.on('BeforeSetContent', (event: { content?: string }) => {
         if (typeof event.content === 'string') {
-          event.content = stripTransientMermaidMarkers(
-            stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+          event.content = normalizeRichMediaTextHtml(
+            stripTransientMermaidMarkers(
+              stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+            ),
           );
         }
       });
       editor.on('SetContent change undo redo', refreshResourceReferences);
+      editor.on('SetContent undo redo', () => {
+        closeRichMediaTextToolbar();
+        window.setTimeout(() => decorateRichMediaTextCaptions(editor), 0);
+      });
       editor.on('input', () => {
         if (richFindVisible.value && richFindSignature.value && !applyingRichFindReplacement) {
           clearRichFindMatches();
         }
         refreshResourceReferences();
+        window.setTimeout(() => decorateRichMediaTextCaptions(editor), 0);
         window.setTimeout(() => {
           if (inlineMentionVisible.value) syncTinyMceInlineMention(editor);
           else tryOpenTinyMceMention(editor);
@@ -3574,8 +4522,32 @@
         const target = event.target;
         const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
         setSelectedMermaidFigure(figure);
+        const mediaTextItem = target instanceof Element ? target.closest<HTMLElement>('.ln-media-text__item') : null;
+        const mediaTextBlock = mediaTextItem?.parentElement?.classList.contains('ln-media-text')
+          ? mediaTextItem.parentElement
+          : null;
+        if (
+          mediaTextItem &&
+          mediaTextBlock &&
+          !props.readonly &&
+          !(target instanceof Element && target.closest('a.ln-resource-link'))
+        ) {
+          const mediaArea = target instanceof Element ? target.closest('.ln-media-text__media') : null;
+          if (mediaArea) {
+            event.preventDefault();
+            event.stopPropagation();
+            focusRichMediaTextCaption(editor, mediaTextItem);
+          }
+          openRichMediaTextToolbar(mediaTextBlock, mediaTextItem, { x: event.clientX, y: event.clientY });
+          return;
+        }
         const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
-        if (image && isMobile.value && !props.readonly && !image.closest('.mermaid-figure--companion')) {
+        if (
+          image &&
+          isMobile.value &&
+          !props.readonly &&
+          !image.closest('.mermaid-figure--companion, .ln-media-text')
+        ) {
           event.preventDefault();
           event.stopPropagation();
           // 图片禁用了系统对象选区后，单击时显式建立 TinyMCE 图片选区，确保自研图片浮条稳定出现。
@@ -3611,6 +4583,7 @@
         window.setTimeout(() => {
           resetUndoHistory(editor);
           refreshResourceReferences();
+          decorateRichMediaTextCaptions(editor);
           emits('ready');
         }, 0);
       });
@@ -3621,6 +4594,7 @@
       // 把两者统一到 12×20 的正文起点，空笔记获得焦点时 placeholder 与真实光标完全重合。
       '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
       '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
+      '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { flex:0 0 var(--ln-media-width); max-width:320px; min-width:0; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:100%!important; max-width:100%!important; height:auto!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -3671,11 +4645,9 @@
       visibilityObserver.disconnect();
       visibilityObserver = null;
     }
-    if (editorRef.value) {
-      clearRichFindMatches();
-      editorRef.value.remove();
-      editorRef.value = null;
-    }
+    // TinyMCE Vue 包装组件负责实际 remove；父组件只提前清理仍需访问活动 DOM 的状态，
+    // 避免父子 onBeforeUnmount 对同一实例重复销毁。
+    prepareRichEditorForUnmount();
   });
 </script>
 
@@ -3710,11 +4682,137 @@
     background-color: var(--note-editor-header-bg, var(--w-e-toolbar-bg-color));
   }
 
-  .markdown-shortcuts-copy {
-    margin: 0;
+  .note-shortcuts {
+    max-height: min(620px, 72vh);
+    overflow-y: auto;
     color: var(--text-color);
-    line-height: 1.9;
-    white-space: pre-line;
+  }
+
+  .note-shortcuts__intro {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--surface-page-bg, var(--background-color));
+
+    strong {
+      display: block;
+      margin-bottom: 3px;
+      font-size: 14px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--desc-color);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+  }
+
+  .note-shortcuts__intro-icon {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    background: var(--mobile-selected-bg, var(--hover-background));
+    color: var(--primary-color);
+  }
+
+  .note-shortcuts__section {
+    margin-top: 18px;
+
+    h3 {
+      margin: 0 0 8px;
+      color: var(--desc-color);
+      font-size: 12px;
+      font-weight: 600;
+    }
+  }
+
+  .note-shortcuts__list {
+    margin: 0;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+  }
+
+  .note-shortcuts__row {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 9px 12px;
+
+    & + & {
+      border-top: 1px solid var(--surface-divider-color, var(--surface-border-color));
+    }
+
+    dt {
+      min-width: 0;
+      font-size: 14px;
+    }
+
+    small {
+      display: block;
+      margin-top: 2px;
+      color: var(--desc-color);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    dd {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      margin: 0;
+      flex: 0 0 auto;
+    }
+
+    kbd {
+      min-width: 26px;
+      padding: 4px 7px;
+      border: 1px solid var(--surface-border-color);
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      background: var(--surface-page-bg, var(--background-color));
+      color: var(--text-color);
+      font-family: var(--app-font-family);
+      font-size: 11px;
+      line-height: 1.2;
+      text-align: center;
+      white-space: nowrap;
+    }
+  }
+
+  .note-shortcuts__or {
+    color: var(--desc-color);
+    font-size: 11px;
+  }
+
+  @media (max-width: 520px) {
+    .note-shortcuts {
+      max-height: 68vh;
+    }
+
+    .note-shortcuts__row {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 7px;
+
+      dd {
+        width: 100%;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+    }
   }
   .note-editor-scroll {
     flex: 1;
@@ -3728,6 +4826,132 @@
     color: var(--text-color);
     padding: 12px 20px clamp(180px, 35vh, 380px);
     min-height: 100%;
+  }
+
+  #editor-container .ln-media-text {
+    --ln-media-width: 36%;
+    display: block;
+    clear: both;
+    margin: 14px 0;
+
+    &[data-ln-media-width='30'] {
+      --ln-media-width: 30%;
+    }
+
+    &[data-ln-media-width='42'] {
+      --ln-media-width: 42%;
+    }
+
+    &[data-ln-media-position='right'] .ln-media-text__item {
+      flex-direction: row-reverse;
+    }
+  }
+
+  #editor-container .ln-media-text__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    box-sizing: border-box;
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color, #e3e6eb);
+    border-radius: 10px;
+
+    &[data-ln-media-item-selected='true'] {
+      border-color: var(--primary-color, #615ced);
+    }
+  }
+
+  #editor-container .ln-media-text__media {
+    flex: 0 0 var(--ln-media-width);
+    max-width: 320px;
+    min-width: 0;
+
+    img {
+      display: block !important;
+      float: none !important;
+      width: 100% !important;
+      max-width: 100% !important;
+      height: auto !important;
+      margin: 0 !important;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+  }
+
+  #editor-container .ln-media-text__content {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    overflow-wrap: anywhere;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  #editor-container .note-editor-body[contenteditable='true'] .ln-media-text__content[data-mce-placeholder]::before {
+    content: attr(data-mce-placeholder);
+    position: absolute;
+    inset: 0 auto auto 0;
+    color: var(--desc-color, #8a919f);
+    pointer-events: none;
+  }
+
+  .rich-media-text-anchor {
+    position: fixed;
+  }
+
+  .rich-media-text-popover {
+    width: min(620px, calc(100vw - 16px));
+    padding: 10px;
+  }
+
+  .rich-media-text-toolbar {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+
+    &__heading {
+      display: flex;
+      align-items: center;
+      align-self: center;
+      gap: 6px;
+      color: var(--text-color);
+      white-space: nowrap;
+    }
+
+    &__field {
+      display: grid;
+      flex: 0 0 116px;
+      gap: 4px;
+
+      > span {
+        color: var(--desc-color, #737782);
+        font-size: 12px;
+        line-height: 1.2;
+      }
+
+      .b-select {
+        width: 100%;
+      }
+    }
+
+    &__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-left: auto;
+
+      .b_btn {
+        gap: 5px;
+      }
+    }
   }
 
   .resource-mention-mobile-preview {
@@ -4383,6 +5607,57 @@
     }
   }
 
+  .rich-text-gradient-dialog {
+    display: grid;
+    gap: 14px;
+    color: var(--text-color);
+
+    > p {
+      margin: 0;
+      color: var(--desc-color);
+      line-height: 1.55;
+    }
+  }
+
+  .rich-text-gradient-dialog__preview {
+    min-height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--surface-page-bg, var(--background-color));
+
+    > span {
+      font-size: 26px;
+      font-weight: 750;
+      line-height: 1.3;
+      text-align: center;
+    }
+  }
+
+  .rich-text-gradient-dialog__fields {
+    display: grid;
+    grid-template-columns: 112px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px 12px;
+
+    > label {
+      font-weight: 600;
+    }
+  }
+
+  .rich-text-gradient-dialog__actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+
+    .b_btn {
+      min-height: 40px;
+    }
+  }
+
   .note-conversion-preview {
     display: grid;
     gap: 14px;
@@ -4646,6 +5921,50 @@
   }
 
   @media (max-width: 767px) {
+    #editor-container .ln-media-text__item {
+      gap: 10px;
+      padding: 7px;
+    }
+
+    #editor-container .ln-media-text__media {
+      max-width: none;
+    }
+
+    .rich-media-text-popover {
+      max-height: calc(100vh - 16px);
+      overflow: auto;
+    }
+
+    .rich-media-text-toolbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: end;
+
+      &__heading,
+      &__actions {
+        grid-column: 1 / -1;
+      }
+
+      &__field {
+        min-width: 0;
+      }
+
+      &__actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-left: 0;
+
+        .b_btn {
+          width: 100%;
+          min-height: 40px;
+
+          &:last-child {
+            grid-column: 1 / -1;
+          }
+        }
+      }
+    }
+
     .rich-mermaid-editor__actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -4661,6 +5980,29 @@
     }
 
     .rich-color-dialog__actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+
+      .b_btn:first-child {
+        grid-column: 1 / -1;
+      }
+
+      .b_btn {
+        width: 100%;
+        min-height: 46px;
+      }
+    }
+
+    .rich-text-gradient-dialog__fields {
+      grid-template-columns: 1fr;
+      gap: 7px;
+    }
+
+    .rich-text-gradient-dialog__fields > label:not(:first-child) {
+      margin-top: 3px;
+    }
+
+    .rich-text-gradient-dialog__actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
 

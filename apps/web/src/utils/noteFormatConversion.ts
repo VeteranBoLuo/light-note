@@ -90,7 +90,7 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
   addIssue(issues, 'fontStyling', fontStyling);
 
   const preserved = doc.body.querySelectorAll(
-    'h1,h2,h3,h4,h5,h6,p,div,strong,b,em,i,s,del,blockquote,ul,ol,li,a,img,input[type="checkbox"]',
+    'h1,h2,h3,h4,h5,h6,p,div,strong,b,em,i,s,del,blockquote,ul,ol,li,a,img,input[type="checkbox"],.ln-text-gradient',
   ).length;
   const standardized = doc.body.querySelectorAll('pre,code,table').length;
   return {
@@ -106,21 +106,41 @@ function analyzeHtml(source: string): NoteFormatConversionReport {
 function analyzeMarkdown(source: string): NoteFormatConversionReport {
   const text = String(source || '');
   const issues: NoteFormatConversionReport['issues'] = [];
-  const rawHtml = countMatches(text, /<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>|<[a-z][\w-]*(?:\s[^>]*)?\s*\/?>/giu);
+  // 图文组合以受控 section 原样保存在 Markdown 中，切回富文本时可以完整恢复，
+  // 因此先从“未知原生 HTML”分析样本中拿掉，避免把内部 figure/img/p 重复计为风险。
+  const mediaTextBlocks = countMatches(
+    text,
+    /<section\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bln-media-text\b[^"']*\1)[^>]*>[\s\S]*?<\/section\s*>/giu,
+  );
+  const rawHtmlSample = text.replace(
+    /<section\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bln-media-text\b[^"']*\1)[^>]*>[\s\S]*?<\/section\s*>/giu,
+    '',
+  );
+  const rawHtml = countMatches(
+    rawHtmlSample,
+    /<([a-z][\w-]*)(?:\s[^>]*)?>[\s\S]*?<\/\1\s*>|<[a-z][\w-]*(?:\s[^>]*)?\s*\/?>/giu,
+  );
   // 调整过尺寸的 Markdown 图片会保存为受控 img HTML；这是轻笺明确支持的结构，
   // 不应在格式切换预检中被误报为“可能丢失的原生 HTML”。
   const sizedImages = countMatches(
-    text,
+    rawHtmlSample,
     /<img\b(?=[^>]*\bdata-ln-size\s*=\s*(["'])(?:original|small|medium|large|full)\1)[^>]*\/?\s*>/giu,
   );
-  const riskyRawHtml = Math.max(0, rawHtml - sizedImages);
+  // 渐变文字与图文组合相同，使用受控 raw HTML 在两种格式间往返，不属于未知 HTML 风险。
+  const gradientSpans = countMatches(
+    rawHtmlSample,
+    /<([a-z][\w-]*)\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bln-text-gradient\b[^"']*\2)[^>]*>[\s\S]*?<\/\1\s*>/giu,
+  );
+  const riskyRawHtml = Math.max(0, rawHtml - sizedImages - gradientSpans);
   addIssue(issues, 'rawHtml', riskyRawHtml);
   const preserved =
-    countMatches(text, /^#{1,6}\s+/gmu) +
-    countMatches(text, /(?:^|\n)\s*(?:[-+*]|\d+[.)])\s+/gu) +
-    countMatches(text, /!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)/gu) +
-    countMatches(text, /(?:\*\*|__)[^\n]+?(?:\*\*|__)|(?:^|[^*])\*[^\n*]+\*/gu) +
-    sizedImages;
+    countMatches(rawHtmlSample, /^#{1,6}\s+/gmu) +
+    countMatches(rawHtmlSample, /(?:^|\n)\s*(?:[-+*]|\d+[.)])\s+/gu) +
+    countMatches(rawHtmlSample, /!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)/gu) +
+    countMatches(rawHtmlSample, /(?:\*\*|__)[^\n]+?(?:\*\*|__)|(?:^|[^*])\*[^\n*]+\*/gu) +
+    sizedImages +
+    mediaTextBlocks +
+    gradientSpans;
   const standardized =
     countMatches(text, /```[\s\S]*?```/gu) +
     countMatches(text, /(?:^|\n)\s*[-+*]\s+\[[ xX]\]\s+/gu) +

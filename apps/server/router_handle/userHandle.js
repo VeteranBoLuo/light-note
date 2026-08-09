@@ -90,6 +90,33 @@ const isActiveIpBan = (ipReputation) => {
 const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
 // 列表头像允许保留较清晰的内嵌图，但不允许把数 MB 的原图带入 50 条首屏响应。
 const MAX_INLINE_AVATAR_BYTES = 1024 * 1024;
+const ADMIN_USER_ROLES = new Set(['user', 'visitor', 'root']);
+const ADMIN_USER_STATUSES = new Set(['active', 'banned', 'all']);
+const ADMIN_USER_ACTIVITY_WINDOWS = new Set(['all', 'day1', 'day7', 'day30', 'inactive30']);
+
+const normalizeAdminDate = (value) => {
+  const normalized = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return '';
+  const time = Date.parse(`${normalized}T00:00:00Z`);
+  return Number.isFinite(time) ? normalized : '';
+};
+
+const maskAdminIp = (value) => {
+  const ip = String(value || '').trim();
+  if (!ip) return '';
+  const mappedIpv4 = ip.match(/^(.*:)(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+  if (mappedIpv4) return `${mappedIpv4[1]}${mappedIpv4[2]}.*`;
+  const ipv4 = ip.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$/);
+  if (ipv4) return `${ipv4[1]}.*`;
+  if (ip.includes(':')) {
+    const parts = ip.split(':').filter(Boolean);
+    return `${parts.slice(0, 3).join(':')}${parts.length > 3 ? ':*' : ''}`;
+  }
+  return ip.length > 8 ? `${ip.slice(0, 6)}…` : ip;
+};
+
+// 对外只暴露设备组键的不可逆短句柄，不把 session ID 或设备摘要交给页面。
+const deviceHandle = (groupKey) => crypto.createHash('sha256').update(String(groupKey)).digest('hex').slice(0, 16);
 
 const queryUserInfoById = async (id) => {
   const [result] = await pool.query(
@@ -625,6 +652,15 @@ export const getUserList = async (req, res) => {
     const key = String(filters?.key || '')
       .trim()
       .slice(0, 200);
+    const role = ADMIN_USER_ROLES.has(String(filters?.role || '').trim()) ? String(filters.role).trim() : '';
+    const status = ADMIN_USER_STATUSES.has(String(filters?.status || '').trim())
+      ? String(filters.status).trim()
+      : 'active';
+    const activityWindow = ADMIN_USER_ACTIVITY_WINDOWS.has(String(filters?.activity_window || '').trim())
+      ? String(filters.activity_window).trim()
+      : 'all';
+    const createFrom = normalizeAdminDate(filters?.create_from);
+    const createTo = normalizeAdminDate(filters?.create_to);
     const pageSize = cursorMode ? normalizeAdminListLimit(req.body?.limit) : legacy.pageSize;
     const currentPage = cursorMode ? 1 : legacy.currentPage;
     const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
@@ -634,7 +670,43 @@ export const getUserList = async (req, res) => {
     const sortColumn = sortField === 'lastActiveTime' ? 'u.last_active_time' : 'u.create_time';
     const direction = sortOrder.toUpperCase();
     const operator = sortOrder === 'asc' ? '>' : '<';
-    const scope = adminCursorScope('users', [key, sortField, sortOrder]);
+    const conditions = [
+      `(u.alias LIKE CONCAT('%', ?, '%')
+        OR u.email LIKE CONCAT('%', ?, '%')
+        OR aur.remark_name LIKE CONCAT('%', ?, '%'))`,
+    ];
+    const filterParams = [key, key, key];
+    if (status === 'active') conditions.push('u.del_flag = 0');
+    if (status === 'banned') conditions.push('u.del_flag = 1');
+    if (role) {
+      conditions.push('u.role = ?');
+      filterParams.push(role);
+    }
+    if (activityWindow === 'day1') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)');
+    if (activityWindow === 'day7') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)');
+    if (activityWindow === 'day30') conditions.push('u.last_active_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)');
+    if (activityWindow === 'inactive30') {
+      conditions.push('(u.last_active_time IS NULL OR u.last_active_time < DATE_SUB(NOW(), INTERVAL 30 DAY))');
+    }
+    if (createFrom) {
+      conditions.push('u.create_time >= ?');
+      filterParams.push(createFrom);
+    }
+    if (createTo) {
+      conditions.push('u.create_time < DATE_ADD(?, INTERVAL 1 DAY)');
+      filterParams.push(createTo);
+    }
+    const whereSql = conditions.join(' AND ');
+    const scope = adminCursorScope('users', [
+      key,
+      role,
+      status,
+      activityWindow,
+      createFrom,
+      createTo,
+      sortField,
+      sortOrder,
+    ]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
     const cursorFilter = cursor
       ? ` AND (${sortColumn} ${operator} ? OR (${sortColumn} = ? AND u.id ${operator} ?))`
@@ -658,15 +730,10 @@ export const getUserList = async (req, res) => {
        FROM user u
        LEFT JOIN admin_user_remarks aur
          ON aur.admin_user_id = ? AND aur.target_user_id = u.id
-       WHERE u.del_flag = 0
-         AND (
-           u.alias LIKE CONCAT('%', ?, '%')
-           OR u.email LIKE CONCAT('%', ?, '%')
-           OR aur.remark_name LIKE CONCAT('%', ?, '%')
-         )${cursorFilter}
+       WHERE ${whereSql}${cursorFilter}
        ORDER BY ${sortColumn} ${direction}, u.id ${direction}
        LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
-      [req.user.id, key, key, key, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      [req.user.id, ...filterParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
@@ -712,13 +779,8 @@ export const getUserList = async (req, res) => {
          FROM user u
          LEFT JOIN admin_user_remarks aur
            ON aur.admin_user_id = ? AND aur.target_user_id = u.id
-         WHERE u.del_flag = 0
-           AND (
-             u.alias LIKE CONCAT('%', ?, '%')
-             OR u.email LIKE CONCAT('%', ?, '%')
-             OR aur.remark_name LIKE CONCAT('%', ?, '%')
-           )`,
-        [req.user.id, key, key, key],
+         WHERE ${whereSql}`,
+        [req.user.id, ...filterParams],
       );
       total = Number(totalRes[0].total || 0);
     }
@@ -745,6 +807,215 @@ export const getUserList = async (req, res) => {
         status === 400 ? L(req, '查询游标无效', 'Invalid cursor') : L(req, '用户列表查询失败', 'Failed to query users'),
       ),
     );
+  }
+};
+
+export const getUserAdminDetail = async (req, res) => {
+  try {
+    if (req.user?.role !== 'root') {
+      return res.send(
+        resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
+      );
+    }
+    const targetUserId = String(req.body?.userId || '').trim();
+    if (!targetUserId || targetUserId.length > 255) {
+      return res.send(resultData(null, 400, L(req, '用户 ID 无效', 'Invalid user ID')));
+    }
+
+    const [profileRows] = await pool.query(
+      `SELECT u.id, u.alias, u.email, u.phone_number, u.role, u.ip, u.location,
+              u.login_type, u.del_flag, u.create_time, u.last_active_time,
+              COALESCE(aur.remark_name, '') AS admin_remark
+       FROM user u
+       LEFT JOIN admin_user_remarks aur
+         ON aur.admin_user_id = ? AND aur.target_user_id = u.id
+       WHERE u.id = ?
+       LIMIT 1`,
+      [req.user.id, targetUserId],
+    );
+    const profile = profileRows[0];
+    if (!profile) {
+      return res.send(resultData(null, 404, L(req, '用户不存在', 'User not found')));
+    }
+
+    const unavailableSections = [];
+    const readSection = async (section, sql, params = []) => {
+      try {
+        const [rows] = await pool.query(sql, params);
+        return rows;
+      } catch (error) {
+        unavailableSections.push(section);
+        console.warn('[admin-user-detail] section=%s code=%s', section, stableAgentErrorCode(error));
+        return [];
+      }
+    };
+
+    const [
+      resourceRows,
+      todoRows,
+      opinionRows,
+      growthRows,
+      agentRows,
+      aiWorkspaceRows,
+      securityRows,
+      apiRows,
+      operationRows,
+      contextRows,
+      deletionRows,
+    ] = await Promise.all([
+      readSection(
+        'resources',
+        `SELECT
+           (SELECT COUNT(*) FROM bookmark WHERE user_id = ? AND del_flag = 0) AS bookmark_total,
+           (SELECT COUNT(*) FROM tag WHERE user_id = ? AND del_flag = 0) AS tag_total,
+           (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) AS note_total,
+           (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS file_total,
+           (SELECT COALESCE(ROUND(SUM(file_size) / 1048576, 2), 0)
+              FROM files WHERE create_by = ? AND del_flag = 0) AS storage_used`,
+        [targetUserId, targetUserId, targetUserId, targetUserId, targetUserId],
+      ),
+      readSection(
+        'todos',
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(status = 'pending'), 0) AS pending_total,
+                COALESCE(SUM(status = 'completed'), 0) AS completed_total,
+                COALESCE(SUM(status = 'pending' AND due_at < NOW()), 0) AS overdue_total
+         FROM todo_items WHERE user_id = ? AND del_flag = 0`,
+        [targetUserId],
+      ),
+      readSection(
+        'opinions',
+        `SELECT COUNT(*) AS total,
+                COALESCE(SUM(status = 'pending'), 0) AS pending_total,
+                COALESCE(SUM(status IN ('replied', 'viewed')), 0) AS replied_total
+         FROM opinion WHERE user_id = ? AND del_flag = 0`,
+        [targetUserId],
+      ),
+      readSection(
+        'growth',
+        `SELECT exp, level, streak, streak_protect_cards, last_checkin_date,
+                points, equipped_title, storage_bonus_mb, ai_bonus_tokens, updated_at
+         FROM user_growth WHERE user_id = ? LIMIT 1`,
+        [targetUserId],
+      ),
+      readSection(
+        'aiUsage',
+        `SELECT COUNT(*) AS request_total,
+                COALESCE(SUM(total_tokens), 0) AS token_total,
+                COALESCE(SUM(cost), 0) AS cost_total,
+                COALESCE(SUM(status <> 'success'), 0) AS failed_total,
+                MAX(created_at) AS last_used_at
+         FROM agent_logs WHERE user_id = ?`,
+        [targetUserId],
+      ),
+      readSection(
+        'aiWorkspace',
+        `SELECT
+           (SELECT COUNT(*) FROM ai_conversations WHERE subject_user_id = ? AND status = 'active') AS conversation_total,
+           (SELECT COUNT(*) FROM ai_feedback WHERE subject_user_id = ?) AS feedback_total,
+           (SELECT COUNT(*) FROM ai_feedback WHERE subject_user_id = ? AND rating = 'down') AS negative_feedback_total`,
+        [targetUserId, targetUserId, targetUserId],
+      ),
+      readSection(
+        'security',
+        `SELECT COUNT(*) AS event_total,
+                COALESCE(SUM(handled_status = 'unhandled'), 0) AS unhandled_total,
+                COALESCE(SUM(severity IN ('high', 'critical')), 0) AS high_risk_total,
+                MAX(created_at) AS last_event_at
+         FROM security_events WHERE user_id = ?`,
+        [targetUserId],
+      ),
+      readSection(
+        'apiHealth',
+        `SELECT COUNT(*) AS request_total,
+                COALESCE(SUM(CAST(status_code AS UNSIGNED) >= 500), 0) AS server_error_total,
+                COALESCE(SUM(CAST(status_code AS UNSIGNED) >= 400 AND CAST(status_code AS UNSIGNED) < 500), 0)
+                  AS client_error_total,
+                MAX(request_time) AS last_request_at
+         FROM api_logs
+         WHERE user_id = ? AND del_flag = 0 AND request_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
+        [targetUserId],
+      ),
+      readSection(
+        'recentOperations',
+        `SELECT module, operation, create_time
+         FROM operation_logs
+         WHERE create_by = ? AND del_flag = 0
+         ORDER BY create_time DESC, id DESC
+         LIMIT 10`,
+        [targetUserId],
+      ),
+      readSection(
+        'adminContexts',
+        `SELECT mode, capability, action, outcome, result_status, create_time
+         FROM admin_context_audit
+         WHERE subject_user_id = ?
+         ORDER BY create_time DESC, id DESC
+         LIMIT 10`,
+        [targetUserId],
+      ),
+      readSection(
+        'accountDeletion',
+        `SELECT request_id, status, attempts, next_retry_at, create_time, update_time, completed_at
+         FROM account_deletion_requests
+         WHERE user_id = ?
+         ORDER BY create_time DESC
+         LIMIT 1`,
+        [targetUserId],
+      ),
+    ]);
+
+    let sessions = [];
+    try {
+      const sessionRows = await listUserSessions(targetUserId);
+      sessions = groupUserSessions(sessionRows).map((group) => ({
+        id: deviceHandle(group.groupKey),
+        ip: maskAdminIp(group.ip),
+        userAgent: String(group.user_agent || '').slice(0, 240),
+        createTime: group.create_time,
+        lastActiveTime: group.last_active_time,
+        expiresAt: group.expires_at,
+        sessionCount: group.sessionCount,
+      }));
+    } catch (error) {
+      unavailableSections.push('sessions');
+      console.warn('[admin-user-detail] section=sessions code=%s', stableAgentErrorCode(error));
+    }
+
+    const numberFields = (row = {}) =>
+      Object.fromEntries(
+        Object.entries(row).map(([field, value]) => [
+          field,
+          /(_total|_used|_tokens|_mb|^exp$|^level$|^streak$|^points$|^attempts$)/.test(field)
+            ? Number(value || 0)
+            : value,
+        ]),
+      );
+    return res.send(
+      resultData({
+        profile: {
+          ...profile,
+          status: Number(profile.del_flag) === 1 ? 'banned' : 'active',
+          ip: maskAdminIp(profile.ip),
+        },
+        resources: numberFields(resourceRows[0]),
+        todos: numberFields(todoRows[0]),
+        opinions: numberFields(opinionRows[0]),
+        growth: numberFields(growthRows[0]),
+        aiUsage: numberFields(agentRows[0]),
+        aiWorkspace: numberFields(aiWorkspaceRows[0]),
+        security: numberFields(securityRows[0]),
+        apiHealth: numberFields(apiRows[0]),
+        sessions,
+        recentOperations: operationRows,
+        adminContexts: contextRows,
+        accountDeletion: deletionRows[0] ? numberFields(deletionRows[0]) : null,
+        unavailableSections: [...new Set(unavailableSections)].sort(),
+      }),
+    );
+  } catch (error) {
+    console.error('[admin-user-detail] query failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, L(req, '用户详情查询失败', 'Failed to query user details')));
   }
 };
 
@@ -1100,9 +1371,6 @@ export const deleteMyAccount = async (req, res) => {
     sendAccountDeletionError(req, res, error, '账号注销失败，请稍后重试');
   }
 };
-
-// 设备句柄：对外只暴露设备组键的 SHA-256 前 16 位，不把 session ID 或设备摘要交给页面。
-const deviceHandle = (groupKey) => crypto.createHash('sha256').update(String(groupKey)).digest('hex').slice(0, 16);
 
 // 登录设备列表：会话是实现细节，页面只按稳定设备标识聚合；历史无标识会话独立展示，避免错误合并。
 export const getMySessions = async (req, res) => {

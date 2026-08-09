@@ -125,12 +125,20 @@
       @next="previewNextFile"
       @close="closePreview"
     />
-    <MobilePageActionsDrawer
+    <MobileCloudSpaceActionsDrawer
       v-if="bookmark.isMobile"
       v-model:open="mobilePageActionsOpen"
-      :title="t('common.more')"
-      :actions="mobilePageActions"
-      @action="handleMobilePageAction"
+      :batch-mode="batchMode"
+      :creating="mobileFolderCreating"
+      :folders="cloud.folderList"
+      :current-folder-id="String(cloud.folder.id || '')"
+      :folder-mutation-id="mobileFolderMutationId"
+      :before-open-create-folder="allowMobileFolderCreate"
+      :before-manage-folders="allowMobileFolderCreate"
+      @batch="toggleBatchMode"
+      @create-folder="createMobileFolder"
+      @rename-folder="renameMobileFolder"
+      @delete-folder="requestMobileFolderDelete"
     />
   </ResourcePageShell>
 </template>
@@ -161,7 +169,10 @@
   import { CLOUD_FILE_CATEGORY_ORDER } from '@/constants/cloudFileCategory.ts';
   import { apiBasePost } from '@/http/request';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import MobileCloudSpaceActionsDrawer from '@/components/cloudSpace/MobileCloudSpaceActionsDrawer.vue';
+  import { blockGuestWrite } from '@/composables/useGuestGuard';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const { t } = useI18n();
@@ -223,16 +234,16 @@
     openFileDialog: (folderId?: string | null) => void;
   }
 
+  interface MobileFolderItem {
+    id: string;
+    name: string;
+  }
+
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
-  const mobilePageActions = computed<MobilePageActionItem[]>(() => [
-    {
-      key: 'batch',
-      label: t(batchMode.value ? 'cloudSpace.exitBatch' : 'cloudSpace.batchAction'),
-      icon: icon.filterPanel.check,
-    },
-  ]);
+  const mobileFolderCreating = ref(false);
+  const mobileFolderMutationId = ref('');
   // 视图优先取用户偏好(设置页「云空间视图」/ 跨设备),再回退本浏览器独立缓存,最后卡片——与标签详情/资源中心对齐。
   // user 偏好在 App.vue setup 阶段已从 localStorage 早恢复,本路由组件 setup 时已就绪。
   const viewMode = ref<'card' | 'table'>(
@@ -413,8 +424,122 @@
     }
   };
 
-  function handleMobilePageAction(action: MobilePageActionItem) {
-    if (action.key === 'batch') toggleBatchMode();
+  function allowMobileFolderCreate() {
+    return !blockGuestWrite('manage-folder');
+  }
+
+  async function createMobileFolder(name: string) {
+    if (blockGuestWrite('manage-folder') || mobileFolderCreating.value) return;
+    mobileFolderCreating.value = true;
+    try {
+      const res = await apiBasePost('/api/file/addFolder', { name }, { silent: true });
+      if (res?.status !== 200 || res.data === undefined || res.data === null) {
+        message.error(t('cloudSpace.createFolderFailed'));
+        return;
+      }
+
+      const folderId = String(res.data);
+      const createdFolder = { id: folderId, name };
+      cloud.folderList = [createdFolder, ...cloud.folderList.filter((folder) => String(folder.id) !== folderId)];
+      cloud.folder = createdFolder;
+      clearSelectionKey.value += 1;
+      mobilePageActionsOpen.value = false;
+      recordOperation({ module: '云空间', operation: `新增文件夹成功【${name}】` });
+      message.success(t('cloudSpace.createFolderSuccess', { name }));
+
+      const folderRefreshed = await cloud.queryFolder();
+      if (folderRefreshed) {
+        const refreshedFolder = cloud.folderList.find((folder) => String(folder.id) === folderId);
+        if (refreshedFolder?.id) {
+          cloud.folder = { id: refreshedFolder.id, name: refreshedFolder.name };
+        }
+      }
+      await cloud.queryFieldList();
+    } catch {
+      message.error(t('cloudSpace.createFolderFailed'));
+    } finally {
+      mobileFolderCreating.value = false;
+    }
+  }
+
+  async function renameMobileFolder(folder: MobileFolderItem, done: (success: boolean) => void) {
+    if (blockGuestWrite('manage-folder') || mobileFolderMutationId.value) {
+      done(false);
+      return;
+    }
+    mobileFolderMutationId.value = folder.id;
+    let success = false;
+    try {
+      const res = await apiBasePost('/api/file/updateFolder', folder, { silent: true });
+      if (res?.status !== 200) {
+        message.error(t('cloudSpace.renameFolderFailed'));
+        return;
+      }
+
+      cloud.folderList = cloud.folderList.map((item) =>
+        String(item.id) === folder.id ? { ...item, name: folder.name } : item,
+      );
+      if (String(cloud.folder.id) === folder.id) {
+        cloud.folder = { id: cloud.folder.id, name: folder.name };
+      }
+      recordOperation({ module: '云空间', operation: `重命名文件夹成功【${folder.name}】` });
+      message.success(t('cloudSpace.renameFolderSuccess', { name: folder.name }));
+      success = true;
+      await cloud.queryFolder();
+      void cloud.queryFieldList();
+    } catch {
+      message.error(t('cloudSpace.renameFolderFailed'));
+    } finally {
+      mobileFolderMutationId.value = '';
+      done(success);
+    }
+  }
+
+  function requestMobileFolderDelete(folder: MobileFolderItem) {
+    if (blockGuestWrite('delete-folder')) {
+      mobilePageActionsOpen.value = false;
+      return;
+    }
+    void closeCurrentMobileOverlayThen(
+      () => {
+        mobilePageActionsOpen.value = false;
+      },
+      () => {
+        Alert.alert({
+          title: t('cloudSpace.deleteFolderTitle'),
+          content: t('cloudSpace.deleteFolderConfirm', { name: folder.name }),
+          okText: t('common.delete'),
+          okType: 'danger',
+          cancelText: t('common.cancel'),
+          onOk: () => void deleteMobileFolder(folder),
+        });
+      },
+    );
+  }
+
+  async function deleteMobileFolder(folder: MobileFolderItem) {
+    if (mobileFolderMutationId.value) return;
+    mobileFolderMutationId.value = folder.id;
+    try {
+      const res = await apiBasePost('/api/file/deleteFolder', { id: folder.id }, { silent: true });
+      if (res?.status !== 200) {
+        message.error(t('cloudSpace.deleteFolderFailed'));
+        return;
+      }
+
+      const deletingCurrentFolder = String(cloud.folder.id) === folder.id;
+      cloud.folderList = cloud.folderList.filter((item) => String(item.id) !== folder.id);
+      if (deletingCurrentFolder) {
+        cloud.folder = { id: 'all', name: t('cloudSpace.allFile') };
+      }
+      recordOperation({ module: '云空间', operation: `删除文件夹成功【${folder.name}】` });
+      message.success(t('cloudSpace.deleteFolderSuccess', { name: folder.name }));
+      await Promise.all([cloud.queryFolder(), cloud.queryFieldList()]);
+    } catch {
+      message.error(t('cloudSpace.deleteFolderFailed'));
+    } finally {
+      mobileFolderMutationId.value = '';
+    }
   }
 
   const onUploadFiles = ({ files, folderId }) => {

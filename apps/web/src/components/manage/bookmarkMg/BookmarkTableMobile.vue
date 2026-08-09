@@ -48,11 +48,18 @@
     </BButton>
   </MobileStickyActionBar>
   <MobilePageActionsDrawer
+    v-model:open="pageActionsOpen"
+    :title="$t('bookmarkMg.title')"
+    :actions="pageActions"
+    @action="handlePageAction"
+  />
+  <MobilePageActionsDrawer
     v-model:open="mobilePageActionsOpen"
     :object-title="activeBookmark?.name || $t('common.more')"
     :actions="mobilePageActions"
     @action="handleMobilePageAction"
   />
+  <LinkHealthModal v-model:visible="healthVisible" />
   <BookmarkSnapshotModal v-model:visible="snapVisible" :bookmark-id="snapBookmarkId" />
 </template>
 
@@ -66,6 +73,7 @@
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import BookmarkFavicon from '@/components/base/BookmarkFavicon.vue';
   import PhoneListMg from '@/components/base/phoneComponents/PhoneListMg.vue';
+  import LinkHealthModal from '@/components/manage/bookmarkMg/LinkHealthModal.vue';
   import BookmarkSnapshotModal from '@/components/manage/bookmarkEditMg/BookmarkSnapshotModal.vue';
   import { useBookmarkManage } from '@/composables/useBookmarkManage.ts';
   import type { BookmarkInterface } from '@/config/bookmarkCfg.ts';
@@ -77,6 +85,8 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { openAiAssistant } from '@/utils/aiEntry';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { OPERATION_LOG_MAP } from '@/config/logMap';
 
   const { t } = useI18n();
 
@@ -93,8 +103,23 @@
   const batchMode = ref(false);
   const selectedIds = ref<string[]>([]);
   const mutating = ref(false);
+  const pageActionsOpen = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const healthVisible = ref(false);
   const activeBookmark = ref<BookmarkInterface | null>(null);
+  const pageActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'health',
+      label: t('bookmarkMg.healthCheck'),
+      description: t('bookmarkMg.healthDesc'),
+      icon: icon.bookmarkManage.healthCheck,
+    },
+    {
+      key: 'batch',
+      label: t('bookmarkMg.batchSelect'),
+      icon: icon.filterPanel.check,
+    },
+  ]);
   const mobilePageActions = computed<MobilePageActionItem[]>(() => {
     const item = activeBookmark.value;
     if (!item) return [];
@@ -132,9 +157,10 @@
     searchSourceType: 'bookmark',
     showNotification: false,
     onAuxiliaryAction: () => {
-      enterBatch();
+      pageActionsOpen.value = true;
     },
-    auxiliaryActionLabel: () => (batchMode.value ? '' : t('bookmarkMg.batchSelect')),
+    auxiliaryActionLabel: () => (batchMode.value ? '' : t('common.more')),
+    auxiliaryActionIcon: () => icon.common.more,
     onAdd: () => {
       if (batchMode.value) toggleSelectAll(tableData.value);
       else router.push('/manage/editBookmark/add');
@@ -190,6 +216,24 @@
       return;
     }
     openItemActions(item);
+  }
+
+  async function handlePageAction(action: MobilePageActionItem) {
+    if (action.key === 'batch') {
+      enterBatch();
+      return;
+    }
+    if (action.key !== 'health') return;
+
+    await closeCurrentMobileOverlayThen(
+      () => {
+        pageActionsOpen.value = false;
+      },
+      () => {
+        healthVisible.value = true;
+        void recordOperation(OPERATION_LOG_MAP.bookmarkMg.healthCheck);
+      },
+    );
   }
 
   function toggleSelection(id: string | number) {

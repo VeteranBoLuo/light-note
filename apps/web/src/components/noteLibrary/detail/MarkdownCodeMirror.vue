@@ -139,6 +139,8 @@
     ['Mod-i', 'italic'],
     ['Mod-k', 'link'],
     ['Mod-f', 'findReplace'],
+    ['F4', 'repeatLastAction'],
+    ['Mod-Alt-r', 'repeatLastAction'],
     ['Mod-Shift-x', 'strike'],
     ['Mod-e', 'inlineCode'],
     ['Mod-Shift-7', 'orderedList'],

@@ -124,7 +124,9 @@ view/search/
 - HTML/Markdown 正式转换必须调用 `POST /api/note/convertMode`，提交 `baseRevision + targetType + convertedContent + analysisHash`。服务端必须先复核预览指纹，再在同一事务内强制保存转换前版本、写正文与类型、递增 revision 并同步 `note_resource_refs`；禁止依赖两次普通自动保存拼接出转换语义。
 - HTML 正文的创建、更新、AI 写入、导入、模板保存、新用户示例、历史恢复均必须调用 `sanitizePersistedNoteContent()`；旧 HTML 在详情、模板和历史版本读取时也走同一白名单。日志只允许记录稳定场景、净化类别、计数和前后长度，不得记录正文、URL、用户或属性值。Markdown 必须保持源码，只做既有的 blockquote 实体规范化。
 - HTML/Markdown 格式转换、AI 修改/撤销和历史恢复属于高风险低频写入，必须在业务事务内强制保存 `note_versions` 还原点并填写 `source_revision/reason`；普通自动保存才允许使用时间合并窗口。新增写入口时要同时审计主表 revision、历史快照、正文净化、图片引用与 `note_resource_refs`。
-- 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。
+- 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。新增或调整编辑器快捷键时，必须同步更新统一快捷键弹窗、工具栏提示和回归测试；富文本与 Markdown 的重做都要兼容 `Ctrl/⌘ + Shift + Z` 与 `Ctrl + Y`。“重复上一步”必须使用独立状态与快捷键，仅记录可安全复用的格式功能及其参数（例如渐变配置），不得复用撤销/重做历史栈，也不得重复插入、删除、上传等副作用操作。
+- 富文本图文并排必须使用 `section.ln-media-text` 受控结构，一张图片对应一个 `figure` 和一个 `figcaption`；禁止用连续图片加 `float` 猜测文字归属。保存前须清理 TinyMCE 临时属性以及图片的浮动、固定宽高和 `data-ln-size`，HTML/Markdown 转换、服务端净化与离线导出必须保留 `data-ln-media-position/data-ln-media-width`。
+- 富文本渐变文字必须保存为 `.ln-text-gradient[data-ln-text-gradient="true"]`，只允许 `--ln-gradient-from`、`--ln-gradient-to` 两个十六进制颜色和枚举角度 `--ln-gradient-angle`；禁止为了渐变重新开放任意 `background`、`background-clip`、阴影或动画内联样式。HTML/Markdown 往返时保留这段受控 raw HTML，服务端净化、站内预览和离线导出必须使用同一协议。
 
 **响应格式：**
 
@@ -287,6 +289,9 @@ try {
 - 引用评测须把“引用键存在/定位成功”和“证据是否支持对应主张”分开记录；语义支持度只能来自完全合成的受控事实或人工标注，不允许用字符串包含、关键词重合或同源 ID 自动判定蕴含。
 - AI 数据库迁移、环境变量、schema assertions、灰度和回滚步骤见 `docs/plan/ai-assistant-rollout-runbook.md`。
 - 用新唯一索引替换旧唯一索引时，先按新索引的归一化表达式做重复键 preflight，再 `ADD UNIQUE`，确认成功后才 `DROP` 旧索引；顺序不可反转。迁移后 assertion 要同时证明新索引列序/唯一性正确且旧索引已移除，不能只检查脚本退出码。
+- 社区客厅必须失败关闭：`COMMUNITY_CHAT_ACCESS_MODE` 缺省或未知时一律是 `closed`；公开聊天使用 `public`，游客只读、登录用户发言，`invite_only` 仅保留给未来私密房间。两种开放模式都必须再显式开启 `COMMUNITY_CHAT_MESSAGING_ENABLED`，realtime 依赖消息开关。冷启动期服务端目录和消息接口只接受 `general`，旧多频道 slug 必须迁移归档而不能仅靠前端隐藏；客户端保留房间数组能力，但单房间时不得渲染桌面侧栏或移动顶部标签。页面不得渲染整页访问状态再跳工作区；首屏只允许单栏同构骨架，失败在工作区内重试。社区写事务只能用同一个 `connection.query`，并在消息落库事务内重新锁定成员限制、`community_chat_runtime_policy` 单行策略、主房间和有效禁言；图片上传在写私有对象存储前必须以账号行锁串行预留配额，最多保留 12 张未绑定的上传中、待发送或待清理图片，不能只靠进程内限流。管理员预览上下文不得代用用户社区身份。Root 切换数据库策略时原因必填，必须与前后状态同事务写入不可变审计；`COMMUNITY_CHAT_EMERGENCY_READ_ONLY` 是更高优先级环境硬开关，生效时后台不得恢复发言。紧急只读拦截新消息以及图片上传/绑定，但不拦截历史与图片查看、已读、举报或屏蔽。客户端只提交房间 slug、公有消息/待发送图片 ID、幂等键、原因枚举和纯文本，不得提交目标 user ID/角色/内部自增 ID 或对象存储 Key；游客不得调用任何社区写接口。历史用不透明公有游标，作者可返回受限公开头像、头像框、等级、段位和称号但不能返回内部账号 ID；头像用户卡必须继续只接受消息公有 ID，由服务端反查作者并只返回公开成就，不接受目标 user ID，也不返回邮箱、经验值、资源统计或私人内容。阅读位置用单调更新防倒退。举报必须保存最小证据快照且重复提交幂等，屏蔽从服务端消息解析作者并同时过滤历史、引用和未读。Root 消息审核只能调用社区管理 API；驳回、隐藏、禁言和封禁都由 Service 事务处理并收集明确原因。通知记录初始化为关闭，设备推送未接入前不得借用 Android 下载通知能力宣称聊天后台推送。
+- 社区 realtime 必须挂载现有 HTTP server 的唯一 `/realtime/chat` 路径，不得新增 echo 端口或把 sid 放进 URL。upgrade 先校验同源/显式允许的 `Origin`、IP 频控和显式 realtime 开关，再从 Cookie sid 读取会话并查 `user` 实时角色、账号限制与社区权限；缺失或无效的显式 sid 不能静默提权或降级。订阅协议只允许 `general`，出现 user ID、角色或额外字段立即协议失败关闭。REST/MySQL 是唯一消息真相，WebSocket 只发公有消息 ID 等失效通知；消息、审核、权限和运行策略事件必须在事务提交后发布，Redis/广播失败只记录稳定错误码，不能改变 REST 成功结果。客户端连接正常时仍保留低频权威安全刷新，断线、切网、前台恢复和权限事件都要重新拉取 REST，未知事件忽略、协议版本不兼容则稳定降级，禁止无限快速重连。
+- 聊天室通知地址必须使用真实可用的消息深链，不能只拼接页面会忽略的查询参数。历史接口的 `before` 与 `focus` 必须互斥；`focus` 只解析当前房间、当前用户仍可见的 active 消息。前端定位后用实色描边高亮并提供“回到最新消息”，目标失效时清理 `message` 参数、保留其他查询参数并回退最新历史。
 
 ### 前端规范
 
@@ -304,6 +309,7 @@ try {
 | 文字提示 | `BTooltip`      | `a-tooltip`                 |
 
 - 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
+- 共享 `MobileAppShell` 负责移动文本输入时的键盘视口：只有文本输入获得焦点且 `visualViewport` 相对稳定基线明显收缩时才进入键盘态，隐藏底部一级导航，并用实际可见高度约束应用壳；失焦或视口恢复时重置。业务页面不得按 Android UA 单独补高度，也不得自行复制键盘监听。
 
 **图标开发规范：**
 

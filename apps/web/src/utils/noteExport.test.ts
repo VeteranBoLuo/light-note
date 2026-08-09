@@ -91,6 +91,27 @@ describe('renderMarkdownForExport', () => {
 
     expect(html).toContain('data-ln-size="large"');
   });
+
+  it('Markdown 中的图文组合渲染后仍保留一图一文结构', async () => {
+    const html = await renderMarkdownForExport(
+      '<section class="ln-media-text" data-ln-media-position="right" data-ln-media-width="42"><figure class="ln-media-text__item"><div class="ln-media-text__media"><img src="https://example.com/a.png" alt="图片"></div><figcaption class="ln-media-text__content"><p>对应文字</p></figcaption></figure></section>',
+    );
+
+    expect(html).toContain('class="ln-media-text"');
+    expect(html).toContain('data-ln-media-position="right"');
+    expect(html).toContain('<figcaption class="ln-media-text__content"><p>对应文字</p></figcaption>');
+  });
+
+  it('Markdown 中的渐变文字渲染后保留受控样式变量', async () => {
+    const html = await renderMarkdownForExport(
+      '<span class="ln-text-gradient" data-ln-text-gradient="true" style="--ln-gradient-from:#615ced;--ln-gradient-to:#00a884;--ln-gradient-angle:90deg">渐变文字</span>',
+    );
+
+    expect(html).toContain('class="ln-text-gradient"');
+    expect(html).toContain('--ln-gradient-from:#615ced');
+    expect(html).toContain('--ln-gradient-to:#00a884');
+    expect(html).toContain('--ln-gradient-angle:90deg');
+  });
 });
 
 describe('buildNoteExportHtml', () => {
@@ -98,14 +119,20 @@ describe('buildNoteExportHtml', () => {
     const doc = buildNoteExportHtml('标题', '<p>正文</p>');
     expect(doc.startsWith('<!DOCTYPE html>')).toBe(true);
     expect(doc).toContain('<style>');
-    // 离线打开时 var(--x) 会全部失效，必须是固定色值
-    expect(doc).not.toContain('var(--');
+    // 离线文件不能依赖站内主题变量；渐变效果只允许使用正文自带的受控变量。
+    expect(doc).not.toContain('var(--text-color');
+    expect(doc).not.toContain('var(--primary-color');
+    expect(doc).toContain('var(--ln-gradient-from');
     // 覆盖表格/代码块/任务清单/资源引用胶囊
     expect(doc).toContain('table th');
     expect(doc).toContain('pre code');
     expect(doc).toContain("input[type='checkbox']");
     expect(doc).toContain('a.ln-resource-link');
     expect(doc).toContain("img[data-ln-size='medium']");
+    expect(doc).toContain('.ln-media-text__item');
+    expect(doc).toContain("data-ln-media-position='right'");
+    expect(doc).toContain('.ln-text-gradient');
+    expect(doc).toContain('.ln-rich-effect-float');
   });
 
   it('正文已以 h1 开头时不再重复补标题（md 笔记首行常是 # 标题）', () => {

@@ -1,20 +1,33 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, defineComponent, h, nextTick, onMounted } from 'vue';
 import { createMemoryHistory, createRouter, RouterView, useRoute } from 'vue-router';
-import { getMainRouteViewKey } from './routeViewKey';
+import { getMainRouteViewKey, markNoteDraftPromoted } from './routeViewKey';
 
 describe('getMainRouteViewKey', () => {
-  it('切换笔记详情 ID 时保持工作区 key，避免整页重新挂载', () => {
+  afterEach(() => markNoteDraftPromoted(null));
+
+  it('切换笔记详情 ID 时生成不同 key，隔离编辑器和自动保存状态', () => {
     const first = getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } });
     const second = getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-b' } });
 
-    expect(first).toBe('note-detail-workspace');
-    expect(second).toBe('note-detail-workspace');
-    expect(first).toBe(second);
+    expect(first).toBe('note-detail:note-a');
+    expect(second).toBe('note-detail:note-b');
+    expect(first).not.toBe(second);
   });
 
   it('同一笔记保持稳定 key', () => {
-    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } })).toBe('note-detail-workspace');
+    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } })).toBe(
+      getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-a' } }),
+    );
+  });
+
+  it('新建草稿首次保存为真实 ID 时沿用同一 key', () => {
+    const addKey = getMainRouteViewKey({ name: 'noteDetail', params: { id: 'add' } });
+    markNoteDraftPromoted('note-created');
+
+    expect(addKey).toBe('note-detail:add');
+    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'note-created' } })).toBe(addKey);
+    expect(getMainRouteViewKey({ name: 'noteDetail', params: { id: 'another-note' } })).not.toBe(addKey);
   });
 
   it('其他页面保持统一 key，查询参数变化不会误重建主内容', () => {
@@ -22,7 +35,7 @@ describe('getMainRouteViewKey', () => {
     expect(getMainRouteViewKey({ name: 'cloudSpace', params: { id: 'b' } })).toBe('main-route-view');
   });
 
-  it('Vue Router 切换笔记 ID 时复用详情组件并更新内容', async () => {
+  it('Vue Router 切换笔记 ID 时重建详情组件', async () => {
     let mountedCount = 0;
     const NoteDetailStub = defineComponent({
       setup() {
@@ -59,7 +72,7 @@ describe('getMainRouteViewKey', () => {
       await router.push('/noteLibrary/note-b');
       await nextTick();
       expect(host.textContent).toBe('note-b');
-      expect(mountedCount).toBe(1);
+      expect(mountedCount).toBe(2);
     } finally {
       app.unmount();
       host.remove();

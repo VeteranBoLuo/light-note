@@ -31,54 +31,37 @@
           >
 
           <div
-            :style="{
-              color: route.path.includes('/home') ? '#615ced' : '',
-            }"
+            id="nav-bookmark-entry"
+            :style="{ color: route.path.includes('/home') ? '#615ced' : '' }"
             style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.home"
             @click="handleToBookmark"
             >{{ $t('navigation.bookmark') }}</div
           >
           <div
-            :style="{
-              color: route.path.includes('/noteLibrary') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            id="nav-note-entry"
+            :style="{ color: route.path.includes('/noteLibrary') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.note"
             @click="router.push('/noteLibrary')"
-            >{{ $t('navigation.note') }}
-          </div>
+            >{{ $t('navigation.note') }}</div
+          >
           <div
-            :style="{
-              color: route.path.includes('/cloudSpace') ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
+            id="nav-cloud-entry"
+            :style="{ color: route.path.includes('/cloudSpace') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
             v-click-log="OPERATION_LOG_MAP.navigation.cloudSpace"
             @click="handleToCloudSpace"
-            >{{ $t('navigation.cloudSpace') }}
-          </div>
-          <div
-            id="nav-tag-entry"
-            :style="{
-              color:
-                route.path.includes('/manage/tagMg') ||
-                route.path.includes('/manage/editTag') ||
-                route.path.startsWith('/tag/')
-                  ? '#615ced'
-                  : '',
-            }"
-            style="font-size: 14px; cursor: pointer; display: flex; gap: 5px; align-items: center"
-            v-click-log="OPERATION_LOG_MAP.navigation.tag"
-            @click="router.push('/manage/tagMg')"
-            >{{ $t('navigation.tag') }}
-          </div>
+            >{{ $t('navigation.cloudSpace') }}</div
+          >
 
           <!--
             待办是唯一挂注意力角标的导航项：它的数字是「逾期 + 今天到期」，做完今天的事
             就能归零，点进去即可处理。角标绝对定位，出现或消失都不改变导航项宽度，
-            后面的「资源中心」不会左右跳动。
+            其他一级导航不会左右跳动。
           -->
           <div
+            id="nav-todo-entry"
             :style="{ color: isTodoRoute ? '#615ced' : '' }"
             class="navigation-todo-entry"
             style="font-size: 14px; cursor: pointer"
@@ -94,24 +77,28 @@
               >{{ displayTodoAttention }}</span
             ></div
           >
-          <div
-            :style="{
-              color:
-                !isTodoRoute && (route.path.includes('/search') || route.path.includes('/inbox')) ? '#615ced' : '',
-            }"
-            style="font-size: 14px; cursor: pointer"
-            v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
-            @click="router.push('/search')"
-            >{{ $t('navigation.resourceCenter') }}</div
+
+          <BButton
+            id="nav-community-entry"
+            class="navigation-community-entry"
+            :class="{ 'is-active': route.path.includes('/community-chat') }"
+            :aria-current="route.path.includes('/community-chat') ? 'page' : undefined"
+            :aria-label="communityEntryLabel"
+            v-click-log="{ module: '导航栏', operation: '打开公共聊天室' }"
+            @click="router.push('/community-chat')"
           >
-          <div
-            v-if="user.role === 'visitor'"
-            :style="{ color: route.path.includes('/co-build') ? '#615ced' : '' }"
-            style="font-size: 14px; cursor: pointer"
-            v-click-log="OPERATION_LOG_MAP.navigation.coBuild"
-            @click="router.push('/co-build')"
-            >{{ $t('navigation.coBuild') }}</div
-          >
+            <SvgIcon :src="icon.ai.conversations" size="16" aria-hidden="true" />
+            <span>{{ $t('navigation.communityChat') }}</span>
+            <span
+              v-if="communityUnreadTotal > 0"
+              class="navigation-community-entry__badge"
+              role="status"
+              :aria-label="$t('communityChat.unreadBadge', { count: communityUnreadTotal })"
+            >
+              {{ communityUnreadTotal > 99 ? '99+' : communityUnreadTotal }}
+            </span>
+          </BButton>
+
           <!--
             管理是单入口：知识库、通知中心、安全中心都已进了 /admin 的侧边导航，
             这里再挂一层下拉只是把后台里已有的入口重复一遍，所以直接进后台总览。
@@ -134,17 +121,23 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import RightArea from '@/components/home/navigation/RightArea.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
+  import icon from '@/config/icon';
 
   const route = useRoute();
   const user = useUserStore();
   const inbox = inboxStore();
+  const communityUnread = useCommunityChatUnread();
+  const { totalUnread: communityUnreadTotal } = communityUnread;
 
   const navigationFucVisible = computed(() => !bookmark.isMobile);
   const { t } = useI18n();
@@ -167,6 +160,11 @@
       overdue: inbox.todoOverdueTotal,
       dueToday: inbox.todoDueTodayTotal,
     }),
+  );
+  const communityEntryLabel = computed(() =>
+    communityUnreadTotal.value > 0
+      ? `${t('navigation.communityChat')}，${t('communityChat.unreadBadge', { count: communityUnreadTotal.value })}`
+      : t('navigation.communityChat'),
   );
 
   const bookmark = bookmarkStore();
@@ -198,6 +196,29 @@
   });
 
   watch(
+    () => [bookmark.isMobile, user.id, user.role] as const,
+    ([isMobile, id, role]) => {
+      if (isMobile) return;
+      communityUnread.reset();
+      if (id && role !== 'visitor') void communityUnread.refresh();
+    },
+    { immediate: true },
+  );
+
+  let communityUnreadTimer: number | undefined;
+  onMounted(() => {
+    communityUnreadTimer = window.setInterval(() => {
+      if (!bookmark.isMobile && document.visibilityState === 'visible' && user.id && user.role !== 'visitor') {
+        void communityUnread.refresh();
+      }
+    }, 60_000);
+  });
+
+  onBeforeUnmount(() => {
+    if (communityUnreadTimer !== undefined) window.clearInterval(communityUnreadTimer);
+  });
+
+  watch(
     () => bookmark.type,
     (val) => {
       if (val !== 'search') {
@@ -224,6 +245,52 @@
   /* 角标绝对定位在文字右上角：数字出现或消失都不占导航流宽度，后续导航项不会跳动 */
   .navigation-todo-entry {
     position: relative;
+  }
+  .navigation-community-entry {
+    position: relative;
+    min-height: 34px;
+    padding: 5px 11px;
+    gap: 6px;
+    border: 1px solid var(--primary-color) !important;
+    border-radius: 999px;
+    color: var(--primary-color);
+    background: var(--card-background) !important;
+    font-size: 13px;
+    font-weight: 650;
+    white-space: nowrap;
+    transform: translateY(0);
+    transition:
+      color 180ms ease,
+      background-color 180ms ease,
+      border-color 180ms ease,
+      transform 180ms ease;
+  }
+  .navigation-community-entry:hover,
+  .navigation-community-entry.is-active {
+    color: #fff;
+    background: var(--primary-color) !important;
+  }
+  .navigation-community-entry:hover:not(.is-active) {
+    transform: translateY(-1px);
+  }
+  .navigation-community-entry__badge {
+    position: absolute;
+    top: -7px;
+    right: -8px;
+    min-width: 17px;
+    height: 17px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--surface-page-bg, var(--background-color));
+    border-radius: 999px;
+    color: var(--danger-fill-fg, #fff);
+    background: var(--danger-fill-bg, #d93b3b);
+    font-size: 9px;
+    line-height: 1;
+    pointer-events: none;
   }
   .navigation-attention-badge {
     position: absolute;
@@ -303,6 +370,15 @@
         width: 25px;
         overflow: hidden;
       }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .navigation-community-entry {
+      transition: none;
+    }
+
+    .navigation-community-entry:hover:not(.is-active) {
+      transform: none;
     }
   }
   @media (min-width: 768px) and (max-width: 1199px) {

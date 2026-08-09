@@ -92,7 +92,10 @@ beforeEach(() => {
     strokeStyle: '',
   } as unknown as CanvasRenderingContext2D;
   canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
-  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+  vi.stubGlobal(
+    'requestAnimationFrame',
+    vi.fn(() => 1),
+  );
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
 });
 
@@ -151,5 +154,19 @@ describe('Landing CTA', () => {
     await nextTick();
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/app');
+  });
+
+  it('把官网的支持入口收敛到站内说明页', async () => {
+    const host = await mountLanding();
+    const reasonLink = host.querySelector<HTMLAnchorElement>('.reason-support-link');
+    const footerLink = host.querySelector<HTMLAnchorElement>('.footer-support-link');
+
+    expect(reasonLink?.getAttribute('href')).toBe('/support');
+    expect(footerLink?.getAttribute('href')).toBe('/support');
+    expect(host.querySelectorAll<HTMLAnchorElement>('a[href="/support"]')).toHaveLength(2);
+
+    reasonLink?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/support');
   });
 });

@@ -347,7 +347,7 @@ describe('笔记库页面树交互接线', () => {
     expect(backFunction).not.toContain('router.back()');
   });
 
-  it('详情切换笔记时保留面包屑稳定壳，只重建标题与编辑内容', () => {
+  it('详情内容加载后以独立 key 重建标题与编辑区域', () => {
     const stablePanelStart = detailSource.indexOf('class="note-body-header editor-panel"');
     const breadcrumbStart = detailSource.indexOf('class="note-detail-breadcrumb"', stablePanelStart);
     const transitionStart = detailSource.indexOf('<Transition name="note-content-switch"', stablePanelStart);
@@ -361,6 +361,8 @@ describe('笔记库页面树交互接线', () => {
     expect(detailSource).not.toContain('canShowPrivateNavigation && detailBreadcrumb.length');
     expect(detailSource).toContain('v-for="item in detailBreadcrumbTailDisplay"');
     expect(detailSource).toContain('class="note-detail-content"');
+    expect(detailSource).toContain('const detailInstanceRouteId = routeNoteLoadKey.value.split');
+    expect(detailSource).toContain('if (id !== detailInstanceRouteId && !isPromotedCurrentDraft) return;');
   });
 
   it('桌面页面标题进入库内预览，移动端仍直接打开正文，展开和更多操作保持独立', () => {

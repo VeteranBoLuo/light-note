@@ -27,6 +27,7 @@
   const menuList = buildAdminMobileMenu({
     icons: {
       overview: icon.userCenter.workbenches,
+      action: icon.ai.pending,
       user: icon.navigation.user,
       ai: icon.ai.ask,
       growth: icon.userCenter.growth,
@@ -36,7 +37,15 @@
     },
     pendingOpinion: 0,
     pendingSecurity: 0,
+    pendingCommunity: 0,
+    pendingModeration: 0,
+    actionCenterTitle: t('adminActionCenter.title'),
+    adminAuditTitle: t('adminAudit.title'),
+    productInsightsTitle: t('adminProductInsights.title'),
+    adminGovernanceTitle: t('adminGovernance.title'),
     aiEvaluationTitle: t('aiEvaluationAdmin.title'),
+    communityAccessTitle: t('communityChatAdmin.navTitle'),
+    communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
   });
 
   function clickItem(item: AdminMobileMenuItem) {

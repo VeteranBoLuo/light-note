@@ -70,7 +70,6 @@
 - 用户反馈处理
 - 图片存储管理
 - 帮助文档管理（含草稿发布）
-- SQL 控制台
 
 ### 基础能力
 
@@ -142,7 +141,7 @@ light-note/
 │       │   ├── aiHandle.js
 │       │   ├── admin/          # 后台管理接口
 │       │   └── ...
-│       └── websocket/          # WebSocket 服务
+│       └── util/communityChat/ # 公共聊天室 realtime 协议、Hub 与 Redis Broker
 └── packages/
     └── shared/             # 共享工具包
 ```

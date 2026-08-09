@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
@@ -41,6 +41,9 @@ const inbox = {
 };
 
 const user = { id: '', role: 'visitor' };
+const communityUnreadTotal = ref(0);
+const refreshCommunityUnread = vi.fn(async () => null);
+const resetCommunityUnread = vi.fn();
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
@@ -48,8 +51,24 @@ vi.mock('@/store', () => ({
   useUserStore: () => user,
 }));
 
+vi.mock('@/composables/useCommunityChatUnread', () => ({
+  useCommunityChatUnread: () => ({
+    totalUnread: communityUnreadTotal,
+    refresh: refreshCommunityUnread,
+    reset: resetCommunityUnread,
+  }),
+}));
+
 vi.mock('@/components/home/navigation/RightArea.vue', () => ({
   default: { name: 'RightAreaStub', template: '<div></div>' },
+}));
+
+vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
+  default: {
+    name: 'SvgIconStub',
+    props: ['src'],
+    template: '<i class="svg-icon-stub" :data-src="src"></i>',
+  },
 }));
 
 const { default: Navigation } = await import('./Navigation.vue');
@@ -82,6 +101,10 @@ afterEach(() => {
   cleanup = undefined;
   mocks.routerPush.mockClear();
   user.role = 'visitor';
+  user.id = '';
+  communityUnreadTotal.value = 0;
+  refreshCommunityUnread.mockClear();
+  resetCommunityUnread.mockClear();
   bookmark.isFold = false;
   inbox.todoAttentionTotal = 0;
   inbox.todoOverdueTotal = 0;
@@ -89,6 +112,56 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
+  it('PC 顶栏用带文字的聊天室入口直达公共空间，并显示未读角标', async () => {
+    user.id = 'user-1';
+    user.role = 'user';
+    communityUnreadTotal.value = 8;
+    const host = await mountNavigation();
+    const entry = host.querySelector<HTMLButtonElement>('#nav-community-entry');
+
+    expect(entry?.textContent).toContain('聊天室');
+    expect(entry?.querySelector('.navigation-community-entry__badge')?.textContent?.trim()).toBe('8');
+    expect(entry?.getAttribute('aria-label')).toContain('8');
+    expect(resetCommunityUnread).toHaveBeenCalledTimes(1);
+    expect(refreshCommunityUnread).toHaveBeenCalledTimes(1);
+
+    entry?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
+  });
+
+  it('PC 顶栏把聊天室固定放在待办右侧', async () => {
+    const host = await mountNavigation();
+    const navigationItems = Array.from(host.querySelector('.navigation-tab')?.children || []);
+    const todoEntry = host.querySelector('#nav-todo-entry');
+    const communityEntry = host.querySelector('#nav-community-entry');
+
+    expect(todoEntry).not.toBeNull();
+    expect(communityEntry).not.toBeNull();
+    expect(navigationItems.indexOf(communityEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
+  });
+
+  it('PC 顶栏保留书签、笔记和云空间三个高频资料入口，可一键切换', async () => {
+    const host = await mountNavigation();
+
+    expect(host.querySelector('#nav-bookmark-entry')?.textContent?.trim()).toBe('书签');
+    expect(host.querySelector('#nav-note-entry')?.textContent?.trim()).toBe('笔记');
+    expect(host.querySelector('#nav-cloud-entry')?.textContent?.trim()).toBe('云空间');
+    expect(host.textContent).not.toContain('资源中心');
+
+    host.querySelector<HTMLElement>('#nav-bookmark-entry')?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/home');
+
+    host.querySelector<HTMLElement>('#nav-note-entry')?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/noteLibrary');
+
+    host.querySelector<HTMLElement>('#nav-cloud-entry')?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/cloudSpace');
+  });
+
   it('PC 应用内点击 Logo 进入稳定应用入口，而不是返回官网', async () => {
     const host = await mountNavigation();
     const logo = host.querySelector<HTMLElement>('.navigation-title-link');

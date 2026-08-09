@@ -206,10 +206,12 @@ SELECT '[15] missing_core_index' AS check_name, CONCAT(expected.tn, '.', expecte
   SELECT 'todo_items', 'uk_todo_series_instance'
 ) expected
 LEFT JOIN information_schema.statistics actual
-  ON actual.table_schema=DATABASE()
- AND actual.table_name=expected.tn
- AND actual.index_name=expected.ix
+ ON actual.table_schema=DATABASE()
+AND actual.table_name=expected.tn
+AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+
 
 -- 16) 已下线的表不应再存在（期望 0 行）
 -- tag_relations：手工「相关标签」已改为按共同资源自动推导（20260731_drop_tag_relations.sql）
@@ -615,3 +617,559 @@ WHERE NOT EXISTS (
     AND column_name='target_user_id'
     AND seq_in_index=1
 );
+
+-- 31) 社区客厅 Stage 0 必须先具备邀请、规则确认、通知默认开启和访问审计底座（期望 0 行）
+SELECT '[31] missing_community_chat_foundation_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'community_chat_rooms' t UNION ALL
+  SELECT 'community_chat_access_requests' UNION ALL
+  SELECT 'community_chat_members' UNION ALL
+  SELECT 'community_chat_user_settings' UNION ALL
+  SELECT 'community_chat_access_audit'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[31] invalid_community_chat_table_shape' AS check_name,
+  CONCAT(actual.table_name, ':', actual.engine, ':', actual.table_collation) AS detail
+FROM information_schema.tables actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN (
+    'community_chat_rooms',
+    'community_chat_access_requests',
+    'community_chat_members',
+    'community_chat_user_settings',
+    'community_chat_access_audit'
+  )
+  AND (actual.engine <> 'InnoDB' OR actual.table_collation <> 'utf8mb4_unicode_ci');
+
+SELECT '[31] missing_community_chat_foundation_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_rooms' tab, 'slug' col, 'community_chat_rooms.slug' n UNION ALL
+  SELECT 'community_chat_rooms', 'default_notification_level', 'community_chat_rooms.default_notification_level' UNION ALL
+  SELECT 'community_chat_rooms', 'last_message_id', 'community_chat_rooms.last_message_id' UNION ALL
+  SELECT 'community_chat_access_requests', 'user_id', 'community_chat_access_requests.user_id' UNION ALL
+  SELECT 'community_chat_access_requests', 'status', 'community_chat_access_requests.status' UNION ALL
+  SELECT 'community_chat_members', 'status', 'community_chat_members.status' UNION ALL
+  SELECT 'community_chat_members', 'rules_version', 'community_chat_members.rules_version' UNION ALL
+  SELECT 'community_chat_members', 'rules_accepted_at', 'community_chat_members.rules_accepted_at' UNION ALL
+  SELECT 'community_chat_user_settings', 'global_notification_enabled', 'community_chat_user_settings.global_notification_enabled' UNION ALL
+  SELECT 'community_chat_user_settings', 'browser_notification_enabled', 'community_chat_user_settings.browser_notification_enabled' UNION ALL
+  SELECT 'community_chat_user_settings', 'android_notification_enabled', 'community_chat_user_settings.android_notification_enabled' UNION ALL
+  SELECT 'community_chat_user_settings', 'lock_screen_preview', 'community_chat_user_settings.lock_screen_preview' UNION ALL
+  SELECT 'community_chat_access_audit', 'actor_user_id', 'community_chat_access_audit.actor_user_id' UNION ALL
+  SELECT 'community_chat_access_audit', 'target_user_id', 'community_chat_access_audit.target_user_id' UNION ALL
+  SELECT 'community_chat_access_audit', 'action', 'community_chat_access_audit.action'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[31] invalid_community_chat_notification_default' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL'), ' expected=', expected.default_value) AS detail
+FROM (
+  SELECT 'global_notification_enabled' column_name, '1' default_value UNION ALL
+  SELECT 'browser_notification_enabled', '0' UNION ALL
+  SELECT 'android_notification_enabled', '0'
+) expected
+JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_user_settings'
+ AND actual.column_name=expected.column_name
+WHERE NOT (actual.is_nullable='NO' AND actual.column_default=expected.default_value);
+
+SELECT '[31] invalid_community_chat_account_id_collation' AS check_name,
+  CONCAT(expected.n, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM (
+  SELECT 'community_chat_access_requests' tab, 'user_id' col, 'community_chat_access_requests.user_id' n UNION ALL
+  SELECT 'community_chat_access_requests', 'reviewed_by', 'community_chat_access_requests.reviewed_by' UNION ALL
+  SELECT 'community_chat_members', 'user_id', 'community_chat_members.user_id' UNION ALL
+  SELECT 'community_chat_members', 'invited_by', 'community_chat_members.invited_by' UNION ALL
+  SELECT 'community_chat_user_settings', 'user_id', 'community_chat_user_settings.user_id' UNION ALL
+  SELECT 'community_chat_access_audit', 'actor_user_id', 'community_chat_access_audit.actor_user_id' UNION ALL
+  SELECT 'community_chat_access_audit', 'target_user_id', 'community_chat_access_audit.target_user_id'
+) expected
+JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.character_set_name <> 'utf8'
+   OR actual.collation_name <> 'utf8_general_ci';
+
+SELECT '[31] missing_community_chat_foundation_index' AS check_name,
+  CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'community_chat_rooms' tn, 'uk_community_chat_room_slug' ix UNION ALL
+  SELECT 'community_chat_rooms', 'idx_community_chat_room_status_sort' UNION ALL
+  SELECT 'community_chat_access_requests', 'uk_community_chat_access_user' UNION ALL
+  SELECT 'community_chat_access_requests', 'idx_community_chat_access_status_time' UNION ALL
+  SELECT 'community_chat_members', 'idx_community_chat_member_status_role' UNION ALL
+  SELECT 'community_chat_access_audit', 'idx_community_chat_audit_target_time' UNION ALL
+  SELECT 'community_chat_access_audit', 'idx_community_chat_audit_actor_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 32) 社区客厅文本 MVP 必须具备消息幂等、回复游标与阅读位置底座（期望 0 行）
+SELECT '[32] missing_community_chat_text_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'community_chat_messages' t UNION ALL
+  SELECT 'community_chat_reads'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[32] invalid_community_chat_text_table_shape' AS check_name,
+  CONCAT(actual.table_name, ':', actual.engine, ':', actual.table_collation) AS detail
+FROM information_schema.tables actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN ('community_chat_messages', 'community_chat_reads')
+  AND (actual.engine <> 'InnoDB' OR actual.table_collation <> 'utf8mb4_unicode_ci');
+
+SELECT '[32] missing_community_chat_text_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_messages' tab, 'public_id' col, 'community_chat_messages.public_id' n UNION ALL
+  SELECT 'community_chat_messages', 'room_id', 'community_chat_messages.room_id' UNION ALL
+  SELECT 'community_chat_messages', 'user_id', 'community_chat_messages.user_id' UNION ALL
+  SELECT 'community_chat_messages', 'client_request_id', 'community_chat_messages.client_request_id' UNION ALL
+  SELECT 'community_chat_messages', 'reply_to_id', 'community_chat_messages.reply_to_id' UNION ALL
+  SELECT 'community_chat_messages', 'content', 'community_chat_messages.content' UNION ALL
+  SELECT 'community_chat_messages', 'status', 'community_chat_messages.status' UNION ALL
+  SELECT 'community_chat_reads', 'room_id', 'community_chat_reads.room_id' UNION ALL
+  SELECT 'community_chat_reads', 'user_id', 'community_chat_reads.user_id' UNION ALL
+  SELECT 'community_chat_reads', 'last_read_message_id', 'community_chat_reads.last_read_message_id'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[32] invalid_community_chat_read_default' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_reads'
+  AND actual.column_name='last_read_message_id'
+  AND NOT (actual.is_nullable='NO' AND actual.column_default='0');
+
+SELECT '[32] invalid_community_chat_account_id_collation' AS check_name,
+  CONCAT(actual.table_name, '.user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN ('community_chat_messages', 'community_chat_reads')
+  AND actual.column_name='user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[32] missing_community_chat_text_index' AS check_name,
+  CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'community_chat_messages' tn, 'uk_community_chat_message_public' ix UNION ALL
+  SELECT 'community_chat_messages', 'uk_community_chat_message_request' UNION ALL
+  SELECT 'community_chat_messages', 'idx_community_chat_message_room_status_id' UNION ALL
+  SELECT 'community_chat_messages', 'idx_community_chat_message_reply' UNION ALL
+  SELECT 'community_chat_messages', 'idx_community_chat_message_user_time' UNION ALL
+  SELECT 'community_chat_reads', 'PRIMARY' UNION ALL
+  SELECT 'community_chat_reads', 'idx_community_chat_read_user_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 33) 社区客厅邀请制开放前必须具备举报、屏蔽、人工处置与临时禁言底座（期望 0 行）
+SELECT '[33] missing_community_chat_governance_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'community_chat_blocks' t UNION ALL
+  SELECT 'community_chat_reports' UNION ALL
+  SELECT 'community_chat_moderation_actions' UNION ALL
+  SELECT 'community_chat_member_sanctions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[33] invalid_community_chat_governance_table_shape' AS check_name,
+  CONCAT(actual.table_name, ':', actual.engine, ':', actual.table_collation) AS detail
+FROM information_schema.tables actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN (
+    'community_chat_blocks',
+    'community_chat_reports',
+    'community_chat_moderation_actions',
+    'community_chat_member_sanctions'
+  )
+  AND (actual.engine <> 'InnoDB' OR actual.table_collation <> 'utf8mb4_unicode_ci');
+
+SELECT '[33] missing_community_chat_governance_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_blocks' tab, 'id' col, 'community_chat_blocks.id' n UNION ALL
+  SELECT 'community_chat_blocks', 'user_id', 'community_chat_blocks.user_id' UNION ALL
+  SELECT 'community_chat_blocks', 'blocked_user_id', 'community_chat_blocks.blocked_user_id' UNION ALL
+  SELECT 'community_chat_reports', 'id', 'community_chat_reports.id' UNION ALL
+  SELECT 'community_chat_reports', 'reporter_id', 'community_chat_reports.reporter_id' UNION ALL
+  SELECT 'community_chat_reports', 'message_id', 'community_chat_reports.message_id' UNION ALL
+  SELECT 'community_chat_reports', 'reason_code', 'community_chat_reports.reason_code' UNION ALL
+  SELECT 'community_chat_reports', 'evidence_snapshot', 'community_chat_reports.evidence_snapshot' UNION ALL
+  SELECT 'community_chat_reports', 'status', 'community_chat_reports.status' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'report_id', 'community_chat_moderation_actions.report_id' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'actor_user_id', 'community_chat_moderation_actions.actor_user_id' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'target_user_id', 'community_chat_moderation_actions.target_user_id' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'action', 'community_chat_moderation_actions.action' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'reason', 'community_chat_moderation_actions.reason' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'user_id', 'community_chat_member_sanctions.user_id' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'type', 'community_chat_member_sanctions.type' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'status', 'community_chat_member_sanctions.status' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'expires_at', 'community_chat_member_sanctions.expires_at' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'created_by', 'community_chat_member_sanctions.created_by'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[33] invalid_community_chat_governance_json' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', actual.data_type) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name='community_chat_reports' AND actual.column_name='evidence_snapshot')
+    OR (actual.table_name='community_chat_moderation_actions' AND actual.column_name='metadata')
+  )
+  AND actual.data_type <> 'json';
+
+SELECT '[33] invalid_community_chat_governance_account_id_collation' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN (
+    'community_chat_blocks',
+    'community_chat_reports',
+    'community_chat_moderation_actions',
+    'community_chat_member_sanctions'
+  )
+  AND actual.column_name IN (
+    'user_id',
+    'blocked_user_id',
+    'reporter_id',
+    'reviewed_by',
+    'actor_user_id',
+    'target_user_id',
+    'created_by',
+    'revoked_by'
+  )
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[33] missing_community_chat_governance_index' AS check_name,
+  CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'community_chat_blocks' tn, 'uk_community_chat_block_pair' ix UNION ALL
+  SELECT 'community_chat_blocks', 'idx_community_chat_block_target_time' UNION ALL
+  SELECT 'community_chat_reports', 'uk_community_chat_reporter_message' UNION ALL
+  SELECT 'community_chat_reports', 'idx_community_chat_report_status_time' UNION ALL
+  SELECT 'community_chat_reports', 'idx_community_chat_report_message_time' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'uk_community_chat_moderation_report' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'idx_community_chat_moderation_target_time' UNION ALL
+  SELECT 'community_chat_moderation_actions', 'idx_community_chat_moderation_actor_time' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'idx_community_chat_sanction_user_status_expiry' UNION ALL
+  SELECT 'community_chat_member_sanctions', 'idx_community_chat_sanction_status_expiry'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 34) 社区客厅公开灰度前必须具备可审计、可即时生效的全站只读策略（期望 0 行）
+SELECT '[34] missing_community_chat_runtime_policy_table' AS check_name,
+  'community_chat_runtime_policy' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_runtime_policy'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[34] missing_community_chat_runtime_policy_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'id' col, 'community_chat_runtime_policy.id' n UNION ALL
+  SELECT 'posting_enabled', 'community_chat_runtime_policy.posting_enabled' UNION ALL
+  SELECT 'updated_by', 'community_chat_runtime_policy.updated_by' UNION ALL
+  SELECT 'update_time', 'community_chat_runtime_policy.update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_runtime_policy'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[34] invalid_community_chat_runtime_policy_default' AS check_name,
+  CONCAT('posting_enabled actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_runtime_policy'
+  AND actual.column_name='posting_enabled'
+  AND NOT (actual.is_nullable='NO' AND actual.column_default='1');
+
+SELECT '[34] invalid_community_chat_runtime_policy_account_id_collation' AS check_name,
+  CONCAT('updated_by actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_runtime_policy'
+  AND actual.column_name='updated_by'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+-- 35) 后台高风险操作必须具备追加式审计事实表（期望 0 行）
+SELECT '[35] missing_admin_operation_audit_table' AS check_name, 'admin_operation_audit' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='admin_operation_audit'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[35] missing_admin_operation_audit_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'id' col, 'admin_operation_audit.id' n UNION ALL
+  SELECT 'actor_user_id', 'admin_operation_audit.actor_user_id' UNION ALL
+  SELECT 'action', 'admin_operation_audit.action' UNION ALL
+  SELECT 'target_type', 'admin_operation_audit.target_type' UNION ALL
+  SELECT 'target_id', 'admin_operation_audit.target_id' UNION ALL
+  SELECT 'outcome', 'admin_operation_audit.outcome' UNION ALL
+  SELECT 'reason', 'admin_operation_audit.reason' UNION ALL
+  SELECT 'request_id', 'admin_operation_audit.request_id' UNION ALL
+  SELECT 'ip_masked', 'admin_operation_audit.ip_masked' UNION ALL
+  SELECT 'metadata', 'admin_operation_audit.metadata' UNION ALL
+  SELECT 'create_time', 'admin_operation_audit.create_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='admin_operation_audit'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[35] invalid_admin_operation_actor_collation' AS check_name,
+  CONCAT('actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='admin_operation_audit'
+  AND actual.column_name='actor_user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[35] missing_admin_operation_audit_index' AS check_name,
+  CONCAT('admin_operation_audit.', expected.ix) AS detail
+FROM (
+  SELECT 'idx_admin_operation_actor_time' ix UNION ALL
+  SELECT 'idx_admin_operation_action_time' UNION ALL
+  SELECT 'idx_admin_operation_target_time' UNION ALL
+  SELECT 'idx_admin_operation_outcome_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='admin_operation_audit'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 36) AI 反馈必须有独立管理员处理状态，不能复用用户侧 resolved 语义（期望 0 行）
+SELECT '[36] missing_admin_ai_feedback_triage_table' AS check_name, 'admin_ai_feedback_triage' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='admin_ai_feedback_triage'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[36] missing_admin_ai_feedback_triage_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'feedback_id' col, 'admin_ai_feedback_triage.feedback_id' n UNION ALL
+  SELECT 'status', 'admin_ai_feedback_triage.status' UNION ALL
+  SELECT 'priority', 'admin_ai_feedback_triage.priority' UNION ALL
+  SELECT 'note', 'admin_ai_feedback_triage.note' UNION ALL
+  SELECT 'updated_by', 'admin_ai_feedback_triage.updated_by' UNION ALL
+  SELECT 'create_time', 'admin_ai_feedback_triage.create_time' UNION ALL
+  SELECT 'update_time', 'admin_ai_feedback_triage.update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='admin_ai_feedback_triage'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[36] missing_admin_ai_feedback_triage_index' AS check_name,
+  CONCAT('admin_ai_feedback_triage.', expected.ix) AS detail
+FROM (
+  SELECT 'idx_admin_ai_feedback_triage_status_time' ix UNION ALL
+  SELECT 'idx_admin_ai_feedback_triage_priority_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='admin_ai_feedback_triage'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 37) API 日志需要请求 ID 与耗时，才能从反馈追到服务端调用（期望 0 行）
+SELECT '[37] missing_api_log_trace_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'request_id' col, 'api_logs.request_id' n UNION ALL
+  SELECT 'duration_ms', 'api_logs.duration_ms'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='api_logs'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[37] missing_api_log_trace_index' AS check_name, CONCAT('api_logs.', expected.ix) AS detail
+FROM (
+  SELECT 'idx_api_logs_request_id' ix UNION ALL
+  SELECT 'idx_api_logs_status_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='api_logs'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 38) 产品洞察聚合必须走所有者 + 时间索引，避免后台看板扫描业务主表（期望 0 行）
+SELECT '[38] missing_admin_product_insights_index' AS check_name,
+  CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'api_logs' tn, 'idx_api_logs_user_time' ix UNION ALL
+  SELECT 'conversion_events', 'idx_conversion_user_event_time' UNION ALL
+  SELECT 'bookmark', 'idx_bookmark_owner_create' UNION ALL
+  SELECT 'files', 'idx_files_owner_create' UNION ALL
+  SELECT 'ai_product_events', 'idx_ai_product_subject_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 39) 聊天室提及关系必须持久化，通知范围不能依赖正文解析（期望 0 行）
+SELECT '[39] missing_community_chat_mention_table' AS check_name,
+  'community_chat_message_mentions' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_message_mentions'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[39] missing_community_chat_mention_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'message_id' col, 'community_chat_message_mentions.message_id' n UNION ALL
+  SELECT 'mentioned_user_id', 'community_chat_message_mentions.mentioned_user_id' UNION ALL
+  SELECT 'create_time', 'community_chat_message_mentions.create_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_mentions'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[39] invalid_community_chat_mention_account_id_collation' AS check_name,
+  CONCAT('mentioned_user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_mentions'
+  AND actual.column_name='mentioned_user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[39] missing_community_chat_mention_index' AS check_name,
+  CONCAT('community_chat_message_mentions.', expected.ix) AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'idx_community_chat_mention_user_message'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_mentions'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 40) 聊天图片必须具备私有对象映射、归属、状态和过期回收索引（期望 0 行）
+SELECT '[40] missing_community_chat_image_table' AS check_name,
+  'community_chat_message_images' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_message_images'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[40] missing_community_chat_image_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'id' col, 'community_chat_message_images.id' n UNION ALL
+  SELECT 'public_id', 'community_chat_message_images.public_id' UNION ALL
+  SELECT 'owner_user_id', 'community_chat_message_images.owner_user_id' UNION ALL
+  SELECT 'message_id', 'community_chat_message_images.message_id' UNION ALL
+  SELECT 'object_key', 'community_chat_message_images.object_key' UNION ALL
+  SELECT 'content_type', 'community_chat_message_images.content_type' UNION ALL
+  SELECT 'file_size', 'community_chat_message_images.file_size' UNION ALL
+  SELECT 'width', 'community_chat_message_images.width' UNION ALL
+  SELECT 'height', 'community_chat_message_images.height' UNION ALL
+  SELECT 'status', 'community_chat_message_images.status' UNION ALL
+  SELECT 'sort_order', 'community_chat_message_images.sort_order' UNION ALL
+  SELECT 'expires_at', 'community_chat_message_images.expires_at' UNION ALL
+  SELECT 'create_time', 'community_chat_message_images.create_time' UNION ALL
+  SELECT 'update_time', 'community_chat_message_images.update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_images'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[40] invalid_community_chat_image_account_id_collation' AS check_name,
+  CONCAT('owner_user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_images'
+  AND actual.column_name='owner_user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[40] invalid_community_chat_image_defaults' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_images'
+  AND (
+    (actual.column_name='status' AND NOT (actual.is_nullable='NO' AND actual.column_default='uploading'))
+    OR (actual.column_name='sort_order' AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+  );
+
+SELECT '[40] missing_community_chat_image_index' AS check_name,
+  CONCAT('community_chat_message_images.', expected.ix) AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'uk_community_chat_image_public' UNION ALL
+  SELECT 'uk_community_chat_image_object' UNION ALL
+  SELECT 'idx_community_chat_image_owner_status_expiry' UNION ALL
+  SELECT 'idx_community_chat_image_message_status_sort'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_images'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

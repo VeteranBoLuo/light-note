@@ -4,214 +4,204 @@
     :show-back="false"
     :show-navigation="!bookmark.isMobile"
     embedded-mobile
-    :style="{ backgroundColor: user.currentTheme === 'day' ? '#f6f7f9' : '#222222' }"
   >
     <div class="person-center-layout" :class="{ 'person-center-layout--mobile': bookmark.isMobile }">
-      <div class="person-title-card" :style="{ backgroundColor: user.currentTheme === 'day' ? '#97a1c6' : '#4d5264' }">
-        <div style="display: flex; gap: 20px; align-items: center">
-          <div class="navigation-icon" :class="{ 'has-frame': equippedFrameId }" :style="{ color: user.iconColor }">
-            <AvatarFramePreview
-              v-if="equippedFrameId"
-              :frame-id="equippedFrameId"
-              :src="user.headPicture || icon.navigation.user"
-              :size="44"
-              :decorative="false"
-              class="dom-hover"
-              @click="zoomImage"
-            />
-            <svg-icon
-              v-else
-              img-id="viewUserImg"
-              @click="zoomImage"
-              size="50"
-              :src="user.headPicture || icon.navigation.user"
-              class="dom-hover"
-            />
-          </div>
-          <div style="display: flex; flex-direction: column">
-            <b style="font-size: 20px">{{ user.alias ? user.alias : $t('personCenter.defaultNickname') }}</b>
-          </div>
-        </div>
-        <div class="user-icon-text" :style="{ color: user.iconColor }">
-          <div style="display: flex; gap: 20px; font-size: 14px">
-            <span
-              >{{ $t('navigation.bookmark') }}<span style="margin-left: 10px">{{ user.bookmarkTotal }}</span></span
-            >
-            <span
-              >{{ $t('navigation.note') }}<span style="margin-left: 10px">{{ user.noteTotal }}</span></span
-            >
-            <span
-              >{{ $t('personCenter.storageUsed')
-              }}<span style="margin-left: 10px">{{ formatStorageSize(user.storageUsed) }}</span></span
-            >
-          </div>
-        </div>
-      </div>
       <div
         class="person-menu-scroll"
         :class="{ 'person-menu-scroll--mobile': bookmark.isMobile, 'no-scrollbar': bookmark.isMobile }"
       >
-        <div class="person-menu">
-          <div class="person-menu-item" @click="goToProfileModule('/myInfo')">
-            <span class="person-menu-item-title">{{ $t('personCenter.personalProfile') }}</span>
-            <span class="person-menu-item-des"
-              >{{ $t('personCenter.email_nickname') }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
+        <section class="profile-card">
+          <div class="profile-card__identity">
+            <BButton class="profile-card__avatar" :aria-label="t('personCenter.viewAvatar')" @click="zoomImage">
+              <AvatarFramePreview
+                v-if="equippedFrameId"
+                :frame-id="equippedFrameId"
+                :src="user.headPicture || icon.navigation.user"
+                :size="52"
+                :decorative="false"
+              />
+              <svg-icon v-else img-id="viewUserImg" size="58" :src="user.headPicture || icon.navigation.user" />
+            </BButton>
+            <div class="profile-card__copy">
+              <strong>{{ user.alias || t('personCenter.defaultNickname') }}</strong>
+              <span
+                >{{ roleName }}<template v-if="user.email"> · {{ user.email }}</template></span
+              >
+            </div>
+            <BButton class="profile-card__edit" @click="goToProfileModule('/myInfo')">
+              <SvgIcon :src="icon.card_edit" size="15" aria-hidden="true" />
+              {{ t('personCenter.editProfile') }}
+            </BButton>
           </div>
-          <div
-            class="person-menu-item"
+
+          <div class="profile-card__stats" :aria-label="t('personCenter.resourceOverview')">
+            <div class="profile-card__stat">
+              <strong>{{ formatCompactNumber(user.bookmarkTotal) }}</strong>
+              <span>{{ t('navigation.bookmark') }}</span>
+            </div>
+            <div class="profile-card__stat">
+              <strong>{{ formatCompactNumber(user.noteTotal) }}</strong>
+              <span>{{ t('navigation.note') }}</span>
+            </div>
+            <div class="profile-card__stat">
+              <strong>{{ formatStorageSize(user.storageUsed) }}</strong>
+              <span>{{ t('personCenter.storageUsed') }}</span>
+            </div>
+          </div>
+
+          <BButton
+            class="profile-card__growth"
             @click="goGrowth"
             v-click-log="{ module: '个人中心', operation: '打开我的成长' }"
           >
-            <span class="person-menu-item-title">{{ $t('growth.entry') }}</span>
-            <span class="person-menu-item-des"
-              >Lv.{{ growthInfo?.level || 1 }} · 🪙 {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            <span class="profile-card__growth-icon">
+              <SvgIcon :src="icon.userCenter.growth" size="19" aria-hidden="true" />
             </span>
-          </div>
-        </div>
-        <div class="person-menu">
-          <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
-          <BButton v-if="!isAndroidApp" class="person-menu-item person-menu-item--button" @click="handlePwaEntry">
-            <span class="person-menu-item-title">{{ $t('pwa.install') }}</span>
-            <span class="person-menu-item-des">
-              {{ pwaEntryDescription }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
+            <span class="profile-card__growth-body">
+              <span class="profile-card__growth-main">
+                <strong v-if="growthInfo">Lv.{{ growthInfo.level }} {{ growthInfo.name }}</strong>
+                <strong v-else>{{ growthLoading ? t('common.loading') : t('personCenter.growthUnavailable') }}</strong>
+                <span class="profile-card__points">
+                  <SvgIcon :src="icon.growth.coin" size="14" aria-hidden="true" />
+                  {{ (growthInfo?.points || 0).toLocaleString('en-US') }}
+                </span>
+              </span>
+              <BProgress
+                v-if="growthInfo"
+                size="small"
+                :percent="growthInfo.progress"
+                :aria-label="t('personCenter.growthProgress')"
+              />
             </span>
+            <SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="16" aria-hidden="true" />
           </BButton>
-          <!--
+        </section>
+
+        <section class="profile-section">
+          <h2>{{ t('personCenter.quickAccess') }}</h2>
+          <div class="profile-quick-grid">
+            <BButton class="profile-quick-item" @click="goToProfileModule('/myInfo')">
+              <span class="profile-entry-icon"><SvgIcon :src="icon.card_edit" size="20" /></span>
+              <span>{{ t('personCenter.personalProfile') }}</span>
+            </BButton>
+            <BButton class="profile-quick-item" @click="goGrowth">
+              <span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.growth" size="20" /></span>
+              <span>{{ t('growth.entry') }}</span>
+            </BButton>
+            <BButton class="profile-quick-item" @click="goToProfileModule('/search')">
+              <span class="profile-entry-icon"><SvgIcon :src="icon.navigation.search" size="20" /></span>
+              <span>{{ t('personCenter.resourceCenter') }}</span>
+            </BButton>
+            <BButton class="profile-quick-item" @click="goToProfileModule('/ptrash')">
+              <span class="profile-entry-icon"><SvgIcon :src="icon.table_delete" size="20" /></span>
+              <span>{{ t('trash.title') }}</span>
+            </BButton>
+          </div>
+        </section>
+
+        <section class="profile-section">
+          <h2>{{ t('personCenter.appAndAccount') }}</h2>
+          <MobileListSurface>
+            <!-- 主题与语言已统一收敛到设置页，移动端个人中心只保留设置入口。 -->
+            <MobileListRow v-if="!isAndroidApp" interactive @click="handlePwaEntry">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.pwa.install" size="20" /></span
+              ></template>
+              <template #title>{{ t('pwa.install') }}</template>
+              <template #subtitle>{{ pwaEntryDescription }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <!--
             App 内复用「安装 App」这一格:浏览器里是装 App、App 里是更新 App,同一位置的两种形态。
             不另开入口是刻意的 —— settingsRegistry 里已经写明安装类入口只保留这一处。
           -->
-          <BButton v-if="isAndroidApp" class="person-menu-item person-menu-item--button" @click="handleAppUpdateEntry">
-            <span class="person-menu-item-title">
-              {{ $t('appUpdate.entry') }}
-              <!-- 实心圆点,不依赖混色:APK 的 WebView 会把 color-mix 回退成实色，状态信号必须自带形状 -->
-              <span v-if="showUpdateBadge" class="person-menu-item-dot" aria-hidden="true"></span>
-            </span>
-            <span class="person-menu-item-des">
-              {{ appUpdateDescription }}
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
-          </BButton>
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/settings')"
-            v-click-log="{ module: '个人中心', operation: '打开设置' }"
-          >
-            <span class="person-menu-item-title">{{ $t('settings.title') }}</span>
-            <span class="person-menu-item-des">
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
-          </div>
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/help')"
-            v-click-log="{ module: '个人中心', operation: '打开帮助' }"
-          >
-            <span class="person-menu-item-title">{{ $t('personCenter.help') }}</span>
-            <span class="person-menu-item-des">
-              <svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" />
-            </span>
-          </div>
-          <div
-            v-if="user.role === 'root'"
-            class="person-menu-item"
-            @click="goToProfileModule('/admin')"
-            v-click-log="{ module: '个人中心', operation: `后台管理` }"
-          >
-            <span class="person-menu-item-title">{{ $t('personCenter.admin') }}</span>
-            <span class="person-menu-item-des"
-              >{{ $t('personCenter.logs_user_mg')
-              }}<svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
-        </div>
-        <div class="person-menu">
-          <!-- 「工作台」入口已随移动端「今日」上线移除:底部一级入口就是同一个页面,
-               不能长期并存两个入口。快速添加同样重复(今日页快速记录 + 顶栏加号),
-               书签管理在书签页顶部已有按钮。资源中心保留:底部搜索位让给今日后,
-               它是「浏览全部资源 / 待整理」除搜索层「查看全部」外的唯一入口。 -->
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/search')"
-            v-click-log="{ module: '个人中心', operation: `资源中心` }"
-          >
-            <span class="person-menu-item-title">{{ $t('personCenter.resourceCenter') }}</span>
-            <span class="person-menu-item-des">
-              <span class="person-menu-item-des-text">{{ $t('personCenter.resourceCenterDesc') }}</span>
-              <svg-icon
-                class="person-menu-item-arrow"
-                color="#999fa8"
-                style="rotate: 180deg"
-                :src="icon.arrow_left"
-                size="14"
-              />
-            </span>
-          </div>
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/ptrash')"
-            v-click-log="{ module: '个人中心', operation: '回收站' }"
-          >
-            <span class="person-menu-item-title">{{ $t('trash.title') }}</span>
-            <span class="person-menu-item-des"
-              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
-        </div>
-        <div class="person-menu">
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/opinions')"
-            v-click-log="{ module: '个人中心', operation: `意见反馈` }"
-          >
-            <span class="person-menu-item-title">{{ $t('personCenter.feedback') }}</span>
-            <span class="person-menu-item-des"
-              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
-          <div
-            class="person-menu-item"
-            @click="goToProfileModule('/updateLogs')"
-            v-click-log="{ module: '更新日志', operation: `更新日志` }"
-          >
-            <span class="person-menu-item-title">{{ $t('personCenter.changelog') }}</span>
-            <span class="person-menu-item-des"
-              ><svg-icon color="#999fa8" style="rotate: 180deg" :src="icon.arrow_left" size="14" /></span
-          ></div>
-        </div>
-        <div class="person-menu person-menu--support">
-          <BButton
-            class="person-menu-item person-menu-item--button"
-            @click="goToProfileModule('/support')"
-            v-click-log="{ module: '个人中心', operation: '打开支持轻笺' }"
-          >
-            <span class="person-menu-item-title">{{ $t('support.entry') }}</span>
-            <span class="person-menu-item-des">
-              <span class="person-menu-item-des-text">{{ $t('support.entryDescription') }}</span>
-              <svg-icon
-                class="person-menu-item-arrow"
-                color="currentColor"
-                style="rotate: 180deg"
-                :src="icon.arrow_left"
-                size="14"
-              />
-            </span>
-          </BButton>
-        </div>
-        <div
-          class="person-menu"
+            <MobileListRow v-else interactive @click="handleAppUpdateEntry">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.pwa.android" size="20" /></span
+              ></template>
+              <template #title>
+                {{ t('appUpdate.entry')
+                }}<span v-if="showUpdateBadge" class="profile-update-dot" aria-hidden="true"></span>
+              </template>
+              <template #subtitle>{{ appUpdateDescription }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/settings')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.settingsGear" size="20" /></span
+              ></template>
+              <template #title>{{ t('settings.title') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+          </MobileListSurface>
+        </section>
+
+        <section class="profile-section">
+          <h2>{{ t('personCenter.communicationAndSupport') }}</h2>
+          <MobileListSurface>
+            <MobileListRow interactive @click="goToProfileModule('/co-build')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.coBuild.board" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.coBuild') }}</template>
+              <template #subtitle>{{ t('personCenter.coBuildDesc') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/opinions')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.message.info" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.feedback') }}</template>
+              <template #subtitle>{{ t('personCenter.feedbackDesc') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/help')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.help_document" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.help') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/updateLogs')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.userCenter.log" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.changelog') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+            <MobileListRow interactive @click="goToProfileModule('/support')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.support.heart" size="20" /></span
+              ></template>
+              <template #title>{{ t('support.entry') }}</template>
+              <template #subtitle>{{ t('support.entryDescription') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+          </MobileListSurface>
+        </section>
+
+        <section v-if="user.role === 'root'" class="profile-section">
+          <h2>{{ t('personCenter.managementTools') }}</h2>
+          <MobileListSurface>
+            <MobileListRow interactive @click="goToProfileModule('/admin')">
+              <template #leading
+                ><span class="profile-entry-icon"><SvgIcon :src="icon.user_admin" size="20" /></span
+              ></template>
+              <template #title>{{ t('personCenter.admin') }}</template>
+              <template #subtitle>{{ t('personCenter.logs_user_mg') }}</template>
+              <template #trailing><SvgIcon class="profile-row-arrow" :src="icon.arrow_right" size="17" /></template>
+            </MobileListRow>
+          </MobileListSurface>
+        </section>
+
+        <BButton
+          class="profile-session-action"
+          :class="{ 'profile-session-action--login': user.role === 'visitor' }"
           @click="handleExitLogin"
-          v-click-log="{
-            module: '个人中心',
-            operation: user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout'),
-          }"
         >
-          <div class="person-menu-item" style="justify-content: center">
-            <span class="person-menu-item-title">{{
-              user.role === 'visitor' ? $t('personCenter.loginRegister') : $t('personCenter.logout')
-            }}</span></div
-          >
-        </div>
+          <SvgIcon :src="user.role === 'visitor' ? icon.navigation.user : icon.navigation.exit" size="19" />
+          {{ user.role === 'visitor' ? t('personCenter.loginRegister') : t('personCenter.logout') }}
+        </BButton>
       </div>
     </div>
     <my-info v-if="userVisible" v-model:visible="userVisible" />
@@ -230,6 +220,9 @@
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
+  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
+  import MobileListRow from '@/components/mobile/MobileListRow.vue';
   import { bookmarkStore, useUserStore } from '@/store';
   import { formatStorageSize } from '@/utils/common';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -256,7 +249,7 @@
   const userVisible = ref(false);
 
   const user = useUserStore();
-  const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const { growth: growthInfo, loading: growthLoading, load: loadGrowth } = useGrowth();
   const equippedFrameId = computed(() => {
     const id = growthInfo.value?.equippedFrame;
     return frameVariant(id) ? id : null;
@@ -279,6 +272,12 @@
         ? t('pwa.directAvailableShort')
         : t('pwa.addToHomeScreen'),
   );
+  const roleName = computed(() => {
+    if (user.role === 'root') return t('myInfo.root');
+    if (user.role === 'admin') return t('myInfo.admin');
+    if (user.role === 'visitor') return t('myInfo.visitor');
+    return t('personCenter.member');
+  });
   useMobileTopBar(['personCenter'], {
     searchMode: 'icon',
   });
@@ -292,6 +291,14 @@
 
   function goGrowth() {
     goToProfileModule('/growth');
+  }
+
+  function formatCompactNumber(value: number | string | null | undefined) {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount)) return '0';
+    if (amount >= 1000)
+      return new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(amount);
+    return amount.toLocaleString();
   }
 
   function handlePwaEntry() {
@@ -365,207 +372,342 @@
 </script>
 
 <style lang="less" scoped>
-  .person-center-layout--mobile {
+  .person-center-layout {
     height: 100%;
     min-height: 0;
     display: flex;
     flex-direction: column;
   }
 
-  .person-title-card {
-    gap: 20px;
-    padding: 14px;
-    height: 136px;
-    box-sizing: border-box;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    color: white;
-  }
-
-  .person-center-layout--mobile .person-title-card {
-    flex: 0 0 auto;
-  }
-
-  .person-menu-scroll--mobile {
+  .person-menu-scroll {
     min-height: 0;
-    padding-bottom: 20px;
+    padding: 2px 0 calc(24px + env(safe-area-inset-bottom));
     overflow-y: auto;
     overscroll-behavior-y: contain;
     flex: 1 1 auto;
   }
 
-  .person-menu {
-    border-radius: 12px;
-    overflow: hidden;
-    margin-top: 20px;
-  }
-
-  .person-menu--support {
+  .profile-card {
+    padding: 16px;
     box-sizing: border-box;
-    border: 1px solid var(--support-entry-border-color);
-
-    .person-menu-item {
-      color: var(--support-entry-text-color);
-      background-color: var(--support-entry-background);
-      transition: background-color 0.2s ease;
-
-      &:hover {
-        background-color: var(--support-entry-hover-background);
-      }
-    }
-
-    .person-menu-item-des {
-      color: var(--support-entry-text-color);
-      opacity: 0.78;
-    }
+    border: 1px solid var(--surface-border-color);
+    border-radius: 18px;
+    background: var(--card-background);
   }
 
-  .person-menu-item {
-    background-color: var(--phone-menu-item-bg-color);
-    height: 50px;
+  .profile-card__identity {
+    min-width: 0;
     display: flex;
     align-items: center;
-    padding: 0 20px;
-    justify-content: space-between;
-    cursor: pointer;
-    &:not(:last-child) {
-      border-bottom: 1px solid var(--phone-menu-item-border-color);
-    }
-
-    .person-menu-item-title {
-      font-size: 16px;
-      flex: 0 0 auto;
-    }
-
-    /*
-     * 新版本红点。实心圆点 + 固定色值,不用 color-mix/阴影表达:
-     * APK 的 WebView 会把混色回退成实色、混色阴影回退成透明,只靠混色的状态信号会整体消失。
-     */
-    .person-menu-item-dot {
-      display: inline-block;
-      width: 7px;
-      height: 7px;
-      margin-left: 6px;
-      border-radius: 50%;
-      background: #f5222d;
-      vertical-align: middle;
-    }
-
-    .person-menu-item-des {
-      min-width: 0;
-      margin-left: 16px;
-      color: #999fa8;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      line-height: 100%;
-    }
-
-    .person-menu-item-des-text {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .person-menu-item-arrow {
-      flex: 0 0 auto;
-    }
+    gap: 12px;
   }
 
-  .person-menu-item--button {
+  .profile-card__avatar {
+    width: 72px;
+    min-width: 72px;
+    height: 72px;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 50%;
+    color: var(--primary-color);
+    background: transparent;
+  }
+
+  .profile-card__avatar :deep(img),
+  .profile-card__avatar :deep(.icon-base64),
+  .profile-card__avatar :deep(.icon-fixed-base64) {
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .profile-card__copy {
+    min-width: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .profile-card__copy strong,
+  .profile-card__copy span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .profile-card__copy strong {
+    color: var(--text-color);
+    font-size: 20px;
+    line-height: 1.25;
+  }
+
+  .profile-card__copy span {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .profile-card__edit {
+    min-height: 32px;
+    flex: 0 0 auto;
+    gap: 5px;
+    padding: 0 10px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--card-background);
+    font-size: 12px;
+  }
+
+  .profile-card__stats {
+    margin-top: 14px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-top: 1px solid var(--surface-divider-color);
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .profile-card__stat {
+    min-width: 0;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 7px 4px;
+    box-sizing: border-box;
+  }
+
+  .profile-card__stat + .profile-card__stat {
+    border-left: 1px solid var(--surface-divider-color);
+  }
+
+  .profile-card__stat strong,
+  .profile-card__stat span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .profile-card__stat strong {
+    color: var(--text-color);
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  .profile-card__stat span {
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.25;
+  }
+
+  .profile-card__growth {
     width: 100%;
+    height: auto;
+    min-height: 54px;
+    margin-top: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 11px 2px 0;
     border: 0;
     border-radius: 0;
     color: var(--text-color);
-    line-height: 1;
+    background: transparent;
+    line-height: normal;
     text-align: left;
+    white-space: normal;
   }
 
-  .navigation-icon {
+  .profile-card__growth-icon {
+    width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 34px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 11px;
+    color: var(--primary-color);
+    background: var(--surface-panel-bg);
+  }
+
+  .profile-card__growth-body {
+    min-width: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .profile-card__growth-main,
+  .profile-card__points {
     display: flex;
     align-items: center;
-    clip-path: circle(50% at 50% 50%);
-    cursor: pointer;
-  }
-  .navigation-icon.has-frame {
-    clip-path: none;
   }
 
-  .handle-body {
-    border-radius: 8px;
-    background-color: var(--user-body-bg-color);
-    margin-top: 15px;
-    padding: 5px;
-    width: 220px;
-
-    .handle-body-title-body {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-      align-items: center;
-    }
-  }
-
-  .header_menu_ul {
-    list-style-type: none;
-    text-align: center;
-    margin-top: 5px;
-    margin-bottom: 5px;
-    box-sizing: border-box;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+  .profile-card__growth-main {
+    min-width: 0;
+    justify-content: space-between;
     gap: 10px;
-
-    .li {
-      height: 30px;
-      cursor: pointer;
-      font-size: 12px;
-      border-radius: 4px;
-      color: var(--text-color);
-      gap: 10px;
-
-      &:hover {
-        background-color: var(--menu-item-h-bg-color);
-        border-radius: 8px;
-      }
-    }
   }
 
-  .user-icon-text {
-    text-align: left;
-    color: white !important;
+  .profile-card__growth-main strong {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .modal-content {
-    margin: auto;
-    display: block;
-    height: 90%;
-    width: 80%;
-    max-width: 700px;
+  .profile-card__points {
+    flex: 0 0 auto;
+    gap: 4px;
+    color: #b45309;
+    font-size: 12px;
+    font-weight: 700;
   }
 
-  .modal-content {
-    -webkit-animation-name: zoom;
-    -webkit-animation-duration: 0.6s;
-    animation-name: zoom;
-    animation-duration: 0.6s;
-    cursor: pointer;
+  .profile-section {
+    --mobile-row-min-height: 60px;
+    --mobile-row-padding-y: 9px;
+    --mobile-row-padding-x: 12px;
+
+    margin-top: 18px;
   }
 
-  @media (max-width: 1000px) {
-    .modal-content {
-      height: 60%;
-      width: 80%;
-      max-width: 700px;
-    }
+  .profile-section h2 {
+    margin: 0 0 8px 4px;
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  .profile-quick-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .profile-quick-item {
+    width: 100%;
+    min-width: 0;
+    height: 76px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 7px;
+    padding: 8px 3px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    color: var(--text-color);
+    background: var(--card-background);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.25;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .profile-quick-item > span:last-child {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .profile-entry-icon {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 32px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--surface-panel-bg);
+  }
+
+  .profile-row-arrow {
+    color: var(--desc-color);
+  }
+
+  .profile-update-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-left: 6px;
+    border-radius: 50%;
+    background: #dc2626;
+    vertical-align: middle;
+  }
+
+  .profile-session-action {
+    width: 100%;
+    min-height: 46px;
+    margin-top: 18px;
+    gap: 8px;
+    border: 1px solid #fecaca;
+    border-radius: 14px;
+    color: #b91c1c;
+    background: var(--card-background);
+  }
+
+  .profile-session-action--login {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
   }
 
   :deep(.phone-container--embedded .phone-body) {
-    padding-top: 12px;
+    padding-top: 10px;
     overflow: hidden;
+  }
+
+  :global(html.light-note-mobile-rendering) .profile-card,
+  :global(html.light-note-mobile-rendering) .profile-quick-item {
+    box-shadow: none;
+  }
+
+  :global(html.light-note-mobile-rendering) .profile-card__growth-icon,
+  :global(html.light-note-mobile-rendering) .profile-entry-icon {
+    border-color: var(--surface-border-color);
+    background: var(--surface-panel-bg);
+  }
+
+  @media (max-width: 360px) {
+    .profile-card {
+      padding: 14px;
+    }
+
+    .profile-card__avatar {
+      width: 66px;
+      min-width: 66px;
+      height: 66px;
+    }
+
+    .profile-card__edit {
+      width: 32px;
+      padding: 0;
+      font-size: 0;
+    }
+
+    .profile-quick-grid {
+      gap: 6px;
+    }
+
+    .profile-quick-item {
+      height: 72px;
+      font-size: 10px;
+    }
   }
 </style>

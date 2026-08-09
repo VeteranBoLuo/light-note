@@ -17,6 +17,27 @@
           <svg-icon :src="icon.navigation.search" size="16" />
         </template>
       </b-input>
+      <BSelect
+        v-model:value="roleFilter"
+        class="usermg-filter"
+        :options="roleOptions"
+        :aria-label="t('adminUserManagement.filters.role')"
+        @change="() => resetList()"
+      />
+      <BSelect
+        v-model:value="statusFilter"
+        class="usermg-filter"
+        :options="statusOptions"
+        :aria-label="t('adminUserManagement.filters.status')"
+        @change="() => resetList()"
+      />
+      <BSelect
+        v-model:value="activityFilter"
+        class="usermg-filter usermg-filter--activity"
+        :options="activityOptions"
+        :aria-label="t('adminUserManagement.filters.activity')"
+        @change="() => resetList()"
+      />
     </template>
 
     <BTable
@@ -82,43 +103,7 @@
     </BTable>
   </AdminDataPage>
 
-  <BModal v-model:visible="detailVisible" title="用户详情" width="500px" :show-footer="false" :mask-closable="true">
-    <div class="user-detail" v-if="selectedRecord">
-      <div class="user-detail__grid">
-        <div
-          ><label>昵称</label><p>{{ selectedRecord.alias }}</p></div
-        >
-        <div
-          ><label>{{ t('adminUserManagement.remarkDetailLabel') }}</label
-          ><p>{{ selectedRecord.adminRemark || '-' }}</p></div
-        >
-        <div
-          ><label>邮箱</label><p>{{ selectedRecord.email }}</p></div
-        >
-        <div
-          ><label>角色</label><p>{{ selectedRecord.role }}</p></div
-        >
-        <div
-          ><label>IP</label><p>{{ selectedRecord.ip || '-' }}</p></div
-        >
-        <div
-          ><label>最近在线</label><p>{{ selectedRecord.lastActiveTime || '-' }}</p></div
-        >
-        <div
-          ><label>注册时间</label><p>{{ selectedRecord.createTime }}</p></div
-        >
-        <div
-          ><label>书签数</label><p>{{ selectedRecord.bookmarkTotal ?? 0 }}</p></div
-        >
-        <div
-          ><label>笔记数</label><p>{{ selectedRecord.noteTotal ?? 0 }}</p></div
-        >
-        <div
-          ><label>云空间</label><p>{{ selectedRecord.storageUsed ?? 0 }} MB</p></div
-        >
-      </div>
-    </div>
-  </BModal>
+  <User360Modal v-model:visible="detailVisible" :user-info="selectedRecord" />
 
   <BModal
     v-if="editVisible"
@@ -158,10 +143,12 @@
   import BSpace from '@/components/base/BasicComponents/BSpace.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import UserPreviewModal from '@/view/admin/components/userMg/UserPreviewModal.vue';
+  import User360Modal from '@/view/admin/components/userMg/User360Modal.vue';
   import AdminUserRemarkModal from '@/view/admin/components/userMg/AdminUserRemarkModal.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
@@ -171,6 +158,27 @@
 
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const searchValue = ref('');
+  const roleFilter = ref('');
+  const statusFilter = ref('active');
+  const activityFilter = ref('all');
+  const roleOptions = computed(() => [
+    { label: t('adminUserManagement.filters.allRoles'), value: '' },
+    { label: t('adminUserManagement.detail.roles.user'), value: 'user' },
+    { label: t('adminUserManagement.detail.roles.visitor'), value: 'visitor' },
+    { label: t('adminUserManagement.detail.roles.root'), value: 'root' },
+  ]);
+  const statusOptions = computed(() => [
+    { label: t('adminUserManagement.filters.active'), value: 'active' },
+    { label: t('adminUserManagement.filters.banned'), value: 'banned' },
+    { label: t('adminUserManagement.filters.allStatuses'), value: 'all' },
+  ]);
+  const activityOptions = computed(() => [
+    { label: t('adminUserManagement.filters.allActivity'), value: 'all' },
+    { label: t('adminUserManagement.filters.active1d'), value: 'day1' },
+    { label: t('adminUserManagement.filters.active7d'), value: 'day7' },
+    { label: t('adminUserManagement.filters.active30d'), value: 'day30' },
+    { label: t('adminUserManagement.filters.inactive30d'), value: 'inactive30' },
+  ]);
   const sortState = ref<{ key: string | null; order: 'asc' | 'desc' | null }>({
     key: 'lastActiveTime',
     order: 'desc',
@@ -187,7 +195,12 @@
       apiQueryPost('/api/user/getUserList', {
         cursor,
         limit,
-        filters: { key: searchValue.value },
+        filters: {
+          key: searchValue.value,
+          role: roleFilter.value,
+          status: statusFilter.value,
+          activityWindow: activityFilter.value,
+        },
         sort: sortState.value.key
           ? { field: sortState.value.key, order: sortState.value.order }
           : { field: 'createTime', order: 'desc' },
@@ -274,7 +287,7 @@
     },
     {
       key: 'growth',
-      label: '成长运营（发经验 / 调等级 / 送补签卡）',
+      label: t('adminUserManagement.growthAction'),
       icon: icon.userCenter.growth,
       function: () => openGrowthAdmin(record),
     },
@@ -341,12 +354,12 @@
 
   const delUser = (record) => {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要删除此用户？`,
+      title: t('common.tips'),
+      content: t('adminUserManagement.deleteConfirm', { name: record.adminRemark || record.alias || record.email }),
       onOk() {
         userApi.deleteUserById(record.id).then((res) => {
           if (res.status === 200) {
-            message.success('删除成功');
+            message.success(t('adminUserManagement.deleteSuccess'));
             void resetList();
           }
         });
@@ -356,15 +369,15 @@
 
   const formFields: BaseFormItem[] = [
     {
-      label: '昵称',
+      label: t('adminUserManagement.detail.alias'),
       name: 'alias',
     },
     {
-      label: '邮箱',
+      label: t('adminUserManagement.email'),
       name: 'email',
     },
     {
-      label: '权限',
+      label: t('adminUserManagement.role'),
       name: 'role',
       render: formRenders.roleSelector(),
     },
@@ -375,8 +388,8 @@
     userApi
       .updateUserInfo({ id: record.id, alias: record.alias, email: record.email, role: record.role })
       .then((res) => {
-        if (res.status) {
-          message.success('保存成功');
+        if (res.status === 200) {
+          message.success(t('adminUserManagement.saveSuccess'));
           editVisible.value = false;
           void resetList();
         }
@@ -394,6 +407,16 @@
   @import '@/assets/css/admin-mixins.less';
   .log-search-input {
     flex: 1;
+  }
+
+  .usermg-filter {
+    width: 132px;
+    flex: 0 0 132px;
+  }
+
+  .usermg-filter--activity {
+    width: 168px;
+    flex-basis: 168px;
   }
 
   .user-detail__grid {

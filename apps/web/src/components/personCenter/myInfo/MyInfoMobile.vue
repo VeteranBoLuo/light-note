@@ -13,10 +13,17 @@
           <template #default>
             <div
               class="profile-avatar"
-              :class="{ 'profile-avatar--disabled': isGuest }"
+              :class="{ 'profile-avatar--disabled': isGuest, 'profile-avatar--framed': equippedFrameId }"
               v-click-log="{ module: '我的信息', operation: `上传头像` }"
             >
-              <div class="profile-avatar__image">
+              <AvatarFramePreview
+                v-if="equippedFrameId"
+                :frame-id="equippedFrameId"
+                :src="headPicture || icon.navigation.user"
+                :size="84"
+                :decorative="false"
+              />
+              <div v-else class="profile-avatar__image">
                 <SvgIcon :src="headPicture || icon.navigation.user" :size="84" />
               </div>
               <span v-if="!isGuest" class="profile-avatar__edit" aria-hidden="true">
@@ -32,6 +39,17 @@
           <span class="profile-role-pill">{{ getRoleName() }}</span>
         </div>
       </section>
+
+      <BButton class="profile-decoration-row" @click="frameDrawerOpen = true">
+        <span class="profile-decoration-row__icon"><SvgIcon :src="icon.growth.reward" :size="19" /></span>
+        <span class="profile-decoration-row__copy">
+          <strong>{{ t('myInfo.avatarDecorations') }}</strong>
+          <small>{{
+            equippedFrameName ? t('myInfo.equippedFrame', { name: equippedFrameName }) : t('myInfo.noFrameEquipped')
+          }}</small>
+        </span>
+        <SvgIcon class="profile-decoration-row__arrow" :src="icon.arrow_right" :size="18" aria-hidden="true" />
+      </BButton>
 
       <section v-if="isGuest" class="profile-visitor-card">
         <div class="profile-visitor-card__title">{{ t('myInfo.visitorTitle') }}</div>
@@ -89,26 +107,25 @@
         </section>
       </template>
 
-      <div v-if="!isGuest" class="profile-bottom-bar">
-        <BButton
-          class="profile-save-button"
-          type="primary"
-          size="large"
-          :loading="saving"
-          :disabled="!hasChanges"
-          @click="saveUserInfo"
-        >
-          {{ hasChanges ? t('myInfo.save') : t('myInfo.saved') }}
-        </BButton>
+      <div v-if="!isGuest && !hasChanges" class="profile-saved-state" role="status">
+        <SvgIcon :src="icon.message.success" :size="16" aria-hidden="true" />
+        {{ t('myInfo.saved') }}
       </div>
+
+      <MobileStickyActionBar v-if="!isGuest && hasChanges" :above-navigation="false">
+        <BButton class="profile-save-button" type="primary" size="large" :loading="saving" @click="saveUserInfo">
+          {{ t('myInfo.save') }}
+        </BButton>
+      </MobileStickyActionBar>
     </div>
 
     <PassConfigDlg v-model:visible="configPassVisible" />
+    <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" />
   </CommonContainer>
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -123,7 +140,11 @@
   import { backRouterPage } from '@/utils/common';
   import icon from '@/config/icon.ts';
   import PassConfigDlg from './PassConfigDlg.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
+  import { frameVariant } from '@/config/growthFrames';
   import { compressAvatarFile } from '@/utils/compressAvatar.ts';
 
   interface ProfileSnapshot {
@@ -134,19 +155,30 @@
 
   const user = useUserStore();
   const bookmark = bookmarkStore();
-  const { loadGrowthTasks } = useGrowth();
-  const { t } = useI18n();
+  const { growth, load: loadGrowth, loadGrowthTasks } = useGrowth();
+  const { t, te } = useI18n();
 
   const MAX_AVATAR_FILE_SIZE = 5000 * 1024;
   const headPicture = ref('');
   const avatarChanged = ref(false);
   const saving = ref(false);
   const configPassVisible = ref(false);
+  const frameDrawerOpen = ref(false);
   const visible = defineModel<boolean>('visible');
   const userData = ref({ alias: '', email: '' });
   const originalProfile = ref({ alias: '', email: '' });
 
   const isGuest = computed(() => user.role === 'visitor' || !user.id);
+  const equippedFrameId = computed(() => {
+    const id = growth.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
+  const equippedFrameName = computed(() => {
+    const id = equippedFrameId.value;
+    if (!id) return '';
+    const key = `growth.shopItems.${id}.name`;
+    return te(key) ? t(key) : id;
+  });
   const displayAlias = computed(() => userData.value.alias.trim() || t('personCenter.defaultNickname'));
   const hasChanges = computed(() => {
     if (isGuest.value) return false;
@@ -173,6 +205,10 @@
   }
 
   syncProfile();
+
+  onMounted(() => {
+    loadGrowth();
+  });
 
   watch(
     () => ({ alias: user.alias, email: user.email, headPicture: user.headPicture }),
@@ -284,6 +320,7 @@
       admin: t('myInfo.admin'),
       visitor: t('myInfo.visitor'),
       root: t('myInfo.root'),
+      user: t('personCenter.member'),
     };
     return roleNames[user.role] || t('myInfo.unknownRole');
   }
@@ -363,6 +400,12 @@
     }
   }
 
+  .profile-avatar--framed {
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
+  }
+
   .profile-avatar__edit {
     position: absolute;
     right: 1px;
@@ -377,6 +420,61 @@
     color: #fff;
     background: var(--primary-color);
     pointer-events: none;
+  }
+
+  .profile-decoration-row {
+    width: 100%;
+    min-height: 64px;
+    justify-content: flex-start;
+    gap: 11px;
+    padding: 10px 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 14px;
+    color: var(--text-color);
+    background: color-mix(in srgb, var(--primary-color) 6%, var(--surface-card-bg));
+    text-align: left;
+  }
+
+  .profile-decoration-row__icon {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 36px;
+    border-radius: 11px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-card-bg));
+  }
+
+  .profile-decoration-row__copy {
+    min-width: 0;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .profile-decoration-row__copy strong,
+  .profile-decoration-row__copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .profile-decoration-row__copy strong {
+    font-size: 14px;
+  }
+
+  .profile-decoration-row__copy small {
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 400;
+  }
+
+  .profile-decoration-row__arrow {
+    flex: 0 0 auto;
+    color: var(--desc-color);
   }
 
   .profile-hero__copy {
@@ -564,13 +662,19 @@
     width: 100%;
   }
 
-  .profile-bottom-bar {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    margin-top: auto;
-    padding: 12px 0 calc(4px + env(safe-area-inset-bottom));
-    background: linear-gradient(to bottom, transparent, var(--background-color) 38%);
+  .profile-saved-state {
+    display: flex;
+    min-height: 36px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+
+  :global(html.light-note-mobile-rendering) .profile-decoration-row {
+    border-color: var(--primary-color);
+    background: var(--surface-panel-bg);
   }
 
   @media (max-width: 360px) {

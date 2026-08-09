@@ -6,11 +6,7 @@
   >
     <GlobalSearch />
     <BTooltip v-if="showQuickCapture" :title="$t('inbox.quickCapture')">
-      <BButton
-        class="quick-capture-btn"
-        :aria-label="$t('inbox.quickCapture')"
-        @click="openQuickCapture"
-      >
+      <BButton class="quick-capture-btn" :aria-label="$t('inbox.quickCapture')" @click="openQuickCapture">
         <!--
           快速添加只负责创建，不承担待处理催办：它的角标曾用 actionTotal（全部未完成待办 +
           全部待整理），点开却只有创建表单，数字无从解释。待处理提醒改由「待办」导航角标
@@ -21,9 +17,9 @@
     </BTooltip>
     <BTooltip v-if="!bookmark.isMobile" :title="$t('navigation.moreEntries')">
       <b-dropdown align="center" trigger="click" :menu-options="moreMenuOptions">
-        <div class="more-menu-trigger">
+        <BButton class="more-menu-trigger" :aria-label="$t('navigation.moreEntries')">
           <svg-icon size="26" hover :src="icon.navigation.portal" />
-        </div>
+        </BButton>
       </b-dropdown>
     </BTooltip>
     <BButton v-if="showGuestRegister" type="primary" class="guest-register-link" @click="registerClick">
@@ -34,8 +30,17 @@
     </BButton>
     <NotificationBell v-if="!bookmark.isMobile && user.role !== 'visitor'" />
     <!--移动端个人中心       -->
-    <div :class="['navigation-icon', { 'has-frame': equippedFrameId }]" v-if="bookmark.isMobile" @click="handleToPhoneUserCenter">
-      <AvatarFramePreview v-if="equippedFrameId" :frame-id="equippedFrameId" :src="user.headPicture || icon.navigation.user" :size="30" />
+    <div
+      :class="['navigation-icon', { 'has-frame': equippedFrameId }]"
+      v-if="bookmark.isMobile"
+      @click="handleToPhoneUserCenter"
+    >
+      <AvatarFramePreview
+        v-if="equippedFrameId"
+        :frame-id="equippedFrameId"
+        :src="user.headPicture || icon.navigation.user"
+        :size="30"
+      />
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
     <!--pc端个人中心       -->
@@ -80,6 +85,11 @@
   const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
   const moreMenuOptions = computed(() => [
+    { label: t('navigation.resourceCenter'), icon: icon.navigation.portal, function: resourceCenterClick },
+    { label: t('navigation.tag'), icon: icon.resource.tag, function: tagManageClick },
+    ...(user.role === 'visitor'
+      ? [{ label: t('navigation.coBuild'), icon: icon.support.heart, function: coBuildClick }]
+      : []),
     { label: t('home.officialSite'), icon: icon.userCenter.home, function: officialSiteClick },
     { label: t('home.toolbox'), icon: icon.toolkit, function: toolkitClick },
     { label: t('navigation.projectAddress'), icon: icon.github, function: githubClick },
@@ -102,6 +112,21 @@
   function officialSiteClick() {
     router.push('/');
     recordOperation({ module: '导航栏', operation: '访问官方首页' });
+  }
+
+  function resourceCenterClick() {
+    router.push('/search');
+    recordOperation({ module: '导航栏', operation: '打开资源中心' });
+  }
+
+  function tagManageClick() {
+    router.push('/manage/tagMg');
+    recordOperation({ module: '导航栏', operation: '打开标签管理' });
+  }
+
+  function coBuildClick() {
+    router.push('/co-build');
+    recordOperation({ module: '导航栏', operation: '打开共建轻笺' });
   }
 
   // 游客点导航栏「免费注册」:打开注册弹窗(openAuthModal 内部记 signup_open,source=nav)
@@ -180,8 +205,15 @@
     flex: 0 0 auto;
   }
   .more-menu-trigger {
+    width: 36px;
+    height: 36px;
+    padding: 0;
     display: flex;
     align-items: center;
+    justify-content: center;
+    border: 0;
+    color: var(--text-color);
+    background: transparent;
     cursor: pointer;
   }
   .quick-capture-btn {

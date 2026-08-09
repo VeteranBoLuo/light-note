@@ -564,9 +564,10 @@
     transition: all 0.15s;
   }
   .notification-popover .nt-tab.active {
-    border-color: transparent;
-    background: var(--primary-color);
-    color: #fff;
+    border-color: var(--primary-color);
+    background: var(--mobile-selected-bg) !important;
+    color: var(--primary-color);
+    font-weight: 700;
   }
   .notification-popover .nt-tab-badge {
     min-width: 15px;
@@ -582,7 +583,8 @@
     font-variant-numeric: tabular-nums;
   }
   .notification-popover .nt-tab.active .nt-tab-badge {
-    background: rgba(255, 255, 255, 0.28);
+    background: var(--danger-fill-bg, #d93b3b);
+    color: var(--danger-fill-fg, #fff);
   }
   .notification-popover .nt-list {
     max-height: 380px;

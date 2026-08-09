@@ -4,7 +4,7 @@ import { useUserStore } from '@/store';
 
 export interface NotificationItem {
   id: string;
-  type: string; // level_up | opinion_reply | system | other
+  type: string; // level_up | opinion_reply | system | todo_reminder | community_chat | other
   title: string;
   content: string | null;
   link: string | null;
@@ -91,6 +91,16 @@ export function useNotification() {
       for (const item of [...items].reverse()) {
         if (item.isRead || browserSeenIds.has(item.id)) continue;
         browserSeenIds.add(item.id);
+        const meta = (() => {
+          if (item.meta && typeof item.meta === 'object') return item.meta;
+          try {
+            return item.meta ? JSON.parse(item.meta) : {};
+          } catch {
+            return {};
+          }
+        })();
+        // 聊天室当前只开放站内提醒。即使用户全局开启了浏览器通知，也不能越过频道级渠道约束。
+        if (meta?.delivery === 'in_app_only') continue;
         const notification = new Notification(item.title || '轻笺', {
           body: item.content || undefined,
           tag: `light-note:${item.id}`,
@@ -108,8 +118,16 @@ export function useNotification() {
   }
 
   // 拉取分页列表(顺带同步未读数)
-  async function fetchList(params: { currentPage?: number; pageSize?: number; type?: string } = {}): Promise<NotificationPage> {
-    const empty: NotificationPage = { items: [], total: 0, unreadTotal: unreadTotal.value, currentPage: 1, pageSize: 20 };
+  async function fetchList(
+    params: { currentPage?: number; pageSize?: number; type?: string } = {},
+  ): Promise<NotificationPage> {
+    const empty: NotificationPage = {
+      items: [],
+      total: 0,
+      unreadTotal: unreadTotal.value,
+      currentPage: 1,
+      pageSize: 20,
+    };
     if (isGuest()) return empty;
     try {
       const res = await notificationApi.getNotificationList(params);

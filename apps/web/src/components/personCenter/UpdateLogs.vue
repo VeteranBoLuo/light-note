@@ -4,13 +4,19 @@
       <BButton class="mobile-changelog-nav__back" :aria-label="t('common.back')" @click="backRouterPage">
         <SvgIcon :src="icon.arrow_left" size="20" aria-hidden="true" />
       </BButton>
-      <strong class="mobile-changelog-nav__title">{{ t('changelog.title') }}</strong>
-      <BButton
-        v-if="user.role === 'root'"
-        class="mobile-changelog-nav__create"
-        :loading="creating"
-        @click="createLog"
-      >
+      <div class="mobile-changelog-nav__heading">
+        <strong class="mobile-changelog-nav__title">{{ t('changelog.title') }}</strong>
+        <BButton
+          class="mobile-changelog-nav__support"
+          size="small"
+          :aria-label="t('support.entry')"
+          v-click-log="{ module: '更新日志', operation: '从更新日志标题打开支持轻笺' }"
+          @click="openSupport"
+        >
+          <SvgIcon :src="icon.support.heart" size="17" aria-hidden="true" />
+        </BButton>
+      </div>
+      <BButton v-if="user.role === 'root'" class="mobile-changelog-nav__create" :loading="creating" @click="createLog">
         {{ t('changelog.newLog') }}
       </BButton>
       <span v-else class="mobile-changelog-nav__placeholder" aria-hidden="true"></span>
@@ -29,7 +35,18 @@
 
     <div class="logs-container">
       <header v-if="!bookmark.isMobile" class="logs-intro">
-        <h1 class="intro-title">{{ t('changelog.pageTitle') }}</h1>
+        <div class="logs-intro__heading">
+          <h1 class="intro-title">{{ t('changelog.pageTitle') }}</h1>
+          <BButton
+            class="logs-intro__support"
+            size="small"
+            v-click-log="{ module: '更新日志', operation: '从更新日志标题打开支持轻笺' }"
+            @click="openSupport"
+          >
+            <SvgIcon :src="icon.support.heart" size="16" aria-hidden="true" />
+            <span>{{ t('support.entry') }}</span>
+          </BButton>
+        </div>
         <p class="intro-desc">{{ t('changelog.pageDesc') }}</p>
       </header>
 
@@ -75,17 +92,26 @@
           <MobileListSurface>
             <template v-for="item in logs.slice(1)" :key="item.id">
               <MobileListRow interactive @click="toggleExpanded(item.id)">
-                <template #leading><time class="mobile-history-date">{{ item.publishDate.slice(5) }}</time></template>
+                <template #leading
+                  ><time class="mobile-history-date">{{ item.publishDate.slice(5) }}</time></template
+                >
                 <template #title>{{ item.title }}</template>
                 <template #subtitle>{{ item.summary || item.tags.join(' · ') }}</template>
                 <template #trailing><SvgIcon :src="icon.arrow_right" size="16" aria-hidden="true" /></template>
               </MobileListRow>
               <div v-if="isExpanded(item.id)" class="mobile-history-detail">
-                <div v-if="renderedContent[item.id]" class="log-markdown markdown-body" v-html="renderedContent[item.id]" v-mermaid></div>
+                <div
+                  v-if="renderedContent[item.id]"
+                  class="log-markdown markdown-body"
+                  v-html="renderedContent[item.id]"
+                  v-mermaid
+                ></div>
                 <ol v-else-if="item.highlights.length" class="log-highlights">
                   <li v-for="(highlight, index) in item.highlights" :key="index">{{ highlight }}</li>
                 </ol>
-                <BButton v-if="user.role === 'root'" size="small" @click="editLog(item.id)">{{ t('common.edit') }}</BButton>
+                <BButton v-if="user.role === 'root'" size="small" @click="editLog(item.id)">{{
+                  t('common.edit')
+                }}</BButton>
               </div>
             </template>
           </MobileListSurface>
@@ -125,10 +151,7 @@
 
             <p v-if="item.summary" class="log-summary">{{ item.summary }}</p>
 
-            <ol
-              v-if="item.highlights.length && (!item.contentMarkdown || !isExpanded(item.id))"
-              class="log-highlights"
-            >
+            <ol v-if="item.highlights.length && (!item.contentMarkdown || !isExpanded(item.id))" class="log-highlights">
               <li v-for="(highlight, highlightIndex) in visibleHighlights(item)" :key="highlightIndex">
                 {{ highlight }}
               </li>
@@ -166,6 +189,7 @@
 <script setup lang="ts">
   import { computed, ref, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -180,6 +204,7 @@
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
 
   const { t } = useI18n();
+  const router = useRouter();
   const user = useUserStore();
   const bookmark = bookmarkStore();
   const logs = ref<UpdateLogItem[]>([]);
@@ -277,6 +302,10 @@
     void getLogs();
   }
 
+  function openSupport() {
+    void router.push('/support');
+  }
+
   onMounted(getLogs);
 </script>
 
@@ -309,8 +338,16 @@
     text-align: center;
   }
 
+  .logs-intro__heading {
+    margin-bottom: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
   .intro-title {
-    margin: 0 0 8px;
+    margin: 0;
     font-size: 30px;
     font-weight: 750;
     background: linear-gradient(135deg, var(--primary-color) 0%, #3d37c9 100%);
@@ -322,6 +359,24 @@
     margin: 0;
     color: var(--desc-color);
     font-size: 14px;
+  }
+
+  .logs-intro :deep(.logs-intro__support.b_btn) {
+    gap: 5px;
+    border: 1px solid var(--support-entry-border-color);
+    color: var(--support-entry-text-color);
+    background: var(--support-entry-background);
+    box-shadow: none;
+  }
+
+  .logs-intro :deep(.logs-intro__support.b_btn:hover) {
+    background: var(--support-entry-hover-background);
+  }
+
+  .logs-intro :deep(.logs-intro__support.b_btn) {
+    min-height: 32px;
+    padding-inline: 10px;
+    font-size: 12px;
   }
 
   .logs-state {
@@ -595,6 +650,28 @@
     color: var(--primary-color);
     background: transparent !important;
     font-weight: 650;
+  }
+
+  .mobile-changelog-nav__heading {
+    display: flex;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__support.b_btn) {
+    width: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    color: var(--support-entry-text-color);
+    background: transparent !important;
+    box-shadow: none;
+  }
+
+  .mobile-changelog-nav__heading :deep(.mobile-changelog-nav__support.b_btn:hover) {
+    background: var(--support-entry-hover-background) !important;
   }
 
   .mobile-changelog-nav__title {

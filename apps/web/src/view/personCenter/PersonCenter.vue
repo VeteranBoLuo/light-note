@@ -330,7 +330,6 @@
       label: t('personCenter.coBuild'),
       path: '/co-build',
       icon: icon.coBuild.board,
-      authOnly: true,
     },
     {
       name: 'trash',

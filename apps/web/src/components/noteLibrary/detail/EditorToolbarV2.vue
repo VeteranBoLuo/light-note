@@ -26,6 +26,7 @@
       <div class="editor-toolbar-v2__group">
         <ToolbarButton :action="undoAction" @run="emitAction" />
         <ToolbarButton :action="redoAction" @run="emitAction" />
+        <ToolbarButton :action="repeatAction" @run="emitAction" />
       </div>
 
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
@@ -55,6 +56,7 @@
       <div class="editor-toolbar-v2__group">
         <ToolbarMenu :action="insertAction" :items="insertActions" @run="emitAction" />
         <ToolbarMenu :action="moreAction" :items="moreActions" align="right" @run="emitAction" />
+        <ToolbarButton :action="shortcutsAction" @run="emitAction" />
       </div>
 
       <div v-if="$slots.trailing" class="editor-toolbar-v2__trailing">
@@ -95,6 +97,7 @@
     label: string;
     icon: string;
     description?: string;
+    shortcut?: string;
     dividerBefore?: boolean;
     disabled?: boolean;
     selected?: boolean;
@@ -117,6 +120,7 @@
     ariaLabel: string;
     undoAction: EditorToolbarAction;
     redoAction: EditorToolbarAction;
+    repeatAction: EditorToolbarAction;
     headingAction: EditorToolbarAction;
     boldAction: EditorToolbarAction;
     italicAction: EditorToolbarAction;
@@ -125,6 +129,7 @@
     linkAction: EditorToolbarAction;
     insertAction: EditorToolbarAction;
     moreAction: EditorToolbarAction;
+    shortcutsAction: EditorToolbarAction;
     headingActions: EditorToolbarAction[];
     listActions: EditorToolbarAction[];
     insertActions: EditorToolbarAction[];
@@ -183,7 +188,11 @@
       return () =>
         h(
           BTooltip,
-          { title: componentProps.action.label },
+          {
+            title: [componentProps.action.label, componentProps.action.description, componentProps.action.shortcut]
+              .filter(Boolean)
+              .join(' · '),
+          },
           {
             default: () =>
               h(
