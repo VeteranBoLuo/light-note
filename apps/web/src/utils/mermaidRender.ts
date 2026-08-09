@@ -21,15 +21,29 @@ const MERMAID_PRE_SELECTOR = 'pre[class*="language-mermaid"]';
 const FIGURE_CLASS = 'mermaid-figure';
 /** 伴随模式生成的图(挂在源码块后面,不进笔记内容) */
 const COMPANION_CLASS = 'mermaid-figure--companion';
+/**
+ * 伴随图存在时给源码块加的编辑期标记。
+ *
+ * 旧版 Android WebView 不支持 `:has()`，不能再靠相邻结构隐藏源码。该 class 会在
+ * TinyMCE 的 GetContent/BeforeSetContent 管线里由 stripTransientMermaidMarkers 剥离，
+ * 因此只属于当前编辑器 DOM，不会写入笔记正文。
+ */
+export const MERMAID_COMPANION_SOURCE_CLASS = 'mermaid-source--has-companion';
 /** 富文本图表的编辑按钮/双击手势向 Vue 编辑器派发的受控事件。 */
 export const MERMAID_EDIT_EVENT = 'lightnote:mermaid-edit';
-/*
- * 伴随模式**不给源码代码块加任何标记**。
- * 试过两种标记都会被写进笔记内容:class 会原样持久化;`data-mce-mermaid-source` 也一样 ——
- * TinyMCE 只剥离它自己认识的那几个 data-mce-* 属性,自定义的照样存进去。
- * 只读展示和 PDF 导出改为按结构判断:"后面紧跟着一张 companion 图"的代码块就是源码块。
- */
 const RENDERED_FLAG = 'data-mermaid-source';
+
+/** 从持久化 HTML 中移除 Mermaid 的编辑期源码标记，同时保留其他 class。 */
+export function stripTransientMermaidMarkers(html: string): string {
+  if (!html.includes(MERMAID_COMPANION_SOURCE_CLASS)) return html;
+  return html.replace(/\sclass=(['"])(.*?)\1/giu, (attribute, quote: string, value: string) => {
+    const classes = value
+      .split(/\s+/u)
+      .filter(Boolean)
+      .filter((className) => className !== MERMAID_COMPANION_SOURCE_CLASS);
+    return classes.length ? ` class=${quote}${classes.join(' ')}${quote}` : '';
+  });
+}
 
 /** 同一段源码在编辑器里会被反复重渲染(每次输入都刷新预览),缓存避免重复调用 mermaid */
 const svgCache = new Map<string, string>();
@@ -781,16 +795,26 @@ export async function renderMermaidBlocks(
 async function renderMermaidCompanions(root: HTMLElement, interactive: boolean): Promise<void> {
   const blocks = collectPendingBlocks(root);
 
+  // companion 被编辑器命令直接移除时，同步清掉源码上的编辑期标记。
+  root.querySelectorAll<HTMLElement>(`.${MERMAID_COMPANION_SOURCE_CLASS}`).forEach((source) => {
+    const next = source.nextElementSibling as HTMLElement | null;
+    if (!next?.classList.contains(COMPANION_CLASS)) source.classList.remove(MERMAID_COMPANION_SOURCE_CLASS);
+  });
+
   // 源码块已被删掉/改成别的语言的,把残留的图一并清掉
   root.querySelectorAll<HTMLElement>(`.${COMPANION_CLASS}`).forEach((companion) => {
     const previous = companion.previousElementSibling as HTMLElement | null;
-    if (!previous || !blocks.some((block) => block.pre === previous)) companion.remove();
+    if (!previous || !blocks.some((block) => block.pre === previous)) {
+      previous?.classList.remove(MERMAID_COMPANION_SOURCE_CLASS);
+      companion.remove();
+    }
   });
 
   const pending: { figure: HTMLElement; code: string }[] = [];
   for (const { pre, code } of blocks) {
     const next = pre.nextElementSibling as HTMLElement | null;
     const existing = next?.classList.contains(COMPANION_CLASS) ? next : null;
+    pre.classList.add(MERMAID_COMPANION_SOURCE_CLASS);
     // 源码没变就不重渲染,否则编辑器每次 NodeChange 都会闪一下
     if (existing && existing.getAttribute(RENDERED_FLAG) === code && existing.dataset.mermaidState === 'ready') {
       continue;

@@ -454,7 +454,12 @@
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
   import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
-  import { MERMAID_EDIT_EVENT, inlineCachedMermaid, renderMermaidBlocks } from '@/utils/mermaidRender.ts';
+  import {
+    MERMAID_EDIT_EVENT,
+    inlineCachedMermaid,
+    renderMermaidBlocks,
+    stripTransientMermaidMarkers,
+  } from '@/utils/mermaidRender.ts';
   import {
     applyEditResult,
     buildCodeBlock,
@@ -2733,6 +2738,10 @@
       ? false
       : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
     quickbars_insert_toolbar: false,
+    // 系统长按菜单会按「图片对象选区 / 文字光标 / 剪贴板状态」动态增减项目，网页无法强制统一。
+    // 图片对象自己的快捷条因此提供一组确定性操作；文字长按仍完全交给系统菜单。
+    quickbars_image_toolbar:
+      'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
     ...(usesNativeTextSelectionMenu.value ? { contextmenu: false } : {}),
     // 移动端不启用 TinyMCE 的触摸缩放手柄；单击图片后由轻笺底部面板调整尺寸，
     // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面端仍保留原生图片拖拽手柄。
@@ -2759,6 +2768,240 @@
         }),
     setup: (editor: any) => {
       editorRef.value = editor;
+      let richImageClipboardHtml = '';
+
+      const resolveSelectedRichImage = () => {
+        const body = editor.getBody?.() as HTMLElement | null;
+        if (!body) return null;
+        const selectionNode = editor.selection?.getNode?.();
+        let image: HTMLImageElement | null = null;
+        if (selectionNode instanceof HTMLImageElement) {
+          image = selectionNode;
+        } else if (selectionNode instanceof Element) {
+          image = selectionNode.matches('figure.image')
+            ? selectionNode.querySelector<HTMLImageElement>('img')
+            : selectionNode.closest<HTMLElement>('figure.image')?.querySelector<HTMLImageElement>('img') || null;
+        }
+        image ||= body.querySelector<HTMLImageElement>(
+          'img[data-mce-selected="1"], figure.image[data-mce-selected="1"] img',
+        );
+        if (!image?.isConnected || !body.contains(image) || image.closest('.mermaid-figure--companion')) return null;
+        return image;
+      };
+
+      const serializeRichImageForClipboard = (image: HTMLImageElement) => {
+        const clone = image.cloneNode(true) as HTMLImageElement;
+        Array.from(clone.attributes).forEach((attribute) => {
+          if (attribute.name.startsWith('data-mce-') || attribute.name === 'contenteditable') {
+            clone.removeAttribute(attribute.name);
+          }
+        });
+        clone.classList.remove('mce-object-selected');
+        if (!clone.className) clone.removeAttribute('class');
+        return clone.outerHTML;
+      };
+
+      const tryCopyRichImageToSystemClipboard = (image: HTMLImageElement) => {
+        editor.focus();
+        editor.selection?.select?.(image);
+        try {
+          const doc = editor.getDoc?.() as Document | null;
+          if (!doc?.queryCommandSupported?.('copy')) return false;
+          return Boolean(doc.execCommand('copy'));
+        } catch {
+          // Android WebView / 卓易通可能禁止网页直接写系统剪贴板；内部图片剪贴板仍然可用。
+          return false;
+        }
+      };
+
+      const captureRichImage = (image: HTMLImageElement) => {
+        richImageClipboardHtml = serializeRichImageForClipboard(image);
+        tryCopyRichImageToSystemClipboard(image);
+      };
+
+      const notifyRichImageMutation = () => {
+        editor.nodeChanged?.();
+        editor.setDirty?.(true);
+        if (editor.dispatch) editor.dispatch('input');
+        else editor.fire?.('input');
+      };
+
+      const createRichImageCaretParagraph = () => {
+        const paragraph = editor.dom.create('p', {}) as HTMLParagraphElement;
+        paragraph.appendChild(editor.dom.create('br', { 'data-mce-bogus': '1' }));
+        return paragraph;
+      };
+
+      const resolveRichImageBlockAnchor = (image: HTMLImageElement) => {
+        const body = editor.getBody?.() as HTMLElement | null;
+        const block = editor.dom.getParent(image, editor.dom.isBlock) as HTMLElement | null;
+        return block && block !== body ? block : image;
+      };
+
+      const isReusableRichImageCaretBlock = (node: Element | null): node is HTMLElement =>
+        Boolean(
+          node?.matches('p,div') &&
+            !String(node.textContent || '').trim() &&
+            !node.querySelector('img,table,pre,ul,ol,figure,input'),
+        );
+
+      const focusRichImageCaret = (target: Node, offset = 0) => {
+        editor.focus();
+        editor.selection?.setCursorLocation?.(target, offset);
+        editor.selection?.scrollIntoView?.(target);
+        editor.nodeChanged?.();
+      };
+
+      const insertParagraphAfterSelectedRichImage = () => {
+        const image = resolveSelectedRichImage();
+        if (!image) return;
+        const anchor = resolveRichImageBlockAnchor(image);
+        const parent = anchor.parentNode;
+        if (!parent) return;
+        const existing = anchor.nextElementSibling;
+        if (isReusableRichImageCaretBlock(existing)) {
+          focusRichImageCaret(existing, 0);
+          return;
+        }
+        const paragraph = createRichImageCaretParagraph();
+        editor.undoManager.transact(() => {
+          parent.insertBefore(paragraph, anchor.nextSibling);
+        });
+        focusRichImageCaret(paragraph, 0);
+        notifyRichImageMutation();
+      };
+
+      const removeSelectedRichImage = (image: HTMLImageElement) => {
+        const body = editor.getBody?.() as HTMLElement | null;
+        if (!body || !body.contains(image)) return;
+        const imageParent = image.parentElement;
+        const imageOnlyLink =
+          imageParent?.matches('a') &&
+          !String(imageParent.textContent || '').trim() &&
+          imageParent.querySelectorAll('img').length === 1
+            ? imageParent
+            : null;
+        const figure = image.closest<HTMLElement>('figure.image');
+        const removalNode: HTMLElement = figure || imageOnlyLink || image;
+        const parent = removalNode.parentNode;
+        if (!parent) return;
+        const removalOffset = Array.prototype.indexOf.call(parent.childNodes, removalNode) as number;
+        let caretTarget: Node = parent;
+        let caretOffset = Math.max(0, removalOffset);
+
+        editor.undoManager.transact(() => {
+          removalNode.remove();
+          if (parent === body) {
+            const paragraph = createRichImageCaretParagraph();
+            body.insertBefore(paragraph, body.childNodes[Math.max(0, removalOffset)] || null);
+            caretTarget = paragraph;
+            caretOffset = 0;
+            return;
+          }
+          if (parent instanceof HTMLElement && editor.dom.isEmpty(parent)) {
+            parent.replaceChildren(editor.dom.create('br', { 'data-mce-bogus': '1' }));
+            caretTarget = parent;
+            caretOffset = 0;
+            return;
+          }
+          caretOffset = Math.min(Math.max(0, removalOffset), parent.childNodes.length);
+        });
+        focusRichImageCaret(caretTarget, caretOffset);
+        notifyRichImageMutation();
+      };
+
+      const pasteRichImageAfterSelection = () => {
+        const image = resolveSelectedRichImage();
+        if (!image) return;
+        if (!richImageClipboardHtml) {
+          message.info(t('noteDetail.editor.imagePasteEmpty'));
+          return;
+        }
+        const template = editor.getDoc().createElement('template') as HTMLTemplateElement;
+        template.innerHTML = richImageClipboardHtml;
+        const clone = template.content.querySelector<HTMLImageElement>('img');
+        const anchor = resolveRichImageBlockAnchor(image);
+        if (!clone || !anchor.parentNode) return;
+        const paragraph = editor.dom.create('p', {}) as HTMLParagraphElement;
+        paragraph.appendChild(clone);
+        editor.undoManager.transact(() => {
+          anchor.parentNode?.insertBefore(paragraph, anchor.nextSibling);
+        });
+        editor.focus();
+        editor.selection?.select?.(clone);
+        editor.selection?.scrollIntoView?.(clone);
+        notifyRichImageMutation();
+      };
+
+      editor.ui.registry.addIcon('ln-image-copy', icon.noteDetail.imageToolbar.copy);
+      editor.ui.registry.addIcon('ln-image-cut', icon.noteDetail.imageToolbar.cut);
+      editor.ui.registry.addIcon('ln-image-paste', icon.noteDetail.imageToolbar.paste);
+      editor.ui.registry.addIcon('ln-image-delete', icon.noteDetail.imageToolbar.delete);
+      editor.ui.registry.addIcon('ln-image-paragraph-after', icon.noteDetail.imageToolbar.paragraphAfter);
+      editor.ui.registry.addButton('lnImageCopy', {
+        icon: 'ln-image-copy',
+        tooltip: t('noteDetail.editor.imageCopy'),
+        onAction: () => {
+          const image = resolveSelectedRichImage();
+          if (image) captureRichImage(image);
+        },
+      });
+      editor.ui.registry.addButton('lnImageCut', {
+        icon: 'ln-image-cut',
+        tooltip: t('noteDetail.editor.imageCut'),
+        onAction: () => {
+          const image = resolveSelectedRichImage();
+          if (!image) return;
+          captureRichImage(image);
+          removeSelectedRichImage(image);
+        },
+      });
+      editor.ui.registry.addButton('lnImagePaste', {
+        icon: 'ln-image-paste',
+        tooltip: t('noteDetail.editor.imagePaste'),
+        onAction: pasteRichImageAfterSelection,
+      });
+      editor.ui.registry.addButton('lnImageDelete', {
+        icon: 'ln-image-delete',
+        tooltip: t('noteDetail.editor.imageDelete'),
+        onAction: () => {
+          const image = resolveSelectedRichImage();
+          if (image) removeSelectedRichImage(image);
+        },
+      });
+      editor.ui.registry.addButton('lnImageParagraphAfter', {
+        icon: 'ln-image-paragraph-after',
+        tooltip: t('noteDetail.editor.imageParagraphAfter'),
+        onAction: insertParagraphAfterSelectedRichImage,
+      });
+
+      let richImageNativeMenuBody: HTMLElement | null = null;
+      const resolveRichImageFromEvent = (event: Event) => {
+        const target = event.target;
+        const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
+        const body = editor.getBody?.() as HTMLElement | null;
+        if (!image || !body?.contains(image) || image.closest('.mermaid-figure--companion')) return null;
+        return image;
+      };
+      const blockNativeRichImageContextMenu = (event: Event) => {
+        // 只收口可编辑图片的系统长按菜单。普通文字继续完全使用系统选区、手柄和剪贴板，
+        // 避免自定义菜单破坏 Android / 鸿蒙 / iOS 的输入法与跨应用复制粘贴。
+        if (!usesNativeTextSelectionMenu.value || props.readonly) return;
+        const image = resolveRichImageFromEvent(event);
+        if (!image) return;
+        event.preventDefault();
+        editor.selection?.select?.(image);
+        editor.nodeChanged?.();
+      };
+      const bindRichImageNativeMenuGuard = () => {
+        richImageNativeMenuBody = editor.getBody?.() as HTMLElement | null;
+        richImageNativeMenuBody?.addEventListener('contextmenu', blockNativeRichImageContextMenu, true);
+      };
+      const unbindRichImageNativeMenuGuard = () => {
+        richImageNativeMenuBody?.removeEventListener('contextmenu', blockNativeRichImageContextMenu, true);
+        richImageNativeMenuBody = null;
+      };
+
       let mermaidEditBody: HTMLElement | null = null;
       const bindMermaidEditRequest = () => {
         mermaidEditBody = editor.getBody?.() as HTMLElement | null;
@@ -2829,6 +3072,7 @@
       };
       editor.on('init', () => {
         bindMermaidEditRequest();
+        bindRichImageNativeMenuGuard();
         // searchreplace 插件会注册自己的 Meta+F。若只在 keydown 里 preventDefault，
         // 同一个编辑器事件上的 TinyMCE shortcut 监听仍会继续执行，原生浮层就会藏在
         // 自研查找栏后面，按 Esc 后才暴露出来。初始化完成后明确替换为唯一入口。
@@ -2842,6 +3086,7 @@
         }
         setSelectedMermaidFigure(null);
         unbindMermaidEditRequest();
+        unbindRichImageNativeMenuGuard();
       });
 
       const refreshResourceReferences = () => {
@@ -2856,12 +3101,16 @@
       // 这样资源重命名不会无声改写用户笔记，手动改过的链接文字仍按用户输入保存。
       editor.on('GetContent', (event: { content?: string }) => {
         if (typeof event.content === 'string') {
-          event.content = stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content));
+          event.content = stripTransientMermaidMarkers(
+            stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+          );
         }
       });
       editor.on('BeforeSetContent', (event: { content?: string }) => {
         if (typeof event.content === 'string') {
-          event.content = stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content));
+          event.content = stripTransientMermaidMarkers(
+            stripTransientMentionMarkers(serializeResourceReferenceSnapshots(event.content)),
+          );
         }
       });
       editor.on('SetContent change undo redo', refreshResourceReferences);
@@ -3329,6 +3578,9 @@
         if (image && isMobile.value && !props.readonly && !image.closest('.mermaid-figure--companion')) {
           event.preventDefault();
           event.stopPropagation();
+          // 图片禁用了系统对象选区后，单击时显式建立 TinyMCE 图片选区，确保自研图片浮条稳定出现。
+          editor.selection?.select?.(image);
+          editor.nodeChanged?.();
           openMobileImageSettings({ kind: 'html', editor, element: image }, image);
           return;
         }
@@ -3372,7 +3624,7 @@
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
-        ? '.note-editor-body, .mce-content-body { max-width: 100%; overflow-wrap: anywhere; box-sizing: border-box; } .note-editor-body h1, .mce-content-body h1 { font-size: clamp(26px, 8vw, 38px); line-height: 1.2; overflow-wrap: anywhere; }'
+        ? '.note-editor-body, .mce-content-body { max-width: 100%; overflow-wrap: anywhere; box-sizing: border-box; } .note-editor-body h1, .mce-content-body h1 { font-size: clamp(26px, 8vw, 38px); line-height: 1.2; overflow-wrap: anywhere; } .note-editor-body[contenteditable="true"] img, .mce-content-body[contenteditable="true"] img { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }'
         : '',
     ].join(' '),
   }));
@@ -4033,7 +4285,7 @@
     }
     pre {
       color: var(--text-color) !important;
-      font-family: 微软雅黑 !important;
+      font-family: var(--app-font-family) !important;
       font-size: 12px !important;
       background-color: transparent !important;
       border: none !important;

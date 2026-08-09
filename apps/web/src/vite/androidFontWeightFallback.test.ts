@@ -13,7 +13,7 @@ describe('wrapAndroidFontWeightFallback', () => {
     ['700', 'bold'],
     ['750', 'bold'],
     ['900', 'bold'],
-  ])('wraps numeric weight %s with the %s Android fallback', (weight, kind) => {
+  ])('wraps numeric weight %s with the %s mobile fallback', (weight, kind) => {
     expect(wrapAndroidFontWeightFallback(weight, 'font-weight')).toBe(
       `var(--ln-android-font-weight-${kind}, ${weight})`,
     );

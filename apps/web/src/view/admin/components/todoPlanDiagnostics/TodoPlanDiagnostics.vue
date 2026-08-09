@@ -389,10 +389,4 @@
       grid-template-columns: 1fr;
     }
   }
-  :global(html.light-note-android-webview) .admin-stat-card.has-warning {
-    border-color: #d97706 !important;
-  }
-  :global(html.light-note-android-webview) .admin-stat-card.has-danger {
-    border-color: #e5484d !important;
-  }
 </style>

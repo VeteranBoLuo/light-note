@@ -713,7 +713,7 @@
     height: 100vh;
     width: 100%;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', sans-serif;
+    font-family: var(--app-font-family);
     color: #e0e0e0;
     background: #08080e;
     position: fixed;

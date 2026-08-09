@@ -1063,11 +1063,10 @@ export default {
       preferences: '快捷偏好',
       updateLogs: '更新日志',
       resourceOverview: '资源概览',
-      // 移动端「今日」专用：那里展示的确实是逾期、今天到期和待整理，「今日」是准确的
-      todaySummary: '今日待处理',
-      todaySummaryHint: '未完成待办、待整理资源与未读通知的统一入口',
-      // 桌面工作台专用：统计范围是「全部未完成」而不是今天，叫「今日」会让人误以为
-      // 它该等于顶栏待办角标（逾期 + 今天）。两个数字都对，只是口径不同。
+      // 移动端与桌面使用同一总览口径；行动明细仍保留「今日待办」范围
+      todaySummary: '待处理总览',
+      todaySummaryHint: '集中查看全部未完成待办、待整理资源与未读通知',
+      // 桌面工作台与移动端顶部总览共用：统计范围是「全部未完成」而不是今天
       actionOverview: '待处理总览',
       actionOverviewHint: '集中查看全部未完成待办、待整理资源与未读通知',
       continueWorking: '继续处理',
@@ -1152,10 +1151,8 @@ export default {
       greetingNoon: '中午好',
       greetingAfternoon: '下午好',
       greetingEvening: '晚上好',
-      pendingSummary: '今天还有 {count} 件事',
-      pendingSummaryEmpty: '今天没有待处理的事',
-      overdue: '逾期待办',
-      dueToday: '今日待办',
+      pendingSummary: '今天优先处理 {count} 件事',
+      pendingSummaryEmpty: '今天没有需要优先处理的事',
       inbox: '待整理',
       quickCaptureTitle: '快速记录',
       quickCaptureHint: '随手收下，稍后整理',
@@ -1938,6 +1935,12 @@ export default {
       imageSettingsHint: '选择图片在正文中的显示宽度。长按文字仍使用系统复制、粘贴和全选菜单。',
       imageSize: '图片显示宽度',
       imageResizeFailed: '图片内容已发生变化，请重新选择图片后再调整',
+      imageCopy: '复制图片',
+      imageCut: '剪切图片',
+      imagePaste: '在此图片后粘贴已复制图片',
+      imagePasteEmpty: '请先用图片浮条复制或剪切一张图片',
+      imageDelete: '删除图片',
+      imageParagraphAfter: '在图片后换行',
       imageSizes: {
         original: '原始',
         small: '小',

@@ -64,7 +64,18 @@
   --primary-color: #615ced;
   --primary-text: #fe2c55;
   --primary-h-color: #3b82f6;
-  font-family: '微软雅黑', sans-serif;
+  /*
+   * 全端只维护这一套 UI 字体栈。不要在业务组件或 App 兼容层重新指定
+   * “微软雅黑”等平台独占字体，否则桌面移动预览与 Android 字面宽度、
+   * 字重回退会再次分叉。
+   */
+  --app-font-family:
+    system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC',
+    'Microsoft YaHei', Arial, sans-serif;
+  font-family: var(--app-font-family);
+  font-synthesis: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   pre {
     font-family: 'Fira Code', 'Courier New', Courier, monospace;
     background: var(--pre-bg-color);
@@ -84,6 +95,16 @@
     font-family: 'Fira Code' !important;
     text-shadow: none !important;
   }
+}
+
+html,
+body,
+#app,
+button,
+input,
+textarea,
+select {
+  font-family: var(--app-font-family);
 }
 
 /* 原生复选框(笔记正文待办、搜索结果多选等)统一强调色为主题靛蓝,
@@ -583,10 +604,9 @@ h1 {
 
 /*
  * 富文本只展示渲染图表，源码由图上的「编辑」或双击打开。
- * `:has(+ companion)` 只改变编辑期视图，不给真实 <pre> 加 class/style/hidden 属性，
- * 因此 TinyMCE 序列化的仍是原始 mermaid 源码，不存在隐藏时把源码一起删掉的风险。
+ * 编辑期标记在 TinyMCE 取内容时统一剥离，避免依赖旧 Android WebView 不支持的 :has()。
  */
-.note-editor:not(.is-readonly) pre[class*='language-mermaid']:has(+ .mermaid-figure--companion),
+.note-editor:not(.is-readonly) pre.mermaid-source--has-companion,
 .note-editor.is-readonly pre[class*='language-mermaid'] {
   display: none;
 }

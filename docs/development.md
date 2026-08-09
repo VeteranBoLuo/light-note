@@ -418,26 +418,23 @@ import icon from "@/config/icon.ts";
   - fixed/absolute 浮层用 `100vw` 定位在 zoom 下会偏移（放大遮挡内容）；改用「视口中心 `left: 50%` + `transform` 偏移」，视口中心与内容同 zoom 上下文等比缩放、相对位置恒定。
   - **排查"只有缩放≠标准时才出现的定位/滚动问题",先怀疑这里。**
 
-**Android APK 样式回退（CSS `color-mix()` / 中间字重 · 重要坑）：**
+**移动浏览器 / Android App 共享渲染基线（重要坑）：**
 
-APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` 渲染错，也会把低透明度、多层 `box-shadow` 画成实心黑框。项目为此做了一层构建期回退，**因此 APK 里看到的混色和你在 Chrome 里写的不是同一个颜色**：
+APK 用系统 WebView 渲染，部分厂商内核会把 `color-mix()` 算错、把中间字重向上匹配成粗体，也可能把低透明度或多层 `box-shadow` 画成实心黑框。过去只给 APK 打补丁，造成电脑移动预览、手机浏览器和 App 出现三套结果。现在统一遵循以下链路：
 
-1. 构建时 PostCSS 插件 `src/vite/androidColorMixFallback.ts` 把每个 `color-mix(...)` 包成 `var(--ln-android-color-mix-<类别>, color-mix(...))`，类别由混色操作数的**变量名**推断（primary / border / background / card-background / danger …）。
-2. 运行时 `main.ts` 检测到 Android WebView（APK 或 `; wv)` UA）给 `<html>` 加 `light-note-android-webview`。
-3. `assets/css/android-webview-compat.less` 只在该类下定义那批 `--ln-android-color-mix-*` 变量；普通浏览器没有定义，继续使用真实混色。
+1. `config/responsive.ts` 是设备断点的唯一来源；`config/renderingProfile.ts` 与 `<head>` 中的 `earlyAppEntryBootstrap.ts` 在首次绘制前同步决定渲染基线。
+2. 手机、平板、移动 PWA 和 Android App 都给 `<html>` 加 `light-note-mobile-rendering`，共同加载 `assets/css/mobile-rendering-baseline.less`；桌面基线保留更丰富的混色和中间字重。
+3. `light-note-android-webview` 只记录渲染引擎，便于日志和诊断。`android-webview-compat.less` 必须保持无可执行视觉规则，业务组件禁止按 App UA 写字体、颜色或布局分支。
+4. 全站 UI 使用 `--app-font-family` 的跨平台系统字体栈并设置 `font-synthesis: none`。PostCSS 插件 `androidFontWeightFallback.ts` 把数字字重包成兼容变量；共享移动基线将 700 以下稳定为 400，只保留真实 700+ 粗体，因此移动浏览器和 App 的普通文字粗细一致。`@font-face` 描述不转换，代码区继续使用等宽字体。
+5. `androidColorMixFallback.ts` 把 `color-mix(...)` 包成按语义分类的兼容变量；共享移动基线同时给移动浏览器和 App 定义稳定颜色。语义弱底色保留固定 RGBA，中性边框落到稳定主题边框，混色阴影落到透明。新增语义色时需同步补插件分类、移动基线变量和测试。
 
-旧系统 WebView 对系统字体的中间字重也不稳定：字体没有 500/550/600/650 等字面时，可能直接向上匹配到 700，表现为 App 的导航、按钮、正文辅助信息大面积加粗，而同一页面在新版移动浏览器正常。构建时 `src/vite/androidFontWeightFallback.ts` 会把纯数字 `font-weight` 包成 `var(--ln-android-font-weight-<regular|medium|bold>, 原值)`；普通浏览器因变量未定义继续使用原值，APK 在兼容层将 700 以下稳定收敛到 400、只让 700+ 保持粗体，并通过 `font-synthesis: none` 禁止厂商回退层伪造字重。不要在业务组件中追加 App UA 分支；真机发现厂商默认字重或继承不一致时，只在 `android-webview-compat.less` 集中补语义明确的普通文字兜底，并补回归测试。`@font-face` 的字重描述不会被转换。
-
-- **后果：APK 内每个 `color-mix()` 都会收敛成兼容值，精确混色层次仍可能与现代浏览器略有差异。** 具体规则如下：
-  - 语义色以低权重混入**主题底色或 `transparent`**（例如 `color-mix(in srgb, var(--primary-color) 8%, var(--background-color))`）→ 走对应的 `*-soft-background`，保留一层稳定 `rgba(…, 0.1)`，避免标签、选中项和弱强调底色直接消失；
-  - 新增页面级语义色（如待办天空蓝）时要在插件分类与兼容层同时声明自己的普通色和 `*-soft-background`，不能让它误归为品牌主色或普通背景；
-  - 偏中性色的混色边框 → 塌缩成普通边框色，与相邻元素再无差异；偏主色的混色边框 → 变成饱和实色主色（仍可见）；
-  - `box-shadow` 里的混色 → 一律回退成 `transparent`，**阴影直接消失**。
-- **铁律：状态与层级不能只由 `color-mix()` 或阴影承载。** 选中、今天、激活、错误、当前项等状态必须同时有一个不依赖混色的实色信号 —— 实色描边（`var(--primary-color)`）、实心圆点 / 圆底、图标、字重或文字色；淡混色只能作为锦上添花。待办日历的「今天」踩过：只写了混色描边 + 5% 淡底，APK 上退化成与普通格子完全一样，只剩一个纯 `var()` 的小圆点。
-- **不要用 `@supports (color-mix(in srgb, red, blue))` 做分支**：出问题的 WebView 是**错误渲染**而不是不支持，`@supports` 会返回 true，判别不出来。回退交给上面那层机制，不要另造一套。
-- 新写混色时留意回退类别按变量名推断：`--surface-border-color` 这类名字里同时含 "surface" 的变量曾被归成背景色，导致 APK 上边框与底色同色、整条边消失（现已对边框声明强制兜底到边框色）。新增容易被误判的语义变量，先在 `androidColorMixFallback.test.ts` 补一条断言。
-- **本地自检（不需要真机）**：DevTools 执行 `document.documentElement.classList.add('light-note-android-webview')`，颜色回退立刻复现，用它确认状态标记在 APK 上依然可辨。阴影被画成黑框那类渲染 bug 只能真机复验。
-- 确实需要按 APK 单独修样式时，写进 `android-webview-compat.less` 的 `html.light-note-android-webview` 块，不要在业务组件里散落 UA 判断。
+- **状态与层级不能只由 `color-mix()` 或阴影承载。** 选中、今天、激活、错误、当前项等状态必须另有实色描边、实心圆点 / 圆底、图标或明确文字色；淡混色只作辅助。
+- **禁止用 `@supports (color-mix(...))` 分流。** 问题 WebView 会返回支持但错误渲染，能力探测无效。
+- 必要布局不得只依赖旧 WebView 缺失的能力：不使用 `:has()` 决定结构；容器宽度分支使用 `useElementWidthClasses()` 的显式类，保留的容器查询必须有移动基线或媒体查询等价回退；CSS 中的 `dvh/svh/lvh` 由 `dynamicViewportFallback.ts` 自动生成前置 `vh` 声明，内联高度通过 `resolveViewportUnitValue()` 处理。
+- 移动端把 `scrollbar-gutter` 统一回 `auto`，避免现代浏览器预留而旧 WebView 不预留；Chrome 87 不支持 `aspect-ratio` 的关键交互元素必须同时给明确尺寸或共享移动高度。
+- **电脑自检：** URL 加 `?renderProfile=mobile`（会记入当前标签页会话），或在 DevTools 执行 `document.documentElement.classList.add('light-note-mobile-rendering')`。`?renderProfile=auto` 清除覆盖。Android 引擎类不会改变视觉，不能再用它模拟 App。
+- **真机实时联调：** 运行 `pnpm dev:web:device`，让平板浏览器与一次性安装的 Debug APK 同时打开同一个局域网 Vite 地址，之后 Vue / TS / Less 修改均由 HMR 更新，不需要反复部署或重装。完整步骤见 `apps/android/README.md`。
+- 新增或修改移动样式后至少检查相同 CSS 视口下的移动浏览器与 Debug App、浅色/深色及横竖屏。若仍有厂商引擎差异，优先在共享移动基线写双方都执行的稳定表达并补回归门禁，禁止恢复 App 专属视觉补丁。
 
 ### 笔记页面树灰度与隐私遥测
 
@@ -459,7 +456,7 @@ APK 用系统 WebView 渲染，部分华为 / 鸿蒙内核会把 `color-mix()` �
 - [ ] 修改文件反查调用方/被调用方，确认不破坏兼容
 - [ ] 删除文件确认无残留引用
 - [ ] 前端：检查 PC 端、移动端、深色主题、中英文
-- [ ] 前端新增或修改 `color-mix()` / 阴影表达的状态与层级 → 加 `light-note-android-webview` 类复检，确认颜色回退后状态仍可辨（见「Android APK 样式回退」）
+- [ ] 前端新增或修改移动端字体、`color-mix()`、阴影或响应式布局 → 用 `?renderProfile=mobile` 复检，并在相同 CSS 视口下对照移动浏览器与 Debug App（见「共享渲染基线」）
 - [ ] 后端：检查最外层 `try/catch`、`return` 遗漏、事务完整性
 - [ ] SQL：确认全部参数化，无字符串拼接
 - [ ] 构建通过（`vite build` 或类型检查）

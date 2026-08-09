@@ -294,6 +294,16 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4.5 7.5h15M9.25 4.5h5.5l.75 3H8.5l.75-3ZM7.25 7.5l.75 12h8l.75-12M10 11v4.5M14 11v4.5"/></g></svg>',
     exportLine:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M13.5 4h5.25v5.25M18.75 4l-8.5 8.5M18 13.25v5.25a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.25"/></g></svg>',
+    imageToolbar: {
+      copy: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7"><rect width="11" height="12" x="9" y="8" rx="2"/><path d="M15 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></g></svg>',
+      cut: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="m8.2 7.2l11.3 8.3M8.2 16.8L19.5 8.5M10.5 12l9-6.5"/></g></svg>',
+      paste:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M8 5H6.5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2v-1.5M14 5h1.5a2 2 0 0 1 2 2v2"/><rect width="6" height="4" x="8" y="3" rx="1.5"/><path d="M13 12h7v7h-7zM15.5 9.5L18 12l-2.5 2.5"/></g></svg>',
+      delete:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M5 7h14M9 4h6l1 3H8l1-3ZM7 7l1 13h8l1-13M10 11v5M14 11v5"/></g></svg>',
+      paragraphAfter:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4 5h10M4 9h7M4 19h16M19 5v5a4 4 0 0 1-4 4H7"/><path d="m10 11l-3 3l3 3"/></g></svg>',
+    },
     table_insert_top:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 2048 2048"><rect width="2048" height="2048" fill="none"/><path fill="currentColor" d="M2048 128v1664H0V128h512L384 256H128v384h640v512h384V640h768V256h-384l-128-128zM640 1280H128v384h512zm640 0H768v384h512zm640 0h-512v384h512zM621 525l-90-90L960 6l429 429l-90 90l-275-275v774H896V250z"/></svg>',
     table_insert_bottom:

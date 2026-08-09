@@ -6,6 +6,7 @@ import AutoImport from 'unplugin-auto-import/vite';
 import { ElementPlusResolver, AntDesignVueResolver } from 'unplugin-vue-components/resolvers';
 import androidColorMixFallback from './src/vite/androidColorMixFallback';
 import androidFontWeightFallback from './src/vite/androidFontWeightFallback';
+import dynamicViewportFallback from './src/vite/dynamicViewportFallback';
 import earlyAppEntryBootstrap from './src/vite/earlyAppEntryBootstrap';
 import seoPreviewRoutes from './src/vite/seoPreviewRoutes';
 
@@ -44,7 +45,7 @@ export default defineConfig(({ mode }) => {
     ],
     css: {
       postcss: {
-        plugins: [androidColorMixFallback(), androidFontWeightFallback()],
+        plugins: [androidColorMixFallback(), androidFontWeightFallback(), dynamicViewportFallback()],
       },
     },
     // 加载对应的.env文件

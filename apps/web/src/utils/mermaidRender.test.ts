@@ -351,15 +351,17 @@ describe('mermaidRender', () => {
     }
 
     it('保留源码代码块,图挂在它后面', async () => {
-      const { renderMermaidBlocks } = await loadModule();
+      const { MERMAID_COMPANION_SOURCE_CLASS, renderMermaidBlocks, stripTransientMermaidMarkers } =
+        await loadModule();
       const host = richTextHost('mindmap\n  root((富文本))');
       await renderMermaidBlocks(host, { companion: true });
 
       const pre = host.querySelector('pre.language-mermaid') as HTMLElement;
       expect(pre).toBeTruthy();
-      // 源码块必须原封不动:任何加在它上面的 class/属性都会被 TinyMCE 存进笔记内容
-      expect(pre.attributes).toHaveLength(1);
-      expect(pre.getAttribute('class')).toBe('language-mermaid');
+      expect(pre.classList.contains(MERMAID_COMPANION_SOURCE_CLASS)).toBe(true);
+      // 编辑期标记必须能在 TinyMCE 取内容时剥离，不能污染笔记正文。
+      expect(stripTransientMermaidMarkers(host.innerHTML)).toContain('class="language-mermaid"');
+      expect(stripTransientMermaidMarkers(host.innerHTML)).not.toContain(MERMAID_COMPANION_SOURCE_CLASS);
       const figure = pre.nextElementSibling as HTMLElement;
       expect(figure.classList.contains('mermaid-figure--companion')).toBe(true);
       expect(figure.querySelector('svg')).toBeTruthy();
@@ -414,8 +416,8 @@ describe('mermaidRender', () => {
       editButton?.click();
       figure.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
       expect(requests).toEqual(['flowchart TD\n  A-->B', 'flowchart TD\n  A-->B']);
-      expect(pre.getAttribute('class')).toBe('language-mermaid');
-      expect(pre.attributes).toHaveLength(1);
+      expect(pre.classList.contains('language-mermaid')).toBe(true);
+      expect(pre.classList.contains('mermaid-source--has-companion')).toBe(true);
     });
 
     it('源码没变时不重复渲染(编辑器 NodeChange 触发很密)', async () => {
@@ -453,6 +455,19 @@ describe('mermaidRender', () => {
       host.querySelector('pre.language-mermaid')?.remove();
       await renderMermaidBlocks(host, { companion: true });
 
+      expect(host.querySelector('.mermaid-figure--companion')).toBeNull();
+    });
+
+    it('源码改成其他语言后会清理伴随图和编辑期标记', async () => {
+      const { renderMermaidBlocks } = await loadModule();
+      const host = richTextHost('mindmap\n  root((清理标记))');
+      await renderMermaidBlocks(host, { companion: true });
+
+      const pre = host.querySelector('pre.language-mermaid') as HTMLElement;
+      pre.className = 'language-javascript mermaid-source--has-companion';
+      await renderMermaidBlocks(host, { companion: true });
+
+      expect(pre.classList.contains('mermaid-source--has-companion')).toBe(false);
       expect(host.querySelector('.mermaid-figure--companion')).toBeNull();
     });
   });

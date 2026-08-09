@@ -21,7 +21,7 @@ function applyMobileImageSizeSource() {
 }
 
 /**
- * 移动端富文本的长按/选择必须落到系统菜单（复制/粘贴/全选）。
+ * 移动端富文本的文字长按/选择必须落到系统菜单（复制/粘贴/全选）。
  *
  * 曾经出的问题：移动端同时开着两层自定义菜单，把系统菜单顶掉了——
  *   1. quickbars 选区条只有 copy，没有 paste/全选；
@@ -44,6 +44,41 @@ describe('移动端富文本交给系统菜单', () => {
   it('触屏设备显式把 contextmenu 设为 false，不落回 TinyMCE 默认值', () => {
     const source = editorInitSource();
     expect(source).toMatch(/usesNativeTextSelectionMenu\.value\s*\?\s*\{\s*contextmenu:\s*false\s*\}\s*:\s*\{\}/);
+  });
+
+  it('图片对象浮条提供稳定操作，同时保留系统文字长按菜单', () => {
+    const source = editorInitSource();
+    expect(source).toContain(
+      "'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter'",
+    );
+    expect(source).toContain("editor.ui.registry.addButton('lnImageCopy'");
+    expect(source).toContain("editor.ui.registry.addButton('lnImageCut'");
+    expect(source).toContain("editor.ui.registry.addButton('lnImagePaste'");
+    expect(source).toContain("editor.ui.registry.addButton('lnImageDelete'");
+    expect(source).toContain("editor.ui.registry.addButton('lnImageParagraphAfter'");
+    expect(source).toContain('richImageClipboardHtml = serializeRichImageForClipboard(image)');
+    // 外部系统剪贴板只做能力探测和尽力复制，不能因为 WebView 拒绝权限而让内部复制失效。
+    expect(source).toMatch(/queryCommandSupported\?\.\('copy'\)[\s\S]*doc\.execCommand\('copy'\)/);
+    // 系统菜单只在图片对象上被阻止，不能给正文根节点挂全局 preventDefault。
+    expect(source).toContain('const blockNativeRichImageContextMenu');
+    expect(source).toMatch(
+      /blockNativeRichImageContextMenu[\s\S]*if \(!usesNativeTextSelectionMenu\.value \|\| props\.readonly\) return;[\s\S]*resolveRichImageFromEvent\(event\)[\s\S]*event\.preventDefault\(\)/,
+    );
+    expect(source).toContain("addEventListener('contextmenu', blockNativeRichImageContextMenu, true)");
+    expect(source).toContain("removeEventListener('contextmenu', blockNativeRichImageContextMenu, true)");
+    expect(source).toContain('.note-editor-body[contenteditable="true"] img');
+    expect(source).toContain('-webkit-touch-callout: none');
+    expect(source).not.toMatch(/\.mce-content-body\s*\{[^}]*-webkit-user-select:\s*none/);
+  });
+
+  it('图片后换行创建真实空段落、恢复光标并进入同一个撤销事务', () => {
+    const source = editorInitSource();
+    expect(source).toContain('const insertParagraphAfterSelectedRichImage');
+    expect(source).toContain("editor.dom.create('p', {})");
+    expect(source).toMatch(
+      /insertParagraphAfterSelectedRichImage[\s\S]*editor\.undoManager\.transact\(\(\)\s*=>\s*\{[\s\S]*parent\.insertBefore\(paragraph, anchor\.nextSibling\)/,
+    );
+    expect(source).toContain('focusRichImageCaret(paragraph, 0)');
   });
 
   it('移动端仍保留六项固定工具栏，格式化能力进入底部抽屉', () => {

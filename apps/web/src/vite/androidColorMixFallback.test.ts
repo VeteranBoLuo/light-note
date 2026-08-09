@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { wrapAndroidColorMixFallbacks } from './androidColorMixFallback';
 
 describe('wrapAndroidColorMixFallbacks', () => {
-  it('keeps the browser color-mix while giving Android a soft primary background', () => {
+  it('keeps desktop color-mix while giving the shared mobile profile a soft primary background', () => {
     const value = 'color-mix(in srgb, var(--primary-color) 20%, transparent)';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background-color')).toBe(
@@ -43,7 +43,7 @@ describe('wrapAndroidColorMixFallbacks', () => {
     );
   });
 
-  it('keeps non-semantic low-opacity backgrounds transparent in Android', () => {
+  it('keeps non-semantic low-opacity backgrounds transparent in the shared mobile profile', () => {
     const value = 'color-mix(in srgb, var(--text-color) 4%, transparent)';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
@@ -52,10 +52,10 @@ describe('wrapAndroidColorMixFallbacks', () => {
   });
 
   /*
-   * 中性弱底色曾经一律回退成透明,导致分段控件的灰槽、统计块的浅底在 APK 里整片消失
-   * (Web 正常)。20% 是分界:再弱的底纹保持透明,够强的换成稳定 RGBA。
+   * 中性弱底色曾经一律回退成透明,导致分段控件的灰槽、统计块的浅底在旧 WebView 整片消失。
+   * 20% 是分界:再弱的底纹保持透明,够强的换成稳定 RGBA。
    */
-  it('keeps mid-weight neutral backgrounds visible in Android', () => {
+  it('keeps mid-weight neutral backgrounds visible in the shared mobile profile', () => {
     const value = 'color-mix(in srgb, var(--card-border-color) 42%, transparent)';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
@@ -71,7 +71,7 @@ describe('wrapAndroidColorMixFallbacks', () => {
     );
   });
 
-  it('keeps mid-weight muted backgrounds visible in Android', () => {
+  it('keeps mid-weight muted backgrounds visible in the shared mobile profile', () => {
     const value = 'color-mix(in srgb, var(--desc-color) 30%, transparent)';
 
     expect(wrapAndroidColorMixFallbacks(value, 'background')).toBe(
@@ -87,7 +87,7 @@ describe('wrapAndroidColorMixFallbacks', () => {
 
   /**
    * `--surface-border-color` 的名字里同时含 "surface"，按变量名会被归成 background。
-   * 若真按 background 回退，Android WebView 上边框会与底色同色、整条边消失
+   * 若真按 background 回退，旧 WebView 上边框会与底色同色、整条边消失
    * （待办日历「今天」的高亮就只剩一个小圆点）。边框声明必须回退到边框色。
    */
   it('边框声明不会回退成背景色，即使混色操作数是 surface / background 变量', () => {

@@ -788,10 +788,4 @@
     min-height: 48px;
   }
 
-  :global(html.light-note-android-webview) .todo-simple-editor__priority :deep(.b_btn.is-active),
-  :global(html.light-note-android-webview) .todo-reminder-editor-v3__mode :deep(.b_btn.is-active) {
-    border-color: var(--primary-color) !important;
-    color: var(--primary-color) !important;
-    font-weight: 800 !important;
-  }
 </style>

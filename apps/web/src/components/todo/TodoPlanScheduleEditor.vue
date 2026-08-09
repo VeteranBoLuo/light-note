@@ -1062,8 +1062,4 @@
       grid-template-columns: 68px minmax(0, 1fr);
     }
   }
-  :global(html.light-note-android-webview) .todo-plan-preview {
-    border-color: var(--primary-color);
-    background: var(--background-color);
-  }
 </style>

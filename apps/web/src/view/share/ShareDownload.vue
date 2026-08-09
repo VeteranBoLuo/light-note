@@ -236,7 +236,7 @@
       radial-gradient(circle at 40% 40%, rgba(120, 219, 226, 0.3) 0%, transparent 50%),
       var(--bg-image, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
     padding: 20px;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--app-font-family);
     position: relative;
     overflow: hidden;
 

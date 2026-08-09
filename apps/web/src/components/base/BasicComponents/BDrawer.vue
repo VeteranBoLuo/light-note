@@ -80,6 +80,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { getRootZoom } from '@/utils/zoom';
+  import { resolveViewportUnitValue } from '@/utils/cssViewport';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import {
@@ -298,7 +299,7 @@
         width: '100%',
         minWidth: '0',
         maxWidth: '100%',
-        height: props.height,
+        height: resolveViewportUnitValue(props.height),
       };
     }
     return {

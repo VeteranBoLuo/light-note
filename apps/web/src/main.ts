@@ -12,14 +12,15 @@ import {
   isLightNoteAndroidApp,
   postAndroidAppReady,
 } from '@/utils/androidBridge';
+import { installRenderingProfileSync } from '@/config/renderingProfile';
 
 // Android 系统 WebView 的部分旧版本会把 color-mix() 与多层阴影渲染成实心黑框。
 // 原生壳会在 UA 中追加 LightNoteAndroid；`; wv)` 保留给旧调试包与系统 WebView。
 const isAndroidApp = isLightNoteAndroidApp();
 const isAndroidWebView = isAndroidWebViewRuntime();
-if (isAndroidWebView) {
-  document.documentElement.classList.add('light-note-android-webview');
-}
+// 首屏内联脚本会在 CSS 绘制前先设置同样的类；这里继续负责窗口缩放、横竖屏和
+// 粗指针变化后的动态同步。Android 身份类只标记引擎，所有可见规则走共享移动基线。
+installRenderingProfileSync({ androidWebView: isAndroidWebView });
 
 // 创建vue实例
 const app = createApp(App);

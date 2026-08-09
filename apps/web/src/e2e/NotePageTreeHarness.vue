@@ -167,6 +167,8 @@
   import NoteLibrarySidebar from '@/components/noteLibrary/tree/NoteLibrarySidebar.vue';
   import { NOTE_TREE_ROOT_KEY } from '@/composables/useNoteTree';
   import icon from '@/config/icon';
+  import { ANDROID_WEBVIEW_CLASS, MOBILE_RENDERING_CLASS } from '@/config/renderingProfile';
+  import { usesMobileDeviceLayout } from '@/config/responsive';
   import { bookmarkStore } from '@/store';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
   import type { AiCoverageReport } from '@/components/aiAssistant/aiSourceNavigation';
@@ -175,12 +177,16 @@
   const theme = params.get('theme') === 'night' ? 'night' : 'day';
   const apkMode = params.get('apk') === '1';
   document.documentElement.dataset.theme = theme;
-  document.documentElement.classList.toggle('light-note-android-webview', apkMode);
+  document.documentElement.classList.toggle(ANDROID_WEBVIEW_CLASS, apkMode);
 
   const bookmark = bookmarkStore();
   function syncViewport() {
     bookmark.screenWidth = window.innerWidth;
     bookmark.screenHeight = window.innerHeight;
+    document.documentElement.classList.toggle(
+      MOBILE_RENDERING_CLASS,
+      apkMode || usesMobileDeviceLayout(window.innerWidth, window.matchMedia('(pointer: coarse)').matches),
+    );
   }
   syncViewport();
   window.addEventListener('resize', syncViewport);
@@ -361,14 +367,7 @@
     overflow-x: hidden;
     background: var(--surface-page-bg);
     color: var(--text-color);
-    font-family:
-      Inter,
-      ui-sans-serif,
-      system-ui,
-      -apple-system,
-      BlinkMacSystemFont,
-      'Segoe UI',
-      sans-serif;
+    font-family: var(--app-font-family);
   }
 
   .note-page-tree-harness {

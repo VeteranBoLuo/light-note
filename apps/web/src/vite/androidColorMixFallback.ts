@@ -11,8 +11,8 @@ interface ParsedOperand {
  * 弱混色背景(可见色权重 < 50、混向 transparent)在旧 WebView 上算不准,统一换成稳定 RGBA。
  *
  * 中性类别(border/muted/text)一开始漏了,于是所有「边框色/文字色 + transparent」的弱底色
- * 在 APK 里直接回退成透明 —— 全站有 40 多处这种写法,表现就是分段控件、统计块之类的浅灰底
- * 在 App 里整片消失,而 Web 上一切正常(用户报的「卡片列表切换区域背景色没了」就是这个)。
+ * 在旧 WebView 里直接回退成透明 —— 全站有 40 多处这种写法,表现就是分段控件、统计块之类的浅灰底
+ * 在 App 里整片消失。现在移动浏览器与 App 共用同一组稳定值，避免预览和真机分叉。
  */
 const SOFT_BACKGROUND_CATEGORIES = new Set([
   'primary',
@@ -32,7 +32,7 @@ const SOFT_BACKGROUND_CATEGORIES = new Set([
 /*
  * 淡染不只会混向 transparent，也经常混向卡片、面板或输入框底色。例如：
  * `color-mix(todo 10%, card-background)`。旧实现只处理 transparent，后者会直接
- * 选中权重更大的卡片底色，导致 App 中标签、选中项等语义色彻底消失。
+ * 选中权重更大的卡片底色，导致旧 WebView 中标签、选中项等语义色彻底消失。
  */
 const SOFT_BACKGROUND_BASE_CATEGORIES = new Set([
   'background',

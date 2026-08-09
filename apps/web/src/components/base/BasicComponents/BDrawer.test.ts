@@ -278,7 +278,8 @@ describe('BDrawer compositor cleanup', () => {
     expect(wrapper?.style.zIndex).toBe('960');
     expect(panel?.classList.contains('b-drawer-panel--bottom')).toBe(true);
     expect(panel?.style.width).toBe('100%');
-    expect(panel?.style.height).toBe('60dvh');
+    // jsdom 不支持 dvh，基础组件必须和旧 WebView 一样降级到 vh，而不是丢掉整条高度。
+    expect(panel?.style.height).toBe('60vh');
     expect(panel?.style.minWidth).toBe('0px');
   });
 

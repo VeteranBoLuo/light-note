@@ -240,7 +240,7 @@
     /*
      * 实色背景 + 白字：Android WebView 会把 color-mix() 塌缩成稳定实色、
      * 把混色阴影回退成透明，时间提醒这种关键状态不能只靠混色或阴影表达
-     * （见 docs/development.md 的「Android APK 样式回退」）。
+     * （见 docs/development.md 的「移动浏览器 / Android App 共享渲染基线」）。
      * 默认红色兜底：有逾期时才是最需要警示的情况，class 逻辑失效也不会弱化提醒。
      */
     /* 用 --danger-fill-* 而不是 --danger-color：后者是前景色，深色主题会提亮到

@@ -314,6 +314,7 @@
     top: 7%;
     left: 12%;
     width: 20%;
+    height: 20%;
     aspect-ratio: 1;
     content: '';
     background: linear-gradient(90deg, transparent 43%, rgba(255, 255, 255, 0.96) 46% 54%, transparent 57%);
@@ -353,6 +354,7 @@
     top: -2px;
     left: 51%;
     width: max(3px, 10%);
+    height: max(3px, 10%);
     aspect-ratio: 1;
     content: '';
     border-radius: 50%;
@@ -469,6 +471,7 @@
     top: 5%;
     right: 12%;
     width: max(3px, 9%);
+    height: max(3px, 9%);
     aspect-ratio: 1;
     content: '';
     border-radius: 50%;
@@ -555,6 +558,7 @@
   .avatar-frame--celestial .avatar-frame__motif::before {
     top: -9%;
     width: 18%;
+    height: 18%;
     background: radial-gradient(circle, #fff 0 14%, #fff7d6 32%, #facc15 58%, #a16207 100%);
     filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(255, 247, 214, 0.96));
     animation: frame-celestial-jewel 4.8s ease-in-out infinite;
@@ -563,6 +567,7 @@
   .avatar-frame--celestial .avatar-frame__motif::after {
     bottom: -6%;
     width: 11%;
+    height: 11%;
     background: radial-gradient(circle, #fff 0 12%, #c4b5fd 34%, #7c3aed 68%, #312e81 100%);
     filter: drop-shadow(0 0 var(--frame-galaxy-orbit-glow) rgba(167, 139, 250, 0.92));
     animation: frame-celestial-jewel 4.8s 2.4s ease-in-out infinite;
@@ -586,6 +591,7 @@
     top: -3%;
     left: 47%;
     width: max(4px, 8%);
+    height: max(4px, 8%);
     aspect-ratio: 1;
     content: '';
     border-radius: 50%;

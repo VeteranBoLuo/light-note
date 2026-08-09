@@ -210,18 +210,16 @@
     flex: 1;
   }
 
-  @container ai-chat (max-width: 520px) {
-    .ai-activity {
-      width: 100%;
-      margin: 4px 0 12px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-activity {
+    width: 100%;
+    margin: 4px 0 12px;
+  }
 
-    .ai-activity__toggle {
-      min-height: 44px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-activity__toggle {
+    min-height: 44px;
+  }
 
-    .ai-activity__summary {
-      min-height: 44px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-activity__summary {
+    min-height: 44px;
   }
 </style>

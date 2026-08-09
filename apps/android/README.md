@@ -57,6 +57,45 @@ Debug APK 位于：
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### 真机实时联调（无需反复部署或重装 APK）
+
+移动浏览器预览和 App 最终都应连接同一个 Vite 开发服务。只要原生壳代码和开发服务地址
+没有变化，首次安装 Debug APK 后，后续修改 Vue / TypeScript / Less 会通过 Vite HMR
+直接更新到已安装的 App，不需要部署服务器，也不需要重新构建 APK。
+
+1. 让 Mac 与 Android 手机或平板连接同一局域网，查询 Mac 的局域网地址：
+
+   ```bash
+   ipconfig getifaddr en0
+   # 有线网卡或其他网络环境可在「系统设置 → 网络」查看当前 IPv4 地址
+   ```
+
+2. 在仓库根目录启动面向真机的开发服务：
+
+   ```bash
+   pnpm dev:web:device
+   ```
+
+   该命令固定监听 `0.0.0.0:5175`。如果同时联调本机后端，可改为
+   `VITE_ENV=local pnpm dev:web:device`，并先启动 `pnpm dev:server`。
+
+3. 只在第一次或开发服务地址变化时构建并安装 Debug APK，把示例 IP 换成上一步地址：
+
+   ```bash
+   cd apps/android
+   ./gradlew assembleDebug -PlightNoteHomeUrl=http://192.168.1.10:5175
+   "$ANDROID_HOME/platform-tools/adb" install -r app/build/outputs/apk/debug/app-debug.apk
+   ```
+
+4. 平板浏览器打开同一个 `http://192.168.1.10:5175/app`，与已安装的 Debug App
+   并排验收。两端会使用同一构建、同一 CSS 移动渲染基线和同一断点；保存前端文件后
+   两端都会收到 HMR。电脑浏览器可用设备模拟器，或在 URL 加
+   `?renderProfile=mobile` 强制启用同一移动渲染基线。
+
+若平板无法访问，先确认 Mac 防火墙允许 Node/Vite 入站、两台设备没有连访客网络，且路由器
+未开启 AP 隔离。字体字形的最终光栅化仍由 Android 系统字体负责，因此电脑模拟只用于快速
+开发，发布前至少在真机浏览器与 Debug App 各完成一轮浅色、深色和横竖屏验收。
+
 Debug 的应用展示名同样是“轻笺”，内部包名使用 `top.boluo66.lightnote.preview`，与未来正式包
 `top.boluo66.lightnote` 隔离。正式发布前必须创建并安全备份长期签名密钥，不得把密钥或密码提交到仓库。
 

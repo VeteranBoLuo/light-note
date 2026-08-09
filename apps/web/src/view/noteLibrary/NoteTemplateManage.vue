@@ -653,10 +653,6 @@
     justify-content: flex-end;
     gap: 9px;
   }
-  :global(html.light-note-android-webview) .note-template-manager__empty-icon {
-    border-color: var(--resource-note-color) !important;
-    color: var(--resource-note-color);
-  }
   @media (max-width: 767px) {
     .note-template-manager {
       border: 0;

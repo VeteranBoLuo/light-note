@@ -1225,11 +1225,6 @@
     }
   }
 
-  :global(html.light-note-android-webview) .todo-legacy-plan-banner.is-converting {
-    border-color: var(--primary-color);
-    background: var(--background-color);
-  }
-
   .todo-description-field {
     position: relative;
   }

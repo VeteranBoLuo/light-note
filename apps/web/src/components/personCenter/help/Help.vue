@@ -677,7 +677,7 @@
 
   .tag-explanation {
     margin: 20px auto;
-    font-family: Arial, sans-serif;
+    font-family: var(--app-font-family);
   }
   .bookmark-definition {
     background-color: var(--background-color);

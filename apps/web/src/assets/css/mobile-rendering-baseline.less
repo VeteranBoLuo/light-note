@@ -1,0 +1,327 @@
+/*
+ * 移动端统一渲染基线
+ *
+ * Android 系统 WebView 可能错误渲染 color-mix()、中间字重和多层阴影。
+ * 这些规则必须同时作用于移动浏览器与 App，保证开发时的浏览器移动预览
+ * 就是 App 的实际排版，而不是维护两套视觉结果。
+ *
+ * `light-note-android-webview` 只标识运行引擎，不允许承载字体、颜色或布局差异；
+ * 所有可见兼容回退统一写在 `light-note-mobile-rendering` 下。
+ */
+html.light-note-mobile-rendering {
+  /*
+   * 所有端共用 --app-font-family，避免 Android / 鸿蒙不存在的平台字体被厂商兼容层
+   * 回退成异常偏粗的中文字面。旧 WebView 还会把 500/550/600/650 等中间字重向上匹配成
+   * 粗体，因此构建阶段会保留桌面浏览器原值，并让共享移动基线把 700 以下
+   * 全部收敛为 400、只让真正的 700+ 保持粗体。这样移动浏览器与 App 字重一致。
+   */
+  font-family: var(--app-font-family);
+  font-weight: 400;
+  // 禁止厂商字体回退层合成不存在的字重；真实 700 字面仍可正常显示加粗。
+  font-synthesis: none;
+
+  --ln-android-font-weight-regular: 400;
+  --ln-android-font-weight-medium: 400;
+  --ln-android-font-weight-bold: 700;
+
+  body,
+  #app,
+  .app-root,
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+  }
+
+  /*
+   * Chromium 94 才完整支持 scrollbar-gutter。移动端本来使用覆盖式滚动条，统一回到
+   * auto 可避免现代浏览器预留一条旧 WebView 不会预留的空槽，造成相同宽度下换行不同。
+   */
+  &,
+  * {
+    scrollbar-gutter: auto !important;
+  }
+
+  /*
+   * 这三类入口在问题设备上分别暴露了厂商默认字重和继承字重不一致：个人中心的
+   * div 菜单比 BButton 版“版本更新”粗、待办 BSelect 触发器单独变粗、后台普通
+   * 文本整体偏粗。显式 regular 只兜住普通文字；组件自身声明的 700+ 标题和
+   * strong/b 仍由更具体的规则保留真实加粗语义。
+   */
+  .person-menu-item-title,
+  .phone-menu-item-title,
+  .mobile-todo-sort .select-trigger,
+  .mobile-todo-sort .select-text,
+  .user-icon-text,
+  .user-icon-text *,
+  .admin-container {
+    font-weight: 400 !important;
+  }
+
+  /*
+   * 构建阶段会把所有 color-mix() 包进这些回退变量。共享移动基线让移动浏览器
+   * 与 App 一起使用稳定主题色；桌面渲染基线未定义变量，继续使用原始混色。
+   */
+  --ln-android-color-mix-background: var(--background-color);
+  --ln-android-color-mix-card-background: var(--card-background, var(--background-color));
+  --ln-android-color-mix-panel-background: var(--workspace-panel-bg-color, var(--background-color));
+  --ln-android-color-mix-menu-background: var(--menu-body-bg-color, var(--background-color));
+  --ln-android-color-mix-input-background: var(--bl-input-noBorder-bg-color, var(--background-color));
+  --ln-android-color-mix-tag-background: var(--common-tag-bg-color, var(--background-color));
+  --ln-android-color-mix-border: var(--surface-border-color, var(--card-border-color));
+  --ln-android-color-mix-text: var(--text-color);
+  --ln-android-color-mix-foreground: var(--text-color);
+  --ln-android-color-mix-muted: var(--desc-color, var(--text-color));
+  --ln-android-color-mix-primary: var(--primary-color);
+  --ln-android-color-mix-todo: var(--todo-accent-color, #0ea5e9);
+  --ln-android-color-mix-bookmark: var(--resource-bookmark-color, var(--primary-color));
+  --ln-android-color-mix-note: var(--resource-note-color, var(--primary-color));
+  --ln-android-color-mix-file: var(--resource-file-color, var(--primary-color));
+  --ln-android-color-mix-tag: var(--resource-tag-color, var(--primary-color));
+  --ln-android-color-mix-warning: var(--warning-color, #f59e0b);
+  --ln-android-color-mix-danger: var(--danger-color, var(--error-color, #e5484d));
+
+  /* 移动端选中、危险与警告状态在 color-mix 回退后仍保留实色描边和字色。 */
+  --mobile-selected-bg: var(--workspace-panel-bg-color);
+  --mobile-sheet-danger-bg: var(--card-background);
+  --ln-android-color-mix-success: var(--success-color, #22a447);
+  // 旧 WebView 不可靠计算低透明度 color-mix()，使用稳定 RGBA 保留徽标和标签的柔和底色。
+  --ln-android-color-mix-primary-soft-background: rgba(97, 92, 237, 0.1);
+  --ln-android-color-mix-todo-soft-background: rgba(14, 165, 233, 0.1);
+  --ln-android-color-mix-bookmark-soft-background: rgba(97, 92, 237, 0.1);
+  --ln-android-color-mix-note-soft-background: rgba(0, 168, 132, 0.1);
+  --ln-android-color-mix-file-soft-background: rgba(255, 138, 0, 0.1);
+  --ln-android-color-mix-tag-soft-background: rgba(236, 72, 153, 0.1);
+  --ln-android-color-mix-warning-soft-background: rgba(245, 158, 11, 0.1);
+  --ln-android-color-mix-danger-soft-background: rgba(229, 72, 77, 0.1);
+  --ln-android-color-mix-success-soft-background: rgba(34, 164, 71, 0.1);
+  // 中性弱底色(分段控件的槽、统计块、弱分隔区)。语义色那几个可以写死品牌 RGBA,
+  // 中性灰必须分主题:浅色主题压深、深色主题提亮,否则一套值在另一套主题上等于看不见。
+  --ln-android-color-mix-border-soft-background: rgba(15, 23, 42, 0.06);
+  --ln-android-color-mix-muted-soft-background: rgba(15, 23, 42, 0.06);
+  --ln-android-color-mix-text-soft-background: rgba(15, 23, 42, 0.06);
+  --ln-android-color-mix-transparent: transparent;
+  --ln-android-color-mix-white: #ffffff;
+  --ln-android-color-mix-black: #111318;
+
+  /* 编辑器自身可能声明字重，普通正文继续锁定 regular，真实 strong 仍保留粗体。 */
+  .note-editor-body,
+  .mce-content-body {
+    font-weight: 400 !important;
+  }
+
+  .markdown-codemirror .cm-content,
+  .markdown-codemirror .cm-line,
+  .md-preview {
+    font-weight: 400 !important;
+  }
+
+  .note-editor-body strong,
+  .note-editor-body b,
+  .mce-content-body strong,
+  .mce-content-body b,
+  .md-preview strong,
+  .md-preview b {
+    font-weight: 700 !important;
+  }
+
+  // 书签真实卡片：不用混色渐变和混色阴影。
+  .card-body {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    background: var(--menu-body-bg-color) !important;
+    box-shadow: none !important;
+  }
+
+  // 待办顶部状态容器与选中项：避免黑色外框和四角方形阴影。
+  .inbox-toolbar--todo-primary {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    // 外层必须保持透明，状态 Tab 与排序框各自持有面板底色，二者之间的 6px 间距才不会被吞掉。
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  // 移动端优先级按钮原本是 todo-accent 10% 混入卡片底色；使用稳定语义 Token 保留同样的蓝底和描边。
+  .todo-item__actions--mobile .todo-mobile-action--priority::before {
+    border-color: var(--chip-todo-border) !important;
+    background: var(--chip-todo-bg) !important;
+  }
+
+  .is-pill .tab:hover {
+    background: var(--bl-input-noBorder-hover-bg-color) !important;
+  }
+
+  .is-pill .tab.is-active {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    background: var(--card-background, var(--background-color)) !important;
+    box-shadow: none !important;
+  }
+
+  // 成长页：统一修正所有已有边框的颜色，不新增边框。
+  .growth-page .growth-back,
+  .growth-page .growth-report-btn,
+  .growth-page .growth-admin-notice,
+  .growth-page .growth-panel,
+  .growth-page .growth-panel * {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .growth-page .growth-panel,
+  .growth-page .gc-badge,
+  .growth-page .gc-checkin,
+  .growth-page .cal-cell,
+  .growth-page .rl-row,
+  .growth-page .aw-badge,
+  .growth-page .ps-item,
+  .growth-page .lt-prize {
+    box-shadow: none !important;
+  }
+
+  /* Chrome 87 尚不支持 aspect-ratio；移动端日历统一使用稳定触控高度。 */
+  .growth-page .cal-cell {
+    min-height: 42px;
+    aspect-ratio: auto;
+  }
+
+  .growth-page .cal-wide .cal-cell {
+    min-height: 48px;
+  }
+
+  .growth-page .dq-item.done .dq-check {
+    border-color: transparent !important;
+  }
+
+  // 帮助中心：旧 WebView 会把混色边框画成黑框，并放大大纲入口的混色/多层阴影。
+  .help-body,
+  .help-editor,
+  .help-compact-catalog-trigger,
+  .help-compact-outline-trigger,
+  .help-compact-outline,
+  .search-result-card {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .help-body,
+  .help-editor,
+  .help-compact-outline-trigger,
+  .help-compact-outline {
+    box-shadow: none !important;
+  }
+
+  // 登录与账号注销新增区域同样避开 color-mix()，防止旧 WebView 把提示框画成黑块或黑边。
+  .github-consent__details,
+  .acc-sec .sess-item.is-current,
+  .acc-sec .deletion-warning,
+  .acc-sec .danger-zone {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    box-shadow: none !important;
+  }
+
+  .github-consent__details,
+  .acc-sec .deletion-warning {
+    background: var(--modal-input-bg, var(--background-color)) !important;
+  }
+
+  .acc-sec .sess-item,
+  .acc-sec .sess-badge {
+    background: var(--bl-input-noBorder-bg-color, var(--background-color)) !important;
+    box-shadow: none !important;
+  }
+
+  // 设置页：外层卡片与返回按钮使用稳定主题边框，避开 color-mix() 被绘制成纯黑。
+  .settings-page .settings-card,
+  .settings-page .settings-back {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+  }
+
+  .settings-page .settings-card {
+    box-shadow: none !important;
+  }
+
+  // 云空间移动端文件夹横排：旧 WebView 会把 color-mix() 边框绘制成纯黑。
+  .mobile-folder-item {
+    border-color: var(--surface-border-color, var(--card-border-color)) !important;
+    box-shadow: none !important;
+  }
+
+  .mobile-folder-item.active {
+    border-color: var(--resource-file-color, var(--primary-color)) !important;
+  }
+
+  .bookmark-page .card-panel,
+  .bookmark-page .card-panel > div,
+  .bookmark-page .right-menu-anchor,
+  .bookmark-page .card-body {
+    touch-action: pan-y;
+  }
+
+  /*
+   * 浏览器支持 cqi 时会重新计算卡片最小宽度，旧 WebView 只使用固定回退值。
+   * 移动渲染基线显式锁定同一组回退值，避免同一台平板的浏览器与 App 列数不同。
+   */
+  .card-panel-wrap {
+    --bookmark-card-min-width: 260px !important;
+  }
+
+  .field-list {
+    --file-card-min-width: 260px !important;
+  }
+
+  .note-workspace {
+    --note-card-min-width: 320px !important;
+  }
+
+  @media (min-width: 480px) {
+    .field-list .mobile-batch-actions {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+
+  // 旧 WebView 明确声明轻触导航，避免等待双击缩放判定造成约 300ms 的点击迟滞。
+  .mobile-resource-tab,
+  .mobile-bottom-nav__item,
+  .mobile-top-bar button {
+    touch-action: manipulation;
+  }
+
+  .mobile-sticky-action-bar,
+  .b-drawer-panel--bottom {
+    border: 1px solid var(--surface-border-color) !important;
+    box-shadow: none !important;
+  }
+
+  // AI 回到底部按钮：部分卓易通 WebView 不识别 inset 简写，会把 0 尺寸的
+  // 进度环画在按钮左上角。两端共同固定按钮和环的盒模型，确保浏览器预览与 App 一致。
+  .scroll-prompt .prompt-icon {
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    max-height: 44px;
+    flex: 0 0 44px;
+    padding: 0;
+    border: 0;
+    line-height: 1;
+  }
+
+  .scroll-prompt .loading-spinner {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    box-sizing: border-box;
+    transform-origin: center;
+  }
+}
+
+/*
+ * 深色主题下的中性弱底色。语义色的软底色两套主题共用一套品牌 RGBA 就够,
+ * 中性灰不行 —— 浅色主题那份「压深的黑」放到深色背景上完全看不出来。
+ */
+html.light-note-mobile-rendering[data-theme='night'] {
+  --ln-android-color-mix-border-soft-background: rgba(255, 255, 255, 0.08);
+  --ln-android-color-mix-muted-soft-background: rgba(255, 255, 255, 0.08);
+  --ln-android-color-mix-text-soft-background: rgba(255, 255, 255, 0.08);
+}

@@ -16,6 +16,7 @@
   },
   "scripts": {
     "dev:web": "pnpm --filter web dev",
+    "dev:web:device": "pnpm --filter web exec vite --host 0.0.0.0 --port 5175 --strictPort",
     "build:web": "pnpm --filter web build",
     "dev:server": "node scripts/freePort.mjs 9001 && pnpm --filter server start",
     "dev:server:watch": "node scripts/freePort.mjs 9001 && pnpm --filter server dev",

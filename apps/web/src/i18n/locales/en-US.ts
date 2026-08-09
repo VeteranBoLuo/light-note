@@ -1091,11 +1091,10 @@ export default {
       preferences: 'Quick Preferences',
       updateLogs: 'Update Logs',
       resourceOverview: 'Resource Overview',
-      // Mobile "Today" only: it really does show overdue, due-today and unorganized items
-      todaySummary: 'Today’s Pending',
-      todaySummaryHint: 'One place for unfinished todos, unorganized resources, and unread notifications',
-      // Desktop workbench only: it counts everything unfinished, not just today, so calling it
-      // "Today" makes people expect it to match the nav badge (overdue + due today).
+      // Mobile and desktop share the same all-pending overview; mobile action details stay scoped to today
+      todaySummary: 'Pending Overview',
+      todaySummaryHint: 'All unfinished todos, unorganized resources and unread notifications in one place',
+      // Shared overview copy for desktop and mobile
       actionOverview: 'Pending Overview',
       actionOverviewHint: 'All unfinished todos, unorganized resources and unread notifications in one place',
       continueWorking: 'Continue Working',
@@ -1181,10 +1180,8 @@ export default {
       greetingNoon: 'Good afternoon',
       greetingAfternoon: 'Good afternoon',
       greetingEvening: 'Good evening',
-      pendingSummary: '{count} things left today',
-      pendingSummaryEmpty: 'Nothing pending today',
-      overdue: 'Overdue todos',
-      dueToday: 'Todos due today',
+      pendingSummary: 'Prioritize {count} things today',
+      pendingSummaryEmpty: 'Nothing needs priority today',
       inbox: 'To organize',
       quickCaptureTitle: 'Quick capture',
       quickCaptureHint: 'Save it now, organize later',
@@ -1979,6 +1976,12 @@ export default {
       imageSettingsHint: 'Choose its width in the note. Long-pressing text still opens the system copy and paste menu.',
       imageSize: 'Image display width',
       imageResizeFailed: 'The image changed. Select it again before resizing.',
+      imageCopy: 'Copy image',
+      imageCut: 'Cut image',
+      imagePaste: 'Paste copied image after this image',
+      imagePasteEmpty: 'Copy or cut an image from the image toolbar first',
+      imageDelete: 'Delete image',
+      imageParagraphAfter: 'Start a new line after image',
       imageSizes: {
         original: 'Original',
         small: 'Small',

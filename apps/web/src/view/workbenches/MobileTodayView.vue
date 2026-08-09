@@ -2,8 +2,9 @@
   <!--
     移动端「今日」。
 
-    它只回答「我今天先做什么、有哪些资料还没整理」，不是统计工作台：
-    资源总量、增长趋势、文件类型分布、常用标签排行和最近更新都留在桌面工作台。
+    顶部总览与桌面工作台使用同一统计口径，下面的行动明细仍只回答
+    「我今天先做什么、有哪些资料还没整理」。资源总量、增长趋势、文件类型分布、
+    常用标签排行和最近更新都留在桌面工作台。
   -->
   <div
     ref="scrollRef"
@@ -35,11 +36,14 @@
           :key="item.key"
           class="mobile-today__summary-item"
           :class="`is-${item.key}`"
+          :title="`${item.value} ${item.label}`"
+          :aria-label="`${item.value} ${item.label}`"
           @click="openSummaryItem(item.key)"
           v-click-log="{ module: '今日', operation: `查看${item.label}` }"
         >
-          <strong>{{ item.value }}</strong>
-          <span>{{ item.label }}</span>
+          <SvgIcon class="mobile-today__summary-icon" :src="item.icon" size="16" aria-hidden="true" />
+          <strong class="mobile-today__summary-value">{{ item.value }}</strong>
+          <span class="mobile-today__summary-label">{{ item.label }}</span>
         </BButton>
       </div>
       <div class="mobile-today__pending-details">
@@ -202,7 +206,7 @@
   const dueTodayTodos = ref<TodoItem[]>([]);
   const inboxItems = ref<TodayInboxItem[]>([]);
   const continueItems = ref<TodayContinueItem[]>([]);
-  const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0 });
+  const counts = ref({ overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 });
   let todayRequestId = 0;
   let currentTodayRequest: Promise<void> | null = null;
 
@@ -230,7 +234,7 @@
           : hour < 18
             ? t('workbench.mobileToday.greetingAfternoon')
             : t('workbench.mobileToday.greetingEvening');
-    // 摘要只算需要今天处理的事，不把「以后到期」的待办也算进来吓人
+    // 问候语只算需要今天优先处理的事，不跟下方「全部待处理」总览混用口径。
     const pending = counts.value.overdue + counts.value.dueToday + counts.value.inbox;
     const tail = pending
       ? t('workbench.mobileToday.pendingSummary', { count: pending })
@@ -239,9 +243,24 @@
   });
 
   const summaryItems = computed(() => [
-    { key: 'overdue' as const, label: t('workbench.mobileToday.overdue'), value: counts.value.overdue },
-    { key: 'dueToday' as const, label: t('workbench.mobileToday.dueToday'), value: counts.value.dueToday },
-    { key: 'inbox' as const, label: t('workbench.mobileToday.inbox'), value: counts.value.inbox },
+    {
+      key: 'todo' as const,
+      label: t('workbench.today.todoPending'),
+      value: counts.value.todoPending,
+      icon: icon.noteDetail.toolbar.todo,
+    },
+    {
+      key: 'inbox' as const,
+      label: t('workbench.mobileToday.inbox'),
+      value: counts.value.inbox,
+      icon: icon.contextMenu.inbox,
+    },
+    {
+      key: 'notification' as const,
+      label: t('workbench.today.unreadNotification'),
+      value: counts.value.unreadNotification,
+      icon: icon.settings.notification,
+    },
   ]);
 
   // 四类快速记录共用同一快速添加抽屉，待办先走轻量表单，需要时再展开完整详情。
@@ -282,8 +301,12 @@
     void router.push({ path: '/inbox', query: { tab } });
   }
 
-  function openSummaryItem(key: 'overdue' | 'dueToday' | 'inbox') {
-    goToTodo(key === 'inbox' ? 'all' : 'todo');
+  function openSummaryItem(key: 'todo' | 'inbox' | 'notification') {
+    if (key === 'notification') {
+      void router.push({ name: 'notifications' });
+      return;
+    }
+    goToTodo(key === 'todo' ? 'todo' : 'all');
   }
 
   function openGrowthTasks() {
@@ -341,6 +364,7 @@
           dueToday: Number(data.counts?.dueToday || 0),
           inbox: Number(data.counts?.inbox || 0),
           todoPending: Number(data.counts?.todoPending || 0),
+          unreadNotification: Number(data.counts?.unreadNotification || 0),
         };
         // 底部导航角标与今日摘要共用同一份计数，避免两处数字不一致。
         // overdue / dueToday 来自 listTodoPage 的 due=overdue|today（includeTotal 权威总数），
@@ -399,7 +423,7 @@
       dueTodayTodos.value = [];
       inboxItems.value = [];
       continueItems.value = [];
-      counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0 };
+      counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
       if (user.id) void loadToday();
     },
   );
@@ -505,8 +529,10 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0;
-    border-top: 1px solid var(--surface-divider-color);
-    border-bottom: 1px solid var(--surface-divider-color);
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--card-background);
   }
 
   .mobile-today__pending-details {
@@ -514,24 +540,30 @@
   }
 
   .mobile-today__summary-item {
-    /* BButton 默认按内容收缩，在 grid 里必须显式撑满，否则三格宽度不一致；
-       column 主轴还要显式居中，否则数字会贴着卡片上边。 */
+    /* 三项共用一条紧凑总览，不再让三个统计数各占一张纵向卡片。 */
+    position: relative;
     width: 100%;
     min-width: 0;
-    height: 70px;
-    padding: 13px 7px;
-    gap: 5px;
-    flex-direction: column;
+    height: 52px;
+    padding: 0 3px;
+    gap: 3px;
+    flex-direction: row;
+    align-items: center;
     justify-content: center;
     border: 0;
-    border-right: 1px solid var(--surface-divider-color);
     border-radius: 0;
     color: var(--text-color);
-    background: var(--card-background) !important;
+    background: transparent !important;
   }
 
-  .mobile-today__summary-item:last-child {
-    border-right: 0;
+  .mobile-today__summary-item:not(:last-child)::after {
+    position: absolute;
+    top: 13px;
+    right: 0;
+    width: 1px;
+    height: 26px;
+    background: var(--surface-divider-color);
+    content: '';
   }
 
   .mobile-today__pending-details :deep(.today-actions__group) {
@@ -553,27 +585,40 @@
     border-top: 1px solid var(--surface-divider-color);
   }
 
-  .mobile-today__summary-item strong {
-    font-size: 19px;
+  .mobile-today__summary-icon {
+    flex: 0 0 auto;
+  }
+
+  .mobile-today__summary-value {
+    flex: 0 0 auto;
+    font-size: 16px;
     font-weight: 720;
-    line-height: 1.1;
+    line-height: 1;
   }
 
-  .mobile-today__summary-item span {
+  .mobile-today__summary-label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
     color: var(--desc-color);
-    font-size: 11px;
+    font-size: clamp(10px, 2.9vw, 11px);
+    line-height: 1.2;
   }
 
-  .mobile-today__summary-item.is-overdue strong {
-    color: var(--danger-color, #e5484d);
-  }
-
-  .mobile-today__summary-item.is-dueToday strong {
+  .mobile-today__summary-item.is-todo .mobile-today__summary-icon,
+  .mobile-today__summary-item.is-todo .mobile-today__summary-value {
     color: var(--primary-color);
   }
 
-  .mobile-today__summary-item.is-inbox strong {
-    color: var(--resource-file-color);
+  .mobile-today__summary-item.is-inbox .mobile-today__summary-icon,
+  .mobile-today__summary-item.is-inbox .mobile-today__summary-value {
+    color: var(--resource-note-color, #00a884);
+  }
+
+  .mobile-today__summary-item.is-notification .mobile-today__summary-icon,
+  .mobile-today__summary-item.is-notification .mobile-today__summary-value {
+    color: var(--resource-bookmark-color, #615ced);
   }
 
   .mobile-today__capture {

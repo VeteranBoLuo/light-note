@@ -54,7 +54,7 @@
                 <span class="field-label">{{ t('settings.theme') }}</span>
                 <span class="field-desc">{{ t('settings.themeDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': themeOpts.length >= 4 }">
                 <BButton
                   v-for="o in themeOpts"
                   :key="o.v"
@@ -74,7 +74,7 @@
                 <span class="field-label">{{ t('settings.language') }}</span>
                 <span class="field-desc">{{ t('settings.languageDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': langOpts.length >= 4 }">
                 <BButton
                   v-for="o in langOpts"
                   :key="o.v"
@@ -94,7 +94,7 @@
                 <span class="field-label">{{ t('settings.uiScale') }}</span>
                 <span class="field-desc">{{ t('settings.uiScaleDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': uiScaleOpts.length >= 4 }">
                 <BButton
                   v-for="o in uiScaleOpts"
                   :key="o.v"
@@ -132,7 +132,7 @@
                 <span class="field-label">{{ t('settings.defaultHome') }}</span>
                 <span class="field-desc">{{ t('settings.defaultHomeDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': homeOpts.length >= 4 }">
                 <BButton
                   v-for="o in homeOpts"
                   :key="o.v"
@@ -152,7 +152,7 @@
                 <span class="field-label">{{ t('settings.bookmarkOpen') }}</span>
                 <span class="field-desc">{{ t('settings.bookmarkOpenDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': bookmarkOpenOpts.length >= 4 }">
                 <BButton
                   v-for="o in bookmarkOpenOpts"
                   :key="o.v"
@@ -172,7 +172,7 @@
                 <span class="field-label">{{ t('settings.todoView') }}</span>
                 <span class="field-desc">{{ t('settings.todoViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': todoViewOpts.length >= 4 }">
                 <BButton
                   v-for="o in todoViewOpts"
                   :key="o.v"
@@ -193,7 +193,7 @@
                 <span class="field-label">{{ t('settings.noteView') }}</span>
                 <span class="field-desc">{{ t('settings.noteViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': viewOpts.length >= 4 }">
                 <BButton
                   v-for="o in viewOpts"
                   :key="o.v"
@@ -213,7 +213,7 @@
                 <span class="field-label">{{ t('settings.noteSidebarMode') }}</span>
                 <span class="field-desc">{{ t('settings.noteSidebarModeDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': noteSidebarModeOpts.length >= 4 }">
                 <BButton
                   v-for="o in noteSidebarModeOpts"
                   :key="o.v"
@@ -233,7 +233,7 @@
                 <span class="field-label">{{ t('settings.resourceView') }}</span>
                 <span class="field-desc">{{ t('settings.resourceViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': resourceViewOpts.length >= 4 }">
                 <BButton
                   v-for="o in resourceViewOpts"
                   :key="o.v"
@@ -253,7 +253,7 @@
                 <span class="field-label">{{ t('settings.resourceSort') }}</span>
                 <span class="field-desc">{{ t('settings.resourceSortDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': resourceSortOpts.length >= 4 }">
                 <BButton
                   v-for="o in resourceSortOpts"
                   :key="o.v"
@@ -273,7 +273,7 @@
                 <span class="field-label">{{ t('settings.tagView') }}</span>
                 <span class="field-desc">{{ t('settings.tagViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': tagViewOpts.length >= 4 }">
                 <BButton
                   v-for="o in tagViewOpts"
                   :key="o.v"
@@ -293,7 +293,7 @@
                 <span class="field-label">{{ t('settings.cloudView') }}</span>
                 <span class="field-desc">{{ t('settings.cloudViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': cloudViewOpts.length >= 4 }">
                 <BButton
                   v-for="o in cloudViewOpts"
                   :key="o.v"
@@ -314,7 +314,7 @@
                 <span class="field-label">{{ t('settings.tagManageView') }}</span>
                 <span class="field-desc">{{ t('settings.tagManageViewDesc') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': tagManageViewOpts.length >= 4 }">
                 <BButton
                   v-for="o in tagManageViewOpts"
                   :key="o.v"
@@ -565,7 +565,7 @@
                 <span class="field-label">{{ t('settings.ai.style') }}</span>
                 <span class="field-desc">{{ t('settings.ai.styleDescription') }}</span>
               </div>
-              <div class="seg">
+              <div class="seg" :class="{ 'seg--two-column': aiStyleOpts.length >= 4 }">
                 <BButton
                   v-for="o in aiStyleOpts"
                   :key="o.v"
@@ -1733,6 +1733,24 @@
      这里把 .seg 变成一条等分轨道:按钮平分整行,44px 高刚好到触控下限。
      只作用于移动端子页 —— 桌面是「标签在左、选项在右」,铺满会把字段拉散。 */
   .settings-body.is-mobile-sub {
+    /* 显式移动子页结构；不能只依赖旧 WebView 不支持的 @container。 */
+    .field {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 10px;
+    }
+    .field.legal-document-field {
+      flex-direction: row;
+      align-items: center;
+      gap: 14px;
+    }
+    .shortcut-keys {
+      align-self: flex-start;
+    }
+    .pwa-settings-actions {
+      justify-content: flex-start;
+    }
+
     /* 轨道底色:混 border 色而非某个表面变量,深浅两套主题下都稳定地「比卡片底突出一层」
        (浅色下 border 偏暗、深色下偏亮,方向都对)。
        权重必须留在 20% 以上 —— androidColorMixFallback 只把「中性色 + transparent」里
@@ -1757,10 +1775,8 @@
       border-radius: 10px;
       font-size: 14px;
     }
-    /* 4 项(移动端的「默认首页」)在窄屏必然换行,默认会折成 3+1、最后一项独占一整行很突兀。
-       项数 ≥4 时改成两列,折成 2+2 更齐。旧 WebView 不支持 :has() 就退回 3+1 ——
-       只是排布差异,不影响可用性,也不涉及状态可辨。 */
-    .seg:has(> .seg-btn:nth-child(4)) .seg-btn {
+    /* 4 项以上由模板显式添加类，不依赖 Chrome 105 才支持的 :has()。 */
+    .seg.seg--two-column .seg-btn {
       flex-basis: calc(50% - 2px);
     }
     /* 未选中项在轨道里不需要自己的描边/底色;选中项因此成为轨道内唯一的实色块。

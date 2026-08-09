@@ -3,11 +3,8 @@ import enUS from '@/i18n/locales/en-US';
 import zhCN from '@/i18n/locales/zh-CN';
 
 /**
- * 桌面工作台与移动端「今日」共用过同一组文案，但两者统计范围不同：
- * 工作台是「全部未完成待办 + 全部待整理」，移动端今日只看逾期、今天到期和待整理。
- * 沿用「今日待处理」会让用户以为工作台的数字该等于顶栏待办角标（逾期 + 今天）。
- *
- * 这组断言锁住「两端文案分离」这个决策，避免以后为了去重把 key 又合回一处。
+ * 桌面工作台与移动端「今日」的顶部总览统一使用「全部未完成待办 + 全部待整理 +
+ * 未读通知」口径；移动端下方行动明细仍只展示逾期、今天到期和待整理。
  */
 describe('待处理文案口径', () => {
   const locales = [
@@ -15,7 +12,7 @@ describe('待处理文案口径', () => {
     ['en-US', enUS],
   ] as const;
 
-  it.each(locales)('%s：桌面总览与移动今日使用各自的文案', (_name, locale) => {
+  it.each(locales)('%s：桌面与移动端总览使用相同文案', (_name, locale) => {
     const panel = locale.workbench.panel as Record<string, string>;
 
     expect(panel.actionOverview).toBeTruthy();
@@ -23,8 +20,8 @@ describe('待处理文案口径', () => {
     expect(panel.todaySummary).toBeTruthy();
     expect(panel.todaySummaryHint).toBeTruthy();
 
-    expect(panel.actionOverview).not.toBe(panel.todaySummary);
-    expect(panel.actionOverviewHint).not.toBe(panel.todaySummaryHint);
+    expect(panel.actionOverview).toBe(panel.todaySummary);
+    expect(panel.actionOverviewHint).toBe(panel.todaySummaryHint);
   });
 
   it('桌面标题不再宣称「今日」，避免与待办角标口径混淆', () => {
@@ -32,9 +29,14 @@ describe('待处理文案口径', () => {
     expect(enUS.workbench.panel.actionOverview.toLowerCase()).not.toContain('today');
   });
 
-  it('移动端今日保留「今日」语义，它展示的确实是今天相关的事项', () => {
-    expect(zhCN.workbench.panel.todaySummary).toContain('今日');
-    expect(enUS.workbench.panel.todaySummary.toLowerCase()).toContain('today');
+  it('移动端总览不再宣称只统计今日', () => {
+    expect(zhCN.workbench.panel.todaySummary).not.toContain('今日');
+    expect(enUS.workbench.panel.todaySummary.toLowerCase()).not.toContain('today');
+  });
+
+  it('移动端待整理入口使用短名称', () => {
+    expect(zhCN.workbench.mobileToday.inbox).toBe('待整理');
+    expect(enUS.workbench.mobileToday.inbox).toBe('To organize');
   });
 
   /** 总数只含待办与待整理；未读通知在下方分项展示，但不计入行动项总数。 */

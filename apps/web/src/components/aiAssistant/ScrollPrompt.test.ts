@@ -6,7 +6,10 @@ import { resolve } from 'node:path';
 import zhCN from '@/i18n/locales/zh-CN';
 import scrollPromptSource from './ScrollPrompt.vue?raw';
 
-const androidCompatStyles = readFileSync(resolve(process.cwd(), 'src/assets/css/android-webview-compat.less'), 'utf8');
+const mobileRenderingStyles = readFileSync(
+  resolve(process.cwd(), 'src/assets/css/mobile-rendering-baseline.less'),
+  'utf8',
+);
 const chatContainerSource = readFileSync(resolve(process.cwd(), 'src/view/aiAssistant/ChatContainer.vue'), 'utf8');
 const workspaceShellSource = readFileSync(
   resolve(process.cwd(), 'src/components/aiAssistant/AiWorkspaceShell.vue'),
@@ -84,9 +87,9 @@ describe('ScrollPrompt', () => {
     expect(mobileWorkspaceSource).toContain(':suppress-scroll-prompt="historyVisible"');
     expect(floatQuestionSource).toContain(':suppress-scroll-prompt="Boolean(activePanel)"');
     expect(chatContainerSource).toMatch(/\.messages-container\s*\{[\s\S]*?min-height:\s*0;/);
-    expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?flex:\s*0 0 44px;/);
-    expect(androidCompatStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?border:\s*0;/);
-    expect(androidCompatStyles).toMatch(
+    expect(mobileRenderingStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?flex:\s*0 0 44px;/);
+    expect(mobileRenderingStyles).toMatch(/\.scroll-prompt \.prompt-icon\s*\{[\s\S]*?border:\s*0;/);
+    expect(mobileRenderingStyles).toMatch(
       /\.scroll-prompt \.loading-spinner\s*\{[\s\S]*?width:\s*100%;[\s\S]*?height:\s*100%;/,
     );
   });

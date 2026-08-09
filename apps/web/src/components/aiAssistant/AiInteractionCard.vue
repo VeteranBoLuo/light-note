@@ -566,38 +566,36 @@
     border-color: color-mix(in srgb, #ef4444 38%, var(--card-border-color));
   }
 
-  @container ai-chat (max-width: 520px) {
-    .ai-interaction-card {
-      width: 100%;
-      margin: 0;
-      padding: 13px;
-      border-radius: 12px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-interaction-card {
+    width: 100%;
+    margin: 0;
+    padding: 13px;
+    border-radius: 12px;
+  }
 
-    .interaction-options {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-    .interaction-meta {
-      flex-direction: column;
-      gap: 3px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-meta {
+    flex-direction: column;
+    gap: 3px;
+  }
 
-    .interaction-actions > * {
-      flex: 1;
-      width: auto;
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-actions > * {
+    flex: 1;
+    width: auto;
+  }
 
-    .interaction-actions :deep(.b_btn) {
-      min-height: 44px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-actions :deep(.b_btn) {
+    min-height: 44px;
+  }
 
-    .interaction-options.is-long {
-      max-height: 360px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-options.is-long {
+    max-height: 360px;
+  }
 
-    .interaction-result {
-      margin-left: 40px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .interaction-result {
+    margin-left: 40px;
   }
 </style>

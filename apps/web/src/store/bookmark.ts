@@ -3,7 +3,7 @@ import { TagInterface } from '@/config/bookmarkCfg.ts';
 import Viewer from 'viewerjs';
 import { trackConversion } from '@/utils/conversion';
 import { apiQueryPost } from '@/http/request.ts';
-import { VIEWPORT_BREAKPOINTS } from '@/config/responsive.ts';
+import { resolveViewportDeviceType, VIEWPORT_BREAKPOINTS } from '@/config/responsive.ts';
 
 // 接口定义
 interface BookmarkState {
@@ -82,24 +82,10 @@ export default defineStore('bookmark', {
      * 这里按视口宽度分层，而不是按设备 UA 判断；适配逻辑本质上应该跟可用空间走。
      */
     deviceType(): 'mobile' | 'tablet' | 'desktop' {
-      const width = this.screenWidth;
-
-      if (width < VIEWPORT_BREAKPOINTS.mobile) {
-        return 'mobile';
-      }
-      if (width < VIEWPORT_BREAKPOINTS.desktop) {
-        return 'tablet';
-      }
-      // iPad Pro 等横屏触控设备可达到 1366px；只在中等宽度且粗指针时延续平板交互，
-      // 避免把同宽度的 MacBook/桌面窗口误判为平板。
-      if (
-        width < VIEWPORT_BREAKPOINTS.compact &&
-        typeof window !== 'undefined' &&
-        window.matchMedia?.('(pointer: coarse)').matches
-      ) {
-        return 'tablet';
-      }
-      return 'desktop';
+      return resolveViewportDeviceType(
+        this.screenWidth,
+        typeof window !== 'undefined' && Boolean(window.matchMedia?.('(pointer: coarse)').matches),
+      );
     },
 
     /**

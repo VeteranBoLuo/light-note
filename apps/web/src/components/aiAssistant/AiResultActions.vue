@@ -1000,22 +1000,20 @@
     color: var(--resource-note-color);
   }
 
-  @container ai-chat (max-width: 520px) {
-    .ai-result-actions {
-      width: 100%;
-      margin: 0 0 10px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-result-actions {
+    width: 100%;
+    margin: 0 0 10px;
+  }
 
-    .ai-result-actions__button,
-    .ai-result-actions__text {
-      min-height: 44px;
-      padding-inline: 7px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-result-actions__button,
+  :global(.chat-wrapper.is-narrow-520) .ai-result-actions__text {
+    min-height: 44px;
+    padding-inline: 7px;
+  }
 
-    .ai-result-reuse__preview dl > div {
-      grid-template-columns: 1fr;
-      gap: 2px;
-    }
+  :global(.chat-wrapper.is-narrow-520) .ai-result-reuse__preview dl > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   @media (max-width: 600px), (pointer: coarse) {

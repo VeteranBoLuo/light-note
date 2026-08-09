@@ -19,8 +19,8 @@ const findBarSource = readFileSync(
 );
 const commonStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8');
 const themeStylesSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
-const androidWebViewStylesSource = readFileSync(
-  resolve(process.cwd(), 'src/assets/css/android-webview-compat.less'),
+const mobileRenderingStylesSource = readFileSync(
+  resolve(process.cwd(), 'src/assets/css/mobile-rendering-baseline.less'),
   'utf8',
 );
 const aiReplySource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/AiReply.vue'), 'utf8');
@@ -69,30 +69,30 @@ describe('编辑器 V2 交互回归', () => {
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\.disabled\)[\s\S]*opacity:\s*0\.4/u);
   });
 
-  it('Android App 富文本与 Markdown 普通正文使用常规字重，真实加粗语义仍显示粗体', () => {
-    expect(androidWebViewStylesSource).toMatch(
-      /html\.light-note-android-webview\s*\{[\s\S]*?font-family:\s*sans-serif;[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*none;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*400;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
+  it('移动浏览器与 Android App 共用常规正文和真实加粗语义', () => {
+    expect(mobileRenderingStylesSource).toMatch(
+      /html\.light-note-mobile-rendering\s*\{[\s\S]*?font-family:\s*var\(--app-font-family\);[\s\S]*?font-weight:\s*400;[\s\S]*?font-synthesis:\s*none;[\s\S]*?--ln-android-font-weight-regular:\s*400;[\s\S]*?--ln-android-font-weight-medium:\s*400;[\s\S]*?--ln-android-font-weight-bold:\s*700;[\s\S]*?body,[\s\S]*?button,[\s\S]*?textarea\s*\{[\s\S]*?font-family:\s*inherit;/u,
     );
-    expect(androidWebViewStylesSource).toMatch(
+    expect(mobileRenderingStylesSource).toMatch(
       /\.person-menu-item-title,[\s\S]*?\.phone-menu-item-title,[\s\S]*?\.mobile-todo-sort \.select-trigger,[\s\S]*?\.mobile-todo-sort \.select-text,[\s\S]*?\.user-icon-text,[\s\S]*?\.user-icon-text \*,[\s\S]*?\.admin-container\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
-    expect(androidWebViewStylesSource).toMatch(
+    expect(mobileRenderingStylesSource).toMatch(
       /\.note-editor-body,\s*\n\s*\.mce-content-body\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
-    expect(androidWebViewStylesSource).toMatch(
+    expect(mobileRenderingStylesSource).toMatch(
       /\.markdown-codemirror \.cm-content,[\s\S]*?\.markdown-codemirror \.cm-line,[\s\S]*?\.md-preview\s*\{[\s\S]*?font-weight:\s*400\s*!important;/u,
     );
-    expect(androidWebViewStylesSource).toMatch(
+    expect(mobileRenderingStylesSource).toMatch(
       /\.note-editor-body strong,[\s\S]*?\.mce-content-body b,[\s\S]*?\.md-preview strong,[\s\S]*?\.md-preview b\s*\{[\s\S]*?font-weight:\s*700\s*!important;/u,
     );
     expect(codeMirrorSource).toMatch(/tag:\s*tags\.strong,[\s\S]*?fontWeight:\s*'700'/u);
   });
 
-  it('Android App 保留移动待办筛选间距与优先级语义底色', () => {
-    expect(androidWebViewStylesSource).toMatch(
+  it('共享移动基线保留待办筛选间距与优先级语义底色', () => {
+    expect(mobileRenderingStylesSource).toMatch(
       /\.inbox-toolbar--todo-primary\s*\{[\s\S]*?background:\s*transparent\s*!important;/u,
     );
-    expect(androidWebViewStylesSource).toMatch(
+    expect(mobileRenderingStylesSource).toMatch(
       /\.todo-item__actions--mobile \.todo-mobile-action--priority::before\s*\{[\s\S]*?border-color:\s*var\(--chip-todo-border\)\s*!important;[\s\S]*?background:\s*var\(--chip-todo-bg\)\s*!important;/u,
     );
   });
@@ -247,8 +247,11 @@ describe('编辑器 V2 交互回归', () => {
 
   it('富文本 Mermaid 仅隐藏相邻源码视图，并保留按钮/双击编辑入口', () => {
     expect(commonStylesSource).toMatch(
-      /pre\[class\*='language-mermaid'\]:has\(\+ \.mermaid-figure--companion\)[\s\S]*display:\s*none/u,
+      /\.note-editor:not\(\.is-readonly\) pre\.mermaid-source--has-companion,[\s\S]*display:\s*none/u,
     );
+    expect(editorSource).toContain('stripTransientMermaidMarkers');
+    expect(editorSource).toContain("editor.on('GetContent'");
+    expect(editorSource).toContain("editor.on('BeforeSetContent'");
     expect(editorSource).toContain('v-model:visible="richMermaidEditorVisible"');
     expect(editorSource).toContain('v-model:value="richMermaidSource"');
     expect(editorSource).toContain('addEventListener(MERMAID_EDIT_EVENT, openRichMermaidEditor)');

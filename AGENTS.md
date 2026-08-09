@@ -23,10 +23,10 @@
 
 ## 样式兼容铁律（不可违反）
 
-- APK 的系统 WebView 里 `color-mix()` 会被构建期回退成稳定实色、混色 `box-shadow` 回退成透明，混色表达的层次差异全部消失（机制见 `docs/development.md` 的「Android APK 样式回退」）。
-- **选中、今天、激活、错误、当前项等状态不得只靠混色或阴影表达**，必须同时有实色描边、实心圆点/圆底、图标、字重或文字色等不依赖混色的信号。
-- 自检：DevTools 执行 `document.documentElement.classList.add('light-note-android-webview')`，确认颜色回退后状态仍可辨。禁止用 `@supports (color-mix(...))` 做分支——出问题的 WebView 是错误渲染而不是不支持，判别不出来。
-- 需要按 APK 单独修样式时写进 `assets/css/android-webview-compat.less` 的 `html.light-note-android-webview` 块，不要在业务组件里散落 UA 判断。
+- 移动浏览器、移动 PWA 与 Android App 必须共用 `html.light-note-mobile-rendering` 下的字体、颜色、阴影和布局回退；`light-note-android-webview` 只允许标识运行引擎，禁止承载用户可见样式，也禁止在业务组件中散落 App UA 样式分支。机制见 `docs/development.md` 的「移动浏览器 / Android App 共享渲染基线」。
+- APK 的系统 WebView 可能错误渲染 `color-mix()`、中间字重和混色 `box-shadow`，因此共享移动基线会把它们稳定化。**选中、今天、激活、错误、当前项等状态不得只靠混色或阴影表达**，必须同时有实色描边、实心圆点/圆底、图标、明确文字色等信号。
+- 本地自检使用 `?renderProfile=mobile`，或在 DevTools 执行 `document.documentElement.classList.add('light-note-mobile-rendering')`；同一页面必须再以相同 CSS 视口检查移动浏览器和 Debug App。禁止用 `@supports (color-mix(...))` 做分支——问题 WebView 会错误渲染但仍返回支持。
+- 不得让必要布局只依赖旧 WebView 缺失的 `:has()`、容器查询或动态视口单位：使用显式状态/宽度类，容器查询必须有等价回退，`dvh/svh/lvh` 由构建插件或 `resolveViewportUnitValue()` 生成 `vh` 回退。
 
 ## 开发工作流
 

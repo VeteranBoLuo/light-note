@@ -1,5 +1,6 @@
 <template>
   <div
+    ref="toolbarRef"
     class="editor-toolbar-v2"
     :class="{ 'is-mobile': mobile, 'is-compact': compact && !mobile }"
     role="toolbar"
@@ -108,6 +109,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import MobilePageActionsDrawer from '@/components/mobile/MobilePageActionsDrawer.vue';
   import type { MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
+  import { useElementWidthClasses } from '@/composables/useElementWidthClasses';
 
   const props = defineProps<{
     mobile: boolean;
@@ -136,6 +138,10 @@
   const headingDrawerOpen = ref(false);
   const insertDrawerOpen = ref(false);
   const moreDrawerOpen = ref(false);
+  const toolbarRef = useElementWidthClasses([
+    { className: 'is-narrow-840', maxWidth: 840 },
+    { className: 'is-narrow-680', maxWidth: 680 },
+  ]);
 
   const mobilePrimaryActions = computed(() => [
     props.undoAction,
@@ -267,8 +273,6 @@
 
 <style scoped lang="less">
   .editor-toolbar-v2 {
-    container-name: editor-toolbar;
-    container-type: inline-size;
     display: flex;
     min-width: 0;
     min-height: 40px;
@@ -403,37 +407,33 @@
     text-overflow: ellipsis;
   }
 
-  @container editor-toolbar (max-width: 840px) {
-    .editor-toolbar-v2__button-label,
-    .editor-toolbar-v2__chevron {
-      display: none;
-    }
-
-    :deep(.editor-toolbar-v2__button.is-menu) {
-      min-width: 30px;
-    }
-
-    .editor-toolbar-v2__divider {
-      margin-inline: 0;
-    }
+  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__button-label,
+  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__chevron {
+    display: none;
   }
 
-  @container editor-toolbar (max-width: 680px) {
-    .editor-toolbar-v2__group {
-      gap: 2px;
-    }
+  .editor-toolbar-v2.is-narrow-840 :deep(.editor-toolbar-v2__button.is-menu) {
+    min-width: 30px;
+  }
 
-    .editor-toolbar-v2__divider {
-      display: none;
-    }
+  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__divider {
+    margin-inline: 0;
+  }
 
-    .editor-toolbar-v2__trailing {
-      flex: 0 0 auto;
-    }
+  .editor-toolbar-v2.is-narrow-680 .editor-toolbar-v2__group {
+    gap: 2px;
+  }
 
-    :deep(.editor-toolbar-v2__trailing .md-view-switch) {
-      min-width: 0;
-    }
+  .editor-toolbar-v2.is-narrow-680 .editor-toolbar-v2__divider {
+    display: none;
+  }
+
+  .editor-toolbar-v2.is-narrow-680 .editor-toolbar-v2__trailing {
+    flex: 0 0 auto;
+  }
+
+  .editor-toolbar-v2.is-narrow-680 :deep(.editor-toolbar-v2__trailing .md-view-switch) {
+    min-width: 0;
   }
 </style>
 

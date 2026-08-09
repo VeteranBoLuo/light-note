@@ -7,7 +7,7 @@
         :class="[{ out: isOut }, props.modalClass]"
         :style="{
           width: props.width !== 'auto' ? props.width : undefined,
-          height: props.height !== 'auto' ? props.height : undefined,
+          height: props.height !== 'auto' ? resolvedHeight : undefined,
         }"
         role="dialog"
         aria-modal="true"
@@ -47,6 +47,7 @@
   import { computed, getCurrentInstance, nextTick, onBeforeUnmount, ref, useAttrs, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { acquireModalLayer, isTopModalLayer, releaseModalLayer } from '@/utils/modalLayer';
+  import { resolveViewportUnitValue } from '@/utils/cssViewport';
   import { useMobileLayout } from '@/composables/useMobileLayout';
   import {
     registerMobileOverlayHistory,
@@ -96,6 +97,7 @@
   let closeTimer: number | null = null;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
   const attrs = useAttrs();
+  const resolvedHeight = computed(() => resolveViewportUnitValue(props.height));
 
   function performClose() {
     if (closeTimer !== null || isOut.value) return;

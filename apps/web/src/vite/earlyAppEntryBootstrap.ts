@@ -9,6 +9,12 @@ import {
   PWA_RUNTIME_SESSION_KEY,
 } from '../config/appEntryBootstrap';
 import { VIEWPORT_BREAKPOINTS } from '../config/responsive';
+import {
+  ANDROID_WEBVIEW_CLASS,
+  MOBILE_RENDERING_CLASS,
+  RENDER_PROFILE_QUERY_KEY,
+  RENDER_PROFILE_SESSION_KEY,
+} from '../config/renderingProfile';
 
 export const EARLY_APP_ENTRY_SCRIPT_ATTRIBUTE = 'data-light-note-early-app-entry';
 
@@ -29,6 +35,12 @@ export function createEarlyAppEntryScript(): string {
     rememberedSessionKey: LOGIN_HISTORY_STORAGE_KEYS.rememberedSession,
     loginHistoryTtlMs: LOGIN_HISTORY_TTL_MS,
     mobileBreakpoint: VIEWPORT_BREAKPOINTS.mobile,
+    desktopBreakpoint: VIEWPORT_BREAKPOINTS.desktop,
+    compactBreakpoint: VIEWPORT_BREAKPOINTS.compact,
+    mobileRenderingClass: MOBILE_RENDERING_CLASS,
+    androidWebViewClass: ANDROID_WEBVIEW_CLASS,
+    renderProfileQueryKey: RENDER_PROFILE_QUERY_KEY,
+    renderProfileSessionKey: RENDER_PROFILE_SESSION_KEY,
     pwaLaunchQueryKey: PWA_LAUNCH_QUERY_KEY,
     pwaLaunchQueryValue: PWA_LAUNCH_QUERY_VALUE,
     pwaRuntimeSessionKey: PWA_RUNTIME_SESSION_KEY,
@@ -48,10 +60,79 @@ export function createEarlyAppEntryScript(): string {
       }
     } catch (markerError) {}
 
+    var userAgent = String((window.navigator && window.navigator.userAgent) || '');
+    var hasAndroidBridge = Boolean(
+      window.LightNoteAndroid && typeof window.LightNoteAndroid.postMessage === 'function'
+    );
+    var isLightNoteAndroidApp =
+      hasAndroidBridge || /\\bLightNoteAndroid\\/[\\w.-]+/i.test(userAgent);
+    var isGenericAndroidWebView =
+      /Android/i.test(userAgent) && /;\\s*wv\\)/i.test(userAgent);
+    var isAndroidWebView = isLightNoteAndroidApp || isGenericAndroidWebView;
+
+    // 该脚本位于 viewport meta 之前，部分移动浏览器此时会把 innerWidth 报成约 980px。
+    // 同时参考屏幕短边，确保首屏渲染基线与 viewport meta 生效后的真实移动布局一致。
+    var innerWidth = Number(window.innerWidth);
+    var screenWidth = Number(window.screen && window.screen.width);
+    var screenHeight = Number(window.screen && window.screen.height);
+    var screenNarrowSide = Math.min(
+      screenWidth > 0 ? screenWidth : Infinity,
+      screenHeight > 0 ? screenHeight : Infinity
+    );
+    var effectiveViewportWidth = innerWidth > 0 ? innerWidth : screenNarrowSide;
+    // 只在真正的手机短边上用 screen 修正 viewport meta 生效前约 980px 的假宽度。
+    // 桌面屏幕的“短边”通常是高度（例如 900px），不能拿它参与 1200px 布局断点，
+    // 否则宽屏桌面首帧会误套移动基线，等 main.ts 运行后才恢复并产生闪烁。
+    if (screenNarrowSide < config.mobileBreakpoint) {
+      effectiveViewportWidth = Math.min(effectiveViewportWidth, screenNarrowSide);
+    }
+    if (!Number.isFinite(effectiveViewportWidth)) {
+      effectiveViewportWidth = config.compactBreakpoint;
+    }
+
+    var coarsePointer = Boolean(
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches
+    );
+    var renderProfileOverride = 'auto';
+    try {
+      var renderProfileParams = new URLSearchParams(String(window.location.search || ''));
+      var queryRenderProfile = renderProfileParams.get(config.renderProfileQueryKey);
+      if (queryRenderProfile === 'auto') {
+        window.sessionStorage.removeItem(config.renderProfileSessionKey);
+      } else if (queryRenderProfile === 'mobile' || queryRenderProfile === 'desktop') {
+        window.sessionStorage.setItem(config.renderProfileSessionKey, queryRenderProfile);
+        renderProfileOverride = queryRenderProfile;
+      } else {
+        var storedRenderProfile = window.sessionStorage.getItem(config.renderProfileSessionKey);
+        if (storedRenderProfile === 'mobile' || storedRenderProfile === 'desktop') {
+          renderProfileOverride = storedRenderProfile;
+        }
+      }
+    } catch (renderProfileError) {}
+
+    var usesMobileLayout =
+      effectiveViewportWidth < config.desktopBreakpoint ||
+      (effectiveViewportWidth < config.compactBreakpoint && coarsePointer);
+    var usesMobileRendering =
+      isAndroidWebView ||
+      renderProfileOverride === 'mobile' ||
+      (renderProfileOverride !== 'desktop' && usesMobileLayout);
+    var root = document.documentElement;
+    root.classList.toggle(config.mobileRenderingClass, usesMobileRendering);
+    root.classList.toggle(config.androidWebViewClass, isAndroidWebView);
+    root.setAttribute(
+      'data-light-note-render-profile',
+      usesMobileRendering ? 'mobile' : 'desktop'
+    );
+    root.setAttribute(
+      'data-light-note-render-engine',
+      isAndroidWebView ? 'android-webview' : 'browser'
+    );
+
     if (window.location.pathname !== '/') return;
 
     function redirectToApplication() {
-      var root = document.documentElement;
       var previousVisibility = root.style.visibility;
       root.style.visibility = 'hidden';
       try {
@@ -61,40 +142,15 @@ export function createEarlyAppEntryScript(): string {
       }
     }
 
-    var userAgent = String((window.navigator && window.navigator.userAgent) || '');
-    var hasAndroidBridge = Boolean(
-      window.LightNoteAndroid && typeof window.LightNoteAndroid.postMessage === 'function'
-    );
-    var isLightNoteAndroidApp =
-      hasAndroidBridge || /\\bLightNoteAndroid\\/[\\w.-]+/i.test(userAgent);
-
     // APK 不受视口宽度影响，任何误入根路径的场景都直接回稳定应用入口。
     if (isLightNoteAndroidApp) {
       redirectToApplication();
       return;
     }
 
-    // 该脚本位于 viewport meta 之前，部分移动浏览器此时会把 innerWidth 报成约 980px。
-    // 同时参考屏幕短边，确保回访手机在官网首次绘制前就能被识别；桌面窄窗口仍沿用响应式宽度语义。
-    var innerWidth = Number(window.innerWidth);
-    var screenWidth = Number(window.screen && window.screen.width);
-    var screenHeight = Number(window.screen && window.screen.height);
-    var screenNarrowSide = Math.min(
-      screenWidth > 0 ? screenWidth : Infinity,
-      screenHeight > 0 ? screenHeight : Infinity
-    );
-    var effectiveViewportWidth = Math.min(
-      innerWidth > 0 ? innerWidth : Infinity,
-      screenNarrowSide
-    );
-    if (
-      !Number.isFinite(effectiveViewportWidth) ||
-      effectiveViewportWidth >= config.mobileBreakpoint
-    ) return;
+    if (effectiveViewportWidth >= config.mobileBreakpoint) return;
 
     // 普通第三方 Android WebView 可能错误报告 standalone，不能因此冒充轻笺 PWA。
-    var isGenericAndroidWebView =
-      /Android/i.test(userAgent) && /;\\s*wv\\)/i.test(userAgent);
     var isStandalone =
       !isGenericAndroidWebView &&
       Boolean(

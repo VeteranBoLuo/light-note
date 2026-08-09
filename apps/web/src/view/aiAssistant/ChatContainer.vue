@@ -1,7 +1,7 @@
 <template>
   <div class="ai-chat-container">
     <!-- 主聊天容器 -->
-    <div class="chat-wrapper">
+    <div ref="chatWrapperRef" class="chat-wrapper">
       <AiConversationLineageNavigator
         v-if="lineageConversationId"
         :conversation-id="lineageConversationId"
@@ -251,6 +251,7 @@
     type AiProductEventDimensions,
   } from '@/api/aiTelemetry';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
+  import { useElementWidthClasses } from '@/composables/useElementWidthClasses';
   import { resolveHelpSources, type ResolvedHelpSource } from '@/api/helpApi';
   import {
     buildAiAssistantRuntimeIdentityKey,
@@ -356,6 +357,7 @@
 
   // 仅 DOM 引用和当前组件显示偏好留在组件内；可恢复的会话态统一由 Pinia 管理。
   const messagesContainer = ref<HTMLElement | null>(null);
+  const chatWrapperRef = useElementWidthClasses([{ className: 'is-narrow-520', maxWidth: 520 }]);
   const chatInputRef = ref<{
     focus: () => void;
     openAttachmentAction: (toolName: AiAttachmentDirectActionName, args?: Record<string, unknown>) => boolean;
@@ -2656,10 +2658,7 @@
     justify-content: center;
     align-items: center;
     background: var(--background-color);
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: var(--app-font-family);
     padding: 0;
     box-sizing: border-box;
   }
@@ -2673,7 +2672,6 @@
     background: var(--background-color);
     border-radius: 16px;
     overflow: hidden;
-    container: ai-chat / inline-size;
   }
 
   .ai-history-fold {
@@ -2706,11 +2704,9 @@
     margin: 0;
   }
 
-  @container ai-chat (max-width: 520px) {
-    .ai-message-action-stack {
-      width: 100%;
-      margin: 4px 0 14px;
-    }
+  .chat-wrapper.is-narrow-520 .ai-message-action-stack {
+    width: 100%;
+    margin: 4px 0 14px;
   }
 
   .messages-container {
@@ -2761,19 +2757,17 @@
     opacity: 0;
   }
 
-  @container ai-chat (max-width: 520px) {
-    /* 换行本身已是默认行为；窄屏只额外收紧留白，并让按钮换行后左对齐。 */
-    .recommendation-dock {
-      min-height: 0;
-      align-items: stretch;
-      padding: 0 10px 2px;
-    }
+  /* 换行本身已是默认行为；窄屏只额外收紧留白，并让按钮换行后左对齐。 */
+  .chat-wrapper.is-narrow-520 .recommendation-dock {
+    min-height: 0;
+    align-items: stretch;
+    padding: 0 10px 2px;
+  }
 
-    .recommendation-dock .continue-sources-btn {
-      width: auto;
-      margin-left: 0;
-      flex: 0 0 auto;
-    }
+  .chat-wrapper.is-narrow-520 .recommendation-dock .continue-sources-btn {
+    width: auto;
+    margin-left: 0;
+    flex: 0 0 auto;
   }
 
   @keyframes fadeIn {

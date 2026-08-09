@@ -10,6 +10,11 @@ import {
   PWA_RUNTIME_SESSION_KEY,
 } from '../config/appEntryBootstrap';
 import { createEarlyAppEntryScript } from './earlyAppEntryBootstrap';
+import {
+  ANDROID_WEBVIEW_CLASS,
+  MOBILE_RENDERING_CLASS,
+  RENDER_PROFILE_SESSION_KEY,
+} from '../config/renderingProfile';
 
 interface ScriptExecutionOptions {
   pathname?: string;
@@ -21,6 +26,7 @@ interface ScriptExecutionOptions {
   storageThrows?: boolean;
   userAgent?: string;
   standalone?: boolean;
+  coarsePointer?: boolean;
   androidBridge?: boolean;
 }
 
@@ -34,12 +40,15 @@ function executeBootstrap({
   storageThrows = false,
   userAgent = 'Mozilla/5.0 Mobile Safari/537.36',
   standalone = false,
+  coarsePointer = false,
   androidBridge = false,
 }: ScriptExecutionOptions = {}) {
   const values = new Map(Object.entries(initialStorage));
   const removedKeys: string[] = [];
   let replacedWith = '';
   const style = { visibility: '' };
+  const classes = new Set<string>();
+  const attributes = new Map<string, string>();
   const localStorage = {
     getItem(key: string) {
       if (storageThrows) throw new Error('storage unavailable');
@@ -59,6 +68,9 @@ function executeBootstrap({
     setItem(key: string, value: string) {
       sessionValues.set(key, value);
     },
+    removeItem(key: string) {
+      sessionValues.delete(key);
+    },
   };
 
   vm.runInNewContext(createEarlyAppEntryScript(), {
@@ -66,7 +78,18 @@ function executeBootstrap({
     Number,
     URLSearchParams,
     document: {
-      documentElement: { style },
+      documentElement: {
+        style,
+        classList: {
+          toggle(className: string, force?: boolean) {
+            if (force === false) classes.delete(className);
+            else classes.add(className);
+          },
+        },
+        setAttribute(name: string, value: string) {
+          attributes.set(name, value);
+        },
+      },
     },
     window: {
       innerWidth: viewportWidth,
@@ -80,8 +103,8 @@ function executeBootstrap({
         userAgent,
         standalone,
       },
-      matchMedia() {
-        return { matches: standalone };
+      matchMedia(query: string) {
+        return { matches: query === '(pointer: coarse)' ? coarsePointer : standalone };
       },
       LightNoteAndroid: androidBridge ? { postMessage() {} } : undefined,
       location: {
@@ -99,6 +122,9 @@ function executeBootstrap({
     replacedWith,
     visibility: style.visibility,
     pwaRuntime: sessionValues.get(PWA_RUNTIME_SESSION_KEY) ?? '',
+    renderProfile: sessionValues.get(RENDER_PROFILE_SESSION_KEY) ?? '',
+    classes,
+    attributes,
   };
 }
 
@@ -202,6 +228,20 @@ describe('首屏前移动应用入口守卫', () => {
     });
 
     expect(result.replacedWith).toBe('');
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(false);
+    expect(result.attributes.get('data-light-note-render-profile')).toBe('desktop');
+  });
+
+  it('桌面屏幕高度低于桌面断点时不会把高度误判成移动布局宽度', () => {
+    const result = executeBootstrap({
+      pathname: '/workbenches',
+      viewportWidth: 1440,
+      screenWidth: 1920,
+      screenHeight: 900,
+    });
+
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(false);
+    expect(result.attributes.get('data-light-note-render-profile')).toBe('desktop');
   });
 
   it('非根路径不参与官网入口分流', () => {
@@ -213,6 +253,42 @@ describe('首屏前移动应用入口守卫', () => {
     });
 
     expect(result.replacedWith).toBe('');
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(true);
+  });
+
+  it('移动浏览器首屏命中共享渲染基线但不伪装 Android 引擎', () => {
+    const result = executeBootstrap({ pathname: '/workbenches', viewportWidth: 390 });
+
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(true);
+    expect(result.classes.has(ANDROID_WEBVIEW_CLASS)).toBe(false);
+    expect(result.attributes.get('data-light-note-render-profile')).toBe('mobile');
+    expect(result.attributes.get('data-light-note-render-engine')).toBe('browser');
+  });
+
+  it('Android App 在宽屏也同时设置共享移动基线和引擎身份', () => {
+    const result = executeBootstrap({
+      pathname: '/workbenches',
+      viewportWidth: 1440,
+      screenWidth: 1440,
+      screenHeight: 900,
+      androidBridge: true,
+    });
+
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(true);
+    expect(result.classes.has(ANDROID_WEBVIEW_CLASS)).toBe(true);
+  });
+
+  it('电脑宽屏可用 renderProfile=mobile 强制验收共享基线', () => {
+    const result = executeBootstrap({
+      pathname: '/workbenches',
+      search: '?renderProfile=mobile',
+      viewportWidth: 1440,
+      screenWidth: 1440,
+      screenHeight: 900,
+    });
+
+    expect(result.classes.has(MOBILE_RENDERING_CLASS)).toBe(true);
+    expect(result.renderProfile).toBe('mobile');
   });
 
   it('manifest 的 PWA 启动入口在当前窗口写入运行环境标记', () => {

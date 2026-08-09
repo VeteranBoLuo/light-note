@@ -29,8 +29,33 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { messageState, removeMessage } from './messageState';
+  import { onBeforeUnmount, onMounted } from 'vue';
 
   const messageIcons = icon.message;
+  const overlayBodyClasses = {
+    '.guest-nudge': 'light-note-has-guest-nudge',
+    '.guest-browse-nudge': 'light-note-has-guest-browse-nudge',
+    '.native-download-progress': 'light-note-has-native-download-progress',
+  } as const;
+  let overlayObserver: MutationObserver | null = null;
+
+  function syncOverlayBodyClasses() {
+    for (const [selector, className] of Object.entries(overlayBodyClasses)) {
+      document.body.classList.toggle(className, Boolean(document.body.querySelector(selector)));
+    }
+  }
+
+  onMounted(() => {
+    syncOverlayBodyClasses();
+    overlayObserver = new MutationObserver(syncOverlayBodyClasses);
+    overlayObserver.observe(document.body, { childList: true, subtree: true });
+  });
+
+  onBeforeUnmount(() => {
+    overlayObserver?.disconnect();
+    overlayObserver = null;
+    Object.values(overlayBodyClasses).forEach((className) => document.body.classList.remove(className));
+  });
 
   function dismissOnMobile(id: number) {
     if (window.matchMedia?.('(max-width: 600px)').matches) removeMessage(id);
@@ -204,20 +229,20 @@
     }
 
     /* 写操作引导和被动浏览提示均占用底部安全区，消息统一叠在提示卡上方。 */
-    body:has(.guest-nudge) .b-message-container {
+    :global(body.light-note-has-guest-nudge) .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 166px);
     }
 
-    body:has(.guest-browse-nudge) .b-message-container {
+    :global(body.light-note-has-guest-browse-nudge) .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 78px);
     }
 
-    body:has(.guest-nudge):has(.guest-browse-nudge) .b-message-container {
+    :global(body.light-note-has-guest-nudge.light-note-has-guest-browse-nudge) .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 230px);
     }
 
     /* 原生下载进度浮层也占着底部,消息同样要叠在它上方(否则文字互相压住看不清) */
-    body:has(.native-download-progress) .b-message-container {
+    :global(body.light-note-has-native-download-progress) .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 104px);
     }
 
