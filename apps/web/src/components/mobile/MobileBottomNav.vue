@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+  import { computed, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -139,26 +139,12 @@
   watch(
     () => [user.id, user.role],
     ([id, role]) => {
-      communityUnread.reset();
       if (id && role !== 'visitor') {
         void inbox.refreshCount();
-        void communityUnread.refresh();
       }
     },
     { immediate: true },
   );
-
-  let unreadRefreshTimer: number | undefined;
-  onMounted(() => {
-    unreadRefreshTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && user.id && user.role !== 'visitor') {
-        void communityUnread.refresh();
-      }
-    }, 60_000);
-  });
-  onBeforeUnmount(() => {
-    if (unreadRefreshTimer !== undefined) window.clearInterval(unreadRefreshTimer);
-  });
 </script>
 
 <style scoped lang="less">

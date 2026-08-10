@@ -9,13 +9,17 @@ import {
 
 const rooms = ref<CommunityChatRoom[]>([]);
 const loading = ref(false);
+const realtimeAvailable = ref(false);
 let refreshPromise: Promise<CommunityChatRoomDirectory | null> | null = null;
+let refreshQueuedAfterCurrent = false;
 let generation = 0;
 
 const totalUnread = computed(() => rooms.value.reduce((total, room) => total + Math.max(0, room.unreadCount), 0));
 const totalMentions = computed(() => rooms.value.reduce((total, room) => total + Math.max(0, room.mentionCount), 0));
 
 function syncDirectory(directory: CommunityChatRoomDirectory | null | undefined) {
+  if (!directory?.messagingEnabled) realtimeAvailable.value = false;
+  else if (directory.access) realtimeAvailable.value = Boolean(directory.access.realtimeEnabled);
   rooms.value = directory?.messagingEnabled ? directory.items || [] : [];
 }
 
@@ -27,30 +31,42 @@ function reset() {
   generation += 1;
   rooms.value = [];
   loading.value = false;
+  realtimeAvailable.value = false;
   refreshPromise = null;
+  refreshQueuedAfterCurrent = false;
 }
 
-async function refresh() {
-  if (refreshPromise) return refreshPromise;
+async function refresh(options: { afterCurrent?: boolean } = {}) {
+  if (refreshPromise) {
+    if (options.afterCurrent) refreshQueuedAfterCurrent = true;
+    return refreshPromise;
+  }
   const requestGeneration = generation;
   loading.value = true;
-  const currentPromise = getCommunityChatAccess()
-    .then(async (accessResponse) => {
-      const access = accessResponse.data as CommunityChatAccess;
-      if (!access?.canEnter || !access.messagingEnabled) {
-        if (requestGeneration === generation) syncDirectory(null);
-        return null;
-      }
-      const response = await getCommunityChatRooms();
-      const directory = response.data as CommunityChatRoomDirectory;
-      if (requestGeneration === generation) syncDirectory(directory);
-      return directory;
-    })
-    .catch(() => null)
-    .finally(() => {
-      if (requestGeneration === generation) loading.value = false;
-      if (refreshPromise === currentPromise) refreshPromise = null;
-    });
+  const currentPromise = (async () => {
+    let directory: CommunityChatRoomDirectory | null = null;
+    do {
+      refreshQueuedAfterCurrent = false;
+      directory = await getCommunityChatAccess()
+        .then(async (accessResponse) => {
+          const access = accessResponse.data as CommunityChatAccess;
+          if (requestGeneration === generation) realtimeAvailable.value = Boolean(access?.realtimeEnabled);
+          if (!access?.canEnter || !access.messagingEnabled) {
+            if (requestGeneration === generation) syncDirectory(null);
+            return null;
+          }
+          const response = await getCommunityChatRooms();
+          const nextDirectory = response.data as CommunityChatRoomDirectory;
+          if (requestGeneration === generation) syncDirectory(nextDirectory);
+          return nextDirectory;
+        })
+        .catch(() => null);
+    } while (requestGeneration === generation && refreshQueuedAfterCurrent);
+    return directory;
+  })().finally(() => {
+    if (requestGeneration === generation) loading.value = false;
+    if (refreshPromise === currentPromise) refreshPromise = null;
+  });
   refreshPromise = currentPromise;
   return currentPromise;
 }
@@ -59,6 +75,7 @@ export function useCommunityChatUnread() {
   return {
     rooms: readonly(rooms),
     loading: readonly(loading),
+    realtimeAvailable: readonly(realtimeAvailable),
     totalUnread,
     totalMentions,
     markRoomRead,

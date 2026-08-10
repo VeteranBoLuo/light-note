@@ -51,6 +51,10 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" fill="currentColor" opacity=".22"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" stroke="currentColor" stroke-width="1.6"/></svg>',
     week: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M8.125 4.75v14.5M12 4.75v14.5M15.875 4.75v14.5M4.75 8.125h14.5M4.75 12h14.5M4.75 15.875h14.5" stroke="currentColor" stroke-width="1.15" opacity=".86"/></svg>',
   },
+  communityChat: {
+    defaultAvatar:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#615ced"/><circle cx="20" cy="15" r="7" fill="#fff"/><path d="M8.5 35c1.15-7.25 5-10.9 11.5-10.9S30.35 27.75 31.5 35" fill="#fff"/></svg>',
+  },
   message: {
     success:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" opacity=".45"/><path d="m8.25 12.15l2.35 2.35l5.15-5.25" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',

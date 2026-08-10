@@ -642,6 +642,9 @@ h1 {
 
 .ln-text-gradient {
   color: var(--ln-gradient-from, #615ced);
+  /* background-clip:text 会把文字填充设为透明，Chrome 会让落在 span 边界内的插入光标
+     继承同一个透明色。显式指定 caret-color 后，渐变末尾/旁边仍能看到输入焦点。 */
+  caret-color: var(--text-color, #161824);
 }
 
 @supports ((background-clip: text) or (-webkit-background-clip: text)) {

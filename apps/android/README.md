@@ -39,6 +39,28 @@ Android 构建前会通过 `syncLegalDocuments` 自动复制到生成目录并�
 首次准备好 JDK 17 和 Android SDK 35 后：
 
 ```bash
+export JAVA_HOME="$(brew --prefix openjdk@17)"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$JAVA_HOME/bin:$(brew --prefix)/bin:$ANDROID_HOME/platform-tools:$PATH"
+
+mkdir -p "$ANDROID_HOME"
+sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+sdkmanager --sdk_root="$ANDROID_HOME" \
+  "platform-tools" \
+  "platforms;android-35" \
+  "build-tools;35.0.0"
+```
+
+如果 `brew --prefix openjdk@17` 或 `sdkmanager` 不存在，先安装 `openjdk@17` 与 Homebrew cask
+`android-commandlinetools`。`Unable to locate a Java Runtime` 表示 `JAVA_HOME` 未指向真实 JDK；
+`/platform-tools/adb` 不存在通常表示 `ANDROID_HOME` 为空。完整环境检查、鸿蒙 6 + 卓易通手动
+安装降级和故障排查见 [开发文档](../../docs/development.md) 的
+「鸿蒙 6 / 卓易通与 Android Debug App 真机实时预览」。
+
+环境就绪后构建：
+
+```bash
 cd apps/android
 ./gradlew assembleDebug
 ```
@@ -77,7 +99,9 @@ app/build/outputs/apk/debug/app-debug.apk
    ```
 
    该命令固定监听 `0.0.0.0:5175`。如果同时联调本机后端，可改为
-   `VITE_ENV=local pnpm dev:web:device`，并先启动 `pnpm dev:server`。
+   `VITE_ENV=local pnpm dev:web:device`，并先启动 `pnpm dev:server`。联调聊天室实时消息时还要确认
+   `apps/server/.env` 中 `COMMUNITY_CHAT_REALTIME_ENABLED=true`；修改后必须重启后端。局域网 WebSocket
+   继续使用与页面相同的 `http://<MAC_LAN_IP>:5175` 来源，不需要额外放宽 Origin 白名单。
 
 3. 只在第一次或开发服务地址变化时构建并安装 Debug APK，把示例 IP 换成上一步地址：
 

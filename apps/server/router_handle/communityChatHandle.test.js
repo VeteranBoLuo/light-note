@@ -11,9 +11,13 @@ const mocks = vi.hoisted(() => ({
   getRuntimePolicy: vi.fn(),
   updateRuntimePolicy: vi.fn(),
   listMessages: vi.fn(),
+  getAuthorAvatar: vi.fn(),
   getAuthorProfile: vi.fn(),
   createMessage: vi.fn(),
+  deleteMessage: vi.fn(),
   markRead: vi.fn(),
+  toggleLike: vi.fn(),
+  recallMessage: vi.fn(),
   uploadImage: vi.fn(),
   getImageDownload: vi.fn(),
   discardImage: vi.fn(),
@@ -50,9 +54,13 @@ vi.mock('../util/services/communityChatAccessService.js', async (importOriginal)
 });
 vi.mock('../util/services/communityChatMessageService.js', () => ({
   listCommunityChatMessages: mocks.listMessages,
+  getCommunityChatMessageAuthorAvatar: mocks.getAuthorAvatar,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   createCommunityChatMessage: mocks.createMessage,
+  deleteCommunityChatMessage: mocks.deleteMessage,
   markCommunityChatRoomRead: mocks.markRead,
+  toggleCommunityChatMessageLike: mocks.toggleLike,
+  recallCommunityChatMessage: mocks.recallMessage,
 }));
 vi.mock('../util/services/communityChatImageService.js', () => ({
   uploadCommunityChatImage: mocks.uploadImage,
@@ -77,19 +85,23 @@ const {
   access,
   blockMessageAuthor,
   createMessage,
+  deleteMessage,
   listAccessRequests,
   listReports,
   markRoomRead,
+  messageAuthorAvatar,
   messageAuthorProfile,
   messages,
   notificationSettings,
   reportMessage,
+  recallMessage,
   requestAccess,
   reviewAccessRequest,
   reviewReport,
   revokeMember,
   rooms,
   runtimePolicy,
+  toggleMessageLike,
   updateRuntimePolicy,
   updateNotificationSettings,
 } = await import('./communityChatHandle.js');
@@ -240,6 +252,24 @@ describe('communityChatHandle', () => {
     });
   });
 
+  it('作者头像延迟接口以私有缓存返回安全图片字节', async () => {
+    const user = { id: 'visitor-1', role: 'visitor' };
+    mocks.getAuthorAvatar.mockResolvedValue({ source: 'data:image/png;base64,YQ==' });
+    const res = mockRes();
+    res.set = vi.fn().mockReturnValue(res);
+    res.type = vi.fn().mockReturnValue(res);
+
+    await messageAuthorAvatar({ user, params: { publicId: '11111111-1111-4111-8111-111111111111' } }, res);
+
+    expect(mocks.getAuthorAvatar).toHaveBeenCalledWith({
+      user,
+      messagePublicId: '11111111-1111-4111-8111-111111111111',
+    });
+    expect(res.set).toHaveBeenCalledWith('Cache-Control', 'private, max-age=300');
+    expect(res.type).toHaveBeenCalledWith('image/png');
+    expect(res.send).toHaveBeenCalledWith(Buffer.from('a'));
+  });
+
   it('发送和已读接口只透传经过白名单提取的消息字段', async () => {
     mocks.createMessage.mockResolvedValue({ message: { publicId: 'message-1' }, idempotent: false });
     mocks.markRead.mockResolvedValue({ roomSlug: 'newcomers', lastReadMessagePublicId: 'message-1' });
@@ -291,7 +321,36 @@ describe('communityChatHandle', () => {
     );
   });
 
-  it('聊天室提醒设置拒绝游客与管理员预览，并只透传总开关和三级范围', async () => {
+  it('点赞、撤回与个人删除接口只使用认证用户和消息公有 ID', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    mocks.toggleLike.mockResolvedValue({ publicId: 'message-1', likedByMe: true, likeCount: 1 });
+    mocks.recallMessage.mockResolvedValue({ publicId: 'message-1', status: 'recalled' });
+    mocks.deleteMessage.mockResolvedValue({ publicId: 'message-1', status: 'deleted_for_me' });
+    const likeRes = mockRes();
+    const recallRes = mockRes();
+    const deleteRes = mockRes();
+
+    await toggleMessageLike(
+      { user, params: { publicId: 'message-1' }, body: { likeCount: 999, targetUserId: 'forged-user' } },
+      likeRes,
+    );
+    await recallMessage(
+      { user, params: { publicId: 'message-1' }, body: { createdAt: 'forged', targetUserId: 'forged-user' } },
+      recallRes,
+    );
+    await deleteMessage(
+      { user, params: { publicId: 'message-1' }, body: { hardDelete: true, targetUserId: 'forged-user' } },
+      deleteRes,
+    );
+
+    expect(mocks.toggleLike).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
+    expect(mocks.recallMessage).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
+    expect(mocks.deleteMessage).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
+    expect(recallRes.send).toHaveBeenCalledWith(expect.objectContaining({ msg: '消息已撤回' }));
+    expect(deleteRes.send).toHaveBeenCalledWith(expect.objectContaining({ msg: '已从你的聊天记录删除' }));
+  });
+
+  it('聊天室提醒设置拒绝游客与管理员预览，并只透传总开关和四档范围', async () => {
     const visitorRes = mockRes();
     await notificationSettings({ user: { id: 'visitor-1', role: 'visitor' } }, visitorRes);
     expect(visitorRes.status).toHaveBeenCalledWith(403);

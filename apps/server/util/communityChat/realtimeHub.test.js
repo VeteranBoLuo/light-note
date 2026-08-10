@@ -102,6 +102,10 @@ describe('communityChat realtime hub', () => {
     });
     expect(JSON.stringify(event)).not.toContain('userId');
     expect(JSON.stringify(event)).not.toContain('role');
+
+    broker.publish('message.updated', { roomSlug: 'general', messagePublicId: 'message-0001', reason: 'recall' });
+    const updated = await client.waitFor('message.updated');
+    expect(updated.payload).toEqual({ roomSlug: 'general', messagePublicId: 'message-0001', reason: 'recall' });
   });
 
   it('按实时数据库账号认证 sid，并且定向权限事件不会泄漏给其他连接', async () => {

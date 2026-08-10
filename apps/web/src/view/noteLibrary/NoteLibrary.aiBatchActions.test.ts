@@ -410,4 +410,12 @@ describe('笔记库页面树交互接线', () => {
       /async function openPage[\s\S]*closeCurrentMobileOverlayThen[\s\S]*emit\('openPage', id\)/,
     );
   });
+
+  it('移动端导航切换栏与搜索区保留独立间距，列表占用抽屉剩余高度', () => {
+    expect(mobileNavigationDrawerSource).toContain('class="note-mobile-navigation-drawer__switcher"');
+    expect(mobileNavigationDrawerSource).toMatch(
+      /\.note-mobile-navigation-drawer__switcher\s*\{[\s\S]*?padding: 0 16px 12px/,
+    );
+    expect(mobileNavigationDrawerSource).toMatch(/\.note-mobile-navigation-drawer__pages,[\s\S]*?flex: 1 1 auto/);
+  });
 });

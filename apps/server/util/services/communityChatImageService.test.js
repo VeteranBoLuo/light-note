@@ -189,7 +189,7 @@ describe('communityChatImageService', () => {
         const text = String(sql);
         if (text.includes('FROM community_chat_members')) return [[], []];
         if (text.includes('FROM community_chat_message_images image')) {
-          expect(params).toEqual(['image-1', 'user-1', 'general', 'user-1']);
+          expect(params).toEqual(['image-1', 'user-1', 0, 'general', 'user-1']);
           return [
             [
               {
@@ -223,6 +223,41 @@ describe('communityChatImageService', () => {
     });
     expect(result.signedUrl).toBe('https://signed.example/image');
     expect(result).not.toHaveProperty('objectKey');
+  });
+
+  it('撤回消息的图片只为管理员保留审核读取能力', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        if (String(sql).includes('FROM community_chat_message_images image')) {
+          expect(params).toEqual(['image-recalled', 'root-1', 1, 'general', 'root-1']);
+          return [
+            [
+              {
+                publicId: 'image-recalled',
+                objectKey: 'community-chat/private/image-recalled.webp',
+                contentType: 'image/webp',
+                fileSize: 100,
+                width: 320,
+                height: 320,
+                status: 'attached',
+              },
+            ],
+            [],
+          ];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const result = await getCommunityChatImageDownload({
+      user: { id: 'root-1', role: 'root' },
+      imagePublicId: 'image-recalled',
+      env: PUBLIC_ENV,
+      db,
+      createSignedUrl: mocks.createSignedUrl,
+    });
+
+    expect(result.publicId).toBe('image-recalled');
   });
 
   it('待发送图片只能由所有者丢弃，先标记清理状态再删除对象记录', async () => {

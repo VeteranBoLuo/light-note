@@ -14,9 +14,13 @@ import {
 } from '../util/services/communityChatAccessService.js';
 import {
   createCommunityChatMessage,
+  deleteCommunityChatMessage,
+  getCommunityChatMessageAuthorAvatar,
   getCommunityChatMessageAuthorProfile,
   listCommunityChatMessages,
   markCommunityChatRoomRead,
+  recallCommunityChatMessage,
+  toggleCommunityChatMessageLike,
 } from '../util/services/communityChatMessageService.js';
 import {
   discardCommunityChatImage,
@@ -259,6 +263,36 @@ export async function messageAuthorProfile(req, res) {
   }
 }
 
+export async function messageAuthorAvatar(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const { source } = await getCommunityChatMessageAuthorAvatar({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    res.set('Cache-Control', 'private, max-age=300');
+    res.set('X-Content-Type-Options', 'nosniff');
+    if (/^https?:\/\//i.test(source)) return res.redirect(302, source);
+
+    const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(source);
+    const body = match ? Buffer.from(match[2], 'base64') : null;
+    if (!match || !body?.length || body.length > 524288) {
+      return res
+        .status(404)
+        .send(
+          resultData(
+            { code: 'COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND' },
+            404,
+            L(req, '头像当前不可用', 'Avatar is unavailable'),
+          ),
+        );
+    }
+    return res.type(match[1]).send(body);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
 export async function markRoomRead(req, res) {
   if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
   try {
@@ -268,6 +302,45 @@ export async function markRoomRead(req, res) {
       lastMessagePublicId: req.body?.lastMessagePublicId,
     });
     return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function toggleMessageLike(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await toggleCommunityChatMessageLike({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function recallMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await recallCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '消息已撤回', 'Message recalled')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function deleteMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await deleteCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '已从你的聊天记录删除', 'Removed from your chat history')));
   } catch (error) {
     return sendError(req, res, error);
   }

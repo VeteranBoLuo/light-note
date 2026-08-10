@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
   updateSettings: vi.fn(),
   success: vi.fn(),
   error: vi.fn(),
+  refreshUnread: vi.fn(),
+  refreshCommunityUnread: vi.fn(),
+  resetCommunityUnread: vi.fn(),
 }));
 
 vi.mock('@/api/communityChatApi', () => ({
@@ -19,14 +22,25 @@ vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: mocks.success, error: mocks.error },
 }));
 
+vi.mock('@/composables/useNotification', () => ({
+  useNotification: () => ({ refreshUnread: mocks.refreshUnread }),
+}));
+
+vi.mock('@/composables/useCommunityChatUnread', () => ({
+  useCommunityChatUnread: () => ({
+    refresh: mocks.refreshCommunityUnread,
+    reset: mocks.resetCommunityUnread,
+  }),
+}));
+
 const { default: CommunityChatNotificationSettingsPanel } =
   await import('./CommunityChatNotificationSettingsPanel.vue');
 
 let cleanup: (() => void) | undefined;
 
-const settings = (enabled: boolean) => ({
+const settings = (enabled: boolean, level = 'mentions') => ({
   enabled,
-  level: 'mentions',
+  level,
   defaultEnabled: true,
   replyCountsAsMention: true,
   channels: {
@@ -65,7 +79,9 @@ async function mountPanel() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.getSettings.mockResolvedValue({ data: settings(true) });
-  mocks.updateSettings.mockImplementation(async (payload) => ({ data: settings(payload.enabled) }));
+  mocks.updateSettings.mockImplementation(async (payload) => ({ data: settings(payload.enabled, payload.level) }));
+  mocks.refreshUnread.mockResolvedValue(undefined);
+  mocks.refreshCommunityUnread.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -74,24 +90,28 @@ afterEach(() => {
 });
 
 describe('CommunityChatNotificationSettingsPanel', () => {
-  it('首次进入默认开启管理员与提及档的站内提醒', async () => {
+  it('首次进入默认开启管理员和提及档的站内提醒', async () => {
     const host = await mountPanel();
 
     expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('true');
     expect(host.textContent).toContain(zhCN.communityChat.notifications.levelMentions);
     expect(host.textContent).toContain(zhCN.communityChat.notifications.levelMentionsDescription);
+    expect(host.querySelector('.community-notification-settings__thumb')).toBeNull();
+    expect(host.textContent).toContain(zhCN.communityChat.notifications.levelMentionsOnly);
+    expect(host.querySelectorAll('.community-notification-settings__dot')).toHaveLength(4);
+    expect(host.querySelectorAll('.community-notification-settings__option.is-current')).toHaveLength(1);
     expect(host.querySelector('.community-notification-settings__channels span')?.classList.contains('is-active')).toBe(
       true,
     );
   });
 
-  it('关闭时明确说明不生成任何提醒，但仍保留聊天室未读角标', async () => {
+  it('关闭时明确说明聊天室角标与定向通知都不显示，但仍可主动查看聊天历史', async () => {
     mocks.getSettings.mockResolvedValueOnce({ data: settings(false) });
     const host = await mountPanel();
 
     expect(host.textContent).toContain(zhCN.communityChat.notifications.disabledLabel);
-    expect(host.textContent).toContain('管理员消息、提及你的消息、回复和普通消息都不会生成提醒');
-    expect(host.textContent).toContain('未读角标只表示有新消息');
+    expect(host.textContent).toContain('聊天室角标和回复 / 提及通知都会关闭');
+    expect(host.textContent).toContain('公共聊天历史仍可在聊天室内主动查看');
     expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
     expect(host.querySelector('.community-notification-settings__channels span')?.classList.contains('is-active')).toBe(
       false,
@@ -105,9 +125,26 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     await flushAsync();
 
     expect(mocks.updateSettings).toHaveBeenCalledWith({ enabled: false, level: 'mentions' });
+    expect(mocks.refreshUnread).toHaveBeenCalledTimes(1);
+    expect(mocks.refreshCommunityUnread).toHaveBeenCalledTimes(1);
+    expect(mocks.resetCommunityUnread).toHaveBeenCalledTimes(1);
     expect(host.textContent).toContain(zhCN.communityChat.notifications.disabledLabel);
     expect(host.querySelector('.community-notification-settings__channels span')?.classList.contains('is-active')).toBe(
       false,
+    );
+  });
+
+  it('可单独选择仅提及档并提交新的四档枚举值', async () => {
+    const host = await mountPanel();
+    const mentionsOnly = Array.from(host.querySelectorAll<HTMLElement>('[role="radio"]')).find((item) =>
+      item.textContent?.includes(zhCN.communityChat.notifications.levelMentionsOnly),
+    );
+    mentionsOnly?.click();
+    await flushAsync();
+
+    expect(mocks.updateSettings).toHaveBeenCalledWith({ enabled: true, level: 'mentions_only' });
+    expect(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain(
+      zhCN.communityChat.notifications.levelMentionsOnly,
     );
   });
 });

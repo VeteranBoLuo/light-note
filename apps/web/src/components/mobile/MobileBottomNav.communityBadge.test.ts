@@ -4,8 +4,6 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
 const communityUnreadTotal = ref(0);
-const refreshCommunityUnread = vi.fn(async () => null);
-const resetCommunityUnread = vi.fn();
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({ name: 'workbenches', query: {}, meta: { mobileShell: 'today' }, fullPath: '/workbenches' }),
@@ -28,8 +26,6 @@ vi.mock('@/composables/useMobileNavigationState', () => ({
 vi.mock('@/composables/useCommunityChatUnread', () => ({
   useCommunityChatUnread: () => ({
     totalUnread: communityUnreadTotal,
-    refresh: refreshCommunityUnread,
-    reset: resetCommunityUnread,
   }),
 }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
@@ -59,8 +55,6 @@ function mount() {
 
 beforeEach(() => {
   communityUnreadTotal.value = 0;
-  refreshCommunityUnread.mockClear();
-  resetCommunityUnread.mockClear();
 });
 
 afterEach(() => {
@@ -69,13 +63,6 @@ afterEach(() => {
 });
 
 describe('移动底栏 · 聊天室未读角标', () => {
-  it('登录账号挂载时重置旧账号状态并刷新真实频道未读', () => {
-    mount();
-
-    expect(resetCommunityUnread).toHaveBeenCalledTimes(1);
-    expect(refreshCommunityUnread).toHaveBeenCalledTimes(1);
-  });
-
   it('只把数字角标挂在聊天室入口，并提供完整读屏语义', async () => {
     const host = mount();
     communityUnreadTotal.value = 12;

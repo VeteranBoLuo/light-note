@@ -146,11 +146,19 @@ describe('useCommunityChatSocket', () => {
 
     socket.message(created);
     socket.message(created);
+    socket.message(
+      serverEvent(
+        'message.updated',
+        { roomSlug: 'general', messagePublicId: 'message-1', reason: 'like' },
+        'updated-1',
+      ),
+    );
     socket.message(serverEvent('message.created', { roomSlug: 'other', messagePublicId: 'message-2' }, 'event-other'));
     socket.onmessage?.(new MessageEvent('message', { data: '{invalid' }));
 
-    expect(mounted.onEvent).toHaveBeenCalledTimes(1);
+    expect(mounted.onEvent).toHaveBeenCalledTimes(2);
     expect(mounted.onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'message.created' }));
+    expect(mounted.onEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'message.updated' }));
   });
 
   it('断线后指数退避重连，重新订阅时触发 REST 补齐回调', async () => {

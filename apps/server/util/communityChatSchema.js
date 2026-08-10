@@ -95,6 +95,8 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     edited_at datetime DEFAULT NULL,
+    recalled_at datetime DEFAULT NULL,
+    recalled_by varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
     deleted_at datetime DEFAULT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_community_chat_message_public (public_id),
@@ -102,6 +104,20 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     KEY idx_community_chat_message_room_status_id (room_id, status, id),
     KEY idx_community_chat_message_reply (reply_to_id),
     KEY idx_community_chat_message_user_time (user_id, create_time, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_message_likes (
+    message_id bigint unsigned NOT NULL,
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id),
+    KEY idx_community_chat_like_user_time (user_id, create_time, message_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_message_deletions (
+    message_id bigint unsigned NOT NULL,
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (message_id, user_id),
+    KEY idx_community_chat_deletion_user_time (user_id, create_time, message_id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_message_mentions (
     message_id bigint unsigned NOT NULL,
@@ -202,6 +218,33 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ];
 
+export const COMMUNITY_CHAT_MESSAGE_RECALL_COLUMNS = [
+  {
+    name: 'recalled_at',
+    ddl: '`recalled_at` datetime DEFAULT NULL AFTER `edited_at`',
+  },
+  {
+    name: 'recalled_by',
+    ddl: '`recalled_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL AFTER `recalled_at`',
+  },
+];
+
+async function ensureCommunityChatMessageRecallColumns() {
+  const [rows] = await pool.query(
+    `SELECT column_name AS columnName
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'community_chat_messages'
+        AND column_name IN ('recalled_at', 'recalled_by')`,
+  );
+  const existing = new Set(rows.map((row) => row.columnName));
+  for (const column of COMMUNITY_CHAT_MESSAGE_RECALL_COLUMNS) {
+    if (!existing.has(column.name)) {
+      await pool.query(`ALTER TABLE community_chat_messages ADD COLUMN ${column.ddl}`);
+    }
+  }
+}
+
 export const COMMUNITY_CHAT_ROOM_SEED_SQL = `
   INSERT INTO community_chat_rooms
     (slug, name_zh, name_en, description_zh, description_en, type, default_notification_level, sort_order)
@@ -232,6 +275,7 @@ export function ensureCommunityChatSchema() {
   if (!ensurePromise) {
     ensurePromise = (async () => {
       for (const sql of COMMUNITY_CHAT_TABLE_SQL) await pool.query(sql);
+      await ensureCommunityChatMessageRecallColumns();
       await pool.query(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
       await pool.query(COMMUNITY_CHAT_ROOM_SEED_SQL);
     })().finally(() => {

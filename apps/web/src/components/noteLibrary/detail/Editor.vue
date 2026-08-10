@@ -358,21 +358,77 @@
             {{ t('noteDetail.editor.gradientTextPreview') }}
           </span>
         </div>
+        <div>
+          <strong class="rich-text-gradient-dialog__palette-title">{{
+            t('noteDetail.editor.gradientPresetPalette')
+          }}</strong>
+          <div
+            class="rich-text-gradient-dialog__palette"
+            role="list"
+            :aria-label="t('noteDetail.editor.gradientPresetPalette')"
+          >
+            <BButton
+              v-for="preset in richTextGradientPresets"
+              :key="preset.key"
+              class="rich-text-gradient-dialog__preset"
+              :class="{
+                'is-active':
+                  richTextGradientFrom.toLowerCase() === preset.from && richTextGradientTo.toLowerCase() === preset.to,
+              }"
+              :style="{ '--gradient-preset-from': preset.from, '--gradient-preset-to': preset.to }"
+              :aria-label="t(preset.labelKey)"
+              @click="applyRichTextGradientPreset(preset)"
+            >
+              <span aria-hidden="true"></span>
+              <small>{{ t(preset.labelKey) }}</small>
+            </BButton>
+          </div>
+        </div>
         <div class="rich-text-gradient-dialog__fields">
-          <label for="note-rich-gradient-from">{{ t('noteDetail.editor.gradientStartColor') }}</label>
-          <BInput
-            id="note-rich-gradient-from"
-            v-model:value="richTextGradientFrom"
-            :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
-            :maxlength="7"
-          />
-          <label for="note-rich-gradient-to">{{ t('noteDetail.editor.gradientEndColor') }}</label>
-          <BInput
-            id="note-rich-gradient-to"
-            v-model:value="richTextGradientTo"
-            :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
-            :maxlength="7"
-          />
+          <template v-if="bookmark.isDesktop">
+            <label for="note-rich-gradient-from">{{ t('noteDetail.editor.gradientStartColor') }}</label>
+            <div class="rich-text-gradient-dialog__color-control">
+              <BInput
+                id="note-rich-gradient-from"
+                v-model:value="richTextGradientFrom"
+                :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
+                :maxlength="7"
+              />
+              <BTooltip
+                class="rich-text-gradient-dialog__color-picker-tooltip"
+                :title="t('noteDetail.editor.gradientStartColorPicker')"
+              >
+                <BInput
+                  id="note-rich-gradient-from-picker"
+                  v-model:value="richTextGradientFrom"
+                  class="rich-text-gradient-dialog__color-picker"
+                  type="color"
+                  height="36px"
+                />
+              </BTooltip>
+            </div>
+            <label for="note-rich-gradient-to">{{ t('noteDetail.editor.gradientEndColor') }}</label>
+            <div class="rich-text-gradient-dialog__color-control">
+              <BInput
+                id="note-rich-gradient-to"
+                v-model:value="richTextGradientTo"
+                :placeholder="t('noteDetail.editor.colorHexPlaceholder')"
+                :maxlength="7"
+              />
+              <BTooltip
+                class="rich-text-gradient-dialog__color-picker-tooltip"
+                :title="t('noteDetail.editor.gradientEndColorPicker')"
+              >
+                <BInput
+                  id="note-rich-gradient-to-picker"
+                  v-model:value="richTextGradientTo"
+                  class="rich-text-gradient-dialog__color-picker"
+                  type="color"
+                  height="36px"
+                />
+              </BTooltip>
+            </div>
+          </template>
           <label id="note-rich-gradient-direction-label">{{ t('noteDetail.editor.gradientDirection') }}</label>
           <BSelect
             v-model:value="richTextGradientAngle"
@@ -578,6 +634,13 @@
   import { useUserStore } from '@/store';
   import { bookmarkStore } from '@/store';
   import icon from '@/config/icon';
+  import {
+    getHeadingShortcutLabels,
+    getRepeatLastActionShortcutLabels,
+    matchEditorInlineFormatShortcut,
+    matchHeadingShortcut,
+    matchesRepeatLastActionShortcut,
+  } from '@/config/keyboardShortcuts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -663,6 +726,7 @@
     type NoteFormatConversionReport,
   } from '@/utils/noteFormatConversion';
   import {
+    createMarkdownRichMediaTextBlockHtml,
     createRichMediaTextBlockHtml,
     createRichMediaTextItemHtml,
     normalizeRichMediaTextHtml,
@@ -791,6 +855,8 @@
     canRedo: false,
     bold: false,
     italic: false,
+    underline: false,
+    strike: false,
     todo: false,
     bulletList: false,
     orderedList: false,
@@ -821,6 +887,14 @@
   const richTextGradientTo = ref(DEFAULT_TEXT_GRADIENT.to);
   const richTextGradientAngle = ref<TextGradientAngle>(DEFAULT_TEXT_GRADIENT.angle as TextGradientAngle);
   const richTextGradientEditingExisting = ref(false);
+  const richTextGradientPresets = [
+    { key: 'brand', from: '#615ced', to: '#00a884', labelKey: 'noteDetail.editor.gradientPresetBrand' },
+    { key: 'ocean', from: '#2563eb', to: '#06b6d4', labelKey: 'noteDetail.editor.gradientPresetOcean' },
+    { key: 'sunset', from: '#f97316', to: '#ec4899', labelKey: 'noteDetail.editor.gradientPresetSunset' },
+    { key: 'aurora', from: '#7c3aed', to: '#22c55e', labelKey: 'noteDetail.editor.gradientPresetAurora' },
+    { key: 'gold', from: '#f59e0b', to: '#ef4444', labelKey: 'noteDetail.editor.gradientPresetGold' },
+    { key: 'ink', from: '#111827', to: '#6b7280', labelKey: 'noteDetail.editor.gradientPresetInk' },
+  ] as const;
   let richTextGradientBookmark: unknown = null;
   let richTextGradientTarget: HTMLElement | null = null;
   const richMermaidEditorVisible = ref(false);
@@ -948,6 +1022,15 @@
   const mdContent = ref('');
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
+  type MarkdownImageInsertMode = 'image' | 'mediaText';
+  interface MarkdownMediaTextUploadIntent {
+    source: string;
+    start: number;
+    end: number;
+    caption: string;
+  }
+  const markdownImageInsertMode = ref<MarkdownImageInsertMode>('image');
+  const markdownMediaTextUploadIntent = shallowRef<MarkdownMediaTextUploadIntent | null>(null);
   type RichMediaTextUploadContext = { editor: any; noteId: string };
   type RichMediaTextUploadIntent =
     | ({ kind: 'insert' } & RichMediaTextUploadContext)
@@ -2119,6 +2202,27 @@
     void uploadMarkdownImage(file, pastedImageFileName(file));
   }
 
+  function openMarkdownImageInsert() {
+    markdownImageInsertMode.value = 'image';
+    markdownMediaTextUploadIntent.value = null;
+    markdownImageInputRef.value?.open();
+  }
+
+  function openMarkdownMediaTextInsert() {
+    if (props.readonly || markdownImageUploading.value) return;
+    const markdownEditor = mdCodeMirrorRef.value;
+    const source = markdownEditor?.getValue() ?? mdContent.value ?? '';
+    const selection = markdownEditor?.getSelection() || { from: source.length, to: source.length };
+    markdownImageInsertMode.value = 'mediaText';
+    markdownMediaTextUploadIntent.value = {
+      source,
+      start: selection.from,
+      end: selection.to,
+      caption: source.slice(selection.from, selection.to).trim() || t('noteDetail.editor.mediaTextMarkdownPlaceholder'),
+    };
+    markdownImageInputRef.value?.open();
+  }
+
   async function uploadMarkdownImage(file: File, fileName = file.name) {
     if (markdownImageUploading.value) return;
     const selection = getMarkdownSelection();
@@ -2139,6 +2243,39 @@
       message.warning(t('note.uploadFailed'));
     } finally {
       markdownImageUploading.value = false;
+    }
+  }
+
+  async function uploadMarkdownMediaText(file: File, intent: MarkdownMediaTextUploadIntent) {
+    if (markdownImageUploading.value) return;
+    markdownImageUploading.value = true;
+    try {
+      const imageUrl =
+        props.imageUploadMode === 'base64'
+          ? await readImageAsDataUrl(file)
+          : await uploadNoteImageFile(file, file.name || 'note-image.png');
+      const currentSource = mdCodeMirrorRef.value?.getValue() ?? mdContent.value ?? '';
+      if (currentSource !== intent.source) {
+        message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
+        return;
+      }
+      const block = createMarkdownRichMediaTextBlockHtml(imageUrl, richMediaTextImageAlt(file.name), intent.caption);
+      const result = insertBlock(
+        {
+          value: currentSource,
+          selectionStart: intent.start,
+          selectionEnd: intent.end,
+        },
+        block,
+      );
+      if (mdCodeMirrorRef.value) mdCodeMirrorRef.value.applyEdit(result);
+      else onMdInput(applyEditResult(currentSource, result));
+      void recordOperation({ module: '笔记', operation: '在 Markdown 中插入图文组合' });
+    } catch {
+      message.warning(t('note.uploadFailed'));
+    } finally {
+      markdownImageUploading.value = false;
+      markdownMediaTextUploadIntent.value = null;
     }
   }
 
@@ -2199,7 +2336,14 @@
 
   async function onMarkdownImagePicked(files: File[]) {
     const file = files[0];
-    if (file) await uploadMarkdownImage(file, file.name);
+    if (!file) return;
+    const mode = markdownImageInsertMode.value;
+    markdownImageInsertMode.value = 'image';
+    if (mode === 'mediaText' && markdownMediaTextUploadIntent.value) {
+      await uploadMarkdownMediaText(file, markdownMediaTextUploadIntent.value);
+      return;
+    }
+    await uploadMarkdownImage(file, file.name);
   }
 
   function notifyRichMediaTextMutation(editor = editorRef.value) {
@@ -2537,6 +2681,9 @@
       ? t('noteDetail.editor.repeatLastReady', { action: repeatableActionLabel(action) })
       : t('noteDetail.editor.repeatLastEmpty');
   });
+  const repeatLastActionShortcutKeys = computed(() => getRepeatLastActionShortcutLabels());
+  const repeatLastActionShortcut = computed(() => repeatLastActionShortcutKeys.value.join(' / '));
+  const headingShortcutKeys = computed(() => getHeadingShortcutLabels());
 
   const shortcutHelpVisible = ref(false);
   const shortcutHelpModeLabel = computed(() =>
@@ -2570,7 +2717,7 @@
         key: 'repeatLastAction',
         label: t('noteDetail.editor.repeatLast'),
         description: t('noteDetail.editor.repeatLastDescription'),
-        keys: ['F4', 'Ctrl / ⌘ + Alt + R'],
+        keys: repeatLastActionShortcutKeys.value,
       },
       {
         key: 'find',
@@ -2603,6 +2750,11 @@
         label: t('noteDetail.editor.link'),
         keys: ['Ctrl / ⌘ + K'],
       },
+      {
+        key: 'headings',
+        label: t('noteDetail.editor.heading1To6'),
+        keys: headingShortcutKeys.value,
+      },
       ...(currentType.value === 'markdown'
         ? [
             {
@@ -2624,11 +2776,6 @@
               key: 'bulletList',
               label: t('noteDetail.editor.bulletList'),
               keys: ['Ctrl / ⌘ + Shift + 8'],
-            },
-            {
-              key: 'headings',
-              label: t('noteDetail.editor.heading1To6'),
-              keys: ['Ctrl / ⌘ + Alt + 1…6'],
             },
           ]
         : []),
@@ -2692,6 +2839,10 @@
       action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
         disabled: disabled || markdownImageUploading.value,
       }),
+      action('insertMediaText', t('noteDetail.editor.mediaText'), icon.noteDetail.toolbar.mediaText, {
+        description: t('noteDetail.editor.mediaTextDescription'),
+        disabled: disabled || (isMarkdown ? markdownImageUploading.value : richMediaTextUploading.value),
+      }),
       ...(props.context === 'note'
         ? [
             action('insertResource', t('noteDetail.editor.resource'), icon.noteDetail.toolbar.mention, {
@@ -2724,12 +2875,8 @@
           }),
         ]
       : [
-          action('insertMediaText', t('noteDetail.editor.mediaText'), icon.noteDetail.toolbar.mediaText, {
-            description: t('noteDetail.editor.mediaTextDescription'),
-            disabled: disabled || richMediaTextUploading.value,
-          }),
           action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline, {
-            dividerBefore: true,
+            dividerBefore: false,
           }),
           action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
           action('textColorPicker', t('noteDetail.editor.textColor'), icon.noteDetail.toolbar.textColor, {
@@ -2754,6 +2901,27 @@
           action('sourceCode', t('noteDetail.editor.sourceCode'), icon.noteDetail.toolbar.source),
           action('wordCount', t('noteDetail.editor.wordCount'), icon.noteDetail.toolbar.wordCount),
         ];
+    const desktopFormatActions = isMarkdown
+      ? [
+          action('quote', t('noteDetail.editor.quote'), icon.noteDetail.toolbar.quote),
+          action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike),
+          action('inlineCode', t('noteDetail.editor.inlineCode'), icon.noteDetail.toolbar.inlineCode),
+        ]
+      : [
+          action('underline', t('noteDetail.editor.underline'), icon.noteDetail.toolbar.underline, {
+            selected: state.underline,
+          }),
+          action('strike', t('noteDetail.editor.strike'), icon.noteDetail.toolbar.strike, {
+            selected: state.strike,
+          }),
+          action('textColorPicker', t('noteDetail.editor.textColor'), icon.noteDetail.toolbar.textColor),
+          action(
+            'backgroundColorPicker',
+            t('noteDetail.editor.backgroundColor'),
+            icon.noteDetail.toolbar.backgroundColor,
+          ),
+          action('textGradient', t('noteDetail.editor.gradientText'), icon.noteDetail.toolbar.gradientText),
+        ];
     const moreActions = isMobile.value
       ? [
           action('redo', t('noteDetail.editor.redo'), icon.noteDetail.toolbar.redo, {
@@ -2764,7 +2932,7 @@
           toolbarAction('repeatLastAction', t('noteDetail.editor.repeatLast'), icon.noteDetail.toolbar.repeat, {
             disabled: disabled || !currentRepeatableAction.value,
             description: repeatLastActionDescription.value,
-            shortcut: 'F4 / Ctrl / ⌘ + Alt + R',
+            shortcut: repeatLastActionShortcut.value,
           }),
           toolbarAction('shortcuts', t('noteDetail.editor.shortcuts'), icon.settings.shortcuts, {
             dividerBefore: true,
@@ -2797,7 +2965,7 @@
         {
           disabled: disabled || !currentRepeatableAction.value,
           description: repeatLastActionDescription.value,
-          shortcut: 'F4 / Ctrl / ⌘ + Alt + R',
+          shortcut: repeatLastActionShortcut.value,
         },
       ),
       headingAction: action('headingMenu', t('noteDetail.editor.headingMenu'), icon.noteDetail.toolbar.heading, {
@@ -2829,6 +2997,7 @@
       listActions,
       insertActions,
       moreActions,
+      desktopFormatActions,
     };
   });
 
@@ -2908,7 +3077,8 @@
         ),
       );
     }
-    if (key === 'insertImage') return markdownImageInputRef.value?.open();
+    if (key === 'insertImage') return openMarkdownImageInsert();
+    if (key === 'insertMediaText') return openMarkdownMediaTextInsert();
     if (key === 'insertResource') return openResourceMentionPicker();
     if (key === 'insertCodeBlock') return void applyMarkdownEdit((input) => insertBlock(input, buildCodeBlock()));
     if (key.startsWith('insertDiagram:')) return insertDiagramTemplate(key.slice('insertDiagram:'.length));
@@ -2993,6 +3163,32 @@
     runRichToolbarAction(action.key, { remember: false });
   }
 
+  function handleRepeatLastEditorActionShortcut(event: KeyboardEvent) {
+    if (!matchesRepeatLastActionShortcut(event)) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    repeatLastEditorAction();
+    return true;
+  }
+
+  function handleHeadingEditorShortcut(event: KeyboardEvent) {
+    const level = matchHeadingShortcut(event);
+    if (!level) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    runRichToolbarAction(`heading${level}`);
+    return true;
+  }
+
+  function handleInlineFormatEditorShortcut(event: KeyboardEvent) {
+    const action = matchEditorInlineFormatShortcut(event);
+    if (!action) return false;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    runRichToolbarAction(action);
+    return true;
+  }
+
   function openRichColorDialog(mode: RichColorMode, editor = editorRef.value) {
     if (!editor || props.readonly) return;
     richColorMode.value = mode;
@@ -3068,6 +3264,11 @@
     richTextGradientBookmark = null;
     richTextGradientTarget = null;
     richTextGradientEditingExisting.value = false;
+  }
+
+  function applyRichTextGradientPreset(preset: (typeof richTextGradientPresets)[number]) {
+    richTextGradientFrom.value = preset.from;
+    richTextGradientTo.value = preset.to;
   }
 
   function restoreRichTextGradientSelection(editor: any) {
@@ -3642,13 +3843,15 @@
     license_key: 'gpl',
     base_url: '/node_modules/tinymce',
     plugins: 'codesample searchreplace autolink autoresize code emoticons image link lists table wordcount quickbars',
-    // 移动端富文本把长按/选择完全交还给系统菜单(复制/粘贴/全选),只有桌面才用自研快捷条。
-    // 之前移动端两层自定义菜单都会顶掉系统的文本操作:
+    // 移动端富文本把文字长按/选择完全交还给系统菜单(复制/粘贴/全选),只有桌面才用自研划词快捷条。
+    // 之前两层自定义菜单会与目标交互冲突:
     //   1. quickbars 选区条只有 copy,没有 paste/全选(浏览器不允许自定义 paste 按钮读剪贴板);
     //   2. contextmenu 不配时 TinyMCE 用默认值 'link linkchecker image editimage table
-    //      spellchecker configurepermanentpen',未加载的付费插件被过滤后,普通文字上只剩「链接」,
-    //      而 silver theme 把 longpress 也当作 contextmenu 触发源(见 theme.js getPointAnchor)。
-    // contextmenu: false 会让菜单项为空,其处理函数直接 return 且不 preventDefault,原生菜单接管。
+    //      spellchecker configurepermanentpen',图片右键/长按会先出现「链接 / 图片」菜单,
+    //      而不是项目已经提供的图片对象快捷条。
+    // contextmenu: false 在所有设备关闭 TinyMCE 默认菜单；图片事件由下方守卫统一唤起
+    // imageselection 快捷条。桌面编辑态由同一守卫阻止浏览器系统菜单，避免它和划词快捷条重叠；
+    // 移动端长按与只读正文仍交给系统菜单，保留复制、粘贴和全选能力。
     // 格式化能力不受影响:移动端仍有底部主工具栏 #editor-toolbar。
     quickbars_selection_toolbar: usesNativeTextSelectionMenu.value
       ? false
@@ -3658,7 +3861,7 @@
     // 图片对象自己的快捷条因此提供一组确定性操作；文字长按仍完全交给系统菜单。
     quickbars_image_toolbar:
       'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
-    ...(usesNativeTextSelectionMenu.value ? { contextmenu: false } : {}),
+    contextmenu: false,
     // 移动端不启用 TinyMCE 的触摸缩放手柄；单击图片后由轻笺底部面板调整尺寸，
     // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面端仍保留原生图片拖拽手柄。
     object_resizing: usesNativeTextSelectionMenu.value ? false : 'img',
@@ -3685,6 +3888,83 @@
     setup: (editor: any) => {
       editorRef.value = editor;
       let richImageClipboardHtml = '';
+      let contextToolbarAdjustFrame: number | null = null;
+      let contextToolbarAdjustTimer: number | null = null;
+      let contextToolbarScrollContainer: HTMLElement | null = null;
+
+      const clearContextToolbarAdjustments = () => {
+        document.querySelectorAll<HTMLElement>('.tox-pop[data-ln-context-toolbar-original-top]').forEach((popup) => {
+          popup.style.top = popup.dataset.lnContextToolbarOriginalTop || '';
+          delete popup.dataset.lnContextToolbarOriginalTop;
+        });
+      };
+      const adjustContextToolbarAwayFromMainToolbar = () => {
+        contextToolbarAdjustFrame = null;
+        clearContextToolbarAdjustments();
+        const editorElement = editor.getElement?.() as HTMLElement | null;
+        const container = editorElement?.closest<HTMLElement>('#editor-container');
+        const toolbar = container?.querySelector<HTMLElement>('.note-editor-toolbar');
+        const body = editor.getBody?.() as HTMLElement | null;
+        if (!toolbar || !body) return;
+        const toolbarRect = toolbar.getBoundingClientRect();
+        const iframe = editor.iframeElement as HTMLIFrameElement | null;
+        const iframeRect = iframe?.getBoundingClientRect();
+        // TinyMCE 的正文选区位于 iframe 的视口坐标系，Quickbars 浮层位于外层页面。
+        // 所有命中判断和选区位置都换算到外层视口，避免浮层只避开工具栏却盖住第一行正文。
+        const bodyRect = iframeRect || body.getBoundingClientRect();
+        const editorViewportTop = iframeRect?.top || 0;
+        // 选区几何在 WebKit/TinyMCE 的 inline 模式下偶尔返回 0×0；至少预留一行正文高度，
+        // 避免解决了“遮工具栏”后又把第一行选中文字盖住。
+        let selectionBottom = toolbarRect.bottom + 28;
+        try {
+          const range = editor.selection?.getRng?.() as Range | undefined;
+          const rects = range ? Array.from(range.getClientRects()) : [];
+          const selectionRect = rects.at(-1) || range?.getBoundingClientRect?.();
+          if (selectionRect && selectionRect.bottom > 0 && (selectionRect.width > 0 || selectionRect.height > 0)) {
+            selectionBottom = editorViewportTop + selectionRect.bottom;
+          } else {
+            const selectionNode = (editor.selection?.getStart?.() ||
+              editor.selection?.getNode?.()) as HTMLElement | null;
+            const nodeRect = selectionNode?.getBoundingClientRect?.();
+            if (selectionNode && selectionNode !== body && body.contains(selectionNode) && nodeRect?.bottom) {
+              selectionBottom = editorViewportTop + nodeRect.bottom;
+            }
+          }
+        } catch {
+          // 选区在毁掉过程中可能已离开 DOM，此时只按主工具栏底部避让。
+        }
+        document.querySelectorAll<HTMLElement>('.tox-pop').forEach((popup) => {
+          const rect = popup.getBoundingClientRect();
+          if (!rect.width || !rect.height || rect.right < bodyRect.left || rect.left > bodyRect.right) return;
+          if (rect.top >= toolbarRect.bottom + 6) return;
+          const currentTop = Number.parseFloat(popup.style.top);
+          if (!Number.isFinite(currentTop)) return;
+          const viewportBottom = document.documentElement.clientHeight;
+          const desiredTop = Math.min(
+            Math.max(toolbarRect.bottom + 6, selectionBottom + 8),
+            Math.max(toolbarRect.bottom + 6, viewportBottom - rect.height - 8),
+          );
+          const delta = desiredTop - rect.top;
+          if (delta <= 0) return;
+          popup.dataset.lnContextToolbarOriginalTop = popup.style.top;
+          popup.style.top = `${Math.round(currentTop + delta)}px`;
+        });
+      };
+      const scheduleContextToolbarAdjustment = () => {
+        if (contextToolbarAdjustFrame !== null) window.cancelAnimationFrame(contextToolbarAdjustFrame);
+        if (contextToolbarAdjustTimer !== null) window.clearTimeout(contextToolbarAdjustTimer);
+        contextToolbarAdjustFrame = window.requestAnimationFrame(() => {
+          contextToolbarAdjustFrame = window.requestAnimationFrame(adjustContextToolbarAwayFromMainToolbar);
+        });
+        // Quickbars 在 SelectionChange 后还会异步测量宽高并重写 top，稍后再校正一次。
+        contextToolbarAdjustTimer = window.setTimeout(() => {
+          contextToolbarAdjustTimer = null;
+          adjustContextToolbarAwayFromMainToolbar();
+        }, 80);
+      };
+      editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment);
+      editor.on('SelectionChange', scheduleContextToolbarAdjustment);
+      editor.on('contexttoolbar-hide', clearContextToolbarAdjustments);
 
       const resolveSelectedRichImage = () => {
         const body = editor.getBody?.() as HTMLElement | null;
@@ -3896,25 +4176,47 @@
         const target = event.target;
         const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
         const body = editor.getBody?.() as HTMLElement | null;
-        if (!image || !body?.contains(image) || image.closest('.mermaid-figure--companion')) return null;
+        if (!image || !body?.contains(image) || image.closest('.mermaid-figure--companion, .ln-media-text'))
+          return null;
         return image;
       };
       const blockNativeRichImageContextMenu = (event: Event) => {
-        // 只收口可编辑图片的系统长按菜单。普通文字继续完全使用系统选区、手柄和剪贴板，
-        // 避免自定义菜单破坏 Android / 鸿蒙 / iOS 的输入法与跨应用复制粘贴。
-        if (!usesNativeTextSelectionMenu.value || props.readonly) return;
+        // 全端只收口普通可编辑图片的右键/长按：阻断浏览器对象菜单，建立图片选区后
+        // 明确打开与单击相同的 imageselection 快捷条。普通文字继续使用系统菜单；
+        // 图文组合与 Mermaid 各自保留已有的专用工具条。
+        if (props.readonly) return;
         const image = resolveRichImageFromEvent(event);
         if (!image) return;
         event.preventDefault();
+        event.stopImmediatePropagation();
         editor.selection?.select?.(image);
         editor.nodeChanged?.();
+        // 必须把图片作为 node 锚点传给 TinyMCE。省略 target 时，长按会按事件点贴到
+        // 图片右边缘，窄屏剩余宽度不足后工具条会被压成单列；随后普通点击又改用节点
+        // 锚点，才出现另一套横向排版。
+        editor.dispatch?.('contexttoolbar-show', { toolbarKey: 'imageselection', target: image });
+      };
+      const blockDesktopRichTextContextMenu = (event: Event) => {
+        if (props.readonly || usesNativeTextSelectionMenu.value || resolveRichImageFromEvent(event)) return;
+        const body = editor.getBody?.() as HTMLElement | null;
+        const target = event.target;
+        if (!body || !(target instanceof Node) || !body.contains(target)) return;
+        // 桌面富文本已有包含 AI 与格式化的划词快捷条；只阻止浏览器系统菜单，
+        // 不停止事件传播，避免影响 TinyMCE 对当前选区和快捷条位置的维护。
+        event.preventDefault();
       };
       const bindRichImageNativeMenuGuard = () => {
         richImageNativeMenuBody = editor.getBody?.() as HTMLElement | null;
         richImageNativeMenuBody?.addEventListener('contextmenu', blockNativeRichImageContextMenu, true);
+        richImageNativeMenuBody?.addEventListener('contextmenu', blockDesktopRichTextContextMenu, true);
+        // TinyMCE 会在触屏设备把 touch 序列合成为自己的 longpress 事件，它不一定继续派发
+        // DOM contextmenu，因此需要同时收口这条路径。prepend=true 保证先于 silver theme 处理。
+        editor.on('longpress', blockNativeRichImageContextMenu, true);
       };
       const unbindRichImageNativeMenuGuard = () => {
         richImageNativeMenuBody?.removeEventListener('contextmenu', blockNativeRichImageContextMenu, true);
+        richImageNativeMenuBody?.removeEventListener('contextmenu', blockDesktopRichTextContextMenu, true);
+        editor.off('longpress', blockNativeRichImageContextMenu);
         richImageNativeMenuBody = null;
       };
 
@@ -3989,6 +4291,10 @@
       editor.on('init', () => {
         bindMermaidEditRequest();
         bindRichImageNativeMenuGuard();
+        contextToolbarScrollContainer = editor.getBody?.()?.closest<HTMLElement>('.note-editor-scroll') || null;
+        contextToolbarScrollContainer?.addEventListener('scroll', scheduleContextToolbarAdjustment, {
+          passive: true,
+        });
         // searchreplace 插件会注册自己的 Meta+F。若只在 keydown 里 preventDefault，
         // 同一个编辑器事件上的 TinyMCE shortcut 监听仍会继续执行，原生浮层就会藏在
         // 自研查找栏后面，按 Esc 后才暴露出来。初始化完成后明确替换为唯一入口。
@@ -4000,23 +4306,27 @@
         editor.shortcuts.remove('Meta+Shift+Z');
         editor.shortcuts.add('Meta+Y', '', () => editor.execCommand('Redo'));
         editor.shortcuts.add('Meta+Shift+Z', '', () => editor.execCommand('Redo'));
-        // 这些格式快捷键统一经过外置工具栏动作，才能成为可被 F4 再次执行的“上一步功能”。
-        (
-          [
-            ['Meta+B', 'bold'],
-            ['Meta+I', 'italic'],
-            ['Meta+U', 'underline'],
-          ] as const
-        ).forEach(([shortcut, actionKey]) => {
+        // 行内格式改由 keydown 优先接管，确保执行后能被“重复上一步”记录。
+        ['Meta+B', 'Meta+I', 'Meta+U'].forEach((shortcut) => {
           editor.shortcuts.remove(shortcut);
-          editor.shortcuts.add(shortcut, '', () => runRichToolbarAction(actionKey));
         });
+        Array.from({ length: 6 }, (_, index) => index + 1).forEach((level) => {
+          editor.shortcuts.remove(`Meta+${level}`);
+          editor.shortcuts.remove(`Meta+Alt+${level}`);
+        });
+        // 重复功能由 keydown 在 TinyMCE 快捷键解析前处理。macOS 的 Option+R
+        // 会把 event.key 变成 ®，只依赖字符键匹配会失效，因此统一按 code/keyCode 识别。
         editor.shortcuts.remove('F4');
         editor.shortcuts.remove('Meta+Alt+R');
-        editor.shortcuts.add('F4', '', repeatLastEditorAction);
-        editor.shortcuts.add('Meta+Alt+R', '', repeatLastEditorAction);
       });
       editor.on('remove', () => {
+        if (contextToolbarAdjustFrame !== null) window.cancelAnimationFrame(contextToolbarAdjustFrame);
+        contextToolbarAdjustFrame = null;
+        if (contextToolbarAdjustTimer !== null) window.clearTimeout(contextToolbarAdjustTimer);
+        contextToolbarAdjustTimer = null;
+        clearContextToolbarAdjustments();
+        contextToolbarScrollContainer?.removeEventListener('scroll', scheduleContextToolbarAdjustment);
+        contextToolbarScrollContainer = null;
         if (editorRef.value === editor) {
           resetRichFindState();
           richFindVisible.value = false;
@@ -4078,37 +4388,44 @@
           clearRichFindMatches();
         }
       });
-      editor.on('keydown', (event: KeyboardEvent) => {
-        if (deleteSelectedMermaidFigure(event)) return;
-        // TinyMCE searchreplace 自带的是可拖拽浮层，在 inline 模式里既遮正文又可能留下重复锚点。
-        // Ctrl(Windows/Linux) 与 ⌘(macOS) 统一打开编辑器内部的紧凑查找栏，只复用其搜索引擎。
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          openRichFind(editor);
-          return;
-        }
-        if (event.key === 'Escape' && richFindVisible.value) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          closeRichFind();
-          return;
-        }
-        if (!inlineMentionVisible.value || event.isComposing) return;
-        if (event.key === 'ArrowDown') {
-          event.preventDefault();
-          inlineMentionSuggestionsRef.value?.moveActive(1);
-        } else if (event.key === 'ArrowUp') {
-          event.preventDefault();
-          inlineMentionSuggestionsRef.value?.moveActive(-1);
-        } else if (event.key === 'Enter') {
-          event.preventDefault();
-          inlineMentionSuggestionsRef.value?.chooseActive();
-        } else if (event.key === 'Escape') {
-          event.preventDefault();
-          closeInlineMention({ dismissed: true });
-        }
-      });
+      editor.on(
+        'keydown',
+        (event: KeyboardEvent) => {
+          if (handleInlineFormatEditorShortcut(event)) return;
+          if (handleHeadingEditorShortcut(event)) return;
+          if (handleRepeatLastEditorActionShortcut(event)) return;
+          if (deleteSelectedMermaidFigure(event)) return;
+          // TinyMCE searchreplace 自带的是可拖拽浮层，在 inline 模式里既遮正文又可能留下重复锚点。
+          // Ctrl(Windows/Linux) 与 ⌘(macOS) 统一打开编辑器内部的紧凑查找栏，只复用其搜索引擎。
+          if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'f') {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            openRichFind(editor);
+            return;
+          }
+          if (event.key === 'Escape' && richFindVisible.value) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            closeRichFind();
+            return;
+          }
+          if (!inlineMentionVisible.value || event.isComposing) return;
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            inlineMentionSuggestionsRef.value?.moveActive(1);
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            inlineMentionSuggestionsRef.value?.moveActive(-1);
+          } else if (event.key === 'Enter') {
+            event.preventDefault();
+            inlineMentionSuggestionsRef.value?.chooseActive();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            closeInlineMention({ dismissed: true });
+          }
+        },
+        true,
+      );
 
       const isTodoCheckbox = (element: Element | null): element is HTMLInputElement =>
         element?.tagName === 'INPUT' &&
@@ -4285,6 +4602,8 @@
           canRedo: Boolean(editor.undoManager?.hasRedo?.()),
           bold: queryCommandState('Bold'),
           italic: queryCommandState('Italic'),
+          underline: queryCommandState('Underline'),
+          strike: queryCommandState('Strikethrough'),
           todo: Boolean(selectedBlocks.length && selectedBlocks.every((item) => getLeadingCheckbox(item))),
           bulletList: queryCommandState('InsertUnorderedList'),
           orderedList: queryCommandState('InsertOrderedList'),
@@ -4409,6 +4728,32 @@
         if (bodyMarker >= 0) output = output.slice(bodyMarker + '【正文】'.length).trim();
         return output.replace(/^【标题】\s*/u, '').trim();
       };
+      const createSelectionAiPendingMarker = () => {
+        const range = editor.selection?.getRng?.()?.cloneRange?.() as Range | undefined;
+        if (!range) return null;
+        const marker = editor.dom.create('span', {
+          class: 'ln-ai-selection-pending',
+          contenteditable: 'false',
+          'data-mce-bogus': 'all',
+          role: 'status',
+          'aria-label': t('noteDetail.editor.aiSelectionProcessing'),
+          title: t('noteDetail.editor.aiSelectionProcessing'),
+        }) as HTMLElement;
+        marker.appendChild(editor.dom.create('span', { class: 'ln-ai-selection-pending__spinner' }));
+        try {
+          range.collapse(false);
+          range.insertNode(marker);
+          return marker;
+        } catch {
+          marker.remove();
+          return null;
+        }
+      };
+      const removeSelectionAiPendingMarker = (marker: HTMLElement | null) => {
+        const parent = marker?.parentNode;
+        marker?.remove();
+        parent?.normalize?.();
+      };
       const aiEditSelection = async (action: string) => {
         const raw = editor.selection ? editor.selection.getContent({ format: 'text' }) : '';
         const text = String(raw || '').trim();
@@ -4417,6 +4762,7 @@
           return;
         }
         const bookmark = editor.selection?.getBookmark?.(2, true) ?? null;
+        const pendingMarker = createSelectionAiPendingMarker();
         editor.setProgressState(true);
         try {
           // 该 AI 端点始终以 SSE 流返回(stream:false 会拿到未解析的原始 SSE),故用流式并自行收集,与 AiReply 一致
@@ -4470,6 +4816,7 @@
           if (buffer) buffer.split('\n').forEach(parseLine); // 收尾残余
           const out = normalizeSelectionAiOutput(full);
           if (out) {
+            removeSelectionAiPendingMarker(pendingMarker);
             editor.focus();
             if (bookmark) editor.selection?.moveToBookmark?.(bookmark);
             const currentSelection = String(editor.selection?.getContent?.({ format: 'text' }) || '').trim();
@@ -4487,6 +4834,7 @@
         } catch {
           message.info(t('noteDetail.editor.aiFailed'));
         } finally {
+          removeSelectionAiPendingMarker(pendingMarker);
           editor.setProgressState(false);
         }
       };
@@ -4595,6 +4943,7 @@
       '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
       '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
       '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { flex:0 0 var(--ln-media-width); max-width:320px; min-width:0; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:100%!important; max-width:100%!important; height:auto!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
+      '.note-editor-body .ln-ai-selection-pending, .mce-content-body .ln-ai-selection-pending { display:inline-flex; width:18px; height:18px; align-items:center; justify-content:center; margin-left:5px; border:1px solid var(--primary-color, #615ced); border-radius:999px; background:var(--background-color, #fff); vertical-align:text-bottom; box-sizing:border-box; } .note-editor-body .ln-ai-selection-pending__spinner, .mce-content-body .ln-ai-selection-pending__spinner { width:9px; height:9px; border:2px solid var(--surface-border-color, #d7d9e0); border-top-color:var(--primary-color, #615ced); border-radius:50%; box-sizing:border-box; animation:ln-ai-selection-spin .7s linear infinite; } @keyframes ln-ai-selection-spin { to { transform:rotate(360deg); } }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
       bookmark.isMobile
@@ -4892,6 +5241,36 @@
 
     > :last-child {
       margin-bottom: 0;
+    }
+  }
+
+  #editor-container .ln-ai-selection-pending {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    margin-left: 5px;
+    border: 1px solid var(--primary-color);
+    border-radius: 999px;
+    background: var(--background-color);
+    vertical-align: text-bottom;
+    box-sizing: border-box;
+  }
+
+  #editor-container .ln-ai-selection-pending__spinner {
+    width: 9px;
+    height: 9px;
+    border: 2px solid var(--surface-border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    box-sizing: border-box;
+    animation: ln-ai-selection-spin 0.7s linear infinite;
+  }
+
+  @keyframes ln-ai-selection-spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 
@@ -5637,6 +6016,53 @@
     }
   }
 
+  .rich-text-gradient-dialog__palette-title {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 13px;
+  }
+
+  .rich-text-gradient-dialog__palette {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .rich-text-gradient-dialog__preset.b_btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 54px;
+    height: auto;
+    padding: 5px;
+    display: grid;
+    gap: 4px;
+    border: 2px solid var(--surface-border-color);
+    background: var(--card-background);
+
+    > span {
+      display: block;
+      width: 100%;
+      height: 24px;
+      border: 1px solid rgba(0, 0, 0, 0.18);
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--gradient-preset-from), var(--gradient-preset-to));
+    }
+
+    > small {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--desc-color);
+      font-size: 11px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    &.is-active {
+      border-color: var(--primary-color);
+      outline: 1px solid var(--primary-color);
+    }
+  }
+
   .rich-text-gradient-dialog__fields {
     display: grid;
     grid-template-columns: 112px minmax(0, 1fr);
@@ -5646,6 +6072,26 @@
     > label {
       font-weight: 600;
     }
+  }
+
+  .rich-text-gradient-dialog__color-control {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .rich-text-gradient-dialog__color-picker-tooltip,
+  .rich-text-gradient-dialog__color-picker {
+    width: 44px;
+  }
+
+  .rich-text-gradient-dialog__color-picker :deep(.b-input) {
+    padding: 3px !important;
+    border: 1px solid var(--surface-border-color) !important;
+    background: var(--card-background);
+    cursor: pointer;
   }
 
   .rich-text-gradient-dialog__actions {
@@ -5996,6 +6442,10 @@
     .rich-text-gradient-dialog__fields {
       grid-template-columns: 1fr;
       gap: 7px;
+    }
+
+    .rich-text-gradient-dialog__palette {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .rich-text-gradient-dialog__fields > label:not(:first-child) {

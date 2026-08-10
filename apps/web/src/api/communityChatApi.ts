@@ -24,6 +24,7 @@ export interface CommunityChatAccess {
   requestStatus: 'pending' | 'approved' | 'rejected' | null;
   memberRole: 'member' | 'moderator' | 'admin' | null;
   notificationsEnabled: boolean;
+  notificationLevel: CommunityChatNotificationLevel;
 }
 
 export interface CommunityChatRoom {
@@ -39,7 +40,7 @@ export interface CommunityChatRoom {
   mentionCount: number;
 }
 
-export type CommunityChatNotificationLevel = 'official' | 'mentions' | 'all';
+export type CommunityChatNotificationLevel = 'official' | 'mentions_only' | 'mentions' | 'all';
 
 export interface CommunityChatNotificationSettings {
   enabled: boolean;
@@ -99,11 +100,22 @@ export interface CommunityChatImage {
 export interface CommunityChatMessage {
   publicId: string;
   content: string;
-  status: 'active';
+  status: 'active' | 'recalled';
   createdAt: string;
   editedAt: string | null;
+  recalledAt: string | null;
+  recalledByAdmin: boolean;
+  canViewRecalledContent: boolean;
+  canRecall: boolean;
+  recallExpired: boolean;
+  canDelete: boolean;
+  recallDeadlineAt: string | null;
   isOwn: boolean;
   images: CommunityChatImage[];
+  likeCount: number;
+  likedByMe: boolean;
+  likePreview: string[];
+  deliveryState?: 'sending';
   author: CommunityChatMessageAuthor;
   reply: CommunityChatMessageReply | null;
 }
@@ -266,6 +278,15 @@ export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?
   apiBasePut(`${roomPath(roomSlug)}/read`, { lastMessagePublicId: lastMessagePublicId || null }, { silent: true });
 
 const messagePath = (messagePublicId: string) => `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`;
+
+export const toggleCommunityChatMessageLike = (messagePublicId: string) =>
+  apiBasePut(`${messagePath(messagePublicId)}/like`, {}, { silent: true });
+
+export const recallCommunityChatMessage = (messagePublicId: string) =>
+  apiBasePost(`${messagePath(messagePublicId)}/recall`, {}, { silent: true });
+
+export const deleteCommunityChatMessage = (messagePublicId: string) =>
+  apiBasePost(`${messagePath(messagePublicId)}/delete`, {}, { silent: true });
 
 export const reportCommunityChatMessage = (
   messagePublicId: string,

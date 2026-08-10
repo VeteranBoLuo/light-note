@@ -14,12 +14,13 @@ export interface MobileOverlayHistoryHandle {
 
 interface MobileOverlayHistoryEntry extends MobileOverlayHistoryHandle {
   onBack: () => void;
-  state: 'active' | 'closing' | 'released';
+  state: 'pending' | 'active' | 'closing' | 'released';
   fallbackTimer: number | null;
   releaseWaiters: Set<() => void>;
 }
 
 const entries: MobileOverlayHistoryEntry[] = [];
+const pendingEntries: MobileOverlayHistoryEntry[] = [];
 let sequence = 0;
 let listening = false;
 
@@ -40,6 +41,39 @@ function resolveReleaseWaiters(entry: MobileOverlayHistoryEntry) {
   const waiters = [...entry.releaseWaiters];
   entry.releaseWaiters.clear();
   waiters.forEach((resolve) => resolve());
+}
+
+function transitionInFlight() {
+  return entries.some((entry) => entry.state === 'closing' || entry.state === 'released');
+}
+
+function activateEntry(entry: MobileOverlayHistoryEntry) {
+  if (entry.state !== 'pending') return false;
+  try {
+    const currentState = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
+    window.history.pushState(
+      { ...currentState, [MOBILE_OVERLAY_HISTORY_STATE_KEY]: entry.id },
+      '',
+      window.location.href,
+    );
+  } catch {
+    entry.state = 'released';
+    resolveReleaseWaiters(entry);
+    return false;
+  }
+
+  entry.state = 'active';
+  entries.push(entry);
+  syncListener();
+  return true;
+}
+
+function flushPendingEntries() {
+  if (transitionInFlight() || !pendingEntries.length) return;
+  const queued = pendingEntries.splice(0);
+  queued.forEach((entry) => {
+    if (entry.state === 'pending') activateEntry(entry);
+  });
 }
 
 function syncListener() {
@@ -82,6 +116,7 @@ function removeEntry(entry: MobileOverlayHistoryEntry, invoke: boolean) {
     resolveReleaseWaiters(entry);
   }
   syncListener();
+  flushPendingEntries();
 }
 
 function handlePopState(event: PopStateEvent) {
@@ -102,6 +137,7 @@ function handlePopState(event: PopStateEvent) {
   if (poppedEntries.length) event.stopImmediatePropagation();
   [...poppedEntries].reverse().forEach(invokeEntry);
   syncListener();
+  flushPendingEntries();
 }
 
 function scheduleFallback(entry: MobileOverlayHistoryEntry, invoke: boolean) {
@@ -119,24 +155,20 @@ export function registerMobileOverlayHistory(onBack: () => void): MobileOverlayH
   const entry: MobileOverlayHistoryEntry = {
     id: `overlay-${Date.now().toString(36)}-${(++sequence).toString(36)}`,
     onBack,
-    state: 'active',
+    state: 'pending',
     fallbackTimer: null,
     releaseWaiters: new Set(),
   };
 
-  try {
-    const currentState = window.history.state && typeof window.history.state === 'object' ? window.history.state : {};
-    window.history.pushState(
-      { ...currentState, [MOBILE_OVERLAY_HISTORY_STATE_KEY]: entry.id },
-      '',
-      window.location.href,
-    );
-  } catch {
-    return null;
+  // history.back() 的状态切换是异步的。旧浮层正在释放时若立刻为新浮层
+  // pushState，旧 back 最终会弹掉新占位，表现为新弹框/抽屉打开后瞬间消失。
+  // 协调器统一把这段交接排队；业务组件即使没有手写等待，也不会再互相撞车。
+  if (transitionInFlight() || pendingEntries.length) {
+    pendingEntries.push(entry);
+    return { id: entry.id };
   }
 
-  entries.push(entry);
-  syncListener();
+  if (!activateEntry(entry)) return null;
   return { id: entry.id };
 }
 
@@ -148,7 +180,10 @@ export function registerMobileOverlayHistory(onBack: () => void): MobileOverlayH
  * 会漏项的清单。正在关闭中的浮层同样算打开，它的 history 占位还没出栈。
  */
 export function hasOpenMobileOverlay(): boolean {
-  return entries.some((entry) => entry.state !== 'released');
+  return (
+    entries.some((entry) => entry.state !== 'released') ||
+    pendingEntries.some((entry) => entry.state === 'pending')
+  );
 }
 
 /**
@@ -193,6 +228,14 @@ export async function closeCurrentMobileOverlayThen<T>(
  */
 export function requestMobileOverlayHistoryClose(handle: MobileOverlayHistoryHandle | null): boolean {
   if (!handle || typeof window === 'undefined') return false;
+  const pendingIndex = pendingEntries.findIndex((candidate) => candidate.id === handle.id);
+  if (pendingIndex >= 0) {
+    const [pending] = pendingEntries.splice(pendingIndex, 1);
+    pending.state = 'released';
+    resolveReleaseWaiters(pending);
+    flushPendingEntries();
+    return false;
+  }
   const entry = entries.find((candidate) => candidate.id === handle.id);
   if (!entry) return false;
   if (entry.state === 'closing') return true;
@@ -214,6 +257,14 @@ export function requestMobileOverlayHistoryClose(handle: MobileOverlayHistoryHan
  */
 export function releaseMobileOverlayHistory(handle: MobileOverlayHistoryHandle | null) {
   if (!handle || typeof window === 'undefined') return;
+  const pendingIndex = pendingEntries.findIndex((candidate) => candidate.id === handle.id);
+  if (pendingIndex >= 0) {
+    const [pending] = pendingEntries.splice(pendingIndex, 1);
+    pending.state = 'released';
+    resolveReleaseWaiters(pending);
+    flushPendingEntries();
+    return;
+  }
   const entry = entries.find((candidate) => candidate.id === handle.id);
   if (!entry) return;
 
@@ -231,6 +282,10 @@ export function releaseMobileOverlayHistory(handle: MobileOverlayHistoryHandle |
 /** 仅供单元测试清理模块级状态。 */
 export function resetMobileOverlayHistoryForTests() {
   entries.splice(0).forEach((entry) => {
+    clearFallback(entry);
+    resolveReleaseWaiters(entry);
+  });
+  pendingEntries.splice(0).forEach((entry) => {
     clearFallback(entry);
     resolveReleaseWaiters(entry);
   });

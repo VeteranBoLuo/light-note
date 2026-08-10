@@ -9,7 +9,13 @@ const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
 const PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]{1,36}$/;
 const CLIENT_MESSAGE_KEYS = new Set(['protocolVersion', 'type', 'requestId', 'payload']);
 const SUBSCRIBE_PAYLOAD_KEYS = new Set(['roomSlug']);
-const BROADCAST_TYPES = new Set(['message.created', 'message.removed', 'runtime.changed', 'access.changed']);
+const BROADCAST_TYPES = new Set([
+  'message.created',
+  'message.updated',
+  'message.removed',
+  'runtime.changed',
+  'access.changed',
+]);
 
 export class CommunityChatRealtimeProtocolError extends Error {
   constructor(code, message, closeCode = 1008) {
@@ -91,7 +97,7 @@ function assertPublicMessageId(value) {
 
 function normalizeBroadcastPayload(type, payload) {
   if (!isPlainObject(payload)) throw protocolError('REALTIME_EVENT_INVALID', 'Realtime event payload is invalid');
-  if (type === 'message.created' || type === 'message.removed') {
+  if (type === 'message.created' || type === 'message.updated' || type === 'message.removed') {
     if (payload.roomSlug !== COMMUNITY_CHAT_PRIMARY_ROOM_SLUG) {
       throw protocolError('REALTIME_EVENT_INVALID', 'Realtime event contains an invalid room');
     }
@@ -99,7 +105,9 @@ function normalizeBroadcastPayload(type, payload) {
     return {
       roomSlug: COMMUNITY_CHAT_PRIMARY_ROOM_SLUG,
       messagePublicId: String(payload.messagePublicId),
-      ...(type === 'message.removed' ? { reason: String(payload.reason || 'moderation').slice(0, 32) } : {}),
+      ...(type === 'message.updated' || type === 'message.removed'
+        ? { reason: String(payload.reason || (type === 'message.updated' ? 'interaction' : 'moderation')).slice(0, 32) }
+        : {}),
     };
   }
   if (type === 'runtime.changed') {

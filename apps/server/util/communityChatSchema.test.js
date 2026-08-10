@@ -17,16 +17,19 @@ describe('ensureCommunityChatSchema', () => {
     mocks.query.mockResolvedValue([[], []]);
   });
 
-  it('幂等创建访问、消息、提及、图片、治理与运行策略共十四张表并补齐默认数据', async () => {
+  it('幂等创建访问、消息互动、个人删除、图片、治理与运行策略共十六张表并补齐默认数据', async () => {
     await ensureCommunityChatSchema();
 
-    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(14);
-    expect(mocks.query).toHaveBeenCalledTimes(16);
+    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(16);
+    expect(mocks.query).toHaveBeenCalledTimes(21);
     expect(
-      mocks.query.mock.calls.slice(0, 14).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
+      mocks.query.mock.calls.slice(0, 16).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
     ).toBe(true);
-    expect(mocks.query.mock.calls[14][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
-    expect(mocks.query.mock.calls[15][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
+    expect(String(mocks.query.mock.calls[16][0])).toContain('information_schema.COLUMNS');
+    expect(String(mocks.query.mock.calls[17][0])).toContain('ADD COLUMN `recalled_at`');
+    expect(String(mocks.query.mock.calls[18][0])).toContain('ADD COLUMN `recalled_by`');
+    expect(mocks.query.mock.calls[19][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
+    expect(mocks.query.mock.calls[20][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
     expect(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL).toContain('VALUES (1, 1)');
     expect(COMMUNITY_CHAT_ROOM_SEED_SQL).toContain("('general'");
     expect(COMMUNITY_CHAT_ROOM_SEED_SQL).not.toContain("('announcements'");
@@ -49,6 +52,7 @@ describe('ensureCommunityChatSchema', () => {
       runtimePolicyMigration,
       notificationsMigration,
       imagesMigration,
+      interactionsMigration,
       baseline,
       assertions,
     ] = await Promise.all([
@@ -60,9 +64,11 @@ describe('ensureCommunityChatSchema', () => {
       readFile(new URL('../migrations/20260809_community_chat_runtime_policy.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260809_community_chat_notifications.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260809_community_chat_images.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/20260810_community_chat_message_interactions.sql', import.meta.url), 'utf8'),
       readFile(new URL('../tag_db.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8'),
     ]);
+    expect(notificationsMigration).toContain("'mentions_only'");
     const tableNames = [
       'community_chat_rooms',
       'community_chat_access_requests',
@@ -116,6 +122,17 @@ describe('ensureCommunityChatSchema', () => {
     }
     expect(imagesMigration).toContain('uk_community_chat_image_public');
     expect(imagesMigration).toContain('idx_community_chat_image_owner_status_expiry');
+    expect(interactionsMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_message_likes`');
+    expect(interactionsMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_message_deletions`');
+    expect(interactionsMigration).toContain('`recalled_at`');
+    expect(interactionsMigration).toContain('`recalled_by`');
+    expect(baseline).toContain('CREATE TABLE `community_chat_message_likes`');
+    expect(baseline).toContain('CREATE TABLE `community_chat_message_deletions`');
+    expect(assertions).toContain('missing_community_chat_interaction_table');
+    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS community_chat_message_likes');
+    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain(
+      'CREATE TABLE IF NOT EXISTS community_chat_message_deletions',
+    );
     expect(notificationsMigration).toContain('idx_community_chat_mention_user_message');
     expect(textMigration).toContain('uk_community_chat_message_request');
     expect(textMigration).toContain('last_read_message_id');

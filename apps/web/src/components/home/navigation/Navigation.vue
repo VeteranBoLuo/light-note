@@ -121,7 +121,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onBeforeUnmount, onMounted, watch } from 'vue';
+  import { computed, onMounted, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, inboxStore, useUserStore } from '@/store';
   import { useRoute } from 'vue-router';
@@ -196,29 +196,6 @@
   });
 
   watch(
-    () => [bookmark.isMobile, user.id, user.role] as const,
-    ([isMobile, id, role]) => {
-      if (isMobile) return;
-      communityUnread.reset();
-      if (id && role !== 'visitor') void communityUnread.refresh();
-    },
-    { immediate: true },
-  );
-
-  let communityUnreadTimer: number | undefined;
-  onMounted(() => {
-    communityUnreadTimer = window.setInterval(() => {
-      if (!bookmark.isMobile && document.visibilityState === 'visible' && user.id && user.role !== 'visitor') {
-        void communityUnread.refresh();
-      }
-    }, 60_000);
-  });
-
-  onBeforeUnmount(() => {
-    if (communityUnreadTimer !== undefined) window.clearInterval(communityUnreadTimer);
-  });
-
-  watch(
     () => bookmark.type,
     (val) => {
       if (val !== 'search') {
@@ -251,24 +228,29 @@
     min-height: 34px;
     padding: 5px 11px;
     gap: 6px;
-    border: 1px solid var(--primary-color) !important;
+    border: 1px solid var(--navigation-community-border) !important;
     border-radius: 999px;
-    color: var(--primary-color);
-    background: var(--card-background) !important;
+    color: var(--navigation-community-fg);
+    background: var(--navigation-community-bg) !important;
     font-size: 13px;
     font-weight: 650;
     white-space: nowrap;
     transform: translateY(0);
     transition:
-      color 180ms ease,
-      background-color 180ms ease,
-      border-color 180ms ease,
-      transform 180ms ease;
+      color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
+      background-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
+      border-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
+      transform 180ms cubic-bezier(0.2, 0.65, 0.3, 1);
   }
-  .navigation-community-entry:hover,
+  .navigation-community-entry:hover {
+    color: var(--navigation-community-fg);
+    border-color: var(--navigation-community-hover-border) !important;
+    background: var(--navigation-community-hover-bg) !important;
+  }
   .navigation-community-entry.is-active {
-    color: #fff;
-    background: var(--primary-color) !important;
+    color: var(--navigation-community-fg);
+    border-color: var(--navigation-community-active-border) !important;
+    background: var(--navigation-community-active-bg) !important;
   }
   .navigation-community-entry:hover:not(.is-active) {
     transform: translateY(-1px);

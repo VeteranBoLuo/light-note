@@ -420,7 +420,11 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
       if (!context) continue;
       if (event.type === 'access.changed') {
         if (!internal.targetUserId || internal.targetUserId !== context.user?.id) continue;
-      } else if (event.type === 'message.created' || event.type === 'message.removed') {
+      } else if (
+        event.type === 'message.created' ||
+        event.type === 'message.updated' ||
+        event.type === 'message.removed'
+      ) {
         if (!context.rooms.has(event.payload.roomSlug)) continue;
       } else if (!context.rooms.size) {
         continue;

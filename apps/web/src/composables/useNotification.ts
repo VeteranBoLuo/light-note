@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { ref, unref, type MaybeRef } from 'vue';
 import notificationApi from '@/api/notificationApi.ts';
 import { useUserStore } from '@/store';
 
@@ -38,7 +38,11 @@ export function resetNotification() {
   browserSeenIds.clear();
 }
 
-export function useNotification() {
+export function useNotification(options: { excludeCommunityChat?: MaybeRef<boolean> } = {}) {
+  const notificationScope = () => ({
+    excludeCommunityChat: Boolean(unref(options.excludeCommunityChat ?? false)),
+  });
+
   function isGuest() {
     const user = useUserStore();
     return !user.id || user.role === 'visitor';
@@ -60,7 +64,7 @@ export function useNotification() {
       browserSeenIds.clear();
     }
     try {
-      const res = await notificationApi.getUnreadCount();
+      const res = await notificationApi.getUnreadCount(notificationScope());
       if (res?.status === 200 && res.data) {
         const previousUnread = unreadTotal.value;
         unreadTotal.value = Number(res.data.unreadTotal) || 0;
@@ -81,7 +85,12 @@ export function useNotification() {
 
   async function notifyNewestUnreadInBrowser() {
     try {
-      const res = await notificationApi.getNotificationList({ currentPage: 1, pageSize: 5, type: 'all' });
+      const res = await notificationApi.getNotificationList({
+        currentPage: 1,
+        pageSize: 5,
+        type: 'all',
+        ...notificationScope(),
+      });
       const items = Array.isArray(res?.data?.items) ? (res.data.items as NotificationItem[]) : [];
       if (!browserNotificationBaselineReady) {
         items.forEach((item) => browserSeenIds.add(item.id));
@@ -130,7 +139,7 @@ export function useNotification() {
     };
     if (isGuest()) return empty;
     try {
-      const res = await notificationApi.getNotificationList(params);
+      const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() });
       if (res?.status === 200 && res.data) {
         unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
         return {
@@ -160,7 +169,7 @@ export function useNotification() {
     unreadTotal.value = 0;
     unreadByType.value = {};
     try {
-      const res = await notificationApi.markAllNotificationsRead();
+      const res = await notificationApi.markAllNotificationsRead(notificationScope());
       if (res?.status !== 200) refreshUnread();
       return res?.status === 200;
     } catch {

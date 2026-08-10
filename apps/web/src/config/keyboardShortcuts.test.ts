@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   getGlobalShortcutKeys,
   getGlobalShortcutLabel,
+  getHeadingShortcutLabels,
+  getRepeatLastActionShortcutLabels,
   isEditableShortcutTarget,
   matchesGlobalShortcut,
+  matchEditorInlineFormatShortcut,
+  matchHeadingShortcut,
+  matchesRepeatLastActionShortcut,
   type ShortcutKeyboardEvent,
 } from './keyboardShortcuts';
 
@@ -47,6 +52,57 @@ describe('keyboardShortcuts', () => {
     expect(getGlobalShortcutKeys('aiAssistant', 'mac')).toEqual(['⌘', '/']);
     expect(getGlobalShortcutLabel('aiAssistant', 'mac')).toBe('⌘ + /');
     expect(getGlobalShortcutLabel('aiAssistant', 'other')).toBe('Ctrl + /');
+  });
+
+  it('为“重复上一步”生成平台化标签，并识别 Mac Option 组合键', () => {
+    expect(getRepeatLastActionShortcutLabels('mac')).toEqual(['⌘ + ⌥ + R', 'Fn + F4']);
+    expect(getRepeatLastActionShortcutLabels('other')).toEqual(['Ctrl + Alt + R', 'F4']);
+    expect(
+      matchesRepeatLastActionShortcut(
+        keyboardEvent({ key: '®', code: 'KeyR', keyCode: 82, metaKey: true, altKey: true }),
+      ),
+    ).toBe(true);
+    expect(matchesRepeatLastActionShortcut(keyboardEvent({ key: 'R', keyCode: 82, ctrlKey: true, altKey: true }))).toBe(
+      true,
+    );
+    expect(matchesRepeatLastActionShortcut(keyboardEvent({ key: 'F4', keyCode: 115 }))).toBe(true);
+    expect(matchesRepeatLastActionShortcut(keyboardEvent({ key: 'r', keyCode: 82, metaKey: true }))).toBe(false);
+    expect(
+      matchesRepeatLastActionShortcut(
+        keyboardEvent({ key: 'r', keyCode: 229, metaKey: true, altKey: true, isComposing: true }),
+      ),
+    ).toBe(false);
+  });
+
+  it('标题快捷键同时支持主修饰键数字与 Alt/Option 兼容组合', () => {
+    expect(getHeadingShortcutLabels('mac')).toEqual(['⌘ + 1…6', '⌘ + ⌥ + 1…6']);
+    expect(getHeadingShortcutLabels('other')).toEqual(['Ctrl + 1…6', 'Ctrl + Alt + 1…6']);
+    expect(matchHeadingShortcut(keyboardEvent({ key: '1', code: 'Digit1', keyCode: 49, metaKey: true }))).toBe(1);
+    expect(
+      matchHeadingShortcut(keyboardEvent({ key: '¡', code: 'Digit1', keyCode: 49, metaKey: true, altKey: true })),
+    ).toBe(1);
+    expect(matchHeadingShortcut(keyboardEvent({ key: '6', code: 'Digit6', keyCode: 54, ctrlKey: true }))).toBe(6);
+    expect(
+      matchHeadingShortcut(keyboardEvent({ key: '1', code: 'Digit1', keyCode: 49, metaKey: true, shiftKey: true })),
+    ).toBeNull();
+    expect(matchHeadingShortcut(keyboardEvent({ key: '1', code: 'Digit1', keyCode: 49 }))).toBeNull();
+  });
+
+  it('富文本行内格式快捷键不依赖编辑器内置解析', () => {
+    expect(matchEditorInlineFormatShortcut(keyboardEvent({ key: 'b', code: 'KeyB', keyCode: 66, metaKey: true }))).toBe(
+      'bold',
+    );
+    expect(matchEditorInlineFormatShortcut(keyboardEvent({ key: 'i', code: 'KeyI', keyCode: 73, metaKey: true }))).toBe(
+      'italic',
+    );
+    expect(matchEditorInlineFormatShortcut(keyboardEvent({ key: 'u', code: 'KeyU', keyCode: 85, ctrlKey: true }))).toBe(
+      'underline',
+    );
+    expect(
+      matchEditorInlineFormatShortcut(
+        keyboardEvent({ key: 'i', code: 'KeyI', keyCode: 73, metaKey: true, altKey: true }),
+      ),
+    ).toBeNull();
   });
 
   it('识别输入控件与可编辑区域', () => {

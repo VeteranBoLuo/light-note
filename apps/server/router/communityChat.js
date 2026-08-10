@@ -76,6 +76,10 @@ router.post(
 );
 router.put('/rooms/:slug/read', handle.markRoomRead);
 router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
+router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);
+router.put('/messages/:publicId/like', messageWriteLimiter, handle.toggleMessageLike);
+router.post('/messages/:publicId/recall', governanceWriteLimiter, handle.recallMessage);
+router.post('/messages/:publicId/delete', governanceWriteLimiter, handle.deleteMessage);
 router.post('/messages/:publicId/report', governanceWriteLimiter, handle.reportMessage);
 router.post('/messages/:publicId/block-author', governanceWriteLimiter, handle.blockMessageAuthor);
 router.get('/images/:publicId', handle.image);

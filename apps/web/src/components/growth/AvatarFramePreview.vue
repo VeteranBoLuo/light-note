@@ -1,7 +1,14 @@
 <template>
   <div
+    ref="frameElement"
     class="avatar-frame"
-    :class="[`avatar-frame--${variant || 'default'}`, { 'avatar-frame--compact': props.size <= 40 }]"
+    :class="[
+      `avatar-frame--${variant || 'default'}`,
+      {
+        'avatar-frame--compact': props.size <= 40,
+        'avatar-frame--motion-paused': isMotionPaused,
+      },
+    ]"
     :style="frameStyle"
     :aria-hidden="decorative ? 'true' : undefined"
   >
@@ -16,7 +23,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { frameVariant } from '@/config/growthFrames';
 
@@ -26,13 +33,45 @@
       src: string;
       size?: number;
       decorative?: boolean;
+      animated?: boolean;
+      pauseWhenOffscreen?: boolean;
     }>(),
     {
       frameId: null,
       size: 60,
       decorative: true,
+      animated: true,
+      pauseWhenOffscreen: false,
     },
   );
+
+  const frameElement = ref<HTMLElement | null>(null);
+  const isMotionVisible = ref(!props.pauseWhenOffscreen);
+  const isMotionPaused = computed(
+    () => !props.animated || (props.pauseWhenOffscreen && !isMotionVisible.value),
+  );
+  let visibilityObserver: IntersectionObserver | null = null;
+
+  onMounted(() => {
+    if (!props.pauseWhenOffscreen || typeof IntersectionObserver === 'undefined' || !frameElement.value) return;
+    const scrollContainer = frameElement.value.closest('.community-message-list');
+    visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        isMotionVisible.value = Boolean(entry?.isIntersecting);
+      },
+      {
+        root: scrollContainer,
+        rootMargin: '24px 0px',
+        threshold: 0.01,
+      },
+    );
+    visibilityObserver.observe(frameElement.value);
+  });
+
+  onBeforeUnmount(() => {
+    visibilityObserver?.disconnect();
+    visibilityObserver = null;
+  });
 
   const variant = computed(() => frameVariant(props.frameId));
   const frameStyle = computed(() => {
@@ -900,5 +939,20 @@
     .avatar-frame__comet::after {
       animation: none !important;
     }
+  }
+
+  .avatar-frame--motion-paused .avatar-frame__ring,
+  .avatar-frame--motion-paused .avatar-frame__ring::before,
+  .avatar-frame--motion-paused .avatar-frame__ring::after,
+  .avatar-frame--motion-paused .avatar-frame__motif,
+  .avatar-frame--motion-paused .avatar-frame__motif::before,
+  .avatar-frame--motion-paused .avatar-frame__motif::after,
+  .avatar-frame--motion-paused .avatar-frame__orbit,
+  .avatar-frame--motion-paused .avatar-frame__orbit::before,
+  .avatar-frame--motion-paused .avatar-frame__orbit::after,
+  .avatar-frame--motion-paused .avatar-frame__comet,
+  .avatar-frame--motion-paused .avatar-frame__comet::before,
+  .avatar-frame--motion-paused .avatar-frame__comet::after {
+    animation: none !important;
   }
 </style>

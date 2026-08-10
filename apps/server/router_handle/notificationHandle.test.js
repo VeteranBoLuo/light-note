@@ -14,7 +14,7 @@ vi.mock('../util/emailDelivery.js', () => ({
   maskEmail: (value) => String(value).replace(/^(.{2}).*(@.*)$/u, '$1***$2'),
 }));
 
-const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list } =
+const { adminDelete, adminEmailStats, adminEmailList, adminEmailDetail, list, unreadCount, markAllRead } =
   await import('./notificationHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -50,6 +50,52 @@ describe('待办提醒通知状态', () => {
     expect(payload.data.items.map((item) => item.todoState)).toEqual(['pending', 'completed', 'unavailable']);
     expect(query.mock.calls[1][0]).toContain('WHERE user_id = ? AND del_flag = 0 AND id IN (?,?,?)');
     expect(query.mock.calls[1][1]).toEqual(['user-1', 'todo-pending', 'todo-completed', 'todo-deleted']);
+    for (const callIndex of [0, 2, 3]) {
+      expect(query.mock.calls[callIndex][0]).toContain("JSON_EXTRACT(meta, '$.kind')");
+      expect(query.mock.calls[callIndex][0]).toContain("IN ('reply', 'mention')");
+    }
+  });
+});
+
+describe('聊天室通知中心可见性与旧客户端兼容', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('旧客户端要求完全排除聊天室时，列表、分页总数和未读总数使用同一个排除条件', async () => {
+    query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ total: 2 }]])
+      .mockResolvedValueOnce([[{ unreadTotal: 1 }]]);
+    const res = mockRes();
+
+    await list(
+      {
+        user: { id: 'user-1', role: 'user' },
+        body: { currentPage: 1, pageSize: 20, excludeCommunityChat: true },
+      },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0][0]).toContain("type <> 'community_chat'");
+    expect(query.mock.calls[1][0]).toContain("type <> 'community_chat'");
+    expect(query.mock.calls[2][0]).toContain("type <> 'community_chat'");
+    expect(res.send.mock.calls[0][0].data).toMatchObject({ total: 2, unreadTotal: 1 });
+  });
+
+  it('旧客户端的铃铛计数和全部已读仍可完全排除聊天室通知', async () => {
+    query.mockResolvedValueOnce([[{ type: 'system', c: 2 }]]).mockResolvedValueOnce([{ affectedRows: 2 }]);
+    const unreadRes = mockRes();
+    const markAllRes = mockRes();
+
+    await unreadCount({ user: { id: 'user-1', role: 'user' }, body: { excludeCommunityChat: true } }, unreadRes);
+    await markAllRead({ user: { id: 'user-1', role: 'user' }, body: { excludeCommunityChat: true } }, markAllRes);
+
+    expect(query.mock.calls[0][0]).toContain("type <> 'community_chat'");
+    expect(query.mock.calls[1][0]).toContain("type <> 'community_chat'");
+    expect(unreadRes.send.mock.calls[0][0].data).toEqual({ unreadTotal: 2, byType: { system: 2 } });
+    expect(markAllRes.send.mock.calls[0][0].data).toEqual({ updated: 2 });
   });
 });
 

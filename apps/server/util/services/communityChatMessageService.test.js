@@ -11,9 +11,13 @@ vi.mock('./communityChatNotificationService.js', () => ({
 import {
   __test__,
   createCommunityChatMessage,
+  deleteCommunityChatMessage,
+  getCommunityChatMessageAuthorAvatar,
   getCommunityChatMessageAuthorProfile,
   listCommunityChatMessages,
   markCommunityChatRoomRead,
+  recallCommunityChatMessage,
+  toggleCommunityChatMessageLike,
 } from './communityChatMessageService.js';
 import { communityChatRealtimeBroker } from '../communityChat/realtimeBroker.js';
 
@@ -41,9 +45,12 @@ function messageRow(overrides = {}) {
     status: 'active',
     createdAt: '2026-08-09T10:00:00.000Z',
     editedAt: null,
+    recalledAt: null,
+    recalledBy: null,
     authorName: '薄荷',
     authorRole: 'member',
     authorAccountRole: 'user',
+    authorHasAvatar: true,
     authorAvatar: 'data:image/webp;base64,avatar',
     authorExp: 900,
     authorTitleId: null,
@@ -110,6 +117,7 @@ describe('communityChatMessageService', () => {
           ];
         }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
     };
@@ -129,7 +137,7 @@ describe('communityChatMessageService', () => {
       author: {
         name: '薄荷',
         role: 'member',
-        avatar: 'data:image/webp;base64,avatar',
+        avatar: '/api/community-chat/messages/message-2/author-avatar',
         frameId: 'frame_mint',
         level: 2,
         levelName: '书生',
@@ -151,15 +159,15 @@ describe('communityChatMessageService', () => {
           return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
         }
         if (text.includes('message.id > ?')) {
-          expect(params).toEqual([2, 42, 'user-1']);
+          expect(params).toEqual([2, 42, 'user-1', 'user-1']);
           return [[{ id: 43 }], []];
         }
         if (text.includes('message.public_id = ?') && !text.includes('ORDER BY message.id DESC')) {
-          expect(params).toEqual([2, 'message-focus', 'user-1']);
+          expect(params).toEqual([2, 'message-focus', 'user-1', 'user-1']);
           return [[{ id: 42 }], []];
         }
         if (text.includes('ORDER BY message.id DESC')) {
-          expect(params).toEqual([2, 'user-1', 42, 3]);
+          expect(params).toEqual([2, 'user-1', 'user-1', 42, 3]);
           return [
             [
               messageRow({ internalId: 42, publicId: 'message-focus', content: '来源消息' }),
@@ -170,6 +178,7 @@ describe('communityChatMessageService', () => {
           ];
         }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
     };
@@ -270,6 +279,32 @@ describe('communityChatMessageService', () => {
     expect(result).not.toHaveProperty('email');
   });
 
+  it('消息列表头像使用独立短地址延迟读取，并复核屏蔽与个人删除可见性', async () => {
+    const messagePublicId = '11111111-1111-4111-8111-111111111111';
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+        if (text.includes('SELECT account.head_picture AS source')) {
+          expect(params).toEqual([messagePublicId, 'general', 'user-1', 'user-1']);
+          expect(text).toContain('community_chat_blocks');
+          expect(text).toContain('community_chat_message_deletions');
+          return [[{ source: 'data:image/png;base64,YQ==' }], []];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    await expect(
+      getCommunityChatMessageAuthorAvatar({
+        user: { id: 'user-1', role: 'user' },
+        messagePublicId,
+        env: PUBLIC_ENV,
+        db,
+      }),
+    ).resolves.toEqual({ source: 'data:image/png;base64,YQ==' });
+  });
+
   it('公共模式允许游客只读消息，并且不创建屏蔽查询或把消息标记为自己的', async () => {
     const db = {
       query: vi.fn(async (sql, params) => {
@@ -278,10 +313,11 @@ describe('communityChatMessageService', () => {
           return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
         }
         if (text.includes('FROM community_chat_messages message')) {
-          expect(params).toEqual([2, '', 51]);
+          expect(params).toEqual([2, 31]);
           return [[messageRow({ userId: 'user-2' })], []];
         }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
     };
@@ -326,6 +362,7 @@ describe('communityChatMessageService', () => {
         ];
       }
       if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
       throw new Error(`unexpected query: ${sql}`);
     });
     const db = { getConnection: vi.fn(async () => connection) };
@@ -396,6 +433,7 @@ describe('communityChatMessageService', () => {
         return [[messageRow({ internalId: 32, publicId: params[0], userId: 'user-1', content: '@薄荷 请看' })], []];
       }
       if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
       throw new Error(`unexpected query: ${sql}`);
     });
     const db = { getConnection: vi.fn(async () => connection) };
@@ -527,6 +565,7 @@ describe('communityChatMessageService', () => {
         return [[messageRow({ publicId: 'message-existing', userId: 'user-1', content: '同一负载' })], []];
       }
       if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
       throw new Error(`unexpected query: ${sql}`);
     });
     const db = { getConnection: vi.fn(async () => connection) };
@@ -584,6 +623,7 @@ describe('communityChatMessageService', () => {
           return [[messageRow({ publicId: 'message-winner', userId: 'user-1', content: '并发消息' })], []];
         }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
     };
@@ -661,7 +701,7 @@ describe('communityChatMessageService', () => {
         if (text.includes('FROM community_chat_messages message')) {
           expect(text).toContain('NOT EXISTS');
           expect(text).toContain('blocked.blocked_user_id = message.user_id');
-          expect(params).toEqual([2, 'user-1', 51]);
+          expect(params).toEqual([2, 'user-1', 'user-1', 31]);
           return [
             [
               messageRow({
@@ -676,6 +716,7 @@ describe('communityChatMessageService', () => {
           ];
         }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
     };
@@ -751,6 +792,290 @@ describe('communityChatMessageService', () => {
     ).toBe(false);
     expect(connection.rollback).toHaveBeenCalledTimes(1);
     expect(connection.release).toHaveBeenCalledTimes(1);
+  });
+
+  it('登录成员可以点赞或取消点赞活跃消息，并广播轻量更新事件', async () => {
+    const realtimeListener = vi.fn();
+    const unsubscribeRealtime = communityChatRealtimeBroker.subscribe(realtimeListener);
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+      if (text.includes('FROM community_chat_messages message')) {
+        return [[{ id: 21, publicId: 'message-like-1', roomSlug: 'general' }], []];
+      }
+      if (text.includes('SELECT 1') && text.includes('community_chat_message_likes')) return [[], []];
+      if (text.includes('INSERT INTO community_chat_message_likes')) return [{ affectedRows: 1 }, []];
+      if (text.includes('COUNT(*) AS likeCount')) {
+        return [
+          [
+            {
+              messageId: 21,
+              likeCount: 1,
+              likedByMe: 1,
+              likerNamesHex: Buffer.from('薄荷').toString('hex'),
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await toggleCommunityChatMessageLike({
+      user: { id: 'user-1', role: 'user' },
+      messagePublicId: 'message-like-1',
+      env: MESSAGE_ENV,
+      db,
+    });
+    unsubscribeRealtime();
+
+    expect(result).toEqual({ publicId: 'message-like-1', likedByMe: true, likeCount: 1, likePreview: ['薄荷'] });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(realtimeListener).toHaveBeenCalledWith({
+      event: expect.objectContaining({
+        type: 'message.updated',
+        payload: { roomSlug: 'general', messagePublicId: 'message-like-1', reason: 'like' },
+      }),
+      internal: {},
+    });
+  });
+
+  it('普通用户只能在两分钟内撤回自己的消息，撤回后保留原文数据', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              id: 31,
+              publicId: 'message-recall-own',
+              authorUserId: 'user-1',
+              status: 'active',
+              recalledBy: null,
+              elapsedSeconds: 119,
+              roomSlug: 'general',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
+      if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
+      if (text.includes('SELECT recalled_at AS recalledAt')) {
+        return [[{ recalledAt: '2026-08-10T10:00:00.000Z' }], []];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await recallCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      messagePublicId: 'message-recall-own',
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({ publicId: 'message-recall-own', status: 'recalled', alreadyRecalled: false });
+    const update = connection.query.mock.calls.find(([sql]) => String(sql).includes("SET status = 'recalled'"));
+    expect(update?.[0]).not.toContain('content =');
+    expect(update?.[0]).not.toContain('DELETE');
+    const notificationUpdate = connection.query.mock.calls.find(([sql]) => String(sql).includes('UPDATE notification'));
+    expect(notificationUpdate?.[1]).toEqual(['message-recall-own']);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('普通用户超过两分钟后撤回失败且不会改变消息状态', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              id: 32,
+              publicId: 'message-recall-expired',
+              authorUserId: 'user-1',
+              status: 'active',
+              recalledBy: null,
+              elapsedSeconds: 121,
+              roomSlug: 'general',
+            },
+          ],
+          [],
+        ];
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    await expect(
+      recallCommunityChatMessage({
+        user: { id: 'user-1', role: 'user' },
+        messagePublicId: 'message-recall-expired',
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'MESSAGE_RECALL_EXPIRED', status: 409 });
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes("SET status = 'recalled'"))).toBe(false);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+  });
+
+  it('Root 可撤回任意时长的消息，并把操作写入治理审计', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_messages message')) {
+        return [
+          [
+            {
+              id: 33,
+              publicId: 'message-recall-admin',
+              authorUserId: 'user-2',
+              status: 'active',
+              recalledBy: null,
+              elapsedSeconds: 86400,
+              roomSlug: 'general',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
+      if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_moderation_actions')) return [{ affectedRows: 1 }, []];
+      if (text.includes('SELECT recalled_at AS recalledAt')) return [[{ recalledAt: new Date() }], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await recallCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      messagePublicId: 'message-recall-admin',
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({ status: 'recalled', recalledByAdmin: true });
+    expect(
+      connection.query.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO community_chat_moderation_actions'),
+      ),
+    ).toBe(true);
+  });
+
+  it('撤回消息对普通用户脱敏，但管理员仍可查看保留的原文和图片', () => {
+    const row = messageRow({
+      status: 'recalled',
+      recalledAt: '2026-08-10T10:00:00.000Z',
+      recalledBy: 'user-2',
+      content: '需要保留审核的原文',
+    });
+    const images = [{ publicId: 'image-1', url: '/api/community-chat/images/image-1' }];
+    const memberView = __test__.toPublicMessage(row, 'user-1', new Set(), images, {}, { memberRole: 'member' });
+    const adminView = __test__.toPublicMessage(row, 'root-1', new Set(), images, {}, { memberRole: 'admin' });
+
+    expect(memberView).toMatchObject({
+      status: 'recalled',
+      content: '',
+      images: [],
+      canViewRecalledContent: false,
+      canDelete: true,
+    });
+    expect(adminView).toMatchObject({
+      status: 'recalled',
+      content: '需要保留审核的原文',
+      images,
+      canViewRecalledContent: true,
+      canDelete: true,
+    });
+  });
+
+  it('普通用户超过两分钟后仍获得撤回入口状态，由客户端解释时间限制', () => {
+    const row = messageRow({
+      userId: 'user-1',
+      status: 'active',
+      createdAt: '2026-08-10T09:00:00.000Z',
+    });
+    const view = __test__.toPublicMessage(
+      row,
+      'user-1',
+      new Set(),
+      [],
+      {},
+      {
+        memberRole: 'member',
+        now: new Date('2026-08-10T09:03:00.000Z').getTime(),
+      },
+    );
+
+    expect(view).toMatchObject({ canRecall: true, recallExpired: true });
+    expect(view.recallDeadlineAt).toBe('2026-08-10T09:02:00.000Z');
+  });
+
+  it('普通成员可把任意可见消息仅从自己的聊天记录删除，不改变公共消息状态', async () => {
+    const realtimeListener = vi.fn();
+    const unsubscribeRealtime = communityChatRealtimeBroker.subscribe(realtimeListener);
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+      if (text.includes('FROM community_chat_messages message')) {
+        return [[{ id: 41, publicId: 'message-delete-for-me', status: 'active' }], []];
+      }
+      if (text.includes('INSERT IGNORE INTO community_chat_message_deletions')) {
+        return [{ affectedRows: 1 }, []];
+      }
+      if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await deleteCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      messagePublicId: 'message-delete-for-me',
+      env: MESSAGE_ENV,
+      db,
+    });
+    unsubscribeRealtime();
+
+    expect(result).toEqual({ publicId: 'message-delete-for-me', status: 'deleted_for_me', alreadyDeleted: false });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE community_chat_messages'))).toBe(
+      false,
+    );
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('community_chat_moderation_actions'))).toBe(
+      false,
+    );
+    expect(realtimeListener).not.toHaveBeenCalled();
+    const notificationUpdate = connection.query.mock.calls.find(([sql]) => String(sql).includes('UPDATE notification'));
+    expect(notificationUpdate?.[1]).toEqual(['user-1', 'message-delete-for-me']);
+  });
+
+  it('重复为自己删除已撤回消息保持幂等，其他人的消息记录不受影响', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_messages message')) {
+        return [[{ id: 41, publicId: 'message-delete-again', status: 'recalled' }], []];
+      }
+      if (text.includes('INSERT IGNORE INTO community_chat_message_deletions')) return [{ affectedRows: 0 }, []];
+      if (text.includes('UPDATE notification')) return [{ affectedRows: 0 }, []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await deleteCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      messagePublicId: 'message-delete-again',
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    expect(result).toEqual({ publicId: 'message-delete-again', status: 'deleted_for_me', alreadyDeleted: true });
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('UPDATE community_chat_messages'))).toBe(
+      false,
+    );
   });
 
   it('纯文本规范化保留换行、移除控制字符并按 Unicode 字符数限长', () => {

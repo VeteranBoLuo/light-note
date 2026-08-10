@@ -25,13 +25,13 @@
             <AvatarFramePreview
               v-if="validFrameId"
               :frame-id="validFrameId"
-              :src="profile.avatar || icon.navigation.user"
+              :src="profile.avatar || icon.communityChat.defaultAvatar"
               :size="68"
             />
             <SvgIcon
               v-else
               class="chat-user-profile__avatar-image"
-              :src="profile.avatar || icon.navigation.user"
+              :src="profile.avatar || icon.communityChat.defaultAvatar"
               size="68"
             />
           </span>
@@ -205,7 +205,7 @@
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
-    background: var(--card-background);
+    background-color: var(--card-background);
   }
 
   .chat-user-profile__avatar-image :deep(img),

@@ -8,36 +8,41 @@
     :close-label="t('common.close')"
     @close="emit('update:open', false)"
   >
-    <BTabs
-      v-model:active-tab="activeTab"
-      class="note-mobile-navigation-drawer__tabs"
-      variant="segment"
-      :options="tabs"
-    />
-    <NoteMobilePageLevelList
-      v-if="activeTab === 'pages'"
-      :open="open"
-      mode="navigation"
-      :current-page-id="currentPageId"
-      :initial-parent-id="initialParentId"
-      :write-enabled="writeEnabled"
-      @open-page="openPage"
-      @create="forwardPageAction('create', $event)"
-      @attach="forwardPageAction('attach', $event)"
-      @toggle-top="forwardPageAction('toggleTop', $event)"
-      @move="forwardPageAction('move', $event)"
-      @rename="forwardPageAction('rename', $event)"
-      @copy-link="forwardPageAction('copyLink', $event)"
-      @delete="forwardPageAction('delete', $event)"
-    />
-    <Catalog
-      v-else
-      class="note-mobile-navigation-drawer__outline"
-      variant="embedded"
-      :content="content"
-      :note-type="noteType"
-      @markdown-heading-click="emit('markdownHeadingClick', $event)"
-    />
+    <div class="note-mobile-navigation-drawer__body">
+      <div class="note-mobile-navigation-drawer__switcher">
+        <BTabs
+          v-model:active-tab="activeTab"
+          class="note-mobile-navigation-drawer__tabs"
+          variant="segment"
+          :options="tabs"
+        />
+      </div>
+      <NoteMobilePageLevelList
+        v-if="activeTab === 'pages'"
+        class="note-mobile-navigation-drawer__pages"
+        :open="open"
+        mode="navigation"
+        :current-page-id="currentPageId"
+        :initial-parent-id="initialParentId"
+        :write-enabled="writeEnabled"
+        @open-page="openPage"
+        @create="forwardPageAction('create', $event)"
+        @attach="forwardPageAction('attach', $event)"
+        @toggle-top="forwardPageAction('toggleTop', $event)"
+        @move="forwardPageAction('move', $event)"
+        @rename="forwardPageAction('rename', $event)"
+        @copy-link="forwardPageAction('copyLink', $event)"
+        @delete="forwardPageAction('delete', $event)"
+      />
+      <Catalog
+        v-else
+        class="note-mobile-navigation-drawer__outline"
+        variant="embedded"
+        :content="content"
+        :note-type="noteType"
+        @markdown-heading-click="emit('markdownHeadingClick', $event)"
+      />
+    </div>
   </BDrawer>
 </template>
 
@@ -116,8 +121,20 @@
 </script>
 
 <style scoped lang="less">
+  .note-mobile-navigation-drawer__body {
+    height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .note-mobile-navigation-drawer__switcher {
+    flex: 0 0 auto;
+    padding: 0 16px 12px;
+  }
+
   .note-mobile-navigation-drawer__tabs {
-    margin: 0 16px 10px;
+    margin: 0;
   }
 
   .note-mobile-navigation-drawer__tabs :deep(.tab-container) {
@@ -129,8 +146,14 @@
     justify-content: center;
   }
 
+  .note-mobile-navigation-drawer__pages,
   .note-mobile-navigation-drawer__outline {
-    height: calc(100% - 56px);
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .note-mobile-navigation-drawer__outline {
     padding: 0 16px 16px;
     box-sizing: border-box;
   }

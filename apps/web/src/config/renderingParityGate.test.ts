@@ -15,6 +15,7 @@ const androidEngineStyles = readFileSync(
 );
 const styleIndex = readFileSync(resolve(sourceRoot, 'assets/css/index.less'), 'utf8');
 const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
+const authModalStyles = readFileSync(resolve(sourceRoot, 'view/login/UserAuthModal.vue'), 'utf8');
 
 function walk(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -127,6 +128,14 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     }
   });
 
+  it('浅色认证卡片使用不透明主题表面，移动端不会透出深色遮罩', () => {
+    expect(authModalStyles).toMatch(/--auth-card-bg:\s*var\(--surface-raised-background\)/u);
+    expect(authModalStyles).not.toMatch(/--auth-card-bg:\s*color-mix\(/u);
+    expect(authModalStyles).toMatch(
+      /--auth-card-border:\s*var\(--surface-border-color,\s*var\(--card-border-color\)\)/u,
+    );
+  });
+
   it('必要布局不再依赖旧 WebView 缺失的 :has()', () => {
     const violations = walk(sourceRoot)
       .filter((path) => ['.vue', '.less', '.css'].includes(extname(path)))
@@ -189,5 +198,11 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(baselineStyles).toMatch(/scrollbar-gutter:\s*auto\s*!important/u);
     expect(baselineStyles).toMatch(/\.growth-page \.cal-cell\s*\{[\s\S]*?min-height:\s*42px/u);
     expect(avatarStyles).toMatch(/width:\s*20%;\s*height:\s*20%;\s*aspect-ratio:\s*1/u);
+    expect(avatarStyles).toContain("'avatar-frame--motion-paused': isMotionPaused");
+    expect(avatarStyles).toContain('const isMotionVisible = ref(!props.pauseWhenOffscreen)');
+    expect(avatarStyles).toContain("rootMargin: '24px 0px'");
+    expect(avatarStyles).toMatch(
+      /\.avatar-frame--motion-paused \.avatar-frame__ring[\s\S]*?animation:\s*none\s*!important/u,
+    );
   });
 });

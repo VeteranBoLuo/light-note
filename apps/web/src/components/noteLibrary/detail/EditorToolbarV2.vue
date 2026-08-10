@@ -40,6 +40,10 @@
         <ToolbarButton :action="italicAction" @run="emitAction" />
       </div>
 
+      <div v-if="desktopFormatActions.length" class="editor-toolbar-v2__group editor-toolbar-v2__desktop-formats">
+        <ToolbarButton v-for="action in desktopFormatActions" :key="action.key" :action="action" @run="emitAction" />
+      </div>
+
       <span class="editor-toolbar-v2__divider" aria-hidden="true"></span>
 
       <div class="editor-toolbar-v2__group">
@@ -134,6 +138,7 @@
     listActions: EditorToolbarAction[];
     insertActions: EditorToolbarAction[];
     moreActions: EditorToolbarAction[];
+    desktopFormatActions: EditorToolbarAction[];
   }>();
 
   const emit = defineEmits<{
@@ -418,6 +423,10 @@
 
   .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__button-label,
   .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__chevron {
+    display: none;
+  }
+
+  .editor-toolbar-v2.is-narrow-840 .editor-toolbar-v2__desktop-formats {
     display: none;
   }
 

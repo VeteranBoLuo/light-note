@@ -6,7 +6,7 @@
     :show-footer="false"
   >
     <div class="chat-settings-modal">
-      <CommunityChatNotificationSettingsPanel compact />
+      <CommunityChatNotificationSettingsPanel compact @saved="emit('notificationSaved', $event)" />
 
       <section class="chat-settings-modal__management">
         <div>
@@ -32,15 +32,24 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CommunityChatNotificationSettingsPanel from '@/components/communityChat/CommunityChatNotificationSettingsPanel.vue';
+  import type { CommunityChatNotificationSettings } from '@/api/communityChatApi';
   import icon from '@/config/icon';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const visible = defineModel<boolean>('visible', { default: false });
-  const emit = defineEmits<{ manageBlocks: [] }>();
+  const emit = defineEmits<{
+    manageBlocks: [];
+    notificationSaved: [settings: CommunityChatNotificationSettings];
+  }>();
   const { t } = useI18n();
 
-  function openBlockedUsers() {
-    visible.value = false;
-    emit('manageBlocks');
+  async function openBlockedUsers() {
+    await closeCurrentMobileOverlayThen(
+      () => {
+        visible.value = false;
+      },
+      () => emit('manageBlocks'),
+    );
   }
 </script>
 

@@ -14,6 +14,13 @@ function escapeHtmlAttribute(value: string) {
   );
 }
 
+function escapeHtmlText(value: string) {
+  return String(value || '').replace(
+    /[&<>]/gu,
+    (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[character] as string,
+  );
+}
+
 export function normalizeRichMediaTextPosition(value: unknown): RichMediaTextPosition {
   return RICH_MEDIA_TEXT_POSITIONS.includes(value as RichMediaTextPosition)
     ? (value as RichMediaTextPosition)
@@ -43,6 +50,26 @@ export function createRichMediaTextBlockHtml(
     imageUrl,
     imageAlt,
   )}</section><p><br></p>`;
+}
+
+/** Markdown 正文用原生 HTML 块表达图文组合，预览与富文本复用同一套 class 和响应式样式。 */
+export function createMarkdownRichMediaTextBlockHtml(
+  imageUrl: string,
+  imageAlt = '',
+  caption = '',
+  position: RichMediaTextPosition = DEFAULT_POSITION,
+  width: RichMediaTextWidth = DEFAULT_WIDTH,
+) {
+  const captionHtml = escapeHtmlText(caption).replace(/\r?\n/gu, '<br>');
+  return `<section class="ln-media-text" data-ln-media-position="${normalizeRichMediaTextPosition(
+    position,
+  )}" data-ln-media-width="${normalizeRichMediaTextWidth(
+    width,
+  )}"><figure class="ln-media-text__item"><div class="ln-media-text__media"><img src="${escapeHtmlAttribute(
+    imageUrl,
+  )}" alt="${escapeHtmlAttribute(
+    imageAlt,
+  )}"></div><figcaption class="ln-media-text__content"><p>${captionHtml}</p></figcaption></figure></section>`;
 }
 
 function directChildrenByClass(parent: Element, className: string) {

@@ -1173,3 +1173,110 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name='community_chat_message_images'
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 41) 聊天消息互动必须具备点赞、个人删除关系与原文保留式撤回字段（期望 0 行）
+SELECT '[41] missing_community_chat_interaction_table' AS check_name,
+  expected.table_name AS detail
+FROM (
+  SELECT 'community_chat_message_likes' table_name UNION ALL
+  SELECT 'community_chat_message_deletions'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.table_name
+ AND actual.engine='InnoDB'
+ AND actual.table_collation='utf8mb4_unicode_ci'
+WHERE actual.table_name IS NULL;
+
+SELECT '[41] invalid_community_chat_interaction_table' AS check_name,
+  CONCAT(actual.table_name, ' actual=', IFNULL(actual.engine, 'NULL'), '/', IFNULL(actual.table_collation, 'NULL')) AS detail
+FROM information_schema.tables actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name IN ('community_chat_message_likes', 'community_chat_message_deletions')
+  AND (actual.engine <> 'InnoDB' OR actual.table_collation <> 'utf8mb4_unicode_ci');
+
+SELECT '[41] missing_community_chat_recall_column' AS check_name,
+  CONCAT('community_chat_messages.', expected.col) AS detail
+FROM (
+  SELECT 'recalled_at' col UNION ALL
+  SELECT 'recalled_by'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_messages'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[41] invalid_community_chat_recalled_by_collation' AS check_name,
+  CONCAT('recalled_by actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_messages'
+  AND actual.column_name='recalled_by'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[41] missing_community_chat_like_column' AS check_name,
+  CONCAT('community_chat_message_likes.', expected.col) AS detail
+FROM (
+  SELECT 'message_id' col UNION ALL
+  SELECT 'user_id' UNION ALL
+  SELECT 'create_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_likes'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[41] invalid_community_chat_like_user_collation' AS check_name,
+  CONCAT('user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_likes'
+  AND actual.column_name='user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[41] missing_community_chat_like_index' AS check_name,
+  CONCAT('community_chat_message_likes.', expected.ix) AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'idx_community_chat_like_user_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_likes'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[41] missing_community_chat_deletion_column' AS check_name,
+  CONCAT('community_chat_message_deletions.', expected.col) AS detail
+FROM (
+  SELECT 'message_id' col UNION ALL
+  SELECT 'user_id' UNION ALL
+  SELECT 'create_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_deletions'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[41] invalid_community_chat_deletion_user_collation' AS check_name,
+  CONCAT('user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_message_deletions'
+  AND actual.column_name='user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[41] missing_community_chat_deletion_index' AS check_name,
+  CONCAT('community_chat_message_deletions.', expected.ix) AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'idx_community_chat_deletion_user_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_message_deletions'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

@@ -18,6 +18,20 @@ const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError
 
 const isRegistered = (user) => Boolean(user?.id && user?.role && user.role !== 'visitor');
 const COMMUNITY_CHAT_RUNTIME_POLICY_ID = 1;
+const COMMUNITY_CHAT_NOTIFICATION_LEVELS = new Set(['official', 'mentions_only', 'mentions', 'all']);
+const COMMUNITY_CHAT_DEFAULT_NOTIFICATION_LEVEL = 'mentions';
+
+function normalizeCommunityChatNotificationLevel(value) {
+  const normalized = String(value || '').trim();
+  return COMMUNITY_CHAT_NOTIFICATION_LEVELS.has(normalized) ? normalized : COMMUNITY_CHAT_DEFAULT_NOTIFICATION_LEVEL;
+}
+
+function applyCommunityChatNotificationSettings(access, settings, defaultEnabled) {
+  access.notificationsEnabled = settings
+    ? Boolean(Number(settings.notificationsEnabled || 0))
+    : Boolean(defaultEnabled);
+  access.notificationLevel = normalizeCommunityChatNotificationLevel(settings?.defaultRoomLevel);
+}
 
 function normalizeText(value, maxLength, fieldName) {
   const text = String(value || '').trim();
@@ -86,6 +100,7 @@ function baseAccess(feature, user, runtimePolicy) {
     requestStatus: null,
     memberRole: null,
     notificationsEnabled: Boolean(isRegistered(user) && feature.notificationsDefaultEnabled),
+    notificationLevel: COMMUNITY_CHAT_DEFAULT_NOTIFICATION_LEVEL,
   };
 }
 
@@ -101,7 +116,8 @@ async function loadPublicAccessRows(db, userId) {
     ),
     queryFirst(
       db,
-      `SELECT global_notification_enabled AS notificationsEnabled
+      `SELECT global_notification_enabled AS notificationsEnabled,
+              default_room_level AS defaultRoomLevel
          FROM community_chat_user_settings
         WHERE user_id = ?
         LIMIT 1`,
@@ -109,6 +125,18 @@ async function loadPublicAccessRows(db, userId) {
     ),
   ]);
   return { member, settings };
+}
+
+async function loadNotificationSettings(db, userId) {
+  return queryFirst(
+    db,
+    `SELECT global_notification_enabled AS notificationsEnabled,
+            default_room_level AS defaultRoomLevel
+       FROM community_chat_user_settings
+      WHERE user_id = ?
+      LIMIT 1`,
+    [userId],
+  );
 }
 
 async function loadUserAccessRows(db, userId, includeMembership) {
@@ -165,6 +193,8 @@ export async function getCommunityChatAccess({ user, env = process.env, db = poo
         canEnter: feature.messagingEnabled,
       };
     }
+    const { member, settings } = await loadPublicAccessRows(db, user.id);
+    applyCommunityChatNotificationSettings(access, settings, feature.notificationsDefaultEnabled);
     if (access.canManage) {
       return {
         ...access,
@@ -176,10 +206,6 @@ export async function getCommunityChatAccess({ user, env = process.env, db = poo
       };
     }
 
-    const { member, settings } = await loadPublicAccessRows(db, user.id);
-    access.notificationsEnabled = settings
-      ? Boolean(Number(settings.notificationsEnabled || 0))
-      : feature.notificationsDefaultEnabled;
     if (member?.status === 'banned') {
       access.status = 'restricted';
       return access;
@@ -198,6 +224,8 @@ export async function getCommunityChatAccess({ user, env = process.env, db = poo
   }
 
   if (access.canManage && feature.accessMode === 'invite_only') {
+    const settings = await loadNotificationSettings(db, user.id);
+    applyCommunityChatNotificationSettings(access, settings, feature.notificationsDefaultEnabled);
     return {
       ...access,
       status: 'active',
@@ -221,9 +249,7 @@ export async function getCommunityChatAccess({ user, env = process.env, db = poo
   }
 
   access.memberRole = member?.role || null;
-  access.notificationsEnabled = settings
-    ? Boolean(Number(settings.notificationsEnabled || 0))
-    : feature.notificationsDefaultEnabled;
+  applyCommunityChatNotificationSettings(access, settings, feature.notificationsDefaultEnabled);
 
   if (member?.status === 'revoked' || member?.status === 'banned') {
     access.status = 'restricted';
@@ -305,7 +331,7 @@ export async function assertCommunityChatMessagingAccess({ user, env = process.e
 }
 
 /**
- * 紧急只读只阻断新消息和图片上传，不阻断历史阅读、举报、屏蔽和已读位置。
+ * 紧急只读阻断新增公开内容及互动（新消息、点赞、图片上传），但不阻断撤回、历史阅读、举报、屏蔽和已读位置。
  * 消息落库事务必须以 lock=true 再次读取该单行策略，避免 Root 切换与发送并发穿透。
  */
 export async function assertCommunityChatPostingEnabled({ env = process.env, db = pool, lock = false } = {}) {
@@ -475,11 +501,15 @@ export async function listCommunityChatRooms({ user, locale = 'zh-CN', env = pro
 
   const nameColumn = locale === 'en-US' ? 'name_en' : 'name_zh';
   const descriptionColumn = locale === 'en-US' ? 'description_en' : 'description_zh';
-  const unreadEnabled = access.messagingEnabled && access.authenticated;
+  const unreadEnabled = access.messagingEnabled && access.authenticated && access.notificationsEnabled;
+  const notificationLevel = normalizeCommunityChatNotificationLevel(access.notificationLevel);
   const unreadJoin = unreadEnabled
     ? `LEFT JOIN (
          SELECT message.room_id, COUNT(*) AS unreadCount
            FROM community_chat_messages message
+           LEFT JOIN user sender ON sender.id = message.user_id
+           LEFT JOIN community_chat_members sender_membership ON sender_membership.user_id = message.user_id
+           LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id
            LEFT JOIN community_chat_reads reading
              ON reading.room_id = message.room_id AND reading.user_id = ?
           WHERE message.status = 'active'
@@ -488,7 +518,40 @@ export async function listCommunityChatRooms({ user, locale = 'zh-CN', env = pro
               SELECT 1 FROM community_chat_blocks blocked
                WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
             )
+            AND NOT EXISTS (
+              SELECT 1 FROM community_chat_message_deletions deletion
+               WHERE deletion.user_id = ? AND deletion.message_id = message.id
+            )
             AND message.id > COALESCE(reading.last_read_message_id, 0)
+            AND (
+              ? = 'all'
+              OR (
+                ? IN ('official', 'mentions')
+                AND (
+                  sender.role = 'root'
+                  OR (sender_membership.role = 'moderator' AND sender_membership.status = 'active')
+                )
+              )
+              OR (
+                ? IN ('mentions_only', 'mentions')
+                AND (
+                  reply.user_id = ?
+                  OR EXISTS (
+                    SELECT 1
+                      FROM community_chat_message_mentions mention
+                     WHERE mention.message_id = message.id
+                      AND mention.mentioned_user_id = ?
+                  )
+                )
+                AND (
+                  ? <> 'mentions_only'
+                  OR NOT (
+                    sender.role = 'root'
+                    OR (sender_membership.role = 'moderator' AND sender_membership.status = 'active')
+                  )
+                )
+              )
+            )
           GROUP BY message.room_id
        ) unread ON unread.room_id = room.id`
     : '';
@@ -501,7 +564,21 @@ export async function listCommunityChatRooms({ user, locale = 'zh-CN', env = pro
        ${unreadJoin}
       WHERE room.status = 'active' AND room.slug = ?
       ORDER BY room.sort_order ASC, room.id ASC`,
-    unreadEnabled ? [user.id, user.id, user.id, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG] : [COMMUNITY_CHAT_PRIMARY_ROOM_SLUG],
+    unreadEnabled
+      ? [
+          user.id,
+          user.id,
+          user.id,
+          user.id,
+          notificationLevel,
+          notificationLevel,
+          notificationLevel,
+          user.id,
+          user.id,
+          notificationLevel,
+          COMMUNITY_CHAT_PRIMARY_ROOM_SLUG,
+        ]
+      : [COMMUNITY_CHAT_PRIMARY_ROOM_SLUG],
   );
 
   return {

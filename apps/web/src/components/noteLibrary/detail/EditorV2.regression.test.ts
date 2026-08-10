@@ -64,6 +64,11 @@ describe('编辑器 V2 交互回归', () => {
     expect(codeMirrorSource).toMatch(/'\.cm-activeLine':\s*\{[\s\S]*rgba\(97, 92, 237, 0\.045\)/u);
   });
 
+  it('渐变文字使用透明文字填充时仍显式保留可见插入光标', () => {
+    const gradientStyle = sourceBetween(commonStylesSource, '.ln-text-gradient {', '@supports');
+    expect(gradientStyle).toContain('caret-color: var(--text-color, #161824)');
+  });
+
   it('工具栏启用态与禁用态具有不同的文字、边框和透明度', () => {
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\)[\s\S]*color:\s*var\(--text-color\)/u);
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\.disabled\)[\s\S]*opacity:\s*0\.4/u);
@@ -148,8 +153,11 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).not.toContain("action('markdownShortcuts'");
     expect(editorSource).toContain("editor.shortcuts.add('Meta+Y', '', () => editor.execCommand('Redo'))");
     expect(editorSource).toContain("editor.shortcuts.add('Meta+Shift+Z', '', () => editor.execCommand('Redo'))");
-    expect(editorSource).toContain("editor.shortcuts.add('F4', '', repeatLastEditorAction)");
-    expect(editorSource).toContain("editor.shortcuts.add('Meta+Alt+R', '', repeatLastEditorAction)");
+    expect(editorSource).toContain('if (handleRepeatLastEditorActionShortcut(event)) return');
+    expect(editorSource).toContain('matchesRepeatLastActionShortcut(event)');
+    expect(editorSource).toContain('getRepeatLastActionShortcutLabels()');
+    expect(editorSource).not.toContain("editor.shortcuts.add('F4', '', repeatLastEditorAction)");
+    expect(editorSource).not.toContain("editor.shortcuts.add('Meta+Alt+R', '', repeatLastEditorAction)");
     expect(editorSource).toContain("if (action.key === 'repeatLastAction')");
     expect(editorSource).toContain("rememberRepeatableAction('markdown', { key })");
     expect(editorSource).toContain("rememberRepeatableAction('html', {");
@@ -160,6 +168,41 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain("event.shiftKey && event.key.toLowerCase() === 'z'");
     expect(codeMirrorSource).toContain("['F4', 'repeatLastAction']");
     expect(codeMirrorSource).toContain("['Mod-Alt-r', 'repeatLastAction']");
+    expect(codeMirrorSource).toContain('`Mod-${index + 1}`');
+    expect(editorSource).toContain('const level = matchHeadingShortcut(event)');
+    expect(editorSource).toContain('runRichToolbarAction(`heading${level}`)');
+    expect(editorSource).toContain('const action = matchEditorInlineFormatShortcut(event)');
+    expect(editorSource).toContain('runRichToolbarAction(action)');
+    expect(editorSource).toContain("if (key === 'italic') return editor.execCommand('Italic')");
+  });
+
+  it('Markdown 与富文本共用图文组合入口，Markdown 上传后写入可预览的 HTML 块', () => {
+    expect(editorSource).toContain("action('insertMediaText', t('noteDetail.editor.mediaText')");
+    expect(editorSource).toContain("if (key === 'insertMediaText') return openMarkdownMediaTextInsert()");
+    expect(editorSource).toContain('createMarkdownRichMediaTextBlockHtml(');
+    expect(editorSource).toContain("operation: '在 Markdown 中插入图文组合'");
+  });
+
+  it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {
+    expect(editorSource).toContain('adjustContextToolbarAwayFromMainToolbar');
+    expect(editorSource).toContain("editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment)");
+    expect(editorSource).toContain('editorViewportTop + selectionRect.bottom');
+    expect(editorSource).toContain("addEventListener('scroll', scheduleContextToolbarAdjustment");
+    expect(editorSource).toContain("'data-mce-bogus': 'all'");
+    expect(editorSource).toContain('ln-ai-selection-pending__spinner');
+    expect(editorSource).toContain('removeSelectionAiPendingMarker(pendingMarker)');
+  });
+
+  it('渐变弹框有可视预设色板，宽屏桌面工具栏直接展示常用格式', () => {
+    expect(editorSource).toContain('v-for="preset in richTextGradientPresets"');
+    expect(editorSource).toContain('applyRichTextGradientPreset(preset)');
+    expect(editorSource).toContain('<template v-if="bookmark.isDesktop">');
+    expect(editorSource).toContain('id="note-rich-gradient-from-picker"');
+    expect(editorSource).toContain('id="note-rich-gradient-to-picker"');
+    expect(editorSource).toContain('type="color"');
+    expect(toolbarSource).toContain('desktopFormatActions');
+    expect(toolbarSource).toContain('editor-toolbar-v2__desktop-formats');
+    expect(editorSource).toContain("action('textGradient', t('noteDetail.editor.gradientText')");
   });
 
   it('模板正文工作区只让共享编辑器内部滚动，不再用固定高度撑开外层页面', () => {

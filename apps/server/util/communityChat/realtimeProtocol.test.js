@@ -62,5 +62,14 @@ describe('communityChat realtime protocol', () => {
     expect(JSON.stringify(event)).not.toContain('internal-user');
     expect(JSON.stringify(event)).not.toContain('不应进入实时包');
     expect(normalizeCommunityChatBroadcastEvent(event)).toEqual(event);
+
+    const updated = createCommunityChatBroadcastEvent('message.updated', {
+      roomSlug: 'general',
+      messagePublicId: 'message-0001',
+      reason: 'like',
+      likeCount: 99,
+    });
+    expect(updated.payload).toEqual({ roomSlug: 'general', messagePublicId: 'message-0001', reason: 'like' });
+    expect(updated.payload).not.toHaveProperty('likeCount');
   });
 });

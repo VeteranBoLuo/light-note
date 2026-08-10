@@ -291,8 +291,9 @@ export async function getCommunityChatImageDownload({
   createSignedUrl = createDownloadSignedUrl,
 }) {
   const normalizedPublicId = normalizePublicId(imagePublicId);
-  await assertCommunityChatReadAccess({ user, env, db });
+  const { memberRole } = await assertCommunityChatReadAccess({ user, env, db });
   const viewerUserId = user?.id && user.role !== 'visitor' ? user.id : '';
+  const canViewRecalled = memberRole === 'admin' || memberRole === 'moderator';
   const image = await queryFirst(
     db,
     `SELECT image.public_id AS publicId, image.object_key AS objectKey,
@@ -311,7 +312,7 @@ export async function getCommunityChatImageDownload({
           )
           OR (
             image.status = 'attached'
-            AND message.status = 'active'
+            AND (message.status = 'active' OR (? = 1 AND message.status = 'recalled'))
             AND room.slug = ?
             AND room.status = 'active'
             AND NOT EXISTS (
@@ -321,7 +322,7 @@ export async function getCommunityChatImageDownload({
           )
         )
       LIMIT 1`,
-    [normalizedPublicId, viewerUserId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, viewerUserId],
+    [normalizedPublicId, viewerUserId, canViewRecalled ? 1 : 0, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, viewerUserId],
   );
   if (!image) {
     throw chatError(

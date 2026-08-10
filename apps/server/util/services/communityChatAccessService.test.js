@@ -264,10 +264,29 @@ describe('communityChatAccessService', () => {
         if (String(sql).includes('FROM community_chat_members')) {
           return [[{ role: 'member', status: 'active', rulesVersion: 'rules-v1' }], []];
         }
-        if (String(sql).includes('community_chat_user_settings')) return [[{ notificationsEnabled: 0 }], []];
+        if (String(sql).includes('community_chat_user_settings')) {
+          return [[{ notificationsEnabled: 1, defaultRoomLevel: 'mentions' }], []];
+        }
         if (String(sql).includes('FROM community_chat_rooms room')) {
-          expect(params).toEqual(['user-1', 'user-1', 'user-1', 'general']);
+          expect(params).toEqual([
+            'user-1',
+            'user-1',
+            'user-1',
+            'user-1',
+            'mentions',
+            'mentions',
+            'mentions',
+            'user-1',
+            'user-1',
+            'mentions',
+            'general',
+          ]);
           expect(String(sql)).toContain('community_chat_blocks');
+          expect(String(sql)).toContain('community_chat_message_deletions');
+          expect(String(sql)).toContain('community_chat_message_mentions');
+          expect(String(sql)).toContain('reply.user_id = ?');
+          expect(String(sql)).toContain("IN ('mentions_only', 'mentions')");
+          expect(String(sql)).toContain("<> 'mentions_only'");
           return [
             [
               {
@@ -295,6 +314,35 @@ describe('communityChatAccessService', () => {
 
     expect(result.messagingEnabled).toBe(true);
     expect(result.items[0]).toMatchObject({ unreadCount: 3, mentionCount: 0 });
+  });
+
+  it('关闭聊天室提醒时不查询也不返回频道未读数', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        if (String(sql).includes('community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+        if (String(sql).includes('community_chat_access_requests')) return [[], []];
+        if (String(sql).includes('FROM community_chat_members')) {
+          return [[{ role: 'member', status: 'active', rulesVersion: 'rules-v1' }], []];
+        }
+        if (String(sql).includes('community_chat_user_settings')) return [[{ notificationsEnabled: 0 }], []];
+        if (String(sql).includes('FROM community_chat_rooms room')) {
+          expect(params).toEqual(['general']);
+          expect(String(sql)).not.toContain('community_chat_reads');
+          return [[{ slug: 'general', name: '轻笺聊天室', type: 'text', status: 'active' }], []];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const result = await listCommunityChatRooms({
+      user: { id: 'user-1', role: 'user' },
+      env: MESSAGE_ENV,
+      db,
+      locale: 'zh-CN',
+    });
+
+    expect(result.access.notificationsEnabled).toBe(false);
+    expect(result.items[0]).toMatchObject({ unreadCount: 0, mentionCount: 0 });
   });
 
   it('重复申请保持单行幂等，并在提交后释放事务连接', async () => {

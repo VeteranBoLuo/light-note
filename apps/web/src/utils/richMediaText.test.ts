@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createRichMediaTextBlockHtml, createRichMediaTextItemHtml, normalizeRichMediaTextHtml } from './richMediaText';
+import {
+  createMarkdownRichMediaTextBlockHtml,
+  createRichMediaTextBlockHtml,
+  createRichMediaTextItemHtml,
+  normalizeRichMediaTextHtml,
+} from './richMediaText';
 
 describe('richMediaText', () => {
   it('creates one image paired with one editable caption', () => {
@@ -17,6 +22,15 @@ describe('richMediaText', () => {
     const html = createRichMediaTextItemHtml('/images/second.png', '第二张');
     expect(html.match(/ln-media-text__item/gu)).toHaveLength(1);
     expect(html).not.toContain('class="ln-media-text"');
+  });
+
+  it('creates a Markdown raw HTML block with an escaped editable caption', () => {
+    const html = createMarkdownRichMediaTextBlockHtml('/images/a.png?x=1&y=2', '图 "1"', '说明 <一>\n第二行');
+    expect(html).toContain('class="ln-media-text"');
+    expect(html).toContain('src="/images/a.png?x=1&amp;y=2"');
+    expect(html).toContain('alt="图 &quot;1&quot;"');
+    expect(html).toContain('<p>说明 &lt;一&gt;<br>第二行</p>');
+    expect(html).not.toContain('<p><br></p>');
   });
 
   it('normalizes invalid layout values and strips ordinary image layout state', () => {

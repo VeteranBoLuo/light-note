@@ -88,7 +88,10 @@ export default defineConfig(({ mode }) => {
           env.VITE_ENV === 'local'
             ? {
                 target: 'http://127.0.0.1:9001',
-                changeOrigin: true,
+                // 真机通过局域网访问 Vite 时，浏览器 Origin 是 LAN-IP:前端端口。
+                // WebSocket Origin 校验必须继续看到这个同源 Host；若改写为 127.0.0.1:9001，
+                // Debug App 会被后端按跨站升级拒绝，只能退化到低频轮询。
+                changeOrigin: false,
                 ws: true,
               }
             : {

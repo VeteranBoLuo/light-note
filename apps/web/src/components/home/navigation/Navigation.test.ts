@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
@@ -42,8 +44,6 @@ const inbox = {
 
 const user = { id: '', role: 'visitor' };
 const communityUnreadTotal = ref(0);
-const refreshCommunityUnread = vi.fn(async () => null);
-const resetCommunityUnread = vi.fn();
 
 vi.mock('@/store', () => ({
   bookmarkStore: () => bookmark,
@@ -54,8 +54,6 @@ vi.mock('@/store', () => ({
 vi.mock('@/composables/useCommunityChatUnread', () => ({
   useCommunityChatUnread: () => ({
     totalUnread: communityUnreadTotal,
-    refresh: refreshCommunityUnread,
-    reset: resetCommunityUnread,
   }),
 }));
 
@@ -72,6 +70,8 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 }));
 
 const { default: Navigation } = await import('./Navigation.vue');
+const navigationSource = readFileSync(resolve(process.cwd(), 'src/components/home/navigation/Navigation.vue'), 'utf8');
+const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
 let cleanup: (() => void) | undefined;
 
@@ -103,8 +103,6 @@ afterEach(() => {
   user.role = 'visitor';
   user.id = '';
   communityUnreadTotal.value = 0;
-  refreshCommunityUnread.mockClear();
-  resetCommunityUnread.mockClear();
   bookmark.isFold = false;
   inbox.todoAttentionTotal = 0;
   inbox.todoOverdueTotal = 0;
@@ -112,6 +110,14 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
+  it('聊天室选中态沿用同一文字色并通过柔和 tonal 背景递进', () => {
+    expect(navigationSource).toContain('background: var(--navigation-community-bg) !important');
+    expect(navigationSource).toContain('background: var(--navigation-community-hover-bg) !important');
+    expect(navigationSource).toContain('background: var(--navigation-community-active-bg) !important');
+    expect(navigationSource).not.toMatch(/navigation-community-entry\.is-active\s*\{[^}]*color:\s*#fff/su);
+    expect(themeSource.match(/--navigation-community-active-bg:/gu)).toHaveLength(2);
+  });
+
   it('PC 顶栏用带文字的聊天室入口直达公共空间，并显示未读角标', async () => {
     user.id = 'user-1';
     user.role = 'user';
@@ -122,8 +128,6 @@ describe('Navigation', () => {
     expect(entry?.textContent).toContain('聊天室');
     expect(entry?.querySelector('.navigation-community-entry__badge')?.textContent?.trim()).toBe('8');
     expect(entry?.getAttribute('aria-label')).toContain('8');
-    expect(resetCommunityUnread).toHaveBeenCalledTimes(1);
-    expect(refreshCommunityUnread).toHaveBeenCalledTimes(1);
 
     entry?.click();
     await nextTick();

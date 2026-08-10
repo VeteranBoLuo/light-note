@@ -16,6 +16,7 @@ const {
   acceptCommunityChatRules,
   blockCommunityChatMessageAuthor,
   createCommunityChatClientRequestId,
+  deleteCommunityChatMessage,
   discardCommunityChatImage,
   getCommunityChatAdminAccessRequests,
   getCommunityChatAdminRuntimePolicy,
@@ -28,11 +29,13 @@ const {
   getCommunityChatRooms,
   markCommunityChatRoomRead,
   requestCommunityChatAccess,
+  recallCommunityChatMessage,
   reportCommunityChatMessage,
   reviewCommunityChatAdminAccessRequest,
   reviewCommunityChatAdminReport,
   revokeCommunityChatAdminMember,
   sendCommunityChatMessage,
+  toggleCommunityChatMessageLike,
   unblockCommunityChatUser,
   updateCommunityChatAdminRuntimePolicy,
   updateCommunityChatNotificationSettings,
@@ -122,7 +125,7 @@ describe('communityChatApi', () => {
     );
   });
 
-  it('聊天室三级提醒在全局设置与聊天室复用同一 REST 资源', () => {
+  it('聊天室四档提醒在全局设置与聊天室复用同一 REST 资源', () => {
     getCommunityChatNotificationSettings();
     updateCommunityChatNotificationSettings({ enabled: true, level: 'mentions' });
 
@@ -212,6 +215,30 @@ describe('communityChatApi', () => {
     expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
       3,
       '/api/community-chat/blocks/block%2F1/unblock',
+      {},
+      { silent: true },
+    );
+  });
+
+  it('点赞、撤回与仅为自己删除都只使用消息公有 ID，并保持独立消息动作路径', () => {
+    toggleCommunityChatMessageLike('message/1');
+    recallCommunityChatMessage('message/1');
+    deleteCommunityChatMessage('message/1');
+
+    expect(mocks.apiBasePut).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/like',
+      {},
+      { silent: true },
+    );
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/recall',
+      {},
+      {
+        silent: true,
+      },
+    );
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/delete',
       {},
       { silent: true },
     );

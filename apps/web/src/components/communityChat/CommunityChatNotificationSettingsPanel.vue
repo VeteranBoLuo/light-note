@@ -24,14 +24,9 @@
       <div
         class="community-notification-settings__rail"
         :class="{ 'is-disabled': !settings.enabled || saving }"
-        :style="{ '--community-level-index': String(activeLevelIndex) }"
         role="radiogroup"
         :aria-label="t('communityChat.notifications.levelLabel')"
       >
-        <span class="community-notification-settings__line" aria-hidden="true">
-          <span class="community-notification-settings__line-fill"></span>
-          <span class="community-notification-settings__thumb"></span>
-        </span>
         <BButton
           v-for="option in levelOptions"
           :key="option.value"
@@ -78,10 +73,14 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
+  import { useNotification } from '@/composables/useNotification';
 
   withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const emit = defineEmits<{ saved: [settings: CommunityChatNotificationSettings] }>();
   const { t } = useI18n();
+  const communityUnread = useCommunityChatUnread();
+  const { refreshUnread } = useNotification();
 
   const DEFAULT_SETTINGS: CommunityChatNotificationSettings = {
     enabled: true,
@@ -107,6 +106,11 @@
       description: t('communityChat.notifications.levelOfficialDescription'),
     },
     {
+      value: 'mentions_only' as const,
+      label: t('communityChat.notifications.levelMentionsOnly'),
+      description: t('communityChat.notifications.levelMentionsOnlyDescription'),
+    },
+    {
       value: 'mentions' as const,
       label: t('communityChat.notifications.levelMentions'),
       description: t('communityChat.notifications.levelMentionsDescription'),
@@ -123,7 +127,9 @@
       levelOptions.value.findIndex((item) => item.value === settings.value.level),
     ),
   );
-  const currentLevel = computed(() => levelOptions.value[activeLevelIndex.value] || levelOptions.value[1]);
+  const currentLevel = computed(
+    () => levelOptions.value[activeLevelIndex.value] || levelOptions.value.find((item) => item.value === 'mentions')!,
+  );
   const currentLevelLabel = computed(() => currentLevel.value.label);
   const currentLevelDescription = computed(() => currentLevel.value.description);
   const currentExplanationLabel = computed(() =>
@@ -134,7 +140,9 @@
   );
 
   function normalizeSettings(value: Partial<CommunityChatNotificationSettings> | null | undefined) {
-    const level: CommunityChatNotificationLevel = ['official', 'mentions', 'all'].includes(String(value?.level))
+    const level: CommunityChatNotificationLevel = ['official', 'mentions_only', 'mentions', 'all'].includes(
+      String(value?.level),
+    )
       ? (value?.level as CommunityChatNotificationLevel)
       : 'mentions';
     const enabled = value?.enabled === undefined ? true : value.enabled === true;
@@ -177,6 +185,8 @@
       const response = await updateCommunityChatNotificationSettings(next);
       settings.value = normalizeSettings(response.data as CommunityChatNotificationSettings);
       emit('saved', settings.value);
+      if (!settings.value.enabled) communityUnread.reset();
+      await Promise.allSettled([refreshUnread(), communityUnread.refresh()]);
       message.success(t('communityChat.notifications.saved'));
     } catch (saveError: any) {
       settings.value = previous;
@@ -255,64 +265,24 @@
   }
 
   .community-notification-settings__rail {
-    --community-level-index: 1;
-    position: relative;
     min-width: 0;
-    padding-top: 6px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .community-notification-settings__line {
-    position: absolute;
-    top: 17px;
-    left: calc(100% / 6);
-    right: calc(100% / 6);
-    height: 3px;
-    overflow: visible;
-    border-radius: 999px;
-    background: var(--surface-border-color);
-    pointer-events: none;
-  }
-
-  .community-notification-settings__line-fill {
-    position: absolute;
-    inset: 0 auto 0 0;
-    width: calc(var(--community-level-index) * 50%);
-    border-radius: inherit;
-    background: var(--primary-color);
-    transition: width 0.22s ease;
-  }
-
-  .community-notification-settings__thumb {
-    position: absolute;
-    top: 50%;
-    left: calc(var(--community-level-index) * 50%);
-    width: 17px;
-    height: 17px;
-    box-sizing: border-box;
-    border: 3px solid var(--card-background);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    background: var(--primary-color);
-    outline: 1px solid var(--primary-color);
-    transition: left 0.22s ease;
+    gap: 8px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .community-notification-settings__option {
-    position: relative;
-    z-index: 1;
     width: 100%;
     height: auto;
-    min-height: 58px;
-    padding: 0 4px 4px;
+    min-height: 42px;
+    padding: 8px 7px;
     display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: 12px;
-    border: 0 !important;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 10px;
     color: var(--desc-color);
-    background: transparent !important;
+    background: var(--card-background) !important;
     font-size: 11px;
     white-space: normal;
   }
@@ -331,7 +301,9 @@
   }
 
   .community-notification-settings__option.is-current {
+    border-color: var(--primary-color) !important;
     color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--workspace-panel-bg-color)) !important;
     font-weight: 700;
   }
 
@@ -396,9 +368,13 @@
   }
 
   @media (max-width: 767px) {
+    .community-notification-settings__rail {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .community-notification-settings__option {
-      min-height: 64px;
-      font-size: 10px;
+      min-height: 44px;
+      font-size: 11px;
     }
 
     .community-notification-settings__head span {
@@ -407,8 +383,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .community-notification-settings__line-fill,
-    .community-notification-settings__thumb,
     .community-notification-settings__dot {
       transition: none;
     }

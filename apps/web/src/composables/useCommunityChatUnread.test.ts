@@ -77,4 +77,30 @@ describe('useCommunityChatUnread', () => {
     expect(unread.totalUnread.value).toBe(0);
     expect(unread.loading.value).toBe(false);
   });
+
+  it('实时事件撞上在途请求时，当前请求结束后再补一次权威刷新', async () => {
+    let resolveFirstRooms: (value: unknown) => void = () => {};
+    mocks.getRooms
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirstRooms = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        data: { messagingEnabled: true, items: [{ slug: 'general', unreadCount: 1, mentionCount: 0 }] },
+      });
+    const unread = useCommunityChatUnread();
+    const pendingRefresh = unread.refresh();
+    await Promise.resolve();
+
+    const queuedRefresh = unread.refresh({ afterCurrent: true });
+    resolveFirstRooms({
+      data: { messagingEnabled: true, items: [{ slug: 'general', unreadCount: 0, mentionCount: 0 }] },
+    });
+    await Promise.all([pendingRefresh, queuedRefresh]);
+
+    expect(mocks.getRooms).toHaveBeenCalledTimes(2);
+    expect(unread.totalUnread.value).toBe(1);
+  });
 });

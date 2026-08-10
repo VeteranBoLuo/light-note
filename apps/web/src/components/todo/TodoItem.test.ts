@@ -291,11 +291,13 @@ describe('TodoItem card editing', () => {
     moreButton?.click();
     await nextTick();
 
-    const pauseButton = Array.from(document.body.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')).find(
-      (button) => button.textContent?.includes('暂停系列'),
-    );
+    const pauseButton = Array.from(
+      document.body.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item'),
+    ).find((button) => button.textContent?.includes('暂停系列'));
     expect(pauseButton).toBeTruthy();
     pauseButton?.click();
-    expect(onSeriesAction).toHaveBeenCalledWith('pause');
+    await vi.waitFor(() => {
+      expect(onSeriesAction).toHaveBeenCalledWith('pause');
+    });
   });
 });

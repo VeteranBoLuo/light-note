@@ -15,9 +15,10 @@ import { deliverCommunityChatMessageNotifications } from './communityChatNotific
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
-const DEFAULT_PAGE_SIZE = 50;
+const DEFAULT_PAGE_SIZE = 30;
 const MAX_PAGE_SIZE = 100;
 const MAX_MENTION_TARGETS = 5;
+export const COMMUNITY_CHAT_RECALL_WINDOW_SECONDS = 120;
 const ROOM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
 
@@ -141,6 +142,7 @@ const MESSAGE_SELECT = `
   SELECT message.id AS internalId, message.public_id AS publicId, message.room_id AS roomId,
          message.user_id AS userId, message.content, message.status,
          message.create_time AS createdAt, message.edited_at AS editedAt,
+         message.recalled_at AS recalledAt, message.recalled_by AS recalledBy,
          account.role AS authorAccountRole,
          CASE WHEN account.del_flag = '0' THEN COALESCE(NULLIF(account.alias, ''), '') ELSE '' END AS authorName,
          CASE
@@ -158,9 +160,9 @@ const MESSAGE_SELECT = `
                  AND OCTET_LENGTH(account.head_picture) <= 524288
                )
              )
-             THEN account.head_picture
-           ELSE ''
-         END AS authorAvatar,
+             THEN 1
+           ELSE 0
+         END AS authorHasAvatar,
          COALESCE(growth.exp, 0) AS authorExp,
          growth.equipped_title AS authorTitleId,
          growth.equipped_frame AS authorFrameId,
@@ -229,21 +231,105 @@ async function loadMessageImages(db, rows) {
   return byMessageId;
 }
 
-function toPublicMessage(row, viewerUserId, blockedUserIds = new Set(), images = []) {
+async function loadMessageLikes(db, rows, viewerUserId) {
+  const messageIds = [
+    ...new Set(rows.map((row) => Number(row.internalId)).filter((id) => Number.isInteger(id) && id > 0)),
+  ];
+  const byMessageId = new Map();
+  if (!messageIds.length) return byMessageId;
+  const placeholders = messageIds.map(() => '?').join(',');
+  const [likeRows] = await db.query(
+    `SELECT likes.message_id AS messageId, COUNT(*) AS likeCount,
+            MAX(CASE WHEN likes.user_id = ? THEN 1 ELSE 0 END) AS likedByMe,
+            GROUP_CONCAT(
+              HEX(
+                CASE
+                  WHEN account.del_flag = '0' THEN COALESCE(NULLIF(account.alias, ''), '轻笺用户')
+                  ELSE '轻笺用户'
+                END
+              )
+              ORDER BY likes.create_time DESC, likes.user_id DESC
+              SEPARATOR ','
+            ) AS likerNamesHex
+       FROM community_chat_message_likes likes
+       LEFT JOIN user account ON account.id = likes.user_id
+      WHERE likes.message_id IN (${placeholders})
+      GROUP BY likes.message_id`,
+    [viewerUserId || '', ...messageIds],
+  );
+  for (const row of likeRows) {
+    const likePreview = String(row.likerNamesHex || '')
+      .split(',')
+      .map((encodedName) => {
+        try {
+          return Buffer.from(encodedName, 'hex').toString('utf8').trim();
+        } catch {
+          return '';
+        }
+      })
+      .filter(Boolean)
+      .slice(0, 3);
+    byMessageId.set(Number(row.messageId), {
+      likeCount: Number(row.likeCount || 0),
+      likedByMe: Boolean(Number(row.likedByMe || 0)),
+      likePreview,
+    });
+  }
+  return byMessageId;
+}
+
+function canModerateMessages(memberRole) {
+  return memberRole === 'admin' || memberRole === 'moderator';
+}
+
+function toPublicMessage(
+  row,
+  viewerUserId,
+  blockedUserIds = new Set(),
+  images = [],
+  likes = {},
+  { memberRole = 'visitor', now = Date.now(), authorAvatar = row.authorAvatar || '' } = {},
+) {
   const replyBlocked = Boolean(row.replyUserId && blockedUserIds.has(row.replyUserId));
   const growth = publicGrowthProfile(row);
+  const isOwn = row.userId === viewerUserId;
+  const isRecalled = row.status === 'recalled';
+  const canViewRecalledContent = isRecalled && canModerateMessages(memberRole);
+  const contentVisible = !isRecalled || canViewRecalledContent;
+  const createdAtMs = new Date(row.createdAt).getTime();
+  const recallDeadlineAt =
+    row.status === 'active' && isOwn && !canModerateMessages(memberRole) && Number.isFinite(createdAtMs)
+      ? new Date(createdAtMs + COMMUNITY_CHAT_RECALL_WINDOW_SECONDS * 1000).toISOString()
+      : null;
+  const recallExpired = Boolean(
+    recallDeadlineAt &&
+    Number.isFinite(new Date(recallDeadlineAt).getTime()) &&
+    new Date(recallDeadlineAt).getTime() < now,
+  );
+  const canRecall = row.status === 'active' && (canModerateMessages(memberRole) || isOwn);
+  const canDelete = memberRole !== 'visitor' && ['active', 'recalled'].includes(row.status);
   return {
     publicId: row.publicId,
-    content: row.content,
+    content: contentVisible ? row.content : '',
     status: row.status,
     createdAt: row.createdAt,
     editedAt: row.editedAt || null,
-    isOwn: row.userId === viewerUserId,
-    images,
+    recalledAt: row.recalledAt || null,
+    recalledByAdmin: Boolean(isRecalled && row.recalledBy && row.recalledBy !== row.userId),
+    canViewRecalledContent,
+    canRecall,
+    recallExpired,
+    canDelete,
+    recallDeadlineAt,
+    isOwn,
+    images: contentVisible ? images : [],
+    likeCount: row.status === 'active' ? Number(likes.likeCount || 0) : 0,
+    likedByMe: row.status === 'active' && Boolean(likes.likedByMe),
+    likePreview: row.status === 'active' ? likes.likePreview || [] : [],
     author: {
       name: row.authorName || '',
       role: row.authorRole || 'member',
-      avatar: row.authorAvatar || '',
+      avatar: authorAvatar,
       frameId: row.authorFrameId || null,
       ...growth,
     },
@@ -298,7 +384,7 @@ export async function getCommunityChatMessageAuthorProfile({ user, messagePublic
        LEFT JOIN community_chat_members membership ON membership.user_id = message.user_id
        LEFT JOIN user_growth growth ON growth.user_id = message.user_id
       WHERE message.public_id = ?
-        AND message.status = 'active'
+        AND message.status IN ('active', 'recalled')
         AND room.slug = ?
         AND room.status = 'active'
         AND account.del_flag = '0'
@@ -349,11 +435,68 @@ export async function getCommunityChatMessageAuthorProfile({ user, messagePublic
   };
 }
 
-async function loadMessageByPublicId(db, publicId, viewerUserId) {
+/**
+ * 头像通过消息公有 ID 延迟读取，避免一页消息重复携带同一份 base64 头像。
+ * 列表正文先以短 URL 返回，同一作者在当前窗口复用 URL，浏览器再独立缓存头像。
+ */
+export async function getCommunityChatMessageAuthorAvatar({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  await assertCommunityChatReadAccess({ user, env, db });
+  const viewerUserId = user?.id && user?.role !== 'visitor' ? user.id : '';
+  const viewerVisibilityClause = viewerUserId
+    ? `AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = message.id
+        )`
+    : '';
+  const avatar = await queryFirst(
+    db,
+    `SELECT account.head_picture AS source
+       FROM community_chat_messages message
+       JOIN community_chat_rooms room ON room.id = message.room_id
+       JOIN user account ON account.id = message.user_id AND account.del_flag = 0
+      WHERE message.public_id = ?
+        AND message.status IN ('active', 'recalled')
+        AND room.slug = ?
+        AND room.status = 'active'
+        AND (
+          account.head_picture LIKE 'https://%'
+          OR account.head_picture LIKE 'http://%'
+          OR (
+            account.head_picture LIKE 'data:image/%;base64,%'
+            AND OCTET_LENGTH(account.head_picture) <= 524288
+          )
+        )
+        ${viewerVisibilityClause}
+      LIMIT 1`,
+    [
+      normalizedMessagePublicId,
+      COMMUNITY_CHAT_PRIMARY_ROOM_SLUG,
+      ...(viewerUserId ? [viewerUserId, viewerUserId] : []),
+    ],
+  );
+  if (!avatar?.source) {
+    throw chatError('COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND', 404, '头像当前不可用', 'Avatar is unavailable');
+  }
+  return { source: String(avatar.source) };
+}
+
+async function loadMessageByPublicId(db, publicId, viewerUserId, memberRole = 'member') {
   const [rows] = await db.query(`${MESSAGE_SELECT} WHERE message.public_id = ? LIMIT 1`, [publicId]);
   if (!rows[0]) return null;
-  const images = await loadMessageImages(db, rows);
-  return toPublicMessage(rows[0], viewerUserId, new Set(), images.get(Number(rows[0].internalId)) || []);
+  const [images, likes] = await Promise.all([loadMessageImages(db, rows), loadMessageLikes(db, rows, viewerUserId)]);
+  const internalId = Number(rows[0].internalId);
+  const authorAvatar = rows[0].authorHasAvatar
+    ? `/api/community-chat/messages/${encodeURIComponent(rows[0].publicId)}/author-avatar`
+    : '';
+  return toPublicMessage(rows[0], viewerUserId, new Set(), images.get(internalId) || [], likes.get(internalId) || {}, {
+    memberRole,
+    authorAvatar,
+  });
 }
 
 async function loadIdempotentMessage(db, userId, clientRequestId, { lock = false } = {}) {
@@ -481,10 +624,23 @@ export async function listCommunityChatMessages({
     );
   }
   const pageSize = normalizePageSize(limit);
-  const { feature } = await assertCommunityChatReadAccess({ user, env, db });
-  const room = await loadRoom(db, normalizedRoomSlug);
   const viewerUserId = user?.id && user?.role !== 'visitor' ? user.id : '';
-  const blockedUserIds = viewerUserId ? await getCommunityChatBlockedUserIds({ userId: viewerUserId, db }) : new Set();
+  const viewerVisibilityClause = viewerUserId
+    ? `AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = message.id
+        )`
+    : '';
+  const viewerVisibilityParams = viewerUserId ? [viewerUserId, viewerUserId] : [];
+  const [{ feature, memberRole }, room, blockedUserIds] = await Promise.all([
+    assertCommunityChatReadAccess({ user, env, db }),
+    loadRoom(db, normalizedRoomSlug),
+    viewerUserId ? getCommunityChatBlockedUserIds({ userId: viewerUserId, db }) : Promise.resolve(new Set()),
+  ]);
 
   let beforeId = null;
   let focusId = null;
@@ -507,13 +663,10 @@ export async function listCommunityChatMessages({
          FROM community_chat_messages message
         WHERE message.room_id = ?
           AND message.public_id = ?
-          AND message.status = 'active'
-          AND NOT EXISTS (
-            SELECT 1 FROM community_chat_blocks blocked
-             WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
-          )
+          AND message.status IN ('active', 'recalled')
+          ${viewerVisibilityClause}
         LIMIT 1`,
-      [room.id, focusPublicId, viewerUserId],
+      [room.id, focusPublicId, ...viewerVisibilityParams],
     );
     if (!focusedMessage) {
       throw chatError(
@@ -531,14 +684,11 @@ export async function listCommunityChatMessages({
            FROM community_chat_messages message
           WHERE message.room_id = ?
             AND message.id > ?
-            AND message.status = 'active'
-            AND NOT EXISTS (
-              SELECT 1 FROM community_chat_blocks blocked
-               WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
-            )
+            AND message.status IN ('active', 'recalled')
+            ${viewerVisibilityClause}
           ORDER BY message.id ASC
           LIMIT 1`,
-        [room.id, focusId, viewerUserId],
+        [room.id, focusId, ...viewerVisibilityParams],
       ),
     );
   }
@@ -546,14 +696,13 @@ export async function listCommunityChatMessages({
   const cursorClause = beforeId !== null ? 'AND message.id < ?' : focusId !== null ? 'AND message.id <= ?' : '';
   const cursorId = beforeId ?? focusId;
   const params =
-    cursorId === null ? [room.id, viewerUserId, pageSize + 1] : [room.id, viewerUserId, cursorId, pageSize + 1];
+    cursorId === null
+      ? [room.id, ...viewerVisibilityParams, pageSize + 1]
+      : [room.id, ...viewerVisibilityParams, cursorId, pageSize + 1];
   const [rows] = await db.query(
     `${MESSAGE_SELECT}
-      WHERE message.room_id = ? AND message.status = 'active'
-        AND NOT EXISTS (
-          SELECT 1 FROM community_chat_blocks blocked
-           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
-        )
+      WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
+        ${viewerVisibilityClause}
         ${cursorClause}
       ORDER BY message.id DESC
       LIMIT ?`,
@@ -562,9 +711,24 @@ export async function listCommunityChatMessages({
   const hasMore = rows.length > pageSize;
   if (hasMore) rows.pop();
   rows.reverse();
-  const images = await loadMessageImages(db, rows);
+  const authorAvatarByUserId = new Map();
+  for (const row of rows) {
+    if (!row.authorHasAvatar || authorAvatarByUserId.has(row.userId)) continue;
+    authorAvatarByUserId.set(
+      row.userId,
+      `/api/community-chat/messages/${encodeURIComponent(row.publicId)}/author-avatar`,
+    );
+  }
+  const [images, likes] = await Promise.all([loadMessageImages(db, rows), loadMessageLikes(db, rows, viewerUserId)]);
   const items = rows.map((row) =>
-    toPublicMessage(row, viewerUserId, blockedUserIds, images.get(Number(row.internalId)) || []),
+    toPublicMessage(
+      row,
+      viewerUserId,
+      blockedUserIds,
+      images.get(Number(row.internalId)) || [],
+      likes.get(Number(row.internalId)) || {},
+      { memberRole, authorAvatar: authorAvatarByUserId.get(row.userId) || '' },
+    ),
   );
 
   return {
@@ -609,9 +773,11 @@ export async function createCommunityChatMessage({
 
   const connection = await db.getConnection();
   let expectedRoomId = null;
+  let viewerMemberRole = 'member';
   try {
     await connection.beginTransaction();
     const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    viewerMemberRole = memberRole;
     await assertCommunityChatPostingEnabled({ env, db: connection, lock: true });
     await assertCommunityChatPostingAllowed({ user, db: connection, lock: true });
     const room = await loadRoom(connection, normalizedRoomSlug, { lock: true });
@@ -628,7 +794,7 @@ export async function createCommunityChatMessage({
         existingImages,
         normalizedImagePublicIds,
       );
-      const message = await loadMessageByPublicId(connection, existing.publicId, user.id);
+      const message = await loadMessageByPublicId(connection, existing.publicId, user.id, memberRole);
       await connection.commit();
       return { message, idempotent: true };
     }
@@ -738,7 +904,7 @@ export async function createCommunityChatMessage({
          update_time = CURRENT_TIMESTAMP`,
       [room.id, user.id, messageId],
     );
-    const message = await loadMessageByPublicId(connection, publicId, user.id);
+    const message = await loadMessageByPublicId(connection, publicId, user.id, memberRole);
     await connection.commit();
     publishCommunityChatRealtimeEvent('message.created', {
       roomSlug: normalizedRoomSlug,
@@ -765,10 +931,239 @@ export async function createCommunityChatMessage({
           existingImages,
           normalizedImagePublicIds,
         );
-        const message = await loadMessageByPublicId(db, existing.publicId, user.id);
+        const message = await loadMessageByPublicId(db, existing.publicId, user.id, viewerMemberRole);
         if (message) return { message, idempotent: true };
       }
     }
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function toggleCommunityChatMessageLike({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    await assertCommunityChatPostingEnabled({ env, db: connection, lock: true });
+    await assertCommunityChatPostingAllowed({ user, db: connection, lock: true });
+    const target = await queryFirst(
+      connection,
+      `SELECT message.id, message.public_id AS publicId, room.slug AS roomSlug
+         FROM community_chat_messages message
+         JOIN community_chat_rooms room ON room.id = message.room_id
+        WHERE message.public_id = ?
+          AND message.status = 'active'
+          AND room.slug = ?
+          AND room.status = 'active'
+        LIMIT 1 FOR UPDATE`,
+      [normalizedMessagePublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG],
+    );
+    if (!target) {
+      throw chatError(
+        'COMMUNITY_CHAT_MESSAGE_NOT_INTERACTIVE',
+        409,
+        '这条消息已不可点赞',
+        'This message can no longer be liked',
+      );
+    }
+
+    const existing = await queryFirst(
+      connection,
+      `SELECT 1
+         FROM community_chat_message_likes
+        WHERE message_id = ? AND user_id = ?
+        LIMIT 1 FOR UPDATE`,
+      [target.id, user.id],
+    );
+    if (existing) {
+      await connection.query(`DELETE FROM community_chat_message_likes WHERE message_id = ? AND user_id = ?`, [
+        target.id,
+        user.id,
+      ]);
+    } else {
+      await connection.query(`INSERT INTO community_chat_message_likes (message_id, user_id) VALUES (?, ?)`, [
+        target.id,
+        user.id,
+      ]);
+    }
+    const likes = await loadMessageLikes(connection, [{ internalId: target.id }], user.id);
+    const interaction = likes.get(Number(target.id)) || { likeCount: 0, likedByMe: false, likePreview: [] };
+    await connection.commit();
+    publishCommunityChatRealtimeEvent('message.updated', {
+      roomSlug: target.roomSlug,
+      messagePublicId: target.publicId,
+      reason: 'like',
+    });
+    return {
+      publicId: target.publicId,
+      likedByMe: Boolean(interaction.likedByMe),
+      likeCount: Number(interaction.likeCount || 0),
+      likePreview: interaction.likePreview || [],
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function recallCommunityChatMessage({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    const canModerate = canModerateMessages(memberRole);
+    const target = await queryFirst(
+      connection,
+      `SELECT message.id, message.public_id AS publicId, message.user_id AS authorUserId,
+              message.status, message.recalled_by AS recalledBy,
+              TIMESTAMPDIFF(SECOND, message.create_time, NOW()) AS elapsedSeconds,
+              room.slug AS roomSlug
+         FROM community_chat_messages message
+         JOIN community_chat_rooms room ON room.id = message.room_id
+        WHERE message.public_id = ?
+          AND room.slug = ?
+          AND room.status = 'active'
+        LIMIT 1 FOR UPDATE`,
+      [normalizedMessagePublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG],
+    );
+    if (!target) {
+      throw chatError('COMMUNITY_CHAT_MESSAGE_NOT_FOUND', 404, '消息不存在', 'Message not found');
+    }
+    const isOwn = target.authorUserId === user.id;
+    if (!canModerate && !isOwn) {
+      throw chatError(
+        'MESSAGE_RECALL_FORBIDDEN',
+        403,
+        '只能撤回自己发送的消息',
+        'You can only recall your own message',
+      );
+    }
+    if (target.status === 'recalled' && (canModerate || target.recalledBy === user.id)) {
+      await connection.commit();
+      return { publicId: target.publicId, status: 'recalled', alreadyRecalled: true };
+    }
+    if (target.status !== 'active') {
+      throw chatError(
+        'MESSAGE_RECALL_UNAVAILABLE',
+        409,
+        '这条消息已不可撤回',
+        'This message can no longer be recalled',
+      );
+    }
+    if (!canModerate && Number(target.elapsedSeconds) > COMMUNITY_CHAT_RECALL_WINDOW_SECONDS) {
+      throw chatError(
+        'MESSAGE_RECALL_EXPIRED',
+        409,
+        '消息发送超过 2 分钟，已不能撤回',
+        'Messages can only be recalled within two minutes',
+      );
+    }
+
+    const [updated] = await connection.query(
+      `UPDATE community_chat_messages
+          SET status = 'recalled', recalled_at = NOW(), recalled_by = ?
+        WHERE id = ? AND status = 'active'`,
+      [user.id, target.id],
+    );
+    if (Number(updated?.affectedRows || 0) !== 1) {
+      throw chatError('MESSAGE_RECALL_CONFLICT', 409, '消息状态已变化，请刷新后重试', 'Message state changed');
+    }
+    // 通知中心只展示“直接回复 / 显式提及”。消息本身被撤回后，对应定向通知必须同步消失，
+    // 不能让收件人再通过通知读取已经撤回的正文摘要。
+    await connection.query(
+      `UPDATE notification
+          SET del_flag = 1, is_read = 1, read_time = COALESCE(read_time, NOW())
+        WHERE source_type = 'community_chat_message' AND source_id = ? AND del_flag = 0`,
+      [target.publicId],
+    );
+    if (canModerate) {
+      await connection.query(
+        `INSERT INTO community_chat_moderation_actions
+           (id, actor_user_id, target_user_id, message_id, action, reason, metadata)
+         VALUES (?, ?, ?, ?, 'recall_message', 'moderator_recall', JSON_OBJECT('previousMessageStatus', 'active'))`,
+        [randomUUID(), user.id, target.authorUserId, target.id],
+      );
+    }
+    const recalled = await queryFirst(
+      connection,
+      `SELECT recalled_at AS recalledAt FROM community_chat_messages WHERE id = ? LIMIT 1`,
+      [target.id],
+    );
+    await connection.commit();
+    publishCommunityChatRealtimeEvent('message.updated', {
+      roomSlug: target.roomSlug,
+      messagePublicId: target.publicId,
+      reason: 'recall',
+    });
+    return {
+      publicId: target.publicId,
+      status: 'recalled',
+      recalledAt: recalled?.recalledAt || null,
+      recalledByAdmin: canModerate && !isOwn,
+      alreadyRecalled: false,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/**
+ * “删除”是当前用户的本地会话整理动作：消息只从自己的聊天记录消失，其他成员仍可见。
+ * 真正改变全局可见性的动作是撤回（公开占位、管理员保留原文）或管理员全局隐藏。
+ */
+export async function deleteCommunityChatMessage({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+
+    const target = await queryFirst(
+      connection,
+      `SELECT message.id, message.public_id AS publicId, message.status
+         FROM community_chat_messages message
+         JOIN community_chat_rooms room ON room.id = message.room_id
+        WHERE message.public_id = ?
+          AND room.slug = ?
+          AND room.status = 'active'
+        LIMIT 1 FOR UPDATE`,
+      [normalizedMessagePublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG],
+    );
+    if (!target) {
+      throw chatError('COMMUNITY_CHAT_MESSAGE_NOT_FOUND', 404, '消息不存在', 'Message not found');
+    }
+    if (!['active', 'recalled'].includes(target.status)) {
+      throw chatError('MESSAGE_DELETE_UNAVAILABLE', 409, '这条消息已不可删除', 'This message can no longer be deleted');
+    }
+
+    const [deleted] = await connection.query(
+      `INSERT IGNORE INTO community_chat_message_deletions (message_id, user_id)
+       VALUES (?, ?)`,
+      [target.id, user.id],
+    );
+    await connection.query(
+      `UPDATE notification
+          SET del_flag = 1, is_read = 1, read_time = COALESCE(read_time, NOW())
+        WHERE user_id = ? AND source_type = 'community_chat_message' AND source_id = ? AND del_flag = 0`,
+      [user.id, target.publicId],
+    );
+    await connection.commit();
+    return {
+      publicId: target.publicId,
+      status: 'deleted_for_me',
+      alreadyDeleted: Number(deleted?.affectedRows || 0) === 0,
+    };
+  } catch (error) {
+    await connection.rollback();
     throw error;
   } finally {
     connection.release();
@@ -798,8 +1193,12 @@ export async function markCommunityChatRoomRead({ user, roomSlug, lastMessagePub
           `SELECT id, public_id AS publicId
              FROM community_chat_messages
             WHERE room_id = ? AND public_id = ? AND status = 'active'
+              AND NOT EXISTS (
+                SELECT 1 FROM community_chat_message_deletions deletion
+                 WHERE deletion.user_id = ? AND deletion.message_id = community_chat_messages.id
+              )
             LIMIT 1`,
-          [room.id, normalizedMessagePublicId],
+          [room.id, normalizedMessagePublicId, user.id],
         )
       : await queryFirst(
           connection,
@@ -833,11 +1232,15 @@ export async function markCommunityChatRoomRead({ user, roomSlug, lastMessagePub
             SELECT 1 FROM community_chat_blocks blocked
              WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
           )
+          AND NOT EXISTS (
+            SELECT 1 FROM community_chat_message_deletions deletion
+             WHERE deletion.user_id = ? AND deletion.message_id = message.id
+          )
           AND message.id > COALESCE(
             (SELECT last_read_message_id FROM community_chat_reads WHERE room_id = ? AND user_id = ? LIMIT 1),
             0
           )`,
-      [room.id, user.id, user.id, room.id, user.id],
+      [room.id, user.id, user.id, user.id, room.id, user.id],
     );
     await connection.commit();
     return {
@@ -861,4 +1264,6 @@ export const __test__ = {
   normalizePageSize,
   normalizePublicMessageId,
   normalizeRoomSlug,
+  canModerateMessages,
+  toPublicMessage,
 };

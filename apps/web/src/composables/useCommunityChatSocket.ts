@@ -7,7 +7,7 @@ export type CommunityChatRealtimeStatus = 'disabled' | 'connecting' | 'connected
 
 export interface CommunityChatRealtimeEvent {
   protocolVersion: 1;
-  type: 'message.created' | 'message.removed' | 'runtime.changed' | 'access.changed';
+  type: 'message.created' | 'message.updated' | 'message.removed' | 'runtime.changed' | 'access.changed';
   eventId: string;
   serverTime: string;
   payload: Record<string, unknown>;
@@ -35,7 +35,13 @@ export interface UseCommunityChatSocketOptions {
   random?: () => number;
 }
 
-const BROADCAST_EVENT_TYPES = new Set(['message.created', 'message.removed', 'runtime.changed', 'access.changed']);
+const BROADCAST_EVENT_TYPES = new Set([
+  'message.created',
+  'message.updated',
+  'message.removed',
+  'runtime.changed',
+  'access.changed',
+]);
 const MAX_SEEN_EVENT_IDS = 512;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -219,7 +225,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
       }
       if (!BROADCAST_EVENT_TYPES.has(event.type)) return;
       if (
-        (event.type === 'message.created' || event.type === 'message.removed') &&
+        (event.type === 'message.created' || event.type === 'message.updated' || event.type === 'message.removed') &&
         event.payload.roomSlug !== options.roomSlug.value
       ) {
         return;
