@@ -3857,10 +3857,9 @@
       ? false
       : 'aiEdit | myHeadingMenu | bold italic forecolor backcolor | removeformat | quicklink',
     quickbars_insert_toolbar: false,
-    // 系统长按菜单会按「图片对象选区 / 文字光标 / 剪贴板状态」动态增减项目，网页无法强制统一。
-    // 图片对象自己的快捷条因此提供一组确定性操作；文字长按仍完全交给系统菜单。
-    quickbars_image_toolbar:
-      'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
+    // 普通图片快捷条在 setup 中按节点类型自行注册，避免 quickbars 把图文组合里的图片
+    // 也识别成普通图片，再和图文组合设置条叠出第二层菜单。
+    quickbars_image_toolbar: false,
     contextmenu: false,
     // 移动端不启用 TinyMCE 的触摸缩放手柄；单击图片后由轻笺底部面板调整尺寸，
     // 避免长按图片/文字时抢走系统复制粘贴菜单。桌面端仍保留原生图片拖拽手柄。
@@ -4169,6 +4168,25 @@
         icon: 'ln-image-paragraph-after',
         tooltip: t('noteDetail.editor.imageParagraphAfter'),
         onAction: insertParagraphAfterSelectedRichImage,
+      });
+      editor.ui.registry.addContextToolbar('imageselection', {
+        predicate: (node: Node) => {
+          const element = node instanceof Element ? node : null;
+          const image =
+            element?.nodeName === 'IMG'
+              ? element
+              : element?.matches('figure.image')
+                ? element.querySelector('img')
+                : null;
+          return Boolean(
+            image &&
+            !image.closest('.mermaid-figure--companion, .ln-media-text') &&
+            editor.dom.isEditable(image.parentElement),
+          );
+        },
+        items:
+          'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
+        position: 'node',
       });
 
       let richImageNativeMenuBody: HTMLElement | null = null;
@@ -4870,25 +4888,24 @@
         const target = event.target;
         const figure = target instanceof Element ? target.closest<HTMLElement>('.mermaid-figure--companion') : null;
         setSelectedMermaidFigure(figure);
-        const mediaTextItem = target instanceof Element ? target.closest<HTMLElement>('.ln-media-text__item') : null;
+        // 图文组合的设置只属于图片本身。文字区必须保留 TinyMCE 原生光标与选区行为，
+        // 不能因为它和图片同属一个 figure 就弹出整组设置。
+        const mediaTextImage =
+          target instanceof Element ? target.closest<HTMLImageElement>('.ln-media-text__media img') : null;
+        const mediaTextItem = mediaTextImage?.closest<HTMLElement>('.ln-media-text__item') || null;
         const mediaTextBlock = mediaTextItem?.parentElement?.classList.contains('ln-media-text')
           ? mediaTextItem.parentElement
           : null;
-        if (
-          mediaTextItem &&
-          mediaTextBlock &&
-          !props.readonly &&
-          !(target instanceof Element && target.closest('a.ln-resource-link'))
-        ) {
-          const mediaArea = target instanceof Element ? target.closest('.ln-media-text__media') : null;
-          if (mediaArea) {
-            event.preventDefault();
-            event.stopPropagation();
-            focusRichMediaTextCaption(editor, mediaTextItem);
-          }
+        if (mediaTextImage && mediaTextItem && mediaTextBlock && !props.readonly) {
+          event.preventDefault();
+          event.stopPropagation();
+          focusRichMediaTextCaption(editor, mediaTextItem);
           openRichMediaTextToolbar(mediaTextBlock, mediaTextItem, { x: event.clientX, y: event.clientY });
           return;
         }
+        // TinyMCE 的正文可能运行在独立编辑上下文里，父页面的 outside-click 监听收不到这次点击；
+        // 因此点回文字或正文空白时在这里显式关闭，且不拦截后续光标定位。
+        if (richMediaTextToolbarVisible.value) closeRichMediaTextToolbar();
         const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
         if (
           image &&
@@ -4942,7 +4959,7 @@
       // 把两者统一到 12×20 的正文起点，空笔记获得焦点时 placeholder 与真实光标完全重合。
       '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
       '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
-      '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { flex:0 0 var(--ln-media-width); max-width:320px; min-width:0; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:100%!important; max-width:100%!important; height:auto!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
+      '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { flex:0 0 var(--ln-media-width); min-width:0; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:100%!important; max-width:100%!important; height:auto!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
       '.note-editor-body .ln-ai-selection-pending, .mce-content-body .ln-ai-selection-pending { display:inline-flex; width:18px; height:18px; align-items:center; justify-content:center; margin-left:5px; border:1px solid var(--primary-color, #615ced); border-radius:999px; background:var(--background-color, #fff); vertical-align:text-bottom; box-sizing:border-box; } .note-editor-body .ln-ai-selection-pending__spinner, .mce-content-body .ln-ai-selection-pending__spinner { width:9px; height:9px; border:2px solid var(--surface-border-color, #d7d9e0); border-top-color:var(--primary-color, #615ced); border-radius:50%; box-sizing:border-box; animation:ln-ai-selection-spin .7s linear infinite; } @keyframes ln-ai-selection-spin { to { transform:rotate(360deg); } }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
@@ -5213,7 +5230,6 @@
 
   #editor-container .ln-media-text__media {
     flex: 0 0 var(--ln-media-width);
-    max-width: 320px;
     min-width: 0;
 
     img {
@@ -6372,40 +6388,62 @@
       padding: 7px;
     }
 
-    #editor-container .ln-media-text__media {
-      max-width: none;
-    }
-
     .rich-media-text-popover {
+      width: min(360px, calc(100vw - 20px));
       max-height: calc(100vh - 16px);
       overflow: auto;
+      padding: 6px;
     }
 
     .rich-media-text-toolbar {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      align-items: end;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-items: center;
+      gap: 6px;
 
-      &__heading,
-      &__actions {
-        grid-column: 1 / -1;
+      &__heading {
+        display: none;
       }
 
       &__field {
+        display: block;
+        flex-basis: auto;
         min-width: 0;
+
+        > span {
+          display: none;
+        }
+
+        .select-trigger {
+          height: 36px;
+          padding-right: 26px;
+          padding-left: 9px;
+        }
+
+        .select-text {
+          font-size: 13px;
+        }
       }
 
       &__actions {
+        grid-column: 1 / -1;
         display: grid;
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
         margin-left: 0;
 
         .b_btn {
           width: 100%;
+          min-width: 0;
           min-height: 40px;
+          height: 40px;
+          gap: 4px;
+          padding: 0 6px;
+          overflow: hidden;
+          font-size: 12px;
 
           &:last-child {
-            grid-column: 1 / -1;
+            grid-column: auto;
           }
         }
       }

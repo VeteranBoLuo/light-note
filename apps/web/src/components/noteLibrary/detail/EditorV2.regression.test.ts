@@ -183,6 +183,26 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain("operation: '在 Markdown 中插入图文组合'");
   });
 
+  it('图文组合只有点击图片才打开设置，移动端使用两行紧凑操作条', () => {
+    expect(editorSource).toContain("target.closest<HTMLImageElement>('.ln-media-text__media img')");
+    expect(editorSource).not.toContain("target.closest('.ln-media-text__media')");
+    expect(editorSource).toMatch(
+      /if \(mediaTextImage && mediaTextItem && mediaTextBlock && !props\.readonly\)[\s\S]*?openRichMediaTextToolbar/u,
+    );
+    expect(editorSource).toContain('if (richMediaTextToolbarVisible.value) closeRichMediaTextToolbar()');
+    expect(editorSource).toContain('quickbars_image_toolbar: false');
+    expect(editorSource).toContain("editor.ui.registry.addContextToolbar('imageselection'");
+    expect(editorSource).toContain("!image.closest('.mermaid-figure--companion, .ln-media-text')");
+    expect(editorSource).not.toContain('max-width:320px');
+    expect(editorSource).not.toContain('max-width: 320px');
+    expect(editorSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.rich-media-text-popover\s*\{[\s\S]*?width:\s*min\(360px,[\s\S]*?padding:\s*6px/u,
+    );
+    expect(editorSource).toMatch(
+      /\.rich-media-text-toolbar[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/u,
+    );
+  });
+
   it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {
     expect(editorSource).toContain('adjustContextToolbarAwayFromMainToolbar');
     expect(editorSource).toContain("editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment)");

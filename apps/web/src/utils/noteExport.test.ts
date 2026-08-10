@@ -131,6 +131,9 @@ describe('buildNoteExportHtml', () => {
     expect(doc).toContain("img[data-ln-size='medium']");
     expect(doc).toContain('.ln-media-text__item');
     expect(doc).toContain("data-ln-media-position='right'");
+    expect(doc).toContain("data-ln-media-width='30'");
+    expect(doc).toContain("data-ln-media-width='42'");
+    expect(doc).not.toContain('max-width: 320px');
     expect(doc).toContain('.ln-text-gradient');
     expect(doc).toContain('.ln-rich-effect-float');
   });

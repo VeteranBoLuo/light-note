@@ -85,8 +85,6 @@
   const showMobileHomeExtra = computed(() => bookmark.isMobile && isMobileHomeRoute(route.name, user.preferences));
   const showGuestRegister = computed(() => !user.adminContext && !user.visitorWorkspace && user.role === 'visitor');
   const moreMenuOptions = computed(() => [
-    { label: t('navigation.resourceCenter'), icon: icon.navigation.portal, function: resourceCenterClick },
-    { label: t('navigation.tag'), icon: icon.resource.tag, function: tagManageClick },
     ...(user.role === 'visitor'
       ? [{ label: t('navigation.coBuild'), icon: icon.support.heart, function: coBuildClick }]
       : []),
@@ -112,16 +110,6 @@
   function officialSiteClick() {
     router.push('/');
     recordOperation({ module: '导航栏', operation: '访问官方首页' });
-  }
-
-  function resourceCenterClick() {
-    router.push('/search');
-    recordOperation({ module: '导航栏', operation: '打开资源中心' });
-  }
-
-  function tagManageClick() {
-    router.push('/manage/tagMg');
-    recordOperation({ module: '导航栏', operation: '打开标签管理' });
   }
 
   function coBuildClick() {

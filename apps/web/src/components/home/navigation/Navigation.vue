@@ -78,6 +78,24 @@
             ></div
           >
 
+          <div
+            id="nav-tag-entry"
+            :style="{ color: route.path.startsWith('/manage/tag') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.tag"
+            @click="router.push('/manage/tagMg')"
+            >{{ $t('navigation.tag') }}</div
+          >
+
+          <div
+            id="nav-resource-center-entry"
+            :style="{ color: route.path.startsWith('/search') ? '#615ced' : '' }"
+            style="font-size: 14px; cursor: pointer"
+            v-click-log="OPERATION_LOG_MAP.navigation.resourceCenter"
+            @click="router.push('/search')"
+            >{{ $t('navigation.resourceCenter') }}</div
+          >
+
           <BButton
             id="nav-community-entry"
             class="navigation-community-entry"
@@ -87,7 +105,12 @@
             v-click-log="{ module: '导航栏', operation: '打开公共聊天室' }"
             @click="router.push('/community-chat')"
           >
-            <SvgIcon :src="icon.ai.conversations" size="16" aria-hidden="true" />
+            <SvgIcon
+              class="navigation-community-entry__icon"
+              :src="icon.ai.conversations"
+              size="16"
+              aria-hidden="true"
+            />
             <span>{{ $t('navigation.communityChat') }}</span>
             <span
               v-if="communityUnreadTotal > 0"
@@ -235,25 +258,23 @@
     font-size: 13px;
     font-weight: 650;
     white-space: nowrap;
-    transform: translateY(0);
     transition:
       color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
       background-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
-      border-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1),
-      transform 180ms cubic-bezier(0.2, 0.65, 0.3, 1);
+      border-color 220ms cubic-bezier(0.2, 0.65, 0.3, 1);
+  }
+  .navigation-community-entry__icon {
+    color: var(--navigation-community-icon-fg);
   }
   .navigation-community-entry:hover {
-    color: var(--navigation-community-fg);
+    color: var(--navigation-community-hover-fg);
     border-color: var(--navigation-community-hover-border) !important;
     background: var(--navigation-community-hover-bg) !important;
   }
   .navigation-community-entry.is-active {
-    color: var(--navigation-community-fg);
+    color: var(--navigation-community-active-fg);
     border-color: var(--navigation-community-active-border) !important;
     background: var(--navigation-community-active-bg) !important;
-  }
-  .navigation-community-entry:hover:not(.is-active) {
-    transform: translateY(-1px);
   }
   .navigation-community-entry__badge {
     position: absolute;
@@ -358,12 +379,8 @@
     .navigation-community-entry {
       transition: none;
     }
-
-    .navigation-community-entry:hover:not(.is-active) {
-      transform: none;
-    }
   }
-  @media (min-width: 768px) and (max-width: 1199px) {
+  @media (min-width: 768px) and (max-width: 1399px) {
     .navigation-title {
       width: 140px;
     }

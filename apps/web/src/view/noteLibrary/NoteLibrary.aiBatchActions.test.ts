@@ -307,7 +307,11 @@ describe('笔记库页面树交互接线', () => {
 
   it('目录菜单支持置顶切换，卡片和列表把标签与层级信息放在稳定区域', () => {
     expect(source).toContain('@toggle-top="toggleTreeNoteTop"');
-    expect(source).toMatch(/function toggleTreeNoteTop[\s\S]*toggleNoteTop\(note, true\)/);
+    expect(source).toMatch(/function toggleTreeNoteTop[\s\S]*toggleNoteTop\(note\)/);
+    expect(source).toMatch(
+      /noteWorkspace\.updateNoteMetadata\(noteId, \{ isTop: note\.isTop \}\)[\s\S]*Promise\.all\(\[reloadNotes\(\), refreshTree\(\)\]\)/,
+    );
+    expect(source).toMatch(/noteList\.value = groupedNotes;[\s\S]{0,180}await refreshTree\(\)/);
     expect(cardSource).toMatch(/class="note-footer-chips"[\s\S]*class="note-tags"[\s\S]*class="note-child-count"/);
     expect(listItemSource).toMatch(/\.note-tags\s*\{[\s\S]{0,120}order: -1/);
     expect(listItemSource).toMatch(/&\.is-mobile[\s\S]*\.note-tags\s*\{[\s\S]{0,80}order: 0/);

@@ -71,6 +71,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 const { default: Navigation } = await import('./Navigation.vue');
 const navigationSource = readFileSync(resolve(process.cwd(), 'src/components/home/navigation/Navigation.vue'), 'utf8');
+const rightAreaSource = readFileSync(resolve(process.cwd(), 'src/components/home/navigation/RightArea.vue'), 'utf8');
 const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
 let cleanup: (() => void) | undefined;
@@ -110,11 +111,15 @@ afterEach(() => {
 });
 
 describe('Navigation', () => {
-  it('聊天室选中态沿用同一文字色并通过柔和 tonal 背景递进', () => {
+  it('聊天室入口默认弱化为普通导航，hover 轻量反馈且仅选中态保留完整 tonal 胶囊', () => {
     expect(navigationSource).toContain('background: var(--navigation-community-bg) !important');
+    expect(navigationSource).toContain('color: var(--navigation-community-hover-fg)');
     expect(navigationSource).toContain('background: var(--navigation-community-hover-bg) !important');
+    expect(navigationSource).toContain('color: var(--navigation-community-active-fg)');
     expect(navigationSource).toContain('background: var(--navigation-community-active-bg) !important');
+    expect(navigationSource).not.toContain('transform: translateY(-1px)');
     expect(navigationSource).not.toMatch(/navigation-community-entry\.is-active\s*\{[^}]*color:\s*#fff/su);
+    expect(themeSource.match(/--navigation-community-bg:\s*transparent/gu)).toHaveLength(2);
     expect(themeSource.match(/--navigation-community-active-bg:/gu)).toHaveLength(2);
   });
 
@@ -134,15 +139,40 @@ describe('Navigation', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/community-chat');
   });
 
-  it('PC 顶栏把聊天室固定放在待办右侧', async () => {
+  it('PC 顶栏按待办、标签、资源中心、聊天室的顺序提供一级入口', async () => {
     const host = await mountNavigation();
     const navigationItems = Array.from(host.querySelector('.navigation-tab')?.children || []);
     const todoEntry = host.querySelector('#nav-todo-entry');
+    const tagEntry = host.querySelector('#nav-tag-entry');
+    const resourceCenterEntry = host.querySelector('#nav-resource-center-entry');
     const communityEntry = host.querySelector('#nav-community-entry');
 
     expect(todoEntry).not.toBeNull();
+    expect(tagEntry?.textContent?.trim()).toBe('标签');
+    expect(resourceCenterEntry?.textContent?.trim()).toBe('资源中心');
     expect(communityEntry).not.toBeNull();
-    expect(navigationItems.indexOf(communityEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
+    expect(navigationItems.indexOf(tagEntry as Element)).toBe(navigationItems.indexOf(todoEntry as Element) + 1);
+    expect(navigationItems.indexOf(resourceCenterEntry as Element)).toBe(
+      navigationItems.indexOf(tagEntry as Element) + 1,
+    );
+    expect(navigationItems.indexOf(communityEntry as Element)).toBe(
+      navigationItems.indexOf(resourceCenterEntry as Element) + 1,
+    );
+
+    tagEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/manage/tagMg');
+
+    resourceCenterEntry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/search');
+  });
+
+  it('标签和资源中心提升为一级入口后不再重复出现在更多菜单', () => {
+    expect(rightAreaSource).not.toContain("label: t('navigation.resourceCenter')");
+    expect(rightAreaSource).not.toContain("label: t('navigation.tag')");
+    expect(rightAreaSource).not.toContain('function resourceCenterClick');
+    expect(rightAreaSource).not.toContain('function tagManageClick');
   });
 
   it('PC 顶栏保留书签、笔记和云空间三个高频资料入口，可一键切换', async () => {
@@ -151,7 +181,8 @@ describe('Navigation', () => {
     expect(host.querySelector('#nav-bookmark-entry')?.textContent?.trim()).toBe('书签');
     expect(host.querySelector('#nav-note-entry')?.textContent?.trim()).toBe('笔记');
     expect(host.querySelector('#nav-cloud-entry')?.textContent?.trim()).toBe('云空间');
-    expect(host.textContent).not.toContain('资源中心');
+    expect(host.querySelector('#nav-tag-entry')?.textContent?.trim()).toBe('标签');
+    expect(host.querySelector('#nav-resource-center-entry')?.textContent?.trim()).toBe('资源中心');
 
     host.querySelector<HTMLElement>('#nav-bookmark-entry')?.click();
     await nextTick();
