@@ -193,8 +193,14 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain('quickbars_image_toolbar: false');
     expect(editorSource).toContain("editor.ui.registry.addContextToolbar('imageselection'");
     expect(editorSource).toContain("!image.closest('.mermaid-figure--companion, .ln-media-text')");
-    expect(editorSource).not.toContain('max-width:320px');
-    expect(editorSource).not.toContain('max-width: 320px');
+    expect(editorSource).toContain('--ln-media-max-width:280px');
+    expect(editorSource).toContain('--ln-media-max-height:220px');
+    expect(editorSource).toContain('--ln-media-max-width:340px');
+    expect(editorSource).toContain('--ln-media-max-height:260px');
+    expect(editorSource).toContain('--ln-media-max-width: 400px');
+    expect(editorSource).toContain('--ln-media-max-height: 300px');
+    expect(editorSource).toContain('max-height:var(--ln-media-max-height)!important');
+    expect(editorSource).toContain('justify-content: center');
     expect(editorSource).toMatch(
       /@media \(max-width: 767px\)[\s\S]*?\.rich-media-text-popover\s*\{[\s\S]*?width:\s*min\(360px,[\s\S]*?padding:\s*6px/u,
     );

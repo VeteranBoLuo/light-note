@@ -209,6 +209,8 @@
       <!-- ==================== 页脚:备案与联系 ==================== -->
       <footer class="dl-foot">
         <div class="dl-foot-links">
+          <a href="/about.html">{{ t('download.about') }}</a>
+          <span class="dl-sep">|</span>
           <a href="/legal/privacy-policy.html">{{ t('download.privacyPolicy') }}</a>
           <span class="dl-sep">|</span>
           <a href="/legal/user-agreement.html">{{ t('download.userAgreement') }}</a>
@@ -222,8 +224,16 @@
             <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ APP_FILING_NUMBER }}</a>
           </span>
           <span class="dl-filing-item">
+            {{ t('download.websiteFilingNameLabel', { name: WEBSITE_FILING_NAME }) }}
+          </span>
+          <span class="dl-filing-item">
             {{ t('download.icpLabel') }}
             <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
+          </span>
+          <span v-if="hasPublicSecurityFiling" class="dl-filing-item">
+            <a :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+              {{ PUBLIC_SECURITY_FILING_NUMBER }}
+            </a>
           </span>
         </div>
       </footer>
@@ -249,8 +259,14 @@
     MIIT_QUERY_URL,
     OFFICIAL_HOST,
     WEBSITE_ICP_NUMBER,
+    WEBSITE_FILING_NAME,
     formatFileSize,
   } from '@/config/androidRelease.ts';
+  import {
+    PUBLIC_SECURITY_FILING_NUMBER,
+    PUBLIC_SECURITY_QUERY_URL,
+    hasPublicSecurityFiling,
+  } from '@/config/siteCompliance.ts';
 
   const { t, tm, rt } = useI18n();
   const router = useRouter();

@@ -132,6 +132,11 @@ export interface CommunityChatMessagePage {
   serverTime: string;
 }
 
+export interface CommunityChatPinnedMessage {
+  roomSlug: string;
+  message: CommunityChatMessage | null;
+}
+
 export interface SendCommunityChatMessageInput {
   clientRequestId: string;
   content: string;
@@ -257,6 +262,9 @@ export const getCommunityChatMessages = (
   params: { before?: string; focus?: string; limit?: number } = {},
 ) => apiBaseGet(`${roomPath(roomSlug)}/messages`, params, { silent: true });
 
+export const getCommunityChatPinnedMessage = (roomSlug: string) =>
+  apiBaseGet(`${roomPath(roomSlug)}/pin`, undefined, { silent: true });
+
 export const getCommunityChatMessageAuthorProfile = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile`, undefined, {
     silent: true,
@@ -281,6 +289,12 @@ const messagePath = (messagePublicId: string) => `/api/community-chat/messages/$
 
 export const toggleCommunityChatMessageLike = (messagePublicId: string) =>
   apiBasePut(`${messagePath(messagePublicId)}/like`, {}, { silent: true });
+
+export const pinCommunityChatMessage = (messagePublicId: string) =>
+  apiBasePost(`${messagePath(messagePublicId)}/pin`, {}, { silent: true });
+
+export const unpinCommunityChatMessage = (messagePublicId: string) =>
+  apiBasePost(`${messagePath(messagePublicId)}/unpin`, {}, { silent: true });
 
 export const recallCommunityChatMessage = (messagePublicId: string) =>
   apiBasePost(`${messagePath(messagePublicId)}/recall`, {}, { silent: true });

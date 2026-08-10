@@ -435,6 +435,12 @@ export async function reviewCommunityChatReport({ user, reportId, action, note, 
         `UPDATE community_chat_messages SET status = 'hidden' WHERE id = ? AND status = 'active'`,
         [report.messageId],
       );
+      await connection.query(
+        `UPDATE community_chat_rooms
+            SET pinned_message_id = NULL, pinned_by = NULL, pinned_at = NULL
+          WHERE pinned_message_id = ?`,
+        [report.messageId],
+      );
     }
 
     if (normalizedAction === 'mute_author') {

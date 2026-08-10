@@ -4959,7 +4959,7 @@
       // 把两者统一到 12×20 的正文起点，空笔记获得焦点时 placeholder 与真实光标完全重合。
       '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
       '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
-      '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { flex:0 0 var(--ln-media-width); min-width:0; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:100%!important; max-width:100%!important; height:auto!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
+      '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; --ln-media-max-width:340px; --ln-media-max-height:260px; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; --ln-media-max-width:280px; --ln-media-max-height:220px; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; --ln-media-max-width:400px; --ln-media-max-height:300px; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { display:flex; flex:0 1 var(--ln-media-width); max-width:var(--ln-media-max-width); min-width:0; justify-content:center; align-items:flex-start; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:auto!important; max-width:100%!important; height:auto!important; max-height:var(--ln-media-max-height)!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
       '.note-editor-body .ln-ai-selection-pending, .mce-content-body .ln-ai-selection-pending { display:inline-flex; width:18px; height:18px; align-items:center; justify-content:center; margin-left:5px; border:1px solid var(--primary-color, #615ced); border-radius:999px; background:var(--background-color, #fff); vertical-align:text-bottom; box-sizing:border-box; } .note-editor-body .ln-ai-selection-pending__spinner, .mce-content-body .ln-ai-selection-pending__spinner { width:9px; height:9px; border:2px solid var(--surface-border-color, #d7d9e0); border-top-color:var(--primary-color, #615ced); border-radius:50%; box-sizing:border-box; animation:ln-ai-selection-spin .7s linear infinite; } @keyframes ln-ai-selection-spin { to { transform:rotate(360deg); } }',
       // 资源 chip 用普通 inline box，不参与行高计算；避免插入后把整行文字向下撑开。
       '.note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline; margin:0 2px; padding:0 6px; line-height:inherit; vertical-align:baseline; overflow-wrap:anywhere; -webkit-box-decoration-break:clone; box-decoration-break:clone; }',
@@ -5196,16 +5196,22 @@
 
   #editor-container .ln-media-text {
     --ln-media-width: 36%;
+    --ln-media-max-width: 340px;
+    --ln-media-max-height: 260px;
     display: block;
     clear: both;
     margin: 14px 0;
 
     &[data-ln-media-width='30'] {
       --ln-media-width: 30%;
+      --ln-media-max-width: 280px;
+      --ln-media-max-height: 220px;
     }
 
     &[data-ln-media-width='42'] {
       --ln-media-width: 42%;
+      --ln-media-max-width: 400px;
+      --ln-media-max-height: 300px;
     }
 
     &[data-ln-media-position='right'] .ln-media-text__item {
@@ -5229,15 +5235,20 @@
   }
 
   #editor-container .ln-media-text__media {
-    flex: 0 0 var(--ln-media-width);
+    display: flex;
+    flex: 0 1 var(--ln-media-width);
+    max-width: var(--ln-media-max-width);
     min-width: 0;
+    align-items: flex-start;
+    justify-content: center;
 
     img {
       display: block !important;
       float: none !important;
-      width: 100% !important;
+      width: auto !important;
       max-width: 100% !important;
       height: auto !important;
+      max-height: var(--ln-media-max-height) !important;
       margin: 0 !important;
       border-radius: 8px;
       object-fit: contain;

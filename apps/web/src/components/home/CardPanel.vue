@@ -94,9 +94,17 @@
     <div class="beian-wrap">
       <span class="beian-copy">{{ $t('landing.copyright') }}</span>
       <span class="beian-separator">|</span>
-      <a class="icp-beian-link" href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-        网站备案号：蜀ICP备2026017699号-1
+      <span>{{ $t('landing.websiteFilingName', { name: WEBSITE_FILING_NAME }) }}</span>
+      <span class="beian-separator">|</span>
+      <a class="icp-beian-link" :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">
+        {{ $t('landing.websiteIcpNumber', { number: WEBSITE_ICP_NUMBER }) }}
       </a>
+      <template v-if="hasPublicSecurityFiling">
+        <span class="beian-separator">|</span>
+        <a class="icp-beian-link" :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+          {{ PUBLIC_SECURITY_FILING_NUMBER }}
+        </a>
+      </template>
     </div>
   </div>
 </template>
@@ -112,6 +120,14 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import {
+    MIIT_QUERY_URL,
+    PUBLIC_SECURITY_FILING_NUMBER,
+    PUBLIC_SECURITY_QUERY_URL,
+    WEBSITE_FILING_NAME,
+    WEBSITE_ICP_NUMBER,
+    hasPublicSecurityFiling,
+  } from '@/config/siteCompliance.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { copyTextToClipboard } from '@/utils/common.ts';
   import { useI18n } from 'vue-i18n';

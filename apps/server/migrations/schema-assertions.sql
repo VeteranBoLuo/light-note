@@ -662,6 +662,9 @@ FROM (
   SELECT 'community_chat_rooms' tab, 'slug' col, 'community_chat_rooms.slug' n UNION ALL
   SELECT 'community_chat_rooms', 'default_notification_level', 'community_chat_rooms.default_notification_level' UNION ALL
   SELECT 'community_chat_rooms', 'last_message_id', 'community_chat_rooms.last_message_id' UNION ALL
+  SELECT 'community_chat_rooms', 'pinned_message_id', 'community_chat_rooms.pinned_message_id' UNION ALL
+  SELECT 'community_chat_rooms', 'pinned_by', 'community_chat_rooms.pinned_by' UNION ALL
+  SELECT 'community_chat_rooms', 'pinned_at', 'community_chat_rooms.pinned_at' UNION ALL
   SELECT 'community_chat_access_requests', 'user_id', 'community_chat_access_requests.user_id' UNION ALL
   SELECT 'community_chat_access_requests', 'status', 'community_chat_access_requests.status' UNION ALL
   SELECT 'community_chat_members', 'status', 'community_chat_members.status' UNION ALL
@@ -697,7 +700,8 @@ WHERE NOT (actual.is_nullable='NO' AND actual.column_default=expected.default_va
 SELECT '[31] invalid_community_chat_account_id_collation' AS check_name,
   CONCAT(expected.n, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
 FROM (
-  SELECT 'community_chat_access_requests' tab, 'user_id' col, 'community_chat_access_requests.user_id' n UNION ALL
+  SELECT 'community_chat_rooms' tab, 'pinned_by' col, 'community_chat_rooms.pinned_by' n UNION ALL
+  SELECT 'community_chat_access_requests', 'user_id', 'community_chat_access_requests.user_id' UNION ALL
   SELECT 'community_chat_access_requests', 'reviewed_by', 'community_chat_access_requests.reviewed_by' UNION ALL
   SELECT 'community_chat_members', 'user_id', 'community_chat_members.user_id' UNION ALL
   SELECT 'community_chat_members', 'invited_by', 'community_chat_members.invited_by' UNION ALL

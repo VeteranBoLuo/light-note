@@ -12,12 +12,15 @@ import {
   __test__,
   createCommunityChatMessage,
   deleteCommunityChatMessage,
+  getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorAvatar,
   getCommunityChatMessageAuthorProfile,
   listCommunityChatMessages,
   markCommunityChatRoomRead,
+  pinCommunityChatMessage,
   recallCommunityChatMessage,
   toggleCommunityChatMessageLike,
+  unpinCommunityChatMessage,
 } from './communityChatMessageService.js';
 import { communityChatRealtimeBroker } from '../communityChat/realtimeBroker.js';
 
@@ -331,6 +334,218 @@ describe('communityChatMessageService', () => {
 
     expect(result.items[0]).toMatchObject({ isOwn: false, author: { name: '薄荷', frameId: 'frame_mint' } });
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('FROM community_chat_blocks WHERE'))).toBe(false);
+  });
+
+  it('游客可读取当前置顶消息', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('FROM community_chat_rooms room')) {
+          return [
+            [
+              {
+                id: 2,
+                slug: 'general',
+                type: 'text',
+                status: 'active',
+                slowModeSeconds: 0,
+                pinnedMessageId: 10,
+                pinnedMessagePublicId: 'message-pinned',
+              },
+            ],
+            [],
+          ];
+        }
+        if (text.includes('FROM community_chat_messages pinned')) {
+          expect(params).toEqual([10, 2]);
+          return [[{ publicId: 'message-pinned' }], []];
+        }
+        if (text.includes('WHERE message.public_id = ? LIMIT 1')) {
+          return [[messageRow({ publicId: 'message-pinned', content: '请先阅读这条消息' })], []];
+        }
+        if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    await expect(
+      getCommunityChatPinnedMessage({
+        user: { id: 'visitor-1', role: 'visitor' },
+        roomSlug: 'general',
+        env: PUBLIC_ENV,
+        db,
+      }),
+    ).resolves.toMatchObject({
+      roomSlug: 'general',
+      message: { publicId: 'message-pinned', content: '请先阅读这条消息' },
+    });
+  });
+
+  it('个人删除或屏蔽的置顶消息不会继续向该用户展示摘要', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('FROM community_chat_members')) return [[], []];
+        if (text.includes('FROM community_chat_rooms room')) {
+          return [
+            [
+              {
+                id: 2,
+                slug: 'general',
+                type: 'text',
+                status: 'active',
+                slowModeSeconds: 0,
+                pinnedMessageId: 10,
+                pinnedMessagePublicId: 'message-pinned',
+              },
+            ],
+            [],
+          ];
+        }
+        if (text.includes('FROM community_chat_messages pinned')) {
+          expect(text).toContain('community_chat_blocks');
+          expect(text).toContain('community_chat_message_deletions');
+          expect(params).toEqual([10, 2, 'user-1', 'user-1']);
+          return [[], []];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    await expect(
+      getCommunityChatPinnedMessage({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        env: PUBLIC_ENV,
+        db,
+      }),
+    ).resolves.toEqual({ roomSlug: 'general', message: null });
+  });
+
+  it('Root 置顶新消息会替换旧指针、写入不可变治理审计并广播实时失效事件', async () => {
+    const realtimeListener = vi.fn();
+    const unsubscribeRealtime = communityChatRealtimeBroker.subscribe(realtimeListener);
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_rooms room')) {
+        return [
+          [
+            {
+              id: 2,
+              slug: 'general',
+              type: 'text',
+              status: 'active',
+              slowModeSeconds: 0,
+              pinnedMessageId: 9,
+              pinnedMessagePublicId: 'message-old-pin',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('WHERE message.public_id = ? AND message.room_id = ?')) {
+        expect(params).toEqual(['message-new-pin', 2]);
+        return [[{ id: 10, publicId: 'message-new-pin', authorUserId: 'user-2' }], []];
+      }
+      if (text.includes('SET pinned_message_id = ?')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_moderation_actions')) return [{ affectedRows: 1 }, []];
+      if (text.includes('WHERE message.public_id = ? LIMIT 1')) {
+        return [[messageRow({ publicId: 'message-new-pin', content: '新的置顶消息' })], []];
+      }
+      if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await pinCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      messagePublicId: 'message-new-pin',
+      env: MESSAGE_ENV,
+      db,
+    });
+    unsubscribeRealtime();
+
+    expect(result).toMatchObject({
+      roomSlug: 'general',
+      message: { publicId: 'message-new-pin' },
+      alreadyPinned: false,
+      replacedMessagePublicId: 'message-old-pin',
+    });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes("'pin_message', 'moderator_pin'"))).toBe(
+      true,
+    );
+    expect(realtimeListener).toHaveBeenCalledWith({
+      event: expect.objectContaining({
+        type: 'message.updated',
+        payload: {
+          roomSlug: 'general',
+          messagePublicId: 'message-new-pin',
+          reason: 'pin',
+        },
+      }),
+      internal: {},
+    });
+  });
+
+  it('普通成员不能通过公有消息 ID 越权置顶', async () => {
+    const connection = createConnection(async (sql) => {
+      if (String(sql).includes('FROM community_chat_members')) return [[MEMBER], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    await expect(
+      pinCommunityChatMessage({
+        user: { id: 'user-1', role: 'user' },
+        messagePublicId: 'message-new-pin',
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_PIN_FORBIDDEN', status: 403 });
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('取消置顶会校验当前指针并写入治理审计', async () => {
+    const connection = createConnection(async (sql) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_rooms room')) {
+        return [
+          [
+            {
+              id: 2,
+              slug: 'general',
+              type: 'text',
+              status: 'active',
+              pinnedMessageId: 10,
+              pinnedMessagePublicId: 'message-pinned',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('SELECT id, user_id AS authorUserId')) return [[{ id: 10, authorUserId: 'user-2' }], []];
+      if (text.includes('SET pinned_message_id = NULL')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_moderation_actions')) return [{ affectedRows: 1 }, []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    await expect(
+      unpinCommunityChatMessage({
+        user: { id: 'root-1', role: 'root' },
+        messagePublicId: 'message-pinned',
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).resolves.toMatchObject({ publicId: 'message-pinned', alreadyUnpinned: false });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(
+      connection.query.mock.calls.some(([sql]) => String(sql).includes("'unpin_message', 'moderator_unpin'")),
+    ).toBe(true);
   });
 
   it('发送消息在同一事务复核资格、落库、推进房间游标和自己的阅读位置', async () => {
@@ -864,6 +1079,7 @@ describe('communityChatMessageService', () => {
         ];
       }
       if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
+      if (text.includes('SET pinned_message_id = NULL')) return [{ affectedRows: 0 }, []];
       if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
       if (text.includes('SELECT recalled_at AS recalledAt')) {
         return [[{ recalledAt: '2026-08-10T10:00:00.000Z' }], []];
@@ -944,6 +1160,7 @@ describe('communityChatMessageService', () => {
         ];
       }
       if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
+      if (text.includes('SET pinned_message_id = NULL')) return [{ affectedRows: 1 }, []];
       if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
       if (text.includes('INSERT INTO community_chat_moderation_actions')) return [{ affectedRows: 1 }, []];
       if (text.includes('SELECT recalled_at AS recalledAt')) return [[{ recalledAt: new Date() }], []];

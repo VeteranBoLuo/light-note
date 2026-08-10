@@ -7,6 +7,7 @@ import workspaceSource from './CommunityChatWorkspace.vue?raw';
 
 const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
+  getPinnedMessage: vi.fn(),
   getAuthorProfile: vi.fn(),
   uploadImage: vi.fn(),
   discardImage: vi.fn(),
@@ -17,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   reportMessage: vi.fn(),
   toggleLike: vi.fn(),
   recallMessage: vi.fn(),
+  pinMessage: vi.fn(),
+  unpinMessage: vi.fn(),
   blockAuthor: vi.fn(),
   getBlocks: vi.fn(),
   unblockUser: vi.fn(),
@@ -47,6 +50,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/api/communityChatApi', () => ({
   createCommunityChatClientRequestId: () => 'request-fixed-0001',
   getCommunityChatMessages: mocks.getMessages,
+  getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   uploadCommunityChatImage: mocks.uploadImage,
   discardCommunityChatImage: mocks.discardImage,
@@ -56,6 +60,8 @@ vi.mock('@/api/communityChatApi', () => ({
   reportCommunityChatMessage: mocks.reportMessage,
   toggleCommunityChatMessageLike: mocks.toggleLike,
   recallCommunityChatMessage: mocks.recallMessage,
+  pinCommunityChatMessage: mocks.pinMessage,
+  unpinCommunityChatMessage: mocks.unpinMessage,
   deleteCommunityChatMessage: mocks.deleteMessage,
   blockCommunityChatMessageAuthor: mocks.blockAuthor,
   getCommunityChatBlocks: mocks.getBlocks,
@@ -274,6 +280,15 @@ beforeEach(() => {
   });
   mocks.recallMessage.mockResolvedValue({ status: 200, data: { publicId: 'message-1', status: 'recalled' } });
   mocks.deleteMessage.mockResolvedValue({ status: 200, data: { publicId: 'message-1', status: 'deleted_for_me' } });
+  mocks.getPinnedMessage.mockResolvedValue({ status: 200, data: { roomSlug: 'general', message: null } });
+  mocks.pinMessage.mockResolvedValue({
+    status: 200,
+    data: { roomSlug: 'general', message: chatMessage(), alreadyPinned: false },
+  });
+  mocks.unpinMessage.mockResolvedValue({
+    status: 200,
+    data: { roomSlug: 'general', publicId: 'message-1', alreadyUnpinned: false },
+  });
   mocks.blockAuthor.mockResolvedValue({ status: 200, data: { id: 'block-1', displayName: '薄荷' } });
   mocks.getBlocks.mockResolvedValue({ status: 200, data: { items: [] } });
   mocks.unblockUser.mockResolvedValue({ status: 200, data: { id: 'block-1', unblocked: true } });
@@ -737,6 +752,64 @@ describe('CommunityChatWorkspace', () => {
     expect(document.body.textContent).toContain('2 / 2');
   });
 
+  it('首屏按图片元数据预留尺寸，并在图片异步撑高时保持贴底直到用户主动滚动', async () => {
+    const pendingMessages = deferred<any>();
+    mocks.getMessages.mockReturnValueOnce(pendingMessages.promise);
+    const host = await mountWorkspace();
+    const messageList = host.querySelector<HTMLElement>('.community-message-list');
+    expect(messageList).not.toBeNull();
+    if (!messageList) return;
+    let scrollHeight = 600;
+    Object.defineProperties(messageList, {
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+
+    pendingMessages.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            images: [
+              {
+                publicId: 'image-delayed',
+                url: '/api/community-chat/images/image-delayed',
+                contentType: 'image/png',
+                fileSize: 12,
+                width: 640,
+                height: 480,
+              },
+            ],
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    await flushAsync();
+
+    const imageButton = host.querySelector<HTMLButtonElement>('.community-message__image');
+    const image = imageButton?.querySelector<HTMLImageElement>('img');
+    expect(imageButton?.style.aspectRatio).toBe('640 / 480');
+    expect(image?.getAttribute('width')).toBe('640');
+    expect(image?.getAttribute('height')).toBe('480');
+    expect(messageList.scrollTop).toBe(600);
+
+    scrollHeight = 900;
+    image?.dispatchEvent(new Event('load'));
+    await flushAnimationFrame();
+    expect(messageList.scrollTop).toBe(900);
+
+    messageList.dispatchEvent(new WheelEvent('wheel'));
+    scrollHeight = 1200;
+    image?.dispatchEvent(new Event('load'));
+    await flushAnimationFrame();
+    expect(messageList.scrollTop).toBe(900);
+  });
+
   it('回复发送复用稳定 clientRequestId，并把引用消息公有 ID 交给后端', async () => {
     mocks.sendMessage.mockResolvedValue({
       data: { message: chatMessage({ publicId: 'message-2', content: '收到', isOwn: true }), idempotent: false },
@@ -767,6 +840,82 @@ describe('CommunityChatWorkspace', () => {
     expect(document.activeElement).toBe(textarea);
   });
 
+  it('点击弱化引用条会在当前消息窗口定位并短暂高亮原消息', async () => {
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({ publicId: 'message-source', content: '原消息内容' }),
+          chatMessage({
+            publicId: 'message-reply',
+            content: '回复内容',
+            reply: {
+              publicId: 'message-source',
+              content: '原消息内容',
+              status: 'active',
+              authorName: '薄荷',
+              hasImages: false,
+            },
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    const host = await mountWorkspace();
+
+    const replyReference = host.querySelector<HTMLButtonElement>('.community-message__reply');
+    expect(replyReference?.textContent).toContain('回复 薄荷：');
+    expect(replyReference?.textContent).toContain('原消息内容');
+    replyReference?.click();
+    await flushAsync();
+
+    expect(mocks.scrollIntoContainer).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-message-public-id="message-source"]')?.classList.contains('is-focused')).toBe(
+      true,
+    );
+    expect(workspaceSource).toMatch(
+      /\.community-message__reply\s*\{[^}]*border-left:\s*2px solid var\(--surface-border-color\)[^}]*background:\s*transparent/u,
+    );
+    expect(workspaceSource).not.toMatch(/\.community-message__reply\s*\{[^}]*padding:\s*7px 9px/u);
+  });
+
+  it('置顶栏对所有成员可见并可定位原消息，管理员可从栏内取消置顶', async () => {
+    const pinned = chatMessage({ publicId: 'message-pinned', content: '请先阅读这条置顶消息' });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [pinned],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    mocks.getPinnedMessage.mockResolvedValueOnce({
+      status: 200,
+      data: { roomSlug: 'general', message: pinned },
+    });
+    const host = await mountWorkspace({ access: { ...access, memberRole: 'admin', canManage: true } });
+
+    const banner = host.querySelector<HTMLElement>('.community-pinned-message');
+    expect(banner?.textContent).toContain(zhCN.communityChat.pin.banner);
+    expect(banner?.textContent).toContain('请先阅读这条置顶消息');
+    host.querySelector<HTMLButtonElement>('.community-pinned-message__jump')?.click();
+    await flushAsync();
+    expect(mocks.scrollIntoContainer).toHaveBeenCalledTimes(1);
+
+    host.querySelector<HTMLButtonElement>('.community-pinned-message__unpin')?.click();
+    const alertOptions = mocks.alert.mock.calls.at(-1)?.[0];
+    expect(alertOptions?.title).toBe(zhCN.communityChat.pin.unpinTitle);
+    alertOptions?.footer?.[1]?.function?.();
+    await flushAsync();
+    expect(mocks.unpinMessage).toHaveBeenCalledWith('message-pinned');
+    expect(host.querySelector('.community-pinned-message')).toBeNull();
+  });
+
   it('提及只显示为输入框上方 tag，正文不重复插入昵称且提交稳定消息公有 ID', async () => {
     vi.useFakeTimers();
     mocks.bookmark.isMobile = true;
@@ -775,9 +924,7 @@ describe('CommunityChatWorkspace', () => {
     });
     const host = await mountWorkspace();
     const avatar = host.querySelector<HTMLButtonElement>('.community-message__avatar');
-    avatar?.dispatchEvent(
-      new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 12, clientY: 12 }),
-    );
+    avatar?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 12, clientY: 12 }));
     await vi.advanceTimersByTimeAsync(500);
     await flushAsync();
 
@@ -1131,8 +1278,9 @@ describe('CommunityChatWorkspace', () => {
       /\.community-message-list\s*\{[\s\S]*?overflow-x:\s*hidden;[\s\S]*?overflow-y:\s*auto;/u,
     );
     expect(workspaceSource).toContain('@scroll.passive="handleMessageListScroll"');
-    expect(workspaceSource).toContain('@wheel.passive="pauseAvatarMotionForScroll"');
-    expect(workspaceSource).toContain('@touchmove.passive="pauseAvatarMotionForScroll"');
+    expect(workspaceSource).toContain('@wheel.passive="handleMessageListUserScrollIntent"');
+    expect(workspaceSource).toContain('@touchmove.passive="handleMessageListUserScrollIntent"');
+    expect(workspaceSource).toContain('pauseAvatarMotionForScroll();');
     expect(workspaceSource).not.toMatch(/ref="messageListEl"\s+v-auto-scrollbar/u);
     expect(workspaceSource).toContain('messageScrollFrame = window.requestAnimationFrame(processMessageListScroll)');
     expect(workspaceSource).toContain('current && isEqual(current, item) ? current : item');
@@ -1145,9 +1293,7 @@ describe('CommunityChatWorkspace', () => {
     expect(workspaceSource).not.toContain('contain: layout style;');
     expect(workspaceSource).toMatch(/\.community-message__avatar\s*\{[\s\S]*?overflow:\s*visible\s*!important;/u);
     expect(workspaceSource).toContain('-webkit-overflow-scrolling: touch;');
-    expect(workspaceSource).toContain(
-      ':global(html.light-note-mobile-rendering .community-message-list)',
-    );
+    expect(workspaceSource).toContain(':global(html.light-note-mobile-rendering .community-message-list)');
     expect(workspaceSource).toContain(
       ':global(html.light-note-mobile-rendering .community-message-list::-webkit-scrollbar)',
     );

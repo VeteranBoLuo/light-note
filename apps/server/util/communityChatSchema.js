@@ -13,6 +13,9 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     default_notification_level varchar(16) NOT NULL DEFAULT 'mentions',
     slow_mode_seconds smallint unsigned NOT NULL DEFAULT 0,
     last_message_id bigint unsigned DEFAULT NULL,
+    pinned_message_id bigint unsigned DEFAULT NULL,
+    pinned_by varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+    pinned_at datetime DEFAULT NULL,
     sort_order int unsigned NOT NULL DEFAULT 0,
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -229,6 +232,21 @@ export const COMMUNITY_CHAT_MESSAGE_RECALL_COLUMNS = [
   },
 ];
 
+export const COMMUNITY_CHAT_ROOM_PIN_COLUMNS = [
+  {
+    name: 'pinned_message_id',
+    ddl: '`pinned_message_id` bigint unsigned DEFAULT NULL AFTER `last_message_id`',
+  },
+  {
+    name: 'pinned_by',
+    ddl: '`pinned_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL AFTER `pinned_message_id`',
+  },
+  {
+    name: 'pinned_at',
+    ddl: '`pinned_at` datetime DEFAULT NULL AFTER `pinned_by`',
+  },
+];
+
 async function ensureCommunityChatMessageRecallColumns() {
   const [rows] = await pool.query(
     `SELECT column_name AS columnName
@@ -241,6 +259,22 @@ async function ensureCommunityChatMessageRecallColumns() {
   for (const column of COMMUNITY_CHAT_MESSAGE_RECALL_COLUMNS) {
     if (!existing.has(column.name)) {
       await pool.query(`ALTER TABLE community_chat_messages ADD COLUMN ${column.ddl}`);
+    }
+  }
+}
+
+async function ensureCommunityChatRoomPinColumns() {
+  const [rows] = await pool.query(
+    `SELECT column_name AS columnName
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'community_chat_rooms'
+        AND column_name IN ('pinned_message_id', 'pinned_by', 'pinned_at')`,
+  );
+  const existing = new Set(rows.map((row) => row.columnName));
+  for (const column of COMMUNITY_CHAT_ROOM_PIN_COLUMNS) {
+    if (!existing.has(column.name)) {
+      await pool.query(`ALTER TABLE community_chat_rooms ADD COLUMN ${column.ddl}`);
     }
   }
 }
@@ -276,6 +310,7 @@ export function ensureCommunityChatSchema() {
     ensurePromise = (async () => {
       for (const sql of COMMUNITY_CHAT_TABLE_SQL) await pool.query(sql);
       await ensureCommunityChatMessageRecallColumns();
+      await ensureCommunityChatRoomPinColumns();
       await pool.query(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
       await pool.query(COMMUNITY_CHAT_ROOM_SEED_SQL);
     })().finally(() => {

@@ -65,6 +65,7 @@ router.post('/membership/accept-rules', accessWriteLimiter, handle.acceptRules);
 router.get('/rooms', handle.rooms);
 router.get('/settings/notifications', handle.notificationSettings);
 router.put('/settings/notifications', governanceWriteLimiter, handle.updateNotificationSettings);
+router.get('/rooms/:slug/pin', handle.pinnedMessage);
 router.get('/rooms/:slug/messages', handle.messages);
 router.post('/rooms/:slug/messages', messageWriteLimiter, handle.createMessage);
 router.post(
@@ -78,6 +79,8 @@ router.put('/rooms/:slug/read', handle.markRoomRead);
 router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
 router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);
 router.put('/messages/:publicId/like', messageWriteLimiter, handle.toggleMessageLike);
+router.post('/messages/:publicId/pin', governanceWriteLimiter, handle.pinMessage);
+router.post('/messages/:publicId/unpin', governanceWriteLimiter, handle.unpinMessage);
 router.post('/messages/:publicId/recall', governanceWriteLimiter, handle.recallMessage);
 router.post('/messages/:publicId/delete', governanceWriteLimiter, handle.deleteMessage);
 router.post('/messages/:publicId/report', governanceWriteLimiter, handle.reportMessage);

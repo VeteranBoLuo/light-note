@@ -220,6 +220,9 @@ describe('communityChatModerationService', () => {
       durationMinutes: null,
     });
     expect(connection.query.mock.calls.some(([sql]) => String(sql).includes("SET status = 'hidden'"))).toBe(true);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('SET pinned_message_id = NULL'))).toBe(
+      true,
+    );
     expect(
       connection.query.mock.calls.some(([sql]) =>
         String(sql).includes('INSERT INTO community_chat_moderation_actions'),

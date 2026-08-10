@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   getRuntimePolicy: vi.fn(),
   updateRuntimePolicy: vi.fn(),
   listMessages: vi.fn(),
+  getPinnedMessage: vi.fn(),
   getAuthorAvatar: vi.fn(),
   getAuthorProfile: vi.fn(),
   createMessage: vi.fn(),
@@ -18,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   markRead: vi.fn(),
   toggleLike: vi.fn(),
   recallMessage: vi.fn(),
+  pinMessage: vi.fn(),
+  unpinMessage: vi.fn(),
   uploadImage: vi.fn(),
   getImageDownload: vi.fn(),
   discardImage: vi.fn(),
@@ -54,6 +57,7 @@ vi.mock('../util/services/communityChatAccessService.js', async (importOriginal)
 });
 vi.mock('../util/services/communityChatMessageService.js', () => ({
   listCommunityChatMessages: mocks.listMessages,
+  getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorAvatar: mocks.getAuthorAvatar,
   getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   createCommunityChatMessage: mocks.createMessage,
@@ -61,6 +65,8 @@ vi.mock('../util/services/communityChatMessageService.js', () => ({
   markCommunityChatRoomRead: mocks.markRead,
   toggleCommunityChatMessageLike: mocks.toggleLike,
   recallCommunityChatMessage: mocks.recallMessage,
+  pinCommunityChatMessage: mocks.pinMessage,
+  unpinCommunityChatMessage: mocks.unpinMessage,
 }));
 vi.mock('../util/services/communityChatImageService.js', () => ({
   uploadCommunityChatImage: mocks.uploadImage,
@@ -92,9 +98,11 @@ const {
   messageAuthorAvatar,
   messageAuthorProfile,
   messages,
+  pinnedMessage,
   notificationSettings,
   reportMessage,
   recallMessage,
+  pinMessage,
   requestAccess,
   reviewAccessRequest,
   reviewReport,
@@ -102,6 +110,7 @@ const {
   rooms,
   runtimePolicy,
   toggleMessageLike,
+  unpinMessage,
   updateRuntimePolicy,
   updateNotificationSettings,
 } = await import('./communityChatHandle.js');
@@ -225,6 +234,29 @@ describe('communityChatHandle', () => {
     });
     expect(roomsRes.status).not.toHaveBeenCalledWith(403);
     expect(messagesRes.status).not.toHaveBeenCalledWith(403);
+  });
+
+  it('置顶消息允许游客只读，置顶和取消置顶写接口只接受登录身份', async () => {
+    const visitor = { id: 'visitor-1', role: 'visitor' };
+    mocks.getPinnedMessage.mockResolvedValue({ roomSlug: 'general', message: null });
+    const readRes = mockRes();
+    const pinRes = mockRes();
+    const unpinRes = mockRes();
+
+    await pinnedMessage({ user: visitor, params: { slug: 'general' } }, readRes);
+    await pinMessage({ user: visitor, params: { publicId: 'message-1' } }, pinRes);
+    await unpinMessage({ user: visitor, params: { publicId: 'message-1' } }, unpinRes);
+
+    expect(mocks.getPinnedMessage).toHaveBeenCalledWith({ user: visitor, roomSlug: 'general' });
+    expect(readRes.send).toHaveBeenCalledWith({
+      data: { roomSlug: 'general', message: null },
+      status: 200,
+      msg: '',
+    });
+    expect(pinRes.status).toHaveBeenCalledWith(403);
+    expect(unpinRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.pinMessage).not.toHaveBeenCalled();
+    expect(mocks.unpinMessage).not.toHaveBeenCalled();
   });
 
   it('游客可通过消息公有 ID 查看作者公开名片，Handle 不接受目标账号 ID', async () => {

@@ -15,12 +15,15 @@ import {
 import {
   createCommunityChatMessage,
   deleteCommunityChatMessage,
+  getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorAvatar,
   getCommunityChatMessageAuthorProfile,
   listCommunityChatMessages,
   markCommunityChatRoomRead,
+  pinCommunityChatMessage,
   recallCommunityChatMessage,
   toggleCommunityChatMessageLike,
+  unpinCommunityChatMessage,
 } from '../util/services/communityChatMessageService.js';
 import {
   discardCommunityChatImage,
@@ -190,6 +193,19 @@ export async function messages(req, res) {
   }
 }
 
+export async function pinnedMessage(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatPinnedMessage({
+      user: req.user,
+      roomSlug: req.params?.slug,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
 export async function createMessage(req, res) {
   if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
   try {
@@ -315,6 +331,32 @@ export async function toggleMessageLike(req, res) {
       messagePublicId: req.params?.publicId,
     });
     return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function pinMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await pinCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '消息已置顶', 'Message pinned')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function unpinMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await unpinCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '已取消置顶', 'Message unpinned')));
   } catch (error) {
     return sendError(req, res, error);
   }

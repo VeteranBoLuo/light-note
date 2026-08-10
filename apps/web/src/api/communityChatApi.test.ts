@@ -24,10 +24,12 @@ const {
   getCommunityChatAccess,
   getCommunityChatMessages,
   getCommunityChatNotificationSettings,
+  getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorProfile,
   getCommunityChatBlocks,
   getCommunityChatRooms,
   markCommunityChatRoomRead,
+  pinCommunityChatMessage,
   requestCommunityChatAccess,
   recallCommunityChatMessage,
   reportCommunityChatMessage,
@@ -37,6 +39,7 @@ const {
   sendCommunityChatMessage,
   toggleCommunityChatMessageLike,
   unblockCommunityChatUser,
+  unpinCommunityChatMessage,
   updateCommunityChatAdminRuntimePolicy,
   updateCommunityChatNotificationSettings,
   uploadCommunityChatImage,
@@ -239,6 +242,28 @@ describe('communityChatApi', () => {
     );
     expect(mocks.apiBasePost).toHaveBeenCalledWith(
       '/api/community-chat/messages/message%2F1/delete',
+      {},
+      { silent: true },
+    );
+  });
+
+  it('置顶读取按房间路径，置顶和取消只使用消息公有 ID', () => {
+    getCommunityChatPinnedMessage('general/room');
+    pinCommunityChatMessage('message/1');
+    unpinCommunityChatMessage('message/1');
+
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith('/api/community-chat/rooms/general%2Froom/pin', undefined, {
+      silent: true,
+    });
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
+      1,
+      '/api/community-chat/messages/message%2F1/pin',
+      {},
+      { silent: true },
+    );
+    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
+      2,
+      '/api/community-chat/messages/message%2F1/unpin',
       {},
       { silent: true },
     );

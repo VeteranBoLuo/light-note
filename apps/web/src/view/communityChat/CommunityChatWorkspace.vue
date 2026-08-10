@@ -65,12 +65,34 @@
       </header>
 
       <div class="community-message-stream">
+        <div v-if="pinnedMessage" class="community-pinned-message" role="status">
+          <BButton
+            class="community-pinned-message__jump"
+            :aria-label="t('communityChat.pin.jump', { name: authorName(pinnedMessage) })"
+            @click="jumpToMessage(pinnedMessage.publicId)"
+          >
+            <SvgIcon :src="icon.contextMenu.pin" size="15" aria-hidden="true" />
+            <strong>{{ t('communityChat.pin.banner') }}</strong>
+            <span>{{ authorName(pinnedMessage) }}：{{ messageSummary(pinnedMessage) }}</span>
+          </BButton>
+          <BTooltip v-if="canManagePinnedMessage" :title="t('communityChat.pin.unpinAction')" :delay="80">
+            <BButton
+              class="community-pinned-message__unpin"
+              :loading="pinActionBusy"
+              :aria-label="t('communityChat.pin.unpinAction')"
+              @click.stop="confirmUnpinMessage(pinnedMessage)"
+            >
+              <SvgIcon :src="icon.contextMenu.unpin" size="15" aria-hidden="true" />
+            </BButton>
+          </BTooltip>
+        </div>
         <div
           ref="messageListEl"
           class="community-message-list"
           aria-live="polite"
-          @wheel.passive="pauseAvatarMotionForScroll"
-          @touchmove.passive="pauseAvatarMotionForScroll"
+          @wheel.passive="handleMessageListUserScrollIntent"
+          @touchmove.passive="handleMessageListUserScrollIntent"
+          @pointerdown="stopInitialBottomLock"
           @scroll.passive="handleMessageListScroll"
         >
           <div v-if="access.emergencyReadOnly" class="community-runtime-readonly" role="status">
@@ -117,7 +139,9 @@
               class="community-message"
               :class="{
                 'is-own': chatMessage.isOwn,
-                'is-focused': chatMessage.publicId === focusedMessagePublicId,
+                'is-focused':
+                  chatMessage.publicId === focusedMessagePublicId ||
+                  chatMessage.publicId === transientFocusedMessagePublicId,
                 'is-recalled': chatMessage.status === 'recalled',
                 'is-sending': chatMessage.deliveryState === 'sending',
               }"
@@ -170,19 +194,16 @@
                     </span>
                   </div>
                   <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
-                    <div v-if="chatMessage.reply" class="community-message__reply">
-                      <strong>{{ chatMessage.reply.authorName || t('communityChat.memberFallback') }}</strong>
-                      <span>
-                        {{
-                          chatMessage.reply.status === 'active'
-                            ? chatMessage.reply.content ||
-                              (chatMessage.reply.hasImages ? t('communityChat.image.messageFallback') : '')
-                            : chatMessage.reply.status === 'recalled'
-                              ? t('communityChat.replyRecalled')
-                              : t('communityChat.replyUnavailable')
-                        }}
-                      </span>
-                    </div>
+                    <BButton
+                      v-if="chatMessage.reply"
+                      class="community-message__reply"
+                      :disabled="!canJumpToReply(chatMessage)"
+                      :aria-label="t('communityChat.replyJump', { name: replyAuthorName(chatMessage) })"
+                      @click.stop="jumpToMessage(chatMessage.reply.publicId)"
+                    >
+                      <strong>{{ t('communityChat.replyReference', { name: replyAuthorName(chatMessage) }) }}</strong>
+                      <span>{{ replySummary(chatMessage) }}</span>
+                    </BButton>
                     <p v-if="chatMessage.content" class="community-message__content">{{ chatMessage.content }}</p>
                     <div
                       v-if="chatMessage.images?.length"
@@ -193,14 +214,19 @@
                         v-for="imageItem in chatMessage.images"
                         :key="imageItem.publicId"
                         class="community-message__image"
+                        :style="{ aspectRatio: messageImageAspectRatio(imageItem) }"
                         :aria-label="t('communityChat.image.preview')"
                         @click.stop="handleMessageImageClick(chatMessage, imageItem)"
                       >
                         <img
                           :src="imageItem.url"
                           :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
+                          :width="positiveImageDimension(imageItem.width)"
+                          :height="positiveImageDimension(imageItem.height)"
                           loading="lazy"
                           decoding="async"
+                          @load="handleMessageImageSettled"
+                          @error="handleMessageImageSettled"
                         />
                       </BButton>
                     </div>
@@ -498,12 +524,15 @@
     getCommunityChatBlocks,
     getCommunityChatMessageAuthorProfile,
     getCommunityChatMessages,
+    getCommunityChatPinnedMessage,
     markCommunityChatRoomRead,
+    pinCommunityChatMessage,
     recallCommunityChatMessage,
     reportCommunityChatMessage,
     sendCommunityChatMessage,
     toggleCommunityChatMessageLike,
     unblockCommunityChatUser,
+    unpinCommunityChatMessage,
     uploadCommunityChatImage,
     type CommunityChatAccess,
     type CommunityChatAuthorProfile,
@@ -511,6 +540,7 @@
     type CommunityChatImage,
     type CommunityChatMessage,
     type CommunityChatMessagePage,
+    type CommunityChatPinnedMessage,
     type CommunityChatReportReason,
     type CommunityChatRoom,
   } from '@/api/communityChatApi';
@@ -597,12 +627,19 @@
   const profileCache = new Map<string, CommunityChatAuthorProfile>();
   const pendingNewMessageCount = ref(0);
   const focusedMessagePublicId = ref('');
+  const transientFocusedMessagePublicId = ref('');
   const hasNewerThanFocus = ref(false);
+  const pinnedMessage = ref<CommunityChatMessage | null>(null);
+  const pinActionBusy = ref(false);
   let profileLoadGeneration = 0;
   let loadGeneration = 0;
+  let pinnedLoadGeneration = 0;
   let pollTimer: number | undefined;
   let markReadTimer: number | undefined;
   let messageScrollFrame: number | undefined;
+  let initialBottomLockTimer: number | undefined;
+  let initialBottomLockFrame: number | undefined;
+  let initialBottomLockActive = false;
   let avatarMotionResumeTimer: number | undefined;
   let recallClockTimer: number | undefined;
   let lastMarkedReadMessageId = '';
@@ -624,12 +661,14 @@
   } | null = null;
   let suppressedAvatarClickPublicId = '';
   let avatarClickSuppressionTimer: number | undefined;
+  let transientFocusTimer: number | undefined;
   const INITIAL_MESSAGE_PAGE_SIZE = 30;
   const COMPOSER_INPUT_MIN_HEIGHT = 42;
   const COMPOSER_INPUT_MAX_HEIGHT = 112;
   const AVATAR_LONG_PRESS_MS = 480;
   const AVATAR_LONG_PRESS_MOVE_TOLERANCE = 10;
   const AVATAR_MOTION_SCROLL_IDLE_MS = 140;
+  const INITIAL_BOTTOM_LOCK_MS = 3000;
 
   const currentRoom = computed(() => props.rooms.find((room) => room.slug === selectedRoomSlug.value) || null);
   const chatImageSequence = computed(() => {
@@ -662,6 +701,9 @@
       (currentRoom.value?.type !== 'announcement' ||
         props.access.memberRole === 'admin' ||
         props.access.memberRole === 'moderator'),
+  );
+  const canManagePinnedMessage = computed(
+    () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
   );
   const imageUploadBusy = computed(() => !canPostCurrentRoom.value || sending.value || imageUploadsInFlight.value > 0);
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
@@ -789,6 +831,40 @@
 
   function authorName(chatMessage: CommunityChatMessage) {
     return chatMessage.author.name || t('communityChat.memberFallback');
+  }
+
+  function messageSummary(chatMessage: CommunityChatMessage) {
+    const content = String(chatMessage.content || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (content) return content;
+    if (chatMessage.images?.length) return t('communityChat.image.messageFallback');
+    return t('communityChat.replyUnavailable');
+  }
+
+  function replyAuthorName(chatMessage: CommunityChatMessage) {
+    return chatMessage.reply?.authorName || t('communityChat.memberFallback');
+  }
+
+  function replySummary(chatMessage: CommunityChatMessage) {
+    const reply = chatMessage.reply;
+    if (!reply) return '';
+    if (reply.status === 'active') {
+      return (
+        String(reply.content || '')
+          .replace(/\s+/g, ' ')
+          .trim() || (reply.hasImages ? t('communityChat.image.messageFallback') : t('communityChat.replyUnavailable'))
+      );
+    }
+    return reply.status === 'recalled' ? t('communityChat.replyRecalled') : t('communityChat.replyUnavailable');
+  }
+
+  function canJumpToReply(chatMessage: CommunityChatMessage) {
+    return Boolean(
+      chatMessage.reply?.publicId &&
+      ['active', 'recalled'].includes(chatMessage.reply.status) &&
+      !chatMessage.reply.publicId.startsWith('pending-'),
+    );
   }
 
   function authorAvatarSource(chatMessage: CommunityChatMessage) {
@@ -932,9 +1008,18 @@
 
   function messageMenuItems(chatMessage: CommunityChatMessage): BActionMenuItem[] {
     const items: BActionMenuItem[] = [];
+    if (canManagePinnedMessage.value && chatMessage.status === 'active' && chatMessage.deliveryState !== 'sending') {
+      const isPinned = pinnedMessage.value?.publicId === chatMessage.publicId;
+      items.push({
+        key: isPinned ? 'unpin' : 'pin',
+        label: t(isPinned ? 'communityChat.pin.unpinAction' : 'communityChat.pin.action'),
+        icon: isPinned ? icon.contextMenu.unpin : icon.contextMenu.pin,
+      });
+    }
     if (!chatMessage.isOwn && chatMessage.status === 'active') {
       const alreadyReported = reportedMessageIds.value.has(chatMessage.publicId);
       if (props.access.canPost) {
+        if (items.length) items.push({ key: 'message-governance-divider', divider: true });
         items.push({
           key: 'mention',
           label: t('communityChat.mentionAction'),
@@ -998,6 +1083,39 @@
     }
   }
 
+  function positiveImageDimension(value: number) {
+    const normalized = Math.floor(Number(value));
+    return Number.isFinite(normalized) && normalized > 0 ? normalized : undefined;
+  }
+
+  function messageImageAspectRatio(imageItem: CommunityChatImage) {
+    const width = positiveImageDimension(imageItem.width);
+    const height = positiveImageDimension(imageItem.height);
+    return width && height ? `${width} / ${height}` : '4 / 3';
+  }
+
+  function stopInitialBottomLock() {
+    initialBottomLockActive = false;
+    if (initialBottomLockTimer !== undefined) window.clearTimeout(initialBottomLockTimer);
+    if (initialBottomLockFrame !== undefined) window.cancelAnimationFrame(initialBottomLockFrame);
+    initialBottomLockTimer = undefined;
+    initialBottomLockFrame = undefined;
+  }
+
+  function startInitialBottomLock() {
+    stopInitialBottomLock();
+    initialBottomLockActive = true;
+    initialBottomLockTimer = window.setTimeout(stopInitialBottomLock, INITIAL_BOTTOM_LOCK_MS);
+  }
+
+  function handleMessageImageSettled() {
+    if (!initialBottomLockActive || initialBottomLockFrame !== undefined) return;
+    initialBottomLockFrame = window.requestAnimationFrame(() => {
+      initialBottomLockFrame = undefined;
+      if (initialBottomLockActive) void scrollToBottom();
+    });
+  }
+
   async function scrollToFocusedMessage(publicId: string) {
     await nextTick();
     if (!messageListEl.value) {
@@ -1021,6 +1139,30 @@
     const centerOffset = Math.max(12, container.clientHeight / 2 - target.offsetHeight / 2);
     scrollIntoContainer(container, target, centerOffset);
     lastMessageScrollTop = container.scrollTop;
+  }
+
+  function showTransientMessageFocus(publicId: string) {
+    transientFocusedMessagePublicId.value = publicId;
+    if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
+    transientFocusTimer = window.setTimeout(() => {
+      transientFocusTimer = undefined;
+      if (transientFocusedMessagePublicId.value === publicId) transientFocusedMessagePublicId.value = '';
+    }, 1800);
+  }
+
+  async function jumpToMessage(publicId: string) {
+    const normalizedPublicId = String(publicId || '').trim();
+    if (!normalizedPublicId || normalizedPublicId.startsWith('pending-')) return;
+    if (chatMessages.value.some((item) => item.publicId === normalizedPublicId)) {
+      showTransientMessageFocus(normalizedPublicId);
+      await scrollToFocusedMessage(normalizedPublicId);
+      return;
+    }
+    try {
+      await router.replace({ query: { ...route.query, message: normalizedPublicId } });
+    } catch {
+      message.warning(t('communityChat.sourceMessageUnavailable'));
+    }
   }
 
   async function clearFocusMessageRoute() {
@@ -1075,6 +1217,11 @@
     pauseAvatarMotionForScroll();
     if (messageScrollFrame !== undefined) return;
     messageScrollFrame = window.requestAnimationFrame(processMessageListScroll);
+  }
+
+  function handleMessageListUserScrollIntent() {
+    stopInitialBottomLock();
+    pauseAvatarMotionForScroll();
   }
 
   async function jumpToLatest() {
@@ -1152,11 +1299,26 @@
     }
   }
 
+  async function loadPinnedMessage() {
+    const roomSlug = selectedRoomSlug.value;
+    if (!roomSlug) return;
+    const generation = ++pinnedLoadGeneration;
+    try {
+      const response = await getCommunityChatPinnedMessage(roomSlug);
+      if (generation !== pinnedLoadGeneration || roomSlug !== selectedRoomSlug.value) return;
+      const data = response.data as CommunityChatPinnedMessage;
+      pinnedMessage.value = data?.message || null;
+    } catch {
+      if (generation === pinnedLoadGeneration) pinnedMessage.value = null;
+    }
+  }
+
   async function loadInitial({ ignoreFocus = false } = {}) {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug) return;
     const generation = ++loadGeneration;
     const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value;
+    stopInitialBottomLock();
     initialLoading.value = true;
     loadError.value = false;
     pendingNewMessageCount.value = 0;
@@ -1188,7 +1350,10 @@
       // 先结束同构骨架，再定位真实消息；否则极快的本地/缓存响应会在消息 DOM 尚未挂载时滚动失败。
       initialLoading.value = false;
       if (focusedMessagePublicId.value) await scrollToFocusedMessage(focusedMessagePublicId.value);
-      else await scrollToBottom();
+      else {
+        startInitialBottomLock();
+        await scrollToBottom();
+      }
       await markLatestRead();
     } catch {
       if (generation === loadGeneration) loadError.value = true;
@@ -1305,9 +1470,16 @@
       return;
     }
     if (event.type === 'message.updated') {
+      const reason = String(event.payload.reason || '');
+      if (reason === 'pin' || reason === 'unpin') {
+        await loadPinnedMessage();
+        return;
+      }
+      if (reason === 'recall') await loadPinnedMessage();
       await refreshLatest({ force: true });
       return;
     }
+    await loadPinnedMessage();
     const removedFocusedMessage = focusedMessagePublicId.value === messagePublicId;
     chatMessages.value = chatMessages.value.filter((item) => item.publicId !== messagePublicId);
     if (removedFocusedMessage) {
@@ -1322,7 +1494,7 @@
 
   async function handleRealtimeSynchronized() {
     emit('accessInvalidated');
-    await refreshLatest({ force: true });
+    await Promise.all([refreshLatest({ force: true }), loadPinnedMessage()]);
   }
 
   function selectRoom(roomSlug: string) {
@@ -1341,10 +1513,7 @@
     await loadInitial({ ignoreFocus: true });
   }
 
-  function openMobileMessageActions(
-    chatMessage: CommunityChatMessage,
-    imageTarget: CommunityChatImage | null = null,
-  ) {
+  function openMobileMessageActions(chatMessage: CommunityChatMessage, imageTarget: CommunityChatImage | null = null) {
     if (!bookmark.isMobile || !messageHasActions(chatMessage)) return;
     mobileMessageActionTarget.value = chatMessage;
     mobileMessageActionImageTarget.value = imageTarget;
@@ -1464,7 +1633,7 @@
         operation: chatMessage.isOwn ? '撤回自己的消息' : '管理员撤回消息',
       });
       message.success(t('communityChat.recall.success'));
-      await refreshLatest({ force: true });
+      await Promise.all([refreshLatest({ force: true }), loadPinnedMessage()]);
     } catch (error: any) {
       message.error(error?.message || t('communityChat.recall.failed'));
     } finally {
@@ -1500,6 +1669,7 @@
       mobileMessageActionsVisible.value = false;
       if (replyTarget.value?.publicId === chatMessage.publicId) cancelReply();
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== chatMessage.publicId);
+      if (pinnedMessage.value?.publicId === chatMessage.publicId) pinnedMessage.value = null;
       if (focusedMessagePublicId.value === chatMessage.publicId) {
         focusedMessagePublicId.value = '';
         hasNewerThanFocus.value = false;
@@ -1704,8 +1874,98 @@
     emit('accessInvalidated');
   }
 
+  function confirmPinMessage(chatMessage: CommunityChatMessage) {
+    if (!canManagePinnedMessage.value || pinActionBusy.value || chatMessage.status !== 'active') return;
+    if (!pinnedMessage.value || pinnedMessage.value.publicId === chatMessage.publicId) {
+      void pinMessage(chatMessage);
+      return;
+    }
+    Alert.alert({
+      title: t('communityChat.pin.replaceTitle'),
+      content: t('communityChat.pin.replaceDescription'),
+      footer: [
+        { label: t('common.cancel'), type: 'dashed', function: () => Alert.destroy() },
+        {
+          label: t('communityChat.pin.replaceAction'),
+          type: 'primary',
+          function: () => {
+            Alert.destroy();
+            void pinMessage(chatMessage);
+          },
+        },
+      ],
+    });
+  }
+
+  async function pinMessage(chatMessage: CommunityChatMessage) {
+    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    pinActionBusy.value = true;
+    messageActionBusyId.value = chatMessage.publicId;
+    try {
+      const response = await pinCommunityChatMessage(chatMessage.publicId);
+      if (response?.status !== 200 || !response.data?.message) throw new Error('COMMUNITY_CHAT_PIN_FAILED');
+      pinnedMessage.value = response.data.message as CommunityChatMessage;
+      mobileMessageActionsVisible.value = false;
+      void recordOperation({ module: '公共聊天室', operation: '管理员置顶消息' });
+      message.success(t('communityChat.pin.success'));
+    } catch (error: any) {
+      message.error(error?.message || t('communityChat.pin.failed'));
+      await loadPinnedMessage();
+    } finally {
+      pinActionBusy.value = false;
+      messageActionBusyId.value = '';
+    }
+  }
+
+  function confirmUnpinMessage(chatMessage: CommunityChatMessage) {
+    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    Alert.alert({
+      title: t('communityChat.pin.unpinTitle'),
+      content: t('communityChat.pin.unpinDescription'),
+      footer: [
+        { label: t('common.cancel'), type: 'dashed', function: () => Alert.destroy() },
+        {
+          label: t('communityChat.pin.unpinAction'),
+          type: 'danger',
+          function: () => {
+            Alert.destroy();
+            void unpinMessage(chatMessage);
+          },
+        },
+      ],
+    });
+  }
+
+  async function unpinMessage(chatMessage: CommunityChatMessage) {
+    if (!canManagePinnedMessage.value || pinActionBusy.value) return;
+    pinActionBusy.value = true;
+    messageActionBusyId.value = chatMessage.publicId;
+    try {
+      const response = await unpinCommunityChatMessage(chatMessage.publicId);
+      if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_UNPIN_FAILED');
+      if (pinnedMessage.value?.publicId === chatMessage.publicId) pinnedMessage.value = null;
+      mobileMessageActionsVisible.value = false;
+      void recordOperation({ module: '公共聊天室', operation: '管理员取消置顶消息' });
+      message.success(t('communityChat.pin.unpinSuccess'));
+    } catch (error: any) {
+      message.error(error?.message || t('communityChat.pin.failed'));
+      await loadPinnedMessage();
+    } finally {
+      pinActionBusy.value = false;
+      messageActionBusyId.value = '';
+    }
+  }
+
   function handleMessageAction(action: string, chatMessage: CommunityChatMessage) {
     if (!props.access.authenticated) return;
+    if (action === 'pin') {
+      confirmPinMessage(chatMessage);
+      return;
+    }
+    if (action === 'unpin') {
+      confirmUnpinMessage(chatMessage);
+      return;
+    }
     if (action === 'mention') {
       startMention(chatMessage);
       return;
@@ -1767,7 +2027,7 @@
       if (response?.status !== 200) throw new Error('COMMUNITY_BLOCK_FAILED');
       void recordOperation({ module: '公共聊天室', operation: '屏蔽消息作者' });
       message.success(t('communityChat.blocks.success', { name: authorName(chatMessage) }));
-      await loadInitial();
+      await Promise.all([loadInitial(), loadPinnedMessage()]);
       if (blocksVisible.value) await loadBlocks();
     } catch (error: any) {
       message.error(error?.message || t('communityChat.blocks.failed'));
@@ -1803,7 +2063,7 @@
       message.success(
         t('communityChat.blocks.unblocked', { name: item.displayName || t('communityChat.memberFallback') }),
       );
-      await loadInitial();
+      await Promise.all([loadInitial(), loadPinnedMessage()]);
     } catch (error: any) {
       message.error(error?.message || t('communityChat.blocks.unblockFailed'));
     } finally {
@@ -1972,7 +2232,11 @@
       authorProfile.value = null;
       pendingNewMessageCount.value = 0;
       focusedMessagePublicId.value = '';
+      transientFocusedMessagePublicId.value = '';
       hasNewerThanFocus.value = false;
+      pinnedLoadGeneration += 1;
+      pinnedMessage.value = null;
+      pinActionBusy.value = false;
       lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
       lastMessageScrollTop = 0;
@@ -1982,6 +2246,7 @@
       }
       realtimeAuthorityRefreshPending = false;
       void loadInitial();
+      void loadPinnedMessage();
     },
     { immediate: true },
   );
@@ -2030,12 +2295,15 @@
     clearAvatarClickSuppression();
     resetComposerDragState();
     loadGeneration += 1;
+    pinnedLoadGeneration += 1;
     profileLoadGeneration += 1;
     if (pollTimer !== undefined) window.clearInterval(pollTimer);
     if (recallClockTimer !== undefined) window.clearInterval(recallClockTimer);
     if (markReadTimer !== undefined) window.clearTimeout(markReadTimer);
     if (messageScrollFrame !== undefined) window.cancelAnimationFrame(messageScrollFrame);
+    stopInitialBottomLock();
     if (avatarMotionResumeTimer !== undefined) window.clearTimeout(avatarMotionResumeTimer);
+    if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
     messageListEl.value?.classList.remove('is-actively-scrolling');
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     window.removeEventListener('resize', syncComposerInputHeight);
@@ -2205,7 +2473,74 @@
     min-width: 0;
     min-height: 0;
     position: relative;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     overflow: hidden;
+  }
+
+  .community-pinned-message {
+    min-width: 0;
+    min-height: 38px;
+    padding: 4px 12px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .community-pinned-message__jump {
+    min-width: 0;
+    min-height: 30px;
+    height: auto;
+    padding: 3px 5px !important;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 6px;
+    border: 0 !important;
+    color: var(--desc-color);
+    background: transparent !important;
+    line-height: 1.4;
+  }
+
+  .community-pinned-message__jump > strong {
+    flex: 0 0 auto;
+    color: var(--chip-pin-fg, var(--primary-color));
+    font-size: 11px;
+  }
+
+  .community-pinned-message__jump > span {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-pinned-message__jump:hover > span {
+    color: var(--text-color);
+  }
+
+  .community-pinned-message__jump:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+  }
+
+  .community-pinned-message__unpin {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 !important;
+    display: grid;
+    place-items: center;
+    border: 0 !important;
+    color: var(--desc-color);
+    background: transparent !important;
   }
 
   .community-conversation-header {
@@ -2304,6 +2639,7 @@
   }
 
   .community-message-list {
+    grid-row: 2;
     width: 100%;
     height: 100%;
     min-width: 0;
@@ -2601,20 +2937,35 @@
   }
 
   .community-message__reply {
-    width: 100%;
-    padding: 7px 9px;
+    width: auto;
+    max-width: 100%;
+    min-height: 24px;
+    height: auto;
+    padding: 3px 2px 3px 9px !important;
     box-sizing: border-box;
-    display: grid;
-    gap: 2px;
-    border-left: 3px solid var(--primary-color);
-    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 4px;
+    overflow: hidden;
+    border: 0 !important;
+    border-left: 2px solid var(--surface-border-color) !important;
+    border-radius: 0;
     color: var(--desc-color);
-    background: var(--workspace-panel-bg-color);
+    background: transparent !important;
     font-size: 10px;
+    line-height: 1.45;
+    text-align: left;
   }
 
-  .community-message.is-own .community-message__reply {
-    text-align: left;
+  .community-message__reply:not(:disabled):hover {
+    border-left-color: var(--primary-color) !important;
+    color: var(--text-color);
+  }
+
+  .community-message__reply:disabled {
+    opacity: 1;
+    cursor: default;
   }
 
   .community-message__reply strong,
@@ -2625,7 +2976,13 @@
   }
 
   .community-message__reply strong {
-    color: var(--primary-color);
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-weight: 500;
+  }
+
+  .community-message__reply span {
+    min-width: 0;
   }
 
   .community-message__recalled {
@@ -2669,6 +3026,11 @@
   }
 
   .community-message.is-focused .community-message__content {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 3px;
+  }
+
+  .community-message.is-focused .community-message__recalled {
     outline: 2px solid var(--primary-color);
     outline-offset: 3px;
   }
@@ -3209,6 +3571,20 @@
 
     .community-conversation-header__settings span {
       display: none;
+    }
+
+    .community-pinned-message {
+      min-height: 36px;
+      padding: 3px 8px;
+    }
+
+    .community-pinned-message__jump {
+      gap: 5px;
+    }
+
+    .community-pinned-message__jump > strong,
+    .community-pinned-message__jump > span {
+      font-size: 10px;
     }
 
     .community-message-list {

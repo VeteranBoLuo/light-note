@@ -126,9 +126,11 @@ async function queryFirst(db, sql, params = []) {
 async function loadRoom(db, roomSlug, { lock = false } = {}) {
   const room = await queryFirst(
     db,
-    `SELECT id, slug, type, status, slow_mode_seconds AS slowModeSeconds
-       FROM community_chat_rooms
-      WHERE slug = ? AND status = 'active'
+    `SELECT room.id, room.slug, room.type, room.status, room.slow_mode_seconds AS slowModeSeconds,
+            room.pinned_message_id AS pinnedMessageId, pinned.public_id AS pinnedMessagePublicId
+       FROM community_chat_rooms room
+       LEFT JOIN community_chat_messages pinned ON pinned.id = room.pinned_message_id
+      WHERE room.slug = ? AND room.status = 'active'
       LIMIT 1${lock ? ' FOR UPDATE' : ''}`,
     [roomSlug],
   );
@@ -280,6 +282,16 @@ async function loadMessageLikes(db, rows, viewerUserId) {
 
 function canModerateMessages(memberRole) {
   return memberRole === 'admin' || memberRole === 'moderator';
+}
+
+function assertCanPinCommunityChatMessage(memberRole) {
+  if (canModerateMessages(memberRole)) return;
+  throw chatError(
+    'COMMUNITY_CHAT_PIN_FORBIDDEN',
+    403,
+    '只有社区管理员可以管理置顶消息',
+    'Only community moderators can manage pinned messages',
+  );
 }
 
 function toPublicMessage(
@@ -497,6 +509,168 @@ async function loadMessageByPublicId(db, publicId, viewerUserId, memberRole = 'm
     memberRole,
     authorAvatar,
   });
+}
+
+export async function getCommunityChatPinnedMessage({ user, roomSlug, env = process.env, db = pool }) {
+  const normalizedRoomSlug = normalizeRoomSlug(roomSlug);
+  const viewerUserId = user?.id && user?.role !== 'visitor' ? user.id : '';
+  const viewerVisibilityClause = viewerUserId
+    ? `AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE blocked.user_id = ? AND blocked.blocked_user_id = pinned.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = pinned.id
+        )`
+    : '';
+  const [{ memberRole }, room] = await Promise.all([
+    assertCommunityChatReadAccess({ user, env, db }),
+    loadRoom(db, normalizedRoomSlug),
+  ]);
+  if (!room.pinnedMessageId) return { roomSlug: room.slug, message: null };
+
+  const target = await queryFirst(
+    db,
+    `SELECT pinned.public_id AS publicId
+       FROM community_chat_messages pinned
+      WHERE pinned.id = ? AND pinned.room_id = ? AND pinned.status = 'active'
+        ${viewerVisibilityClause}
+      LIMIT 1`,
+    [room.pinnedMessageId, room.id, ...(viewerUserId ? [viewerUserId, viewerUserId] : [])],
+  );
+  if (!target) return { roomSlug: room.slug, message: null };
+  const message = await loadMessageByPublicId(db, target.publicId, viewerUserId, memberRole);
+  return { roomSlug: room.slug, message };
+}
+
+export async function pinCommunityChatMessage({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    assertCanPinCommunityChatMessage(memberRole);
+    const room = await loadRoom(connection, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, { lock: true });
+    const target = await queryFirst(
+      connection,
+      `SELECT message.id, message.public_id AS publicId, message.user_id AS authorUserId
+         FROM community_chat_messages message
+        WHERE message.public_id = ? AND message.room_id = ? AND message.status = 'active'
+        LIMIT 1 FOR UPDATE`,
+      [normalizedMessagePublicId, room.id],
+    );
+    if (!target) {
+      throw chatError(
+        'COMMUNITY_CHAT_MESSAGE_NOT_PINNABLE',
+        409,
+        '这条消息当前不能置顶',
+        'This message cannot be pinned',
+      );
+    }
+
+    const alreadyPinned = Number(room.pinnedMessageId || 0) === Number(target.id);
+    if (!alreadyPinned) {
+      await connection.query(
+        `UPDATE community_chat_rooms
+            SET pinned_message_id = ?, pinned_by = ?, pinned_at = NOW()
+          WHERE id = ?`,
+        [target.id, user.id, room.id],
+      );
+      await connection.query(
+        `INSERT INTO community_chat_moderation_actions
+           (id, actor_user_id, target_user_id, message_id, action, reason, metadata)
+         VALUES (?, ?, ?, ?, 'pin_message', 'moderator_pin', ?)`,
+        [
+          randomUUID(),
+          user.id,
+          target.authorUserId,
+          target.id,
+          JSON.stringify({ previousPinnedMessagePublicId: room.pinnedMessagePublicId || null }),
+        ],
+      );
+    }
+    const message = await loadMessageByPublicId(connection, target.publicId, user.id, memberRole);
+    await connection.commit();
+    if (!alreadyPinned) {
+      publishCommunityChatRealtimeEvent('message.updated', {
+        roomSlug: room.slug,
+        messagePublicId: target.publicId,
+        reason: 'pin',
+      });
+    }
+    return {
+      roomSlug: room.slug,
+      message,
+      alreadyPinned,
+      replacedMessagePublicId: alreadyPinned ? null : room.pinnedMessagePublicId || null,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function unpinCommunityChatMessage({ user, messagePublicId, env = process.env, db = pool }) {
+  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    assertCanPinCommunityChatMessage(memberRole);
+    const room = await loadRoom(connection, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, { lock: true });
+    if (!room.pinnedMessageId) {
+      await connection.commit();
+      return { roomSlug: room.slug, publicId: normalizedMessagePublicId, alreadyUnpinned: true };
+    }
+    if (room.pinnedMessagePublicId !== normalizedMessagePublicId) {
+      throw chatError(
+        'COMMUNITY_CHAT_PIN_CHANGED',
+        409,
+        '置顶消息已经变化，请刷新后重试',
+        'The pinned message has changed. Refresh and try again',
+      );
+    }
+    const target = await queryFirst(
+      connection,
+      `SELECT id, user_id AS authorUserId FROM community_chat_messages WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [room.pinnedMessageId],
+    );
+    await connection.query(
+      `UPDATE community_chat_rooms
+          SET pinned_message_id = NULL, pinned_by = NULL, pinned_at = NULL
+        WHERE id = ? AND pinned_message_id = ?`,
+      [room.id, room.pinnedMessageId],
+    );
+    if (target) {
+      await connection.query(
+        `INSERT INTO community_chat_moderation_actions
+           (id, actor_user_id, target_user_id, message_id, action, reason, metadata)
+         VALUES (?, ?, ?, ?, 'unpin_message', 'moderator_unpin', ?)`,
+        [
+          randomUUID(),
+          user.id,
+          target.authorUserId,
+          target.id,
+          JSON.stringify({ messagePublicId: normalizedMessagePublicId }),
+        ],
+      );
+    }
+    await connection.commit();
+    publishCommunityChatRealtimeEvent('message.updated', {
+      roomSlug: room.slug,
+      messagePublicId: normalizedMessagePublicId,
+      reason: 'unpin',
+    });
+    return { roomSlug: room.slug, publicId: normalizedMessagePublicId, alreadyUnpinned: false };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 async function loadIdempotentMessage(db, userId, clientRequestId, { lock = false } = {}) {
@@ -1074,6 +1248,12 @@ export async function recallCommunityChatMessage({ user, messagePublicId, env = 
     if (Number(updated?.affectedRows || 0) !== 1) {
       throw chatError('MESSAGE_RECALL_CONFLICT', 409, '消息状态已变化，请刷新后重试', 'Message state changed');
     }
+    await connection.query(
+      `UPDATE community_chat_rooms
+          SET pinned_message_id = NULL, pinned_by = NULL, pinned_at = NULL
+        WHERE pinned_message_id = ?`,
+      [target.id],
+    );
     // 通知中心只展示“直接回复 / 显式提及”。消息本身被撤回后，对应定向通知必须同步消失，
     // 不能让收件人再通过通知读取已经撤回的正文摘要。
     await connection.query(

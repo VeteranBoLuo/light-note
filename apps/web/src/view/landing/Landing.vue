@@ -308,7 +308,17 @@
           <div class="landing-footer">
             <span>{{ t('landing.copyright') }}</span>
             <span class="footer-sep">|</span>
-            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
+            <span>{{ t('landing.websiteFilingName', { name: WEBSITE_FILING_NAME }) }}</span>
+            <span class="footer-sep">|</span>
+            <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
+            <template v-if="hasPublicSecurityFiling">
+              <span class="footer-sep">|</span>
+              <a :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+                {{ PUBLIC_SECURITY_FILING_NUMBER }}
+              </a>
+            </template>
+            <span class="footer-sep">|</span>
+            <a href="/about.html">{{ t('landing.about') }}</a>
             <span class="footer-sep">|</span>
             <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心。
                  注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
@@ -407,6 +417,14 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
+  import {
+    MIIT_QUERY_URL,
+    PUBLIC_SECURITY_FILING_NUMBER,
+    PUBLIC_SECURITY_QUERY_URL,
+    WEBSITE_FILING_NAME,
+    WEBSITE_ICP_NUMBER,
+    hasPublicSecurityFiling,
+  } from '@/config/siteCompliance.ts';
 
   const { t } = useI18n();
   const router = useRouter();

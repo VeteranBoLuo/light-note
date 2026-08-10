@@ -133,7 +133,14 @@ describe('buildNoteExportHtml', () => {
     expect(doc).toContain("data-ln-media-position='right'");
     expect(doc).toContain("data-ln-media-width='30'");
     expect(doc).toContain("data-ln-media-width='42'");
-    expect(doc).not.toContain('max-width: 320px');
+    expect(doc).toContain('--ln-media-max-width: 280px');
+    expect(doc).toContain('--ln-media-max-height: 220px');
+    expect(doc).toContain('--ln-media-max-width: 340px');
+    expect(doc).toContain('--ln-media-max-height: 260px');
+    expect(doc).toContain('--ln-media-max-width: 400px');
+    expect(doc).toContain('--ln-media-max-height: 300px');
+    expect(doc).toContain('max-height: var(--ln-media-max-height) !important');
+    expect(doc).toContain('justify-content: center');
     expect(doc).toContain('.ln-text-gradient');
     expect(doc).toContain('.ln-rich-effect-float');
   });
