@@ -423,6 +423,7 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/resource-governance/findings/query'],
   ['GET', '/resource-governance/findings/:id'],
   ['POST', '/resource-governance/findings/ignore'],
+  ['POST', '/resource-governance/invalid-owners/cleanup'],
   ['POST', '/resource-governance/jobs/preview'],
   ['POST', '/resource-governance/jobs'],
   ['POST', '/resource-governance/jobs/query'],

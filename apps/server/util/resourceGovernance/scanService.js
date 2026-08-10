@@ -3,7 +3,12 @@ import { promises as fsP } from 'node:fs';
 import pool from '../../db/index.js';
 import { ensureResourceGovernanceSchema } from '../resourceGovernanceSchema.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
-import { GOVERNANCE_RISK, normalizeGovernanceScopes, resourceGovernanceScanEnabled } from './registry.js';
+import {
+  canCreateCleanupJob,
+  GOVERNANCE_RISK,
+  normalizeGovernanceScopes,
+  resourceGovernanceScanEnabled,
+} from './registry.js';
 import {
   classifyLocalImage,
   governanceFingerprint,
@@ -294,6 +299,15 @@ async function scanOwnerIntegrity(scan, db, tables) {
   const scopes = new Set(scan.scopes);
   let scanned = 0;
   let findings = 0;
+  const ownersWithDeletionWorkflow = new Set();
+  if (tables.has('account_deletion_requests')) {
+    const [deletionRequests] = await db.query(
+      `SELECT CONVERT(user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AS owner_id
+         FROM account_deletion_requests
+        WHERE status IN ('pending', 'processing', 'retry_wait')`,
+    );
+    for (const request of deletionRequests) ownersWithDeletionWorkflow.add(String(request.owner_id || ''));
+  }
   for (const definition of OWNER_RESOURCE_DEFINITIONS) {
     if (!scopes.has(definition.scope) || !tables.has(definition.table)) continue;
     let cursor = '';
@@ -350,6 +364,9 @@ async function scanOwnerIntegrity(scan, db, tables) {
         ORDER BY r.${definition.owner} ASC`,
     );
     for (const row of softDeletedGroups) {
+      // 已进入正式账号注销工作流的资源由 accountDeletion 领域服务处理，
+      // 不再为同一账号制造多条不可执行的“软删除 owner”噪声。
+      if (ownersWithDeletionWorkflow.has(String(row.owner_id || ''))) continue;
       await recordFinding(
         scan,
         {
@@ -401,14 +418,73 @@ async function scanAccountDeletionJobs(scan, db, tables) {
           attempts: Number(row.attempts || 0),
           lastErrorCode: row.last_error_code || null,
           updatedAt: row.update_time,
-          cleanupExecutorRegistered: false,
-          reasonCode: 'EXISTING_DELETION_WORKFLOW_REQUIRES_REPAIR',
+          cleanupExecutorRegistered: true,
+          actionKind: 'cleanup_invalid_owner',
+          reasonCode: 'EXISTING_DELETION_WORKFLOW_RETRY_REQUIRED',
         },
       },
       db,
     );
   }
   return { scanned: rows.length, findings: rows.length };
+}
+
+async function decorateFindingActions(items, db) {
+  const invalidOwnerIssues = new Set(['OWNER_MISSING', 'SOFT_DELETED_OWNER_HAS_RESOURCES', 'ACCOUNT_DELETION_STALLED']);
+  const invalidOwnerItems = items.filter((item) => invalidOwnerIssues.has(item.issue_code) && item.owner_id);
+  const ownerStates = new Map();
+  const accountStates = new Map();
+  if (invalidOwnerItems.length) {
+    const ownerIds = [...new Set(invalidOwnerItems.map((item) => String(item.owner_id)))];
+    const ownerPlaceholders = ownerIds.map(() => '?').join(',');
+    const [owners] = await db.query(
+      `SELECT id, role, del_flag
+         FROM user
+        WHERE id IN (${ownerPlaceholders})`,
+      ownerIds,
+    );
+    for (const owner of owners) ownerStates.set(String(owner.id), owner);
+
+    const requestIds = [
+      ...new Set(
+        invalidOwnerItems
+          .filter((item) => item.issue_code === 'ACCOUNT_DELETION_STALLED' && item.target_id)
+          .map((item) => String(item.target_id)),
+      ),
+    ];
+    if (requestIds.length) {
+      const placeholders = requestIds.map(() => '?').join(',');
+      const [requests] = await db.query(
+        `SELECT id, user_id, status, processing_started_at
+           FROM account_deletion_requests
+          WHERE id IN (${placeholders})`,
+        requestIds,
+      );
+      for (const request of requests) accountStates.set(String(request.id), request);
+    }
+  }
+
+  return items.map((item) => {
+    if (invalidOwnerIssues.has(item.issue_code)) {
+      const owner = ownerStates.get(String(item.owner_id || ''));
+      const ownerRetired = !owner || Number(owner.del_flag || 0) === 1;
+      const request =
+        item.issue_code === 'ACCOUNT_DELETION_STALLED' ? accountStates.get(String(item.target_id || '')) : null;
+      const requestMatches =
+        item.issue_code !== 'ACCOUNT_DELETION_STALLED' ||
+        (request && String(request.user_id || '') === String(item.owner_id || ''));
+      return {
+        ...item,
+        action_kind: 'cleanup_invalid_owner',
+        action_eligible: Boolean(item.state === 'open' && ownerRetired && requestMatches),
+      };
+    }
+    return {
+      ...item,
+      action_kind: canCreateCleanupJob(item) ? 'cleanup' : null,
+      action_eligible: canCreateCleanupJob(item),
+    };
+  });
 }
 
 async function summarizeOpenFindings(db) {
@@ -537,13 +613,14 @@ export async function queryGovernanceFindings(filters = {}, { db = pool } = {}) 
       LIMIT ? OFFSET ?`,
     [...params, pageSize, (page - 1) * pageSize],
   );
+  const decoratedItems = await decorateFindingActions(items, db);
   const summary = await summarizeOpenFindings(db);
   const [latestScans] = await db.query(
     `SELECT id, status, scope_json, summary_json, started_at, heartbeat_at, finished_at, last_error_code, create_time
        FROM resource_governance_scans ORDER BY create_time DESC LIMIT 1`,
   );
   return {
-    items: items.map((item) => ({ ...item, evidence_json: parseJson(item.evidence_json) })),
+    items: decoratedItems.map((item) => ({ ...item, evidence_json: parseJson(item.evidence_json) })),
     total: Number(countRow?.total || 0),
     page,
     pageSize,

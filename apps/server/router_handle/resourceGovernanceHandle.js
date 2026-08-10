@@ -8,6 +8,7 @@ import {
   queryGovernanceAudits,
   queryGovernanceFindings,
 } from '../util/resourceGovernance/scanService.js';
+import { cleanupInvalidOwnerFindings } from '../util/resourceGovernance/invalidOwnerCleanupService.js';
 import {
   cancelCleanupJob,
   createCleanupJob,
@@ -41,6 +42,10 @@ function sendError(res, scene, error) {
     RESOURCE_GOVERNANCE_CONFIRMATION_MISMATCH: '确认短语不匹配',
     RESOURCE_GOVERNANCE_FINDING_SCOPE_INVALID: '清理候选范围无效',
     RESOURCE_GOVERNANCE_FINDING_SCOPE_CHANGED: '候选状态已经变化，请刷新后重新确认',
+    ACCOUNT_DELETION_RETRY_SCOPE_INVALID: '注销清理重试范围无效',
+    ACCOUNT_DELETION_RETRY_SCOPE_CHANGED: '注销清理任务状态已经变化，请重新扫描',
+    ACCOUNT_DELETION_RETRY_NOT_ALLOWED: '注销清理任务当前不可重试',
+    ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED: '账号当前仍处于可用状态，已拒绝物理清理',
     FINDING_NOT_CLEANABLE: '该候选不允许自动清理',
     EXECUTOR_NOT_REGISTERED: '该资源类型没有注册清理执行器',
     IMAGE_KIND_EXECUTOR_DISABLED: '该图片类型当前仅支持只读复核',
@@ -84,7 +89,7 @@ export async function queryFindings(req, res) {
         capabilities: {
           scanEnabled: resourceGovernanceScanEnabled(),
           cleanupEnabled: resourceGovernanceCleanupEnabled(),
-          reviewCleanupEnabled: false,
+          reviewCleanupEnabled: true,
         },
       }),
     );
@@ -117,6 +122,24 @@ export async function ignoreFinding(req, res) {
     return res.send(resultData({ ignored: true }));
   } catch (error) {
     return sendError(res, 'ignore-finding', error);
+  }
+}
+
+export async function cleanupInvalidOwners(req, res) {
+  const user = rootUser(req, res);
+  if (!user) return;
+  try {
+    return res.send(
+      resultData(
+        await cleanupInvalidOwnerFindings({
+          findingIds: req.body?.findingIds,
+          confirmationPhrase: req.body?.confirmationPhrase,
+          actorUserId: user.id,
+        }),
+      ),
+    );
+  } catch (error) {
+    return sendError(res, 'cleanup-invalid-owners', error);
   }
 }
 

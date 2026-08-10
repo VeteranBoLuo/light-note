@@ -67,8 +67,8 @@
         />
         <BSelect v-model:value="filters.riskLevel" :options="riskOptions" @change="reloadFindings" />
         <BSelect v-model:value="filters.resourceType" :options="resourceOptions" @change="reloadFindings" />
-        <BButton :disabled="selectedIds.length === 0 || !capabilities.cleanupEnabled" @click="reviewCleanup">
-          {{ t('resourceGovernance.cleanupSelected', { count: selectedIds.length }) }}
+        <BButton :disabled="selectedIds.length === 0 || !canExecuteSelected" @click="reviewCleanup">
+          {{ selectedActionLabel }}
         </BButton>
       </div>
 
@@ -321,7 +321,13 @@
 
     <BModal
       v-model:visible="cleanupConfirmOpen"
-      :title="t('resourceGovernance.cleanupConfirmTitle')"
+      :title="
+        t(
+          cleanupPreview?.actionKind === 'cleanup_invalid_owner'
+            ? 'resourceGovernance.cleanupInvalidOwnerTitle'
+            : 'resourceGovernance.cleanupConfirmTitle',
+        )
+      "
       :width="bookmark.isMobile ? '92%' : '520px'"
       :show-footer="false"
       :mask-closable="false"
@@ -331,10 +337,15 @@
       <div v-if="cleanupPreview" class="governance-confirm">
         <p>
           {{
-            t('resourceGovernance.cleanupConfirmContent', {
-              count: cleanupPreview.count,
-              size: formatBytes(cleanupPreview.estimatedBytes),
-            })
+            t(
+              cleanupPreview.actionKind === 'cleanup_invalid_owner'
+                ? 'resourceGovernance.cleanupInvalidOwnerContent'
+                : 'resourceGovernance.cleanupConfirmContent',
+              {
+                count: cleanupPreview.count,
+                size: formatBytes(cleanupPreview.estimatedBytes),
+              },
+            )
           }}
         </p>
         <div class="governance-confirm__phrase">
@@ -355,7 +366,13 @@
             :disabled="cleanupPhrase.trim() !== cleanupPreview.confirmationPhrase"
             @click="submitCleanup"
           >
-            {{ t('resourceGovernance.confirmCleanup') }}
+            {{
+              t(
+                cleanupPreview.actionKind === 'cleanup_invalid_owner'
+                  ? 'resourceGovernance.confirmInvalidOwnerCleanup'
+                  : 'resourceGovernance.confirmCleanup',
+              )
+            }}
           </BButton>
         </div>
       </div>
@@ -381,6 +398,7 @@
   import { bookmarkStore } from '@/store';
   import {
     cancelGovernanceJob,
+    cleanupGovernanceInvalidOwners,
     createGovernanceCleanupJob,
     createGovernanceScan,
     getGovernanceScan,
@@ -433,11 +451,29 @@
     confirmationPhrase: string;
     count: number;
     estimatedBytes: number;
+    actionKind: 'cleanup' | 'cleanup_invalid_owner';
+    findingIds: string[];
   } | null>(null);
   let searchTimer: number | null = null;
   let scanTimer: number | null = null;
 
   const scanActive = computed(() => latestScan.value?.status === 'pending' || latestScan.value?.status === 'running');
+  const selectedFindings = computed(() =>
+    selectedIds.value
+      .map((id) => findings.value.find((finding) => finding.id === id))
+      .filter((finding): finding is GovernanceFinding => Boolean(finding)),
+  );
+  const selectedActionKind = computed(() => selectedFindings.value[0]?.actionKind || null);
+  const canExecuteSelected = computed(() => {
+    if (selectedActionKind.value === 'cleanup_invalid_owner') return capabilities.reviewCleanupEnabled;
+    if (selectedActionKind.value === 'cleanup') return capabilities.cleanupEnabled;
+    return false;
+  });
+  const selectedActionLabel = computed(() =>
+    selectedActionKind.value === 'cleanup_invalid_owner'
+      ? t('resourceGovernance.cleanupInvalidOwnerSelected', { count: selectedIds.value.length })
+      : t('resourceGovernance.cleanupSelected', { count: selectedIds.value.length }),
+  );
   const latestScanText = computed(() =>
     latestScan.value?.finishedAt ? formatTime(latestScan.value.finishedAt) : t('resourceGovernance.notScanned'),
   );
@@ -521,18 +557,21 @@
     return id.length > 20 ? `${id.slice(0, 8)}…${id.slice(-6)}` : id;
   }
   function isFindingSelectable(finding: GovernanceFinding) {
-    return (
-      capabilities.cleanupEnabled &&
-      finding.state === 'open' &&
-      finding.riskLevel === 'safe' &&
-      finding.issueCode === 'LOCAL_IMAGE_UNREFERENCED'
-    );
+    if (!finding.actionEligible || finding.state !== 'open') return false;
+    if (finding.actionKind === 'cleanup_invalid_owner') return capabilities.reviewCleanupEnabled;
+    return finding.actionKind === 'cleanup' && capabilities.cleanupEnabled;
   }
   function toggleFinding(finding: GovernanceFinding, checked: boolean) {
     if (!isFindingSelectable(finding)) return;
-    selectedIds.value = checked
-      ? [...new Set([...selectedIds.value, finding.id])]
-      : selectedIds.value.filter((id) => id !== finding.id);
+    if (!checked) {
+      selectedIds.value = selectedIds.value.filter((id) => id !== finding.id);
+      return;
+    }
+    const currentKind = selectedActionKind.value;
+    selectedIds.value =
+      currentKind && currentKind !== finding.actionKind
+        ? [finding.id]
+        : [...new Set([...selectedIds.value, finding.id])];
   }
 
   async function reloadFindings() {
@@ -651,9 +690,30 @@
 
   async function reviewCleanup() {
     if (!selectedIds.value.length) return;
+    if (selectedActionKind.value === 'cleanup_invalid_owner') {
+      const findingIds = [...selectedIds.value];
+      cleanupPreview.value = {
+        previewToken: '',
+        confirmationPhrase: t('resourceGovernance.cleanupInvalidOwnerPhrase', { count: findingIds.length }),
+        count: findingIds.length,
+        estimatedBytes: selectedFindings.value.reduce(
+          (total, finding) => total + Number(finding.estimatedBytes || 0),
+          0,
+        ),
+        actionKind: 'cleanup_invalid_owner',
+        findingIds,
+      };
+      cleanupPhrase.value = '';
+      cleanupConfirmOpen.value = true;
+      return;
+    }
     const preview = await previewGovernanceCleanup(selectedIds.value);
     if (preview.status !== 200) return;
-    cleanupPreview.value = preview.data;
+    cleanupPreview.value = {
+      ...preview.data,
+      actionKind: 'cleanup',
+      findingIds: [...selectedIds.value],
+    };
     cleanupPhrase.value = '';
     cleanupConfirmOpen.value = true;
   }
@@ -668,14 +728,31 @@
     if (!preview || cleanupSubmitting.value || cleanupPhrase.value.trim() !== preview.confirmationPhrase) return;
     cleanupSubmitting.value = true;
     try {
-      const result = await createGovernanceCleanupJob(preview.previewToken, cleanupPhrase.value.trim());
+      const result =
+        preview.actionKind === 'cleanup_invalid_owner'
+          ? await cleanupGovernanceInvalidOwners(preview.findingIds, cleanupPhrase.value.trim())
+          : await createGovernanceCleanupJob(preview.previewToken, cleanupPhrase.value.trim());
       if (result.status === 200) {
         selectedIds.value = [];
         cleanupConfirmOpen.value = false;
         cleanupPreview.value = null;
         cleanupPhrase.value = '';
-        message.success(t('resourceGovernance.cleanupQueued'));
-        await reloadFindings();
+        if (preview.actionKind === 'cleanup_invalid_owner') {
+          if (Number(result.data?.failed || 0) > 0) {
+            message.error(
+              t('resourceGovernance.cleanupInvalidOwnerPartial', {
+                completed: result.data?.completed || 0,
+                failed: result.data?.failed || 0,
+              }),
+            );
+          } else {
+            message.success(t('resourceGovernance.cleanupInvalidOwnerSuccess', { count: result.data?.completed || 0 }));
+          }
+          await Promise.all([reloadFindings(), reloadJobs(), reloadAudits()]);
+        } else {
+          message.success(t('resourceGovernance.cleanupQueued'));
+          await reloadFindings();
+        }
       }
     } finally {
       cleanupSubmitting.value = false;
@@ -726,6 +803,7 @@
     return t('resourceGovernance.ownerNotApplicable');
   }
   function guardDescription(finding: GovernanceFinding) {
+    if (finding.actionKind === 'cleanup_invalid_owner') return t('resourceGovernance.guardInvalidOwnerCleanup');
     if (finding.riskLevel === 'safe') return t('resourceGovernance.guardSafe');
     if (finding.riskLevel === 'review') return t('resourceGovernance.guardReview');
     return t('resourceGovernance.guardBlocked');

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import os from 'node:os';
+import pool from './db/index.js';
 import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 import { claimGovernanceScan, runGovernanceScan } from './util/resourceGovernance/scanService.js';
 import { claimCleanupJob, runCleanupJob } from './util/resourceGovernance/jobService.js';
@@ -54,7 +55,16 @@ function stop() {
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
-run().catch((error) => {
-  console.error('[resource-governance-worker] startup failed code=%s', stableAgentErrorCode(error));
-  process.exitCode = 1;
-});
+run()
+  .catch((error) => {
+    console.error('[resource-governance-worker] startup failed code=%s', stableAgentErrorCode(error));
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    try {
+      await pool.end();
+    } catch (error) {
+      console.error('[resource-governance-worker] shutdown failed code=%s', stableAgentErrorCode(error));
+      process.exitCode = 1;
+    }
+  });

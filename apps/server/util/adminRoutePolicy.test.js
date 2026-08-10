@@ -80,6 +80,7 @@ describe('adminRoutePolicyMiddleware', () => {
   it('资源治理查询、重试和取消在任何代管上下文都失败关闭', () => {
     for (const [method, path] of [
       ['POST', '/resource-governance/findings/query'],
+      ['POST', '/resource-governance/invalid-owners/cleanup'],
       ['GET', '/resource-governance/jobs/job-1'],
       ['POST', '/resource-governance/jobs/job-1/retry'],
       ['POST', '/resource-governance/jobs/job-1/cancel'],

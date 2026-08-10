@@ -45,6 +45,9 @@ export const getGovernanceFinding = (id: string) =>
 export const ignoreGovernanceFinding = (id: string, reasonCode: string) =>
   apiBasePost('/api/resource-governance/findings/ignore', { id, reasonCode });
 
+export const cleanupGovernanceInvalidOwners = (findingIds: string[], confirmationPhrase: string) =>
+  apiBasePost('/api/resource-governance/invalid-owners/cleanup', { findingIds, confirmationPhrase }, { silent: true });
+
 export const previewGovernanceCleanup = (findingIds: string[]) =>
   apiBasePost('/api/resource-governance/jobs/preview', { findingIds }, { silent: true });
 

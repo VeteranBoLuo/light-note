@@ -8,6 +8,7 @@ router.get('/scans/:id', handle.getScan);
 router.post('/findings/query', handle.queryFindings);
 router.get('/findings/:id', handle.getFinding);
 router.post('/findings/ignore', handle.ignoreFinding);
+router.post('/invalid-owners/cleanup', handle.cleanupInvalidOwners);
 router.post('/jobs/preview', handle.previewJob);
 router.post('/jobs', handle.createJob);
 router.post('/jobs/query', handle.queryJobs);

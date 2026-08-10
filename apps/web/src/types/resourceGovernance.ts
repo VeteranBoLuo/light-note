@@ -1,5 +1,6 @@
 export type GovernanceRisk = 'safe' | 'review' | 'blocked';
 export type GovernanceFindingState = 'open' | 'ignored' | 'queued' | 'resolved' | 'stale';
+export type GovernanceActionKind = 'cleanup' | 'cleanup_invalid_owner';
 
 export interface GovernanceFinding {
   id: string;
@@ -17,6 +18,8 @@ export interface GovernanceFinding {
   lastSeenAt: string;
   lastVerifiedAt?: string | null;
   resolutionCode?: string | null;
+  actionKind?: GovernanceActionKind | null;
+  actionEligible?: boolean;
 }
 
 export interface GovernanceSummary {

@@ -660,6 +660,22 @@ async function purgeDatabaseForUser(userId) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    const [accounts] = await connection.query(
+      `SELECT role, del_flag
+         FROM user
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [userId],
+    );
+    const account = accounts[0] || null;
+    if (account && Number(account.del_flag || 0) !== 1) {
+      throw accountDeletionError(
+        'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+        '账号当前仍处于可用状态，已拒绝物理清理',
+        409,
+      );
+    }
     const tables = await existingTables(connection);
     await purgeAiWorkspace(connection, tables, userId);
     await purgeFeatureRequests(connection, tables, userId);
@@ -675,6 +691,135 @@ async function purgeDatabaseForUser(userId) {
   } finally {
     connection.release();
   }
+}
+
+function mergeCleanupArtifacts(current, collected) {
+  const objectKeys = [
+    ...parseCleanupJsonArray(current?.object_keys_json || '[]', 'object_keys_json'),
+    ...(collected.objectKeys || []),
+  ];
+  const noteImageUrls = [
+    ...parseCleanupJsonArray(current?.note_image_urls_json || '[]', 'note_image_urls_json'),
+    ...(collected.noteImageUrls || []),
+  ];
+  const bookmarkIcons = [
+    ...parseCleanupJsonArray(current?.bookmark_icons_json || '[]', 'bookmark_icons_json'),
+    ...(collected.bookmarkIcons || []),
+  ];
+  const bookmarkIconMap = new Map();
+  for (const icon of bookmarkIcons) {
+    const key = `${String(icon?.id || '')}:${String(icon?.iconUrl || icon?.icon_url || '')}`;
+    if (key !== ':') bookmarkIconMap.set(key, icon);
+  }
+  return {
+    objectKeys: [...new Set(objectKeys.map((value) => String(value || '').trim()).filter(Boolean))],
+    noteImageUrls: [...new Set(noteImageUrls.map((value) => String(value || '').trim()).filter(Boolean))],
+    bookmarkIcons: [...bookmarkIconMap.values()],
+  };
+}
+
+/**
+ * Root 资源治理专用：为已经不存在、已软删除或已正式注销的账号补建/恢复物理清理任务。
+ *
+ * 管理员权限只决定是否允许发起该动作；是否真的可删除仍由这里和
+ * purgeDatabaseForUser 在两个事务阶段分别锁定 user 行复核，正常账号绝不进入清理。
+ */
+export async function cleanupInvalidOwnerResourcesNow({ userId, expectedRequestId = null, db = pool }) {
+  const normalizedUserId = String(userId || '').trim();
+  const normalizedRequestId = String(expectedRequestId || '').trim();
+  if (!normalizedUserId) {
+    throw accountDeletionError('ACCOUNT_DELETION_RETRY_SCOPE_INVALID', '失效资源归属范围无效', 400);
+  }
+
+  const connection = await db.getConnection();
+  let requestId = '';
+  try {
+    await connection.beginTransaction();
+    const [accounts] = await connection.query(
+      `SELECT role, del_flag
+         FROM user
+        WHERE id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [normalizedUserId],
+    );
+    const account = accounts[0] || null;
+    if (account && Number(account.del_flag || 0) !== 1) {
+      throw accountDeletionError(
+        'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+        '账号当前仍处于可用状态，已拒绝物理清理',
+        409,
+      );
+    }
+
+    const tables = await existingTables(connection);
+    if (!tables.has('account_deletion_requests')) {
+      throw accountDeletionError('ACCOUNT_DELETION_SCHEMA_UNAVAILABLE', '账号清理队列表尚未就绪', 503);
+    }
+    const artifacts = await collectCleanupArtifacts(connection, tables, normalizedUserId);
+    const [requests] = await connection.query(
+      `SELECT id, user_id, status, processing_started_at,
+              object_keys_json, note_image_urls_json, bookmark_icons_json
+         FROM account_deletion_requests
+        WHERE user_id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [normalizedUserId],
+    );
+    const current = requests[0] || null;
+    if (normalizedRequestId && (!current || String(current.id || '') !== normalizedRequestId)) {
+      throw accountDeletionError('ACCOUNT_DELETION_RETRY_SCOPE_CHANGED', '注销清理任务状态已经变化', 409);
+    }
+    if (
+      current?.status === 'processing' &&
+      current.processing_started_at &&
+      new Date(current.processing_started_at).getTime() >= Date.now() - STALE_PROCESSING_MINUTES * 60 * 1000
+    ) {
+      throw accountDeletionError('ACCOUNT_DELETION_RETRY_NOT_ALLOWED', '注销清理任务正在执行，请稍后刷新', 409);
+    }
+
+    if (current) {
+      requestId = String(current.id);
+      const merged = mergeCleanupArtifacts(current, artifacts);
+      await connection.query(
+        `UPDATE account_deletion_requests
+            SET status = 'pending',
+                object_keys_json = ?, note_image_urls_json = ?, bookmark_icons_json = ?,
+                next_retry_at = NOW(), processing_started_at = NULL, completed_at = NULL,
+                last_error_code = NULL
+          WHERE id = ?`,
+        [
+          JSON.stringify(merged.objectKeys),
+          JSON.stringify(merged.noteImageUrls),
+          JSON.stringify(merged.bookmarkIcons),
+          requestId,
+        ],
+      );
+    } else {
+      requestId = crypto.randomUUID();
+      await connection.query(
+        `INSERT INTO account_deletion_requests
+          (id, user_id, status, object_keys_json, note_image_urls_json, bookmark_icons_json)
+         VALUES (?, ?, 'pending', ?, ?, ?)`,
+        [
+          requestId,
+          normalizedUserId,
+          JSON.stringify(artifacts.objectKeys),
+          JSON.stringify(artifacts.noteImageUrls),
+          JSON.stringify(artifacts.bookmarkIcons),
+        ],
+      );
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback().catch(() => {});
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  const execution = await processAccountDeletionRequest(requestId);
+  return { requestId, ...execution };
 }
 
 function parseCleanupJsonArray(value, fieldName) {
