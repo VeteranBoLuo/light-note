@@ -146,6 +146,7 @@
   import AiNoteConfirmationPreview from './AiNoteConfirmationPreview.vue';
   import NoteDirectoryPicker from '@/components/noteLibrary/tree/NoteDirectoryPicker.vue';
   import { fetchNoteTreeFeatures } from '@/api/noteTree';
+  import { AI_AGENT_CLIENT_CAPABILITIES } from '@/api/aiAttachmentApi';
 
   const props = defineProps<{ confirmation: AiToolConfirmation }>();
   const emit = defineEmits<{
@@ -305,6 +306,8 @@
         confirmationToken: props.confirmation.token,
         sessionId: props.confirmation.sessionId,
         parentId,
+        ...(props.confirmation.continuation?.token ? { continuationToken: props.confirmation.continuation.token } : {}),
+        clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
       });
       const next = res.data?.confirmation as AiToolConfirmation | undefined;
       if (
@@ -341,6 +344,8 @@
       const res = await apiBasePost('/api/chat/agent/confirm', {
         confirmationToken: props.confirmation.token,
         sessionId: props.confirmation.sessionId,
+        ...(props.confirmation.continuation?.token ? { continuationToken: props.confirmation.continuation.token } : {}),
+        clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
       });
       if (res.status !== 200) throw new Error(res.msg || t('ai.confirmationFailed'));
       const receipt = resolveSucceededActionReceipt(res.data?.actionReceipt, props.confirmation);
@@ -358,6 +363,7 @@
         summary: resultText.value,
         sources: Array.isArray(res.data?.sources) ? res.data.sources : [],
         receipt,
+        ...(res.data?.continuation ? { continuation: res.data.continuation } : {}),
       });
       settle('confirmed', resultText.value);
       recordOperation({
@@ -391,6 +397,8 @@
       const res = await apiBasePost('/api/chat/agent/confirm/reject', {
         confirmationToken: props.confirmation.token,
         sessionId: props.confirmation.sessionId,
+        ...(props.confirmation.continuation?.token ? { continuationToken: props.confirmation.continuation.token } : {}),
+        clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
       });
       if (res.status !== 200) throw new Error(res.msg || t('ai.confirmationFailed'));
       stopCountdown();

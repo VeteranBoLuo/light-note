@@ -3913,6 +3913,9 @@ export default {
       targetReady: 'Target checked: {target}',
       awaitingConfirmation: 'Nothing has been changed. Waiting for your confirmation.',
     },
+    actionContinuation: {
+      userMessage: 'Continue based on the completed “{tool}” action',
+    },
     toolStatus: {
       running: 'Running',
       success: 'Completed',

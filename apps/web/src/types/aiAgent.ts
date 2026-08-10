@@ -10,6 +10,17 @@ export interface AiToolConfirmationPreview {
   details?: AiConfirmationPreviewDetail[];
 }
 
+export type AiActionContinuationPolicy =
+  'terminal' | 'promote_confirmation' | 'final_reply' | 'resume_plan' | 'offer_followup' | 'edit';
+
+export interface AiActionContinuation {
+  schemaVersion: 1;
+  token: string;
+  policy: AiActionContinuationPolicy;
+  labelKey?: string;
+  expiresAt?: string;
+}
+
 export interface AiToolConfirmation {
   token: string;
   id: string;
@@ -21,6 +32,7 @@ export interface AiToolConfirmation {
   riskLevel?: 'low' | 'medium' | 'high';
   preview?: AiToolConfirmationPreview;
   expiresAt?: string;
+  continuation?: AiActionContinuation;
 }
 
 export interface AiToolActionReceipt {
@@ -37,6 +49,7 @@ export interface AiToolConfirmationResolution {
   summary: string;
   sources: unknown[];
   receipt: AiToolActionReceipt;
+  continuation?: AiActionContinuation;
 }
 
 export interface AiToolConfirmationReplacement {
@@ -87,6 +100,15 @@ export interface AiAgentInteraction {
   submitLabel?: string;
   cancelLabel?: string;
   expiresIn: number;
+  continuation?: AiActionContinuation;
+}
+
+export interface AiActionOutcome {
+  schemaVersion: 1;
+  state: 'resolved' | 'confirmation_required' | 'completed' | 'editing' | 'cancelled';
+  summary?: string;
+  receipt?: AiToolActionReceipt;
+  continuation?: AiActionContinuation;
 }
 
 export interface AiAgentInteractionResponse {

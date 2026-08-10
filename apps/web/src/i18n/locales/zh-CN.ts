@@ -3804,6 +3804,9 @@ export default {
       targetReady: '已核对操作对象：{target}',
       awaitingConfirmation: '尚未写入，等待你的确认',
     },
+    actionContinuation: {
+      userMessage: '继续根据刚才已完成的“{tool}”操作回答',
+    },
     toolStatus: {
       running: '执行中',
       success: '已完成',
