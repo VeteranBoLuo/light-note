@@ -91,8 +91,9 @@
         <!-- 当前目录按钮内已经同时提供目录/标签选择，不再重复放一个标签按钮。 -->
         <div v-if="bookmark.isMobile" class="note-mobile-actions">
           <BButton
-            v-if="noteTreeMobileEnabled"
             class="note-mobile-directory"
+            :class="{ 'is-loading': !noteTreeFeaturesReady }"
+            :disabled="!noteTreeFeaturesReady"
             :title="mobileScopeLabel"
             @click="openMobileDirectory(noteSidebarMode)"
           >
@@ -503,7 +504,7 @@
 
     <!-- 新建笔记类型选择 -->
     <NewNotePickerModal
-      v-if="bookmark.isMobile"
+      v-if="bookmark.isMobile && showTypePicker"
       v-model:visible="showTypePicker"
       :builtin-templates="orderedBuiltinTemplates"
       :my-templates="orderedMyTemplates"
@@ -516,7 +517,7 @@
       @retry="loadMyTemplates"
     />
     <ActionCardModal
-      v-else
+      v-if="!bookmark.isMobile && showTypePicker"
       v-model:visible="showTypePicker"
       :mask-closable="false"
       :title="$t('note.pickEditor')"
@@ -527,6 +528,7 @@
 
     <!-- AI 智能整理(笔记):自动为未打标签的笔记推荐标签 -->
     <AiOrganizeModal
+      v-if="aiOrgVisible"
       v-model:visible="aiOrgVisible"
       init-type="note"
       :selected-ids="selectedAiOrganizeIds"
@@ -558,7 +560,7 @@
       @renamed="handleNoteRenamed"
     />
     <NoteDirectoryDrawer
-      v-if="bookmark.isMobile"
+      v-if="bookmark.isMobile && mobileDirectoryOpen"
       v-model:open="mobileDirectoryOpen"
       :initial-tab="mobileDirectoryInitialTab"
       :current-parent-id="currentParentId"
@@ -609,21 +611,15 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { bookmarkStore, useNoteWorkspaceStore, useUserStore } from '@/store';
+  import { bookmarkStore, useNoteLibraryCacheStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import { VueDraggable } from 'vue-draggable-plus';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
-  import NoteDirectoryDrawer from '@/components/noteLibrary/tree/NoteDirectoryDrawer.vue';
-  import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
-  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
-  import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { registerGlobalRefreshSource } from '@/composables/useGlobalRefreshBar';
-  import AiOrganizeModal from '@/components/manage/bookmarkMg/AiOrganizeModal.vue';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
-  import NoteReadonlyPreview from '@/components/noteLibrary/library/NoteReadonlyPreview.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -643,9 +639,7 @@
     type NoteTreeFeatures,
   } from '@/api/noteTree';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
-  import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
-  import ActionCardModal from '@/components/base/ActionCardModal.vue';
-  import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
+  import { buildNoteDetailRequestScope, prefetchNoteDetail } from '@/api/noteDetailPrefetch';
   import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
@@ -675,6 +669,41 @@
   } from '@/utils/noteTreeDrop';
   import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
   import { getRootZoom } from '@/utils/zoom';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+  import {
+    NOTE_LIBRARY_FEATURES_FRESH_MS,
+    NOTE_LIBRARY_LIST_FRESH_MS,
+    NOTE_LIBRARY_TAGS_FRESH_MS,
+    buildNoteLibraryListCacheKey,
+  } from '@/store/noteLibraryCache';
+
+  const createDeferredLibraryFeature = (loader: () => Promise<any>) =>
+    defineAsyncComponent({
+      loader,
+      loadingComponent: AsyncFeatureLoadingOverlay,
+      delay: 180,
+      suspensible: false,
+    });
+  const NoteDirectoryDrawer = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/tree/NoteDirectoryDrawer.vue'),
+  );
+  const NoteAttachPagesModal = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/tree/NoteAttachPagesModal.vue'),
+  );
+  const NoteMoveModal = createDeferredLibraryFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
+  const NoteRenameModal = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
+  );
+  const AiOrganizeModal = createDeferredLibraryFeature(
+    () => import('@/components/manage/bookmarkMg/AiOrganizeModal.vue'),
+  );
+  const ActionCardModal = createDeferredLibraryFeature(() => import('@/components/base/ActionCardModal.vue'));
+  const NewNotePickerModal = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/library/NewNotePickerModal.vue'),
+  );
+  const NoteReadonlyPreview = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/library/NoteReadonlyPreview.vue'),
+  );
   const NoteTagConfig = defineAsyncComponent(() => import('@/components/noteLibrary/detail/NoteTagConfig.vue'));
   const TEMPLATE_ICONS: Record<string, string> = {
     daily: icon.noteTemplate.daily,
@@ -691,6 +720,8 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
   const noteWorkspace = useNoteWorkspaceStore();
+  const noteLibraryCache = useNoteLibraryCacheStore();
+  const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
   const { sidebarPreferredOpen: noteSidebarExpanded, sidebarWidth: noteWorkspaceSidebarWidth } =
     storeToRefs(noteWorkspace);
   const librarySidebarOverlayOpen = ref(false);
@@ -706,8 +737,11 @@
     }
     libraryWorkspaceMode.value = layout.mode;
   }
-  const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
-  const noteTreeFeaturesReady = ref(false);
+  const initialFeatureSnapshot = noteLibraryCache.readFeatures(noteCacheScope.value);
+  const noteTreeFeatures = ref<NoteTreeFeatures>({
+    ...(initialFeatureSnapshot?.features || DISABLED_NOTE_TREE_FEATURES),
+  });
+  const noteTreeFeaturesReady = ref(Boolean(initialFeatureSnapshot));
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
   const noteTreeWriteEnabled = computed(() => noteTreeFeatures.value.note_tree_write);
   const noteTreeMobileEnabled = computed(() => noteTreeReadEnabled.value && noteTreeFeatures.value.note_tree_mobile);
@@ -803,13 +837,16 @@
   } = useNoteTree({ enabled: noteTreeReadEnabled });
 
   async function loadNoteTreeFeatureSnapshot() {
+    const requestScope = noteCacheScope.value;
     let next = { ...DISABLED_NOTE_TREE_FEATURES } as NoteTreeFeatures;
     try {
       next = await fetchNoteTreeFeatures();
     } catch {
       // 前端先于后端发布、网络异常或灰度接口不可用时失败关闭；普通平铺笔记库仍可使用。
     }
+    if (requestScope !== noteCacheScope.value) return;
     noteTreeFeatures.value = next;
+    noteLibraryCache.writeFeatures(requestScope, next);
     if (!next.note_tree_read) {
       noteSidebarMode.value = 'tags';
       const query = { ...router.currentRoute.value.query };
@@ -822,7 +859,21 @@
     noteTreeFeaturesReady.value = true;
   }
 
-  void loadNoteTreeFeatureSnapshot();
+  if (
+    !initialFeatureSnapshot ||
+    Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
+  ) {
+    void loadNoteTreeFeatureSnapshot();
+  }
+  watch(noteCacheScope, (scope, previousScope) => {
+    if (!previousScope || scope === previousScope) return;
+    const cached = noteLibraryCache.readFeatures(scope);
+    noteTreeFeatures.value = { ...(cached?.features || DISABLED_NOTE_TREE_FEATURES) };
+    noteTreeFeaturesReady.value = Boolean(cached);
+    if (!cached || Date.now() - cached.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS) {
+      void loadNoteTreeFeatureSnapshot();
+    }
+  });
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
   // 首次列表请求要等待目录功能开关快照；默认进入加载态，避免请求启动前短暂误显空状态。
@@ -830,7 +881,8 @@
   const loadingMore = ref(false);
   // 只切标签时走软刷新:保留旧列表并降透明度,不整屏换骨架屏
   const refreshing = ref(false);
-  const tagLoading = ref(true);
+  const initialTagSnapshot = noteLibraryCache.readTags(noteCacheScope.value);
+  const tagLoading = ref(!initialTagSnapshot);
   const noteTotal = ref(0);
   const notePage = ref(0);
   const noteHasMore = ref(false);
@@ -1598,14 +1650,14 @@
     externalBusy: computed(() => loading.value || refreshing.value || loadingMore.value || noteDragging.value),
     getScrollContainer: () =>
       noteWorkspaceElement()?.querySelector<HTMLElement>('[data-mobile-resource-scroll]') ?? null,
-    onRefresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
+    onRefresh: () => Promise.all([reloadNotes(true), getAllTags(true), refreshTree()]),
   });
   /*
    * 从后台切回来时补一次数据。走的是同一条软刷新路径,区别只在触发方式:
    * 这里没有手势,所以反馈只有顶部那条进度条。
    */
   useForegroundRefresh({
-    refresh: () => Promise.all([reloadNotes(true), getAllTags(), refreshTree()]),
+    refresh: () => Promise.all([reloadNotes(true), getAllTags(true), refreshTree()]),
     canRefresh: () =>
       !batchMode.value && !loading.value && !refreshing.value && !loadingMore.value && !noteDragging.value,
   });
@@ -1615,9 +1667,9 @@
    * 必须排除下拉引起的那次,否则和跟手的胶囊指示器重复。
    */
   registerGlobalRefreshSource(() => refreshing.value && !pullRefresh.refreshing.value);
-  const allTags = ref<any[]>([]);
-  const untaggedNoteCount = ref<number | null>(null);
-  const totalNoteCount = ref<number | null>(null);
+  const allTags = ref<any[]>(initialTagSnapshot?.items || []);
+  const untaggedNoteCount = ref<number | null>(initialTagSnapshot?.untaggedCount ?? null);
+  const totalNoteCount = ref<number | null>(initialTagSnapshot?.totalCount ?? null);
   // 侧栏的三个计数取同一次标签查询的快照,避免"全部"和各标签之和对不上;
   // 旧后端没有该字段时回退到无筛选列表写入的 user.noteTotal
   const allNoteCount = computed(() => totalNoteCount.value ?? user.noteTotal ?? 0);
@@ -1634,7 +1686,7 @@
   });
 
   async function init() {
-    await Promise.all([reloadNotes(), getAllTags(), refreshTree()]);
+    await Promise.all([reloadNotes(), getAllTags(true), refreshTree()]);
   }
 
   function getActiveNoteTagId() {
@@ -1644,8 +1696,33 @@
     return String(rawTag);
   }
 
+  const currentListCacheKey = computed(() =>
+    buildNoteLibraryListCacheKey(noteCacheScope.value, {
+      mode: noteSidebarMode.value,
+      parentId:
+        noteTreeReadEnabled.value && noteSidebarMode.value === 'directory' ? currentParentId.value : null,
+      tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : null,
+      keyword: debouncedSearch.value,
+    }),
+  );
+
+  function restoreListSnapshot(snapshot: ReturnType<typeof noteLibraryCache.readList>) {
+    if (!snapshot) return false;
+    // 切换范围时若上一个请求还在途中，先让它失效，避免旧响应覆盖快照。
+    noteRequestSeq += 1;
+    noteList.value = snapshot.items;
+    noteTotal.value = snapshot.total;
+    notePage.value = snapshot.page;
+    noteHasMore.value = snapshot.hasMore;
+    loading.value = false;
+    loadingMore.value = false;
+    refreshing.value = false;
+    return true;
+  }
+
   async function queryNotePage(targetPage: number, append = false, soft = false) {
     const requestSeq = append ? noteRequestSeq : ++noteRequestSeq;
+    const requestCacheKey = currentListCacheKey.value;
     if (append) loadingMore.value = true;
     else {
       // soft 时不动 loading:模板继续渲染旧列表,避免切标签整屏闪骨架屏
@@ -1657,15 +1734,20 @@
     }
 
     try {
-      const res = await apiBasePost('/api/note/queryNoteList', {
-        page: targetPage,
-        pageSize: RESOURCE_LIST_PAGE_SIZE,
-        ...(noteTreeReadEnabled.value && noteSidebarMode.value === 'directory'
-          ? { parentId: currentParentId.value }
-          : {}),
-        keyword: debouncedSearch.value,
-        tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : undefined,
-      });
+      const res = await apiBasePost(
+        '/api/note/queryNoteList',
+        {
+          page: targetPage,
+          pageSize: RESOURCE_LIST_PAGE_SIZE,
+          ...(noteTreeReadEnabled.value && noteSidebarMode.value === 'directory'
+            ? { parentId: currentParentId.value }
+            : {}),
+          keyword: debouncedSearch.value,
+          tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : undefined,
+        },
+        // 列表有本地骨架/软刷新状态，不再同时点亮全局顶部请求条。
+        { feedback: false },
+      );
       if (requestSeq !== noteRequestSeq) return false;
       if (res.status !== 200) {
         message.error(t('note.loadFailed'));
@@ -1677,6 +1759,12 @@
       noteTotal.value = Number(res.data?.total || 0);
       notePage.value = Number(res.data?.page || targetPage);
       noteHasMore.value = Boolean(res.data?.hasMore);
+      noteLibraryCache.writeList(requestCacheKey, {
+        items: noteList.value,
+        total: noteTotal.value,
+        page: notePage.value,
+        hasMore: noteHasMore.value,
+      });
       return true;
     } catch (error) {
       console.error('加载笔记列表失败:', error);
@@ -1711,9 +1799,25 @@
     }
   }
 
-  async function getAllTags() {
+  async function getAllTags(force = false) {
+    const requestScope = noteCacheScope.value;
+    const cached = noteLibraryCache.readTags(requestScope);
+    if (cached) {
+      allTags.value = cached.items;
+      untaggedNoteCount.value = cached.untaggedCount;
+      totalNoteCount.value = cached.totalCount;
+      tagLoading.value = false;
+      if (!force && Date.now() - cached.updatedAt <= NOTE_LIBRARY_TAGS_FRESH_MS) return;
+    } else {
+      tagLoading.value = true;
+    }
     try {
-      const res = await apiBasePost('/api/note/queryNoteTagList', { userId: user.id });
+      const res = await apiBasePost(
+        '/api/note/queryNoteTagList',
+        { userId: user.id },
+        { feedback: false },
+      );
+      if (requestScope !== noteCacheScope.value) return;
       if (res.status === 200) {
         // 兼容旧后端:老版本直接返回标签数组,新版本返回带汇总计数的对象
         const payload: any = res.data;
@@ -1721,6 +1825,11 @@
         allTags.value = isLegacyArray ? payload : Array.isArray(payload?.items) ? payload.items : [];
         untaggedNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.untaggedCount);
         totalNoteCount.value = isLegacyArray ? null : toFiniteCount(payload?.totalCount);
+        noteLibraryCache.writeTags(requestScope, {
+          items: allTags.value,
+          untaggedCount: untaggedNoteCount.value,
+          totalCount: totalNoteCount.value,
+        });
       }
     } catch (error) {
       console.warn('fetchNoteTags fallback', error);
@@ -1801,6 +1910,15 @@
     ],
     ([featuresReady, search, tag, refreshToken, parentId, mode], previous) => {
       if (!featuresReady) return;
+      const forceRefresh = Array.isArray(previous) && refreshToken !== previous[3];
+      const cached = noteLibraryCache.readList(currentListCacheKey.value);
+      if (cached) {
+        restoreListSnapshot(cached);
+        if (!forceRefresh && Date.now() - cached.updatedAt <= NOTE_LIBRARY_LIST_FRESH_MS) {
+          if (batchMode.value) exitBatch();
+          return;
+        }
+      }
       // 只有"页面已有内容 + 本次仅标签变化"才软刷新;首屏、搜索和强制刷新仍用骨架屏
       const onlyTagChanged =
         Array.isArray(previous) &&
@@ -1809,7 +1927,7 @@
         parentId === previous[4] &&
         mode === previous[5] &&
         tag !== previous[2];
-      const soft = onlyTagChanged && visibleDragNoteList.value.length > 0;
+      const soft = Boolean(cached) || (onlyTagChanged && visibleDragNoteList.value.length > 0);
       if (batchMode.value) exitBatch();
       void reloadNotes(soft);
       if (bookmark.isMobile) {
@@ -1821,6 +1939,9 @@
     { immediate: true },
   );
   void getAllTags();
+  watch(noteCacheScope, () => {
+    void getAllTags();
+  });
 
   function applyNoteSearchImmediately() {
     if (searchTimer.value) window.clearTimeout(searchTimer.value);

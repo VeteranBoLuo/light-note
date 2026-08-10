@@ -10,13 +10,6 @@
       bar
       :title="globalLoadingBarTitle"
     />
-    <div
-      v-if="bookmark.isMobile && (routeNavigationLoading || networkRequestLoading)"
-      class="mobile-interaction-wait"
-      :class="{ 'is-network-request': networkRequestLoading }"
-    >
-      <BLoading :loading="true" inline :title="globalLoadingBarTitle" />
-    </div>
     <div v-if="!isOnline" class="app-offline-banner" role="status" aria-live="polite">
       <span class="app-offline-banner__dot" aria-hidden="true"></span>
       {{ t('http.offline') }}
@@ -903,35 +896,6 @@
     --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
   }
 
-  /* App 内部路由和普通接口都不会触发 WebView 原生进度。超过短暂切换阈值后给出明确反馈，
-     避免弱网用户以为点击没有生效；接口反馈本身已延迟 380ms，因此无需再次延迟。 */
-  .mobile-interaction-wait {
-    position: fixed;
-    z-index: 850;
-    left: 50%;
-    bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom, 0px)) + 16px);
-    transform: translateX(-50%);
-    padding: 6px 13px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 999px;
-    color: var(--text-color);
-    background: var(--card-background);
-    box-shadow: 0 8px 24px rgba(31, 35, 48, 0.14);
-    opacity: 0;
-    pointer-events: none;
-    animation: mobile-interaction-wait-reveal 1ms linear 380ms forwards;
-  }
-
-  .mobile-interaction-wait.is-network-request {
-    animation-delay: 0ms;
-  }
-
-  @keyframes mobile-interaction-wait-reveal {
-    to {
-      opacity: 1;
-    }
-  }
-
   .app-offline-banner {
     position: fixed;
     z-index: 1190;
@@ -960,18 +924,6 @@
     flex: 0 0 7px;
     border-radius: 50%;
     background: var(--warning-color, #a05f00);
-  }
-
-  .disable-animations .mobile-interaction-wait {
-    opacity: 1;
-    animation: none;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .mobile-interaction-wait {
-      opacity: 1;
-      animation: none;
-    }
   }
 
   /* 只影响根元素下的主要内容，避免全局影响 */

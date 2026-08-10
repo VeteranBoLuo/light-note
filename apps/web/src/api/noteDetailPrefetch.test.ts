@@ -4,9 +4,13 @@ const apiBasePost = vi.fn();
 
 vi.mock('@/http/request', () => ({ apiBasePost }));
 
-const { buildNoteDetailRequestScope, clearNoteDetailPrefetch, consumeNoteDetail, prefetchNoteDetail } = await import(
-  './noteDetailPrefetch'
-);
+const {
+  buildNoteDetailRequestScope,
+  clearNoteDetailPrefetch,
+  consumeNoteDetail,
+  invalidateNoteDetailPrefetch,
+  prefetchNoteDetail,
+} = await import('./noteDetailPrefetch');
 
 describe('noteDetailPrefetch', () => {
   beforeEach(() => {
@@ -61,6 +65,28 @@ describe('noteDetailPrefetch', () => {
     await Promise.all([prefetched, first, second]);
 
     expect(apiBasePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('短时间内重新打开同一篇会复用已落定的详情快照', async () => {
+    const response = { status: 200, msg: '', data: { id: 'note-1' } };
+    apiBasePost.mockResolvedValue(response);
+    const identity = { id: 'user-1', role: 'user' };
+
+    await consumeNoteDetail(identity, 'note-1');
+    await consumeNoteDetail(identity, 'note-1');
+
+    expect(apiBasePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('写操作失效详情后再次进入会读取新正文', async () => {
+    apiBasePost.mockResolvedValue({ status: 200, msg: '', data: { id: 'note-1' } });
+    const identity = { id: 'user-1', role: 'user' };
+
+    await consumeNoteDetail(identity, 'note-1');
+    invalidateNoteDetailPrefetch(identity, 'note-1');
+    await consumeNoteDetail(identity, 'note-1');
+
+    expect(apiBasePost).toHaveBeenCalledTimes(2);
   });
 
   it('预取失败会清理缓存，重试会创建新请求', async () => {

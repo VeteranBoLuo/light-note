@@ -1,6 +1,6 @@
 import { apiBasePost } from '@/http/request';
 
-const NOTE_DETAIL_PREFETCH_TTL = 15_000;
+const NOTE_DETAIL_PREFETCH_TTL = 30_000;
 const NOTE_DETAIL_INTERACTIVE_TIMEOUT = 15_000;
 const MAX_PREFETCH_ENTRIES = 8;
 
@@ -89,16 +89,24 @@ export function consumeNoteDetail(identity: NoteDetailRequestIdentity, noteId: s
   const key = cacheKey(identity, normalizedId);
   const entry = entries.get(key);
   if (entry && entry.expiresAt > Date.now()) {
-    // 同一点击可能同时触发桌面预览、路由切换等多个消费者。等请求真正落定后再清理，
-    // 让并发消费者继续复用同一个 Promise；落定即删又避免 15 秒内重开读到旧正文。
-    const clearSettledEntry = () => {
-      if (entries.get(key) === entry) entries.delete(key);
-    };
-    void entry.promise.then(clearSettledEntry, clearSettledEntry);
+    // 返回笔记库后短时间再进入同一篇时复用已落定结果，避免弱网下每次都重走详情请求。
+    // 保存、删除、置顶等写操作会主动调用 invalidateNoteDetailPrefetch 失效。
     return entry.promise;
   }
   if (entry) entries.delete(key);
   return createRequest(identity, normalizedId);
+}
+
+export function invalidateNoteDetailPrefetch(identity: NoteDetailRequestIdentity, noteId?: string) {
+  const normalizedId = String(noteId || '').trim();
+  if (normalizedId) {
+    entries.delete(cacheKey(identity, normalizedId));
+    return;
+  }
+  const scopePrefix = `${buildNoteDetailRequestScope(identity)}::`;
+  for (const key of entries.keys()) {
+    if (key.startsWith(scopePrefix)) entries.delete(key);
+  }
 }
 
 export function clearNoteDetailPrefetch() {

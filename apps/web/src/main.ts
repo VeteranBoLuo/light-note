@@ -21,6 +21,12 @@ const isAndroidWebView = isAndroidWebViewRuntime();
 // 首屏内联脚本会在 CSS 绘制前先设置同样的类；这里继续负责窗口缩放、横竖屏和
 // 粗指针变化后的动态同步。Android 身份类只标记引擎，所有可见规则走共享移动基线。
 installRenderingProfileSync({ androidWebView: isAndroidWebView });
+// 首屏在 App.vue 读取 Pinia 断点前就可能带着上次桌面端保存的 0.9/1.1 zoom。
+// 移动端必须在 Vue 挂载前回到 1，否则首屏骨架和笔记卡会暂时只占 90% 宽度。
+if (document.documentElement.classList.contains('light-note-mobile-rendering')) {
+  document.documentElement.style.zoom = '';
+  document.documentElement.style.setProperty('--ln-aux-zoom', '1');
+}
 
 // 创建vue实例
 const app = createApp(App);

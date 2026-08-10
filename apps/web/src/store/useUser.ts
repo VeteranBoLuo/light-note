@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import icon from '@/config/icon.ts';
 import bookmarkStore from './bookmark.ts';
 import cloudSpaceStore from './cloudSpace.ts';
+import useNoteLibraryCacheStore from './noteLibraryCache.ts';
 import { resolveSystemTheme } from '@/utils/systemTheme';
 
 // 接口定义
@@ -184,6 +185,7 @@ export default defineStore('user', {
       if (previousResourceIdentity !== getResourceIdentityKey(this)) {
         bookmarkStore().reset();
         cloudSpaceStore().reset({ showLoading: true });
+        useNoteLibraryCacheStore().reset();
       }
     },
     /**
@@ -194,6 +196,7 @@ export default defineStore('user', {
       // 登出时一并清空资源缓存,避免下一个账号看到上一个账号残留的数据。
       bookmarkStore().reset();
       cloudSpaceStore().reset({ showLoading: true });
+      useNoteLibraryCacheStore().reset();
     },
     /**
      * 获取用户信息（敏感信息除外）

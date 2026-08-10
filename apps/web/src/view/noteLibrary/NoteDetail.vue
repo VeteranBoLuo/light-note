@@ -300,7 +300,7 @@
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { bookmarkStore, noteStore, useNoteWorkspaceStore, useUserStore } from '@/store';
+  import { bookmarkStore, noteStore, useNoteLibraryCacheStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
   import NoteEditorWarmupPreview from '@/components/noteLibrary/detail/NoteEditorWarmupPreview.vue';
@@ -334,7 +334,11 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
-  import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
+  import {
+    buildNoteDetailRequestScope,
+    consumeNoteDetail,
+    invalidateNoteDetailPrefetch,
+  } from '@/api/noteDetailPrefetch';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
 
   const createDeferredDetailFeature = (loader: () => Promise<any>) =>
@@ -446,6 +450,11 @@
     () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
   );
   const noteWorkspace = useNoteWorkspaceStore();
+  const noteLibraryCache = useNoteLibraryCacheStore();
+  function invalidateNoteReadCaches(noteId = note.id) {
+    invalidateNoteDetailPrefetch(user, noteId);
+    noteLibraryCache.markListsStale(buildNoteDetailRequestScope(user));
+  }
   const {
     aiPreferredOpen,
     browseParentId,
@@ -1123,6 +1132,7 @@
       if (updated.revision) note.revision = updated.revision;
     }
     recordOperation({ module: '笔记', operation: `重命名笔记【${updated.title}】` });
+    invalidateNoteReadCaches(updated.id);
     await refreshTree();
     if (updated.id === note.id) await loadDetailBreadcrumb(note.id);
   }
@@ -1132,6 +1142,7 @@
     const response = await apiBasePost('/api/note/toggleNoteTop', { id: target.id });
     if (response.status !== 200) return;
     target.isTop = Boolean(response.data?.isTop);
+    invalidateNoteReadCaches(target.id);
     message.success(target.isTop ? t('common.pinned') : t('common.unpinned'));
     await refreshTree();
   }
@@ -1182,6 +1193,7 @@
           return;
         }
         if (response.status !== 200) return;
+        invalidateNoteReadCaches(target.id);
         message.success(t('common.deleteSuccess'));
         await refreshTree();
         await loadDetailBreadcrumb(note.id);
@@ -1386,6 +1398,7 @@
               result: 'success',
             });
           }
+          invalidateNoteReadCaches(note.id);
           return note.id as string;
         }
         throw new Error('创建笔记失败');
@@ -1479,6 +1492,7 @@
         }
         setUpdateTime();
         saveStatus.value = 'saved';
+        invalidateNoteReadCaches(note.id);
       } else {
         saveStatus.value = 'error';
       }
@@ -1606,6 +1620,7 @@
             return;
           }
           if (res.status !== 200) return;
+          invalidateNoteReadCaches(note.id);
           message.success(t('common.deleteSuccess'));
           recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}】` });
           if (noteTreeReadEnabled.value) {
@@ -1655,6 +1670,7 @@
           return;
         }
         if (res.status !== 200) return;
+        invalidateNoteReadCaches(note.id);
         message.success(t('common.deleteSuccess'));
         const deletedCount = Number(res.data?.deletedCount || preview.totalCount);
         recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}，共${deletedCount}篇】` });
