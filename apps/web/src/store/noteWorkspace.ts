@@ -196,6 +196,10 @@ export default defineStore('noteWorkspace', () => {
   let breadcrumbRequestSeq = 0;
   let searchRequestSeq = 0;
   let treeRequestSeq = 0;
+  let breadcrumbTargetId: string | null = null;
+  const childrenRequests = new Map<string, Promise<NoteTreeItem[]>>();
+  const breadcrumbRequests = new Map<string, Promise<NoteBreadcrumbItem[]>>();
+  const breadcrumbRevealRequests = new Map<string, Promise<void>>();
 
   const currentDirectoryTitle = computed(() => {
     const items = currentBreadcrumb.value;
@@ -206,6 +210,10 @@ export default defineStore('noteWorkspace', () => {
     treeRequestSeq += 1;
     breadcrumbRequestSeq += 1;
     searchRequestSeq += 1;
+    breadcrumbTargetId = null;
+    childrenRequests.clear();
+    breadcrumbRequests.clear();
+    breadcrumbRevealRequests.clear();
     childrenByParent.value = {};
     loadingKeys.value = new Set();
     loadedKeys.value = new Set();
@@ -233,58 +241,75 @@ export default defineStore('noteWorkspace', () => {
     }
   }
 
-  async function loadChildren(parentId: string | null = null, force = false) {
+  function loadChildren(parentId: string | null = null, force = false): Promise<NoteTreeItem[]> {
     const key = parentKey(normalizedId(parentId));
-    if (!force && loadedKeys.value.has(key)) return childrenByParent.value[key] || [];
-    if (loadingKeys.value.has(key)) return childrenByParent.value[key] || [];
+    if (!force && loadedKeys.value.has(key)) return Promise.resolve(childrenByParent.value[key] || []);
+    const inFlight = childrenRequests.get(key);
+    if (inFlight) return inFlight;
     const requestOwner = ownerKey.value;
     const requestGeneration = treeRequestSeq;
     loadingKeys.value = markSet(loadingKeys.value, key, true);
     treeError.value = '';
-    try {
-      const response = await apiBasePost(
-        '/api/note/queryNoteTree',
-        { parentId: normalizedId(parentId), depth: 1 },
-        { silent: true },
-      );
-      if (requestOwner !== ownerKey.value || requestGeneration !== treeRequestSeq) return [];
-      if (response.status !== 200) {
-        treeError.value = String(response.msg || 'NOTE_TREE_LOAD_FAILED');
+    const request = (async () => {
+      try {
+        const response = await apiBasePost(
+          '/api/note/queryNoteTree',
+          { parentId: normalizedId(parentId), depth: 1 },
+          { silent: true },
+        );
+        if (requestOwner !== ownerKey.value || requestGeneration !== treeRequestSeq) return [];
+        if (response.status !== 200) {
+          treeError.value = String(response.msg || 'NOTE_TREE_LOAD_FAILED');
+          return [];
+        }
+        const payload = (response.data || {}) as NoteTreeQueryResult;
+        const items = sortNoteTreeItems(Array.isArray(payload.items) ? payload.items : []);
+        childrenByParent.value = { ...childrenByParent.value, [key]: items };
+        loadedKeys.value = markSet(loadedKeys.value, key, true);
+        // 展开状态会跨当前浏览会话保存在 sessionStorage。恢复根层时不能只恢复箭头，
+        // 还要把已记住的展开分支一并取回，否则会出现“箭头朝下但子页面为空”。
+        const restoredBranches = items.filter((item) => item.hasChildren && expandedIds.value.has(item.id));
+        if (restoredBranches.length) {
+          await Promise.all(restoredBranches.map((item) => loadChildren(item.id)));
+        }
+        return items;
+      } catch (error) {
+        if (requestOwner === ownerKey.value && requestGeneration === treeRequestSeq) {
+          treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_LOAD_FAILED';
+        }
         return [];
+      } finally {
+        if (childrenRequests.get(key) === request) {
+          childrenRequests.delete(key);
+          loadingKeys.value = markSet(loadingKeys.value, key, false);
+        }
       }
-      const payload = (response.data || {}) as NoteTreeQueryResult;
-      const items = sortNoteTreeItems(Array.isArray(payload.items) ? payload.items : []);
-      childrenByParent.value = { ...childrenByParent.value, [key]: items };
-      loadedKeys.value = markSet(loadedKeys.value, key, true);
-      // 展开状态会跨当前浏览会话保存在 sessionStorage。恢复根层时不能只恢复箭头，
-      // 还要把已记住的展开分支一并取回，否则会出现“箭头朝下但子页面为空”，
-      // 用户必须先折叠再展开一次才能看到内容。
-      const restoredBranches = items.filter((item) => item.hasChildren && expandedIds.value.has(item.id));
-      if (restoredBranches.length) {
-        await Promise.all(restoredBranches.map((item) => loadChildren(item.id)));
-      }
-      return items;
-    } catch (error) {
-      if (requestOwner === ownerKey.value && requestGeneration === treeRequestSeq) {
-        treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_LOAD_FAILED';
-      }
-      return [];
-    } finally {
-      loadingKeys.value = markSet(loadingKeys.value, key, false);
-    }
+    })();
+    childrenRequests.set(key, request);
+    return request;
   }
 
-  async function revealBreadcrumb(items: NoteBreadcrumbItem[]) {
-    await loadChildren(null);
-    for (const item of items.slice(0, -1)) {
-      expandedIds.value = markSet(expandedIds.value, item.id, true);
-      await loadChildren(item.id);
-    }
+  function revealBreadcrumb(items: NoteBreadcrumbItem[]) {
+    const key = items.map((item) => item.id).join('/');
+    if (!key) return Promise.resolve();
+    const inFlight = breadcrumbRevealRequests.get(key);
+    if (inFlight) return inFlight;
+    const request = (async () => {
+      await loadChildren(null);
+      for (const item of items.slice(0, -1)) {
+        expandedIds.value = markSet(expandedIds.value, item.id, true);
+        await loadChildren(item.id);
+      }
+    })().finally(() => {
+      if (breadcrumbRevealRequests.get(key) === request) breadcrumbRevealRequests.delete(key);
+    });
+    breadcrumbRevealRequests.set(key, request);
+    return request;
   }
 
-  async function loadBreadcrumb(noteId: string | null) {
+  async function loadBreadcrumb(noteId: string | null, options: { reveal?: boolean } = {}) {
     const id = normalizedId(noteId);
-    const seq = ++breadcrumbRequestSeq;
+    breadcrumbTargetId = id;
     if (!id) {
       currentBreadcrumb.value = [];
       return [];
@@ -292,28 +317,39 @@ export default defineStore('noteWorkspace', () => {
     const cached = breadcrumbByNote.value[id];
     if (cached) {
       currentBreadcrumb.value = cached;
-      await revealBreadcrumb(cached);
+      if (options.reveal !== false) await revealBreadcrumb(cached);
       return cached;
     }
     const requestOwner = ownerKey.value;
-    try {
-      const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId: id }, { silent: true });
-      if (requestOwner !== ownerKey.value || seq !== breadcrumbRequestSeq) return [];
-      if (response.status !== 200) {
-        treeError.value = String(response.msg || 'NOTE_TREE_BREADCRUMB_FAILED');
-        return [];
-      }
-      const items = Array.isArray(response.data?.items) ? response.data.items : [];
-      breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: items };
-      currentBreadcrumb.value = items;
-      await revealBreadcrumb(items);
-      return items;
-    } catch (error) {
-      if (requestOwner === ownerKey.value && seq === breadcrumbRequestSeq) {
-        treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_BREADCRUMB_FAILED';
-      }
-      return [];
+    const requestGeneration = breadcrumbRequestSeq;
+    let request = breadcrumbRequests.get(id);
+    if (!request) {
+      request = (async () => {
+        try {
+          const response = await apiBasePost('/api/note/queryNoteBreadcrumb', { noteId: id }, { silent: true });
+          if (requestOwner !== ownerKey.value || requestGeneration !== breadcrumbRequestSeq) return [];
+          if (response.status !== 200) {
+            treeError.value = String(response.msg || 'NOTE_TREE_BREADCRUMB_FAILED');
+            return [];
+          }
+          const items = Array.isArray(response.data?.items) ? response.data.items : [];
+          breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: items };
+          return items;
+        } catch (error) {
+          if (requestOwner === ownerKey.value && requestGeneration === breadcrumbRequestSeq) {
+            treeError.value = error instanceof Error ? error.message : 'NOTE_TREE_BREADCRUMB_FAILED';
+          }
+          return [];
+        } finally {
+          if (breadcrumbRequests.get(id) === request) breadcrumbRequests.delete(id);
+        }
+      })();
+      breadcrumbRequests.set(id, request);
     }
+    const items = await request;
+    if (breadcrumbTargetId === id) currentBreadcrumb.value = items;
+    if (options.reveal !== false) await revealBreadcrumb(items);
+    return items;
   }
 
   async function toggleExpanded(node: NoteTreeItem) {
@@ -537,6 +573,7 @@ export default defineStore('noteWorkspace', () => {
     ensureOwner,
     loadBreadcrumb,
     loadChildren,
+    revealBreadcrumb,
     insertCreatedNote,
     refreshTree,
     searchTree,

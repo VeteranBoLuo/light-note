@@ -19,8 +19,17 @@ function activeDetailPageId() {
   return queryValue(router.currentRoute.value.params?.id);
 }
 
-export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<string> } = {}) {
+export function useNoteTree(
+  options: {
+    enabled?: Ref<boolean>;
+    ownerKey?: Ref<string>;
+    loadTree?: Ref<boolean>;
+    revealBreadcrumb?: Ref<boolean>;
+  } = {},
+) {
   const enabled = computed(() => options.enabled?.value !== false);
+  const loadTreeEnabled = computed(() => options.loadTree?.value !== false);
+  const revealBreadcrumbEnabled = computed(() => options.revealBreadcrumb?.value !== false);
   const user = useUserStore();
   const workspace = useNoteWorkspaceStore();
   const {
@@ -58,7 +67,7 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
       currentBreadcrumb.value = [];
       return [];
     }
-    return workspace.loadBreadcrumb(noteId);
+    return workspace.loadBreadcrumb(noteId, { reveal: revealBreadcrumbEnabled.value });
   }
 
   async function toggleExpanded(node: NoteTreeItem) {
@@ -126,12 +135,17 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
   );
 
   watch(
-    enabled,
-    (isEnabled) => {
-      if (isEnabled) void loadChildren(null);
+    [enabled, loadTreeEnabled],
+    ([isEnabled, shouldLoadTree]) => {
+      if (isEnabled && shouldLoadTree) void loadChildren(null);
     },
     { immediate: true },
   );
+
+  watch(revealBreadcrumbEnabled, (shouldReveal) => {
+    if (!enabled.value || !shouldReveal || !currentBreadcrumb.value.length) return;
+    void workspace.revealBreadcrumb(currentBreadcrumb.value);
+  });
 
   return {
     activePageId,

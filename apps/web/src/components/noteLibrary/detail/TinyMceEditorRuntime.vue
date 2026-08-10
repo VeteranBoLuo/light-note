@@ -20,8 +20,6 @@
   import 'tinymce/plugins/searchreplace';
   import 'tinymce/plugins/wordcount';
   import 'tinymce/plugins/quickbars';
-  import 'tinymce/skins/ui/oxide-dark/skin.min.css';
-
   defineOptions({ inheritAttrs: false });
   const modelValue = defineModel<string>({ default: '' });
 </script>

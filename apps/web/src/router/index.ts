@@ -218,7 +218,16 @@ router.beforeEach((to, from) => {
     if (noteId && noteId !== 'add') {
       void Promise.all([import('@/api/noteDetailPrefetch'), import('@/store/useUser')])
         .then(([prefetchModule, userModule]) => {
-          prefetchModule.prefetchNoteDetail(userModule.default(), noteId);
+          const detailRequest = prefetchModule.prefetchNoteDetail(userModule.default(), noteId);
+          void detailRequest
+            ?.then((response) =>
+              import('@/components/noteLibrary/detail/editorRuntimeLoader').then((runtime) =>
+                runtime.preloadNoteEditorRuntime(response?.data?.type),
+              ),
+            )
+            .catch(() => {
+              // 正文或编辑器预热失败不阻断导航；详情视图会按正常链路重试并给出反馈。
+            });
         })
         .catch(() => {
           // 预取是加速层；失败后详情页仍会走自身可重试请求。

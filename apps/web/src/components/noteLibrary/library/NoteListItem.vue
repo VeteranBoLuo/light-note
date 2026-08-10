@@ -3,6 +3,11 @@
     class="note-list-item"
     :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode, 'is-mobile': bookmark.isMobile }"
     @click="handleItemClick"
+    @keydown.enter.self="handleItemClick"
+    @pointerdown="prefetchNoteRoute"
+    @focus="prefetchNoteRoute"
+    role="button"
+    tabindex="0"
     v-click-log="{ module: '笔记库', operation: `打开笔记【${note.title}】` }"
   >
     <div v-if="!bookmark.isMobile" class="note-select-column">
@@ -107,7 +112,7 @@
 <script lang="ts" setup>
   import { computed } from 'vue';
   import router from '@/router';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -119,6 +124,9 @@
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+  import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
+  import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
 
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
@@ -129,6 +137,7 @@
     },
   );
   const bookmark = bookmarkStore();
+  const user = useUserStore();
 
   // 与 NoteCard 保持同一套标签折叠规则
   const MAX_VISIBLE_TAGS = 3;
@@ -187,6 +196,18 @@
       return;
     }
     emit('open');
+  }
+
+  function prefetchNoteRoute() {
+    if (props.batchMode || !props.note?.id) return;
+    prefetchNoteDetail(user, String(props.note.id));
+    void preloadNoteEditorRuntime(props.note.type).catch(() => {
+      // 预热失败不阻断点击；正式挂载时会重试。
+    });
+    if (!bookmark.isMobile) return;
+    void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: props.note.id } }).catch(() => {
+      // 正式点击仍会重试并显示全局导航反馈。
+    });
   }
 </script>
 

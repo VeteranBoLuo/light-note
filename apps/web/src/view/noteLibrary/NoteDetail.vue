@@ -170,11 +170,6 @@
                   :placeholder="$t('noteDetail.titlePlaceholder')"
                 />
               </div>
-              <NoteEditorWarmupPreview
-                v-if="!editorRuntimeReady && Boolean(note.content)"
-                :content="note.content"
-                :note-type="note.type"
-              />
               <editor
                 ref="editorRef"
                 class="editor-component"
@@ -303,7 +298,7 @@
   import { bookmarkStore, noteStore, useNoteLibraryCacheStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
   import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
-  import NoteEditorWarmupPreview from '@/components/noteLibrary/detail/NoteEditorWarmupPreview.vue';
+  import Editor from '@/components/noteLibrary/detail/Editor.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
@@ -339,6 +334,8 @@
     consumeNoteDetail,
     invalidateNoteDetailPrefetch,
   } from '@/api/noteDetailPrefetch';
+  import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
+  import { NOTE_LIBRARY_FEATURES_FRESH_MS } from '@/store/noteLibraryCache';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
 
   const createDeferredDetailFeature = (loader: () => Promise<any>) =>
@@ -377,16 +374,6 @@
     loadingComponent: AiPanelPlaceholder,
     delay: 0,
   });
-  const loadEditorComponent = () => import('@/components/noteLibrary/detail/Editor.vue');
-  const Editor = defineAsyncComponent({
-    loader: loadEditorComponent,
-    loadingComponent: NoteDetailLoadingState,
-    delay: 0,
-    suspensible: false,
-  });
-  // 详情页小 chunk 一执行就开始下载重型编辑器；此时正文预取也已在进行，二者并行。
-  // 不等待 isReady 后再触发，否则会把“正文请求 → 编辑器下载”重新串成瀑布。
-  void loadEditorComponent();
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -432,7 +419,13 @@
     parentId: null as string | null,
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
-  const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
+  const noteWorkspace = useNoteWorkspaceStore();
+  const noteLibraryCache = useNoteLibraryCacheStore();
+  const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
+  const initialFeatureSnapshot = noteLibraryCache.readFeatures(noteCacheScope.value);
+  const noteTreeFeatures = ref<NoteTreeFeatures>({
+    ...(initialFeatureSnapshot?.features || DISABLED_NOTE_TREE_FEATURES),
+  });
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
   const noteTreeWriteEnabled = computed(() => noteTreeFeatures.value.note_tree_write);
   const noteTreeSubtreeTrashEnabled = computed(
@@ -449,8 +442,6 @@
   const canShowDetailSidebar = computed(
     () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
   );
-  const noteWorkspace = useNoteWorkspaceStore();
-  const noteLibraryCache = useNoteLibraryCacheStore();
   function invalidateNoteReadCaches(noteId = note.id) {
     invalidateNoteDetailPrefetch(user, noteId);
     noteLibraryCache.markListsStale(buildNoteDetailRequestScope(user));
@@ -462,6 +453,9 @@
     sidebarPreferredOpen,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
+  const shouldLoadDetailTree = computed(
+    () => canShowPrivateNavigation.value && !bookmark.isMobile && sidebarPreferredOpen.value,
+  );
   const initialDetailWorkspaceLayout = resolveNoteWorkspaceLayout(
     typeof window === 'undefined' ? 1420 : window.innerWidth,
     bookmark.isMobile,
@@ -505,7 +499,11 @@
     refreshTree,
     searchTree,
     toggleExpanded,
-  } = useNoteTree({ enabled: canShowPrivateNavigation });
+  } = useNoteTree({
+    enabled: canShowPrivateNavigation,
+    loadTree: shouldLoadDetailTree,
+    revealBreadcrumb: shouldLoadDetailTree,
+  });
   const detailSidebarMode = computed<'directory' | 'outline'>({
     get: () => (detailTab.value === 'outline' ? 'outline' : 'directory'),
     set: (value) => {
@@ -561,15 +559,34 @@
   let currentEditorResourceRefs: ResourceRef[] = [];
 
   async function loadNoteTreeFeatureSnapshot() {
+    const requestScope = noteCacheScope.value;
     try {
-      noteTreeFeatures.value = await fetchNoteTreeFeatures();
+      const next = await fetchNoteTreeFeatures();
+      if (requestScope !== noteCacheScope.value) return;
+      noteTreeFeatures.value = next;
+      noteLibraryCache.writeFeatures(requestScope, next);
     } catch {
-      noteTreeFeatures.value = { ...DISABLED_NOTE_TREE_FEATURES };
+      // 已有快照时保留可用能力；弱网刷新失败不能让面包屑/目录突然消失。
+      if (!noteLibraryCache.readFeatures(requestScope)) {
+        noteTreeFeatures.value = { ...DISABLED_NOTE_TREE_FEATURES };
+      }
     }
-    if (noteTreeReadEnabled.value && note.id) void loadDetailBreadcrumb(String(note.id));
   }
 
-  const noteTreeFeaturePromise = loadNoteTreeFeatureSnapshot();
+  const noteTreeFeaturePromise =
+    !initialFeatureSnapshot ||
+    Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
+      ? loadNoteTreeFeatureSnapshot()
+      : Promise.resolve();
+
+  watch(noteCacheScope, (scope, previousScope) => {
+    if (!previousScope || scope === previousScope) return;
+    const cached = noteLibraryCache.readFeatures(scope);
+    noteTreeFeatures.value = { ...(cached?.features || DISABLED_NOTE_TREE_FEATURES) };
+    if (!cached || Date.now() - cached.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS) {
+      void loadNoteTreeFeatureSnapshot();
+    }
+  });
 
   async function resolveEditorResourceRefs(refs: ResourceRef[], force = false) {
     const normalized = refs.slice(0, 100);
@@ -1808,10 +1825,10 @@
 
   function completeMarkdownContentSwitch() {
     if (note.type !== 'markdown') return;
-    // Markdown 编辑器没有 TinyMCE 的 init 事件；内容 DOM 挂载后即可恢复交互和自动保存。
-    contentAutosaveReady.value = true;
-    isNoteSwitching.value = false;
-    void refreshCatalog();
+    // CodeMirror 是异步运行时，必须等它真正发出 ready；nextTick 只代表 Vue 壳已挂载。
+    void preloadNoteEditorRuntime('markdown').catch(() => {
+      // 异步组件挂载时会重试，并由统一的 chunk 错误链路提供反馈。
+    });
   }
 
   async function loadRouteNote(routeId: string, query: Record<string, any>) {
@@ -1877,7 +1894,10 @@
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
-        void loadDetailBreadcrumb(String(note.id));
+        // 正文拿到类型后立刻预热对应引擎；useNoteTree 独占首次面包屑加载，避免重复请求。
+        void preloadNoteEditorRuntime(note.type).catch(() => {
+          // 预热失败时异步组件仍会按正常挂载链路重试并由路由错误处理兜底。
+        });
         await nextTick();
         await syncHeaderTitle();
         completeMarkdownContentSwitch();

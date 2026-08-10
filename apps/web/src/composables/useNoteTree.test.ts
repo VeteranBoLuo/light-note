@@ -230,6 +230,37 @@ describe('useNoteTree', () => {
     scope.stop();
   });
 
+  it('移动详情先取轻量面包屑，目录未打开前不拉根节点和祖先分支', async () => {
+    mocks.route.value = {
+      name: 'noteDetail',
+      params: { id: 'module' },
+      query: {},
+      fullPath: '/noteLibrary/module',
+    } as any;
+    const loadTree = ref(false);
+    const revealBreadcrumb = ref(false);
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree({ loadTree, revealBreadcrumb }));
+
+    await vi.waitFor(() => expect(tree?.currentBreadcrumb.value).toHaveLength(2));
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteBreadcrumb',
+      { noteId: 'module' },
+      { silent: true },
+    );
+
+    loadTree.value = true;
+    revealBreadcrumb.value = true;
+    await vi.waitFor(() => expect(tree?.childrenByParent.value[NOTE_TREE_ROOT_KEY]).toHaveLength(1));
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteTree',
+      { parentId: null, depth: 1 },
+      { silent: true },
+    );
+    scope.stop();
+  });
+
   it('目录搜索使用服务端命中与祖先树，并自动展开完整路径', async () => {
     const scope = effectScope();
     const tree = scope.run(() => useNoteTree());

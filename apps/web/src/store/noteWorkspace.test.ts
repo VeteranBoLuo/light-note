@@ -1,7 +1,10 @@
 import { createPinia, setActivePinia } from 'pinia';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from './noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
+
+const mocks = vi.hoisted(() => ({ apiBasePost: vi.fn() }));
+vi.mock('@/http/request', () => ({ apiBasePost: mocks.apiBasePost }));
 
 const treeNode = (overrides: Partial<NoteTreeItem> = {}): NoteTreeItem => ({
   id: 'note-1',
@@ -20,6 +23,7 @@ describe('noteWorkspace 目录元数据同步', () => {
     sessionStorage.clear();
     localStorage.clear();
     setActivePinia(createPinia());
+    mocks.apiBasePost.mockReset();
   });
 
   it('保存标题与格式后同步普通树、搜索树和所有已缓存面包屑', () => {
@@ -118,5 +122,43 @@ describe('noteWorkspace 目录元数据同步', () => {
       'manual-first',
       'updated-new',
     ]);
+  });
+
+  it('同一目录的并发读取复用一个在途请求', async () => {
+    let resolveRequest!: (value: any) => void;
+    mocks.apiBasePost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    const workspace = useNoteWorkspaceStore();
+
+    const first = workspace.loadChildren(null);
+    const second = workspace.loadChildren(null);
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+
+    resolveRequest({ status: 200, data: { items: [treeNode()] } });
+    await expect(Promise.all([first, second])).resolves.toEqual([[treeNode()], [treeNode()]]);
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+  });
+
+  it('同一笔记的并发面包屑读取去重，且可只更新路径而不展开整棵目录', async () => {
+    let resolveRequest!: (value: any) => void;
+    mocks.apiBasePost.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRequest = resolve;
+      }),
+    );
+    const workspace = useNoteWorkspaceStore();
+    const items = [{ id: 'note-1', title: '笔记' }];
+
+    const first = workspace.loadBreadcrumb('note-1', { reveal: false });
+    const second = workspace.loadBreadcrumb('note-1', { reveal: false });
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
+
+    resolveRequest({ status: 200, data: { items } });
+    await expect(Promise.all([first, second])).resolves.toEqual([items, items]);
+    expect(workspace.currentBreadcrumb).toEqual(items);
+    expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
   });
 });

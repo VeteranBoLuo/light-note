@@ -1,9 +1,5 @@
 <template>
   <section class="note-editor-warmup" role="status" :aria-label="t('noteDetail.editorPreparing')">
-    <div class="note-editor-warmup__status">
-      <span class="note-editor-warmup__dot" aria-hidden="true"></span>
-      {{ t('noteDetail.editorPreparing') }}
-    </div>
     <pre v-if="isMarkdown" class="note-editor-warmup__content note-editor-warmup__markdown">{{ content }}</pre>
     <article v-else class="note-editor-warmup__content" v-html="safeContent"></article>
   </section>
@@ -29,40 +25,16 @@
   .note-editor-warmup {
     position: absolute;
     z-index: 3;
-    inset: 56px 0 0;
+    inset: 0;
     min-height: 0;
     overflow: auto;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
   }
 
-  .note-editor-warmup__status {
-    position: sticky;
-    z-index: 2;
-    top: 0;
-    min-height: 30px;
-    padding: 0 18px;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    box-sizing: border-box;
-    color: var(--desc-color);
-    background: var(--surface-page-bg, var(--background-color));
-    border-bottom: 1px solid var(--surface-divider-color);
-    font-size: 12px;
-  }
-
-  .note-editor-warmup__dot {
-    width: 6px;
-    height: 6px;
-    flex: 0 0 6px;
-    border-radius: 50%;
-    background: var(--resource-note-color, #00a884);
-    animation: note-editor-warmup-pulse 1.1s ease-in-out infinite;
-  }
-
   .note-editor-warmup__content {
-    padding: 16px 20px clamp(180px, 35vh, 380px);
+    margin: 0;
+    padding: 12px 20px clamp(180px, 35vh, 380px);
     overflow-wrap: anywhere;
     line-height: 1.7;
   }
@@ -94,19 +66,4 @@
     border: 1px solid var(--surface-border-color);
   }
 
-  @keyframes note-editor-warmup-pulse {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .note-editor-warmup__dot {
-      animation: none;
-    }
-  }
 </style>
