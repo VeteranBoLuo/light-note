@@ -2,6 +2,10 @@ import express from 'express';
 const router = express.Router();
 
 import * as commonHandle from '../router_handle/commonHandle.js';
+import { getAdminActionCenter, retryAdminAsyncJob } from '../router_handle/adminActionCenterHandle.js';
+import { getAdminOperationAudits } from '../router_handle/adminAuditHandle.js';
+import { updateAdminAiFeedbackTriage } from '../router_handle/adminAiFeedbackHandle.js';
+import { getAdminGovernance, getAdminProductInsights } from '../router_handle/adminInsightsHandle.js';
 import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
@@ -34,8 +38,6 @@ router.post('/analyzeImgUrl', commonHandle.analyzeImgUrl);
 
 router.post('/getImages', commonHandle.getImages);
 
-router.post('/runSql', commonHandle.runSql);
-
 router.post('/getHelpConfig', commonHandle.getHelpConfig);
 
 router.post('/resolveHelpSources', commonHandle.resolveHelpSources);
@@ -48,9 +50,15 @@ router.post('/getAgentLogs', commonHandle.getAgentLogs);
 router.post('/getAgentLogChain', commonHandle.getAgentLogChain);
 router.post('/getAgentLogsSummary', commonHandle.getAgentLogsSummary);
 router.post('/getAiFeedback', commonHandle.getAiFeedback);
+router.post('/updateAdminAiFeedbackTriage', updateAdminAiFeedbackTriage);
 router.post('/getDeepSeekBalance', commonHandle.getDeepSeekBalance);
 router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);
+router.post('/getAdminActionCenter', getAdminActionCenter);
+router.post('/retryAdminAsyncJob', retryAdminAsyncJob);
+router.post('/getAdminOperationAudits', getAdminOperationAudits);
+router.post('/getAdminProductInsights', getAdminProductInsights);
+router.post('/getAdminGovernance', getAdminGovernance);
 
 export default router;

@@ -32,6 +32,14 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
 
+  it('社区客厅使用独立路由并占据移动底栏第五位', () => {
+    const resolved = router.resolve('/community-chat');
+    expect(resolved.name).toBe('communityChat');
+    expect(resolved.meta.mobileShell).toBe('community');
+    expect(resolved.meta.mobileBottomNav).toBe(true);
+    expect(resolved.meta.roles).toContain('visitor');
+  });
+
   it('支持轻笺页面允许游客直达，且使用统一的双端路径', () => {
     const resolved = router.resolve('/support');
     expect(resolved.name).toBe('support');

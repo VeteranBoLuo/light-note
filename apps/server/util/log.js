@@ -83,6 +83,7 @@ export function sanitizeLogUrl(value) {
 
 export async function logFunction(req, res, next) {
   try {
+    const requestStartedAt = Date.now();
     // 管理员上下文由 admin_context_audit 统一记录 actor/subject/policy，避免混入普通用户 API 日志。
     if (req.adminContext) {
       next();
@@ -142,6 +143,8 @@ export async function logFunction(req, res, next) {
             url: sanitizeLogUrl(req.originalUrl),
             req: requestPayload === '{}' ? '' : requestPayload,
             status_code: res.statusCode,
+            request_id: req.requestId || null,
+            duration_ms: Math.min(4_294_967_295, Math.max(0, Date.now() - requestStartedAt)),
             ip: req.ip || '',
             system: system,
             del_flag: 0,

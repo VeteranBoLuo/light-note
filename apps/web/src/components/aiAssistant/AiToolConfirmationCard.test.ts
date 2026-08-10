@@ -58,10 +58,14 @@ function createConfirmation(overrides: Partial<AiToolConfirmation> = {}): AiTool
   };
 }
 
-function mountCard(confirmation = createConfirmation(), onReplaced?: (replacement: unknown) => void) {
+function mountCard(
+  confirmation = createConfirmation(),
+  onReplaced?: (replacement: unknown) => void,
+  onResolved?: (resolution: unknown) => void,
+) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(AiToolConfirmationCard, { confirmation, onReplaced });
+  const app = createApp(AiToolConfirmationCard, { confirmation, onReplaced, onResolved });
   app.use(
     createI18n({
       legacy: false,
@@ -142,6 +146,40 @@ describe('AiToolConfirmationCard note preview', () => {
     expect(api.success).toHaveBeenCalled();
   });
 
+  it('确认成功后透传服务端续答策略，同时不改变原权威回执校验', async () => {
+    const continuation = {
+      schemaVersion: 1 as const,
+      token: 'continuation-token',
+      policy: 'final_reply' as const,
+    };
+    api.post.mockResolvedValue({
+      status: 200,
+      data: {
+        actionReceipt: {
+          actionId: 'confirmation-1',
+          toolName: 'create_note',
+          status: 'succeeded',
+          summary: '笔记已创建',
+          completedAt: '2026-08-03T12:00:00.000Z',
+        },
+        continuation,
+      },
+    });
+    const onResolved = vi.fn();
+    const host = mountCard(createConfirmation({ continuation }), undefined, onResolved);
+
+    findButton(host, '确认执行').click();
+    await flush();
+
+    expect(api.post).toHaveBeenCalledWith('/api/chat/agent/confirm', {
+      confirmationToken: 'token',
+      sessionId: 'session-1',
+      continuationToken: 'continuation-token',
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
+    });
+    expect(onResolved).toHaveBeenCalledWith(expect.objectContaining({ continuation }));
+  });
+
   it('其他通用工具仍沿用原参数兜底展示', () => {
     const host = mountCard(
       createConfirmation({
@@ -200,6 +238,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: 'directory-2',
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',
@@ -232,6 +271,7 @@ describe('AiToolConfirmationCard note preview', () => {
       confirmationToken: 'token',
       sessionId: 'session-1',
       parentId: null,
+      clientCapabilities: ['agent_interaction_v1', 'agent_continuation_v1'],
     });
     expect(onReplaced).toHaveBeenCalledWith({
       previousConfirmationId: 'confirmation-1',

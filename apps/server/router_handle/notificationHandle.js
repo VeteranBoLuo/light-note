@@ -11,6 +11,14 @@ const ADMIN_TYPES = ['system', 'other'];
 const GROUP_KEY = 'COALESCE(batch_id, id)';
 const EMAIL_TYPES = ['verification', 'todo_reminder', 'system'];
 const EMAIL_STATUSES = ['sending', 'accepted', 'failed', 'unknown'];
+// 聊天室普通消息只驱动入口角标；通用通知中心仅展示回复与显式 @ 两类定向消息。
+// 这条过滤同时兜住升级前已生成的旧聊天室通知，避免历史普通消息继续形成通知噪音。
+const COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL = `(
+  (type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message')
+  OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(meta, '$.kind')), '') IN ('reply', 'mention')
+)`;
+const COMMUNITY_CHAT_EXCLUDED_SQL =
+  "type <> 'community_chat' AND COALESCE(source_type, '') <> 'community_chat_message'";
 
 function parseNotificationMeta(meta) {
   if (!meta) return {};
@@ -82,9 +90,11 @@ export const list = async (req, res) => {
     const currentPage = Math.max(Number(req.body?.currentPage) || 1, 1);
     const offset = (currentPage - 1) * pageSize;
     const type = req.body?.type;
+    const excludeCommunityChat = req.body?.excludeCommunityChat === true;
 
-    const where = ['user_id = ?', 'del_flag = 0'];
+    const where = ['user_id = ?', 'del_flag = 0', COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL];
     const params = [userId];
+    if (excludeCommunityChat) where.push(COMMUNITY_CHAT_EXCLUDED_SQL);
     if (type && type !== 'all') {
       if (type === 'other') {
         // 「其他」tab 作兜底:除三大已知类型外的所有(如 streak_risk 签到提醒),避免新增类型无处归类
@@ -105,7 +115,11 @@ export const list = async (req, res) => {
     await attachTodoStates(items, userId);
     const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM notification WHERE ${whereSql}`, params);
     const [[{ unreadTotal }]] = await pool.query(
-      `SELECT COUNT(*) AS unreadTotal FROM notification WHERE user_id = ? AND is_read = 0 AND del_flag = 0`,
+      `SELECT COUNT(*) AS unreadTotal
+        FROM notification
+        WHERE user_id = ? AND is_read = 0 AND del_flag = 0
+          AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+          ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
       [userId],
     );
     res.send(resultData({ items, total, unreadTotal, currentPage, pageSize }));
@@ -122,9 +136,13 @@ export const unreadCount = async (req, res) => {
     return res.send(resultData({ unreadTotal: 0, byType: {} }));
   }
   try {
+    const excludeCommunityChat = req.body?.excludeCommunityChat === true;
     const [rows] = await pool.query(
       `SELECT type, COUNT(*) AS c FROM notification
-       WHERE user_id = ? AND is_read = 0 AND del_flag = 0 GROUP BY type`,
+       WHERE user_id = ? AND is_read = 0 AND del_flag = 0
+         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+         ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}
+       GROUP BY type`,
       [userId],
     );
     const byType = {};
@@ -134,8 +152,8 @@ export const unreadCount = async (req, res) => {
       unreadTotal += Number(r.c || 0);
     }
     res.send(resultData({ unreadTotal, byType }));
-  } catch (e) {
-    res.send(resultData(null, 500, '获取未读数失败: ' + e.message));
+  } catch {
+    res.send(resultData(null, 500, '获取未读数失败'));
   }
 };
 
@@ -187,14 +205,17 @@ export const markRead = async (req, res) => {
 export const markAllRead = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
+    const excludeCommunityChat = req.body?.excludeCommunityChat === true;
     const [result] = await pool.query(
       `UPDATE notification SET is_read = 1, read_time = NOW()
-       WHERE user_id = ? AND is_read = 0 AND del_flag = 0`,
+       WHERE user_id = ? AND is_read = 0 AND del_flag = 0
+         AND ${COMMUNITY_CHAT_TARGETED_NOTIFICATION_SQL}
+         ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
       [req.user.id],
     );
     res.send(resultData({ updated: result.affectedRows || 0 }));
-  } catch (e) {
-    res.send(resultData(null, 500, '标记全部已读失败: ' + e.message));
+  } catch {
+    res.send(resultData(null, 500, '标记全部已读失败'));
   }
 };
 

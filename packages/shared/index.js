@@ -15,6 +15,148 @@ export const STATUS = Object.freeze({
   VISITOR: 'visitor',
 });
 
+/**
+ * 网站合规展示信息（前后端共享的单一事实源）。
+ *
+ * 产品品牌始终是“轻笺”；“轻笺知识库”只用于网站备案全称及合规位置。
+ * 公安备案通过前不得填写占位编号，编号和查询地址必须同时存在才允许页面展示。
+ */
+export const SITE_COMPLIANCE = Object.freeze({
+  productName: '轻笺',
+  websiteFilingName: '轻笺知识库',
+  websiteIcpNumber: '蜀ICP备2026017699号-1',
+  miitQueryUrl: 'https://beian.miit.gov.cn/',
+  publicSecurityFilingNumber: '',
+  publicSecurityQueryUrl: '',
+});
+
+// 云文件在线预览格式注册表。这里是前后端关于“扩展名 -> 预览策略”的单一事实源；
+// 浏览器端仍负责直接预览，服务端只处理需要受控派生的压缩包目录与旧文档 PDF。
+export const FILE_PREVIEW_STRATEGY = Object.freeze({
+  ARCHIVE_MANIFEST: 'archive_manifest',
+  CONVERTED_PDF: 'converted_pdf',
+});
+
+export const FILE_PREVIEW_FORMATS = Object.freeze([
+  Object.freeze({
+    id: 'archive',
+    category: 'compress',
+    previewType: 'archive',
+    strategy: FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST,
+    extensions: Object.freeze([
+      'zip',
+      'zipx',
+      'rar',
+      '7z',
+      'tar',
+      'tar.gz',
+      'tgz',
+      'tar.bz2',
+      'tbz',
+      'tbz2',
+      'tar.xz',
+      'txz',
+      'gz',
+      'bz2',
+      'xz',
+    ]),
+    mimeTypes: Object.freeze([
+      'application/zip',
+      'application/x-zip-compressed',
+      'application/x-rar-compressed',
+      'application/vnd.rar',
+      'application/x-7z-compressed',
+      'application/x-tar',
+      'application/gzip',
+      'application/x-gzip',
+      'application/x-bzip2',
+      'application/x-xz',
+    ]),
+  }),
+  Object.freeze({
+    id: 'legacy-word',
+    category: 'word',
+    previewType: 'converted-pdf',
+    strategy: FILE_PREVIEW_STRATEGY.CONVERTED_PDF,
+    extensions: Object.freeze(['doc', 'rtf', 'odt']),
+    mimeTypes: Object.freeze([
+      'application/msword',
+      'application/vnd.ms-word',
+      'application/rtf',
+      'text/rtf',
+      'application/vnd.oasis.opendocument.text',
+    ]),
+  }),
+  Object.freeze({
+    id: 'legacy-spreadsheet',
+    category: 'excel',
+    previewType: 'converted-pdf',
+    strategy: FILE_PREVIEW_STRATEGY.CONVERTED_PDF,
+    extensions: Object.freeze(['xls', 'ods']),
+    mimeTypes: Object.freeze(['application/vnd.ms-excel', 'application/vnd.oasis.opendocument.spreadsheet']),
+  }),
+  Object.freeze({
+    id: 'legacy-presentation',
+    category: 'ppt',
+    previewType: 'converted-pdf',
+    strategy: FILE_PREVIEW_STRATEGY.CONVERTED_PDF,
+    extensions: Object.freeze(['ppt', 'odp']),
+    mimeTypes: Object.freeze(['application/vnd.ms-powerpoint', 'application/vnd.oasis.opendocument.presentation']),
+  }),
+]);
+
+export const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS = Object.freeze([
+  'tsv',
+  'jsonl',
+  'ndjson',
+  'srt',
+  'vtt',
+  'ics',
+  'vcf',
+  'diff',
+  'patch',
+]);
+
+const FILE_PREVIEW_EXTENSION_INDEX = new Map();
+const FILE_PREVIEW_MIME_INDEX = new Map();
+for (const format of FILE_PREVIEW_FORMATS) {
+  for (const extension of format.extensions) FILE_PREVIEW_EXTENSION_INDEX.set(extension, format);
+  for (const mimeType of format.mimeTypes) FILE_PREVIEW_MIME_INDEX.set(mimeType, format);
+}
+
+const FILE_PREVIEW_COMPOUND_EXTENSIONS = [...FILE_PREVIEW_EXTENSION_INDEX.keys()]
+  .filter((extension) => extension.includes('.'))
+  .sort((left, right) => right.length - left.length);
+
+export function normalizeFilePreviewMimeType(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .split(';')[0];
+}
+
+export function getFilePreviewExtension(fileName = '', explicitExtension = '') {
+  const explicit = String(explicitExtension || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\./u, '');
+  if (explicit) return explicit;
+  const normalizedName = String(fileName || '')
+    .trim()
+    .toLowerCase();
+  for (const extension of FILE_PREVIEW_COMPOUND_EXTENSIONS) {
+    if (normalizedName.endsWith(`.${extension}`)) return extension;
+  }
+  const index = normalizedName.lastIndexOf('.');
+  return index > 0 && index < normalizedName.length - 1 ? normalizedName.slice(index + 1) : '';
+}
+
+export function resolveFilePreviewFormat({ fileName = '', fileType = '', ext = '' } = {}) {
+  const extension = getFilePreviewExtension(fileName, ext);
+  if (extension) return FILE_PREVIEW_EXTENSION_INDEX.get(extension) || null;
+  return FILE_PREVIEW_MIME_INDEX.get(normalizeFilePreviewMimeType(fileType)) || null;
+}
+
 export const BOOKMARK_URL_STATE = Object.freeze({
   VALID: 'valid',
   NORMALIZED: 'normalized',

@@ -10,6 +10,7 @@ export function getStaticSitemapUrls(site, helpPath) {
   const origin = String(site || '').replace(/\/$/, '');
   return [
     { loc: `${origin}/`, priority: '1.0', changefreq: 'weekly' },
+    { loc: `${origin}/about.html`, priority: '0.7', changefreq: 'yearly' },
     { loc: `${origin}/updateLogs`, priority: '0.8', changefreq: 'weekly' },
     { loc: `${origin}${helpPath}`, priority: '0.8', changefreq: 'weekly' },
   ];

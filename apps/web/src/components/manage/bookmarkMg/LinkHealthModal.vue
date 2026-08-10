@@ -42,7 +42,7 @@
 
       <template v-if="summary.suspect.length">
         <p class="lh-hint">{{ $t('bookmarkMg.healthSuspectHint') }}</p>
-        <div class="lh-list">
+        <div v-auto-scrollbar class="lh-list">
           <div v-for="d in summary.suspect" :key="d.id" class="lh-item">
             <div class="lh-item-main">
               <a class="lh-item-name" :href="normalizeUrl(d.url) || undefined" target="_blank" rel="noopener"
@@ -271,6 +271,8 @@
     min-width: 0;
   }
   .lh-item-name {
+    display: block;
+    min-width: 0;
     font-size: 13px;
     font-weight: 600;
     color: var(--text-color);
@@ -304,5 +306,45 @@
     background: linear-gradient(135deg, var(--primary-color), #22d3ee);
     color: #fff;
     font-weight: 600;
+  }
+
+  @media (max-width: 767px) {
+    .lh {
+      width: 100%;
+      max-width: none;
+      gap: 14px;
+    }
+    .lh-bar {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .lh-bar :deep(.space-body) {
+      width: 100%;
+    }
+    .lh-bar :deep(.b_btn) {
+      flex: 1 1 0;
+      min-width: 0;
+      min-height: 44px;
+    }
+    .lh-list {
+      max-height: 48vh;
+      gap: 8px;
+    }
+    .lh-item {
+      flex-direction: column;
+      align-items: stretch;
+      border-color: var(--danger-color);
+      border-left-width: 3px;
+    }
+    .lh-item-actions {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .lh-act {
+      width: 100%;
+      min-height: 44px;
+      padding: 8px 10px;
+    }
   }
 </style>

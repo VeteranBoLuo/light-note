@@ -1,4 +1,5 @@
 import path from 'path';
+import { FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS, FILE_PREVIEW_FORMATS } from '@lightnote/shared';
 
 export const FILE_CATEGORY_ORDER = [
   'image',
@@ -146,6 +147,14 @@ const EXTENSION_CATEGORY_MAP = new Map([
   ['bz2', 'compress'],
   ['xz', 'compress'],
 ]);
+
+for (const format of FILE_PREVIEW_FORMATS) {
+  for (const mimeType of format.mimeTypes) EXACT_MIME_CATEGORY_MAP.set(mimeType, format.category);
+  for (const extension of format.extensions) {
+    EXTENSION_CATEGORY_MAP.set(extension.split('.').pop(), format.category);
+  }
+}
+for (const extension of FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS) EXTENSION_CATEGORY_MAP.set(extension, 'text');
 
 export function normalizeFileCategory(category = '') {
   const normalized = String(category || '')

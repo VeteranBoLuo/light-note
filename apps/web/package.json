@@ -16,9 +16,7 @@
     "typecheck": "tsc --noEmit --skipLibCheck",
     "test": "vitest run",
     "test:e2e:ai": "node e2e/ai-critical-flow.e2e.mjs",
-    "test:watch": "vitest",
-    "sql": "node src/sql/index.ts",
-    "websocket": "node src/http/websocket.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ant-design/icons-vue": "7.0.1",
@@ -67,8 +65,7 @@
     "vue": "^3.4.15",
     "vue-draggable-plus": "^0.6.0",
     "vue-i18n": "9",
-    "vue-router": "^4.2.5",
-    "ws": "^8.17.0"
+    "vue-router": "^4.2.5"
   },
   "devDependencies": {
     "@iconify/vue": "^4.1.2",

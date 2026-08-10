@@ -135,6 +135,28 @@ describe('mobileOverlayHistory', () => {
     expect(shellBack).not.toHaveBeenCalled();
   });
 
+  it('业务层未显式等待时也会统一排队浮层交接，旧 back 不会弹掉新浮层', () => {
+    const shellBack = vi.fn();
+    const shell = registerMobileOverlayHistory(shellBack)!;
+    const drawerBack = vi.fn();
+
+    releaseMobileOverlayHistory(shell);
+    const drawer = registerMobileOverlayHistory(drawerBack)!;
+
+    // 旧浮层仍在等待 popstate，新浮层只登记、尚未抢先 pushState。
+    expect(window.history.state[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toBe(shell.id);
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+
+    // 旧占位完成释放后，协调器才为新浮层压入自己的占位。
+    expect(window.history.state[MOBILE_OVERLAY_HISTORY_STATE_KEY]).toBe(drawer.id);
+    expect(shellBack).not.toHaveBeenCalled();
+    expect(drawerBack).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new PopStateEvent('popstate', { state: {} }));
+    expect(drawerBack).toHaveBeenCalledOnce();
+  });
+
   it('弹出其他自管历史层并落回当前占位时，不误关底层浮层', () => {
     const close = vi.fn();
     const legacyOverlayClose = vi.fn();

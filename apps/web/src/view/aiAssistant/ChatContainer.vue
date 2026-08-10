@@ -196,6 +196,7 @@
     type AiConversationActionSettlement,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
+  import { resolveAutomaticActionContinuation } from '@/components/aiAssistant/actionContinuation';
   import { shouldUseAiCloudHistory } from '@/components/aiAssistant/aiUiContracts';
   import {
     getAiChatBottomDistance,
@@ -215,6 +216,7 @@
   } from '@/components/aiAssistant/aiStreamTypewriter';
   import { isEditableAttachmentTool, type AiAttachmentDirectActionName } from '@/config/aiTools';
   import type {
+    AiActionContinuation,
     AiAgentInteraction,
     AiAgentInteractionResolution,
     AiAgentInteractionSettlement,
@@ -1745,6 +1747,7 @@
       parentMessageId?: string;
       versionGroupId?: string;
       historySnapshot?: ChatMessage[];
+      actionContinuation?: AiActionContinuation;
     } = {},
   ) => {
     if (isLoading.value || cloudRecoveryPending.value || latestConversationChoicePending) return;
@@ -1755,11 +1758,17 @@
     hasAnswerStarted.value = false;
     const inputText = (options.inputText ?? userInput.value).trim();
     if (!inputText) return;
+    const actionContinuation = options.actionContinuation?.token ? options.actionContinuation : null;
     const pendingNoteDraft =
-      !options.materialSnapshot && !contexts.value.length && !scopeRefs.value.length && !attachments.value.length
+      !actionContinuation &&
+      !options.materialSnapshot &&
+      !contexts.value.length &&
+      !scopeRefs.value.length &&
+      !attachments.value.length
         ? resolveAiAssistantPendingNoteDraftReference(messages.value)
         : null;
     const autoInheritedMaterialSnapshot =
+      !actionContinuation &&
       !options.materialSnapshot &&
       !contexts.value.length &&
       !scopeRefs.value.length &&
@@ -1771,6 +1780,7 @@
     // 由受约束语义分类判断本轮是否承接（真实追问 83% 不含指代词，"作者是谁""翻译成英文"
     // 这类问法此前必然丢材料）。候选只含 type+id，是否使用及内容解析都在服务端完成。
     const followUpMaterialCandidate =
+      !actionContinuation &&
       !options.materialSnapshot &&
       !contexts.value.length &&
       !scopeRefs.value.length &&
@@ -1778,10 +1788,11 @@
       !autoInheritedMaterialSnapshot
         ? resolveAiAssistantFollowUpMaterialSnapshot(messages.value)
         : null;
-    const materialSnapshot =
-      options.materialSnapshot ||
-      autoInheritedMaterialSnapshot ||
-      createAiAssistantMaterialSnapshot(contexts.value, attachments.value, scopeRefs.value);
+    const materialSnapshot = actionContinuation
+      ? createAiAssistantMaterialSnapshot([], [], [])
+      : options.materialSnapshot ||
+        autoInheritedMaterialSnapshot ||
+        createAiAssistantMaterialSnapshot(contexts.value, attachments.value, scopeRefs.value);
     const contextSnapshot = materialSnapshot.contextRefs;
     const scopeSnapshot = materialSnapshot.scopeRefs;
     const attachmentSnapshot = materialSnapshot.attachmentRefs;
@@ -2131,6 +2142,7 @@
         '/api/chat/agent',
         {
           message: inputText,
+          ...(actionContinuation ? { trigger: 'card_continuation', continuationToken: actionContinuation.token } : {}),
           stream: true,
           sessionId: sessionId.value,
           enableTranslation: enableTranslation.value,
@@ -2464,6 +2476,22 @@
     });
   };
 
+  const startedActionContinuationTokens = new Set<string>();
+  function continueAfterConfirmedAction(resolution: AiToolConfirmationResolution) {
+    const continuation = resolveAutomaticActionContinuation(resolution);
+    if (!continuation || startedActionContinuationTokens.has(continuation.token)) return;
+    startedActionContinuationTokens.add(continuation.token);
+    queueMicrotask(() => {
+      void sendMessage({
+        inputText: t('ai.actionContinuation.userMessage', {
+          tool: t(`ai.tools.${resolution.toolName}`, resolution.toolName),
+        }),
+        clearComposer: false,
+        actionContinuation: continuation,
+      });
+    });
+  }
+
   const handleConfirmationResolved = async (index: number, resolution: AiToolConfirmationResolution) => {
     const target = messages.value[index];
     if (!target || !resolution.summary) return;
@@ -2488,6 +2516,7 @@
       }
     }
     persistHistory();
+    continueAfterConfirmedAction(resolution);
   };
 
   const handleInteractionResolved = (
@@ -2707,6 +2736,70 @@
   .chat-wrapper.is-narrow-520 .ai-message-action-stack {
     width: 100%;
     margin: 4px 0 14px;
+  }
+
+  /*
+   * 窄容器状态由 ChatContainer 自己维护，因此跨组件响应式规则也必须从这里下发。
+   * 子组件 scoped 样式里组合 :global(.chat-wrapper) 会被编译成只命中容器本身，
+   * 进而把 max-height / padding 等卡片规则错误施加到整个聊天工作区。
+   */
+  .chat-wrapper.is-narrow-520 :deep(.ai-interaction-card) {
+    width: 100%;
+    margin: 0;
+    padding: 13px;
+    border-radius: 12px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-options) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-meta) {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-actions > *) {
+    width: auto;
+    flex: 1;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-actions .b_btn) {
+    min-height: 44px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-options.is-long) {
+    max-height: 360px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-result) {
+    margin-left: 40px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity) {
+    width: 100%;
+    margin: 4px 0 12px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity__toggle),
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity__summary) {
+    min-height: 44px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions) {
+    width: 100%;
+    margin: 0 0 10px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions__button),
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions__text) {
+    min-height: 44px;
+    padding-inline: 7px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-reuse__preview dl > div) {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .messages-container {

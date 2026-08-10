@@ -252,7 +252,7 @@ const ensureRootRole = async (req, res) => {
       return null;
     }
     const [userResult] = await pool.query('SELECT role,del_flag FROM user WHERE id = ? LIMIT 1', [userId]);
-    if (userResult.length === 0 || userResult[0].role !== 'root') {
+    if (userResult.length === 0 || userResult[0].role !== 'root' || Number(userResult[0].del_flag || 0) !== 0) {
       res.send(resultData(null, 403, '仅root用户可操作'));
       return null;
     }
@@ -409,6 +409,12 @@ const reseedSortById = async (connection, tableName) => {
 
 // sort 列管理已移除（knowledge_base 自带 sort 列）
 
+function normalizeAdminLogDate(value, endOfDay = false) {
+  const text = String(value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(text)) return null;
+  return `${text} ${endOfDay ? '23:59:59' : '00:00:00'}`;
+}
+
 export const getApiLogs = async (req, res) => {
   // 全站 API 日志(含所有用户 IP/URL/请求体)——仅 root 运维可查,防越权信息泄露(前端已在 root 后台,后端须同门)
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
@@ -424,23 +430,71 @@ export const getApiLogs = async (req, res) => {
       .slice(0, 200);
     const { hide_internal: hideInternal = true } = filters;
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
-    const roleParams = hideInternal ? INTERNAL_ROLES : [];
-
-    const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%') OR a.url LIKE CONCAT('%', ?, '%')) AND a.del_flag = 0`;
+    const method = String(filters.method || '').toUpperCase();
+    const status = String(filters.status || '').toLowerCase();
+    const requestId = String(filters.request_id || '')
+      .trim()
+      .slice(0, 64);
+    const startDate = normalizeAdminLogDate(filters.start_date);
+    const endDate = normalizeAdminLogDate(filters.end_date, true);
+    const minDurationMs = Math.min(Math.max(Number(filters.min_duration_ms) || 0, 0), 600_000);
+    const conditions = [
+      `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%')
+        OR a.url LIKE CONCAT('%', ?, '%') OR a.request_id LIKE CONCAT('%', ?, '%'))`,
+      'a.del_flag = 0',
+    ];
+    const baseParams = [key, key, key, key, key];
     // 隐藏内部账号(root/test);u.role 为 NULL(join 不到 user,如已删用户)按真实用户保留,避免误删日志
-    const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
-    const scope = adminCursorScope('api-logs', [key, hideInternal]);
+    if (hideInternal) {
+      conditions.push(`(u.role IS NULL OR u.role NOT IN (${rolePh}))`);
+      baseParams.push(...INTERNAL_ROLES);
+    }
+    if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+      conditions.push('a.method = ?');
+      baseParams.push(method);
+    }
+    if (status === 'success') conditions.push('CAST(a.status_code AS UNSIGNED) BETWEEN 200 AND 399');
+    if (status === '4xx') conditions.push('CAST(a.status_code AS UNSIGNED) BETWEEN 400 AND 499');
+    if (status === '5xx') conditions.push('CAST(a.status_code AS UNSIGNED) >= 500');
+    if (status === 'errors') conditions.push('CAST(a.status_code AS UNSIGNED) >= 400');
+    if (requestId) {
+      conditions.push('a.request_id = ?');
+      baseParams.push(requestId);
+    }
+    if (startDate) {
+      conditions.push('a.request_time >= ?');
+      baseParams.push(startDate);
+    }
+    if (endDate) {
+      conditions.push('a.request_time <= ?');
+      baseParams.push(endDate);
+    }
+    if (minDurationMs > 0) {
+      conditions.push('a.duration_ms >= ?');
+      baseParams.push(minDurationMs);
+    }
+    const scope = adminCursorScope('api-logs', [
+      key,
+      hideInternal,
+      method,
+      status,
+      requestId,
+      startDate,
+      endDate,
+      minDurationMs,
+    ]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
-    const cursorFilter = cursor ? ' AND (a.request_time < ? OR (a.request_time = ? AND a.id < ?))' : '';
-    const whereClause = baseWhere + roleFilter + cursorFilter;
+    const cursorFilter = cursor ? '(a.request_time < ? OR (a.request_time = ? AND a.id < ?))' : '';
     const cursorParams = cursor
       ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
       : [];
+    const listConditions = cursorFilter ? [...conditions, cursorFilter] : conditions;
+    const whereClause = listConditions.join(' AND ');
     const take = cursorMode ? pageSize + 1 : pageSize;
 
     const [result] = await pool.query(
       `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC, a.id DESC LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
-      [key || '', key || '', key || '', key || '', ...roleParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
 
     const hasMore = cursorMode && result.length > pageSize;
@@ -459,10 +513,10 @@ export const getApiLogs = async (req, res) => {
 
     let total;
     if (!cursorMode || !cursor) {
-      const countWhereClause = baseWhere + roleFilter;
+      const countWhereClause = conditions.join(' AND ');
       const [totalRes] = await pool.query(
         `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${countWhereClause}`,
-        [key || '', key || '', key || '', key || '', ...roleParams],
+        baseParams,
       );
       total = Number(totalRes[0].total || 0);
     }
@@ -600,32 +654,63 @@ export const getOperationLogs = async (req, res) => {
     const skip = cursorMode ? 0 : pageSize * (currentPage - 1);
     const hideInternal = filters.hide_internal !== false;
     const rolePh = INTERNAL_ROLES.map(() => '?').join(', ');
-    const roleParams = hideInternal ? INTERNAL_ROLES : [];
-    const roleFilter = hideInternal ? ` AND (u.role IS NULL OR u.role NOT IN (${rolePh}))` : '';
     const key = String(filters.key || '')
       .trim()
       .slice(0, 200);
-    const baseWhere = `(u.alias LIKE CONCAT('%', ?, '%')
-OR u.email LIKE CONCAT('%', ?, '%')
-OR o.operation LIKE CONCAT('%', ?, '%')
-OR o.module LIKE CONCAT('%', ?, '%'))
-AND o.del_flag = 0${roleFilter}`;
-    const scope = adminCursorScope('operation-logs', [key, hideInternal]);
+    const moduleName = String(filters.module || '')
+      .trim()
+      .slice(0, 100);
+    const userId = String(filters.user_id || '')
+      .trim()
+      .slice(0, 255);
+    const startDate = normalizeAdminLogDate(filters.start_date);
+    const endDate = normalizeAdminLogDate(filters.end_date, true);
+    const conditions = [
+      `(u.alias LIKE CONCAT('%', ?, '%')
+        OR u.email LIKE CONCAT('%', ?, '%')
+        OR o.operation LIKE CONCAT('%', ?, '%')
+        OR o.module LIKE CONCAT('%', ?, '%')
+        OR o.ip LIKE CONCAT('%', ?, '%'))`,
+      'o.del_flag = 0',
+    ];
+    const baseParams = [key, key, key, key, key];
+    if (hideInternal) {
+      conditions.push(`(u.role IS NULL OR u.role NOT IN (${rolePh}))`);
+      baseParams.push(...INTERNAL_ROLES);
+    }
+    if (moduleName) {
+      conditions.push('o.module = ?');
+      baseParams.push(moduleName);
+    }
+    if (userId) {
+      conditions.push('o.create_by = ?');
+      baseParams.push(userId);
+    }
+    if (startDate) {
+      conditions.push('o.create_time >= ?');
+      baseParams.push(startDate);
+    }
+    if (endDate) {
+      conditions.push('o.create_time <= ?');
+      baseParams.push(endDate);
+    }
+    const scope = adminCursorScope('operation-logs', [key, hideInternal, moduleName, userId, startDate, endDate]);
     const cursor = cursorMode ? decodeAdminListCursor(req.body?.cursor, scope) : null;
-    const cursorFilter = cursor ? ' AND (o.create_time < ? OR (o.create_time = ? AND o.id < ?))' : '';
+    const cursorFilter = cursor ? '(o.create_time < ? OR (o.create_time = ? AND o.id < ?))' : '';
     const cursorParams = cursor
       ? [new Date(adminCursorTime(cursor.value)), new Date(adminCursorTime(cursor.value)), cursor.id]
       : [];
+    const listConditions = cursorFilter ? [...conditions, cursorFilter] : conditions;
     const take = cursorMode ? pageSize + 1 : pageSize;
     const [rows] = await pool.query(
       `SELECT o.*, u.alias,u.email
 FROM operation_logs o
 LEFT JOIN user u ON o.create_by = u.id
-WHERE ${baseWhere}${cursorFilter}
+WHERE ${listConditions.join(' AND ')}
 ORDER BY o.create_time DESC, o.id DESC
 LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
 `,
-      [key, key, key, key, ...roleParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
+      [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
     const hasMore = cursorMode && rows.length > pageSize;
     const page = cursorMode ? rows.slice(0, pageSize) : rows;
@@ -642,8 +727,8 @@ LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
     let total;
     if (!cursorMode || !cursor) {
       const [totalRes] = await pool.query(
-        `SELECT COUNT(*) AS total FROM operation_logs o LEFT JOIN user u ON o.create_by = u.id WHERE ${baseWhere}`,
-        [key, key, key, key, ...roleParams],
+        `SELECT COUNT(*) AS total FROM operation_logs o LEFT JOIN user u ON o.create_by = u.id WHERE ${conditions.join(' AND ')}`,
+        baseParams,
       );
       total = Number(totalRes[0].total || 0);
     }
@@ -961,25 +1046,6 @@ export const clearImages = async (req, res) => {
   } catch (error) {
     console.error('删除过程中出现错误:', error);
     res.status(500).send(resultData(null, 500, '删除失败'));
-  }
-};
-
-export const runSql = async (req, res) => {
-  try {
-    const userId = await ensureRootRole(req, res);
-    if (!userId) return;
-
-    // 拦截危险操作（DROP TABLE/DATABASE、TRUNCATE、ALTER TABLE、GRANT、REVOKE）
-    const DANGEROUS = /\b(DROP\s+TABLE|DROP\s+DATABASE|TRUNCATE|ALTER\s+TABLE|GRANT|REVOKE)\b/i;
-    if (DANGEROUS.test(req.body.sql)) {
-      return res.send(resultData(null, 403, '危险操作已拦截。如需执行，请直连数据库。'));
-    }
-
-    const [result] = await pool.query(req.body.sql);
-    res.send(resultData(result, 200));
-  } catch (e) {
-    console.error('[admin-sql] 执行失败 code=%s', stableAgentErrorCode(e));
-    res.send(resultData(null, 500, 'SQL 执行失败，请检查语句后重试'));
   }
 };
 
@@ -1759,8 +1825,8 @@ export const getAgentLogs = async (req, res) => {
     const params = [];
 
     if (keyword) {
-      where += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ?)';
-      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+      where += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ? OR a.request_id LIKE ?)';
+      params.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
     }
 
     // 隐藏内部账号(root/test):按 user_id join user 判角色;join 不到(u.role NULL,如已删用户)按真实用户保留
@@ -1791,8 +1857,8 @@ export const getAgentLogs = async (req, res) => {
       const countParams = [];
       let countWhere = '1=1';
       if (keyword) {
-        countWhere += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ?)';
-        countParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
+        countWhere += ' AND (a.question LIKE ? OR a.user_alias LIKE ? OR a.tools_used LIKE ? OR a.request_id LIKE ?)';
+        countParams.push(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, `%${keyword}%`);
       }
       if (hideInternal) {
         countWhere += ` AND (u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`;
@@ -1873,6 +1939,7 @@ export const getAiFeedback = async (req, res) => {
       keyword = '',
       rating = '',
       resolved = '',
+      triageStatus = '',
       pageSize = 20,
       currentPage = 1,
       hideInternal = true,
@@ -1892,12 +1959,16 @@ export const getAiFeedback = async (req, res) => {
     }
     if (resolved === 'resolved') where.push('f.resolved = 1');
     if (resolved === 'pending') where.push('(f.resolved IS NULL OR f.resolved = 0)');
+    if (['open', 'investigating', 'actioned', 'dismissed'].includes(triageStatus)) {
+      where.push("COALESCE(t.status, 'open') = ?");
+      params.push(triageStatus);
+    }
     if (String(keyword).trim()) {
       const like = `%${String(keyword).trim().slice(0, 200)}%`;
       where.push(
-        '(u.alias LIKE ? OR c.title LIKE ? OR q.content LIKE ? OR m.content LIKE ? OR f.reason LIKE ? OR f.comment LIKE ?)',
+        '(f.id LIKE ? OR f.request_id LIKE ? OR u.alias LIKE ? OR c.title LIKE ? OR q.content LIKE ? OR m.content LIKE ? OR f.reason LIKE ? OR f.comment LIKE ?)',
       );
-      params.push(like, like, like, like, like, like);
+      params.push(like, like, like, like, like, like, like, like);
     }
     if (hideInternal) {
       where.push(`(u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`);
@@ -1908,11 +1979,15 @@ export const getAiFeedback = async (req, res) => {
       INNER JOIN ai_conversations c ON c.id = f.conversation_id
       INNER JOIN ai_messages m ON m.id = f.message_id AND m.conversation_id = c.id AND m.role = 'assistant'
       LEFT JOIN ai_messages q ON q.id = m.parent_message_id AND q.conversation_id = c.id AND q.role = 'user'
-      LEFT JOIN user u ON u.id = f.actor_user_id`;
+      LEFT JOIN user u ON u.id = f.actor_user_id
+      LEFT JOIN admin_ai_feedback_triage t ON t.feedback_id = f.id`;
 
     const [[rows], [countRows], [summaryRows], [reasonRows]] = await Promise.all([
       pool.query(
         `SELECT f.id, f.conversation_id, f.message_id, f.request_id, f.rating, f.reason, f.resolved, f.comment,
+                COALESCE(t.status, 'open') AS triage_status, COALESCE(t.priority, 'normal') AS triage_priority,
+                COALESCE(t.note, '') AS triage_note, t.updated_by AS triage_updated_by,
+                t.update_time AS triage_update_time,
                 f.create_time, f.update_time, c.title AS conversation_title, u.alias AS user_alias,
                 q.content AS question, m.content AS answer, m.model_meta_json
          ${fromSql} WHERE ${whereSql}
@@ -1924,7 +1999,11 @@ export const getAiFeedback = async (req, res) => {
         `SELECT COUNT(*) AS total,
                 COALESCE(SUM(f.rating = 'helpful'), 0) AS helpful,
                 COALESCE(SUM(f.rating = 'unhelpful'), 0) AS unhelpful,
-                COALESCE(SUM(f.rating = 'unhelpful' AND (f.resolved IS NULL OR f.resolved = 0)), 0) AS pending
+                COALESCE(SUM(f.rating = 'unhelpful' AND COALESCE(t.status, 'open') IN ('open', 'investigating')), 0) AS pending,
+                COALESCE(SUM(COALESCE(t.status, 'open') = 'open'), 0) AS triage_open,
+                COALESCE(SUM(t.status = 'investigating'), 0) AS triage_investigating,
+                COALESCE(SUM(t.status = 'actioned'), 0) AS triage_actioned,
+                COALESCE(SUM(t.status = 'dismissed'), 0) AS triage_dismissed
          ${fromSql} WHERE ${whereSql}`,
         params,
       ),
@@ -1946,6 +2025,11 @@ export const getAiFeedback = async (req, res) => {
           rating: row.rating,
           reason: row.reason || null,
           resolved: row.resolved == null ? null : Boolean(row.resolved),
+          triageStatus: row.triage_status || 'open',
+          triagePriority: row.triage_priority || 'normal',
+          triageNote: row.triage_note || '',
+          triageUpdatedBy: row.triage_updated_by || null,
+          triageUpdatedAt: row.triage_update_time || null,
           comment: row.comment || '',
           userAlias: row.user_alias || '',
           conversationTitle: row.conversation_title || '',
@@ -1963,12 +2047,19 @@ export const getAiFeedback = async (req, res) => {
           helpful: Number(summary.helpful || 0),
           unhelpful: Number(summary.unhelpful || 0),
           pending: Number(summary.pending || 0),
+          triageOpen: Number(summary.triage_open || 0),
+          triageInvestigating: Number(summary.triage_investigating || 0),
+          triageActioned: Number(summary.triage_actioned || 0),
+          triageDismissed: Number(summary.triage_dismissed || 0),
         },
         reasons: reasonRows.map((row) => ({ reason: row.reason, count: Number(row.count || 0) })),
       }),
     );
   } catch (error) {
     console.error('[admin-ai-feedback] query failed code=%s', stableAgentErrorCode(error));
+    if (['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR'].includes(error?.code)) {
+      return res.send(resultData(null, 503, 'AI 反馈闭环尚未完成数据库迁移'));
+    }
     return res.send(resultData(null, 500, '查询 AI 回答反馈失败'));
   }
 };

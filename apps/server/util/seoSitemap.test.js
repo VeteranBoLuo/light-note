@@ -6,6 +6,7 @@ describe('SEO sitemap', () => {
     const xml = renderSitemapXml(getStaticSitemapUrls('https://boluo66.top', '/helpCenter'));
 
     expect(xml).toContain('<loc>https://boluo66.top/</loc>');
+    expect(xml).toContain('<loc>https://boluo66.top/about.html</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/updateLogs</loc>');
     expect(xml).toContain('<loc>https://boluo66.top/helpCenter</loc>');
     expect(xml).not.toContain('https://boluo66.top/landing');

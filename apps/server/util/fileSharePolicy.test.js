@@ -53,5 +53,12 @@ describe('file share policy', () => {
     expect(getFileShareState({ ...active, max_download_count: 2, download_count: 2 })).toBe(
       'download_limit_reached',
     );
+    expect(
+      getFileShareState(
+        { ...active, max_access_count: 1, access_count: 1, max_download_count: 1, download_count: 1 },
+        Date.now(),
+        'session',
+      ),
+    ).toBe('active');
   });
 });

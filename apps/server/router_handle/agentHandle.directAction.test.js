@@ -23,6 +23,9 @@ const mocks = vi.hoisted(() => ({
   resolveSessionActionRetry: vi.fn(() => ({ state: 'none' })),
   settleSessionAction: vi.fn(),
   rejectToolConfirmation: vi.fn(),
+  completeActionContinuation: vi.fn(),
+  discardActionContinuation: vi.fn(),
+  rebindActionContinuation: vi.fn(),
 }));
 
 vi.mock('../db/index.js', () => ({
@@ -90,6 +93,28 @@ vi.mock('../util/agent/interactionResolvers.js', () => ({
   createToolResolutionInteraction: mocks.createToolResolutionInteraction,
   resolveAgentInteractionAction: mocks.resolveAgentInteractionAction,
 }));
+
+vi.mock('../util/agent/actionContinuationStore.js', () => {
+  class ActionContinuationError extends Error {
+    constructor(code, message, status = 400) {
+      super(message);
+      this.code = code;
+      this.status = status;
+    }
+  }
+  return {
+    ActionContinuationError,
+    claimActionContinuation: vi.fn(),
+    completeActionContinuation: mocks.completeActionContinuation,
+    createActionContinuation: vi.fn(),
+    discardActionContinuation: mocks.discardActionContinuation,
+    finalizeActionContinuation: vi.fn(),
+    inspectActionContinuation: vi.fn(),
+    rebindActionContinuation: mocks.rebindActionContinuation,
+    releaseActionContinuation: vi.fn(),
+    settleActionContinuation: vi.fn(),
+  };
+});
 
 vi.mock('../util/agent/confirmationStore.js', () => {
   class ToolConfirmationError extends Error {
@@ -822,6 +847,48 @@ describe('confirmAgentTool', () => {
             toolName: 'create_image_note',
             status: 'succeeded',
           }),
+        }),
+      }),
+    );
+  });
+
+  it('写操作成功后才激活匹配的续答令牌，续答异常不改变权威成功结果', async () => {
+    mocks.completeActionContinuation.mockResolvedValueOnce({
+      schemaVersion: 1,
+      token: 'continuation-token',
+      policy: 'final_reply',
+    });
+    const req = {
+      body: {
+        confirmationToken: 'token-image',
+        continuationToken: 'continuation-token',
+        sessionId: 'session-image',
+        clientCapabilities: ['agent_continuation_v1'],
+      },
+      user: { id: 'user-1', role: 'user', alias: '测试用户' },
+      headers: {},
+      ip: '127.0.0.1',
+    };
+    const res = createResponse();
+
+    await confirmAgentTool(req, res);
+
+    expect(mocks.completeActionContinuation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: 'continuation-token',
+        sessionId: 'session-image',
+        action: { kind: 'confirmation', id: 'confirm-image-1' },
+        outcome: expect.objectContaining({
+          receipt: expect.objectContaining({ status: 'succeeded', actionId: 'confirm-image-1' }),
+        }),
+      }),
+    );
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: expect.objectContaining({
+          actionReceipt: expect.objectContaining({ status: 'succeeded' }),
+          continuation: expect.objectContaining({ policy: 'final_reply' }),
         }),
       }),
     );

@@ -90,4 +90,33 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.childrenByParent.parent).toHaveLength(1);
     expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY][0].childCount).toBe(1);
   });
+
+  it('目录缓存始终按置顶、手动顺序、更新时间和稳定 ID 排序', () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.childrenByParent = {
+      [NOTE_TREE_ROOT_KEY]: [
+        treeNode({ id: 'updated-old', sort: 2, updateTime: '2026-08-09T08:00:00.000Z' }),
+        treeNode({ id: 'manual-first', sort: 0, updateTime: '2026-08-01T08:00:00.000Z' }),
+        treeNode({ id: 'pinned', isTop: true, sort: 99, updateTime: '2026-07-01T08:00:00.000Z' }),
+        treeNode({ id: 'updated-new', sort: 2, updateTime: '2026-08-10T08:00:00.000Z' }),
+      ],
+    };
+
+    workspace.updateNoteMetadata('updated-old', { updateTime: '2026-08-09T08:00:00.000Z' });
+
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY].map((item) => item.id)).toEqual([
+      'pinned',
+      'manual-first',
+      'updated-new',
+      'updated-old',
+    ]);
+
+    workspace.updateNoteMetadata('updated-old', { isTop: true, sort: 0 });
+    expect(workspace.childrenByParent[NOTE_TREE_ROOT_KEY].map((item) => item.id)).toEqual([
+      'updated-old',
+      'pinned',
+      'manual-first',
+      'updated-new',
+    ]);
+  });
 });

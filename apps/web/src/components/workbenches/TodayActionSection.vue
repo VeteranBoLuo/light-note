@@ -63,7 +63,9 @@
               <!-- 重复待办不会被顺延(会打乱周期)，按钮就不能也叫「明天再看」，否则又是一个
                    承诺了做不到的事的按钮 —— 它对这类待办只推提醒 -->
               <BButton size="small" :disabled="mutatingTodoId === todo.id" @click="snoozeTodo(todo)">
-                {{ todo.recurrence ? t('workbench.today.snoozeReminderOnly') : t('workbench.today.snoozeTomorrow') }}
+                {{
+                  isRecurringTodo(todo) ? t('workbench.today.snoozeReminderOnly') : t('workbench.today.snoozeTomorrow')
+                }}
               </BButton>
               <BButton size="small" :disabled="mutatingTodoId === todo.id" @click="editTodo(todo)">
                 {{ t('inbox.editTodo') }}
@@ -127,14 +129,18 @@
   import { completeInbox, type InboxResourceType } from '@/api/inboxApi';
   import {
     completeTodo as completeTodoApi,
+    previewTodoPlanUpdateV2,
     snoozeTodo as snoozeTodoApi,
     updateTodo as updateTodoApi,
+    updateTodoPlanV2,
     type TodoItem,
   } from '@/api/todoApi';
   import { inboxStore } from '@/store';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { recordOperation } from '@/api/commonApi';
   import { todoSnoozeAt } from '@/utils/todoPlanning';
+  import { generateUUID } from '@/utils/common';
+  import { normalizeCurrentTodoPlanDraft } from '@/components/todo/todoDraftNormalizer';
 
   interface WorkbenchInboxItem {
     resourceType: InboxResourceType;
@@ -261,6 +267,26 @@
     return icon.resource.bookmark;
   }
 
+  function isRecurringTodo(item: TodoItem) {
+    return Boolean(item.recurrence || item.seriesId);
+  }
+
+  async function postponeV2SingleTodo(item: TodoItem, targetAt: string) {
+    const draft = normalizeCurrentTodoPlanDraft(item, { dueAt: targetAt });
+    const preview = await previewTodoPlanUpdateV2(item.id, 'current', draft);
+    if (preview.status !== 200 || !preview.data?.previewHash) return preview;
+    return updateTodoPlanV2(
+      item.id,
+      'current',
+      {
+        ...draft,
+        previewHash: String(preview.data.previewHash),
+        idempotencyKey: generateUUID(),
+      },
+      { silent: true },
+    );
+  }
+
   async function completeTodo(item: TodayTodoRow) {
     if (blockGuestWrite('workbench-today-todo', t('inbox.guestPrompt'))) return;
     mutatingTodoId.value = item.id;
@@ -289,20 +315,21 @@
    * 而今日区是按 dueAt 判逾期的，于是逾期待办点完照旧赖在这里（乐观移除后一刷新就回来），
    * 今天到期的那种则会在明天变成逾期再冒出来。待办页的「稍后提醒」语义本来就是提醒，那边不动。
    *
-   * 重复待办例外：下一个实例是按当前 dueAt 推算的（todoService 的 nextRecurrenceAt），
-   * 顺延 dueAt 会让整条周期一起漂移（每周一的事顺延一天就全变周二）。
-   * 所以重复待办仍然只推提醒、条目留在今日区，并用提示说明截止时间没动，
-   * 免得又变成「点了没反应」。
+   * 重复待办例外：v1 会按当前 dueAt 推算下一项，v2 则已有独立的系列日程；
+   * 都不能从工作台偷偷移动当前截止时间并改变系列语义。因此重复待办只推提醒、条目留在今日区。
+   * v2 单任务修改日期时必须走计划预览和“当前项”更新，保证提醒 Job 与日期同步重算。
    */
   async function snoozeTodo(item: TodayTodoRow) {
     if (blockGuestWrite('workbench-today-todo', t('inbox.guestPrompt'))) return;
     mutatingTodoId.value = item.id;
     const targetAt = todoSnoozeAt('tomorrow');
-    const recurring = Boolean(item.recurrence);
+    const recurring = isRecurringTodo(item);
     try {
       const res = recurring
-        ? await snoozeTodoApi(item.id, targetAt)
-        : await updateTodoApi(item.id, { dueAt: targetAt });
+        ? await snoozeTodoApi(item.id, targetAt, { silent: true })
+        : Number(item.planVersion || 1) === 2
+          ? await postponeV2SingleTodo(item, targetAt)
+          : await updateTodoApi(item.id, { dueAt: targetAt }, { silent: true });
       if (res.status === 200) {
         // 只有真的顺延了截止时间才从今日区移除；重复待办仍属于今天，留着才和提示一致
         if (!recurring) removedTodoIds.value = new Set([...removedTodoIds.value, item.id]);
@@ -313,10 +340,10 @@
         message.success(recurring ? t('workbench.today.snoozeRecurringHint') : t('workbench.today.snoozedToTomorrow'));
         emit('refresh');
       } else {
-        message.error(t('inbox.todoSnoozeFailed'));
+        message.error(res.msg || t('inbox.todoSnoozeFailed'));
       }
-    } catch {
-      message.error(t('inbox.todoSnoozeFailed'));
+    } catch (error: any) {
+      message.error(error?.message || t('inbox.todoSnoozeFailed'));
     } finally {
       mutatingTodoId.value = '';
     }

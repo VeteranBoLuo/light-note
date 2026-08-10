@@ -44,14 +44,16 @@
           @keydown="handleResizeKeydown"
         />
         <div class="b-drawer-header" :class="{ 'b-drawer-header--centered': mobileCenteredHeader }">
-          <BButton
-            v-if="mobileCenteredHeader"
-            class="b-drawer-close b-drawer-close--leading"
-            :aria-label="closeLabel || t('common.close')"
-            @click="handleClose"
-          >
-            <SvgIcon size="18" :src="closeIcon || icon.common.close" aria-hidden="true" />
-          </BButton>
+          <slot name="header-leading">
+            <BButton
+              v-if="mobileCenteredHeader"
+              class="b-drawer-close b-drawer-close--leading"
+              :aria-label="closeLabel || t('common.close')"
+              @click="handleClose"
+            >
+              <SvgIcon size="18" :src="closeIcon || icon.common.close" aria-hidden="true" />
+            </BButton>
+          </slot>
           <span :id="drawerTitleId" class="b-drawer-title">{{ title }}</span>
           <div class="b-drawer-header-actions">
             <slot name="header-actions" />

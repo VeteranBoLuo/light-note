@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>轻笺智域 · 卡片动作续答原型</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #f5f6fb;
+        --card: #ffffff;
+        --text: #20232b;
+        --muted: #697080;
+        --line: #dfe2ec;
+        --primary: #615ced;
+        --success: #087f5b;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 32px 16px;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.6 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main { width: min(720px, 100%); margin: 0 auto; }
+      h1 { margin: 0 0 6px; font-size: 24px; }
+      .intro { margin: 0 0 24px; color: var(--muted); }
+      .timeline { display: grid; gap: 14px; }
+      .message { display: flex; gap: 10px; align-items: flex-start; }
+      .avatar {
+        display: grid; place-items: center; flex: 0 0 30px; height: 30px;
+        border-radius: 10px; background: var(--primary); color: white; font-weight: 700;
+      }
+      .bubble, .card {
+        width: min(600px, calc(100vw - 76px)); padding: 13px 15px;
+        border: 1px solid var(--line); border-radius: 14px; background: var(--card);
+      }
+      .user { justify-content: flex-end; }
+      .user .bubble { width: auto; max-width: 520px; background: #615ced; color: #fff; border-color: #615ced; }
+      .card { border-color: #aaa7f2; }
+      .card header { display: flex; justify-content: space-between; gap: 12px; }
+      .badge { padding: 1px 8px; border: 1px solid #76b39e; border-radius: 999px; color: var(--success); }
+      dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 12px 0; }
+      dt { color: var(--muted); }
+      dd { margin: 0; }
+      .actions { display: flex; justify-content: flex-end; gap: 8px; }
+      button {
+        min-height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 9px;
+        background: var(--card); color: var(--text); cursor: pointer;
+      }
+      button.primary { border-color: var(--primary); background: var(--primary); color: #fff; }
+      button:disabled { opacity: .55; cursor: default; }
+      .success { color: var(--success); font-weight: 650; }
+      .hidden { display: none; }
+      .typing::after { content: ""; display: inline-block; width: 7px; height: 1em; margin-left: 3px; background: currentColor; animation: blink .8s infinite; vertical-align: -2px; }
+      @keyframes blink { 50% { opacity: 0; } }
+      .note { margin-top: 24px; padding: 12px 14px; border-left: 3px solid var(--primary); color: var(--muted); }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg: #191b21; --card: #262a33; --text: #f1f3f8; --muted: #aeb4c2; --line: #414653; }
+        .user .bubble { background: #736ff2; border-color: #736ff2; }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>卡片成功后，AI 再完成回答</h1>
+      <p class="intro">点击确认体验：原卡片先完成并保留权威回执，随后形成一轮可见续答。</p>
+      <section class="timeline" aria-live="polite">
+        <div class="message user"><div class="bubble">创建一条“检查死链体检方案”的待办，并告诉我结果。</div></div>
+        <div class="message">
+          <div class="avatar">AI</div>
+          <article class="card" id="action-card">
+            <header><strong>确认创建待办</strong><span class="badge">低风险</span></header>
+            <dl><dt>目标</dt><dd>检查死链体检方案</dd><dt>影响</dt><dd>确认后创建 1 条待办</dd></dl>
+            <div class="actions" id="card-actions">
+              <button type="button" id="cancel">取消</button>
+              <button type="button" class="primary" id="confirm">确认执行</button>
+            </div>
+            <div id="card-result" class="success hidden">待办已创建（权威回执）</div>
+          </article>
+        </div>
+        <div class="message user hidden" id="continuation-user"><div class="bubble">继续根据刚才已完成的“创建待办”操作回答</div></div>
+        <div class="message hidden" id="continuation-ai">
+          <div class="avatar">AI</div>
+          <div class="bubble typing" id="answer">正在根据已完成操作整理结果…</div>
+        </div>
+      </section>
+      <p class="note">原型使用原生按钮仅为了单文件演示；生产 Vue 代码继续使用项目 BButton、BInput 等自研组件。</p>
+    </main>
+    <script>
+      const actions = document.querySelector('#card-actions');
+      const result = document.querySelector('#card-result');
+      const user = document.querySelector('#continuation-user');
+      const ai = document.querySelector('#continuation-ai');
+      const answer = document.querySelector('#answer');
+      document.querySelector('#confirm').addEventListener('click', () => {
+        actions.classList.add('hidden');
+        result.classList.remove('hidden');
+        user.classList.remove('hidden');
+        ai.classList.remove('hidden');
+        window.setTimeout(() => {
+          answer.classList.remove('typing');
+          answer.textContent = '待办“检查死链体检方案”已经创建成功。你可以在待办页面继续设置截止时间或提醒。';
+        }, 900);
+      });
+      document.querySelector('#cancel').addEventListener('click', () => {
+        actions.classList.add('hidden');
+        result.classList.remove('hidden');
+        result.textContent = '已取消，没有创建待办；不会调用 AI 续答。';
+      });
+    </script>
+  </body>
+</html>

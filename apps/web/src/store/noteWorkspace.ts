@@ -70,9 +70,26 @@ function markSet(source: Set<string>, key: string, enabled: boolean) {
   return next;
 }
 
-export type NoteTreeMetadataPatch = Partial<Pick<NoteTreeItem, 'title' | 'type'>>;
+export type NoteTreeMetadataPatch = Partial<
+  Pick<NoteTreeItem, 'title' | 'type' | 'isTop' | 'sort' | 'updateTime'>
+>;
 
 export type CreatedNoteTreeItem = Pick<NoteTreeItem, 'id' | 'parentId' | 'title' | 'type'>;
+
+function compareNoteTreeItems(left: NoteTreeItem, right: NoteTreeItem) {
+  const pinned = Number(Boolean(right.isTop)) - Number(Boolean(left.isTop));
+  if (pinned) return pinned;
+  const manualOrder = Number(left.sort || 0) - Number(right.sort || 0);
+  if (manualOrder) return manualOrder;
+  const leftUpdatedAt = new Date(left.updateTime || 0).getTime() || 0;
+  const rightUpdatedAt = new Date(right.updateTime || 0).getTime() || 0;
+  if (leftUpdatedAt !== rightUpdatedAt) return rightUpdatedAt - leftUpdatedAt;
+  return String(right.id).localeCompare(String(left.id));
+}
+
+function sortNoteTreeItems(items: NoteTreeItem[]) {
+  return [...items].sort(compareNoteTreeItems);
+}
 
 function patchTreeItems(items: NoteTreeItem[], noteId: string, patch: NoteTreeMetadataPatch): NoteTreeItem[] {
   let changed = false;
@@ -87,7 +104,7 @@ function patchTreeItems(items: NoteTreeItem[], noteId: string, patch: NoteTreeMe
       ...(nextChildren !== item.children ? { children: nextChildren } : {}),
     };
   });
-  return changed ? nextItems : items;
+  return changed ? sortNoteTreeItems(nextItems) : items;
 }
 
 function patchTreeIndex(
@@ -236,7 +253,7 @@ export default defineStore('noteWorkspace', () => {
         return [];
       }
       const payload = (response.data || {}) as NoteTreeQueryResult;
-      const items = Array.isArray(payload.items) ? payload.items : [];
+      const items = sortNoteTreeItems(Array.isArray(payload.items) ? payload.items : []);
       childrenByParent.value = { ...childrenByParent.value, [key]: items };
       loadedKeys.value = markSet(loadedKeys.value, key, true);
       // 展开状态会跨当前浏览会话保存在 sessionStorage。恢复根层时不能只恢复箭头，
@@ -317,12 +334,12 @@ export default defineStore('noteWorkspace', () => {
   }
 
   function indexTreeSearchItems(items: NoteTreeItem[]) {
-    const indexed: Record<string, NoteTreeItem[]> = { [NOTE_TREE_ROOT_KEY]: items };
+    const indexed: Record<string, NoteTreeItem[]> = { [NOTE_TREE_ROOT_KEY]: sortNoteTreeItems(items) };
     const expanded = new Set<string>();
     const visit = (nodes: NoteTreeItem[]) => {
       nodes.forEach((node) => {
         const children = Array.isArray(node.children) ? node.children : [];
-        indexed[node.id] = children;
+        indexed[node.id] = sortNoteTreeItems(children);
         if (children.length) {
           expanded.add(node.id);
           visit(children);
@@ -394,6 +411,13 @@ export default defineStore('noteWorkspace', () => {
     const normalizedPatch: NoteTreeMetadataPatch = {};
     if (typeof patch.title === 'string') normalizedPatch.title = patch.title;
     if (Object.prototype.hasOwnProperty.call(patch, 'type')) normalizedPatch.type = patch.type;
+    if (Object.prototype.hasOwnProperty.call(patch, 'isTop')) normalizedPatch.isTop = Boolean(patch.isTop);
+    if (Object.prototype.hasOwnProperty.call(patch, 'sort') && Number.isFinite(Number(patch.sort))) {
+      normalizedPatch.sort = Number(patch.sort);
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'updateTime')) {
+      normalizedPatch.updateTime = patch.updateTime == null ? null : String(patch.updateTime);
+    }
     if (!Object.keys(normalizedPatch).length) return;
 
     childrenByParent.value = patchTreeIndex(childrenByParent.value, id, normalizedPatch);
@@ -440,7 +464,8 @@ export default defineStore('noteWorkspace', () => {
       existingIndex >= 0
         ? siblings.map((item, index) => (index === existingIndex ? { ...item, ...createdNode } : item))
         : [...siblings, createdNode];
-    let nextChildrenByParent = { ...childrenByParent.value, [key]: nextSiblings };
+    const orderedSiblings = sortNoteTreeItems(nextSiblings);
+    let nextChildrenByParent = { ...childrenByParent.value, [key]: orderedSiblings };
     if (existingIndex < 0 && parentId) {
       nextChildrenByParent = incrementParentInTreeIndex(nextChildrenByParent, parentId);
       treeSearchChildrenByParent.value = incrementParentInTreeIndex(treeSearchChildrenByParent.value, parentId);

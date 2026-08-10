@@ -22,6 +22,7 @@ export type AdminNavEntry =
 
 export type AdminNavIcons = {
   overview: string;
+  action: string;
   user: string;
   ai: string;
   growth: string;
@@ -34,8 +35,16 @@ export type AdminNavInput = {
   icons: AdminNavIcons;
   pendingOpinion: number;
   pendingSecurity: number;
-  /** AI 问答测试集页标题走 i18n，由调用方注入 */
+  pendingCommunity: number;
+  pendingModeration: number;
+  /** 国际化标题由调用方注入，菜单事实层不直接依赖 i18n 实例。 */
+  actionCenterTitle: string;
+  adminAuditTitle: string;
+  productInsightsTitle: string;
+  adminGovernanceTitle: string;
   aiEvaluationTitle: string;
+  communityAccessTitle: string;
+  communityModerationTitle: string;
 };
 
 /** 跨外壳入口：这些是独立顶级路由，路径不能按 /admin/{id} 拼 */
@@ -59,7 +68,15 @@ export function buildAdminNav({
   icons,
   pendingOpinion,
   pendingSecurity,
+  pendingCommunity,
+  pendingModeration,
+  actionCenterTitle,
+  adminAuditTitle,
+  productInsightsTitle,
+  adminGovernanceTitle,
   aiEvaluationTitle,
+  communityAccessTitle,
+  communityModerationTitle,
 }: AdminNavInput): AdminNavEntry[] {
   return [
     {
@@ -67,6 +84,12 @@ export function buildAdminNav({
       key: 'overview',
       icon: icons.overview,
       item: { id: 'overview', title: '总览' },
+    },
+    {
+      kind: 'item',
+      key: 'action',
+      icon: icons.action,
+      item: { id: 'actionCenter', title: actionCenterTitle },
     },
     {
       kind: 'group',
@@ -92,6 +115,7 @@ export function buildAdminNav({
       icon: icons.log,
       items: [
         { id: 'operationLog', title: '操作日志' },
+        { id: 'adminAudit', title: adminAuditTitle },
         { id: 'apiLog', title: 'API 日志' },
         { id: 'todoPlanDiagnostics', title: '待办计划诊断' },
         { id: 'logCleanup', title: '日志清理' },
@@ -116,8 +140,21 @@ export function buildAdminNav({
       title: '增长运营',
       icon: icons.growth,
       items: [
+        { id: 'productInsights', title: productInsightsTitle },
         { id: 'conversion', title: '转化漏斗' },
         { id: 'pointsOps', title: '积分运营' },
+        {
+          id: 'communityChatAccess',
+          title: communityAccessTitle,
+          badge: pendingCommunity,
+          badgeHint: `${pendingCommunity} 条社区申请待审核`,
+        },
+        {
+          id: 'communityChatModeration',
+          title: communityModerationTitle,
+          badge: pendingModeration,
+          badgeHint: `${pendingModeration} 条消息举报待处理`,
+        },
         { id: 'notificationCenter', title: '通知中心', path: EXTERNAL_PATHS.notificationCenter, external: true },
       ],
     },
@@ -140,8 +177,7 @@ export function buildAdminNav({
       title: '工具',
       icon: icons.tool,
       items: [
-        // 菜单里此前直接显示代码标识 "simpleSql"
-        { id: 'simpleSql', title: 'SQL 控制台' },
+        { id: 'adminGovernance', title: adminGovernanceTitle },
         { id: 'resourceGovernance', title: '资源治理' },
       ],
     },
@@ -173,25 +209,31 @@ export function adminNavTarget(item: AdminNavItem): string {
  * 不在这张表里的模块在手机上**没有路由**，列进菜单会点出 404。
  *
  * 故意不收录：
- * - simpleSql / knowledgeBase：双栏工作台（编辑器占满高度），手机屏放不下；
+ * - knowledgeBase：双栏工作台（编辑器占满高度），手机屏放不下；
  * - pointsOps：无手机路由，且发放积分是需要核对的写操作，不适合在手机上顺手做。
  */
 const MOBILE_PATHS: Record<string, string> = {
   overview: '/overview',
+  actionCenter: '/actionCenter',
   userMg: '/userMg',
   userOpinion: '/userOpinion',
   agentLog: '/agentLog',
   aiFeedback: '/aiFeedback',
   aiEvaluation: '/aiEvaluation',
+  productInsights: '/productInsights',
   conversion: '/conversion',
+  communityChatAccess: '/communityChatAccess',
+  communityChatModeration: '/communityChatModeration',
   notificationCenter: '/notificationCenter',
   operationLog: '/operationLog',
+  adminAudit: '/adminAudit',
   todoPlanDiagnostics: '/todoPlanDiagnostics',
   apiLog: '/apiLog',
   logCleanup: '/logCleanup',
   logExclude: '/logExclude',
   securityCenter: '/securityCenterMobile',
   resourceGovernance: '/resourceGovernance',
+  adminGovernance: '/adminGovernance',
 };
 
 export type AdminMobileMenuItem = { id: string; title: string; url: string };

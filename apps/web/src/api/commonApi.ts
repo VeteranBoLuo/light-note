@@ -50,6 +50,40 @@ export const getNoticeSummary = async function () {
   return apiBaseGet('/api/common/noticeSummary');
 };
 
+export const getAdminActionCenter = async function (params: { limit?: number } = {}) {
+  return apiBasePost('/api/common/getAdminActionCenter', params, { silent: true });
+};
+
+export const retryAdminAsyncJob = async function (params: {
+  source: string;
+  id: string;
+  reason: string;
+  confirmed: true;
+  confirmText: '确认重试任务';
+}) {
+  return apiBasePost('/api/common/retryAdminAsyncJob', params, { silent: true });
+};
+
+export const getAdminOperationAudits = async function (params: {
+  action?: string;
+  outcome?: string;
+  keyword?: string;
+  startDate?: string;
+  endDate?: string;
+  currentPage?: number;
+  pageSize?: number;
+}) {
+  return apiBasePost('/api/common/getAdminOperationAudits', params, { silent: true });
+};
+
+export const getAdminProductInsights = async function (params: { periodDays: 7 | 30 | 90; cohortWeeks: 8 | 12 | 16 }) {
+  return apiBasePost('/api/common/getAdminProductInsights', params, { silent: true });
+};
+
+export const getAdminGovernance = async function () {
+  return apiBasePost('/api/common/getAdminGovernance', {}, { silent: true });
+};
+
 // 渐进式抓取书签图标:缺图立即抓，已有图标过期后静默重验；按小批合并请求，批间限并发、逐批回填。
 // 既不像"整批一次请求"那样被最慢站拖死首屏十几秒,也不像"逐个请求"那样几百个请求撞限流 429。
 export async function loadBookmarkIconsProgressively(

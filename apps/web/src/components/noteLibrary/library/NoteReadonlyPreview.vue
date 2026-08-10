@@ -38,7 +38,9 @@
     </header>
 
     <div v-auto-scrollbar class="note-readonly-preview__scroll">
-      <BLoading v-if="loading" inline loading :title="t('common.loading')" />
+      <div v-if="loading" class="note-readonly-preview__loading">
+        <BLoading inline loading :title="t('common.loading')" />
+      </div>
       <template v-else-if="error">
         <div class="note-readonly-preview__error">
           <strong>{{ t('common.requestFailed') }}</strong>
@@ -263,6 +265,12 @@
     flex: 1 1 auto;
     overflow: auto;
     padding: 22px clamp(24px, 5vw, 68px) 40px;
+  }
+
+  .note-readonly-preview__loading {
+    min-height: 100%;
+    display: grid;
+    place-items: center;
   }
 
   .note-readonly-preview__article {

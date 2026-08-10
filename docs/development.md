@@ -124,7 +124,9 @@ view/search/
 - HTML/Markdown 正式转换必须调用 `POST /api/note/convertMode`，提交 `baseRevision + targetType + convertedContent + analysisHash`。服务端必须先复核预览指纹，再在同一事务内强制保存转换前版本、写正文与类型、递增 revision 并同步 `note_resource_refs`；禁止依赖两次普通自动保存拼接出转换语义。
 - HTML 正文的创建、更新、AI 写入、导入、模板保存、新用户示例、历史恢复均必须调用 `sanitizePersistedNoteContent()`；旧 HTML 在详情、模板和历史版本读取时也走同一白名单。日志只允许记录稳定场景、净化类别、计数和前后长度，不得记录正文、URL、用户或属性值。Markdown 必须保持源码，只做既有的 blockquote 实体规范化。
 - HTML/Markdown 格式转换、AI 修改/撤销和历史恢复属于高风险低频写入，必须在业务事务内强制保存 `note_versions` 还原点并填写 `source_revision/reason`；普通自动保存才允许使用时间合并窗口。新增写入口时要同时审计主表 revision、历史快照、正文净化、图片引用与 `note_resource_refs`。
-- 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。
+- 移动端编辑器不得用自定义长按、`contextmenu`、划词 AI 或选区工具条拦截系统复制、粘贴和全选；格式能力从固定六入口工具栏的底部操作面板进入。Markdown 编辑器扩展不得把解析后的语法树或 HTML 回写成正文，外部同步更新不得污染 CodeMirror 撤销历史。新增或调整编辑器快捷键时，必须同步更新统一快捷键弹窗、工具栏提示和回归测试；富文本与 Markdown 的重做都要兼容 `Ctrl/⌘ + Shift + Z` 与 `Ctrl + Y`。“重复上一步”必须使用独立状态与快捷键，仅记录可安全复用的格式功能及其参数（例如渐变配置），不得复用撤销/重做历史栈，也不得重复插入、删除、上传等副作用操作。
+- 富文本图文并排必须使用 `section.ln-media-text` 受控结构，一张图片对应一个 `figure` 和一个 `figcaption`；禁止用连续图片加 `float` 猜测文字归属。保存前须清理 TinyMCE 临时属性以及图片的浮动、固定宽高和 `data-ln-size`，HTML/Markdown 转换、服务端净化与离线导出必须保留 `data-ln-media-position/data-ln-media-width`。
+- 富文本渐变文字必须保存为 `.ln-text-gradient[data-ln-text-gradient="true"]`，只允许 `--ln-gradient-from`、`--ln-gradient-to` 两个十六进制颜色和枚举角度 `--ln-gradient-angle`；禁止为了渐变重新开放任意 `background`、`background-clip`、阴影或动画内联样式。HTML/Markdown 往返时保留这段受控 raw HTML，服务端净化、站内预览和离线导出必须使用同一协议。
 
 **响应格式：**
 
@@ -287,6 +289,11 @@ try {
 - 引用评测须把“引用键存在/定位成功”和“证据是否支持对应主张”分开记录；语义支持度只能来自完全合成的受控事实或人工标注，不允许用字符串包含、关键词重合或同源 ID 自动判定蕴含。
 - AI 数据库迁移、环境变量、schema assertions、灰度和回滚步骤见 `docs/plan/ai-assistant-rollout-runbook.md`。
 - 用新唯一索引替换旧唯一索引时，先按新索引的归一化表达式做重复键 preflight，再 `ADD UNIQUE`，确认成功后才 `DROP` 旧索引；顺序不可反转。迁移后 assertion 要同时证明新索引列序/唯一性正确且旧索引已移除，不能只检查脚本退出码。
+- 社区客厅必须失败关闭：`COMMUNITY_CHAT_ACCESS_MODE` 缺省或未知时一律是 `closed`；公开聊天使用 `public`，游客只读、登录用户发言，`invite_only` 仅保留给未来私密房间。两种开放模式都必须再显式开启 `COMMUNITY_CHAT_MESSAGING_ENABLED`，realtime 依赖消息开关。冷启动期服务端目录和消息接口只接受 `general`，旧多频道 slug 必须迁移归档而不能仅靠前端隐藏；客户端保留房间数组能力，但单房间时不得渲染桌面侧栏或移动顶部标签。页面不得渲染整页访问状态再跳工作区；首屏只允许单栏同构骨架，失败在工作区内重试。社区写事务只能用同一个 `connection.query`，并在消息落库事务内重新锁定成员限制、`community_chat_runtime_policy` 单行策略、主房间和有效禁言；点赞属于新互动写入，必须复核发言策略与禁言，撤回属于减少公开内容的治理动作，即使紧急只读也允许执行。普通用户撤回必须由服务端用数据库时间硬限制在本人消息发送后 120 秒内，管理员/社区管理员可撤回任意活跃消息；撤回只能把状态改为 `recalled` 并记录 `recalled_at/recalled_by`，禁止清空正文、解绑图片或只靠前端倒计时判断。历史接口对普通用户脱敏撤回原文和图片，对管理员保留审核可见性；管理员撤回必须同步写入 `community_chat_moderation_actions`，被撤回消息产生过回复或提及定向通知时还要按来源键软删除通知。图片上传在写私有对象存储前必须以账号行锁串行预留配额，最多保留 12 张未绑定的上传中、待发送或待清理图片，不能只靠进程内限流。管理员预览上下文不得代用用户社区身份。Root 切换数据库策略时原因必填，必须与前后状态同事务写入不可变审计；`COMMUNITY_CHAT_EMERGENCY_READ_ONLY` 是更高优先级环境硬开关，生效时后台不得恢复发言。紧急只读拦截新消息、点赞以及图片上传/绑定，但不拦截撤回、个人删除、历史与图片查看、已读、举报或屏蔽。客户端只提交房间 slug、公有消息/待发送图片 ID、幂等键、原因枚举和纯文本，不得提交目标 user ID/角色/内部自增 ID、点赞计数、消息时间或对象存储 Key；游客不得调用任何社区写接口。历史用不透明公有游标，首屏固定最新 30 条，接近列表顶部时才继续请求 `before` 下一页，禁止一次返回全量历史；消息列表的头像只返回按需读取且可缓存的短地址，禁止为同一作者在每条消息中重复内联 Base64。头像用户卡必须继续只接受消息公有 ID，由服务端反查作者并只返回公开成就，不接受目标 user ID，也不返回邮箱、经验值、资源统计或私人内容。阅读位置用单调更新防倒退。举报必须保存最小证据快照且重复提交幂等，屏蔽从服务端消息解析作者并同时过滤历史、引用和未读。Root 消息审核只能调用社区管理 API；驳回、隐藏、禁言和封禁都由 Service 事务处理并收集明确原因。通知记录默认开启，设备推送未接入前不得借用 Android 下载通知能力宣称聊天后台推送。
+- 社区 realtime 必须挂载现有 HTTP server 的唯一 `/realtime/chat` 路径，不得新增 echo 端口或把 sid 放进 URL。upgrade 先校验同源/显式允许的 `Origin`、IP 频控和显式 realtime 开关，再从 Cookie sid 读取会话并查 `user` 实时角色、账号限制与社区权限；缺失或无效的显式 sid 不能静默提权或降级。订阅协议只允许 `general`，出现 user ID、角色或额外字段立即协议失败关闭。REST/MySQL 是唯一消息真相，WebSocket 只发公有消息 ID 等失效通知；消息、审核、权限和运行策略事件必须在事务提交后发布，Redis/广播失败只记录稳定错误码，不能改变 REST 成功结果。客户端连接正常时仍保留低频权威安全刷新，断线、切网、前台恢复和权限事件都要重新拉取 REST，未知事件忽略、协议版本不兼容则稳定降级，禁止无限快速重连。登录用户在聊天室外也必须由应用根层维持一个角标订阅，不能把连接绑在桌面顶栏或移动底栏的挂载周期上；进入聊天室时停用根层连接并由消息工作区接管，防止重复连接。实时事件只能触发服务端权威目录刷新，不能在前端直接加角标；事件撞上在途目录请求时必须排队再补一次，避免一直等到轮询兜底。本地真机通过 `VITE_ENV=local` 代理 WebSocket 时必须保留设备访问 Vite 的原始 Host，不能用 `changeOrigin` 改成后端回环地址，否则局域网 Origin 会被安全校验拒绝并静默退化到轮询。
+- 聊天室通知地址必须使用真实可用的消息深链，不能只拼接页面会忽略的查询参数。历史接口的 `before` 与 `focus` 必须互斥；`focus` 只解析当前房间、当前用户仍可见的 active/recalled 消息。前端定位后用实色描边高亮并提供“回到最新消息”，目标失效时清理 `message` 参数、保留其他查询参数并回退最新历史。
+- 聊天室引用允许本人或他人的 active 消息。普通用户只允许在服务端数据库时间判定的 120 秒窗口内撤回本人消息，但服务端仍向本人返回 `canRecall + recallExpired`，前端超时后保留撤回入口并在点击时说明规则；管理员/社区管理员可撤回任意 active 消息。`delete` 是所有登录用户可用的个人隐藏：必须幂等写入 `community_chat_message_deletions`，历史、深链和未读只对当前用户过滤，不得把消息改为 `hidden` 或影响他人；全局隐藏只能走 Root 治理处置。提醒主开关默认开启；关闭时必须在同一事务内软清理该用户已有聊天室通知并推进主房间阅读基线，房间目录不得继续返回聊天室未读，重新开启不得补算关闭期间消息。房间未读角标按保存的 `official / mentions_only / mentions / all` 四档过滤：`official` 只包含管理员消息，`mentions_only` 只包含普通成员发出的显式提及和直接引用回复，两档严格互斥；`mentions` 合并前两类，`all` 再包含普通非定向消息。通用通知中心在 PC 与移动端都只投递“直接回复本人”或“显式提及本人”的定向事件，且 `official` 仅允许 Root/社区管理员的定向消息、`mentions_only` 仅允许普通成员的定向消息、`mentions/all` 允许两类定向消息。普通消息和未形成回复/@ 的管理员消息不得进入通用通知中心；同一消息同时回复并 @ 同一成员时必须依赖接收者 + 消息来源键幂等去重。账号级站内通知总开关关闭时同样不得投递，定向消息撤回时必须按来源键同步软删除通知。提及对象在编辑器上方用独立 tag 表达，正文不得重复插入 `@昵称`；移动端长按他人头像可快捷添加 tag，轻触仍打开公开用户卡。发送请求结束并恢复可编辑状态后，焦点应回到输入框；公开撤回占位不得暴露管理员审核可见性，只显示“该消息已撤回”。
+- 移动端消息操作只能由消息气泡 payload 触发，禁止把点击监听绑到整条 `article` 造成昵称、元信息或行空白误触。已发送图片按钮必须走与正文一致的消息操作入口：登录用户先打开操作抽屉并从“查看大图”进入聊天专用 `ChatImageViewerModal`，PC 与无操作权限的游客才直接预览；抽屉动作触发时必须先快照图片目标，再释放消息和图片引用，避免关闭抽屉后的延迟事件丢失目标。聊天查看器的切换序列只包含当前已经分页加载且对用户可见的消息图片，序号随该序列变化并以图片公有 ID 保持当前项；不能为了显示全量图片数额外读取整段历史。移动端原始缩放下横向滑动切图、放大后单指拖动并支持双指缩放，PC 的左/上方向键切上一张、右/下方向键切下一张，放大后使用 Pointer Capture 拖动画面；画面中不常驻方向键或手势说明。桌面左右切换按钮的绝对定位必须应用到 `BTooltip` 包裹层，不能只定位内部 `BButton`；移动端工具栏只保留一个旋转方向，“还原/适应窗口”不得复用旋转图标。聊天消息列表必须只允许纵向滚动并限制消息正文、点赞摘要不超过可用宽度；滚动回调使用 passive 监听并按 `requestAnimationFrame` 合并，同步刷新对内容未变化的消息复用原对象且不得重写整个响应式列表。首屏固定 30 条时不使用 `content-visibility`，避免变高消息滚入视口时临时布局和栅格化；允许头像框外饰溢出的消息行不得使用会裁剪或限制装饰绘制边界的 containment。聊天列表中的 `AvatarFramePreview` 首次挂载必须保持暂停，并使用可视区观察，仅让可视区及约 24px 预热范围内的头像框播放完整动效，离屏后暂停；消息流收到 wheel、touchmove 或 scroll 时，每款可见头像框必须保留一层 transform/opacity 核心动效，只暂停滤镜变化和次级装饰动画，停止约 140ms 后恢复完整版，不得让滚动中的头像框完全静止。自动加载更早页必须同时满足“正在向上滚动”和“接近顶部”，程序性滚到底部不得误触发。`html.light-note-mobile-rendering` 下统一隐藏该列表的原生滚动条，浏览器移动预览、PWA 与 Android App 使用同一规则。
 
 ### 前端规范
 
@@ -304,6 +311,7 @@ try {
 | 文字提示 | `BTooltip`      | `a-tooltip`                 |
 
 - 存量 Ant Design（`a-*`）逐步替换为自研 B 组件，不新增；确无对应 B 组件才用原生，并注明原因。
+- 共享 `MobileAppShell` 负责移动文本输入时的键盘视口：只有文本输入获得焦点且 `visualViewport` 相对稳定基线明显收缩时才进入键盘态，隐藏底部一级导航，并用实际可见高度约束应用壳；失焦或视口恢复时重置。业务页面不得按 Android UA 单独补高度，也不得自行复制键盘监听。
 
 **图标开发规范：**
 
@@ -436,6 +444,119 @@ APK 用系统 WebView 渲染，部分厂商内核会把 `color-mix()` 算错、�
 - **真机实时联调：** 运行 `pnpm dev:web:device`，让平板浏览器与一次性安装的 Debug APK 同时打开同一个局域网 Vite 地址，之后 Vue / TS / Less 修改均由 HMR 更新，不需要反复部署或重装。完整步骤见 `apps/android/README.md`。
 - 新增或修改移动样式后至少检查相同 CSS 视口下的移动浏览器与 Debug App、浅色/深色及横竖屏。若仍有厂商引擎差异，优先在共享移动基线写双方都执行的稳定表达并补回归门禁，禁止恢复 App 专属视觉补丁。
 
+### 鸿蒙 6 / 卓易通与 Android Debug App 真机实时预览
+
+真机开发使用 Vite HMR，不使用生产链路的 `pnpm preview`。Debug App 只承载 WebView；只要 Mac
+局域网 IP 和原生壳没有变化，前端文件保存后会实时更新，不需要重新构建或部署 APK。
+
+#### 1. 首次环境检查
+
+Android 构建要求 JDK 17、Android SDK 35、Build Tools 35.0.0 和 Platform Tools。先检查实际路径，
+不要只看 `java` 命令是否存在——macOS 的 `/usr/bin/java` 可能只是“未安装运行时”的系统占位程序：
+
+```bash
+echo "$JAVA_HOME"
+/usr/libexec/java_home -V
+command -v sdkmanager
+echo "$ANDROID_HOME"
+test -x "$ANDROID_HOME/platform-tools/adb" && "$ANDROID_HOME/platform-tools/adb" version
+```
+
+使用 Homebrew JDK 与 Android 命令行工具时，可在当前终端配置：
+
+```bash
+export JAVA_HOME="$(brew --prefix openjdk@17)"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export ANDROID_SDK_ROOT="$ANDROID_HOME"
+export PATH="$JAVA_HOME/bin:$(brew --prefix)/bin:$ANDROID_HOME/platform-tools:$PATH"
+```
+
+若 `openjdk@17` 或 `sdkmanager` 尚未安装，先安装一次：
+
+```bash
+brew install openjdk@17
+brew install --cask android-commandlinetools
+```
+
+然后安装项目所需 SDK。`--licenses` 是交互命令，逐项输入 `y`；不得在自动化脚本中静默代替用户
+接受新的 Android SDK 许可：
+
+```bash
+mkdir -p "$ANDROID_HOME"
+sdkmanager --sdk_root="$ANDROID_HOME" --licenses
+sdkmanager --sdk_root="$ANDROID_HOME" \
+  "platform-tools" \
+  "platforms;android-35" \
+  "build-tools;35.0.0"
+```
+
+确认成功后再把 `JAVA_HOME`、`ANDROID_HOME`、`ANDROID_SDK_ROOT` 和 `PATH` 写入个人 shell
+配置；不要提交机器专属绝对路径。Gradle 也可读取被 Git 忽略的 `apps/android/local.properties`，
+但文档命令默认使用环境变量，避免出现两套 SDK 路径。
+
+#### 2. 每次联调启动顺序
+
+1. 让 Mac 与鸿蒙 / Android 设备处于同一局域网，查询 Mac 当前 IPv4 地址：
+
+   ```bash
+   ipconfig getifaddr en0
+   # 有线或多网卡环境在「系统设置 → 网络」确认实际 IPv4 地址
+   ```
+
+2. 若页面需要登录、资料、AI 等真实接口，先确认 `apps/server/.env` 指向本次允许使用的依赖环境，
+   再在仓库根目录启动后端。后端代码也要热重载时使用 watch 命令：
+
+   ```bash
+   pnpm dev:server:watch
+   ```
+
+   已有正确的 `9001` 后端进程时不要重复启动。只做纯前端页面调试可以省略本地后端，并按需要
+   使用现有 API 环境。
+
+3. 另开终端，让 Vite 对局域网监听固定端口 `5175`。联调本机后端时必须显式使用本地代理模式：
+
+   ```bash
+   VITE_ENV=local pnpm dev:web:device
+   ```
+
+4. 先用设备浏览器访问 `http://<MAC_LAN_IP>:5175/app`。浏览器能打开后再验收 Debug App，
+   可以快速区分“局域网 / 防火墙问题”和“APK 内地址过期”。
+
+#### 3. 首次安装或 IP 变化时更新 Debug APK
+
+Debug 首页由 `lightNoteHomeUrl` 在构建时写入 APK，已安装的包不会自动跟随 Mac IP 变化。第一次
+安装、Mac IP 变化或 Android 原生代码变化时执行：
+
+```bash
+cd apps/android
+./gradlew assembleDebug -PlightNoteHomeUrl=http://<MAC_LAN_IP>:5175
+"$ANDROID_HOME/platform-tools/adb" devices -l
+"$ANDROID_HOME/platform-tools/adb" install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+鸿蒙 6 + 卓易通未向 Mac 暴露兼容 ADB 设备时，构建仍然有效；把
+`apps/android/app/build/outputs/apk/debug/app-debug.apk` 手动传到手机覆盖安装即可。Debug 包名为
+`top.boluo66.lightnote.preview`，与正式包隔离；Release 永远不能覆盖为 HTTP 本地地址。
+
+#### 4. HMR 与重装边界
+
+- 修改 Vue、TypeScript、Less 和 Web 静态资源：Vite 自动 HMR，不重装 APK。
+- 修改本地后端：由 `pnpm dev:server:watch` 重启，不重装 APK。
+- 修改 `apps/android` 原生代码、Gradle、Manifest，或 Mac 局域网 IP：重新构建并覆盖安装 Debug APK。
+- `5175` 是手机访问的 Vite 端口，`9001` 只由 Mac 上的 Vite 代理访问；手机无需直连数据库或后端端口。
+
+#### 5. 常见报错定位
+
+- `Unable to locate a Java Runtime`：JDK 可能已经安装但 `JAVA_HOME` 为空；优先执行
+  `export JAVA_HOME="$(brew --prefix openjdk@17)"` 后用 `$JAVA_HOME/bin/java -version` 验证。
+- `zsh: no such file or directory: /platform-tools/adb`：`ANDROID_HOME` 为空，命令被展开成根目录路径；
+  配置 SDK 路径并安装 `platform-tools`。
+- 设备浏览器能打开、Debug App 仍回线上或打不开：已安装 APK 写入的是旧 IP，按当前 IP 重建覆盖。
+- 浏览器和 App 都打不开：检查 Vite 是否监听 `0.0.0.0:5175`、Mac 防火墙、访客 Wi-Fi、VPN、
+  路由器 AP 隔离和设备是否处于同一局域网。
+- 页面能打开但接口失败：确认以 `VITE_ENV=local` 启动 Vite、`9001` 后端正在监听，并复核
+  `apps/server/.env` 的依赖环境。
+
 ### 笔记页面树灰度与隐私遥测
 
 - 页面树能力由 `util/noteTreeFeatureFlags.js` 统一裁决，前端只消费 `/api/note/getNoteTreeFeatures` 的账号级快照。生产环境未配置时默认全部关闭；本地开发和测试默认开启，便于离线回归。
@@ -503,14 +624,17 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 
 1. **前端：** 构建后将 `dist/` 上传到服务器（替换旧 `dist`）
 2. **后端：** 通过 pm2 启动 `app.js`，配置 `.env` 环境变量
-3. **AI 文档 Worker：** 通过 pm2 单独启动 `documentWorker.js`（进程名 `light-note-document-worker`）；本地开发可运行 `pnpm --filter server worker:documents`
+3. **AI 文档/文件预览 Worker：** 通过 pm2 单独启动 `documentWorker.js`（进程名 `light-note-document-worker`）；项目根目录的 `pnpm dev:server`、`pnpm dev:server:watch` 和 `pnpm preview` 会自动同时托管该 Worker，单独调试时也可运行 `pnpm --filter server worker:documents`。AI 文档解析与云文件派生预览交替取队列并保持单并发，避免 OCR、7-Zip 和 LibreOffice 同时抢占资源
 4. **书签图标 Worker：** 通过 pm2 单独启动 `bookmarkIconWorker.js`（进程名 `light-note-bookmark-icon-worker`）；本地开发可运行 `pnpm --filter server worker:bookmark-icons`。部署前执行 `pnpm --filter server check:bookmark-icons`，确认任务 Schema、favicon-api 和图标目录可用；favicon 服务地址统一由 `FAVICON_API_BASE_URL` 配置。图标落盘使用完整内容哈希共享文件，删除或替换图标必须在业务事务提交后通过 `cleanupBookmarkIconFiles()` 做活动引用检查，禁止直接拼接 `/www/wwwroot/images` 或在提交前删除文件。
 5. **资源治理 Worker：** 通过 pm2 单独启动 `resourceGovernanceWorker.js`（进程名 `light-note-resource-governance-worker`）；本地运行 `pnpm --filter server worker:resource-governance`。发布前必须执行 `pnpm --filter server check:resource-governance`。`RESOURCE_GOVERNANCE_SCAN_ENABLED` 默认开启；`RESOURCE_GOVERNANCE_CLEANUP_ENABLED` 必须显式为 `true` 且确认密钥不少于 32 字符才允许低风险任务。业务主表、共享书签图标、软删除账号资源和未知图片来源首版均无删除执行器。
 6. **本地 OCR 运行时：** 服务器需安装 Poppler、Tesseract、简体中文和英文语言包；Debian/Ubuntu 可安装 `poppler-utils tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng`，安装后执行 `pnpm --filter server check:ocr` 验证
-7. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档、书签图标与资源治理 Worker
+7. **文件预览运行时：** 服务器需安装提供 `7zz` 的 7-Zip 和 LibreOffice Writer/Calc/Impress；发布前先应用 `20260808_file_preview_artifacts.sql`，再执行 `pnpm --filter server check:file-previews`。自定义二进制可用 `FILE_PREVIEW_7Z_BIN`、`FILE_PREVIEW_OFFICE_BIN` 指定；`FILE_PREVIEW_ARCHIVE_ENABLED=false` 或 `FILE_PREVIEW_OFFICE_ENABLED=false` 可分别急停对应新能力。Worker 应使用无特权系统用户，7-Zip/LibreOffice 子进程只继承运行所需的白名单环境变量，不得把数据库、Redis 或对象存储凭据传给文件解析器；生产网络策略应只放行 Worker 必需的数据库、Redis 和 OBS 目标
+8. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker、书签图标 Worker 与资源治理 Worker
 
 资源治理的 finding 只是候选，不是删除授权：扫描必须只读；用户行只要存在（包括 `del_flag=1`）就不能判为 owner 缺失；本地图片至少经过两次跨 24 小时无引用检查；preview、建 Job 和 Worker 执行分别重新核验。API 只能接收 finding ID 或受 Root + session + 证据哈希绑定的短时 token，禁止接收表名、路径、对象 key 或任意待删除资源 ID；前端创建任务前还必须由 Root 手工输入服务端返回的确认短语，禁止代填。本地图片必须核验 `note_images`、笔记正文、笔记历史、笔记模板和书签图标引用，unlink 前再复核文件身份并执行第二轮引用查询；任一来源命中或状态变化都只能阻断。失败任务不会自动重试，只允许 Root 显式重试；待执行任务允许显式取消，两种操作都必须记录审计日志。
 
 OCR 默认完全在服务器本机执行，不使用 OCR API。可通过 `AI_OCR_MAX_PAGES`、`AI_OCR_MAX_PIXELS`、`AI_OCR_PDF_DPI`、`AI_OCR_LANGUAGES`、`AI_OCR_PDFTOPPM_BIN` 和 `AI_OCR_TESSERACT_BIN` 调整限制或二进制路径；生产环境应保持文档 Worker 单并发，避免 OCR 抢占主 HTTP 进程资源。
+
+文件预览默认限制压缩包 100MB、10,000 个条目、45 秒清单生成，旧版 Office 50MB、120 秒转换，派生 PDF 80MB；可通过 `FILE_PREVIEW_ARCHIVE_MAX_BYTES`、`FILE_PREVIEW_ARCHIVE_MAX_ENTRIES`、`FILE_PREVIEW_ARCHIVE_TIMEOUT_MS`、`FILE_PREVIEW_OFFICE_MAX_BYTES`、`FILE_PREVIEW_OFFICE_TIMEOUT_MS`、`FILE_PREVIEW_PDF_MAX_BYTES` 调整。限制应按 Worker 单并发和服务器内存评估，禁止去掉超时、条目数或输出大小上限。
 
 ⚠️ **部署禁令：** 改完代码后不 build、不部署、只能建议是否提交，但是不能推送，除非用户明确说"部署"或"上线"。

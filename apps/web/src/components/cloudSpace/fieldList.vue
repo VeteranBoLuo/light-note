@@ -75,7 +75,7 @@
       </div>
     </div>
     <div
-      v-if="viewMode === 'card'"
+      v-if="viewMode === 'card' && (cloud.loading || cloud.fileList.length)"
       class="file-card-grid"
       data-mobile-resource-scroll
       @scroll.passive="onFileListScroll"
@@ -265,7 +265,7 @@
       </BButton>
     </div>
     <div
-      v-if="viewMode === 'table'"
+      v-if="viewMode === 'table' && (cloud.loading || cloud.fileList.length)"
       class="file-container"
       data-mobile-resource-scroll
       @scroll.passive="onFileListScroll"
@@ -2267,8 +2267,9 @@
   }
 
   .file-empty-state {
-    min-height: 300px;
-    padding: 48px 20px;
+    min-height: 0;
+    flex: 1;
+    padding: 28px 20px;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;

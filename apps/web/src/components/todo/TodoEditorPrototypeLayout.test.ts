@@ -42,6 +42,23 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toContain('<BSwitch v-model:checked="draft.independentTasks.enabled" />');
   });
 
+  it('提醒方式与周期类型都是三等分整区可点击，移动端保留足够触控高度', () => {
+    expect(reminderSource).toMatch(
+      /\.todo-reminder-editor-v3__mode\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
+    );
+    expect(reminderSource).toMatch(
+      /\.todo-reminder-editor-v3__mode :deep\(\.b_btn\)\s*\{[\s\S]*?width:\s*100%[\s\S]*?min-width:\s*0/,
+    );
+    expect(repeatReminderSource).toMatch(
+      /\.todo-reminder-repeat__segment\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
+    );
+    expect(repeatReminderSource).toMatch(
+      /\.todo-reminder-repeat__segment :deep\(\.b_btn\)\s*\{[\s\S]*?width:\s*100%[\s\S]*?min-width:\s*0/,
+    );
+    expect(reminderSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?min-height:\s*44px/);
+    expect(repeatReminderSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?min-height:\s*44px/);
+  });
+
   it('移动端新建使用通知页式独立路由，保留一页渐进披露和固定底部动作', () => {
     expect(todoCreateRouteSource).toContain("path: '/todo/new'");
     expect(mobileCreateSource).toContain('class="todo-create-page__header"');

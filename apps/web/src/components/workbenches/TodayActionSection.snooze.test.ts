@@ -8,18 +8,27 @@ import zhCN from '@/i18n/locales/zh-CN';
  *
  * 原来它复用待办页的「稍后提醒」接口，那个接口只改 todo_reminders.scheduled_at；
  * 而今日区是按 dueAt 判逾期的，于是逾期待办点完照旧留在工作台 —— 提示说「已更新下次提醒时间」，
- * 用户看到的却是列表没变。这里锁住：普通待办走 updateTodo 改 dueAt，
- * 重复待办才退回只推提醒（顺延它的 dueAt 会让整条周期漂移）。
+ * 用户看到的却是列表没变。这里锁住：v1 普通待办走 updateTodo 改 dueAt，v2 单任务走
+ * “预览 → 当前项更新”；v1/v2 重复待办都只推提醒（顺延 dueAt 会破坏系列日程）。
  */
 const updateTodo = vi.fn();
+const previewTodoPlanUpdateV2 = vi.fn();
+const updateTodoPlanV2 = vi.fn();
 const snoozeTodo = vi.fn();
 const completeTodo = vi.fn();
 const success = vi.fn();
 const error = vi.fn();
 
-vi.mock('@/api/todoApi', () => ({ updateTodo, snoozeTodo, completeTodo }));
+vi.mock('@/api/todoApi', () => ({
+  updateTodo,
+  previewTodoPlanUpdateV2,
+  updateTodoPlanV2,
+  snoozeTodo,
+  completeTodo,
+}));
 vi.mock('@/api/inboxApi', () => ({ completeInbox: vi.fn() }));
 vi.mock('@/api/commonApi', () => ({ recordOperation: vi.fn() }));
+vi.mock('@/utils/common', () => ({ generateUUID: vi.fn(() => 'todo-idempotency-key') }));
 vi.mock('@/composables/useGuestGuard', () => ({ blockGuestWrite: vi.fn(() => false) }));
 vi.mock('@/store', () => ({ inboxStore: () => ({ refreshCount: vi.fn() }) }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
@@ -88,6 +97,8 @@ afterEach(() => {
   cleanup?.();
   cleanup = undefined;
   updateTodo.mockReset();
+  previewTodoPlanUpdateV2.mockReset();
+  updateTodoPlanV2.mockReset();
   snoozeTodo.mockReset();
   completeTodo.mockReset();
   success.mockReset();
@@ -138,6 +149,66 @@ describe('工作台今日待办 · 明天再看', () => {
     // 截止时间没动 → 它确实还属于今天，留在列表里才和提示一致，不能乐观移除
     expect(host.querySelectorAll('.today-action-row').length).toBe(1);
     expect(success).toHaveBeenCalledWith('已推迟提醒；重复待办的截止时间保持不变');
+  });
+
+  it('v2 单任务通过当前项计划预览顺延截止时间', async () => {
+    previewTodoPlanUpdateV2.mockResolvedValue({ status: 200, data: { previewHash: 'preview-v2' } });
+    updateTodoPlanV2.mockResolvedValue({ status: 200 });
+    const host = await mountSection([
+      {
+        ...OVERDUE,
+        planVersion: 2,
+        seriesId: null,
+        instanceTimezone: 'Asia/Shanghai',
+        reminder: { version: 1, mode: 'none', channels: [] },
+      },
+    ]);
+
+    expect(snoozeButton(host)?.textContent?.trim()).toBe('明天再看');
+    await clickSnooze(host);
+
+    expect(previewTodoPlanUpdateV2).toHaveBeenCalledWith('todo-overdue', 'current', expect.any(Object));
+    expect(updateTodoPlanV2).toHaveBeenCalledWith(
+      'todo-overdue',
+      'current',
+      expect.objectContaining({ previewHash: 'preview-v2', idempotencyKey: expect.any(String) }),
+      { silent: true },
+    );
+    expect(updateTodo).not.toHaveBeenCalled();
+    expect(snoozeTodo).not.toHaveBeenCalled();
+    expect(success).toHaveBeenCalledWith('已顺延到明天上午 9 点');
+  });
+
+  it('v2 系列实例识别为重复任务并只推迟提醒', async () => {
+    snoozeTodo.mockResolvedValue({ status: 200 });
+    const host = await mountSection([{ ...OVERDUE, planVersion: 2, seriesId: 'series-1', recurrence: null }]);
+
+    expect(snoozeButton(host)?.textContent?.trim()).toBe('推迟提醒');
+    await clickSnooze(host);
+
+    expect(snoozeTodo).toHaveBeenCalledWith('todo-overdue', expect.any(String), { silent: true });
+    expect(updateTodo).not.toHaveBeenCalled();
+    expect(previewTodoPlanUpdateV2).not.toHaveBeenCalled();
+    expect(updateTodoPlanV2).not.toHaveBeenCalled();
+    expect(host.querySelectorAll('.today-action-row').length).toBe(1);
+  });
+
+  it('计划预览失败只展示一次后端错误', async () => {
+    previewTodoPlanUpdateV2.mockResolvedValue({ status: 409, msg: '计划预览已变化' });
+    const host = await mountSection([
+      {
+        ...OVERDUE,
+        planVersion: 2,
+        seriesId: null,
+        reminder: { version: 1, mode: 'none', channels: [] },
+      },
+    ]);
+
+    await clickSnooze(host);
+
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith('计划预览已变化');
+    expect(updateTodoPlanV2).not.toHaveBeenCalled();
   });
 
   it('顺延失败时报错，且不把条目从列表里抹掉', async () => {

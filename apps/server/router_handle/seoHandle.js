@@ -26,10 +26,15 @@ import pool from '../db/index.js';
 import { marked } from 'marked';
 import { formatDateTime } from '../util/common.js';
 import { getStaticSitemapUrls, renderSitemapXml } from '../util/seoSitemap.js';
+import { SITE_COMPLIANCE } from '@lightnote/shared';
 
 const SITE = 'https://boluo66.top';
-const BRAND = '轻笺';
+const BRAND = SITE_COMPLIANCE.productName;
 const HELP_PATH = '/helpCenter'; // 单一来源，避免路径散落在各处手改漏改
+const PUBLIC_SECURITY_FILING_HTML =
+  SITE_COMPLIANCE.publicSecurityFilingNumber && SITE_COMPLIANCE.publicSecurityQueryUrl
+    ? ` · <a href="${SITE_COMPLIANCE.publicSecurityQueryUrl}">${SITE_COMPLIANCE.publicSecurityFilingNumber}</a>`
+    : '';
 
 const escapeHtml = (s) =>
   String(s ?? '')
@@ -100,10 +105,13 @@ ${jsonLd ? `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script
 <div class="wrap">
 <header class="site">
   <a href="/">${BRAND}</a>
-  <nav><a href="${HELP_PATH}">帮助中心</a><a href="/">产品介绍</a></nav>
+  <nav><a href="${HELP_PATH}">帮助中心</a><a href="/about.html">关于轻笺</a><a href="/">产品介绍</a></nav>
 </header>
 ${body}
-<footer class="site">${BRAND} —— 轻量级知识管理工具：书签 · 笔记 · 云空间 · <a href="/">了解更多</a></footer>
+<footer class="site">
+  <div>${BRAND} —— 轻量级知识管理工具：书签 · 笔记 · 云空间 · <a href="/">了解更多</a></div>
+  <div style="margin-top:8px">备案网站名称：${SITE_COMPLIANCE.websiteFilingName} · <a href="${SITE_COMPLIANCE.miitQueryUrl}">${SITE_COMPLIANCE.websiteIcpNumber}</a>${PUBLIC_SECURITY_FILING_HTML}</div>
+</footer>
 </div>
 </body>
 </html>`;

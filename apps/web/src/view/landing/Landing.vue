@@ -229,9 +229,20 @@
               :style="{ transitionDelay: `${i * 0.1}s` }"
             >
               <div class="reason-icon" :style="{ background: r.bg }">{{ r.icon }}</div>
-              <div>
+              <div class="reason-copy">
                 <div class="reason-title">{{ r.title }}</div>
                 <div class="reason-desc">{{ r.desc }}</div>
+                <a
+                  v-if="r.supportCta"
+                  class="reason-support-link"
+                  href="/support"
+                  @click="openSupport"
+                  v-click-log="{ module: '官网首页', operation: '从永久免费说明了解支持轻笺' }"
+                >
+                  <SvgIcon :src="icon.support.heart" size="14" aria-hidden="true" />
+                  <span>{{ r.supportCta }}</span>
+                  <SvgIcon class="reason-support-link__arrow" :src="icon.arrow_right" size="14" aria-hidden="true" />
+                </a>
               </div>
             </div>
           </div>
@@ -297,7 +308,17 @@
           <div class="landing-footer">
             <span>{{ t('landing.copyright') }}</span>
             <span class="footer-sep">|</span>
-            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">蜀ICP备2026017699号-1</a>
+            <span>{{ t('landing.websiteFilingName', { name: WEBSITE_FILING_NAME }) }}</span>
+            <span class="footer-sep">|</span>
+            <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
+            <template v-if="hasPublicSecurityFiling">
+              <span class="footer-sep">|</span>
+              <a :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+                {{ PUBLIC_SECURITY_FILING_NUMBER }}
+              </a>
+            </template>
+            <span class="footer-sep">|</span>
+            <a href="/about.html">{{ t('landing.about') }}</a>
             <span class="footer-sep">|</span>
             <!-- 后端直出的 SEO 内容页,不走 SPA 路由;爬虫由此发现帮助中心。
                  注意:路径是 /helpCenter 不是 /help —— /help 是 App 内已有的
@@ -309,6 +330,15 @@
             <a href="/legal/user-agreement.html">{{ t('landing.userAgreement') }}</a>
             <span class="footer-sep">|</span>
             <a href="#" @click.prevent="handleContact">{{ t('landing.contactUs') }}</a>
+            <span class="footer-sep">|</span>
+            <a
+              class="footer-support-link"
+              href="/support"
+              @click="openSupport"
+              v-click-log="{ module: '官网首页', operation: '从官网页脚打开支持轻笺' }"
+            >
+              {{ t('support.entry') }}
+            </a>
             <span class="footer-sep">|</span>
             <a href="https://github.com/VeteranBoLuo" target="_blank" rel="noopener noreferrer">GitHub</a>
           </div>
@@ -387,6 +417,14 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
+  import {
+    MIIT_QUERY_URL,
+    PUBLIC_SECURITY_FILING_NUMBER,
+    PUBLIC_SECURITY_QUERY_URL,
+    WEBSITE_FILING_NAME,
+    WEBSITE_ICP_NUMBER,
+    hasPublicSecurityFiling,
+  } from '@/config/siteCompliance.ts';
 
   const { t } = useI18n();
   const router = useRouter();
@@ -459,9 +497,7 @@
     },
   ]);
 
-  const currentPreviewAspect = computed(
-    () => previewItems.value[previewIndex.value]?.aspect || MOBILE_STAGE_ASPECT,
-  );
+  const currentPreviewAspect = computed(() => previewItems.value[previewIndex.value]?.aspect || MOBILE_STAGE_ASPECT);
   const navLabels = computed(() => [
     t('landing.navCover'),
     t('landing.navCore'),
@@ -525,6 +561,11 @@
     void recordOperation(LANDING_OPERATION_LOG.enter);
     enterApp();
   }
+  function openSupport(event: MouseEvent) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    void router.push('/support');
+  }
   function handleContact() {
     showContactModal.value = true;
     feedbackContent.value = '';
@@ -586,14 +627,28 @@
     { icon: '🌐', title: t('landing.featI18nTitle'), desc: t('landing.featI18nDesc') },
   ]);
 
-  const reasons = computed(() => [
+  type LandingReason = {
+    icon: string;
+    title: string;
+    desc: string;
+    bg: string;
+    supportCta?: string;
+  };
+
+  const reasons = computed<LandingReason[]>(() => [
     {
       icon: '💪',
       title: t('landing.reasonUpdateTitle'),
       desc: t('landing.reasonUpdateDesc'),
       bg: 'rgba(99,92,237,.12)',
     },
-    { icon: '🆓', title: t('landing.reasonFreeTitle'), desc: t('landing.reasonFreeDesc'), bg: 'rgba(0,168,132,.12)' },
+    {
+      icon: '🆓',
+      title: t('landing.reasonFreeTitle'),
+      desc: t('landing.reasonFreeDesc'),
+      bg: 'rgba(0,168,132,.12)',
+      supportCta: t('support.entryDescription'),
+    },
     { icon: '🌱', title: t('landing.reasonSmartTitle'), desc: t('landing.reasonSmartDesc'), bg: 'rgba(255,138,0,.12)' },
     {
       icon: '⚡',
@@ -1592,6 +1647,35 @@
     color: #888;
     line-height: 1.5;
   }
+  .reason-copy {
+    min-width: 0;
+  }
+  .reason-support-link {
+    width: max-content;
+    max-width: 100%;
+    min-height: 28px;
+    margin-top: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: rgba(190, 186, 217, 0.72);
+    font-size: 12px;
+    line-height: 1.45;
+    text-decoration: none;
+    transition: color 0.2s ease;
+  }
+  .reason-support-link:hover,
+  .reason-support-link:focus-visible {
+    color: #aaa6f2;
+  }
+  .reason-support-link:focus-visible {
+    border-radius: 5px;
+    outline: 2px solid rgba(97, 92, 237, 0.6);
+    outline-offset: 2px;
+  }
+  .reason-support-link__arrow {
+    opacity: 0.72;
+  }
 
   /* ============ CTA ============ */
   .cta-glass {
@@ -2177,6 +2261,10 @@
     }
     .reason-desc {
       font-size: 12px;
+    }
+    .reason-support-link {
+      min-height: 44px;
+      margin-top: 2px;
     }
     .cta-glass {
       width: 100%;

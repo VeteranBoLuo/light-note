@@ -58,7 +58,7 @@ function dispatchModShortcut(host: HTMLElement, key: string, options: { shiftKey
   content?.dispatchEvent(
     new KeyboardEvent('keydown', {
       key,
-      code: `Key${key.toUpperCase()}`,
+      code: /^\d$/u.test(key) ? `Digit${key}` : `Key${key.toUpperCase()}`,
       bubbles: true,
       cancelable: true,
       metaKey: isMac,
@@ -119,7 +119,7 @@ describe('MarkdownCodeMirror', () => {
   });
 
   it('支持常用 Markdown 键盘命令，并进入同一撤销历史', async () => {
-    const { host, editor, model } = await mountEditor('正文');
+    const { host, editor, model, commands } = await mountEditor('正文');
     editor.value?.setSelection(0, 2);
 
     dispatchModShortcut(host, 'b');
@@ -134,6 +134,10 @@ describe('MarkdownCodeMirror', () => {
     dispatchModShortcut(host, 'k');
     await nextTick();
     expect(model.value).toContain('[正文](');
+
+    dispatchModShortcut(host, '1');
+    await nextTick();
+    expect(commands.value).toContain('heading1');
   });
 
   it('Mod+F 交给统一顶部搜索栏，并由外置 API 完成查找与替换', async () => {

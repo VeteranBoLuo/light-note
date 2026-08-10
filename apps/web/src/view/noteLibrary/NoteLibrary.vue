@@ -1137,7 +1137,7 @@
   const sortPinnedFirst = (notes: any[]) =>
     [...notes].sort((a: any, b: any) => Number(Boolean(b.isTop)) - Number(Boolean(a.isTop)));
 
-  async function toggleNoteTop(note: any, refreshDirectory = false) {
+  async function toggleNoteTop(note: any) {
     if (blockGuestWrite('pin-note')) return;
     const noteId = String(note?.id || '');
     if (!noteId || togglingTopIds.has(noteId)) return;
@@ -1146,7 +1146,10 @@
       const res = await apiBasePost('/api/note/toggleNoteTop', { id: noteId });
       if (res.status !== 200) return;
       note.isTop = Boolean(res.data?.isTop);
-      await Promise.all([reloadNotes(), ...(refreshDirectory ? [refreshTree()] : [])]);
+      // 卡片、列表和左侧页面树共享同一排序语义。先同步已缓存树避免视觉停留在旧顺序，
+      // 再并行读取服务端权威列表与目录，覆盖搜索树和尚未加载的展开分支。
+      noteWorkspace.updateNoteMetadata(noteId, { isTop: note.isTop });
+      await Promise.all([reloadNotes(), refreshTree()]);
       message.success(note.isTop ? t('common.pinned') : t('common.unpinned'));
       recordOperation({
         module: '笔记库',
@@ -1160,7 +1163,7 @@
   }
 
   function toggleTreeNoteTop(note: any) {
-    return toggleNoteTop(note, true);
+    return toggleNoteTop(note);
   }
 
   function openNoteTagConfig(note: any) {
@@ -2743,6 +2746,8 @@
       });
       if (res.status === 200) {
         noteList.value = groupedNotes;
+        // 右侧手动排序已经落库后，左侧目录必须立即采用相同的同级顺序。
+        await refreshTree();
         recordOperation({ module: '笔记库', operation: '调整笔记排序成功' });
       } else {
         visibleDragNoteList.value = [...viewNoteList.value];

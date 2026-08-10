@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeMarkdownBlockquoteEntities, resolveBookmarkUrlInput } from './index.js';
+import { SITE_COMPLIANCE, normalizeMarkdownBlockquoteEntities, resolveBookmarkUrlInput } from './index.js';
+
+describe('SITE_COMPLIANCE', () => {
+  it('明确区分产品品牌与网站备案全称，公安备案通过前不展示占位号', () => {
+    expect(SITE_COMPLIANCE).toMatchObject({
+      productName: '轻笺',
+      websiteFilingName: '轻笺知识库',
+      websiteIcpNumber: '蜀ICP备2026017699号-1',
+      miitQueryUrl: 'https://beian.miit.gov.cn/',
+      publicSecurityFilingNumber: '',
+      publicSecurityQueryUrl: '',
+    });
+  });
+});
 
 describe('resolveBookmarkUrlInput', () => {
   it.each([

@@ -23,12 +23,20 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/overview/AdminOverview.vue'),
       },
       {
+        path: 'actionCenter',
+        component: () => import('@/view/admin/components/actionCenter/ActionCenter.vue'),
+      },
+      {
         path: 'apiLog',
         component: () => import('@/view/admin/components/apiLog/ApiLog.vue'),
       },
       {
         path: 'operationLog',
         component: () => import('@/view/admin/components/operationLog/OperationLog.vue'),
+      },
+      {
+        path: 'adminAudit',
+        component: () => import('@/view/admin/components/adminAudit/AdminAudit.vue'),
       },
       {
         path: 'todoPlanDiagnostics',
@@ -43,16 +51,20 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/userOpinion/UserOpinion.vue'),
       },
       {
+        path: 'communityChatAccess',
+        component: () => import('@/view/admin/components/communityChat/CommunityChatAccessAdmin.vue'),
+      },
+      {
+        path: 'communityChatModeration',
+        component: () => import('@/view/admin/components/communityChat/CommunityChatModerationAdmin.vue'),
+      },
+      {
         path: 'resourceGovernance',
         component: () => import('@/view/admin/components/resourceGovernance/ResourceGovernance.vue'),
       },
       {
         path: 'imageMg',
         redirect: '/admin/resourceGovernance',
-      },
-      {
-        path: 'simpleSql',
-        component: () => import('@/view/admin/components/SimpleSql.vue'),
       },
       {
         path: 'agentLog',
@@ -65,6 +77,10 @@ const adminRouter: RouteRecordRaw[] = [
       {
         path: 'aiEvaluation',
         component: () => import('@/view/admin/components/aiEvaluation/AiEvaluation.vue'),
+      },
+      {
+        path: 'productInsights',
+        component: () => import('@/view/admin/components/productInsights/ProductInsights.vue'),
       },
       {
         path: 'conversion',
@@ -82,12 +98,21 @@ const adminRouter: RouteRecordRaw[] = [
         path: 'pointsOps',
         component: () => import('@/view/admin/components/pointsOps/PointsOps.vue'),
       },
+      {
+        path: 'adminGovernance',
+        component: () => import('@/view/admin/components/adminGovernance/AdminGovernance.vue'),
+      },
     ],
   },
   {
     path: 'overview',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/overview/AdminOverview.vue'),
+  },
+  {
+    path: 'actionCenter',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/actionCenter/ActionCenter.vue'),
   },
   {
     path: 'apiLog',
@@ -98,6 +123,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'operationLog',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/operationLog/OperationLogMobile.vue'),
+  },
+  {
+    path: 'adminAudit',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/adminAudit/AdminAudit.vue'),
   },
   {
     path: 'todoPlanDiagnostics',
@@ -113,6 +143,16 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'userOpinion',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/userOpinion/UserOpinionMobile.vue'),
+  },
+  {
+    path: 'communityChatAccess',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/communityChat/CommunityChatAccessAdmin.vue'),
+  },
+  {
+    path: 'communityChatModeration',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/communityChat/CommunityChatModerationAdmin.vue'),
   },
   {
     path: 'resourceGovernance',
@@ -140,6 +180,11 @@ const adminRouter: RouteRecordRaw[] = [
     component: () => import('@/view/admin/components/aiEvaluation/AiEvaluation.vue'),
   },
   {
+    path: 'productInsights',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/productInsights/ProductInsights.vue'),
+  },
+  {
     path: 'conversion',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
@@ -153,6 +198,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'logExclude',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/logExclude/LogExclude.vue'),
+  },
+  {
+    path: 'adminGovernance',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/adminGovernance/AdminGovernance.vue'),
   },
 ];
 

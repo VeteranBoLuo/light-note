@@ -1,115 +1,231 @@
 <template>
   <AdminDataPage
     eyebrow="Admin / API"
-    title="API 日志"
-    subtitle="实时掌握 API 调用和用户行为状态"
-    toolbar-hint="支持模糊匹配 · 回车或停止输入 0.3s 自动查询"
+    :title="t('adminApiLog.title')"
+    :subtitle="t('adminApiLog.subtitle')"
+    :toolbar-hint="t('adminApiLog.toolbarHint')"
     :summary-count="total"
   >
+    <template #actions>
+      <BButton type="danger" @click="clearApiLogs">{{ t('adminApiLog.clear') }}</BButton>
+    </template>
+
     <template #toolbar>
-      <b-input
-        v-model:value="searchValue"
-        placeholder="搜索昵称 / 邮箱 / IP / 接口 URL"
-        class="log-search-input"
-        @input="handleSearch"
-      >
-        <template #prefix>
-          <svg-icon :src="icon.navigation.search" size="16" />
-        </template>
-      </b-input>
+      <BInput
+        v-model:value="filters.keyword"
+        class="log-filter log-filter--search"
+        clearable
+        :placeholder="t('adminApiLog.filters.keyword')"
+        @input="scheduleSearch"
+        @enter="reloadLogs"
+      />
+      <BInput
+        v-model:value="filters.requestId"
+        class="log-filter log-filter--request"
+        clearable
+        :placeholder="t('adminApiLog.filters.requestId')"
+        @input="scheduleSearch"
+        @enter="reloadLogs"
+      />
+      <BSelect v-model:value="filters.method" class="log-filter" :options="methodOptions" @change="reloadLogs" />
+      <BSelect v-model:value="filters.status" class="log-filter" :options="statusOptions" @change="reloadLogs" />
+      <BInput
+        v-model:value="filters.minDurationMs"
+        type="number"
+        class="log-filter log-filter--duration"
+        :placeholder="t('adminApiLog.filters.minDuration')"
+        @enter="reloadLogs"
+      />
+      <BInput v-model:value="filters.startDate" type="date" class="log-filter log-filter--date" @change="reloadLogs" />
+      <span class="log-filter-separator">{{ t('adminApiLog.filters.to') }}</span>
+      <BInput v-model:value="filters.endDate" type="date" class="log-filter log-filter--date" @change="reloadLogs" />
       <span class="admin-toolbar-switch">
-        <BSwitch v-model:checked="hideInternal" @change="searchApiLog()" />
-        隐藏内部账号(管理员/测试)
+        <BSwitch v-model:checked="filters.hideInternal" @change="reloadLogs" />
+        {{ t('adminApiLog.filters.hideInternal') }}
       </span>
-      <b-button type="danger" @click="clearApiLogs">清空日志</b-button>
+      <BButton @click="resetFilters">{{ t('adminApiLog.filters.reset') }}</BButton>
     </template>
 
     <BTable
       ref="tableRef"
       fill
       virtual
+      row-key="id"
       :data="logList"
       :columns="logColumns"
       :row-clickable="true"
       :loading="loading"
       :has-more="hasMore"
+      :row-height="48"
       @load-more="loadMore"
-      @row-click="onRowClick"
+      @row-click="openDetail"
     >
       <template #bodyCell="{ text, record, column }">
-        <template v-if="column.key === 'system'">
-          <span :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">{{
-            text?.os || t('apiLog.unknown')
-          }}</span>
-        </template>
-        <template v-else-if="column.key === 'runtime'">
-          <span :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
-            >{{ t(getApiLogRuntimeLabelKey(record.system?.runtime))
-            }}{{ getApiLogAppVersionSuffix(record.system?.runtime, record.system?.appVersion) }}</span
-          >
-        </template>
+        <BChip v-if="column.key === 'statusCode'" :tone="statusTone(record.statusCode)">
+          {{ record.statusCode || '-' }}
+        </BChip>
+        <span v-else-if="column.key === 'durationMs'" :class="{ 'is-slow': Number(record.durationMs) >= 1000 }">
+          {{ formatDuration(record.durationMs) }}
+        </span>
+        <span v-else-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
+          {{ text?.os || t('apiLog.unknown') }}
+        </span>
+        <span
+          v-else-if="column.key === 'runtime'"
+          :style="{ color: getApiLogRuntimeColor(record.system?.runtime), fontSize: '12px' }"
+        >
+          {{ t(getApiLogRuntimeLabelKey(record.system?.runtime))
+          }}{{ getApiLogAppVersionSuffix(record.system?.runtime, record.system?.appVersion) }}
+        </span>
+        <code v-else-if="column.key === 'requestId'" class="api-log__request-id">{{ shortId(record.requestId) }}</code>
       </template>
     </BTable>
   </AdminDataPage>
 
-  <BModal v-model:visible="detailVisible" title="API 详情" width="600px" :show-footer="false" :mask-closable="true">
-    <div style="display: flex; flex-direction: column; gap: 10px; color: var(--text-color)" v-if="selectedRecord">
-      <div>时间：{{ selectedRecord.requestTime }}</div>
-      <div>接口：{{ selectedRecord.url }}</div>
-      <div>
-        请求参数：
-        <pre
-          style="
-            margin: 4px 0 0;
-            max-height: 120px;
-            overflow: auto;
-            padding: 8px;
-            border-radius: 6px;
-            font-size: 12px;
-            white-space: pre-wrap;
-            word-break: break-all;
-          "
-          >{{ selectedRecord.req }}</pre>
+  <BModal
+    v-model:visible="detailVisible"
+    :title="t('adminApiLog.detail.title')"
+    width="min(720px, 94vw)"
+    :show-footer="false"
+    :mask-closable="true"
+    fullscreen-mobile
+  >
+    <dl v-if="selectedRecord" class="api-log-detail">
+      <div
+        ><dt>{{ t('adminApiLog.detail.time') }}</dt
+        ><dd>{{ formatTime(selectedRecord.requestTime) }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.method') }}</dt
+        ><dd>{{ selectedRecord.method || '-' }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.status') }}</dt
+        ><dd>{{ selectedRecord.statusCode || '-' }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.duration') }}</dt
+        ><dd>{{ formatDuration(selectedRecord.durationMs) }}</dd></div
+      >
+      <div class="is-wide"
+        ><dt>{{ t('adminApiLog.detail.url') }}</dt
+        ><dd>{{ selectedRecord.url || '-' }}</dd></div
+      >
+      <div class="is-wide"
+        ><dt>{{ t('adminApiLog.detail.requestId') }}</dt
+        ><dd
+          ><code>{{ selectedRecord.requestId || '-' }}</code></dd
+        ></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.user') }}</dt
+        ><dd>{{ selectedRecord.alias || selectedRecord.email || '-' }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.ip') }}</dt
+        ><dd>{{ selectedRecord.ip || '-' }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.location') }}</dt
+        ><dd>{{ locationLabel(selectedRecord) }}</dd></div
+      >
+      <div
+        ><dt>{{ t('adminApiLog.detail.browser') }}</dt
+        ><dd>{{ selectedRecord.system?.browser || '-' }}</dd></div
+      >
+      <div
+        ><dt>{{ t('apiLog.operatingSystem') }}</dt
+        ><dd>{{ selectedRecord.system?.os || t('apiLog.unknown') }}</dd></div
+      >
+      <div
+        ><dt>{{ t('apiLog.runtime') }}</dt
+        ><dd>{{ runtimeLabel(selectedRecord) }}</dd></div
+      >
+      <div class="is-wide">
+        <dt>{{ t('adminApiLog.detail.payload') }}</dt>
+        <dd>
+          <pre>{{ payloadText(selectedRecord.req) }}</pre>
+        </dd>
       </div>
-      <div>ip地址：{{ selectedRecord?.ip }}</div>
-      <div>指纹：{{ selectedRecord.system?.fingerprint }}</div>
-      <div>省份：{{ selectedRecord.location?.province }}</div>
-      <div>城市：{{ selectedRecord.location?.city }}</div>
-      <div>浏览器：{{ selectedRecord.system?.browser }}</div>
-      <div>{{ t('apiLog.operatingSystem') }}：{{ selectedRecord.system?.os || t('apiLog.unknown') }}</div>
-      <div>
-        {{ t('apiLog.runtime') }}：{{ t(getApiLogRuntimeLabelKey(selectedRecord.system?.runtime))
-        }}{{ getApiLogAppVersionSuffix(selectedRecord.system?.runtime, selectedRecord.system?.appVersion) }}
-      </div>
-    </div>
+    </dl>
   </BModal>
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, onUnmounted, ref } from 'vue';
-  import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
-  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import icon from '@/config/icon.ts';
-  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
-  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
-  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRoute } from 'vue-router';
+  import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
+  import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { bookmarkStore } from '@/store';
+  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
   import {
     getApiLogAppVersionSuffix,
     getApiLogOsColor,
     getApiLogRuntimeColor,
     getApiLogRuntimeLabelKey,
   } from '@/utils/apiLogPresentation.ts';
-  import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
-  const { t } = useI18n();
+
+  const { t, locale } = useI18n();
+  const route = useRoute();
+  const bookmark = bookmarkStore();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
-  const searchValue = ref('');
-  const hideInternal = ref(true);
+  const filters = reactive({
+    keyword: '',
+    requestId: String(route.query.requestId || '').slice(0, 64),
+    method: '',
+    status: '',
+    minDurationMs: '',
+    startDate: '',
+    endDate: '',
+    hideInternal: true,
+  });
+  const selectedRecord = ref<any>(null);
+  const detailVisible = ref(false);
+  const hasLoaded = ref(false);
+  let timer: number | null = null;
+
+  const methodOptions = computed(() => [
+    { value: '', label: t('adminApiLog.filters.allMethods') },
+    ...['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((value) => ({ value, label: value })),
+  ]);
+  const statusOptions = computed(() => [
+    { value: '', label: t('adminApiLog.filters.allStatuses') },
+    { value: 'success', label: t('adminApiLog.filters.success') },
+    { value: '4xx', label: t('adminApiLog.filters.clientErrors') },
+    { value: '5xx', label: t('adminApiLog.filters.serverErrors') },
+    { value: 'errors', label: t('adminApiLog.filters.allErrors') },
+  ]);
+  const logColumns = computed(() =>
+    bookmark.isMobile
+      ? [
+          { title: t('adminApiLog.columns.time'), key: 'requestTime', width: '150px' },
+          { title: t('adminApiLog.columns.method'), key: 'method', width: '72px' },
+          { title: t('adminApiLog.columns.status'), key: 'statusCode', width: '74px', ellipsis: false },
+          { title: t('adminApiLog.columns.url'), key: 'url', width: 'minmax(180px, 1.6fr)' },
+        ]
+      : [
+          { title: t('adminApiLog.columns.user'), key: 'alias', width: '130px' },
+          { title: t('adminApiLog.columns.time'), key: 'requestTime', width: '160px' },
+          { title: t('adminApiLog.columns.method'), key: 'method', width: '72px' },
+          { title: t('adminApiLog.columns.status'), key: 'statusCode', width: '74px', ellipsis: false },
+          { title: t('adminApiLog.columns.duration'), key: 'durationMs', width: '88px' },
+          { title: t('adminApiLog.columns.url'), key: 'url', width: 'minmax(200px, 1.6fr)' },
+          { title: t('adminApiLog.columns.requestId'), key: 'requestId', width: '118px' },
+          { title: t('apiLog.operatingSystem'), key: 'system', width: '105px' },
+          { title: t('apiLog.runtime'), key: 'runtime', width: '100px' },
+        ],
+  );
+
   const {
     items: logList,
     total,
@@ -123,144 +239,211 @@
       apiQueryPost('/api/common/getApiLogs', {
         cursor,
         limit,
-        filters: { key: searchValue.value, hideInternal: hideInternal.value },
+        filters: {
+          key: filters.keyword,
+          requestId: filters.requestId,
+          method: filters.method,
+          status: filters.status,
+          minDurationMs: filters.minDurationMs,
+          startDate: filters.startDate,
+          endDate: filters.endDate,
+          hideInternal: filters.hideInternal,
+        },
       }),
     onError: (_error, silent) => {
       if (!silent) message.error(t('common.requestFailedDescription'));
     },
   });
-  const hasLoaded = ref(false);
 
-  const logColumns = computed(() => {
-    return [
-      {
-        title: '昵称',
-        key: 'alias',
-        width: '1fr',
-      },
-      {
-        title: '邮箱',
-        key: 'email',
-        width: '1fr',
-      },
-      {
-        title: '时间',
-        key: 'requestTime',
-        width: '1fr',
-      },
-      {
-        title: '接口',
-        key: 'url',
-        width: '1fr',
-      },
-      {
-        title: 'ip',
-        key: 'ip',
-        width: '1fr',
-      },
-      {
-        title: t('apiLog.operatingSystem'),
-        key: 'system',
-        width: '110px',
-      },
-      {
-        title: t('apiLog.runtime'),
-        key: 'runtime',
-        width: '100px',
-      },
-    ];
-  });
-
+  function clearTimer() {
+    if (timer) window.clearTimeout(timer);
+    timer = null;
+  }
+  function scheduleSearch() {
+    clearTimer();
+    timer = window.setTimeout(() => reloadLogs({ silent: true }), 350);
+  }
+  async function reloadLogs(options: { silent?: boolean } = {}) {
+    clearTimer();
+    tableRef.value?.scrollToTop();
+    const loaded = await reload(options);
+    if (loaded) hasLoaded.value = true;
+  }
+  function resetFilters() {
+    Object.assign(filters, {
+      keyword: '',
+      requestId: '',
+      method: '',
+      status: '',
+      minDurationMs: '',
+      startDate: '',
+      endDate: '',
+      hideInternal: true,
+    });
+    void reloadLogs();
+  }
+  function openDetail(record: any) {
+    selectedRecord.value = record;
+    detailVisible.value = true;
+  }
   function clearApiLogs() {
     Alert.alert({
-      title: '提示',
-      content: `请确认是否要清空日志？`,
+      title: t('adminApiLog.clearTitle'),
+      content: t('adminApiLog.clearConfirm'),
       onOk() {
-        apiBaseGet('/api/common/clearApiLogs', {}).then((res) => {
-          if (res.status === 200) {
-            message.success('日志清空成功');
-            searchApiLog();
+        apiBaseGet('/api/common/clearApiLogs', {}).then((response: any) => {
+          if (response?.status === 200) {
+            message.success(t('adminApiLog.clearSuccess'));
+            void reloadLogs();
           }
         });
       },
     });
   }
-
-  const timer = ref<any>(null);
-  function clearSearchTimer() {
-    if (timer.value) {
-      clearTimeout(timer.value);
-      timer.value = null;
-    }
+  function statusTone(value: unknown): 'success' | 'pending' | 'danger' | 'neutral' {
+    const code = Number(value);
+    if (code >= 500) return 'danger';
+    if (code >= 400) return 'pending';
+    if (code >= 200 && code < 400) return 'success';
+    return 'neutral';
   }
-  function handleSearch() {
-    clearSearchTimer();
-    timer.value = setTimeout(() => {
-      searchApiLog({ silent: true });
-    }, 300);
+  function formatDuration(value: unknown) {
+    const ms = Number(value);
+    if (!Number.isFinite(ms)) return '-';
+    return ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${ms} ms`;
   }
-
-  function cancelPendingRequest() {
-    cancel();
+  function formatTime(value: unknown) {
+    if (!value) return '-';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : String(value);
   }
-
-  const selectedRecord = ref<any>(null);
-  const detailVisible = ref(false);
-
-  function onRowClick(record: any) {
-    selectedRecord.value = record;
-    detailVisible.value = true;
+  function shortId(value: unknown) {
+    const text = String(value || '');
+    return text.length > 14 ? `${text.slice(0, 12)}…` : text || '-';
   }
-
-  async function searchApiLog(options: { silent?: boolean } = {}) {
-    tableRef.value?.scrollToTop();
-    const loaded = await reload(options);
-    if (loaded) hasLoaded.value = true;
+  function payloadText(value: unknown) {
+    if (value == null || value === '') return '-';
+    return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   }
-
-  /*
-   * 回到前台补一次日志。这里故意不用 useForegroundRefresh:那套要求刷新全程静默
-   * (不进 loading、不闪列表)且有 5 分钟陈旧阈值,而日志页要的正相反 ——
-   * 每次切回来都要最新一屏,reload 本身就会清空列表并进表格 loading。
-   * 「从别处回到本页」不需要单独处理:全站没有 keep-alive,重新进页即重新挂载,
-   * 由下面的 onMounted 取数(silent 只用于抑制自动刷新的报错提示)。
-   */
+  function locationLabel(record: any) {
+    return [record?.location?.province, record?.location?.city].filter(Boolean).join(' / ') || '-';
+  }
+  function runtimeLabel(record: any) {
+    return `${t(getApiLogRuntimeLabelKey(record?.system?.runtime))}${getApiLogAppVersionSuffix(
+      record?.system?.runtime,
+      record?.system?.appVersion,
+    )}`;
+  }
   const handleVisibilityChange = () => {
-    if (!document.hidden && hasLoaded.value) {
-      searchApiLog({ silent: true });
-    }
+    if (!document.hidden && hasLoaded.value) void reloadLogs({ silent: true });
   };
 
   onMounted(() => {
-    searchApiLog();
+    void reloadLogs();
     document.addEventListener('visibilitychange', handleVisibilityChange);
   });
-
   onUnmounted(() => {
-    clearSearchTimer();
-    cancelPendingRequest();
+    clearTimer();
+    cancel();
     document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 </script>
 
 <style lang="less" scoped>
   @import '@/assets/css/admin-breakpoints.less';
-  .log-search-input {
-    flex: 1;
-  }
 
+  .log-filter {
+    width: 126px;
+  }
+  .log-filter--search {
+    width: min(240px, 24vw);
+  }
+  .log-filter--request {
+    width: min(210px, 21vw);
+  }
+  .log-filter--duration {
+    width: 118px;
+  }
+  .log-filter--date {
+    width: 138px;
+  }
+  .log-filter-separator {
+    color: var(--sub-text-color);
+    font-size: 12px;
+  }
   .admin-toolbar-switch {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     color: var(--text-color);
-    font-size: 13px;
+    font-size: 12px;
     white-space: nowrap;
   }
+  .is-slow {
+    color: var(--error-color);
+    font-weight: 600;
+  }
+  .api-log__request-id {
+    color: var(--sub-text-color);
+    font-size: 11px;
+  }
+  .api-log-detail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 18px;
+    margin: 0;
+  }
+  .api-log-detail > div {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  .api-log-detail > div.is-wide {
+    grid-column: 1 / -1;
+  }
+  .api-log-detail dt {
+    color: var(--sub-text-color);
+    font-size: 11px;
+  }
+  .api-log-detail dd {
+    min-width: 0;
+    margin: 0;
+    color: var(--text-color);
+    overflow-wrap: anywhere;
+  }
+  .api-log-detail pre {
+    max-height: 240px;
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    font:
+      12px/1.55 ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Consolas,
+      monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 
-  @media (max-width: @admin-bp-desktop) {
-    .log-search-input {
+  @media (max-width: @admin-bp-mobile) {
+    .log-filter,
+    .log-filter--search,
+    .log-filter--request,
+    .log-filter--duration,
+    .log-filter--date {
       width: 100%;
+    }
+    .log-filter-separator {
+      display: none;
+    }
+    .api-log-detail {
+      grid-template-columns: 1fr;
+    }
+    .api-log-detail > div.is-wide {
+      grid-column: auto;
     }
   }
 </style>

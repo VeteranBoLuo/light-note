@@ -1,13 +1,25 @@
 <template>
   <Teleport to="body">
-    <div v-if="visible" class="mask-container" :class="props.maskClass" @click.self="handleMaskClick">
+    <div
+      v-if="visible"
+      class="mask-container"
+      :class="[props.maskClass, { 'is-mobile-fullscreen': isMobileFullscreen }]"
+      @click.self="handleMaskClick"
+    >
       <div
         ref="modalRef"
         class="modal-view"
-        :class="[{ out: isOut }, props.modalClass]"
+        :class="[
+          {
+            out: isOut,
+            'is-mobile-fullscreen': isMobileFullscreen,
+            'has-mobile-header-slot': isMobileFullscreen && Boolean($slots.mobileHeader),
+          },
+          props.modalClass,
+        ]"
         :style="{
-          width: props.width !== 'auto' ? props.width : undefined,
-          height: props.height !== 'auto' ? resolvedHeight : undefined,
+          width: !isMobileFullscreen && props.width !== 'auto' ? props.width : undefined,
+          height: !isMobileFullscreen && props.height !== 'auto' ? resolvedHeight : undefined,
         }"
         role="dialog"
         aria-modal="true"
@@ -16,12 +28,20 @@
         @keydown="handleModalKeydown"
       >
         <div class="modal-header">
-          <div :id="modalTitleId" class="modal-title">
-            <slot name="title">{{ title || t('common.defaultTitle') }}</slot>
-          </div>
-          <BButton class="modal-close" :aria-label="t('common.close')" @click="handleClose">
-            <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
-          </BButton>
+          <template v-if="isMobileFullscreen && $slots.mobileHeader">
+            <span :id="modalTitleId" class="modal-accessible-title">
+              {{ title || t('common.defaultTitle') }}
+            </span>
+            <slot name="mobileHeader" :close="handleClose"></slot>
+          </template>
+          <template v-else>
+            <div :id="modalTitleId" class="modal-title">
+              <slot name="title">{{ title || t('common.defaultTitle') }}</slot>
+            </div>
+            <BButton class="modal-close" :aria-label="t('common.close')" @click="handleClose">
+              <SvgIcon :src="icon.navigation.close" size="18" aria-hidden="true" />
+            </BButton>
+          </template>
         </div>
         <div class="modal-content" :class="props.contentClass">
           <slot name="default"></slot>
@@ -74,6 +94,8 @@
       historyClosable?: boolean;
       /** 弹框打开后优先聚焦的元素选择器；找不到时回退到第一个可聚焦元素。 */
       initialFocus?: string;
+      /** 仅在统一移动布局下铺满视口；桌面端仍按 width/height 渲染。 */
+      fullscreenMobile?: boolean;
     }>(),
     {
       title: '',
@@ -85,6 +107,7 @@
       height: 'auto',
       historyClosable: true,
       initialFocus: '',
+      fullscreenMobile: false,
     },
   );
   const visible = defineModel('visible');
@@ -98,6 +121,7 @@
   let historyHandle: MobileOverlayHistoryHandle | null = null;
   const attrs = useAttrs();
   const resolvedHeight = computed(() => resolveViewportUnitValue(props.height));
+  const isMobileFullscreen = computed(() => props.fullscreenMobile && isMobileLayout.value);
 
   function performClose() {
     if (closeTimer !== null || isOut.value) return;
@@ -272,6 +296,18 @@
     margin: 0;
   }
 
+  .modal-accessible-title {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .modal-close.b_btn {
     display: inline-flex;
     align-items: center;
@@ -362,6 +398,52 @@
     }
     .modal-footer {
       padding: 0 16px 12px;
+    }
+
+    .mask-container.is-mobile-fullscreen {
+      background-color: var(--background-color);
+      animation: none;
+    }
+
+    .modal-view.is-mobile-fullscreen {
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      min-height: 0;
+      max-width: none;
+      max-height: none;
+      transform: none;
+      border-radius: 0;
+      box-shadow: none;
+      animation: mobile-fullscreen-in 0.2s ease;
+    }
+
+    .modal-view.is-mobile-fullscreen.out {
+      animation: out-animation 0.2s ease;
+    }
+
+    .modal-view.is-mobile-fullscreen.has-mobile-header-slot .modal-header {
+      min-height: 0;
+      padding: 0;
+    }
+
+    .modal-view.is-mobile-fullscreen .modal-content {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .modal-view.is-mobile-fullscreen .modal-footer {
+      padding-bottom: calc(12px + env(safe-area-inset-bottom));
+    }
+  }
+
+  @keyframes mobile-fullscreen-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
 </style>

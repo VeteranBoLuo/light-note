@@ -11,11 +11,8 @@
 /** 工信部 App 备案号。与网站 ICP 备案号不是同一个,两者不能互相冒充。 */
 export const APP_FILING_NUMBER = '蜀ICP备2026017699号-3A';
 
-/** 网站 ICP 备案号,与上面的 App 备案号并列展示时用。 */
-export const WEBSITE_ICP_NUMBER = '蜀ICP备2026017699号-1';
-
-/** 工信部备案查询入口。 */
-export const MIIT_QUERY_URL = 'https://beian.miit.gov.cn';
+/** 网站备案信息由站点合规配置统一维护；这里保留转出以兼容下载页既有引用。 */
+export { MIIT_QUERY_URL, WEBSITE_FILING_NAME, WEBSITE_ICP_NUMBER } from './siteCompliance.ts';
 
 /** 唯一正式分发域名。下载页的安全提示要明确只认这个域名。后端拼绝对地址也要用它，故同在 shared。 */
 export { OFFICIAL_HOST } from '@lightnote/shared';

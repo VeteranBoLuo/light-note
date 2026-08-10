@@ -10,6 +10,10 @@ const bookmarkSource = readFileSync(
   resolve(process.cwd(), 'src/components/manage/bookmarkMg/BookmarkTableMobile.vue'),
   'utf8',
 );
+const linkHealthSource = readFileSync(
+  resolve(process.cwd(), 'src/components/manage/bookmarkMg/LinkHealthModal.vue'),
+  'utf8',
+);
 
 describe('移动端书签列表布局', () => {
   it('从页面内容区到列表保持可收缩的 flex 高度链', () => {
@@ -30,5 +34,24 @@ describe('移动端书签列表布局', () => {
     expect(phoneListSource).toContain('v-for="index in 9"');
     expect(phoneListSource).toMatch(/\.phone-list-skeleton[\s\S]*?min-height:\s*100%/);
     expect(phoneListSource).toMatch(/\.phone-skeleton-icon[\s\S]*?width:\s*38px[\s\S]*?height:\s*38px/);
+  });
+
+  it('通过页面级更多抽屉进入死链体检，并安全交接移动端浮层历史', () => {
+    expect(bookmarkSource).toContain('<LinkHealthModal v-model:visible="healthVisible" />');
+    expect(bookmarkSource).toMatch(/key:\s*'health'[\s\S]*?icon:\s*icon\.bookmarkManage\.healthCheck/);
+    expect(bookmarkSource).toMatch(/auxiliaryActionLabel:[\s\S]*?t\('common\.more'\)/);
+    expect(bookmarkSource).toMatch(/auxiliaryActionIcon:\s*\(\)\s*=>\s*icon\.common\.more/);
+    expect(bookmarkSource).toMatch(
+      /async function handlePageAction[\s\S]*?closeCurrentMobileOverlayThen[\s\S]*?healthVisible\.value = true/,
+    );
+  });
+
+  it('死链体检在窄屏改为纵向结果卡，并保留 44px 触控操作', () => {
+    expect(linkHealthSource).toContain('v-auto-scrollbar class="lh-list"');
+    expect(linkHealthSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.lh-bar[\s\S]*?flex-direction:\s*column/);
+    expect(linkHealthSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.lh-item[\s\S]*?flex-direction:\s*column[\s\S]*?border-color:\s*var\(--danger-color\)/,
+    );
+    expect(linkHealthSource).toMatch(/\.lh-act[\s\S]*?min-height:\s*44px/);
   });
 });

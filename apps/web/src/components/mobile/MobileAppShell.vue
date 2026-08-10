@@ -1,5 +1,10 @@
 <template>
-  <div v-if="enabled" class="mobile-app-shell">
+  <div
+    v-if="enabled"
+    class="mobile-app-shell"
+    :class="{ 'is-keyboard-open': keyboardOpen }"
+    :style="shellViewportStyle"
+  >
     <MobileTopBar />
     <MobileResourceTabs v-if="showTopSwitcher" />
     <!--
@@ -28,7 +33,7 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type CSSProperties } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import MobileResourceTabs from '@/components/mobile/MobileResourceTabs.vue';
   import MobileBottomNav from '@/components/mobile/MobileBottomNav.vue';
@@ -48,18 +53,62 @@
   const route = useRoute();
   const router = useRouter();
   const keyboardOpen = ref(false);
+  const visibleViewportHeight = ref(0);
   const { rememberResourceFromRoute, restoreResourceScroll, saveResourceScroll } = useMobileNavigationState();
   const restoreTimers = new Set<number>();
   let removeBeforeGuard: (() => void) | undefined;
+  let stableViewportHeight = 0;
+  let stableViewportWidth = 0;
+  let focusFrame = 0;
+
+  const shellViewportStyle = computed<CSSProperties>(() =>
+    keyboardOpen.value && visibleViewportHeight.value > 0
+      ? ({ '--mobile-visible-viewport-height': `${visibleViewportHeight.value}px` } as CSSProperties)
+      : {},
+  );
+
+  function isTextEntryFocused() {
+    const activeElement = document.activeElement;
+    if (!(activeElement instanceof HTMLElement)) return false;
+    return (
+      activeElement instanceof HTMLInputElement ||
+      activeElement instanceof HTMLTextAreaElement ||
+      activeElement.isContentEditable
+    );
+  }
 
   function updateKeyboardState() {
     const viewport = window.visualViewport;
     if (!viewport) {
       keyboardOpen.value = false;
+      visibleViewportHeight.value = 0;
       return;
     }
-    const obscuredHeight = window.innerHeight - viewport.height;
-    keyboardOpen.value = obscuredHeight > 120 || viewport.height / window.innerHeight < 0.75;
+    const viewportHeight = Math.max(0, Math.round(viewport.height));
+    const viewportWidth = Math.max(0, Math.round(viewport.width));
+    const textEntryFocused = isTextEntryFocused();
+    const widthChanged = stableViewportWidth > 0 && Math.abs(stableViewportWidth - viewportWidth) > 80;
+
+    if (!textEntryFocused || widthChanged || stableViewportHeight <= 0) {
+      stableViewportWidth = viewportWidth;
+      stableViewportHeight = widthChanged
+        ? viewportHeight
+        : Math.max(stableViewportHeight, viewportHeight, window.innerHeight);
+    }
+
+    const baselineHeight = Math.max(stableViewportHeight, viewportHeight, window.innerHeight);
+    const obscuredHeight = baselineHeight - viewportHeight;
+    keyboardOpen.value =
+      textEntryFocused && (obscuredHeight > 120 || (baselineHeight > 0 && viewportHeight / baselineHeight < 0.75));
+    visibleViewportHeight.value = keyboardOpen.value ? viewportHeight : 0;
+  }
+
+  function scheduleKeyboardStateUpdate() {
+    if (focusFrame) window.cancelAnimationFrame(focusFrame);
+    focusFrame = window.requestAnimationFrame(() => {
+      focusFrame = 0;
+      updateKeyboardState();
+    });
   }
 
   function syncPrimaryRootState() {
@@ -102,6 +151,8 @@
     updateKeyboardState();
     window.visualViewport?.addEventListener('resize', updateKeyboardState);
     window.addEventListener('resize', updateKeyboardState);
+    document.addEventListener('focusin', scheduleKeyboardStateUpdate);
+    document.addEventListener('focusout', scheduleKeyboardStateUpdate);
     removeBeforeGuard = router.beforeEach((_to, from) => {
       if (props.enabled) saveResourceScroll(getMobileResourcePath(from.name));
     });
@@ -110,8 +161,11 @@
   onBeforeUnmount(() => {
     clearRestoreTimers();
     removeBeforeGuard?.();
+    if (focusFrame) window.cancelAnimationFrame(focusFrame);
     window.visualViewport?.removeEventListener('resize', updateKeyboardState);
     window.removeEventListener('resize', updateKeyboardState);
+    document.removeEventListener('focusin', scheduleKeyboardStateUpdate);
+    document.removeEventListener('focusout', scheduleKeyboardStateUpdate);
     delete document.documentElement.dataset.lightNotePrimaryRoot;
   });
 </script>
@@ -130,6 +184,11 @@
     overflow: hidden;
     color: var(--text-color);
     background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .mobile-app-shell.is-keyboard-open {
+    height: var(--mobile-visible-viewport-height, 100%);
+    max-height: 100%;
   }
 
   .mobile-app-shell__refresh-slot {

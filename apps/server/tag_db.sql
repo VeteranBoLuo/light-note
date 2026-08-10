@@ -32,8 +32,13 @@ CREATE TABLE `api_logs` (
   `request_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '用户调用接口的时间',
   `del_flag` varchar(255) NOT NULL DEFAULT '0',
   `status_code` varchar(255) DEFAULT NULL COMMENT '状态码',
+  `request_id` varchar(64) DEFAULT NULL COMMENT '服务端链路请求 ID',
+  `duration_ms` int unsigned DEFAULT NULL COMMENT '服务端处理耗时毫秒',
   PRIMARY KEY (`id`) USING BTREE,
-  KEY `idx_api_logs_admin_list` (`del_flag`,`request_time`,`id`)
+  KEY `idx_api_logs_admin_list` (`del_flag`,`request_time`,`id`),
+  KEY `idx_api_logs_request_id` (`request_id`),
+  KEY `idx_api_logs_status_time` (`del_flag`,`status_code`,`request_time`,`id`),
+  KEY `idx_api_logs_user_time` (`user_id`,`request_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC COMMENT='api日志';
 
 -- ----------------------------
@@ -53,6 +58,7 @@ CREATE TABLE `bookmark` (
   `deleted_at` datetime DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `fk_bookmark_user_id` (`user_id`),
+  KEY `idx_bookmark_owner_create` (`create_time`,`del_flag`,`user_id`),
   CONSTRAINT `fk_bookmark_user_id` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 
@@ -115,6 +121,7 @@ CREATE TABLE `files` (
   `share_token` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT '旧版分享令牌（仅迁移兼容，禁止新写入）',
   PRIMARY KEY (`id`),
   KEY `fk_folder_id` (`folder_id`),
+  KEY `idx_files_owner_create` (`create_time`,`del_flag`,`create_by`),
   CONSTRAINT `fk_folder_id` FOREIGN KEY (`folder_id`) REFERENCES `folders` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=298 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件信息表';
 
@@ -177,6 +184,56 @@ CREATE TABLE `file_share_events` (
   KEY `idx_file_share_events_retention` (`create_time`),
   CONSTRAINT `fk_file_share_events_share` FOREIGN KEY (`share_id`) REFERENCES `file_shares` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件分享隐私化访问事件';
+
+-- ----------------------------
+-- Table structure for file_preview_artifacts / file_preview_jobs
+-- ----------------------------
+DROP TABLE IF EXISTS `file_preview_jobs`;
+DROP TABLE IF EXISTS `file_preview_artifacts`;
+CREATE TABLE `file_preview_artifacts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `file_id` int(11) NOT NULL,
+  `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strategy` enum('archive_manifest','converted_pdf') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strategy_version` smallint(5) unsigned NOT NULL,
+  `format_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `source_etag` varchar(160) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_size` bigint(20) unsigned NOT NULL,
+  `status` enum('queued','processing','ready','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `artifact_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `artifact_size` bigint(20) unsigned NOT NULL DEFAULT '0',
+  `manifest_json` mediumtext COLLATE utf8mb4_unicode_ci,
+  `entry_count` int(10) unsigned NOT NULL DEFAULT '0',
+  `total_uncompressed_size` bigint(20) unsigned NOT NULL DEFAULT '0',
+  `contains_encrypted` tinyint(1) NOT NULL DEFAULT '0',
+  `suspicious_expansion` tinyint(1) NOT NULL DEFAULT '0',
+  `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_access_at` datetime DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_preview_artifact` (`file_id`,`strategy`,`strategy_version`),
+  KEY `idx_file_preview_owner_status` (`owner_user_id`,`status`,`update_time`),
+  KEY `idx_file_preview_cleanup` (`last_access_at`,`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云文件派生预览缓存';
+
+CREATE TABLE `file_preview_jobs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `artifact_id` bigint(20) unsigned NOT NULL,
+  `status` enum('queued','processing','completed','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `attempts` tinyint(3) unsigned NOT NULL DEFAULT '0',
+  `available_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `locked_at` datetime DEFAULT NULL,
+  `locked_by` varchar(96) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `output_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_preview_job_artifact` (`artifact_id`),
+  KEY `idx_file_preview_job_queue` (`status`,`available_at`,`id`),
+  CONSTRAINT `fk_file_preview_job_artifact` FOREIGN KEY (`artifact_id`) REFERENCES `file_preview_artifacts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云文件预览任务队列';
 
 -- ----------------------------
 -- Table structure for help_config
@@ -304,6 +361,29 @@ CREATE TABLE `operation_logs` (
   PRIMARY KEY (`id`) USING BTREE,
   KEY `idx_operation_logs_admin_list` (`del_flag`,`create_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1 ROW_FORMAT=DYNAMIC COMMENT='操作日志';
+
+-- ----------------------------
+-- Table structure for admin_operation_audit
+-- ----------------------------
+DROP TABLE IF EXISTS `admin_operation_audit`;
+CREATE TABLE `admin_operation_audit` (
+  `id` char(36) NOT NULL,
+  `actor_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `action` varchar(64) NOT NULL,
+  `target_type` varchar(64) DEFAULT NULL,
+  `target_id` varchar(255) DEFAULT NULL,
+  `outcome` varchar(16) NOT NULL COMMENT 'intent/succeeded/failed/denied',
+  `reason` varchar(500) NOT NULL DEFAULT '',
+  `request_id` varchar(64) DEFAULT NULL,
+  `ip_masked` varchar(64) DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_admin_operation_actor_time` (`actor_user_id`,`create_time`,`id`),
+  KEY `idx_admin_operation_action_time` (`action`,`create_time`,`id`),
+  KEY `idx_admin_operation_target_time` (`target_type`,`target_id`,`create_time`,`id`),
+  KEY `idx_admin_operation_outcome_time` (`outcome`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='后台高风险操作追加式审计';
 
 -- ----------------------------
 -- Table structure for opinion
@@ -569,6 +649,311 @@ CREATE TABLE `tag_relations` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8 ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------
+-- Table structure for community_chat_rooms
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_rooms`;
+CREATE TABLE `community_chat_rooms` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `slug` varchar(64) NOT NULL,
+  `name_zh` varchar(80) NOT NULL,
+  `name_en` varchar(80) NOT NULL,
+  `description_zh` varchar(280) NOT NULL DEFAULT '',
+  `description_en` varchar(280) NOT NULL DEFAULT '',
+  `type` varchar(24) NOT NULL DEFAULT 'text',
+  `status` varchar(24) NOT NULL DEFAULT 'active',
+  `default_notification_level` varchar(16) NOT NULL DEFAULT 'mentions',
+  `slow_mode_seconds` smallint unsigned NOT NULL DEFAULT 0,
+  `last_message_id` bigint unsigned DEFAULT NULL,
+  `pinned_message_id` bigint unsigned DEFAULT NULL,
+  `pinned_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `pinned_at` datetime DEFAULT NULL,
+  `sort_order` int unsigned NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_room_slug` (`slug`),
+  KEY `idx_community_chat_room_status_sort` (`status`,`sort_order`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `community_chat_rooms`
+  (`slug`,`name_zh`,`name_en`,`description_zh`,`description_en`,`type`,`default_notification_level`,`sort_order`)
+VALUES
+  ('general','轻笺聊天室','Light Note Chat','聊使用问题、实用技巧、功能想法和日常见闻。','Discuss product questions, useful workflows, ideas, and everyday topics.','text','mentions',10);
+
+-- ----------------------------
+-- Table structure for community_chat_runtime_policy
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_runtime_policy`;
+CREATE TABLE `community_chat_runtime_policy` (
+  `id` tinyint unsigned NOT NULL,
+  `posting_enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `updated_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO `community_chat_runtime_policy` (`id`,`posting_enabled`) VALUES (1,1);
+
+-- ----------------------------
+-- Table structure for community_chat_access_requests
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_access_requests`;
+CREATE TABLE `community_chat_access_requests` (
+  `id` char(36) NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'pending',
+  `request_message` varchar(500) NOT NULL DEFAULT '',
+  `reviewed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `review_note` varchar(500) NOT NULL DEFAULT '',
+  `reviewed_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_access_user` (`user_id`),
+  KEY `idx_community_chat_access_status_time` (`status`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_members
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_members`;
+CREATE TABLE `community_chat_members` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `role` varchar(16) NOT NULL DEFAULT 'member',
+  `status` varchar(16) NOT NULL DEFAULT 'invited',
+  `invited_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `rules_version` varchar(32) DEFAULT NULL,
+  `rules_accepted_at` datetime DEFAULT NULL,
+  `joined_at` datetime DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  KEY `idx_community_chat_member_status_role` (`status`,`role`,`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_user_settings
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_user_settings`;
+CREATE TABLE `community_chat_user_settings` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `global_notification_enabled` tinyint unsigned NOT NULL DEFAULT 1,
+  `browser_notification_enabled` tinyint unsigned NOT NULL DEFAULT 0,
+  `android_notification_enabled` tinyint unsigned NOT NULL DEFAULT 0,
+  `lock_screen_preview` varchar(16) NOT NULL DEFAULT 'hidden',
+  `default_room_level` varchar(16) NOT NULL DEFAULT 'mentions',
+  `dnd_enabled` tinyint unsigned NOT NULL DEFAULT 0,
+  `dnd_start` time NOT NULL DEFAULT '22:00:00',
+  `dnd_end` time NOT NULL DEFAULT '08:00:00',
+  `timezone_offset_minutes` smallint NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_access_audit
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_access_audit`;
+CREATE TABLE `community_chat_access_audit` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `actor_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `target_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `action` varchar(32) NOT NULL,
+  `reason` varchar(500) NOT NULL DEFAULT '',
+  `metadata` json DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_community_chat_audit_target_time` (`target_user_id`,`create_time`,`id`),
+  KEY `idx_community_chat_audit_actor_time` (`actor_user_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_messages
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_messages`;
+CREATE TABLE `community_chat_messages` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `public_id` char(36) NOT NULL,
+  `room_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `client_request_id` varchar(64) NOT NULL,
+  `reply_to_id` bigint unsigned DEFAULT NULL,
+  `content` text NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'active',
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `edited_at` datetime DEFAULT NULL,
+  `recalled_at` datetime DEFAULT NULL,
+  `recalled_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `deleted_at` datetime DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_message_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_message_request` (`user_id`,`client_request_id`),
+  KEY `idx_community_chat_message_room_status_id` (`room_id`,`status`,`id`),
+  KEY `idx_community_chat_message_reply` (`reply_to_id`),
+  KEY `idx_community_chat_message_user_time` (`user_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_likes
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_likes`;
+CREATE TABLE `community_chat_message_likes` (
+  `message_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`user_id`),
+  KEY `idx_community_chat_like_user_time` (`user_id`,`create_time`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_deletions
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_deletions`;
+CREATE TABLE `community_chat_message_deletions` (
+  `message_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`user_id`),
+  KEY `idx_community_chat_deletion_user_time` (`user_id`,`create_time`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_mentions
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_mentions`;
+CREATE TABLE `community_chat_message_mentions` (
+  `message_id` bigint unsigned NOT NULL,
+  `mentioned_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`,`mentioned_user_id`),
+  KEY `idx_community_chat_mention_user_message` (`mentioned_user_id`,`message_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_message_images
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_message_images`;
+CREATE TABLE `community_chat_message_images` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `public_id` char(36) NOT NULL,
+  `owner_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `message_id` bigint unsigned DEFAULT NULL,
+  `object_key` varchar(512) NOT NULL,
+  `content_type` varchar(64) NOT NULL,
+  `file_size` int unsigned NOT NULL,
+  `width` int unsigned NOT NULL,
+  `height` int unsigned NOT NULL,
+  `status` varchar(24) NOT NULL DEFAULT 'uploading',
+  `sort_order` tinyint unsigned NOT NULL DEFAULT 0,
+  `expires_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_image_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_image_object` (`object_key`),
+  KEY `idx_community_chat_image_owner_status_expiry` (`owner_user_id`,`status`,`expires_at`),
+  KEY `idx_community_chat_image_message_status_sort` (`message_id`,`status`,`sort_order`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_reads
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_reads`;
+CREATE TABLE `community_chat_reads` (
+  `room_id` bigint unsigned NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `last_read_message_id` bigint unsigned NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`room_id`,`user_id`),
+  KEY `idx_community_chat_read_user_time` (`user_id`,`update_time`,`room_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_blocks
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_blocks`;
+CREATE TABLE `community_chat_blocks` (
+  `id` char(36) NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `blocked_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_block_pair` (`user_id`,`blocked_user_id`),
+  KEY `idx_community_chat_block_target_time` (`blocked_user_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_reports
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_reports`;
+CREATE TABLE `community_chat_reports` (
+  `id` char(36) NOT NULL,
+  `reporter_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `message_id` bigint unsigned NOT NULL,
+  `reason_code` varchar(32) NOT NULL,
+  `detail` varchar(500) NOT NULL DEFAULT '',
+  `evidence_snapshot` json NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'pending',
+  `reviewed_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `review_note` varchar(500) NOT NULL DEFAULT '',
+  `reviewed_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_reporter_message` (`reporter_id`,`message_id`),
+  KEY `idx_community_chat_report_status_time` (`status`,`create_time`,`id`),
+  KEY `idx_community_chat_report_message_time` (`message_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_moderation_actions
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_moderation_actions`;
+CREATE TABLE `community_chat_moderation_actions` (
+  `id` char(36) NOT NULL,
+  `report_id` char(36) DEFAULT NULL,
+  `actor_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `target_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `message_id` bigint unsigned DEFAULT NULL,
+  `action` varchar(32) NOT NULL,
+  `reason` varchar(500) NOT NULL,
+  `expires_at` datetime DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_moderation_report` (`report_id`),
+  KEY `idx_community_chat_moderation_target_time` (`target_user_id`,`create_time`,`id`),
+  KEY `idx_community_chat_moderation_actor_time` (`actor_user_id`,`create_time`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_member_sanctions
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_member_sanctions`;
+CREATE TABLE `community_chat_member_sanctions` (
+  `id` char(36) NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `type` varchar(16) NOT NULL,
+  `status` varchar(16) NOT NULL DEFAULT 'active',
+  `expires_at` datetime DEFAULT NULL,
+  `reason` varchar(500) NOT NULL,
+  `created_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `revoked_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_community_chat_sanction_user_status_expiry` (`user_id`,`status`,`expires_at`,`id`),
+  KEY `idx_community_chat_sanction_status_expiry` (`status`,`expires_at`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
 -- Table structure for user
 -- ----------------------------
 DROP TABLE IF EXISTS `user`;
@@ -640,7 +1025,8 @@ CREATE TABLE IF NOT EXISTS `conversion_events` (
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_event_time` (`event`, `create_time`),
-  KEY `idx_fingerprint` (`fingerprint`)
+  KEY `idx_fingerprint` (`fingerprint`),
+  KEY `idx_conversion_user_event_time` (`user_id`,`event`,`create_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='游客转化漏斗事件';
 
 -- ----------------------------

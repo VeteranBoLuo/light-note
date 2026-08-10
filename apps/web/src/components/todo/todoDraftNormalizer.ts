@@ -1,5 +1,6 @@
 import type {
   TodoCreateInitialValues,
+  TodoItem,
   TodoPlanConfig,
   TodoPlanDraft,
   TodoPlanTiming,
@@ -154,6 +155,53 @@ export function normalizeTodoCreateDraft(draft: TodoCreateDraftV3): TodoPlanDraf
     plan: { type: 'once' },
     reminder: { mode: 'none', channels: [] },
     singleTaskReminder: normalizeSingleReminder(draft.reminder, draft.timing),
+  };
+}
+
+function isSingleTaskReminderSchedule(reminder: TodoItem['reminder']): reminder is TodoSingleTaskReminderSchedule {
+  return Boolean(reminder && 'version' in reminder && reminder.version === 1);
+}
+
+function isV2ReminderConfig(reminder: TodoItem['reminder']): reminder is TodoReminderV2Config {
+  return Boolean(reminder && ['none', 'once_per_instance', 'nudge'].includes(reminder.mode));
+}
+
+/**
+ * 把列表已加载的 v2 单任务还原成“仅修改当前项”所需的完整计划草稿。
+ * 快捷操作不能只 PATCH dueAt：v2 的日期、提醒规则和 Reminder Job 必须继续由
+ * 确定性计划预览统一计算，否则截止时间与实际提醒会逐渐漂移。
+ */
+export function normalizeCurrentTodoPlanDraft(
+  item: TodoItem,
+  overrides: { dueAt?: string | null; startAt?: string | null } = {},
+): TodoPlanDraft {
+  const reminder = item.reminder;
+  const singleTaskReminder = isSingleTaskReminderSchedule(reminder) ? JSON.parse(JSON.stringify(reminder)) : null;
+  const draft: TodoCreateDraftV3 = {
+    task: {
+      title: item.title,
+      description: item.description || '',
+      priority: item.priority,
+      checklist: (item.checklist || []).map((entry) => ({ ...entry })),
+      contextRefs: (item.resourceRefs || []).map(({ type, id }) => ({ type, id })),
+    },
+    timing: {
+      startAt: overrides.startAt !== undefined ? overrides.startAt : item.startAt || null,
+      dueAt: overrides.dueAt !== undefined ? overrides.dueAt : item.dueAt || null,
+      timezone: item.instanceTimezone || 'Asia/Shanghai',
+    },
+    reminder: singleTaskReminder || { version: 1, mode: 'none', channels: [] },
+    independentTasks: {
+      enabled: false,
+      plan: { type: 'once' },
+      reminder: isV2ReminderConfig(reminder) ? JSON.parse(JSON.stringify(reminder)) : { mode: 'none', channels: [] },
+    },
+  };
+  if (singleTaskReminder) return normalizeTodoCreateDraft(draft);
+  return {
+    ...normalizeTodoCreateDraft(draft),
+    reminder: draft.independentTasks.reminder,
+    singleTaskReminder: undefined,
   };
 }
 

@@ -92,7 +92,10 @@ beforeEach(() => {
     strokeStyle: '',
   } as unknown as CanvasRenderingContext2D;
   canvasContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context);
-  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 1));
+  vi.stubGlobal(
+    'requestAnimationFrame',
+    vi.fn(() => 1),
+  );
   vi.stubGlobal('cancelAnimationFrame', vi.fn());
 });
 
@@ -113,7 +116,13 @@ async function mountLanding() {
     createI18n({
       legacy: false,
       locale: 'zh-CN',
-      messages: { 'zh-CN': {} },
+      messages: {
+        'zh-CN': {
+          landing: {
+            websiteFilingName: '备案网站名称：{name}',
+          },
+        },
+      },
       missingWarn: false,
       fallbackWarn: false,
     }),
@@ -151,5 +160,29 @@ describe('Landing CTA', () => {
     await nextTick();
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/app');
+  });
+
+  it('把官网的支持入口收敛到站内说明页', async () => {
+    const host = await mountLanding();
+    const reasonLink = host.querySelector<HTMLAnchorElement>('.reason-support-link');
+    const footerLink = host.querySelector<HTMLAnchorElement>('.footer-support-link');
+
+    expect(reasonLink?.getAttribute('href')).toBe('/support');
+    expect(footerLink?.getAttribute('href')).toBe('/support');
+    expect(host.querySelectorAll<HTMLAnchorElement>('a[href="/support"]')).toHaveLength(2);
+
+    reasonLink?.click();
+    await nextTick();
+    expect(mocks.routerPush).toHaveBeenCalledWith('/support');
+  });
+
+  it('在官网页脚公开备案全称并提供关于页面入口', async () => {
+    const host = await mountLanding();
+    const footer = host.querySelector<HTMLElement>('.landing-footer');
+    const aboutLink = footer?.querySelector<HTMLAnchorElement>('a[href="/about.html"]');
+
+    expect(footer?.textContent).toContain('轻笺知识库');
+    expect(footer?.textContent).toContain('蜀ICP备2026017699号-1');
+    expect(aboutLink).not.toBeNull();
   });
 });

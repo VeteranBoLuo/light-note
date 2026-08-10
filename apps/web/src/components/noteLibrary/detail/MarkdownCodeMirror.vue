@@ -139,10 +139,13 @@
     ['Mod-i', 'italic'],
     ['Mod-k', 'link'],
     ['Mod-f', 'findReplace'],
+    ['F4', 'repeatLastAction'],
+    ['Mod-Alt-r', 'repeatLastAction'],
     ['Mod-Shift-x', 'strike'],
     ['Mod-e', 'inlineCode'],
     ['Mod-Shift-7', 'orderedList'],
     ['Mod-Shift-8', 'bulletList'],
+    ...Array.from({ length: 6 }, (_, index) => [`Mod-${index + 1}`, `heading${index + 1}`]),
     ...Array.from({ length: 6 }, (_, index) => [`Mod-Alt-${index + 1}`, `heading${index + 1}`]),
   ].map(([shortcut, command]) => ({
     key: shortcut,

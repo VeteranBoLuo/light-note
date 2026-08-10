@@ -80,8 +80,168 @@ const ALLOWED_TAGS = [
 
 // 只开放不会加载外部资源、不会覆盖页面布局的样式属性。值仍显式拒绝 URL、脚本
 // 与旧浏览器行为表达式；TinyMCE 的颜色、对齐、字号、表格和图片尺寸均可保留。
-const SAFE_STYLE_VALUE = /^(?![\s\S]*(?:url\s*\(|expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:))[\s\S]{1,256}$/i;
+const SAFE_STYLE_VALUE =
+  /^(?![\s\S]*(?:url\s*\(|expression\s*\(|javascript\s*:|vbscript\s*:|@import|behavior\s*:))[\s\S]{1,256}$/i;
 const SAFE_DATA_IMAGE = /^data:image\/(?:png|jpe?g|gif|webp|avif);base64,[a-z0-9+/=\s]+$/i;
+const SAFE_GRADIENT_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
+const SAFE_GRADIENT_ANGLE = /^(?:0|45|90|135|180|225|270|315)deg$/i;
+
+function appendClassName(value, className) {
+  const classes = new Set(
+    String(value || '')
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+  classes.add(className);
+  return [...classes].join(' ');
+}
+
+function appendInlineStyle(value, declaration) {
+  const style = String(value || '').trim();
+  if (!style) return declaration;
+  return `${style.replace(/;+$/u, '')};${declaration}`;
+}
+
+function normalizeLegacyGradientColor(value) {
+  const color = String(value || '')
+    .trim()
+    .toLowerCase();
+  return SAFE_GRADIENT_COLOR.test(color) ? color : '';
+}
+
+function parseLegacyLinearGradient(style) {
+  const match = String(style || '').match(
+    /linear-gradient\(\s*((?:0|45|90|135|180|225|270|315)deg)\s*,\s*(#[0-9a-f]{3,6})\s*,\s*(#[0-9a-f]{3,6})/iu,
+  );
+  if (!match) return null;
+  const from = normalizeLegacyGradientColor(match[2]);
+  const to = normalizeLegacyGradientColor(match[3]);
+  if (!from || !to) return null;
+  return { angle: match[1].toLowerCase(), from, to };
+}
+
+function degradedTextGradientFor(tagName) {
+  if (tagName === 'h1') return { angle: '90deg', from: '#615ced', to: '#00a884' };
+  if (tagName === 'h2') return { angle: '90deg', from: '#615ced', to: '#ec4899' };
+  if (tagName === 'p') return { angle: '90deg', from: '#ff8a00', to: '#ec4899' };
+  return { angle: '135deg', from: '#615ced', to: '#00a884' };
+}
+
+function appendGradientVariables(style, gradient, { fallbackBackground = false, fallbackText = false } = {}) {
+  if (!gradient) return style;
+  let next = String(style || '');
+  if (fallbackText) {
+    next = next.replace(/(?:^|;)\s*color\s*:\s*transparent\s*;?/iu, ';');
+    next = appendInlineStyle(next, `color:${gradient.from}`);
+  }
+  if (fallbackBackground) next = appendInlineStyle(next, `background-color:${gradient.from}`);
+  return appendInlineStyle(
+    next,
+    `--ln-gradient-from:${gradient.from};--ln-gradient-to:${gradient.to};--ln-gradient-angle:${gradient.angle}`,
+  );
+}
+
+// 2026-08-08 之前的新用户富文本示例使用了任意 background/animation 等内联 CSS。
+// 新安全边界不能重新开放任意 CSS，但可以把这些已知旧效果升级成受控语义类；这样历史
+// 示例在读取时恢复可见，下一次保存后也会稳定落成新的安全协议。
+function transformLegacyRichTextEffects(tagName, attribs) {
+  const next = { ...attribs };
+  const style = String(next.style || '');
+  if (!style) return { tagName, attribs: next };
+  const compactStyle = style.toLowerCase().replace(/\s+/gu, '');
+
+  const gradient = parseLegacyLinearGradient(style);
+  // 如果旧示例曾在受限白名单上线期间被自动保存，background/background-clip 已经
+  // 丢失，只剩 color:transparent。透明正文没有合法可见用途，因此可安全恢复为默认渐变。
+  const degradedTextGradient =
+    !gradient && compactStyle.includes('color:transparent') ? degradedTextGradientFor(tagName) : null;
+  const textGradient = gradient || degradedTextGradient;
+  const hasTextGradient = Boolean(
+    degradedTextGradient || (gradient && /(?:^|;)\s*(?:-webkit-)?background-clip\s*:\s*text\b/iu.test(style)),
+  );
+  if (hasTextGradient) {
+    next.class = appendClassName(next.class, 'ln-text-gradient');
+    next['data-ln-text-gradient'] = 'true';
+    next.style = appendGradientVariables(style, textGradient, { fallbackText: true });
+  }
+
+  const isDegradedGlow =
+    tagName === 'span' &&
+    compactStyle.includes('color:#615ced') &&
+    compactStyle.includes('font-size:20px') &&
+    compactStyle.includes('font-weight:bold');
+  if (/text-shadow\s*:/iu.test(style) || isDegradedGlow) {
+    next.class = appendClassName(next.class, 'ln-rich-text-glow');
+  }
+
+  const isLegacyGradientCard =
+    tagName === 'p' && gradient && /border-radius\s*:/iu.test(style) && /box-shadow\s*:/iu.test(style);
+  const isDegradedGradientCard =
+    tagName === 'p' &&
+    !gradient &&
+    (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&
+    compactStyle.includes('padding:20px24px');
+  const isGradientCard = isLegacyGradientCard || isDegradedGradientCard;
+  if (isGradientCard) {
+    next.class = appendClassName(next.class, 'ln-rich-card');
+    next.style = appendGradientVariables(next.style || style, gradient || degradedTextGradientFor('h1'), {
+      fallbackBackground: true,
+    });
+  }
+
+  const isDegradedGradientFill =
+    tagName === 'th' &&
+    !gradient &&
+    (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&
+    !compactStyle.includes('background-color:');
+  if (tagName === 'th' && (gradient || isDegradedGradientFill)) {
+    next.class = appendClassName(next.class, 'ln-rich-gradient-fill');
+    next.style = appendGradientVariables(next.style || style, gradient || degradedTextGradientFor('h1'), {
+      fallbackBackground: true,
+    });
+  }
+
+  const isDegradedBreathe =
+    tagName === 'span' &&
+    compactStyle.includes('display:inline-block') &&
+    compactStyle.includes('padding:6px18px') &&
+    (compactStyle.includes('color:#fff') || compactStyle.includes('color:#ffffff')) &&
+    compactStyle.includes('font-weight:bold');
+  if (/animation\s*:\s*mermaid-figure-breathe\b/iu.test(style) || isDegradedBreathe) {
+    next.class = appendClassName(next.class, 'ln-rich-effect-breathe');
+    next.style = appendGradientVariables(next.style || style, gradient || degradedTextGradientFor('h1'), {
+      fallbackBackground: true,
+    });
+  }
+  const isDegradedSpin =
+    tagName === 'span' &&
+    compactStyle.includes('display:inline-block') &&
+    compactStyle.includes('width:26px') &&
+    compactStyle.includes('height:26px') &&
+    compactStyle.includes('border:4pxsolid');
+  if (/animation\s*:\s*spin\b/iu.test(style) || isDegradedSpin) {
+    next.class = appendClassName(next.class, 'ln-rich-effect-spin');
+  }
+  const isDegradedFloat =
+    tagName === 'span' && compactStyle.includes('display:inline-block') && compactStyle.includes('font-size:26px');
+  if (/animation\s*:\s*backgroundShift\b/iu.test(style) || isDegradedFloat) {
+    next.class = appendClassName(next.class, 'ln-rich-effect-float');
+  }
+  const isDegradedGradientBorder =
+    tagName === 'p' && compactStyle.includes('border:3pxsolidtransparent') && compactStyle.includes('padding:16px20px');
+  if ((/padding-box[\s\S]*border-box/iu.test(style) && /linear-gradient\(/iu.test(style)) || isDegradedGradientBorder) {
+    next.class = appendClassName(next.class, 'ln-rich-gradient-border');
+  }
+  const isDegradedQuote =
+    tagName === 'blockquote' &&
+    compactStyle.includes('border-left:4pxsolid#615ced') &&
+    compactStyle.includes('padding:12px16px');
+  if (tagName === 'blockquote' && (/border-radius\s*:/iu.test(style) || isDegradedQuote)) {
+    next.class = appendClassName(next.class, 'ln-rich-quote');
+  }
+
+  return { tagName, attribs: next };
+}
 
 const SANITIZE_OPTIONS = Object.freeze({
   allowedTags: ALLOWED_TAGS,
@@ -145,6 +305,9 @@ const SANITIZE_OPTIONS = Object.freeze({
       display: [SAFE_STYLE_VALUE],
       float: [SAFE_STYLE_VALUE],
       clear: [SAFE_STYLE_VALUE],
+      '--ln-gradient-from': [SAFE_GRADIENT_COLOR],
+      '--ln-gradient-to': [SAFE_GRADIENT_COLOR],
+      '--ln-gradient-angle': [SAFE_GRADIENT_ANGLE],
     },
   },
   allowedSchemes: ['http', 'https', 'mailto', 'tel'],
@@ -152,10 +315,16 @@ const SANITIZE_OPTIONS = Object.freeze({
   allowProtocolRelative: false,
   nonTextTags: ['style', 'script', 'textarea', 'option', 'xmp', 'noscript', 'iframe', 'object', 'embed', 'form'],
   transformTags: {
+    '*': transformLegacyRichTextEffects,
     a(tagName, attribs) {
-      const next = { ...attribs };
+      const transformed = transformLegacyRichTextEffects(tagName, attribs);
+      const next = { ...transformed.attribs };
       if (String(next.target || '').toLowerCase() === '_blank') {
-        const rel = new Set(String(next.rel || '').split(/\s+/).filter(Boolean));
+        const rel = new Set(
+          String(next.rel || '')
+            .split(/\s+/)
+            .filter(Boolean),
+        );
         rel.add('noopener');
         rel.add('noreferrer');
         next.rel = [...rel].join(' ');

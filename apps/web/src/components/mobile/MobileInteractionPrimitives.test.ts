@@ -10,7 +10,8 @@ vi.mock('@/components/base/BasicComponents/BDrawer.vue', () => ({
     props: ['open', 'title'],
     emits: ['close'],
     setup(props: { open: boolean; title: string }, { slots }: { slots: Record<string, () => unknown> }) {
-      return () => (props.open ? h('section', { class: 'drawer-stub', 'data-title': props.title }, slots.default?.()) : null);
+      return () =>
+        props.open ? h('section', { class: 'drawer-stub', 'data-title': props.title }, slots.default?.()) : null;
     },
   },
 }));
@@ -108,6 +109,8 @@ describe('mobile interaction primitives', () => {
     expect(onAction).not.toHaveBeenCalled();
     items[3].click();
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ key: 'delete', danger: true }));
+    await vi.waitFor(() => {
+      expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ key: 'delete', danger: true }));
+    });
   });
 });

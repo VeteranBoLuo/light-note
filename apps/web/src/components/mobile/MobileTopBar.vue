@@ -15,14 +15,28 @@
     </template>
     <BButton
       v-else
-      class="mobile-top-bar__brand"
-      :aria-label="t('mobileNavigation.backToToday')"
-      :title="t('mobileNavigation.backToToday')"
-      @click="goToToday"
-      v-click-log="{ module: '移动端导航', operation: '返回今日' }"
+      class="mobile-top-bar__profile"
+      :class="{ 'mobile-top-bar__profile--active': route.meta.mobileShell === 'profile' }"
+      :aria-label="t('mobileNavigation.profile')"
+      :title="t('mobileNavigation.profile')"
+      :aria-current="route.meta.mobileShell === 'profile' ? 'page' : undefined"
+      @click="goToProfile"
+      v-click-log="{ module: '移动端导航', operation: '打开我的' }"
     >
-      <img src="/favicon.svg?v=7" width="25" height="25" alt="" />
-      <span>{{ t('navigation.title') }}</span>
+      <AvatarFramePreview
+        v-if="equippedFrameId"
+        :frame-id="equippedFrameId"
+        :src="profileAvatarSource"
+        :size="28"
+        aria-hidden="true"
+      />
+      <SvgIcon v-else class="mobile-top-bar__profile-avatar" :src="profileAvatarSource" size="32" aria-hidden="true" />
+      <span
+        v-if="profileAttentionLabel"
+        class="mobile-top-bar__profile-dot"
+        role="status"
+        :aria-label="profileAttentionLabel"
+      ></span>
     </BButton>
 
     <!-- 移动端只保留这一个文本搜索入口:它始终是全局搜索,不再按页面变成局部搜索框。
@@ -89,14 +103,17 @@
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, onMounted } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import NotificationBell from '@/components/notification/NotificationBell.vue';
   import icon from '@/config/icon';
-  import { MOBILE_TODAY_PATH } from '@/config/mobileNavigation';
+  import { frameVariant } from '@/config/growthFrames';
+  import { useAndroidAppUpdate } from '@/composables/useAndroidAppUpdate';
+  import { useGrowth } from '@/composables/useGrowth';
   import { getMobileTopBarBinding } from '@/composables/useMobileTopBar';
   import { useMobileGlobalSearch } from '@/composables/useMobileGlobalSearch';
   import { useUserStore } from '@/store';
@@ -106,6 +123,8 @@
   const user = useUserStore();
   const { t } = useI18n();
   const { openSearch } = useMobileGlobalSearch();
+  const { growth: growthInfo, load: loadGrowth } = useGrowth();
+  const appUpdate = useAndroidAppUpdate();
 
   const activeBinding = computed(() => getMobileTopBarBinding(route.name));
   // ownTopBar 允许是函数：同一路由可按查询参数决定用共享顶栏还是页面自画顶栏
@@ -119,17 +138,37 @@
   const showSearch = computed(() => !isSecondary.value && activeBinding.value?.searchMode !== 'icon');
   const showNotification = computed(() => activeBinding.value?.showNotification !== false);
   const showActions = computed(() =>
-    Boolean(!showSearch.value || activeBinding.value?.onAuxiliaryAction || activeBinding.value?.onAdd || showNotification.value),
+    Boolean(
+      !showSearch.value ||
+      activeBinding.value?.onAuxiliaryAction ||
+      activeBinding.value?.onAdd ||
+      showNotification.value,
+    ),
   );
   const addLabel = computed(() => activeBinding.value?.addLabel?.() || t('common.add'));
   const addActionMode = computed(() => activeBinding.value?.addActionMode?.() || 'icon');
+  const equippedFrameId = computed(() => {
+    const id = growthInfo.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
+  const profileAvatarSource = computed(() => user.headPicture || icon.navigation.user);
+  const profileAttentionLabel = computed(() => {
+    const notices: string[] = [];
+    if (growthInfo.value?.hasUnreadLevelUp) notices.push(t('growth.levelUpTitle'));
+    if (appUpdate.showBadge.value) {
+      notices.push(t('appUpdate.newVersionShort', { version: appUpdate.latestVersion.value }));
+    }
+    return notices.join(' · ');
+  });
 
-  /**
-   * Logo 回「今日」，与移动端所有默认落点一致（冷启动、登录后、注册后都是今日）。
-   * 「回到上次的资料页签」由底部「资料」入口承担，且只在当前会话内有效。
-   */
-  function goToToday() {
-    if (route.path !== MOBILE_TODAY_PATH) void router.push(MOBILE_TODAY_PATH);
+  onMounted(() => {
+    // 顶栏头像是移动端固定入口，不能依赖用户先打开成长页后才出现头像框或升级提醒。
+    void loadGrowth();
+  });
+
+  /** 顶栏头像是「我的」的新一级入口；与底栏切换一致，不在 Android 返回栈堆叠一级页面。 */
+  function goToProfile() {
+    if (route.path !== '/personCenter') void router.replace('/personCenter');
   }
 
   function openGlobalSearch() {
@@ -158,25 +197,37 @@
     background: var(--surface-page-bg, var(--background-color));
   }
 
-  .mobile-top-bar__brand {
-    flex: 0 0 auto;
-    min-width: 0;
+  .mobile-top-bar__profile {
+    position: relative;
+    width: 44px;
+    min-width: 44px;
     height: 44px;
-    padding: 0 6px 0 0;
-    gap: 8px;
-    border-radius: 10px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
     color: var(--text-color);
     background: transparent !important;
-    font-size: 16px;
-    font-weight: 720;
-    letter-spacing: -0.01em;
   }
 
-  .mobile-top-bar__brand img {
-    width: 25px;
-    height: 25px;
-    display: block;
-    flex: 0 0 auto;
+  .mobile-top-bar__profile--active {
+    border-color: var(--primary-color);
+  }
+
+  .mobile-top-bar__profile-avatar {
+    overflow: hidden;
+    border-radius: 50%;
+  }
+
+  .mobile-top-bar__profile-dot {
+    position: absolute;
+    top: 3px;
+    right: 2px;
+    width: 9px;
+    height: 9px;
+    box-sizing: border-box;
+    border: 2px solid var(--surface-page-bg, var(--background-color));
+    border-radius: 50%;
+    background: var(--danger-fill-bg, #d93b3b);
   }
 
   .mobile-top-bar__back {
@@ -302,11 +353,5 @@
   .mobile-top-bar__bell :deep(.nt-bell:active) {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
-  }
-
-  @media (max-width: 359px) {
-    .mobile-top-bar__brand span {
-      display: none;
-    }
   }
 </style>

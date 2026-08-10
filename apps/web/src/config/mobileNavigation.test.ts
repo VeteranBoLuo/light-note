@@ -23,16 +23,11 @@ describe('移动端导航配置', () => {
 
   it('保持资料切换与底部主导航的固定顺序', () => {
     expect(MOBILE_RESOURCE_NAVIGATION.map((item) => item.key)).toEqual(['bookmark', 'note', 'cloud', 'tag']);
-    // 今日在首位、AI 居中保持强调；搜索不再占底部位置，已升级为顶栏全局能力
-    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual([
-      'today',
-      'resources',
-      'ai',
-      'todo',
-      'profile',
-    ]);
+    // 今日在首位、AI 居中保持强调；个人中心改由顶栏头像进入，第五位给独立聊天室
+    expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).toEqual(['today', 'resources', 'ai', 'todo', 'community']);
     expect(MOBILE_BOTTOM_NAVIGATION.map((item) => item.key)).not.toContain('search');
     expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'today')?.path).toBe('/workbenches');
+    expect(MOBILE_BOTTOM_NAVIGATION.find((item) => item.key === 'community')?.path).toBe('/community-chat');
   });
 
   it('拒绝把详情页或任意字符串当成资料根路径', () => {

@@ -13,10 +13,27 @@ describe('cloudFileCategory preview compatibility', () => {
     ['legacy.doc', 'application/msword'],
     ['legacy.xls', 'application/vnd.ms-excel'],
     ['legacy.ppt', 'application/vnd.ms-powerpoint'],
-  ])('旧版 Office 文件 %s 不进入 OOXML 渲染器', (fileName, fileType) => {
+  ])('旧版 Office 文件 %s 进入服务端 PDF 转换预览', (fileName, fileType) => {
     const file = { fileName, fileType };
     expect(isLegacyOfficeFile(file)).toBe(true);
-    expect(getCloudPreviewType(file)).toBe('unsupported');
+    expect(getCloudPreviewType(file)).toBe('converted-pdf');
+  });
+
+  it.each([
+    ['document.rtf', 'application/rtf'],
+    ['document.odt', 'application/vnd.oasis.opendocument.text'],
+    ['sheet.ods', 'application/vnd.oasis.opendocument.spreadsheet'],
+    ['slides.odp', 'application/vnd.oasis.opendocument.presentation'],
+  ])('ODF/RTF 文件 %s 进入服务端 PDF 转换预览', (fileName, fileType) => {
+    expect(getCloudPreviewType({ fileName, fileType })).toBe('converted-pdf');
+  });
+
+  it.each(['zip', 'rar', '7z', 'tar', 'tgz', 'tbz2', 'txz', 'gz', 'bz2', 'xz'])('压缩文件 .%s 进入目录预览', (ext) => {
+    expect(getCloudPreviewType({ fileName: `archive.${ext}`, fileType: 'application/octet-stream' })).toBe('archive');
+  });
+
+  it('未知压缩格式仍保持不可预览，不因 compress 分类误进入派生任务', () => {
+    expect(getCloudPreviewType({ fileName: 'archive.cab', category: 'compress' })).toBe('unsupported');
   });
 
   it.each([
@@ -51,7 +68,7 @@ describe('cloudFileCategory preview compatibility', () => {
     expect(getCloudPreviewType(file)).toBe('text');
   });
 
-  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini'])(
+  it.each(['py', 'java', 'go', 'rs', 'cpp', 'sql', 'sh', 'vue', 'toml', 'ini', 'tsv', 'jsonl', 'srt', 'vtt', 'ics', 'diff'])(
     '源码或配置文件 .%s 可以进入文本预览',
     (ext) => {
       const file = { fileName: `source.${ext}`, fileType: 'application/octet-stream' };

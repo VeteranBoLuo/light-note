@@ -16,13 +16,7 @@ import { removeUserSessions } from '../util/sessionStore.js';
 import { setIpBan } from '../util/security/services/ipReputation.js';
 import { isIP } from 'node:net';
 
-const DISPOSITIONS = new Set([
-  'unknown',
-  'confirmed_attack',
-  'false_positive',
-  'authorized_test',
-  'benign_anomaly',
-]);
+const DISPOSITIONS = new Set(['unknown', 'confirmed_attack', 'false_positive', 'authorized_test', 'benign_anomaly']);
 const RULE_MODES = new Set(['observe', 'block', 'off']);
 const EXCEPTION_EFFECTS = new Set(['observe_only', 'skip_rule', 'score_adjust']);
 const EXCEPTION_SUBJECT_TYPES = new Set(['user', 'ip']);
@@ -38,7 +32,10 @@ const ensureRootRole = (req, res) => {
 
 const safeDays = (value) => ([1, 7, 30].includes(Number(value)) ? Number(value) : 7);
 const cutoffForDays = (days) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-const normalizedString = (value, max = 500) => String(value || '').trim().slice(0, max);
+const normalizedString = (value, max = 500) =>
+  String(value || '')
+    .trim()
+    .slice(0, max);
 
 const normalizedExpiry = (body = {}) => {
   if (body.permanent === true) return { valid: true, value: null };
@@ -52,7 +49,7 @@ const queryOptionalRows = async (label, sql, params = []) => {
     const [rows] = await pool.query(sql, params);
     return rows;
   } catch (error) {
-    console.warn(`[security-v2] ${label} query skipped:`, error?.code || error?.message || 'unknown error');
+    console.warn(`[security-v2] ${label} query skipped:`, error?.code || 'QUERY_FAILED');
     return [];
   }
 };
@@ -79,6 +76,8 @@ const buildDailyTrend = (rows, days) => {
       raw: Number(row.raw || 0),
       confirmed: Number(row.confirmed || 0),
       falsePositive: Number(row.falsePositive || 0),
+      benignAnomaly: Number(row.benignAnomaly || 0),
+      authorizedTest: Number(row.authorizedTest || 0),
     };
   });
 };
@@ -200,7 +199,9 @@ export const getSecurityOverviewV2 = async (req, res) => {
       `SELECT DATE_FORMAT(created_at, '%Y-%m-%d') AS statDate,
               COUNT(*) AS raw,
               COALESCE(SUM(disposition = 'confirmed_attack'), 0) AS confirmed,
-              COALESCE(SUM(disposition = 'false_positive'), 0) AS falsePositive
+              COALESCE(SUM(disposition = 'false_positive'), 0) AS falsePositive,
+              COALESCE(SUM(disposition = 'benign_anomaly'), 0) AS benignAnomaly,
+              COALESCE(SUM(disposition = 'authorized_test'), 0) AS authorizedTest
        FROM security_events
        WHERE created_at >= ?
        GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
@@ -209,18 +210,20 @@ export const getSecurityOverviewV2 = async (req, res) => {
     );
     const noisyRuleRows = await queryOptionalRows(
       'overview noisy rules',
-      `SELECT ev.rule_code AS ruleCode,
-              MAX(ev.rule_name) AS ruleName,
-              COUNT(DISTINCT e.event_id) AS rawHits,
-              COUNT(DISTINCT CASE WHEN e.disposition = 'confirmed_attack' THEN e.event_id END) AS confirmedHits,
-              COUNT(DISTINCT CASE WHEN e.disposition = 'false_positive' THEN e.event_id END) AS falsePositiveHits,
-              ROUND(100 * COUNT(DISTINCT CASE WHEN e.disposition = 'false_positive' THEN e.event_id END) /
-                NULLIF(COUNT(DISTINCT CASE WHEN e.disposition IN ('confirmed_attack','false_positive','benign_anomaly') THEN e.event_id END), 0)) AS falsePositiveRate,
+      `SELECT COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) AS ruleCode,
+              MAX(COALESCE(r.rule_name, NULLIF(e.matched_rule, ''), e.attack_type)) AS ruleName,
+              COUNT(*) AS rawHits,
+              COALESCE(SUM(e.disposition = 'confirmed_attack'), 0) AS confirmedHits,
+              COALESCE(SUM(e.disposition = 'false_positive'), 0) AS falsePositiveHits,
+              ROUND(100 * COALESCE(SUM(e.disposition = 'false_positive'), 0) /
+                NULLIF(COALESCE(SUM(e.disposition IN ('confirmed_attack','false_positive','benign_anomaly')), 0), 0)) AS falsePositiveRate,
               SUBSTRING_INDEX(GROUP_CONCAT(e.request_path ORDER BY e.created_at DESC SEPARATOR ','), ',', 1) AS primaryRoute
-       FROM security_event_evidence ev
-       JOIN security_events e ON e.event_id = ev.event_id
+       FROM security_events e
+       LEFT JOIN security_rules r
+         ON r.rule_code = COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
        WHERE e.created_at >= ?
-       GROUP BY ev.rule_code
+         AND COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) IS NOT NULL
+       GROUP BY COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
        ORDER BY COALESCE(falsePositiveRate, 0) DESC, rawHits DESC
        LIMIT 5`,
       [cutoff],
@@ -251,8 +254,15 @@ export const getSecurityOverviewV2 = async (req, res) => {
       [cutoff],
     );
     const policyRows = await queryOptionalRows(
-      'overview policy version',
-      'SELECT COALESCE(MAX(version), 1) AS version FROM security_rule_overrides WHERE enabled = 1',
+      'overview active policies',
+      `SELECT o.rule_code AS ruleCode, o.mode, o.version
+       FROM security_rule_overrides o
+       JOIN (
+         SELECT rule_code, MAX(id) AS id
+         FROM security_rule_overrides
+         WHERE enabled = 1 AND (expires_at IS NULL OR expires_at > NOW())
+         GROUP BY rule_code
+       ) latest ON latest.id = o.id`,
     );
     const summary = summaryRows[0] || {};
     const reviewedDenominator =
@@ -264,7 +274,7 @@ export const getSecurityOverviewV2 = async (req, res) => {
       : 0;
     summary.rateLimitTriggers = Number(rateRows[0]?.total || 0);
     summary.detectionStatus = 'healthy';
-    summary.policyVersion = Number(policyRows[0]?.version || 1);
+    summary.policyVersion = Math.max(1, ...policyRows.map((row) => Number(row.version || 1)));
     summary.eventBacklog = Number(summary.pendingReview || 0);
     summary.autoIpBanEnabled = SECURITY_CONFIG.ipAutoBanEnabled;
     summary.reputationDecisionEnabled = SECURITY_CONFIG.reputationDecisionEnabled;
@@ -273,7 +283,19 @@ export const getSecurityOverviewV2 = async (req, res) => {
         days,
         summary,
         trend: buildDailyTrend(trendRows, days),
-        noisyRules: noisyRuleRows,
+        noisyRules: noisyRuleRows.map((row) => {
+          const ruleCode = row.ruleCode || row.rule_code || '';
+          const policy = policyRows.find((item) => (item.ruleCode || item.rule_code) === ruleCode);
+          return {
+            ...row,
+            ruleCode,
+            mode: policy?.mode || getDefaultSecurityRuleMode(ruleCode),
+            rawHits: Number(row.rawHits || row.raw_hits || 0),
+            confirmedHits: Number(row.confirmedHits || row.confirmed_hits || 0),
+            falsePositiveHits: Number(row.falsePositiveHits || row.false_positive_hits || 0),
+            falsePositiveRate: Number(row.falsePositiveRate || row.false_positive_rate || 0),
+          };
+        }),
         reviewQueue: reviewRows,
       }),
     );
@@ -664,7 +686,9 @@ export const saveSecurityRuleOverride = async (req, res) => {
       await connection.rollback();
       return res.status(404).send(resultData(null, 404, '安全规则不存在'));
     }
-    const [versionRows] = await connection.query('SELECT COALESCE(MAX(version), 0) + 1 AS version FROM security_rule_overrides');
+    const [versionRows] = await connection.query(
+      'SELECT COALESCE(MAX(version), 0) + 1 AS version FROM security_rule_overrides',
+    );
     const version = Number(versionRows[0]?.version || 1);
     const [result] = await connection.query(
       `INSERT INTO security_rule_overrides

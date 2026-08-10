@@ -121,12 +121,7 @@
           class="text-input"
         />
         <!-- 输入 @ 唤起完整资源选择器(搜索框 + 分类列表),与「@ 添加资源」按钮形态一致 -->
-        <div
-          v-if="mentionQuery"
-          v-show="mentionHasResults"
-          class="ai-mention-layer"
-          :style="mentionAnchorStyle"
-        >
+        <div v-if="mentionQuery" v-show="mentionHasResults" class="ai-mention-layer" :style="mentionAnchorStyle">
           <ResourcePickerPanel
             ref="mentionPanel"
             :show-search="false"
@@ -217,11 +212,7 @@
   import AiContextPicker from './AiContextPicker.vue';
   import AiAttachmentPicker from './AiAttachmentPicker.vue';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
-  import {
-    replaceMentionQuery,
-    resolveMentionQuery,
-    type MentionQuery,
-  } from '@/utils/resourceMentionTrigger';
+  import { replaceMentionQuery, resolveMentionQuery, type MentionQuery } from '@/utils/resourceMentionTrigger';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
   import { getTextareaCaretRect, toAnchorOffset } from '@/utils/textareaCaret';
@@ -229,11 +220,7 @@
   import type { AiAttachmentDirectActionName } from '@/config/aiTools';
   import { mergePromptSuggestion, type AiAttachmentActionRequest } from './attachmentActions';
   import icon from '@/config/icon';
-  import {
-    MAX_AI_SCOPE_REFS,
-    type AiResourceContext,
-    type AiScopeRef,
-  } from '@/types/aiScope';
+  import { MAX_AI_SCOPE_REFS, type AiResourceContext, type AiScopeRef } from '@/types/aiScope';
 
   const { t } = useI18n();
 
@@ -358,9 +345,7 @@
   // ── 输入 @ 唤起资源建议 ──────────────────────────────
   // @ 浮层与「@ 添加资源」按钮共享同一条「当前页面」推导
   const currentPageResource = useCurrentPageResource();
-  const mentionPinnedItems = computed(() =>
-    currentPageResource.value ? [currentPageResource.value] : [],
-  );
+  const mentionPinnedItems = computed(() => (currentPageResource.value ? [currentPageResource.value] : []));
   const mentionQuery = ref<MentionQuery | null>(null);
   const mentionPanel = ref<{ chooseActive: () => void; moveActive: (offset: number) => void } | null>(null);
   // 搜不到结果就整块不显示(与 Claude 一致);面板仍挂载着继续搜,
@@ -764,16 +749,16 @@
     .mobile-context-toggle {
       display: inline-flex;
       flex: 0 0 auto;
-      gap: 7px;
+      gap: 6px;
       width: max-content;
       max-width: 100%;
-      height: var(--mobile-touch-size, 44px) !important;
-      min-height: var(--mobile-touch-size, 44px);
-      padding: 5px 9px 5px 6px !important;
+      height: 40px !important;
+      min-height: 40px;
+      padding: 4px 8px 4px 5px !important;
       /* 先给不支持 color-mix 的移动 WebView 一个可见的主题边框，再用混色增强层次。 */
       border: 1px solid var(--card-border-color);
       border-color: var(--primary-color);
-      border-radius: 12px;
+      border-radius: 10px;
       background: var(--card-background);
       background: linear-gradient(
         135deg,
@@ -789,9 +774,9 @@
 
     .mobile-context-toggle__icon {
       display: grid;
-      flex: 0 0 30px;
-      width: 30px;
-      height: 30px;
+      flex: 0 0 28px;
+      width: 28px;
+      height: 28px;
       place-items: center;
       border-radius: 8px;
       background: var(--primary-color);
@@ -1011,7 +996,7 @@
       }
     }
 
-    .input-actions :deep(.b_btn) {
+    .input-actions :deep(.b_btn:not(.send-btn)) {
       min-height: var(--mobile-touch-size, 44px) !important;
       height: var(--mobile-touch-size, 44px) !important;
       padding-inline: 10px;
@@ -1037,7 +1022,8 @@
 
     .send-btn {
       min-width: 54px;
-      height: var(--mobile-touch-size, 44px);
+      min-height: 40px;
+      height: 40px;
     }
   }
 </style>
@@ -1064,11 +1050,7 @@
   .ai-quota-detail .ai-quota-fill {
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(
-      90deg,
-      var(--primary-color),
-      color-mix(in srgb, var(--primary-color) 68%, #22d3ee)
-    );
+    background: linear-gradient(90deg, var(--primary-color), color-mix(in srgb, var(--primary-color) 68%, #22d3ee));
   }
   .ai-quota-detail dl {
     display: grid;

@@ -46,6 +46,28 @@ describe('analyzeNoteFormatConversion', () => {
     expect(report.issues).not.toContainEqual(expect.objectContaining({ key: 'rawHtml' }));
   });
 
+  it('Markdown 中的轻笺图文组合属于受支持结构，不误报原生 HTML 风险', () => {
+    const report = analyzeNoteFormatConversion(
+      '<section class="ln-media-text" data-ln-media-position="left" data-ln-media-width="36"><figure class="ln-media-text__item"><div class="ln-media-text__media"><img src="/a.png" alt=""></div><figcaption class="ln-media-text__content"><p>说明</p></figcaption></figure></section>',
+      'markdown',
+    );
+
+    expect(report.preserved).toBe(1);
+    expect(report.potentialLoss).toBe(0);
+    expect(report.issues).not.toContainEqual(expect.objectContaining({ key: 'rawHtml' }));
+  });
+
+  it('Markdown 中的受控渐变文字可无损往返，不误报原生 HTML 风险', () => {
+    const report = analyzeNoteFormatConversion(
+      '<span class="ln-text-gradient" data-ln-text-gradient="true" style="--ln-gradient-from:#615ced;--ln-gradient-to:#00a884;--ln-gradient-angle:90deg">渐变</span>',
+      'markdown',
+    );
+
+    expect(report.preserved).toBe(1);
+    expect(report.potentialLoss).toBe(0);
+    expect(report.issues).not.toContainEqual(expect.objectContaining({ key: 'rawHtml' }));
+  });
+
   it('转换预览指纹稳定绑定目标格式、正文和 baseRevision', async () => {
     const input = { targetType: 'markdown' as const, convertedContent: '# 标题\n', baseRevision: 7 };
     expect(serializeNoteFormatConversionHashInput(input)).toBe(

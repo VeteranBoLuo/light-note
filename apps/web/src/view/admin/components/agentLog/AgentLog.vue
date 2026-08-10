@@ -177,6 +177,7 @@
 
 <script lang="ts" setup>
   import { computed, onMounted, ref } from 'vue';
+  import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -200,6 +201,7 @@
   } from './agentLogOutcome.ts';
 
   const { t } = useI18n();
+  const route = useRoute();
 
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const todayCount = ref(0);
@@ -217,7 +219,7 @@
     toolHitRate: 0,
     toolErrorRate: 0,
   });
-  const searchValue = ref('');
+  const searchValue = ref(String(route.query.requestId || '').slice(0, 64));
   const hideInternal = ref(true);
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);

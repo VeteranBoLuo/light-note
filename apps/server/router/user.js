@@ -70,6 +70,8 @@ router.post('/adminContext/end', userHandle.endAdminContext);
 
 router.post('/getUserList', userHandle.getUserList);
 
+router.post('/admin/detail', userHandle.getUserAdminDetail);
+
 router.post('/admin/remark', saveAdminUserRemark);
 
 router.post('/registerUser', registerLimiter, userHandle.registerUser);

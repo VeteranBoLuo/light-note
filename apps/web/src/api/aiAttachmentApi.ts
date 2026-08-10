@@ -8,7 +8,7 @@ import type {
   AiToolConfirmation,
 } from '@/types/aiAgent';
 
-export const AI_AGENT_CLIENT_CAPABILITIES = ['agent_interaction_v1'] as const;
+export const AI_AGENT_CLIENT_CAPABILITIES = ['agent_interaction_v1', 'agent_continuation_v1'] as const;
 
 export type AiAttachmentStatus = 'awaiting_upload' | 'queued' | 'parsing' | 'ready' | 'no_text' | 'failed';
 
@@ -150,6 +150,7 @@ export async function respondAiInteraction({
         selectedIds: response.selectedIds,
         customValue: response.customValue,
         cancelled: response.cancelled,
+        ...(interaction.continuation?.token ? { continuationToken: interaction.continuation.token } : {}),
         clientCapabilities: [...AI_AGENT_CLIENT_CAPABILITIES],
       },
       { silent: true },

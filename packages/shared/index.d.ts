@@ -20,6 +20,43 @@ export declare const STATUS: {
   readonly VISITOR: 'visitor';
 };
 
+/** 网站合规展示信息；产品品牌与网站备案全称不得混用。 */
+export declare const SITE_COMPLIANCE: {
+  readonly productName: '轻笺';
+  readonly websiteFilingName: '轻笺知识库';
+  readonly websiteIcpNumber: '蜀ICP备2026017699号-1';
+  readonly miitQueryUrl: 'https://beian.miit.gov.cn/';
+  readonly publicSecurityFilingNumber: string;
+  readonly publicSecurityQueryUrl: string;
+};
+
+export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';
+export type DerivedFilePreviewType = 'archive' | 'converted-pdf';
+
+export interface FilePreviewFormatDefinition {
+  readonly id: string;
+  readonly category: 'compress' | 'word' | 'excel' | 'ppt';
+  readonly previewType: DerivedFilePreviewType;
+  readonly strategy: FilePreviewStrategy;
+  readonly extensions: readonly string[];
+  readonly mimeTypes: readonly string[];
+}
+
+export declare const FILE_PREVIEW_STRATEGY: {
+  readonly ARCHIVE_MANIFEST: 'archive_manifest';
+  readonly CONVERTED_PDF: 'converted_pdf';
+};
+
+export declare const FILE_PREVIEW_FORMATS: readonly FilePreviewFormatDefinition[];
+export declare const FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS: readonly string[];
+export declare function normalizeFilePreviewMimeType(value?: unknown): string;
+export declare function getFilePreviewExtension(fileName?: unknown, explicitExtension?: unknown): string;
+export declare function resolveFilePreviewFormat(input?: {
+  fileName?: unknown;
+  fileType?: unknown;
+  ext?: unknown;
+}): FilePreviewFormatDefinition | null;
+
 export type BookmarkUrlState = 'valid' | 'normalized' | 'needs_confirmation' | 'invalid';
 export type BookmarkUrlCandidateSource = 'explicit' | 'domain';
 

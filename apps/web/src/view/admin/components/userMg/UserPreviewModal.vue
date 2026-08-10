@@ -6,6 +6,9 @@
     height="calc(100vh - 64px)"
     top="50%"
     :show-footer="false"
+    fullscreen-mobile
+    modal-class="user-preview-modal"
+    content-class="user-preview-modal-content"
     v-model:visible="visible"
     @close="closePreview"
   >
@@ -19,7 +22,35 @@
         </div>
       </div>
     </template>
-    <iframe v-if="previewUrl" class="user-preview-frame" :name="ADMIN_LOGIN_PREVIEW_FRAME_NAME" :src="previewUrl" />
+    <template #mobileHeader="{ close }">
+      <div class="preview-mobile-admin-rail">
+        <BButton class="preview-mobile-exit" :aria-label="t('guest.adminContextExit')" @click="close">
+          <SvgIcon :src="icon.navigation.exit" size="18" aria-hidden="true" />
+          <span>{{ t('guest.adminContextExit') }}</span>
+        </BButton>
+        <div class="preview-mobile-title" :aria-label="previewTitle">{{ previewTitle }}</div>
+        <div
+          class="preview-mobile-context"
+          :class="`mode-${contextInfo?.mode || props.mode || 'readonly'}`"
+          :aria-label="`${modeTitle}，${countdownLabel}`"
+        >
+          <strong>{{ modeShortTitle }}</strong>
+          <span>{{ countdownTime }}</span>
+        </div>
+      </div>
+    </template>
+    <div class="user-preview-frame-shell">
+      <iframe
+        v-if="previewUrl"
+        class="user-preview-frame"
+        :title="previewTitle"
+        :name="ADMIN_LOGIN_PREVIEW_FRAME_NAME"
+        :src="previewUrl"
+      />
+      <div v-else class="user-preview-loading" aria-live="polite">
+        <BLoading inline loading :title="t('common.loading')" />
+      </div>
+    </div>
   </b-modal>
 </template>
 
@@ -28,7 +59,10 @@
   import { useI18n } from 'vue-i18n';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
   import userApi from '@/api/userApi.ts';
   import {
     ADMIN_LOGIN_PREVIEW_FRAME_NAME,
@@ -55,7 +89,7 @@
   const contextToken = ref('');
   const contextInfo = ref<AdminContextInfo | null>(null);
   const now = ref(Date.now());
-  const closing = ref(false);
+  let disposed = false;
   let timer: number | null = null;
   const previewTitle = computed(() => {
     const name = props.userInfo?.adminRemark || props.userInfo?.alias || props.userInfo?.email || '用户';
@@ -65,6 +99,11 @@
   });
   const modeTitle = computed(() =>
     contextInfo.value?.mode === 'maintain' ? t('guest.adminContextMaintain') : t('guest.adminContextReadonly'),
+  );
+  const modeShortTitle = computed(() =>
+    contextInfo.value?.mode === 'maintain' || props.mode === 'maintain'
+      ? t('guest.adminContextMaintainShort')
+      : t('guest.adminContextReadonlyShort'),
   );
   const subjectLabel = computed(() =>
     t('guest.adminContextSubject', {
@@ -82,31 +121,61 @@
     return Math.max(0, Math.ceil((expiresAt - now.value) / 1000));
   });
   const countdownLabel = computed(() => {
+    return t('guest.adminContextRemaining', { time: countdownTime.value });
+  });
+  const countdownTime = computed(() => {
     const minutes = Math.floor(secondsLeft.value / 60);
     const seconds = secondsLeft.value % 60;
-    return t('guest.adminContextRemaining', {
-      time: `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`,
-    });
+    return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   });
+
+  function clearLocalPreview() {
+    const token = contextToken.value;
+    previewUrl.value = '';
+    contextToken.value = '';
+    contextInfo.value = null;
+    clearAdminLoginPreview();
+    return token;
+  }
+
+  async function revokeContextToken(token: string) {
+    if (!token) return;
+    try {
+      await userApi.endAdminContext(token);
+    } catch {
+      // 令牌可能已经过期或网络已断开；本地授权材料仍必须立即清理。
+    }
+  }
+
+  function disposeCurrentPreview(hide = false) {
+    openingId.value += 1;
+    const token = clearLocalPreview();
+    if (hide) visible.value = false;
+    if (token) void revokeContextToken(token);
+  }
 
   watch(
     () => [visible.value, props.userInfo?.id, props.mode],
     async () => {
       if (!visible.value || !props.userInfo?.id) {
+        if (contextToken.value || previewUrl.value) disposeCurrentPreview(false);
         return;
       }
       const requestId = ++openingId.value;
-      previewUrl.value = '';
-      contextInfo.value = null;
-      clearAdminLoginPreview();
+      const previousToken = clearLocalPreview();
+      if (previousToken) void revokeContextToken(previousToken);
       try {
         const mode = props.mode || 'readonly';
         const res = await userApi.startAdminContext(props.userInfo.id, mode);
-        if (requestId !== openingId.value || !visible.value) return;
+        const responseToken = String(res.data?.contextToken || '');
+        if (requestId !== openingId.value || !visible.value || disposed) {
+          if (responseToken) void revokeContextToken(responseToken);
+          return;
+        }
         if (res.status !== 200 || !res.data?.contextToken) {
           throw new Error(res.msg || t('guest.adminContextStartFailed'));
         }
-        contextToken.value = res.data.contextToken;
+        contextToken.value = responseToken;
         contextInfo.value = res.data.context || {
           mode: res.data.mode as 'readonly' | 'maintain',
           subjectUserId: res.data.target?.id,
@@ -114,9 +183,10 @@
           expiresAt: res.data.expiresAt,
         };
         now.value = Date.now();
-        setAdminLoginPreview(res.data.contextToken, props.userInfo.preferences);
+        setAdminLoginPreview(responseToken, props.userInfo.preferences);
         previewUrl.value = getAdminLoginPreviewUrl('/home');
       } catch (error: any) {
+        if (requestId !== openingId.value || !visible.value || disposed) return;
         message.error(error?.message || t('guest.adminContextStartFailed'));
         closePreview();
       }
@@ -124,24 +194,8 @@
     { immediate: true },
   );
 
-  async function closePreview() {
-    if (closing.value) return;
-    closing.value = true;
-    openingId.value += 1;
-    const token = contextToken.value;
-    visible.value = false;
-    previewUrl.value = '';
-    contextToken.value = '';
-    contextInfo.value = null;
-    clearAdminLoginPreview();
-    if (token) {
-      try {
-        await userApi.endAdminContext(token);
-      } catch {
-        // 令牌可能已经过期；本地清理仍必须执行。
-      }
-    }
-    closing.value = false;
+  function closePreview() {
+    disposeCurrentPreview(true);
   }
 
   function handlePreviewMessage(event: MessageEvent) {
@@ -156,6 +210,8 @@
     window.addEventListener('message', handlePreviewMessage);
   });
   onBeforeUnmount(() => {
+    disposed = true;
+    disposeCurrentPreview(false);
     if (timer !== null) window.clearInterval(timer);
     window.removeEventListener('message', handlePreviewMessage);
   });
@@ -207,11 +263,75 @@
     font-variant-numeric: tabular-nums;
   }
   .user-preview-frame {
+    display: block;
     width: 100%;
     height: 100%;
     border: 1px solid var(--border-color);
     border-radius: 6px;
     background: var(--background-color);
+  }
+  .user-preview-frame-shell {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    background: var(--background-color);
+  }
+  .user-preview-loading {
+    display: grid;
+    width: 100%;
+    min-height: 180px;
+    place-items: center;
+  }
+  .preview-mobile-admin-rail {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: calc(52px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 8px 0;
+    box-sizing: border-box;
+    background: var(--card-background);
+  }
+  .preview-mobile-exit.b_btn {
+    gap: 4px;
+    min-width: 0;
+    height: 44px;
+    padding: 0 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  .preview-mobile-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .preview-mobile-context {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 28px;
+    padding: 0 7px;
+    border: 1px solid rgba(97, 92, 237, 0.62);
+    border-radius: 999px;
+    background: var(--primary-btn-bg-color);
+    color: var(--primary-color);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .preview-mobile-context.mode-maintain {
+    border-color: rgba(245, 158, 11, 0.72);
+    background: rgba(245, 158, 11, 0.12);
+    color: var(--warning-color);
   }
   @media (max-width: @admin-bp-desktop) {
     .preview-context-subject {
@@ -222,8 +342,20 @@
     }
   }
   @media (max-width: @admin-bp-mobile) {
-    .preview-context-status {
-      left: 60%;
+    :deep(.user-preview-modal-content) {
+      min-height: 0;
+    }
+    .user-preview-frame {
+      border: 0;
+      border-radius: 0;
+    }
+    .preview-mobile-exit.b_btn span {
+      display: none;
+    }
+  }
+  @media (min-width: 390px) and (max-width: @admin-bp-mobile) {
+    .preview-mobile-exit.b_btn span {
+      display: inline;
     }
   }
 </style>

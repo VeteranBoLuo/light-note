@@ -40,11 +40,19 @@ pnpm preview
 
 后端启动和验收中的用户操作会对 `.env` 指向的数据产生真实读写，因此运行前仍应确认当前配置就是你希望使用的环境。
 
-进行本地验收时至少覆盖本次改动对应的用户流程，并检查桌面端、移动端、深色主题及中英文（适用时）。涉及 AI 文档解析、OCR 或异步文件处理时，还应额外启动：
+进行本地验收时至少覆盖本次改动对应的用户流程，并检查桌面端、移动端、深色主题及中英文（适用时）。项目根目录的 `pnpm dev:server`、`pnpm dev:server:watch` 与 `pnpm preview` 已自动托管文档/文件预览 Worker；仅在绕过这些项目级命令单独启动后端时，涉及 AI 文档解析、OCR 或云文件异步预览还应额外启动：
 
 ```bash
 pnpm --filter server worker:documents
 ```
+
+涉及压缩包目录或旧版 Office 在线预览时，应先应用 `20260808_file_preview_artifacts.sql`，并确认当前环境的 7-Zip 与 LibreOffice 可用：
+
+```bash
+pnpm --filter server check:file-previews
+```
+
+该检查会同时验证预览表、关键索引和已启用的运行时；任一必需项缺失时不得启动依赖新结构的 HTTP/Worker 进程。需要分阶段发布时可显式关闭其中一种预览能力，门禁仍会检查另一种已启用能力。
 
 涉及批量导入书签或后台图标补全时，还应额外启动：
 

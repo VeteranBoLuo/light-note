@@ -1,10 +1,10 @@
-import { ref } from 'vue';
+import { ref, unref, type MaybeRef } from 'vue';
 import notificationApi from '@/api/notificationApi.ts';
 import { useUserStore } from '@/store';
 
 export interface NotificationItem {
   id: string;
-  type: string; // level_up | opinion_reply | system | other
+  type: string; // level_up | opinion_reply | system | todo_reminder | community_chat | other
   title: string;
   content: string | null;
   link: string | null;
@@ -38,7 +38,11 @@ export function resetNotification() {
   browserSeenIds.clear();
 }
 
-export function useNotification() {
+export function useNotification(options: { excludeCommunityChat?: MaybeRef<boolean> } = {}) {
+  const notificationScope = () => ({
+    excludeCommunityChat: Boolean(unref(options.excludeCommunityChat ?? false)),
+  });
+
   function isGuest() {
     const user = useUserStore();
     return !user.id || user.role === 'visitor';
@@ -60,7 +64,7 @@ export function useNotification() {
       browserSeenIds.clear();
     }
     try {
-      const res = await notificationApi.getUnreadCount();
+      const res = await notificationApi.getUnreadCount(notificationScope());
       if (res?.status === 200 && res.data) {
         const previousUnread = unreadTotal.value;
         unreadTotal.value = Number(res.data.unreadTotal) || 0;
@@ -81,7 +85,12 @@ export function useNotification() {
 
   async function notifyNewestUnreadInBrowser() {
     try {
-      const res = await notificationApi.getNotificationList({ currentPage: 1, pageSize: 5, type: 'all' });
+      const res = await notificationApi.getNotificationList({
+        currentPage: 1,
+        pageSize: 5,
+        type: 'all',
+        ...notificationScope(),
+      });
       const items = Array.isArray(res?.data?.items) ? (res.data.items as NotificationItem[]) : [];
       if (!browserNotificationBaselineReady) {
         items.forEach((item) => browserSeenIds.add(item.id));
@@ -91,6 +100,16 @@ export function useNotification() {
       for (const item of [...items].reverse()) {
         if (item.isRead || browserSeenIds.has(item.id)) continue;
         browserSeenIds.add(item.id);
+        const meta = (() => {
+          if (item.meta && typeof item.meta === 'object') return item.meta;
+          try {
+            return item.meta ? JSON.parse(item.meta) : {};
+          } catch {
+            return {};
+          }
+        })();
+        // 聊天室当前只开放站内提醒。即使用户全局开启了浏览器通知，也不能越过频道级渠道约束。
+        if (meta?.delivery === 'in_app_only') continue;
         const notification = new Notification(item.title || '轻笺', {
           body: item.content || undefined,
           tag: `light-note:${item.id}`,
@@ -108,11 +127,19 @@ export function useNotification() {
   }
 
   // 拉取分页列表(顺带同步未读数)
-  async function fetchList(params: { currentPage?: number; pageSize?: number; type?: string } = {}): Promise<NotificationPage> {
-    const empty: NotificationPage = { items: [], total: 0, unreadTotal: unreadTotal.value, currentPage: 1, pageSize: 20 };
+  async function fetchList(
+    params: { currentPage?: number; pageSize?: number; type?: string } = {},
+  ): Promise<NotificationPage> {
+    const empty: NotificationPage = {
+      items: [],
+      total: 0,
+      unreadTotal: unreadTotal.value,
+      currentPage: 1,
+      pageSize: 20,
+    };
     if (isGuest()) return empty;
     try {
-      const res = await notificationApi.getNotificationList(params);
+      const res = await notificationApi.getNotificationList({ ...params, ...notificationScope() });
       if (res?.status === 200 && res.data) {
         unreadTotal.value = Number(res.data.unreadTotal ?? unreadTotal.value) || 0;
         return {
@@ -142,7 +169,7 @@ export function useNotification() {
     unreadTotal.value = 0;
     unreadByType.value = {};
     try {
-      const res = await notificationApi.markAllNotificationsRead();
+      const res = await notificationApi.markAllNotificationsRead(notificationScope());
       if (res?.status !== 200) refreshUnread();
       return res?.status === 200;
     } catch {
