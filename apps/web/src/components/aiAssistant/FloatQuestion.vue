@@ -159,6 +159,7 @@
     setAiAssistantVisibility,
     type AiAssistantLaunchPayload,
   } from '@/utils/aiEntry';
+  import { shouldPreloadLargeFeature, type NetworkInformationLike } from '@/utils/largeFeaturePreload';
 
   const AiWorkspaceShell = defineAsyncComponent(() => import('@/components/aiAssistant/AiWorkspaceShell.vue'));
   const AiConversationCenter = defineAsyncComponent(() => import('@/components/aiAssistant/AiConversationCenter.vue'));
@@ -532,9 +533,17 @@
       device: telemetryDevice(),
       mode: activeMode.value,
     });
-    // 空闲时预热对话模块，避免首次打开抽屉等待；预渲染环境继续跳过。
+    // 只在桌面正常网络的空闲期预热。移动端、弱网或省流模式下，后台下载大型 AI
+    // 运行时会与用户刚点击的页面争抢带宽，正是“页面还能滚，但点击像没反应”的来源之一。
     const warmChat = () => import('@/view/aiAssistant/ChatContainer.vue').catch(() => {});
-    if (!(window as any).__PRERENDER__ && !navigator.webdriver) {
+    const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+    const canWarmChat = shouldPreloadLargeFeature({
+      mobile: bookmark.isMobile,
+      online: navigator.onLine !== false,
+      visibilityState: document.visibilityState,
+      connection,
+    });
+    if (!(window as any).__PRERENDER__ && !navigator.webdriver && canWarmChat) {
       if (typeof window.requestIdleCallback === 'function') {
         window.requestIdleCallback(warmChat);
       } else {

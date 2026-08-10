@@ -156,6 +156,11 @@ const normalizeCanonicalMarkdownRecord = (record) => {
   };
 };
 
+// 列表卡片只展示几行摘要。此前 SELECT n.* 会把每篇最高 1MB 的完整正文随 48 张卡片一起传输，
+// 弱网 App 不仅下载慢，还要在主线程解析一大块 JSON。保留 4000 字符足够生成卡片/列表摘要，
+// 打开正文仍由 getNoteDetail 返回完整内容；搜索条件也继续在数据库完整正文上执行。
+const NOTE_LIST_CONTENT_PREVIEW_LENGTH = 4000;
+
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
 // note_images 的归属可信度是图片引用计数体系的地基:
 // - 传入 noteId 必须校验属于当前用户,否则可向他人笔记挂图污染归属;
@@ -770,7 +775,22 @@ export const queryNoteList = async (req, res) => {
 
     const whereSql = where.join(' AND ');
     let listSql = `
-      SELECT n.*,
+      SELECT
+        n.id,
+        n.title,
+        LEFT(COALESCE(n.content, ''), ${NOTE_LIST_CONTENT_PREVIEW_LENGTH}) AS content,
+        n.create_by,
+        n.update_by,
+        n.del_flag,
+        n.sort,
+        n.is_top,
+        n.create_time,
+        n.update_time,
+        n.deleted_at,
+        n.type,
+        n.revision,
+        n.parent_id,
+        n.tree_delete_batch_id,
         (
           SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
           FROM resource_tag_relations r

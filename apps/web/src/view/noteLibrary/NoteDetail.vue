@@ -170,6 +170,11 @@
                   :placeholder="$t('noteDetail.titlePlaceholder')"
                 />
               </div>
+              <NoteEditorWarmupPreview
+                v-if="!editorRuntimeReady && Boolean(note.content)"
+                :content="note.content"
+                :note-type="note.type"
+              />
               <editor
                 ref="editorRef"
                 class="editor-component"
@@ -227,7 +232,12 @@
         @close="catalogDrawerOpen = false"
       />
     </div>
-    <b-loading :loading="!isReady" style="z-index: -1" />
+    <NoteDetailLoadingState
+      v-if="!isReady"
+      variant="page"
+      :error="noteLoadFailed"
+      @retry="retryLoadRouteNote"
+    />
     <NoteVersionHistory
       v-if="versionHistoryVisible"
       v-model:visible="versionHistoryVisible"
@@ -238,19 +248,19 @@
     />
     <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
     <NoteAttachPagesModal
-      v-if="noteTreeWriteEnabled && note.id"
+      v-if="attachPagesVisible && noteTreeWriteEnabled && note.id"
       v-model:visible="attachPagesVisible"
       :target-note="attachTargetNote"
       @attached="handlePagesAttached"
     />
     <NoteMoveModal
-      v-if="noteTreeWriteEnabled && note.id"
+      v-if="moveSelfVisible && noteTreeWriteEnabled && note.id"
       v-model:visible="moveSelfVisible"
       :note="moveTargetNote"
       @moved="handleSelfMoved"
     />
     <NoteRenameModal
-      v-if="noteTreeWriteEnabled"
+      v-if="renamePageVisible && noteTreeWriteEnabled"
       v-model:visible="renamePageVisible"
       :note="renameTargetNote"
       @renamed="handlePageRenamed"
@@ -292,19 +302,14 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore, noteStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
-  import Editor from '@/components/noteLibrary/detail/Editor.vue';
-  import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
+  import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
+  import NoteEditorWarmupPreview from '@/components/noteLibrary/detail/NoteEditorWarmupPreview.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
-  import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
-  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
-  import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
-  import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
   import NoteConflictModal from '@/components/noteLibrary/detail/NoteConflictModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -329,6 +334,29 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
+  import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+
+  const createDeferredDetailFeature = (loader: () => Promise<any>) =>
+    defineAsyncComponent({
+      loader,
+      loadingComponent: AsyncFeatureLoadingOverlay,
+      delay: 280,
+      suspensible: false,
+    });
+  const NoteVersionHistory = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/detail/NoteVersionHistory.vue'),
+  );
+  const SaveTemplateModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/detail/SaveTemplateModal.vue'),
+  );
+  const NoteAttachPagesModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/tree/NoteAttachPagesModal.vue'),
+  );
+  const NoteMoveModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
+  const NoteRenameModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
+  );
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -345,6 +373,16 @@
     loadingComponent: AiPanelPlaceholder,
     delay: 0,
   });
+  const loadEditorComponent = () => import('@/components/noteLibrary/detail/Editor.vue');
+  const Editor = defineAsyncComponent({
+    loader: loadEditorComponent,
+    loadingComponent: NoteDetailLoadingState,
+    delay: 0,
+    suspensible: false,
+  });
+  // 详情页小 chunk 一执行就开始下载重型编辑器；此时正文预取也已在进行，二者并行。
+  // 不等待 isReady 后再触发，否则会把“正文请求 → 编辑器下载”重新串成瀑布。
+  void loadEditorComponent();
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const user = useUserStore();
@@ -987,6 +1025,7 @@
     const currentRouteId = Array.isArray(rawRouteId) ? rawRouteId.join('/') : String(rawRouteId || '');
     // 快速切换时旧编辑器可能晚到一个 ready；它不能重新开启自动保存，也不能覆盖新页面的大纲。
     if (currentRouteId !== 'add' && currentRouteId !== note.id) return;
+    editorRuntimeReady.value = true;
     contentAutosaveReady.value = true;
     isNoteSwitching.value = false;
     // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
@@ -1693,6 +1732,8 @@
     return await persistBeforeLeave();
   });
   const isReady = ref(false);
+  const noteLoadFailed = ref(false);
+  const editorRuntimeReady = ref(false);
 
   function resetPerNoteRuntime() {
     clearScheduledSave();
@@ -1708,6 +1749,7 @@
     skipSaveOnLeave = false;
     hasSwitchBackup.value = false;
     contentAutosaveReady.value = false;
+    editorRuntimeReady.value = false;
     conflictVisible.value = false;
     conflictCloudVersion.value = null;
     conflictLocalVersion.value = null;
@@ -1766,6 +1808,7 @@
 
     const requestVersion = ++noteLoadVersion;
     const isInitialLoad = !isReady.value;
+    noteLoadFailed.value = false;
     if (!isInitialLoad) isNoteSwitching.value = true;
     resetPerNoteRuntime();
 
@@ -1798,7 +1841,7 @@
 
     let contentApplied = false;
     try {
-      const response = await apiBasePost('/api/note/getNoteDetail', { id: routeId });
+      const response = await consumeNoteDetail(user, routeId);
       if (requestVersion !== noteLoadVersion) return;
       if (response.status === 200 && response.data) {
         const rawType = response.data.type;
@@ -1823,15 +1866,29 @@
         await syncHeaderTitle();
         completeMarkdownContentSwitch();
         syncReadonlyEditorChrome();
+      } else {
+        noteLoadFailed.value = true;
+        isReady.value = false;
       }
     } catch (error) {
       console.error('加载笔记失败:', error);
+      if (requestVersion === noteLoadVersion) {
+        noteLoadFailed.value = true;
+        isReady.value = false;
+      }
     } finally {
       if (requestVersion === noteLoadVersion) {
-        if (!isReady.value) isReady.value = true;
         if (!contentApplied) isNoteSwitching.value = false;
       }
     }
+  }
+
+  function retryLoadRouteNote() {
+    const route = router.currentRoute.value;
+    const rawId = route.params.id;
+    const id = Array.isArray(rawId) ? rawId.join('/') : String(rawId || '');
+    if (!id) return;
+    void loadRouteNote(id, { ...route.query });
   }
 
   const routeNoteLoadKey = computed(() => {
@@ -2132,6 +2189,7 @@
   }
 
   .note-detail-content {
+    position: relative;
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;

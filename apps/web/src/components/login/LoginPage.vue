@@ -143,7 +143,7 @@
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
       await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
       message.success(t('auth.loginSuccess'));
-      setLocale(user.preferences.lang || 'zh-CN');
+      void setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();

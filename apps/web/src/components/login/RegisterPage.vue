@@ -167,7 +167,7 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || DEFAULT_NOTE_VIEW_MODE;
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      setLocale(user.preferences.lang || 'zh-CN');
+      void setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();

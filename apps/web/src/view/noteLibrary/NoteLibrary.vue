@@ -643,6 +643,7 @@
     type NoteTreeFeatures,
   } from '@/api/noteTree';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
+  import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
   import ActionCardModal from '@/components/base/ActionCardModal.vue';
   import NewNotePickerModal from '@/components/noteLibrary/library/NewNotePickerModal.vue';
   import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
@@ -1236,6 +1237,7 @@
     const noteId = String(typeof noteOrId === 'string' ? noteOrId : noteOrId?.id || '').trim();
     if (!noteId) return;
     if (bookmark.isMobile) return openDirectoryPage(noteId);
+    prefetchNoteDetail(user, noteId);
     captureDesktopPreviewScroll();
     const source = (typeof noteOrId === 'object' && noteOrId) ||
       noteList.value.find((item) => String(item.id) === noteId) ||

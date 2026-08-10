@@ -63,7 +63,7 @@ export async function updatePreference(patch: Record<string, any>): Promise<void
   applyPreferenceLocally(patch);
   if (patch.lang) {
     try {
-      setLocale(patch.lang); // 即时切换 i18n(legacy:false,响应式生效),无需刷新页面
+      await setLocale(patch.lang); // 英文词典按需加载完成后再切换，避免短暂显示翻译 key
       document.documentElement.lang = patch.lang; // 同步 <html lang> 供 a11y / CSS :lang 使用
     } catch {
       /* i18n 尚未就绪时忽略 */
@@ -79,7 +79,7 @@ export async function updatePreference(patch: Record<string, any>): Promise<void
     applyPreferenceLocally(previous);
     if (patch.lang && previous.lang) {
       try {
-        setLocale(previous.lang as 'zh-CN' | 'en-US');
+        await setLocale(previous.lang as 'zh-CN' | 'en-US');
         document.documentElement.lang = previous.lang;
       } catch {
         /* ignore */

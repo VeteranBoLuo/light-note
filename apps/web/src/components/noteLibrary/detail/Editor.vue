@@ -609,24 +609,6 @@
     type PropType,
   } from 'vue';
   import { useRouter } from 'vue-router';
-  import TinyMceEditor from '@tinymce/tinymce-vue';
-  import 'tinymce/tinymce';
-  import 'tinymce/icons/default';
-  import 'tinymce/themes/silver';
-  import 'tinymce/models/dom';
-  import 'tinymce/plugins/autolink';
-  import 'tinymce/plugins/autoresize';
-  import 'tinymce/plugins/code';
-  import 'tinymce/plugins/emoticons';
-  import 'tinymce/plugins/image';
-  import 'tinymce/plugins/link';
-  import 'tinymce/plugins/lists';
-  import 'tinymce/plugins/table';
-  import 'tinymce/plugins/codesample';
-  import 'tinymce/plugins/searchreplace';
-  import 'tinymce/plugins/wordcount';
-  import 'tinymce/plugins/quickbars';
-  import 'tinymce/skins/ui/oxide-dark/skin.min.css';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import i18n from '@/i18n';
@@ -708,6 +690,7 @@
     type ResourceRef,
   } from '@/utils/noteResourceRefs';
   import type { ResolvedResourceReference } from '@/api/noteReferences';
+  import NoteDetailLoadingState from './NoteDetailLoadingState.vue';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     buildNoteReturnFocusLocation,
@@ -744,7 +727,14 @@
     type TextGradientAngle,
   } from '@/utils/richTextEffects';
 
-  // 富文本笔记不需要下载 CodeMirror；仅在真正进入 Markdown 编辑区时加载。
+  // 两套重型编辑引擎按笔记类型分包，Markdown 不再下载 TinyMCE，富文本也不下载 CodeMirror。
+  const loadTinyMceRuntime = () => import('./TinyMceEditorRuntime.vue');
+  const TinyMceEditor = defineAsyncComponent({
+    loader: loadTinyMceRuntime,
+    loadingComponent: NoteDetailLoadingState,
+    delay: 0,
+    suspensible: false,
+  });
   const MarkdownCodeMirror = defineAsyncComponent(() => import('./MarkdownCodeMirror.vue'));
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
@@ -824,6 +814,8 @@
       default: () => [],
     },
   });
+
+  if (props.type === 'html') void loadTinyMceRuntime();
 
   const emits = defineEmits([
     'update:modelValue',

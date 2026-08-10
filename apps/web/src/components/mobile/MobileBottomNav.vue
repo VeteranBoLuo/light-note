@@ -5,12 +5,15 @@
       :key="item.key"
       class="mobile-bottom-nav__item"
       :class="{
-        'mobile-bottom-nav__item--active': isItemActive(item.key),
+        'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
+        'mobile-bottom-nav__item--pending': pendingKey === item.key,
         'mobile-bottom-nav__item--ai': item.key === 'ai',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
       :aria-label="item.key === 'ai' && aiStatusText ? aiAccessibleLabel : undefined"
-      :aria-busy="item.key === 'ai' && aiEdgeStatus === 'generating' ? 'true' : undefined"
+      :aria-busy="pendingKey === item.key || (item.key === 'ai' && aiEdgeStatus === 'generating') ? 'true' : undefined"
+      @pointerdown="prefetchItem(item)"
+      @focus="prefetchItem(item)"
       @click="activate(item)"
       v-click-log="{ module: '移动端导航', operation: `打开${t(item.labelKey)}` }"
     >
@@ -51,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -67,6 +70,7 @@
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { inboxStore, useAiAssistantStore, useUserStore } from '@/store';
   import { storeToRefs } from 'pinia';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
 
   const route = useRoute();
   const router = useRouter();
@@ -78,6 +82,7 @@
   const { saveResourceScroll, scrollCurrentResourceToTop } = useMobileNavigationState();
   const communityUnread = useCommunityChatUnread();
   const { totalUnread: communityUnreadTotal } = communityUnread;
+  const pendingKey = ref<MobileShellSection | null>(null);
 
   // 屏幕阅读器听到的是完整语义，而不是一个孤立数字
   const todoAttentionLabel = computed(() =>
@@ -112,21 +117,42 @@
     return route.meta.mobileShell === key;
   }
 
-  function activate(item: MobileBottomNavigationItem) {
+  function getItemTarget(item: MobileBottomNavigationItem) {
+    return item.key === 'resources'
+      ? getMobileResourceEntryPath()
+      : item.key === 'todo'
+        ? { path: '/inbox', query: { tab: 'todo' } }
+        : item.path;
+  }
+
+  function prefetchItem(item: MobileBottomNavigationItem) {
+    const target = getItemTarget(item);
+    if (!target) return;
+    // 手指按下到 click 之间就启动目标路由分包下载；不做全量后台预热，避免弱网下与当前页面抢带宽。
+    void prefetchResolvedRoute(router, target).catch(() => {
+      // 预取失败不阻断导航，正式跳转仍走 Router 的统一错误恢复。
+    });
+  }
+
+  async function activate(item: MobileBottomNavigationItem) {
+    if (pendingKey.value === item.key) return;
     if (item.key === 'resources' && route.meta.mobileShell === 'resources') {
       scrollCurrentResourceToTop();
       return;
     }
     saveResourceScroll(route.meta.mobileShell === 'resources' ? getMobileResourcePathFromRoute() : null);
 
-    const target =
-      item.key === 'resources'
-        ? getMobileResourceEntryPath()
-        : item.key === 'todo'
-          ? { path: '/inbox', query: { tab: 'todo' } }
-          : item.path;
+    const target = getItemTarget(item);
     // 一级导航切换不应堆叠浏览历史；否则 Android 返回手势会在底栏页面间倒退。
-    if (target && router.resolve(target).fullPath !== route.fullPath) router.replace(target);
+    if (!target || router.resolve(target).fullPath === route.fullPath) return;
+    pendingKey.value = item.key;
+    try {
+      await router.replace(target);
+    } catch {
+      // Router 会统一处理分包加载失败与刷新自愈；这里消费事件处理器 Promise，避免控制台出现未处理拒绝。
+    } finally {
+      if (pendingKey.value === item.key) pendingKey.value = null;
+    }
   }
 
   function getMobileResourcePathFromRoute() {
@@ -180,6 +206,32 @@
   .mobile-bottom-nav__item--active {
     color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
+  }
+
+  .mobile-bottom-nav__item--pending .mobile-bottom-nav__icon {
+    transform: translateY(-1px);
+  }
+
+  .mobile-bottom-nav__item--pending .mobile-bottom-nav__label::after {
+    content: '';
+    width: 4px;
+    height: 4px;
+    margin-left: 3px;
+    display: inline-block;
+    border-radius: 50%;
+    background: currentColor;
+    animation: mobile-navigation-pending 0.9s ease-in-out infinite;
+    vertical-align: 2px;
+  }
+
+  @keyframes mobile-navigation-pending {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 
   .mobile-bottom-nav__item--ai .mobile-bottom-nav__icon {
@@ -281,6 +333,11 @@
 
     .mobile-bottom-nav__ai-status.is-generating {
       animation: none;
+    }
+
+    .mobile-bottom-nav__item--pending .mobile-bottom-nav__label::after {
+      animation: none;
+      opacity: 1;
     }
   }
 </style>

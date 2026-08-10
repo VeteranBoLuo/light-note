@@ -68,6 +68,8 @@ describe('笔记置顶 handler', () => {
     await vi.waitFor(() => expect(res.send).toHaveBeenCalled());
 
     const [sql, params] = poolQuery.mock.calls[0];
+    expect(sql).not.toContain('SELECT n.*');
+    expect(sql).toContain("LEFT(COALESCE(n.content, ''), 4000) AS content");
     expect(sql).toContain('ORDER BY n.is_top DESC, n.sort, n.update_time DESC');
     expect(params).toEqual(['u1']);
     expect(attachPendingStatus).toHaveBeenCalled();

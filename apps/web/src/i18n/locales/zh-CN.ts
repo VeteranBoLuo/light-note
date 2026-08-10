@@ -2508,6 +2508,12 @@ export default {
     },
   },
   noteDetail: {
+    loadingTitle: '正在打开笔记',
+    loadingDescription: '正在获取正文并准备编辑器，弱网下可能需要一点时间。',
+    loadFailedTitle: '暂时无法打开这篇笔记',
+    loadFailedDescription: '网络连接不稳定或服务暂时不可用，请检查网络后重试。',
+    retryLoad: '重新加载',
+    editorPreparing: '正文已显示，正在准备编辑器…',
     catalogTitle: '笔记目录',
     catalogOpen: '打开笔记目录',
     catalogClose: '关闭笔记目录',
@@ -5778,6 +5784,8 @@ export default {
     tooFrequent: '请求过于频繁，请稍后再试',
     serverBusy: '服务器开小差了，请稍后重试',
     networkUnstable: '网络连接不稳定，请检查网络后重试',
+    offline: '当前网络不可用，请联网后重试',
+    requestTimeout: '网络响应超时，请检查网络后重试',
   },
   guest: {
     previewTitle: '注册后即可动手',

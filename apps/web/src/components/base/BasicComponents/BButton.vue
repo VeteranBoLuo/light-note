@@ -86,6 +86,8 @@
     padding: 0 15px;
     font-size: 14px;
     font-family: inherit;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
 
     &:focus-visible {
       outline: 2px solid var(--primary-color, #615ced);
@@ -154,6 +156,12 @@
   .b_btn.disabled {
     opacity: 0.45;
     cursor: not-allowed;
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .b_btn:not(.disabled):not(.loading):active {
+      opacity: 0.72;
+    }
   }
 
   .btn-spinner {

@@ -4,6 +4,7 @@ import router from '@/router';
 import useUserStore from '@/store/useUser';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
+import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
 
 export { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 
@@ -84,6 +85,9 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
   }
 
   function openDirectoryPage(noteId: string) {
+    // 从卡片/目录点击的这一刻就请求正文。Vue Router 同时下载详情页与编辑器 chunk，
+    // 弱网下不再先等几百 KB 的脚本到齐，才开始发正文请求。
+    prefetchNoteDetail(user, noteId);
     return router.push({
       path: `/noteLibrary/${encodeURIComponent(noteId)}`,
       query: { from: router.currentRoute.value.fullPath },

@@ -3,7 +3,10 @@ import { createI18n } from 'vue-i18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import zhCN from '@/i18n/locales/zh-CN';
 
-vi.mock('@/store', () => ({ bookmarkStore: () => ({ isMobile: false }) }));
+vi.mock('@/store', () => ({
+  bookmarkStore: () => ({ isMobile: false }),
+  useUserStore: () => ({ id: 'test-user', role: 'user', visitorWorkspace: false, adminContext: null }),
+}));
 vi.mock('@/router', () => ({ default: { push: vi.fn() } }));
 vi.mock('@/composables/useNoteSummary', () => ({ useNoteSummary: () => computed(() => '摘要') }));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({

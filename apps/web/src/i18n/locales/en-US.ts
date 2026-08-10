@@ -2589,6 +2589,12 @@ export default {
     },
   },
   noteDetail: {
+    loadingTitle: 'Opening note',
+    loadingDescription: 'Fetching the content and preparing the editor. This may take a moment on a slow connection.',
+    loadFailedTitle: 'This note could not be opened',
+    loadFailedDescription: 'The connection is unstable or the service is temporarily unavailable. Check your network and try again.',
+    retryLoad: 'Try again',
+    editorPreparing: 'Content is ready. Preparing the editor…',
     catalogTitle: 'Note outline',
     catalogOpen: 'Open note outline',
     catalogClose: 'Close note outline',
@@ -5951,6 +5957,8 @@ export default {
     tooFrequent: 'Too many requests. Please try again later.',
     serverBusy: 'The server hit a snag. Please try again later.',
     networkUnstable: 'Unstable network. Please check your connection and try again.',
+    offline: 'You are offline. Reconnect and try again.',
+    requestTimeout: 'The request timed out. Check your connection and try again.',
   },
   guest: {
     previewTitle: 'Sign up to start',

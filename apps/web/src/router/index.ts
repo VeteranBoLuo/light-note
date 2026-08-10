@@ -209,6 +209,22 @@ router.beforeEach((to, from) => {
   if (from.matched.length > 0 && to.fullPath !== from.fullPath) {
     routeNavigationLoadingState.value = true;
   }
+
+  // 详情页脚本仍在下载时就并行请求正文。这里覆盖通知、搜索、图谱等所有直达入口；
+  // 笔记库卡片自身也会预取，但同一身份/笔记 ID 会命中同一个在途 Promise，不会重复请求。
+  if (to.name === 'noteDetail') {
+    const rawId = to.params.id;
+    const noteId = Array.isArray(rawId) ? rawId.join('/') : String(rawId || '');
+    if (noteId && noteId !== 'add') {
+      void Promise.all([import('@/api/noteDetailPrefetch'), import('@/store/useUser')])
+        .then(([prefetchModule, userModule]) => {
+          prefetchModule.prefetchNoteDetail(userModule.default(), noteId);
+        })
+        .catch(() => {
+          // 预取是加速层；失败后详情页仍会走自身可重试请求。
+        });
+    }
+  }
 });
 export function getPendingNavigationTarget() {
   return pendingNavigationTarget || window.location.pathname + window.location.search;
