@@ -350,6 +350,7 @@
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
+  import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -686,6 +687,7 @@
 
   async function loadDerivedPreview(retryDerived: boolean) {
     const expectedFileId = activePreviewFileId;
+    const pollingStartedAt = Date.now();
     const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
     let state: FilePreviewState;
     if (shareAccess) {
@@ -703,7 +705,7 @@
       }
     }
 
-    for (let pollCount = 0; pollCount < 180; pollCount += 1) {
+    for (let pollCount = 0; ; pollCount += 1) {
       if (expectedFileId !== activePreviewFileId || !props.visible) return;
       if (state.status === 'ready') {
         derivedReady.value = true;
@@ -721,13 +723,15 @@
         Object.assign(failure, { code: state.errorCode });
         throw failure;
       }
-      await waitForPreviewPoll(state.pollAfterMs || 1500);
+      if (hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt)) {
+        throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
+      }
+      await waitForPreviewPoll(getFilePreviewPollDelay(pollCount, state.pollAfterMs));
       if (expectedFileId !== activePreviewFileId || !props.visible) return;
       state = shareAccess
         ? await resolveSharedFilePreview(sharePreviewTicket.value)
         : await resolveOwnedFilePreview(expectedFileId);
     }
-    throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
   }
 
   function releaseHtmlBlobUrl() {

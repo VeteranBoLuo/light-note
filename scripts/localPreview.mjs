@@ -175,6 +175,13 @@ async function waitForPort(port, child, serviceName, timeout = 60_000) {
   );
 }
 
+async function ensureChildStable(child, serviceName, milliseconds = 800) {
+  await sleep(milliseconds);
+  if (child.exitCode !== null || child.signalCode !== null) {
+    throw new Error(`${serviceName}启动失败，请查看上方日志。`);
+  }
+}
+
 async function stopChild(child) {
   if (child.exitCode !== null || child.signalCode !== null) return;
 
@@ -200,12 +207,21 @@ async function main() {
   await ensurePortAvailable(previewPort, "前端预览");
 
   console.log(
-    "\n[本地预览] 1/2 启动本机后端代码（依赖使用 apps/server/.env 的现有配置）…",
+    "\n[本地预览] 1/3 启动本机后端代码（依赖使用 apps/server/.env 的现有配置）…",
   );
   const backend = runPnpm("本机后端", ["--filter", "server", "run", "start"]);
   await waitForPort(backendPort, backend, "本机后端");
 
-  console.log("\n[本地预览] 2/2 构建生产前端产物，并启动本地预览页…");
+  console.log("\n[本地预览] 2/3 启动文档与文件预览 Worker…");
+  const worker = runPnpm("文档与文件预览 Worker", [
+    "--filter",
+    "server",
+    "run",
+    "worker:documents",
+  ]);
+  await ensureChildStable(worker, "文档与文件预览 Worker");
+
+  console.log("\n[本地预览] 3/3 构建生产前端产物，并启动本地预览页…");
   const preview = runPnpm("前端预览", [
     "--filter",
     "web",
@@ -215,7 +231,9 @@ async function main() {
   await waitForPort(previewPort, preview, "前端预览");
 
   console.log(`\n✅ 本地上线预览已就绪：http://127.0.0.1:${previewPort}`);
-  console.log("   前端与后端均为本机当前代码；按 Ctrl+C 会同时停止它们。\n");
+  console.log(
+    "   前端、后端与异步文件处理 Worker 均为本机当前代码；按 Ctrl+C 会同时停止它们。\n",
+  );
 }
 
 process.on("SIGINT", () => void stopAll(0));
