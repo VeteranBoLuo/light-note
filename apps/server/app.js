@@ -22,6 +22,7 @@ import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
 import { earlyAnonymousRateLimiter, globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
+import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
 import { ensureAiEvaluationSchema } from './util/aiEvaluationSchema.js';
 import { ensureNoteTreeSchema } from './util/noteTreeSchema.js';
 import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
@@ -111,6 +112,7 @@ ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );
 ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureFilePreviewSchema().catch((err) => console.error('文件预览数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureAiEvaluationSchema().catch((err) => console.error('AI 评测数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureCommunityChatSchema()
   .then(() => {

@@ -4,6 +4,17 @@ import FilePreview from './FilePreview.vue';
 import { HTML_PREVIEW_REFERRER_POLICY, HTML_PREVIEW_SANDBOX } from '@/utils/htmlPreview';
 import { MOBILE_OVERLAY_HISTORY_STATE_KEY, resetMobileOverlayHistoryForTests } from '@/utils/mobileOverlayHistory';
 
+const filePreviewApiMocks = vi.hoisted(() => ({
+  resolveOwnedFilePreview: vi.fn(),
+  prepareOwnedFilePreview: vi.fn(),
+  prepareSharedFilePreview: vi.fn(),
+  resolveSharedFilePreview: vi.fn(),
+}));
+const commonHttpMocks = vi.hoisted(() => ({ getFileShareDownload: vi.fn() }));
+
+vi.mock('@/api/filePreviewApi.ts', () => filePreviewApiMocks);
+vi.mock('@/http/common.ts', () => commonHttpMocks);
+
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
 }));
@@ -35,6 +46,13 @@ vi.mock('@/components/cloudSpace/PdfPreview.vue', () => ({
   },
 }));
 
+vi.mock('@/components/cloudSpace/ArchivePreview.vue', () => ({
+  default: {
+    props: ['fileId', 'previewTicket'],
+    template: '<div class="archive-preview-stub" :data-file-id="fileId" :data-ticket="previewTicket" />',
+  },
+}));
+
 vi.mock('@/api/commonApi.ts', () => ({
   recordOperation: vi.fn(),
 }));
@@ -52,6 +70,8 @@ const createObjectUrl = vi.fn(() => 'blob:https://boluo66.top/html-preview');
 const revokeObjectUrl = vi.fn();
 
 beforeEach(() => {
+  Object.values(filePreviewApiMocks).forEach((mock) => mock.mockReset());
+  commonHttpMocks.getFileShareDownload.mockReset();
   resetMobileOverlayHistoryForTests();
   window.history.replaceState({}, '', '/');
   vi.spyOn(window.history, 'back').mockImplementation(() => {});
@@ -192,11 +212,11 @@ async function mountUnsupportedPreview() {
           visible: true,
           showNext: true,
           fileInfo: {
-            id: 'archive-1',
-            fileName: 'archive.zip',
-            fileType: 'application/zip',
-            fileUrl: 'https://files.example/archive.zip?signature=test',
-            category: 'compress',
+            id: 'binary-1',
+            fileName: 'program.bin',
+            fileType: 'application/octet-stream',
+            fileUrl: 'https://files.example/program.bin?signature=test',
+            category: 'other',
           },
         });
     },
@@ -347,6 +367,142 @@ describe('FilePreview PDF preview', () => {
     expect(preview?.dataset.src).toBe(fileUrl);
     expect(preview?.dataset.fileName).toBe('preview.pdf');
     expect(document.body.querySelector('iframe.preview-iframe')).toBeNull();
+  });
+});
+
+describe('FilePreview derived previews', () => {
+  it('prepares a legacy Office document and reuses the local PDF renderer', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({
+      fileId: 'legacy-1',
+      strategy: 'converted_pdf',
+      previewType: 'converted-pdf',
+      formatId: 'legacy-word',
+      status: 'missing',
+      errorCode: '',
+      pollAfterMs: 0,
+    });
+    filePreviewApiMocks.prepareOwnedFilePreview.mockResolvedValue({
+      fileId: 'legacy-1',
+      strategy: 'converted_pdf',
+      previewType: 'converted-pdf',
+      formatId: 'legacy-word',
+      status: 'ready',
+      errorCode: '',
+      pollAfterMs: 0,
+      previewUrl: 'https://files.example/derived.pdf?signature=test',
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            fileInfo: {
+              id: 'legacy-1',
+              fileName: 'legacy.doc',
+              fileType: 'application/msword',
+              fileUrl: 'https://files.example/legacy.doc?signature=test',
+              category: 'word',
+            },
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() =>
+      expect(document.body.querySelector<HTMLElement>('.pdf-preview-stub')?.dataset.src).toBe(
+        'https://files.example/derived.pdf?signature=test',
+      ),
+    );
+    expect(filePreviewApiMocks.prepareOwnedFilePreview).toHaveBeenCalledWith('legacy-1', false);
+  });
+
+  it('opens an archive directory viewer instead of extracting the archive', async () => {
+    filePreviewApiMocks.resolveOwnedFilePreview.mockResolvedValue({
+      fileId: 'archive-1',
+      strategy: 'archive_manifest',
+      previewType: 'archive',
+      formatId: 'archive',
+      status: 'ready',
+      errorCode: '',
+      pollAfterMs: 0,
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            fileInfo: {
+              id: 'archive-1',
+              fileName: 'archive.zip',
+              fileType: 'application/zip',
+              fileUrl: 'https://files.example/archive.zip?signature=test',
+              category: 'compress',
+            },
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() => expect(document.body.querySelector('.archive-preview-stub')).not.toBeNull());
+    expect(document.body.querySelector('.unsupported-preview')).toBeNull();
+  });
+
+  it('authorizes a shared archive once and passes its short-lived ticket to the directory viewer', async () => {
+    filePreviewApiMocks.prepareSharedFilePreview.mockResolvedValue({
+      fileId: 'archive-shared',
+      strategy: 'archive_manifest',
+      previewType: 'archive',
+      formatId: 'archive',
+      status: 'ready',
+      errorCode: '',
+      pollAfterMs: 0,
+      previewTicket: 'preview-ticket-value',
+      sourceDownloadUrl: 'https://files.example/shared.7z?signature=test',
+    });
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () =>
+          h(FilePreview, {
+            visible: true,
+            previewAccess: { kind: 'share', token: 'share-token-value', accessCode: 'A123' },
+            fileInfo: {
+              id: 'archive-shared',
+              fileName: 'shared.7z',
+              fileType: 'application/x-7z-compressed',
+              category: 'compress',
+            },
+          });
+      },
+    });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await vi.waitFor(() =>
+      expect(document.body.querySelector<HTMLElement>('.archive-preview-stub')?.dataset.ticket).toBe(
+        'preview-ticket-value',
+      ),
+    );
+    expect(filePreviewApiMocks.prepareSharedFilePreview).toHaveBeenCalledWith('share-token-value', 'A123', false);
+    expect(filePreviewApiMocks.resolveOwnedFilePreview).not.toHaveBeenCalled();
+    expect(document.body.querySelector('.preview-controls')).not.toBeNull();
+    expect(document.body.querySelector('.file-preview-backlinks')).toBeNull();
   });
 });
 

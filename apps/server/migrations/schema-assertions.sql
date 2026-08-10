@@ -162,6 +162,8 @@ SELECT '[13] missing_core_table' AS check_name, expected.t AS detail FROM (
   SELECT 'note_versions' t UNION ALL
   SELECT 'file_shares' UNION ALL
   SELECT 'file_share_events'
+  UNION ALL SELECT 'file_preview_artifacts'
+  UNION ALL SELECT 'file_preview_jobs'
 ) expected
 LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
@@ -180,6 +182,13 @@ SELECT '[14] missing_core_column' AS check_name, expected.n AS detail FROM (
   SELECT 'file_shares', 'expires_at', 'file_shares.expires_at' UNION ALL
   SELECT 'file_shares', 'status', 'file_shares.status' UNION ALL
   SELECT 'file_share_events', 'visitor_hash', 'file_share_events.visitor_hash' UNION ALL
+  SELECT 'file_preview_artifacts', 'strategy', 'file_preview_artifacts.strategy' UNION ALL
+  SELECT 'file_preview_artifacts', 'source_etag', 'file_preview_artifacts.source_etag' UNION ALL
+  SELECT 'file_preview_artifacts', 'status', 'file_preview_artifacts.status' UNION ALL
+  SELECT 'file_preview_artifacts', 'manifest_json', 'file_preview_artifacts.manifest_json' UNION ALL
+  SELECT 'file_preview_jobs', 'artifact_id', 'file_preview_jobs.artifact_id' UNION ALL
+  SELECT 'file_preview_jobs', 'locked_at', 'file_preview_jobs.locked_at' UNION ALL
+  SELECT 'file_preview_jobs', 'output_object_key', 'file_preview_jobs.output_object_key' UNION ALL
   SELECT 'ai_conversations', 'is_pinned', 'ai_conversations.is_pinned' UNION ALL
   SELECT 'todo_items', 'sort_order', 'todo_items.sort_order' UNION ALL
   SELECT 'todo_items', 'series_id', 'todo_items.series_id' UNION ALL
@@ -201,6 +210,10 @@ SELECT '[15] missing_core_index' AS check_name, CONCAT(expected.tn, '.', expecte
   SELECT 'file_shares', 'idx_file_shares_owner_status' UNION ALL
   SELECT 'file_shares', 'idx_file_shares_file_status' UNION ALL
   SELECT 'file_share_events', 'idx_file_share_events_retention' UNION ALL
+  SELECT 'file_preview_artifacts', 'uk_file_preview_artifact' UNION ALL
+  SELECT 'file_preview_artifacts', 'idx_file_preview_owner_status' UNION ALL
+  SELECT 'file_preview_jobs', 'uk_file_preview_job_artifact' UNION ALL
+  SELECT 'file_preview_jobs', 'idx_file_preview_job_queue' UNION ALL
   SELECT 'ai_conversations', 'idx_ai_conversation_sidebar' UNION ALL
   SELECT 'todo_items', 'idx_todo_custom_order' UNION ALL
   SELECT 'todo_items', 'uk_todo_series_instance'

@@ -23,7 +23,8 @@ import {
 } from '../util/fileCategory.js';
 import * as fileHandle from '../router_handle/fileHandle.js';
 import * as fileShareHandle from '../router_handle/fileShareHandle.js';
-import { ensureNotVisitor } from '../util/auth.js';
+import * as filePreviewHandle from '../router_handle/filePreviewHandle.js';
+import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import { recordFirstOwnResource } from '../util/conversion.js';
 import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../util/resourceInbox.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
@@ -41,6 +42,20 @@ const fileShareAccessLimiter = rateLimit({
         { errorCode: 'SHARE_RATE_LIMITED' },
         429,
         L(req, '尝试次数过多，请稍后再试', 'Too many attempts. Try again later'),
+      ),
+    ),
+});
+const fileSharePreviewLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 240,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.send(
+      resultData(
+        { errorCode: 'SHARE_PREVIEW_RATE_LIMITED' },
+        429,
+        L(req, '预览请求过于频繁，请稍后重试', 'Too many preview requests. Try again later'),
       ),
     ),
 });
@@ -532,6 +547,12 @@ router.post('/queryTotalFileSize', async (req, res) => {
 
 router.post('/updateFile', fileHandle.updateFile);
 router.post('/getFileInfo', fileHandle.getFileInfo);
+router.post('/preview/resolve', filePreviewHandle.resolveOwnedFilePreview);
+router.post('/preview/prepare', (req, res) => {
+  if (!ensureUserOrAdminPolicy(req, res, ['content_write'])) return;
+  return filePreviewHandle.prepareOwnedFilePreview(req, res);
+});
+router.post('/preview/archive', filePreviewHandle.listOwnedArchivePreview);
 router.post('/share/create', (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   return fileShareHandle.createFileShare(req, res);
@@ -550,6 +571,9 @@ router.post('/share/rotate', (req, res) => {
 });
 router.post('/share/resolve', fileShareAccessLimiter, fileShareHandle.resolveFileShare);
 router.post('/share/download', fileShareAccessLimiter, fileShareHandle.downloadFileShare);
+router.post('/share/preview/prepare', fileShareAccessLimiter, fileShareHandle.prepareFileSharePreview);
+router.post('/share/preview/resolve', fileSharePreviewLimiter, fileShareHandle.resolveFileSharePreview);
+router.post('/share/preview/archive', fileSharePreviewLimiter, fileShareHandle.listFileShareArchivePreview);
 
 router.post('/queryFolder', fileHandle.queryFolder);
 router.post('/addFolder', fileHandle.addFolder);

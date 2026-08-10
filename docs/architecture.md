@@ -235,6 +235,8 @@ src/
 | `note`                                       | 笔记                             | UUID             |
 | `files`                                      | 云空间文件                       | 自增             |
 | `folders`                                    | 云空间文件夹                     | 自增             |
+| `file_preview_artifacts`                     | 云文件派生预览及压缩包目录缓存   | 自增             |
+| `file_preview_jobs`                          | 云文件异步预览任务               | 自增             |
 | `tag`                                        | 标签                             | UUID             |
 | `resource_tag_relations`                     | 资源-标签关联                    | 无独立 id        |
 | `onboarding_seed_resources`                  | 注册示例资源来源标记             | 复合主键         |
@@ -321,7 +323,11 @@ src/
 
 书签、笔记库和云空间主列表采用服务端分页：前端首屏固定请求 48 条，接近滚动容器底部时增量合并下一页，接口同时返回当前筛选条件下的 `total / page / pageSize / hasMore`。关键词、标签、目录/文件夹、无标签和文件分类必须先在 SQL 中完成过滤与总数统计，再应用 `LIMIT / OFFSET`；云文件只为当前页生成签名地址。书签通过全局同置顶分组锚点排序；笔记在页面树模式按当前 `parentId + isTop` 兄弟组锚点排序，旧调用未传树模式时继续兼容平铺读取。目录内关键词搜索由服务端从 owner 树快照扩展后代 ID，并返回面包屑路径与子页面数量。已加载前缀可以拖拽、未加载尾部不会被局部编号覆盖；拖到当前已加载末尾只表示插入该锚点之后，只有加载到真实末尾后才能拖到全局最后。标签编辑、标签详情和管理页等尚未迁移的旧调用显式使用不分页模式并保持原响应结构，后续迁移前不得依赖分页默认值。
 
-云空间文件预览统一由 `FilePreview.vue` 承载，桌面与移动端的上一个、下一个和下载操作固定使用同一套底部控制栏。视频默认暂停并由用户明确开始播放，音视频在进入播放器前通过 `canPlayType()` 做浏览器能力判断，真实解码失败仍回到可下载的稳定错误态；卡片视频使用完整比例缩略图、播放标识和可用时长。PDF 必须继续由前端主动拉取签名地址的字节数据并交给 `PdfPreview.vue` / PDF.js 渲染，禁止改回 `iframe`、`embed` 或直接导航到对象存储地址，避免浏览器把“查看”处理成下载。旧版 `.doc/.xls/.ppt` 仍不进入 OOXML 渲染器，新增预览类型时必须同时更新前后端分类口径和兼容测试。
+云空间文件预览统一由 `FilePreview.vue` 承载，桌面与移动端的上一个、下一个和下载操作固定使用同一套底部控制栏。视频默认暂停并由用户明确开始播放，音视频在进入播放器前通过 `canPlayType()` 做浏览器能力判断，真实解码失败仍回到可下载的稳定错误态；卡片视频使用完整比例缩略图、播放标识和可用时长。PDF 必须继续由前端主动拉取签名地址的字节数据并交给 `PdfPreview.vue` / PDF.js 渲染，禁止改回 `iframe`、`embed` 或直接导航到对象存储地址，避免浏览器把“查看”处理成下载。
+
+新增格式由 `@lightnote/shared` 的统一注册表同时驱动前后端分类：ZIP/RAR/RAR5/7Z/TAR 及 GZ/BZ2/XZ 系列压缩包只在服务端调用 7-Zip 生成受限目录清单，前端支持目录导航、搜索和分页，不解压或读取包内正文；`.doc/.xls/.ppt/.rtf/.odt/.ods/.odp` 由独立 Worker 调用 LibreOffice 分别按 Writer、Calc、Impress 过滤器转换为私有 PDF，再沿用 `PdfPreview.vue`；TSV、JSONL/NDJSON、SRT、VTT、ICS、VCF、DIFF、PATCH 直接走已有文本预览。派生结果以源对象 ETag、大小、格式和策略版本作为缓存指纹，源文件变化后重新排队。分享页首次准备预览仍执行分享密码、有效期和次数校验并计一次下载授权，后续轮询使用短时随机票据，不重复计数。
+
+`file_preview_artifacts` 保存任务状态、压缩包目录或派生 PDF 私有对象键，`file_preview_jobs` 保存单文件幂等任务和数据库租约；两类重处理任务与 AI 文档解析共用单并发 `documentWorker.js` 并交替取队列，避免 LibreOffice、7-Zip 和 OCR 同时抢占资源。压缩包设文件大小、条目数、路径长度、清单大小、超时和可疑膨胀提示，异常路径不进入清单；Office 转换使用随机私有临时目录、独立 LibreOffice profile、无 shell 子进程和输出大小上限。永久删除文件后，保留的派生记录由 Worker 定期识别孤儿记录并删除对应 OBS 对象；长期未访问的完成/失败记录也按保留期回收。
 
 资源中心主结果流通过 `/search/global` 的 `ordered` 分页模式，按“书签 → 笔记 → 文件 → 标签”的固定分组顺序连续取数，每批合计最多 40 条；当前类型不足一批时由后续类型补齐，并以 `{ type, offset }` 游标从准确位置续取。首批返回经过关键词、资源类型、标签、无标签、日期和排序条件后的 `typeTotals`、`hasMoreByType` 与标签筛选选项，追加批次不重复执行这些统计查询；页面只为已经加载的类型显示一次分组标题。全局快捷搜索、提及选择器等小型预览调用继续使用按类型限量的兼容模式。前端不再用 `limit=0` 拉取书签、笔记、文件和标签全量后本地筛选；请求版本号负责阻止旧关键词或旧筛选响应覆盖新结果。
 
@@ -442,7 +448,7 @@ src/
 - Root 的签到排行由 `get_checkin_ranking` 直接读取有效 `growth_events` 签到账本，支持累计/指定周期签到天数、历史最长连签和当前未断连签；默认排除逻辑删除与 root/test 内部账号，补签按产品规则计入，并返回最近签到日和补签审计摘要。当前连签不能直接按 `user_growth.streak` 快照排序，必须结合最近签到日判定是否已断签
 - PDF 优先读取原生文字层；没有文字层时由文档 Worker 使用本机 Poppler 逐页渲染，再调用本机 Tesseract（默认 `chi_sim+eng`）OCR。图片附件直接进入相同的本地 OCR 流程，不调用第三方 OCR API
 - OCR 默认最多处理 20 页图片型 PDF、单张图片最多 2400 万像素，并对渲染、单页识别和整份文档设置独立超时；所有临时文件使用随机私有目录并在成功或失败后清理
-- 文档正文由独立 `documentWorker.js` 从 OBS 拉取并解析，主 HTTP 进程只负责签名、鉴权、任务创建、状态查询和片段检索
+- 文档正文与云文件派生预览由独立 `documentWorker.js` 从 OBS 拉取并处理，主 HTTP 进程只负责签名、鉴权、任务创建和状态/结果查询；Worker 在 AI 文档任务与文件预览任务之间公平轮转并保持单并发
 - 临时文件使用 `ai-temp/{userId}/{sourceId}/` 独立前缀并在 24 小时后清理；云文件永久删除、覆盖或重命名时同步使解析缓存失效
 - Agent 只接收服务端按问题检索出的受控片段，文件内容明确视为不可信资料；来源卡片由服务端生成真实定位
 - 笔记正文进入 Agent 前由 `util/noteSemantic.js` 统一解析 HTML/Markdown，保留标题、段落、普通列表、复选任务、表格、引用、代码、链接和图片引用；`[x]`/`[ ]` 状态直接以正文中的复选框为准，普通列表不计入任务统计
@@ -633,9 +639,9 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - **建表 schema 是双轨,两条并存,排查时都要看**：
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
-  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
+  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
-- **Schema 基线门禁**：`note.revision`、`note_versions.source_revision/reason`、旧版兼容列 `files.share_token` 以及独立分享表已由 `20260807_note_editor_safety.sql`、`20260730_file_share_lifecycle.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema`，关键表、列或索引缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
+- **Schema 基线门禁**：`note.revision`、`note_versions.source_revision/reason`、旧版兼容列 `files.share_token`、独立分享表和文件预览任务表已由 `20260807_note_editor_safety.sql`、`20260730_file_share_lifecycle.sql`、`20260808_file_preview_artifacts.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema` 与 `pnpm --filter server check:file-previews`，关键表、索引或已启用的 7-Zip/LibreOffice 运行时缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。
 
 ### 安全模块会自动封 IP —— 密集运维流量小心

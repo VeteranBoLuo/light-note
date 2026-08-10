@@ -624,11 +624,14 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 
 1. **前端：** 构建后将 `dist/` 上传到服务器（替换旧 `dist`）
 2. **后端：** 通过 pm2 启动 `app.js`，配置 `.env` 环境变量
-3. **AI 文档 Worker：** 通过 pm2 单独启动 `documentWorker.js`（进程名 `light-note-document-worker`）；本地开发可运行 `pnpm --filter server worker:documents`
+3. **AI 文档/文件预览 Worker：** 通过 pm2 单独启动 `documentWorker.js`（进程名 `light-note-document-worker`）；本地开发可运行 `pnpm --filter server worker:documents`。AI 文档解析与云文件派生预览交替取队列并保持单并发，避免 OCR、7-Zip 和 LibreOffice 同时抢占资源
 4. **书签图标 Worker：** 通过 pm2 单独启动 `bookmarkIconWorker.js`（进程名 `light-note-bookmark-icon-worker`）；本地开发可运行 `pnpm --filter server worker:bookmark-icons`。部署前执行 `pnpm --filter server check:bookmark-icons`，确认任务 Schema、favicon-api 和图标目录可用；favicon 服务地址统一由 `FAVICON_API_BASE_URL` 配置。图标落盘使用完整内容哈希共享文件，删除或替换图标必须在业务事务提交后通过 `cleanupBookmarkIconFiles()` 做活动引用检查，禁止直接拼接 `/www/wwwroot/images` 或在提交前删除文件。
 5. **本地 OCR 运行时：** 服务器需安装 Poppler、Tesseract、简体中文和英文语言包；Debian/Ubuntu 可安装 `poppler-utils tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng`，安装后执行 `pnpm --filter server check:ocr` 验证
-6. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档 Worker 与书签图标 Worker
+6. **文件预览运行时：** 服务器需安装提供 `7zz` 的 7-Zip 和 LibreOffice Writer/Calc/Impress；发布前先应用 `20260808_file_preview_artifacts.sql`，再执行 `pnpm --filter server check:file-previews`。自定义二进制可用 `FILE_PREVIEW_7Z_BIN`、`FILE_PREVIEW_OFFICE_BIN` 指定；`FILE_PREVIEW_ARCHIVE_ENABLED=false` 或 `FILE_PREVIEW_OFFICE_ENABLED=false` 可分别急停对应新能力。Worker 应使用无特权系统用户，7-Zip/LibreOffice 子进程只继承运行所需的白名单环境变量，不得把数据库、Redis 或对象存储凭据传给文件解析器；生产网络策略应只放行 Worker 必需的数据库、Redis 和 OBS 目标
+7. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker 与书签图标 Worker
 
 OCR 默认完全在服务器本机执行，不使用 OCR API。可通过 `AI_OCR_MAX_PAGES`、`AI_OCR_MAX_PIXELS`、`AI_OCR_PDF_DPI`、`AI_OCR_LANGUAGES`、`AI_OCR_PDFTOPPM_BIN` 和 `AI_OCR_TESSERACT_BIN` 调整限制或二进制路径；生产环境应保持文档 Worker 单并发，避免 OCR 抢占主 HTTP 进程资源。
+
+文件预览默认限制压缩包 100MB、10,000 个条目、45 秒清单生成，旧版 Office 50MB、120 秒转换，派生 PDF 80MB；可通过 `FILE_PREVIEW_ARCHIVE_MAX_BYTES`、`FILE_PREVIEW_ARCHIVE_MAX_ENTRIES`、`FILE_PREVIEW_ARCHIVE_TIMEOUT_MS`、`FILE_PREVIEW_OFFICE_MAX_BYTES`、`FILE_PREVIEW_OFFICE_TIMEOUT_MS`、`FILE_PREVIEW_PDF_MAX_BYTES` 调整。限制应按 Worker 单并发和服务器内存评估，禁止去掉超时、条目数或输出大小上限。
 
 ⚠️ **部署禁令：** 改完代码后不 build、不部署、只能建议是否提交，但是不能推送，除非用户明确说"部署"或"上线"。

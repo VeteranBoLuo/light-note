@@ -22,6 +22,13 @@ describe('file category filtering', () => {
     ['source.py', 'text'],
     ['component.vue', 'text'],
     ['config.toml', 'text'],
+    ['events.jsonl', 'text'],
+    ['captions.vtt', 'text'],
+    ['calendar.ics', 'text'],
+    ['document.odt', 'word'],
+    ['sheet.ods', 'excel'],
+    ['slides.odp', 'ppt'],
+    ['backup.tgz', 'compress'],
   ])('recognizes the new preview category for %s', (fileName, expectedCategory) => {
     expect(resolveFileCategory({ fileName, fileType: 'application/octet-stream' })).toBe(expectedCategory);
   });

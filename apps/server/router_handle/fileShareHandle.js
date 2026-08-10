@@ -1,3 +1,4 @@
+import { resolveFilePreviewFormat } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { L, generateUUID, resultData } from '../util/common.js';
 import { buildObjectKey, createDownloadSignedUrl } from '../util/obsClient.js';
@@ -13,6 +14,9 @@ import {
   verifyShareAccessCode,
 } from '../util/fileSharePolicy.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { listArchivePreview, prepareFilePreview, resolveFilePreview } from '../util/filePreview/service.js';
+import { issueFilePreviewShareTicket, readFilePreviewShareTicket } from '../util/filePreview/shareTicket.js';
+import { sendPreviewError } from './filePreviewHandle.js';
 
 const SHARE_SELECT = `
   SELECT
@@ -82,6 +86,7 @@ function mapOwnerShare(row) {
 
 function mapPublicFile(row) {
   return {
+    id: String(row.id),
     fileName: row.file_name,
     fileType: row.file_type,
     fileSize: Number(row.file_size || 0),
@@ -261,7 +266,7 @@ export async function rotateFileShare(req, res) {
   }
 }
 
-async function authorizePublicShare(req, res, { eventType, countColumn }) {
+async function authorizePublicShare(req, res, { eventType, countColumn, previewOnly = false }) {
   const token = String(req.body?.token || '').trim();
   if (token.length < 32 || token.length > 128) {
     publicError(req, res, 404, 'SHARE_NOT_FOUND', '分享链接无效', 'The share link is invalid');
@@ -309,6 +314,19 @@ async function authorizePublicShare(req, res, { eventType, countColumn }) {
       publicError(req, res, 403, 'SHARE_CODE_INVALID', '提取码错误', 'The access code is incorrect');
       return null;
     }
+    if (previewOnly && !resolveFilePreviewFormat({ fileName: row.file_name, fileType: row.file_type })) {
+      await appendShareEvent(connection, req, row.id, eventType, 'preview_unsupported');
+      await connection.commit();
+      publicError(
+        req,
+        res,
+        415,
+        'FILE_PREVIEW_UNSUPPORTED',
+        '此文件格式暂不支持在线预览',
+        'This file format cannot be previewed online',
+      );
+      return null;
+    }
     await connection.query(
       `UPDATE file_shares
        SET ${countColumn} = ${countColumn} + 1,
@@ -328,6 +346,54 @@ async function authorizePublicShare(req, res, { eventType, countColumn }) {
     return null;
   } finally {
     connection.release();
+  }
+}
+
+async function authorizePreviewTicket(req, res) {
+  let ticket;
+  try {
+    ticket = await readFilePreviewShareTicket(req.body?.previewTicket);
+  } catch (error) {
+    console.error('[file-share] preview ticket read failed code=%s', stableAgentErrorCode(error));
+    publicError(
+      req,
+      res,
+      503,
+      'SHARE_PREVIEW_TICKET_UNAVAILABLE',
+      '预览会话暂时不可用',
+      'The preview session is unavailable',
+    );
+    return null;
+  }
+  if (!ticket) {
+    publicError(
+      req,
+      res,
+      403,
+      'SHARE_PREVIEW_TICKET_INVALID',
+      '预览会话已过期，请重新打开',
+      'The preview session expired',
+    );
+    return null;
+  }
+  try {
+    const [rows] = await pool.query(
+      `${SHARE_SELECT}
+       WHERE s.id = ? AND s.file_id = ? AND s.owner_user_id = ?
+       LIMIT 1`,
+      [ticket.shareId, ticket.fileId, ticket.ownerUserId],
+    );
+    const row = rows[0];
+    const state = getFileShareState(row, Date.now(), 'session');
+    if (state !== 'active') {
+      publicError(req, res, 410, `SHARE_${state.toUpperCase()}`, '分享已失效', 'The share is unavailable');
+      return null;
+    }
+    return row;
+  } catch (error) {
+    console.error('[file-share] preview ticket authorization failed code=%s', stableAgentErrorCode(error));
+    publicError(req, res, 503, 'SHARE_SERVICE_UNAVAILABLE', '分享服务暂时不可用', 'The share service is unavailable');
+    return null;
   }
 }
 
@@ -359,4 +425,73 @@ export async function downloadFileShare(req, res) {
     );
   }
   return res.send(resultData({ downloadUrl: url, fileName: row.file_name, expiresIn }));
+}
+
+export async function prepareFileSharePreview(req, res) {
+  const row = await authorizePublicShare(req, res, {
+    eventType: 'downloaded',
+    countColumn: 'download_count',
+    previewOnly: true,
+  });
+  if (!row) return;
+  try {
+    const [state, ticket] = await Promise.all([
+      prepareFilePreview({
+        ownerUserId: row.file_owner_id,
+        fileId: row.file_id,
+        retry: req.body?.retry === true,
+      }),
+      issueFilePreviewShareTicket({
+        shareId: row.id,
+        fileId: row.file_id,
+        ownerUserId: row.file_owner_id,
+      }),
+    ]);
+    const sourceObjectKey = row.obs_key || buildObjectKey(row.file_owner_id, row.file_name);
+    const { url: sourceDownloadUrl, expiresIn: sourceUrlExpiresIn } = createDownloadSignedUrl({
+      objectKey: sourceObjectKey,
+      expires: 600,
+    });
+    return res.send(
+      resultData({
+        ...state,
+        previewTicket: ticket.token,
+        ticketExpiresIn: ticket.expiresIn,
+        sourceDownloadUrl: sourceDownloadUrl || '',
+        sourceUrlExpiresIn,
+      }),
+    );
+  } catch (error) {
+    return sendPreviewError(req, res, error, 'share-prepare');
+  }
+}
+
+export async function resolveFileSharePreview(req, res) {
+  const row = await authorizePreviewTicket(req, res);
+  if (!row) return;
+  try {
+    const state = await resolveFilePreview({ ownerUserId: row.file_owner_id, fileId: row.file_id });
+    return res.send(resultData(state));
+  } catch (error) {
+    return sendPreviewError(req, res, error, 'share-resolve');
+  }
+}
+
+export async function listFileShareArchivePreview(req, res) {
+  const row = await authorizePreviewTicket(req, res);
+  if (!row) return;
+  try {
+    const data = await listArchivePreview({
+      ownerUserId: row.file_owner_id,
+      fileId: row.file_id,
+      directory: req.body?.directory,
+      query: req.body?.query,
+      offset: req.body?.offset,
+      limit: req.body?.limit,
+      touch: false,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendPreviewError(req, res, error, 'share-archive-list');
+  }
 }

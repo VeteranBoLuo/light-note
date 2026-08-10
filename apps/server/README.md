@@ -45,7 +45,8 @@
 
 - 文件上传/下载/删除
 - 文件夹管理 · 文件移动
-- 文件预览支持（图片/PDF/音视频/Office）
+- 文件预览支持（图片/PDF/音视频/新版 Office、旧版 Office 转 PDF）
+- 压缩包目录在线查看（ZIP/RAR/7Z/TAR 与 GZ/BZ2/XZ 系列，只列目录、不解压）
 - 存储配额管理（默认 1GB）
 - 外部分享链接生成与下载
 
@@ -88,6 +89,7 @@
 - Node.js 20.x
 - MySQL 8.0+
 - pnpm
+- 7-Zip（`7zz`）与 LibreOffice Writer/Calc/Impress（启用压缩包和旧版 Office 预览时）
 
 ### 安装
 
@@ -106,6 +108,13 @@ mysql -u root -p < apps/server/init.sql
 
 # 启动服务
 node apps/server/app.js
+```
+
+启用新增文件预览前，先应用 `apps/server/migrations/20260808_file_preview_artifacts.sql`，并运行：
+
+```bash
+pnpm --filter server check:file-previews
+pnpm --filter server worker:documents
 ```
 
 ---

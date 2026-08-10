@@ -118,11 +118,16 @@ declare(ADMIN_POLICIES.READ, 'file', [
   ['POST', '/file/checkFileNames'],
   ['POST', '/file/queryTotalFileSize'],
   ['POST', '/file/getFileInfo'],
+  ['POST', '/file/preview/resolve'],
+  ['POST', '/file/preview/archive'],
   ['POST', '/file/queryFolder'],
   ['POST', '/file/getFileTags'],
   ['POST', '/file/share/list'],
   ['POST', '/file/share/resolve'],
   ['POST', '/file/share/download'],
+  ['POST', '/file/share/preview/prepare'],
+  ['POST', '/file/share/preview/resolve'],
+  ['POST', '/file/share/preview/archive'],
 ]);
 
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
@@ -130,6 +135,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/confirmUpload'],
   ['POST', '/file/deleteFileById'],
   ['POST', '/file/updateFile'],
+  ['POST', '/file/preview/prepare'],
   ['POST', '/file/addFolder'],
   ['POST', '/file/associateFile'],
   ['POST', '/file/updateFolder'],

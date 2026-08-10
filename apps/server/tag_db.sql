@@ -186,6 +186,56 @@ CREATE TABLE `file_share_events` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文件分享隐私化访问事件';
 
 -- ----------------------------
+-- Table structure for file_preview_artifacts / file_preview_jobs
+-- ----------------------------
+DROP TABLE IF EXISTS `file_preview_jobs`;
+DROP TABLE IF EXISTS `file_preview_artifacts`;
+CREATE TABLE `file_preview_artifacts` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `file_id` int(11) NOT NULL,
+  `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strategy` enum('archive_manifest','converted_pdf') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `strategy_version` smallint(5) unsigned NOT NULL,
+  `format_id` varchar(40) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `source_etag` varchar(160) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `source_size` bigint(20) unsigned NOT NULL,
+  `status` enum('queued','processing','ready','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `artifact_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `artifact_size` bigint(20) unsigned NOT NULL DEFAULT '0',
+  `manifest_json` mediumtext COLLATE utf8mb4_unicode_ci,
+  `entry_count` int(10) unsigned NOT NULL DEFAULT '0',
+  `total_uncompressed_size` bigint(20) unsigned NOT NULL DEFAULT '0',
+  `contains_encrypted` tinyint(1) NOT NULL DEFAULT '0',
+  `suspicious_expansion` tinyint(1) NOT NULL DEFAULT '0',
+  `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_access_at` datetime DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_preview_artifact` (`file_id`,`strategy`,`strategy_version`),
+  KEY `idx_file_preview_owner_status` (`owner_user_id`,`status`,`update_time`),
+  KEY `idx_file_preview_cleanup` (`last_access_at`,`update_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云文件派生预览缓存';
+
+CREATE TABLE `file_preview_jobs` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `artifact_id` bigint(20) unsigned NOT NULL,
+  `status` enum('queued','processing','completed','failed') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'queued',
+  `attempts` tinyint(3) unsigned NOT NULL DEFAULT '0',
+  `available_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `locked_at` datetime DEFAULT NULL,
+  `locked_by` varchar(96) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `error_code` varchar(64) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `output_object_key` varchar(1024) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_file_preview_job_artifact` (`artifact_id`),
+  KEY `idx_file_preview_job_queue` (`status`,`available_at`,`id`),
+  CONSTRAINT `fk_file_preview_job_artifact` FOREIGN KEY (`artifact_id`) REFERENCES `file_preview_artifacts` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='云文件预览任务队列';
+
+-- ----------------------------
 -- Table structure for help_config
 -- ----------------------------
 DROP TABLE IF EXISTS `help_config`;

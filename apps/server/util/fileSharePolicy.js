@@ -84,6 +84,7 @@ export function getFileShareState(row, now = Date.now(), operation = 'any') {
   if (row.expires_at && new Date(row.expires_at).getTime() <= now) return 'expired';
   if (
     operation !== 'download' &&
+    operation !== 'session' &&
     row.max_access_count !== null &&
     Number(row.access_count) >= Number(row.max_access_count)
   ) {
@@ -91,6 +92,7 @@ export function getFileShareState(row, now = Date.now(), operation = 'any') {
   }
   if (
     operation !== 'access' &&
+    operation !== 'session' &&
     row.max_download_count !== null &&
     Number(row.download_count) >= Number(row.max_download_count)
   ) {
