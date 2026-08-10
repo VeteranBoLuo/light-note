@@ -42,6 +42,7 @@ describe('adminRoutePolicyMiddleware', () => {
       'noteLibrary.js': '/note',
       'notification.js': '/notification',
       'opinion.js': '/opinion',
+      'resourceGovernance.js': '/resource-governance',
       'search.js': '/search',
       'security.js': '/security',
       'seo.js': '',
@@ -68,6 +69,24 @@ describe('adminRoutePolicyMiddleware', () => {
       const next = vi.fn();
       const res = createRes();
       adminRoutePolicyMiddleware(createReq('/user/admin/remark', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+      );
+    }
+  });
+
+  it('资源治理查询、重试和取消在任何代管上下文都失败关闭', () => {
+    for (const [method, path] of [
+      ['POST', '/resource-governance/findings/query'],
+      ['GET', '/resource-governance/jobs/job-1'],
+      ['POST', '/resource-governance/jobs/job-1/retry'],
+      ['POST', '/resource-governance/jobs/job-1/cancel'],
+    ]) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path, method, 'maintain'), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith(

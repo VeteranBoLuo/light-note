@@ -503,21 +503,25 @@ async function purgeFeatureRequests(connection, tables, userId) {
   );
 }
 
-async function purgeOwnedResources(connection, tables, userId) {
+export async function purgeOwnedResources(connection, tables, userId) {
   if (tables.has('note_resource_refs')) {
     const targetClauses = [];
     const params = [userId];
     if (tables.has('bookmark')) {
-      targetClauses.push("(target_type = 'bookmark' AND target_id IN (SELECT id FROM bookmark WHERE user_id = ?))");
+      targetClauses.push(
+        "(target_type = 'bookmark' AND CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM bookmark WHERE user_id = ?))",
+      );
       params.push(userId);
     }
     if (tables.has('note')) {
-      targetClauses.push("(target_type = 'note' AND target_id IN (SELECT id FROM note WHERE create_by = ?))");
+      targetClauses.push(
+        "(target_type = 'note' AND CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM note WHERE create_by = ?))",
+      );
       params.push(userId);
     }
     if (tables.has('files')) {
       targetClauses.push(
-        "(target_type = 'file' AND target_id IN (SELECT CAST(id AS CHAR) FROM files WHERE create_by = ?))",
+        "(target_type = 'file' AND CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci IN (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM files WHERE create_by = ?))",
       );
       params.push(userId);
     }
@@ -548,7 +552,8 @@ async function purgeOwnedResources(connection, tables, userId) {
       await connection.query(
         `DELETE FROM note_versions
           WHERE create_by = ?
-             OR note_id IN (SELECT id FROM note WHERE create_by = ?)`,
+             OR CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci IN
+                (SELECT CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci FROM note WHERE create_by = ?)`,
         [userId, userId],
       );
     } else {

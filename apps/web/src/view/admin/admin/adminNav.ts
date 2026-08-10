@@ -142,7 +142,7 @@ export function buildAdminNav({
       items: [
         // 菜单里此前直接显示代码标识 "simpleSql"
         { id: 'simpleSql', title: 'SQL 控制台' },
-        { id: 'imageMg', title: '图片管理' },
+        { id: 'resourceGovernance', title: '资源治理' },
       ],
     },
   ];
@@ -191,7 +191,7 @@ const MOBILE_PATHS: Record<string, string> = {
   logCleanup: '/logCleanup',
   logExclude: '/logExclude',
   securityCenter: '/securityCenterMobile',
-  imageMg: '/imageMg',
+  resourceGovernance: '/resourceGovernance',
 };
 
 export type AdminMobileMenuItem = { id: string; title: string; url: string };

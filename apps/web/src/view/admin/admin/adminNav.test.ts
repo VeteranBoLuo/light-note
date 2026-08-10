@@ -18,7 +18,7 @@ const MOBILE_ROUTES = new Set([
   '/todoPlanDiagnostics',
   '/userMg',
   '/userOpinion',
-  '/imageMg',
+  '/resourceGovernance',
   '/agentLog',
   '/aiFeedback',
   '/aiEvaluation',
@@ -68,7 +68,7 @@ describe('后台导航菜单', () => {
         'logCleanup',
         'logExclude',
         'simpleSql',
-        'imageMg',
+        'resourceGovernance',
       ]),
     );
     // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
@@ -129,7 +129,7 @@ describe('后台导航菜单', () => {
       'agentLog',
       'conversion',
       'securityCenter',
-      'imageMg',
+      'resourceGovernance',
     ]);
   });
 

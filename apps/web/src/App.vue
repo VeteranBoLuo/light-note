@@ -237,7 +237,8 @@
     '/admin/userMg': '/userMg',
     '/admin/userOpinion': '/userOpinion',
     '/admin/operationLog': '/operationLog',
-    '/admin/imageMg': '/imageMg',
+    '/admin/imageMg': '/resourceGovernance',
+    '/admin/resourceGovernance': '/resourceGovernance',
     '/admin/logExclude': '/logExclude',
     '/securityCenter/overview': '/securityCenterMobile',
     '/securityCenter/review': '/securityCenterMobile',
@@ -255,7 +256,8 @@
     '/userMg': '/admin/userMg',
     '/userOpinion': '/admin/userOpinion',
     '/operationLog': '/admin/operationLog',
-    '/imageMg': '/admin/imageMg',
+    '/imageMg': '/admin/resourceGovernance',
+    '/resourceGovernance': '/admin/resourceGovernance',
     '/logExclude': '/admin/logExclude',
     '/admin': '/admin/operationLog',
     '/personCenter': '/home',
@@ -779,7 +781,7 @@
     'banned',
     'quickSave',
   ];
-  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
+  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
     const targetRecord = [...to.matched].reverse().find((record) => Array.isArray(record.meta?.roles));

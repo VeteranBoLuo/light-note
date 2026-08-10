@@ -34,6 +34,7 @@ import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 import { requestTraceMiddleware } from './util/requestTrace.js';
+import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -109,6 +110,10 @@ ensureFeatureRequestTables().catch((err) =>
 );
 ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureAiEvaluationSchema().catch((err) => console.error('AI 评测数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+// 治理接口必须先有完整快照/审计表；这里只做幂等 Schema 就绪，不在 HTTP 进程执行任何扫描或清理。
+await ensureResourceGovernanceSchema().catch((err) => {
+  console.error('资源治理 Schema 初始化失败 code=%s，治理接口将失败关闭', stableAgentErrorCode(err));
+});
 startAiConversationRetentionScheduler().catch((err) =>
   console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );
