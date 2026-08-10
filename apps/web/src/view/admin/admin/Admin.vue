@@ -68,6 +68,7 @@
   import { useRoute } from 'vue-router';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
+  import { getCommunityChatAdminAccessRequests, getCommunityChatAdminReports } from '@/api/communityChatApi.ts';
   import { useI18n } from 'vue-i18n';
   import { adminNavTarget, buildAdminNav, resolveActiveNavId, type AdminNavItem } from '@/view/admin/admin/adminNav.ts';
 
@@ -76,11 +77,14 @@
 
   const pendingOpinion = ref(0);
   const pendingSecurity = ref(0);
+  const pendingCommunity = ref(0);
+  const pendingModeration = ref(0);
 
   const menuEntries = computed(() =>
     buildAdminNav({
       icons: {
         overview: icon.userCenter.workbenches,
+        action: icon.ai.pending,
         user: icon.navigation.user,
         ai: icon.ai.ask,
         growth: icon.userCenter.growth,
@@ -90,7 +94,15 @@
       },
       pendingOpinion: pendingOpinion.value,
       pendingSecurity: pendingSecurity.value,
+      pendingCommunity: pendingCommunity.value,
+      pendingModeration: pendingModeration.value,
+      actionCenterTitle: t('adminActionCenter.title'),
+      adminAuditTitle: t('adminAudit.title'),
+      productInsightsTitle: t('adminProductInsights.title'),
+      adminGovernanceTitle: t('adminGovernance.title'),
       aiEvaluationTitle: t('aiEvaluationAdmin.title'),
+      communityAccessTitle: t('communityChatAdmin.navTitle'),
+      communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
     }),
   );
 
@@ -102,18 +114,29 @@
   }
 
   /**
-   * 角标数据复用总览接口已有的 pending 字段，不新增后端接口。
-   * 取不到就静默保持 0：导航是外壳，不该因为一个统计失败而报错打断使用。
+   * 反馈和安全复用总览统计；社区准入与消息审核分别复用列表 total，不为导航另建计数接口。
+   * 任一来源取不到都静默保留原值：导航外壳不能被角标请求打断。
    */
   async function loadPending() {
-    try {
-      const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: true });
+    const [overviewResult, communityResult, moderationResult] = await Promise.allSettled([
+      apiBasePost('/api/common/getAdminOverview', { hideInternal: true }),
+      getCommunityChatAdminAccessRequests({ status: 'pending', page: 1, pageSize: 1 }),
+      getCommunityChatAdminReports({ status: 'pending', page: 1, pageSize: 1 }),
+    ]);
+    if (overviewResult.status === 'fulfilled') {
+      const res: any = overviewResult.value;
       if (res?.status === 200) {
         pendingOpinion.value = Number(res.data?.pending?.opinion || 0);
         pendingSecurity.value = Number(res.data?.pending?.security || 0);
       }
-    } catch {
-      /* 忽略：角标缺失不影响导航 */
+    }
+    if (communityResult.status === 'fulfilled') {
+      const res: any = communityResult.value;
+      if (res?.status === 200) pendingCommunity.value = Number(res.data?.total || 0);
+    }
+    if (moderationResult.status === 'fulfilled') {
+      const res: any = moderationResult.value;
+      if (res?.status === 200) pendingModeration.value = Number(res.data?.total || 0);
     }
   }
 
@@ -121,7 +144,15 @@
   watch(
     () => route.path,
     (path, prev) => {
-      if (prev && (prev.includes('userOpinion') || prev.includes('securityCenter')) && path !== prev) loadPending();
+      if (
+        prev &&
+        (prev.includes('userOpinion') ||
+          prev.includes('securityCenter') ||
+          prev.includes('communityChatAccess') ||
+          prev.includes('communityChatModeration')) &&
+        path !== prev
+      )
+        loadPending();
     },
   );
 

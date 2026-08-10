@@ -77,7 +77,12 @@
         <BButton type="primary" @click="goRegister">免费创建你自己的</BButton>
       </div>
     </div>
-    <FilePreview v-model:visible="previewVisible" :file-info="previewFileInfo" @close="previewVisible = false" />
+    <FilePreview
+      v-model:visible="previewVisible"
+      :file-info="previewFileInfo"
+      :preview-access="{ kind: 'share', token, accessCode: accessCode.trim() }"
+      @close="previewVisible = false"
+    />
   </div>
 </template>
 
@@ -85,7 +90,7 @@
   import { ref, computed, reactive, onMounted } from 'vue';
   import { useRoute } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { downloadFileShare, getFileShareDownload, resolveFileShare } from '@/http/common.ts';
+  import { downloadFileShare, resolveFileShare } from '@/http/common.ts';
   import { trackConversion } from '@/utils/conversion';
   import FilePreview from '@/components/FilePreview.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -195,20 +200,10 @@
     }
   };
 
-  const previewFile = async () => {
-    loading.value = true;
+  const previewFile = () => {
     errorMessage.value = '';
-    try {
-      const result = await getFileShareDownload(token.value, accessCode.value.trim());
-      file.fileUrl = result.downloadUrl;
-      recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName}】` });
-      previewVisible.value = true;
-    } catch (error: any) {
-      errorCode.value = String(error?.code || 'SHARE_PREVIEW_FAILED');
-      errorMessage.value = error?.message || t('cloudSpace.sharePreviewFailed');
-    } finally {
-      loading.value = false;
-    }
+    recordOperation({ module: '分享文件', operation: `预览分享文件【${file.fileName}】` });
+    previewVisible.value = true;
   };
 
   const bookmark = bookmarkStore();

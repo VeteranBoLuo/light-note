@@ -1,17 +1,24 @@
 import { apiBasePost } from '@/http/request.ts';
 
+export interface NotificationScopeOptions {
+  excludeCommunityChat?: boolean;
+}
+
 // 通知列表(分页 + 未读数;可按 type 筛选:all/level_up/opinion_reply/system)
-export const getNotificationList = (params: { currentPage?: number; pageSize?: number; type?: string } = {}) =>
-  apiBasePost('/api/notification/list', params);
+export const getNotificationList = (
+  params: { currentPage?: number; pageSize?: number; type?: string } & NotificationScopeOptions = {},
+) => apiBasePost('/api/notification/list', params);
 
 // 仅未读数(铃铛角标轮询用,轻量)
-export const getUnreadCount = () => apiBasePost('/api/notification/unreadCount');
+export const getUnreadCount = (options: NotificationScopeOptions = {}) =>
+  apiBasePost('/api/notification/unreadCount', options);
 
 // 标记指定通知已读
 export const markNotificationsRead = (ids: string[]) => apiBasePost('/api/notification/markRead', { ids });
 
 // 全部已读
-export const markAllNotificationsRead = () => apiBasePost('/api/notification/markAllRead');
+export const markAllNotificationsRead = (options: NotificationScopeOptions = {}) =>
+  apiBasePost('/api/notification/markAllRead', options);
 
 // 删除(软删)指定通知
 export const deleteNotifications = (ids: string[]) => apiBasePost('/api/notification/delete', { ids });

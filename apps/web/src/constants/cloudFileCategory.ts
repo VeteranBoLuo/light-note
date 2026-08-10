@@ -1,8 +1,21 @@
+import { FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS, FILE_PREVIEW_STRATEGY, resolveFilePreviewFormat } from '@lightnote/shared';
+
 export type CloudFileCategory =
   'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'text' | 'compress' | 'other';
 
 export type CloudPreviewType =
-  'image' | 'video' | 'audio' | 'pdf' | 'word' | 'excel' | 'ppt' | 'html' | 'text' | 'unsupported';
+  | 'image'
+  | 'video'
+  | 'audio'
+  | 'pdf'
+  | 'word'
+  | 'excel'
+  | 'ppt'
+  | 'html'
+  | 'text'
+  | 'archive'
+  | 'converted-pdf'
+  | 'unsupported';
 
 export const CLOUD_FILE_CATEGORY_ORDER: CloudFileCategory[] = [
   'image',
@@ -105,6 +118,7 @@ const TEXT_EXT_SET = new Set([
   'r',
   'dart',
   'lua',
+  ...FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS,
 ]);
 
 const MEDIA_EXTENSION_MIME_MAP: Record<'video' | 'audio', ReadonlyMap<string, string>> = {
@@ -133,15 +147,8 @@ const MEDIA_EXTENSION_MIME_MAP: Record<'video' | 'audio', ReadonlyMap<string, st
 const IMAGE_EXT_SET = new Set(['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg', 'avif', 'ico']);
 const VIDEO_EXT_SET: ReadonlySet<string> = new Set(MEDIA_EXTENSION_MIME_MAP.video.keys());
 const AUDIO_EXT_SET: ReadonlySet<string> = new Set(MEDIA_EXTENSION_MIME_MAP.audio.keys());
-const COMPRESS_EXT_SET = new Set(['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz']);
+const COMPRESS_EXT_SET = new Set(['zip', 'zipx', 'rar', '7z', 'tar', 'tgz', 'tbz', 'tbz2', 'txz', 'gz', 'bz2', 'xz']);
 
-const LEGACY_OFFICE_EXT_SET = new Set(['doc', 'xls', 'ppt']);
-const LEGACY_OFFICE_MIME_SET = new Set([
-  'application/msword',
-  'application/vnd.ms-word',
-  'application/vnd.ms-excel',
-  'application/vnd.ms-powerpoint',
-]);
 const HTML_EXT_SET = new Set(['html', 'htm']);
 
 function normalizeMimeType(fileType?: string): string {
@@ -163,9 +170,7 @@ function getFileExtension(fileName?: string, ext?: string): string {
 }
 
 export function isLegacyOfficeFile(file?: { fileName?: string; fileType?: string; ext?: string }): boolean {
-  const extension = getFileExtension(file?.fileName, file?.ext);
-  if (extension) return LEGACY_OFFICE_EXT_SET.has(extension);
-  return LEGACY_OFFICE_MIME_SET.has(normalizeMimeType(file?.fileType));
+  return resolveFilePreviewFormat(file)?.strategy === FILE_PREVIEW_STRATEGY.CONVERTED_PDF;
 }
 
 export function isHtmlFile(file?: { fileName?: string; fileType?: string; ext?: string }): boolean {
@@ -191,8 +196,11 @@ function resolveCloudCategoryFallback(file?: {
   if (AUDIO_EXT_SET.has(extension)) return 'audio';
   if (extension === 'pdf') return 'pdf';
   if (extension === 'doc' || extension === 'docx') return 'word';
+  if (extension === 'rtf' || extension === 'odt') return 'word';
   if (extension === 'xls' || extension === 'xlsx') return 'excel';
+  if (extension === 'ods') return 'excel';
   if (extension === 'ppt' || extension === 'pptx') return 'ppt';
+  if (extension === 'odp') return 'ppt';
   if (COMPRESS_EXT_SET.has(extension)) return 'compress';
   if (TEXT_EXT_SET.has(extension)) return 'text';
   return 'other';
@@ -224,9 +232,9 @@ export function getCloudPreviewType(file?: {
   fileType?: string;
   ext?: string;
 }): CloudPreviewType {
-  // @vue-office 的浏览器渲染器只支持 OOXML（docx/xlsx/pptx）。
-  // 旧版 OLE Office 文件不能交给对应渲染器，否则会被误报为文件损坏。
-  if (isLegacyOfficeFile(file)) return 'unsupported';
+  const derivedFormat = resolveFilePreviewFormat(file);
+  if (derivedFormat?.strategy === FILE_PREVIEW_STRATEGY.CONVERTED_PDF) return 'converted-pdf';
+  if (derivedFormat?.strategy === FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST) return 'archive';
   // HTML 必须进入独立沙箱，不能作为普通文本通过 v-html 注入轻笺页面。
   if (isHtmlFile(file)) return 'html';
   const category = getCloudFileCategory(file);

@@ -83,13 +83,23 @@ export default defineConfig(({ mode }) => {
                 changeOrigin: true,
                 secure: false,
               },
-        // WebSocket 代理
-        '/ws': {
-          target: 'http://127.0.0.1:3000',
-          changeOrigin: true,
-          ws: true,
-          rewrite: (path: string) => path.replace(/^\/ws/, ''),
-        },
+        // 公共聊天室与 REST 共用 9001 服务；浏览器始终连接同源路径，避免暴露 sid 或额外端口。
+        '/realtime/chat':
+          env.VITE_ENV === 'local'
+            ? {
+                target: 'http://127.0.0.1:9001',
+                // 真机通过局域网访问 Vite 时，浏览器 Origin 是 LAN-IP:前端端口。
+                // WebSocket Origin 校验必须继续看到这个同源 Host；若改写为 127.0.0.1:9001，
+                // Debug App 会被后端按跨站升级拒绝，只能退化到低频轮询。
+                changeOrigin: false,
+                ws: true,
+              }
+            : {
+                target: 'https://boluo66.top',
+                changeOrigin: true,
+                secure: false,
+                ws: true,
+              },
         '/obs': {
           target: 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,

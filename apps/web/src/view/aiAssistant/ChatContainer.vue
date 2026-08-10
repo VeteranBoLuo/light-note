@@ -2738,6 +2738,70 @@
     margin: 4px 0 14px;
   }
 
+  /*
+   * 窄容器状态由 ChatContainer 自己维护，因此跨组件响应式规则也必须从这里下发。
+   * 子组件 scoped 样式里组合 :global(.chat-wrapper) 会被编译成只命中容器本身，
+   * 进而把 max-height / padding 等卡片规则错误施加到整个聊天工作区。
+   */
+  .chat-wrapper.is-narrow-520 :deep(.ai-interaction-card) {
+    width: 100%;
+    margin: 0;
+    padding: 13px;
+    border-radius: 12px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-options) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-meta) {
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-actions > *) {
+    width: auto;
+    flex: 1;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-actions .b_btn) {
+    min-height: 44px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-options.is-long) {
+    max-height: 360px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.interaction-result) {
+    margin-left: 40px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity) {
+    width: 100%;
+    margin: 4px 0 12px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity__toggle),
+  .chat-wrapper.is-narrow-520 :deep(.ai-activity__summary) {
+    min-height: 44px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions) {
+    width: 100%;
+    margin: 0 0 10px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions__button),
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-actions__text) {
+    min-height: 44px;
+    padding-inline: 7px;
+  }
+
+  .chat-wrapper.is-narrow-520 :deep(.ai-result-reuse__preview dl > div) {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
   .messages-container {
     flex: 1;
     min-height: 0;

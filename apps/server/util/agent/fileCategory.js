@@ -3,14 +3,29 @@
 // image/video/audio/document/archive/other,供 AI 文件类工具共用,避免各工具口径不一致导致漏报。
 // 说明:SQL 片段里用裸列名 file_type(查询只涉及 files 单表,不加别名也无歧义)。
 
+import { FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS, FILE_PREVIEW_FORMATS, FILE_PREVIEW_STRATEGY } from '@lightnote/shared';
+
+const extensionSql = "LOWER(SUBSTRING_INDEX(COALESCE(file_name, ''), '.', -1))";
+const quoteSqlList = (values) =>
+  [...new Set(values)].map((value) => `'${String(value).replace(/'/gu, "''")}'`).join(', ');
+const archiveExtensions = FILE_PREVIEW_FORMATS.filter(
+  (format) => format.strategy === FILE_PREVIEW_STRATEGY.ARCHIVE_MANIFEST,
+).flatMap((format) => format.extensions.map((extension) => extension.split('.').pop()));
+const documentExtensions = [
+  ...FILE_PREVIEW_FORMATS.filter((format) => format.strategy === FILE_PREVIEW_STRATEGY.CONVERTED_PDF).flatMap(
+    (format) => format.extensions,
+  ),
+  ...FILE_PREVIEW_EXTRA_TEXT_EXTENSIONS,
+];
+const extensionCondition = (extensions) =>
+  `(LOCATE('.', COALESCE(file_name, ''), 2) > 0 AND ${extensionSql} IN (${quoteSqlList(extensions)}))`;
+
 export const FILE_CATEGORY_SQL = {
   image: "file_type LIKE 'image/%'",
   video: "file_type LIKE 'video/%'",
   audio: "file_type LIKE 'audio/%'",
-  document:
-    "(file_type = 'application/pdf' OR file_type LIKE 'text/%' OR file_type = 'application/json' OR file_type LIKE '%word%' OR file_type LIKE '%excel%' OR file_type LIKE '%spreadsheet%' OR file_type LIKE '%presentation%' OR file_type LIKE '%powerpoint%' OR file_type LIKE '%officedocument%' OR file_type LIKE '%opendocument%' OR file_type LIKE '%csv%')",
-  archive:
-    "(file_type LIKE '%zip%' OR file_type LIKE '%rar%' OR file_type LIKE '%gzip%' OR file_type LIKE '%7z%' OR file_type LIKE '%x-tar%' OR file_type LIKE '%compress%')",
+  document: `(file_type = 'application/pdf' OR file_type LIKE 'text/%' OR file_type = 'application/json' OR file_type LIKE '%word%' OR file_type LIKE '%excel%' OR file_type LIKE '%spreadsheet%' OR file_type LIKE '%presentation%' OR file_type LIKE '%powerpoint%' OR file_type LIKE '%officedocument%' OR file_type LIKE '%opendocument%' OR file_type LIKE '%csv%' OR ${extensionCondition(documentExtensions)})`,
+  archive: `(file_type LIKE '%zip%' OR file_type LIKE '%rar%' OR file_type LIKE '%gzip%' OR file_type LIKE '%7z%' OR file_type LIKE '%x-tar%' OR file_type LIKE '%compress%' OR ${extensionCondition(archiveExtensions)})`,
 };
 
 // other = 不属于上述任何一类(如 application/octet-stream、application/x-msdownload 等)

@@ -106,13 +106,15 @@
 
   .todo-reminder-editor-v3__mode {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding: 3px;
     border-radius: 11px;
     background: var(--workspace-panel-bg-color);
   }
 
   .todo-reminder-editor-v3__mode :deep(.b_btn) {
+    width: 100%;
+    min-width: 0;
     border: 1px solid transparent;
     background: transparent;
   }
@@ -122,6 +124,16 @@
     background: var(--card-background);
     color: var(--primary-color);
     font-weight: 700;
+  }
+
+  @media (max-width: 767px) {
+    .todo-reminder-editor-v3__mode :deep(.b_btn) {
+      height: auto;
+      min-height: 44px;
+      padding-block: 6px;
+      line-height: 1.35;
+      white-space: normal;
+    }
   }
 
   .todo-reminder-editor-v3__channels {

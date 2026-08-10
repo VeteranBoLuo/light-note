@@ -2,6 +2,8 @@ import TurndownService from 'turndown';
 import { tables } from 'turndown-plugin-gfm';
 import type { Token, Tokens } from 'marked';
 import { createSizedContentImageHtml, isContentImageSize } from '@/utils/contentImageSize';
+import { normalizeRichMediaTextHtml } from '@/utils/richMediaText';
+import { serializeTextGradientElement } from '@/utils/richTextEffects';
 
 const EMPTY_MARKDOWN_TASK_ITEM_RE = /^\s*(?:[-+*]|\d+[.)])\s+\[([ xX])\]\s*$/u;
 const EMPTY_MARKDOWN_TASK_TEXT_RE = /^\[[ xX]\]$/u;
@@ -108,6 +110,26 @@ export function createNoteTurndownService() {
   service.addRule('gfmStrikethrough', {
     filter: ['s', 'strike', 'del'],
     replacement: (content) => (content.trim() ? `~~${content}~~` : ''),
+  });
+
+  // 标准 Markdown 没有“一图一文并排”的语法。轻笺把整个受控结构保留为一段
+  // raw HTML，避免 Turndown 把多个图片和说明重新打散成同一条文字流。
+  service.addRule('lightNoteMediaText', {
+    filter: (node) => node.nodeName === 'SECTION' && (node as HTMLElement).classList.contains('ln-media-text'),
+    replacement: (_content, node) => {
+      const html = normalizeRichMediaTextHtml((node as HTMLElement).outerHTML);
+      return `\n\n${html}\n\n`;
+    },
+  });
+
+  // 标准 Markdown 没有渐变文字。轻笺只保留受控 class 与三项合法 CSS 变量，
+  // 既能在 Markdown 预览中继续展示，也能在切回富文本时恢复可编辑配置。
+  service.addRule('lightNoteTextGradient', {
+    filter: (node) => node instanceof HTMLElement && node.classList.contains('ln-text-gradient'),
+    replacement: (content, node) => {
+      const html = serializeTextGradientElement(node as HTMLElement);
+      return html || content;
+    },
   });
 
   // 标准 Markdown 图片没有宽度语法。轻笺用一段受控的 img HTML 保存移动端选择的

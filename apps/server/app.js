@@ -22,6 +22,7 @@ import { startEmailDeliveryLogCleanupScheduler } from './util/emailDelivery.js';
 import { earlyAnonymousRateLimiter, globalRateLimiter } from './util/requestRateLimit.js';
 import { ensureFeatureRequestTables } from './util/featureRequestSchema.js';
 import { ensureAiDocumentSchema } from './util/aiDocumentSchema.js';
+import { ensureFilePreviewSchema } from './util/filePreviewSchema.js';
 import { ensureAiEvaluationSchema } from './util/aiEvaluationSchema.js';
 import { ensureNoteTreeSchema } from './util/noteTreeSchema.js';
 import { startAiConversationRetentionScheduler } from './util/aiConversationService.js';
@@ -34,6 +35,9 @@ import { getUploadStaticDirectories } from './util/bookmarkIconStorage.js';
 import { startAccountDeletionCleanupScheduler } from './util/accountDeletion.js';
 import { startOperationalLogRetentionScheduler } from './util/operationalLogRetention.js';
 import { requestTraceMiddleware } from './util/requestTrace.js';
+import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
+import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
+import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -108,7 +112,15 @@ ensureFeatureRequestTables().catch((err) =>
   console.error('共建轻笺数据表初始化失败 code=%s', stableAgentErrorCode(err)),
 );
 ensureAiDocumentSchema().catch((err) => console.error('AI 文档数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureFilePreviewSchema().catch((err) => console.error('文件预览数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureAiEvaluationSchema().catch((err) => console.error('AI 评测数据表初始化失败 code=%s', stableAgentErrorCode(err)));
+ensureCommunityChatSchema()
+  .then(() => {
+    startCommunityChatImageCleanupScheduler().catch((err) =>
+      console.error('社区客厅图片清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+    );
+  })
+  .catch((err) => console.error('社区客厅基础数据表初始化失败 code=%s', stableAgentErrorCode(err)));
 startAiConversationRetentionScheduler().catch((err) =>
   console.error('AI 临时会话清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );
@@ -226,6 +238,7 @@ const server = app.listen(9001, () => {
   listeningReported = true;
   console.log('服务器已启动：' + new Date().toLocaleString('zh-CN'));
 });
+registerCommunityChatRealtimeHub(server);
 
 // 端口占用必须是一眼可读的错误。否则它会落进上面的 uncaughtException 兜底,
 // 被 stableAgentErrorCode 脱敏成一个看不出原因的码,表现为"重启完前端还连着旧进程"。

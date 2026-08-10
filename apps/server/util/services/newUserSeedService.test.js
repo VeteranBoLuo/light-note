@@ -79,9 +79,20 @@ describe('newUserSeedService', () => {
       const richText = seed.notes.find((note) => note.key === 'rich-text-demo');
       expect(richText).toBeDefined();
       const sanitized = sanitizeNoteHtml(richText.content).html;
-      expect(sanitized).not.toMatch(/linear-gradient|background-clip|box-shadow|text-shadow|animation\s*:|border-radius/i);
-      expect(sanitized).toContain('background-color:#f3f1ff');
-      expect(sanitized).toContain('border-left:4px solid #615ced');
+      expect(sanitized).not.toMatch(
+        /linear-gradient|background-clip|box-shadow|text-shadow|animation\s*:|border-radius/i,
+      );
+      expect(sanitized).toContain('class="ln-text-gradient"');
+      expect(sanitized).toContain('data-ln-text-gradient="true"');
+      expect(sanitized).toContain('--ln-gradient-from:#615ced');
+      expect(sanitized).toContain('class="ln-rich-card"');
+      expect(sanitized).toContain('class="ln-rich-text-glow"');
+      expect(sanitized).toContain('class="ln-rich-effect-breathe"');
+      expect(sanitized).toContain('class="ln-rich-effect-spin"');
+      expect(sanitized).toContain('class="ln-rich-effect-float"');
+      expect(sanitized).toContain('class="ln-rich-gradient-border"');
+      expect(sanitized).toContain('class="ln-rich-gradient-fill"');
+      expect(sanitized).toContain('class="ln-rich-quote"');
     }
   });
 

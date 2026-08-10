@@ -4,6 +4,12 @@
       <BTabs :options="tabOptions" v-model:activeTab="activeTab" />
 
       <div v-if="isFormTab" class="opinion-compose opinion-body">
+        <MobileNoticeStrip
+          v-if="bookmark.isMobile"
+          :icon="icon.message.info"
+          :title="t('personCenter.opinions.mobileNoticeTitle')"
+          :description="t('personCenter.opinions.mobileNoticeDesc')"
+        />
         <section class="opinion-card">
           <div class="opinion-card__header">
             <div>
@@ -13,7 +19,7 @@
             <div class="opinion-limit">{{ t('personCenter.opinions.imageLimit', { count: maxImageCount }) }}</div>
           </div>
 
-          <div class="opinion-example">
+          <div v-if="!bookmark.isMobile" class="opinion-example">
             <div class="opinion-example__title">{{ t('personCenter.opinions.exampleTitle') }}</div>
             <div class="opinion-example__desc">{{ t('personCenter.opinions.exampleDesc') }}</div>
           </div>
@@ -24,17 +30,42 @@
           </div>
 
           <div class="opinion-field">
-            <label class="opinion-field__label">{{ t('personCenter.opinions.feedbackContent') }}</label>
+            <div class="opinion-field__heading">
+              <label class="opinion-field__label">{{ t('personCenter.opinions.feedbackContent') }}</label>
+              <span class="opinion-character-count">{{ opinionData.content.length }} / 500</span>
+            </div>
             <b-input
               type="textarea"
               v-model:value="opinionData.content"
+              :maxlength="500"
               :placeholder="t('personCenter.opinions.contentPlaceholder')"
             />
           </div>
 
           <div class="opinion-field">
             <label class="opinion-field__label">{{ t('personCenter.opinions.feedbackImages') }}</label>
+            <div v-if="bookmark.isMobile" class="opinion-mobile-images">
+              <div v-for="(item, index) in parsedDraftImages" :key="`${item}-${index}`" class="opinion-image">
+                <img :src="item" alt="" />
+                <BButton
+                  class="opinion-image__remove"
+                  :aria-label="t('personCenter.opinions.removeImage')"
+                  @click="removeDraftImage(index)"
+                >
+                  <SvgIcon :src="icon.common.close" size="13" />
+                </BButton>
+              </div>
+              <BUpload v-if="parsedDraftImages.length < maxImageCount" multiple accept="image/*" @change="uploadImg">
+                <template #default>
+                  <BButton class="opinion-mobile-images__add">
+                    <SvgIcon :src="icon.file_upload" size="22" />
+                    <span>{{ t('personCenter.opinions.addImage') }}</span>
+                  </BButton>
+                </template>
+              </BUpload>
+            </div>
             <div
+              v-else
               ref="pasteZoneRef"
               class="opinion-upload-dropzone"
               :class="{ 'opinion-upload-dropzone--dragover': isDragOver }"
@@ -54,22 +85,55 @@
                 <b-upload multiple accept="image/*" @change="uploadImg" />
               </div>
             </div>
-            <div class="opinion-upload__hint">{{ t('personCenter.opinions.imageTip') }}</div>
-            <div v-if="parsedDraftImages.length > 0" class="opinion-images">
+            <div class="opinion-upload__hint">{{
+              bookmark.isMobile
+                ? t('personCenter.opinions.mobileImageTip', { count: maxImageCount })
+                : t('personCenter.opinions.imageTip')
+            }}</div>
+            <div v-if="!bookmark.isMobile && parsedDraftImages.length > 0" class="opinion-images">
               <div v-for="(item, index) in parsedDraftImages" :key="`${item}-${index}`" class="opinion-image">
                 <img :src="item" alt="" />
-                <button class="opinion-image__remove" @click="removeDraftImage(index)">×</button>
+                <BButton
+                  class="opinion-image__remove"
+                  :aria-label="t('personCenter.opinions.removeImage')"
+                  @click="removeDraftImage(index)"
+                >
+                  <SvgIcon :src="icon.common.close" size="13" />
+                </BButton>
               </div>
             </div>
           </div>
 
-          <div class="opinion-field">
+          <div v-if="bookmark.isMobile" class="opinion-field opinion-contact-field">
+            <BButton class="opinion-contact-toggle" @click="showContact = !showContact">
+              <span>{{ t('personCenter.opinions.contactInfo') }}</span>
+              <span>{{ showContact ? t('common.collapse') : t('personCenter.opinions.optional') }}</span>
+            </BButton>
+            <b-input
+              v-if="showContact"
+              v-model:value="opinionData.phone"
+              :placeholder="t('personCenter.opinions.contactPlaceholder')"
+            />
+          </div>
+          <div v-else class="opinion-field">
             <label class="opinion-field__label">{{ t('personCenter.opinions.contactInfo') }}</label>
             <b-input v-model:value="opinionData.phone" :placeholder="t('personCenter.opinions.contactPlaceholder')" />
           </div>
         </section>
 
-        <b-button type="primary" class="opinion-submit" @click="submit">
+        <MobileStickyActionBar v-if="bookmark.isMobile" :above-navigation="false">
+          <BButton type="primary" class="opinion-submit" :loading="submitting" :disabled="!canSubmit" @click="submit">
+            {{ canSubmit ? t('personCenter.opinions.submit') : t('personCenter.opinions.submitNeedMore') }}
+          </BButton>
+        </MobileStickyActionBar>
+        <b-button
+          v-else
+          type="primary"
+          class="opinion-submit"
+          :loading="submitting"
+          :disabled="!canSubmit"
+          @click="submit"
+        >
           {{ t('personCenter.opinions.submit') }}
         </b-button>
       </div>
@@ -77,6 +141,14 @@
       <div v-else class="opinion-history opinion-body">
         <b-loading :loading="loading" />
         <div v-show="!loading" class="opinion-history__content">
+          <MobileNoticeStrip
+            v-if="historyFailed"
+            tone="danger"
+            :icon="icon.message.error"
+            :title="t('personCenter.opinions.historyLoadFailed')"
+          >
+            <BButton class="opinion-retry" @click="fetchOpinionHistory">{{ t('common.retry') }}</BButton>
+          </MobileNoticeStrip>
           <div class="opinion-summary" v-if="summary">
             <div class="opinion-summary__item">
               <strong>{{ summary.pendingTotal || 0 }}</strong>
@@ -110,14 +182,12 @@
                 <span class="opinion-history-card__time">{{ item.createTime }}</span>
               </div>
 
-              <div class="opinion-history-card__section">
-                <label>{{ t('personCenter.opinions.feedbackContent') }}</label>
+              <div class="opinion-history-card__section opinion-history-card__section--content">
                 <p>{{ item.content }}</p>
               </div>
 
-              <div class="opinion-history-card__section">
-                <label>{{ t('personCenter.opinions.feedbackImages') }}</label>
-                <div v-if="parseImgArray(item.imgArray).length > 0" class="opinion-card-images">
+              <div v-if="parseImgArray(item.imgArray).length > 0" class="opinion-history-card__section">
+                <div class="opinion-card-images">
                   <img
                     v-for="(src, index) in parseImgArray(item.imgArray)"
                     :key="`${src}-${index}`"
@@ -126,7 +196,6 @@
                     @click="bookmark.refreshViewer(src)"
                   />
                 </div>
-                <span v-else class="opinion-history-card__placeholder">-</span>
               </div>
 
               <div class="opinion-reply" v-if="item.replyContent">
@@ -139,52 +208,11 @@
             </article>
           </div>
 
-          <div
-            v-else
-            class="both-center"
-            style="
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              gap: 16px;
-              transform: translate(-50%, -50%);
-            "
-          >
-            <div
-              style="
-                width: 56px;
-                height: 56px;
-                border-radius: 16px;
-                background: var(
-                  --ln-android-color-mix-transparent,
-                  color-mix(in srgb, var(--text-color) 6%, transparent)
-                );
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-color);
-                opacity: 0.35;
-              "
-            >
-              <svg
-                width="28"
-                height="28"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.5"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              >
-                <path d="M22 12h-5l-2 3H9l-2-3H2" />
-                <path
-                  d="M5.45 5.11L2 12v6a2 2 0 002 2h16a2 2 0 002-2v-6l-3.45-6.89A2 2 0 0016.76 4H7.24a2 2 0 00-1.79 1.11z"
-                />
-              </svg>
-            </div>
-            <span style="font-size: 14px; color: var(--sub-text-color)">{{
-              t('personCenter.opinions.noFeedbackHistory')
-            }}</span>
+          <div v-else-if="!historyFailed" class="opinion-empty">
+            <span class="opinion-empty__icon"><SvgIcon :src="icon.contextMenu.inbox" size="28" /></span>
+            <strong>{{ t('personCenter.opinions.noFeedbackHistory') }}</strong>
+            <span>{{ t('personCenter.opinions.emptyHistoryDesc') }}</span>
+            <BButton type="primary" @click="activeTab = 'form'">{{ t('personCenter.opinions.goFeedback') }}</BButton>
           </div>
         </div>
       </div>
@@ -199,6 +227,9 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobileNoticeStrip from '@/components/mobile/MobileNoticeStrip.vue';
+  import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import opinionApi from '@/api/opinionApi.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import { computed, onMounted, reactive, ref, watch } from 'vue';
@@ -206,6 +237,7 @@
   import { cloneDeep } from 'lodash-es';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
+  import icon from '@/config/icon';
 
   const props = withDefaults(
     defineProps<{
@@ -227,11 +259,7 @@
   const bookmark = bookmarkStore();
   const user = useUserStore();
 
-  const activeTab = ref(
-    props.initialTab === 'history'
-      ? t('personCenter.opinions.feedbackHistory')
-      : t('personCenter.opinions.feedbackType'),
-  );
+  const activeTab = ref<'form' | 'history'>(props.initialTab === 'history' ? 'history' : 'form');
 
   const opinionData = reactive({
     type: '',
@@ -243,13 +271,20 @@
   const summary = ref<any>(null);
   const opinionHistory = ref<any[]>([]);
   const loading = ref(false);
+  const submitting = ref(false);
+  const historyFailed = ref(false);
   const hasMarkedViewed = ref(false);
   const isDragOver = ref(false);
+  const showContact = ref(false);
   const pasteZoneRef = ref<HTMLElement | null>(null);
 
   const tabOptions = computed(() => [
-    t('personCenter.opinions.feedbackType'),
-    t('personCenter.opinions.feedbackHistory'),
+    { key: 'form', label: t('personCenter.opinions.feedbackType') },
+    {
+      key: 'history',
+      label: t('personCenter.opinions.feedbackHistory'),
+      badge: user.unreadOpinionReplyTotal || undefined,
+    },
   ]);
 
   const radioOptions = computed(() => [
@@ -258,9 +293,12 @@
     { label: t('personCenter.opinions.otherIssues'), value: t('personCenter.opinions.otherIssues') },
   ]);
 
-  const isFormTab = computed(() => activeTab.value === t('personCenter.opinions.feedbackType'));
+  const isFormTab = computed(() => activeTab.value === 'form');
   const maxImageCount = computed(() => (bookmark.isMobile ? 2 : 3));
   const parsedDraftImages = computed(() => opinionData.imgArray.map((item) => item));
+  const canSubmit = computed(
+    () => Boolean(opinionData.type) && opinionData.content.trim().length >= 6 && !submitting.value,
+  );
 
   resetDraft();
 
@@ -385,34 +423,42 @@
 
   async function submit() {
     if (!opinionData.type) {
-      message.warning('请选择反馈类型');
+      message.warning(t('personCenter.opinions.chooseType'));
       return;
     }
-    if (!opinionData.content || !opinionData.content.trim()) {
+    if (opinionData.content.trim().length < 6) {
       message.warning(t('personCenter.opinions.contentPlaceholder'));
       return;
     }
 
-    const params: any = cloneDeep(opinionData);
-    params.imgArray = JSON.stringify(params.imgArray);
-    const res = await opinionApi.createOpinion(params);
-    if (res.status === 200) {
-      recordOperation({
-        module: t('personCenter.opinions.feedbackModule'),
-        operation: `${t('personCenter.opinions.submitFeedback')}成功`,
-      });
-      message.success(t('personCenter.opinions.thankYouFeedback'));
-      resetDraft();
-      emit('submitted');
+    submitting.value = true;
+    try {
+      const params: any = cloneDeep(opinionData);
+      params.content = params.content.trim();
+      params.imgArray = JSON.stringify(params.imgArray);
+      const res = await opinionApi.createOpinion(params);
+      if (res.status === 200) {
+        recordOperation({
+          module: t('personCenter.opinions.feedbackModule'),
+          operation: `${t('personCenter.opinions.submitFeedback')}成功`,
+        });
+        message.success(t('personCenter.opinions.thankYouFeedback'));
+        resetDraft();
+        showContact.value = false;
+        emit('submitted');
+      }
+    } finally {
+      submitting.value = false;
     }
   }
 
   async function fetchOpinionHistory() {
     loading.value = true;
+    historyFailed.value = false;
     try {
       const res = await opinionApi.getOpinionList({
         currentPage: 1,
-        pageSize: 50,
+        pageSize: 20,
         userId: user.id,
       });
       if (res.status === 200) {
@@ -430,6 +476,9 @@
           return fetchOpinionHistory();
         }
       }
+    } catch (error) {
+      console.error('加载反馈历史失败:', error);
+      historyFailed.value = true;
     } finally {
       loading.value = false;
     }
@@ -448,8 +497,7 @@
   watch(
     () => props.initialTab,
     (value) => {
-      activeTab.value =
-        value === 'history' ? t('personCenter.opinions.feedbackHistory') : t('personCenter.opinions.feedbackType');
+      activeTab.value = value === 'history' ? 'history' : 'form';
       if (value === 'history') {
         hasMarkedViewed.value = false;
         fetchOpinionHistory();
@@ -460,7 +508,7 @@
   watch(
     () => activeTab.value,
     (value) => {
-      if (value === t('personCenter.opinions.feedbackHistory')) {
+      if (value === 'history') {
         hasMarkedViewed.value = false;
         fetchOpinionHistory();
       }
@@ -468,7 +516,7 @@
   );
 
   onMounted(() => {
-    if (activeTab.value === t('personCenter.opinions.feedbackHistory')) {
+    if (activeTab.value === 'history') {
       fetchOpinionHistory();
     }
   });
@@ -621,9 +669,22 @@
     gap: 8px;
   }
 
+  .opinion-field__heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+
   .opinion-field__label {
     font-size: 13px;
     font-weight: 600;
+  }
+
+  .opinion-character-count {
+    color: var(--sub-text-color);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
   }
 
   .opinion-upload {
@@ -718,6 +779,32 @@
     flex-wrap: wrap;
   }
 
+  .opinion-mobile-images {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .opinion-mobile-images .opinion-image,
+  .opinion-mobile-images :deep(.b-upload-trigger),
+  .opinion-mobile-images :deep(.b_btn) {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  .opinion-mobile-images__add {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: 1px dashed var(--primary-color);
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: var(--surface-panel-bg);
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
   .opinion-image {
     position: relative;
     width: 72px;
@@ -748,11 +835,30 @@
     right: 6px;
     width: 22px;
     height: 22px;
+    min-width: 22px;
+    padding: 0;
     border: none;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.6);
     color: white;
     cursor: pointer;
+    line-height: 1;
+  }
+
+  .opinion-contact-toggle {
+    width: 100%;
+    min-height: 44px;
+    justify-content: space-between;
+    padding: 0 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--text-color);
+    background: var(--surface-panel-bg);
+  }
+
+  .opinion-contact-toggle > span:last-child {
+    color: var(--desc-color);
+    font-size: 11px;
   }
 
   .opinion-submit {
@@ -762,6 +868,14 @@
 
   .opinion-history__content {
     min-height: auto;
+  }
+
+  .opinion-retry {
+    min-height: 32px;
+    margin-top: 5px;
+    border: 1px solid currentColor;
+    color: inherit;
+    background: transparent;
   }
 
   .opinion-compose.opinion-body,
@@ -875,23 +989,177 @@
     margin-left: 8px;
   }
 
+  .opinion-empty {
+    min-height: 260px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 24px;
+    box-sizing: border-box;
+    color: var(--desc-color);
+    text-align: center;
+  }
+
+  .opinion-empty__icon {
+    width: 54px;
+    height: 54px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    color: var(--primary-color);
+    background: var(--surface-panel-bg);
+  }
+
+  .opinion-empty strong {
+    color: var(--text-color);
+    font-size: 15px;
+  }
+
+  .opinion-empty > span:not(.opinion-empty__icon) {
+    max-width: 280px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
   @media (max-width: 768px) {
     .opinion-shell {
       gap: 10px;
     }
 
+    .opinion-compose.opinion-body {
+      padding-bottom: 84px;
+    }
+
     .opinion-summary {
-      grid-template-columns: 1fr;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 14px;
+      background: var(--card-background);
+    }
+
+    .opinion-summary__item {
+      min-width: 0;
+      min-height: 68px;
+      align-items: center;
+      justify-content: center;
+      padding: 8px 4px;
+      border: 0;
+      border-radius: 0;
+      text-align: center;
+    }
+
+    .opinion-summary__item + .opinion-summary__item {
+      border-left: 1px solid var(--surface-divider-color);
+    }
+
+    .opinion-summary__item strong {
+      font-size: 19px;
+    }
+
+    .opinion-summary__item span {
+      overflow: hidden;
+      font-size: 10px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .opinion-card {
-      padding: 12px;
-      border-radius: 14px;
+      gap: 13px;
+      padding: 14px;
+      border-color: var(--surface-border-color);
+      border-radius: 16px;
+      background: var(--card-background);
+    }
+
+    .opinion-card__header {
+      align-items: center;
+    }
+
+    .opinion-card__title {
+      font-size: 16px;
+    }
+
+    .opinion-card__desc {
+      margin-top: 3px;
+      line-height: 1.45;
+    }
+
+    .opinion-limit {
+      flex: 0 0 auto;
+    }
+
+    .opinion-field :deep(.bl-radio-group) {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .opinion-field :deep(.bl-radio) {
+      width: 100%;
+      min-width: 0;
+      min-height: 38px;
+      height: auto;
+      justify-content: center;
+      padding: 5px 4px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 10px;
+      color: var(--text-color);
+      background: var(--surface-panel-bg);
+      font-size: 12px;
+      line-height: 1.25;
+      text-align: center;
+    }
+
+    .opinion-field :deep(.bl-radio.element-primary) {
+      border-color: var(--primary-color);
+      color: var(--primary-color);
+      background: var(--surface-panel-bg);
+      box-shadow: inset 0 0 0 1px var(--primary-color);
     }
 
     .opinion-history-card {
       padding: 12px;
       border-radius: 14px;
+      border-color: var(--surface-border-color);
+      box-shadow: none;
     }
+
+    .opinion-history-card__section--content p {
+      display: -webkit-box;
+      overflow: hidden;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+    }
+
+    .opinion-card-images img {
+      width: 64px;
+      height: 64px;
+    }
+
+    .opinion-reply {
+      border-color: var(--primary-color);
+      background: var(--surface-panel-bg);
+    }
+  }
+
+  :global(html.light-note-mobile-rendering) .opinion-history-card,
+  :global(html.light-note-mobile-rendering) .opinion-card {
+    box-shadow: none;
+  }
+
+  :global(html.light-note-mobile-rendering) .opinion-reply {
+    border-color: var(--primary-color);
+    background: var(--surface-panel-bg);
+  }
+
+  :global(html.light-note-mobile-rendering) .opinion-field :deep(.bl-radio.element-primary) {
+    border-color: var(--primary-color);
+    box-shadow: none;
   }
 </style>

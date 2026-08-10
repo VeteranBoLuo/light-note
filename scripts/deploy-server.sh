@@ -40,6 +40,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 
+echo "🔎  检查文件预览 Schema、7-Zip 与 LibreOffice 运行时…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkFilePreviewRuntime.js"
+
 echo "♻️  pm2 restart ${PM2}…"
 ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
   if pm2 describe '$DOCUMENT_WORKER_PM2' >/dev/null 2>&1; then \

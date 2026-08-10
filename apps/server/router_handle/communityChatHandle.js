@@ -1,0 +1,492 @@
+import { L, reqLang, resultData } from '../util/common.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  CommunityChatError,
+  acceptCommunityChatRules,
+  getCommunityChatAccess,
+  getCommunityChatRuntimePolicyForAdmin,
+  listCommunityChatAccessRequests,
+  listCommunityChatRooms,
+  requestCommunityChatAccess,
+  reviewCommunityChatAccessRequest,
+  revokeCommunityChatMember,
+  updateCommunityChatRuntimePolicy,
+} from '../util/services/communityChatAccessService.js';
+import {
+  createCommunityChatMessage,
+  deleteCommunityChatMessage,
+  getCommunityChatMessageAuthorAvatar,
+  getCommunityChatMessageAuthorProfile,
+  listCommunityChatMessages,
+  markCommunityChatRoomRead,
+  recallCommunityChatMessage,
+  toggleCommunityChatMessageLike,
+} from '../util/services/communityChatMessageService.js';
+import {
+  discardCommunityChatImage,
+  getCommunityChatImageDownload,
+  uploadCommunityChatImage,
+} from '../util/services/communityChatImageService.js';
+import {
+  blockCommunityChatMessageAuthor,
+  listCommunityChatBlocks,
+  listCommunityChatReports,
+  reportCommunityChatMessage,
+  reviewCommunityChatReport,
+  unblockCommunityChatUser,
+} from '../util/services/communityChatModerationService.js';
+import {
+  getCommunityChatNotificationSettings,
+  updateCommunityChatNotificationSettings,
+} from '../util/services/communityChatNotificationService.js';
+
+function rejectAdminPreview(req, res) {
+  if (!req.adminContext) return false;
+  res
+    .status(403)
+    .send(
+      resultData(
+        { code: 'COMMUNITY_CHAT_ADMIN_PREVIEW_FORBIDDEN' },
+        403,
+        L(
+          req,
+          '聊天室身份不能通过管理员预览代用，请退出预览后使用自己的账号操作',
+          'Community identity cannot be impersonated through admin preview. Exit preview and use your own account.',
+        ),
+      ),
+    );
+  return true;
+}
+
+function requireRegistered(req, res) {
+  if (req.user?.id && req.user.role !== 'visitor') return true;
+  res
+    .status(403)
+    .send(resultData({ code: 'LOGIN_REQUIRED' }, 403, L(req, '请先注册或登录', 'Please register or sign in first')));
+  return false;
+}
+
+// multer 解析文件前先拒绝游客和管理员预览身份，避免未授权请求写入系统临时目录。
+export function requireImageUploadIdentity(req, res, next) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  return next();
+}
+
+export function imageUploadError(req, res, error) {
+  const tooLarge = error?.code === 'LIMIT_FILE_SIZE';
+  return res
+    .status(tooLarge ? 413 : 400)
+    .send(
+      resultData(
+        { code: tooLarge ? 'COMMUNITY_CHAT_IMAGE_TOO_LARGE' : 'COMMUNITY_CHAT_IMAGE_UPLOAD_INVALID' },
+        tooLarge ? 413 : 400,
+        tooLarge
+          ? L(req, '单张图片不能超过 5MB', 'Each image must be 5MB or smaller')
+          : L(req, '图片上传请求不合法', 'Invalid image upload request'),
+      ),
+    );
+}
+
+function requireRoot(req, res) {
+  if (req.user?.id && req.user.role === 'root') return true;
+  res
+    .status(403)
+    .send(resultData({ code: 'ROOT_REQUIRED' }, 403, L(req, '没有操作权限', 'You do not have permission')));
+  return false;
+}
+
+function sendError(req, res, error) {
+  if (error instanceof CommunityChatError) {
+    return res
+      .status(error.status)
+      .send(resultData({ code: error.code }, error.status, L(req, error.zhMessage, error.enMessage)));
+  }
+  console.error('[社区客厅] 请求失败 code=%s', stableAgentErrorCode(error));
+  return res
+    .status(500)
+    .send(
+      resultData(
+        { code: 'COMMUNITY_CHAT_UNAVAILABLE' },
+        500,
+        L(req, '社区客厅暂时不可用，请稍后重试', 'The community lounge is temporarily unavailable'),
+      ),
+    );
+}
+
+export async function access(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    return res.send(resultData(await getCommunityChatAccess({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function requestAccess(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await requestCommunityChatAccess({ user: req.user, message: req.body?.message });
+    return res.send(resultData(data, 200, L(req, '内测申请已提交', 'Pilot access request submitted')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function acceptRules(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await acceptCommunityChatRules({ user: req.user, rulesVersion: req.body?.rulesVersion });
+    return res.send(resultData(data, 200, L(req, '社区规则已确认', 'Community rules accepted')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function rooms(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    return res.send(resultData(await listCommunityChatRooms({ user: req.user, locale: reqLang(req) })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function notificationSettings(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    return res.send(resultData(await getCommunityChatNotificationSettings({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function updateNotificationSettings(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await updateCommunityChatNotificationSettings({
+      user: req.user,
+      enabled: req.body?.enabled,
+      level: req.body?.level,
+    });
+    return res.send(resultData(data, 200, L(req, '聊天室提醒设置已保存', 'Chat notification settings saved')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function messages(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await listCommunityChatMessages({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      before: req.query?.before,
+      focus: req.query?.focus,
+      limit: req.query?.limit,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function createMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await createCommunityChatMessage({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      clientRequestId: req.body?.clientRequestId,
+      content: req.body?.content,
+      replyToPublicId: req.body?.replyToPublicId,
+      mentionMessagePublicIds: req.body?.mentionMessagePublicIds,
+      imagePublicIds: req.body?.imagePublicIds,
+    });
+    return res.send(resultData(data, 200, L(req, '消息已发送', 'Message sent')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function uploadImage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await uploadCommunityChatImage({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      file: req.file,
+    });
+    return res.send(resultData(data, 200, L(req, '图片已就绪', 'Image ready')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function image(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatImageDownload({
+      user: req.user,
+      imagePublicId: req.params?.publicId,
+    });
+    res.set('Cache-Control', 'private, max-age=60');
+    return res.redirect(302, data.signedUrl);
+  } catch (error) {
+    if (error instanceof CommunityChatError && error.status === 404) return res.status(404).end();
+    return sendError(req, res, error);
+  }
+}
+
+export async function discardImage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await discardCommunityChatImage({
+      user: req.user,
+      imagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '图片已移除', 'Image discarded')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function messageAuthorProfile(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatMessageAuthorProfile({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function messageAuthorAvatar(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const { source } = await getCommunityChatMessageAuthorAvatar({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    res.set('Cache-Control', 'private, max-age=300');
+    res.set('X-Content-Type-Options', 'nosniff');
+    if (/^https?:\/\//i.test(source)) return res.redirect(302, source);
+
+    const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(source);
+    const body = match ? Buffer.from(match[2], 'base64') : null;
+    if (!match || !body?.length || body.length > 524288) {
+      return res
+        .status(404)
+        .send(
+          resultData(
+            { code: 'COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND' },
+            404,
+            L(req, '头像当前不可用', 'Avatar is unavailable'),
+          ),
+        );
+    }
+    return res.type(match[1]).send(body);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function markRoomRead(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await markCommunityChatRoomRead({
+      user: req.user,
+      roomSlug: req.params?.slug,
+      lastMessagePublicId: req.body?.lastMessagePublicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function toggleMessageLike(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await toggleCommunityChatMessageLike({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function recallMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await recallCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '消息已撤回', 'Message recalled')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function deleteMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await deleteCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '已从你的聊天记录删除', 'Removed from your chat history')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function reportMessage(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await reportCommunityChatMessage({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+      reasonCode: req.body?.reasonCode,
+      detail: req.body?.detail,
+    });
+    return res.send(resultData(data, 200, L(req, '举报已提交', 'Report submitted')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function blockMessageAuthor(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await blockCommunityChatMessageAuthor({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '已屏蔽该成员', 'Member blocked')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function blocks(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    return res.send(resultData(await listCommunityChatBlocks({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function unblockUser(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await unblockCommunityChatUser({ user: req.user, blockId: req.params?.blockId });
+    return res.send(resultData(data, 200, L(req, '已取消屏蔽', 'Member unblocked')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function listAccessRequests(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await listCommunityChatAccessRequests({
+      user: req.user,
+      status: req.query?.status,
+      page: req.query?.page,
+      pageSize: req.query?.pageSize,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function reviewAccessRequest(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await reviewCommunityChatAccessRequest({
+      user: req.user,
+      targetUserId: req.params?.userId,
+      action: req.body?.action,
+      note: req.body?.note,
+    });
+    return res.send(resultData(data, 200, L(req, '内测申请已处理', 'Pilot access request reviewed')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function revokeMember(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await revokeCommunityChatMember({
+      user: req.user,
+      targetUserId: req.params?.userId,
+      reason: req.body?.reason,
+    });
+    return res.send(resultData(data, 200, L(req, '聊天室访问资格已撤销', 'Community chat access revoked')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function runtimePolicy(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    return res.send(resultData(await getCommunityChatRuntimePolicyForAdmin({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function updateRuntimePolicy(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await updateCommunityChatRuntimePolicy({
+      user: req.user,
+      postingEnabled: req.body?.postingEnabled,
+      reason: req.body?.reason,
+    });
+    return res.send(resultData(data, 200, L(req, '聊天室运行状态已更新', 'Chat runtime state updated')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function listReports(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await listCommunityChatReports({
+      user: req.user,
+      status: req.query?.status,
+      page: req.query?.page,
+      pageSize: req.query?.pageSize,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function reviewReport(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRoot(req, res)) return;
+  try {
+    const data = await reviewCommunityChatReport({
+      user: req.user,
+      reportId: req.params?.reportId,
+      action: req.body?.action,
+      note: req.body?.note,
+      durationMinutes: req.body?.durationMinutes,
+    });
+    return res.send(resultData(data, 200, L(req, '举报已处理', 'Report reviewed')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}

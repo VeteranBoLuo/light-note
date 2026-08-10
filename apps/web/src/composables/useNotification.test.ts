@@ -79,6 +79,28 @@ describe('useNotification.fetchList', () => {
     await expect(useNotification().deleteNotifications(['n-1'])).resolves.toBe(false);
   });
 
+  it('移动端范围会从列表、铃铛计数和全部已读统一排除聊天室通知', async () => {
+    getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 1, byType: { system: 1 } } });
+    getNotificationList.mockResolvedValue({
+      status: 200,
+      data: { items: [], total: 0, unreadTotal: 1, currentPage: 1, pageSize: 20 },
+    });
+    markAllNotificationsRead.mockResolvedValue({ status: 200 });
+    const notification = useNotification({ excludeCommunityChat: true });
+
+    await notification.refreshUnread();
+    await notification.fetchList({ currentPage: 1, pageSize: 20 });
+    await notification.markAllRead();
+
+    expect(getUnreadCount).toHaveBeenCalledWith({ excludeCommunityChat: true });
+    expect(getNotificationList).toHaveBeenCalledWith({
+      currentPage: 1,
+      pageSize: 20,
+      excludeCommunityChat: true,
+    });
+    expect(markAllNotificationsRead).toHaveBeenCalledWith({ excludeCommunityChat: true });
+  });
+
   it('浏览器通知先建立基线，只对页面打开后出现的新未读项提示', async () => {
     const created: Array<{ title: string; options: NotificationOptions }> = [];
     const close = vi.fn();
@@ -97,7 +119,10 @@ describe('useNotification.fetchList', () => {
     user.preferences.notificationsBrowser = true;
     getUnreadCount
       .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 1, byType: { todo_reminder: 1 } } })
-      .mockResolvedValueOnce({ status: 200, data: { unreadTotal: 2, byType: { todo_reminder: 2 } } });
+      .mockResolvedValueOnce({
+        status: 200,
+        data: { unreadTotal: 3, byType: { todo_reminder: 2, community_chat: 1 } },
+      });
     getNotificationList
       .mockResolvedValueOnce({
         status: 200,
@@ -108,9 +133,17 @@ describe('useNotification.fetchList', () => {
         data: {
           items: [
             { id: 'new', title: '新提醒', content: '待办内容', isRead: 0, link: '/inbox' },
+            {
+              id: 'chat-new',
+              title: '聊天室有新消息',
+              content: '有人回复了你',
+              isRead: 0,
+              link: '/community-chat?message=message-1',
+              meta: JSON.stringify({ delivery: 'in_app_only' }),
+            },
             { id: 'old', title: '旧提醒', isRead: 0 },
           ],
-          total: 2,
+          total: 3,
         },
       });
 

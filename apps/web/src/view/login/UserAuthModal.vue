@@ -189,8 +189,13 @@
 
 <style scoped lang="less">
   .auth-overlay {
-    --auth-card-bg: color-mix(in srgb, var(--background-color) 96%, #6861f0 4%);
-    --auth-card-border: color-mix(in srgb, var(--card-border-color) 78%, #756ff5 22%);
+    /*
+     * 认证卡片直接复用不透明的提升表面。这里不能再用“浅色表面 + 少量品牌紫”的
+     * color-mix：共享移动回退会把弱品牌色归一为半透明 RGBA，深色遮罩随之透进卡片，
+     * 造成移动浏览器与 App 的浅色登录页整片发灰。现有 raised token 本身已提供同款淡紫层次。
+     */
+    --auth-card-bg: var(--surface-raised-background);
+    --auth-card-border: var(--surface-border-color, var(--card-border-color));
     --auth-title: var(--text-color);
     --auth-muted: var(--desc-color);
     --auth-input-bg: var(--bl-input-noBorder-bg-color);

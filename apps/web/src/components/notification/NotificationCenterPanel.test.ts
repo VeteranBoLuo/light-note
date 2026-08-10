@@ -6,6 +6,7 @@ import type { NotificationItem } from '@/composables/useNotification';
 import NotificationCenterPanel from './NotificationCenterPanel.vue';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationCenterPanel.vue'), 'utf8');
+const bellSource = readFileSync(resolve(process.cwd(), 'src/components/notification/NotificationBell.vue'), 'utf8');
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (key: string) => key }),
@@ -90,6 +91,8 @@ describe('NotificationCenterPanel', () => {
 
     expect(host.querySelectorAll('.nt-tab')).toHaveLength(4);
     expect(host.querySelector('.nt-tab.active')?.textContent).toContain('全部');
+    expect(host.querySelector('.nt-tab.active .nt-tab-check')).not.toBeNull();
+    expect(host.querySelectorAll('.nt-tab:not(.active) .nt-tab-check')).toHaveLength(0);
     expect(host.querySelectorAll('.nt-group-surface .nt-item')).toHaveLength(2);
     expect(host.querySelector('.nt-item')?.classList.contains('unread')).toBe(true);
     expect(host.querySelector('.nt-item .nt-dot')).not.toBeNull();
@@ -142,12 +145,24 @@ describe('NotificationCenterPanel', () => {
   });
 
   it('移动端操作按钮保留触控热区，但可见尺寸与状态胶囊一致', () => {
-    expect(source).toMatch(
-      /\.is-mobile \.nt-todo-action\s*\{[\s\S]*?height: 44px;[\s\S]*?min-height: 44px;/,
-    );
+    expect(source).toMatch(/\.is-mobile \.nt-todo-action\s*\{[\s\S]*?height: 44px;[\s\S]*?min-height: 44px;/);
     expect(source).toMatch(
       /\.is-mobile \.nt-todo-action::before\s*\{[\s\S]*?inset: 10px 0;[\s\S]*?border-radius: 7px;/,
     );
     expect(source).toMatch(/\.nt-todo-state\s*\{[\s\S]*?min-height: 24px;[\s\S]*?border-radius: 7px;/);
+  });
+
+  it('通知分类选中态同时使用实色描边、明确文字色和勾选图标', () => {
+    expect(source).toContain('class="nt-tab-check"');
+    expect(source).toMatch(
+      /\.nt-tab\.active\s*\{[\s\S]*?border:\s*2px solid var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,
+    );
+    expect(source).toMatch(
+      /\.is-mobile \.nt-tab\.active\s*\{[\s\S]*?border:\s*2px solid var\(--primary-color\);[\s\S]*?background:\s*var\(--mobile-selected-bg\) !important;/,
+    );
+    expect(bellSource).toMatch(
+      /\.notification-popover \.nt-tab\.active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,
+    );
+    expect(bellSource).not.toMatch(/\.notification-popover \.nt-tab\.active\s*\{[^}]*color:\s*#fff;/);
   });
 });

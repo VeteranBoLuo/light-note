@@ -51,6 +51,10 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.8"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" fill="currentColor" opacity=".22"/><rect x="7.5" y="7.5" width="9" height="9" rx=".75" stroke="currentColor" stroke-width="1.6"/></svg>',
     week: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="4.25" y="4.25" width="15.5" height="15.5" rx="1.5" stroke="currentColor" stroke-width="1.6"/><path d="M8.125 4.75v14.5M12 4.75v14.5M15.875 4.75v14.5M4.75 8.125h14.5M4.75 12h14.5M4.75 15.875h14.5" stroke="currentColor" stroke-width="1.15" opacity=".86"/></svg>',
   },
+  communityChat: {
+    defaultAvatar:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#615ced"/><circle cx="20" cy="15" r="7" fill="#fff"/><path d="M8.5 35c1.15-7.25 5-10.9 11.5-10.9S30.35 27.75 31.5 35" fill="#fff"/></svg>',
+  },
   message: {
     success:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.8" opacity=".45"/><path d="m8.25 12.15l2.35 2.35l5.15-5.25" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -315,6 +319,8 @@ export default {
     toolbar: {
       undo: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 7H5v-4M5.4 7.1A8 8 0 1 1 4.2 14"/></svg>',
       redo: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 7h4v-4m-.4 4.1A8 8 0 1 0 19.8 14"/></svg>',
+      repeat:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M6.5 7.5h10a3.5 3.5 0 0 1 3.5 3.5v.5M7.5 16.5h10A3.5 3.5 0 0 0 21 13"/><path d="m6.5 4.5l-3 3l3 3M17.5 13.5l3 3l-3 3"/></g></svg>',
       todo: '<svg xmlns="http://www.w3.org/2000/svg" width="22px" height="22px" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="m9 11l3 3l8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></g></svg>',
       codeBlock:
         '<svg xmlns="http://www.w3.org/2000/svg" width="24px" height="24px" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5" d="m17 7.83l1.697 1.526c1.542 1.389 2.313 2.083 2.313 2.974c0 .89-.771 1.585-2.314 2.973L17 16.83M13.987 5L12 12.415l-1.987 7.415M7 7.83L5.304 9.356C3.76 10.745 2.99 11.44 2.99 12.33s.771 1.585 2.314 2.973L7 16.83"/></svg>',
@@ -338,6 +344,8 @@ export default {
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M12 9.5v10"/></g></svg>',
       image:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.5" y="5" width="17" height="14" rx="2.2"/><circle cx="8.75" cy="9.75" r="1.5"/><path d="m4.5 16.5l4.2-3.9a1.6 1.6 0 0 1 2.2.06L15 16.4m0 0l1.9-1.7a1.6 1.6 0 0 1 2.16.03l1.44 1.32"/></g></svg>',
+      mediaText:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="3.25" y="5" width="7.5" height="14" rx="1.8"/><circle cx="6.35" cy="8.4" r="1.05"/><path d="m4.1 16.7l2.05-2.25a1.2 1.2 0 0 1 1.72-.05l2.05 2.15M14 7h6.5M14 11h6.5M14 15h5M14 19h4"/></g></svg>',
       mention:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="12" cy="12" r="3.2"/><path d="M15.2 9.4V13a2.6 2.6 0 0 0 5.2 0v-1a8.4 8.4 0 1 0-3.3 6.68"/></g></svg>',
       underline:
@@ -346,6 +354,8 @@ export default {
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8" d="M5 12h14M17.5 7.2C16.8 5.6 14.8 5 12.5 5C9.8 5 8 6.2 8 8.1c0 1.4 1 2.2 2.4 2.7m.8 2.4c2.8.5 4.8 1.1 4.8 3.1c0 1.8-1.8 2.7-4.3 2.7c-2.3 0-4.4-.8-5.2-2.5"/></svg>',
       textColor:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m6 18l6-14l6 14M8.2 13h7.6M5 21h14"/></svg>',
+      gradientText:
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="m5.5 17.5l5.1-12h2.8l5.1 12M7.8 12.2h8.4"/><path d="M5 21h2.4m1.7 0h2.4m1.7 0h2.4m1.7 0H19"/></g></svg>',
       backgroundColor:
         '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="m8 4l8 8l-5.5 5.5a2 2 0 0 1-2.8 0l-2.2-2.2a2 2 0 0 1 0-2.8L11 7"/><path d="M4 21h16"/></g></svg>',
       align:

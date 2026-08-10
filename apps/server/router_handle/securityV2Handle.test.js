@@ -23,9 +23,8 @@ vi.mock('../util/security/services/securityEventHandling.js', () => ({
   applySecurityEventHandle: mocks.applySecurityEventHandle,
 }));
 
-const { batchSetSecurityReviewDisposition, getSecurityReviewClusters, getSecurityRuleQuality } = await import(
-  './securityV2Handle.js'
-);
+const { batchSetSecurityReviewDisposition, getSecurityOverviewV2, getSecurityReviewClusters, getSecurityRuleQuality } =
+  await import('./securityV2Handle.js');
 
 function createResponse() {
   return {
@@ -105,9 +104,7 @@ describe('securityV2Handle 批量事件复核', () => {
   });
 
   it('待复核列表和角标统一只统计 unknown 且处于 new/reviewing 的事件', async () => {
-    mocks.pool.query
-      .mockResolvedValueOnce([[{ disposition: 'unknown', total: 26 }]])
-      .mockResolvedValueOnce([[]]);
+    mocks.pool.query.mockResolvedValueOnce([[{ disposition: 'unknown', total: 26 }]]).mockResolvedValueOnce([[]]);
     const res = createResponse();
 
     await getSecurityReviewClusters(
@@ -124,6 +121,99 @@ describe('securityV2Handle 批量事件复核', () => {
     expect(countSql).toContain("e.disposition <> 'unknown' OR e.workflow_status IN ('new','reviewing')");
     expect(listSql).toContain("e.workflow_status IN ('new','reviewing')");
     expect(res.body).toMatchObject({ status: 200, data: { counts: [{ disposition: 'unknown', total: 26 }] } });
+  });
+});
+
+describe('securityV2Handle 安全态势', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.pool.query.mockReset();
+  });
+
+  it('最吵规则直接按安全事件聚合，并回传命中量与当前运行模式', async () => {
+    mocks.pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            pendingReview: 0,
+            confirmedAttacks: 3,
+            falsePositives: 10,
+            authorizedTests: 1,
+            benignAnomalies: 4,
+            highConfidenceBlocks: 13,
+            pendingHighConfidence: 0,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 0 }]])
+      .mockResolvedValueOnce([
+        [
+          {
+            statDate: '2026-08-09',
+            raw: 17,
+            confirmed: 3,
+            falsePositive: 10,
+            benignAnomaly: 2,
+            authorizedTest: 1,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            ruleCode: 'SSRF_PRIVATE_HOST',
+            ruleName: 'SSRF 内网地址访问',
+            rawHits: '17',
+            confirmedHits: '3',
+            falsePositiveHits: '10',
+            falsePositiveRate: '59',
+            primaryRoute: '/chat/generateBookmarkMeta',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ ruleCode: 'SSRF_PRIVATE_HOST', mode: 'block', version: 4 }]]);
+    const res = createResponse();
+
+    await getSecurityOverviewV2(
+      {
+        user: { id: 'root-1', role: 'root' },
+        adminContext: null,
+        body: { days: 7 },
+      },
+      res,
+    );
+
+    const noisyRulesSql = mocks.pool.query.mock.calls[3][0];
+    expect(noisyRulesSql).toContain('FROM security_events e');
+    expect(noisyRulesSql).not.toContain('security_event_evidence');
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        summary: { confirmedAttacks: 3, falsePositiveRate: 59, policyVersion: 4 },
+        trend: expect.arrayContaining([
+          expect.objectContaining({
+            date: '2026-08-09',
+            raw: 17,
+            confirmed: 3,
+            falsePositive: 10,
+            benignAnomaly: 2,
+            authorizedTest: 1,
+          }),
+        ]),
+        noisyRules: [
+          {
+            ruleCode: 'SSRF_PRIVATE_HOST',
+            mode: 'block',
+            rawHits: 17,
+            confirmedHits: 3,
+            falsePositiveHits: 10,
+            falsePositiveRate: 59,
+            primaryRoute: '/chat/generateBookmarkMeta',
+          },
+        ],
+      },
+    });
   });
 });
 

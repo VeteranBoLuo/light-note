@@ -16,6 +16,13 @@
         :class="{ active: activeTab === tab.value }"
         @click="emit('switch-tab', tab.value)"
       >
+        <SvgIcon
+          v-if="activeTab === tab.value"
+          class="nt-tab-check"
+          :src="icon.filterPanel.check"
+          size="14"
+          aria-hidden="true"
+        />
         {{ tab.label }}
         <span v-if="tabUnread(tab.value) > 0" class="nt-tab-badge">
           {{ tabUnread(tab.value) > 99 ? '99+' : tabUnread(tab.value) }}
@@ -199,10 +206,15 @@
   }
 
   .nt-tab.active {
-    border-color: var(--primary-color);
+    border: 2px solid var(--primary-color);
     color: var(--primary-color);
     background: var(--mobile-selected-bg) !important;
     font-weight: 700;
+  }
+
+  .nt-tab-check {
+    flex: 0 0 auto;
+    color: currentColor;
   }
 
   .nt-tab-badge {
@@ -391,16 +403,16 @@
 
   .is-mobile .nt-tab {
     min-height: 36px;
-    border: 0;
+    border: 1px solid transparent;
     border-radius: 10px;
     font-size: 13px;
   }
 
   .is-mobile .nt-tab.active {
-    border: 0;
+    border: 2px solid var(--primary-color);
     color: var(--primary-color);
-    background: var(--card-background) !important;
-    box-shadow: 0 4px 12px rgba(42, 45, 80, 0.08);
+    background: var(--mobile-selected-bg) !important;
+    box-shadow: none;
     font-weight: 700;
   }
 

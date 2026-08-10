@@ -180,8 +180,8 @@
 
   @media (max-width: 600px) {
     .recommendation-container {
-      height: var(--mobile-touch-size, 44px);
-      min-height: var(--mobile-touch-size, 44px);
+      height: 40px;
+      min-height: 40px;
       padding: 0;
       box-sizing: border-box;
       align-items: center;
@@ -207,8 +207,8 @@
 
     .recommendation-item {
       width: max-content;
-      height: var(--mobile-touch-size, 44px);
-      min-height: var(--mobile-touch-size, 44px);
+      height: 40px;
+      min-height: 40px;
       max-width: min(216px, 68vw);
       padding: 0 10px;
       border: 0;

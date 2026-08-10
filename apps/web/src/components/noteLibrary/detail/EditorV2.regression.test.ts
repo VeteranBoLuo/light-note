@@ -64,6 +64,11 @@ describe('编辑器 V2 交互回归', () => {
     expect(codeMirrorSource).toMatch(/'\.cm-activeLine':\s*\{[\s\S]*rgba\(97, 92, 237, 0\.045\)/u);
   });
 
+  it('渐变文字使用透明文字填充时仍显式保留可见插入光标', () => {
+    const gradientStyle = sourceBetween(commonStylesSource, '.ln-text-gradient {', '@supports');
+    expect(gradientStyle).toContain('caret-color: var(--text-color, #161824)');
+  });
+
   it('工具栏启用态与禁用态具有不同的文字、边框和透明度', () => {
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\)[\s\S]*color:\s*var\(--text-color\)/u);
     expect(toolbarSource).toMatch(/editor-toolbar-v2__button\.disabled\)[\s\S]*opacity:\s*0\.4/u);
@@ -128,6 +133,76 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain("isMobile.value || props.context === 'template' ? 'edit' : 'split'");
     expect(editorSource).toContain("{ key: 'split', label: t('note.mdEditPreview')");
     expect(editorSource).toContain("{ key: 'preview', label: t('note.mdPreview')");
+  });
+
+  it('快捷键帮助、重做与重复上一步是三个独立入口，两种编辑模式都支持重复格式功能', () => {
+    const mobilePrimaryActions = sourceBetween(toolbarSource, 'const mobilePrimaryActions', 'function emitAction');
+    expect(toolbarSource).toContain('<ToolbarButton :action="shortcutsAction" @run="emitAction" />');
+    expect(toolbarSource).toContain('<ToolbarButton :action="repeatAction" @run="emitAction" />');
+    expect(toolbarSource).toContain('shortcutsAction: EditorToolbarAction');
+    expect(toolbarSource).toContain('repeatAction: EditorToolbarAction');
+    expect(mobilePrimaryActions).not.toContain('props.shortcutsAction');
+    expect(mobilePrimaryActions).not.toContain('props.repeatAction');
+    expect(editorSource).toContain('v-model:visible="shortcutHelpVisible"');
+    expect(editorSource).toContain(
+      "toolbarAction('shortcuts', t('noteDetail.editor.shortcuts'), icon.settings.shortcuts",
+    );
+    expect(editorSource).toContain("if (action.key === 'shortcuts')");
+    expect(editorSource).toContain('shortcutHelpVisible.value = true');
+    expect(editorSource).not.toContain('markdownShortcutsVisible');
+    expect(editorSource).not.toContain("action('markdownShortcuts'");
+    expect(editorSource).toContain("editor.shortcuts.add('Meta+Y', '', () => editor.execCommand('Redo'))");
+    expect(editorSource).toContain("editor.shortcuts.add('Meta+Shift+Z', '', () => editor.execCommand('Redo'))");
+    expect(editorSource).toContain('if (handleRepeatLastEditorActionShortcut(event)) return');
+    expect(editorSource).toContain('matchesRepeatLastActionShortcut(event)');
+    expect(editorSource).toContain('getRepeatLastActionShortcutLabels()');
+    expect(editorSource).not.toContain("editor.shortcuts.add('F4', '', repeatLastEditorAction)");
+    expect(editorSource).not.toContain("editor.shortcuts.add('Meta+Alt+R', '', repeatLastEditorAction)");
+    expect(editorSource).toContain("if (action.key === 'repeatLastAction')");
+    expect(editorSource).toContain("rememberRepeatableAction('markdown', { key })");
+    expect(editorSource).toContain("rememberRepeatableAction('html', {");
+    expect(editorSource).toContain("key: 'textGradient'");
+    expect(editorSource).toContain('applyRichTextGradientToCurrentSelection(action.gradient)');
+    expect(editorSource).not.toContain("t('noteDetail.editor.redoRepeat')");
+    expect(editorSource).toContain("event.key.toLowerCase() === 'y'");
+    expect(editorSource).toContain("event.shiftKey && event.key.toLowerCase() === 'z'");
+    expect(codeMirrorSource).toContain("['F4', 'repeatLastAction']");
+    expect(codeMirrorSource).toContain("['Mod-Alt-r', 'repeatLastAction']");
+    expect(codeMirrorSource).toContain('`Mod-${index + 1}`');
+    expect(editorSource).toContain('const level = matchHeadingShortcut(event)');
+    expect(editorSource).toContain('runRichToolbarAction(`heading${level}`)');
+    expect(editorSource).toContain('const action = matchEditorInlineFormatShortcut(event)');
+    expect(editorSource).toContain('runRichToolbarAction(action)');
+    expect(editorSource).toContain("if (key === 'italic') return editor.execCommand('Italic')");
+  });
+
+  it('Markdown 与富文本共用图文组合入口，Markdown 上传后写入可预览的 HTML 块', () => {
+    expect(editorSource).toContain("action('insertMediaText', t('noteDetail.editor.mediaText')");
+    expect(editorSource).toContain("if (key === 'insertMediaText') return openMarkdownMediaTextInsert()");
+    expect(editorSource).toContain('createMarkdownRichMediaTextBlockHtml(');
+    expect(editorSource).toContain("operation: '在 Markdown 中插入图文组合'");
+  });
+
+  it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {
+    expect(editorSource).toContain('adjustContextToolbarAwayFromMainToolbar');
+    expect(editorSource).toContain("editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment)");
+    expect(editorSource).toContain('editorViewportTop + selectionRect.bottom');
+    expect(editorSource).toContain("addEventListener('scroll', scheduleContextToolbarAdjustment");
+    expect(editorSource).toContain("'data-mce-bogus': 'all'");
+    expect(editorSource).toContain('ln-ai-selection-pending__spinner');
+    expect(editorSource).toContain('removeSelectionAiPendingMarker(pendingMarker)');
+  });
+
+  it('渐变弹框有可视预设色板，宽屏桌面工具栏直接展示常用格式', () => {
+    expect(editorSource).toContain('v-for="preset in richTextGradientPresets"');
+    expect(editorSource).toContain('applyRichTextGradientPreset(preset)');
+    expect(editorSource).toContain('<template v-if="bookmark.isDesktop">');
+    expect(editorSource).toContain('id="note-rich-gradient-from-picker"');
+    expect(editorSource).toContain('id="note-rich-gradient-to-picker"');
+    expect(editorSource).toContain('type="color"');
+    expect(toolbarSource).toContain('desktopFormatActions');
+    expect(toolbarSource).toContain('editor-toolbar-v2__desktop-formats');
+    expect(editorSource).toContain("action('textGradient', t('noteDetail.editor.gradientText')");
   });
 
   it('模板正文工作区只让共享编辑器内部滚动，不再用固定高度撑开外层页面', () => {
@@ -212,13 +287,27 @@ describe('编辑器 V2 交互回归', () => {
     expect(noteDetailSource).toContain('@mode-converted="onEditorModeConverted"');
   });
 
-  it('笔记草稿由 IndexedDB 主存储，并防止异步恢复覆盖已经切换的笔记', () => {
-    expect(noteDetailSource).toContain('readNoteDraftFromDb');
-    expect(noteDetailSource).toContain('writeNoteDraftToDb');
-    expect(noteDetailSource).toContain('promoteNoteDraftInDb');
-    expect(noteDetailSource).toContain('activeDraftNoteId !== draftNoteId');
-    expect(noteDetailSource).toContain('currentDraftIdentityKey() !== identityKey');
-    expect(noteDetailSource).not.toContain('window.localStorage, currentDraftIdentityKey()');
+  it('笔记只在云端保存返回 revision 冲突时打开版本对比', () => {
+    const saveConflict = sourceBetween(
+      noteDetailSource,
+      "apiBasePost('/api/note/updateNote'",
+      'ok = res.status === 200',
+    );
+    expect(saveConflict).toContain("res.status === 409 && res.data?.code === 'NOTE_VERSION_CONFLICT'");
+    expect(saveConflict).toContain('openVersionConflict(cloud, currentNoteVersion())');
+    expect(noteDetailSource).not.toContain('readNoteDraftFromDb');
+    expect(noteDetailSource).not.toContain('recoverLocalDraft');
+    expect(noteDetailSource).not.toContain('persistLocalDraftNow');
+    expect(noteDetailSource).not.toContain("addEventListener('pagehide'");
+  });
+
+  it('HTML 切到 Markdown 时先释放富文本状态，并由 TinyMCE 包装组件单独销毁实例', () => {
+    const modeSwitch = sourceBetween(editorSource, 'async function doSwitch', 'function undoSwitch');
+    expect(modeSwitch).toMatch(/prepareRichEditorForUnmount\(\);[\s\S]*currentType\.value = targetType/u);
+    const removeHandler = sourceBetween(editorSource, "editor.on('remove'", 'const refreshResourceReferences');
+    expect(removeHandler).not.toContain('clearRichFindMatches()');
+    expect(removeHandler).toContain('resetRichFindState()');
+    expect(editorSource).not.toContain('editorRef.value.remove();');
   });
 
   it('富文本划词 AI 只提交选段协议，并在原选区未变化时安全写回', () => {
@@ -279,7 +368,7 @@ describe('编辑器 V2 交互回归', () => {
   });
 
   it('笔记内部滚动容器使用滚动时显隐的统一滚动条行为', () => {
-    expect(editorSource).toContain('<div v-auto-scrollbar class="note-editor-scroll">');
+    expect(editorSource).toContain('v-auto-scrollbar class="note-editor-scroll"');
     expect(editorSource).toMatch(/ref="mdPreviewRef"\s+v-auto-scrollbar/u);
     expect(codeMirrorSource).toContain("view.scrollDOM.classList.add('auto-scrollbar')");
     expect(codeMirrorSource).toContain("scrollElement.classList.add('is-scrolling')");

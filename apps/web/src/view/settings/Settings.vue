@@ -422,6 +422,9 @@
                 @change="set('notificationsInApp', $event)"
               />
             </div>
+            <div v-if="!isGuestUser()" class="field community-chat-notification-field">
+              <CommunityChatNotificationSettingsPanel />
+            </div>
             <div class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.notificationsEmail') }}</span>
@@ -760,6 +763,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import AccountSecurity from '@/components/settings/AccountSecurity.vue';
+  import CommunityChatNotificationSettingsPanel from '@/components/communityChat/CommunityChatNotificationSettingsPanel.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -1329,6 +1333,9 @@
   }
   .notification-dnd-controls :deep(.b-input) {
     width: 112px;
+  }
+  .community-chat-notification-field {
+    display: block;
   }
   @media (max-width: 600px) {
     .notification-dnd-field {

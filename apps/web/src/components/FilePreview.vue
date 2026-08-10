@@ -52,7 +52,7 @@
       </div>
       <div class="preview-content" @click.stop>
         <ResourceBacklinks
-          v-if="fileInfo?.id && !isHtmlFullscreen"
+          v-if="fileInfo?.id && previewAccess?.kind !== 'share' && !isHtmlFullscreen"
           class="file-preview-backlinks"
           target-type="file"
           :target-id="String(fileInfo.id)"
@@ -81,12 +81,20 @@
         <div :style="{ opacity: loading ? '0' : '1' }" class="preview-main flex-center">
           <!-- 1. PDF预览 -->
           <PdfPreview
-            v-if="previewType === 'pdf'"
+            v-if="(previewType === 'pdf' || previewType === 'converted-pdf') && effectiveFileUrl"
             :src="effectiveFileUrl"
             :file-name="fileInfo.fileName"
             class="preview-pdf-viewer"
             @rendered="onRendered"
             @error="onPdfError"
+          />
+
+          <!-- 1.25 压缩包只展示目录，不在服务器或浏览器解压内容 -->
+          <ArchivePreview
+            v-else-if="previewType === 'archive' && derivedReady"
+            :file-id="String(fileInfo.id)"
+            :preview-ticket="sharePreviewTicket"
+            @error="onDerivedPreviewError"
           />
 
           <!-- 1.5 HTML 交互预览：必须与轻笺页面隔离，禁止直接 v-html 注入 -->
@@ -250,7 +258,7 @@
         </div>
 
         <!-- 预览控制栏：悬浮在内容区内，避免额外占用预览高度 -->
-        <div v-if="!loading && !isHtmlFullscreen && (showNext || fileInfo.fileUrl)" class="preview-controls">
+        <div v-if="!loading && !isHtmlFullscreen && (showNext || sourceDownloadUrl)" class="preview-controls">
           <div v-if="showNext" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.previous')">
               <BButton size="small" @click="handlePrev" class="action-btn">
@@ -263,15 +271,15 @@
               </BButton>
             </BTooltip>
           </div>
-          <span v-if="showNext && fileInfo.fileUrl" class="control-divider"></span>
-          <div v-if="fileInfo.fileUrl" class="preview-control-group">
+          <span v-if="showNext && sourceDownloadUrl" class="control-divider"></span>
+          <div v-if="sourceDownloadUrl" class="preview-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.download')">
               <BButton size="small" @click="downloadFile" class="action-btn">
                 <SvgIcon :src="icon.cloudSpace.download" size="17" />
               </BButton>
             </BTooltip>
           </div>
-          <span v-if="previewType === 'image' && (showNext || fileInfo.fileUrl)" class="control-divider"></span>
+          <span v-if="previewType === 'image' && (showNext || sourceDownloadUrl)" class="control-divider"></span>
           <div v-if="previewType === 'image'" class="preview-control-group image-control-group">
             <BTooltip :title="t('cloudSpace.previewPanel.zoomOut')">
               <BButton size="small" @click="zoomOut" :disabled="scale <= 0.1" class="action-btn">
@@ -305,12 +313,21 @@
   import { useI18n } from 'vue-i18n';
   import VideoPreview from '@/components/base/VideoPreview.vue';
   import PdfPreview from '@/components/cloudSpace/PdfPreview.vue';
+  import ArchivePreview from '@/components/cloudSpace/ArchivePreview.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { getFileShareDownload } from '@/http/common.ts';
+  import {
+    prepareOwnedFilePreview,
+    prepareSharedFilePreview,
+    resolveOwnedFilePreview,
+    resolveSharedFilePreview,
+    type FilePreviewState,
+  } from '@/api/filePreviewApi.ts';
   import { acquireTopLayerEscapeLock } from '@/utils/topLayerEscape';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
   import {
@@ -333,6 +350,7 @@
     type MobileOverlayHistoryHandle,
   } from '@/utils/mobileOverlayHistory';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer';
+  import { getFilePreviewPollDelay, hasFilePreviewPollingTimedOut } from '@/utils/filePreviewPolling';
 
   const VueOfficeDocx = defineAsyncComponent(() => import('@vue-office/docx/lib/v3/vue-office-docx.mjs'));
   const VueOfficeExcel = defineAsyncComponent(() => import('@vue-office/excel/lib/v3/vue-office-excel.mjs'));
@@ -348,6 +366,7 @@
       fileUrl?: string;
       category?: string;
     };
+    previewAccess?: { kind: 'share'; token: string; accessCode?: string } | { kind: 'owner' };
   }>();
 
   const emit = defineEmits<{
@@ -387,6 +406,12 @@
   const markdownContent = ref('');
   let activePreviewFileId = '';
   let textAbortController: AbortController | null = null;
+  const derivedPreviewUrl = ref('');
+  const derivedReady = ref(false);
+  const sharePreviewTicket = ref('');
+  const sharedSourceFileUrl = ref('');
+  let previewPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let releasePreviewPollWait: (() => void) | null = null;
 
   let officeStyleLoaded = false;
   let markdownLibLoaded = false;
@@ -491,12 +516,10 @@
     markdownContent.value = enrichMarkdownHeadings(sanitized);
   }
 
+  const sourceDownloadUrl = computed(() => sharedSourceFileUrl.value || props.fileInfo.fileUrl || '');
   const effectiveFileUrl = computed(() => {
-    if (!props.fileInfo.fileUrl) return '';
-
-    const url = props.fileInfo.fileUrl;
-
-    return url;
+    if (previewType.value === 'converted-pdf') return derivedPreviewUrl.value;
+    return sourceDownloadUrl.value;
   });
 
   // 监听 visible 变化，开始预览
@@ -519,10 +542,12 @@
         return;
       }
       if (!newVisible) {
+        cancelPreviewPolling();
         textAbortController?.abort();
         textAbortController = null;
         void exitHtmlFullscreen();
         activePreviewFileId = '';
+        resetDerivedPreviewState();
         releaseHtmlBlobUrl();
         document.body.style.overflow = previousBodyOverflow;
         if (previewHistoryHandle) {
@@ -563,7 +588,8 @@
   );
 
   // 开始预览
-  async function startPreview(file: typeof props.fileInfo) {
+  async function startPreview(file: typeof props.fileInfo, retryDerived = false) {
+    cancelPreviewPolling();
     textAbortController?.abort();
     textAbortController = null;
     loading.value = true;
@@ -573,7 +599,25 @@
     markdownContent.value = '';
     resetImageView();
     releaseHtmlBlobUrl();
+    resetDerivedPreviewState();
     try {
+      if (previewType.value === 'archive' || previewType.value === 'converted-pdf') {
+        await loadDerivedPreview(retryDerived);
+        return;
+      }
+      if (
+        props.previewAccess?.kind === 'share' &&
+        !effectiveFileUrl.value &&
+        !unsupportedTypes.includes(previewType.value)
+      ) {
+        const expectedFileId = activePreviewFileId;
+        const result = await getFileShareDownload(
+          props.previewAccess.token,
+          String(props.previewAccess.accessCode || '').trim(),
+        );
+        if (expectedFileId !== activePreviewFileId) return;
+        sharedSourceFileUrl.value = result.downloadUrl;
+      }
       if (['word', 'excel', 'ppt'].includes(previewType.value)) {
         await ensureOfficeStylesLoaded();
       }
@@ -593,8 +637,100 @@
       }
     } catch (err) {
       error.value = true;
-      errorMessage.value = t('cloudSpace.previewPanel.loadFailed');
+      errorMessage.value = (err as Error)?.message || t('cloudSpace.previewPanel.loadFailed');
       loading.value = false;
+    }
+  }
+
+  function resetDerivedPreviewState() {
+    derivedPreviewUrl.value = '';
+    derivedReady.value = false;
+    sharePreviewTicket.value = '';
+    sharedSourceFileUrl.value = '';
+  }
+
+  function cancelPreviewPolling() {
+    if (previewPollTimer) clearTimeout(previewPollTimer);
+    previewPollTimer = null;
+    releasePreviewPollWait?.();
+    releasePreviewPollWait = null;
+  }
+
+  function waitForPreviewPoll(milliseconds: number) {
+    return new Promise<void>((resolve) => {
+      releasePreviewPollWait = resolve;
+      previewPollTimer = setTimeout(
+        () => {
+          previewPollTimer = null;
+          releasePreviewPollWait = null;
+          resolve();
+        },
+        Math.min(5000, Math.max(500, milliseconds || 1500)),
+      );
+    });
+  }
+
+  function derivedFailureMessage(code: string) {
+    const keyByCode: Record<string, string> = {
+      ARCHIVE_PASSWORD_REQUIRED: 'cloudSpace.previewPanel.archivePasswordUnsupported',
+      ARCHIVE_MULTIPART_OR_DAMAGED: 'cloudSpace.previewPanel.archiveMultipartOrDamaged',
+      ARCHIVE_ENTRY_LIMIT_EXCEEDED: 'cloudSpace.previewPanel.archiveTooManyEntries',
+      ARCHIVE_MANIFEST_TOO_LARGE: 'cloudSpace.previewPanel.archiveManifestTooLarge',
+      FILE_CONTENT_INVALID: 'cloudSpace.previewPanel.previewContentInvalid',
+      FILE_SIZE_INVALID: 'cloudSpace.previewPanel.previewFileTooLarge',
+      OFFICE_CONVERSION_FAILED: 'cloudSpace.previewPanel.officeConversionFailed',
+      OFFICE_CONVERSION_TIMEOUT: 'cloudSpace.previewPanel.officeConversionTimeout',
+      OFFICE_OUTPUT_TOO_LARGE: 'cloudSpace.previewPanel.officeOutputTooLarge',
+    };
+    return t(keyByCode[code] || 'cloudSpace.previewPanel.derivedPreviewFailed');
+  }
+
+  async function loadDerivedPreview(retryDerived: boolean) {
+    const expectedFileId = activePreviewFileId;
+    const pollingStartedAt = Date.now();
+    const shareAccess = props.previewAccess?.kind === 'share' ? props.previewAccess : null;
+    let state: FilePreviewState;
+    if (shareAccess) {
+      state = await prepareSharedFilePreview(
+        shareAccess.token,
+        String(shareAccess.accessCode || '').trim(),
+        retryDerived,
+      );
+      sharePreviewTicket.value = String(state.previewTicket || '');
+      sharedSourceFileUrl.value = String(state.sourceDownloadUrl || '');
+    } else {
+      state = await resolveOwnedFilePreview(expectedFileId);
+      if (state.status === 'missing' || (state.status === 'failed' && retryDerived)) {
+        state = await prepareOwnedFilePreview(expectedFileId, retryDerived);
+      }
+    }
+
+    for (let pollCount = 0; ; pollCount += 1) {
+      if (expectedFileId !== activePreviewFileId || !props.visible) return;
+      if (state.status === 'ready') {
+        derivedReady.value = true;
+        if (state.previewType === 'converted-pdf') {
+          if (!state.previewUrl) throw new Error(t('cloudSpace.previewPanel.derivedPreviewFailed'));
+          derivedPreviewUrl.value = state.previewUrl;
+          // PDF 保持加载态，交给 PdfPreview 的 rendered/error 事件结算。
+        } else {
+          loading.value = false;
+        }
+        return;
+      }
+      if (state.status === 'failed') {
+        const failure = new Error(derivedFailureMessage(state.errorCode));
+        Object.assign(failure, { code: state.errorCode });
+        throw failure;
+      }
+      if (hasFilePreviewPollingTimedOut(state.previewType, pollingStartedAt)) {
+        throw new Error(t('cloudSpace.previewPanel.derivedPreviewTimeout'));
+      }
+      await waitForPreviewPoll(getFilePreviewPollDelay(pollCount, state.pollAfterMs));
+      if (expectedFileId !== activePreviewFileId || !props.visible) return;
+      state = shareAccess
+        ? await resolveSharedFilePreview(sharePreviewTicket.value)
+        : await resolveOwnedFilePreview(expectedFileId);
     }
   }
 
@@ -740,6 +876,12 @@
     });
   }
 
+  function onDerivedPreviewError(err: unknown) {
+    loading.value = false;
+    error.value = true;
+    errorMessage.value = (err as Error)?.message || t('cloudSpace.previewPanel.derivedPreviewFailed');
+  }
+
   // 工具函数
   function toggleWrap() {
     wrapText.value = !wrapText.value;
@@ -821,10 +963,10 @@
   }
 
   function downloadFile() {
-    if (!props.fileInfo.fileUrl) return;
+    if (!sourceDownloadUrl.value) return;
 
     const link = document.createElement('a');
-    link.href = props.fileInfo.fileUrl;
+    link.href = sourceDownloadUrl.value;
     link.download = props.fileInfo.fileName;
     link.target = '_blank';
     document.body.appendChild(link);
@@ -837,7 +979,7 @@
   }
 
   function retry() {
-    startPreview(props.fileInfo);
+    startPreview(props.fileInfo, true);
   }
 
   async function enterHtmlFullscreen() {
@@ -1120,6 +1262,7 @@
   });
 
   onUnmounted(() => {
+    cancelPreviewPolling();
     textAbortController?.abort();
     textAbortController = null;
     syncEscapeLock(false);

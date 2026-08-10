@@ -18,4 +18,9 @@ describe('移动端通知入口', () => {
     expect(source).toMatch(/<NotificationCenterPanel[\s\S]*?mobile[\s\S]*?@switch-tab="switchTab"/);
     expect(source).toMatch(/\.nt-page[\s\S]*?height:\s*100%[\s\S]*?overflow:\s*hidden/);
   });
+
+  it('移动端与 PC 共用通知中心，后端只放行直接回复，聊天室角标保持独立', () => {
+    expect(source).toContain('useNotification()');
+    expect(source).not.toContain('excludeCommunityChat: isMobileLayout');
+  });
 });

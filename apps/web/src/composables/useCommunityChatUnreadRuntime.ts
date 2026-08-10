@@ -1,0 +1,108 @@
+import { computed, onBeforeUnmount, onMounted, watch, type ComputedRef, type Ref } from 'vue';
+import { useCommunityChatSocket, type CommunityChatRealtimeEvent } from './useCommunityChatSocket';
+import { useCommunityChatUnread } from './useCommunityChatUnread';
+
+type ReadonlyStringRef = Readonly<Ref<string>> | ComputedRef<string>;
+type ReadonlyBooleanRef = Readonly<Ref<boolean>> | ComputedRef<boolean>;
+
+export interface UseCommunityChatUnreadRuntimeOptions {
+  userId: ReadonlyStringRef;
+  userRole: ReadonlyStringRef;
+  realtimeActive: ReadonlyBooleanRef;
+}
+
+const FALLBACK_REFRESH_INTERVAL_MS = 60_000;
+const REALTIME_REFRESH_DEBOUNCE_MS = 25;
+
+/**
+ * 应用级聊天室角标运行时。
+ *
+ * 聊天页面自己的连接负责消息列表；其余页面由这里维持唯一的公共房间订阅，
+ * 收到事件后再读取服务端权威目录。不能在客户端直接 +1，因为是否产生角标
+ * 取决于每个账号的「关闭 / 仅管理员 / 仅提及 / 管理员和提及 / 全部消息」设置。
+ */
+export function useCommunityChatUnreadRuntime(options: UseCommunityChatUnreadRuntimeOptions) {
+  const unread = useCommunityChatUnread();
+  const authenticated = computed(() => Boolean(options.userId.value) && options.userRole.value !== 'visitor');
+  const roomSlug = computed(() => unread.rooms.value[0]?.slug || '');
+  const socketEnabled = computed(
+    () =>
+      authenticated.value && options.realtimeActive.value && unread.realtimeAvailable.value && Boolean(roomSlug.value),
+  );
+  const identityKey = computed(() => `${options.userId.value || 'guest'}:${options.userRole.value || 'visitor'}`);
+  let mounted = false;
+  let realtimeRefreshTimer: number | undefined;
+  let fallbackRefreshTimer: number | undefined;
+
+  function clearRealtimeRefreshTimer() {
+    if (realtimeRefreshTimer !== undefined) window.clearTimeout(realtimeRefreshTimer);
+    realtimeRefreshTimer = undefined;
+  }
+
+  function refreshNow({ afterCurrent = false } = {}) {
+    if (!authenticated.value) return;
+    void unread.refresh({ afterCurrent });
+  }
+
+  function scheduleAuthoritativeRefresh() {
+    if (!authenticated.value || realtimeRefreshTimer !== undefined) return;
+    realtimeRefreshTimer = window.setTimeout(() => {
+      realtimeRefreshTimer = undefined;
+      refreshNow({ afterCurrent: true });
+    }, REALTIME_REFRESH_DEBOUNCE_MS);
+  }
+
+  function handleRealtimeEvent(event: CommunityChatRealtimeEvent) {
+    // 点赞等互动不会改变未读数，避免公共房间每次点赞都让所有在线用户请求目录。
+    if (event.type === 'message.updated' && event.payload.reason !== 'recall') return;
+    scheduleAuthoritativeRefresh();
+  }
+
+  const socket = useCommunityChatSocket({
+    enabled: socketEnabled,
+    roomSlug,
+    identityKey,
+    onEvent: handleRealtimeEvent,
+    // 断线期间可能漏过事件；重新订阅成功后必须用 REST 补齐权威角标。
+    onSynchronized: () => refreshNow({ afterCurrent: true }),
+  });
+
+  watch(
+    [options.userId, options.userRole],
+    () => {
+      clearRealtimeRefreshTimer();
+      unread.reset();
+      if (mounted) refreshNow();
+    },
+    { flush: 'post' },
+  );
+
+  function handleVisibilityChange() {
+    if (document.visibilityState === 'visible') refreshNow();
+  }
+
+  onMounted(() => {
+    mounted = true;
+    refreshNow();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    fallbackRefreshTimer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') refreshNow();
+    }, FALLBACK_REFRESH_INTERVAL_MS);
+  });
+
+  onBeforeUnmount(() => {
+    mounted = false;
+    clearRealtimeRefreshTimer();
+    if (fallbackRefreshTimer !== undefined) window.clearInterval(fallbackRefreshTimer);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  });
+
+  return {
+    status: socket.status,
+  };
+}
+
+export const __test__ = {
+  FALLBACK_REFRESH_INTERVAL_MS,
+  REALTIME_REFRESH_DEBOUNCE_MS,
+};

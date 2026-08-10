@@ -59,6 +59,8 @@ const {
   getAdminOverviewRecent,
   getAdminOverviewTrend,
   getAgentLogs,
+  getApiLogs,
+  getOperationLogs,
 } = await import('./commonHandle.js');
 const processBookmarkIcons = mockProcessBookmarkIcons;
 const isBookmarkIconCheckRecent = mockIsBookmarkIconCheckRecent;
@@ -1061,14 +1063,87 @@ describe('getAiFeedback AI 回答反馈看板', () => {
     );
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
-    expect(payload.data.summary).toEqual({ total: 1, helpful: 0, unhelpful: 1, pending: 1 });
-    expect(payload.data.items[0]).toMatchObject({ rating: 'unhelpful', question: '问题', answer: '回答' });
+    expect(payload.data.summary).toMatchObject({ total: 1, helpful: 0, unhelpful: 1, pending: 1 });
+    expect(payload.data.items[0]).toMatchObject({
+      rating: 'unhelpful',
+      question: '问题',
+      answer: '回答',
+      triageStatus: 'open',
+      triagePriority: 'normal',
+    });
     expect(payload.data.reasons).toEqual([{ reason: 'incorrect', count: 1 }]);
     const statements = query.mock.calls.map(([sql]) => String(sql)).join('\n');
     expect(statements).toContain("c.status IN ('active', 'archived')");
     expect(statements).toContain("retention_mode <> 'temporary'");
     expect(statements).toContain('q.id = m.parent_message_id');
+    expect(statements).toContain('LEFT JOIN admin_ai_feedback_triage');
     expect(statements).not.toContain('q.request_id = f.request_id');
+  });
+});
+
+describe('后台日志组合筛选', () => {
+  beforeEach(() => query.mockReset());
+
+  it('API 日志按请求 ID、方法、状态、日期和耗时参数化筛选', async () => {
+    query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+    const res = mockRes();
+    await getApiLogs(
+      {
+        user: { role: 'root' },
+        body: {
+          cursor: null,
+          limit: 20,
+          filters: {
+            key: '/api/chat',
+            requestId: 'request-12345678',
+            method: 'POST',
+            status: '5xx',
+            minDurationMs: 900,
+            startDate: '2026-08-01',
+            endDate: '2026-08-09',
+            hideInternal: false,
+          },
+        },
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    const [sql, params] = query.mock.calls[0];
+    expect(String(sql)).toContain('a.request_id = ?');
+    expect(String(sql)).toContain('a.method = ?');
+    expect(String(sql)).toContain('a.duration_ms >= ?');
+    expect(String(sql)).toContain('CAST(a.status_code AS UNSIGNED) >= 500');
+    expect(String(sql)).not.toContain('request-12345678');
+    expect(params).toEqual(expect.arrayContaining(['request-12345678', 'POST', 900, '2026-08-01 00:00:00']));
+  });
+
+  it('操作日志支持用户、模块与日期精确下钻', async () => {
+    query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 0 }]]);
+    const res = mockRes();
+    await getOperationLogs(
+      {
+        user: { role: 'root' },
+        body: {
+          cursor: null,
+          limit: 20,
+          filters: {
+            key: '保存',
+            module: '笔记库',
+            userId: 'user-1',
+            startDate: '2026-08-01',
+            endDate: '2026-08-09',
+            hideInternal: false,
+          },
+        },
+      },
+      res,
+    );
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+    const [sql, params] = query.mock.calls[0];
+    expect(String(sql)).toContain('o.module = ?');
+    expect(String(sql)).toContain('o.create_by = ?');
+    expect(String(sql)).not.toContain('user-1');
+    expect(params).toEqual(expect.arrayContaining(['笔记库', 'user-1', '2026-08-09 23:59:59']));
   });
 });
 

@@ -259,8 +259,12 @@ export const convertLegacyTodoPlanV2 = (legacyTodoId: string, payload: TodoPlanW
   });
 export const previewTodoPlanUpdateV2 = (todoId: string, scope: TodoPlanScope, payload: TodoPlanDraft) =>
   apiBasePost('/api/todo/v2/update-preview', { todoId, scope, ...payload }, { silent: true });
-export const updateTodoPlanV2 = (todoId: string, scope: TodoPlanScope, payload: TodoPlanWritePayload) =>
-  apiBasePost('/api/todo/v2/update', { todoId, scope, ...payload });
+export const updateTodoPlanV2 = (
+  todoId: string,
+  scope: TodoPlanScope,
+  payload: TodoPlanWritePayload,
+  options?: { silent?: boolean },
+) => apiBasePost('/api/todo/v2/update', { todoId, scope, ...payload }, options);
 export const pauseTodoSeriesV2 = (seriesId: string, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/series/pause', { seriesId, idempotencyKey });
 export const resumeTodoSeriesV2 = (seriesId: string, idempotencyKey: string) =>
@@ -271,8 +275,8 @@ export const skipTodoInstanceV2 = (todoId: string, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/instance/skip', { todoId, idempotencyKey });
 export const deleteTodoPlanV2 = (todoId: string, scope: TodoPlanScope, idempotencyKey: string) =>
   apiBasePost('/api/todo/v2/delete', { todoId, scope, idempotencyKey });
-export const updateTodo = (id: string, payload: Partial<TodoPayload>) =>
-  apiBasePost('/api/todo/update', { id, ...payload });
+export const updateTodo = (id: string, payload: Partial<TodoPayload>, options?: { silent?: boolean }) =>
+  apiBasePost('/api/todo/update', { id, ...payload }, options);
 export const completeTodo = (id: string, options?: { silent?: boolean }) =>
   apiBasePost('/api/todo/complete', { id }, options);
 export const reopenTodo = (id: string) => apiBasePost('/api/todo/reopen', { id });
@@ -284,4 +288,5 @@ export const batchDeleteTodos = (ids: string[]) => apiBasePost('/api/todo/batch-
 export const batchRestoreTodos = (ids: string[]) => apiBasePost('/api/todo/batch-restore', { ids });
 export const reorderTodos = (items: Array<{ id: string; dueAt?: string | null; priority: TodoPriority }>) =>
   apiBasePost('/api/todo/reorder', { items });
-export const snoozeTodo = (id: string, targetAt: string) => apiBasePost('/api/todo/snooze', { id, targetAt });
+export const snoozeTodo = (id: string, targetAt: string, options?: { silent?: boolean }) =>
+  apiBasePost('/api/todo/snooze', { id, targetAt }, options);

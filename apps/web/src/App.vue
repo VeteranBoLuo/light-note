@@ -79,6 +79,7 @@
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
+  import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
@@ -191,6 +192,13 @@
   // `mobileShell` 表示该路由需要统一移动端顶栏；资源切换器与底部导航是两个独立开关。
   // 二级页（例如模板管理）只需要「返回 + 标题 + 页面动作」，不能因为两项导航都关闭就把顶栏一并卸载。
   const mobileShellEnabled = computed(() => bookmark.isMobile && Boolean(router.currentRoute.value.meta.mobileShell));
+  // 聊天室页面已有负责消息列表的实时连接；其余页面由根层连接守护导航角标。
+  // 放在 App 而不是底部导航中，键盘弹出导致底栏卸载时也不会断开订阅。
+  useCommunityChatUnreadRuntime({
+    userId: computed(() => user.id),
+    userRole: computed(() => user.role),
+    realtimeActive: computed(() => router.currentRoute.value.name !== 'communityChat'),
+  });
   watch(
     mobileBottomNavActive,
     (active) => {
@@ -233,12 +241,25 @@
 
   // 路由映射表
   const phoneReplaceMap = {
+    '/admin/overview': '/overview',
+    '/admin/actionCenter': '/actionCenter',
+    '/admin/adminAudit': '/adminAudit',
     '/admin/apiLog': '/apiLog',
+    '/admin/agentLog': '/agentLog',
+    '/admin/aiFeedback': '/aiFeedback',
+    '/admin/aiEvaluation': '/aiEvaluation',
+    '/admin/productInsights': '/productInsights',
+    '/admin/conversion': '/conversion',
     '/admin/userMg': '/userMg',
     '/admin/userOpinion': '/userOpinion',
+    '/admin/communityChatAccess': '/communityChatAccess',
+    '/admin/communityChatModeration': '/communityChatModeration',
     '/admin/operationLog': '/operationLog',
+    '/admin/todoPlanDiagnostics': '/todoPlanDiagnostics',
     '/admin/imageMg': '/imageMg',
+    '/admin/logCleanup': '/logCleanup',
     '/admin/logExclude': '/logExclude',
+    '/admin/adminGovernance': '/adminGovernance',
     '/securityCenter/overview': '/securityCenterMobile',
     '/securityCenter/review': '/securityCenterMobile',
     '/securityCenter/detection-quality': '/securityCenterMobile',
@@ -251,12 +272,25 @@
     '/trash': '/ptrash',
   };
   const deskReplaceMap = {
+    '/overview': '/admin/overview',
+    '/actionCenter': '/admin/actionCenter',
+    '/adminAudit': '/admin/adminAudit',
     '/apiLog': '/admin/apiLog',
+    '/agentLog': '/admin/agentLog',
+    '/aiFeedback': '/admin/aiFeedback',
+    '/aiEvaluation': '/admin/aiEvaluation',
+    '/productInsights': '/admin/productInsights',
+    '/conversion': '/admin/conversion',
     '/userMg': '/admin/userMg',
     '/userOpinion': '/admin/userOpinion',
+    '/communityChatAccess': '/admin/communityChatAccess',
+    '/communityChatModeration': '/admin/communityChatModeration',
     '/operationLog': '/admin/operationLog',
+    '/todoPlanDiagnostics': '/admin/todoPlanDiagnostics',
     '/imageMg': '/admin/imageMg',
+    '/logCleanup': '/admin/logCleanup',
     '/logExclude': '/admin/logExclude',
+    '/adminGovernance': '/admin/adminGovernance',
     '/admin': '/admin/operationLog',
     '/personCenter': '/home',
     '/securityOverview': '/securityCenter/overview',

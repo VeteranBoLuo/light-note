@@ -9,9 +9,7 @@ describe('noteHtmlToMarkdown', () => {
       noteHtmlToMarkdown(
         '<p><img src="/api/file/image.png" alt="截图" title="示例" width="320" data-ln-size="small"></p>',
       ),
-    ).toContain(
-      '<img src="/api/file/image.png" alt="截图" title="示例" data-ln-size="small" />',
-    );
+    ).toContain('<img src="/api/file/image.png" alt="截图" title="示例" data-ln-size="small" />');
   });
 
   it('保留已勾选和未勾选的轻笺待办状态', () => {
@@ -114,5 +112,35 @@ describe('noteHtmlToMarkdown', () => {
 
   it('删除线转换为 GFM 双波浪线', () => {
     expect(noteHtmlToMarkdown('<p><s>旧内容</s></p>')).toBe('~~旧内容~~');
+  });
+
+  it('图文组合切到 Markdown 时保留一图一文的完整结构', () => {
+    const markdown = noteHtmlToMarkdown(`
+      <section class="ln-media-text" data-ln-media-position="right" data-ln-media-width="42">
+        <figure class="ln-media-text__item">
+          <div class="ln-media-text__media"><img src="/window.png" alt="主卧"></div>
+          <figcaption class="ln-media-text__content"><p>房间名称：主卧</p></figcaption>
+        </figure>
+      </section>
+    `);
+
+    expect(markdown).toContain('<section class="ln-media-text"');
+    expect(markdown).toContain('data-ln-media-position="right"');
+    expect(markdown).toContain('<img src="/window.png" alt="主卧">');
+    expect(markdown).toContain('<figcaption class="ln-media-text__content"><p>房间名称：主卧</p></figcaption>');
+  });
+
+  it('渐变文字切到 Markdown 时保留受控颜色、方向和安全文字样式', () => {
+    const markdown = noteHtmlToMarkdown(
+      '<p><span class="ln-text-gradient extra" data-ln-text-gradient="true" data-mce-style="temp" style="--ln-gradient-from:#615ced;--ln-gradient-to:#00a884;--ln-gradient-angle:135deg;font-weight:bold;background-image:url(https://example.com/x)">渐变重点</span></p>',
+    );
+
+    expect(markdown).toContain('class="ln-text-gradient"');
+    expect(markdown).toContain('--ln-gradient-from: #615ced');
+    expect(markdown).toContain('--ln-gradient-to: #00a884');
+    expect(markdown).toContain('--ln-gradient-angle: 135deg');
+    expect(markdown).toContain('font-weight: bold');
+    expect(markdown).not.toContain('data-mce-style');
+    expect(markdown).not.toContain('background-image');
   });
 });

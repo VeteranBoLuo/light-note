@@ -8,7 +8,13 @@
     transform/overflow 裁掉。
   -->
   <Teleport to="body">
-    <BButton v-if="saveVisible" class="viewer-save-btn" :loading="saving" @click="saveImage">
+    <BButton
+      v-if="saveVisible"
+      class="viewer-save-btn"
+      :class="{ 'has-viewer-toolbar': viewerToolbarVisible }"
+      :loading="saving"
+      @click="saveImage"
+    >
       <SvgIcon v-if="!saving" :src="icon.cloudSpace.download" size="16" aria-hidden="true" />
       <span>{{ t('common.saveImage') }}</span>
     </BButton>
@@ -38,6 +44,7 @@
   const viewSrc = ref();
   /** 预览是否正在显示:按钮只在看图时出现,不能在 viewer 关掉后留在屏幕上 */
   const viewerVisible = ref(false);
+  const viewerToolbarVisible = ref(false);
   let currentViewer: Viewer | null = null;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
 
@@ -106,15 +113,19 @@
     viewSrc.value = `${bookmark.viewer.src}`;
     nextTick(() => {
       const options: Record<string, any> = bookmark.viewer.options || {};
+      viewerToolbarVisible.value = Boolean(options.toolbar);
       const viewer = new Viewer(document.getElementById('viewImage'), {
         inline: false,
         navbar: false,
         toolbar: false,
         ...options,
+        // 统一落在全站“覆盖层”层级，BMessage / BAlert 等全局反馈仍可正常显示在预览之上。
+        zIndex: 900,
         hidden() {
           if (historyHandle) releaseMobileOverlayHistory(historyHandle);
           historyHandle = null;
           viewerVisible.value = false;
+          viewerToolbarVisible.value = false;
           viewer.destroy();
           if (currentViewer === viewer) currentViewer = null;
           viewSrc.value = '';
@@ -146,6 +157,7 @@
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);
     historyHandle = null;
     viewerVisible.value = false;
+    viewerToolbarVisible.value = false;
     currentViewer?.destroy();
     currentViewer = null;
   });
@@ -154,7 +166,7 @@
 <style scoped lang="less">
   /*
    * 放底部居中而不是右上角:viewer.js 自带的关闭按钮就在右上角,别抢它的位置;
-   * 底部也更靠近拇指。z-index 要压过 viewer.js 容器的 2015。
+   * 底部也更靠近拇指。viewer.js 容器统一收敛到 900，这里只高一层。
    * 遮罩恒为深色、不跟随主题,所以这里固定用浅底深字 —— 不接主题变量,
    * 也不用 color-mix,APK 里不会因为混色回退而变得看不见。
    */
@@ -165,7 +177,7 @@
        用和进度浮层同一个变量对齐,没有底部导航的页面自动退回安全区。 */
     bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom, 0px)) + 22px);
     transform: translateX(-50%);
-    z-index: 2020;
+    z-index: 901;
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -193,6 +205,12 @@
   }
   .viewer-save-btn:active {
     background: rgba(52, 52, 58, 0.88);
+  }
+
+  /* viewer.js 自带工具栏固定在视口底部。开启缩放/旋转工具栏时，保存按钮统一
+     上移到工具栏之上，避免桌面端与移动端都出现按钮互相遮挡。 */
+  .viewer-save-btn.has-viewer-toolbar {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 </style>
 

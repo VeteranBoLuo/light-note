@@ -18,7 +18,7 @@
           'has-divider': action.dividerBefore,
         }"
         :type="action.danger ? 'danger' : undefined"
-        :disabled="action.disabled"
+        :disabled="action.disabled || actionHandoffPending"
         :loading="action.loading"
         role="menuitem"
         @click="runAction(action)"
@@ -51,11 +51,12 @@
 </script>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
 
   const props = withDefaults(
     defineProps<{
@@ -72,11 +73,22 @@
     'update:open': [open: boolean];
     action: [action: MobilePageActionItem];
   }>();
+  const actionHandoffPending = ref(false);
 
-  function runAction(action: MobilePageActionItem) {
-    if (action.disabled || action.loading) return;
-    emit('update:open', false);
-    emit('action', action);
+  async function runAction(action: MobilePageActionItem) {
+    if (action.disabled || action.loading || actionHandoffPending.value) return;
+    actionHandoffPending.value = true;
+    try {
+      // 抽屉与下一层弹框都使用移动端 history 占位。若同一轮先关抽屉再开弹框，
+      // 抽屉异步触发的 history.back() 可能把刚注册的弹框一起弹掉，表现为弹框偶发闪退。
+      // 所有移动操作抽屉统一先等当前占位真正出栈，再派发业务动作。
+      await closeCurrentMobileOverlayThen(
+        () => emit('update:open', false),
+        () => emit('action', action),
+      );
+    } finally {
+      actionHandoffPending.value = false;
+    }
   }
 </script>
 
