@@ -256,7 +256,8 @@
     '/admin/communityChatModeration': '/communityChatModeration',
     '/admin/operationLog': '/operationLog',
     '/admin/todoPlanDiagnostics': '/todoPlanDiagnostics',
-    '/admin/imageMg': '/imageMg',
+    '/admin/imageMg': '/resourceGovernance',
+    '/admin/resourceGovernance': '/resourceGovernance',
     '/admin/logCleanup': '/logCleanup',
     '/admin/logExclude': '/logExclude',
     '/admin/adminGovernance': '/adminGovernance',
@@ -287,7 +288,8 @@
     '/communityChatModeration': '/admin/communityChatModeration',
     '/operationLog': '/admin/operationLog',
     '/todoPlanDiagnostics': '/admin/todoPlanDiagnostics',
-    '/imageMg': '/admin/imageMg',
+    '/imageMg': '/admin/resourceGovernance',
+    '/resourceGovernance': '/admin/resourceGovernance',
     '/logCleanup': '/admin/logCleanup',
     '/logExclude': '/admin/logExclude',
     '/adminGovernance': '/admin/adminGovernance',
@@ -813,7 +815,7 @@
     'banned',
     'quickSave',
   ];
-  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
+  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
     const targetRecord = [...to.matched].reverse().find((record) => Array.isArray(record.meta?.roles));

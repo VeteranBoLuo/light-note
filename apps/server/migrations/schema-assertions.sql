@@ -1297,3 +1297,49 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name='community_chat_message_deletions'
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 42) 统一资源治理必须持久化扫描、候选、任务明细与最小审计（期望 0 行）
+SELECT '[42] missing_resource_governance_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'resource_governance_scans' t UNION ALL
+  SELECT 'resource_governance_findings' UNION ALL
+  SELECT 'resource_cleanup_jobs' UNION ALL
+  SELECT 'resource_cleanup_job_items' UNION ALL
+  SELECT 'resource_governance_audit'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE() AND actual.table_name=expected.t
+WHERE actual.table_name IS NULL;
+
+SELECT '[42] missing_resource_governance_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'resource_governance_scans' tab, 'scope_json' col, 'resource_governance_scans.scope_json' n UNION ALL
+  SELECT 'resource_governance_scans', 'lease_expires_at', 'resource_governance_scans.lease_expires_at' UNION ALL
+  SELECT 'resource_governance_findings', 'fingerprint', 'resource_governance_findings.fingerprint' UNION ALL
+  SELECT 'resource_governance_findings', 'target_locator', 'resource_governance_findings.target_locator' UNION ALL
+  SELECT 'resource_governance_findings', 'evidence_json', 'resource_governance_findings.evidence_json' UNION ALL
+  SELECT 'resource_governance_findings', 'observation_count', 'resource_governance_findings.observation_count' UNION ALL
+  SELECT 'resource_cleanup_jobs', 'confirmation_digest', 'resource_cleanup_jobs.confirmation_digest' UNION ALL
+  SELECT 'resource_cleanup_job_items', 'precondition_hash', 'resource_cleanup_job_items.precondition_hash' UNION ALL
+  SELECT 'resource_governance_audit', 'summary_json', 'resource_governance_audit.summary_json'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[42] missing_resource_governance_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'resource_governance_scans' tn, 'idx_resource_governance_scans_status' ix UNION ALL
+  SELECT 'resource_governance_findings', 'uk_resource_governance_finding_fingerprint' UNION ALL
+  SELECT 'resource_governance_findings', 'idx_resource_governance_findings_list' UNION ALL
+  SELECT 'resource_cleanup_jobs', 'idx_resource_cleanup_jobs_status' UNION ALL
+  SELECT 'resource_cleanup_job_items', 'idx_resource_cleanup_job_items_claim' UNION ALL
+  SELECT 'resource_governance_audit', 'idx_resource_governance_audit_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

@@ -37,6 +37,7 @@ const {
   ACCOUNT_DELETION_CONFIRMATION_TEXT,
   cleanupCompletedAccountDeletionRequests,
   processAccountDeletionRequest,
+  purgeOwnedResources,
   requestAccountDeletion,
   sendAccountDeletionCode,
 } = await import('./accountDeletion.js');
@@ -166,6 +167,19 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('跨排序规则清理引用时显式统一 utf8mb4_unicode_ci，避免注销任务卡在 retry_wait', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 0 }]);
+    const tables = new Set(['note_resource_refs', 'bookmark', 'note', 'files', 'note_versions']);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+
+    const refSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM note_resource_refs'))?.[0];
+    const versionSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM note_versions'))?.[0];
+    expect(refSql).toContain('CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+    expect(refSql).toContain('CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+    expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+  });
+
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {
     poolQuery.mockResolvedValueOnce([{ affectedRows: 12 }]);
 

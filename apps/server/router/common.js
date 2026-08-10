@@ -38,8 +38,6 @@ router.post('/analyzeImgUrl', commonHandle.analyzeImgUrl);
 
 router.post('/getImages', commonHandle.getImages);
 
-router.post('/clearImages', commonHandle.clearImages);
-
 router.post('/getHelpConfig', commonHandle.getHelpConfig);
 
 router.post('/resolveHelpSources', commonHandle.resolveHelpSources);

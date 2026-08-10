@@ -7,6 +7,7 @@ REMOTE="/www/wwwroot/light-note-back"
 PM2="app"                     # pm2 进程名(实测,非 light-note-back)
 DOCUMENT_WORKER_PM2="light-note-document-worker"
 BOOKMARK_ICON_WORKER_PM2="light-note-bookmark-icon-worker"
+RESOURCE_GOVERNANCE_WORKER_PM2="light-note-resource-governance-worker"
 OUT="/tmp/ln-server-deploy"
 TS="$(date +%Y%m%d%H%M%S)"
 cd "$(dirname "$0")/.."
@@ -37,6 +38,9 @@ ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node util/security/migrate.js"
 echo "🔎  使用生产环境检查书签图标任务 Schema、favicon-api 与图标目录…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkBookmarkIconRuntime.js"
 
+echo "🔎  幂等初始化并检查资源治理 Schema、目录与清理开关…"
+ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkResourceGovernanceRuntime.js"
+
 echo "🔎  执行只读 Schema 发布门禁…"
 ssh -i "$KEY" "$HOST" "cd '$REMOTE' && node scripts/checkSchemaAssertions.js"
 
@@ -54,6 +58,11 @@ ssh -i "$KEY" "$HOST" "pm2 restart $PM2 --update-env && \
     pm2 restart '$BOOKMARK_ICON_WORKER_PM2' --update-env; \
   else \
     cd '$REMOTE' && pm2 start bookmarkIconWorker.js --name '$BOOKMARK_ICON_WORKER_PM2'; \
+  fi && \
+  if pm2 describe '$RESOURCE_GOVERNANCE_WORKER_PM2' >/dev/null 2>&1; then \
+    pm2 restart '$RESOURCE_GOVERNANCE_WORKER_PM2' --update-env; \
+  else \
+    cd '$REMOTE' && pm2 start resourceGovernanceWorker.js --name '$RESOURCE_GOVERNANCE_WORKER_PM2'; \
   fi && \
   pm2 save"
 
