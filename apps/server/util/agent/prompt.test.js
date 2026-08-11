@@ -68,6 +68,8 @@ describe('buildPlannerPrompt', () => {
     expect(prompt).toContain('询问已有状态、历史记录、统计、回顾');
     expect(prompt).toContain('planned、forbidden、unavailable 或 unknown');
     expect(prompt).toContain('dependsOn 只能引用');
+    expect(prompt).toContain('仅确认写操作结果的说法仍属于 data_action');
+    expect(prompt).toContain('独立的分析、说明、建议或查询结果时才属于 mixed');
     expect(prompt).toContain('任何必需工具参数若无法从用户原话');
     expect(prompt).toContain('requestClass=ambiguous');
     expect(prompt).toContain('禁止为满足 schema 而臆造');

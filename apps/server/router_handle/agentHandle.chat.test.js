@@ -474,7 +474,7 @@ describe('agentChat 主链路', () => {
     const continuation = {
       state: 'ready',
       snapshot: {
-        question: '创建一条检查方案的待办，并告诉我是否成功',
+        question: '创建一条检查方案的待办，并给我两条执行建议',
         locale: 'zh-CN',
         tools: [{ name: 'create_todo', status: 'confirmation_required', summary: '等待确认' }],
       },
@@ -491,7 +491,7 @@ describe('agentChat 主链路', () => {
     mocks.claimActionContinuation.mockResolvedValue({ ...continuation, state: 'running' });
     mocks.settleActionContinuation.mockResolvedValue({ ...continuation, state: 'settled' });
     mocks.requestAi.mockResolvedValueOnce({
-      content: '待办“检查方案”已经创建成功。',
+      content: '建议先明确检查范围，再按影响程度排序。',
       toolCalls: [],
       usage: usage(12),
       usageStatus: 'reported',
@@ -522,15 +522,16 @@ describe('agentChat 主链路', () => {
     expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.toolExecute).not.toHaveBeenCalled();
     expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(mocks.requestAi.mock.calls[0]?.[0]?.[0]?.content).toContain('禁止复述、改写或再次确认该操作结果');
     expect(mocks.settleActionContinuation).toHaveBeenCalledWith(
       expect.objectContaining({ state: 'running' }),
-      expect.objectContaining({ answer: '待办“检查方案”已经创建成功。' }),
+      expect.objectContaining({ answer: '建议先明确检查范围，再按影响程度排序。' }),
     );
     expect(res.send).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 200,
         data: expect.objectContaining({
-          response: '待办“检查方案”已经创建成功。',
+          response: '建议先明确检查范围，再按影响程度排序。',
           confirmations: [],
           interactions: [],
         }),
@@ -1706,12 +1707,6 @@ describe('agentChat 主链路', () => {
 
   it('明确待办完成请求经语义计划和真实工具调用生成确认，不产生虚假的最终回复', async () => {
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
-    mocks.createActionContinuation.mockResolvedValue({
-      schemaVersion: 1,
-      token: 'continuation-token',
-      policy: 'final_reply',
-    });
-    mocks.finalizeActionContinuation.mockResolvedValue(undefined);
     mocks.requestAi.mockResolvedValueOnce({
       content: '',
       toolCalls: [
@@ -1758,26 +1753,72 @@ describe('agentChat 主链路', () => {
       }),
     );
     expect(mocks.recordTurn).not.toHaveBeenCalled();
-    expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          response: '',
-          confirmations: [
-            expect.objectContaining({
-              id: 'confirmation-1',
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.response).toBe('');
+    expect(data?.confirmations).toEqual([
+      expect.objectContaining({ id: 'confirmation-1', toolName: 'set_todo_status' }),
+    ]);
+    expect(data?.confirmations?.[0]).not.toHaveProperty('continuation');
+    expect(mocks.createActionContinuation).not.toHaveBeenCalled();
+    expect(mocks.finalizeActionContinuation).not.toHaveBeenCalled();
+  });
+
+  it('混合请求的确认卡保留 Final Reply 续答，但策略来自语义计划而非工具名', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
+    mocks.createActionContinuation.mockResolvedValue({
+      schemaVersion: 1,
+      token: 'continuation-token',
+      policy: 'final_reply',
+    });
+    mocks.finalizeActionContinuation.mockResolvedValue(undefined);
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        semanticPlanCall({
+          requestClass: 'mixed',
+          intents: [
+            {
+              kind: 'write',
+              capabilityId: 'todo.status.set',
+              goal: '完成待办，之后还要回答用户的非操作问题',
+              targetDescription: '测试代办',
+              dependsOn: [],
+            },
+          ],
+          toolCalls: [
+            {
               toolName: 'set_todo_status',
-              continuation: expect.objectContaining({ token: 'continuation-token', policy: 'final_reply' }),
-            }),
+              arguments: { keyword: '测试代办', status: 'completed' },
+            },
           ],
         }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '把待办「测试代办」标记为完成，再结合当前内容给我下一步建议',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        clientCapabilities: ['agent_continuation_v1'],
       }),
+      res,
     );
-    expect(mocks.finalizeActionContinuation).toHaveBeenCalledWith(
+
+    const continuation = res.send.mock.calls.at(-1)?.[0]?.data?.confirmations?.[0]?.continuation;
+    expect(continuation).toMatchObject({ token: 'continuation-token', policy: 'final_reply' });
+    expect(mocks.createActionContinuation).toHaveBeenCalledWith(
       expect.objectContaining({
-        token: 'continuation-token',
         action: { kind: 'confirmation', id: 'confirmation-1' },
+        policy: 'final_reply',
       }),
     );
+    expect(mocks.finalizeActionContinuation).toHaveBeenCalledTimes(1);
   });
 
   it('场景A回归:挂着标签问待办,公开来源与追问上下文都不含该标签', async () => {
@@ -2007,14 +2048,8 @@ describe('agentChat 主链路', () => {
     expect(payload.coverage.overall.documentCount).toBe(0);
   });
 
-  it('流式待确认操作在续答快照定稿后发送唯一确认卡，再以空正文终态收口', async () => {
+  it('流式纯操作只发送唯一确认卡，不签发续答并以空正文终态收口', async () => {
     mocks.selectAgentTools.mockImplementation((registry) => [registry.get('set_todo_status')].filter(Boolean));
-    mocks.createActionContinuation.mockResolvedValue({
-      schemaVersion: 1,
-      token: 'continuation-token',
-      policy: 'final_reply',
-    });
-    mocks.finalizeActionContinuation.mockResolvedValue(undefined);
     mocks.requestAi.mockResolvedValueOnce({
       content: '',
       toolCalls: [
@@ -2058,14 +2093,13 @@ describe('agentChat 主链路', () => {
     expect(confirmationIndex).toBeGreaterThanOrEqual(0);
     expect(terminalIndex).toBeGreaterThan(confirmationIndex);
     expect(output.filter((event) => event.event === 'tool_confirmation')).toHaveLength(1);
-    expect(output[confirmationIndex]?.confirmation?.continuation).toMatchObject({
-      token: 'continuation-token',
-      policy: 'final_reply',
-    });
+    expect(output[confirmationIndex]?.confirmation).not.toHaveProperty('continuation');
     expect(output.some((event) => event.event === 'delta')).toBe(false);
     expect(output[terminalIndex]).toEqual(expect.objectContaining({ answer: '' }));
     expect(mocks.requestAi).toHaveBeenCalledTimes(1);
     expect(mocks.requestAiStream).not.toHaveBeenCalled();
+    expect(mocks.createActionContinuation).not.toHaveBeenCalled();
+    expect(mocks.finalizeActionContinuation).not.toHaveBeenCalled();
   });
 
   it('模型臆造写入参数时失败关闭，但不向用户泄漏内部 args 字段路径', async () => {
@@ -3617,10 +3651,6 @@ describe('agentChat 主链路', () => {
         confirmation: { ...input, id: 'confirmation-todo' },
         expiresIn: 300,
       }));
-    mocks.createActionContinuation
-      .mockResolvedValueOnce({ schemaVersion: 1, token: 'continuation-note', policy: 'final_reply' })
-      .mockResolvedValueOnce({ schemaVersion: 1, token: 'continuation-todo', policy: 'final_reply' });
-    mocks.discardActionContinuation.mockResolvedValue(true);
     mocks.requestAi
       .mockResolvedValueOnce(noteDraftTaskResponse({ producesNote: true, otherMutations: true }))
       .mockResolvedValueOnce({
@@ -3670,7 +3700,9 @@ describe('agentChat 主链路', () => {
     const data = res.send.mock.calls.at(-1)?.[0]?.data;
     expect(data?.confirmations?.map((item) => item.toolName)).toEqual(['create_note', 'create_todo']);
     expect(data?.confirmations?.every((item) => !item.continuation)).toBe(true);
-    expect(mocks.discardActionContinuation).toHaveBeenCalledTimes(2);
+    expect(mocks.createActionContinuation).not.toHaveBeenCalled();
+    expect(mocks.finalizeActionContinuation).not.toHaveBeenCalled();
+    expect(mocks.discardActionContinuation).not.toHaveBeenCalled();
     // 两个写操作都覆盖到了，就不该再出现"其他操作没有执行"的兜底披露。
     expect(String(data?.response || '')).not.toContain('其他操作没有执行');
   });

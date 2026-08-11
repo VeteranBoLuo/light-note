@@ -109,6 +109,9 @@ ${identityLine}
       '用户同时要求查看数据并修改时属于 mixed。用户只要求修改、但必须先查询才能定位相对目标时可以是 data_action：同时声明 read/write intent，并让 write 通过 dependsOn 依赖 read。无法确定目标或查询/修改含义时必须 needsClarification=true。',
     );
     lines.push(
+      '要求“告诉我是否成功、完成后告诉我结果、创建好即可”等仅确认写操作结果的说法仍属于 data_action，因为服务端权威回执会直接回答；只有写操作之外还明确要求独立的分析、说明、建议或查询结果时才属于 mixed。',
+    );
+    lines.push(
       'dependsOn 只能引用当前计划中排在前面的 intent 下标。当前轮只能把无依赖、或服务端已经声明依赖满足的 intent 放进 toolCalls；依赖未满足的工具参数不得提前猜测。',
     );
     lines.push('');

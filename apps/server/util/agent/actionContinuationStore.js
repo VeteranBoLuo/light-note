@@ -109,6 +109,9 @@ function validateRecord(record, ownerKey, sessionId) {
   if (!record || record.version !== 1 || !['pending', 'ready', 'running', 'settled'].includes(record.state)) {
     throw new ActionContinuationError('ACTION_CONTINUATION_INVALID', '操作续答数据无效。');
   }
+  if (!['terminal', 'final_reply'].includes(record.policy)) {
+    throw new ActionContinuationError('ACTION_CONTINUATION_INVALID', '操作续答策略无效。');
+  }
   if (record.ownerHash !== ownerHash(ownerKey) || !sessionId || record.sessionId !== sessionId) {
     throw new ActionContinuationError('ACTION_CONTINUATION_FORBIDDEN', '这次操作续答不属于当前用户或会话。', 403);
   }
@@ -186,13 +189,13 @@ async function compareAndSet(key, previousRaw, nextRecord) {
   return nextRecord;
 }
 
-export async function createActionContinuation({ ownerKey, sessionId, action, snapshot }) {
+export async function createActionContinuation({ ownerKey, sessionId, action, snapshot, policy = 'terminal' }) {
   const token = crypto.randomBytes(32).toString('base64url');
   const normalizedSnapshot = normalizeSnapshot(snapshot);
   const record = {
     version: 1,
     state: 'pending',
-    policy: 'final_reply',
+    policy: policy === 'final_reply' ? 'final_reply' : 'terminal',
     snapshotReady: false,
     ownerHash: ownerHash(ownerKey),
     sessionId: String(sessionId || ''),

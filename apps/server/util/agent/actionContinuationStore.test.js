@@ -40,11 +40,12 @@ function installRedisState() {
   });
 }
 
-async function issue(action = initialAction) {
+async function issue(action = initialAction, policy = 'final_reply') {
   return createActionContinuation({
     ownerKey,
     sessionId,
     action,
+    policy,
     snapshot: { question: '找到待办后把它设为已完成', locale: 'zh-CN', originRequestId: 'request-1' },
   });
 }
@@ -88,6 +89,44 @@ describe('agent actionContinuationStore', () => {
       code: 'ACTION_CONTINUATION_FORBIDDEN',
       status: 403,
     });
+  });
+
+  it('未显式声明 Final Reply 时按 terminal 失败关闭', async () => {
+    const action = { kind: 'confirmation', id: 'confirmation-terminal' };
+    const continuation = await createActionContinuation({
+      ownerKey,
+      sessionId,
+      action,
+      snapshot: { question: '创建一条待办', locale: 'zh-CN' },
+    });
+    await finalizeActionContinuation({
+      token: continuation.token,
+      ownerKey,
+      sessionId,
+      action,
+      snapshot: { question: '创建一条待办', locale: 'zh-CN' },
+    });
+
+    expect(continuation.policy).toBe('terminal');
+    await expect(
+      completeActionContinuation({
+        token: continuation.token,
+        ownerKey,
+        sessionId,
+        action,
+        outcome: {
+          receipt: {
+            actionId: action.id,
+            capabilityId: 'todo.create',
+            toolName: 'create_todo',
+            status: 'succeeded',
+            summary: '待办已创建',
+            completedAt: new Date().toISOString(),
+          },
+        },
+      }),
+    ).resolves.toBeNull();
+    expect(JSON.parse(storedRaw)).toMatchObject({ state: 'pending', policy: 'terminal' });
   });
 
   it('选择卡晋级确认卡后只接受新动作的权威成功回执', async () => {

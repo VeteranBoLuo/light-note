@@ -261,7 +261,12 @@ export function buildSemanticPlanToolDefinition(catalog, tools = [], { dependenc
         additionalProperties: false,
         properties: {
           version: { type: 'string', enum: [SEMANTIC_PLAN_VERSION] },
-          requestClass: { type: 'string', enum: [...REQUEST_CLASSES] },
+          requestClass: {
+            type: 'string',
+            enum: [...REQUEST_CLASSES],
+            description:
+              '纯写操作及仅要求报告其成功结果的请求使用 data_action；只有写操作之外仍需独立交付分析、说明、建议或查询结果时使用 mixed。',
+          },
           confidence: { type: 'string', enum: [...CONFIDENCE_LEVELS] },
           intents: {
             type: 'array',
