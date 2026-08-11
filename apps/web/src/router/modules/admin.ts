@@ -59,8 +59,12 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/communityChat/CommunityChatModerationAdmin.vue'),
       },
       {
+        path: 'resourceGovernance',
+        component: () => import('@/view/admin/components/resourceGovernance/ResourceGovernance.vue'),
+      },
+      {
         path: 'imageMg',
-        component: () => import('@/view/admin/components/imageMg/ImageMg.vue'),
+        redirect: '/admin/resourceGovernance',
       },
       {
         path: 'agentLog',
@@ -151,9 +155,14 @@ const adminRouter: RouteRecordRaw[] = [
     component: () => import('@/view/admin/components/communityChat/CommunityChatModerationAdmin.vue'),
   },
   {
+    path: 'resourceGovernance',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/resourceGovernance/ResourceGovernance.vue'),
+  },
+  {
     path: 'imageMg',
     meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/imageMg/ImageMgMobile.vue'),
+    redirect: '/resourceGovernance',
   },
   {
     path: 'agentLog',

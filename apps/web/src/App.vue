@@ -2,14 +2,18 @@
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
     <!--
       全站唯一的顶部进度条,视口级 fixed 定位,所有模块共用同一个位置。
-      两件事共用它:路由导航(Android App 里不显示,原生层自己有反馈)和静默刷新
-      (回到前台的陈旧刷新、切标签一类的软刷新 —— 这个在 Android App 里也要显示)。
+      两件事共用它:SPA 路由导航和静默刷新(回到前台的陈旧刷新、切标签一类的软刷新)。
+      Android 原生进度只能感知整页加载,看不到 Vue Router 内部切换,所以 App 内也必须显示这条反馈。
     -->
     <BLoading
-      :loading="(!isAndroidApp && routeNavigationLoading) || globalRefreshing"
+      :loading="routeNavigationLoading || globalRefreshing || networkRequestLoading"
       bar
       :title="globalLoadingBarTitle"
     />
+    <div v-if="!isOnline" class="app-offline-banner" role="status" aria-live="polite">
+      <span class="app-offline-banner__dot" aria-hidden="true"></span>
+      {{ t('http.offline') }}
+    </div>
     <a-config-provider
       :theme="{
         token: {
@@ -25,14 +29,14 @@
         <router-view />
       </MobileAppShell>
       <Login v-if="bookmark.isShowLogin" />
-      <BViewer />
+      <BViewer v-if="bookmark.viewerKey" />
       <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
-      <GuestNudge />
-      <AndroidDownloadProgress />
+      <GuestNudge v-if="nudgeVisible" />
+      <AndroidDownloadProgress v-if="isAndroidApp" />
       <DisplayScaleSuggestion />
-      <AdminContextBanner />
+      <AdminContextBanner v-if="user.adminContext" />
       <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
-      <PwaInstallGuideModal v-if="!isAndroidApp" />
+      <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible" />
     </a-config-provider>
   </div>
 </template>
@@ -40,13 +44,11 @@
   import { bookmarkStore, inboxStore, useAiAssistantStore, useUserStore } from '@/store';
   import { buildAiAssistantRuntimeIdentityKey, resolveAiAssistantIdentity } from '@/store/aiAssistant';
   import { useGrowth } from '@/composables/useGrowth';
-  import { h, onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, provide, ref } from 'vue';
-  import BViewer from '@/components/base/Viewer/BViewer.vue';
+  import { onMounted, onBeforeUnmount, watch, computed, defineAsyncComponent, provide, ref } from 'vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { getNoticeSummary, resetBookmarkIconRefreshRequests } from '@/api/commonApi.ts';
   import { useRouter, type RouteLocationNormalized } from 'vue-router';
   import { getLogFingerprint } from '@/utils/common';
-  import { notification } from 'ant-design-vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { throttle } from 'lodash-es';
   import { setLocale } from './i18n';
@@ -59,10 +61,7 @@
   import { getAdminLoginPreviewPreferences, isAdminLoginPreview, markLoggedIn } from '@/utils/authStorage.ts';
   import { resolvePassiveAuthUi } from '@/utils/authUiPolicy.ts';
   import { showPreviewGuide } from '@/composables/useGuestGuard';
-  import GuestNudge from '@/components/home/GuestNudge.vue';
   import DisplayScaleSuggestion from '@/components/base/DisplayScaleSuggestion.vue';
-  import AndroidDownloadProgress from '@/components/base/AndroidDownloadProgress.vue';
-  import AdminContextBanner from '@/components/admin/AdminContextBanner.vue';
   import { resetBookmarkIconRuntime } from '@/composables/bookmarkIconRuntime.ts';
   import MobileAppShell from '@/components/mobile/MobileAppShell.vue';
   import {
@@ -74,23 +73,43 @@
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import { routeNavigationLoading } from '@/router';
   import { globalRefreshing } from '@/composables/useGlobalRefreshBar';
+  import { networkRequestLoading } from '@/composables/useNetworkRequestFeedback';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
+  import { nudgeVisible } from '@/composables/guestNudge';
+  import { usePwaInstall } from '@/composables/usePwaInstall';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
+  // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
+  const BViewer = defineAsyncComponent({
+    loader: () => import('@/components/base/Viewer/BViewer.vue'),
+    loadingComponent: AsyncFeatureLoadingOverlay,
+    delay: 120,
+  });
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
   const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
-  const PwaInstallGuideModal = defineAsyncComponent(() => import('@/components/pwa/PwaInstallGuideModal.vue'));
+  const GuestNudge = defineAsyncComponent(() => import('@/components/home/GuestNudge.vue'));
+  const AndroidDownloadProgress = defineAsyncComponent(
+    () => import('@/components/base/AndroidDownloadProgress.vue'),
+  );
+  const AdminContextBanner = defineAsyncComponent(() => import('@/components/admin/AdminContextBanner.vue'));
+  const PwaInstallGuideModal = defineAsyncComponent({
+    loader: () => import('@/components/pwa/PwaInstallGuideModal.vue'),
+    loadingComponent: AsyncFeatureLoadingOverlay,
+    delay: 280,
+  });
 
   const router = useRouter();
   const user = useUserStore();
   const aiAssistant = useAiAssistantStore();
   const bookmark = bookmarkStore();
   const inbox = inboxStore();
+  const { guideVisible: pwaGuideVisible } = usePwaInstall();
   const { t } = useI18n();
   provide(
     MOBILE_LAYOUT_CONTEXT,
@@ -98,6 +117,7 @@
   );
   const isAndroidApp = isLightNoteAndroidApp();
   const aiRuntimeIdentity = computed(() => resolveAiAssistantIdentity(user));
+  const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   const aiRuntimeIdentityKey = computed(() => buildAiAssistantRuntimeIdentityKey(aiRuntimeIdentity.value));
   // AI 请求属于应用级运行时，而不是某个路由组件。根层持续守护 owner 四维身份：
   // 普通导航不会触碰请求；登录、退出或管理员上下文变化则先中止旧域，再原子切换状态。
@@ -110,7 +130,6 @@
   const globalLoadingBarTitle = computed(() =>
     globalRefreshing.value && !routeNavigationLoading.value ? t('common.refreshing') : t('common.loading'),
   );
-  const NOTICE_KEY = 'pending-notice';
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
   const scaleExcludedRouter = new Set([
@@ -256,7 +275,8 @@
     '/admin/communityChatModeration': '/communityChatModeration',
     '/admin/operationLog': '/operationLog',
     '/admin/todoPlanDiagnostics': '/todoPlanDiagnostics',
-    '/admin/imageMg': '/imageMg',
+    '/admin/imageMg': '/resourceGovernance',
+    '/admin/resourceGovernance': '/resourceGovernance',
     '/admin/logCleanup': '/logCleanup',
     '/admin/logExclude': '/logExclude',
     '/admin/adminGovernance': '/adminGovernance',
@@ -287,7 +307,8 @@
     '/communityChatModeration': '/admin/communityChatModeration',
     '/operationLog': '/admin/operationLog',
     '/todoPlanDiagnostics': '/admin/todoPlanDiagnostics',
-    '/imageMg': '/admin/imageMg',
+    '/imageMg': '/admin/resourceGovernance',
+    '/resourceGovernance': '/admin/resourceGovernance',
     '/logCleanup': '/admin/logCleanup',
     '/logExclude': '/admin/logExclude',
     '/adminGovernance': '/admin/adminGovernance',
@@ -388,7 +409,9 @@
               : location.pathname === '/home'
                 ? 'home'
                 : 'app';
-        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: pvPage }).catch(() => {});
+        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: pvPage }, { silent: true, feedback: false }).catch(
+          () => {},
+        );
       }
     } catch (e) {
       /* 隐私模式 sessionStorage 不可用时忽略 */
@@ -429,7 +452,7 @@
       // 同步清理旧版本曾写入的游客 homePage，避免后续 /app 误读到已经废弃的游客设置。
       setStoredPreferences(withoutHomePagePreference(user.preferences));
     }
-    setLocale(user.preferences.lang || 'zh-CN');
+    void setLocale(user.preferences.lang || 'zh-CN');
   }
 
   async function redirectLandingToApplicationIfNeeded() {
@@ -510,7 +533,6 @@
           // 初始化确认当前是游客时保持资料页可浏览，不替用户打开登录/注册。
           bookmark.isShowLogin = false;
           stopOpinionNoticePolling();
-          notification.close(NOTICE_KEY);
         }
         return res;
       } catch (error) {
@@ -589,7 +611,6 @@
     // 被动降级为游客时不替用户打开认证；主动登录/注册和受保护操作仍走各自入口。
     bookmark.isShowLogin = false;
     stopOpinionNoticePolling();
-    notification.close(NOTICE_KEY);
     localStorage.removeItem('rememberedSid');
   }
 
@@ -665,86 +686,8 @@
     showPreviewGuide(msg);
   }
 
-  function openNoticeSummary(data) {
-    if (user.role === 'root') {
-      const opinion = data.opinion || {};
-      const security = data.security || {};
-      const hasOpinionNotice = Number(opinion.pendingTotal || 0) > 0;
-      const hasSecurityNotice = Number(security.unhandledHighRiskCount || 0) > 0;
-      if (!hasOpinionNotice && !hasSecurityNotice) {
-        notification.close(NOTICE_KEY);
-        return;
-      }
-      const children = [];
-      if (hasOpinionNotice) {
-        children.push(
-          h(
-            'a',
-            {
-              onClick: () => {
-                notification.close(NOTICE_KEY);
-                router.push({
-                  path: bookmark.isMobile ? '/userOpinion' : '/admin/userOpinion',
-                  query: { status: 'pending' },
-                });
-              },
-            },
-            `${t('personCenter.opinions.feedbackModule')}：${opinion.pendingTotal}${t('personCenter.opinions.pendingCountSuffix')}`,
-          ),
-        );
-      }
-      if (hasSecurityNotice) {
-        if (children.length > 0) {
-          children.push(h('br'));
-        }
-        const criticalText = security.unhandledCriticalCount
-          ? `，${t('common.noticeCriticalPrefix')}${security.unhandledCriticalCount}${t('personCenter.opinions.noticeCountSuffix')}`
-          : '';
-        children.push(
-          h(
-            'a',
-            {
-              onClick: () => {
-                notification.close(NOTICE_KEY);
-                router.push({
-                  path: bookmark.isMobile ? '/securityCenterMobile' : '/securityCenter/review',
-                  query: { handledStatus: 'unhandled' },
-                });
-              },
-            },
-            `${t('common.securityCenter')}：${security.unhandledHighRiskCount}${t('common.noticeHighRiskSuffix')}${criticalText}`,
-          ),
-        );
-      }
-      notification.open({
-        key: NOTICE_KEY,
-        message: t('common.pendingNoticeTitle'),
-        description: h('div', children),
-        duration: 8,
-      });
-      return;
-    }
-
-    const opinion = data.opinion || {};
-    if (!opinion.unreadReplyTotal) {
-      notification.close(NOTICE_KEY);
-      return;
-    }
-
-    const latestReplySummary = opinion.latestReply?.replyContent || t('personCenter.opinions.userNoticeDesc');
-    notification.open({
-      key: NOTICE_KEY,
-      message: t('personCenter.opinions.userNoticeTitle'),
-      description: h(
-        'a',
-        `${t('personCenter.opinions.replyCountPrefix')}${opinion.unreadReplyTotal}${t('personCenter.opinions.noticeCountSuffix')} · ${latestReplySummary}`,
-      ),
-      onClick: () => {
-        notification.close(NOTICE_KEY);
-        router.push({ path: '/opinions', query: { tab: 'history', markViewed: '1' } });
-      },
-      duration: 8,
-    });
+  function syncOnlineStatus() {
+    isOnline.value = navigator.onLine !== false;
   }
 
   async function refreshOpinionNotice() {
@@ -813,7 +756,7 @@
     'banned',
     'quickSave',
   ];
-  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg'];
+  const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];
 
   function getRequiredRoles(to: RouteLocationNormalized): string[] {
     const targetRecord = [...to.matched].reverse().find((record) => Array.isArray(record.meta?.roles));
@@ -883,6 +826,8 @@
     window.addEventListener('light-note:auth-session', handleAuthSession);
     window.addEventListener('light-note:preview-blocked', handlePreviewBlocked);
     window.addEventListener('online', handleLandingAuthRecoverySignal);
+    window.addEventListener('online', syncOnlineStatus);
+    window.addEventListener('offline', syncOnlineStatus);
     document.addEventListener('visibilitychange', handleLandingAuthRecoverySignal);
     await router.isReady();
     await getUserInfo();
@@ -912,6 +857,8 @@
     window.removeEventListener('light-note:auth-session', handleAuthSession);
     window.removeEventListener('light-note:preview-blocked', handlePreviewBlocked);
     window.removeEventListener('online', handleLandingAuthRecoverySignal);
+    window.removeEventListener('online', syncOnlineStatus);
+    window.removeEventListener('offline', syncOnlineStatus);
     document.removeEventListener('visibilitychange', handleLandingAuthRecoverySignal);
     clearLandingAuthRetry(true);
     disposeSystemTheme?.();
@@ -949,6 +896,36 @@
     --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
   }
 
+  .app-offline-banner {
+    position: fixed;
+    z-index: 1190;
+    top: 3px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: calc(100vw - 24px);
+    padding: 7px 13px;
+    box-sizing: border-box;
+    border: 1px solid var(--warning-color, #a05f00);
+    border-radius: 0 0 10px 10px;
+    color: var(--text-color);
+    background: var(--card-background);
+    box-shadow: 0 6px 18px rgba(31, 35, 48, 0.14);
+    font-size: 12px;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .app-offline-banner__dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--warning-color, #a05f00);
+  }
+
   /* 只影响根元素下的主要内容，避免全局影响 */
   .disable-animations .app-root,
   .disable-animations .app-root * {
@@ -963,10 +940,6 @@
       animation: none !important;
       transition: none !important;
     }
-  }
-  .ant-notification-notice-description {
-    font-size: 13px !important;
-    color: #6b7280 !important;
   }
   @media (max-width: 768px) {
     *::-webkit-scrollbar {

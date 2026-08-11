@@ -156,6 +156,11 @@ const normalizeCanonicalMarkdownRecord = (record) => {
   };
 };
 
+// 列表卡片只展示几行摘要。此前 SELECT n.* 会把每篇最高 1MB 的完整正文随 48 张卡片一起传输，
+// 弱网 App 不仅下载慢，还要在主线程解析一大块 JSON。保留 4000 字符足够生成卡片/列表摘要，
+// 打开正文仍由 getNoteDetail 返回完整内容；搜索条件也继续在数据库完整正文上执行。
+const NOTE_LIST_CONTENT_PREVIEW_LENGTH = 4000;
+
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
 // note_images 的归属可信度是图片引用计数体系的地基:
 // - 传入 noteId 必须校验属于当前用户,否则可向他人笔记挂图污染归属;
@@ -770,7 +775,22 @@ export const queryNoteList = async (req, res) => {
 
     const whereSql = where.join(' AND ');
     let listSql = `
-      SELECT n.*,
+      SELECT
+        n.id,
+        n.title,
+        LEFT(COALESCE(n.content, ''), ${NOTE_LIST_CONTENT_PREVIEW_LENGTH}) AS content,
+        n.create_by,
+        n.update_by,
+        n.del_flag,
+        n.sort,
+        n.is_top,
+        n.create_time,
+        n.update_time,
+        n.deleted_at,
+        n.type,
+        n.revision,
+        n.parent_id,
+        n.tree_delete_batch_id,
         (
           SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
           FROM resource_tag_relations r
@@ -837,24 +857,42 @@ export const queryNoteList = async (req, res) => {
   }
 };
 
-export const getNoteDetail = (req, res) => {
+export const getNoteDetail = async (req, res) => {
   try {
     const userId = req.user.id;
+    const noteTreeFeatures = resolveNoteTreeFeatures(noteTreeFeatureIdentity(req));
+    // 先登记正文查询，再并行读取轻量目录快照，避免测试与观测日志中的请求顺序漂移。
+    const detailPromise = pool.query('select * from note where id=? and create_by=? and del_flag=?', [
+      req.body.id,
+      userId,
+      '0',
+    ]);
+    const breadcrumbPromise = noteTreeFeatures[NOTE_TREE_FEATURE.READ]
+      ? resolveOwnedNoteBreadcrumb({ userId, noteId: req.body.id })
+          .then((resolved) => (Array.isArray(resolved?.items) ? resolved.items : []))
+          .catch((error) => {
+            // 面包屑是辅助导航。历史异常父链或临时目录查询失败不能阻断正文读取；
+            // 独立 breadcrumb 接口仍保留为重命名、移动后的刷新兜底。
+            console.warn('[note-library] detail breadcrumb unavailable code=%s', stableAgentErrorCode(error));
+            return [];
+          })
+      : Promise.resolve([]);
     // 归属校验:只能读自己的笔记(游客=共享 visitor 账号),防止传他人 note id 越权读取;越权/不存在统一 404 不泄露存在性
-    pool
-      .query('select * from note where id=? and create_by=? and del_flag=?', [req.body.id, userId, '0'])
-      .then(([result]) => {
-        if (result.length === 0) {
-          return res.send(resultData(null, 404, '笔记不存在'));
-        }
-        res.send(resultData(normalizeCanonicalMarkdownRecord(result[0])));
-      })
-      .catch((err) => {
-        return sendNoteServerError(res, 'get-note-detail', err);
-      });
+    // 正文与轻量目录快照并行读取，聚合响应不会把两个数据库往返串行叠加到移动端首屏延迟上。
+    const [[result], breadcrumb] = await Promise.all([detailPromise, breadcrumbPromise]);
+    if (result.length === 0) {
+      return res.send(resultData(null, 404, '笔记不存在'));
+    }
+
+    return res.send(
+      resultData({
+        ...normalizeCanonicalMarkdownRecord(result[0]),
+        breadcrumb,
+        noteTreeFeatures,
+      }),
+    );
   } catch (e) {
-    console.warn('[note-library] get detail rejected code=%s', stableAgentErrorCode(e));
-    return res.send(resultData(null, 400, '客户端请求参数无效'));
+    return sendNoteServerError(res, 'get-note-detail', e);
   }
 };
 

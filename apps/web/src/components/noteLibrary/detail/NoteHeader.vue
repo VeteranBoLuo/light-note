@@ -168,7 +168,6 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore } from '@/store';
   import { defineAsyncComponent, ref } from 'vue';
-  import { generatePdfBlob } from '@/utils/htmlToPdf.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -183,13 +182,6 @@
   import { watch } from 'vue';
   import { recordOperation } from '@/api/commonApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { createNoteTurndownService } from '@/utils/noteHtmlToMarkdown';
-  import {
-    buildNoteExportHtml,
-    buildNoteExportMarkdown,
-    inlineMermaidForExport,
-    renderMarkdownForExport,
-  } from '@/utils/noteExport';
   import { buildExportFileName, canSaveGeneratedFile, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge, type NoteExportFormat } from '@/utils/androidFileExport';
@@ -243,7 +235,6 @@
 
   const bookmark = bookmarkStore();
   const mobileActionsOpen = ref(false);
-  const turndownService = createNoteTurndownService();
 
   /** 手机与平板优先走系统分享：可存进「文件」也可转发到其他 App，比隐式下载更符合手机习惯。 */
   const preferShareExport = () => bookmark.isMobile || bookmark.isTablet;
@@ -664,6 +655,9 @@
         // 手机上渲染长笔记要几秒,没有反馈会被当成没点上
         const closeRendering = message.loading(t('noteDetail.exportPdfRendering'), 0);
         try {
+          // jsPDF + html2canvas/canvg 体积很大，只在用户确认导出 PDF 后加载；
+          // 普通打开笔记不再为一个低频导出动作额外下载两百多 KB gzip 运行时。
+          const { generatePdfBlob } = await import('@/utils/htmlToPdf.ts');
           const blob = await generatePdfBlob(selector);
           closeRendering();
           const pdfFileName = buildExportFileName(title, t('noteDetail.unnamedDoc'), 'pdf');
@@ -693,6 +687,9 @@
         exportModalVisible.value = false;
         const title = props.note.title || t('noteDetail.unnamedDoc');
         const content = props.note.content || '';
+        const { buildNoteExportHtml, inlineMermaidForExport, renderMarkdownForExport } = await import(
+          '@/utils/noteExport'
+        );
         // md 笔记的 content 是 Markdown 源码,直接塞进 <body> 只会显示 `#`、`- [ ]` 原文,
         // 必须先按站内同口径渲染成 HTML。
         // 富文本笔记的正文已经是 HTML,但里面的 mermaid 源码块同样要在导出时渲染成内联 SVG
@@ -722,6 +719,11 @@
       async onOk() {
         exportModalVisible.value = false;
         const title = props.note.title || t('noteDetail.unnamedDoc');
+        const [{ buildNoteExportMarkdown }, { createNoteTurndownService }] = await Promise.all([
+          import('@/utils/noteExport'),
+          import('@/utils/noteHtmlToMarkdown'),
+        ]);
+        const turndownService = createNoteTurndownService();
         // md 笔记的 content 已经是 Markdown:再过一遍 turndown(HTML→MD)会把语法逐个
         // 转义成 \# / \*\*、并吃掉换行压成一行,只有 html 笔记才需要转换。
         const markdown = buildNoteExportMarkdown(title, props.note.content || '', props.noteType || 'html', (html) =>

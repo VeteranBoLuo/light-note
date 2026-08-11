@@ -258,6 +258,10 @@ src/
 | `conversion_events`                          | 游客转化事件                     | 自增             |
 | `admin_context_audit`                        | 管理员预览与内容维护审计         | UUID             |
 | `admin_user_remarks`                         | Root 对用户设置的私有备注名      | 复合主键         |
+| `resource_governance_scans`                  | 资源治理只读扫描任务与租约       | UUID             |
+| `resource_governance_findings`               | 治理候选、风险和无正文证据       | UUID             |
+| `resource_cleanup_jobs` / `resource_cleanup_job_items` | 低风险清理批次与逐项结果 | UUID / 复合主键 |
+| `resource_governance_audit`                  | 扫描、忽略与清理最小审计         | 自增             |
 | `agent_logs`                                 | AI 请求、用量和阶段追踪          | UUID             |
 | `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位    | 复合键 / 自增    |
 | `user_growth`                                | 成长快照、积分及永久 AI 加油余额 | 用户 UUID        |
@@ -632,6 +636,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 ### 部署机制：本地打包 → rsync 上传
 
 - `deploy:server` = 本地 `pnpm deploy --legacy` 打平自包含 `node_modules` → rsync 增量（`--delete`）上传 → `pm2 restart app`（含 `documentWorker`）；`deploy:web` 同理传 `dist`。
+- 资源治理使用独立 `resourceGovernanceWorker.js` 领取扫描和低风险清理任务；HTTP 进程只创建任务、查询证据和生成受会话绑定的确认，不遍历目录。历史后台 `/admin/imageMg`、`/imageMg` 只做路由重定向，旧 `/common/clearImages` 不再注册。
 - **因此不能引入平台相关的 native node 库**（如 sharp）：本地装的是当前平台（mac）二进制，rsync 到 linux 服务器会崩。项目一贯用系统 CLI（`tesseract` / `convert`(ImageMagick) / `pdftoppm`，走 `execFile`）做图像/OCR，正是为规避这一点。
 - 部署脚本健康检查**不 gate 部署、失败不自动回滚**；非 200 需手动执行脚本末尾的回滚命令（切回服务器上的 `${REMOTE}_bak_*` 硬链接快照）。
 
@@ -639,7 +644,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - **建表 schema 是双轨,两条并存,排查时都要看**：
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
-  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
+  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）/ `ensureResourceGovernanceSchema`。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。资源治理 Schema 也由部署前 `check:resource-governance` 幂等初始化，保证 Schema 断言在应用重启前可通过。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
 - **Schema 基线门禁**：`note.revision`、`note_versions.source_revision/reason`、旧版兼容列 `files.share_token`、独立分享表和文件预览任务表已由 `20260807_note_editor_safety.sql`、`20260730_file_share_lifecycle.sql`、`20260808_file_preview_artifacts.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema` 与 `pnpm --filter server check:file-previews`，关键表、索引或已启用的 7-Zip/LibreOffice 运行时缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。

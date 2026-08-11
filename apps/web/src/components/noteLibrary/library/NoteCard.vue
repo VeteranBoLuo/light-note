@@ -2,6 +2,8 @@
   <div
     @click="handleCardClick"
     @keydown.enter.self="handleCardClick"
+    @pointerdown="prefetchNoteRoute"
+    @focus="prefetchNoteRoute"
     class="note-card"
     :class="{ 'is-selected': note.isCheck, 'is-batch-mode': batchMode }"
     role="button"
@@ -74,7 +76,7 @@
 <script lang="ts" setup>
   import { computed } from 'vue';
   import router from '@/router';
-  import { bookmarkStore } from '@/store';
+  import { bookmarkStore, useUserStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -86,6 +88,8 @@
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
   import { useNoteSummary } from '@/composables/useNoteSummary';
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+  import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
     {
@@ -99,6 +103,7 @@
   const summary = useNoteSummary(() => props.note, { maxLength: 300 });
 
   const bookmark = bookmarkStore();
+  const user = useUserStore();
   const emit = defineEmits<{
     open: [];
     openParent: [noteId: string];
@@ -146,6 +151,15 @@
     }
     emit('open');
   }
+
+  function prefetchNoteRoute() {
+    if (props.batchMode || !props.note?.id) return;
+    prefetchNoteDetail(user, String(props.note.id));
+    if (!bookmark.isMobile) return;
+    void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: props.note.id } }).catch(() => {
+      // 正式点击仍会重试并显示全局导航反馈。
+    });
+  }
 </script>
 
 <style lang="less" scoped>
@@ -171,6 +185,13 @@
     &:focus-visible {
       box-shadow: var(--surface-hover-shadow);
       border-color: color-mix(in srgb, var(--resource-note-color, #00a884) 34%, var(--surface-border-color));
+    }
+
+    @media (hover: none) and (pointer: coarse) {
+      &:active {
+        border-color: var(--resource-note-color, #00a884);
+        background: var(--surface-hover-bg, var(--primary-btn-h-bg-color));
+      }
     }
 
     &:hover,

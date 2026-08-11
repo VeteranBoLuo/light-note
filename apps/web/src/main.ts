@@ -5,7 +5,7 @@ import '@/assets/css/index.less';
 import { Icon } from '@iconify/vue';
 import globalDirect from '@/config/globalDirect';
 import { createPinia } from 'pinia';
-import i18n from '@/i18n';
+import i18n, { prepareInitialLocale } from '@/i18n';
 import { initializePwaInstall } from '@/composables/usePwaInstall';
 import {
   isAndroidWebViewRuntime,
@@ -21,6 +21,12 @@ const isAndroidWebView = isAndroidWebViewRuntime();
 // 首屏内联脚本会在 CSS 绘制前先设置同样的类；这里继续负责窗口缩放、横竖屏和
 // 粗指针变化后的动态同步。Android 身份类只标记引擎，所有可见规则走共享移动基线。
 installRenderingProfileSync({ androidWebView: isAndroidWebView });
+// 首屏在 App.vue 读取 Pinia 断点前就可能带着上次桌面端保存的 0.9/1.1 zoom。
+// 移动端必须在 Vue 挂载前回到 1，否则首屏骨架和笔记卡会暂时只占 90% 宽度。
+if (document.documentElement.classList.contains('light-note-mobile-rendering')) {
+  document.documentElement.style.zoom = '';
+  document.documentElement.style.setProperty('--ln-aux-zoom', '1');
+}
 
 // 创建vue实例
 const app = createApp(App);
@@ -38,8 +44,6 @@ if (!isAndroidApp) {
   initializePwaInstall();
 }
 // 挂载实例
-app.mount('#app');
-
 async function notifyAndroidInitialViewReady() {
   await router.isReady();
   await nextTick();
@@ -48,13 +52,21 @@ async function notifyAndroidInitialViewReady() {
   postAndroidAppReady();
 }
 
-if (isAndroidWebView) {
-  // 原生品牌封面持续显示到首个异步路由组件真正完成绘制，避免 HTML
-  // 到达后 Vue 首帧尚未出现时短暂露出 WebView 白底。
-  void notifyAndroidInitialViewReady().catch((error) => {
-    console.warn('Android 首屏就绪通知失败:', error);
-  });
+async function mountApplication() {
+  // 中文词典已经在主包中；只有英文用户会并行等待英文词典分包，避免先显示翻译 key 再闪变。
+  await prepareInitialLocale();
+  app.mount('#app');
+
+  if (isAndroidWebView) {
+    // 原生品牌封面持续显示到首个异步路由组件真正完成绘制，避免 HTML
+    // 到达后 Vue 首帧尚未出现时短暂露出 WebView 白底。
+    void notifyAndroidInitialViewReady().catch((error) => {
+      console.warn('Android 首屏就绪通知失败:', error);
+    });
+  }
 }
+
+void mountApplication();
 
 // 游客访问量埋点(page_view)已移至 App.vue initApp():需等 window.fingerprint 生成后再上报,
 // 否则 fingerprint 为空会导致漏斗按 DISTINCT fingerprint 统计失真。

@@ -51,6 +51,15 @@ function sourceBetween(source: string, startText: string, endText: string) {
 }
 
 describe('编辑器 V2 交互回归', () => {
+  it('富文本初始化不会回写规范化内容，正文预览与编辑器只做轻量交接', () => {
+    const updateHandler = sourceBetween(editorSource, 'function handleRichContentUpdate', 'const forceReinit');
+    expect(editorSource).toContain(':model-value="content"');
+    expect(editorSource).toContain('@update:model-value="handleRichContentUpdate"');
+    expect(editorSource).not.toContain('v-model="content"');
+    expect(updateHandler).toContain('if (!richEditorRuntimeReady.value) return');
+    expect(noteDetailSource).not.toContain('<Transition name="note-content-switch"');
+  });
+
   it('外置工具栏不再检查不存在的 TinyMCE 内置工具栏并循环重建编辑器', () => {
     const guard = sourceBetween(editorSource, 'const ensureToolbarRendered', 'const currentLang');
     expect(guard).not.toMatch(/querySelector\([^)]*tox-toolbar/u);

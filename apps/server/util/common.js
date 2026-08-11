@@ -21,6 +21,7 @@ import tagIconRouter from '../router/tagIcon.js';
 import featureRequestRouter from '../router/featureRequest.js';
 import updateLogRouter from '../router/updateLog.js';
 import aiEvaluationRouter from '../router/aiEvaluation.js';
+import resourceGovernanceRouter from '../router/resourceGovernance.js';
 import communityChatRouter from '../router/communityChat.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
@@ -272,6 +273,10 @@ export const baseRouter = [
   {
     path: '/aiEvaluation',
     router: aiEvaluationRouter,
+  },
+  {
+    path: '/resource-governance',
+    router: resourceGovernanceRouter,
   },
   {
     // SEO 内容页(/helpCenter、/helpCenter/:id、/sitemap.xml)：挂根路径，只注册 GET，

@@ -7,6 +7,7 @@ import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
 import { getLightNoteAndroidVersion } from '@/utils/androidBridge.ts';
 import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
+import { beginNetworkRequestFeedback, finishNetworkRequestFeedback } from '@/composables/useNetworkRequestFeedback';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -28,16 +29,19 @@ function statusMessage(status: number): string | undefined {
 }
 
 // 接口定义
-interface ApiResponse {
+export interface ApiResponse {
   status: number;
   msg: string;
   data: any;
   requestId?: string;
 }
 
-type RequestOptions = AxiosRequestConfig & {
+export type RequestOptions = AxiosRequestConfig & {
   silent?: boolean;
   suppressAuthExpired?: boolean;
+  /** 是否把超过 380ms 的前台请求呈现在全局进度条；静默请求默认不呈现。 */
+  feedback?: boolean;
+  __networkFeedbackTracked?: boolean;
 };
 
 const request = axios.create({
@@ -147,6 +151,7 @@ function notifyIpBanned(response?: any) {
 //请求拦截
 request.interceptors.request.use(
   (config) => {
+    const options = config as RequestOptions;
     if (config.url?.includes('/api')) {
       let currentLang = 'zh-CN';
       try {
@@ -173,7 +178,12 @@ request.interceptors.request.use(
       if (logDeviceId) config.headers['X-Log-Device-Id'] = logDeviceId;
       // 会话层只用该稳定标识归并同一浏览器的重复登录记录，不作为认证或权限依据。
       if (logDeviceId) config.headers['X-Device-Id'] = logDeviceId;
-      const rememberedSid = localStorage.getItem('rememberedSid');
+      let rememberedSid = '';
+      try {
+        rememberedSid = localStorage.getItem('rememberedSid') || '';
+      } catch {
+        // 隐私模式下存储不可用不应让正常接口在发出前失败。
+      }
       // 过期流程中不再重放旧 sid,避免带着失效凭证继续触发过期
       if (rememberedSid && !authExpiredFlow) {
         config.headers['X-Session-Id'] = rememberedSid;
@@ -181,6 +191,14 @@ request.interceptors.request.use(
       // 记录请求发起时的登录身份:响应回来时若身份已变(如退出后又登录了别的账号),
       // 说明这是一条「陈旧的在途响应」,notifyAuthExpired 会据此忽略其过期信号,避免误弹「登录已过期」
       (config as any).__reqUserId = useUserStore().id || '';
+    }
+    // 所有可能抛错的请求头准备完成后才登记，避免请求尚未发出就异常时让全局进度条永久挂起。
+    if (
+      config.url?.includes('/api') &&
+      (options.feedback === true || (options.feedback !== false && !options.silent))
+    ) {
+      beginNetworkRequestFeedback();
+      options.__networkFeedbackTracked = true;
     }
     return config;
   },
@@ -192,6 +210,11 @@ request.interceptors.request.use(
 // 响应拦截
 request.interceptors.response.use(
   (response) => {
+    const requestOptions = response.config as RequestOptions;
+    if (requestOptions.__networkFeedbackTracked) {
+      requestOptions.__networkFeedbackTracked = false;
+      finishNetworkRequestFeedback();
+    }
     const requestId = String(response.headers?.['x-request-id'] || '');
     if (requestId && response.data && typeof response.data === 'object') {
       response.data.requestId = requestId;
@@ -206,6 +229,10 @@ request.interceptors.response.use(
   },
   (error) => {
     const requestOptions = error.config as RequestOptions | undefined;
+    if (requestOptions?.__networkFeedbackTracked) {
+      requestOptions.__networkFeedbackTracked = false;
+      finishNetworkRequestFeedback();
+    }
     const silent = Boolean(requestOptions?.silent);
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {
@@ -295,13 +322,30 @@ request.interceptors.response.use(
       }
     }
     // 无HTTP响应（网络层错误）
-    if (error.code === 'ECONNRESET' || (error.message && error.message.includes('ECONNRESET'))) {
-      // 这里只是基础处理，实际项目中应该调用统一的错误提示组件
+    const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+    const isTimeout = error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+    const isNetworkFailure =
+      isOffline ||
+      isTimeout ||
+      error.code === 'ERR_NETWORK' ||
+      error.code === 'ECONNRESET' ||
+      (error.message && /ECONNRESET|Network Error|Failed to fetch/i.test(error.message));
+    if (isNetworkFailure) {
       console.error('网络连接异常:', error);
-      // 返回一个自定义错误对象，避免原生的技术错误暴露给用户
+      const failureMessage = i18n.global.t(
+        isOffline ? 'http.offline' : isTimeout ? 'http.requestTimeout' : 'http.networkUnstable',
+      );
+      if (!silent) {
+        message.open({
+          key: 'http-network-failure',
+          type: 'error',
+          content: failureMessage,
+          duration: 4,
+        });
+      }
       return Promise.reject({
-        code: 'NETWORK_ERROR',
-        message: i18n.global.t('http.networkUnstable'),
+        code: isOffline ? 'OFFLINE' : isTimeout ? 'REQUEST_TIMEOUT' : 'NETWORK_ERROR',
+        message: failureMessage,
         originalError: error,
       });
     }

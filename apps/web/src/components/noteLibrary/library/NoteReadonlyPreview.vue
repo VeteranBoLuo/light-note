@@ -68,6 +68,8 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
+  import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
+  import { useUserStore } from '@/store';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
 
   interface PreviewBreadcrumbItem {
@@ -99,6 +101,7 @@
   );
   const emit = defineEmits<{ close: []; edit: [] }>();
   const { t } = useI18n();
+  const user = useUserStore();
   const detail = ref<Record<string, any>>({});
   const breadcrumb = ref<PreviewBreadcrumbItem[]>([]);
   const previewHtml = ref('');
@@ -121,7 +124,7 @@
     previewHtml.value = '';
     try {
       const [detailResult, breadcrumbResult] = await Promise.all([
-        apiBasePost('/api/note/getNoteDetail', { id: noteId }, { silent: true }),
+        consumeNoteDetail(user, noteId),
         apiBasePost('/api/note/queryNoteBreadcrumb', { noteId }, { silent: true }).catch(() => null),
       ]);
       if (seq !== requestSeq) return;

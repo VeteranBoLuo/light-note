@@ -37,6 +37,7 @@ const {
   ACCOUNT_DELETION_CONFIRMATION_TEXT,
   cleanupCompletedAccountDeletionRequests,
   processAccountDeletionRequest,
+  purgeOwnedResources,
   requestAccountDeletion,
   sendAccountDeletionCode,
 } = await import('./accountDeletion.js');
@@ -166,6 +167,19 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('跨排序规则清理引用时显式统一 utf8mb4_unicode_ci，避免注销任务卡在 retry_wait', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 0 }]);
+    const tables = new Set(['note_resource_refs', 'bookmark', 'note', 'files', 'note_versions']);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+
+    const refSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM note_resource_refs'))?.[0];
+    const versionSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM note_versions'))?.[0];
+    expect(refSql).toContain('CONVERT(target_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+    expect(refSql).toContain('CONVERT(id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+    expect(versionSql).toContain('CONVERT(note_id USING utf8mb4) COLLATE utf8mb4_unicode_ci');
+  });
+
   it('已完成的清理任务记录只保留 180 天并分批删除', async () => {
     poolQuery.mockResolvedValueOnce([{ affectedRows: 12 }]);
 
@@ -197,6 +211,9 @@ describe('账号注销后台清理', () => {
     });
 
     const connection = createConnection(async (sql) => {
+      if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
+        return [[{ role: 'deleted', del_flag: 1 }]];
+      }
       if (sql.includes('information_schema.TABLES')) {
         return [
           [
@@ -264,6 +281,9 @@ describe('账号注销后台清理', () => {
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
     });
     const connection = createConnection(async (sql) => {
+      if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
+        return [[{ role: 'deleted', del_flag: 1 }]];
+      }
       if (sql.includes('information_schema.TABLES')) return [[{ tableName: 'user' }]];
       if (sql.includes('DELETE FROM user')) return [{ affectedRows: 1 }];
       throw new Error(`未覆盖的测试 SQL: ${sql}`);
@@ -276,6 +296,83 @@ describe('账号注销后台清理', () => {
     });
     expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'retry_wait'"))).toBe(true);
     expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'completed'"))).toBe(false);
+  });
+
+  it('注销任务数据异常指向正常账号时强制阻断，不删除任何账号资源', async () => {
+    const requestId = 'request-active-account';
+    poolQuery.mockImplementation(async (sql) => {
+      if (sql.includes("SET status = 'processing'")) return [{ affectedRows: 1 }];
+      if (sql.includes('SELECT id, user_id, object_keys_json')) {
+        return [
+          [
+            {
+              id: requestId,
+              user_id: 'user-1',
+              object_keys_json: '[]',
+              note_image_urls_json: '[]',
+              bookmark_icons_json: '[]',
+              attempts: 1,
+            },
+          ],
+        ];
+      }
+      if (sql.includes("SET status = 'retry_wait'")) return [{ affectedRows: 1 }];
+      throw new Error(`未覆盖的测试 SQL: ${sql}`);
+    });
+    const connection = createConnection(async (sql) => {
+      if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
+        return [[{ role: 'user', del_flag: 0 }]];
+      }
+      throw new Error(`正常账号阻断后不应继续执行 SQL: ${sql}`);
+    });
+    getConnection.mockResolvedValue(connection);
+
+    await expect(processAccountDeletionRequest(requestId)).rejects.toMatchObject({
+      code: 'ACCOUNT_DELETION_ACTIVE_ACCOUNT_BLOCKED',
+    });
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note'))).toBe(false);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM user'))).toBe(false);
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(poolQuery.mock.calls.some(([sql]) => sql.includes("SET status = 'retry_wait'"))).toBe(true);
+  });
+
+  it('后台软删除账号允许清理资源，但用户行删除条件仍只匹配正式注销账号', async () => {
+    const requestId = 'request-soft-deleted-account';
+    poolQuery.mockImplementation(async (sql) => {
+      if (sql.includes("SET status = 'processing'")) return [{ affectedRows: 1 }];
+      if (sql.includes('SELECT id, user_id, object_keys_json')) {
+        return [
+          [
+            {
+              id: requestId,
+              user_id: 'user-1',
+              object_keys_json: '[]',
+              note_image_urls_json: '[]',
+              bookmark_icons_json: '[]',
+              attempts: 1,
+            },
+          ],
+        ];
+      }
+      if (sql.includes("SET status = 'completed'")) return [{ affectedRows: 1 }];
+      throw new Error(`未覆盖的测试 SQL: ${sql}`);
+    });
+    const connection = createConnection(async (sql) => {
+      if (sql.includes('SELECT role, del_flag') && sql.includes('FOR UPDATE')) {
+        return [[{ role: 'user', del_flag: 1 }]];
+      }
+      if (sql.includes('information_schema.TABLES')) return [[{ tableName: 'note' }, { tableName: 'user' }]];
+      if (sql.includes('DELETE FROM note WHERE create_by')) return [{ affectedRows: 2 }];
+      if (sql.includes('DELETE FROM user')) return [{ affectedRows: 0 }];
+      throw new Error(`未覆盖的测试 SQL: ${sql}`);
+    });
+    getConnection.mockResolvedValue(connection);
+
+    await expect(processAccountDeletionRequest(requestId)).resolves.toEqual({ claimed: true, completed: true });
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('DELETE FROM note WHERE create_by'))).toBe(true);
+    const userDeleteSql = connection.query.mock.calls.find(([sql]) => sql.includes('DELETE FROM user'))?.[0];
+    expect(userDeleteSql).toContain("role = 'deleted'");
+    expect(userDeleteSql).toContain('del_flag = 1');
   });
 
   it('清理任务载荷损坏时进入 retry_wait，不会丢弃待删除对象', async () => {

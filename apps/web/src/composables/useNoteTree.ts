@@ -4,6 +4,7 @@ import router from '@/router';
 import useUserStore from '@/store/useUser';
 import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 import type { NoteTreeItem } from '@/types/noteTree';
+import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
 
 export { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
 
@@ -18,8 +19,17 @@ function activeDetailPageId() {
   return queryValue(router.currentRoute.value.params?.id);
 }
 
-export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<string> } = {}) {
+export function useNoteTree(
+  options: {
+    enabled?: Ref<boolean>;
+    ownerKey?: Ref<string>;
+    loadTree?: Ref<boolean>;
+    revealBreadcrumb?: Ref<boolean>;
+  } = {},
+) {
   const enabled = computed(() => options.enabled?.value !== false);
+  const loadTreeEnabled = computed(() => options.loadTree?.value !== false);
+  const revealBreadcrumbEnabled = computed(() => options.revealBreadcrumb?.value !== false);
   const user = useUserStore();
   const workspace = useNoteWorkspaceStore();
   const {
@@ -57,7 +67,7 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
       currentBreadcrumb.value = [];
       return [];
     }
-    return workspace.loadBreadcrumb(noteId);
+    return workspace.loadBreadcrumb(noteId, { reveal: revealBreadcrumbEnabled.value });
   }
 
   async function toggleExpanded(node: NoteTreeItem) {
@@ -84,6 +94,9 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
   }
 
   function openDirectoryPage(noteId: string) {
+    // 从卡片/目录点击的这一刻就请求正文。Vue Router 同时下载详情页与编辑器 chunk，
+    // 弱网下不再先等几百 KB 的脚本到齐，才开始发正文请求。
+    prefetchNoteDetail(user, noteId);
     return router.push({
       path: `/noteLibrary/${encodeURIComponent(noteId)}`,
       query: { from: router.currentRoute.value.fullPath },
@@ -122,12 +135,17 @@ export function useNoteTree(options: { enabled?: Ref<boolean>; ownerKey?: Ref<st
   );
 
   watch(
-    enabled,
-    (isEnabled) => {
-      if (isEnabled) void loadChildren(null);
+    [enabled, loadTreeEnabled],
+    ([isEnabled, shouldLoadTree]) => {
+      if (isEnabled && shouldLoadTree) void loadChildren(null);
     },
     { immediate: true },
   );
+
+  watch(revealBreadcrumbEnabled, (shouldReveal) => {
+    if (!enabled.value || !shouldReveal || !currentBreadcrumb.value.length) return;
+    void workspace.revealBreadcrumb(currentBreadcrumb.value);
+  });
 
   return {
     activePageId,

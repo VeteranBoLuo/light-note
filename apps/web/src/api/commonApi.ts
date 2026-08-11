@@ -40,14 +40,14 @@ export const recordOperation = async function (params: { module: string; operati
     return;
   }
   try {
-    await apiBasePost('/api/common/recordOperationLogs', params);
+    await apiBasePost('/api/common/recordOperationLogs', params, { silent: true, feedback: false });
   } catch (error) {
     console.warn('record operation failed:', error);
   }
 };
 
 export const getNoticeSummary = async function () {
-  return apiBaseGet('/api/common/noticeSummary');
+  return apiBaseGet('/api/common/noticeSummary', undefined, { silent: true, feedback: false });
 };
 
 export const getAdminActionCenter = async function (params: { limit?: number } = {}) {

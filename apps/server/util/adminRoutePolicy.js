@@ -418,7 +418,19 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['GET', '/common/clearOperationLogs'],
   ['POST', '/common/getIpLogStats'],
   ['POST', '/common/clearLogsByIp'],
-  ['POST', '/common/clearImages'],
+  ['POST', '/resource-governance/scans'],
+  ['GET', '/resource-governance/scans/:id'],
+  ['POST', '/resource-governance/findings/query'],
+  ['GET', '/resource-governance/findings/:id'],
+  ['POST', '/resource-governance/findings/ignore'],
+  ['POST', '/resource-governance/invalid-owners/cleanup'],
+  ['POST', '/resource-governance/jobs/preview'],
+  ['POST', '/resource-governance/jobs'],
+  ['POST', '/resource-governance/jobs/query'],
+  ['GET', '/resource-governance/jobs/:id'],
+  ['POST', '/resource-governance/jobs/:id/retry'],
+  ['POST', '/resource-governance/jobs/:id/cancel'],
+  ['POST', '/resource-governance/audits/query'],
   ['POST', '/common/getAgentLogs'],
   ['POST', '/common/getAgentLogChain'],
   ['POST', '/common/getAgentLogsSummary'],
@@ -542,6 +554,14 @@ function resolvePolicy(method, path) {
   }
   if (/^\/updateLog\/image\/[^/]+\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /updateLog/image/:logId/:fileName`);
+  }
+  if (/^\/resource-governance\/(?:scans|findings|jobs)\/[^/]+$/.test(path)) {
+    const resource = path.split('/')[2];
+    return routePolicies.get(`${method} /resource-governance/${resource}/:id`);
+  }
+  if (/^\/resource-governance\/jobs\/[^/]+\/(?:retry|cancel)$/.test(path)) {
+    const action = path.endsWith('/retry') ? 'retry' : 'cancel';
+    return routePolicies.get(`${method} /resource-governance/jobs/:id/${action}`);
   }
   return null;
 }

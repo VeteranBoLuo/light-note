@@ -151,6 +151,7 @@ function chatMessage(overrides = {}) {
     recallDeadlineAt: null,
     isOwn: false,
     images: [],
+    mentions: [],
     likeCount: 0,
     likedByMe: false,
     likePreview: [],
@@ -916,12 +917,11 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('.community-pinned-message')).toBeNull();
   });
 
-  it('提及只显示为输入框上方 tag，正文不重复插入昵称且提交稳定消息公有 ID', async () => {
+  it('提及在输入框上方用 tag 编辑，发送后在气泡内展示昵称且提交稳定消息公有 ID', async () => {
     vi.useFakeTimers();
     mocks.bookmark.isMobile = true;
-    mocks.sendMessage.mockResolvedValue({
-      data: { message: chatMessage({ publicId: 'message-mention-sent', content: '请看一下', isOwn: true }) },
-    });
+    const request = deferred<any>();
+    mocks.sendMessage.mockReturnValueOnce(request.promise);
     const host = await mountWorkspace();
     const avatar = host.querySelector<HTMLButtonElement>('.community-message__avatar');
     avatar?.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true, button: 0, clientX: 12, clientY: 12 }));
@@ -949,6 +949,24 @@ describe('CommunityChatWorkspace', () => {
       content: '请看一下',
       mentionMessagePublicIds: ['message-1'],
     });
+    const optimisticBubble = host.querySelector('.community-message.is-sending');
+    expect(optimisticBubble?.textContent).toContain('@薄荷');
+    expect(optimisticBubble?.textContent).toContain('请看一下');
+
+    request.resolve({
+      data: {
+        message: chatMessage({
+          publicId: 'message-mention-sent',
+          content: '请看一下',
+          mentions: ['薄荷'],
+          isOwn: true,
+        }),
+      },
+    });
+    await flushAsync();
+    const sentBubble = host.querySelector('[data-message-public-id="message-mention-sent"]');
+    expect(sentBubble?.textContent).toContain('@薄荷');
+    expect(sentBubble?.textContent).toContain('请看一下');
   });
 
   it('发送请求未返回时先显示本地气泡，加载圈替换发送箭头并在响应后对账', async () => {

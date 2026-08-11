@@ -178,6 +178,22 @@ const MESSAGE_SELECT = `
            ELSE ''
          END AS replyAuthorName,
          (
+           SELECT GROUP_CONCAT(
+                    HEX(
+                      CASE
+                        WHEN mentioned_account.del_flag = '0'
+                          THEN COALESCE(NULLIF(mentioned_account.alias, ''), '轻笺用户')
+                        ELSE '轻笺用户'
+                      END
+                    )
+                    ORDER BY mention.create_time ASC, mention.mentioned_user_id ASC
+                    SEPARATOR ','
+                  )
+             FROM community_chat_message_mentions mention
+             LEFT JOIN user mentioned_account ON mentioned_account.id = mention.mentioned_user_id
+            WHERE mention.message_id = message.id
+         ) AS mentionNamesHex,
+         (
            SELECT COUNT(*)
              FROM community_chat_message_images reply_image
             WHERE reply_image.message_id = reply.id AND reply_image.status = 'attached'
@@ -207,6 +223,20 @@ function toPublicImage(row) {
     width: Number(row.width || 0),
     height: Number(row.height || 0),
   };
+}
+
+function publicMentionNames(row) {
+  return String(row.mentionNamesHex || '')
+    .split(',')
+    .map((encodedName) => {
+      try {
+        return Buffer.from(encodedName, 'hex').toString('utf8').trim();
+      } catch {
+        return '';
+      }
+    })
+    .filter(Boolean)
+    .slice(0, MAX_MENTION_TARGETS);
 }
 
 async function loadMessageImages(db, rows) {
@@ -335,6 +365,7 @@ function toPublicMessage(
     recallDeadlineAt,
     isOwn,
     images: contentVisible ? images : [],
+    mentions: contentVisible ? publicMentionNames(row) : [],
     likeCount: row.status === 'active' ? Number(likes.likeCount || 0) : 0,
     likedByMe: row.status === 'active' && Boolean(likes.likedByMe),
     likePreview: row.status === 'active' ? likes.likePreview || [] : [],

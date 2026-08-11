@@ -133,7 +133,7 @@ async function stopAll(exitCode) {
 }
 
 async function main() {
-  console.log("\n[本地后端] 1/3 释放旧的 HTTP 服务端口…");
+  console.log("\n[本地后端] 1/4 释放旧的 HTTP 服务端口…");
   const freePort = runChild(
     "端口清理",
     process.execPath,
@@ -143,7 +143,7 @@ async function main() {
   await waitForExit(freePort, "端口清理");
 
   console.log(
-    `[本地后端] 2/3 启动 HTTP 服务${watchMode ? "（监听模式）" : ""}…`,
+    `[本地后端] 2/4 启动 HTTP 服务${watchMode ? "（监听模式）" : ""}…`,
   );
   const backend = runPnpm("HTTP 服务", [
     "--filter",
@@ -153,7 +153,7 @@ async function main() {
   ]);
 
   console.log(
-    `[本地后端] 3/3 启动文档与文件预览 Worker${watchMode ? "（监听模式）" : ""}…`,
+    `[本地后端] 3/4 启动文档与文件预览 Worker${watchMode ? "（监听模式）" : ""}…`,
   );
   const worker = runPnpm("文档与文件预览 Worker", [
     "--filter",
@@ -162,12 +162,25 @@ async function main() {
     watchMode ? "worker:documents:dev" : "worker:documents",
   ]);
 
+  console.log(
+    `[本地后端] 4/4 启动资源治理 Worker${watchMode ? "（监听模式）" : ""}…`,
+  );
+  const governanceWorker = runPnpm("资源治理 Worker", [
+    "--filter",
+    "server",
+    "run",
+    watchMode
+      ? "worker:resource-governance:dev"
+      : "worker:resource-governance",
+  ]);
+
   await Promise.all([
     waitForPort(backendPort, backend),
     ensureChildStable(worker, "文档与文件预览 Worker"),
+    ensureChildStable(governanceWorker, "资源治理 Worker"),
   ]);
   console.log(
-    "\n✅ 本地后端已就绪，HTTP 服务与异步文件处理 Worker 将共同运行；按 Ctrl+C 会同时停止。\n",
+    "\n✅ 本地后端已就绪，HTTP 服务、异步文件处理 Worker 与资源治理 Worker 将共同运行；按 Ctrl+C 会同时停止。\n",
   );
 }
 

@@ -27,10 +27,18 @@
         @close="closeRichFind"
       />
       <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
+        <Transition name="note-editor-warmup">
+          <NoteEditorWarmupPreview
+            v-if="!richEditorRuntimeReady && Boolean(content)"
+            :content="content"
+            note-type="html"
+          />
+        </Transition>
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
-          v-model="content"
+          :model-value="content"
+          @update:model-value="handleRichContentUpdate"
           tag-name="div"
           class="note-editor-body"
           :init="editorInit"
@@ -97,6 +105,13 @@
         />
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
+            <Transition name="note-editor-warmup">
+              <NoteEditorWarmupPreview
+                v-if="!markdownRuntimeReady && Boolean(mdContent)"
+                :content="mdContent"
+                note-type="markdown"
+              />
+            </Transition>
             <MarkdownCodeMirror
               ref="mdCodeMirrorRef"
               :model-value="mdContent"
@@ -109,6 +124,7 @@
               @command="runMarkdownToolbarAction"
               @selection-change="syncOrOpenMarkdownMention"
               @history-change="markdownHistoryState = $event"
+              @ready="handleMarkdownRuntimeReady"
               @paste="onMarkdownPaste"
               @blur="closeInlineMention"
               :readonly="readonly"
@@ -609,24 +625,6 @@
     type PropType,
   } from 'vue';
   import { useRouter } from 'vue-router';
-  import TinyMceEditor from '@tinymce/tinymce-vue';
-  import 'tinymce/tinymce';
-  import 'tinymce/icons/default';
-  import 'tinymce/themes/silver';
-  import 'tinymce/models/dom';
-  import 'tinymce/plugins/autolink';
-  import 'tinymce/plugins/autoresize';
-  import 'tinymce/plugins/code';
-  import 'tinymce/plugins/emoticons';
-  import 'tinymce/plugins/image';
-  import 'tinymce/plugins/link';
-  import 'tinymce/plugins/lists';
-  import 'tinymce/plugins/table';
-  import 'tinymce/plugins/codesample';
-  import 'tinymce/plugins/searchreplace';
-  import 'tinymce/plugins/wordcount';
-  import 'tinymce/plugins/quickbars';
-  import 'tinymce/skins/ui/oxide-dark/skin.min.css';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import i18n from '@/i18n';
@@ -654,6 +652,7 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import EditorFindBar, { type EditorFindBarExpose } from './EditorFindBar.vue';
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
+  import NoteEditorWarmupPreview from './NoteEditorWarmupPreview.vue';
   import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
   import {
@@ -708,6 +707,7 @@
     type ResourceRef,
   } from '@/utils/noteResourceRefs';
   import type { ResolvedResourceReference } from '@/api/noteReferences';
+  import { loadMarkdownRuntime, loadTinyMceRuntime, preloadNoteEditorRuntime } from './editorRuntimeLoader';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import {
     buildNoteReturnFocusLocation,
@@ -744,8 +744,17 @@
     type TextGradientAngle,
   } from '@/utils/richTextEffects';
 
-  // 富文本笔记不需要下载 CodeMirror；仅在真正进入 Markdown 编辑区时加载。
-  const MarkdownCodeMirror = defineAsyncComponent(() => import('./MarkdownCodeMirror.vue'));
+  // 两套重型编辑引擎按笔记类型分包，Markdown 不再下载 TinyMCE，富文本也不下载 CodeMirror。
+  const TinyMceEditor = defineAsyncComponent({
+    loader: loadTinyMceRuntime,
+    delay: 0,
+    suspensible: false,
+  });
+  const MarkdownCodeMirror = defineAsyncComponent({
+    loader: loadMarkdownRuntime,
+    delay: 0,
+    suspensible: false,
+  });
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   const CODE_LANGUAGES = [
@@ -825,6 +834,10 @@
     },
   });
 
+  void preloadNoteEditorRuntime(props.type).catch(() => {
+    // 异步组件挂载时会重试，并交由统一的 chunk 错误链路处理。
+  });
+
   const emits = defineEmits([
     'update:modelValue',
     'setHtml',
@@ -840,6 +853,8 @@
   const content = defineModel<string>('content');
   const editorRef = shallowRef<any>(null);
   const editorReady = ref(false);
+  const richEditorRuntimeReady = ref(false);
+  const markdownRuntimeReady = ref(false);
   const editorKey = ref(0);
   const richFindVisible = ref(false);
   const richFindText = ref('');
@@ -1469,6 +1484,7 @@
   }
 
   function prepareRichEditorForUnmount(editor = editorRef.value) {
+    richEditorRuntimeReady.value = false;
     if (!editor) return;
     // TinyMCE 的 remove 事件发生时，selection/searchreplace 已进入销毁流程；
     // 此时再调用 searchreplace.done() 会访问已经脱离 DOM 的 marker.parentNode。
@@ -3755,6 +3771,19 @@
   const currentLang = computed(() => i18n.global.locale.value);
   const isNightTheme = computed(() => user.currentTheme === 'night');
 
+  function handleMarkdownRuntimeReady() {
+    markdownRuntimeReady.value = true;
+    emits('ready');
+  }
+
+  function handleRichContentUpdate(value: string) {
+    // TinyMCE 初始化时会先规范化一次 HTML，并可能在用户尚未操作前发出 update:modelValue。
+    // 预览层仍显示服务端正文时忽略这次内部回写，避免正文闪动和误触发自动保存；
+    // init 完成后的真实输入继续正常同步。
+    if (!richEditorRuntimeReady.value) return;
+    content.value = value;
+  }
+
   const forceReinit = async () => {
     if (currentType.value !== 'html') return;
     if (richFindVisible.value) {
@@ -3762,6 +3791,7 @@
       richFindVisible.value = false;
     }
     editorRef.value = null;
+    richEditorRuntimeReady.value = false;
     editorKey.value += 1;
     editorReady.value = false;
     await nextTick();
@@ -4949,6 +4979,7 @@
           resetUndoHistory(editor);
           refreshResourceReferences();
           decorateRichMediaTextCaptions(editor);
+          richEditorRuntimeReady.value = true;
           emits('ready');
         }, 0);
       });
@@ -5181,9 +5212,17 @@
     }
   }
   .note-editor-scroll {
+    position: relative;
     flex: 1;
     min-height: 0;
     overflow: auto;
+  }
+  .note-editor-warmup-leave-active {
+    transition: opacity 90ms ease-out;
+  }
+  .note-editor-warmup-leave-to {
+    opacity: 0;
+    pointer-events: none;
   }
   .note-editor-body {
     outline: none;
@@ -5573,6 +5612,7 @@
     overflow: hidden;
   }
   .md-editor-pane {
+    position: relative;
     border-right: 1px solid var(--card-border-color, #e8eaf2);
   }
   .md-textarea {

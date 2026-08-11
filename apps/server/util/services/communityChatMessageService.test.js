@@ -64,6 +64,7 @@ function messageRow(overrides = {}) {
     replyStatus: '',
     replyAuthorName: '',
     replyImageCount: 0,
+    mentionNamesHex: '',
     ...overrides,
   };
 }
@@ -113,7 +114,13 @@ describe('communityChatMessageService', () => {
           return [
             [
               messageRow({ internalId: 3, publicId: 'message-3', userId: 'user-3', content: '第三条' }),
-              messageRow({ internalId: 2, publicId: 'message-2', userId: 'user-1', content: '第二条' }),
+              messageRow({
+                internalId: 2,
+                publicId: 'message-2',
+                userId: 'user-1',
+                content: '第二条',
+                mentionNamesHex: Buffer.from('薄荷').toString('hex'),
+              }),
               messageRow({ internalId: 1, publicId: 'message-1', userId: 'user-2', content: '第一条' }),
             ],
             [],
@@ -137,6 +144,7 @@ describe('communityChatMessageService', () => {
     expect(result.items.map((item) => item.publicId)).toEqual(['message-2', 'message-3']);
     expect(result.items[0]).toMatchObject({
       isOwn: true,
+      mentions: ['薄荷'],
       author: {
         name: '薄荷',
         role: 'member',
@@ -150,6 +158,7 @@ describe('communityChatMessageService', () => {
     expect(result.items[0]).not.toHaveProperty('userId');
     expect(result.items[0].author).not.toHaveProperty('id');
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('LEFT JOIN user_growth growth'))).toBe(true);
+    expect(db.query.mock.calls.some(([sql]) => String(sql).includes('community_chat_message_mentions'))).toBe(true);
   });
 
   it('按公有消息 ID 定位来源消息，并明确返回是否还有更新消息', async () => {
@@ -645,7 +654,18 @@ describe('communityChatMessageService', () => {
       if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
       if (text.includes('INSERT INTO community_chat_reads')) return [{ affectedRows: 1 }, []];
       if (text.includes('WHERE message.public_id = ?')) {
-        return [[messageRow({ internalId: 32, publicId: params[0], userId: 'user-1', content: '@薄荷 请看' })], []];
+        return [
+          [
+            messageRow({
+              internalId: 32,
+              publicId: params[0],
+              userId: 'user-1',
+              content: '请看',
+              mentionNamesHex: Buffer.from('薄荷').toString('hex'),
+            }),
+          ],
+          [],
+        ];
       }
       if (text.includes('FROM community_chat_message_images')) return [[], []];
       if (text.includes('FROM community_chat_message_likes')) return [[], []];
@@ -657,13 +677,14 @@ describe('communityChatMessageService', () => {
       user: { id: 'user-1', role: 'user' },
       roomSlug: 'general',
       clientRequestId: 'request-mention-01',
-      content: '@薄荷 请看',
+      content: '请看',
       mentionMessagePublicIds: [targetPublicId],
       env: MESSAGE_ENV,
       db,
     });
 
     expect(result.idempotent).toBe(false);
+    expect(result.message).toMatchObject({ content: '请看', mentions: ['薄荷'] });
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.deliverNotifications).toHaveBeenCalledTimes(1);
   });

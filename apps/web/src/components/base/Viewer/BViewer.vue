@@ -103,6 +103,7 @@
     () => {
       newView();
     },
+    { immediate: true },
   );
 
   function newView() {

@@ -148,49 +148,47 @@
               </BButton>
             </template>
           </nav>
-          <Transition name="note-content-switch" mode="out-in">
-            <div :key="noteContentKey" class="note-detail-content">
-              <div class="note-body-title n-title">
-                <BInput
-                  v-if="bookmark.isMobile"
-                  class="note-title-mobile"
-                  height="50px"
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-                <BInput
-                  v-else
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-              </div>
-              <editor
-                ref="editorRef"
-                class="editor-component"
-                v-model:content="note.content"
-                :type="note.type"
-                :revision="note.revision"
-                :persist-mode-conversion="persistEditorModeConversion"
-                @update:type="note.type = $event"
-                @switch-backup-change="hasSwitchBackup = $event"
-                @mode-converted="onEditorModeConverted"
-                :readonly="readonly"
-                :note-id="note.id"
-                :ensure-note-id="ensureNoteId"
-                :resource-refs="resolvedResourceRefs"
-                @set-note-id="onEditorSetNoteId"
-                @ready="handleEditorReady"
-                @markdown-rendered="refreshCatalog"
-                @resource-refs-change="onEditorResourceRefsChange"
+          <div :key="noteContentKey" class="note-detail-content">
+            <div class="note-body-title n-title">
+              <BInput
+                v-if="bookmark.isMobile"
+                class="note-title-mobile"
+                height="50px"
+                :disabled="readonly"
+                v-model:value="note.title"
+                @change="inputBlur"
+                @focusout="focusout"
+                :placeholder="$t('noteDetail.titlePlaceholder')"
+              />
+              <BInput
+                v-else
+                :disabled="readonly"
+                v-model:value="note.title"
+                @change="inputBlur"
+                @focusout="focusout"
+                :placeholder="$t('noteDetail.titlePlaceholder')"
               />
             </div>
-          </Transition>
+            <editor
+              ref="editorRef"
+              class="editor-component"
+              v-model:content="note.content"
+              :type="note.type"
+              :revision="note.revision"
+              :persist-mode-conversion="persistEditorModeConversion"
+              @update:type="note.type = $event"
+              @switch-backup-change="hasSwitchBackup = $event"
+              @mode-converted="onEditorModeConverted"
+              :readonly="readonly"
+              :note-id="note.id"
+              :ensure-note-id="ensureNoteId"
+              :resource-refs="resolvedResourceRefs"
+              @set-note-id="onEditorSetNoteId"
+              @ready="handleEditorReady"
+              @markdown-rendered="refreshCatalog"
+              @resource-refs-change="onEditorResourceRefsChange"
+            />
+          </div>
         </div>
         <template #ai>
           <div class="note-detail-ai-slot">
@@ -227,7 +225,7 @@
         @close="catalogDrawerOpen = false"
       />
     </div>
-    <b-loading :loading="!isReady" style="z-index: -1" />
+    <NoteDetailLoadingState v-if="!isReady" variant="page" :error="noteLoadFailed" @retry="retryLoadRouteNote" />
     <NoteVersionHistory
       v-if="versionHistoryVisible"
       v-model:visible="versionHistoryVisible"
@@ -238,19 +236,19 @@
     />
     <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
     <NoteAttachPagesModal
-      v-if="noteTreeWriteEnabled && note.id"
+      v-if="attachPagesVisible && noteTreeWriteEnabled && note.id"
       v-model:visible="attachPagesVisible"
       :target-note="attachTargetNote"
       @attached="handlePagesAttached"
     />
     <NoteMoveModal
-      v-if="noteTreeWriteEnabled && note.id"
+      v-if="moveSelfVisible && noteTreeWriteEnabled && note.id"
       v-model:visible="moveSelfVisible"
       :note="moveTargetNote"
       @moved="handleSelfMoved"
     />
     <NoteRenameModal
-      v-if="noteTreeWriteEnabled"
+      v-if="renamePageVisible && noteTreeWriteEnabled"
       v-model:visible="renamePageVisible"
       :note="renameTargetNote"
       @renamed="handlePageRenamed"
@@ -290,21 +288,16 @@
   import Catalog from '@/components/noteLibrary/detail/Catalog.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import { bookmarkStore, noteStore, useNoteWorkspaceStore, useUserStore } from '@/store';
+  import { bookmarkStore, noteStore, useNoteLibraryCacheStore, useNoteWorkspaceStore, useUserStore } from '@/store';
   import NoteHeader from '@/components/noteLibrary/detail/NoteHeader.vue';
+  import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
   import Editor from '@/components/noteLibrary/detail/Editor.vue';
-  import NoteVersionHistory from '@/components/noteLibrary/detail/NoteVersionHistory.vue';
   import NoteWorkspaceShell from '@/components/noteLibrary/workspace/NoteWorkspaceShell.vue';
   import NoteWorkspaceSidebar from '@/components/noteLibrary/workspace/NoteWorkspaceSidebar.vue';
   import NoteMobileNavigationDrawer from '@/components/noteLibrary/workspace/NoteMobileNavigationDrawer.vue';
-  import NoteAttachPagesModal from '@/components/noteLibrary/tree/NoteAttachPagesModal.vue';
-  import NoteMoveModal from '@/components/noteLibrary/tree/NoteMoveModal.vue';
-  import NoteRenameModal from '@/components/noteLibrary/tree/NoteRenameModal.vue';
-  import SaveTemplateModal from '@/components/noteLibrary/detail/SaveTemplateModal.vue';
   import NoteConflictModal from '@/components/noteLibrary/detail/NoteConflictModal.vue';
   import { renderNoteTemplate } from '@/utils/noteTemplate.ts';
   import { findBuiltinNoteTemplate, pickTemplateLocale } from '@/config/noteTemplates.ts';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
@@ -313,6 +306,7 @@
     DISABLED_NOTE_TREE_FEATURES,
     fetchNoteDeletePreview,
     fetchNoteTreeFeatures,
+    normalizeNoteTreeFeatures,
     type NoteTreeFeatures,
   } from '@/api/noteTree';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
@@ -329,6 +323,35 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { NOTE_TREE_ROOT_KEY, useNoteTree } from '@/composables/useNoteTree';
   import type { NoteTreeItem } from '@/types/noteTree';
+  import {
+    buildNoteDetailRequestScope,
+    consumeNoteDetail,
+    invalidateNoteDetailPrefetch,
+  } from '@/api/noteDetailPrefetch';
+  import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
+  import { NOTE_LIBRARY_FEATURES_FRESH_MS } from '@/store/noteLibraryCache';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+
+  const createDeferredDetailFeature = (loader: () => Promise<any>) =>
+    defineAsyncComponent({
+      loader,
+      loadingComponent: AsyncFeatureLoadingOverlay,
+      delay: 280,
+      suspensible: false,
+    });
+  const NoteVersionHistory = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/detail/NoteVersionHistory.vue'),
+  );
+  const SaveTemplateModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/detail/SaveTemplateModal.vue'),
+  );
+  const NoteAttachPagesModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/tree/NoteAttachPagesModal.vue'),
+  );
+  const NoteMoveModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
+  const NoteRenameModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
+  );
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -390,7 +413,13 @@
     parentId: null as string | null,
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
-  const noteTreeFeatures = ref<NoteTreeFeatures>({ ...DISABLED_NOTE_TREE_FEATURES });
+  const noteWorkspace = useNoteWorkspaceStore();
+  const noteLibraryCache = useNoteLibraryCacheStore();
+  const noteCacheScope = computed(() => buildNoteDetailRequestScope(user));
+  const initialFeatureSnapshot = noteLibraryCache.readFeatures(noteCacheScope.value);
+  const noteTreeFeatures = ref<NoteTreeFeatures>({
+    ...(initialFeatureSnapshot?.features || DISABLED_NOTE_TREE_FEATURES),
+  });
   const noteTreeReadEnabled = computed(() => noteTreeFeatures.value.note_tree_read);
   const noteTreeWriteEnabled = computed(() => noteTreeFeatures.value.note_tree_write);
   const noteTreeSubtreeTrashEnabled = computed(
@@ -407,7 +436,10 @@
   const canShowDetailSidebar = computed(
     () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
   );
-  const noteWorkspace = useNoteWorkspaceStore();
+  function invalidateNoteReadCaches(noteId = note.id) {
+    invalidateNoteDetailPrefetch(user, noteId);
+    noteLibraryCache.markListsStale(buildNoteDetailRequestScope(user));
+  }
   const {
     aiPreferredOpen,
     browseParentId,
@@ -415,6 +447,9 @@
     sidebarPreferredOpen,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
+  const shouldLoadDetailTree = computed(
+    () => canShowPrivateNavigation.value && !bookmark.isMobile && sidebarPreferredOpen.value,
+  );
   const initialDetailWorkspaceLayout = resolveNoteWorkspaceLayout(
     typeof window === 'undefined' ? 1420 : window.innerWidth,
     bookmark.isMobile,
@@ -458,7 +493,11 @@
     refreshTree,
     searchTree,
     toggleExpanded,
-  } = useNoteTree({ enabled: canShowPrivateNavigation });
+  } = useNoteTree({
+    enabled: canShowPrivateNavigation,
+    loadTree: shouldLoadDetailTree,
+    revealBreadcrumb: shouldLoadDetailTree,
+  });
   const detailSidebarMode = computed<'directory' | 'outline'>({
     get: () => (detailTab.value === 'outline' ? 'outline' : 'directory'),
     set: (value) => {
@@ -514,15 +553,41 @@
   let currentEditorResourceRefs: ResourceRef[] = [];
 
   async function loadNoteTreeFeatureSnapshot() {
+    const requestScope = noteCacheScope.value;
     try {
-      noteTreeFeatures.value = await fetchNoteTreeFeatures();
+      const next = await fetchNoteTreeFeatures();
+      if (requestScope !== noteCacheScope.value) return;
+      noteTreeFeatures.value = next;
+      noteLibraryCache.writeFeatures(requestScope, next);
     } catch {
-      noteTreeFeatures.value = { ...DISABLED_NOTE_TREE_FEATURES };
+      // 已有快照时保留可用能力；弱网刷新失败不能让面包屑/目录突然消失。
+      if (!noteLibraryCache.readFeatures(requestScope)) {
+        noteTreeFeatures.value = { ...DISABLED_NOTE_TREE_FEATURES };
+      }
     }
-    if (noteTreeReadEnabled.value && note.id) void loadDetailBreadcrumb(String(note.id));
   }
 
-  const noteTreeFeaturePromise = loadNoteTreeFeatureSnapshot();
+  const initialFeatureRouteRawId = router.currentRoute.value.params.id;
+  const initialFeatureRouteId = Array.isArray(initialFeatureRouteRawId)
+    ? initialFeatureRouteRawId.join('/')
+    : String(initialFeatureRouteRawId || '');
+  // 已有笔记由 getNoteDetail 同一响应携带能力快照和面包屑，避免冷启动时额外请求后
+  // 再逐段点亮导航。新建页没有详情请求，仍沿用独立能力接口。
+  const receivesTreeBootstrapFromDetail = Boolean(initialFeatureRouteId && initialFeatureRouteId !== 'add');
+  const noteTreeFeaturePromise =
+    !receivesTreeBootstrapFromDetail &&
+    (!initialFeatureSnapshot || Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS)
+      ? loadNoteTreeFeatureSnapshot()
+      : Promise.resolve();
+
+  watch(noteCacheScope, (scope, previousScope) => {
+    if (!previousScope || scope === previousScope) return;
+    const cached = noteLibraryCache.readFeatures(scope);
+    noteTreeFeatures.value = { ...(cached?.features || DISABLED_NOTE_TREE_FEATURES) };
+    if (!cached || Date.now() - cached.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS) {
+      void loadNoteTreeFeatureSnapshot();
+    }
+  });
 
   async function resolveEditorResourceRefs(refs: ResourceRef[], force = false) {
     const normalized = refs.slice(0, 100);
@@ -987,6 +1052,7 @@
     const currentRouteId = Array.isArray(rawRouteId) ? rawRouteId.join('/') : String(rawRouteId || '');
     // 快速切换时旧编辑器可能晚到一个 ready；它不能重新开启自动保存，也不能覆盖新页面的大纲。
     if (currentRouteId !== 'add' && currentRouteId !== note.id) return;
+    editorRuntimeReady.value = true;
     contentAutosaveReady.value = true;
     isNoteSwitching.value = false;
     // 不 await:目录解析最长要等 6 次重试，focusRef 定位不该被它拖着
@@ -1084,6 +1150,7 @@
       if (updated.revision) note.revision = updated.revision;
     }
     recordOperation({ module: '笔记', operation: `重命名笔记【${updated.title}】` });
+    invalidateNoteReadCaches(updated.id);
     await refreshTree();
     if (updated.id === note.id) await loadDetailBreadcrumb(note.id);
   }
@@ -1093,6 +1160,7 @@
     const response = await apiBasePost('/api/note/toggleNoteTop', { id: target.id });
     if (response.status !== 200) return;
     target.isTop = Boolean(response.data?.isTop);
+    invalidateNoteReadCaches(target.id);
     message.success(target.isTop ? t('common.pinned') : t('common.unpinned'));
     await refreshTree();
   }
@@ -1143,6 +1211,7 @@
           return;
         }
         if (response.status !== 200) return;
+        invalidateNoteReadCaches(target.id);
         message.success(t('common.deleteSuccess'));
         await refreshTree();
         await loadDetailBreadcrumb(note.id);
@@ -1347,6 +1416,7 @@
               result: 'success',
             });
           }
+          invalidateNoteReadCaches(note.id);
           return note.id as string;
         }
         throw new Error('创建笔记失败');
@@ -1440,6 +1510,7 @@
         }
         setUpdateTime();
         saveStatus.value = 'saved';
+        invalidateNoteReadCaches(note.id);
       } else {
         saveStatus.value = 'error';
       }
@@ -1567,6 +1638,7 @@
             return;
           }
           if (res.status !== 200) return;
+          invalidateNoteReadCaches(note.id);
           message.success(t('common.deleteSuccess'));
           recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}】` });
           if (noteTreeReadEnabled.value) {
@@ -1616,6 +1688,7 @@
           return;
         }
         if (res.status !== 200) return;
+        invalidateNoteReadCaches(note.id);
         message.success(t('common.deleteSuccess'));
         const deletedCount = Number(res.data?.deletedCount || preview.totalCount);
         recordOperation({ module: '笔记', operation: `删除笔记成功【${note.title}，共${deletedCount}篇】` });
@@ -1693,6 +1766,8 @@
     return await persistBeforeLeave();
   });
   const isReady = ref(false);
+  const noteLoadFailed = ref(false);
+  const editorRuntimeReady = ref(false);
 
   function resetPerNoteRuntime() {
     clearScheduledSave();
@@ -1708,6 +1783,7 @@
     skipSaveOnLeave = false;
     hasSwitchBackup.value = false;
     contentAutosaveReady.value = false;
+    editorRuntimeReady.value = false;
     conflictVisible.value = false;
     conflictCloudVersion.value = null;
     conflictLocalVersion.value = null;
@@ -1750,10 +1826,10 @@
 
   function completeMarkdownContentSwitch() {
     if (note.type !== 'markdown') return;
-    // Markdown 编辑器没有 TinyMCE 的 init 事件；内容 DOM 挂载后即可恢复交互和自动保存。
-    contentAutosaveReady.value = true;
-    isNoteSwitching.value = false;
-    void refreshCatalog();
+    // CodeMirror 是异步运行时，必须等它真正发出 ready；nextTick 只代表 Vue 壳已挂载。
+    void preloadNoteEditorRuntime('markdown').catch(() => {
+      // 异步组件挂载时会重试，并由统一的 chunk 错误链路提供反馈。
+    });
   }
 
   async function loadRouteNote(routeId: string, query: Record<string, any>) {
@@ -1766,6 +1842,7 @@
 
     const requestVersion = ++noteLoadVersion;
     const isInitialLoad = !isReady.value;
+    noteLoadFailed.value = false;
     if (!isInitialLoad) isNoteSwitching.value = true;
     resetPerNoteRuntime();
 
@@ -1798,40 +1875,77 @@
 
     let contentApplied = false;
     try {
-      const response = await apiBasePost('/api/note/getNoteDetail', { id: routeId });
+      const response = await consumeNoteDetail(user, routeId);
       if (requestVersion !== noteLoadVersion) return;
       if (response.status === 200 && response.data) {
-        const rawType = response.data.type;
+        const {
+          breadcrumb: bundledBreadcrumb,
+          noteTreeFeatures: bundledFeaturePayload,
+          ...detailRecord
+        } = response.data;
+        if (bundledFeaturePayload && typeof bundledFeaturePayload === 'object') {
+          const bundledFeatures = normalizeNoteTreeFeatures(bundledFeaturePayload as Record<string, unknown>);
+          noteTreeFeatures.value = bundledFeatures;
+          noteLibraryCache.writeFeatures(noteCacheScope.value, bundledFeatures);
+        } else if (
+          !initialFeatureSnapshot ||
+          Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
+        ) {
+          // 兼容前后端短暂错版本：旧服务端没有聚合字段时仍能恢复原来的独立能力读取。
+          void loadNoteTreeFeatureSnapshot();
+        }
+        const rawType = detailRecord.type;
         Object.assign(note, {
-          ...response.data,
-          id: String(response.data.id || routeId),
+          ...detailRecord,
+          id: String(detailRecord.id || routeId),
           type: normalizeNoteType(rawType),
-          content: normalizeLoadedContent(response.data.content || '', rawType),
-          revision: Math.max(1, Number(response.data.revision || 1)),
-          parentId: response.data.parentId || null,
+          content: normalizeLoadedContent(detailRecord.content || '', rawType),
+          revision: Math.max(1, Number(detailRecord.revision || 1)),
+          parentId: detailRecord.parentId || null,
         });
+        if (Array.isArray(bundledBreadcrumb)) {
+          const seededBreadcrumb = noteWorkspace.seedBreadcrumb(note.id, bundledBreadcrumb);
+          if (seededBreadcrumb.length) note.parentId = seededBreadcrumb.at(-2)?.id || null;
+        }
         note.lastTitle = cloneDeep(note.title);
         latestRequestedTitle = note.title;
         noteWorkspace.updateNoteMetadata(String(note.id), { title: note.title, type: note.type });
-        updateTime.value = response.data.updateTime ?? response.data.createTime;
+        updateTime.value = detailRecord.updateTime ?? detailRecord.createTime;
         nodeType.value = user.id === note.createBy ? 'edit' : 'share';
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
-        void loadDetailBreadcrumb(String(note.id));
+        // 正文拿到类型后立刻预热对应引擎；useNoteTree 独占首次面包屑加载，避免重复请求。
+        void preloadNoteEditorRuntime(note.type).catch(() => {
+          // 预热失败时异步组件仍会按正常挂载链路重试并由路由错误处理兜底。
+        });
         await nextTick();
         await syncHeaderTitle();
         completeMarkdownContentSwitch();
         syncReadonlyEditorChrome();
+      } else {
+        noteLoadFailed.value = true;
+        isReady.value = false;
       }
     } catch (error) {
       console.error('加载笔记失败:', error);
+      if (requestVersion === noteLoadVersion) {
+        noteLoadFailed.value = true;
+        isReady.value = false;
+      }
     } finally {
       if (requestVersion === noteLoadVersion) {
-        if (!isReady.value) isReady.value = true;
         if (!contentApplied) isNoteSwitching.value = false;
       }
     }
+  }
+
+  function retryLoadRouteNote() {
+    const route = router.currentRoute.value;
+    const rawId = route.params.id;
+    const id = Array.isArray(rawId) ? rawId.join('/') : String(rawId || '');
+    if (!id) return;
+    void loadRouteNote(id, { ...route.query });
   }
 
   const routeNoteLoadKey = computed(() => {
@@ -2111,27 +2225,10 @@
     .catalog-panel.is-animatable {
       transition: none;
     }
-
-    .note-content-switch-enter-active,
-    .note-content-switch-leave-active {
-      transition: none !important;
-    }
-  }
-
-  .note-content-switch-enter-active,
-  .note-content-switch-leave-active {
-    transition:
-      opacity 140ms ease,
-      transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-content-switch-enter-from,
-  .note-content-switch-leave-to {
-    opacity: 0;
-    transform: translateY(4px);
   }
 
   .note-detail-content {
+    position: relative;
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;

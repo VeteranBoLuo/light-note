@@ -118,6 +118,7 @@
 
     <!-- 全屏文件预览 -->
     <FilePreview
+      v-if="previewVisible"
       v-model:visible="previewVisible"
       :file-info="previewFileInfo"
       :show-next="cloud.fileTotal > 1"
@@ -173,7 +174,13 @@
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
-  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
+  import FilePreviewLoadingState from '@/components/cloudSpace/FilePreviewLoadingState.vue';
+  const FilePreview = defineAsyncComponent({
+    loader: () => import('@/components/FilePreview.vue'),
+    loadingComponent: FilePreviewLoadingState,
+    delay: 0,
+    suspensible: false,
+  });
 
   const { t } = useI18n();
   const bookmark = bookmarkStore();
@@ -687,11 +694,13 @@
     if (!file || !file.fileType) return;
     const normalized = normalizeFileInfo(file);
     pendingLocalPreviewId = normalized.id;
-    await syncFileRoute(normalized.id);
-    if (pendingLocalPreviewId !== normalized.id) return;
     Object.assign(previewFileInfo, normalized);
     previewVisible.value = true;
-    pendingLocalPreviewId = '';
+    try {
+      await syncFileRoute(normalized.id);
+    } finally {
+      if (pendingLocalPreviewId === normalized.id) pendingLocalPreviewId = '';
+    }
   }
 
   async function previewNextFile() {
@@ -707,10 +716,13 @@
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % list.length;
     const target = normalizeFileInfo(list[nextIndex]);
     pendingLocalPreviewId = target.id;
-    await syncFileRoute(target.id);
     Object.assign(previewFileInfo, target);
     previewVisible.value = true;
-    pendingLocalPreviewId = '';
+    try {
+      await syncFileRoute(target.id);
+    } finally {
+      if (pendingLocalPreviewId === target.id) pendingLocalPreviewId = '';
+    }
   }
 
   async function previewPrevFile() {
@@ -721,10 +733,13 @@
     const prevIndex = currentIndex === -1 ? 0 : (currentIndex - 1 + list.length) % list.length;
     const target = normalizeFileInfo(list[prevIndex]);
     pendingLocalPreviewId = target.id;
-    await syncFileRoute(target.id);
     Object.assign(previewFileInfo, target);
     previewVisible.value = true;
-    pendingLocalPreviewId = '';
+    try {
+      await syncFileRoute(target.id);
+    } finally {
+      if (pendingLocalPreviewId === target.id) pendingLocalPreviewId = '';
+    }
   }
 
   // 关闭预览

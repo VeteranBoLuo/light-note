@@ -178,7 +178,7 @@ export function buildAdminNav({
       icon: icons.tool,
       items: [
         { id: 'adminGovernance', title: adminGovernanceTitle },
-        { id: 'imageMg', title: '图片管理' },
+        { id: 'resourceGovernance', title: '资源治理' },
       ],
     },
   ];
@@ -232,7 +232,7 @@ const MOBILE_PATHS: Record<string, string> = {
   logCleanup: '/logCleanup',
   logExclude: '/logExclude',
   securityCenter: '/securityCenterMobile',
-  imageMg: '/imageMg',
+  resourceGovernance: '/resourceGovernance',
   adminGovernance: '/adminGovernance',
 };
 

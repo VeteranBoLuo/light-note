@@ -6,6 +6,7 @@ import inboxStore from './inbox.ts';
 import todoStore from './todo.ts';
 import useAiAssistantStore from './aiAssistant.ts';
 import useNoteWorkspaceStore from './noteWorkspace.ts';
+import useNoteLibraryCacheStore from './noteLibraryCache.ts';
 
 export {
   cloudSpaceStore,
@@ -16,4 +17,5 @@ export {
   todoStore,
   useAiAssistantStore,
   useNoteWorkspaceStore,
+  useNoteLibraryCacheStore,
 };
