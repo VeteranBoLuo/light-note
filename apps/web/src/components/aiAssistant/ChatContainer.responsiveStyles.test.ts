@@ -25,9 +25,13 @@ describe('ChatContainer narrow responsive styles', () => {
     });
   });
 
-  it('keeps the mobile send action compact without shrinking the neighboring touch controls', () => {
-    expect(chatInputSource).toContain('.input-actions :deep(.b_btn:not(.send-btn))');
-    expect(chatInputSource).toMatch(/\.send-btn\s*\{\s*min-width:\s*54px;\s*min-height:\s*40px;\s*height:\s*40px;/);
+  it('keeps all mobile composer actions at the same compact height', () => {
+    expect(chatInputSource).toContain('--ai-composer-action-height: 40px');
+    expect(chatInputSource).toContain('.input-actions :deep(.b_btn)');
+    expect(chatInputSource).not.toContain('.input-actions :deep(.b_btn:not(.send-btn))');
+    expect(chatInputSource).toMatch(
+      /\.input-actions :deep\(\.b_btn\)\s*\{[\s\S]*?min-height:\s*var\(--ai-composer-action-height\)[\s\S]*?height:\s*var\(--ai-composer-action-height\)/,
+    );
   });
 
   it('keeps the mobile material entry aligned with the compact send action', () => {

@@ -671,11 +671,18 @@
   }
 
   .input-actions {
+    --ai-composer-action-height: 28px;
+
     display: flex;
     flex-wrap: wrap;
     justify-content: flex-end;
     align-items: center;
     gap: 0.5rem;
+  }
+
+  .input-actions :deep(.b_btn) {
+    min-height: var(--ai-composer-action-height) !important;
+    height: var(--ai-composer-action-height) !important;
   }
 
   .send-btn {
@@ -687,7 +694,7 @@
     cursor: pointer;
     transition: all 0.2s;
     min-width: 50px;
-    height: 28px;
+    height: var(--ai-composer-action-height);
     line-height: 1;
   }
 
@@ -996,12 +1003,6 @@
       }
     }
 
-    .input-actions :deep(.b_btn:not(.send-btn)) {
-      min-height: var(--mobile-touch-size, 44px) !important;
-      height: var(--mobile-touch-size, 44px) !important;
-      padding-inline: 10px;
-    }
-
     .text-input :deep(.b-textarea) {
       min-height: 42px;
       max-height: 88px;
@@ -1017,13 +1018,13 @@
     }
 
     .input-actions {
+      --ai-composer-action-height: 40px;
+
       gap: 4px;
     }
 
     .send-btn {
       min-width: 54px;
-      min-height: 40px;
-      height: 40px;
     }
   }
 </style>

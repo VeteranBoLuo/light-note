@@ -153,7 +153,6 @@ function publicContinuation(token, record) {
     schemaVersion: 1,
     token: String(token),
     policy: record.policy === 'final_reply' ? 'final_reply' : 'terminal',
-    labelKey: 'ai.actionContinuation.userMessage',
     expiresAt: record.expiresAt,
   };
 }

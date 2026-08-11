@@ -13,7 +13,7 @@ const GROUPS = {
   generic: ['search_content', 'search_knowledge_base'],
   fallback: ['query_bookmarks', 'query_notes'],
   bookmark: ['query_bookmarks'],
-  bookmarkHealth: ['query_link_health'],
+  bookmarkHealth: ['query_link_health', 'start_link_health_check'],
   note: ['query_notes', 'read_note'],
   noteImage: ['analyze_resource_images'],
   file: ['query_files', 'query_cloud_folders', 'get_storage_usage'],
@@ -92,7 +92,7 @@ const DOMAIN_INTENT_RULES = [
   { pattern: /待办|任务|提醒|截止|todo/i, groups: ['todo'] },
   { pattern: /待整理|收集箱|稍后整理|inbox/i, groups: ['inbox'] },
   { pattern: /图片|截图|ocr|识图|图像/i, groups: ['noteImage'] },
-  { pattern: /死链|失效链接|链接健康|link health/i, groups: ['bookmarkHealth'] },
+  { pattern: /死链|失效.{0,4}链接|链接.{0,4}失效|链接健康|link health/i, groups: ['bookmarkHealth'] },
 ];
 
 export { ROUTED_AGENT_WRITE_TOOL_NAMES };

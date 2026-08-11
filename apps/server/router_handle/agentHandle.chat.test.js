@@ -114,6 +114,7 @@ vi.mock('../util/agent/tools/index.js', () => ({
       timeoutMs: 1000,
       execute: mocks.toolExecute,
       getDependencyRefs: (raw) => raw.dependencyRefs || [],
+      toArtifacts: (raw) => (raw.artifact ? [raw.artifact] : []),
       transform: (raw) => `结果:${raw.value}`,
       summarize: (raw) => `结果:${raw.value}`,
     },
@@ -469,7 +470,7 @@ describe('agentChat 主链路', () => {
     });
   });
 
-  it('卡片续答只读取服务端成功回执并直接进入 Final Reply，不重新开放 Planner 或工具', async () => {
+  it('卡片续答允许空消息内部触发，只读取服务端成功回执且不重新开放 Planner 或工具', async () => {
     const continuation = {
       state: 'ready',
       snapshot: {
@@ -500,7 +501,7 @@ describe('agentChat 主链路', () => {
 
     await agentChat(
       request({
-        message: '继续根据刚才已完成的操作回答',
+        message: '',
         trigger: 'card_continuation',
         continuationToken: 'continuation-token',
         clientCapabilities: ['agent_continuation_v1'],
@@ -2985,6 +2986,86 @@ describe('agentChat 主链路', () => {
       toolChoice: 'none',
       temperature: 0.3,
     });
+  });
+
+  it('真实体检 artifact 经 SSE 与恢复快照透传，数字不依赖模型正文', async () => {
+    const artifact = {
+      id: 'bookmark-health:run-1',
+      kind: 'job',
+      schemaVersion: 1,
+      status: 'running',
+      titleKey: 'ai.artifact.bookmarkHealth.title',
+      generatedAt: '2026-08-10T12:00:00.000Z',
+      revision: 1,
+      data: {
+        jobType: 'bookmark_health',
+        jobId: 'run-1',
+        total: 214,
+        checked: 0,
+        alive: 0,
+        suspect: 0,
+        unknown: 0,
+        pollAfterMs: 2500,
+        suspects: [],
+      },
+    };
+    mocks.toolExecute.mockResolvedValueOnce({ value: '已启动', artifact });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_demo',
+                goal: '启动真实死链体检',
+                targetDescription: '当前账号全部书签',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_demo', arguments: {} }],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '体检已启动，请查看任务卡。',
+        toolCalls: [],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'stop',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '我有哪些书签链接失效了？',
+        stream: true,
+        contexts: [],
+        attachmentIds: [],
+      }),
+      res,
+    );
+
+    const events = sseEvents(res);
+    expect(events.find((event) => event.event === 'artifact.created')?.artifact).toMatchObject({
+      id: 'bookmark-health:run-1',
+      data: { total: 214, checked: 0 },
+    });
+    expect(events.find((event) => event.event === 'response.completed')?.artifacts).toEqual([
+      expect.objectContaining({ id: 'bookmark-health:run-1' }),
+    ]);
+    const recoveryInsert = mocks.poolQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO ai_response_events'),
+    );
+    const terminalPayload = JSON.parse(recoveryInsert[1].at(-2));
+    expect(terminalPayload.recoverySnapshot.artifacts).toEqual([
+      expect.objectContaining({ id: 'bookmark-health:run-1' }),
+    ]);
   });
 
   it('多读取计划正确识别能力但漏交工具调用时，会收窄能力补全后再执行查询', async () => {

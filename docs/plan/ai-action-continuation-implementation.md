@@ -1,6 +1,6 @@
 # 轻笺智域卡片动作续答落地方案
 
-> 状态：v1 已进入代码实现；目标分支 `codex/ai-action-continuation`，基线为 2026-08-09 最新 `origin/main`。
+> 状态：v1 已实现，并补充死链体检 Job/Artifact 首个业务适配；当前修复分支 `codex/ai-health-job-continuation-fix`。
 
 ## 1. 问题与目标
 
@@ -43,7 +43,7 @@ v1 只有 `final_reply` 会被 Web 客户端自动执行。其他枚举是协议
 
 ```json
 {
-  "message": "继续根据刚才已完成的操作回答",
+  "message": "",
   "trigger": "card_continuation",
   "continuationToken": "opaque-token",
   "sessionId": "server-session-id",
@@ -52,7 +52,7 @@ v1 只有 `final_reply` 会被 Web 客户端自动执行。其他枚举是协议
 }
 ```
 
-`message` 只用于在对话中形成可见的用户轮次。服务端不信任该文本，而是从 Redis 私有快照恢复原始问题、前序工具事实、动作绑定和权威成功回执。
+空 `message` 明确表示内部续答事件，不形成用户轮次。服务端只从 Redis 私有快照恢复原始问题、前序工具事实、动作绑定和权威成功回执。
 
 ## 3. 服务端状态机
 
@@ -85,8 +85,8 @@ stateDiagram-v2
 1. 原助手消息照常展示选择卡或确认卡。
 2. 用户选择后，若涉及写入，仍只晋级为原 `AiToolConfirmationCard`。
 3. 用户确认后，卡片先校验权威回执并完成原结算、历史持久化。
-4. 若成功响应携带 `policy=final_reply`，前端新增一条可见用户消息，再走原 SSE Agent 请求。
-5. 新的 AI 消息独立流式展示；续答失败时只影响这条消息，原卡片仍保持成功。
+4. 若成功响应携带 `policy=final_reply`，前端以空消息和令牌发起内部 SSE 请求，不插入、不保存用户消息。
+5. 新的 AI 消息在原卡片后独立流式展示并标记为不可普通重生成；续答失败时只影响这条消息，原卡片仍保持成功。
 
 对于声明新 capability 的 SSE 请求，服务端会等整轮规划结束、确认只有一张未决卡片并完成私有快照后，再发送该卡片事件，避免第一张卡先拿到续答令牌而同轮随后又出现第二张卡。未声明 capability 的旧客户端保持原发送时序。
 
@@ -106,9 +106,9 @@ stateDiagram-v2
 | 续答 Provider 失败 | 动作仍成功 | 可安全重试续答 | 不回滚业务结果 |
 | 续答请求重放 | 不执行工具 | 不重复调用 Provider | 回放 Redis 缓存答案 |
 
-## 6. 与 Artifact / 长任务的扩展点
+## 6. Artifact / 长任务落地
 
-死链体检、批量分析、导入导出等长任务不应在点击后占用一次长 HTTP Agent 请求。后续 Job 卡片应使用：
+死链体检、批量分析、导入导出等长任务不应在点击后占用一次长 HTTP Agent 请求。通用 Job 卡片原则：
 
 - 点击开始：确定性创建 Job，展示真实进度；
 - 运行中：SSE/轮询只读 Job 状态，不调用 LLM；
@@ -116,13 +116,23 @@ stateDiagram-v2
 - 用户显式点击后，使用 `offer_followup` 或受限的 `final_reply`；
 - “重新体检”创建新的幂等 Job，不读取旧结果冒充本次执行。
 
-v1 已提供通用协议和安全令牌存储，Job/Artifact 组件接入时无需修改现有资源创建卡。
+### 6.1 已落地：书签死链体检
+
+- `start_link_health_check` 启动真实全量检查；“我有哪些链接失效”默认选它，不再把历史记录说成刚检查。
+- `query_link_health` 只读当前/最近状态，用于“上次结果”、“当前进度”等明确问法。
+- 后端以受控 `bookmark_health` artifact 投影总数、已检数、正常、疑似失效、无法判断及疑似清单；原始工具数据不直接透传。
+- `AiJobCard` 按任务状态轮询已有体检 API，卡片上可直接“开始体检/重新体检”。
+- artifact 同时进入 SSE 恢复快照、本地会话和云会话 `modelMeta`，重载后仍能恢复卡片。
+- 同账号重复启动时复用正在运行的检查，不重复扫描。
+
+当前全量检查沿用项目已有的进程内后台任务。结果会逐条落到 `bookmark_health`，但运行态和 runId 在服务进程重启后会丢失；如果后续要支持多实例调度、取消或精确失败重试，再升级为持久化 Job/Worker。这不影响本次“真实执行 + 进度卡 + 重跑”的闭环。
 
 ## 7. 验证门禁
 
 - Store：owner/session/action 绑定、晋级重绑、成功前禁止续答、原子认领、结果缓存；
 - Handler：续答不进入 Planner、不选择工具；确认成功才激活令牌；
-- Web：只有 `final_reply` 自动续答；terminal/resume_plan 不自动执行；
+- Web：只有 `final_reply` 自动续答；内部请求不生成用户消息；terminal/resume_plan 不自动执行；
+- Artifact：死链真实任务防重入、进度汇总、SSE/恢复透传、卡片重跑与失败保留；
 - 回归：创建笔记确认预览、目录替换、回执校验、选择卡晋级、老客户端无 capability；
 - 工程：服务端语法检查、定向 Vitest、Web 类型检查/构建、`git diff --check`。
 

@@ -102,6 +102,7 @@ export interface AiAgentRecoverySnapshot {
     evidenceCount: number;
   } | null;
   coverage: Record<string, unknown> | null;
+  artifacts?: import('@/types/aiArtifact').AiArtifact[];
   activity: Array<Record<string, unknown> | string>;
   stage: string;
   status: 'completed' | 'failed';

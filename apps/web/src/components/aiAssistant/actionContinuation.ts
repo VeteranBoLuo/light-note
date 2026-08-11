@@ -13,3 +13,15 @@ export function resolveAutomaticActionContinuation(
   }
   return continuation;
 }
+
+/**
+ * 卡片成功后的续答是内部协议事件，不是用户又发了一条问题。
+ * message 必须保持为空，服务端只凭 owner/session 绑定的令牌恢复原问题和权威回执。
+ */
+export function createInternalActionContinuationRequest(continuation: AiActionContinuation) {
+  return {
+    message: '',
+    trigger: 'card_continuation' as const,
+    continuationToken: continuation.token,
+  };
+}

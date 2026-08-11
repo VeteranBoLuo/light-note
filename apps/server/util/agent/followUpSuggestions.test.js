@@ -35,6 +35,15 @@ describe('followUpSuggestions', () => {
     ).toEqual(['把这些失效书签按原因分类', '哪些失效链接最需要优先处理？', '这些失效书签分别该怎么处理？']);
   });
 
+  it('真实死链体检完成后与查看历史结果使用同类追问', () => {
+    expect(
+      buildFallbackQuestions({
+        locale: 'zh-CN',
+        tools: [{ name: 'start_link_health_check', status: 'success' }],
+      }),
+    ).toEqual(['把这些失效书签按原因分类', '哪些失效链接最需要优先处理？', '这些失效书签分别该怎么处理？']);
+  });
+
   it('待确认、回答过短和错误回答不生成追问', () => {
     expect(shouldOfferFollowUps({ answer: '正常且足够长的回答内容，可以继续进行深入分析。' })).toBe(true);
     expect(shouldOfferFollowUps({ answer: '太短' })).toBe(false);

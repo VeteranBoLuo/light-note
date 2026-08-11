@@ -66,7 +66,7 @@
   <body>
     <main>
       <h1>卡片成功后，AI 再完成回答</h1>
-      <p class="intro">点击确认体验：原卡片先完成并保留权威回执，随后形成一轮可见续答。</p>
+      <p class="intro">点击确认体验：原卡片先完成并保留权威回执，随后由内部事件直接形成 AI 续答，不替用户发送控制语句。</p>
       <section class="timeline" aria-live="polite">
         <div class="message user"><div class="bubble">创建一条“检查死链体检方案”的待办，并告诉我结果。</div></div>
         <div class="message">
@@ -81,7 +81,6 @@
             <div id="card-result" class="success hidden">待办已创建（权威回执）</div>
           </article>
         </div>
-        <div class="message user hidden" id="continuation-user"><div class="bubble">继续根据刚才已完成的“创建待办”操作回答</div></div>
         <div class="message hidden" id="continuation-ai">
           <div class="avatar">AI</div>
           <div class="bubble typing" id="answer">正在根据已完成操作整理结果…</div>
@@ -92,13 +91,11 @@
     <script>
       const actions = document.querySelector('#card-actions');
       const result = document.querySelector('#card-result');
-      const user = document.querySelector('#continuation-user');
       const ai = document.querySelector('#continuation-ai');
       const answer = document.querySelector('#answer');
       document.querySelector('#confirm').addEventListener('click', () => {
         actions.classList.add('hidden');
         result.classList.remove('hidden');
-        user.classList.remove('hidden');
         ai.classList.remove('hidden');
         window.setTimeout(() => {
           answer.classList.remove('typing');

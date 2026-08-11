@@ -241,6 +241,7 @@ export const GOLDEN_ENUMS = Object.freeze({
     'query_bookmarks',
     'create_bookmark',
     'query_link_health',
+    'start_link_health_check',
     'query_notes',
     'query_todos',
     'set_todo_status',

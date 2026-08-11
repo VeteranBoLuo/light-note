@@ -36,6 +36,7 @@ import getGrowth from './get_growth.js';
 import queryPointsLog from './query_points_log.js';
 import queryNotifications from './query_notifications.js';
 import queryLinkHealth from './query_link_health.js';
+import startLinkHealthCheck from './start_link_health_check.js';
 import getRecap from './get_recap.js';
 import queryFeedback from './query_feedback.js';
 import queryWeeklyChallenge from './query_weekly_challenge.js';
@@ -91,6 +92,7 @@ export default [
   queryPointsLog,
   queryNotifications,
   queryLinkHealth,
+  startLinkHealthCheck,
   getRecap,
   queryFeedback,
   queryWeeklyChallenge,

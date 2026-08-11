@@ -111,9 +111,16 @@ const TOOL_COVERAGE_CASES = Object.freeze([
   ),
   smokeCase(
     'query-link-health',
-    '查看我的书签死链检测结果和疑似失效链接。',
+    '查看我上次书签死链检测的结果，不要重新检查。',
     'read.query_link_health',
     'query_link_health',
+  ),
+  smokeCase(
+    'start-link-health-check',
+    '我有哪些书签链接失效了？请做一次真实体检。',
+    'read.start_link_health_check',
+    'start_link_health_check',
+    { forbiddenTools: ['query_link_health'] },
   ),
   smokeCase('get-recap', '生成我的本周内容回顾。', 'read.get_recap', 'get_recap'),
   smokeCase('query-feedback', '查看我提交的意见反馈有没有收到回复。', 'read.query_feedback', 'query_feedback'),

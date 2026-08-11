@@ -34,6 +34,7 @@ const READ_GROUPS = [
       'get_recap',
       'get_insights',
       'query_link_health',
+      'start_link_health_check',
       'query_feedback',
     ],
     zh: '查看账号设备、额度与存储、成长积分、商店抽奖、周报洞察及链接健康',

@@ -247,7 +247,7 @@ export function buildFallbackQuestions(context = {}) {
           general: ['总结一下最重要的结论', '基于这些结果我下一步该做什么？', '解释最容易误解的部分'],
         };
 
-  if (tools.has('query_link_health')) addUnique(output, groups.link);
+  if (tools.has('query_link_health') || tools.has('start_link_health_check')) addUnique(output, groups.link);
   if (tools.has('query_notes') || tools.has('read_note') || sourceTypes.has('note')) addUnique(output, groups.note);
   if (tools.has('query_files') || sourceTypes.has('file') || sourceTypes.has('document'))
     addUnique(output, groups.file);

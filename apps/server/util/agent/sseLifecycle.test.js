@@ -113,6 +113,15 @@ describe('Agent SSE lifecycle', () => {
       coverage: { overall: { complete: false, coverageRatio: 0.6 } },
       citationAudit: { evidenceCount: 1, verifiedCitationCount: 1 },
     });
+    lifecycle.send('artifact.created', {
+      artifact: {
+        id: 'bookmark-health:run-1',
+        kind: 'job',
+        schemaVersion: 1,
+        status: 'running',
+        data: { jobType: 'bookmark_health', jobId: 'run-1' },
+      },
+    });
     await lifecycle.complete({
       snapshotAnswer: '基于材料的最终答案',
       output: { session_id: 's4' },
@@ -129,6 +138,7 @@ describe('Agent SSE lifecycle', () => {
         citations: [expect.objectContaining({ citationKey: '1' })],
         coverage: { overall: { complete: false, coverageRatio: 0.6 } },
         citationAudit: { evidenceCount: 1, verifiedCitationCount: 1 },
+        artifacts: [expect.objectContaining({ id: 'bookmark-health:run-1', status: 'running' })],
         stage: 'completed',
       }),
     );

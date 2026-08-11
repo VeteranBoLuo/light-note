@@ -1,5 +1,6 @@
 import type { AiAgentInteraction, AiToolConfirmation } from '@/types/aiAgent';
 import type { AiEvidence } from '@/api/aiWorkspaceApi';
+import type { AiArtifact } from '@/types/aiArtifact';
 
 export interface AiSseEvent {
   event?: string;
@@ -11,6 +12,8 @@ export interface AiSseEvent {
   /** 终态权威答案；用于替换流中可能含无效引用编号的原始增量。 */
   answer?: string;
   output?: { text?: string; session_id?: string };
+  artifact?: AiArtifact;
+  artifacts?: AiArtifact[];
   confirmation?: AiToolConfirmation;
   interaction?: AiAgentInteraction;
   sources?: any[];

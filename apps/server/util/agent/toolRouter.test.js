@@ -11,6 +11,7 @@ const tools = [
   { name: 'query_bookmarks' },
   { name: 'create_bookmark', isWrite: true },
   { name: 'query_link_health' },
+  { name: 'start_link_health_check' },
   { name: 'query_notes' },
   { name: 'read_note' },
   { name: 'analyze_resource_images' },
@@ -62,6 +63,17 @@ describe('selectAgentTools', () => {
     expect(selected.map((tool) => tool.name)).toContain('query_bookmarks');
     expect(selected.map((tool) => tool.name)).not.toContain('create_bookmark');
     expect(matchAgentWriteActionToolNames(message)).toEqual([]);
+  });
+
+  it('死链意图同时提供真实体检与历史结果工具给 Planner 区分', () => {
+    const selected = selectAgentTools(registry, {
+      message: '我有哪些书签链接失效了？',
+      userRole: 'user',
+      maxTools: 12,
+    });
+    expect(selected.map((tool) => tool.name)).toEqual(
+      expect.arrayContaining(['query_link_health', 'start_link_health_check']),
+    );
   });
 
   it('非 root 永远拿不到 root 工具 schema', () => {

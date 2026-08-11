@@ -50,6 +50,7 @@ export function createAgentSseLifecycle({
     evidence: [],
     citationAudit: null,
     coverage: null,
+    artifacts: [],
     activity: [],
     stage,
     status: 'running',
@@ -114,6 +115,15 @@ export function createAgentSseLifecycle({
     if (event === 'coverage' && payload.coverage != null) {
       snapshot.coverage = cloneSerializable(payload.coverage, null);
     }
+    if (event === 'artifact.created' && payload.artifact?.id) {
+      const artifact = cloneSerializable(payload.artifact, null);
+      if (artifact) {
+        const existing = snapshot.artifacts.findIndex((item) => item?.id === artifact.id);
+        if (existing >= 0) snapshot.artifacts[existing] = artifact;
+        else snapshot.artifacts.push(artifact);
+        if (snapshot.artifacts.length > 8) snapshot.artifacts.splice(0, snapshot.artifacts.length - 8);
+      }
+    }
     if (event === 'response.completed') {
       if (Array.isArray(payload.sources)) snapshot.sources = cloneSerializable(payload.sources, []);
       if (Array.isArray(payload.entityRefs)) snapshot.entityRefs = cloneSerializable(payload.entityRefs, []);
@@ -123,6 +133,7 @@ export function createAgentSseLifecycle({
       }
       if (payload.coverage != null) snapshot.coverage = cloneSerializable(payload.coverage, null);
       if (payload.citationAudit != null) snapshot.citationAudit = cloneSerializable(payload.citationAudit, null);
+      if (Array.isArray(payload.artifacts)) snapshot.artifacts = cloneSerializable(payload.artifacts, []);
     }
     if (event === 'stage.changed' && payload.stage) {
       stage = String(payload.stage);

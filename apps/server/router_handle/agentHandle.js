@@ -109,6 +109,7 @@ import {
 } from '../util/agent/runtime.js';
 import { createAgentSseLifecycle } from '../util/agent/sseLifecycle.js';
 import { redactSensitiveText, stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { normalizeAgentArtifacts } from '../util/agent/artifact.js';
 import { persistAiResponseSnapshot, resolveAiResponseRecoveryIdentity } from '../util/aiResponseRecoveryService.js';
 import {
   createAiMemoryCandidate,
@@ -504,6 +505,15 @@ async function executeTool(name, args, ctx) {
     }
     // dataSummary 比 transform 更精简，给 lastTool 用
     const dataSummary = typeof tool.summarize === 'function' ? tool.summarize(raw, args) : summary.slice(0, 200);
+    let artifacts = [];
+    if (typeof tool.toArtifacts === 'function') {
+      try {
+        artifacts = normalizeAgentArtifacts(tool.toArtifacts(raw, args, ctx));
+      } catch (artifactError) {
+        // 结构化卡片是结果增强；投影失败时保留真实工具结果，但绝不把 raw 数据直接发给客户端。
+        console.error('[Agent] artifact projection failed name=%s code=%s', name, stableAgentErrorCode(artifactError));
+      }
+    }
     let dependencyRefs = [];
     if (typeof tool.getDependencyRefs === 'function') {
       try {
@@ -521,6 +531,7 @@ async function executeTool(name, args, ctx) {
       params: args,
       sources: resolveToolSources(tool, raw, args, ctx),
       nextActions: Array.isArray(raw?.nextActions) ? raw.nextActions.slice(0, 4) : [],
+      artifacts,
       dependencyRefs,
       ...(ctx.includeRawResult === true ? { raw } : {}),
     };
@@ -1253,6 +1264,7 @@ async function hydrateNoteDraftBookmarks({
 const BROAD_PERSONAL_CONTENT_TOOLS = new Set([
   'query_bookmarks',
   'query_link_health',
+  'start_link_health_check',
   'query_notes',
   'read_note',
   'analyze_resource_images',
@@ -1713,7 +1725,7 @@ export async function agentChat(req, res) {
     const STYLE_TEMP = { strict: 0.3, balanced: 1.0, creative: 1.5 };
     const styleTemperature = STYLE_TEMP[aiStyle];
 
-    if (!message?.trim()) {
+    if (!actionContinuationRequested && !message?.trim()) {
       return res.status(400).send(resultData(null, 400, '消息不能为空'));
     }
     if (String(message).length > 12000) {
@@ -1884,8 +1896,8 @@ export async function agentChat(req, res) {
     }
 
     // 卡片动作续答是一次受服务端令牌约束的 Final Reply，不重新进入 Planner，也不再开放工具。
-    // 原问题、已完成动作及前序工具事实全部从 Redis 私有快照恢复；客户端显示的“继续”文案
-    // 只负责形成可见对话轮次，绝不作为续答事实或工具指令。
+    // 原问题、已完成动作及前序工具事实全部从 Redis 私有快照恢复。客户端只发送令牌触发内部
+    // 续答，不再伪造一条“继续回答”的用户消息，也不会把内部控制文案写进本地/云端会话。
     if (actionContinuationRequested) {
       if (!canUseActionContinuation) {
         throw new ActionContinuationError(
@@ -3043,6 +3055,7 @@ export async function agentChat(req, res) {
     const issuedActionContinuations = [];
     const sources = [...resolvedContexts.sources, ...resolvedAttachments.sources];
     const toolEntitySources = [];
+    const artifacts = [];
     let finalContent = '';
     let apiCalls = pendingDraftIntentCalls;
     let remainingToolResultBudget = 24000;
@@ -3285,6 +3298,14 @@ export async function agentChat(req, res) {
           if (Array.isArray(result.sources)) {
             sources.push(...result.sources);
             toolEntitySources.push(...result.sources);
+          }
+          if (Array.isArray(result.artifacts)) {
+            for (const artifact of result.artifacts) {
+              const existingIndex = artifacts.findIndex((item) => item.id === artifact.id);
+              if (existingIndex >= 0) artifacts[existingIndex] = artifact;
+              else artifacts.push(artifact);
+              if (stream) sseLifecycle?.send('artifact.created', { artifact });
+            }
           }
           usedTools.push({
             name: tc.function.name,
@@ -4368,6 +4389,7 @@ export async function agentChat(req, res) {
         evidence: publicEvidence,
         coverage: publicCoverage,
         citationAudit,
+        artifacts,
       });
       res.removeListener('close', onClientClose);
     } else {
@@ -4381,6 +4403,7 @@ export async function agentChat(req, res) {
           entityRefs,
           evidence: publicEvidence,
           citationAudit,
+          artifacts,
           coverage: publicCoverage,
           usage: totalUsage,
           requestId,

@@ -8,6 +8,7 @@ import type { AiEvidence } from '@/api/aiWorkspaceApi';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
 import { compareAiConversationRecency, type AiConversationRecency } from '@/utils/aiConversationContinuity';
 import type { AiResourceContext, AiScopeRef } from '@/types/aiScope';
+import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
 
 interface AiToolStatusItem {
   name: string;
@@ -89,6 +90,10 @@ export interface AiAssistantMessage {
   recommendations?: string[];
   recommendationReady?: boolean;
   recommendationPending?: boolean;
+  /** 服务端签发的结构化业务事实卡片；模型正文不能覆盖其状态与数字。 */
+  artifacts?: AiArtifact[];
+  /** 卡片成功后的内部续答，不对应一条用户消息，也禁止按普通提问重新生成。 */
+  generatedBy?: 'action_continuation';
 }
 
 export interface AiAssistantMaterialSnapshot {
@@ -619,6 +624,8 @@ function normalizePersistedMessage(value: unknown): AiAssistantMessage | null {
       : [],
     recommendationReady: Boolean(raw.recommendationReady),
     recommendationPending: false,
+    artifacts: normalizeAiArtifacts(raw.artifacts),
+    generatedBy: raw.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
   };
 }
 
@@ -646,6 +653,8 @@ function serializeMessage(message: AiAssistantMessage): Record<string, unknown> 
     cloudId: message.cloudId,
     requestId: message.requestId,
     traceId: message.traceId,
+    artifacts: normalizeAiArtifacts(message.artifacts),
+    generatedBy: message.generatedBy,
     recovered: message.recovered === true,
     stage: message.stage,
     terminal: message.terminal ? safeCloneArray([message.terminal])[0] : undefined,

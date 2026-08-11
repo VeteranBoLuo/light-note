@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { checkUrlLiveness } from './fetchWebMeta.js';
+import { randomUUID } from 'node:crypto';
 
 // 链接体检·快照兜底:定期/按需检测收藏链接,把"疑似失效"的挑出来供用户确认,失效的可回退到网页快照阅读。
 // 判定用 checkUrlLiveness:404/410 → 'suspect'(疑似,非断言:SPA 深层路由、被删子页都可能"浏览器能开、服务器 404");
@@ -24,6 +25,7 @@ export async function ensureBookmarkHealthTable() {
 
 // 正在全量检测的用户(内存态,进程级):防重入 + 供前端轮询判断是否还在跑
 const fullChecking = new Set();
+const fullCheckRuns = new Map();
 export function isChecking(userId) {
   return fullChecking.has(userId);
 }
@@ -77,8 +79,16 @@ async function checkOneAndSave(userId, b) {
 // 全量后台检测:一次把该用户所有书签查完(并发受限),后台跑不阻塞请求;前端轮询 getHealthSummary 看进度。
 // 用 fullChecking 防重入(同一用户同时只跑一个)。逐条落库,故轮询能看到 checked/suspect 实时增长。
 export async function startFullCheck(userId) {
-  if (fullChecking.has(userId)) return { running: true, already: true };
+  if (fullChecking.has(userId)) return { ...(await getHealthSummary(userId)), already: true };
   await pool.query('DELETE FROM bookmark_health WHERE user_id = ?', [userId]); // 先清空 → 进度从 0 起,一次全新扫描
+  const run = {
+    runId: randomUUID(),
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    errorCode: null,
+  };
+  fullCheckRuns.set(userId, run);
   fullChecking.add(userId);
   (async () => {
     try {
@@ -88,18 +98,35 @@ export async function startFullCheck(userId) {
       );
       await runPool(bms, (b) => checkOneAndSave(userId, b));
     } catch (e) {
-      console.warn('[死链体检] 全量检测失败:', e.message);
+      run.status = 'failed';
+      run.errorCode = String(e?.code || e?.name || 'BOOKMARK_HEALTH_FAILED').slice(0, 64);
+      console.warn('[死链体检] 全量检测失败 code=%s', run.errorCode);
     } finally {
+      if (run.status === 'running') run.status = 'succeeded';
+      run.completedAt = new Date().toISOString();
       fullChecking.delete(userId);
     }
   })();
-  return { running: true };
+  return await getHealthSummary(userId);
 }
 
 // 概览:总书签数、已测数 + 疑似失效列表(含书签名、是否有快照可兜底);running=是否正在全量检测
 export async function getHealthSummary(userId) {
-  const [[tot]] = await pool.query("SELECT COUNT(*) AS c FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''", [userId]);
-  const [[chk]] = await pool.query('SELECT COUNT(*) AS c FROM bookmark_health WHERE user_id = ?', [userId]);
+  const [[tot]] = await pool.query(
+    "SELECT COUNT(*) AS c FROM bookmark WHERE user_id = ? AND del_flag = 0 AND url IS NOT NULL AND url <> ''",
+    [userId],
+  );
+  const [[counts]] = await pool.query(
+    `SELECT COUNT(*) AS checked,
+            SUM(h.status = 'alive') AS alive,
+            SUM(h.status = 'suspect') AS suspect,
+            SUM(h.status NOT IN ('alive', 'suspect')) AS unknown,
+            MAX(h.checked_at) AS last_checked_at
+       FROM bookmark_health h
+       JOIN bookmark b ON b.id = h.bookmark_id AND b.user_id = h.user_id
+      WHERE h.user_id = ? AND b.del_flag = 0 AND b.url IS NOT NULL AND b.url <> ''`,
+    [userId],
+  );
   const [rows] = await pool.query(
     `SELECT h.bookmark_id, b.name, b.url, h.note, h.checked_at,
             (SELECT COUNT(*) FROM bookmark_snapshot s WHERE s.bookmark_id = h.bookmark_id) AS has_snapshot
@@ -109,10 +136,23 @@ export async function getHealthSummary(userId) {
       ORDER BY h.checked_at DESC LIMIT 100`,
     [userId],
   );
+  const run = fullCheckRuns.get(userId) || null;
+  const running = fullChecking.has(userId);
+  const checked = Number(counts.checked || 0);
+  const total = Number(tot.c || 0);
   return {
-    total: Number(tot.c || 0),
-    checked: Number(chk.c || 0),
-    running: fullChecking.has(userId),
+    total,
+    checked,
+    alive: Number(counts.alive || 0),
+    suspectCount: Number(counts.suspect || 0),
+    unknown: Number(counts.unknown || 0),
+    running,
+    runId: run?.runId || 'latest',
+    runStatus: running ? 'running' : run?.status || (checked >= total ? 'succeeded' : 'idle'),
+    startedAt: run?.startedAt || null,
+    completedAt: run?.completedAt || null,
+    lastCheckedAt: counts.last_checked_at || null,
+    pollAfterMs: 2500,
     suspect: rows.map((r) => ({
       id: r.bookmark_id,
       name: r.name,
@@ -133,10 +173,13 @@ export async function resetHealth(userId) {
 
 // 用户「标记正常」:把某书签的体检状态置为 alive,消除误报(SPA/需登录等浏览器能开的)。
 export async function markLinkNormal(userId, bookmarkId) {
-  await pool.query(
-    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note) VALUES (?, ?, 'alive', 'user')
+  const [result] = await pool.query(
+    `INSERT INTO bookmark_health (bookmark_id, user_id, status, note)
+     SELECT id, user_id, 'alive', 'user'
+       FROM bookmark
+      WHERE id = ? AND user_id = ? AND del_flag = 0
      ON DUPLICATE KEY UPDATE status = 'alive', note = 'user', checked_at = CURRENT_TIMESTAMP`,
     [bookmarkId, userId],
   );
-  return { ok: true };
+  return { ok: Number(result.affectedRows || 0) > 0 };
 }

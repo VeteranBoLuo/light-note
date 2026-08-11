@@ -30,7 +30,11 @@
             :data-ai-message-id="message.cloudId || message.id"
             tabindex="-1"
             :is-streaming="isLoading && index === messages.length - 1 && message.role === 'assistant'"
-            :can-regenerate="!regenerationPreparing && (!cloudHistoryEnabled() || Boolean(message.cloudId))"
+            :can-regenerate="
+              message.generatedBy !== 'action_continuation' &&
+              !regenerationPreparing &&
+              (!cloudHistoryEnabled() || Boolean(message.cloudId))
+            "
             @edit="handleEditMessage"
             @regenerate="() => handleRegenerate(index)"
             @source-navigate="handleMessageSourceNavigate"
@@ -50,6 +54,14 @@
             :tool-events="message.toolEvents || []"
             :streaming="isLoading && index === messages.length - 1"
           />
+          <div v-if="message.artifacts?.length" class="ai-message-artifact-stack">
+            <AiJobCard
+              v-for="artifact in message.artifacts"
+              :key="artifact.id"
+              :artifact="artifact"
+              @updated="(nextArtifact) => handleArtifactUpdated(index, nextArtifact)"
+            />
+          </div>
           <AiSourceCards
             v-if="message.sources?.length || message.evidence?.length || messageCoverage(message)"
             :sources="message.sources || []"
@@ -169,6 +181,7 @@
   import AiInteractionCard from '@/components/aiAssistant/AiInteractionCard.vue';
   import AiToolConfirmationCard from '@/components/aiAssistant/AiToolConfirmationCard.vue';
   import AiActivitySummary from '@/components/aiAssistant/AiActivitySummary.vue';
+  import AiJobCard from '@/components/aiAssistant/AiJobCard.vue';
   import AiAnswerVersionSwitcher from '@/components/aiAssistant/AiAnswerVersionSwitcher.vue';
   import AiConversationLineageNavigator from '@/components/aiAssistant/AiConversationLineageNavigator.vue';
   import AiResultActions from '@/components/aiAssistant/AiResultActions.vue';
@@ -196,7 +209,10 @@
     type AiConversationActionSettlement,
   } from '@/components/aiAssistant/aiConversationState';
   import { createQuickQuestionDispatcher } from '@/components/aiAssistant/quickQuestionDispatch';
-  import { resolveAutomaticActionContinuation } from '@/components/aiAssistant/actionContinuation';
+  import {
+    createInternalActionContinuationRequest,
+    resolveAutomaticActionContinuation,
+  } from '@/components/aiAssistant/actionContinuation';
   import { shouldUseAiCloudHistory } from '@/components/aiAssistant/aiUiContracts';
   import {
     getAiChatBottomDistance,
@@ -225,6 +241,7 @@
     AiToolConfirmationResolution,
     AiToolConfirmationSettlement,
   } from '@/types/aiAgent';
+  import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
   import { useI18n } from 'vue-i18n';
   import axios from 'axios';
   import { apiBasePost } from '@/http/request';
@@ -1127,6 +1144,9 @@
       requestId: cloudMessage.requestId || undefined,
       traceId: cloudMessage.traceId || undefined,
       recovered: cloudMessage.modelMeta?.recovered === true,
+      artifacts: normalizeAiArtifacts(cloudMessage.modelMeta?.artifacts),
+      generatedBy:
+        cloudMessage.modelMeta?.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
       entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
       actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
@@ -1441,6 +1461,8 @@
         : {}),
       ...(chatMessage.actionSettlements?.length ? { actionSettlements: chatMessage.actionSettlements.slice(-20) } : {}),
       ...(chatMessage.entityRefs?.length ? { entityRefs: chatMessage.entityRefs.slice(0, 5) } : {}),
+      ...(chatMessage.artifacts?.length ? { artifacts: normalizeAiArtifacts(chatMessage.artifacts) } : {}),
+      ...(chatMessage.generatedBy ? { generatedBy: chatMessage.generatedBy } : {}),
     };
     try {
       const saved = await saveAiCloudMessage(cloudConversationId, {
@@ -1756,9 +1778,9 @@
     showScrollToBottom.value = false;
     // 重置当前轮消息的思考状态，仅影响新创建的AI消息
     hasAnswerStarted.value = false;
-    const inputText = (options.inputText ?? userInput.value).trim();
-    if (!inputText) return;
     const actionContinuation = options.actionContinuation?.token ? options.actionContinuation : null;
+    const inputText = (options.inputText ?? userInput.value).trim();
+    if (!inputText && !actionContinuation) return;
     const pendingNoteDraft =
       !actionContinuation &&
       !options.materialSnapshot &&
@@ -1819,18 +1841,20 @@
     }
 
     // 添加用户消息
-    const userMessage: ChatMessage = {
-      id: createAiAssistantMessageId('user'),
-      role: 'user',
-      content: inputText,
-      timestamp: new Date(),
-      contexts: contextSnapshot.map((item) => ({ ...item })),
-      contextRefs: contextSnapshot,
-      scopeRefs: scopeSnapshot,
-      attachmentRefs: attachmentSnapshot,
-      parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
-    };
-    messages.value.push(userMessage);
+    const userMessage: ChatMessage | null = actionContinuation
+      ? null
+      : {
+          id: createAiAssistantMessageId('user'),
+          role: 'user',
+          content: inputText,
+          timestamp: new Date(),
+          contexts: contextSnapshot.map((item) => ({ ...item })),
+          contextRefs: contextSnapshot,
+          scopeRefs: scopeSnapshot,
+          attachmentRefs: attachmentSnapshot,
+          parentMessageId: cloudPreparation === 'replaced' ? undefined : options.parentMessageId,
+        };
+    if (userMessage) messages.value.push(userMessage);
 
     // 添加AI消息占位
     const aiMessage: ChatMessage = {
@@ -1843,14 +1867,17 @@
       // 回答完成且服务端明确提供 follow-up requestId 后才进入 pending。
       // 提前置 true 会让空追问栏在“正在理解”阶段重新占回 40px，造成滚动回弹。
       recommendationPending: false,
-      parentMessageId: userMessage.id,
+      parentMessageId: userMessage?.id || options.parentMessageId,
       versionGroupId: cloudPreparation === 'replaced' ? undefined : options.versionGroupId,
+      generatedBy: actionContinuation ? 'action_continuation' : undefined,
     };
     messages.value.push(aiMessage);
     const requestLease = aiAssistant.beginRequest(aiMessage.id);
     const requestController = requestLease.controller;
     const cloudRuntimeKey = requestLease.runtimeIdentityKey;
-    const cloudUserSavePromise = persistCloudUserMessage(cloudRuntimeKey, userMessage);
+    const cloudUserSavePromise: Promise<AiCloudMessage | null> = userMessage
+      ? persistCloudUserMessage(cloudRuntimeKey, userMessage)
+      : Promise.resolve(null);
     let savedCloudUserMessage: AiCloudMessage | null = null;
     activeRoundTelemetry = {
       assistantMessageId: aiMessage.id,
@@ -1867,11 +1894,13 @@
       const current = messages.value.find((item) => item.id === aiMessage.id) || null;
       finalizeAiRound('stopped', current, { cancelled: reason !== 'user_stop' });
     });
-    void recordAiProductEvent('ai_prompt_submitted', {
-      ...aiRoundDimensions(activeRoundTelemetry),
-      lengthBucket: aiLengthBucket(inputText.length),
-      stage: 'planning',
-    });
+    if (!actionContinuation) {
+      void recordAiProductEvent('ai_prompt_submitted', {
+        ...aiRoundDimensions(activeRoundTelemetry),
+        lengthBucket: aiLengthBucket(inputText.length),
+        stage: 'planning',
+      });
+    }
 
     if (options.clearComposer !== false) {
       userInput.value = '';
@@ -1930,7 +1959,7 @@
         // 用户中断后可能仍收到最后一个网络分片；旧请求的工具/确认事件不能挂到新一轮消息上。
         if (!aiAssistant.isRequestCurrent(requestLease)) return;
         const aiMessageIndex = messages.value.findIndex((item) => item.id === aiMessage.id);
-        const userMessageIndex = messages.value.findIndex((item) => item.id === userMessage.id);
+        const userMessageIndex = userMessage ? messages.value.findIndex((item) => item.id === userMessage.id) : -1;
         if (aiMessageIndex < 0) return;
         try {
           const currentMsg = messages.value[aiMessageIndex];
@@ -2091,6 +2120,17 @@
             currentMsg.coverage = data.coverage;
           }
 
+          if (currentMsg && data.event === 'artifact.created' && data.artifact) {
+            const artifact = normalizeAiArtifacts([data.artifact])[0];
+            if (artifact) {
+              const artifacts = [...(currentMsg.artifacts || [])];
+              const existingIndex = artifacts.findIndex((item) => item.id === artifact.id);
+              if (existingIndex >= 0) artifacts[existingIndex] = artifact;
+              else artifacts.push(artifact);
+              currentMsg.artifacts = artifacts.slice(0, 8);
+            }
+          }
+
           if (currentMsg && data.event === 'response.completed') {
             // 终态是权威结果:公开来源以「替换」落地,中间事件发过的候选来源一并被纠正
             if (Array.isArray(data.sources)) {
@@ -2103,6 +2143,7 @@
             if (data.coverage && typeof data.coverage === 'object') currentMsg.coverage = data.coverage;
             currentMsg.entityRefs = normalizeCloudEntityRefs(data.entityRefs);
             if (data.citationAudit) currentMsg.citationAudit = data.citationAudit;
+            currentMsg.artifacts = normalizeAiArtifacts(data.artifacts);
             if (typeof data.answer === 'string') authoritativeAnswerSnapshot = data.answer;
           }
 
@@ -2141,8 +2182,7 @@
       await apiBasePost(
         '/api/chat/agent',
         {
-          message: inputText,
-          ...(actionContinuation ? { trigger: 'card_continuation', continuationToken: actionContinuation.token } : {}),
+          ...(actionContinuation ? createInternalActionContinuationRequest(actionContinuation) : { message: inputText }),
           stream: true,
           sessionId: sessionId.value,
           enableTranslation: enableTranslation.value,
@@ -2477,16 +2517,21 @@
   };
 
   const startedActionContinuationTokens = new Set<string>();
-  function continueAfterConfirmedAction(resolution: AiToolConfirmationResolution) {
+  function continueAfterConfirmedAction(index: number, resolution: AiToolConfirmationResolution) {
     const continuation = resolveAutomaticActionContinuation(resolution);
     if (!continuation || startedActionContinuationTokens.has(continuation.token)) return;
     startedActionContinuationTokens.add(continuation.token);
+    let parentMessageId: string | undefined;
+    for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+      const candidate = messages.value[cursor];
+      if (candidate?.role !== 'user') continue;
+      parentMessageId = candidate.cloudId || candidate.id;
+      break;
+    }
     queueMicrotask(() => {
       void sendMessage({
-        inputText: t('ai.actionContinuation.userMessage', {
-          tool: t(`ai.tools.${resolution.toolName}`, resolution.toolName),
-        }),
         clearComposer: false,
+        parentMessageId,
         actionContinuation: continuation,
       });
     });
@@ -2516,8 +2561,23 @@
       }
     }
     persistHistory();
-    continueAfterConfirmedAction(resolution);
+    continueAfterConfirmedAction(index, resolution);
   };
+
+  function handleArtifactUpdated(index: number, artifact: AiArtifact) {
+    const target = messages.value[index];
+    if (!target) return;
+    const normalized = normalizeAiArtifacts([artifact])[0];
+    if (!normalized) return;
+    const artifacts = [...(target.artifacts || [])];
+    const existingIndex = artifacts.findIndex(
+      (item) => item.id === normalized.id || item.data.jobType === normalized.data.jobType,
+    );
+    if (existingIndex >= 0) artifacts[existingIndex] = normalized;
+    else artifacts.push(normalized);
+    target.artifacts = artifacts.slice(0, 8);
+    persistHistory();
+  }
 
   const handleInteractionResolved = (
     index: number,
@@ -2720,11 +2780,16 @@
     font-size: 12px;
   }
 
-  .ai-message-action-stack {
+  .ai-message-action-stack,
+  .ai-message-artifact-stack {
     display: grid;
     width: min(680px, calc(100% - 44px));
     gap: 8px;
     margin: -10px 0 16px 44px;
+  }
+
+  .ai-message-artifact-stack {
+    margin-top: 6px;
   }
 
   .ai-message-action-stack :deep(.ai-interaction-card),
@@ -2733,7 +2798,8 @@
     margin: 0;
   }
 
-  .chat-wrapper.is-narrow-520 .ai-message-action-stack {
+  .chat-wrapper.is-narrow-520 .ai-message-action-stack,
+  .chat-wrapper.is-narrow-520 .ai-message-artifact-stack {
     width: 100%;
     margin: 4px 0 14px;
   }

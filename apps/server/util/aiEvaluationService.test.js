@@ -82,7 +82,7 @@ describe('AI 冒烟异步运行服务', () => {
       status: 'queued',
       suite: 'full',
       depth: 'answer',
-      caseCount: 39,
+      caseCount: 40,
     });
     await vi.waitFor(() => expect(mocks.release).toHaveBeenCalledOnce());
     expect(mocks.runSuite).toHaveBeenCalledWith(

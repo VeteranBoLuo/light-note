@@ -67,6 +67,21 @@ describe('Agent 工具注册表', () => {
     });
   });
 
+  it('死链体检同时提供历史查询与真实任务启动，并以结构化卡片投影结果', () => {
+    const query = tools.find((tool) => tool.name === 'query_link_health');
+    const start = tools.find((tool) => tool.name === 'start_link_health_check');
+    expect(query?.description).toContain('不会启动新体检');
+    expect(query?.description).toContain('必须使用 start_link_health_check');
+    expect(start?.description).toContain('真实死链体检');
+    expect(start?.description).toContain('我有哪些失效链接');
+    expect(start?.isWrite).not.toBe(true);
+    expect(start?.toArtifacts({ runId: 'run-1', running: true, total: 10, checked: 2 })[0]).toMatchObject({
+      id: 'bookmark-health:run-1',
+      status: 'running',
+      data: { jobType: 'bookmark_health', total: 10, checked: 2 },
+    });
+  });
+
   it('列表到详情的依赖工具从 raw 结果提供结构化引用，不解析标题文本', () => {
     const queryNotes = tools.find((tool) => tool.name === 'query_notes');
     const readNote = tools.find((tool) => tool.name === 'read_note');

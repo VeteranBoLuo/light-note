@@ -1,6 +1,7 @@
 import type { AiEvidence, AiAgentRecoverySnapshot, AiAgentRecoveryTerminal } from '@/api/aiWorkspaceApi';
 import type { AiSource } from '@/components/aiAssistant/aiSourceNavigation';
 import { sanitizeAiMessageActivity } from '@/utils/aiMemoryInfluence';
+import { normalizeAiArtifacts, type AiArtifact } from '@/types/aiArtifact';
 
 export interface AiRecoveryMessageTarget {
   content: string;
@@ -19,6 +20,7 @@ export interface AiRecoveryMessageTarget {
   recovered?: boolean;
   stage?: string;
   terminal?: AiAgentRecoveryTerminal;
+  artifacts?: AiArtifact[];
 }
 
 export interface AiStreamRecoveryDecision {
@@ -107,6 +109,7 @@ export function applyAiRecoverySnapshot(target: AiRecoveryMessageTarget, snapsho
   const evidence = cloneEvidence(snapshot.evidence);
   target.evidence = evidence.length ? evidence : cloneEvidence(snapshot.citations);
   target.coverage = snapshot.coverage && typeof snapshot.coverage === 'object' ? { ...snapshot.coverage } : null;
+  target.artifacts = normalizeAiArtifacts(snapshot.artifacts);
   target.citationAudit = normalizeCitationAudit(snapshot.citationAudit);
   target.activity = sanitizeAiMessageActivity(snapshot.activity);
   target.recovered = true;
