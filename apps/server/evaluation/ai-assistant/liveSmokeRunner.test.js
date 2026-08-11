@@ -22,10 +22,10 @@ describe('DeepSeek 小型冒烟 Runner', () => {
     });
   });
 
-  it('完整集覆盖全部 35 个普通用户工具及关键 Root 排行回归', async () => {
+  it('完整集覆盖全部 36 个普通用户工具及关键 Root 排行回归', async () => {
     const coveredTools = FULL_LIVE_SMOKE_CASES.flatMap((item) => item.requiredTools);
-    expect(FULL_LIVE_SMOKE_CASES).toHaveLength(40);
-    expect(new Set(coveredTools).size).toBe(36);
+    expect(FULL_LIVE_SMOKE_CASES).toHaveLength(41);
+    expect(new Set(coveredTools).size).toBe(37);
     expect(FULL_LIVE_SMOKE_CASES).toContainEqual(
       expect.objectContaining({
         id: 'root-current-bookmark-count-ranking',
@@ -36,7 +36,7 @@ describe('DeepSeek 小型冒烟 Runner', () => {
     await expect(runLiveSmokeSuite({ live: false, suite: 'full', repeat: 1, format: 'json' })).resolves.toMatchObject({
       dryRun: true,
       suite: 'full',
-      cases: 40,
+      cases: 41,
       execution: { toolsExecuted: 0, businessDataReads: 0, businessDataWrites: 0 },
     });
   });

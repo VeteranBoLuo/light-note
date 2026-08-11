@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   releaseActionContinuation: vi.fn(),
   shouldContinueToolPlanning: vi.fn(() => false),
   prepareTodoStatus: vi.fn(),
+  prepareTodoDeletion: vi.fn(),
   buildNoteAiPayload: vi.fn(),
   findOwnedNoteForAi: vi.fn(),
   findOwnedTodoForAi: vi.fn(),
@@ -170,6 +171,28 @@ vi.mock('../util/agent/tools/index.js', () => ({
       transform: () => '待办状态已更新。',
       summarize: () => '待办状态已更新。',
       preview: (args) => ({ title: '完成待办', target: args.targetTitle, impact: '确认后才会写入。' }),
+    },
+    {
+      name: 'delete_todo',
+      description: '删除一条待办',
+      parameters: {
+        type: 'object',
+        properties: {
+          todoId: { type: 'string' },
+          keyword: { type: 'string' },
+          scope: { type: 'string', enum: ['current', 'future', 'series'] },
+        },
+      },
+      isWrite: true,
+      directAction: true,
+      riskLevel: 'medium',
+      confirmationPolicy: 'always',
+      dependencyBindings: [{ argument: 'todoId', refType: 'todo', requireUnique: true }],
+      prepareArgs: mocks.prepareTodoDeletion,
+      execute: vi.fn(),
+      transform: () => '待办已移入回收站。',
+      summarize: () => '待办已移入回收站。',
+      preview: (args) => ({ title: '删除待办', target: args.targetTitle, impact: '确认后才会删除。' }),
     },
     {
       name: 'create_todo',
@@ -456,6 +479,19 @@ describe('agentChat 主链路', () => {
       return {
         ...args,
         expectedVersion: 'todo-version-1',
+        targetTitle: args.keyword || args.todoId,
+      };
+    });
+    mocks.prepareTodoDeletion.mockImplementation(async (args) => {
+      if (!args.keyword && !args.todoId) {
+        const error = new Error('请提供待办 ID 或足够具体的标题。');
+        error.code = 'TODO_TARGET_REQUIRED';
+        throw error;
+      }
+      return {
+        ...args,
+        scope: args.scope || 'current',
+        expectedVersion: 'todo-delete-version-1',
         targetTitle: args.keyword || args.todoId,
       };
     });
@@ -1761,6 +1797,62 @@ describe('agentChat 主链路', () => {
     expect(data?.confirmations?.[0]).not.toHaveProperty('continuation');
     expect(mocks.createActionContinuation).not.toHaveBeenCalled();
     expect(mocks.finalizeActionContinuation).not.toHaveBeenCalled();
+  });
+
+  it('明确待办删除请求生成唯一确认卡，不回退到“暂不支持”或模型成功文案', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) => [registry.get('delete_todo')].filter(Boolean));
+    mocks.requestAi.mockResolvedValueOnce({
+      content: '',
+      toolCalls: [
+        semanticPlanCall({
+          requestClass: 'data_action',
+          intents: [
+            {
+              kind: 'write',
+              capabilityId: 'todo.delete',
+              goal: '删除指定待办',
+              targetDescription: '刚才那个待办',
+              dependsOn: [],
+            },
+          ],
+          toolCalls: [{ toolName: 'delete_todo', arguments: { keyword: '测试 Agent' } }],
+        }),
+      ],
+      usage: usage(4),
+      usageStatus: 'reported',
+      finishReason: 'tool_calls',
+    });
+    const req = request({
+      message: '把刚才那个待办删掉',
+      stream: false,
+      contexts: [],
+      attachmentIds: [],
+      clientCapabilities: ['agent_continuation_v1'],
+    });
+    const res = response();
+
+    await agentChat(req, res);
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'delete_todo',
+        capabilityId: 'todo.delete',
+        args: expect.objectContaining({
+          keyword: '测试 Agent',
+          scope: 'current',
+          expectedVersion: 'todo-delete-version-1',
+        }),
+      }),
+    );
+    const data = res.send.mock.calls.at(-1)?.[0]?.data;
+    expect(data?.response).toBe('');
+    expect(data?.confirmations).toEqual([
+      expect.objectContaining({ id: 'confirmation-1', toolName: 'delete_todo', capabilityId: 'todo.delete' }),
+    ]);
+    expect(data?.confirmations?.[0]).not.toHaveProperty('continuation');
+    expect(mocks.createActionContinuation).not.toHaveBeenCalled();
+    expect(mocks.recordTurn).not.toHaveBeenCalled();
   });
 
   it('混合请求的确认卡保留 Final Reply 续答，但策略来自语义计划而非工具名', async () => {

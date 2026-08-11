@@ -4819,6 +4819,7 @@ export default {
       priority: '优先级',
       todoDescription: '待办说明',
       activeReminderCount: '未触发提醒',
+      deleteScope: '删除范围',
       targetDirectory: '目标目录',
     },
     risk: {
@@ -5054,6 +5055,7 @@ export default {
       query_todos: '待办',
       query_inbox: '待整理',
       set_todo_status: '修改待办状态',
+      delete_todo: '删除待办',
       query_weekly_challenge: '本周挑战',
       query_tags: '标签',
       query_points_log: '积分记录',

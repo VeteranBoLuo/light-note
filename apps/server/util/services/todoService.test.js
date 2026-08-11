@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  applyTodoDeletion,
   applyTodoStatusChange,
   batchSetTodoStatus,
   createTodo,
@@ -9,6 +10,7 @@ import {
   listTodos,
   nextRecurrenceAt,
   prepareTodoStatusChange,
+  prepareTodoDeletion,
   queryTodoAttentionCounts,
   reorderTodos,
   setTodoStatus,
@@ -776,6 +778,137 @@ describe('todoService', () => {
         expectedVersion: 'any-snapshot',
       }),
     ).resolves.toMatchObject({ state: 'noop', status: 'completed' });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('Agent 删除预检按 owner 冻结单条普通待办并默认仅当前项', async () => {
+    connection.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'todo-delete-1',
+            title: '整理发票',
+            description: null,
+            checklist: '[]',
+            priority: 2,
+            status: 'pending',
+            dueAt: '2026-08-12 18:00:00',
+            recurrenceRule: null,
+            completedAt: null,
+            updatedAt: '2026-08-11 10:00:00',
+            planVersion: 1,
+            seriesId: null,
+            occurrenceNo: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ activeReminderCount: 2 }]]);
+
+    const prepared = await prepareTodoDeletion(connection, 'user-delete-1', { keyword: '发票' });
+
+    expect(connection.query.mock.calls[0]).toEqual([
+      expect.stringContaining('title LIKE ?'),
+      ['user-delete-1', '%发票%'],
+    ]);
+    expect(prepared).toMatchObject({
+      todoId: 'todo-delete-1',
+      targetTitle: '整理发票',
+      currentStatus: 'pending',
+      scope: 'current',
+      activeReminderCount: 2,
+      expectedVersion: expect.any(String),
+    });
+    expect(prepared).not.toHaveProperty('description');
+    expect(prepared).not.toHaveProperty('checklist');
+  });
+
+  it('Agent 删除任务系列时范围缺失会失败关闭', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'todo-series-delete-1',
+          title: '每周周报',
+          checklist: '[]',
+          priority: 1,
+          status: 'pending',
+          recurrenceRule: null,
+          updatedAt: '2026-08-11 10:00:00',
+          planVersion: 2,
+          seriesId: 'series-1',
+          occurrenceNo: 3,
+        },
+      ],
+    ]);
+
+    await expect(
+      prepareTodoDeletion(connection, 'user-delete-2', { todoId: 'todo-series-delete-1' }),
+    ).rejects.toMatchObject({ code: 'TODO_DELETE_SCOPE_REQUIRED', status: 409 });
+    expect(connection.query).toHaveBeenCalledTimes(1);
+  });
+
+  it('Agent 删除确认在事务内复核版本并复用普通待办软删除 Service', async () => {
+    const row = {
+      id: 'todo-delete-2',
+      title: '清理旧任务',
+      description: null,
+      checklist: '[]',
+      priority: 1,
+      status: 'completed',
+      dueAt: null,
+      recurrenceRule: null,
+      completedAt: '2026-08-10 10:00:00',
+      updatedAt: '2026-08-11 09:00:00',
+      planVersion: 1,
+      seriesId: null,
+      occurrenceNo: null,
+    };
+    connection.query.mockResolvedValueOnce([[row]]).mockResolvedValueOnce([[{ activeReminderCount: 0 }]]);
+    const prepared = await prepareTodoDeletion(connection, 'user-delete-3', { todoId: row.id });
+    connection.query.mockReset();
+    connection.query
+      .mockResolvedValueOnce([[row]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+
+    const result = await applyTodoDeletion(connection, 'user-delete-3', prepared);
+
+    expect(connection.query.mock.calls[0][0]).toContain('FOR UPDATE');
+    expect(connection.query.mock.calls[0][1]).toEqual(['todo-delete-2', 'user-delete-3']);
+    expect(connection.query.mock.calls[1][0]).toContain('SET del_flag = 1');
+    expect(connection.query.mock.calls[1][1]).toEqual(['todo-delete-2', 'user-delete-3']);
+    expect(result).toMatchObject({
+      state: 'deleted',
+      todoId: 'todo-delete-2',
+      title: '清理旧任务',
+      previousStatus: 'completed',
+      scope: 'current',
+      affectedItems: 1,
+    });
+  });
+
+  it('Agent 删除确认前目标变更会拒绝写入', async () => {
+    connection.query.mockResolvedValueOnce([
+      [
+        {
+          id: 'todo-delete-3',
+          title: '已变更待办',
+          checklist: '[]',
+          priority: 1,
+          status: 'pending',
+          updatedAt: '2026-08-11 12:00:00',
+          planVersion: 1,
+        },
+      ],
+    ]);
+
+    await expect(
+      applyTodoDeletion(connection, 'user-delete-4', {
+        todoId: 'todo-delete-3',
+        scope: 'current',
+        expectedVersion: 'outdated-version',
+      }),
+    ).rejects.toMatchObject({ code: 'TODO_DELETE_CONFLICT', status: 409 });
     expect(connection.query).toHaveBeenCalledTimes(1);
   });
 });

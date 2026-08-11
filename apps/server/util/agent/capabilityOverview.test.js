@@ -20,6 +20,7 @@ describe('capabilityOverview', () => {
         { name: 'create_note' },
         { name: 'create_todo_plan' },
         { name: 'set_todo_status' },
+        { name: 'delete_todo' },
         { name: 'query_users' },
         { name: 'get_resource_creation_ranking' },
         { name: 'get_checkin_ranking' },
@@ -31,6 +32,7 @@ describe('capabilityOverview', () => {
     expect(response).toContain('创建普通笔记或图片笔记');
     expect(response).toContain('创建单条待办或带重复与提醒的任务计划');
     expect(response).toContain('完成或重新打开单条待办');
+    expect(response).toContain('删除单条待办或指定范围的任务系列');
     expect(response).toContain('所有数据变更都会先展示确认');
     expect(response).toContain('暂不能直接编辑或删除已有笔记/书签');
     expect(response).toContain('管理查询');

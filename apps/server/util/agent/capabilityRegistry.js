@@ -280,10 +280,17 @@ export const AGENT_ACTION_CAPABILITIES = Object.freeze([
   }),
   defineCapability({
     id: 'todo.delete',
-    status: 'planned',
+    status: 'enabled',
+    toolName: 'delete_todo',
     operations: ['delete'],
     resources: ['todo'],
+    riskLevel: 'medium',
+    confirmationPolicy: 'always',
     labels: { zh: '删除待办', en: 'delete a todo' },
+    actionPatterns: [
+      /(?:删除|删掉|移除).{0,20}(?:待办|任务|提醒)|(?:待办|任务|提醒).{0,20}(?:删除|删掉|移除)/i,
+      /(?:delete|remove).{0,20}(?:todo|task|reminder)|(?:todo|task|reminder).{0,20}(?:delete|remove)/i,
+    ],
     operationPatterns: [DELETE_PATTERN],
     resourcePatterns: [/(?:待办|任务|提醒|todo|task|reminder)/i],
   }),

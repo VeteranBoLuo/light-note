@@ -411,6 +411,7 @@ src/
 
 ## 轻笺智域（AI Agent）
 
+- 待办写入能力包括状态修改与安全删除。`delete_todo` 只接受单个待办目标：稳定 `[todo:ID]` 直接冻结，标题重名先进入服务端白名单选择卡，选定后仍要生成中风险确认卡。确认执行在同一事务内复查 owner 和目标版本，并复用 `todoService` / `todoSeriesService` 的软删除、提醒取消和任务系列范围删除。任务系列必须明确 `current / future / series`，未说明时失败关闭；后两种范围只删除对应范围内的未完成项并保留已完成历史
 - 主力供应商：DeepSeek（`DEEPSEEK_API_KEY`）
 - 备用供应商：千问 Qwen（`DASHSCOPE_API_KEY`）
 - 通过 `AGENT_LLM_PROVIDER` 环境变量切换
@@ -511,7 +512,7 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 - `ai_product_events` 只接受事件名和白名单枚举、布尔值、数量与标识维度；标识使用 `AI_TELEMETRY_HMAC_SECRET` 做 HMAC，错误只保留稳定类别，不保存问题、回答、标题或摘录。默认保留期为 180 天（可在 30～730 天内配置），应用启动链已注册受控多批清理：默认每轮最多 25 批、每批 10000 行，代码上限 100 批，并返回 `batches` / `backlogRemaining`；启动或周期清理达到上限仍有积压时只输出无正文警告。预发布仍需用到期数据和数据库指标证明调度真实执行且批量删除不会影响请求链。
 - `aiArtifactRetention.js` 提供 Change Set 单域可选 TTL，天数变量必须显式配置 1～3650 的正整数才启用，默认关闭；共享调度默认每日一次、限制 10 分钟～7 天。每批在事务内 `FOR UPDATE`、删除前重验状态并有界处理，支持多实例竞争、幂等、缺表跳过和 backlog。Change Set 只清 `applied/undone/expired`，在选择和删除时排除 indefinite 会话。清理器已接启动链，但具体天数未经产品/隐私批准，不能默认启用。
 - 文档 Worker、标签图标、路由装载、文件与笔记库等本轮 AI 可达错误路径已移除 raw `error.message/stack` 输出；file/note AI 相关读写路由也不再把对象存储 key 或原始异常返回客户端，Conversation/Recovery 调度日志统一为稳定错误码。这次代码扫描不能替代预发布合成 canary 和真实进程日志采集，新增路径仍须遵守同一 scrub 规则。
-- `evaluation/ai-assistant/` 的 schema v2 提供 268 条完全合成任务、49 个合成来源和六维确定性评分器，覆盖 10 个能力域且每域至少 20 条；owner 四维、请求 lifecycle、反凑数校验和生成器 `--check` 都进入数据契约。确定性回放适配器已把 3 条合成 Provider 轨迹接到真实 `agentChat` 主链，覆盖统一笔记草稿协议修复、确认和显式 URL 读取；关键 UI E2E 在 Chrome 覆盖 `@ + Enter`、确认卡刷新恢复和材料生成笔记入口。这些 CI 门禁均不加载真实 Provider。DeepSeek Planner 冒烟分为 6 条快速集和 37 条完整集，完整集覆盖全部 34 个普通用户工具及关键边界；只允许 Root 在后台选择并二次确认后手动执行。运行只生成与评分语义计划，工具执行数恒为 0，不访问用户业务数据；互斥运行并把无正文结构化结果写入 `ai_evaluation_runs`，终态记录保留 90 天，不跟随提交、上线或定时任务。自然语言有用性评测和人工引用蕴含标注仍需独立建设。
+- `evaluation/ai-assistant/` 的 schema v2 提供 268 条完全合成任务、49 个合成来源和六维确定性评分器，覆盖 10 个能力域且每域至少 20 条；owner 四维、请求 lifecycle、反凑数校验和生成器 `--check` 都进入数据契约。确定性回放适配器已把 3 条合成 Provider 轨迹接到真实 `agentChat` 主链，覆盖统一笔记草稿协议修复、确认和显式 URL 读取；关键 UI E2E 在 Chrome 覆盖 `@ + Enter`、确认卡刷新恢复和材料生成笔记入口。这些 CI 门禁均不加载真实 Provider。DeepSeek Planner 冒烟分为 6 条快速集和 41 条完整集，完整集覆盖全部 36 个普通用户工具及关键边界；只允许 Root 在后台选择并二次确认后手动执行。运行只生成与评分语义计划，工具执行数恒为 0，不访问用户业务数据；互斥运行并把无正文结构化结果写入 `ai_evaluation_runs`，终态记录保留 90 天，不跟随提交、上线或定时任务。自然语言有用性评测和人工引用蕴含标注仍需独立建设。
 
 ## 共建轻笺
 

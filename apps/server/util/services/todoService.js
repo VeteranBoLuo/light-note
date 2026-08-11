@@ -8,12 +8,19 @@ import {
   normalizeTodoResourceRefs,
   replaceTodoResourceRefs,
 } from './todoReferenceService.js';
-import { loadV2ReminderMap, loadV2SeriesMap, setV2TodoStatus, snoozeV2Todo } from './todoSeriesService.js';
+import {
+  deleteTodoPlan,
+  loadV2ReminderMap,
+  loadV2SeriesMap,
+  setV2TodoStatus,
+  snoozeV2Todo,
+} from './todoSeriesService.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
 const TODO_PAGE_CURSOR_SCOPE = 'todos';
 const TODO_STATUS_LABELS = Object.freeze({ pending: '待处理', completed: '已完成' });
+const TODO_DELETE_SCOPES = new Set(['current', 'future', 'series']);
 const TODO_STATUS_TARGET_FIELDS = `id, title, description, checklist, priority, status,
   start_at AS startAt, due_at AS dueAt, sort_order AS sortOrder, recurrence_rule AS recurrenceRule,
   completed_at AS completedAt, update_time AS updatedAt,
@@ -65,6 +72,25 @@ function normalizeTodoStatusChange(input = {}) {
     throw todoStatusError('TODO_TARGET_REQUIRED', '请指定要修改的待办。');
   }
   return { todoId, keyword, status };
+}
+
+function normalizeTodoDeletion(input = {}) {
+  const todoId = String(input?.todoId || '')
+    .trim()
+    .slice(0, 64);
+  const keyword = String(input?.keyword || '')
+    .trim()
+    .slice(0, 100);
+  const scope = String(input?.scope || '')
+    .trim()
+    .toLowerCase();
+  if (!todoId && !keyword) {
+    throw todoStatusError('TODO_TARGET_REQUIRED', '请指定要删除的待办。');
+  }
+  if (scope && !TODO_DELETE_SCOPES.has(scope)) {
+    throw todoStatusError('TODO_DELETE_SCOPE_INVALID', '删除范围无效。');
+  }
+  return { todoId, keyword, scope };
 }
 
 function todoTitleLikePattern(keyword) {
@@ -701,6 +727,134 @@ export async function applyTodoStatusChange(connection, userId, input = {}) {
     status,
     dueAt: target.dueAt,
     pausedReminderCount,
+  };
+}
+
+/**
+ * 为 Agent 删除操作冻结单个待办目标。任务系列的删除范围会改变实际影响，
+ * 因此必须由用户或 Planner 基于用户原话明确提供，不在 Service 内猜测。
+ */
+export async function prepareTodoDeletion(db, userId, input = {}) {
+  const { todoId, keyword, scope } = normalizeTodoDeletion(input);
+  let rows;
+  if (todoId) {
+    [rows] = await db.query(
+      `SELECT ${TODO_STATUS_TARGET_FIELDS}
+       FROM todo_items
+       WHERE id = ? AND user_id = ? AND del_flag = 0
+       LIMIT 1`,
+      [todoId, userId],
+    );
+  } else {
+    [rows] = await db.query(
+      `SELECT ${TODO_STATUS_TARGET_FIELDS}
+       FROM todo_items
+       WHERE user_id = ? AND del_flag = 0 AND title LIKE ?
+       ORDER BY update_time DESC, id DESC
+       LIMIT 6`,
+      [userId, todoTitleLikePattern(keyword)],
+    );
+  }
+
+  if (!rows?.length) {
+    throw todoStatusError('TODO_NOT_FOUND', '没有找到可删除的待办，请核对名称后重试。', 404);
+  }
+  if (rows.length > 5) {
+    throw todoStatusError('TODO_KEYWORD_AMBIGUOUS', '匹配到多条待办，请补充更具体的标题后重试。', 409);
+  }
+  if (rows.length > 1) {
+    throw todoStatusError('TODO_SELECTION_REQUIRED', '匹配到多条待办，请先选择要删除的一条。', 409, {
+      candidates: rows.map(todoStatusCandidate),
+    });
+  }
+
+  const target = todoStatusTarget(rows[0]);
+  const isV2Series = target.planVersion === 2 && Boolean(target.seriesId);
+  if (isV2Series && !scope) {
+    throw todoStatusError(
+      'TODO_DELETE_SCOPE_REQUIRED',
+      `待办“${target.title}”属于任务系列，请说明只删除当前项、当前及以后，还是整个系列。`,
+      409,
+      { target: todoStatusCandidate(rows[0]) },
+    );
+  }
+  const resolvedScope = scope || 'current';
+  if (resolvedScope !== 'current' && !isV2Series) {
+    throw todoStatusError('TODO_DELETE_SCOPE_UNAVAILABLE', '该待办不属于可按范围删除的任务系列。', 409);
+  }
+
+  const [reminderRows] = await db.query(
+    `SELECT (
+       (SELECT COUNT(*) FROM todo_reminders
+         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')) +
+       (SELECT COUNT(*) FROM todo_reminder_jobs
+         WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing','paused'))
+     ) AS activeReminderCount`,
+    [target.todoId, userId, target.todoId, userId],
+  );
+  return {
+    todoId: target.todoId,
+    scope: resolvedScope,
+    expectedVersion: target.expectedVersion,
+    targetTitle: target.title,
+    currentStatus: target.status,
+    dueAt: target.dueAt,
+    priority: target.priority,
+    planVersion: target.planVersion,
+    seriesId: target.seriesId,
+    recurring: target.recurring,
+    activeReminderCount: Number(reminderRows?.[0]?.activeReminderCount || 0),
+  };
+}
+
+/**
+ * Agent 确认后的删除入口。调用方必须已经开启事务；执行前会锁定目标并校验
+ * 确认卡冻结的版本，然后复用页面端相同的软删除与任务系列 Service。
+ */
+export async function applyTodoDeletion(connection, userId, input = {}) {
+  const { todoId, scope } = normalizeTodoDeletion(input);
+  const expectedVersion = String(input?.expectedVersion || '').trim();
+  if (!expectedVersion) {
+    throw todoStatusError('TODO_DELETE_PREVIEW_REQUIRED', '删除待办需要重新生成确认预览。', 409);
+  }
+  const [rows] = await connection.query(
+    `SELECT ${TODO_STATUS_TARGET_FIELDS}
+     FROM todo_items
+     WHERE id = ? AND user_id = ? AND del_flag = 0
+     LIMIT 1 FOR UPDATE`,
+    [todoId, userId],
+  );
+  const row = rows?.[0];
+  if (!row) {
+    throw todoStatusError('TODO_NOT_FOUND', '该待办已不存在或不再可删除，请重新发起操作。', 404);
+  }
+  const target = todoStatusTarget(row);
+  if (target.expectedVersion !== expectedVersion) {
+    throw todoStatusError('TODO_DELETE_CONFLICT', '待办在确认前已发生变化，请重新查看后再确认。', 409);
+  }
+  const resolvedScope = scope || 'current';
+  const isV2Series = target.planVersion === 2 && Boolean(target.seriesId);
+  if (resolvedScope !== 'current' && !isV2Series) {
+    throw todoStatusError('TODO_DELETE_SCOPE_UNAVAILABLE', '该待办不属于可按范围删除的任务系列。', 409);
+  }
+
+  let result;
+  if (target.planVersion === 2) {
+    result = await deleteTodoPlan(connection, userId, { todoId: target.todoId, scope: resolvedScope });
+    await invalidatePersonalKnowledgeCache(userId, { database: connection });
+  } else {
+    const affectedItems = await deleteTodo(connection, userId, target.todoId);
+    if (affectedItems !== 1) {
+      throw todoStatusError('TODO_DELETE_CONFLICT', '待办未能删除，请重新查看后再确认。', 409);
+    }
+    result = { todoId: target.todoId, scope: 'current', affectedItems };
+  }
+
+  return {
+    state: 'deleted',
+    title: target.title,
+    previousStatus: target.status,
+    ...result,
   };
 }
 

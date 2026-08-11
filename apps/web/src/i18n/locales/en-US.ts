@@ -2592,7 +2592,8 @@ export default {
     loadingTitle: 'Opening note',
     loadingDescription: 'Fetching the content and preparing the editor. This may take a moment on a slow connection.',
     loadFailedTitle: 'This note could not be opened',
-    loadFailedDescription: 'The connection is unstable or the service is temporarily unavailable. Check your network and try again.',
+    loadFailedDescription:
+      'The connection is unstable or the service is temporarily unavailable. Check your network and try again.',
     retryLoad: 'Try again',
     editorPreparing: 'Content is ready. Preparing the editor…',
     catalogTitle: 'Note outline',
@@ -4976,6 +4977,7 @@ export default {
       priority: 'Priority',
       todoDescription: 'Description',
       activeReminderCount: 'Pending reminders',
+      deleteScope: 'Deletion scope',
       targetDirectory: 'Destination directory',
     },
     risk: {
@@ -5217,6 +5219,7 @@ export default {
       query_todos: 'to-dos',
       query_inbox: 'inbox items',
       set_todo_status: 'update to-do status',
+      delete_todo: 'delete to-do',
       query_weekly_challenge: 'weekly challenge',
       query_tags: 'tags',
       query_points_log: 'points history',

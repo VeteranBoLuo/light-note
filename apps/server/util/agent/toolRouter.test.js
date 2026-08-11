@@ -30,6 +30,7 @@ const tools = [
   { name: 'query_api_logs', requireRoot: true },
   { name: 'query_todos' },
   { name: 'set_todo_status', isWrite: true },
+  { name: 'delete_todo', isWrite: true },
   { name: 'query_inbox' },
   { name: 'enqueue_inbox', isWrite: true },
   { name: 'complete_inbox', isWrite: true },
@@ -246,6 +247,15 @@ describe('selectAgentTools', () => {
     expect(selected.map((tool) => tool.name)).toEqual(['set_todo_status', 'query_todos']);
   });
 
+  it('待办删除动作与其必要查询工具在紧张上限下仍优先保留', () => {
+    const selected = selectAgentTools(registry, {
+      message: '把刚才那个待办删掉',
+      userRole: 'user',
+      maxTools: 2,
+    });
+    expect(selected.map((tool) => tool.name)).toEqual(['delete_todo', 'query_todos']);
+  });
+
   it('“任务”这一常用说法同样路由到待办查询工具', () => {
     const selected = selectAgentTools(registry, {
       message: '我的任务有哪些？',
@@ -273,6 +283,7 @@ describe('selectAgentTools', () => {
 
   it('明确写命令进入通用无回执安全门，只读筛选和状态询问不会误判为写动作', () => {
     expect(matchAgentWriteActionToolNames('把待办“整理发票”标记为完成')).toContain('set_todo_status');
+    expect(matchAgentWriteActionToolNames('把刚才那个待办删掉')).toContain('delete_todo');
     expect(matchAgentWriteActionToolNames('帮我收藏这个链接')).toContain('create_bookmark');
     expect(matchAgentWriteActionToolNames('创建一篇笔记')).toContain('create_note');
     expect(matchAgentWriteActionToolNames('这个待办完成了吗？')).toEqual([]);

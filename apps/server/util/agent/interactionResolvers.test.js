@@ -16,9 +16,13 @@ const {
   canResolveFolderInteraction,
   canResolveBookmarkUrlInteraction,
   canResolveTodoStatusInteraction,
+  canResolveTodoDeletionInteraction,
+  canResolveTodoDeletionScopeInteraction,
   createBookmarkUrlResolutionInteraction,
   createFolderResolutionInteraction,
   createTodoStatusResolutionInteraction,
+  createTodoDeletionResolutionInteraction,
+  createTodoDeletionScopeResolutionInteraction,
   resolveAgentInteractionAction,
 } = await import('./interactionResolvers.js');
 
@@ -143,6 +147,92 @@ describe('agent interactionResolvers', () => {
     expect(() =>
       resolveAgentInteractionAction(interaction, { cancelled: false, selectedIds: ['todo-attacker'] }),
     ).toThrow('请选择一个可用的待办');
+  });
+
+  it('删除待办重名时先选择服务端候选，再晋级为标准确认', async () => {
+    const error = {
+      code: 'TODO_SELECTION_REQUIRED',
+      normalizedToolArgs: { keyword: '周报', scope: 'current' },
+      data: {
+        candidates: [
+          { todoId: 'todo-1', title: '周报', status: 'pending', dueAt: '2026-08-12 10:00:00' },
+          { todoId: 'todo-2', title: '周报', status: 'completed', dueAt: null },
+        ],
+      },
+    };
+    expect(canResolveTodoDeletionInteraction(error, 'delete_todo')).toBe(true);
+    expect(canResolveTodoDeletionInteraction(error, 'set_todo_status')).toBe(false);
+
+    const result = await createTodoDeletionResolutionInteraction({
+      error,
+      toolName: 'delete_todo',
+      ownerKey: 'user:user-1',
+      sessionId: 'session-1',
+      context: { resourceUserId: 'user-1', resourceUserRole: 'user' },
+    });
+    expect(result.spec).toMatchObject({
+      code: 'todo_delete_target_selection',
+      type: 'single_choice',
+      purpose: 'choice_confirmation',
+    });
+    expect(result.action).toEqual({
+      resolver: 'delete_todo_target_selection',
+      toolName: 'delete_todo',
+      args: { scope: 'current' },
+      candidates: [
+        { id: 'todo_1', todoId: 'todo-1' },
+        { id: 'todo_2', todoId: 'todo-2' },
+      ],
+    });
+
+    expect(resolveAgentInteractionAction(result, { cancelled: false, selectedIds: ['todo_2'] })).toEqual({
+      state: 'confirmation_required',
+      toolName: 'delete_todo',
+      args: { todoId: 'todo-2', scope: 'current' },
+    });
+    expect(() => resolveAgentInteractionAction(result, { cancelled: false, selectedIds: ['todo-attacker'] })).toThrow(
+      '请选择一个可用的待办',
+    );
+  });
+
+  it('任务系列删除范围使用服务端白名单选择，选完仍需确认', async () => {
+    const error = {
+      code: 'TODO_DELETE_SCOPE_REQUIRED',
+      data: {
+        target: { todoId: 'todo-series-1', title: '每周周报', status: 'pending', dueAt: '2026-08-12' },
+      },
+    };
+    expect(canResolveTodoDeletionScopeInteraction(error, 'delete_todo')).toBe(true);
+    expect(canResolveTodoDeletionScopeInteraction(error, 'create_note')).toBe(false);
+
+    const result = await createTodoDeletionScopeResolutionInteraction({
+      error,
+      toolName: 'delete_todo',
+      ownerKey: 'user:user-1',
+      sessionId: 'session-1',
+      context: { resourceUserId: 'user-1', resourceUserRole: 'user' },
+    });
+    expect(result.spec).toMatchObject({
+      code: 'todo_delete_scope_selection',
+      type: 'single_choice',
+      minSelections: 1,
+      maxSelections: 1,
+    });
+    expect(result.spec.options.map((option) => option.id)).toEqual(['current', 'future', 'series']);
+    expect(result.action).toEqual({
+      resolver: 'delete_todo_scope_selection',
+      toolName: 'delete_todo',
+      args: { todoId: 'todo-series-1' },
+      allowedScopes: ['current', 'future', 'series'],
+    });
+    expect(resolveAgentInteractionAction(result, { cancelled: false, selectedIds: ['future'] })).toEqual({
+      state: 'confirmation_required',
+      toolName: 'delete_todo',
+      args: { todoId: 'todo-series-1', scope: 'future' },
+    });
+    expect(() => resolveAgentInteractionAction(result, { cancelled: false, selectedIds: ['all'] })).toThrow(
+      '请选择一个可用的删除范围',
+    );
   });
 
   it('只处理保存附件工具的文件夹缺失/重名错误', () => {

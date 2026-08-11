@@ -38,7 +38,7 @@ describe('Agent 动作能力注册表', () => {
 
   it('语义能力目录同时覆盖读取工具、可用写能力和未开放动作', () => {
     const catalog = buildAgentSemanticCapabilityCatalog(tools, {
-      availableToolNames: new Set(['query_notes', 'set_todo_status', 'get_checkin_ranking']),
+      availableToolNames: new Set(['query_notes', 'set_todo_status', 'delete_todo', 'get_checkin_ranking']),
     });
 
     expect(catalog.find((entry) => entry.id === 'read.query_notes')).toMatchObject({
@@ -50,6 +50,11 @@ describe('Agent 动作能力注册表', () => {
       effect: 'write',
       status: 'enabled',
       toolNames: ['set_todo_status'],
+    });
+    expect(catalog.find((entry) => entry.id === 'todo.delete')).toMatchObject({
+      effect: 'write',
+      status: 'enabled',
+      toolNames: ['delete_todo'],
     });
     expect(catalog.find((entry) => entry.id === 'note.delete')).toMatchObject({
       effect: 'write',

@@ -62,6 +62,11 @@ const WRITE_GROUPS = [
     en: 'create a single todo or a task plan with recurrence and reminders',
   },
   { names: ['set_todo_status'], zh: '完成或重新打开单条待办', en: 'complete or reopen a single todo' },
+  {
+    names: ['delete_todo'],
+    zh: '删除单条待办或指定范围的任务系列',
+    en: 'delete one todo or a selected task-series range',
+  },
 ];
 
 const ROOT_TOOLS = [

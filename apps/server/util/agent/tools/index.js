@@ -3,6 +3,7 @@ import queryBookmarks from './query_bookmarks.js';
 import queryNotes from './query_notes.js';
 import queryTodos from './query_todos.js';
 import setTodoStatus from './set_todo_status.js';
+import deleteTodo from './delete_todo.js';
 import createTodo from './create_todo.js';
 import previewTodoPlan from './preview_todo_plan.js';
 import createTodoPlan from './create_todo_plan.js';
@@ -60,6 +61,7 @@ export default [
   queryNotes,
   queryTodos,
   setTodoStatus,
+  deleteTodo,
   createTodo,
   ...todoPlanTools,
   readNote,

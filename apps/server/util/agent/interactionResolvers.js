@@ -162,6 +162,30 @@ export function canResolveTodoStatusInteraction(error, toolName, fallbackArgs = 
   );
 }
 
+export function canResolveTodoDeletionInteraction(error, toolName, fallbackArgs = {}) {
+  if (toolName !== 'delete_todo' || String(error?.code || '') !== 'TODO_SELECTION_REQUIRED') return false;
+  const args = normalizedArgsFromError(error, fallbackArgs);
+  const scope = String(args.scope || '').toLowerCase();
+  const candidates = error?.data?.candidates;
+  return (
+    (!scope || ['current', 'future', 'series'].includes(scope)) &&
+    Array.isArray(candidates) &&
+    candidates.length >= 2 &&
+    candidates.length <= 5 &&
+    candidates.every((candidate) => String(candidate?.todoId || '').trim() && String(candidate?.title || '').trim())
+  );
+}
+
+export function canResolveTodoDeletionScopeInteraction(error, toolName) {
+  const target = error?.data?.target;
+  return (
+    toolName === 'delete_todo' &&
+    String(error?.code || '') === 'TODO_DELETE_SCOPE_REQUIRED' &&
+    Boolean(String(target?.todoId || '').trim()) &&
+    Boolean(String(target?.title || '').trim())
+  );
+}
+
 export async function createTodoStatusResolutionInteraction({
   error,
   toolName,
@@ -206,11 +230,99 @@ export async function createTodoStatusResolutionInteraction({
   });
 }
 
+export async function createTodoDeletionResolutionInteraction({
+  error,
+  toolName,
+  fallbackArgs,
+  ownerKey,
+  sessionId,
+  context,
+}) {
+  if (!canResolveTodoDeletionInteraction(error, toolName, fallbackArgs)) return null;
+  const args = normalizedArgsFromError(error, fallbackArgs);
+  const candidates = error.data.candidates.slice(0, 5);
+  const scope = String(args.scope || '').toLowerCase();
+  return createAgentInteraction({
+    ownerKey,
+    sessionId,
+    context,
+    spec: {
+      code: 'todo_delete_target_selection',
+      type: 'single_choice',
+      purpose: 'choice_confirmation',
+      title: '选择要删除的待办',
+      description: '找到多条匹配的待办。请选择一条；选择本身不会删除数据，下一步仍需确认。',
+      options: candidates.map((candidate, index) => ({
+        id: `todo_${index + 1}`,
+        label: String(candidate.title).slice(0, 120),
+        description: formatTodoCandidateDescription(candidate),
+        recommended: candidates.length === 1,
+      })),
+      minSelections: 1,
+      maxSelections: 1,
+    },
+    action: {
+      resolver: 'delete_todo_target_selection',
+      toolName,
+      args: scope ? { scope } : {},
+      candidates: candidates.map((candidate, index) => ({
+        id: `todo_${index + 1}`,
+        todoId: String(candidate.todoId),
+      })),
+    },
+  });
+}
+
+export async function createTodoDeletionScopeResolutionInteraction({ error, toolName, ownerKey, sessionId, context }) {
+  if (!canResolveTodoDeletionScopeInteraction(error, toolName)) return null;
+  const target = error.data.target;
+  return createAgentInteraction({
+    ownerKey,
+    sessionId,
+    context,
+    spec: {
+      code: 'todo_delete_scope_selection',
+      type: 'single_choice',
+      purpose: 'choice_confirmation',
+      title: '选择任务系列的删除范围',
+      description: `待办“${String(target.title).slice(0, 120)}”属于任务系列。选择范围不会立即删除，下一步仍需确认。`,
+      options: [
+        {
+          id: 'current',
+          label: '仅当前项',
+          description: '只删除当前这一项，其他系列项保留。',
+          recommended: true,
+        },
+        {
+          id: 'future',
+          label: '当前及以后',
+          description: '删除当前及以后尚未完成的项目并结束系列。',
+        },
+        {
+          id: 'series',
+          label: '整个任务系列',
+          description: '删除系列中尚未完成的项目并结束系列，已完成历史保留。',
+        },
+      ],
+      minSelections: 1,
+      maxSelections: 1,
+    },
+    action: {
+      resolver: 'delete_todo_scope_selection',
+      toolName,
+      args: { todoId: String(target.todoId) },
+      allowedScopes: ['current', 'future', 'series'],
+    },
+  });
+}
+
 export async function createToolResolutionInteraction(input) {
   return (
     (await createFolderResolutionInteraction(input)) ||
     (await createBookmarkUrlResolutionInteraction(input)) ||
-    (await createTodoStatusResolutionInteraction(input))
+    (await createTodoStatusResolutionInteraction(input)) ||
+    (await createTodoDeletionResolutionInteraction(input)) ||
+    (await createTodoDeletionScopeResolutionInteraction(input))
   );
 }
 
@@ -244,6 +356,34 @@ export function resolveAgentInteractionAction(interaction, response) {
       state: 'confirmation_required',
       toolName: action.toolName,
       args: { todoId: selected.todoId, status },
+    };
+  }
+  if (action.resolver === 'delete_todo_target_selection' && action.toolName === 'delete_todo') {
+    const choice = response.selectedIds[0];
+    const selected = Array.isArray(action.candidates)
+      ? action.candidates.find((candidate) => candidate.id === choice)
+      : null;
+    const scope = String(action.args?.scope || '').toLowerCase();
+    if (!selected?.todoId || (scope && !['current', 'future', 'series'].includes(scope))) {
+      throw new AgentInteractionError('AGENT_INTERACTION_RESPONSE_INVALID', '请选择一个可用的待办。');
+    }
+    return {
+      state: 'confirmation_required',
+      toolName: action.toolName,
+      args: { todoId: selected.todoId, ...(scope ? { scope } : {}) },
+    };
+  }
+  if (action.resolver === 'delete_todo_scope_selection' && action.toolName === 'delete_todo') {
+    const scope = String(response.selectedIds[0] || '').toLowerCase();
+    const allowedScopes = Array.isArray(action.allowedScopes) ? action.allowedScopes.map(String) : [];
+    const todoId = String(action.args?.todoId || '').trim();
+    if (!todoId || !allowedScopes.includes(scope) || !['current', 'future', 'series'].includes(scope)) {
+      throw new AgentInteractionError('AGENT_INTERACTION_RESPONSE_INVALID', '请选择一个可用的删除范围。');
+    }
+    return {
+      state: 'confirmation_required',
+      toolName: action.toolName,
+      args: { todoId, scope },
     };
   }
   if (action.resolver !== 'save_attachment_folder_resolution' || action.toolName !== 'save_attachment_to_cloud') {

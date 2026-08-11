@@ -46,6 +46,12 @@ const TOOL_COVERAGE_CASES = Object.freeze([
     'set_todo_status',
   ),
   smokeCase(
+    'delete-todo',
+    '删除 ID 为 11111111-1111-4111-8111-111111111111 的普通待办。',
+    'todo.delete',
+    'delete_todo',
+  ),
+  smokeCase(
     'read-note',
     '读取 ID 为 22222222-2222-4222-8222-222222222222 的笔记正文并概括。',
     'read.read_note',
@@ -190,7 +196,7 @@ const ADMIN_REGRESSION_CASES = Object.freeze([
   ),
 ]);
 
-// 完整集覆盖 34 个普通用户工具，并补充关键 Root 只读工具回归、普通对话、依赖顺序与禁止永久删除边界。
+// 完整集覆盖 36 个普通用户工具，并补充关键 Root 只读工具回归、普通对话、依赖顺序与禁止永久删除边界。
 export const FULL_LIVE_SMOKE_CASES = Object.freeze([
   ...QUICK_LIVE_SMOKE_CASES,
   ...TOOL_COVERAGE_CASES,

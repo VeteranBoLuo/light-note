@@ -101,7 +101,7 @@ function cannotReadTodos(ctx) {
 export default {
   name: 'query_todos',
   description:
-    '查询当前账号的待办。可按待办状态、关键词和排序筛选，返回标题、截止时间、优先级、清单完成进度与提醒渠道摘要；不读取待办说明或提醒邮箱。为“标记完成”定位目标时查 pending，为“重新打开/恢复为待处理”定位目标时必须查 completed；只问当前状态时按用户原话选择 pending/completed/all。需要继续查看更多结果时传回上一页返回的 cursor。',
+    '查询当前账号的待办。可按待办状态、关键词和排序筛选，返回标题、截止时间、优先级、清单完成进度与提醒渠道摘要；不读取待办说明或提醒邮箱。为“标记完成”定位目标时查 pending，为“重新打开/恢复为待处理”定位目标时必须查 completed，为“删除”定位目标时必须查 all；只问当前状态时按用户原话选择 pending/completed/all。需要继续查看更多结果时传回上一页返回的 cursor。',
   parameters: {
     type: 'object',
     properties: {
@@ -109,7 +109,7 @@ export default {
         type: 'string',
         enum: ['pending', 'completed', 'all'],
         description:
-          '待办状态，默认 pending。定位“标记完成”的目标用 pending；定位“重新打开/恢复为待处理”的目标必须用 completed',
+          '待办状态，默认 pending。定位“标记完成”的目标用 pending；定位“重新打开/恢复为待处理”的目标必须用 completed；定位“删除”的目标必须用 all',
       },
       keyword: { type: 'string', maxLength: 100, description: '可选，按待办标题或说明搜索' },
       sort: {

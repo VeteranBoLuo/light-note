@@ -24,6 +24,7 @@ describe('Agent 工具注册表', () => {
         'create_note',
         'create_todo',
         'create_todo_plan',
+        'delete_todo',
         'restore_trash',
         'save_attachment_to_cloud',
         'set_todo_status',
@@ -47,7 +48,7 @@ describe('Agent 工具注册表', () => {
     }
   });
 
-  it('待办计划预览、待办与待整理查询工具、单条待办状态写工具已注册', () => {
+  it('待办计划预览、待办与待整理查询工具、单条待办状态与删除工具已注册', () => {
     for (const name of ['preview_todo_plan', 'query_todos', 'query_inbox']) {
       expect(tools.some((tool) => tool.name === name && !tool.isWrite)).toBe(true);
     }
@@ -62,6 +63,13 @@ describe('Agent 工具注册表', () => {
       isWrite: true,
       directAction: true,
       riskLevel: 'low',
+      confirmationPolicy: 'always',
+      dependencyBindings: [{ argument: 'todoId', refType: 'todo', requireUnique: true }],
+    });
+    expect(tools.find((tool) => tool.name === 'delete_todo')).toMatchObject({
+      isWrite: true,
+      directAction: true,
+      riskLevel: 'medium',
       confirmationPolicy: 'always',
       dependencyBindings: [{ argument: 'todoId', refType: 'todo', requireUnique: true }],
     });

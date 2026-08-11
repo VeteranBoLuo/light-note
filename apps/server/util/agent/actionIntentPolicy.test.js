@@ -8,6 +8,8 @@ describe('Agent 动作意图安全策略', () => {
     ['把待办“整理发票”标记为完成', 'enabled', 'set_todo_status'],
     ['恢复回收站里的笔记', 'enabled', 'restore_trash'],
     ['reopen task "invoice"', 'enabled', 'set_todo_status'],
+    ['把刚才那个待办删掉', 'enabled', 'delete_todo'],
+    ['delete task "invoice"', 'enabled', 'delete_todo'],
     ['新建一个待办提醒我明天交材料', 'enabled', 'create_todo'],
     ['创建一个今天晚上 21 点的待办', 'enabled', 'create_todo'],
     ['add a task to review the draft', 'enabled', 'create_todo'],
@@ -54,6 +56,7 @@ describe('Agent 动作意图安全策略', () => {
 
   it.each([
     ['彻底删除全部笔记', 'data.permanent_delete'],
+    ['清空所有待办', 'data.permanent_delete'],
     ['帮我修改账号密码', 'account.security.manage'],
     ['给我增加 1000 积分', 'growth.integrity.manage'],
     ['封禁这个用户', 'admin.mutation'],

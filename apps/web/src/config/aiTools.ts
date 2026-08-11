@@ -5,6 +5,7 @@ export const AI_WRITE_TOOL_NAMES = new Set([
   'create_bookmark',
   'add_tag',
   'set_todo_status',
+  'delete_todo',
   'restore_trash',
   'write_knowledge_base',
 ]);
