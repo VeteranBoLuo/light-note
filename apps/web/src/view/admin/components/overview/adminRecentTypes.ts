@@ -8,12 +8,14 @@ export type AdminRecentResource = {
   title?: string | null;
   userId: string;
   userName?: string | null;
+  userRemark?: string | null;
   createdAt: string;
 };
 
 export type AdminRecentUser = {
   id: string;
   name?: string | null;
+  userRemark?: string | null;
   role?: string | null;
   createdAt: string;
 };

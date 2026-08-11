@@ -156,6 +156,7 @@
     TREND_MOTION_START_DELAY,
     TREND_SUMMARY_KEYFRAMES,
   } from './workbenchTrendAnimation';
+  import { filterTrendDataByRange, type TrendRange } from './workbenchTrendRange';
 
   interface TrendItem {
     date: string;
@@ -168,33 +169,27 @@
     value: number;
   }
 
-  type TrendRange = 'week' | 'month';
-
-  const props = withDefaults(
-    defineProps<{
-      loading: boolean;
-      themeKey: string;
-      trendData: TrendItem[];
-      fileTypeData: FileTypeItem[];
-      weekDays?: number;
-    }>(),
-    {
-      weekDays: 7,
-    },
-  );
+  const props = defineProps<{
+    loading: boolean;
+    themeKey: string;
+    trendData: TrendItem[];
+    fileTypeData: FileTypeItem[];
+  }>();
   const emit = defineEmits<{ openFiles: [] }>();
 
   const { t } = useI18n();
-  const activeTrendRange = ref<TrendRange>('week');
+  const activeTrendRange = ref<TrendRange>('sevenDays');
   const trendRangeOptions = computed(() => [
-    { key: 'week', label: t('workbench.chart.rangeWeek') },
+    { key: 'sevenDays', label: t('workbench.chart.rangeSevenDays') },
     { key: 'month', label: t('workbench.chart.rangeMonth') },
   ]);
   const trendTitle = computed(() =>
-    activeTrendRange.value === 'month' ? t('workbench.chart.trendMonth') : t('workbench.chart.trendWeek'),
+    activeTrendRange.value === 'month' ? t('workbench.chart.trendMonth') : t('workbench.chart.trendSevenDays'),
   );
   const trendHint = computed(() =>
-    activeTrendRange.value === 'month' ? t('workbench.chart.trendHintMonth') : t('workbench.chart.trendHintWeek'),
+    activeTrendRange.value === 'month'
+      ? t('workbench.chart.trendHintMonth')
+      : t('workbench.chart.trendHintSevenDays'),
   );
   const cardThemeClass = computed(() => (props.themeKey === 'night' ? 'chart-card--night' : 'chart-card--day'));
   const trendRef = ref<HTMLElement | null>(null);
@@ -287,12 +282,7 @@
     };
   }
 
-  const visibleTrendData = computed(() => {
-    const dates = Array.from(new Set(props.trendData.map((item) => item.date)));
-    const dayCount = activeTrendRange.value === 'month' ? 30 : Math.max(1, Math.min(7, Number(props.weekDays || 7)));
-    const visibleDates = new Set(dates.slice(-dayCount));
-    return props.trendData.filter((item) => visibleDates.has(item.date));
-  });
+  const visibleTrendData = computed(() => filterTrendDataByRange(props.trendData, activeTrendRange.value));
 
   const trendSummaryItems = computed(() => {
     const configs = [
@@ -480,25 +470,46 @@
     const { dates, series, maxValue } = buildTrendSeries();
     const activeIndex =
       trendTooltip.visible && trendTooltip.index >= 0 && trendTooltip.index < dates.length ? trendTooltip.index : -1;
-    const descColor = getThemeVar('--desc-color', '#71717a');
-    const gridColor = getThemeVar('--bl-input-noBorder-bg-color', '#f4f4f5');
+    const axisTextColor = getThemeVar('--workbench-chart-axis-text', '#626a7a');
+    const gridColor = getThemeVar('--workbench-chart-grid-line', '#e2e6f0');
+    const axisLineColor = getThemeVar('--workbench-chart-axis-line', '#aeb7ca');
     const primaryColor = getThemeVar('--primary-color', '#615ced');
     const pointBackground = getThemeVar('--menu-body-bg-color', '#fff');
+    const labelStep = dates.length > 20 ? 5 : dates.length > 10 ? 3 : dates.length > 7 ? 2 : 1;
 
     ctx.lineWidth = 1;
     ctx.strokeStyle = gridColor;
-    ctx.globalAlpha = props.themeKey === 'night' ? 0.5 : 0.82;
-    for (let i = 0; i <= 4; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       const y = top + (plotHeight / 4) * i;
       ctx.beginPath();
       ctx.moveTo(left, y);
       ctx.lineTo(left + plotWidth, y);
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
 
-    ctx.fillStyle = descColor;
-    ctx.font = '11px sans-serif';
+    // 横纵轴使用独立实色，并给日期补短刻度；深色模式下不再依赖低对比度网格猜测横轴位置。
+    ctx.beginPath();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = axisLineColor;
+    ctx.moveTo(left, top);
+    ctx.lineTo(left, top + plotHeight);
+    ctx.lineTo(left + plotWidth, top + plotHeight);
+    ctx.stroke();
+
+    dates.forEach((_date, index) => {
+      const isRegularTick = index === dates.length - 1 || index % labelStep === 0;
+      if (!isRegularTick) return;
+      const x = left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * index);
+      ctx.beginPath();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = axisLineColor;
+      ctx.moveTo(x, top + plotHeight);
+      ctx.lineTo(x, top + plotHeight + 5);
+      ctx.stroke();
+    });
+
+    ctx.fillStyle = axisTextColor;
+    ctx.font = '500 11px sans-serif';
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
     for (let i = 0; i <= 4; i += 1) {
@@ -508,15 +519,14 @@
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const labelStep = dates.length > 20 ? 5 : dates.length > 10 ? 3 : dates.length > 7 ? 2 : 1;
     dates.forEach((date, index) => {
       const isActive = index === activeIndex;
       const isRegularLabel = index === dates.length - 1 || index % labelStep === 0;
       const isTooCloseToActive = activeIndex >= 0 && Math.abs(index - activeIndex) <= 1;
       if (!isActive && (!isRegularLabel || isTooCloseToActive)) return;
       const x = left + (dates.length === 1 ? plotWidth / 2 : (plotWidth / (dates.length - 1)) * index);
-      ctx.fillStyle = isActive ? primaryColor : descColor;
-      ctx.font = isActive ? '700 11px sans-serif' : '11px sans-serif';
+      ctx.fillStyle = isActive ? primaryColor : axisTextColor;
+      ctx.font = isActive ? '700 11px sans-serif' : '500 11px sans-serif';
       ctx.fillText(date, x, top + plotHeight + 11);
     });
 
@@ -997,7 +1007,7 @@
   }
 
   watch(
-    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData, props.weekDays],
+    () => [props.loading, props.themeKey, props.trendData, props.fileTypeData],
     () => {
       syncCharts();
     },
@@ -1320,8 +1330,9 @@
     top: 7px;
     left: 42px;
     z-index: 2;
-    color: var(--desc-color);
-    font-size: 10px;
+    color: var(--workbench-chart-axis-text);
+    font-size: 11px;
+    font-weight: 600;
     pointer-events: none;
   }
 

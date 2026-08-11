@@ -245,8 +245,9 @@ describe('编辑器 V2 交互回归', () => {
       /@media \(max-width: 767px\)[\s\S]*?\.rich-media-text-popover\s*\{[\s\S]*?width:\s*min\(360px,[\s\S]*?padding:\s*6px/u,
     );
     expect(editorSource).toMatch(
-      /\.rich-media-text-toolbar[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/u,
+      /\.rich-media-text-toolbar[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)/u,
     );
+    expect(editorSource).toContain('@click="previewSelectedRichMediaTextImage"');
   });
 
   it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {

@@ -6,6 +6,7 @@ const source = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/library/NoteReadonlyPreview.vue'),
   'utf8',
 );
+const commonStyles = readFileSync(resolve(process.cwd(), 'src/assets/css/common.less'), 'utf8');
 
 describe('NoteReadonlyPreview', () => {
   it('正文加载态在可用预览区域内水平与垂直居中', () => {
@@ -13,5 +14,23 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toMatch(
       /\.note-readonly-preview__loading\s*\{[\s\S]*min-height:\s*100%;[\s\S]*display:\s*grid;[\s\S]*place-items:\s*center;/u,
     );
+  });
+
+  it('图文组合保留左右布局，正文图片可以点击或键盘放大', () => {
+    expect(source).toContain('note-readonly-preview__content note-rich-content is-image-preview-enabled');
+    expect(source).toContain('@click="handlePreviewContentActivation"');
+    expect(source).toContain('@keydown="handlePreviewImageActivation"');
+    expect(source).toContain('prepareNoteContentPreviewImages');
+    expect(commonStyles).toMatch(/\.note-rich-content[\s\S]*\.ln-media-text__item\s*\{[\s\S]*display:\s*flex;/u);
+    expect(commonStyles).toContain("&[data-ln-media-position='right'] .ln-media-text__item");
+  });
+
+  it('阅读预览拦截站内引用，文件可选择本页预览或进入云空间', () => {
+    expect(source).toContain("parseResourceHref(anchor.getAttribute('href'))");
+    expect(source).toContain('resolveNoteResourceRefs(refs)');
+    expect(source).toContain("t('note.resourceMention.previewHere')");
+    expect(source).toContain("t('note.resourceMention.openInCloudSpace')");
+    expect(source).toContain("apiBasePost('/api/file/getFileInfo'");
+    expect(source).toContain('<FilePreview');
   });
 });

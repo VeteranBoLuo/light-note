@@ -12,11 +12,22 @@ describe('笔记库路由布局根节点', () => {
     expect(templateSource.match(/<ResourcePageShell\b/g)).toHaveLength(1);
   });
 
-  it('笔记详情跳转加载层位于页面壳内部，不产生并列根节点', () => {
-    const loadingLayerIndex = templateSource.indexOf('class="note-detail-navigation-loading"');
-    const shellClosingIndex = templateSource.lastIndexOf('</ResourcePageShell>');
+  it('笔记详情跳转不再使用 fixed 整页骨架遮住真实详情顶栏', () => {
+    expect(templateSource).not.toContain('note-detail-navigation-loading');
+    expect(source).not.toContain('paintNoteNavigationFeedback');
+    expect(source).toContain('openingNoteId.value = normalizedId');
+  });
 
-    expect(loadingLayerIndex).toBeGreaterThan(-1);
-    expect(loadingLayerIndex).toBeLessThan(shellClosingIndex);
+  it('移动目录首次打开后保持挂载，关闭抽屉后仍能派发目录选择', () => {
+    expect(templateSource).toContain('v-if="bookmark.isMobile && mobileDirectoryMounted"');
+    const start = source.indexOf("function openMobileDirectory(tab: 'directory' | 'tags')");
+    const end = source.indexOf('let consumingDirectoryOpenRequest', start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const openDirectorySource = source.slice(start, end);
+    expect(openDirectorySource).toContain('mobileDirectoryMounted.value = true');
+    expect(openDirectorySource.indexOf('mobileDirectoryMounted.value = true')).toBeLessThan(
+      openDirectorySource.indexOf('mobileDirectoryOpen.value = true'),
+    );
   });
 });

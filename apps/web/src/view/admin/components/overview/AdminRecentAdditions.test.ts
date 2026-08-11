@@ -4,7 +4,10 @@ import AdminRecentAdditions from './AdminRecentAdditions.vue';
 import type { AdminRecentData } from './adminRecentTypes.ts';
 
 vi.mock('vue-i18n', () => ({
-  useI18n: () => ({ t: (key: string) => key, locale: ref('zh-CN') }),
+  useI18n: () => ({
+    t: (key: string, params?: Record<string, string>) => (params?.remark ? `${key}:${params.remark}` : key),
+    locale: ref('zh-CN'),
+  }),
 }));
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
@@ -58,17 +61,29 @@ describe('AdminRecentAdditions', () => {
           title: 'Vue 文档',
           userId: 'user-1',
           userName: '小白',
+          userRemark: '重点客户',
           createdAt: '2026-08-07T10:00:00.000Z',
         },
       ],
-      recentUsers: [{ id: 'user-2', name: '新用户', role: 'user', createdAt: '2026-08-07T11:00:00.000Z' }],
+      recentUsers: [
+        {
+          id: 'user-2',
+          name: '新用户',
+          userRemark: '内测用户',
+          role: 'user',
+          createdAt: '2026-08-07T11:00:00.000Z',
+        },
+      ],
     };
     const { host, onViewUsers } = mountRecent({ data });
     await nextTick();
 
     expect(host.textContent).toContain('Vue 文档');
     expect(host.textContent).toContain('小白');
+    expect(host.textContent).toContain('adminOverviewRecent.userRemark:重点客户');
     expect(host.textContent).toContain('新用户');
+    expect(host.textContent).toContain('adminOverviewRecent.userRemark:内测用户');
+    expect(host.querySelectorAll('.admin-recent__remark')).toHaveLength(2);
     (host.querySelector('.admin-recent__users-link') as HTMLButtonElement).click();
     expect(onViewUsers).toHaveBeenCalledTimes(1);
   });

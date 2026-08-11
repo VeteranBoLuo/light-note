@@ -52,25 +52,99 @@
           <SvgIcon :src="icon.growth.lock" size="15" aria-hidden="true" />
           <span>{{ t('common.preview') }}</span>
         </div>
-        <div v-if="previewHtml" class="note-readonly-preview__content" v-html="previewHtml"></div>
+        <div
+          v-if="previewHtml"
+          ref="previewContentRef"
+          class="note-readonly-preview__content note-rich-content is-image-preview-enabled"
+          @click="handlePreviewContentActivation"
+          @keydown="handlePreviewImageActivation"
+          v-html="previewHtml"
+        ></div>
         <p v-else class="note-readonly-preview__empty">{{ t('common.none') }}</p>
       </article>
     </div>
+
+    <BModal
+      v-model:visible="resourcePreviewVisible"
+      :title="t('note.resourceMention.resourceActionsTitle')"
+      width="360px"
+      :show-footer="false"
+      @close="closeResourcePreview"
+    >
+      <div v-if="resourcePreview" class="note-readonly-preview__resource-preview">
+        <div class="note-readonly-preview__resource-summary">
+          <strong>{{ resourcePreviewTitle }}</strong>
+          <span>{{ resourcePreviewType }}</span>
+        </div>
+        <p
+          class="note-readonly-preview__resource-status"
+          :class="{ 'is-unavailable': resourcePreviewState?.available === false }"
+        >
+          {{ resourcePreviewStatus }}
+        </p>
+        <div class="note-readonly-preview__resource-actions">
+          <template v-if="resourcePreview.ref.type === 'file'">
+            <BButton
+              type="primary"
+              :loading="inlineFilePreviewLoading"
+              :disabled="!resourcePreviewCanOpen"
+              @click="openReferencedFileInlinePreview"
+            >
+              {{ t('note.resourceMention.previewHere') }}
+            </BButton>
+            <BButton :disabled="!resourcePreviewCanOpen || inlineFilePreviewLoading" @click="openResourcePreviewTarget">
+              {{ t('note.resourceMention.openInCloudSpace') }}
+            </BButton>
+          </template>
+          <BButton v-else type="primary" :disabled="!resourcePreviewCanOpen" @click="openResourcePreviewTarget">
+            {{ resourcePreviewOpenLabel }}
+          </BButton>
+        </div>
+      </div>
+    </BModal>
+
+    <FilePreview
+      v-if="inlineFilePreviewInfo"
+      v-model:visible="inlineFilePreviewVisible"
+      :file-info="inlineFilePreviewInfo"
+      @close="closeReferencedFileInlinePreview"
+    />
   </section>
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
   import { consumeNoteDetail } from '@/api/noteDetailPrefetch';
+  import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { useUserStore } from '@/store';
   import { normalizeNoteContentResourceUrls, noteContentToHtml } from '@/utils/common';
+  import {
+    collectResourceRefsFromHtml,
+    parseResourceHref,
+    presentResourceReferenceChips,
+    resourceRefKey,
+    type ResourceRef,
+  } from '@/utils/noteResourceRefs';
+  import { handleNoteContentImagePreviewEvent, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
+  import { normalizeReferencedFilePreviewInfo, type ReferencedFilePreviewInfo } from '@/utils/noteResourceNavigation';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import {
+    resolveAiSourceNavigation,
+    type AiSource,
+    type AiSourceTarget,
+  } from '@/components/aiAssistant/aiSourceNavigation';
+
+  const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
 
   interface PreviewBreadcrumbItem {
     id: string;
@@ -101,17 +175,192 @@
   );
   const emit = defineEmits<{ close: []; edit: [] }>();
   const { t } = useI18n();
+  const router = useRouter();
   const user = useUserStore();
   const detail = ref<Record<string, any>>({});
   const breadcrumb = ref<PreviewBreadcrumbItem[]>([]);
   const previewHtml = ref('');
+  const previewSourceHtml = ref('');
+  const previewContentRef = ref<HTMLElement | null>(null);
+  const resolvedResourceRefs = ref<ResolvedResourceReference[]>([]);
+  const resourcePreviewVisible = ref(false);
+  const resourcePreview = ref<{ ref: ResourceRef; title: string } | null>(null);
+  const inlineFilePreviewVisible = ref(false);
+  const inlineFilePreviewLoading = ref(false);
+  const inlineFilePreviewInfo = ref<ReferencedFilePreviewInfo | null>(null);
   const loading = ref(false);
   const error = ref(false);
   let requestSeq = 0;
+  let resourceResolveSeq = 0;
+  let inlineFilePreviewRequestId = 0;
 
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
   const parentBreadcrumb = computed(() => breadcrumb.value.filter((item) => item.id !== props.noteId));
   const displayTime = computed(() => String(displayNote.value.updateTime || displayNote.value.createTime || '').trim());
+
+  function resolvedResourceRef(ref: ResourceRef) {
+    return resolvedResourceRefs.value.find((item) => item.type === ref.type && item.id === ref.id);
+  }
+
+  const resourcePreviewState = computed(() => {
+    const preview = resourcePreview.value;
+    return preview ? resolvedResourceRef(preview.ref) || null : null;
+  });
+  const resourcePreviewTitle = computed(() => {
+    const preview = resourcePreview.value;
+    if (!preview) return '';
+    return resourcePreviewState.value?.title || preview.title || preview.ref.id;
+  });
+  const resourcePreviewType = computed(() => {
+    const type = resourcePreview.value?.ref.type;
+    return type ? t(`ai.sourceTypes.${type}`) : '';
+  });
+  const resourcePreviewCanOpen = computed(() => {
+    const preview = resourcePreview.value;
+    const state = resourcePreviewState.value;
+    if (!preview || !state?.available) return false;
+    return preview.ref.type !== 'bookmark' || Boolean(state.url);
+  });
+  const resourcePreviewStatus = computed(() => {
+    const preview = resourcePreview.value;
+    const state = resourcePreviewState.value;
+    if (!preview || !state || (preview.ref.type === 'bookmark' && !state.url)) {
+      return t('note.resourceMention.checkingResource');
+    }
+    return state.available ? t('note.resourceMention.resourceReady') : t('note.resourceMention.resourceUnavailable');
+  });
+  const resourcePreviewOpenLabel = computed(() => {
+    const type = resourcePreview.value?.ref.type;
+    if (type === 'bookmark') return t('note.resourceMention.openWebsite');
+    if (type === 'file') return t('note.resourceMention.openFile');
+    return t('note.resourceMention.openNote');
+  });
+
+  function handlePreviewImageActivation(event: MouseEvent | KeyboardEvent) {
+    handleNoteContentImagePreviewEvent(event);
+  }
+
+  function handlePreviewContentActivation(event: MouseEvent) {
+    if (handleNoteContentImagePreviewEvent(event)) return;
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
+    const ref = anchor ? parseResourceHref(anchor.getAttribute('href')) : null;
+    if (!ref || !anchor) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resourcePreview.value = {
+      ref,
+      title: String(anchor.textContent || '').trim() || ref.id,
+    };
+    resourcePreviewVisible.value = true;
+  }
+
+  function closeResourcePreview() {
+    inlineFilePreviewRequestId += 1;
+    inlineFilePreviewLoading.value = false;
+    resourcePreviewVisible.value = false;
+    resourcePreview.value = null;
+  }
+
+  async function navigateResourceRef(ref: ResourceRef) {
+    const state = resolvedResourceRef(ref);
+    if (!state?.available || (ref.type === 'bookmark' && !state.url)) {
+      message.warning(t('note.resourceMention.resourceUnavailable'));
+      return;
+    }
+    const source: AiSource = {
+      type: ref.type,
+      id: ref.id,
+      title: state.title || ref.id,
+      url: state.url,
+      target: state.navigation?.target as AiSourceTarget | undefined,
+      fileId: state.navigation?.fileId,
+    };
+    const navigation = resolveAiSourceNavigation(source);
+    if (navigation.kind === 'external') {
+      window.open(navigation.url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    if (navigation.kind === 'internal') await router.push(navigation.target);
+  }
+
+  async function openResourcePreviewTarget() {
+    const preview = resourcePreview.value;
+    if (!preview) return;
+    if (!resourcePreviewCanOpen.value) {
+      message.warning(resourcePreviewStatus.value);
+      return;
+    }
+    await closeCurrentMobileOverlayThen(closeResourcePreview, () => navigateResourceRef(preview.ref));
+  }
+
+  async function openReferencedFileInlinePreview() {
+    const preview = resourcePreview.value;
+    if (!preview || preview.ref.type !== 'file' || inlineFilePreviewLoading.value) return;
+    if (!resourcePreviewCanOpen.value) {
+      message.warning(resourcePreviewStatus.value);
+      return;
+    }
+    const expectedRefKey = resourceRefKey(preview.ref);
+    const requestId = ++inlineFilePreviewRequestId;
+    inlineFilePreviewLoading.value = true;
+    try {
+      const res = await apiBasePost('/api/file/getFileInfo', { id: preview.ref.id }, { silent: true });
+      const currentPreview = resourcePreview.value;
+      if (
+        requestId !== inlineFilePreviewRequestId ||
+        !resourcePreviewVisible.value ||
+        !currentPreview ||
+        resourceRefKey(currentPreview.ref) !== expectedRefKey
+      ) {
+        return;
+      }
+      const fileInfo =
+        res?.status === 200 ? normalizeReferencedFilePreviewInfo(res.data, { id: preview.ref.id }) : null;
+      if (!fileInfo) {
+        message.warning(t('note.resourceMention.resourceUnavailable'));
+        return;
+      }
+      await closeCurrentMobileOverlayThen(closeResourcePreview, () => {
+        inlineFilePreviewInfo.value = fileInfo;
+        inlineFilePreviewVisible.value = true;
+      });
+    } catch {
+      if (requestId === inlineFilePreviewRequestId) {
+        message.warning(t('note.resourceMention.resourceUnavailable'));
+      }
+    } finally {
+      if (requestId === inlineFilePreviewRequestId) inlineFilePreviewLoading.value = false;
+    }
+  }
+
+  function closeReferencedFileInlinePreview() {
+    inlineFilePreviewVisible.value = false;
+    inlineFilePreviewInfo.value = null;
+  }
+
+  async function decoratePreviewImages() {
+    await nextTick();
+    prepareNoteContentPreviewImages(previewContentRef.value, t('noteDetail.editor.imagePreview'));
+  }
+
+  async function resolvePreviewResourceRefs(html: string, parentRequestSeq: number) {
+    const refs = collectResourceRefsFromHtml(html).slice(0, 100);
+    const seq = ++resourceResolveSeq;
+    resolvedResourceRefs.value = [];
+    if (!refs.length) return;
+    try {
+      const resolved = await resolveNoteResourceRefs(refs);
+      if (seq !== resourceResolveSeq || parentRequestSeq !== requestSeq || html !== previewSourceHtml.value) return;
+      resolvedResourceRefs.value = resolved;
+      previewHtml.value = presentResourceReferenceChips(html, resolved, {
+        unavailableLabel: (snapshotTitle) => t('note.resourceRefUnavailable', { title: snapshotTitle }),
+      });
+      void decoratePreviewImages();
+    } catch {
+      // 引用解析失败时保留正文，但不允许未经归属校验的链接直接导航。
+    }
+  }
 
   async function loadPreview() {
     const noteId = String(props.noteId || '').trim();
@@ -122,6 +371,11 @@
     detail.value = {};
     breadcrumb.value = [];
     previewHtml.value = '';
+    previewSourceHtml.value = '';
+    resolvedResourceRefs.value = [];
+    resourceResolveSeq += 1;
+    closeResourcePreview();
+    closeReferencedFileInlinePreview();
     try {
       const [detailResult, breadcrumbResult] = await Promise.all([
         consumeNoteDetail(user, noteId),
@@ -135,11 +389,20 @@
       detail.value = detailResult.data;
       breadcrumb.value = Array.isArray(breadcrumbResult?.data?.items) ? breadcrumbResult.data.items : [];
       const normalizedContent = normalizeNoteContentResourceUrls(String(detailResult.data.content || ''));
-      previewHtml.value = await noteContentToHtml(normalizedContent, detailResult.data.type);
+      const renderedHtml = await noteContentToHtml(normalizedContent, detailResult.data.type);
+      if (seq !== requestSeq) return;
+      previewSourceHtml.value = renderedHtml;
+      previewHtml.value = presentResourceReferenceChips(renderedHtml, [], {
+        unavailableLabel: (snapshotTitle) => t('note.resourceRefUnavailable', { title: snapshotTitle }),
+      });
+      void resolvePreviewResourceRefs(renderedHtml, seq);
     } catch {
       if (seq === requestSeq) error.value = true;
     } finally {
-      if (seq === requestSeq) loading.value = false;
+      if (seq === requestSeq) {
+        loading.value = false;
+        void decoratePreviewImages();
+      }
     }
   }
 
@@ -367,6 +630,49 @@
       border-radius: 9px;
       background: var(--menu-body-bg-color);
     }
+  }
+
+  .note-readonly-preview__resource-preview {
+    min-width: min(300px, calc(90vw - 32px));
+    display: grid;
+    gap: 14px;
+  }
+
+  .note-readonly-preview__resource-summary {
+    display: grid;
+    gap: 4px;
+
+    strong {
+      overflow: hidden;
+      color: var(--text-color);
+      font-size: 16px;
+      line-height: 1.4;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    span {
+      color: var(--desc-color, #737782);
+      font-size: 13px;
+    }
+  }
+
+  .note-readonly-preview__resource-status {
+    margin: 0;
+    color: var(--desc-color, #737782);
+    font-size: 13px;
+    line-height: 1.5;
+
+    &.is-unavailable {
+      color: var(--error-color, #e5484d);
+    }
+  }
+
+  .note-readonly-preview__resource-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
   }
 
   .note-readonly-preview__error,

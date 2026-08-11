@@ -67,11 +67,23 @@ function rollOne(drawIndex) {
 // 在事务内发放单个奖励(积分/存储/补签卡/AI包)。返回落库明细(前端展示用)。
 async function grantReward(conn, userId, prize) {
   if (prize.kind === 'points') {
-    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, prize.amount, 'lottery_win', prize.id]);
+    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+      userId,
+      prize.amount,
+      'lottery_win',
+      prize.id,
+    ]);
     await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [prize.amount, userId]);
   } else if (prize.kind === 'storage') {
-    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [userId, 'lottery_storage', prize.id]);
-    await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [prize.amount, userId]);
+    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+      userId,
+      'lottery_storage',
+      prize.id,
+    ]);
+    await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [
+      prize.amount,
+      userId,
+    ]);
   } else if (prize.kind === 'card') {
     // 补签卡:统一走 grantItem(上限 2;已满则本次不叠加,概率低可接受)
     await grantItem(conn, userId, 'makeup_card', prize.amount);
@@ -81,7 +93,13 @@ async function grantReward(conn, userId, prize) {
       userId,
     ]);
   }
-  return { id: prize.id, kind: prize.kind, amount: prize.amount, name: prize.name };
+  return {
+    id: prize.id,
+    kind: prize.kind,
+    amount: prize.amount,
+    name: prize.name,
+    rare: prize.tier === 'rare',
+  };
 }
 
 /**
@@ -112,27 +130,59 @@ export async function drawLottery(userId, { times = 1, free = false, userRole = 
         await conn.rollback();
         return { ok: false, reason: 'no_free', msg: '今日免费次数已用完' };
       }
-      await conn.query('UPDATE user_growth SET lottery_free_day = ?, lottery_free_used = ? WHERE user_id = ?', [today, usedToday + 1, userId]);
-      await conn.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'lottery_free', ?)", [userId, today]);
+      await conn.query('UPDATE user_growth SET lottery_free_day = ?, lottery_free_used = ? WHERE user_id = ?', [
+        today,
+        usedToday + 1,
+        userId,
+      ]);
+      await conn.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'lottery_free', ?)", [
+        userId,
+        today,
+      ]);
     } else {
       if (Number(g.points) < cost) {
         await conn.rollback();
         return { ok: false, reason: 'insufficient', msg: '积分不足' };
       }
       await conn.query('UPDATE user_growth SET points = points - ? WHERE user_id = ?', [cost, userId]);
-      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [userId, -cost, 'lottery_cost', n === 10 ? 'x10' : 'x1']);
+      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+        userId,
+        -cost,
+        'lottery_cost',
+        n === 10 ? 'x10' : 'x1',
+      ]);
     }
     // 逐抽(全局序号 = 历史累计 + 本次序,用于保底命中)
     const baseCount = Number(g.lottery_count) || 0;
     const results = [];
+    const pityHitIndexes = [];
     for (let i = 1; i <= n; i++) {
-      const prize = rollOne(baseCount + i);
-      results.push(await grantReward(conn, userId, prize));
+      const drawIndex = baseCount + i;
+      const guaranteed = drawIndex % PITY_EVERY === 0;
+      const prize = rollOne(drawIndex);
+      const reward = await grantReward(conn, userId, prize);
+      results.push({ ...reward, guaranteed });
+      if (guaranteed) pityHitIndexes.push(i);
     }
     await conn.query('UPDATE user_growth SET lottery_count = lottery_count + ? WHERE user_id = ?', [n, userId]);
     await conn.commit();
     const [nb] = await pool.query('SELECT points FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-    return { ok: true, cost, free, points: Number(nb[0]?.points || 0), results };
+    const finalCount = baseCount + n;
+    const pityProgressBefore = baseCount % PITY_EVERY;
+    const pityProgressAfter = finalCount % PITY_EVERY;
+    const nextPityIn = PITY_EVERY - pityProgressAfter || PITY_EVERY;
+    return {
+      ok: true,
+      cost,
+      free,
+      points: Number(nb[0]?.points || 0),
+      results,
+      pityTriggered: pityHitIndexes.length > 0,
+      pityHitIndexes,
+      pityProgressBefore,
+      pityProgressAfter,
+      nextPityIn,
+    };
   } catch (e) {
     try {
       await conn.rollback();
@@ -178,5 +228,16 @@ export async function getLotteryStatus(userId, { userRole = null } = {}) {
     rate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2), // 百分比,公示用
     rare: x.tier === 'rare',
   }));
-  return { points, count, toPity, singleCost: DRAW_COST, tenCost: TEN_DRAW_COST, pityEvery: PITY_EVERY, level, freeDaily, freeRemaining, pool: prizes };
+  return {
+    points,
+    count,
+    toPity,
+    singleCost: DRAW_COST,
+    tenCost: TEN_DRAW_COST,
+    pityEvery: PITY_EVERY,
+    level,
+    freeDaily,
+    freeRemaining,
+    pool: prizes,
+  };
 }

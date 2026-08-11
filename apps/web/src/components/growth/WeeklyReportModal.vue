@@ -1,593 +1,1316 @@
 <template>
-  <Teleport to="body">
-    <transition name="wr-pop">
-      <div v-if="visible" class="wr-overlay" @click.self="close">
-        <div ref="cardRef" class="wr-card">
-          <button class="wr-close" @click="close" aria-label="close">×</button>
-
-          <!-- 星空 + 渐变头图 -->
-          <div class="wr-banner">
-            <span v-for="s in stars" :key="s.i" class="wr-star" :style="s.style">✦</span>
-            <div class="wr-orb wr-orb-1"></div>
-            <div class="wr-orb wr-orb-2"></div>
-            <div class="wr-banner-inner">
-              <div class="wr-banner-kicker">{{ report?.generatedAt || '' }} · {{ t('growth.weeklyReportSub') }}</div>
-              <div class="wr-banner-title">{{ t('growth.weeklyReportTitle') }}</div>
-            </div>
-          </div>
-
-          <div class="wr-body">
-            <!-- 称号 + 评语 -->
-            <div class="wr-verdict">
-              <div class="wr-verdict-badge">{{ verdict.emoji }}</div>
-              <div class="wr-verdict-title">{{ verdict.title }}</div>
-              <div class="wr-verdict-quote">{{ verdict.quote }}</div>
-            </div>
-
-            <!-- 三大核心数字 + 较上周对比 -->
-            <div class="wr-stats">
-              <div class="wr-stat">
-                <b class="wr-stat-num wr-c-exp">+{{ animExp }}</b>
-                <span>{{ t('growth.wrExp') }}</span>
-                <em class="wr-cmp" :class="cmpExp.dir">{{ cmpText(cmpExp) }}</em>
+  <BModal
+    v-model:visible="modalVisible"
+    :title="t('growth.weeklyReportTitle')"
+    width="1040px"
+    height="min(90vh, 860px)"
+    modal-class="weekly-report-v2-modal"
+    content-class="weekly-report-v2-content"
+    :fullscreen-mobile="true"
+    :show-footer="false"
+  >
+    <div class="wr-workspace">
+      <div class="wr-preview-column">
+        <span class="wr-preview-label">{{ t('growth.wrPosterPreview') }}</span>
+        <div
+          ref="posterStageRef"
+          class="wr-poster-stage"
+          :class="{ 'is-scaled': posterPreviewScale < 1 }"
+          :style="posterStageStyle"
+        >
+          <article
+            ref="posterRef"
+            class="wr-poster"
+            :class="themeClass"
+            :style="{ transform: `scale(${posterPreviewScale})` }"
+          >
+            <div class="wr-poster-glow wr-poster-glow-one"></div>
+            <div class="wr-poster-glow wr-poster-glow-two"></div>
+            <header class="wr-poster-header">
+              <div class="wr-brand-mark">
+                <SvgIcon :src="icon.growth.rank" size="18" />
+                <span>LIGHT NOTE · WEEKLY MOMENT</span>
               </div>
-              <div class="wr-stat">
-                <b class="wr-stat-num wr-c-fire">{{ animCheckin }}<i v-if="(report?.checkinDays || 0) > 0" class="wr-fire">🔥</i></b>
-                <span>{{ t('growth.wrCheckin') }}</span>
-                <em class="wr-cmp flat">{{ t('growth.wrKeepUp') }}</em>
+              <span class="wr-edition">NO.{{ weekNumber }}</span>
+            </header>
+
+            <section class="wr-profile">
+              <div class="wr-avatar">
+                <SvgIcon :src="avatarSrc" size="46" />
               </div>
-              <div class="wr-stat">
-                <b class="wr-stat-num wr-c-total">{{ animTotal }}</b>
+              <div class="wr-profile-copy">
+                <strong>{{ displayName }}</strong>
+                <span>{{ dateRange }}</span>
+              </div>
+              <div class="wr-rank-chip">
+                <b>Lv.{{ safeNumber(report?.level, 1) }}</b>
+                <span>{{ rankName }}</span>
+              </div>
+            </section>
+
+            <section class="wr-hero">
+              <div class="wr-hero-emblem" aria-hidden="true">{{ milestone.emoji }}</div>
+              <div>
+                <span class="wr-hero-kicker">{{ t('growth.wrWeeklyHighlight') }}</span>
+                <h2>{{ milestone.title }}</h2>
+                <p>{{ headline }}</p>
+              </div>
+            </section>
+
+            <section class="wr-core-stats">
+              <div class="wr-core-stat">
+                <SvgIcon :src="icon.growth.create" size="17" />
+                <b>{{ totalOutput }}</b>
                 <span>{{ t('growth.wrTotal') }}</span>
-                <em class="wr-cmp" :class="cmpTotal.dir">{{ cmpText(cmpTotal) }}</em>
               </div>
-            </div>
+              <div class="wr-core-stat">
+                <SvgIcon :src="icon.growth.checkin" size="17" />
+                <b>{{ activeDays }}/7</b>
+                <span>{{ t('growth.wrActiveDays') }}</span>
+              </div>
+              <div class="wr-core-stat">
+                <SvgIcon :src="icon.growth.level" size="17" />
+                <b>{{ expDisplay }}</b>
+                <span>{{ expCaption }}</span>
+              </div>
+            </section>
 
-            <!-- 资源条形图 + 各自较上周 -->
-            <div class="wr-bars">
-              <div v-for="b in bars" :key="b.key" class="wr-bar-row">
-                <span class="wr-bar-label">{{ b.label }}</span>
-                <div class="wr-bar-track">
-                  <div class="wr-bar-fill" :style="{ width: (barsReady ? b.pct : 0) + '%', background: b.color }"></div>
+            <section class="wr-trend-card">
+              <div class="wr-section-heading">
+                <span>{{ t('growth.wrActivityTrend') }}</span>
+                <b>{{ comparisonText }}</b>
+              </div>
+              <div class="wr-trend-grid" :class="{ 'is-unavailable': !hasDailySeries }">
+                <div v-for="day in chartDays" :key="day.day" class="wr-trend-day">
+                  <div class="wr-trend-track">
+                    <span
+                      class="wr-trend-fill"
+                      :class="{ 'is-active': day.activity > 0 }"
+                      :style="{ height: `${day.height}%` }"
+                    ></span>
+                  </div>
+                  <b>{{ day.value }}</b>
+                  <small>{{ day.label }}</small>
                 </div>
-                <span class="wr-bar-val">
-                  {{ b.val }}<em class="wr-bar-cmp" :class="b.dir">{{ b.cmp }}</em>
-                </span>
               </div>
-            </div>
+              <span v-if="!hasDailySeries" class="wr-trend-legacy">{{ t('growth.wrTrendUnavailable') }}</span>
+            </section>
 
-            <!-- 段位 -->
-            <div class="wr-level">
-              <span class="wr-level-badge" :style="{ background: levelGradient }">Lv.{{ report?.level }}</span>
-              <span class="wr-level-name">{{ t('growth.ranks.' + (report?.level || 1)) }}</span>
-            </div>
+            <section class="wr-composition">
+              <div class="wr-section-heading">
+                <span>{{ t('growth.wrContentComposition') }}</span>
+                <b>{{ dominantLabel }}</b>
+              </div>
+              <div class="wr-composition-track">
+                <span class="is-bookmark" :style="{ flexGrow: composition.bookmarks }"></span>
+                <span class="is-note" :style="{ flexGrow: composition.notes }"></span>
+                <span class="is-file" :style="{ flexGrow: composition.files }"></span>
+              </div>
+              <div class="wr-composition-legend">
+                <span><i class="is-bookmark"></i>{{ t('growth.wrBookmark') }} {{ composition.bookmarks }}</span>
+                <span><i class="is-note"></i>{{ t('growth.wrNote') }} {{ composition.notes }}</span>
+                <span><i class="is-file"></i>{{ t('growth.wrFile') }} {{ composition.files }}</span>
+              </div>
+            </section>
 
-            <button class="wr-export" @click="exportImage" :disabled="exporting">
-              📸 {{ exporting ? t('growth.wrExporting') : t('growth.wrExport') }}
-            </button>
-          </div>
+            <footer class="wr-poster-footer">
+              <div>
+                <span>{{ t('growth.wrMilestone') }}</span>
+                <strong>{{ milestone.description }}</strong>
+              </div>
+              <div class="wr-level-progress" :aria-label="t('growth.wrLevelProgress')">
+                <span :style="{ width: `${levelProgress}%` }"></span>
+              </div>
+              <small>{{ t('growth.wrPosterPrivacy') }}</small>
+            </footer>
+          </article>
         </div>
       </div>
-    </transition>
-  </Teleport>
+
+      <aside class="wr-insights">
+        <div class="wr-insight-heading">
+          <span>{{ t('growth.wrInsightTitle') }}</span>
+          <strong>{{ t('growth.wrInsightSubtitle') }}</strong>
+        </div>
+
+        <section class="wr-insight-card is-summary">
+          <span>{{ t('growth.wrComparedWithLastWeek') }}</span>
+          <strong :class="comparison.dir">{{ comparisonLongText }}</strong>
+          <p>{{ comparisonDescription }}</p>
+        </section>
+
+        <div class="wr-insight-grid">
+          <section class="wr-insight-card">
+            <span>{{ t('growth.wrBestDay') }}</span>
+            <strong>{{ bestDayTitle }}</strong>
+            <p>{{ bestDayDescription }}</p>
+          </section>
+          <section class="wr-insight-card">
+            <span>{{ t('growth.wrExp') }}</span>
+            <strong>{{ expDisplay }}</strong>
+            <p>{{ expExplanation }}</p>
+          </section>
+        </div>
+
+        <section class="wr-next-goal">
+          <div class="wr-next-goal-icon">
+            <SvgIcon :src="icon.growth.action" size="20" />
+          </div>
+          <div>
+            <span>{{ t('growth.wrNextGoal') }}</span>
+            <strong>{{ nextGoal }}</strong>
+          </div>
+        </section>
+
+        <p class="wr-save-tip">
+          <SvgIcon :src="icon.message.info" size="16" />
+          {{ t('growth.wrSaveTip') }}
+        </p>
+
+        <div class="wr-insight-actions">
+          <BButton :loading="sharing" :disabled="exporting" @click="sharePoster">
+            <SvgIcon :src="icon.cloudSpace.share" size="16" />
+            {{ t('growth.wrShare') }}
+          </BButton>
+          <BButton type="primary" :loading="exporting" :disabled="sharing" @click="downloadPoster">
+            <SvgIcon :src="icon.cloudSpace.download" size="16" />
+            {{ exporting ? t('growth.wrExporting') : t('growth.wrExport') }}
+          </BButton>
+        </div>
+      </aside>
+    </div>
+  </BModal>
 </template>
 
 <script setup lang="ts">
-  import { computed, ref, watch, nextTick } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { recordOperation } from '@/api/commonApi.ts';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { useUserStore } from '@/store';
+  import { recordOperation } from '@/api/commonApi';
+  import { prepareMaskedIconsForCanvas } from '@/utils/canvasExport';
 
-  const props = defineProps<{ visible: boolean; report: any }>();
-  const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>();
-  const { t } = useI18n();
+  type Direction = 'up' | 'down' | 'flat';
+  type ReportDay = {
+    day: string;
+    bookmarks?: number;
+    notes?: number;
+    files?: number;
+    exp?: number;
+    checkins?: number;
+    total?: number;
+  };
+  type WeeklyReport = {
+    bookmarks?: number;
+    notes?: number;
+    files?: number;
+    exp?: number;
+    checkinDays?: number;
+    activeDays?: number;
+    level?: number;
+    levelName?: string;
+    levelProgress?: number;
+    expToNext?: number;
+    isMax?: boolean;
+    expStatus?: 'earned' | 'role_excluded' | 'no_grant' | 'none';
+    generatedAt?: string;
+    period?: { start?: string; end?: string; week?: number; weekYear?: number };
+    days?: ReportDay[];
+    bestDay?: ReportDay | null;
+    prev?: { bookmarks?: number; notes?: number; files?: number; exp?: number };
+  };
 
-  const animExp = ref(0);
-  const animCheckin = ref(0);
-  const animTotal = ref(0);
-  const barsReady = ref(false);
-  const cardRef = ref<HTMLElement | null>(null);
+  const props = defineProps<{ visible: boolean; report: WeeklyReport | null }>();
+  const emit = defineEmits<{ 'update:visible': [value: boolean] }>();
+  const { t, locale } = useI18n();
+  const user = useUserStore();
+  const posterRef = ref<HTMLElement | null>(null);
+  const posterStageRef = ref<HTMLElement | null>(null);
+  const posterPreviewScale = ref(1);
+  const posterNaturalSize = ref({ width: 500, height: 650 });
   const exporting = ref(false);
+  const sharing = ref(false);
 
-  const stars = Array.from({ length: 9 }, (_, i) => {
-    const top = (i * 37) % 90;
-    const left = (i * 53 + 7) % 96;
-    const size = 8 + ((i * 5) % 8);
-    const op = 0.3 + ((i * 3) % 5) / 10;
-    return { i, style: `top:${top}%;left:${left}%;font-size:${size}px;opacity:${op};animation-delay:${i * 0.2}s` };
+  const modalVisible = computed({
+    get: () => props.visible,
+    set: (value: boolean) => emit('update:visible', value),
+  });
+  const safeNumber = (value: unknown, fallback = 0) => {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : fallback;
+  };
+  const composition = computed(() => ({
+    bookmarks: safeNumber(props.report?.bookmarks),
+    notes: safeNumber(props.report?.notes),
+    files: safeNumber(props.report?.files),
+  }));
+  const totalOutput = computed(() => composition.value.bookmarks + composition.value.notes + composition.value.files);
+  const previousOutput = computed(
+    () =>
+      safeNumber(props.report?.prev?.bookmarks) +
+      safeNumber(props.report?.prev?.notes) +
+      safeNumber(props.report?.prev?.files),
+  );
+  const activeDays = computed(() =>
+    Math.min(7, safeNumber(props.report?.activeDays, safeNumber(props.report?.checkinDays))),
+  );
+  const levelProgress = computed(() => Math.max(0, Math.min(100, safeNumber(props.report?.levelProgress, 100))));
+  const isHighestLevel = computed(() => Boolean(props.report?.isMax) || safeNumber(props.report?.level) >= 15);
+  const displayName = computed(
+    () => user.adminContext?.subjectAlias || user.alias || user.userName || t('growth.wrUserFallback'),
+  );
+  const avatarSrc = computed(() =>
+    user.adminContext ? icon.navigation.user : user.headPicture || icon.navigation.user,
+  );
+  const rankName = computed(() => props.report?.levelName || t(`growth.ranks.${safeNumber(props.report?.level, 1)}`));
+  const themeClass = computed(() => {
+    const level = safeNumber(props.report?.level, 1);
+    if (level >= 13) return 'wr-theme-coral';
+    if (level >= 10) return 'wr-theme-gold';
+    if (level >= 7) return 'wr-theme-violet';
+    if (level >= 4) return 'wr-theme-ocean';
+    return 'wr-theme-slate';
   });
 
-  function close() {
-    emit('update:visible', false);
+  function parseLocalDate(value?: string) {
+    if (!value) return null;
+    const date = new Date(`${value.slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? null : date;
   }
-
-  function countUp(target: number, setter: (v: number) => void, dur = 950) {
-    const t0 = performance.now();
-    function tick(now: number) {
-      const p = Math.min(1, (now - t0) / dur);
-      setter(Math.round(target * (1 - Math.pow(1 - p, 3))));
-      if (p < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
+  function formatShortDate(value?: string) {
+    const date = parseLocalDate(value);
+    if (!date) return value || '--';
+    return new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric' }).format(date);
   }
-
-  // 较上周对比
-  function delta(cur: number, prev: number) {
-    const d = (cur || 0) - (prev || 0);
-    return { d, dir: d > 0 ? 'up' : d < 0 ? 'down' : 'flat' };
+  function fallbackWeek(value?: string) {
+    const date = parseLocalDate(value) || new Date();
+    const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    utc.setUTCDate(utc.getUTCDate() + 4 - (utc.getUTCDay() || 7));
+    const start = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    return Math.ceil(((utc.getTime() - start.getTime()) / 86400000 + 1) / 7);
   }
-  function cmpText(c: { d: number; dir: string }) {
-    if (c.dir === 'up') return `↑ ${c.d}`;
-    if (c.dir === 'down') return `↓ ${-c.d}`;
-    return t('growth.wrFlat');
-  }
-  const cmpExp = computed(() => delta(props.report?.exp, props.report?.prev?.exp));
-  const cmpTotal = computed(() => {
-    const r = props.report;
-    if (!r) return delta(0, 0);
-    const cur = (r.bookmarks || 0) + (r.notes || 0) + (r.files || 0);
-    const prev = (r.prev?.bookmarks || 0) + (r.prev?.notes || 0) + (r.prev?.files || 0);
-    return delta(cur, prev);
+  const weekNumber = computed(() => safeNumber(props.report?.period?.week, fallbackWeek(props.report?.generatedAt)));
+  const dateRange = computed(() => {
+    const start = props.report?.period?.start;
+    const end = props.report?.period?.end || props.report?.generatedAt;
+    return start
+      ? `${formatShortDate(start)} — ${formatShortDate(end)}`
+      : `${formatShortDate(end)} · ${t('growth.weeklyReportSub')}`;
   });
 
-  const bars = computed(() => {
-    const r = props.report;
-    if (!r) return [];
-    const p = r.prev || {};
-    const items = [
-      { key: 'bookmark', label: t('growth.wrBookmark'), val: r.bookmarks || 0, prev: p.bookmarks || 0, color: 'linear-gradient(90deg, #a855f7, #6366f1)' },
-      { key: 'note', label: t('growth.wrNote'), val: r.notes || 0, prev: p.notes || 0, color: 'linear-gradient(90deg, #f472b6, #f43f5e)' },
-      { key: 'file', label: t('growth.wrFile'), val: r.files || 0, prev: p.files || 0, color: 'linear-gradient(90deg, #22d3ee, #3b82f6)' },
-    ];
-    const max = Math.max(1, ...items.map((i) => i.val));
-    return items.map((i) => {
-      const c = delta(i.val, i.prev);
-      return { ...i, pct: Math.round((i.val / max) * 100), dir: c.dir, cmp: c.dir === 'flat' ? '' : c.dir === 'up' ? ` ↑${c.d}` : ` ↓${-c.d}` };
+  const comparison = computed<{ delta: number; dir: Direction }>(() => {
+    const delta = totalOutput.value - previousOutput.value;
+    return { delta, dir: delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat' };
+  });
+  const comparisonText = computed(() => {
+    if (comparison.value.dir === 'up') return t('growth.wrComparedUpShort', { n: comparison.value.delta });
+    if (comparison.value.dir === 'down')
+      return t('growth.wrComparedDownShort', { n: Math.abs(comparison.value.delta) });
+    return t('growth.wrComparedFlatShort');
+  });
+  const comparisonLongText = computed(() => {
+    if (!previousOutput.value && totalOutput.value > 0) return t('growth.wrNewMomentum');
+    if (comparison.value.dir === 'up') return t('growth.wrComparedUp', { n: comparison.value.delta });
+    if (comparison.value.dir === 'down') return t('growth.wrComparedDown', { n: Math.abs(comparison.value.delta) });
+    return t('growth.wrComparedFlat');
+  });
+  const comparisonDescription = computed(() =>
+    totalOutput.value
+      ? t('growth.wrComparisonDescription', { current: totalOutput.value, previous: previousOutput.value })
+      : t('growth.wrComparisonEmpty'),
+  );
+
+  const milestone = computed(() => {
+    const checkins = safeNumber(props.report?.checkinDays);
+    if (checkins >= 7)
+      return {
+        emoji: '🔥',
+        title: t('growth.wrMilestoneFullAttendance'),
+        description: t('growth.wrMilestoneFullAttendanceDesc'),
+      };
+    if (composition.value.notes >= 10)
+      return {
+        emoji: '✍️',
+        title: t('growth.wrMilestoneWriter'),
+        description: t('growth.wrMilestoneWriterDesc', { n: composition.value.notes }),
+      };
+    if (composition.value.bookmarks >= 20)
+      return {
+        emoji: '📚',
+        title: t('growth.wrMilestoneCollector'),
+        description: t('growth.wrMilestoneCollectorDesc', { n: composition.value.bookmarks }),
+      };
+    if (composition.value.files >= 10)
+      return {
+        emoji: '🗂️',
+        title: t('growth.wrMilestoneOrganizer'),
+        description: t('growth.wrMilestoneOrganizerDesc', { n: composition.value.files }),
+      };
+    if (totalOutput.value >= 10)
+      return {
+        emoji: '✨',
+        title: t('growth.wrMilestoneMomentum'),
+        description: t('growth.wrMilestoneMomentumDesc', { n: totalOutput.value }),
+      };
+    if (!totalOutput.value && !checkins)
+      return { emoji: '🌙', title: t('growth.wrMilestonePause'), description: t('growth.wrMilestonePauseDesc') };
+    return { emoji: '🌱', title: t('growth.wrMilestoneSeed'), description: t('growth.wrMilestoneSeedDesc') };
+  });
+  const headline = computed(() => {
+    if (!totalOutput.value && !activeDays.value) return t('growth.wrHeadlineEmpty');
+    if (comparison.value.dir === 'up')
+      return t('growth.wrHeadlineUp', { days: activeDays.value, total: totalOutput.value, n: comparison.value.delta });
+    return t('growth.wrHeadlineSteady', { days: activeDays.value, total: totalOutput.value });
+  });
+
+  const hasDailySeries = computed(() => Array.isArray(props.report?.days) && props.report!.days!.length === 7);
+  const normalizedDays = computed<ReportDay[]>(() => {
+    if (hasDailySeries.value) return props.report!.days!;
+    const end = parseLocalDate(props.report?.generatedAt) || new Date();
+    return Array.from({ length: 7 }, (_, index) => {
+      const day = new Date(end);
+      day.setDate(day.getDate() - (6 - index));
+      const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+      return { day: key, total: 0 };
+    });
+  });
+  const chartDays = computed(() => {
+    const days = normalizedDays.value.map((day) => {
+      const total = safeNumber(day.total, safeNumber(day.bookmarks) + safeNumber(day.notes) + safeNumber(day.files));
+      const activity = total + (safeNumber(day.checkins) > 0 ? 1 : 0);
+      return { ...day, total, activity };
+    });
+    const max = Math.max(1, ...days.map((day) => day.activity));
+    return days.map((day) => ({
+      ...day,
+      value: day.total || (day.activity ? '•' : '0'),
+      height: day.activity ? Math.max(14, Math.round((day.activity / max) * 100)) : 5,
+      label: new Intl.DateTimeFormat(locale.value, { weekday: 'short' }).format(parseLocalDate(day.day) || new Date()),
+    }));
+  });
+  const bestDay = computed(
+    () =>
+      props.report?.bestDay ||
+      chartDays.value.reduce((best, day) => (day.activity > best.activity ? day : best), chartDays.value[0]),
+  );
+  const bestDayTitle = computed(() =>
+    hasDailySeries.value &&
+    safeNumber(bestDay.value?.total) + safeNumber(bestDay.value?.exp) + safeNumber(bestDay.value?.checkins) > 0
+      ? formatShortDate(bestDay.value?.day)
+      : t('growth.wrNoBestDay'),
+  );
+  const bestDayDescription = computed(() => {
+    if (bestDayTitle.value === t('growth.wrNoBestDay')) return t('growth.wrNoBestDayDesc');
+    return t('growth.wrBestDayDesc', {
+      total: safeNumber(bestDay.value?.total),
+      exp: safeNumber(bestDay.value?.exp),
     });
   });
 
-  const levelGradient = computed(() => {
-    const lv = props.report?.level || 1;
-    if (lv >= 13) return 'linear-gradient(135deg, #f43f5e, #fb923c)';
-    if (lv >= 10) return 'linear-gradient(135deg, #f59e0b, #fbbf24)';
-    if (lv >= 7) return 'linear-gradient(135deg, #a855f7, #8b5cf6)';
-    if (lv >= 4) return 'linear-gradient(135deg, #3b82f6, #22d3ee)';
-    return 'linear-gradient(135deg, #94a3b8, #cbd5e1)';
+  const dominantLabel = computed(() => {
+    const entries = [
+      [t('growth.wrBookmark'), composition.value.bookmarks],
+      [t('growth.wrNote'), composition.value.notes],
+      [t('growth.wrFile'), composition.value.files],
+    ] as const;
+    const winner = [...entries].sort((a, b) => b[1] - a[1])[0];
+    return winner[1] ? t('growth.wrDominantType', { type: winner[0] }) : t('growth.wrNoComposition');
   });
 
-  const verdict = computed(() => {
-    const r = props.report || {};
-    const b = r.bookmarks || 0;
-    const n = r.notes || 0;
-    const f = r.files || 0;
-    const e = r.exp || 0;
-    const c = r.checkinDays || 0;
-    const total = b + n + f;
-    if (c >= 7) return { emoji: '🔥', title: '全勤标兵', quote: '连续 7 天从未缺席,自律就是你的超能力!' };
-    if (total === 0 && !e && !c) return { emoji: '🌊', title: '静水流深', quote: '本周小憩了一下,新的一周,期待你的第一条记录~' };
-    if (b >= 20) return { emoji: '📚', title: '收藏家', quote: `一周收入 ${b} 条书签,你的知识库正在疯狂生长!` };
-    if (n >= 10) return { emoji: '✍️', title: '笔耕不辍', quote: `${n} 篇笔记落笔,思考的深度令人佩服!` };
-    if (f >= 10) return { emoji: '🗂️', title: '归档大师', quote: `${f} 个文件收纳有序,整理力拉满!` };
-    if (e >= 200) return { emoji: '🚀', title: '成长飞速', quote: `本周狂揽 ${e} 点经验,火箭般的上升势头!` };
-    if (total >= 10) return { emoji: '⭐', title: '稳步前行', quote: `新增 ${total} 项内容,积累的力量不可小觑!` };
-    if (c >= 3) return { emoji: '📅', title: '节奏大师', quote: `本周签到 ${c} 天,好习惯正在养成!` };
-    return { emoji: '🌱', title: '成长新芽', quote: '每一次记录都是成长的种子,继续加油!' };
+  const expDisplay = computed(() => {
+    if (props.report?.expStatus === 'role_excluded' || (isHighestLevel.value && !safeNumber(props.report?.exp)))
+      return 'MAX';
+    return `+${safeNumber(props.report?.exp)}`;
+  });
+  const expCaption = computed(() => (expDisplay.value === 'MAX' ? t('growth.wrMaxLevel') : t('growth.wrExp')));
+  const expExplanation = computed(() => {
+    if (props.report?.expStatus === 'role_excluded') return t('growth.wrExpRoleExcluded');
+    if (isHighestLevel.value && !safeNumber(props.report?.exp)) return t('growth.wrExpMaxLevel');
+    if (props.report?.expStatus === 'no_grant') return t('growth.wrExpNoGrant');
+    if (!safeNumber(props.report?.exp)) return t('growth.wrExpNone');
+    return isHighestLevel.value
+      ? t('growth.wrExpEarnedMax', { n: safeNumber(props.report?.exp) })
+      : t('growth.wrExpToNext', { n: safeNumber(props.report?.expToNext) });
+  });
+  const nextGoal = computed(() => {
+    if (activeDays.value < 7) return t('growth.wrGoalActiveDays', { n: 7 - activeDays.value });
+    if (composition.value.notes < 3) return t('growth.wrGoalNotes', { n: 3 - composition.value.notes });
+    if (composition.value.bookmarks < 5) return t('growth.wrGoalBookmarks', { n: 5 - composition.value.bookmarks });
+    return t('growth.wrGoalKeepMomentum');
   });
 
-  async function exportImage() {
-    if (!cardRef.value || exporting.value) return;
-    exporting.value = true;
+  const posterStageStyle = computed(() => {
+    if (posterPreviewScale.value >= 1) return undefined;
+    return {
+      width: `${posterNaturalSize.value.width * posterPreviewScale.value}px`,
+      height: `${posterNaturalSize.value.height * posterPreviewScale.value}px`,
+    };
+  });
+  let previewResizeFrame = 0;
+  function updatePosterPreviewScale() {
+    window.cancelAnimationFrame(previewResizeFrame);
+    previewResizeFrame = window.requestAnimationFrame(() => {
+      if (!posterRef.value || !posterStageRef.value || window.innerWidth <= 820) {
+        posterPreviewScale.value = 1;
+        return;
+      }
+      const content = posterStageRef.value.closest<HTMLElement>('.weekly-report-v2-content');
+      const label = posterStageRef.value.previousElementSibling as HTMLElement | null;
+      const width = posterRef.value.offsetWidth || 500;
+      const height = posterRef.value.offsetHeight || 650;
+      posterNaturalSize.value = { width, height };
+      const contentStyle = content ? window.getComputedStyle(content) : null;
+      const verticalPadding =
+        safeNumber(contentStyle?.paddingTop?.replace('px', '')) +
+        safeNumber(contentStyle?.paddingBottom?.replace('px', ''));
+      const availableHeight = Math.max(
+        320,
+        (content?.clientHeight || height) - verticalPadding - (label?.offsetHeight || 0) - 8,
+      );
+      posterPreviewScale.value = Math.min(1, availableHeight / height);
+    });
+  }
+  watch(
+    () => props.visible,
+    (visible) => {
+      if (visible) nextTick(updatePosterPreviewScale);
+    },
+    { immediate: true },
+  );
+  onMounted(() => window.addEventListener('resize', updatePosterPreviewScale));
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', updatePosterPreviewScale);
+    window.cancelAnimationFrame(previewResizeFrame);
+  });
+
+  async function renderPoster() {
+    if (!posterRef.value) throw new Error('poster_not_ready');
+    const html2canvas = (await import('html2canvas')).default;
+    const width = posterRef.value.offsetWidth || 500;
+    const height = posterRef.value.offsetHeight || 650;
+    const exportHost = document.createElement('div');
+    const exportPoster = posterRef.value.cloneNode(true) as HTMLElement;
+    exportHost.setAttribute('aria-hidden', 'true');
+    Object.assign(exportHost.style, {
+      position: 'fixed',
+      top: '0',
+      left: '-10000px',
+      width: `${width}px`,
+      height: `${height}px`,
+      overflow: 'hidden',
+      pointerEvents: 'none',
+    });
+    exportPoster.dataset.weeklyReportExport = 'true';
+    Object.assign(exportPoster.style, {
+      width: `${width}px`,
+      height: `${height}px`,
+      minHeight: `${height}px`,
+      maxWidth: 'none',
+      margin: '0',
+      transform: 'none',
+    });
+    exportPoster.querySelectorAll<HTMLElement>('*').forEach((element) => {
+      element.style.animation = 'none';
+      element.style.transition = 'none';
+    });
+    exportHost.append(exportPoster);
+    document.body.append(exportHost);
+
     try {
-      const html2canvas = (await import('html2canvas')).default; // 懒加载:仅点导出时拉取 ~48kB
-      const canvas = await html2canvas(cardRef.value, {
-        backgroundColor: null,
-        scale: 2,
+      prepareMaskedIconsForCanvas(exportPoster, window);
+      await document.fonts?.ready;
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+      const renderWidth = exportPoster.getBoundingClientRect().width || width;
+      return await html2canvas(exportPoster, {
+        backgroundColor: '#0d1022',
+        scale: Math.min(5, Math.max(3, 2160 / renderWidth)),
         useCORS: true,
-        ignoreElements: (el) => el.classList?.contains('wr-close') || el.classList?.contains('wr-export'),
-        onclone: (doc: Document) => {
-          // html2canvas 不支持 background-clip:text,渐变字会被渲染成矩形色块;
-          // 导出时把这些渐变文字降级为对应纯色,避免数字背后出现色块。
-          const map: [string, string][] = [
-            ['.wr-c-exp', '#a5b4fc'],
-            ['.wr-c-fire', '#fb923c'],
-            ['.wr-c-total', '#38bdf8'],
-            ['.wr-verdict-title', '#c4b5fd'],
-          ];
-          map.forEach(([sel, color]) => {
-            doc.querySelectorAll<HTMLElement>(sel).forEach((el) => {
-              el.style.background = 'none';
-              el.style.backgroundClip = 'border-box';
-              el.style.webkitBackgroundClip = 'border-box';
-              el.style.webkitTextFillColor = color;
-              el.style.color = color;
-            });
+        logging: false,
+        onclone: (documentClone) => {
+          const clonedPoster = documentClone.querySelector<HTMLElement>('[data-weekly-report-export="true"]');
+          if (!clonedPoster) return;
+          clonedPoster.style.transform = 'none';
+          clonedPoster.querySelectorAll<HTMLElement>('*').forEach((element) => {
+            element.style.animation = 'none';
+            element.style.transition = 'none';
           });
         },
       });
-      const link = document.createElement('a');
-      link.download = `轻笺周报-${props.report?.generatedAt || ''}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
+    } finally {
+      exportHost.remove();
+    }
+  }
+  function canvasToBlob(canvas: HTMLCanvasElement) {
+    return new Promise<Blob>((resolve, reject) =>
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('poster_blob_failed'))), 'image/png', 0.96),
+    );
+  }
+  function posterFilename() {
+    return `${t('growth.wrFileName')}-${props.report?.period?.end || props.report?.generatedAt || 'weekly'}.png`;
+  }
+  function saveBlob(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = posterFilename();
+    link.href = url;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function downloadPoster() {
+    if (exporting.value || sharing.value) return;
+    exporting.value = true;
+    try {
+      saveBlob(await canvasToBlob(await renderPoster()));
+      message.success(t('growth.wrExportSuccess'));
       recordOperation({
         module: '成长',
-        operation: `导出成长周报图片成功【${props.report?.generatedAt || '本周'}】`,
+        operation: `导出成长周报图片成功【${props.report?.period?.end || props.report?.generatedAt || '本周'}】`,
       });
-    } catch (e) {
-      console.error('导出周报失败:', e);
+    } catch (error) {
+      console.error('导出周报失败:', error);
+      message.error(t('growth.wrExportFailed'));
     } finally {
       exporting.value = false;
     }
   }
-
-  watch(
-    () => props.visible,
-    (v) => {
-      if (v && props.report) {
-        const r = props.report;
-        const total = (r.bookmarks || 0) + (r.notes || 0) + (r.files || 0);
-        animExp.value = 0;
-        animCheckin.value = 0;
-        animTotal.value = 0;
-        barsReady.value = false;
-        countUp(r.exp || 0, (x) => (animExp.value = x));
-        countUp(r.checkinDays || 0, (x) => (animCheckin.value = x));
-        countUp(total, (x) => (animTotal.value = x));
-        nextTick(() => setTimeout(() => (barsReady.value = true), 150));
+  async function sharePoster() {
+    if (sharing.value || exporting.value) return;
+    sharing.value = true;
+    try {
+      const blob = await canvasToBlob(await renderPoster());
+      const file = new File([blob], posterFilename(), { type: 'image/png' });
+      const canShareFile =
+        typeof navigator.share === 'function' && (!navigator.canShare || navigator.canShare({ files: [file] }));
+      if (canShareFile) {
+        await navigator.share({ title: t('growth.weeklyReportTitle'), files: [file] });
+        recordOperation({ module: '成长', operation: '分享成长周报图片成功' });
+      } else {
+        saveBlob(blob);
+        message.info(t('growth.wrShareFallback'));
       }
-    },
-    { immediate: true },
-  );
+    } catch (error) {
+      if ((error as DOMException)?.name !== 'AbortError') {
+        console.error('分享周报失败:', error);
+        message.error(t('growth.wrShareFailed'));
+      }
+    } finally {
+      sharing.value = false;
+    }
+  }
 </script>
 
-<style scoped lang="less">
-  .wr-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 400;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    background: rgba(8, 10, 25, 0.66);
-    backdrop-filter: blur(7px);
-  }
-  .wr-card {
-    position: relative;
-    width: 100%;
-    max-width: 468px;
-    border-radius: 26px;
+<style lang="less">
+  .weekly-report-v2-modal {
     overflow: hidden;
-    background: linear-gradient(168deg, #221a4d 0%, #14132e 46%, #0c1024 100%);
-    box-shadow:
-      0 34px 90px -26px rgba(10, 8, 40, 0.85),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-    color: #fff;
-  }
-  .wr-close {
-    position: absolute;
-    top: 12px;
-    right: 14px;
-    z-index: 4;
-    width: 30px;
-    height: 30px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.16);
-    color: #fff;
-    font-size: 20px;
-    line-height: 1;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .wr-close:hover {
-    background: rgba(255, 255, 255, 0.32);
+
+    .modal-header {
+      flex: 0 0 auto;
+    }
   }
 
-  .wr-banner {
-    position: relative;
-    padding: 26px 24px 20px;
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(37, 99, 235, 0.4) 55%, rgba(6, 182, 212, 0.35));
-    overflow: hidden;
-    text-align: center;
-  }
-  .wr-star {
-    position: absolute;
-    color: #fff;
-    animation: wr-twinkle 2.6s ease-in-out infinite;
-    pointer-events: none;
-  }
-  @keyframes wr-twinkle {
-    0%,
-    100% {
-      opacity: 0.25;
-      transform: scale(0.8);
-    }
-    50% {
-      opacity: 0.9;
-      transform: scale(1.15);
-    }
-  }
-  .wr-orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(10px);
-    opacity: 0.55;
-    pointer-events: none;
-  }
-  .wr-orb-1 {
-    width: 150px;
-    height: 150px;
-    background: radial-gradient(circle, rgba(168, 85, 247, 0.7), transparent 70%);
-    top: -54px;
-    right: -30px;
-  }
-  .wr-orb-2 {
-    width: 120px;
-    height: 120px;
-    background: radial-gradient(circle, rgba(34, 211, 238, 0.6), transparent 70%);
-    bottom: -46px;
-    left: -20px;
-  }
-  .wr-banner-inner {
-    position: relative;
-    z-index: 1;
-  }
-  .wr-banner-kicker {
-    font-size: 12px;
-    letter-spacing: 0.04em;
-    color: rgba(255, 255, 255, 0.78);
-  }
-  .wr-banner-title {
-    margin-top: 4px;
-    font-size: 21px;
-    font-weight: 800;
-    letter-spacing: 0.02em;
-    text-shadow: 0 2px 14px rgba(124, 58, 237, 0.6);
+  .weekly-report-v2-content {
+    min-height: 0;
+    padding: 18px 22px !important;
+    overflow: auto;
+    background: var(--background-color);
   }
 
-  .wr-body {
-    padding: 8px 24px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-  }
-
-  .wr-verdict {
-    text-align: center;
-    padding: 6px 0 2px;
-  }
-  .wr-verdict-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 76px;
-    height: 76px;
-    border-radius: 24px;
-    font-size: 42px;
-    background: radial-gradient(circle at 30% 25%, rgba(168, 85, 247, 0.45), rgba(37, 99, 235, 0.25));
-    box-shadow:
-      0 0 0 1px rgba(255, 255, 255, 0.12),
-      0 12px 30px -8px rgba(124, 58, 237, 0.7);
-    animation: wr-float 3s ease-in-out infinite;
-  }
-  @keyframes wr-float {
-    0%,
-    100% {
-      transform: translateY(0);
-    }
-    50% {
-      transform: translateY(-6px);
-    }
-  }
-  .wr-verdict-title {
-    margin-top: 12px;
-    font-size: 24px;
-    font-weight: 900;
-    background: linear-gradient(100deg, #c4b5fd, #a5b4fc 40%, #67e8f9);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .wr-verdict-quote {
-    margin-top: 8px;
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: rgba(255, 255, 255, 0.72);
-    padding: 0 8px;
-  }
-
-  .wr-stats {
-    display: flex;
-    justify-content: space-between;
-    padding: 14px 4px;
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-  .wr-stat {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-  }
-  .wr-stat-num {
-    font-size: 30px;
-    font-weight: 800;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    display: inline-flex;
-    align-items: baseline;
-  }
-  .wr-c-exp {
-    background: linear-gradient(135deg, #c4b5fd, #818cf8);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .wr-c-fire {
-    background: linear-gradient(135deg, #fb923c, #f43f5e);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .wr-c-total {
-    background: linear-gradient(135deg, #67e8f9, #38bdf8);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  .wr-fire {
-    font-size: 15px;
-    margin-left: 2px;
-    -webkit-text-fill-color: initial;
-    animation: wr-flame 0.85s ease-in-out infinite alternate;
-    filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.85));
-  }
-  @keyframes wr-flame {
-    from {
-      transform: scale(1) rotate(-4deg);
-    }
-    to {
-      transform: scale(1.22) rotate(4deg);
-    }
-  }
-  .wr-stat span {
-    font-size: 11.5px;
-    color: rgba(255, 255, 255, 0.6);
-  }
-  .wr-cmp {
-    font-size: 10.5px;
-    font-weight: 700;
-    font-style: normal;
-  }
-  .wr-cmp.up {
-    color: #4ade80;
-  }
-  .wr-cmp.down {
-    color: #f87171;
-  }
-  .wr-cmp.flat {
-    color: rgba(255, 255, 255, 0.42);
-  }
-
-  .wr-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 11px;
-  }
-  .wr-bar-row {
+  .wr-workspace {
     display: grid;
-    grid-template-columns: 48px 1fr 62px;
-    align-items: center;
-    gap: 10px;
+    grid-template-columns: minmax(420px, 500px) minmax(280px, 1fr);
+    gap: 24px;
+    max-width: 930px;
+    margin: 0 auto;
   }
-  .wr-bar-label {
+
+  .wr-preview-column {
+    min-width: 0;
+  }
+
+  .wr-preview-label {
+    display: block;
+    margin: 0 0 8px 4px;
+    color: var(--desc-color);
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.62);
+    font-weight: 600;
   }
-  .wr-bar-track {
-    height: 11px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
+
+  .wr-poster-stage {
+    width: 100%;
+    margin: 0 auto;
+  }
+  .wr-poster-stage.is-scaled .wr-poster {
+    width: 500px;
+    max-width: none;
+  }
+
+  .wr-poster {
+    --wr-primary: #8b7cff;
+    --wr-secondary: #45d9ff;
+    --wr-accent: #ff7b69;
+    --wr-primary-soft: rgba(139, 124, 255, 0.24);
+    --wr-primary-glow: rgba(139, 124, 255, 0.32);
+    --wr-secondary-soft: rgba(69, 217, 255, 0.2);
+    position: relative;
+    box-sizing: border-box;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    width: 100%;
+    min-height: 650px;
+    padding: 24px;
     overflow: hidden;
-  }
-  .wr-bar-fill {
-    height: 100%;
-    border-radius: 999px;
-    box-shadow: 0 0 12px -2px currentColor;
-    transition: width 0.95s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  .wr-bar-val {
-    font-size: 13px;
-    font-weight: 700;
-    text-align: right;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 28px;
+    background:
+      linear-gradient(160deg, rgba(255, 255, 255, 0.055), transparent 30%),
+      radial-gradient(circle at 90% 0%, var(--wr-primary-glow), transparent 38%), #0d1022;
     color: #fff;
-    font-variant-numeric: tabular-nums;
+    box-shadow: 0 24px 70px -34px rgba(14, 16, 38, 0.92);
+    transform-origin: top left;
   }
-  .wr-bar-cmp {
+
+  .wr-poster.wr-theme-ocean {
+    --wr-primary: #3478f6;
+    --wr-secondary: #28d9cc;
+    --wr-accent: #70a5ff;
+    --wr-primary-soft: rgba(52, 120, 246, 0.24);
+    --wr-primary-glow: rgba(52, 120, 246, 0.34);
+    --wr-secondary-soft: rgba(40, 217, 204, 0.2);
+  }
+  .wr-poster.wr-theme-violet {
+    --wr-primary: #8b5cf6;
+    --wr-secondary: #d76bff;
+    --wr-accent: #5eead4;
+    --wr-primary-soft: rgba(139, 92, 246, 0.24);
+    --wr-primary-glow: rgba(139, 92, 246, 0.34);
+    --wr-secondary-soft: rgba(215, 107, 255, 0.2);
+  }
+  .wr-poster.wr-theme-gold {
+    --wr-primary: #f59e0b;
+    --wr-secondary: #ff6b4a;
+    --wr-accent: #ffd166;
+    --wr-primary-soft: rgba(245, 158, 11, 0.24);
+    --wr-primary-glow: rgba(245, 158, 11, 0.34);
+    --wr-secondary-soft: rgba(255, 107, 74, 0.2);
+  }
+  .wr-poster.wr-theme-coral {
+    --wr-primary: #f43f5e;
+    --wr-secondary: #fb923c;
+    --wr-accent: #fda4af;
+    --wr-primary-soft: rgba(244, 63, 94, 0.24);
+    --wr-primary-glow: rgba(244, 63, 94, 0.34);
+    --wr-secondary-soft: rgba(251, 146, 60, 0.2);
+  }
+
+  .wr-poster::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    opacity: 0.26;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    background-size: 34px 34px;
+    mask-image: linear-gradient(to bottom, black, transparent 80%);
+  }
+
+  .wr-poster-glow {
+    position: absolute;
+    z-index: -1;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(12px);
+  }
+  .wr-poster-glow-one {
+    top: 120px;
+    right: -95px;
+    width: 230px;
+    height: 230px;
+    background: var(--wr-primary-glow);
+  }
+  .wr-poster-glow-two {
+    bottom: 35px;
+    left: -100px;
+    width: 210px;
+    height: 210px;
+    background: var(--wr-secondary-soft);
+  }
+
+  .wr-poster-header,
+  .wr-profile,
+  .wr-section-heading,
+  .wr-poster-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .wr-brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+  .wr-brand-mark .svg-icon {
+    color: var(--wr-secondary);
+  }
+  .wr-edition {
+    color: rgba(255, 255, 255, 0.5);
     font-size: 10px;
     font-weight: 700;
-    font-style: normal;
-    margin-left: 3px;
-  }
-  .wr-bar-cmp.up {
-    color: #4ade80;
-  }
-  .wr-bar-cmp.down {
-    color: #f87171;
+    letter-spacing: 0.08em;
   }
 
-  .wr-level {
+  .wr-profile {
+    justify-content: flex-start;
+    gap: 11px;
+  }
+  .wr-avatar {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 52px;
+    height: 52px;
+    overflow: hidden;
+    border: 2px solid rgba(255, 255, 255, 0.78);
+    border-radius: 17px;
+    background: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 0 4px var(--wr-primary-soft);
+  }
+  .wr-avatar .svg-icon {
+    border-radius: 14px;
+  }
+  .wr-profile-copy {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .wr-profile-copy strong {
+    overflow: hidden;
+    color: #fff;
+    font-size: 16px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wr-profile-copy span {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 11px;
+  }
+  .wr-rank-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+  .wr-rank-chip b {
+    color: var(--wr-accent);
+    font-size: 13px;
+  }
+  .wr-rank-chip span {
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 11px;
+  }
+
+  .wr-hero {
+    display: grid;
+    grid-template-columns: 68px 1fr;
+    align-items: center;
+    gap: 15px;
+    padding: 17px;
+    border: 1px solid rgba(255, 255, 255, 0.11);
+    border-radius: 20px;
+    background: linear-gradient(125deg, var(--wr-primary-soft), rgba(255, 255, 255, 0.035));
+  }
+  .wr-hero-emblem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    background: rgba(7, 10, 27, 0.45);
+    font-size: 34px;
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
+  }
+  .wr-hero-kicker {
+    color: var(--wr-secondary);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+  }
+  .wr-hero h2 {
+    margin: 4px 0 5px;
+    color: #fff;
+    font-size: 23px;
+    line-height: 1.15;
+  }
+  .wr-hero p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 11px;
+    line-height: 1.55;
+  }
+
+  .wr-core-stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 9px;
+  }
+  .wr-core-stat {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 2px 7px;
+    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 15px;
+    background: rgba(255, 255, 255, 0.045);
+  }
+  .wr-core-stat .svg-icon {
+    grid-row: span 2;
+    color: var(--wr-secondary);
+  }
+  .wr-core-stat b {
+    color: #fff;
+    font-size: 19px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wr-core-stat span {
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 9px;
+  }
+
+  .wr-trend-card,
+  .wr-composition {
+    padding: 14px 15px;
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 17px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+  .wr-section-heading span {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .wr-section-heading b {
+    color: var(--wr-secondary);
+    font-size: 10px;
+  }
+  .wr-trend-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    height: 96px;
+    margin-top: 9px;
+  }
+  .wr-trend-day {
+    display: grid;
+    grid-template-rows: 1fr auto auto;
+    gap: 2px;
+    min-width: 0;
+    text-align: center;
+  }
+  .wr-trend-track {
+    position: relative;
+    width: 100%;
+    max-width: 30px;
+    margin: 0 auto;
+    overflow: hidden;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.045);
+  }
+  .wr-trend-fill {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    min-height: 3px;
+    border-radius: 8px 8px 5px 5px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .wr-trend-fill.is-active {
+    background: linear-gradient(to top, var(--wr-primary), var(--wr-secondary));
+    box-shadow: 0 -4px 13px var(--wr-primary-glow);
+  }
+  .wr-trend-day b {
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+  }
+  .wr-trend-day small {
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 8px;
+  }
+  .wr-trend-legacy {
+    display: block;
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.38);
+    font-size: 8px;
+    text-align: center;
+  }
+
+  .wr-composition-track {
+    display: flex;
+    gap: 3px;
+    height: 8px;
+    margin: 11px 0 9px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.07);
+  }
+  .wr-composition-track span {
+    min-width: 0;
+    border-radius: 999px;
+  }
+  .wr-composition-track span[style*='flex-grow: 0'] {
+    display: none;
+  }
+  .wr-composition .is-bookmark {
+    background: #8b7cff;
+  }
+  .wr-composition .is-note {
+    background: #ff6fae;
+  }
+  .wr-composition .is-file {
+    background: #36c8ed;
+  }
+  .wr-composition-legend {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .wr-composition-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 9px;
+  }
+  .wr-composition-legend i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .wr-poster-footer {
+    display: grid;
+    grid-template-columns: 1fr 100px;
+    gap: 6px 15px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .wr-poster-footer > div:first-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .wr-poster-footer span {
+    color: var(--wr-secondary);
+    font-size: 9px;
+    font-weight: 800;
+  }
+  .wr-poster-footer strong {
+    overflow: hidden;
+    color: rgba(255, 255, 255, 0.76);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .wr-level-progress {
+    align-self: center;
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.09);
+  }
+  .wr-level-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--wr-primary), var(--wr-secondary));
+  }
+  .wr-poster-footer small {
+    grid-column: 1 / -1;
+    color: rgba(255, 255, 255, 0.28);
+    font-size: 8px;
+  }
+
+  .wr-insights {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding-top: 26px;
+  }
+  .wr-insight-heading {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .wr-insight-heading span {
+    color: var(--primary-color);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+  .wr-insight-heading strong {
+    color: var(--text-color);
+    font-size: 20px;
+  }
+  .wr-insight-card,
+  .wr-next-goal,
+  .wr-save-tip {
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--surface-card-bg);
+  }
+  .wr-insight-card {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 6px;
+    padding: 16px;
+  }
+  .wr-insight-card > span,
+  .wr-next-goal span {
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .wr-insight-card strong {
+    color: var(--text-color);
+    font-size: 18px;
+  }
+  .wr-insight-card strong.up {
+    color: #16a34a;
+  }
+  .wr-insight-card strong.down {
+    color: var(--warning-color);
+  }
+  .wr-insight-card p {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .wr-insight-card.is-summary {
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--surface-card-bg));
+    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
+  }
+  .wr-insight-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
-  .wr-level-badge {
-    padding: 4px 13px;
-    border-radius: 999px;
-    color: #fff;
-    font-size: 13px;
-    font-weight: 800;
-    box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.6);
+  .wr-next-goal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    border-color: color-mix(in srgb, var(--primary-color) 42%, var(--surface-border-color));
   }
-  .wr-level-name {
-    font-size: 15px;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.92);
+  .wr-next-goal-icon {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--primary-color) 12%, var(--surface-card-bg));
+    color: var(--primary-color);
+  }
+  .wr-next-goal > div:last-child {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .wr-next-goal strong {
+    color: var(--text-color);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .wr-save-tip {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .wr-save-tip .svg-icon {
+    flex: 0 0 auto;
+    color: var(--primary-color);
   }
 
-  .wr-export {
-    align-self: center;
-    margin-top: 2px;
-    padding: 9px 22px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s;
+  .wr-insight-actions {
+    display: grid;
+    grid-template-columns: repeat(2, max-content);
+    align-items: center;
+    align-self: flex-end;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: auto;
+    padding-top: 2px;
   }
-  .wr-export:hover:not(:disabled) {
-    background: rgba(255, 255, 255, 0.2);
-  }
-  .wr-export:disabled {
-    opacity: 0.6;
-    cursor: default;
+  .wr-insight-actions .b_btn {
+    min-width: 116px;
   }
 
-  .wr-pop-enter-active {
-    transition: opacity 0.25s ease;
-  }
-  .wr-pop-leave-active {
-    transition: opacity 0.2s ease;
-  }
-  .wr-pop-enter-from,
-  .wr-pop-leave-to {
-    opacity: 0;
-  }
-  .wr-pop-enter-active .wr-card {
-    animation: wr-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-  @keyframes wr-in {
-    from {
-      transform: translateY(28px) scale(0.92);
-      opacity: 0;
+  @media (max-width: 820px) {
+    .weekly-report-v2-modal.is-mobile-fullscreen {
+      .modal-header {
+        min-height: 54px;
+      }
+
+      .weekly-report-v2-content {
+        overflow-x: hidden !important;
+        overflow-y: auto !important;
+        overscroll-behavior-y: contain;
+        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
+      }
     }
-    to {
-      transform: translateY(0) scale(1);
-      opacity: 1;
+    .weekly-report-v2-content {
+      padding: 14px !important;
+    }
+    .wr-workspace {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    .wr-preview-column {
+      width: min(100%, 500px);
+      margin: 0 auto;
+    }
+    .wr-poster-stage {
+      height: auto !important;
+      width: 100% !important;
+    }
+    .wr-poster {
+      transform: none !important;
+    }
+    .wr-insights {
+      width: min(100%, 500px);
+      margin: 0 auto;
+      padding-top: 0;
+    }
+  }
+
+  @media (min-width: 821px) and (max-height: 780px) {
+    .wr-insights {
+      gap: 8px;
+      padding-top: 0;
+    }
+    .wr-insight-card {
+      gap: 4px;
+      padding: 12px;
+    }
+    .wr-next-goal {
+      padding: 11px 12px;
+    }
+    .wr-save-tip {
+      padding: 9px 11px;
     }
   }
 
   @media (max-width: 520px) {
-    .wr-stat-num {
-      font-size: 25px;
+    .wr-poster {
+      min-height: 610px;
+      padding: 18px;
+      border-radius: 22px;
     }
-    .wr-verdict-title {
-      font-size: 21px;
+    .wr-brand-mark {
+      font-size: 8px;
+    }
+    .wr-profile-copy strong {
+      font-size: 14px;
+    }
+    .wr-hero {
+      grid-template-columns: 56px 1fr;
+      gap: 11px;
+      padding: 14px;
+    }
+    .wr-hero-emblem {
+      width: 54px;
+      height: 54px;
+      border-radius: 16px;
+      font-size: 29px;
+    }
+    .wr-hero h2 {
+      font-size: 19px;
+    }
+    .wr-core-stat {
+      padding: 9px;
+    }
+    .wr-core-stat .svg-icon {
+      display: none;
+    }
+    .wr-core-stat b {
+      grid-column: 1 / -1;
+      font-size: 17px;
+    }
+    .wr-core-stat span {
+      grid-column: 1 / -1;
+    }
+    .wr-trend-grid {
+      gap: 5px;
+    }
+    .wr-composition-legend {
+      gap: 4px;
+    }
+    .wr-composition-legend span {
+      font-size: 8px;
+    }
+    .wr-insight-grid {
+      grid-template-columns: 1fr;
+    }
+    .wr-insight-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-self: stretch;
+      width: 100%;
+    }
+    .wr-insight-actions .b_btn {
+      min-width: 0;
+    }
+  }
+
+  html.light-note-mobile-rendering {
+    .wr-poster,
+    .wr-insight-card,
+    .wr-next-goal {
+      box-shadow: none;
+    }
+    .wr-insight-card.is-summary,
+    .wr-next-goal {
+      border-color: var(--primary-color);
+    }
+    .wr-trend-fill.is-active {
+      box-shadow: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wr-poster * {
+      animation: none !important;
+      transition: none !important;
     }
   }
 </style>

@@ -18,6 +18,19 @@
         <span class="skeleton skeleton--heading"></span>
         <span class="skeleton skeleton--action"></span>
       </div>
+      <template v-if="variant === 'page'">
+        <div class="note-detail-loading-state__breadcrumb">
+          <span class="skeleton skeleton--crumb"></span>
+          <span class="skeleton skeleton--crumb-divider"></span>
+          <span class="skeleton skeleton--crumb skeleton--crumb-current"></span>
+        </div>
+        <div class="note-detail-loading-state__title-row">
+          <span class="skeleton skeleton--page-title"></span>
+        </div>
+        <div class="note-detail-loading-state__toolbar" aria-hidden="true">
+          <span v-for="index in 6" :key="index" class="skeleton skeleton--tool"></span>
+        </div>
+      </template>
       <div class="note-detail-loading-state__body">
         <span class="skeleton skeleton--title"></span>
         <span class="skeleton skeleton--line skeleton--line-wide"></span>
@@ -72,6 +85,36 @@
     border-bottom: 1px solid var(--surface-divider-color);
   }
 
+  .note-detail-loading-state__breadcrumb {
+    min-height: 42px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .note-detail-loading-state__title-row {
+    min-height: 74px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color);
+  }
+
+  .note-detail-loading-state__toolbar {
+    min-height: 58px;
+    padding: 7px 16px;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--surface-divider-color);
+    background: var(--surface-panel-bg, var(--background-color));
+  }
+
   .note-detail-loading-state__body {
     width: min(920px, calc(100% - 48px));
     margin: 0 auto;
@@ -84,7 +127,7 @@
   .skeleton {
     display: block;
     border-radius: 8px;
-    background: var(--surface-muted-bg, #eef0f4);
+    background: var(--note-detail-skeleton-bg, #e4e7ed);
     animation: note-detail-skeleton-pulse 1.35s ease-in-out infinite;
   }
 
@@ -103,6 +146,30 @@
     width: 82px;
     height: 32px;
     margin-left: auto;
+  }
+
+  .skeleton--crumb {
+    width: 52px;
+    height: 14px;
+  }
+
+  .skeleton--crumb-divider {
+    width: 5px;
+    height: 14px;
+  }
+
+  .skeleton--crumb-current {
+    width: 116px;
+  }
+
+  .skeleton--page-title {
+    width: min(320px, 54%);
+    height: 30px;
+  }
+
+  .skeleton--tool {
+    width: 92px;
+    height: 44px;
   }
 
   .skeleton--title {
@@ -168,10 +235,10 @@
   @keyframes note-detail-skeleton-pulse {
     0%,
     100% {
-      opacity: 0.58;
+      opacity: 0.72;
     }
     50% {
-      opacity: 1;
+      opacity: 0.94;
     }
   }
 
@@ -186,9 +253,37 @@
       gap: 12px;
     }
 
+    .note-detail-loading-state__breadcrumb {
+      min-height: 32px;
+      padding: 0 16px;
+      gap: 9px;
+    }
+
+    .note-detail-loading-state__title-row {
+      min-height: 44px;
+      padding: 0 16px;
+    }
+
+    .note-detail-loading-state__toolbar {
+      min-height: 52px;
+      padding: 5px 8px;
+      gap: 6px;
+    }
+
+    .skeleton--page-title {
+      width: 62%;
+      height: 24px;
+    }
+
+    .skeleton--tool {
+      width: auto;
+      height: 42px;
+      flex: 1 1 0;
+    }
+
     .note-detail-loading-state__body {
       width: calc(100% - 32px);
-      padding: 28px 0;
+      padding: 24px 0;
       gap: 15px;
     }
 

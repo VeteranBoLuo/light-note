@@ -47,6 +47,9 @@
                 <span>
                   <BChip :tone="item.type">{{ resourceLabel(item.type) }}</BChip>
                   <span class="admin-recent__owner">{{ displayUserName(item.userName) }}</span>
+                  <span v-if="displayUserRemark(item.userRemark)" class="admin-recent__remark">
+                    {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(item.userRemark) }) }}
+                  </span>
                 </span>
               </div>
               <BTooltip :title="formatFullTime(item.createdAt)">
@@ -73,9 +76,12 @@
               <span class="admin-recent__avatar" aria-hidden="true">{{ userInitial(user.name) }}</span>
               <div class="admin-recent__body">
                 <strong :title="displayUserName(user.name)">{{ displayUserName(user.name) }}</strong>
-                <span
-                  ><BChip tone="neutral">{{ roleLabel(user.role) }}</BChip></span
-                >
+                <span>
+                  <BChip tone="neutral">{{ roleLabel(user.role) }}</BChip>
+                  <span v-if="displayUserRemark(user.userRemark)" class="admin-recent__remark">
+                    {{ t('adminOverviewRecent.userRemark', { remark: displayUserRemark(user.userRemark) }) }}
+                  </span>
+                </span>
               </div>
               <BTooltip :title="formatFullTime(user.createdAt)">
                 <time class="admin-recent__time" :datetime="user.createdAt">{{ formatTime(user.createdAt) }}</time>
@@ -121,6 +127,10 @@
 
   function displayUserName(value?: string | null) {
     return String(value || '').trim() || t('adminOverviewRecent.unnamedUser');
+  }
+
+  function displayUserRemark(value?: string | null) {
+    return String(value || '').trim();
   }
 
   function displayResourceTitle(item: AdminRecentResource) {
@@ -310,6 +320,14 @@
 
   .admin-recent__owner {
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-recent__remark {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--primary-color);
     text-overflow: ellipsis;
     white-space: nowrap;
   }

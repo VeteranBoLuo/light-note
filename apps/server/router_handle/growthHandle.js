@@ -14,6 +14,7 @@ import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
+  FRAME_CATALOG,
   SHOP_ITEMS,
   getOwnedCosmetics,
   buyItem,
@@ -78,7 +79,7 @@ export const getWeeklyReport = async (req, res) => {
     res.send(resultData(report));
   } catch (error) {
     console.error('获取周报失败:', error);
-    res.send(resultData(null, 500, '获取周报失败: ' + error.message));
+    res.send(resultData(null, 500, '获取周报失败，请稍后重试'));
   }
 };
 
@@ -198,12 +199,15 @@ export const getRanks = async (req, res) => {
   }
 };
 
-// GET /growth/shop —— 积分商店(目录 + 当前用户余额/等级/已拥有/已佩戴;游客只读展示,canBuy 全 false)
+// GET /growth/shop —— 同一接口返回积分商品与完整头像框目录；前端统一展示，购买与成就领取语义分开。
 export const getShop = async (req, res) => {
   try {
     const userId = req.user?.id || 'visitor';
     const userRole = req.user?.role || 'visitor';
     const isVisitor = !req.user?.id || userRole === 'visitor';
+    // Root 自己的账号用于验收装扮：目录中的全部头像框都可直接佩戴，但管理员预览上下文
+    // 仍保持目标账号的真实权益，避免把 Root 的调试特权映射到被预览用户。
+    const rootFrameAccess = userRole === 'root' && !req.adminContext;
     let points = 0;
     let level = 0;
     let equippedTitle = null;
@@ -234,6 +238,8 @@ export const getShop = async (req, res) => {
         cost: it.cost,
         minLevel: it.minLevel || 0,
         bonusTokens: it.bonusTokens || 0,
+        acquisition: 'shop',
+        achievementKey: null,
         owned: isOwned,
         equipped:
           (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
@@ -241,10 +247,49 @@ export const getShop = async (req, res) => {
         canBuy: !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
       };
     });
-    res.send(resultData({ points, level, equippedTitle, equippedFrame, protectCards, isVisitor, items }));
+    const frames = FRAME_CATALOG.map((frame) => {
+      const isOwned = owned.includes(frame.id);
+      const meetsLevel = !frame.minLevel || level >= frame.minLevel;
+      return {
+        id: frame.id,
+        type: frame.type,
+        effect: frame.effect,
+        rarity: frame.rarity,
+        name: frame.name,
+        desc: frame.desc,
+        cost: frame.acquisition === 'shop' ? frame.cost : null,
+        minLevel: frame.minLevel || 0,
+        bonusTokens: 0,
+        acquisition: frame.acquisition,
+        achievementKey: frame.achievementKey || null,
+        owned: isOwned,
+        canEquip: rootFrameAccess || isOwned,
+        equipped: equippedFrame === frame.id,
+        canBuy:
+          frame.acquisition === 'shop' &&
+          !rootFrameAccess &&
+          !isVisitor &&
+          !isOwned &&
+          meetsLevel &&
+          points >= Number(frame.cost || 0),
+      };
+    });
+    res.send(
+      resultData({
+        points,
+        level,
+        equippedTitle,
+        equippedFrame,
+        protectCards,
+        isVisitor,
+        rootFrameAccess,
+        items,
+        frames,
+      }),
+    );
   } catch (error) {
     console.error('获取积分商店失败:', error);
-    res.send(resultData(null, 500, '获取积分商店失败: ' + error.message));
+    res.send(resultData(null, 500, '获取积分商店失败'));
   }
 };
 
@@ -321,7 +366,7 @@ export const getClaimable = async (req, res) => {
     );
   } catch (error) {
     console.error('获取待领取数失败:', error);
-    res.send(resultData(null, 500, '获取失败: ' + error.message));
+    res.send(resultData(null, 500, '获取失败'));
   }
 };
 
@@ -334,6 +379,7 @@ export const doClaimAll = async (req, res) => {
     let claimed = 0;
     let points = 0;
     let exp = 0;
+    const frames = [];
     const tasks = await getGrowthTasks(userId);
     for (const task of tasks.tasks.filter((item) => item.claimable)) {
       const result = await claimGrowthTask(userId, task.taskKey, { userRole });
@@ -349,6 +395,7 @@ export const doClaimAll = async (req, res) => {
       if (r.ok) {
         claimed++;
         points += r.reward || 0;
+        if (r.frameId) frames.push(r.frameId);
       }
     }
     const wk = await getWeeklyChallenges(userId);
@@ -359,10 +406,10 @@ export const doClaimAll = async (req, res) => {
         points += r.reward || 0;
       }
     }
-    res.send(resultData({ ok: true, claimed, points, exp }));
+    res.send(resultData({ ok: true, claimed, points, exp, frames }));
   } catch (error) {
     console.error('一键领取失败:', error);
-    res.send(resultData(null, 500, '领取失败: ' + error.message));
+    res.send(resultData(null, 500, '领取失败'));
   }
 };
 
@@ -470,7 +517,7 @@ export const doAdminGrantPoints = async (req, res) => {
   }
 };
 
-// POST /growth/achievement/claim —— 领取成就奖励(已解锁且未领 → 发积分)
+// POST /growth/achievement/claim —— 领取成就奖励(已解锁且未领 → 发积分与可选头像框)
 export const doClaimAchievement = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
@@ -480,7 +527,7 @@ export const doClaimAchievement = async (req, res) => {
     res.send(resultData(result));
   } catch (error) {
     console.error('领取成就奖励失败:', error);
-    res.send(resultData(null, 500, '领取失败: ' + error.message));
+    res.send(resultData(null, 500, '领取失败'));
   }
 };
 
@@ -510,12 +557,14 @@ export const doDrawLottery = async (req, res) => {
   }
 };
 
-// POST /growth/equipFrame —— 佩戴/卸下头像框装扮(frameId 为空=卸下;须已拥有)
+// POST /growth/equipFrame —— 佩戴/卸下头像框装扮(frameId 为空=卸下;普通用户须已拥有，Root 可验收全目录)
 export const equipFrameHandle = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
     const { frameId } = req.body || {};
-    const result = await equipFrame(req.user.id, frameId || null);
+    const result = await equipFrame(req.user.id, frameId || null, {
+      userRole: req.adminContext ? null : req.user.role,
+    });
     res.send(resultData(result));
   } catch (error) {
     console.error('佩戴头像框失败:', error);

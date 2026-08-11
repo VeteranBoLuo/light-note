@@ -721,6 +721,102 @@ h1 {
   background-color: rgba(97, 92, 237, 0.08);
 }
 
+/*
+ * 笔记正文预览共用图文组合布局。编辑器 iframe 内仍由 TinyMCE 的 content_style
+ * 提供同一套规则；这里覆盖详情预览、Markdown 预览与编辑器热身预览，避免 v-html
+ * 离开 Editor.vue 的 scoped 样式后退化成「大图一行、文字下一行」。
+ */
+.note-rich-content {
+  .ln-media-text {
+    --ln-media-width: 36%;
+    --ln-media-max-width: 340px;
+    --ln-media-max-height: 260px;
+    display: block;
+    clear: both;
+    margin: 14px 0;
+
+    &[data-ln-media-width='30'] {
+      --ln-media-width: 30%;
+      --ln-media-max-width: 280px;
+      --ln-media-max-height: 220px;
+    }
+
+    &[data-ln-media-width='42'] {
+      --ln-media-width: 42%;
+      --ln-media-max-width: 400px;
+      --ln-media-max-height: 300px;
+    }
+
+    &[data-ln-media-position='right'] .ln-media-text__item {
+      flex-direction: row-reverse;
+    }
+  }
+
+  .ln-media-text__item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    box-sizing: border-box;
+    margin: 10px 0;
+    padding: 10px;
+    border: 1px solid var(--surface-border-color, #e3e6eb);
+    border-radius: 10px;
+  }
+
+  .ln-media-text__media {
+    display: flex;
+    flex: 0 1 var(--ln-media-width);
+    max-width: var(--ln-media-max-width);
+    min-width: 0;
+    align-items: flex-start;
+    justify-content: center;
+
+    img {
+      display: block !important;
+      float: none !important;
+      width: auto !important;
+      max-width: 100% !important;
+      height: auto !important;
+      max-height: var(--ln-media-max-height) !important;
+      margin: 0 !important;
+      border-radius: 8px;
+      object-fit: contain;
+    }
+  }
+
+  .ln-media-text__content {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 44px;
+    overflow-wrap: anywhere;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    > :last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &.is-image-preview-enabled img {
+    cursor: zoom-in;
+
+    &:focus-visible {
+      outline: 2px solid var(--primary-color, #615ced);
+      outline-offset: 3px;
+    }
+  }
+}
+
+@media (max-width: 767px) {
+  .note-rich-content .ln-media-text__item {
+    gap: 10px;
+    padding: 7px;
+  }
+}
+
 @keyframes ln-rich-breathe {
   0%,
   100% {

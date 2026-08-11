@@ -44,6 +44,65 @@
       </div>
     </div>
 
+    <aside v-if="showExperienceSources && quests.length" class="dq-exp-guide" role="note">
+      <div class="dq-exp-guide-head">
+        <span class="dq-exp-guide-icon"><SvgIcon :src="icon.message.info" size="15" /></span>
+        <span class="dq-exp-guide-copy">
+          <b>{{ t('growth.questExperienceTitle') }}</b>
+          <small v-if="hasExperienceRewards">{{ t('growth.questExperienceRule') }}</small>
+        </span>
+      </div>
+      <div v-if="hasExperienceRewards" class="dq-exp-guide-list">
+        <span class="dq-exp-guide-item">
+          <span>{{ t('growth.questExperienceCheckin') }}</span>
+          <b>{{ t('growth.questExperienceCheckinValue') }}</b>
+        </span>
+        <span class="dq-exp-guide-item">
+          <span>{{ t('growth.questExperienceCreate') }}</span>
+          <b>{{ t('growth.questExperienceCreateValue') }}</b>
+        </span>
+        <span class="dq-exp-guide-item">
+          <span>{{ t('growth.questExperienceStage') }}</span>
+          <b>{{ t('growth.questExperienceStageValue', { values: experienceStageValues }) }}</b>
+        </span>
+      </div>
+      <div
+        v-if="hasExperienceRewards && safeDailyCap > 0"
+        class="dq-exp-cap"
+        :class="{ reached: isDailyCapReached }"
+        role="status"
+      >
+        <div class="dq-exp-cap-head">
+          <span>{{ t('growth.questExperienceDailyCap') }}</span>
+          <b>{{
+            t('growth.questExperienceDailyProgress', {
+              current: safeDailyExp,
+              cap: safeDailyCap,
+            })
+          }}</b>
+        </div>
+        <BProgress
+          :percent="dailyCapPercent"
+          size="small"
+          :aria-label="
+            t('growth.questExperienceDailyProgress', {
+              current: safeDailyExp,
+              cap: safeDailyCap,
+            })
+          "
+        />
+        <small>{{
+          isDailyCapReached
+            ? t('growth.questExperienceDailyCapReached', { cap: safeDailyCap })
+            : t('growth.questExperienceDailyCapRule', { cap: safeDailyCap })
+        }}</small>
+      </div>
+      <p v-if="hasExperienceRewards" class="dq-exp-guide-footnote">
+        {{ t('growth.questExperienceCreateHint') }}
+      </p>
+      <p v-else class="dq-exp-guide-disabled">{{ t('growth.questExperienceUnavailable') }}</p>
+    </aside>
+
     <div v-if="bonus.claimable" class="dq-bonus claimable">
       <span class="dq-bonus-text">{{ t('growth.questAvailableReward') }}</span>
       <BButton
@@ -63,12 +122,28 @@
   import { useI18n } from 'vue-i18n';
   import type { Quest, QuestBonus } from '@/composables/useGrowth.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BProgress from '@/components/base/BasicComponents/BProgress.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
 
   const props = withDefaults(
-    defineProps<{ quests: Quest[]; bonus: QuestBonus; claiming?: boolean; readOnly?: boolean }>(),
-    { readOnly: false },
+    defineProps<{
+      quests: Quest[];
+      bonus: QuestBonus;
+      claiming?: boolean;
+      readOnly?: boolean;
+      showExperienceSources?: boolean;
+      dailyExp?: number;
+      dailyCap?: number;
+      dailyCapReached?: boolean;
+    }>(),
+    {
+      readOnly: false,
+      showExperienceSources: false,
+      dailyExp: 0,
+      dailyCap: 0,
+      dailyCapReached: false,
+    },
   );
   defineEmits<{ (e: 'claim'): void }>();
   const { t, te } = useI18n();
@@ -103,6 +178,22 @@
           claimable: props.bonus.claimable,
         },
       ],
+  );
+  const experienceStageValues = computed(() =>
+    stages.value
+      .map((stage) => Number(stage.exp || 0))
+      .filter((exp) => exp > 0)
+      .map((exp) => `+${exp}`)
+      .join(' / '),
+  );
+  const hasExperienceRewards = computed(() => Boolean(experienceStageValues.value));
+  const safeDailyExp = computed(() => Math.max(0, Number(props.dailyExp) || 0));
+  const safeDailyCap = computed(() => Math.max(0, Number(props.dailyCap) || 0));
+  const dailyCapPercent = computed(() =>
+    safeDailyCap.value > 0 ? Math.min(100, Math.round((safeDailyExp.value / safeDailyCap.value) * 100)) : 0,
+  );
+  const isDailyCapReached = computed(
+    () => props.dailyCapReached || (safeDailyCap.value > 0 && safeDailyExp.value >= safeDailyCap.value),
   );
 
   function stageReward(stage: { exp: number; points: number }) {
@@ -261,6 +352,109 @@
     font-size: 10.5px;
     font-weight: 700;
   }
+  .dq-exp-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    padding: 11px 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--background-color);
+  }
+  .dq-exp-guide-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dq-exp-guide-icon {
+    display: grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    border: 1px solid var(--primary-color);
+    border-radius: 50%;
+    color: var(--primary-color);
+  }
+  .dq-exp-guide-copy {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .dq-exp-guide-copy b {
+    color: var(--text-color);
+    font-size: 12px;
+  }
+  .dq-exp-guide-copy small,
+  .dq-exp-guide-disabled {
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .dq-exp-guide-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .dq-exp-guide-item {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 8px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 8px;
+    color: var(--desc-color);
+    font-size: 10.5px;
+  }
+  .dq-exp-guide-item b {
+    color: var(--primary-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .dq-exp-guide-footnote,
+  .dq-exp-guide-disabled {
+    margin: 0;
+  }
+  .dq-exp-guide-footnote {
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
+  .dq-exp-cap {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px 10px;
+    border: 1px solid var(--primary-color);
+    border-radius: 8px;
+    background: var(--card-background);
+  }
+  .dq-exp-cap.reached {
+    border-color: var(--warning-color);
+  }
+  .dq-exp-cap-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--text-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .dq-exp-cap-head b {
+    color: var(--primary-color);
+    font-variant-numeric: tabular-nums;
+  }
+  .dq-exp-cap.reached .dq-exp-cap-head b {
+    color: var(--warning-color);
+  }
+  .dq-exp-cap small {
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
   .dq-bonus {
     display: flex;
     align-items: center;
@@ -307,6 +501,19 @@
   @media (max-width: 520px) {
     .dq-stages {
       grid-template-columns: 1fr;
+    }
+    .dq-exp-guide-list {
+      grid-template-columns: 1fr;
+    }
+    .dq-exp-guide-item {
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .dq-exp-guide-item b {
+      max-width: 68%;
+      text-align: right;
     }
   }
 </style>

@@ -264,7 +264,7 @@
             <div class="note-directory-title-copy">
               <h2>{{ currentDirectoryTitle || $t('note.knowledgeRoot') }}</h2>
               <span v-if="hasActiveFilter">{{ $t('note.visibleCount', { total: noteTotal }) }}</span>
-              <span v-else-if="currentParentId">{{ $t('note.directChildren', { count: noteTotal }) }}</span>
+              <span v-else-if="currentParentId">{{ $t('note.directoryOrderHint', { count: noteTotal }) }}</span>
               <span v-else>{{ $t('note.rootDirectoryHint') }}</span>
             </div>
             <div class="note-directory-actions">
@@ -562,7 +562,7 @@
       @renamed="handleNoteRenamed"
     />
     <NoteDirectoryDrawer
-      v-if="bookmark.isMobile && mobileDirectoryOpen"
+      v-if="bookmark.isMobile && mobileDirectoryMounted"
       v-model:open="mobileDirectoryOpen"
       :initial-tab="mobileDirectoryInitialTab"
       :current-parent-id="currentParentId"
@@ -602,9 +602,6 @@
       :actions="mobileBatchActions"
       @action="handleMobileBatchAction"
     />
-    <div v-if="openingNoteId" class="note-detail-navigation-loading" aria-live="polite">
-      <NoteDetailLoadingState variant="page" />
-    </div>
   </ResourcePageShell>
 </template>
 
@@ -624,7 +621,6 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
-  import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
@@ -951,6 +947,9 @@
   const activeMobileNote = ref<any | null>(null);
   const mobileBatchActionsOpen = ref(false);
   const mobileDirectoryOpen = ref(false);
+  // 首次打开仍然懒加载；之后保持实例挂载。抽屉关闭会先释放移动端 history 占位，
+  // 若随 open=false 立即卸载，子组件稍后派发的目录 select 会被 Vue 丢弃。
+  const mobileDirectoryMounted = ref(false);
   const mobileDirectoryInitialTab = ref<'directory' | 'tags'>('directory');
   const previewNoteId = ref<string | null>(null);
   const previewNoteSeed = ref<Record<string, any> | null>(null);
@@ -1294,11 +1293,6 @@
     return noteList.value.find((item) => String(item.id) === noteId) || findLoadedTreeNode(noteId);
   }
 
-  async function paintNoteNavigationFeedback() {
-    await nextTick();
-    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-  }
-
   async function openDirectoryPage(noteId: string) {
     const normalizedId = String(noteId || '').trim();
     if (!normalizedId || openingNoteId.value) return;
@@ -1311,8 +1305,8 @@
 
     openingNoteId.value = normalizedId;
     prefetchNoteDetail(user, normalizedId);
-    // 先让触控反馈骨架完成一帧绘制，再启动可能包含 TinyMCE 的重运行时解析。
-    await paintNoteNavigationFeedback();
+    // 直接提交路由，让详情页真实顶栏先接管画面；编辑器运行时使用正文区域自己的骨架。
+    // 这里不能再盖一层 fixed 整页骨架，否则路由或接口稍慢时会把真实详情布局全部遮住。
     void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: normalizedId } }).catch(() => {
       // 正式导航会复用或重试路由加载，并由详情页呈现错误状态。
     });
@@ -2301,6 +2295,7 @@
   }
 
   function openMobileDirectory(tab: 'directory' | 'tags') {
+    mobileDirectoryMounted.value = true;
     mobileDirectoryInitialTab.value = tab === 'directory' && !noteTreeMobileEnabled.value ? 'tags' : tab;
     mobileDirectoryOpen.value = true;
     if (mobileDirectoryInitialTab.value === 'directory') {
@@ -3093,14 +3088,6 @@
 </script>
 
 <style lang="less" scoped>
-  .note-detail-navigation-loading {
-    position: fixed;
-    z-index: 1200;
-    inset: 0;
-    overflow: hidden;
-    background: var(--surface-page-bg, var(--background-color));
-  }
-
   .note-library-wrapper {
     width: 100%;
     height: 100%;

@@ -207,6 +207,7 @@
     border-radius: 50%;
     color: var(--text-color);
     background: transparent !important;
+    overflow: visible;
   }
 
   .mobile-top-bar__profile--active {

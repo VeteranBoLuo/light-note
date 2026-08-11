@@ -51,8 +51,11 @@ describe('移动端富文本交给系统菜单', () => {
   it('图片对象浮条提供稳定操作，文字菜单按桌面编辑与移动长按分流', () => {
     const source = editorInitSource();
     expect(source).toContain(
-      "'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter'",
+      "'lnImagePreview | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter'",
     );
+    expect(source).toContain("editor.ui.registry.addButton('lnImagePreview'");
+    expect(editorSource).toContain('icon.noteDetail.diagramTools.zoom');
+    expect(editorSource).not.toContain('icon.noteDetail.toolbar.zoom');
     expect(source).toContain("editor.ui.registry.addButton('lnImageCopy'");
     expect(source).toContain("editor.ui.registry.addButton('lnImageCut'");
     expect(source).toContain("editor.ui.registry.addButton('lnImagePaste'");
@@ -110,6 +113,7 @@ describe('移动端富文本交给系统菜单', () => {
   it('移动端图片尺寸使用共用底部抽屉，并允许连续切换档位', () => {
     expect(editorSource).toContain('<BDrawer');
     expect(editorSource).toContain('@click="handleMarkdownPreviewClick"');
+    expect(editorSource).toContain('@click="previewMobileImage"');
     expect(editorInitSource()).toMatch(
       /object_resizing:\s*usesNativeTextSelectionMenu\.value\s*\?\s*false\s*:\s*'img'/,
     );

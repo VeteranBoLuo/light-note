@@ -151,6 +151,7 @@
   }
   .navigation-icon.has-frame {
     clip-path: none;
+    overflow: visible;
   }
   .navigation-action-btn {
     border: 0;

@@ -353,6 +353,7 @@ describe('getAdminOverviewRecent 最近新增', () => {
             title: '新书签',
             userId: 'user-1',
             userName: '小白',
+            userRemark: '客户甲',
             createdAt: new Date('2026-08-07T08:00:00Z'),
           },
         ],
@@ -380,7 +381,15 @@ describe('getAdminOverviewRecent 最近新增', () => {
         ],
       ])
       .mockResolvedValueOnce([
-        [{ id: 'user-4', name: '新用户', role: 'user', createdAt: new Date('2026-08-07T11:00:00Z') }],
+        [
+          {
+            id: 'user-4',
+            name: '新用户',
+            userRemark: '内测用户',
+            role: 'user',
+            createdAt: new Date('2026-08-07T11:00:00Z'),
+          },
+        ],
       ]);
     const res = mockRes();
 
@@ -389,14 +398,21 @@ describe('getAdminOverviewRecent 最近新增', () => {
     const resourceSql = query.mock.calls.slice(1, 4).map(([sql]) => String(sql));
     expect(resourceSql.every((sql) => sql.includes('onboarding_seed_resources'))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes('resource_owner.del_flag = 0'))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes('LEFT JOIN admin_user_remarks'))).toBe(true);
+    expect(resourceSql.every((sql) => sql.includes("COALESCE(owner_remark.remark_name, '') AS userRemark"))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes("resource_owner.role NOT IN ('root', 'test')"))).toBe(true);
     expect(resourceSql.every((sql) => sql.includes('LIMIT 20'))).toBe(true);
+    expect(query.mock.calls.slice(1, 5).every(([, params]) => params?.[0] === 'root-id')).toBe(true);
     expect(String(query.mock.calls[4][0])).toContain("role <> 'visitor'");
+    expect(String(query.mock.calls[4][0])).toContain('LEFT JOIN admin_user_remarks');
     expect(String(query.mock.calls[4][0])).toContain('LIMIT 20');
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
     expect(payload.data.recentResources.map((item) => item.type)).toEqual(['note', 'file', 'bookmark']);
-    expect(payload.data.recentUsers).toEqual([expect.objectContaining({ id: 'user-4', name: '新用户', role: 'user' })]);
+    expect(payload.data.recentResources[2]).toEqual(expect.objectContaining({ userRemark: '客户甲' }));
+    expect(payload.data.recentUsers).toEqual([
+      expect.objectContaining({ id: 'user-4', name: '新用户', userRemark: '内测用户', role: 'user' }),
+    ]);
   });
 
   it('非 root 用户无权读取且不执行资源查询', async () => {

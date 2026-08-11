@@ -228,78 +228,78 @@ src/
 
 ## 数据库核心表
 
-| 表                                           | 作用                             | 主键类型         |
-| -------------------------------------------- | -------------------------------- | ---------------- |
-| `user`                                       | 用户                             | UUID             |
-| `bookmark`                                   | 书签                             | UUID             |
-| `note`                                       | 笔记                             | UUID             |
-| `files`                                      | 云空间文件                       | 自增             |
-| `folders`                                    | 云空间文件夹                     | 自增             |
-| `file_preview_artifacts`                     | 云文件派生预览及压缩包目录缓存   | 自增             |
-| `file_preview_jobs`                          | 云文件异步预览任务               | 自增             |
-| `tag`                                        | 标签                             | UUID             |
-| `resource_tag_relations`                     | 资源-标签关联                    | 无独立 id        |
-| `onboarding_seed_resources`                  | 注册示例资源来源标记             | 复合主键         |
-| `resource_inbox`                             | 书签/笔记/文件待整理关系         | UUID             |
-| `todo_items`                                 | 待处理中的待办事项               | UUID             |
-| `todo_reminders`                             | 待办 v1 历史提醒调度记录         | UUID             |
-| `todo_series`                                | 待办 v2 任务系列模板与生成游标   | UUID             |
-| `todo_series_resource_refs`                  | 待办 v2 系列参考资料模板         | UUID             |
-| `todo_reminder_rules`                        | 待办 v2 每项提醒规则             | UUID             |
-| `todo_reminder_jobs`                         | 待办 v2 实际渠道投递 Job         | UUID             |
-| `todo_plan_requests` / `todo_plan_mutations` | v2 创建与系列操作幂等请求        | UUID             |
-| `todo_plan_runtime_metrics`                  | v2 调度低基数累计诊断指标        | 指标名           |
-| `email_delivery_logs`                        | 系统邮件 SMTP 投递记录           | UUID             |
-| `account_deletion_requests`                  | 账号注销物理清理重试队列         | UUID             |
-| `tag_relations`                              | 标签-标签关联                    | 无独立 id        |
-| `api_logs`                                   | API 请求日志                     | UUID             |
-| `operation_logs`                             | 操作日志                         | UUID             |
-| `security_events`                            | 安全事件                         | 自增             |
-| `conversion_events`                          | 游客转化事件                     | 自增             |
-| `admin_context_audit`                        | 管理员预览与内容维护审计         | UUID             |
-| `admin_user_remarks`                         | Root 对用户设置的私有备注名      | 复合主键         |
-| `resource_governance_scans`                  | 资源治理只读扫描任务与租约       | UUID             |
-| `resource_governance_findings`               | 治理候选、风险和无正文证据       | UUID             |
-| `resource_cleanup_jobs` / `resource_cleanup_job_items` | 低风险清理批次与逐项结果 | UUID / 复合主键 |
-| `resource_governance_audit`                  | 扫描、忽略与清理最小审计         | 自增             |
-| `agent_logs`                                 | AI 请求、用量和阶段追踪          | UUID             |
-| `ai_token_usage` / `ai_token_reservations`   | AI 日额度账本与请求级原子占位    | 复合键 / 自增    |
-| `user_growth`                                | 成长快照、积分及永久 AI 加油余额 | 用户 UUID        |
-| `ai_provider_balance_snapshots`              | AI 供应商每日账户余额快照        | 自增             |
-| `ai_evaluation_runs`                         | 管理员手动 AI 冒烟结构化结果     | UUID             |
-| `ai_document_sources`                        | AI 文档来源与解析状态            | UUID             |
-| `ai_document_chunks`                         | AI 文档正文片段与定位            | 自增             |
-| `ai_document_jobs`                           | AI 文档异步解析任务              | 自增             |
-| `ai_conversations` / `ai_messages`           | AI 持久会话与消息快照            | UUID             |
-| `ai_message_sources` / `ai_message_evidence` | 消息来源与不可变证据片段         | 自增             |
-| `ai_feedback`                                | AI 回答反馈与原因                | UUID             |
-| `ai_content_chunks`                          | 个人知识统一词法索引元数据       | 自增             |
-| `ai_content_generations`                     | 个人知识索引的账号级失效代际     | 账号 ID          |
-| `ai_change_sets` / `ai_change_items`         | 可审阅变更集、执行回执与撤销     | UUID             |
-| `ai_memories`                                | 候选、已确认与临时记忆           | UUID             |
-| `ai_response_events`                         | SSE 终态短期恢复事件             | 自增             |
-| `ai_product_events`                          | 无正文 AI 产品学习事件           | UUID             |
-| `note_template`                              | 用户自存笔记模板                 | UUID             |
-| `feature_requests`                           | 共建轻笺公开需求                 | UUID             |
-| `feature_request_votes`                      | 共建建议唯一投票                 | 复合主键         |
-| `feature_request_updates`                    | 共建建议公开时间线               | UUID             |
-| `community_chat_rooms`                       | 社区房间目录（当前仅 general）   | 自增             |
-| `community_chat_runtime_policy`              | 单行发言运行策略与切换人         | 固定值 1         |
-| `community_chat_access_requests`             | 社区内测申请与审核状态           | UUID             |
-| `community_chat_members`                     | 社区成员、角色与规则确认         | 用户 UUID        |
-| `community_chat_user_settings`               | 社区通知与隐私偏好               | 用户 UUID        |
-| `community_chat_access_audit`                | 私密房间预留准入与访问审计       | 自增             |
-| `community_chat_messages`                    | 消息、回复、幂等与原文保留式撤回 | 自增 + 公有 UUID |
-| `community_chat_message_likes`               | 消息点赞关系                     | 消息 + 用户      |
-| `community_chat_message_deletions`           | 用户个人隐藏消息关系             | 消息 + 用户      |
-| `community_chat_reads`                       | 用户在聊天室的单调阅读位置       | 房间 + 用户      |
-| `community_chat_blocks`                      | 用户单向屏蔽关系                 | 公有 UUID        |
-| `community_chat_reports`                     | 消息举报与最小证据快照           | 公有 UUID        |
-| `community_chat_moderation_actions`          | 不可变更的举报处置审计           | 公有 UUID        |
-| `community_chat_member_sanctions`            | 社区成员禁言处罚                 | 公有 UUID        |
-| `update_logs`                                | Markdown 更新日志及 OBS 图片键   | UUID             |
-| `opinion`                                    | 用户反馈                         | UUID             |
-| `help_config` / `help_config_draft`          | 帮助中心                         | UUID             |
+| 表                                                     | 作用                             | 主键类型         |
+| ------------------------------------------------------ | -------------------------------- | ---------------- |
+| `user`                                                 | 用户                             | UUID             |
+| `bookmark`                                             | 书签                             | UUID             |
+| `note`                                                 | 笔记                             | UUID             |
+| `files`                                                | 云空间文件                       | 自增             |
+| `folders`                                              | 云空间文件夹                     | 自增             |
+| `file_preview_artifacts`                               | 云文件派生预览及压缩包目录缓存   | 自增             |
+| `file_preview_jobs`                                    | 云文件异步预览任务               | 自增             |
+| `tag`                                                  | 标签                             | UUID             |
+| `resource_tag_relations`                               | 资源-标签关联                    | 无独立 id        |
+| `onboarding_seed_resources`                            | 注册示例资源来源标记             | 复合主键         |
+| `resource_inbox`                                       | 书签/笔记/文件待整理关系         | UUID             |
+| `todo_items`                                           | 待处理中的待办事项               | UUID             |
+| `todo_reminders`                                       | 待办 v1 历史提醒调度记录         | UUID             |
+| `todo_series`                                          | 待办 v2 任务系列模板与生成游标   | UUID             |
+| `todo_series_resource_refs`                            | 待办 v2 系列参考资料模板         | UUID             |
+| `todo_reminder_rules`                                  | 待办 v2 每项提醒规则             | UUID             |
+| `todo_reminder_jobs`                                   | 待办 v2 实际渠道投递 Job         | UUID             |
+| `todo_plan_requests` / `todo_plan_mutations`           | v2 创建与系列操作幂等请求        | UUID             |
+| `todo_plan_runtime_metrics`                            | v2 调度低基数累计诊断指标        | 指标名           |
+| `email_delivery_logs`                                  | 系统邮件 SMTP 投递记录           | UUID             |
+| `account_deletion_requests`                            | 账号注销物理清理重试队列         | UUID             |
+| `tag_relations`                                        | 标签-标签关联                    | 无独立 id        |
+| `api_logs`                                             | API 请求日志                     | UUID             |
+| `operation_logs`                                       | 操作日志                         | UUID             |
+| `security_events`                                      | 安全事件                         | 自增             |
+| `conversion_events`                                    | 游客转化事件                     | 自增             |
+| `admin_context_audit`                                  | 管理员预览与内容维护审计         | UUID             |
+| `admin_user_remarks`                                   | Root 对用户设置的私有备注名      | 复合主键         |
+| `resource_governance_scans`                            | 资源治理只读扫描任务与租约       | UUID             |
+| `resource_governance_findings`                         | 治理候选、风险和无正文证据       | UUID             |
+| `resource_cleanup_jobs` / `resource_cleanup_job_items` | 低风险清理批次与逐项结果         | UUID / 复合主键  |
+| `resource_governance_audit`                            | 扫描、忽略与清理最小审计         | 自增             |
+| `agent_logs`                                           | AI 请求、用量和阶段追踪          | UUID             |
+| `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位    | 复合键 / 自增    |
+| `user_growth`                                          | 成长快照、积分及永久 AI 加油余额 | 用户 UUID        |
+| `ai_provider_balance_snapshots`                        | AI 供应商每日账户余额快照        | 自增             |
+| `ai_evaluation_runs`                                   | 管理员手动 AI 冒烟结构化结果     | UUID             |
+| `ai_document_sources`                                  | AI 文档来源与解析状态            | UUID             |
+| `ai_document_chunks`                                   | AI 文档正文片段与定位            | 自增             |
+| `ai_document_jobs`                                     | AI 文档异步解析任务              | 自增             |
+| `ai_conversations` / `ai_messages`                     | AI 持久会话与消息快照            | UUID             |
+| `ai_message_sources` / `ai_message_evidence`           | 消息来源与不可变证据片段         | 自增             |
+| `ai_feedback`                                          | AI 回答反馈与原因                | UUID             |
+| `ai_content_chunks`                                    | 个人知识统一词法索引元数据       | 自增             |
+| `ai_content_generations`                               | 个人知识索引的账号级失效代际     | 账号 ID          |
+| `ai_change_sets` / `ai_change_items`                   | 可审阅变更集、执行回执与撤销     | UUID             |
+| `ai_memories`                                          | 候选、已确认与临时记忆           | UUID             |
+| `ai_response_events`                                   | SSE 终态短期恢复事件             | 自增             |
+| `ai_product_events`                                    | 无正文 AI 产品学习事件           | UUID             |
+| `note_template`                                        | 用户自存笔记模板                 | UUID             |
+| `feature_requests`                                     | 共建轻笺公开需求                 | UUID             |
+| `feature_request_votes`                                | 共建建议唯一投票                 | 复合主键         |
+| `feature_request_updates`                              | 共建建议公开时间线               | UUID             |
+| `community_chat_rooms`                                 | 社区房间目录（当前仅 general）   | 自增             |
+| `community_chat_runtime_policy`                        | 单行发言运行策略与切换人         | 固定值 1         |
+| `community_chat_access_requests`                       | 社区内测申请与审核状态           | UUID             |
+| `community_chat_members`                               | 社区成员、角色与规则确认         | 用户 UUID        |
+| `community_chat_user_settings`                         | 社区通知与隐私偏好               | 用户 UUID        |
+| `community_chat_access_audit`                          | 私密房间预留准入与访问审计       | 自增             |
+| `community_chat_messages`                              | 消息、回复、幂等与原文保留式撤回 | 自增 + 公有 UUID |
+| `community_chat_message_likes`                         | 消息点赞关系                     | 消息 + 用户      |
+| `community_chat_message_deletions`                     | 用户个人隐藏消息关系             | 消息 + 用户      |
+| `community_chat_reads`                                 | 用户在聊天室的单调阅读位置       | 房间 + 用户      |
+| `community_chat_blocks`                                | 用户单向屏蔽关系                 | 公有 UUID        |
+| `community_chat_reports`                               | 消息举报与最小证据快照           | 公有 UUID        |
+| `community_chat_moderation_actions`                    | 不可变更的举报处置审计           | 公有 UUID        |
+| `community_chat_member_sanctions`                      | 社区成员禁言处罚                 | 公有 UUID        |
+| `update_logs`                                          | Markdown 更新日志及 OBS 图片键   | UUID             |
+| `opinion`                                              | 用户反馈                         | UUID             |
+| `help_config` / `help_config_draft`                    | 帮助中心                         | UUID             |
 
 更新日志使用 `update_logs` 单表保存标题、发布日期、摘要、兼容摘要、标签、Markdown 正文及该条日志拥有的 OBS object key 集合。编辑器以 Markdown 为唯一正文输入，历史重点更新首次编辑时自动转换为 Markdown，`highlights` 仅作为工作台等旧读模型的自动生成兼容字段。公开正文统一经 `marked + DOMPurify` 渲染；图片存放在 `update-logs/{logId}/` 前缀，页面使用稳定站内地址，由后端为私有 OBS 对象生成短时下载签名。保存正文时按 Markdown 实际引用收敛 `image_keys`，事务提交后清理被移除的对象；删除日志同样先提交业务事务再清理 OBS。旧 `config_json` 数据由幂等迁移导入，迁移前公开读取仍可回退旧格式。
 
@@ -663,7 +663,9 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 ### 成长系统是全站横切依赖
 
 - 段位特权（`util/growth.js` 的 `RANKS`）被多个模块读取：**AI 每日 token 额度**（`aiQuota`）、**回收站保留天数**（`trashHandle`）、**云空间容量**、**每日抽奖次数**。AI 调用先消耗当日等级额度，耗尽后才扣 `user_growth.ai_bonus_tokens` 永久余额；兑换、抽奖与历史背包转换都只能增加此余额。改等级阈值、特权表或余额扣减顺序会牵连这些模块，不是孤立改动。
+- 成长周报由 `util/weeklyReport.js` 聚合，不新建周报表：实时预览统计“含今天的最近 7 个自然日”，每周一通知固定统计上周一至周日，并把快照写入 `notification.meta.weeklyReport`。返回值除总量与上周对比外，还包含固定 7 天 `days`、`activeDays`、`bestDay`、自然周 `period`、等级进度和 `expStatus`；前端据此绘制真实趋势并解释最高等级/免经验账号的零经验，禁止把缺失日数据伪造成趋势。旧通知缺少新增字段时必须降级展示。导出周报卡只包含聚合指标，不包含资源标题或正文。
 - 一次性成长任务采用“事件达成、用户领取”两阶段模型：`status = completed` 只表示业务条件已满足，`claimed_at` 才表示奖励已领取。头像等资料保存接口必须等待达成状态同步后再响应；经验发放只允许从领取事务进入，并用成长账本唯一来源键保证重复点击幂等。
+- 头像框目录由 `util/points.js` 的 `FRAME_CATALOG` 统一维护，并用 `acquisition = shop | achievement` 区分获取方式；`SHOP_ITEMS` 只包含可扣积分购买的商品。完整目录及所有头像框入口按“基础 → 进阶 → 炫彩 → 传说”稳定递增，同档保留目录顺序；当前 25 款按 `5 / 6 / 6 / 8` 分布，积分框为 `3 / 3 / 3 / 4`，成就框为 `2 / 3 / 3 / 4`。笔记与文件都按 200 炫彩、500 传说形成双阶梯，避免直接把中间成就拔高后掏空炫彩档；200 数量档同时要求 Lv.5，书签/笔记/文件的 500 数量档同时要求 Lv.8，等级受每日经验硬顶约束，因此不再重复叠加注册天数或内容质量条件。视觉复杂度、价格与等级门槛必须匹配档位：积分框从 220 积分、无等级门槛的静态基础款，严格递增至 3200 积分、Lv.12 的传说款；高亮持续能量环（如霓虹）归入传说，积分基础框可使用静态双层材质，但不使用持续动画。签到框按 7 天进阶、30 天炫彩、365 天传说形成阶梯，365 天“岁序长明”是签到线最高难度身份框，视觉强度必须高于其他常规传说。成就赠送框大部分保持纪念性和低干扰，只有高难度传说成就使用完整轨道、强光晕等身份视觉。成就专属框必须直接展示对应 `achDesc` 及附加等级条件，不能只显示来源或数值进度。所有商店预览、顶栏、个人中心和聊天室佩戴态复用 `AvatarFramePreview` 的 64px 固定设计画布，再整体等比缩放到目标头像尺寸；禁止按入口尺寸重新计算描边、渐变与轨道几何。`GET /growth/shop` 同时返回 `items` 与完整 `frames` 供同一页面展示，购买接口只校验 `SHOP_ITEMS`，佩戴接口校验完整目录与装扮权益；Root 自己的普通管理会话额外获得全目录直接佩戴能力，用于小头像和多端视觉验收，不扣积分、不补写 `user_cosmetics`，管理员预览上下文不继承该调试特权。成就领取仍以 `points_log(reason = achievement, ref = key)` 幂等，并在同一事务内发放积分和可选头像框；兼容头像框上线前的历史领取流水时，读取链路只把对应框合并为已拥有，首次佩戴再在事务内幂等补齐 `user_cosmetics` 并更新 `equipped_frame`，避免管理员只读预览产生写入。公共用户卡继续从该领取事实展示成就，不能只改前端状态。
 
 ### 分享链接安全 —— 明确未完成
 

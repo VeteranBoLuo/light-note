@@ -473,6 +473,7 @@
   /* 佩戴头像框时不裁,否则会把渐变环边缘裁掉 */
   .navigation-icon.has-frame {
     clip-path: none;
+    overflow: visible;
   }
   .handle-body {
     display: none;

@@ -27,33 +27,48 @@
           @keydown.enter="openDetail(a)"
           @keydown.space.prevent="openDetail(a)"
         >
-          <div class="aw-medal">
-            <SvgIcon class="aw-symbol" :src="groupIcon(g)" size="25" />
-            <span v-if="!a.unlocked" class="aw-lock">
-              <SvgIcon :src="icon.growth.lock" size="11" />
-            </span>
-          </div>
-          <div class="aw-name">{{ t(`growth.achName.${a.key}`) }}</div>
-          <template v-if="a.unlocked">
-            <BButton
-              v-if="a.claimable"
-              class="aw-claim"
-              :disabled="readOnly || claimingKey === a.key"
-              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-              @click.stop="onClaim(a)"
-            >
-              <SvgIcon :src="icon.growth.coin" size="12" /> {{ t('growth.achClaim', { n: a.reward }) }}
-            </BButton>
-            <div v-else class="aw-got">
-              <SvgIcon :src="icon.filterPanel.check" size="11" /> {{ t('growth.achClaimed') }}
+          <div class="aw-badge__main">
+            <div class="aw-medal">
+              <SvgIcon class="aw-symbol" :src="groupIcon(g)" size="25" />
+              <span v-if="!a.unlocked" class="aw-lock">
+                <SvgIcon :src="icon.growth.lock" size="11" />
+              </span>
             </div>
-          </template>
-          <div v-else class="aw-mini">
-            <div class="aw-mini-bar"><div class="aw-mini-fill" :style="{ width: prog(a) + '%' }"></div></div>
-            <span class="aw-mini-num">{{ Math.min(a.cur, a.target) }}/{{ a.target }}</span>
-            <span v-if="a.reward" class="aw-reward-hint"
-              ><SvgIcon :src="icon.growth.coin" size="10" /> {{ a.reward }}</span
-            >
+            <div class="aw-copy">
+              <div class="aw-name">{{ t(`growth.achName.${a.key}`) }}</div>
+              <div class="aw-condition">{{ conditionOf(a) }}</div>
+            </div>
+          </div>
+          <div v-if="a.frameId" class="aw-frame-reward">
+            <AvatarFramePreview :frame-id="a.frameId" :src="icon.navigation.user" :size="30" :animated="false" />
+            <span>{{ t('growth.achFrameReward', { name: frameName(a.frameId) }) }}</span>
+          </div>
+          <div class="aw-footer">
+            <template v-if="a.unlocked">
+              <BButton
+                v-if="a.claimable"
+                class="aw-claim"
+                :disabled="readOnly || claimingKey === a.key"
+                :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+                @click.stop="onClaim(a)"
+              >
+                <SvgIcon :src="a.frameId ? icon.growth.reward : icon.growth.coin" size="12" />
+                {{ a.frameId ? t('growth.achClaimWithFrame', { n: a.reward }) : t('growth.achClaim', { n: a.reward }) }}
+              </BButton>
+              <div v-else class="aw-got">
+                <SvgIcon :src="icon.filterPanel.check" size="11" /> {{ t('growth.achClaimed') }}
+              </div>
+            </template>
+            <div v-else class="aw-mini">
+              <div class="aw-mini-progress">
+                <div class="aw-mini-bar"><div class="aw-mini-fill" :style="{ width: prog(a) + '%' }"></div></div>
+                <span class="aw-mini-num">{{ Math.min(a.cur, a.target) }}/{{ a.target }}</span>
+                <span v-if="a.minLevel" class="aw-mini-level">Lv.{{ a.currentLevel || 0 }}/{{ a.minLevel }}</span>
+              </div>
+              <span v-if="a.reward" class="aw-reward-hint">
+                {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="10" /> {{ a.reward }}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -66,9 +81,13 @@
           <SvgIcon class="awd-symbol" :src="groupIcon(detail.group)" size="40" />
         </div>
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
-        <div class="awd-desc">{{ t(`growth.achDesc.${detail.key}`) }}</div>
+        <div class="awd-desc">{{ conditionOf(detail) }}</div>
         <div v-if="detail.reward" class="awd-reward">
           {{ t('growth.achRewardLabel') }} <SvgIcon :src="icon.growth.coin" size="14" /> {{ detail.reward }}
+        </div>
+        <div v-if="detail.frameId" class="awd-frame-reward">
+          <AvatarFramePreview :frame-id="detail.frameId" :src="icon.navigation.user" :size="46" />
+          <span>{{ t('growth.achFrameReward', { name: frameName(detail.frameId) }) }}</span>
         </div>
         <BButton
           v-if="detail.claimable"
@@ -77,7 +96,11 @@
           :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
           @click="onClaim(detail)"
         >
-          {{ t('growth.achClaim', { n: detail.reward }) }}
+          {{
+            detail.frameId
+              ? t('growth.achClaimWithFrame', { n: detail.reward })
+              : t('growth.achClaim', { n: detail.reward })
+          }}
         </BButton>
         <div v-else-if="detail.unlocked" class="awd-status unlocked">
           <SvgIcon :src="icon.filterPanel.check" size="13" /> {{ t('growth.achClaimed') }}
@@ -92,7 +115,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { Achievement } from '@/composables/useGrowth.ts';
   import { ACHIEVEMENT_GROUPS } from '@/config/achievements.ts';
@@ -100,6 +123,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import icon from '@/config/icon.ts';
 
   const props = withDefaults(
@@ -134,6 +158,15 @@
     if (props.readOnly) return;
     emit('claim', a.key);
   }
+  watch(
+    () => props.achievements,
+    (achievements) => {
+      if (!detail.value) return;
+      const detailKey = detail.value.key;
+      detail.value = achievements.find((achievement) => achievement.key === detailKey) || null;
+      if (!detail.value) detailVisible.value = false;
+    },
+  );
   // 只展示实际存在数据的分组(向后兼容后端新增/删减)
   const groups = computed(() => ACHIEVEMENT_GROUPS.filter((g) => props.achievements.some((a) => a.group === g)));
   const visibleGroups = computed(() => groups.value.filter((group) => byGroup(group).length > 0));
@@ -153,8 +186,16 @@
   function prog(a: Achievement) {
     return a.target ? Math.min(100, Math.round((a.cur / a.target) * 100)) : 0;
   }
+  function conditionOf(a: Achievement) {
+    const condition = t(`growth.achDesc.${a.key}`);
+    return a.minLevel ? t('growth.frameAchievementConditionWithLevel', { condition, level: a.minLevel }) : condition;
+  }
   function tipOf(a: Achievement) {
-    return t(`growth.achDesc.${a.key}`);
+    return conditionOf(a);
+  }
+  function frameName(frameId: string) {
+    const key = `growth.shopItems.${frameId}.name`;
+    return t(key);
   }
   function groupIcon(group: string) {
     return icon.growth[group as keyof typeof icon.growth] || icon.growth.level;
@@ -221,19 +262,21 @@
   }
   .aw-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
   }
   .aw-badge {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 14px 8px 10px;
-    border-radius: 12px;
+    align-items: stretch;
+    gap: 10px;
+    min-height: 146px;
+    padding: 14px;
+    box-sizing: border-box;
+    border-radius: 14px;
     border: 1px solid color-mix(in srgb, var(--card-border-color) 40%, transparent);
     background: var(--background-color);
-    text-align: center;
+    text-align: left;
     cursor: pointer;
     transition:
       transform 0.18s ease,
@@ -256,6 +299,13 @@
     transform: translateY(-2px);
     box-shadow: 0 10px 22px -14px color-mix(in srgb, #fbbf24 80%, transparent);
   }
+  .aw-badge__main {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    align-items: center;
+    gap: 11px;
+  }
   .aw-medal {
     position: relative;
     width: 46px;
@@ -265,6 +315,12 @@
     align-items: center;
     justify-content: center;
     background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
+  }
+  .aw-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
   .aw-badge.unlocked .aw-medal {
     color: #fff;
@@ -309,13 +365,46 @@
     box-shadow: 0 0 0 2px var(--background-color);
   }
   .aw-name {
-    font-size: 12px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 700;
     color: var(--text-color);
     line-height: 1.25;
   }
   .aw-badge:not(.unlocked) .aw-name {
     color: var(--desc-color);
+  }
+  .aw-condition {
+    display: -webkit-box;
+    overflow: hidden;
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 1.4;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .aw-frame-reward {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 24%, var(--surface-border-color));
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 5%, var(--background-color));
+    font-size: 10.5px;
+    font-weight: 700;
+  }
+  .aw-frame-reward span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .aw-footer {
+    min-height: 24px;
+    display: flex;
+    align-items: center;
+    margin-top: auto;
   }
   .aw-got {
     display: inline-flex;
@@ -376,16 +465,25 @@
     font-size: 9.5px;
     color: #d97706;
     font-weight: 600;
+    white-space: nowrap;
   }
   .aw-mini {
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 3px;
+    justify-content: space-between;
+    gap: 9px;
     width: 100%;
   }
+  .aw-mini-progress {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1 1 auto;
+  }
   .aw-mini-bar {
-    width: 72%;
+    min-width: 42px;
+    flex: 1 1 auto;
     height: 4px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--card-border-color) 50%, transparent);
@@ -398,9 +496,70 @@
     transition: width 0.4s ease;
   }
   .aw-mini-num {
+    flex: 0 0 auto;
     font-size: 10px;
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
+  }
+  .aw-mini-level {
+    flex: 0 0 auto;
+    padding: 1px 5px;
+    border: 1px solid color-mix(in srgb, var(--primary-color) 38%, transparent);
+    border-radius: 999px;
+    color: var(--primary-color);
+    font-size: 9px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 767px) {
+    .aw-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .aw-badge {
+      align-items: center;
+      min-height: 154px;
+      padding: 12px 8px 10px;
+      text-align: center;
+    }
+
+    .aw-badge__main {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+
+    .aw-copy {
+      align-items: center;
+    }
+
+    .aw-condition {
+      display: none;
+    }
+
+    .aw-frame-reward {
+      justify-content: center;
+      width: 100%;
+      padding: 4px 6px;
+      box-sizing: border-box;
+    }
+
+    .aw-footer {
+      width: 100%;
+      justify-content: center;
+    }
+
+    .aw-mini {
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .aw-mini-progress {
+      width: 100%;
+    }
   }
 </style>
 
@@ -473,6 +632,18 @@
     font-size: 13px;
     font-weight: 600;
     color: #d97706;
+  }
+  .awd-frame-reward {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: var(--background-color);
+    font-size: 12px;
+    font-weight: 700;
   }
   .awd-claim {
     margin-top: 6px;

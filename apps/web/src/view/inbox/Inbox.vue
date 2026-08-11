@@ -312,6 +312,7 @@
           <TodoMatrixView
             v-else-if="isTodoFocused && todoView === 'matrix'"
             :items="todo.items"
+            :mobile="bookmark.isMobile"
             :disabled="hasPendingOperation || todoBatchMutating"
             :deleting-id="deletingTodoId"
             @toggle-complete="toggleTodo"

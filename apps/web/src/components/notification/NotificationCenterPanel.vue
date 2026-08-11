@@ -264,13 +264,6 @@
     font-weight: 700;
   }
 
-  .nt-group-surface {
-    overflow: hidden;
-    border: 1px solid var(--surface-border-color);
-    border-radius: var(--mobile-surface-radius, 16px);
-    background: var(--card-background);
-  }
-
   .nt-item {
     position: relative;
     min-height: 72px;
@@ -422,7 +415,10 @@
   }
 
   .is-mobile .nt-group-surface {
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
     border-radius: 17px;
+    background: var(--card-background);
   }
 
   .is-mobile .nt-item {

@@ -111,6 +111,13 @@ describe('NotificationCenterPanel', () => {
     expect(onMore).not.toHaveBeenCalled();
   });
 
+  it('分组外框只用于移动端列表表面，不套在桌面通知卡片外', () => {
+    expect(source).not.toMatch(/\n  \.nt-group-surface\s*\{/);
+    expect(source).toMatch(
+      /\.is-mobile \.nt-group-surface\s*\{[\s\S]*?overflow:\s*hidden;[\s\S]*?border:\s*1px solid var\(--surface-border-color\);[\s\S]*?background:\s*var\(--card-background\);/,
+    );
+  });
+
   it('卡片操作按钮贴近标题首行，避免落到摘要内容区域', () => {
     expect(source).toMatch(/\.nt-item-action\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?top:\s*0;/);
   });

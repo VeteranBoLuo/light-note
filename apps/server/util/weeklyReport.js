@@ -12,73 +12,212 @@ import { formatDateTime } from './common.js';
 import { getGrowth } from './growth.js';
 import crypto from 'crypto';
 
-// 汇总单个用户近 7 天的成长数据(供定时任务发通知 + 前端实时「本周周报」预览复用)
-export async function buildWeeklyReport(userId, userRole = null) {
-  const [[row]] = await pool.query(
-    `SELECT
+function startOfLocalDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function addDays(value, amount) {
+  const date = new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+}
+
+function dateKey(value) {
+  return formatDateTime(new Date(value)).slice(0, 10);
+}
+
+/** 计算自然周序号。周一为一周开始，跨年时同时返回 ISO 周所属年份。 */
+export function getIsoWeekInfo(value) {
+  const date = startOfLocalDay(value);
+  const utc = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const weekday = utc.getUTCDay() || 7;
+  utc.setUTCDate(utc.getUTCDate() + 4 - weekday);
+  const weekYear = utc.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(weekYear, 0, 1));
+  const week = Math.ceil(((utc.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return { week, weekYear };
+}
+
+/**
+ * 实时周报包含今天在内的最近 7 个自然日；定时周报通过 endOffsetDays=1 固定为上周一至周日。
+ * 使用明确边界而非 NOW()-168h，避免周报一天里不同时刻打开时统计口径漂移。
+ */
+export function getWeeklyReportPeriod(now = new Date(), endOffsetDays = 0) {
+  const end = addDays(startOfLocalDay(now), -endOffsetDays);
+  const start = addDays(end, -6);
+  const next = addDays(end, 1);
+  const prevStart = addDays(start, -7);
+  const { week, weekYear } = getIsoWeekInfo(end);
+  return {
+    start: dateKey(start),
+    end: dateKey(end),
+    week,
+    weekYear,
+    startSql: formatDateTime(start),
+    nextSql: formatDateTime(next),
+    prevStartSql: formatDateTime(prevStart),
+  };
+}
+
+/** 把数据库稀疏日聚合补成固定 7 天，前端可直接绘制真实趋势。 */
+export function fillWeeklyReportDays(period, rows = []) {
+  const rowMap = new Map((rows || []).map((row) => [String(row.day), row]));
+  const start = startOfLocalDay(`${period.start}T00:00:00`);
+  return Array.from({ length: 7 }, (_, index) => {
+    const day = dateKey(addDays(start, index));
+    const row = rowMap.get(day) || {};
+    const bookmarks = Number(row.bookmarks || 0);
+    const notes = Number(row.notes || 0);
+    const files = Number(row.files || 0);
+    const exp = Number(row.exp || 0);
+    const checkins = Number(row.checkins || 0);
+    return { day, bookmarks, notes, files, exp, checkins, total: bookmarks + notes + files };
+  });
+}
+
+export function summarizeWeeklyReportDays(days = []) {
+  const total = days.reduce(
+    (sum, day) => ({
+      bookmarks: sum.bookmarks + Number(day.bookmarks || 0),
+      notes: sum.notes + Number(day.notes || 0),
+      files: sum.files + Number(day.files || 0),
+      exp: sum.exp + Number(day.exp || 0),
+      checkinDays: sum.checkinDays + (Number(day.checkins || 0) > 0 ? 1 : 0),
+    }),
+    { bookmarks: 0, notes: 0, files: 0, exp: 0, checkinDays: 0 },
+  );
+  const activeDays = days.filter(
+    (day) => Number(day.total || 0) > 0 || Number(day.exp || 0) > 0 || Number(day.checkins || 0) > 0,
+  ).length;
+  const bestDay = days.reduce((best, day) => {
+    if (!best) return day;
+    const score = Number(day.total || 0) * 1000 + Number(day.exp || 0) + Number(day.checkins || 0);
+    const bestScore = Number(best.total || 0) * 1000 + Number(best.exp || 0) + Number(best.checkins || 0);
+    return score >= bestScore ? day : best;
+  }, null);
+  const bestScore = Number(bestDay?.total || 0) + Number(bestDay?.exp || 0) + Number(bestDay?.checkins || 0);
+  return { ...total, activeDays, bestDay: bestScore > 0 ? bestDay : null };
+}
+
+// 汇总单个用户近 7 个自然日的成长数据(供定时任务发通知 + 前端实时「本周周报」预览复用)
+export async function buildWeeklyReport(userId, userRole = null, options = {}) {
+  const period = getWeeklyReportPeriod(options.now || new Date(), Number(options.endOffsetDays || 0));
+  const currentBounds = [period.startSql, period.nextSql];
+  const previousEndSql = period.startSql;
+  const dailySql = `
+    SELECT day,
+      SUM(bookmarks) AS bookmarks,
+      SUM(notes) AS notes,
+      SUM(files) AS files,
+      SUM(exp) AS exp,
+      SUM(checkins) AS checkins
+    FROM (
+      SELECT DATE_FORMAT(b.create_time, '%Y-%m-%d') AS day, COUNT(*) AS bookmarks,
+        0 AS notes, 0 AS files, 0 AS exp, 0 AS checkins
+      FROM bookmark b
+      WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= ? AND b.create_time < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
+        )
+      GROUP BY DATE_FORMAT(b.create_time, '%Y-%m-%d')
+      UNION ALL
+      SELECT DATE_FORMAT(n.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+        COUNT(*) AS notes, 0 AS files, 0 AS exp, 0 AS checkins
+      FROM note n
+      WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= ? AND n.create_time < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
+        )
+      GROUP BY DATE_FORMAT(n.create_time, '%Y-%m-%d')
+      UNION ALL
+      SELECT DATE_FORMAT(f.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+        0 AS notes, COUNT(*) AS files, 0 AS exp, 0 AS checkins
+      FROM files f
+      WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= ? AND f.create_time < ?
+        AND NOT EXISTS (
+          SELECT 1 FROM onboarding_seed_resources osr
+          WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
+            AND osr.resource_id = CAST(f.id AS CHAR)
+        )
+      GROUP BY DATE_FORMAT(f.create_time, '%Y-%m-%d')
+      UNION ALL
+      SELECT DATE_FORMAT(ge.create_time, '%Y-%m-%d') AS day, 0 AS bookmarks,
+        0 AS notes, 0 AS files,
+        SUM(CASE WHEN ge.status = 'granted' THEN ge.amount ELSE 0 END) AS exp,
+        MAX(CASE WHEN ge.source = 'checkin' AND ge.status = 'granted' THEN 1 ELSE 0 END) AS checkins
+      FROM growth_events ge
+      WHERE ge.user_id = ? AND ge.create_time >= ? AND ge.create_time < ?
+      GROUP BY DATE_FORMAT(ge.create_time, '%Y-%m-%d')
+    ) weekly_days
+    GROUP BY day
+    ORDER BY day`;
+  const previousSql = `SELECT
       (SELECT COUNT(*) FROM bookmark b
-        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
-          )) AS bookmarks,
-      (SELECT COUNT(*) FROM note n
-        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
-          )) AS notes,
-      (SELECT COUNT(*) FROM files f
-        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-          AND NOT EXISTS (
-            SELECT 1 FROM onboarding_seed_resources osr
-            WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
-              AND osr.resource_id = CAST(f.id AS CHAR)
-          )) AS files,
-      (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS exp,
-      (SELECT COUNT(*) FROM growth_events WHERE user_id = ? AND source = 'checkin' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)) AS checkinDays,
-      (SELECT COUNT(*) FROM bookmark b
-        WHERE b.user_id = ? AND b.del_flag = 0
-          AND b.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-          AND b.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= ? AND b.create_time < ?
           AND NOT EXISTS (
             SELECT 1 FROM onboarding_seed_resources osr
             WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
           )) AS prevBookmarks,
       (SELECT COUNT(*) FROM note n
-        WHERE n.create_by = ? AND n.del_flag = 0
-          AND n.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-          AND n.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= ? AND n.create_time < ?
           AND NOT EXISTS (
             SELECT 1 FROM onboarding_seed_resources osr
             WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
           )) AS prevNotes,
       (SELECT COUNT(*) FROM files f
-        WHERE f.create_by = ? AND f.del_flag = 0
-          AND f.create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-          AND f.create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)
+        WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= ? AND f.create_time < ?
           AND NOT EXISTS (
             SELECT 1 FROM onboarding_seed_resources osr
             WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
               AND osr.resource_id = CAST(f.id AS CHAR)
           )) AS prevFiles,
-      (SELECT COALESCE(SUM(amount), 0) FROM growth_events WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 14 DAY) AND create_time < DATE_SUB(NOW(), INTERVAL 7 DAY)) AS prevExp`,
-    [userId, userId, userId, userId, userId, userId, userId, userId, userId],
-  );
-  const g = await getGrowth(userId, { userRole });
+      (SELECT COALESCE(SUM(amount), 0) FROM growth_events
+        WHERE user_id = ? AND status = 'granted' AND create_time >= ? AND create_time < ?) AS prevExp`;
+  const dailyParams = Array.from({ length: 4 }, () => [userId, ...currentBounds]).flat();
+  const previousParams = Array.from({ length: 4 }, () => [userId, period.prevStartSql, previousEndSql]).flat();
+  const [dailyResult, previousResult, g] = await Promise.all([
+    pool.query(dailySql, dailyParams),
+    pool.query(previousSql, previousParams),
+    getGrowth(userId, { userRole }),
+  ]);
+  const [dailyRows] = dailyResult;
+  const [[row]] = previousResult;
+  const days = fillWeeklyReportDays(period, dailyRows);
+  const summary = summarizeWeeklyReportDays(days);
   // 免账本用户(如 root)不写每日签到流水,从账本数出来的 checkinDays 会是 0;
   // 用当前连签数兜底(至多 7 天,近似本周),避免「连签中却显示签到 0」。
-  let checkinDays = Number(row.checkinDays || 0);
+  let checkinDays = Number(summary.checkinDays || 0);
   if (checkinDays === 0 && Number(g.streak) > 0) checkinDays = Math.min(Number(g.streak), 7);
+  const total = summary.bookmarks + summary.notes + summary.files;
+  const expStatus =
+    userRole === 'root' ? 'role_excluded' : summary.exp > 0 ? 'earned' : total > 0 ? 'no_grant' : 'none';
   return {
-    bookmarks: Number(row.bookmarks || 0),
-    notes: Number(row.notes || 0),
-    files: Number(row.files || 0),
-    exp: Number(row.exp || 0),
+    bookmarks: summary.bookmarks,
+    notes: summary.notes,
+    files: summary.files,
+    exp: summary.exp,
     checkinDays,
+    activeDays: Math.max(summary.activeDays, checkinDays),
+    days,
+    bestDay: summary.bestDay,
+    period: {
+      start: period.start,
+      end: period.end,
+      week: period.week,
+      weekYear: period.weekYear,
+    },
+    expStatus,
     level: g.level,
     levelName: g.name,
-    generatedAt: formatDateTime(new Date()).slice(0, 10), // 本地时区,避免凌晨 toISOString 取 UTC 差一天
+    levelProgress: g.progress,
+    expToNext: g.expToNext,
+    isMax: g.isMax,
+    streak: g.streak,
+    generatedAt: dateKey(options.now || new Date()), // 本地时区,避免凌晨 toISOString 取 UTC 差一天
     prev: {
       bookmarks: Number(row.prevBookmarks || 0),
       notes: Number(row.prevNotes || 0),
@@ -116,7 +255,7 @@ export async function generateWeeklyReports() {
         const notificationId = crypto.createHash('md5').update(`weekly:${weekKey}:${userId}`).digest('hex');
         const [[existing]] = await pool.query('SELECT 1 FROM notification WHERE id = ? LIMIT 1', [notificationId]);
         if (existing) continue;
-        const report = await buildWeeklyReport(userId);
+        const report = await buildWeeklyReport(userId, null, { endOffsetDays: 1 });
         // 无实质活动不发空周报
         if (report.bookmarks + report.notes + report.files + report.exp + report.checkinDays === 0) continue;
         const isEn = lang === 'en-US';

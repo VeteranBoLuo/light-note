@@ -1,7 +1,7 @@
 <template>
   <div ref="growthPageRef" class="growth-page">
-    <div class="growth-container">
-      <header class="growth-hero">
+    <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
+      <header v-if="!useWideDesktopLayout" class="growth-hero">
         <BButton class="growth-back" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
@@ -18,79 +18,150 @@
         <span>{{ t('growth.adminContextNotice') }}</span>
       </div>
 
-      <BTabs
-        v-model:active-tab="activeSection"
-        class="growth-section-tabs"
-        variant="segment"
-        :options="sectionOptions"
-      />
+      <div class="growth-workspace" :class="{ 'growth-workspace--wide': useWideDesktopLayout }">
+        <aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">
+          <header class="growth-hero growth-hero--sidebar">
+            <BButton class="growth-back" @click="goBack">
+              <SvgIcon :src="icon.arrow_left" size="16" />
+              <span>{{ t('common.back') }}</span>
+            </BButton>
+            <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
+            <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
+          </header>
 
-      <section v-if="activeSection === 'overview'" class="growth-panel">
-        <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
-      </section>
+          <nav class="growth-side-nav" :aria-label="t('growth.pageTitle')">
+            <template v-for="section in sectionOptions" :key="section.key">
+              <BButton
+                class="growth-side-nav-item"
+                :class="{ 'is-active': activeSection === section.key }"
+                :aria-current="activeSection === section.key ? 'page' : undefined"
+                :aria-expanded="section.key === 'rewards' ? rewardsExpanded : undefined"
+                @click="selectSection(section.key)"
+              >
+                <span class="growth-side-nav-icon" aria-hidden="true">
+                  <SvgIcon :src="section.icon" size="17" />
+                </span>
+                <span class="growth-side-nav-label">{{ section.label }}</span>
+                <SvgIcon
+                  v-if="section.key === 'rewards'"
+                  class="growth-side-nav-chevron"
+                  :class="{ expanded: rewardsExpanded }"
+                  :src="icon.arrow_right"
+                  size="13"
+                  aria-hidden="true"
+                />
+              </BButton>
 
-      <div v-if="activeSection === 'overview'" class="growth-row growth-overview-row">
-        <section class="growth-panel growth-panel--flex">
-          <GrowthStats :stats="stats" />
-        </section>
-        <section id="growth-heatmap" class="growth-panel growth-panel--flex">
-          <ActivityHeatmap ref="heatmapRef" />
-        </section>
-      </div>
+              <div
+                v-if="section.key === 'rewards' && rewardsExpanded"
+                class="growth-side-subnav"
+                role="group"
+                :aria-label="section.label"
+              >
+                <BButton
+                  v-for="rewardSection in rewardSectionOptions"
+                  :key="rewardSection.key"
+                  class="growth-side-subnav-item"
+                  :class="{ 'is-active': activeRewardSection === rewardSection.key }"
+                  :aria-current="activeRewardSection === rewardSection.key ? 'page' : undefined"
+                  @click="selectRewardSection(rewardSection.key)"
+                >
+                  <SvgIcon :src="rewardSection.icon" size="15" aria-hidden="true" />
+                  <span>{{ rewardSection.label }}</span>
+                </BButton>
+              </div>
+            </template>
+          </nav>
 
-      <template v-if="activeSection === 'tasks'">
-        <div class="growth-row">
-          <section class="growth-panel growth-panel--flex">
-            <DailyQuests
-              :quests="quests"
-              :bonus="questBonus"
-              :claiming="claiming"
-              :read-only="isAdminContext"
-              @claim="onClaim"
-            />
-          </section>
-          <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel growth-panel--flex">
-            <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
-          </section>
-        </div>
-        <section class="growth-panel">
-          <WeeklyChallenge :read-only="isAdminContext" />
-        </section>
-      </template>
+          <BButton class="growth-side-report" :loading="wrLoading" @click="openWeeklyReport">
+            <SvgIcon :src="icon.growth.rank" size="16" />
+            <span>{{ t('growth.weeklyReportEntry') }}</span>
+          </BButton>
+        </aside>
 
-      <template v-if="activeSection === 'achievements'">
-        <section class="growth-panel">
-          <AchievementWall
-            :achievements="achievements"
-            :unlocked-count="dashboard?.unlockedCount || 0"
-            :total-achievements="dashboard?.totalAchievements || achievements.length"
-            :claimable-count="dashboard?.claimableCount || 0"
-            :claiming-key="claimingAch"
-            :read-only="isAdminContext"
-            @claim="onClaimAchievement"
+        <main class="growth-main">
+          <BTabs
+            v-if="!useWideDesktopLayout"
+            v-model:active-tab="activeSection"
+            class="growth-section-tabs"
+            variant="segment"
+            :options="sectionOptions"
+            @select="handleSectionTabSelect"
           />
-        </section>
-        <section v-if="streakMilestones.length" class="growth-panel">
-          <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
-        </section>
-        <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
-        <section v-if="showRecap" id="growth-recap" class="growth-panel"><RecapCard /></section>
-      </template>
 
-      <template v-if="activeSection === 'rewards'">
-        <BTabs
-          v-model:active-tab="activeRewardSection"
-          class="growth-reward-tabs"
-          variant="line"
-          :options="rewardSectionOptions"
-        />
-        <section class="growth-panel">
-          <PointsShop v-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
-          <LotteryDraw v-else-if="activeRewardSection === 'lottery'" :read-only="isAdminContext" />
-          <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
-          <PointsLedger v-else />
-        </section>
-      </template>
+          <section v-if="activeSection === 'overview'" class="growth-panel">
+            <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
+          </section>
+
+          <div v-if="activeSection === 'overview'" class="growth-row growth-overview-row">
+            <section class="growth-panel growth-panel--flex">
+              <GrowthStats :stats="stats" />
+            </section>
+            <section id="growth-heatmap" class="growth-panel growth-panel--flex">
+              <ActivityHeatmap ref="heatmapRef" />
+            </section>
+          </div>
+
+          <template v-if="activeSection === 'tasks'">
+            <div class="growth-row">
+              <section class="growth-panel growth-panel--flex">
+                <DailyQuests
+                  :quests="quests"
+                  :bonus="questBonus"
+                  :claiming="claiming"
+                  :read-only="isAdminContext"
+                  :daily-exp="growth?.dailyExp || 0"
+                  :daily-cap="growth?.dailyCap || 0"
+                  :daily-cap-reached="Boolean(growth?.dailyCapReached)"
+                  show-experience-sources
+                  @claim="onClaim"
+                />
+              </section>
+              <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel growth-panel--flex">
+                <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
+              </section>
+            </div>
+            <section class="growth-panel">
+              <WeeklyChallenge :read-only="isAdminContext" />
+            </section>
+          </template>
+
+          <template v-if="activeSection === 'achievements'">
+            <section class="growth-panel">
+              <AchievementWall
+                :achievements="achievements"
+                :unlocked-count="dashboard?.unlockedCount || 0"
+                :total-achievements="dashboard?.totalAchievements || achievements.length"
+                :claimable-count="dashboard?.claimableCount || 0"
+                :claiming-key="claimingAch"
+                :read-only="isAdminContext"
+                @claim="onClaimAchievement"
+              />
+            </section>
+            <section v-if="streakMilestones.length" class="growth-panel">
+              <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
+            </section>
+            <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
+            <section v-if="showRecap" id="growth-recap" class="growth-panel"><RecapCard /></section>
+          </template>
+
+          <template v-if="activeSection === 'rewards'">
+            <BTabs
+              v-if="!useWideDesktopLayout"
+              v-model:active-tab="activeRewardSection"
+              class="growth-reward-tabs"
+              variant="line"
+              :options="rewardSectionOptions"
+            />
+            <section class="growth-panel">
+              <PointsShop v-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
+              <LotteryDraw v-else-if="activeRewardSection === 'lottery'" :read-only="isAdminContext" />
+              <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
+              <PointsLedger v-else />
+            </section>
+          </template>
+        </main>
+      </div>
     </div>
 
     <WeeklyReportModal v-model:visible="wrVisible" :report="wrData" />
@@ -131,6 +202,7 @@
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
   type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
+  type GrowthNavOption<T extends string> = { key: T; label: string; icon: string };
 
   const { t } = useI18n();
   const route = useRoute();
@@ -149,19 +221,20 @@
       ? (routeRewardSection as RewardSection)
       : 'shop',
   );
+  const rewardsExpanded = ref(activeSection.value === 'rewards');
   const growthPageRef = ref<HTMLElement | null>(null);
-  let preserveNextMobileSectionScroll = false;
-  const sectionOptions = computed(() => [
-    { key: 'overview', label: t('growth.mobileTabOverview') },
-    { key: 'tasks', label: t('growth.mobileTabTasks') },
-    { key: 'achievements', label: t('growth.mobileTabAchievements') },
-    { key: 'rewards', label: t('growth.mobileTabRewards') },
+  const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
+  const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => [
+    { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
+    { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
+    { key: 'achievements', label: t('growth.mobileTabAchievements'), icon: icon.growth.level },
+    { key: 'rewards', label: t('growth.mobileTabRewards'), icon: icon.growth.reward },
   ]);
-  const rewardSectionOptions = computed(() => [
-    { key: 'shop', label: t('growth.rewardTabShop') },
-    { key: 'lottery', label: t('growth.rewardTabLottery') },
-    { key: 'inventory', label: t('growth.rewardTabInventory') },
-    { key: 'ledger', label: t('growth.rewardTabLedger') },
+  const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => [
+    { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
+    { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
+    { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
+    { key: 'ledger', label: t('growth.rewardTabLedger'), icon: icon.noteDetail.history },
   ]);
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
@@ -169,6 +242,7 @@
     dashboard,
     recap,
     growthTasks,
+    load,
     loadDashboard,
     loadGrowthTasks,
     loadRecap,
@@ -197,8 +271,7 @@
     if (!targetId) return;
     const targetSection = sectionForHash(route.hash);
     if (targetSection && activeSection.value !== targetSection) {
-      // 带 hash 的入口需要继续定位到目标卡片，不能被普通 Tab 切换的回顶逻辑覆盖。
-      preserveNextMobileSectionScroll = bookmark.isMobile;
+      // 带 hash 的入口由程序切换分区，不会触发用户点击 Tab 的回顶逻辑。
       activeSection.value = targetSection;
     }
     void nextTick(() => {
@@ -208,6 +281,25 @@
 
   function refreshHeatmap() {
     void heatmapRef.value?.reload();
+  }
+
+  function handleSectionTabSelect() {
+    // 四个成长分区共享同一滚动容器；切换或再次点击当前 Tab 都从页面顶部开始。
+    void nextTick(() => resetMobileScrollElement(growthPageRef.value));
+  }
+
+  function selectSection(section: GrowthSection) {
+    if (section === 'rewards' && activeSection.value === 'rewards') {
+      rewardsExpanded.value = !rewardsExpanded.value;
+      return;
+    }
+    activeSection.value = section;
+    handleSectionTabSelect();
+  }
+
+  function selectRewardSection(section: RewardSection) {
+    activeRewardSection.value = section;
+    handleSectionTabSelect();
   }
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)
@@ -281,6 +373,7 @@
 
   onMounted(() => {
     recordOperation({ module: '成长', operation: '查看我的成长' });
+    void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
     loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
     // 只加载当前分区的专属数据；奖励子页在挂载时加载，避免 PC 首屏同时请求整页所有模块。
     if (activeSection.value === 'tasks') loadGrowthTasks(true);
@@ -298,7 +391,7 @@
    */
   useForegroundRefresh({
     refresh: () => {
-      const requests: Array<Promise<unknown>> = [loadDashboard()];
+      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true)];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true));
       if (activeSection.value === 'achievements') requests.push(loadRecap());
       return Promise.all(requests);
@@ -314,18 +407,35 @@
     () => scrollToHash(),
   );
 
+  watch(
+    () => route.query.section,
+    (section) => {
+      // 个人资料头像框选择器等入口会在成长页已经挂载时改 query；此时路由组件不会重建，
+      // 必须把外部导航反向同步回 Tab，不能只让地址栏变成 tasks/achievements。
+      const requested = String(section || '');
+      const nextSection = ['overview', 'tasks', 'achievements', 'rewards'].includes(requested)
+        ? (requested as GrowthSection)
+        : 'overview';
+      if (activeSection.value !== nextSection) activeSection.value = nextSection;
+    },
+  );
+
+  watch(
+    () => route.query.reward,
+    (reward) => {
+      const requested = String(reward || '');
+      const nextReward = ['shop', 'lottery', 'inventory', 'ledger'].includes(requested)
+        ? (requested as RewardSection)
+        : 'shop';
+      if (activeRewardSection.value !== nextReward) activeRewardSection.value = nextReward;
+    },
+  );
+
   watch(activeSection, (section) => {
+    rewardsExpanded.value = section === 'rewards';
     void router.replace({ query: { ...route.query, section } });
     if (section === 'tasks') void loadGrowthTasks();
     if (section === 'achievements') void loadRecap();
-    if (!bookmark.isMobile) return;
-    if (preserveNextMobileSectionScroll) {
-      preserveNextMobileSectionScroll = false;
-      return;
-    }
-    // 成长页四个分段共用同一个滚动容器；切换内容后必须回到页面起点，
-    // 不能把上一分段的滚动位置带进结构和高度完全不同的新分段。
-    void nextTick(() => resetMobileScrollElement(growthPageRef.value));
   });
 
   watch(activeRewardSection, (reward) => {
@@ -340,8 +450,17 @@
     try {
       const res = await claimAchievement(key);
       if (res?.status === 200 && res.data?.ok) {
-        message.success(t('growth.achClaimOk', { n: res.data.reward }));
-        recordOperation({ module: '成长', operation: `领取成就奖励 ${key}（+${res.data.reward} 积分）` });
+        if (res.data.frameId) {
+          const frameName = t(`growth.shopItems.${res.data.frameId}.name`);
+          message.success(t('growth.achClaimFrameOk', { n: res.data.reward, name: frameName }));
+          recordOperation({
+            module: '成长',
+            operation: `领取成就奖励 ${key}（+${res.data.reward} 积分、头像框「${frameName}」）`,
+          });
+        } else {
+          message.success(t('growth.achClaimOk', { n: res.data.reward }));
+          recordOperation({ module: '成长', operation: `领取成就奖励 ${key}（+${res.data.reward} 积分）` });
+        }
       } else if (res?.data?.reason === 'claimed') {
         message.info(t('growth.achClaimedAlready'));
       } else if (res?.data?.reason === 'locked') {
@@ -383,6 +502,162 @@
     .growth-container {
       max-width: 1120px;
     }
+  }
+  .growth-container.growth-container--wide {
+    max-width: 1360px;
+  }
+  .growth-workspace {
+    min-width: 0;
+  }
+  .growth-workspace--wide {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+  }
+  .growth-main {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .growth-desktop-sidebar {
+    position: sticky;
+    top: 18px;
+    display: flex;
+    max-height: calc(100vh - 36px);
+    min-width: 0;
+    flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .growth-hero--sidebar {
+    flex: 0 0 auto;
+    padding: 0 4px 16px;
+  }
+  .growth-side-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 16px;
+    background: var(--workbench-subcard-bg);
+    box-shadow: 0 12px 28px -24px rgba(30, 35, 70, 0.45);
+  }
+  .growth-side-nav-item.b_btn,
+  .growth-side-subnav-item.b_btn,
+  .growth-side-report.b_btn {
+    width: 100%;
+    margin: 0;
+    box-sizing: border-box;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--desc-color);
+    box-shadow: none;
+  }
+  .growth-side-nav-item.b_btn {
+    position: relative;
+    justify-content: flex-start;
+    gap: 10px;
+    height: 46px;
+    padding: 0 11px;
+    overflow: hidden;
+    border-radius: 11px;
+    line-height: normal;
+    text-align: left;
+  }
+  .growth-side-nav-item.b_btn::before {
+    content: '';
+    position: absolute;
+    top: 9px;
+    bottom: 9px;
+    left: 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: transparent;
+  }
+  .growth-side-nav-item.b_btn:hover,
+  .growth-side-subnav-item.b_btn:hover {
+    border-color: var(--card-border-color);
+    background: var(--hover-background);
+    color: var(--text-color);
+  }
+  .growth-side-nav-item.b_btn.is-active {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 10%, var(--workbench-subcard-bg));
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+  .growth-side-nav-item.b_btn.is-active::before {
+    background: var(--primary-color);
+  }
+  .growth-side-nav-icon {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+    place-items: center;
+    border: 1px solid var(--card-border-color);
+    border-radius: 9px;
+    background: var(--background-color);
+    color: currentColor;
+  }
+  .growth-side-nav-item.is-active .growth-side-nav-icon {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: #fff;
+  }
+  .growth-side-nav-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .growth-side-nav-chevron {
+    margin-left: auto;
+    transition: transform 0.18s ease;
+  }
+  .growth-side-nav-chevron.expanded {
+    transform: rotate(90deg);
+  }
+  .growth-side-subnav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0 4px 2px 24px;
+    padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--card-border-color);
+  }
+  .growth-side-subnav-item.b_btn {
+    position: relative;
+    justify-content: flex-start;
+    gap: 9px;
+    height: 38px;
+    padding: 0 10px;
+    border-radius: 9px;
+    line-height: normal;
+    text-align: left;
+  }
+  .growth-side-subnav-item.b_btn.is-active {
+    border-color: var(--primary-color);
+    background: color-mix(in srgb, var(--primary-color) 9%, var(--workbench-subcard-bg));
+    color: var(--primary-color);
+    font-weight: 700;
+  }
+  .growth-side-report.b_btn {
+    justify-content: flex-start;
+    gap: 8px;
+    height: 42px;
+    margin-top: 12px;
+    padding: 0 14px;
+    border-color: var(--primary-color);
+    border-radius: 11px;
+    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  .growth-side-report.b_btn:hover {
+    background: color-mix(in srgb, var(--primary-color) 14%, var(--background-color));
   }
   .growth-hero {
     display: flex;
@@ -507,6 +782,9 @@
       padding: 18px 12px 36px;
     }
     .growth-container {
+      gap: 12px;
+    }
+    .growth-main {
       gap: 12px;
     }
     .growth-section-tabs :deep(.tab) {

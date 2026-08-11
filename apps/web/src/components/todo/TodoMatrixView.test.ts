@@ -27,7 +27,7 @@ function todo(id: string, title: string, priority: TodoItem['priority'], dueAt: 
   };
 }
 
-function mountMatrix() {
+function mountMatrix(options: { mobile?: boolean } = {}) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 30);
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
@@ -47,12 +47,14 @@ function mountMatrix() {
       return () =>
         h(TodoMatrixView, {
           items,
+          mobile: options.mobile,
           onEdit,
           onDelete,
           onToggleComplete,
         });
     },
   });
+  app.component('OriginalIcon', { render: () => h('span', { 'aria-hidden': 'true' }) });
   app.use(
     createI18n({
       legacy: false,
@@ -61,7 +63,7 @@ function mountMatrix() {
       fallbackWarn: false,
       messages: {
         'zh-CN': {
-          common: { delete: '删除' },
+          common: { delete: '删除', more: '更多' },
           inbox: {
             todoMatrixLabel: '待办四象限',
             todoMatrixGuide: '自动分类说明',
@@ -80,6 +82,7 @@ function mountMatrix() {
               otherNotUrgent: '普通或低优先，稍后截止',
             },
             todoSelect: '选择待办“{title}”',
+            editTodo: '编辑待办',
             deleteTodo: '删除待办',
             todoPriority0: '低',
             todoPriority1: '普通',
@@ -107,13 +110,13 @@ afterEach(() => {
 });
 
 describe('TodoMatrixView', () => {
-  it('按四种组合渲染计数，并把编辑、完成、删除交给既有上层动作', async () => {
+  it('桌面端在中性 2×2 矩阵中渲染计数，并复用既有编辑、完成、删除动作', async () => {
     const { host, items, onEdit, onDelete, onToggleComplete } = mountMatrix();
     await nextTick();
 
     expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(4);
     for (const key of ['importantUrgent', 'importantNotUrgent', 'otherUrgent', 'otherNotUrgent']) {
-      expect(host.querySelector(`.is-${key} .todo-matrix__count`)?.textContent?.trim()).toBe('1');
+      expect(host.querySelector(`[data-quadrant="${key}"] .todo-matrix__count`)?.textContent?.trim()).toBe('1');
     }
 
     host.querySelector<HTMLButtonElement>('.todo-matrix-card__content')!.click();
@@ -122,7 +125,26 @@ describe('TodoMatrixView', () => {
     host.querySelector<HTMLElement>('.todo-matrix-card__checkbox')!.click();
     expect(onToggleComplete).toHaveBeenCalledWith(items[0], true);
 
-    host.querySelector<HTMLButtonElement>('.todo-matrix-card__delete')!.click();
+    host.querySelector<HTMLButtonElement>('.todo-matrix-card__more')!.click();
+    await nextTick();
+    await nextTick();
+    document.querySelector<HTMLButtonElement>('.b-action-menu__item.is-danger')!.click();
     expect(onDelete).toHaveBeenCalledWith(items[0]);
+  });
+
+  it('移动端显示 2×2 象限概览，并且一次只展开用户选中的一个象限', async () => {
+    const { host } = mountMatrix({ mobile: true });
+    await nextTick();
+
+    expect(host.querySelectorAll('.todo-matrix__overview-button')).toHaveLength(4);
+    expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(1);
+    expect(host.querySelector('.todo-matrix__quadrant')?.getAttribute('data-quadrant')).toBe('importantUrgent');
+
+    host.querySelector<HTMLButtonElement>('.todo-matrix__overview-button.is-otherNotUrgent')!.click();
+    await nextTick();
+
+    expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(1);
+    expect(host.querySelector('.todo-matrix__quadrant')?.getAttribute('data-quadrant')).toBe('otherNotUrgent');
+    expect(host.querySelector('.todo-matrix-card__title')?.textContent).toBe('低优先无日期');
   });
 });

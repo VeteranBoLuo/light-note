@@ -60,7 +60,7 @@
               <BInput
                 v-model:value="content"
                 type="textarea"
-                :rows="captureType === 'bookmark' ? 3 : 7"
+                :rows="7"
                 :maxlength="60000"
                 :placeholder="capturePlaceholder"
                 @input="detectType"
@@ -715,6 +715,17 @@
     border-radius: 14px;
     background: var(--card-background);
     box-shadow: var(--surface-card-shadow);
+  }
+
+  /* 资源类 Tab 切换时保持弹框稳定：以 7 行笔记输入面板为当前最高基准。
+     只统一初始最小高度，选择文件后仍允许按真实内容向下扩展；待办保持独立高度。 */
+  @media (min-width: 768px) {
+    .capture-workspace.is-bookmark,
+    .capture-workspace.is-note,
+    .capture-workspace.is-file {
+      min-height: 262px;
+      box-sizing: border-box;
+    }
   }
 
   .capture-panel-intro {

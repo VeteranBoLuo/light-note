@@ -70,6 +70,8 @@
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
+  import { scheduleNoteEditorStartupPreload } from '@/utils/noteEditorStartupPreload';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
@@ -192,9 +194,7 @@
   const mobileTopSwitcherActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopSwitcher === true,
   );
-  const mobileTopBarActive = computed(
-    () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopBar !== false,
-  );
+  const mobileTopBarActive = computed(() => bookmark.isMobile && router.currentRoute.value.meta.mobileTopBar !== false);
   const mobileBottomNavActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
@@ -318,6 +318,8 @@
   let noticeRequest: Promise<void> | null = null;
   let userInfoRequest: Promise<any> | null = null;
   let userInfoLoaded = false;
+  let disposeNoteEditorStartupPreload: (() => void) | null = null;
+  const appStartupReady = ref(false);
   // 官网 CTA 单独等待 /me 的确定结果，避免 Pinia 初始游客值在登录态恢复前短暂露出注册入口。
   // 它不参与登录、会话或路由鉴权，只影响 Landing 的按钮展示与点击资格。
   const landingAuthStatus = ref<LandingAuthStatus>('pending');
@@ -736,6 +738,46 @@
     }, NOTICE_POLLING_INTERVAL);
   }
 
+  const noteEditorPreloadExcludedRoutes = new Set([
+    'landing',
+    'help',
+    'updateLogs',
+    'downloadAndroid',
+    'githubCallBack',
+    'not-found',
+    'not-role',
+    'banned',
+    'quickSave',
+  ]);
+
+  function syncNoteEditorStartupPreload() {
+    disposeNoteEditorStartupPreload?.();
+    disposeNoteEditorStartupPreload = null;
+    const currentRouteName = String(router.currentRoute.value.name || '');
+    const applicationRoute = Boolean(currentRouteName && !noteEditorPreloadExcludedRoutes.has(currentRouteName));
+    const supportedPlatform = isAndroidApp || bookmark.isDesktop;
+    if (!appStartupReady.value || !supportedPlatform || !applicationRoute) return;
+    disposeNoteEditorStartupPreload = scheduleNoteEditorStartupPreload({
+      supportedPlatform,
+      applicationRoute,
+      // App 更容易遇到弱网首次点击停顿；PC 稍晚预热，避免与首屏请求争抢网络和解析时间。
+      delayMs: isAndroidApp ? 2_000 : 5_000,
+      prerender: Boolean((window as any).__PRERENDER__),
+      preloadRoute: () =>
+        prefetchResolvedRoute(router, {
+          name: 'noteDetail',
+          // 这里只解析并加载路由组件，不会触发导航守卫或请求这篇不存在的笔记。
+          params: { id: '__editor_runtime_warmup__' },
+        }),
+    });
+  }
+
+  watch(
+    () => [appStartupReady.value, bookmark.isDesktop, router.currentRoute.value.name] as const,
+    () => syncNoteEditorStartupPreload(),
+    { immediate: true },
+  );
+
   const skipRouter = [
     'help',
     'updateLogs',
@@ -830,6 +872,7 @@
   onMounted(async () => {
     initApp();
     await init();
+    appStartupReady.value = true;
     // 根路径是纯官网展示页，不应该出现任何账号相关的通知/弹窗。
     if (router.currentRoute.value.name === 'landing') return;
     startOpinionNoticePolling();
@@ -837,6 +880,9 @@
 
   // 解绑媒体查询监听，防止内存泄漏
   onBeforeUnmount(() => {
+    appStartupReady.value = false;
+    disposeNoteEditorStartupPreload?.();
+    disposeNoteEditorStartupPreload = null;
     aiAssistant.abortActiveRequest('app_shutdown');
     aiAssistant.flushPersistence();
     stopOpinionNoticePolling();

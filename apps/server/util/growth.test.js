@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 
 // growth.js 顶层 import pool from '../db/index.js';纯逻辑测试不碰库,mock 掉以免 import 期连真库
 vi.mock('../db/index.js', () => ({
@@ -7,6 +7,7 @@ vi.mock('../db/index.js', () => ({
 vi.mock('./points.js', () => ({
   earnPoints: vi.fn(),
   earnStorage: vi.fn(),
+  getAchievementFrameByKey: vi.fn(),
   titleName: vi.fn(),
 }));
 vi.mock('./items.js', () => ({
@@ -20,7 +21,7 @@ vi.mock('./growthTaskCompletion.js', () => ({ completeGrowthTask }));
 
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
-import { earnPoints } from './points.js';
+import { earnPoints, getAchievementFrameByKey } from './points.js';
 import { createNotification } from './notification.js';
 import {
   adminAdjustGrowth,
@@ -32,11 +33,15 @@ import {
   MAX_LEVEL,
   MAKEUP_WINDOW_DAYS,
   ACHIEVEMENTS,
+  meetsAchievementRequirement,
   useProtectCard,
   claimDailyQuestBonus,
+  claimAchievement,
   getGrowthDashboard,
   getActivityHeatmap,
   awardCreate,
+  grantExp,
+  getGrowth,
 } from './growth.js';
 
 afterEach(() => vi.useRealTimers());
@@ -94,20 +99,211 @@ describe('rankOf 越界钳制', () => {
   });
 });
 
+describe('每日经验上限与一次性奖励隔离', () => {
+  function makeGrantConnection({ used = 0, exp = 100, level = 1 } = {}) {
+    return {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (sql.includes('INSERT IGNORE INTO growth_events')) return [{ affectedRows: 1, insertId: 11 }];
+        if (sql.includes('INSERT INTO user_growth (user_id) VALUES')) return [{ affectedRows: 0 }];
+        if (sql.includes('SELECT exp, level FROM user_growth')) return [[{ exp, level }]];
+        if (sql.includes('SUM(amount)')) return [[{ used }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+  }
+
+  it('可重复来源只使用剩余每日额度，并从统计中排除一次性来源', async () => {
+    vi.clearAllMocks();
+    const connection = makeGrantConnection({ used: 195 });
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await grantExp('user-1', 'note', {
+      refId: 'note-1',
+      amount: 15,
+      userRole: 'user',
+    });
+
+    expect(result.granted).toBe(5);
+    const capQuery = connection.query.mock.calls.find(([sql]) => sql.includes('SUM(amount)'));
+    expect(capQuery?.[0]).toContain('source NOT IN (?, ?, ?, ?, ?)');
+    expect(capQuery?.[1]).toEqual([
+      'user-1',
+      'growth_task',
+      'first_own_resource',
+      'milestone',
+      'manual',
+      'profile_done',
+    ]);
+    const lockCall = connection.query.mock.calls.findIndex(([sql]) => sql.includes('FOR UPDATE'));
+    const capCall = connection.query.mock.calls.findIndex(([sql]) => sql.includes('SUM(amount)'));
+    expect(lockCall).toBeGreaterThan(-1);
+    expect(lockCall).toBeLessThan(capCall);
+  });
+
+  it('一次性成长奖励全额发放，不读取也不占用每日额度', async () => {
+    vi.clearAllMocks();
+    const connection = makeGrantConnection({ used: 200 });
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await grantExp('user-1', 'growth_task', {
+      refId: 'first_note',
+      amount: 50,
+      userRole: 'user',
+    });
+
+    expect(result.granted).toBe(50);
+    expect(connection.query.mock.calls.some(([sql]) => sql.includes('SUM(amount)'))).toBe(false);
+  });
+
+  it('页面今日经验与发放端使用同一份受限来源口径', async () => {
+    vi.clearAllMocks();
+    pool.query.mockImplementation(async (sql) => {
+      if (sql.includes('SELECT exp, streak, last_checkin_date')) {
+        return [
+          [
+            {
+              exp: 800,
+              streak: 0,
+              last_checkin_date: null,
+              last_notified_level: 2,
+              streak_protect_cards: 0,
+              points: 0,
+              equipped_title: null,
+              equipped_frame: null,
+              storage_bonus_mb: 0,
+            },
+          ],
+        ];
+      }
+      if (sql.includes('SUM(amount)')) return [[{ used: 86 }]];
+      throw new Error(`未预期的查询: ${sql}`);
+    });
+
+    const growth = await getGrowth('user-1', { userRole: 'user' });
+
+    expect(growth).toMatchObject({ dailyExp: 86, dailyCap: 200, dailyCapReached: false });
+    const capQuery = pool.query.mock.calls.find(([sql]) => sql.includes('SUM(amount)'));
+    expect(capQuery?.[1]).toEqual([
+      'user-1',
+      'growth_task',
+      'first_own_resource',
+      'milestone',
+      'manual',
+      'profile_done',
+    ]);
+  });
+});
+
 describe('成就体系职责', () => {
-  it('不再把首次体验和首次创建行为作为长期成就', () => {
+  it('仅用首签成就承接新用户赠框，其余仍保持长期积累目标', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
     const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
 
-    expect(keys).toHaveLength(30);
+    expect(keys).toHaveLength(35);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
-    expect(ACHIEVEMENTS.every((achievement) => achievement.target > 1)).toBe(true);
+    expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual([
+      expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
+    ]);
+    expect(
+      ACHIEVEMENTS.filter((achievement) => achievement.key !== 'streak_1').every(
+        (achievement) => achievement.target > 1,
+      ),
+    ).toBe(true);
     expect(
       ACHIEVEMENTS.reduce((counts, achievement) => {
         counts[achievement.group] = (counts[achievement.group] || 0) + 1;
         return counts;
       }, {}),
-    ).toEqual({ checkin: 6, create: 9, action: 4, organize: 4, level: 3, tenure: 4 });
+    ).toEqual({ checkin: 7, create: 13, action: 4, organize: 4, level: 3, tenure: 4 });
+  });
+
+  it('资源头像框只叠加等级门槛：200 档 Lv.5，500 档 Lv.8', () => {
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'note_200')).toMatchObject({ minLevel: 5 });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'file_200')).toMatchObject({ minLevel: 5 });
+    for (const key of ['bookmark_500', 'note_500', 'file_500']) {
+      expect(ACHIEVEMENTS.find((achievement) => achievement.key === key)).toMatchObject({ minLevel: 8 });
+    }
+
+    const note200 = ACHIEVEMENTS.find((achievement) => achievement.key === 'note_200');
+    expect(meetsAchievementRequirement(note200, { noteCount: 200, level: 4 })).toBe(false);
+    expect(meetsAchievementRequirement(note200, { noteCount: 199, level: 5 })).toBe(false);
+    expect(meetsAchievementRequirement(note200, { noteCount: 200, level: 5 })).toBe(true);
+  });
+});
+
+describe('成就头像框领取', () => {
+  let connection;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    connection = {
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    };
+    pool.getConnection.mockResolvedValue(connection);
+    getAchievementFrameByKey.mockReturnValue({ id: 'frame_first_light' });
+    earnPoints.mockResolvedValue(true);
+    pool.query
+      .mockResolvedValueOnce([
+        [
+          {
+            exp: 0,
+            streak: 1,
+            last_checkin_date: '20260811',
+            last_notified_level: 1,
+            streak_protect_cards: 0,
+            points: 30,
+            equipped_title: null,
+            equipped_frame: null,
+            storage_bonus_mb: 0,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ s: 5 }]]);
+  });
+
+  afterEach(() => {
+    getAchievementFrameByKey.mockReset();
+    earnPoints.mockReset();
+  });
+
+  it('在同一事务发放积分和头像框，并返回奖励 frameId', async () => {
+    const result = await claimAchievement('user-1', 'streak_1', {
+      userRole: 'user',
+      dashboard: { achievements: [{ key: 'streak_1', unlocked: true }] },
+    });
+
+    expect(earnPoints).toHaveBeenCalledWith('user-1', 10, 'achievement', 'streak_1', connection);
+    expect(connection.query).toHaveBeenCalledWith(
+      'INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)',
+      ['user-1', 'frame_first_light'],
+    );
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(connection.release).toHaveBeenCalledOnce();
+    expect(result).toMatchObject({ ok: true, key: 'streak_1', reward: 10, frameId: 'frame_first_light' });
+  });
+
+  it('头像框入库失败时回滚成就积分事务', async () => {
+    connection.query.mockRejectedValueOnce(new Error('insert failed'));
+
+    await expect(
+      claimAchievement('user-1', 'streak_1', {
+        userRole: 'user',
+        dashboard: { achievements: [{ key: 'streak_1', unlocked: true }] },
+      }),
+    ).rejects.toThrow('insert failed');
+
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+    expect(connection.release).toHaveBeenCalledOnce();
   });
 });
 
@@ -367,8 +563,8 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
 
     // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
-    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 20, capped: false });
-    expect(earnPoints).toHaveBeenCalledWith('root-1', 20, 'quest', '20260806:2');
+    expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 10, capped: false });
+    expect(earnPoints).toHaveBeenCalledWith('root-1', 10, 'quest', '20260806:2');
     const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
     expect(contentCountCall?.[0]).toContain('td.del_flag = 0 AND td.create_time >= CURDATE()');
     expect(contentCountCall?.[1]).toEqual(['root-1', 'root-1', 'root-1', 'root-1', 'root-1', 'root-1']);
@@ -398,8 +594,8 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
 
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
-    expect(earnPoints).toHaveBeenNthCalledWith(1, 'root-1', 20, 'quest', '20260806:2');
-    expect(earnPoints).toHaveBeenNthCalledWith(2, 'root-1', 10, 'quest', '20260806:3');
+    expect(earnPoints).toHaveBeenNthCalledWith(1, 'root-1', 10, 'quest', '20260806:2');
+    expect(earnPoints).toHaveBeenNthCalledWith(2, 'root-1', 20, 'quest', '20260806:3');
   });
 
   it('root 未记录内容时仍算未完成,不发积分', async () => {

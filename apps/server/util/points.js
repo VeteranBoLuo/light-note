@@ -94,9 +94,10 @@ export async function ensurePointsSchema() {
 }
 
 // ============================================================================
-// 商店目录(单一事实源)。type: consumable(可反复买) / title|cosmetic(一次性拥有)
+// 商店目录与头像框目录分源：SHOP_ITEMS 只包含可用积分兑换的商品；FRAME_CATALOG
+// 包含所有可佩戴头像框，并通过 acquisition 区分积分兑换与成就领取。
 // ============================================================================
-export const SHOP_ITEMS = [
+const SHOP_UTILITY_ITEMS = [
   // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
   // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
   {
@@ -145,14 +146,17 @@ export const SHOP_ITEMS = [
     storageMb: 2048,
   },
   // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。
-  // 头像框装扮(type=cosmetic,effect=frame):一次性拥有、可佩戴,前端按 id 渲染样式
+];
+
+// 可积分兑换的头像框。它们会进入 SHOP_ITEMS；成就专属框不会进入购买目录。
+const SHOP_FRAME_ITEMS = [
   {
     id: 'frame_mint',
     type: 'cosmetic',
     effect: 'frame',
     rarity: 'basic',
     name: '薄荷',
-    desc: '头像框 · 清新薄荷微光',
+    desc: '头像框 · 清透薄荷晶环',
     cost: 220,
     minLevel: 0,
   },
@@ -162,9 +166,19 @@ export const SHOP_ITEMS = [
     effect: 'frame',
     rarity: 'basic',
     name: '墨韵',
-    desc: '头像框 · 水墨留白',
+    desc: '头像框 · 墨玉双层笔锋',
     cost: 320,
     minLevel: 0,
+  },
+  {
+    id: 'frame_moonstone',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '月白',
+    desc: '头像框 · 月白瓷光',
+    cost: 420,
+    minLevel: 1,
   },
   {
     id: 'frame_gold',
@@ -174,7 +188,7 @@ export const SHOP_ITEMS = [
     name: '鎏金',
     desc: '头像框 · 金光流转',
     cost: 500,
-    minLevel: 0,
+    minLevel: 2,
   },
   {
     id: 'frame_sakura',
@@ -183,18 +197,18 @@ export const SHOP_ITEMS = [
     rarity: 'rare',
     name: '樱绯',
     desc: '头像框 · 樱色浪漫',
-    cost: 500,
-    minLevel: 0,
+    cost: 600,
+    minLevel: 3,
   },
   {
     id: 'frame_neon',
     type: 'cosmetic',
     effect: 'frame',
-    rarity: 'rare',
+    rarity: 'legendary',
     name: '霓虹',
     desc: '头像框 · 赛博霓虹',
-    cost: 500,
-    minLevel: 0,
+    cost: 1600,
+    minLevel: 8,
   },
   {
     id: 'frame_sunset',
@@ -203,18 +217,18 @@ export const SHOP_ITEMS = [
     rarity: 'rare',
     name: '晚霞',
     desc: '头像框 · 暮色渐染',
-    cost: 650,
-    minLevel: 2,
+    cost: 750,
+    minLevel: 4,
   },
   {
     id: 'frame_ocean',
     type: 'cosmetic',
     effect: 'frame',
-    rarity: 'rare',
+    rarity: 'epic',
     name: '潮汐',
     desc: '头像框 · 深海流光',
-    cost: 750,
-    minLevel: 3,
+    cost: 900,
+    minLevel: 5,
   },
   {
     id: 'frame_aurora',
@@ -223,7 +237,7 @@ export const SHOP_ITEMS = [
     rarity: 'epic',
     name: '极光',
     desc: '头像框 · 极光幻彩',
-    cost: 1000,
+    cost: 1100,
     minLevel: 6,
   },
   {
@@ -233,7 +247,7 @@ export const SHOP_ITEMS = [
     rarity: 'epic',
     name: '赤焰',
     desc: '头像框 · 烈焰跃动',
-    cost: 1100,
+    cost: 1300,
     minLevel: 7,
   },
   {
@@ -243,8 +257,8 @@ export const SHOP_ITEMS = [
     rarity: 'legendary',
     name: '星河',
     desc: '头像框 · 流光星河',
-    cost: 1200,
-    minLevel: 8,
+    cost: 1900,
+    minLevel: 9,
   },
   {
     id: 'frame_dragon',
@@ -253,7 +267,7 @@ export const SHOP_ITEMS = [
     rarity: 'legendary',
     name: '龙曜',
     desc: '头像框 · 龙鳞金焰',
-    cost: 2200,
+    cost: 2400,
     minLevel: 10,
   },
   {
@@ -268,8 +282,140 @@ export const SHOP_ITEMS = [
   },
 ];
 
+const ACHIEVEMENT_FRAME_ITEMS = [
+  {
+    id: 'frame_first_light',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '初光',
+    desc: '头像框 · 首次签到纪念',
+    achievementKey: 'streak_1',
+  },
+  {
+    id: 'frame_streak_seed',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '七日晨光',
+    desc: '头像框 · 七日签到印记',
+    achievementKey: 'streak_7',
+  },
+  {
+    id: 'frame_streak_month',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '月华渐盈',
+    desc: '头像框 · 卅日月相流转',
+    achievementKey: 'streak_30',
+  },
+  {
+    id: 'frame_bookmark_seed',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '书页初藏',
+    desc: '头像框 · 第一座小书架',
+    achievementKey: 'bookmark_20',
+  },
+  {
+    id: 'frame_note_seed',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '青笔初成',
+    desc: '头像框 · 笔尖新绿',
+    achievementKey: 'note_10',
+  },
+  {
+    id: 'frame_file_seed',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '云匣初启',
+    desc: '头像框 · 云端初藏',
+    achievementKey: 'file_10',
+  },
+  {
+    id: 'frame_bookmark_archive',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '万卷星库',
+    desc: '头像框 · 万卷流转成星河',
+    achievementKey: 'bookmark_500',
+  },
+  {
+    id: 'frame_note_masterpiece',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '文心长河',
+    desc: '头像框 · 翡翠墨光奔流',
+    achievementKey: 'note_200',
+  },
+  {
+    id: 'frame_file_vault',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '云阙宝库',
+    desc: '头像框 · 晶辉守护云藏',
+    achievementKey: 'file_200',
+  },
+  {
+    id: 'frame_note_constellation',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '翰墨星海',
+    desc: '头像框 · 五百篇文光汇成星海',
+    achievementKey: 'note_500',
+  },
+  {
+    id: 'frame_file_constellation',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '寰宇云藏',
+    desc: '头像框 · 五百云藏辉映星门',
+    achievementKey: 'file_500',
+  },
+  {
+    id: 'frame_streak_eternal',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'legendary',
+    name: '岁序长明',
+    desc: '头像框 · 日月轮转一周年',
+    achievementKey: 'streak_365',
+  },
+];
+
+const FRAME_RARITY_ORDER = { basic: 0, rare: 1, epic: 2, legendary: 3 };
+
+export const FRAME_CATALOG = [
+  ...SHOP_FRAME_ITEMS.map((item) => ({ ...item, acquisition: 'shop' })),
+  ...ACHIEVEMENT_FRAME_ITEMS.map((item) => ({ ...item, acquisition: 'achievement' })),
+].sort(
+  (left, right) =>
+    (FRAME_RARITY_ORDER[left.rarity] ?? Number.MAX_SAFE_INTEGER) -
+    (FRAME_RARITY_ORDER[right.rarity] ?? Number.MAX_SAFE_INTEGER),
+);
+
+export const SHOP_ITEMS = [...SHOP_UTILITY_ITEMS, ...SHOP_FRAME_ITEMS];
+
 export function getShopItem(id) {
   return SHOP_ITEMS.find((i) => i.id === id) || null;
+}
+
+export function getFrameItem(id) {
+  return FRAME_CATALOG.find((item) => item.id === id) || null;
+}
+
+export function getAchievementFrameByKey(key) {
+  return FRAME_CATALOG.find((item) => item.acquisition === 'achievement' && item.achievementKey === key) || null;
 }
 
 // ============================================================================
@@ -584,9 +730,23 @@ export async function getUserPointsDetail(userId) {
   };
 }
 
+async function getClaimedAchievementFrameIds(userId, conn = pool) {
+  if (!userId) return [];
+  const [rows] = await conn.query("SELECT DISTINCT ref FROM points_log WHERE user_id = ? AND reason = 'achievement'", [
+    userId,
+  ]);
+  const claimedKeys = new Set(rows.map((row) => row.ref).filter(Boolean));
+  return FRAME_CATALOG.filter(
+    (item) => item.acquisition === 'achievement' && item.achievementKey && claimedKeys.has(item.achievementKey),
+  ).map((item) => item.id);
+}
+
 export async function getOwnedCosmetics(userId) {
   const [rows] = await pool.query('SELECT cosmetic_id FROM user_cosmetics WHERE user_id = ?', [userId]);
-  return rows.map((r) => r.cosmetic_id);
+  // 成就头像框晚于部分成就领取记录上线。旧 points_log 已代表奖励领取事实，读取时把对应
+  // 头像框视为已拥有；这里保持只读，避免 GET /growth/shop 在管理员只读预览中产生写入。
+  const claimedAchievementFrames = await getClaimedAchievementFrameIds(userId);
+  return [...new Set([...rows.map((row) => row.cosmetic_id), ...claimedAchievementFrames])];
 }
 
 export async function getEquippedTitle(userId) {
@@ -693,20 +853,52 @@ export function titleName(id) {
   return it && it.type === 'title' ? it.name : null;
 }
 
-// 佩戴/卸下头像框:frameId 为空=卸下;非空须已拥有
-export async function equipFrame(userId, frameId) {
+// 佩戴/卸下头像框:frameId 为空=卸下;普通用户非空须已拥有，Root 可直接验收当前完整目录。
+export async function equipFrame(userId, frameId, { userRole = null } = {}) {
   if (!frameId) {
     await pool.query('UPDATE user_growth SET equipped_frame = NULL WHERE user_id = ?', [userId]);
     return { ok: true, equipped: null };
   }
-  const item = getShopItem(frameId);
+  const item = getFrameItem(frameId);
   if (!item || item.type !== 'cosmetic' || item.effect !== 'frame') {
     return { ok: false, reason: 'invalid_frame', msg: '头像框不存在或已下架' };
+  }
+  if (userRole === 'root') {
+    await pool.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
+    return { ok: true, equipped: frameId };
   }
   const [owned] = await pool.query('SELECT 1 FROM user_cosmetics WHERE user_id = ? AND cosmetic_id = ? LIMIT 1', [
     userId,
     frameId,
   ]);
+  if (!owned.length && item.acquisition === 'achievement' && item.achievementKey) {
+    // 兼容头像框上线前已领取的成就：首次佩戴时在同一事务补齐装扮所有权并完成佩戴。
+    const conn = await pool.getConnection();
+    try {
+      await conn.beginTransaction();
+      const [claimed] = await conn.query(
+        "SELECT 1 FROM points_log WHERE user_id = ? AND reason = 'achievement' AND ref = ? LIMIT 1",
+        [userId, item.achievementKey],
+      );
+      if (!claimed.length) {
+        await conn.rollback();
+        return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
+      }
+      await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, frameId]);
+      await conn.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
+      await conn.commit();
+      return { ok: true, equipped: frameId };
+    } catch (error) {
+      try {
+        await conn.rollback();
+      } catch {
+        // 回滚失败仅保留原始错误，由上层统一记录。
+      }
+      throw error;
+    } finally {
+      conn.release();
+    }
+  }
   if (!owned.length) return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
   await pool.query('UPDATE user_growth SET equipped_frame = ? WHERE user_id = ?', [frameId, userId]);
   return { ok: true, equipped: frameId };

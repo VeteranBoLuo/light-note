@@ -43,7 +43,12 @@
     @openChange="onOpenChange"
   >
     <BTooltip :title="t('notification.title')">
-      <BButton class="nt-bell dom-hover" v-click-log="{ module: '通知中心', operation: '打开通知铃铛' }">
+      <BButton
+        class="nt-bell dom-hover"
+        :class="{ 'is-open': open }"
+        :aria-expanded="open"
+        v-click-log="{ module: '通知中心', operation: '打开通知铃铛' }"
+      >
         <SvgIcon :src="icon.settings.notification" size="24" aria-hidden="true" />
         <span v-if="unreadTotal > 0" class="nt-badge">{{ unreadTotal > 99 ? '99+' : unreadTotal }}</span>
       </BButton>
@@ -416,12 +421,19 @@
     cursor: pointer;
     padding: 6px;
     border-radius: 8px;
+    background: transparent !important;
     box-sizing: border-box;
-    transition: background-color 0.2s;
+    transition:
+      color 0.2s,
+      background-color 0.2s;
   }
   @media (min-width: 600px) {
     .nt-bell:hover {
-      background-color: var(--menu-item-h-bg-color);
+      background-color: var(--menu-item-h-bg-color) !important;
+    }
+    .nt-bell.is-open {
+      color: var(--primary-color);
+      background-color: color-mix(in srgb, var(--primary-color) 10%, transparent) !important;
     }
   }
   .nt-badge {

@@ -120,7 +120,7 @@
     </div>
 
     <PassConfigDlg v-model:visible="configPassVisible" />
-    <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" />
+    <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" @navigate="handleFrameNavigation" />
   </CommonContainer>
 </template>
 
@@ -146,6 +146,7 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
   import { compressAvatarFile } from '@/utils/compressAvatar.ts';
+  import router from '@/router';
 
   interface ProfileSnapshot {
     alias: string;
@@ -188,6 +189,17 @@
       userData.value.email.trim() !== originalProfile.value.email
     );
   });
+
+  function handleFrameNavigation(destination: 'growth' | 'tasks' | 'achievements') {
+    frameDrawerOpen.value = false;
+    const target =
+      destination === 'achievements'
+        ? { path: '/growth', query: { section: 'achievements' } }
+        : destination === 'tasks'
+          ? { path: '/growth', query: { section: 'tasks' } }
+          : '/growth';
+    void router.push(target);
+  }
 
   function getUserSnapshot(): ProfileSnapshot {
     return {

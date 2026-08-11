@@ -1,7 +1,11 @@
 <template>
   <section class="note-editor-warmup" role="status" :aria-label="t('noteDetail.editorPreparing')">
     <pre v-if="isMarkdown" class="note-editor-warmup__content note-editor-warmup__markdown">{{ content }}</pre>
-    <article v-else class="note-editor-warmup__content note-editor-rich-content" v-html="safeContent"></article>
+    <article
+      v-else
+      class="note-editor-warmup__content note-editor-rich-content note-rich-content"
+      v-html="safeContent"
+    ></article>
   </section>
 </template>
 

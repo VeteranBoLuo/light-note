@@ -10,8 +10,19 @@
           @change="handleAvatarChange"
         >
           <template #default>
-            <div class="user_icon" v-click-log="{ module: '我的信息', operation: `上传头像` }">
-              <svg-icon :src="headPicture || icon.navigation.user" :size="80" />
+            <div
+              class="user_icon"
+              :class="{ 'user_icon--framed': equippedFrameId }"
+              v-click-log="{ module: '我的信息', operation: `上传头像` }"
+            >
+              <AvatarFramePreview
+                v-if="equippedFrameId"
+                :frame-id="equippedFrameId"
+                :src="headPicture || icon.navigation.user"
+                :size="80"
+                :decorative="false"
+              />
+              <svg-icon v-else :src="headPicture || icon.navigation.user" :size="80" />
             </div>
           </template>
         </BUpload>
@@ -28,6 +39,18 @@
             }}</a></div
           >
           <PassConfigDlg v-model:visible="configPassVisible" />
+        </div>
+        <div class="user-item">
+          <span class="user-item-label">{{ t('myInfo.avatarDecorations') }}</span>
+          <BButton class="frame-picker-entry" @click="frameDrawerOpen = true">
+            <span class="frame-picker-entry__current">
+              <SvgIcon :src="icon.growth.reward" size="18" aria-hidden="true" />
+              <span>{{
+                equippedFrameName ? t('myInfo.equippedFrame', { name: equippedFrameName }) : t('myInfo.noFrameEquipped')
+              }}</span>
+            </span>
+            <span class="frame-picker-entry__action">{{ t('myInfo.chooseAvatarFrame') }}</span>
+          </BButton>
         </div>
         <div class="user-item">
           <span class="user-item-label">{{ t('myInfo.nickname') }}</span>
@@ -48,12 +71,13 @@
       </div>
     </template>
   </b-modal>
+  <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" :z-index="720" @navigate="handleFrameNavigation" />
 </template>
 
 <script lang="ts" setup>
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { Ref, ref, watch } from 'vue';
+  import { computed, Ref, ref, watch } from 'vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -66,6 +90,10 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { compressAvatarFile } from '@/utils/compressAvatar.ts';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
+  import { frameVariant } from '@/config/growthFrames.ts';
+  import router from '@/router';
   const user = useUserStore();
   const headPicture = ref<string>('');
   const avatarChanged = ref(false);
@@ -73,9 +101,28 @@
   const visible = <Ref<boolean>>defineModel('visible');
 
   const bookmark = bookmarkStore();
-  const { loadGrowthTasks } = useGrowth();
-  const { t } = useI18n();
+  const { growth, load: loadGrowth, loadGrowthTasks } = useGrowth();
+  const { t, te } = useI18n();
   const MAX_AVATAR_FILE_SIZE = 5000 * 1024;
+  const frameDrawerOpen = ref(false);
+  const equippedFrameId = computed(() => {
+    const id = growth.value?.equippedFrame;
+    return frameVariant(id) ? id : null;
+  });
+  const equippedFrameName = computed(() => {
+    const id = equippedFrameId.value;
+    if (!id) return '';
+    const key = `growth.shopItems.${id}.name`;
+    return te(key) ? t(key) : id;
+  });
+
+  watch(
+    visible,
+    (isVisible) => {
+      if (isVisible) void loadGrowth();
+    },
+    { immediate: true },
+  );
 
   async function handleAvatarChange(files: File[]) {
     const file = files?.[0];
@@ -147,6 +194,18 @@
     configPassVisible.value = true;
   }
 
+  function handleFrameNavigation(destination: 'growth' | 'tasks' | 'achievements') {
+    frameDrawerOpen.value = false;
+    visible.value = false;
+    const target =
+      destination === 'achievements'
+        ? { path: '/growth', query: { section: 'achievements' } }
+        : destination === 'tasks'
+          ? { path: '/growth', query: { section: 'tasks' } }
+          : '/growth';
+    void router.push(target);
+  }
+
   const userData = ref({ alias: user.alias, email: user.email });
   headPicture.value = user.headPicture || '';
   watch(
@@ -211,6 +270,43 @@
       align-items: center; /* 垂直居中 */
       font-size: 12px; /* 文字大小 */
     }
+  }
+  .user_icon--framed {
+    overflow: visible;
+    border-color: transparent;
+  }
+  .frame-picker-entry {
+    width: 100%;
+    min-height: 56px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    color: var(--text-color);
+    background: var(--surface-panel-bg);
+    text-align: left;
+  }
+  .frame-picker-entry__current {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-color);
+  }
+  .frame-picker-entry__current > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .frame-picker-entry__current :deep(.svg-icon) {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
+  .frame-picker-entry__action {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+    font-weight: 700;
   }
   @media (max-width: 1000px) {
     .home-container {

@@ -1,6 +1,9 @@
 <template>
   <div v-if="ranks.length" class="rank-ladder">
-    <div class="rl-head">{{ t('growth.rankLadder') }}</div>
+    <div class="rl-heading">
+      <div class="rl-head">{{ t('growth.rankLadder') }}</div>
+      <p class="rl-hint">{{ t('growth.rankLadderHint') }}</p>
+    </div>
     <div class="rl-colhead">
       <span></span>
       <span>{{ t('growth.colRank') }}</span>
@@ -17,11 +20,14 @@
         <span class="rl-lv" :style="{ background: TIER_GRADIENTS[tierOf(r.level)] }">{{ r.level }}</span>
         <span class="rl-name">
           {{ t('growth.ranks.' + r.level) }}
+          <BChip v-if="r.level === curLevel" tone="pin">{{ t('growth.currentRank') }}</BChip>
           <span v-if="r.level === maxLevel" class="rl-max">{{ t('growth.max') }}</span>
         </span>
         <span class="rl-exp">{{ r.cumExp.toLocaleString('en-US') }}</span>
         <span class="rl-perk">
-          {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} · {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays }) }}<span v-if="r.freeDraws" class="rl-free">· 🎟️{{ r.freeDraws }}</span>
+          {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} ·
+          {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays })
+          }}<span v-if="r.freeDraws" class="rl-free">· 🎟️{{ r.freeDraws }}</span>
         </span>
       </div>
     </div>
@@ -33,6 +39,7 @@
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
 
   const { t } = useI18n();
   const { growth, ranks, load, loadRanks } = useGrowth();
@@ -91,6 +98,12 @@
     color: var(--desc-color);
     letter-spacing: 0.03em;
   }
+  .rl-hint {
+    margin: 3px 0 0;
+    color: var(--desc-color);
+    font-size: 10.5px;
+    line-height: 1.45;
+  }
   .rl-list {
     display: flex;
     flex-direction: column;
@@ -121,6 +134,7 @@
     align-items: center;
     gap: 10px;
     padding: 6px 8px;
+    border: 1px solid transparent;
     border-radius: 8px;
     font-size: 12.5px;
     transition: background 0.15s;
@@ -129,8 +143,8 @@
     opacity: 0.55;
   }
   .rl-row.cur {
+    border-color: var(--primary-color);
     background: color-mix(in srgb, var(--primary-color) 12%, transparent);
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary-color) 40%, transparent);
     opacity: 1;
   }
   .rl-lv {

@@ -39,20 +39,28 @@
                   <div class="gc-earn-list">
                     <div class="gc-earn-item"
                       ><span>{{ t('growth.earnCheckin') }}</span
-                      ><b>+5~10</b></div
+                      ><b>{{ t('growth.earnCheckinValue') }}</b></div
                     >
                     <div class="gc-earn-item"
                       ><span>{{ t('growth.earnCreate') }}</span
-                      ><b>+10~15</b></div
+                      ><b>{{ t('growth.earnCreateValue') }}</b></div
+                    >
+                    <div class="gc-earn-item"
+                      ><span>{{ t('growth.earnDailyQuest') }}</span
+                      ><b>{{ t('growth.earnDailyQuestValue') }}</b></div
                     >
                     <div class="gc-earn-item"
                       ><span>{{ t('growth.earnFirst') }}</span
-                      ><b>+30</b></div
+                      ><b>{{ t('growth.earnFirstValue') }}</b></div
                     >
                     <div class="gc-earn-item"
                       ><span>{{ t('growth.earnProfile') }}</span
-                      ><b>+20</b></div
+                      ><b>{{ t('growth.earnProfileValue') }}</b></div
                     >
+                  </div>
+                  <div class="gc-earn-popover-hint">{{ t('growth.questExperienceCreateHint') }}</div>
+                  <div v-if="g.dailyCap" class="gc-earn-popover-hint">
+                    {{ t('growth.questExperienceDailyCapRule', { cap: g.dailyCap }) }}
                   </div>
                   <div v-if="g.dailyCapReached" class="gc-earn-popover-tip">{{ t('growth.dailyReached') }}</div>
                 </div>
@@ -107,7 +115,7 @@
         </div>
       </div>
 
-      <BButton class="gc-ranks-btn" @click="rankVisible = true">
+      <BButton v-if="!bookmark.isDesktop" class="gc-ranks-btn" @click="rankVisible = true">
         <SvgIcon :src="icon.growth.rank" size="16" />
         {{ t('growth.viewAllRanks') }}
       </BButton>
@@ -145,9 +153,17 @@
         @makeup="onUseCard"
       />
     </div>
+
+    <RankLadder v-if="bookmark.isDesktop" class="gc-ladder" />
   </div>
 
-  <BModal v-model:visible="rankVisible" :title="t('growth.rankModalTitle')" :show-footer="false" width="720px">
+  <BModal
+    v-if="!bookmark.isDesktop"
+    v-model:visible="rankVisible"
+    :title="t('growth.rankModalTitle')"
+    :show-footer="false"
+    width="720px"
+  >
     <RankLadder class="gc-ladder-modal" />
   </BModal>
 
@@ -155,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import RankLadder from '@/components/growth/RankLadder.vue';
@@ -169,8 +185,10 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import icon from '@/config/icon.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
+  import { bookmarkStore } from '@/store';
 
   const { t } = useI18n();
+  const bookmark = bookmarkStore();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
   const { growth: g, dashboard, load, loadDashboard, doCheckin, useProtectCard, markRead } = useGrowth();
@@ -179,6 +197,13 @@
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
   const earnPopoverOpen = ref(false);
   const rankVisible = ref(false);
+
+  watch(
+    () => bookmark.isDesktop,
+    (isDesktop) => {
+      if (isDesktop) rankVisible.value = false;
+    },
+  );
 
   // 浮层通过 Teleport 挂到 body 并使用 fixed 定位；页面滚动时收起，
   // 避免触发点已经离开视口后，规则卡被定位逻辑钳在页面顶部。
@@ -301,6 +326,33 @@
     flex-direction: column;
     gap: 14px;
     min-width: 0;
+  }
+  /* 完整桌面直接展示等级路线；手机和平板继续使用弹框，避免压缩主信息。 */
+  @media (min-width: 1200px) {
+    .growth-card {
+      flex-direction: row;
+      align-items: stretch;
+      gap: 28px;
+    }
+    .gc-main {
+      flex: 1 1 auto;
+    }
+    .gc-ladder {
+      display: flex;
+      width: 360px;
+      flex: 0 0 360px;
+      flex-direction: column;
+    }
+    .gc-ladder :deep(.rank-ladder) {
+      flex: 1 1 auto;
+      min-height: 0;
+      margin-top: 0;
+    }
+    .gc-ladder :deep(.rl-list) {
+      flex: 1 1 auto;
+      min-height: 0;
+      max-height: none;
+    }
   }
   .gc-top {
     display: flex;
@@ -606,7 +658,12 @@
     color: var(--primary-color);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+    text-align: right;
+  }
+  .gc-earn-popover-hint {
+    color: var(--desc-color);
+    font-size: 11px;
+    line-height: 1.5;
   }
   .gc-earn-popover-tip {
     font-size: 11.5px;

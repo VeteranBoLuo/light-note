@@ -14,6 +14,7 @@ function mountTabs() {
   document.body.append(host);
   const active = ref('ask');
   const onChange = vi.fn();
+  const onSelect = vi.fn();
   const app = createApp({
     setup() {
       return () =>
@@ -28,6 +29,7 @@ function mountTabs() {
             active.value = value;
           },
           onChange,
+          onSelect,
         });
     },
   });
@@ -36,7 +38,7 @@ function mountTabs() {
     app.unmount();
     host.remove();
   };
-  return { host, active, onChange };
+  return { host, active, onChange, onSelect };
 }
 
 describe('BTabs keyboard navigation', () => {
@@ -73,5 +75,15 @@ describe('BTabs keyboard navigation', () => {
     tabs[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
     await nextTick();
     expect(active.value).toBe('organize');
+  });
+
+  it('emits select when the active tab is clicked again without emitting a false change', async () => {
+    const { host, active, onChange, onSelect } = mountTabs();
+    host.querySelectorAll<HTMLElement>('[role="tab"]')[0]?.click();
+    await nextTick();
+
+    expect(active.value).toBe('ask');
+    expect(onSelect).toHaveBeenCalledWith('ask');
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

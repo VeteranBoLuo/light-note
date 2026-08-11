@@ -11,7 +11,7 @@
  */
 import pool from '../db/index.js';
 import crypto from 'crypto';
-import { earnPoints, earnStorage, titleName } from './points.js';
+import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './points.js';
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
@@ -42,9 +42,19 @@ export const RANKS = [
 export const MAX_LEVEL = 15;
 export const MAKEUP_WINDOW_DAYS = 3;
 const DAILY_EXP_CAP = 200; // 日 EXP 硬顶 —— 唯一不可绕底线(批量导入速通的最后闸)。签到远低于此,为后续创造类预置。
+// 一次性/运营类经验不属于可刷的「每日经验」，既不受 200 日顶限制，也不占用当日额度。
+// first_own_resource / profile_done 为历史一次性来源，保留在同一口径中兼容旧账本。
+const DAILY_EXP_CAP_EXEMPT_SOURCES = Object.freeze([
+  'growth_task',
+  'first_own_resource',
+  'milestone',
+  'manual',
+  'profile_done',
+]);
+const DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS = DAILY_EXP_CAP_EXEMPT_SOURCES.map(() => '?').join(', ');
 const DAILY_QUEST_STAGES = [
-  { key: 'basic', required: 2, exp: 10, points: 20, source: 'daily_quest_2' },
-  { key: 'complete', required: 3, exp: 5, points: 10, source: 'daily_quest_3' },
+  { key: 'basic', required: 2, exp: 5, points: 10, source: 'daily_quest_2' },
+  { key: 'complete', required: 3, exp: 10, points: 20, source: 'daily_quest_3' },
 ];
 const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
 
@@ -64,6 +74,21 @@ const HEATMAP_ACTIVITY_TYPES = ['bookmark', 'note', 'file', 'checkin'];
 // 所有成长数据都必须以角色为准隔离，避免游客继承共享账号的历史成长/奖励记录。
 function isVisitorGrowthActor(userId, userRole = null) {
   return !userId || userId === 'visitor' || userRole === 'visitor';
+}
+
+function isDailyExpCapExemptSource(source) {
+  return DAILY_EXP_CAP_EXEMPT_SOURCES.includes(source);
+}
+
+// 发放与展示共用同一查询，避免「页面还没到 200，后端却已停止增长」。
+async function getDailyLimitedExpTotal(db, userId) {
+  const [[row]] = await db.query(
+    `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
+     WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
+       AND source NOT IN (${DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS})`,
+    [userId, ...DAILY_EXP_CAP_EXEMPT_SOURCES],
+  );
+  return Number(row?.used || 0);
 }
 
 // 连续加成:第 N 天 +min(N,5),第 5 天起固定 +5 → 单日签到 ≤ 10
@@ -201,28 +226,25 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     }
     const eventId = ins.insertId;
 
-    // 2. 日 EXP 硬顶:当日已发放合计(含刚插入的 0)→ 截断本次发放量
-    // 里程碑/一次性来源豁免日顶(一次性、幂等、非刷点):成长任务、升级里程碑、手动。
-    // 日顶只压可重复的日常/创造来源(签到、书签/笔记/文件衰减、批量导入)。
-    // growth_task 属于一次性成长奖励(幂等、非刷点),豁免日顶,保证必得
-    // daily_quest(今日任务奖励)不豁免日顶:与日上限口径一致,达 200/日后不再增发(用户反馈:不应超上限)
-    const capExempt = source === 'growth_task' || source === 'milestone' || source === 'manual';
-    let used = 0;
-    if (!capExempt) {
-      const [[sumRow]] = await c.query(
-        `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
-         WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()`,
-        [userId],
-      );
-      used = Number(sumRow.used || 0);
-    }
+    // 2. 锁定用户成长行，串行化同一用户的并发发放，防止多请求同时穿透 200 日硬顶。
+    // ON DUPLICATE KEY UPDATE 直接取排他锁；不用 INSERT IGNORE 的共享锁再升级，避免并发锁升级死锁。
+    await c.query(
+      `INSERT INTO user_growth (user_id) VALUES (?)
+       ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+      [userId],
+    );
+    const [[gRow]] = await c.query('SELECT exp, level FROM user_growth WHERE user_id = ? FOR UPDATE', [userId]);
+
+    // 3. 日 EXP 硬顶:只统计受限的日常/创造来源，一次性奖励始终单独计算。
+    // daily_quest 不豁免，与签到、新增内容、批量导入共用 200/日额度。
+    const capExempt = isDailyExpCapExemptSource(source);
+    const used = capExempt ? 0 : await getDailyLimitedExpTotal(c, userId);
     const grantAmount = capExempt ? amount : Math.max(0, Math.min(amount, DAILY_EXP_CAP - used));
     if (grantAmount > 0) {
       await c.query('UPDATE growth_events SET amount = ? WHERE id = ?', [grantAmount, eventId]);
     }
 
-    // 3. 更新快照:exp 增量累加(防并发覆盖);level 随后由 levelForExp 校准
-    const [[gRow]] = await c.query('SELECT exp, level FROM user_growth WHERE user_id = ? FOR UPDATE', [userId]);
+    // 4. 更新快照:exp 增量累加(防并发覆盖);level 随后由 levelForExp 校准
     const beforeExp = Number(gRow?.exp || 0);
     const fromLevel = gRow ? Number(gRow.level) : 1;
     const afterExp = beforeExp + grantAmount;
@@ -233,7 +255,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
       [userId, afterExp, toLevel, grantAmount, toLevel],
     );
 
-    // 4. 升级 → 逐级落 level_up 里程碑(唯一键去重;通知中心第三刀读此)
+    // 5. 升级 → 逐级落 level_up 里程碑(唯一键去重;通知中心第三刀读此)
     let leveledUp = false;
     if (toLevel > fromLevel) {
       leveledUp = true;
@@ -393,13 +415,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
   let dailyExp = 0;
   if (!isGuest && userRole !== 'root') {
-    const [[dRow]] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
-       WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
-         AND source NOT IN ('growth_task', 'first_own_resource', 'milestone', 'manual', 'profile_done')`,
-      [userId],
-    );
-    dailyExp = Number(dRow.s || 0);
+    dailyExp = await getDailyLimitedExpTotal(pool, userId);
   }
   return {
     exp,
@@ -438,9 +454,12 @@ export async function getGrowth(userId, { userRole = null } = {}) {
 // ============================================================================
 
 // 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值;reward=解锁后可领的积分。
-// reward 按长期积累难度递增:中阶 50~120;高阶 150~250;里程碑级 500~600。
+// minLevel 只用于高数量资源头像框：200 档需 Lv.5，500 档需 Lv.8。等级本身受每日经验硬顶约束，
+// 已经代表持续使用时长，不再叠加注册/活跃天数或内容质量判定，避免误伤正常导入和高频创作。
+// reward 按长期积累难度递增：首签 10；中阶 40~120；高阶 150~500；里程碑级 600~800。
 // 领取幂等由 points_log(reason='achievement', ref=key)保证,无需额外表。
 export const ACHIEVEMENTS = [
+  { key: 'streak_1', group: 'checkin', metric: 'maxStreak', target: 1, reward: 10 },
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
   { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
   { key: 'streak_100', group: 'checkin', metric: 'maxStreak', target: 100, reward: 300 },
@@ -450,12 +469,16 @@ export const ACHIEVEMENTS = [
   { key: 'bookmark_20', group: 'create', metric: 'bookmarkCount', target: 20, reward: 40 },
   { key: 'bookmark_50', group: 'create', metric: 'bookmarkCount', target: 50, reward: 80 },
   { key: 'bookmark_200', group: 'create', metric: 'bookmarkCount', target: 200, reward: 200 },
+  { key: 'bookmark_500', group: 'create', metric: 'bookmarkCount', target: 500, minLevel: 8, reward: 400 },
   { key: 'note_10', group: 'create', metric: 'noteCount', target: 10, reward: 40 },
   { key: 'note_20', group: 'create', metric: 'noteCount', target: 20, reward: 60 },
   { key: 'note_50', group: 'create', metric: 'noteCount', target: 50, reward: 120 },
+  { key: 'note_200', group: 'create', metric: 'noteCount', target: 200, minLevel: 5, reward: 400 },
+  { key: 'note_500', group: 'create', metric: 'noteCount', target: 500, minLevel: 8, reward: 600 },
   { key: 'file_10', group: 'create', metric: 'fileCount', target: 10, reward: 40 },
   { key: 'file_50', group: 'create', metric: 'fileCount', target: 50, reward: 100 },
-  { key: 'file_200', group: 'create', metric: 'fileCount', target: 200, reward: 300 },
+  { key: 'file_200', group: 'create', metric: 'fileCount', target: 200, minLevel: 5, reward: 300 },
+  { key: 'file_500', group: 'create', metric: 'fileCount', target: 500, minLevel: 8, reward: 500 },
   { key: 'todo_20', group: 'action', metric: 'completedTodoCount', target: 20, reward: 40 },
   { key: 'todo_100', group: 'action', metric: 'completedTodoCount', target: 100, reward: 150 },
   { key: 'todo_500', group: 'action', metric: 'completedTodoCount', target: 500, reward: 300 },
@@ -472,6 +495,13 @@ export const ACHIEVEMENTS = [
   { key: 'join_100', group: 'tenure', metric: 'joinDays', target: 100, reward: 250 },
   { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365, reward: 600 },
 ];
+
+export function meetsAchievementRequirement(achievement, metrics = {}) {
+  const current = Number(metrics[achievement?.metric] || 0);
+  const level = Number(metrics.level || 0);
+  const minLevel = Math.max(0, Number(achievement?.minLevel || 0));
+  return current >= Number(achievement?.target || 0) && level >= minLevel;
+}
 
 function safeParseMeta(m) {
   if (!m) return null;
@@ -903,18 +933,25 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
   const newlyUnlocked = []; // 本次读取里首次达标、尚无永久标记的成就 → 待落库固化
   const achievements = ACHIEVEMENTS.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
+    const minLevel = Math.max(0, Number(a.minLevel || 0));
+    const currentLevel = Number(growth.level || 0);
+    const rewardFrame = getAchievementFrameByKey(a.key);
     const claimed = claimedKeys.has(a.key);
     // 永久解锁 = 已领取 / 有解锁标记 / 或当前刚达标(后者首次出现时落标记固化,之后指标回落也不退回)
     const everUnlocked = claimed || unlockedKeys.has(a.key);
-    const unlocked = everUnlocked || cur >= a.target;
-    if (!isGuest && !everUnlocked && cur >= a.target) newlyUnlocked.push(a.key);
+    const requirementsMet = meetsAchievementRequirement(a, metrics);
+    const unlocked = everUnlocked || requirementsMet;
+    if (!isGuest && !everUnlocked && requirementsMet) newlyUnlocked.push(a.key);
     return {
       key: a.key,
       group: a.group,
       target: a.target,
       cur,
+      minLevel,
+      currentLevel,
       unlocked,
       reward: a.reward, // 解锁后可领的积分
+      frameId: rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
       claimed, // 是否已领取奖励
       claimable: unlocked && !claimed, // 可领取(已解锁且未领)
     };
@@ -1051,7 +1088,8 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
  * 用户当前等级对应的云空间配额(MB)。root=满级;无成长账本(新用户)=Lv1。
  * 供文件上传配额校验按等级下发,替代原先"非 root 一律 500MB"。
  */
-// 领取单个成就奖励:已解锁且未领 → 发积分(幂等,ref=成就 key,与 dashboard.claimed 同源)。
+// 领取单个成就奖励：已解锁且未领 → 在同一事务发积分与可选头像框。
+// points_log(reason='achievement', ref=key) 仍是幂等领取事实源；头像框使用 user_cosmetics 主键兜底去重。
 export async function claimAchievement(userId, key, { userRole = null, dashboard = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
   const ach = ACHIEVEMENTS.find((a) => a.key === key);
@@ -1061,9 +1099,39 @@ export async function claimAchievement(userId, key, { userRole = null, dashboard
   const dash = dashboard || (await getGrowthDashboard(userId, { userRole }));
   const a = dash.achievements.find((x) => x.key === key);
   if (!a || !a.unlocked) return { ok: false, reason: 'locked', msg: '成就尚未解锁' };
-  const got = await earnPoints(userId, ach.reward, 'achievement', key);
-  if (!got) return { ok: false, reason: 'claimed', msg: '该成就奖励已领取' };
-  return { ok: true, key, reward: ach.reward, growth: await getGrowth(userId, { userRole }) };
+  const rewardFrame = getAchievementFrameByKey(key);
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    const got = await earnPoints(userId, ach.reward, 'achievement', key, conn);
+    if (!got) {
+      await conn.rollback();
+      return { ok: false, reason: 'claimed', msg: '该成就奖励已领取' };
+    }
+    if (rewardFrame) {
+      await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [
+        userId,
+        rewardFrame.id,
+      ]);
+    }
+    await conn.commit();
+  } catch (error) {
+    try {
+      await conn.rollback();
+    } catch {
+      // 回滚失败仅保留原始错误，由上层统一记录稳定错误信息。
+    }
+    throw error;
+  } finally {
+    conn.release();
+  }
+  return {
+    ok: true,
+    key,
+    reward: ach.reward,
+    frameId: rewardFrame?.id || null,
+    growth: await getGrowth(userId, { userRole }),
+  };
 }
 
 export async function getUserSpaceMb(userId, userRole = null) {

@@ -95,12 +95,21 @@
       const res = await apiBasePost('/api/growth/claimAll');
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
-          message.success(t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }));
+          const frameCount = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
+          message.success(
+            frameCount
+              ? t('growth.claimAllOkWithFrames', {
+                  exp: res.data.exp || 0,
+                  points: res.data.points || 0,
+                  frames: frameCount,
+                })
+              : t('growth.claimAllOkMixed', { exp: res.data.exp || 0, points: res.data.points || 0 }),
+          );
           recordOperation({
             module: '工作台',
             operation: `一键领取成长奖励（${res.data.claimed} 项,经验+${res.data.exp || 0},积分+${
               res.data.points || 0
-            }）`,
+            }${frameCount ? `,头像框+${frameCount}` : ''}）`,
           });
         } else {
           message.info(t('growth.claimAllNone'));
@@ -137,6 +146,7 @@
           if (res.data.leveledUp && res.data.growth) {
             message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
           }
+          await loadClaimable();
         }
       }
     } catch (error) {

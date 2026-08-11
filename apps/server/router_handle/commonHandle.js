@@ -1417,37 +1417,54 @@ export const getAdminOverviewRecent = async (req, res) => {
     const [bookmarkRows, noteRows, fileRows, userRows] = await Promise.all([
       pool.query(
         `SELECT bookmark.id, bookmark.name AS title, bookmark.create_time AS createdAt,
-                resource_owner.id AS userId, resource_owner.alias AS userName
+                resource_owner.id AS userId, resource_owner.alias AS userName,
+                COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM bookmark
          JOIN \`user\` resource_owner ON resource_owner.id = bookmark.user_id AND resource_owner.del_flag = 0
+         LEFT JOIN admin_user_remarks owner_remark
+           ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
          WHERE bookmark.del_flag = 0${resourceOwnerRole}${scope.notOnboardingBookmark}
          ORDER BY bookmark.create_time DESC, bookmark.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
+        [rootUserId],
       ),
       pool.query(
         `SELECT note.id, note.title, note.create_time AS createdAt,
-                resource_owner.id AS userId, resource_owner.alias AS userName
+                resource_owner.id AS userId, resource_owner.alias AS userName,
+                COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM note
          JOIN \`user\` resource_owner ON resource_owner.id = note.create_by AND resource_owner.del_flag = 0
+         LEFT JOIN admin_user_remarks owner_remark
+           ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
          WHERE note.del_flag = 0${resourceOwnerRole}${scope.notOnboardingNote}
          ORDER BY note.create_time DESC, note.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
+        [rootUserId],
       ),
       pool.query(
         `SELECT files.id, files.file_name AS title, files.create_time AS createdAt,
-                resource_owner.id AS userId, resource_owner.alias AS userName
+                resource_owner.id AS userId, resource_owner.alias AS userName,
+                COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM files
          JOIN \`user\` resource_owner ON resource_owner.id = files.create_by AND resource_owner.del_flag = 0
+         LEFT JOIN admin_user_remarks owner_remark
+           ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
          WHERE files.del_flag = 0${resourceOwnerRole}${scope.notOnboardingFile}
          ORDER BY files.create_time DESC, files.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
+        [rootUserId],
       ),
       pool.query(
-        `SELECT id, alias AS name, role, create_time AS createdAt
-         FROM \`user\`
-         WHERE del_flag = 0 AND role <> 'visitor'${scope.notIntRole}
-         ORDER BY create_time DESC, id DESC
+        `SELECT recent_user.id, recent_user.alias AS name, recent_user.role,
+                recent_user.create_time AS createdAt,
+                COALESCE(user_remark.remark_name, '') AS userRemark
+         FROM \`user\` recent_user
+         LEFT JOIN admin_user_remarks user_remark
+           ON user_remark.admin_user_id = ? AND user_remark.target_user_id = recent_user.id
+         WHERE recent_user.del_flag = 0 AND recent_user.role <> 'visitor'${scope.notIntRole}
+         ORDER BY recent_user.create_time DESC, recent_user.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
+        [rootUserId],
       ),
     ]);
 

@@ -20,3 +20,17 @@ describe('QuickCaptureModal 移动端布局', () => {
     expect(source).not.toMatch(/\.capture-intro-strip\s*\{[^}]*max-height:/);
   });
 });
+
+describe('QuickCaptureModal 桌面端布局', () => {
+  it('书签与笔记输入框统一使用 7 行高度', () => {
+    expect(source).toMatch(/<BInput[\s\S]*?type="textarea"[\s\S]*?:rows="7"/);
+    expect(source).not.toContain(`captureType === 'bookmark' ? 3 : 7`);
+  });
+
+  it('书签、笔记和文件共用最高资源面板基准，待办保持独立高度', () => {
+    expect(source).toMatch(
+      /@media \(min-width: 768px\)\s*\{[\s\S]*?\.capture-workspace\.is-bookmark,\s*\.capture-workspace\.is-note,\s*\.capture-workspace\.is-file\s*\{[\s\S]*?min-height:\s*262px;/,
+    );
+    expect(source).not.toMatch(/\.capture-workspace\.is-todo[^}]*min-height:\s*262px;/);
+  });
+});

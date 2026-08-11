@@ -32,7 +32,10 @@
     badge?: string | number;
   }
 
-  const emit = defineEmits(['change']);
+  const emit = defineEmits<{
+    change: [value: string];
+    select: [value: string];
+  }>();
   const props = withDefaults(
     defineProps<{
       options: (string | TabItem)[];
@@ -62,6 +65,8 @@
     const resolved = typeof tab === 'string' ? resolvedOptions.value.find((t) => (t.key ?? t.label) === tab) : tab;
     if (!resolved) return;
     const value = resolved.key ?? resolved.label;
+    // select 对切换与重复点击都触发；change 仍只代表值真的变化。
+    emit('select', value);
     if (activeValue.value === value) {
       syncUnderline(value);
       return;

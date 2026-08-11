@@ -295,7 +295,6 @@
           :theme-key="user.currentTheme || 'day'"
           :trend-data="trendChartData"
           :file-type-data="fileTypeChartData"
-          :week-days="trendWeekDays"
           @open-files="openQuickCapture('file')"
         />
       </section>
@@ -490,7 +489,6 @@
     usedSpace: 0,
   });
   const weeklyStats = ref({ bookmark: 0, note: 0, file: 0, tag: 0 });
-  const trendWeekDays = ref(new Date().getDay() || 7);
   const todayStats = ref({
     actionTotal: 0,
     todoPendingTotal: 0,
@@ -897,7 +895,6 @@
         file: Number(data.weeklyStats?.file || 0),
         tag: Number(data.weeklyStats?.tag || 0),
       };
-      trendWeekDays.value = Math.max(1, Math.min(7, Number(data.weekDays || new Date().getDay() || 7)));
       todayStats.value = {
         actionTotal: Number(data.today?.actionTotal || 0),
         todoPendingTotal: Number(data.today?.todoPendingTotal || 0),

@@ -150,9 +150,10 @@
             <div
               ref="mdPreviewRef"
               v-auto-scrollbar
-              class="md-preview"
+              class="md-preview note-rich-content is-image-preview-enabled"
               @scroll="syncMdScroll('preview')"
               @click="handleMarkdownPreviewClick"
+              @keydown="handleMarkdownPreviewClick"
               v-html="renderedMd"
               v-mermaid
             ></div>
@@ -206,6 +207,10 @@
             />
           </label>
           <div class="rich-media-text-toolbar__actions">
+            <BButton size="small" @click="previewSelectedRichMediaTextImage">
+              <SvgIcon :src="icon.noteDetail.diagramTools.zoom" size="15" aria-hidden="true" />
+              {{ t('noteDetail.editor.imagePreview') }}
+            </BButton>
             <BButton size="small" :disabled="richMediaTextUploading" @click="replaceRichMediaTextImage">
               <SvgIcon :src="icon.noteDetail.toolbar.image" size="15" aria-hidden="true" />
               {{ t('noteDetail.editor.mediaTextReplaceImage') }}
@@ -586,12 +591,18 @@
     >
       <div class="mobile-image-settings">
         <div class="mobile-image-settings__preview">
-          <img
+          <BButton
             v-if="mobileImageSettingsPreview.src"
-            :src="mobileImageSettingsPreview.src"
-            :alt="mobileImageSettingsPreview.alt"
-            :data-ln-size="mobileImageSettingsSize"
-          />
+            class="mobile-image-settings__preview-button"
+            :aria-label="t('noteDetail.editor.imagePreview')"
+            @click="previewMobileImage"
+          >
+            <img
+              :src="mobileImageSettingsPreview.src"
+              :alt="mobileImageSettingsPreview.alt"
+              :data-ln-size="mobileImageSettingsSize"
+            />
+          </BButton>
         </div>
         <p>{{ t('noteDetail.editor.imageSettingsHint') }}</p>
         <div class="mobile-image-settings__options" role="group" :aria-label="t('noteDetail.editor.imageSize')">
@@ -726,6 +737,7 @@
   import type { ResolvedResourceReference } from '@/api/noteReferences';
   import { loadMarkdownRuntime, loadTinyMceRuntime, preloadNoteEditorRuntime } from './editorRuntimeLoader';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import { openNoteContentImagePreview, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
   import {
     buildNoteReturnFocusLocation,
     normalizeReferencedFilePreviewInfo,
@@ -1365,7 +1377,14 @@
     mobileImageTarget.value = null;
   }
 
+  async function previewMobileImage() {
+    const src = mobileImageSettingsPreview.value.src;
+    if (!src) return;
+    await closeCurrentMobileOverlayThen(closeMobileImageSettings, () => openNoteContentImagePreview(src));
+  }
+
   function handleMarkdownPreviewClick(event: Event) {
+    if (event instanceof KeyboardEvent && event.key !== 'Enter' && event.key !== ' ') return;
     const target = event.target;
     const image = target instanceof Element ? target.closest<HTMLImageElement>('img') : null;
     const rawIndex = image?.getAttribute(MARKDOWN_IMAGE_INDEX_ATTRIBUTE);
@@ -1374,6 +1393,11 @@
       event.preventDefault();
       event.stopPropagation();
       openMobileImageSettings({ kind: 'markdown', imageIndex }, image);
+      return;
+    }
+    if (image && openNoteContentImagePreview(image)) {
+      event.preventDefault();
+      event.stopPropagation();
       return;
     }
     handleRenderedResourceLinkClick(event);
@@ -2503,6 +2527,14 @@
     richMediaTextImageInputRef.value?.open();
   }
 
+  function previewSelectedRichMediaTextImage() {
+    const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
+    const image = target?.item.querySelector<HTMLImageElement>('.ln-media-text__media img');
+    if (!image) return;
+    closeRichMediaTextToolbar();
+    openNoteContentImagePreview(image);
+  }
+
   function addRichMediaTextItem() {
     const target = getLiveRichMediaTextTarget(richMediaTextBlock.value, richMediaTextItem.value);
     if (!target || richMediaTextUploading.value) return;
@@ -3545,6 +3577,7 @@
       publishResourceRefs('');
     }
     await nextTick();
+    prepareNoteContentPreviewImages(mdPreviewRef.value, t('noteDetail.editor.imagePreview'));
     emits('markdown-rendered');
   }
 
@@ -4198,10 +4231,19 @@
       };
 
       editor.ui.registry.addIcon('ln-image-copy', icon.noteDetail.imageToolbar.copy);
+      editor.ui.registry.addIcon('ln-image-preview', icon.noteDetail.diagramTools.zoom);
       editor.ui.registry.addIcon('ln-image-cut', icon.noteDetail.imageToolbar.cut);
       editor.ui.registry.addIcon('ln-image-paste', icon.noteDetail.imageToolbar.paste);
       editor.ui.registry.addIcon('ln-image-delete', icon.noteDetail.imageToolbar.delete);
       editor.ui.registry.addIcon('ln-image-paragraph-after', icon.noteDetail.imageToolbar.paragraphAfter);
+      editor.ui.registry.addButton('lnImagePreview', {
+        icon: 'ln-image-preview',
+        tooltip: t('noteDetail.editor.imagePreview'),
+        onAction: () => {
+          const image = resolveSelectedRichImage();
+          if (image) openNoteContentImagePreview(image);
+        },
+      });
       editor.ui.registry.addButton('lnImageCopy', {
         icon: 'ln-image-copy',
         tooltip: t('noteDetail.editor.imageCopy'),
@@ -4254,7 +4296,7 @@
           );
         },
         items:
-          'lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
+          'lnImagePreview | lnImageCopy lnImageCut lnImagePaste lnImageDelete | alignleft aligncenter alignright | lnImageParagraphAfter',
         position: 'node',
       });
 
@@ -4972,6 +5014,11 @@
           openRichMediaTextToolbar(mediaTextBlock, mediaTextItem, { x: event.clientX, y: event.clientY });
           return;
         }
+        if (mediaTextImage && props.readonly && openNoteContentImagePreview(mediaTextImage)) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         // TinyMCE 的正文可能运行在独立编辑上下文里，父页面的 outside-click 监听收不到这次点击；
         // 因此点回文字或正文空白时在这里显式关闭，且不拦截后续光标定位。
         if (richMediaTextToolbarVisible.value) closeRichMediaTextToolbar();
@@ -4988,6 +5035,11 @@
           editor.selection?.select?.(image);
           editor.nodeChanged?.();
           openMobileImageSettings({ kind: 'html', editor, element: image }, image);
+          return;
+        }
+        if (image && props.readonly && openNoteContentImagePreview(image)) {
+          event.preventDefault();
+          event.stopPropagation();
           return;
         }
         if (handleTinyMceResourceReferenceActivation(event)) return;
@@ -6554,6 +6606,16 @@
     }
   }
 
+  .mobile-image-settings__preview-button.b_btn {
+    width: 100%;
+    height: auto;
+    min-height: 82px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+  }
+
   .mobile-image-settings__options {
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -6668,7 +6730,7 @@
       &__actions {
         grid-column: 1 / -1;
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 6px;
         margin-left: 0;
 

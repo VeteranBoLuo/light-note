@@ -46,8 +46,11 @@ export interface Achievement {
   group: 'checkin' | 'create' | 'level' | 'tenure' | string;
   target: number;
   cur: number;
+  minLevel?: number; // 复合成就的最低等级；0/缺省表示无等级门槛
+  currentLevel?: number; // 服务端参与解锁判断的当前等级，供多条件进度展示
   unlocked: boolean;
   reward?: number; // 解锁后可领的积分
+  frameId?: string | null; // 可选头像框奖励
   claimed?: boolean; // 是否已领取
   claimable?: boolean; // 已解锁且未领
 }
@@ -130,10 +133,13 @@ export interface ShopItem {
   rarity?: 'basic' | 'rare' | 'epic' | 'legendary' | null;
   name: string;
   desc: string;
-  cost: number;
+  cost: number | null;
   minLevel: number;
   bonusTokens: number;
+  acquisition?: 'shop' | 'achievement';
+  achievementKey?: string | null;
   owned: boolean;
+  canEquip?: boolean;
   equipped: boolean;
   canBuy: boolean;
 }
@@ -145,7 +151,9 @@ export interface Shop {
   equippedFrame: string | null;
   protectCards: number;
   isVisitor: boolean;
+  rootFrameAccess?: boolean;
   items: ShopItem[];
+  frames?: ShopItem[];
 }
 
 export interface InventoryItem {
@@ -169,6 +177,7 @@ export interface LotteryPrize {
   name: string;
   rate?: number; // 概率%(仅状态接口返回)
   rare?: boolean;
+  guaranteed?: boolean; // 本次结果是否由第 N 抽保底触发
 }
 
 export interface LotteryStatus {
@@ -192,6 +201,11 @@ export interface LotteryDrawResult {
   free?: boolean;
   points?: number;
   results?: LotteryPrize[];
+  pityTriggered?: boolean;
+  pityHitIndexes?: number[]; // 本批次内命中保底的序号，从 1 开始
+  pityProgressBefore?: number;
+  pityProgressAfter?: number;
+  nextPityIn?: number;
 }
 
 export interface WeeklyChallenge {
@@ -603,11 +617,13 @@ export function useGrowth() {
     return res;
   }
 
-  // 领取成就奖励:成功则刷新看板(领取态)+ 成长快照(积分余额)
+  // 领取成就奖励:成功则刷新看板、成长快照和头像框目录(成就框立即进入装扮库)
   async function claimAchievement(key: string) {
     const res = await growthApi.claimAchievement(key);
     if (res?.status === 200 && res.data?.ok) {
-      await Promise.all([loadDashboard(), load(true)]);
+      const refreshes: Array<Promise<unknown>> = [loadDashboard(), load(true)];
+      if (res.data.frameId) refreshes.push(loadShop());
+      await Promise.all(refreshes);
       syncPointsToViews();
     }
     return res;

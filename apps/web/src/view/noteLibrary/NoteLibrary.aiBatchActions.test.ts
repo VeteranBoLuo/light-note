@@ -263,7 +263,9 @@ describe('笔记库页面树交互接线', () => {
   it('只在固定预览顶栏展示笔记标题，正文直接从用户内容开始', () => {
     expect(readonlyPreviewSource).toContain("<h2>{{ displayNote.title || t('note.untitled') }}</h2>");
     expect(readonlyPreviewSource).not.toContain("<h1>{{ displayNote.title || t('note.untitled') }}</h1>");
-    expect(readonlyPreviewSource).toContain('class="note-readonly-preview__content" v-html="previewHtml"');
+    expect(readonlyPreviewSource).toContain(
+      'class="note-readonly-preview__content note-rich-content is-image-preview-enabled"',
+    );
     expect(readonlyPreviewSource).toMatch(/\.note-readonly-preview__content[\s\S]*:deep\(> :first-child\)/);
   });
 

@@ -23,4 +23,14 @@ describe('移动端通知入口', () => {
     expect(source).toContain('useNotification()');
     expect(source).not.toContain('excludeCommunityChat: isMobileLayout');
   });
+
+  it('PC 铃铛默认无底色，只在悬停或面板展开时强调', () => {
+    expect(source).toContain(`:class="{ 'is-open': open }"`);
+    expect(source).toContain(':aria-expanded="open"');
+    expect(source).toMatch(/\.nt-bell\s*\{[\s\S]*?background:\s*transparent !important;/);
+    expect(source).toMatch(/\.nt-bell:hover\s*\{[\s\S]*?var\(--menu-item-h-bg-color\) !important;/);
+    expect(source).toMatch(
+      /\.nt-bell\.is-open\s*\{[\s\S]*?color:\s*var\(--primary-color\);[\s\S]*?color-mix\(in srgb, var\(--primary-color\) 10%, transparent\) !important;/,
+    );
+  });
 });
