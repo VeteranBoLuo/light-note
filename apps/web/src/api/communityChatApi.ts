@@ -112,6 +112,7 @@ export interface CommunityChatMessage {
   recallDeadlineAt: string | null;
   isOwn: boolean;
   images: CommunityChatImage[];
+  mentions: string[];
   likeCount: number;
   likedByMe: boolean;
   likePreview: string[];

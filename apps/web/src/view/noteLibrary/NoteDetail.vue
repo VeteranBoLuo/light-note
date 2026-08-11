@@ -148,49 +148,47 @@
               </BButton>
             </template>
           </nav>
-          <Transition name="note-content-switch" mode="out-in">
-            <div :key="noteContentKey" class="note-detail-content">
-              <div class="note-body-title n-title">
-                <BInput
-                  v-if="bookmark.isMobile"
-                  class="note-title-mobile"
-                  height="50px"
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-                <BInput
-                  v-else
-                  :disabled="readonly"
-                  v-model:value="note.title"
-                  @change="inputBlur"
-                  @focusout="focusout"
-                  :placeholder="$t('noteDetail.titlePlaceholder')"
-                />
-              </div>
-              <editor
-                ref="editorRef"
-                class="editor-component"
-                v-model:content="note.content"
-                :type="note.type"
-                :revision="note.revision"
-                :persist-mode-conversion="persistEditorModeConversion"
-                @update:type="note.type = $event"
-                @switch-backup-change="hasSwitchBackup = $event"
-                @mode-converted="onEditorModeConverted"
-                :readonly="readonly"
-                :note-id="note.id"
-                :ensure-note-id="ensureNoteId"
-                :resource-refs="resolvedResourceRefs"
-                @set-note-id="onEditorSetNoteId"
-                @ready="handleEditorReady"
-                @markdown-rendered="refreshCatalog"
-                @resource-refs-change="onEditorResourceRefsChange"
+          <div :key="noteContentKey" class="note-detail-content">
+            <div class="note-body-title n-title">
+              <BInput
+                v-if="bookmark.isMobile"
+                class="note-title-mobile"
+                height="50px"
+                :disabled="readonly"
+                v-model:value="note.title"
+                @change="inputBlur"
+                @focusout="focusout"
+                :placeholder="$t('noteDetail.titlePlaceholder')"
+              />
+              <BInput
+                v-else
+                :disabled="readonly"
+                v-model:value="note.title"
+                @change="inputBlur"
+                @focusout="focusout"
+                :placeholder="$t('noteDetail.titlePlaceholder')"
               />
             </div>
-          </Transition>
+            <editor
+              ref="editorRef"
+              class="editor-component"
+              v-model:content="note.content"
+              :type="note.type"
+              :revision="note.revision"
+              :persist-mode-conversion="persistEditorModeConversion"
+              @update:type="note.type = $event"
+              @switch-backup-change="hasSwitchBackup = $event"
+              @mode-converted="onEditorModeConverted"
+              :readonly="readonly"
+              :note-id="note.id"
+              :ensure-note-id="ensureNoteId"
+              :resource-refs="resolvedResourceRefs"
+              @set-note-id="onEditorSetNoteId"
+              @ready="handleEditorReady"
+              @markdown-rendered="refreshCatalog"
+              @resource-refs-change="onEditorResourceRefsChange"
+            />
+          </div>
         </div>
         <template #ai>
           <div class="note-detail-ai-slot">
@@ -227,12 +225,7 @@
         @close="catalogDrawerOpen = false"
       />
     </div>
-    <NoteDetailLoadingState
-      v-if="!isReady"
-      variant="page"
-      :error="noteLoadFailed"
-      @retry="retryLoadRouteNote"
-    />
+    <NoteDetailLoadingState v-if="!isReady" variant="page" :error="noteLoadFailed" @retry="retryLoadRouteNote" />
     <NoteVersionHistory
       v-if="versionHistoryVisible"
       v-model:visible="versionHistoryVisible"
@@ -313,6 +306,7 @@
     DISABLED_NOTE_TREE_FEATURES,
     fetchNoteDeletePreview,
     fetchNoteTreeFeatures,
+    normalizeNoteTreeFeatures,
     type NoteTreeFeatures,
   } from '@/api/noteTree';
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
@@ -573,9 +567,16 @@
     }
   }
 
+  const initialFeatureRouteRawId = router.currentRoute.value.params.id;
+  const initialFeatureRouteId = Array.isArray(initialFeatureRouteRawId)
+    ? initialFeatureRouteRawId.join('/')
+    : String(initialFeatureRouteRawId || '');
+  // 已有笔记由 getNoteDetail 同一响应携带能力快照和面包屑，避免冷启动时额外请求后
+  // 再逐段点亮导航。新建页没有详情请求，仍沿用独立能力接口。
+  const receivesTreeBootstrapFromDetail = Boolean(initialFeatureRouteId && initialFeatureRouteId !== 'add');
   const noteTreeFeaturePromise =
-    !initialFeatureSnapshot ||
-    Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
+    !receivesTreeBootstrapFromDetail &&
+    (!initialFeatureSnapshot || Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS)
       ? loadNoteTreeFeatureSnapshot()
       : Promise.resolve();
 
@@ -1877,19 +1878,39 @@
       const response = await consumeNoteDetail(user, routeId);
       if (requestVersion !== noteLoadVersion) return;
       if (response.status === 200 && response.data) {
-        const rawType = response.data.type;
+        const {
+          breadcrumb: bundledBreadcrumb,
+          noteTreeFeatures: bundledFeaturePayload,
+          ...detailRecord
+        } = response.data;
+        if (bundledFeaturePayload && typeof bundledFeaturePayload === 'object') {
+          const bundledFeatures = normalizeNoteTreeFeatures(bundledFeaturePayload as Record<string, unknown>);
+          noteTreeFeatures.value = bundledFeatures;
+          noteLibraryCache.writeFeatures(noteCacheScope.value, bundledFeatures);
+        } else if (
+          !initialFeatureSnapshot ||
+          Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
+        ) {
+          // 兼容前后端短暂错版本：旧服务端没有聚合字段时仍能恢复原来的独立能力读取。
+          void loadNoteTreeFeatureSnapshot();
+        }
+        const rawType = detailRecord.type;
         Object.assign(note, {
-          ...response.data,
-          id: String(response.data.id || routeId),
+          ...detailRecord,
+          id: String(detailRecord.id || routeId),
           type: normalizeNoteType(rawType),
-          content: normalizeLoadedContent(response.data.content || '', rawType),
-          revision: Math.max(1, Number(response.data.revision || 1)),
-          parentId: response.data.parentId || null,
+          content: normalizeLoadedContent(detailRecord.content || '', rawType),
+          revision: Math.max(1, Number(detailRecord.revision || 1)),
+          parentId: detailRecord.parentId || null,
         });
+        if (Array.isArray(bundledBreadcrumb)) {
+          const seededBreadcrumb = noteWorkspace.seedBreadcrumb(note.id, bundledBreadcrumb);
+          if (seededBreadcrumb.length) note.parentId = seededBreadcrumb.at(-2)?.id || null;
+        }
         note.lastTitle = cloneDeep(note.title);
         latestRequestedTitle = note.title;
         noteWorkspace.updateNoteMetadata(String(note.id), { title: note.title, type: note.type });
-        updateTime.value = response.data.updateTime ?? response.data.createTime;
+        updateTime.value = detailRecord.updateTime ?? detailRecord.createTime;
         nodeType.value = user.id === note.createBy ? 'edit' : 'share';
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
@@ -2204,24 +2225,6 @@
     .catalog-panel.is-animatable {
       transition: none;
     }
-
-    .note-content-switch-enter-active,
-    .note-content-switch-leave-active {
-      transition: none !important;
-    }
-  }
-
-  .note-content-switch-enter-active,
-  .note-content-switch-leave-active {
-    transition:
-      opacity 140ms ease,
-      transform 160ms cubic-bezier(0.22, 0.61, 0.36, 1);
-  }
-
-  .note-content-switch-enter-from,
-  .note-content-switch-leave-to {
-    opacity: 0;
-    transform: translateY(4px);
   }
 
   .note-detail-content {

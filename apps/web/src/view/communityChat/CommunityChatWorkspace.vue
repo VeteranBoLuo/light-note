@@ -204,7 +204,18 @@
                       <strong>{{ t('communityChat.replyReference', { name: replyAuthorName(chatMessage) }) }}</strong>
                       <span>{{ replySummary(chatMessage) }}</span>
                     </BButton>
-                    <p v-if="chatMessage.content" class="community-message__content">{{ chatMessage.content }}</p>
+                    <p v-if="chatMessage.mentions?.length || chatMessage.content" class="community-message__content">
+                      <span v-if="chatMessage.mentions?.length" class="community-message__mentions">
+                        <span
+                          v-for="(name, index) in chatMessage.mentions"
+                          :key="`${chatMessage.publicId}:mention:${index}`"
+                          class="community-message__mention"
+                        >
+                          @{{ name }}
+                        </span>
+                      </span>
+                      <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
+                    </p>
                     <div
                       v-if="chatMessage.images?.length"
                       class="community-message__images"
@@ -2076,6 +2087,7 @@
     content: string;
     images: CommunityChatImage[];
     replyTarget: CommunityChatMessage | null;
+    mentions: string[];
   }): CommunityChatMessage {
     const previousOwnMessage = [...chatMessages.value].reverse().find((item) => item.isOwn);
     const previousAuthor = previousOwnMessage?.author;
@@ -2098,6 +2110,7 @@
       recallDeadlineAt: null,
       isOwn: true,
       images: input.images.map((imageItem) => ({ ...imageItem })),
+      mentions: [...input.mentions],
       likeCount: 0,
       likedByMe: false,
       likePreview: [],
@@ -2142,6 +2155,7 @@
       content,
       images: imageSnapshot,
       replyTarget: replySnapshot,
+      mentions: mentionSnapshot.map((target) => target.name),
     });
     sending.value = true;
     chatMessages.value = [...chatMessages.value, optimisticMessage];
@@ -3018,11 +3032,30 @@
     white-space: pre-wrap;
   }
 
+  .community-message__mentions {
+    display: inline;
+    margin-inline-end: 5px;
+  }
+
+  .community-message__mention {
+    margin-inline-end: 5px;
+    color: var(--primary-color);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
   .community-message.is-own .community-message__content {
     border-color: var(--primary-color);
     border-radius: 15px 5px 15px 15px;
     color: #fff;
     background: var(--primary-color);
+  }
+
+  .community-message.is-own .community-message__mention {
+    color: #fff;
+    text-decoration: underline;
+    text-decoration-color: rgba(255, 255, 255, 0.68);
+    text-underline-offset: 2px;
   }
 
   .community-message.is-focused .community-message__content {

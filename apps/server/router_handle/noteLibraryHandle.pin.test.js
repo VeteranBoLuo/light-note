@@ -41,8 +41,16 @@ vi.mock('../util/noteImages.js', () => ({
 }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
-const { deleteNoteSubtree, delNote, moveNoteNode, moveNoteNodes, queryNoteList, toggleNoteTop, updateNoteSort } =
-  await import('./noteLibraryHandle.js');
+const {
+  deleteNoteSubtree,
+  delNote,
+  getNoteDetail,
+  moveNoteNode,
+  moveNoteNodes,
+  queryNoteList,
+  toggleNoteTop,
+  updateNoteSort,
+} = await import('./noteLibraryHandle.js');
 
 function mockRes() {
   return { send: vi.fn() };
@@ -74,6 +82,99 @@ describe('笔记置顶 handler', () => {
     expect(params).toEqual(['u1']);
     expect(attachPendingStatus).toHaveBeenCalled();
     expect(lastSent(res).status).toBe(200);
+  });
+
+  it('笔记详情一次返回正文、能力快照和面包屑', async () => {
+    vi.stubEnv('NOTE_TREE_READ_ENABLED', 'true');
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'note-1',
+            parent_id: 'parent',
+            title: '当前页面',
+            type: 'html',
+            content: '<p>正文</p>',
+            create_by: 'u1',
+            del_flag: 0,
+            revision: 1,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'parent',
+            parent_id: null,
+            title: '父页面',
+            type: 'html',
+            revision: 1,
+            sort: 0,
+            is_top: 0,
+            del_flag: 0,
+            update_time: '2026-08-10T10:00:00.000Z',
+          },
+          {
+            id: 'note-1',
+            parent_id: 'parent',
+            title: '当前页面',
+            type: 'html',
+            revision: 1,
+            sort: 0,
+            is_top: 0,
+            del_flag: 0,
+            update_time: '2026-08-10T10:01:00.000Z',
+          },
+        ],
+      ]);
+    const res = mockRes();
+
+    await getNoteDetail({ user: { id: 'u1', role: 'user' }, body: { id: 'note-1' } }, res);
+
+    expect(poolQuery).toHaveBeenCalledTimes(2);
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: {
+        id: 'note-1',
+        content: '<p>正文</p>',
+        breadcrumb: [
+          { id: 'parent', title: '父页面' },
+          { id: 'note-1', title: '当前页面' },
+        ],
+        noteTreeFeatures: { note_tree_read: true },
+      },
+    });
+  });
+
+  it('目录能力关闭时详情仍立即返回正文且不加载目录快照', async () => {
+    vi.stubEnv('NOTE_TREE_READ_ENABLED', 'false');
+    poolQuery.mockResolvedValueOnce([
+      [
+        {
+          id: 'note-1',
+          parent_id: null,
+          title: '当前页面',
+          type: 'html',
+          content: '<p>正文</p>',
+          create_by: 'u1',
+          del_flag: 0,
+          revision: 1,
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getNoteDetail({ user: { id: 'u1', role: 'user' }, body: { id: 'note-1' } }, res);
+
+    expect(poolQuery).toHaveBeenCalledTimes(1);
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: {
+        id: 'note-1',
+        breadcrumb: [],
+        noteTreeFeatures: { note_tree_read: false },
+      },
+    });
   });
 
   it('笔记库分页在数据库内应用搜索和无标签筛选，并返回当前条件总数', async () => {

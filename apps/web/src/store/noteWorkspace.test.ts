@@ -161,4 +161,18 @@ describe('noteWorkspace 目录元数据同步', () => {
     expect(workspace.currentBreadcrumb).toEqual(items);
     expect(mocks.apiBasePost).toHaveBeenCalledTimes(1);
   });
+
+  it('详情接口随正文返回的面包屑会直接写入缓存，后续读取不再发起网络请求', async () => {
+    const workspace = useNoteWorkspaceStore();
+    const items = [
+      { id: 'parent', title: '父页面' },
+      { id: 'note-1', title: '当前页面' },
+    ];
+
+    expect(workspace.seedBreadcrumb('note-1', items)).toEqual(items);
+    await expect(workspace.loadBreadcrumb('note-1', { reveal: false })).resolves.toEqual(items);
+
+    expect(workspace.currentBreadcrumb).toEqual(items);
+    expect(mocks.apiBasePost).not.toHaveBeenCalled();
+  });
 });

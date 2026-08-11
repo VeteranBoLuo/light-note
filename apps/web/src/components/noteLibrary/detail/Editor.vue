@@ -27,15 +27,18 @@
         @close="closeRichFind"
       />
       <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
-        <NoteEditorWarmupPreview
-          v-if="!richEditorRuntimeReady && Boolean(content)"
-          :content="content"
-          note-type="html"
-        />
+        <Transition name="note-editor-warmup">
+          <NoteEditorWarmupPreview
+            v-if="!richEditorRuntimeReady && Boolean(content)"
+            :content="content"
+            note-type="html"
+          />
+        </Transition>
         <TinyMceEditor
           v-if="editorReady"
           :key="editorKey"
-          v-model="content"
+          :model-value="content"
+          @update:model-value="handleRichContentUpdate"
           tag-name="div"
           class="note-editor-body"
           :init="editorInit"
@@ -102,11 +105,13 @@
         />
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
-            <NoteEditorWarmupPreview
-              v-if="!markdownRuntimeReady && Boolean(mdContent)"
-              :content="mdContent"
-              note-type="markdown"
-            />
+            <Transition name="note-editor-warmup">
+              <NoteEditorWarmupPreview
+                v-if="!markdownRuntimeReady && Boolean(mdContent)"
+                :content="mdContent"
+                note-type="markdown"
+              />
+            </Transition>
             <MarkdownCodeMirror
               ref="mdCodeMirrorRef"
               :model-value="mdContent"
@@ -3771,6 +3776,14 @@
     emits('ready');
   }
 
+  function handleRichContentUpdate(value: string) {
+    // TinyMCE 初始化时会先规范化一次 HTML，并可能在用户尚未操作前发出 update:modelValue。
+    // 预览层仍显示服务端正文时忽略这次内部回写，避免正文闪动和误触发自动保存；
+    // init 完成后的真实输入继续正常同步。
+    if (!richEditorRuntimeReady.value) return;
+    content.value = value;
+  }
+
   const forceReinit = async () => {
     if (currentType.value !== 'html') return;
     if (richFindVisible.value) {
@@ -5203,6 +5216,13 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
+  }
+  .note-editor-warmup-leave-active {
+    transition: opacity 90ms ease-out;
+  }
+  .note-editor-warmup-leave-to {
+    opacity: 0;
+    pointer-events: none;
   }
   .note-editor-body {
     outline: none;

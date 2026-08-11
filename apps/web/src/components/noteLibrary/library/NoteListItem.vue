@@ -126,7 +126,6 @@
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
-  import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
 
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
@@ -201,9 +200,6 @@
   function prefetchNoteRoute() {
     if (props.batchMode || !props.note?.id) return;
     prefetchNoteDetail(user, String(props.note.id));
-    void preloadNoteEditorRuntime(props.note.type).catch(() => {
-      // 预热失败不阻断点击；正式挂载时会重试。
-    });
     if (!bookmark.isMobile) return;
     void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: props.note.id } }).catch(() => {
       // 正式点击仍会重试并显示全局导航反馈。

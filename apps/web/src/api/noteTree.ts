@@ -29,18 +29,21 @@ export const DISABLED_NOTE_TREE_FEATURES: NoteTreeFeatures = Object.freeze({
   ai_note_branch_analysis: false,
 });
 
+export function normalizeNoteTreeFeatures(raw: Record<string, unknown> | null | undefined): NoteTreeFeatures {
+  return Object.fromEntries(
+    (Object.keys(DISABLED_NOTE_TREE_FEATURES) as NoteTreeFeatureName[]).map((key) => [
+      key,
+      raw?.[NOTE_TREE_FEATURE_RESPONSE_KEYS[key]] === true || raw?.[key] === true,
+    ]),
+  ) as NoteTreeFeatures;
+}
+
 export async function fetchNoteTreeFeatures(): Promise<NoteTreeFeatures> {
   const response = await apiBasePost('/api/note/getNoteTreeFeatures', {}, { silent: true });
   if (response.status !== 200 || !response.data?.features) {
     throw new Error(String(response.data?.code || 'NOTE_TREE_FEATURES_UNAVAILABLE'));
   }
-  const raw = response.data.features as Record<string, unknown>;
-  return Object.fromEntries(
-    (Object.keys(DISABLED_NOTE_TREE_FEATURES) as NoteTreeFeatureName[]).map((key) => [
-      key,
-      raw[NOTE_TREE_FEATURE_RESPONSE_KEYS[key]] === true || raw[key] === true,
-    ]),
-  ) as NoteTreeFeatures;
+  return normalizeNoteTreeFeatures(response.data.features as Record<string, unknown>);
 }
 
 export interface NoteDeletePreview {
@@ -63,11 +66,7 @@ function collectTreeIds(items: NoteTreeItem[], visited = new Set<string>()) {
 export async function fetchNoteDeletePreview(noteId: string): Promise<NoteDeletePreview> {
   const id = String(noteId || '').trim();
   if (!id) throw new Error('NOTE_TREE_NODE_ID_REQUIRED');
-  const response = await apiBasePost(
-    '/api/note/queryNoteTree',
-    { parentId: id, depth: 'all' },
-    { silent: true },
-  );
+  const response = await apiBasePost('/api/note/queryNoteTree', { parentId: id, depth: 'all' }, { silent: true });
   if (response.status !== 200) throw new Error(String(response.data?.code || 'NOTE_TREE_LOAD_FAILED'));
   const payload = (response.data || {}) as NoteTreeQueryResult;
   const descendantIds = [...collectTreeIds(payload.items || [])];
@@ -80,7 +79,9 @@ export async function fetchNoteDeletePreview(noteId: string): Promise<NoteDelete
 }
 
 export function collapseNoteDeletePreviews(previews: NoteDeletePreview[]) {
-  const normalized = [...new Map(previews.filter((preview) => preview?.id).map((preview) => [preview.id, preview])).values()];
+  const normalized = [
+    ...new Map(previews.filter((preview) => preview?.id).map((preview) => [preview.id, preview])).values(),
+  ];
   const selectedIds = new Set(normalized.map((preview) => preview.id));
   const nestedSelectedIds = new Set<string>();
   for (const preview of normalized) {

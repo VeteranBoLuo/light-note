@@ -6,7 +6,6 @@
       class="mobile-bottom-nav__item"
       :class="{
         'mobile-bottom-nav__item--active': isItemActive(item.key) || pendingKey === item.key,
-        'mobile-bottom-nav__item--pending': pendingKey === item.key,
         'mobile-bottom-nav__item--ai': item.key === 'ai',
       }"
       :aria-current="isItemActive(item.key) ? 'page' : undefined"
@@ -208,32 +207,6 @@
     background: color-mix(in srgb, var(--primary-color) 8%, transparent) !important;
   }
 
-  .mobile-bottom-nav__item--pending .mobile-bottom-nav__icon {
-    transform: translateY(-1px);
-  }
-
-  .mobile-bottom-nav__item--pending .mobile-bottom-nav__label::after {
-    content: '';
-    width: 4px;
-    height: 4px;
-    margin-left: 3px;
-    display: inline-block;
-    border-radius: 50%;
-    background: currentColor;
-    animation: mobile-navigation-pending 0.9s ease-in-out infinite;
-    vertical-align: 2px;
-  }
-
-  @keyframes mobile-navigation-pending {
-    0%,
-    100% {
-      opacity: 0.35;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-
   .mobile-bottom-nav__item--ai .mobile-bottom-nav__icon {
     width: 30px;
     height: 25px;
@@ -333,11 +306,6 @@
 
     .mobile-bottom-nav__ai-status.is-generating {
       animation: none;
-    }
-
-    .mobile-bottom-nav__item--pending .mobile-bottom-nav__label::after {
-      animation: none;
-      opacity: 1;
     }
   }
 </style>

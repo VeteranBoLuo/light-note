@@ -12,6 +12,7 @@ import {
   collapseNoteDeletePreviews,
   fetchNoteDeletePreview,
   fetchNoteTreeFeatures,
+  normalizeNoteTreeFeatures,
   type NoteDeletePreview,
 } from './noteTree';
 
@@ -67,6 +68,26 @@ describe('noteTree feature snapshot', () => {
       note_tree_write: true,
       note_tree_mobile: true,
       note_tree_subtree_trash: true,
+      ai_note_branch_scope: true,
+      ai_note_branch_analysis: true,
+    });
+  });
+
+  it('详情聚合响应可以直接规范化能力快照，不额外依赖接口包装层', () => {
+    expect(
+      normalizeNoteTreeFeatures({
+        noteTreeRead: true,
+        noteTreeWrite: true,
+        note_tree_mobile: true,
+        noteTreeSubtreeTrash: false,
+        ai_note_branch_scope: true,
+        aiNoteBranchAnalysis: true,
+      }),
+    ).toEqual({
+      note_tree_read: true,
+      note_tree_write: true,
+      note_tree_mobile: true,
+      note_tree_subtree_trash: false,
       ai_note_branch_scope: true,
       ai_note_branch_analysis: true,
     });

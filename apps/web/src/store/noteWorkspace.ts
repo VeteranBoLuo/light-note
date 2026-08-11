@@ -70,9 +70,7 @@ function markSet(source: Set<string>, key: string, enabled: boolean) {
   return next;
 }
 
-export type NoteTreeMetadataPatch = Partial<
-  Pick<NoteTreeItem, 'title' | 'type' | 'isTop' | 'sort' | 'updateTime'>
->;
+export type NoteTreeMetadataPatch = Partial<Pick<NoteTreeItem, 'title' | 'type' | 'isTop' | 'sort' | 'updateTime'>>;
 
 export type CreatedNoteTreeItem = Pick<NoteTreeItem, 'id' | 'parentId' | 'title' | 'type'>;
 
@@ -239,6 +237,18 @@ export default defineStore('noteWorkspace', () => {
       browseParentId.value = normalizedId(next.browseParentId);
       currentBreadcrumb.value = browseParentId.value ? breadcrumbByNote.value[browseParentId.value] || [] : [];
     }
+  }
+
+  function seedBreadcrumb(noteId: string | null, items: NoteBreadcrumbItem[]) {
+    const id = normalizedId(noteId);
+    if (!id) return [];
+    const normalizedItems = (Array.isArray(items) ? items : [])
+      .map((item) => ({ id: String(item?.id || '').trim(), title: String(item?.title || '') }))
+      .filter((item) => item.id);
+    breadcrumbByNote.value = { ...breadcrumbByNote.value, [id]: normalizedItems };
+    breadcrumbTargetId = id;
+    currentBreadcrumb.value = normalizedItems;
+    return normalizedItems;
   }
 
   function loadChildren(parentId: string | null = null, force = false): Promise<NoteTreeItem[]> {
@@ -577,6 +587,7 @@ export default defineStore('noteWorkspace', () => {
     insertCreatedNote,
     refreshTree,
     searchTree,
+    seedBreadcrumb,
     setAiPreferredOpen,
     setNavigation,
     setSidebarPreferredOpen,

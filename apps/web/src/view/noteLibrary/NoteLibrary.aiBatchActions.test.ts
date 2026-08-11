@@ -351,16 +351,15 @@ describe('笔记库页面树交互接线', () => {
     expect(backFunction).not.toContain('router.back()');
   });
 
-  it('详情内容加载后以独立 key 重建标题与编辑区域', () => {
+  it('详情内容加载后保留独立 key，但不再让整个正文做进场位移动画', () => {
     const stablePanelStart = detailSource.indexOf('class="note-body-header editor-panel"');
     const breadcrumbStart = detailSource.indexOf('class="note-detail-breadcrumb"', stablePanelStart);
-    const transitionStart = detailSource.indexOf('<Transition name="note-content-switch"', stablePanelStart);
-    const keyedContentStart = detailSource.indexOf(':key="noteContentKey"', transitionStart);
+    const keyedContentStart = detailSource.indexOf(':key="noteContentKey"', breadcrumbStart);
 
     expect(stablePanelStart).toBeGreaterThan(-1);
     expect(breadcrumbStart).toBeGreaterThan(stablePanelStart);
-    expect(transitionStart).toBeGreaterThan(breadcrumbStart);
-    expect(keyedContentStart).toBeGreaterThan(transitionStart);
+    expect(keyedContentStart).toBeGreaterThan(breadcrumbStart);
+    expect(detailSource).not.toContain('<Transition name="note-content-switch"');
     expect(detailSource).toContain('v-if="canShowPrivateNavigation"\n            class="note-detail-breadcrumb"');
     expect(detailSource).not.toContain('canShowPrivateNavigation && detailBreadcrumb.length');
     expect(detailSource).toContain('v-for="item in detailBreadcrumbTailDisplay"');
