@@ -145,7 +145,7 @@ const SHOP_UTILITY_ITEMS = [
     effect: 'storage',
     storageMb: 2048,
   },
-  // 专属称号已下架:称号仅本人可见、无公开展示价值,故移除兑换入口(buyItem/equipTitle 仍兼容 type==='title' 历史数据,目录不再上架)。
+  // 专属称号已下架：历史已佩戴称号仍兼容，并会在社区名片中公开展示；目录不再新增兑换入口。
 ];
 
 // 可积分兑换的头像框。它们会进入 SHOP_ITEMS；成就专属框不会进入购买目录。

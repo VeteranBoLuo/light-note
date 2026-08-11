@@ -59,6 +59,16 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     PRIMARY KEY (user_id),
     KEY idx_community_chat_member_status_role (status, role, update_time)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_member_profiles (
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    bio varchar(255) NOT NULL DEFAULT '',
+    show_community_tenure tinyint unsigned NOT NULL DEFAULT 1,
+    featured_achievements json DEFAULT NULL,
+    revision bigint unsigned NOT NULL DEFAULT 1,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_user_settings (
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     global_notification_enabled tinyint unsigned NOT NULL DEFAULT 1,

@@ -234,7 +234,8 @@ describe('communityChatMessageService', () => {
       query: vi.fn(async (sql, params) => {
         const text = String(sql);
         if (text.includes('JOIN community_chat_rooms room')) {
-          expect(params).toEqual(['11111111-1111-4111-8111-111111111111', 'general', '']);
+          expect(params).toEqual(['11111111-1111-4111-8111-111111111111', 'general']);
+          expect(text).toContain('community_chat_member_profiles');
           return [
             [
               {
@@ -242,10 +243,16 @@ describe('communityChatMessageService', () => {
                 authorAccountRole: 'user',
                 authorName: '薄荷',
                 authorRole: 'member',
-                authorAvatar: 'https://example.com/avatar.webp',
+                authorHasAvatar: 1,
                 authorExp: 15000,
                 authorTitleId: null,
-                authorFrameId: 'frame_mint',
+                authorFrameId: 'frame_streak_seed',
+                authorJoinedAt: '2026-07-01T00:00:00.000Z',
+                authorMemberCreatedAt: '2026-07-01T00:00:00.000Z',
+                bio: '喜欢整理知识',
+                showCommunityTenure: 1,
+                featuredAchievements: null,
+                profileRevision: 0,
               },
             ],
             [],
@@ -277,18 +284,23 @@ describe('communityChatMessageService', () => {
       role: 'member',
       level: 10,
       levelName: '翰林',
-      frameId: 'frame_mint',
+      avatar: '/api/community-chat/messages/11111111-1111-4111-8111-111111111111/author-avatar',
+      frameId: 'frame_streak_seed',
+      frameRarity: 'rare',
+      bio: '喜欢整理知识',
       achievements: [
         { key: 'streak_7', group: 'checkin' },
-        { key: 'level_5', group: 'level' },
         { key: 'level_10', group: 'level' },
+        { key: 'level_5', group: 'level' },
       ],
       achievementCount: 3,
+      hasMoreAchievements: false,
     });
     expect(result).not.toHaveProperty('userId');
     expect(result).not.toHaveProperty('authorUserId');
     expect(result).not.toHaveProperty('exp');
     expect(result).not.toHaveProperty('email');
+    expect(result.avatar).not.toContain('data:image');
   });
 
   it('消息列表头像使用独立短地址延迟读取，并复核屏蔽与个人删除可见性', async () => {

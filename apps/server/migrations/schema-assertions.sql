@@ -1343,3 +1343,61 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name=expected.tn
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 43) 社区名片扩展必须具备隐私设置、精选成就与乐观并发版本（期望 0 行）
+SELECT '[43] missing_community_chat_profile_table' AS check_name,
+  'community_chat_member_profiles' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_member_profiles'
+    AND engine='InnoDB'
+    AND table_collation='utf8mb4_unicode_ci'
+);
+
+SELECT '[43] missing_community_chat_profile_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'user_id' col, 'community_chat_member_profiles.user_id' n UNION ALL
+  SELECT 'bio', 'community_chat_member_profiles.bio' UNION ALL
+  SELECT 'show_community_tenure', 'community_chat_member_profiles.show_community_tenure' UNION ALL
+  SELECT 'featured_achievements', 'community_chat_member_profiles.featured_achievements' UNION ALL
+  SELECT 'revision', 'community_chat_member_profiles.revision' UNION ALL
+  SELECT 'create_time', 'community_chat_member_profiles.create_time' UNION ALL
+  SELECT 'update_time', 'community_chat_member_profiles.update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_member_profiles'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[43] invalid_community_chat_profile_account_id_collation' AS check_name,
+  CONCAT('user_id actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_member_profiles'
+  AND actual.column_name='user_id'
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[43] invalid_community_chat_profile_defaults' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_member_profiles'
+  AND (
+    (actual.column_name='bio' AND NOT (actual.is_nullable='NO' AND actual.column_default=''))
+    OR (actual.column_name='show_community_tenure' AND NOT (actual.is_nullable='NO' AND actual.column_default='1'))
+    OR (actual.column_name='revision' AND NOT (actual.is_nullable='NO' AND actual.column_default='1'))
+  );
+
+SELECT '[43] missing_community_chat_profile_primary_key' AS check_name,
+  'community_chat_member_profiles.PRIMARY' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.statistics
+  WHERE table_schema=DATABASE()
+    AND table_name='community_chat_member_profiles'
+    AND index_name='PRIMARY'
+    AND column_name='user_id'
+);

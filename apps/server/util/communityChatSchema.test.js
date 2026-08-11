@@ -18,23 +18,23 @@ describe('ensureCommunityChatSchema', () => {
     mocks.query.mockResolvedValue([[], []]);
   });
 
-  it('幂等创建访问、消息互动、个人删除、图片、治理与运行策略共十六张表并补齐消息置顶字段和默认数据', async () => {
+  it('幂等创建访问、名片、消息互动、个人删除、图片、治理与运行策略共十七张表并补齐消息置顶字段和默认数据', async () => {
     await ensureCommunityChatSchema();
 
-    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(16);
-    expect(mocks.query).toHaveBeenCalledTimes(25);
+    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(17);
+    expect(mocks.query).toHaveBeenCalledTimes(26);
     expect(
-      mocks.query.mock.calls.slice(0, 16).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
+      mocks.query.mock.calls.slice(0, 17).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
     ).toBe(true);
-    expect(String(mocks.query.mock.calls[16][0])).toContain('information_schema.COLUMNS');
-    expect(String(mocks.query.mock.calls[17][0])).toContain('ADD COLUMN `recalled_at`');
-    expect(String(mocks.query.mock.calls[18][0])).toContain('ADD COLUMN `recalled_by`');
-    expect(String(mocks.query.mock.calls[19][0])).toContain("TABLE_NAME = 'community_chat_rooms'");
-    expect(String(mocks.query.mock.calls[20][0])).toContain('ADD COLUMN `pinned_message_id`');
-    expect(String(mocks.query.mock.calls[21][0])).toContain('ADD COLUMN `pinned_by`');
-    expect(String(mocks.query.mock.calls[22][0])).toContain('ADD COLUMN `pinned_at`');
-    expect(mocks.query.mock.calls[23][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
-    expect(mocks.query.mock.calls[24][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
+    expect(String(mocks.query.mock.calls[17][0])).toContain('information_schema.COLUMNS');
+    expect(String(mocks.query.mock.calls[18][0])).toContain('ADD COLUMN `recalled_at`');
+    expect(String(mocks.query.mock.calls[19][0])).toContain('ADD COLUMN `recalled_by`');
+    expect(String(mocks.query.mock.calls[20][0])).toContain("TABLE_NAME = 'community_chat_rooms'");
+    expect(String(mocks.query.mock.calls[21][0])).toContain('ADD COLUMN `pinned_message_id`');
+    expect(String(mocks.query.mock.calls[22][0])).toContain('ADD COLUMN `pinned_by`');
+    expect(String(mocks.query.mock.calls[23][0])).toContain('ADD COLUMN `pinned_at`');
+    expect(mocks.query.mock.calls[24][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
+    expect(mocks.query.mock.calls[25][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
     expect(COMMUNITY_CHAT_ROOM_PIN_COLUMNS.map((column) => column.name)).toEqual([
       'pinned_message_id',
       'pinned_by',
@@ -64,6 +64,7 @@ describe('ensureCommunityChatSchema', () => {
       imagesMigration,
       interactionsMigration,
       pinMigration,
+      profileMigration,
       baseline,
       assertions,
     ] = await Promise.all([
@@ -77,6 +78,7 @@ describe('ensureCommunityChatSchema', () => {
       readFile(new URL('../migrations/20260809_community_chat_images.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260810_community_chat_message_interactions.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260810_community_chat_message_pin.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../migrations/20260811_community_chat_member_profiles.sql', import.meta.url), 'utf8'),
       readFile(new URL('../tag_db.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8'),
     ]);
@@ -149,6 +151,13 @@ describe('ensureCommunityChatSchema', () => {
     expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS community_chat_message_likes');
     expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain(
       'CREATE TABLE IF NOT EXISTS community_chat_message_deletions',
+    );
+    expect(profileMigration).toContain('CREATE TABLE IF NOT EXISTS community_chat_member_profiles');
+    expect(profileMigration).toContain('featured_achievements json DEFAULT NULL');
+    expect(baseline).toContain('CREATE TABLE `community_chat_member_profiles`');
+    expect(assertions).toContain('missing_community_chat_profile_table');
+    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain(
+      'CREATE TABLE IF NOT EXISTS community_chat_member_profiles',
     );
     expect(notificationsMigration).toContain('idx_community_chat_mention_user_message');
     expect(textMigration).toContain('uk_community_chat_message_request');

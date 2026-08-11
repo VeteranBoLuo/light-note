@@ -76,4 +76,38 @@ describe('ChatSettingsModal', () => {
     expect(mocks.closeCurrentMobileOverlayThen).toHaveBeenCalledTimes(1);
     expect(mocks.order).toEqual(['close', 'model', 'next', 'emit']);
   });
+
+  it('关闭设置浮层后再打开自己的社区名片，避免移动端遮罩层相互抢占', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(ChatSettingsModal, {
+      visible: true,
+      'onUpdate:visible': (visible: boolean) => {
+        if (!visible) mocks.order.push('model');
+      },
+      onManageProfile: () => mocks.order.push('profile'),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': zhCN },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
+      item.textContent?.includes(zhCN.communityChat.settings.ownProfileAction),
+    );
+    button?.click();
+    await Promise.resolve();
+    await nextTick();
+
+    expect(mocks.closeCurrentMobileOverlayThen).toHaveBeenCalledTimes(1);
+    expect(mocks.order).toEqual(['close', 'model', 'next', 'profile']);
+  });
 });

@@ -734,6 +734,21 @@ CREATE TABLE `community_chat_members` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
+-- Table structure for community_chat_member_profiles
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_member_profiles`;
+CREATE TABLE `community_chat_member_profiles` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `bio` varchar(255) NOT NULL DEFAULT '',
+  `show_community_tenure` tinyint unsigned NOT NULL DEFAULT 1,
+  `featured_achievements` json DEFAULT NULL,
+  `revision` bigint unsigned NOT NULL DEFAULT 1,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
 -- Table structure for community_chat_user_settings
 -- ----------------------------
 DROP TABLE IF EXISTS `community_chat_user_settings`;

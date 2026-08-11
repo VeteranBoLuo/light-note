@@ -173,7 +173,13 @@
               </BButton>
               <div class="community-message__body">
                 <div class="community-message__meta">
-                  <strong>{{ authorName(chatMessage) }}</strong>
+                  <BButton
+                    class="community-message__author-name"
+                    :aria-label="t('communityChat.profile.view', { name: authorName(chatMessage) })"
+                    @click.stop="openAuthorProfile(chatMessage)"
+                  >
+                    {{ authorName(chatMessage) }}
+                  </BButton>
                   <span class="community-message__level">
                     Lv.{{ chatMessage.author.level }} {{ chatMessage.author.levelName }}
                   </span>
@@ -508,6 +514,7 @@
   <ChatSettingsModal
     v-model:visible="settingsVisible"
     @manage-blocks="openBlocksFromSettings"
+    @manage-profile="openProfileFromSettings"
     @notification-saved="handleNotificationSettingsSaved"
   />
   <MobilePageActionsDrawer
@@ -527,7 +534,27 @@
     :profile="authorProfile"
     :loading="profileLoading"
     :error="profileError"
-    @retry="loadAuthorProfile"
+    :authenticated="props.access.authenticated"
+    :is-own="profileIsOwn"
+    :can-mention="profileCanMention"
+    :can-reply="profileCanReply"
+    :own-profile="ownProfile"
+    :own-loading="ownProfileLoading"
+    :own-error="ownProfileError"
+    :saving="ownProfileSaving"
+    :all-achievements="profileAllAchievements"
+    :all-achievements-loading="profileAllAchievementsLoading"
+    :all-achievements-error="profileAllAchievementsError"
+    :session-key="profileSessionKey"
+    @retry="retryAuthorProfile"
+    @request-own="requestOwnProfile"
+    @load-all-achievements="requestAllProfileAchievements"
+    @save="saveCommunityProfile"
+    @mention="mentionProfileMember"
+    @reply="replyToProfileMember"
+    @block="blockProfileMember"
+    @report="reportProfileMember"
+    @login="loginFromProfile"
   />
 </template>
 
@@ -542,7 +569,6 @@
     deleteCommunityChatMessage,
     discardCommunityChatImage,
     getCommunityChatBlocks,
-    getCommunityChatMessageAuthorProfile,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
     markCommunityChatRoomRead,
@@ -555,7 +581,6 @@
     unpinCommunityChatMessage,
     uploadCommunityChatImage,
     type CommunityChatAccess,
-    type CommunityChatAuthorProfile,
     type CommunityChatBlockItem,
     type CommunityChatImage,
     type CommunityChatMessage,
@@ -581,11 +606,13 @@
   import ChatReportModal from '@/components/communityChat/ChatReportModal.vue';
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
+  import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
   import { useCommunityChatSocket, type CommunityChatRealtimeEvent } from '@/composables/useCommunityChatSocket';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { scrollIntoContainer } from '@/utils/zoom';
 
   const props = defineProps<{
@@ -603,6 +630,29 @@
   const unread = useCommunityChatUnread();
   const bookmark = bookmarkStore();
   const currentUser = useUserStore();
+  const {
+    visible: profileVisible,
+    targetMessage: profileTargetMessage,
+    sessionKey: profileSessionKey,
+    profile: authorProfile,
+    profileLoading,
+    profileError,
+    ownProfile,
+    ownLoading: ownProfileLoading,
+    ownError: ownProfileError,
+    ownSaving: ownProfileSaving,
+    allAchievements: profileAllAchievements,
+    allAchievementsLoading: profileAllAchievementsLoading,
+    allAchievementsError: profileAllAchievementsError,
+    isOwn: profileIsOwn,
+    openForMessage: openCommunityProfileForMessage,
+    openOwnProfile: openOwnCommunityProfile,
+    closeProfile: closeCommunityProfile,
+    loadPublicProfile,
+    loadOwnProfile,
+    loadAllAchievements: loadProfileAchievements,
+    saveOwnProfile,
+  } = useCommunityChatProfile();
   const selectedRoomSlug = ref('');
   const chatMessages = ref<CommunityChatMessage[]>([]);
   const initialLoading = ref(false);
@@ -642,19 +692,12 @@
   const mobileMessageActionTarget = ref<CommunityChatMessage | null>(null);
   const mobileMessageActionImageTarget = ref<CommunityChatImage | null>(null);
   const recallClock = ref(Date.now());
-  const profileVisible = ref(false);
-  const profileLoading = ref(false);
-  const profileError = ref(false);
-  const profileTargetMessageId = ref('');
-  const authorProfile = ref<CommunityChatAuthorProfile | null>(null);
-  const profileCache = new Map<string, CommunityChatAuthorProfile>();
   const pendingNewMessageCount = ref(0);
   const focusedMessagePublicId = ref('');
   const transientFocusedMessagePublicId = ref('');
   const hasNewerThanFocus = ref(false);
   const pinnedMessage = ref<CommunityChatMessage | null>(null);
   const pinActionBusy = ref(false);
-  let profileLoadGeneration = 0;
   let loadGeneration = 0;
   let pinnedLoadGeneration = 0;
   let pollTimer: number | undefined;
@@ -727,6 +770,12 @@
   );
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
+  );
+  const profileCanMention = computed(() =>
+    profileTargetMessage.value ? canMentionMessage(profileTargetMessage.value) : false,
+  );
+  const profileCanReply = computed(() =>
+    profileTargetMessage.value ? canReplyToMessage(profileTargetMessage.value) : false,
   );
   const imageUploadBusy = computed(() => !canPostCurrentRoom.value || sending.value || imageUploadsInFlight.value > 0);
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
@@ -913,17 +962,7 @@
   }
 
   function openAuthorProfile(chatMessage: CommunityChatMessage) {
-    profileTargetMessageId.value = chatMessage.publicId;
-    profileVisible.value = true;
-    const cached = profileCache.get(chatMessage.publicId);
-    if (cached) {
-      authorProfile.value = cached;
-      profileLoading.value = false;
-      profileError.value = false;
-      return;
-    }
-    authorProfile.value = null;
-    void loadAuthorProfile();
+    openCommunityProfileForMessage(chatMessage);
   }
 
   function canMentionMessage(chatMessage: CommunityChatMessage) {
@@ -1006,27 +1045,12 @@
     openAuthorProfile(chatMessage);
   }
 
-  async function loadAuthorProfile() {
-    const messagePublicId = profileTargetMessageId.value;
-    if (!messagePublicId) return;
-    const generation = ++profileLoadGeneration;
-    profileLoading.value = true;
-    profileError.value = false;
-    try {
-      const response = await getCommunityChatMessageAuthorProfile(messagePublicId);
-      if (generation !== profileLoadGeneration || messagePublicId !== profileTargetMessageId.value) return;
-      const profile = response.data as CommunityChatAuthorProfile;
-      if (!profile || !Array.isArray(profile.achievements)) throw new Error('COMMUNITY_PROFILE_INVALID');
-      profileCache.set(messagePublicId, profile);
-      authorProfile.value = profile;
-    } catch {
-      if (generation === profileLoadGeneration) {
-        authorProfile.value = null;
-        profileError.value = true;
-      }
-    } finally {
-      if (generation === profileLoadGeneration) profileLoading.value = false;
+  function retryAuthorProfile() {
+    if (profileIsOwn.value && !profileTargetMessage.value) {
+      void loadOwnProfile({ force: true }).catch(() => undefined);
+      return;
     }
+    void loadPublicProfile({ force: true }).catch(() => undefined);
   }
 
   function messageMenuItems(chatMessage: CommunityChatMessage): BActionMenuItem[] {
@@ -2028,6 +2052,75 @@
     blocksVisible.value = true;
   }
 
+  function openProfileFromSettings() {
+    openOwnCommunityProfile();
+  }
+
+  function requestOwnProfile() {
+    void loadOwnProfile().catch(() => undefined);
+  }
+
+  function requestAllProfileAchievements() {
+    void loadProfileAchievements().catch(() => undefined);
+  }
+
+  function communityProfileErrorCode(error: any) {
+    return String(error?.response?.data?.data?.code || error?.data?.code || error?.code || '');
+  }
+
+  async function saveCommunityProfile(input: CommunityChatProfileUpdateInput) {
+    try {
+      const saved = await saveOwnProfile(input);
+      if (!saved) return;
+      void recordOperation({ module: '公共聊天室', operation: '更新社区名片公开资料' });
+      message.success(t('communityChat.profile.saveSuccess'));
+    } catch (error: any) {
+      if (communityProfileErrorCode(error) === 'COMMUNITY_PROFILE_CONFLICT') {
+        message.warning(t('communityChat.profile.saveConflict'));
+        await loadOwnProfile({ force: true }).catch(() => undefined);
+        return;
+      }
+      message.error(error?.message || t('communityChat.profile.saveFailed'));
+    }
+  }
+
+  async function closeProfileThen(next: () => void | Promise<void>) {
+    await closeCurrentMobileOverlayThen(() => {
+      profileVisible.value = false;
+    }, next);
+  }
+
+  function mentionProfileMember() {
+    const target = profileTargetMessage.value;
+    if (!target) return;
+    void closeProfileThen(() => startMention(target));
+  }
+
+  function replyToProfileMember() {
+    const target = profileTargetMessage.value;
+    if (!target) return;
+    void closeProfileThen(() => startReply(target));
+  }
+
+  function blockProfileMember() {
+    const target = profileTargetMessage.value;
+    if (!target) return;
+    void closeProfileThen(() => confirmBlock(target));
+  }
+
+  function reportProfileMember() {
+    const target = profileTargetMessage.value;
+    if (!target) return;
+    void closeProfileThen(() => {
+      reportTarget.value = target;
+      reportVisible.value = true;
+    });
+  }
+
+  function loginFromProfile() {
+    void closeProfileThen(openAuthentication);
+  }
+
   function handleNotificationSettingsSaved() {
     emit('accessInvalidated');
   }
@@ -2362,6 +2455,11 @@
     { immediate: true },
   );
 
+  watch(realtimeIdentityKey, (nextIdentity, previousIdentity) => {
+    if (!previousIdentity || nextIdentity === previousIdentity) return;
+    closeCommunityProfile({ reset: true, clearIdentityCache: true });
+  });
+
   watch(
     selectedRoomSlug,
     () => {
@@ -2386,12 +2484,7 @@
       imageViewerImages.value = [];
       imageViewerInitialPublicId.value = '';
       releaseMessageImagePreloads({ clearReady: true });
-      profileLoadGeneration += 1;
-      profileVisible.value = false;
-      profileLoading.value = false;
-      profileError.value = false;
-      profileTargetMessageId.value = '';
-      authorProfile.value = null;
+      closeCommunityProfile({ reset: true });
       pendingNewMessageCount.value = 0;
       focusedMessagePublicId.value = '';
       transientFocusedMessagePublicId.value = '';
@@ -2457,7 +2550,7 @@
     resetComposerDragState();
     loadGeneration += 1;
     pinnedLoadGeneration += 1;
-    profileLoadGeneration += 1;
+    closeCommunityProfile({ reset: true });
     if (pollTimer !== undefined) window.clearInterval(pollTimer);
     if (recallClockTimer !== undefined) window.clearInterval(recallClockTimer);
     if (markReadTimer !== undefined) window.clearTimeout(markReadTimer);
@@ -3082,9 +3175,25 @@
     font-size: 10px;
   }
 
-  .community-message__meta strong {
+  .community-message__meta strong,
+  .community-message__author-name {
     color: var(--text-color);
     font-size: 11px;
+  }
+
+  .community-message__author-name {
+    width: auto;
+    height: auto;
+    min-height: 20px;
+    padding: 0;
+    line-height: 20px;
+    font-weight: 700;
+    background: transparent;
+  }
+
+  .community-message__author-name:hover {
+    color: var(--primary-color);
+    background: transparent;
   }
 
   .community-message__role {

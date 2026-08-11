@@ -36,6 +36,7 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['security_account_bans', 'user_id'],
   ['security_account_reputation', 'user_id'],
   ['user_sessions', 'user_id'],
+  ['community_chat_member_profiles', 'user_id'],
 ]);
 
 function accountDeletionError(code, message, status = 400) {

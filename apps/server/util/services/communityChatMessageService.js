@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
-import { ACHIEVEMENTS, MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
+import { MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
 import { titleName } from '../points.js';
 import {
   CommunityChatError,
@@ -13,6 +13,11 @@ import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } fro
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
+
+export {
+  getCommunityChatMessageAuthorAchievements,
+  getCommunityChatMessageAuthorProfile,
+} from './communityChatProfileService.js';
 
 const MAX_MESSAGE_LENGTH = 2000;
 const DEFAULT_PAGE_SIZE = 30;
@@ -385,96 +390,6 @@ function toPublicMessage(
           hasImages: replyBlocked ? false : Boolean(Number(row.replyImageCount || 0)),
         }
       : null,
-  };
-}
-
-/**
- * 通过消息公有 ID 解析作者公开名片。客户端永远拿不到内部账号 ID、邮箱、经验值或资源统计。
- */
-export async function getCommunityChatMessageAuthorProfile({ user, messagePublicId, env = process.env, db = pool }) {
-  const normalizedMessagePublicId = normalizePublicMessageId(messagePublicId);
-  await assertCommunityChatReadAccess({ user, env, db });
-  const viewerUserId = user?.id && user?.role !== 'visitor' ? user.id : '';
-  const profile = await queryFirst(
-    db,
-    `SELECT message.user_id AS authorUserId,
-            account.role AS authorAccountRole,
-            CASE WHEN account.del_flag = '0' THEN COALESCE(NULLIF(account.alias, ''), '') ELSE '' END AS authorName,
-            CASE
-              WHEN account.role = 'root' THEN 'official'
-              WHEN membership.role = 'moderator' AND membership.status = 'active' THEN 'moderator'
-              ELSE 'member'
-            END AS authorRole,
-            CASE
-              WHEN account.del_flag = '0'
-                AND (
-                  account.head_picture LIKE 'https://%'
-                  OR account.head_picture LIKE 'http://%'
-                  OR (
-                    account.head_picture LIKE 'data:image/%;base64,%'
-                    AND OCTET_LENGTH(account.head_picture) <= 524288
-                  )
-                )
-                THEN account.head_picture
-              ELSE ''
-            END AS authorAvatar,
-            COALESCE(growth.exp, 0) AS authorExp,
-            growth.equipped_title AS authorTitleId,
-            growth.equipped_frame AS authorFrameId
-       FROM community_chat_messages message
-       JOIN community_chat_rooms room ON room.id = message.room_id
-       JOIN user account ON account.id = message.user_id
-       LEFT JOIN community_chat_members membership ON membership.user_id = message.user_id
-       LEFT JOIN user_growth growth ON growth.user_id = message.user_id
-      WHERE message.public_id = ?
-        AND message.status IN ('active', 'recalled')
-        AND room.slug = ?
-        AND room.status = 'active'
-        AND account.del_flag = '0'
-        AND NOT EXISTS (
-          SELECT 1 FROM community_chat_blocks blocked
-           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
-        )
-      LIMIT 1`,
-    [normalizedMessagePublicId, COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, viewerUserId],
-  );
-  if (!profile) {
-    throw chatError(
-      'COMMUNITY_CHAT_AUTHOR_PROFILE_NOT_FOUND',
-      404,
-      '该用户资料当前不可查看',
-      'This member profile is not available',
-    );
-  }
-
-  const [achievementRows] = await db.query(
-    `SELECT ref, MAX(id) AS latestId
-       FROM points_log
-      WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock') AND ref IS NOT NULL
-      GROUP BY ref
-      ORDER BY latestId DESC`,
-    [profile.authorUserId],
-  );
-  const knownAchievements = new Map(ACHIEVEMENTS.map((achievement) => [achievement.key, achievement]));
-  const unlockedKeys = new Set(
-    achievementRows.map((row) => String(row.ref || '')).filter((key) => knownAchievements.has(key)),
-  );
-  const growth = publicGrowthProfile(profile);
-  for (const achievement of ACHIEVEMENTS) {
-    if (achievement.group === 'level' && growth.level >= achievement.target) unlockedKeys.add(achievement.key);
-  }
-  const achievements = ACHIEVEMENTS.filter((achievement) => unlockedKeys.has(achievement.key)).map(
-    ({ key, group }) => ({ key, group }),
-  );
-
-  return {
-    name: profile.authorName || '',
-    role: profile.authorRole || 'member',
-    avatar: profile.authorAvatar || '',
-    frameId: profile.authorFrameId || null,
-    ...growth,
-    achievements,
-    achievementCount: achievements.length,
   };
 }
 

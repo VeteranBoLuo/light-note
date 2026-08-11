@@ -14,6 +14,10 @@ const mocks = vi.hoisted(() => ({
   getPinnedMessage: vi.fn(),
   getAuthorAvatar: vi.fn(),
   getAuthorProfile: vi.fn(),
+  getAuthorAchievements: vi.fn(),
+  getOwnProfile: vi.fn(),
+  getOwnProfileAvatar: vi.fn(),
+  updateOwnProfile: vi.fn(),
   createMessage: vi.fn(),
   deleteMessage: vi.fn(),
   markRead: vi.fn(),
@@ -59,7 +63,6 @@ vi.mock('../util/services/communityChatMessageService.js', () => ({
   listCommunityChatMessages: mocks.listMessages,
   getCommunityChatPinnedMessage: mocks.getPinnedMessage,
   getCommunityChatMessageAuthorAvatar: mocks.getAuthorAvatar,
-  getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
   createCommunityChatMessage: mocks.createMessage,
   deleteCommunityChatMessage: mocks.deleteMessage,
   markCommunityChatRoomRead: mocks.markRead,
@@ -67,6 +70,13 @@ vi.mock('../util/services/communityChatMessageService.js', () => ({
   recallCommunityChatMessage: mocks.recallMessage,
   pinCommunityChatMessage: mocks.pinMessage,
   unpinCommunityChatMessage: mocks.unpinMessage,
+}));
+vi.mock('../util/services/communityChatProfileService.js', () => ({
+  getCommunityChatMessageAuthorProfile: mocks.getAuthorProfile,
+  getCommunityChatMessageAuthorAchievements: mocks.getAuthorAchievements,
+  getCommunityChatOwnProfile: mocks.getOwnProfile,
+  getCommunityChatOwnProfileAvatar: mocks.getOwnProfileAvatar,
+  updateCommunityChatOwnProfile: mocks.updateOwnProfile,
 }));
 vi.mock('../util/services/communityChatImageService.js', () => ({
   uploadCommunityChatImage: mocks.uploadImage,
@@ -96,10 +106,13 @@ const {
   listReports,
   markRoomRead,
   messageAuthorAvatar,
+  messageAuthorAchievements,
   messageAuthorProfile,
   messages,
   pinnedMessage,
   notificationSettings,
+  ownProfile,
+  ownProfileAvatar,
   reportMessage,
   recallMessage,
   pinMessage,
@@ -112,6 +125,7 @@ const {
   toggleMessageLike,
   unpinMessage,
   updateRuntimePolicy,
+  updateOwnProfile,
   updateNotificationSettings,
 } = await import('./communityChatHandle.js');
 
@@ -276,12 +290,73 @@ describe('communityChatHandle', () => {
     expect(mocks.getAuthorProfile).toHaveBeenCalledWith({
       user,
       messagePublicId: '11111111-1111-4111-8111-111111111111',
+      locale: 'zh-CN',
     });
     expect(res.send).toHaveBeenCalledWith({
       data: { name: '薄荷', level: 3, achievements: [] },
       status: 200,
       msg: '',
     });
+  });
+
+  it('作者全部成就继续只接受消息公有 ID，个人资料读写使用当前登录身份和版本号', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    mocks.getAuthorAchievements.mockResolvedValue({ achievements: [{ key: 'streak_7', group: 'checkin' }] });
+    mocks.getOwnProfile.mockResolvedValue({ bio: '喜欢整理知识', revision: 2 });
+    mocks.updateOwnProfile.mockResolvedValue({ bio: '新的简介', revision: 3 });
+    const achievementRes = mockRes();
+    const ownRes = mockRes();
+    const updateRes = mockRes();
+
+    await messageAuthorAchievements(
+      { user, params: { publicId: 'message-1' }, query: { userId: 'forged-user' } },
+      achievementRes,
+    );
+    await ownProfile({ user }, ownRes);
+    await updateOwnProfile(
+      {
+        user,
+        body: {
+          bio: '新的简介',
+          showCommunityTenure: false,
+          featuredAchievementKeys: ['streak_7'],
+          baseRevision: 2,
+          userId: 'forged-user',
+        },
+      },
+      updateRes,
+    );
+
+    expect(mocks.getAuthorAchievements).toHaveBeenCalledWith({ user, messagePublicId: 'message-1' });
+    expect(mocks.getOwnProfile).toHaveBeenCalledWith({ user, locale: 'zh-CN' });
+    expect(mocks.updateOwnProfile).toHaveBeenCalledWith({
+      user,
+      bio: '新的简介',
+      showCommunityTenure: false,
+      featuredAchievementKeys: ['streak_7'],
+      baseRevision: 2,
+      locale: 'zh-CN',
+    });
+    expect(achievementRes.send).toHaveBeenCalled();
+    expect(ownRes.send).toHaveBeenCalled();
+    expect(updateRes.send).toHaveBeenCalled();
+  });
+
+  it('个人头像接口拒绝游客并复用安全图片输出', async () => {
+    const visitorRes = mockRes();
+    await ownProfileAvatar({ user: { id: 'visitor-1', role: 'visitor' } }, visitorRes);
+    expect(visitorRes.status).toHaveBeenCalledWith(403);
+    expect(mocks.getOwnProfileAvatar).not.toHaveBeenCalled();
+
+    const user = { id: 'user-1', role: 'user' };
+    mocks.getOwnProfileAvatar.mockResolvedValue({ source: 'data:image/png;base64,YQ==' });
+    const userRes = mockRes();
+    userRes.set = vi.fn().mockReturnValue(userRes);
+    userRes.type = vi.fn().mockReturnValue(userRes);
+    await ownProfileAvatar({ user }, userRes);
+    expect(mocks.getOwnProfileAvatar).toHaveBeenCalledWith({ user });
+    expect(userRes.type).toHaveBeenCalledWith('image/png');
+    expect(userRes.send).toHaveBeenCalledWith(Buffer.from('a'));
   });
 
   it('作者头像延迟接口以私有缓存返回安全图片字节', async () => {

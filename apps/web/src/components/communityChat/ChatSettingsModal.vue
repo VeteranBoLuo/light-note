@@ -8,6 +8,17 @@
     <div class="chat-settings-modal">
       <CommunityChatNotificationSettingsPanel compact @saved="emit('notificationSaved', $event)" />
 
+      <section class="chat-settings-modal__management chat-settings-modal__management--profile">
+        <div>
+          <strong>{{ t('communityChat.settings.ownProfileTitle') }}</strong>
+          <span>{{ t('communityChat.settings.ownProfileDescription') }}</span>
+        </div>
+        <BButton @click="openOwnProfile">
+          <SvgIcon :src="icon.userCenter.growth" size="16" aria-hidden="true" />
+          {{ t('communityChat.settings.ownProfileAction') }}
+        </BButton>
+      </section>
+
       <section class="chat-settings-modal__management">
         <div>
           <strong>{{ t('communityChat.settings.blockedUsersTitle') }}</strong>
@@ -39,17 +50,26 @@
   const visible = defineModel<boolean>('visible', { default: false });
   const emit = defineEmits<{
     manageBlocks: [];
+    manageProfile: [];
     notificationSaved: [settings: CommunityChatNotificationSettings];
   }>();
   const { t } = useI18n();
 
-  async function openBlockedUsers() {
+  async function openDestination(eventName: 'manageBlocks' | 'manageProfile') {
     await closeCurrentMobileOverlayThen(
       () => {
         visible.value = false;
       },
-      () => emit('manageBlocks'),
+      () => emit(eventName),
     );
+  }
+
+  function openBlockedUsers() {
+    return openDestination('manageBlocks');
+  }
+
+  function openOwnProfile() {
+    return openDestination('manageProfile');
   }
 </script>
 
@@ -69,6 +89,10 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 13px;
     background: var(--workspace-panel-bg-color);
+  }
+
+  .chat-settings-modal__management--profile {
+    border-color: var(--primary-color);
   }
 
   .chat-settings-modal__management > div {

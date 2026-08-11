@@ -1,4 +1,4 @@
-import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
+import { apiBaseGet, apiBasePatch, apiBasePost, apiBasePut } from '@/http/request';
 
 export type CommunityChatAccessStatus =
   'login_required' | 'read_only' | 'closed' | 'not_invited' | 'requested' | 'rules_required' | 'active' | 'restricted';
@@ -65,6 +65,7 @@ export interface CommunityChatMessageAuthor {
   role: 'member' | 'moderator' | 'official';
   avatar: string;
   frameId: string | null;
+  frameRarity?: 'basic' | 'rare' | 'epic' | 'legendary' | null;
   level: number;
   levelName: string;
   title: string | null;
@@ -76,8 +77,26 @@ export interface CommunityChatPublicAchievement {
 }
 
 export interface CommunityChatAuthorProfile extends CommunityChatMessageAuthor {
+  bio: string;
+  communityTenureLabel: string | null;
   achievements: CommunityChatPublicAchievement[];
   achievementCount: number;
+  hasMoreAchievements: boolean;
+}
+
+export interface CommunityChatAchievementCollection {
+  achievements: CommunityChatPublicAchievement[];
+  achievementCount: number;
+}
+
+export interface CommunityChatOwnProfile {
+  bio: string;
+  showCommunityTenure: boolean;
+  featuredAchievementKeys: string[];
+  revision: number;
+  usesDefaultFeaturedAchievements: boolean;
+  availableAchievements: CommunityChatPublicAchievement[];
+  publicPreview: CommunityChatAuthorProfile;
 }
 
 export interface CommunityChatMessageReply {
@@ -239,6 +258,23 @@ export const getCommunityChatMessageAuthorProfile = (messagePublicId: string) =>
   apiBaseGet(`/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile`, undefined, {
     silent: true,
   });
+
+export const getCommunityChatMessageAuthorAchievements = (messagePublicId: string) =>
+  apiBaseGet(
+    `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}/author-profile/achievements`,
+    undefined,
+    { silent: true },
+  );
+
+export const getCommunityChatOwnProfile = () =>
+  apiBaseGet('/api/community-chat/profile/me', undefined, { silent: true });
+
+export const updateCommunityChatOwnProfile = (input: {
+  bio: string;
+  showCommunityTenure: boolean;
+  featuredAchievementKeys: string[];
+  baseRevision: number;
+}) => apiBasePatch('/api/community-chat/profile/me', input, { silent: true });
 
 export const sendCommunityChatMessage = (roomSlug: string, input: SendCommunityChatMessageInput) =>
   apiBasePost(`${roomPath(roomSlug)}/messages`, input, { silent: true });

@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   apiBaseGet: vi.fn(),
+  apiBasePatch: vi.fn(),
   apiBasePost: vi.fn(),
   apiBasePut: vi.fn(),
 }));
 
 vi.mock('@/http/request', () => ({
   apiBaseGet: mocks.apiBaseGet,
+  apiBasePatch: mocks.apiBasePatch,
   apiBasePost: mocks.apiBasePost,
   apiBasePut: mocks.apiBasePut,
 }));
@@ -25,6 +27,8 @@ const {
   getCommunityChatNotificationSettings,
   getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorProfile,
+  getCommunityChatMessageAuthorAchievements,
+  getCommunityChatOwnProfile,
   getCommunityChatBlocks,
   getCommunityChatRooms,
   markCommunityChatRoomRead,
@@ -39,6 +43,7 @@ const {
   unpinCommunityChatMessage,
   updateCommunityChatAdminRuntimePolicy,
   updateCommunityChatNotificationSettings,
+  updateCommunityChatOwnProfile,
   uploadCommunityChatImage,
 } = await import('./communityChatApi');
 
@@ -141,10 +146,38 @@ describe('communityChatApi', () => {
 
   it('公开用户卡只通过消息公有 ID 读取，不接受内部账号 ID', () => {
     getCommunityChatMessageAuthorProfile('message/1');
+    getCommunityChatMessageAuthorAchievements('message/1');
 
     expect(mocks.apiBaseGet).toHaveBeenCalledWith(
       '/api/community-chat/messages/message%2F1/author-profile',
       undefined,
+      { silent: true },
+    );
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
+      '/api/community-chat/messages/message%2F1/author-profile/achievements',
+      undefined,
+      { silent: true },
+    );
+  });
+
+  it('个人社区名片只读取当前登录身份，并通过 PATCH 携带乐观并发版本', () => {
+    getCommunityChatOwnProfile();
+    updateCommunityChatOwnProfile({
+      bio: '喜欢整理知识',
+      showCommunityTenure: false,
+      featuredAchievementKeys: ['streak_7'],
+      baseRevision: 3,
+    });
+
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith('/api/community-chat/profile/me', undefined, { silent: true });
+    expect(mocks.apiBasePatch).toHaveBeenCalledWith(
+      '/api/community-chat/profile/me',
+      {
+        bio: '喜欢整理知识',
+        showCommunityTenure: false,
+        featuredAchievementKeys: ['streak_7'],
+        baseRevision: 3,
+      },
       { silent: true },
     );
   });

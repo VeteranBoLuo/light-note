@@ -17,7 +17,6 @@ import {
   deleteCommunityChatMessage,
   getCommunityChatPinnedMessage,
   getCommunityChatMessageAuthorAvatar,
-  getCommunityChatMessageAuthorProfile,
   listCommunityChatMessages,
   markCommunityChatRoomRead,
   pinCommunityChatMessage,
@@ -25,6 +24,13 @@ import {
   toggleCommunityChatMessageLike,
   unpinCommunityChatMessage,
 } from '../util/services/communityChatMessageService.js';
+import {
+  getCommunityChatMessageAuthorAchievements,
+  getCommunityChatMessageAuthorProfile,
+  getCommunityChatOwnProfile,
+  getCommunityChatOwnProfileAvatar,
+  updateCommunityChatOwnProfile,
+} from '../util/services/communityChatProfileService.js';
 import {
   discardCommunityChatImage,
   getCommunityChatImageDownload,
@@ -272,11 +278,46 @@ export async function messageAuthorProfile(req, res) {
     const data = await getCommunityChatMessageAuthorProfile({
       user: req.user,
       messagePublicId: req.params?.publicId,
+      locale: reqLang(req),
     });
     return res.send(resultData(data));
   } catch (error) {
     return sendError(req, res, error);
   }
+}
+
+export async function messageAuthorAchievements(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatMessageAuthorAchievements({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+function sendProfileAvatar(req, res, source) {
+  res.set('Cache-Control', 'private, max-age=300');
+  res.set('X-Content-Type-Options', 'nosniff');
+  if (/^https?:\/\//i.test(source)) return res.redirect(302, source);
+
+  const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(source);
+  const body = match ? Buffer.from(match[2], 'base64') : null;
+  if (!match || !body?.length || body.length > 524288) {
+    return res
+      .status(404)
+      .send(
+        resultData(
+          { code: 'COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND' },
+          404,
+          L(req, '头像当前不可用', 'Avatar is unavailable'),
+        ),
+      );
+  }
+  return res.type(match[1]).send(body);
 }
 
 export async function messageAuthorAvatar(req, res) {
@@ -286,24 +327,44 @@ export async function messageAuthorAvatar(req, res) {
       user: req.user,
       messagePublicId: req.params?.publicId,
     });
-    res.set('Cache-Control', 'private, max-age=300');
-    res.set('X-Content-Type-Options', 'nosniff');
-    if (/^https?:\/\//i.test(source)) return res.redirect(302, source);
+    return sendProfileAvatar(req, res, source);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
 
-    const match = /^data:(image\/(?:jpeg|png|webp|gif));base64,([A-Za-z0-9+/=]+)$/i.exec(source);
-    const body = match ? Buffer.from(match[2], 'base64') : null;
-    if (!match || !body?.length || body.length > 524288) {
-      return res
-        .status(404)
-        .send(
-          resultData(
-            { code: 'COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND' },
-            404,
-            L(req, '头像当前不可用', 'Avatar is unavailable'),
-          ),
-        );
-    }
-    return res.type(match[1]).send(body);
+export async function ownProfile(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await getCommunityChatOwnProfile({ user: req.user, locale: reqLang(req) });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function updateOwnProfile(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await updateCommunityChatOwnProfile({
+      user: req.user,
+      bio: req.body?.bio,
+      showCommunityTenure: req.body?.showCommunityTenure,
+      featuredAchievementKeys: req.body?.featuredAchievementKeys,
+      baseRevision: req.body?.baseRevision,
+      locale: reqLang(req),
+    });
+    return res.send(resultData(data, 200, L(req, '社区名片已保存', 'Community profile saved')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function ownProfileAvatar(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const { source } = await getCommunityChatOwnProfileAvatar({ user: req.user });
+    return sendProfileAvatar(req, res, source);
   } catch (error) {
     return sendError(req, res, error);
   }
