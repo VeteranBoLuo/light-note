@@ -13,6 +13,7 @@
     >
       <MobileAppShell
         :enabled="mobileShellEnabled"
+        :show-top-bar="mobileTopBarActive"
         :show-top-switcher="mobileTopSwitcherActive"
         :show-bottom-nav="mobileBottomNavActive"
       >
@@ -63,13 +64,12 @@
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
-  import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { isLightNoteAndroidApp, postAndroidMessage } from '@/utils/androidBridge';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import { useAndroidNativeNotifications } from '@/composables/useAndroidNativeNotifications';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
@@ -101,6 +101,12 @@
     computed(() => bookmark.isMobile),
   );
   const isAndroidApp = isLightNoteAndroidApp();
+  // 已安装的 2026-08 灰度壳不会随 Web 更新自动删除旧通知。新页面启动时只做迁移清理，
+  // 不再建立通知 WebSocket、轮询未读或发送新的系统通知；DownloadManager 通知不走此桥。
+  if (isAndroidApp) {
+    postAndroidMessage({ type: 'notifications.configure', enabled: false });
+    postAndroidMessage({ type: 'notifications.clear' });
+  }
   const aiRuntimeIdentity = computed(() => resolveAiAssistantIdentity(user));
   const isOnline = ref(typeof navigator === 'undefined' ? true : navigator.onLine !== false);
   const aiRuntimeIdentityKey = computed(() => buildAiAssistantRuntimeIdentityKey(aiRuntimeIdentity.value));
@@ -186,6 +192,9 @@
   const mobileTopSwitcherActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopSwitcher === true,
   );
+  const mobileTopBarActive = computed(
+    () => bookmark.isMobile && router.currentRoute.value.meta.mobileTopBar !== false,
+  );
   const mobileBottomNavActive = computed(
     () => bookmark.isMobile && router.currentRoute.value.meta.mobileBottomNav === true,
   );
@@ -199,7 +208,6 @@
     userRole: computed(() => user.role),
     realtimeActive: computed(() => router.currentRoute.value.name !== 'communityChat'),
   });
-  useAndroidNativeNotifications();
   watch(
     mobileBottomNavActive,
     (active) => {

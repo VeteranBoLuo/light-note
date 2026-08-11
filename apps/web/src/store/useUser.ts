@@ -64,9 +64,6 @@ interface UserInfo {
     notificationsInApp?: boolean; // 待办等站内通知总开关
     notificationsEmail?: boolean; // 待办等邮件通知总开关
     notificationsBrowser?: boolean; // 前台页面浏览器系统通知
-    notificationsAndroid?: boolean; // Root 灰度：App 原生通知栏总开关
-    notificationsAndroidBadge?: boolean; // Root 灰度：App 桌面图标未读角标
-    communityChatAndroidNotifications?: boolean; // Root 灰度：聊天室回复/@ 原生通知
     notificationsDnd?: boolean; // 是否启用免打扰时段
     notificationsDndStart?: string; // 免打扰开始时间，HH:mm
     notificationsDndEnd?: string; // 免打扰结束时间，HH:mm
@@ -126,9 +123,6 @@ const createDefaultUserState = (): UserState => ({
     notificationsInApp: true,
     notificationsEmail: true,
     notificationsBrowser: false,
-    notificationsAndroid: true,
-    notificationsAndroidBadge: true,
-    communityChatAndroidNotifications: false,
     notificationsDnd: false,
     notificationsDndStart: '22:00',
     notificationsDndEnd: '08:00',

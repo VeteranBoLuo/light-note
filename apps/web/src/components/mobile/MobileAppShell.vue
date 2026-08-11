@@ -2,10 +2,10 @@
   <div
     v-if="enabled"
     class="mobile-app-shell"
-    :class="{ 'is-keyboard-open': keyboardOpen }"
+    :class="{ 'is-keyboard-open': keyboardOpen, 'is-top-bar-hidden': !showTopBar }"
     :style="shellViewportStyle"
   >
-    <MobileTopBar />
+    <MobileTopBar v-if="showTopBar" />
     <MobileResourceTabs v-if="showTopSwitcher" />
     <!--
       全站唯一的下拉刷新指示器,位置固定在顶栏正下方。
@@ -46,6 +46,7 @@
 
   const props = defineProps<{
     enabled: boolean;
+    showTopBar: boolean;
     showTopSwitcher: boolean;
     showBottomNav: boolean;
   }>();
@@ -111,6 +112,19 @@
     });
   }
 
+  function resetKeyboardViewportState() {
+    keyboardOpen.value = false;
+    visibleViewportHeight.value = 0;
+    if (typeof window === 'undefined') return;
+    if (focusFrame) {
+      window.cancelAnimationFrame(focusFrame);
+      focusFrame = 0;
+    }
+    const viewport = window.visualViewport;
+    stableViewportWidth = Math.max(0, Math.round(viewport?.width || window.innerWidth));
+    stableViewportHeight = Math.max(0, Math.round(viewport?.height || 0), window.innerHeight);
+  }
+
   function syncPrimaryRootState() {
     if (typeof document === 'undefined') return;
     document.documentElement.dataset.lightNotePrimaryRoot = String(props.enabled && props.showBottomNav);
@@ -141,6 +155,18 @@
     () => route.fullPath,
     () => {
       if (props.enabled) scheduleScrollRestore(route.name);
+    },
+    { immediate: true },
+  );
+
+  watch(
+    () => props.enabled,
+    (enabled) => {
+      // 详情页会临时卸下统一移动壳。若此时输入框仍处于聚焦或 visualViewport 的
+      // 键盘收起事件晚到，旧的可视高度不能被下一次笔记库挂载继续复用。
+      resetKeyboardViewportState();
+      if (!enabled) return;
+      nextTick(() => scheduleKeyboardStateUpdate());
     },
     { immediate: true },
   );
@@ -189,6 +215,10 @@
   .mobile-app-shell.is-keyboard-open {
     height: var(--mobile-visible-viewport-height, 100%);
     max-height: 100%;
+  }
+
+  .mobile-app-shell.is-top-bar-hidden {
+    --mobile-top-bar-height: 0px;
   }
 
   .mobile-app-shell__refresh-slot {

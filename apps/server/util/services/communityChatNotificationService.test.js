@@ -137,12 +137,7 @@ describe('communityChatNotificationService', () => {
   });
 
   it('回复与显式提及按同一规则幂等投递，同一消息回复并 @ 同一人也由来源键去重', async () => {
-    const db = {
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([{ affectedRows: 1 }, []])
-        .mockResolvedValueOnce([[{ userId: 'user-2' }], []]),
-    };
+    const db = { query: vi.fn().mockResolvedValueOnce([{ affectedRows: 1 }, []]) };
     const result = await deliverCommunityChatMessageNotifications({
       messagePublicId: '11111111-1111-4111-8111-111111111111',
       env: PUBLIC_ENV,
@@ -158,7 +153,7 @@ describe('communityChatNotificationService', () => {
     expect(text).toContain("'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END");
     expect(text).toContain('LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id');
     expect(text).toContain('LEFT JOIN community_chat_message_mentions mention ON mention.message_id = message.id');
-    expect(db.query.mock.calls[1][0]).toContain('SELECT DISTINCT user_id AS userId');
+    expect(db.query).toHaveBeenCalledTimes(1);
     expect(text).toContain('recipient.id = reply.user_id');
     expect(text).toContain('recipient.id = mention.mentioned_user_id');
     expect(text).toContain('COALESCE(settings.global_notification_enabled, 1) = 1');

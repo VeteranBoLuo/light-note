@@ -8,6 +8,7 @@ const communityChatRouter: RouteRecordRaw = {
     title: '社区客厅',
     roles: ALL_ROLES,
     mobileShell: 'community',
+    mobileTopBar: false,
     mobileBottomNav: true,
   },
   component: () => import('@/view/communityChat/CommunityChat.vue'),

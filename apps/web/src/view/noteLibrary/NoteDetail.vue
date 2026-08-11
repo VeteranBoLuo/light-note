@@ -327,6 +327,7 @@
     buildNoteDetailRequestScope,
     consumeNoteDetail,
     invalidateNoteDetailPrefetch,
+    seedNoteDetail,
   } from '@/api/noteDetailPrefetch';
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import { NOTE_LIBRARY_FEATURES_FRESH_MS } from '@/store/noteLibraryCache';
@@ -1726,6 +1727,22 @@
     }
   }
 
+  function seedCurrentNoteDetail() {
+    if (!note.id || nodeType.value === 'share') return;
+    seedNoteDetail(user, note.id, {
+      id: note.id,
+      title: note.title,
+      content: note.content,
+      createBy: note.createBy,
+      type: note.type,
+      revision: note.revision,
+      parentId: note.parentId,
+      updateTime: updateTime.value,
+      breadcrumb: detailBreadcrumb.value.map((item) => ({ ...item })),
+      noteTreeFeatures: { ...noteTreeFeatures.value },
+    });
+  }
+
   async function persistBeforeLeave() {
     captureTitleBeforeLeave();
     // 返回发生在失焦事件之前时，主动把当前标题纳入保存队列；不能依赖事件时序。
@@ -1739,6 +1756,8 @@
     const saved = await flushPendingSave();
     if (!saved) {
       message.error(t('noteDetail.saveFailed'));
+    } else {
+      seedCurrentNoteDetail();
     }
     return saved;
   }

@@ -602,6 +602,9 @@
       :actions="mobileBatchActions"
       @action="handleMobileBatchAction"
     />
+    <div v-if="openingNoteId" class="note-detail-navigation-loading" aria-live="polite">
+      <NoteDetailLoadingState variant="page" />
+    </div>
   </ResourcePageShell>
 </template>
 
@@ -621,6 +624,8 @@
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import NoteCard from '@/components/noteLibrary/library/NoteCard.vue';
   import NoteListItem from '@/components/noteLibrary/library/NoteListItem.vue';
+  import NoteDetailLoadingState from '@/components/noteLibrary/detail/NoteDetailLoadingState.vue';
+  import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
@@ -656,6 +661,7 @@
   import { copyTextToClipboard } from '@/utils/clipboard';
   import { deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
+  import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
   import type { NoteBatchExportMode } from '@/utils/noteBatchExport';
   import {
@@ -881,6 +887,7 @@
   });
   const noteList = ref<any[]>([]);
   const visibleDragNoteList = ref<any[]>([]);
+  const openingNoteId = ref('');
   // 首次列表请求要等待目录功能开关快照；默认进入加载态，避免请求启动前短暂误显空状态。
   const loading = ref(true);
   const loadingMore = ref(false);
@@ -1283,13 +1290,41 @@
     return selectTreeDirectory(noteId);
   }
 
-  function openDirectoryPage(noteId: string) {
+  function findNoteForWarmup(noteId: string) {
+    return noteList.value.find((item) => String(item.id) === noteId) || findLoadedTreeNode(noteId);
+  }
+
+  async function paintNoteNavigationFeedback() {
+    await nextTick();
+    await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+
+  async function openDirectoryPage(noteId: string) {
+    const normalizedId = String(noteId || '').trim();
+    if (!normalizedId || openingNoteId.value) return;
     void recordNoteTreeProductEvent('note_tree_page_opened', {
       surface: noteTreeSurface(),
-      ...noteTreeNodeMetrics(noteId),
+      ...noteTreeNodeMetrics(normalizedId),
       result: 'success',
     });
-    return openTreeDirectoryPage(noteId);
+    if (!bookmark.isMobile) return openTreeDirectoryPage(normalizedId);
+
+    openingNoteId.value = normalizedId;
+    prefetchNoteDetail(user, normalizedId);
+    // 先让触控反馈骨架完成一帧绘制，再启动可能包含 TinyMCE 的重运行时解析。
+    await paintNoteNavigationFeedback();
+    void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: normalizedId } }).catch(() => {
+      // 正式导航会复用或重试路由加载，并由详情页呈现错误状态。
+    });
+    const source = findNoteForWarmup(normalizedId);
+    void preloadNoteEditorRuntime(source?.type).catch(() => {
+      // 编辑器异步组件挂载时仍会重试。
+    });
+    try {
+      return await openTreeDirectoryPage(normalizedId);
+    } finally {
+      openingNoteId.value = '';
+    }
   }
 
   function openLibraryNote(noteOrId: any) {
@@ -1997,6 +2032,7 @@
     treeMotionCleanupTimers.clear();
     desktopPreviewScrollSnapshot = null;
     noteRequestSeq += 1;
+    clearNoteDetailWarmup();
   });
 
   const viewNoteList = computed(() => noteList.value);
@@ -2011,6 +2047,56 @@
       visibleDragNoteList.value = [...val];
     },
     { immediate: true },
+  );
+
+  let noteDetailRouteWarmupTimer: number | null = null;
+  let noteEditorRuntimeWarmupTimer: number | null = null;
+  let noteDetailWarmupSignature = '';
+
+  function clearNoteDetailWarmup() {
+    if (noteDetailRouteWarmupTimer !== null) window.clearTimeout(noteDetailRouteWarmupTimer);
+    if (noteEditorRuntimeWarmupTimer !== null) window.clearTimeout(noteEditorRuntimeWarmupTimer);
+    noteDetailRouteWarmupTimer = null;
+    noteEditorRuntimeWarmupTimer = null;
+  }
+
+  function shouldAvoidHeavyWarmup() {
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    return connection?.saveData === true;
+  }
+
+  function scheduleNoteDetailWarmup(notes: any[]) {
+    if (!bookmark.isMobile || !notes.length) return;
+    const candidate = notes.find((item) => String(item?.type || '').toLowerCase() === 'html') || notes[0];
+    const signature = `${String(candidate?.id || '')}:${String(candidate?.type || 'html')}`;
+    if (!candidate?.id || signature === noteDetailWarmupSignature) return;
+    noteDetailWarmupSignature = signature;
+    clearNoteDetailWarmup();
+    noteDetailRouteWarmupTimer = window.setTimeout(() => {
+      noteDetailRouteWarmupTimer = null;
+      void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: candidate.id } }).catch(() => {
+        // 弱网预热失败不打扰当前列表，用户点击时按正常导航链路重试。
+      });
+    }, 320);
+    if (shouldAvoidHeavyWarmup()) return;
+    noteEditorRuntimeWarmupTimer = window.setTimeout(() => {
+      noteEditorRuntimeWarmupTimer = null;
+      void preloadNoteEditorRuntime(candidate.type).catch(() => {
+        // 后台预热失败不展示错误，正式打开编辑器时仍会重试。
+      });
+    }, 2_500);
+  }
+
+  watch(
+    () => [bookmark.isMobile, visibleDragNoteList.value] as const,
+    ([mobile, notes]) => {
+      if (!mobile) {
+        clearNoteDetailWarmup();
+        return;
+      }
+      scheduleNoteDetailWarmup(notes);
+    },
+    { immediate: true, flush: 'post' },
   );
 
   const visibleNoteTags = computed(() => {
@@ -3007,6 +3093,14 @@
 </script>
 
 <style lang="less" scoped>
+  .note-detail-navigation-loading {
+    position: fixed;
+    z-index: 1200;
+    inset: 0;
+    overflow: hidden;
+    background: var(--surface-page-bg, var(--background-color));
+  }
+
   .note-library-wrapper {
     width: 100%;
     height: 100%;

@@ -1,6 +1,7 @@
 import { apiBasePost } from '@/http/request';
 
 const NOTE_DETAIL_PREFETCH_TTL = 30_000;
+const NOTE_DETAIL_LOCAL_SNAPSHOT_TTL = 2 * 60_000;
 const NOTE_DETAIL_INTERACTIVE_TIMEOUT = 15_000;
 const MAX_PREFETCH_ENTRIES = 8;
 
@@ -95,6 +96,27 @@ export function consumeNoteDetail(identity: NoteDetailRequestIdentity, noteId: s
   }
   if (entry) entries.delete(key);
   return createRequest(identity, normalizedId);
+}
+
+/**
+ * 保存成功或离开编辑器时，用当前已由服务端确认的正文回填短期详情快照。
+ * 这样返回笔记库后再次打开同一篇，不会因为写操作刚使预取失效而立刻重复走弱网请求。
+ */
+export function seedNoteDetail(
+  identity: NoteDetailRequestIdentity,
+  noteId: string,
+  data: Record<string, unknown>,
+) {
+  const normalizedId = String(noteId || '').trim();
+  if (!normalizedId || normalizedId === 'add') return null;
+  pruneEntries();
+  const response = { status: 200, msg: '', data } as NoteDetailResponse;
+  const promise = Promise.resolve(response);
+  entries.set(cacheKey(identity, normalizedId), {
+    expiresAt: Date.now() + NOTE_DETAIL_LOCAL_SNAPSHOT_TTL,
+    promise,
+  });
+  return promise;
 }
 
 export function invalidateNoteDetailPrefetch(identity: NoteDetailRequestIdentity, noteId?: string) {

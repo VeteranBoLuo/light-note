@@ -47,8 +47,6 @@ declare global {
     __lightNoteAndroidApkInstallResult?: (raw: unknown) => void;
     /** 原生 → 网页的系统深浅色变化回调，由 onAndroidSystemThemeChange 装上 */
     __lightNoteAndroidSystemTheme?: (raw: unknown) => void;
-    /** 原生通知权限结果；系统授权后用于立即重同步未读角标。 */
-    __lightNoteAndroidNotificationPermission?: (granted: boolean) => void;
   }
 }
 
@@ -133,18 +131,6 @@ export function isLightNoteAndroidApp(
   return hasAndroidBridge() || hasLightNoteAndroidUserAgent(userAgent);
 }
 
-/**
- * 当前原生壳是否实现通知栏 / 桌面角标桥。
- *
- * 不能仅凭 LightNoteAndroid 或 versionName 判断：旧正式壳同样有通用 postMessage，Debug 包也可能
- * 暂时沿用当前正式版本号。能力标记由支持该协议的原生壳在页面首行执行前写入 UA。
- */
-export function hasAndroidNativeNotificationCapability(
-  userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
-): boolean {
-  return /\bLightNoteNativeNotifications\/1\b/i.test(userAgent);
-}
-
 export function isAndroidWebViewRuntime(
   userAgent = typeof navigator === 'undefined' ? '' : navigator.userAgent,
 ) {
@@ -164,60 +150,6 @@ export function postAndroidMessage(payload: Record<string, unknown>): boolean {
     console.warn('Android 原生通道不可用:', error);
     return false;
   }
-}
-
-type AndroidNotificationPermissionListener = (granted: boolean) => void;
-const androidNotificationPermissionListeners = new Set<AndroidNotificationPermissionListener>();
-let androidNotificationPermissionHookInstalled = false;
-
-function ensureAndroidNotificationPermissionHook() {
-  if (androidNotificationPermissionHookInstalled || typeof window === 'undefined') return;
-  androidNotificationPermissionHookInstalled = true;
-  window.__lightNoteAndroidNotificationPermission = (granted: boolean) => {
-    androidNotificationPermissionListeners.forEach((listener) => listener(granted === true));
-  };
-}
-
-export function onAndroidNotificationPermission(listener: AndroidNotificationPermissionListener): () => void {
-  ensureAndroidNotificationPermissionHook();
-  androidNotificationPermissionListeners.add(listener);
-  return () => androidNotificationPermissionListeners.delete(listener);
-}
-
-export function configureAndroidNotifications(enabled: boolean): boolean {
-  return postAndroidMessage({ type: 'notifications.configure', enabled });
-}
-
-export function syncAndroidNotifications(input: {
-  unreadCount: number;
-  title?: string | null;
-  content?: string | null;
-  path?: string | null;
-  badgeEnabled: boolean;
-  alert?: boolean;
-}): boolean {
-  return postAndroidMessage({ type: 'notifications.sync', ...input });
-}
-
-export function postAndroidChatNotification(input: {
-  notificationId: string;
-  title?: string | null;
-  content?: string | null;
-  path?: string | null;
-}): boolean {
-  return postAndroidMessage({ type: 'notifications.chat', ...input });
-}
-
-export function cancelAndroidChatNotification(notificationId: string): boolean {
-  return postAndroidMessage({ type: 'notifications.chat.cancel', notificationId });
-}
-
-export function clearAndroidChatNotifications(): boolean {
-  return postAndroidMessage({ type: 'notifications.chat.clear' });
-}
-
-export function clearAndroidNotifications(): boolean {
-  return postAndroidMessage({ type: 'notifications.clear' });
 }
 
 const DOWNLOAD_STATUSES: AndroidDownloadStatus[] = ['pending', 'running', 'paused', 'success', 'failed'];

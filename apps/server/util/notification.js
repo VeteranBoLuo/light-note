@@ -1,7 +1,6 @@
 import pool from '../db/index.js';
 // 使用无路由副作用的数据工具，避免业务 service -> common.js -> router -> Agent 的循环依赖。
 import { insertData } from './agent/data.js';
-import { publishUserNotificationChanged } from './notificationRealtimeBroker.js';
 
 const CREATE_SQL = `
   CREATE TABLE IF NOT EXISTS notification (
@@ -89,14 +88,9 @@ export async function createNotification(
     isRead: 0,
   });
   // 只有携带来源键的系统事实才允许幂等忽略；普通通知仍保留原先的严格 INSERT 语义。
-  const [result] = await db.query(sourceType && sourceId ? 'INSERT IGNORE INTO notification SET ?' : 'INSERT INTO notification SET ?', [
-    row,
-  ]);
-  // WebSocket 只发失效信号，客户端仍回源 REST。外部事务的调用点无法在这里感知最终 commit，
-  // 因此稍后广播；即使事务最终回滚也只是触发一次无变化的权威读取，不会泄露或伪造通知。
-  if (Number(result?.affectedRows || 0) > 0) {
-    if (conn) setTimeout(() => publishUserNotificationChanged(userId, 'created'), 250).unref?.();
-    else publishUserNotificationChanged(userId, 'created');
-  }
+  const [result] = await db.query(
+    sourceType && sourceId ? 'INSERT IGNORE INTO notification SET ?' : 'INSERT INTO notification SET ?',
+    [row],
+  );
   return Number(result?.affectedRows || 0) > 0 ? row.id : null;
 }

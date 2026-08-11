@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, h, nextTick, ref } from 'vue';
+import { createApp, h, nextTick, ref, type Ref } from 'vue';
 
 const mocks = vi.hoisted(() => ({
   route: { name: 'communityChat', fullPath: '/community-chat' },
@@ -41,14 +41,20 @@ let viewport: MockVisualViewport;
 let originalVisualViewport: PropertyDescriptor | undefined;
 let originalInnerHeight: PropertyDescriptor | undefined;
 
-function mountShell() {
+function mountShell(options: { enabled?: Ref<boolean>; showTopBar?: boolean } = {}) {
   const host = document.createElement('div');
   document.body.append(host);
+  const enabled = options.enabled || ref(true);
   const app = createApp({
     render: () =>
       h(
         MobileAppShell,
-        { enabled: true, showTopSwitcher: false, showBottomNav: true },
+        {
+          enabled: enabled.value,
+          showTopBar: options.showTopBar !== false,
+          showTopSwitcher: false,
+          showBottomNav: true,
+        },
         { default: () => h('textarea', { class: 'composer-stub' }) },
       ),
   });
@@ -57,7 +63,7 @@ function mountShell() {
     app.unmount();
     host.remove();
   };
-  return host;
+  return { host, enabled };
 }
 
 beforeEach(() => {
@@ -80,7 +86,7 @@ afterEach(() => {
 
 describe('MobileAppShell 软键盘可视高度', () => {
   it('输入控件聚焦且可视视口缩小时收起底栏，并把壳体限制到键盘上方', async () => {
-    const host = mountShell();
+    const { host } = mountShell();
     const textarea = host.querySelector<HTMLTextAreaElement>('.composer-stub');
     const shell = host.querySelector<HTMLElement>('.mobile-app-shell');
     expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
@@ -102,5 +108,38 @@ describe('MobileAppShell 软键盘可视高度', () => {
     expect(shell?.classList.contains('is-keyboard-open')).toBe(false);
     expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('');
     expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
+  });
+
+  it('路由卸下并重新启用壳体时清空上一页残留的键盘视口', async () => {
+    const enabled = ref(true);
+    const { host } = mountShell({ enabled });
+    const textarea = host.querySelector<HTMLTextAreaElement>('.composer-stub');
+
+    textarea?.focus();
+    viewport.height = 480;
+    viewport.dispatchEvent(new Event('resize'));
+    await nextTick();
+    expect(host.querySelector('.mobile-app-shell')?.classList.contains('is-keyboard-open')).toBe(true);
+
+    enabled.value = false;
+    await nextTick();
+    textarea?.blur();
+    viewport.height = 800;
+    enabled.value = true;
+    await nextTick();
+    await nextTick();
+
+    const restoredShell = host.querySelector<HTMLElement>('.mobile-app-shell');
+    expect(restoredShell?.classList.contains('is-keyboard-open')).toBe(false);
+    expect(restoredShell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('');
+    expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
+  });
+
+  it('聊天室可按路由关闭全局顶栏并把刷新槽顶边归零', async () => {
+    const { host } = mountShell({ showTopBar: false });
+    const shell = host.querySelector<HTMLElement>('.mobile-app-shell');
+
+    expect(host.querySelector('.top-bar-stub')).toBeNull();
+    expect(shell?.classList.contains('is-top-bar-hidden')).toBe(true);
   });
 });

@@ -11,7 +11,6 @@ import pool from '../db/index.js';
 import { formatDateTime } from './common.js';
 import { getGrowth } from './growth.js';
 import crypto from 'crypto';
-import { publishUserNotificationChanged } from './notificationRealtimeBroker.js';
 
 // 汇总单个用户近 7 天的成长数据(供定时任务发通知 + 前端实时「本周周报」预览复用)
 export async function buildWeeklyReport(userId, userRole = null) {
@@ -125,13 +124,12 @@ export async function generateWeeklyReports() {
           ? `This week +${report.exp} EXP · ${report.bookmarks} bookmarks / ${report.notes} notes / ${report.files} files added · ${report.checkinDays} check-in days`
           : `本周 +${report.exp} 经验 · 新增书签 ${report.bookmarks} / 笔记 ${report.notes} / 文件 ${report.files} · 签到 ${report.checkinDays} 天`;
         const title = isEn ? '📊 Your weekly growth report' : '📊 你的本周成长周报';
-        const [inserted] = await pool.query(
+        await pool.query(
           `INSERT INTO notification (id, user_id, type, title, content, link, meta, is_read)
            VALUES (?, ?, 'system', ?, ?, '/growth', ?, 0)
            ON DUPLICATE KEY UPDATE id = id`,
           [notificationId, userId, title, content, JSON.stringify({ weeklyReport: report })],
         );
-        if (Number(inserted?.affectedRows || 0) > 0) publishUserNotificationChanged(userId, 'created');
         count++;
       } catch (e) {
         console.error(`[周报] 用户 ${userId} 生成失败(跳过):`, e.message);

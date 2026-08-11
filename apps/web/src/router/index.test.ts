@@ -36,6 +36,7 @@ describe('官网与应用入口路由', () => {
     const resolved = router.resolve('/community-chat');
     expect(resolved.name).toBe('communityChat');
     expect(resolved.meta.mobileShell).toBe('community');
+    expect(resolved.meta.mobileTopBar).toBe(false);
     expect(resolved.meta.mobileBottomNav).toBe(true);
     expect(resolved.meta.roles).toContain('visitor');
   });

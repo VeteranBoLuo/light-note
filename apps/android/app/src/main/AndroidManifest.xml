@@ -3,7 +3,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!--
       应用内更新：把已下载的安装包交给系统安装器，不申请这项就只能让用户自己去文件管理里
       翻安装包（鸿蒙兼容层实测既不弹通知、文件也不在「下载」目录，很难找到）。

@@ -51,22 +51,7 @@
         <span :class="{ 'is-active': settings.enabled }">
           <i aria-hidden="true"></i>{{ t('communityChat.notifications.inAppChannel') }}
         </span>
-        <span v-if="!androidPilotAvailable"> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
-        <span v-else :class="{ 'is-active': androidNotificationsEnabled }">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannel') }}
-        </span>
-      </div>
-      <div v-if="androidPilotAvailable" class="community-notification-settings__android">
-        <div>
-          <strong>{{ t('communityChat.notifications.androidTargetedTitle') }}</strong>
-          <span>{{ t('communityChat.notifications.androidTargetedDescription') }}</span>
-        </div>
-        <BSwitch
-          :checked="androidNotificationsEnabled"
-          :disabled="savingAndroid || !settings.enabled || user.preferences.notificationsAndroid === false"
-          :aria-label="t('communityChat.notifications.androidTargetedTitle')"
-          @change="changeAndroidNotifications"
-        />
+        <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
       </div>
       <p class="community-notification-settings__hint">
         {{ t('communityChat.notifications.visibilityHint') }}
@@ -90,14 +75,10 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { useNotification } from '@/composables/useNotification';
-  import { useUserStore } from '@/store';
-  import { hasAndroidNativeNotificationCapability, isLightNoteAndroidApp } from '@/utils/androidBridge';
-  import { updatePreference } from '@/utils/savePreference';
 
   withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const emit = defineEmits<{ saved: [settings: CommunityChatNotificationSettings] }>();
   const { t } = useI18n();
-  const user = useUserStore();
   const communityUnread = useCommunityChatUnread();
   const { refreshUnread } = useNotification();
 
@@ -115,20 +96,8 @@
   const settings = ref<CommunityChatNotificationSettings>({ ...DEFAULT_SETTINGS });
   const loading = ref(true);
   const saving = ref(false);
-  const savingAndroid = ref(false);
   const error = ref(false);
   let loadGeneration = 0;
-  const androidPilotAvailable = computed(
-    () =>
-      isLightNoteAndroidApp() &&
-      hasAndroidNativeNotificationCapability() &&
-      user.role === 'root' &&
-      !user.adminPreview &&
-      !user.adminContext,
-  );
-  const androidNotificationsEnabled = computed(
-    () => androidPilotAvailable.value && user.preferences.communityChatAndroidNotifications === true,
-  );
 
   const levelOptions = computed(() => [
     {
@@ -234,19 +203,6 @@
   function changeLevel(level: CommunityChatNotificationLevel) {
     if (!settings.value.enabled || level === settings.value.level) return;
     void save({ enabled: true, level });
-  }
-
-  async function changeAndroidNotifications(enabled: boolean) {
-    if (!androidPilotAvailable.value || savingAndroid.value) return;
-    savingAndroid.value = true;
-    try {
-      await updatePreference({ communityChatAndroidNotifications: enabled });
-      message.success(t('communityChat.notifications.saved'));
-    } catch {
-      message.error(t('communityChat.notifications.saveFailed'));
-    } finally {
-      savingAndroid.value = false;
-    }
   }
 
   onMounted(loadSettings);
@@ -401,35 +357,6 @@
     height: 6px;
     border-radius: 50%;
     background: currentColor;
-  }
-
-  .community-notification-settings__android {
-    min-width: 0;
-    padding: 10px 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 12px;
-    background: var(--workspace-panel-bg-color);
-  }
-
-  .community-notification-settings__android > div {
-    min-width: 0;
-    display: grid;
-    gap: 3px;
-  }
-
-  .community-notification-settings__android strong {
-    color: var(--text-color);
-    font-size: 12px;
-  }
-
-  .community-notification-settings__android span {
-    color: var(--desc-color);
-    font-size: 10px;
-    line-height: 1.55;
   }
 
   .community-notification-settings__hint {

@@ -532,15 +532,14 @@ export const ANDROID_RELEASE = Object.freeze({
   versionCode: 10001,
   packageName: 'top.boluo66.lightnote',
   releaseDate: '2026-08-11',
-  fileSizeBytes: 1784621,
-  sha256: 'ea064f04cca397a6a4602053365dba59e6a385f421fd2a4092c1b81938762b2a',
+  fileSizeBytes: 1777869,
+  sha256: '0a309f1ca1504491f89ba9fbe5a655ed3dc9fe476cfe9ca0df1d70de94c89ce3',
   certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
   downloadPath: '/downloads/android/light-note-1.0.1.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([
     'android.permission.INTERNET',
     'android.permission.ACCESS_NETWORK_STATE',
-    'android.permission.POST_NOTIFICATIONS',
     // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
     // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
     'android.permission.REQUEST_INSTALL_PACKAGES',
@@ -558,7 +557,6 @@ export const ANDROID_RELEASE = Object.freeze({
 export const ANDROID_SOURCE_PERMISSIONS = Object.freeze([
   'android.permission.INTERNET',
   'android.permission.ACCESS_NETWORK_STATE',
-  'android.permission.POST_NOTIFICATIONS',
   'android.permission.REQUEST_INSTALL_PACKAGES',
 ]);
 

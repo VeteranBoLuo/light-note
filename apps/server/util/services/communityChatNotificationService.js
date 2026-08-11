@@ -1,7 +1,6 @@
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { CommunityChatError } from './communityChatAccessService.js';
-import { publishUserNotificationChanged } from '../notificationRealtimeBroker.js';
 
 export const COMMUNITY_CHAT_NOTIFICATION_LEVELS = Object.freeze(['official', 'mentions_only', 'mentions', 'all']);
 export const COMMUNITY_CHAT_DEFAULT_NOTIFICATION_LEVEL = 'mentions';
@@ -109,7 +108,6 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
     }
 
     await connection.commit();
-    if (!enabled) publishUserNotificationChanged(user.id, 'chat_settings');
     return toPublicSettings({ enabled: enabled ? 1 : 0, level: normalizedLevel });
   } catch (error) {
     await connection.rollback();
@@ -224,16 +222,6 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
         AND (reply.user_id IS NOT NULL OR mention.mentioned_user_id IS NOT NULL)`,
     [normalizedPublicId, ...accessParams],
   );
-
-  if (Number(result?.affectedRows || 0) > 0) {
-    const [recipients] = await db.query(
-      `SELECT DISTINCT user_id AS userId
-         FROM notification
-        WHERE source_type = 'community_chat_message' AND source_id = ? AND del_flag = 0`,
-      [normalizedPublicId],
-    );
-    recipients.forEach(({ userId }) => publishUserNotificationChanged(userId, 'chat_created'));
-  }
 
   return { delivered: Number(result?.affectedRows || 0) };
 }

@@ -5,11 +5,10 @@ import { ANDROID_SOURCE_PERMISSIONS } from '@lightnote/shared';
 import { ANDROID_RELEASE } from './androidRelease';
 
 /**
- * 对外公示的权限清单必须与 AndroidManifest 一致。
+ * 当前源码清单必须与 AndroidManifest 一致；已发布 APK 清单必须继续反映线上文件本身。
  *
- * 这张清单会渲染在下载页上、也是备案材料的一部分（docs/android/p4-compliance-audit.md）。
- * 它和 manifest 是两个文件、靠人同步，漂移了不会有任何报错：表现是"公示少写一项"或
- * "公示多写一项"，属于合规问题而不是功能问题，所以只能靠断言锁住。
+ * 两张清单都会进入下载页或备案材料（docs/android/p4-compliance-audit.md）。源码先移除权限、
+ * 线上 APK 尚未替换时允许存在已知过渡差异，除此之外的漂移仍属于合规问题。
  */
 
 const MANIFEST_PATH = resolve(__dirname, '../../../android/app/src/main/AndroidManifest.xml');
@@ -47,8 +46,8 @@ describe('Android 权限公示', () => {
     expect(ANDROID_RELEASE.permissions).toContain('android.permission.REQUEST_INSTALL_PACKAGES');
   });
 
-  it('当前发布包与源码均声明 Android 13+ 通知权限', () => {
-    expect(ANDROID_SOURCE_PERMISSIONS).toContain('android.permission.POST_NOTIFICATIONS');
-    expect(ANDROID_RELEASE.permissions).toContain('android.permission.POST_NOTIFICATIONS');
+  it('当前源码和已发布 APK 均不再申请通知权限', () => {
+    expect(ANDROID_SOURCE_PERMISSIONS).not.toContain('android.permission.POST_NOTIFICATIONS');
+    expect(ANDROID_RELEASE.permissions).not.toContain('android.permission.POST_NOTIFICATIONS');
   });
 });

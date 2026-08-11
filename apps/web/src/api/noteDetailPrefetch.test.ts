@@ -10,6 +10,7 @@ const {
   consumeNoteDetail,
   invalidateNoteDetailPrefetch,
   prefetchNoteDetail,
+  seedNoteDetail,
 } = await import('./noteDetailPrefetch');
 
 describe('noteDetailPrefetch', () => {
@@ -87,6 +88,21 @@ describe('noteDetailPrefetch', () => {
     await consumeNoteDetail(identity, 'note-1');
 
     expect(apiBasePost).toHaveBeenCalledTimes(2);
+  });
+
+  it('保存后的本地确认快照可覆盖已失效请求并避免重复读取', async () => {
+    const identity = { id: 'user-1', role: 'user' };
+    apiBasePost.mockResolvedValue({ status: 200, msg: '', data: { id: 'note-1', content: 'old' } });
+
+    await consumeNoteDetail(identity, 'note-1');
+    invalidateNoteDetailPrefetch(identity, 'note-1');
+    seedNoteDetail(identity, 'note-1', { id: 'note-1', content: 'new' });
+
+    await expect(consumeNoteDetail(identity, 'note-1')).resolves.toMatchObject({
+      status: 200,
+      data: { id: 'note-1', content: 'new' },
+    });
+    expect(apiBasePost).toHaveBeenCalledTimes(1);
   });
 
   it('预取失败会清理缓存，重试会创建新请求', async () => {

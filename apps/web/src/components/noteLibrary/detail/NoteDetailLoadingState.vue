@@ -33,8 +33,6 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
-  defineOptions({ inheritAttrs: false });
-
   withDefaults(
     defineProps<{
       variant?: 'page' | 'editor';

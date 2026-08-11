@@ -28,9 +28,6 @@ export interface UserPreferences {
   notificationsInApp?: boolean;
   notificationsEmail?: boolean;
   notificationsBrowser?: boolean;
-  notificationsAndroid?: boolean;
-  notificationsAndroidBadge?: boolean;
-  communityChatAndroidNotifications?: boolean;
   notificationsDnd?: boolean;
   notificationsDndStart?: string;
   notificationsDndEnd?: string;

@@ -620,10 +620,6 @@ export default {
         'Chat badges and reply / mention notifications are disabled. Public message history remains available inside the chat.',
       inAppChannel: 'Desktop / mobile Notifications: replies or mentions',
       appChannelLater: 'No mobile system notifications',
-      appChannel: 'App notification shade: replies or mentions',
-      androidTargetedTitle: 'App alerts for replies / mentions',
-      androidTargetedDescription:
-        'Off by default. Only direct replies or mentions enter the notification shade; ordinary chat never alerts or affects the app icon badge.',
       visibilityHint:
         'The badge follows the scope above. Notifications only receives replies or mentions directed to you and still follows the selected scope. Activity from an off period is not replayed later.',
       saved: 'Chat notification settings saved',
@@ -3572,11 +3568,6 @@ export default {
     notificationsBrowserDesc: 'Show new notifications as system browser alerts while the page is open.',
     notificationsBrowserUnsupported: 'This browser does not support system notifications.',
     notificationsBrowserDenied: 'Browser notification permission was denied. Allow it in site settings and retry.',
-    notificationsAndroid: 'App system notifications',
-    notificationsAndroidDesc: 'Root pilot: mirror new in-app notifications to the App notification shade. App only.',
-    notificationsAndroidBadge: 'App icon number badge',
-    notificationsAndroidBadgeDesc:
-      'Uses the notification-center unread count exactly. Chat messages are excluded; the launcher can also override badges.',
     notificationsDnd: 'Do not disturb',
     notificationsDndDesc: 'Todo notifications during this period are deferred until it ends.',
     notificationsDndStart: 'Do-not-disturb start',

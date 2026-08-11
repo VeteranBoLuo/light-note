@@ -31,25 +31,23 @@
     授权码同时使用 PKCE 约束，换取令牌时再次提交同一回调地址，且仅向预先探测选定的线路提交一次，
     防止登录串号、授权码替换和授权码重放。
 
-当前隐私同意版本为 `2026-08-11`；用户协议继续使用 `2026-07-28`。隐私版本升级用于披露可选的
-Android 通知权限，安装新版本后会重新展示首次同意页，旧版本同意状态不会被静默沿用。
+当前隐私同意版本为 `2026-08-11`；用户协议继续使用 `2026-07-28`。该版本曾用于披露 Root 灰度包的
+Android 通知权限；灰度能力已经停用，当前源码与已发布 APK 均不再申请该权限。
 
 ## 2. APK 权限证据
 
-当前 Android 源码 Manifest 与 `2026-08-11` 构建的 Root 试点 Release APK 声明如下。该包保持
-`1.0.1` 版本号用于同签名手动覆盖安装，已用 `apkanalyzer manifest permissions`、`apksigner verify`
-和 SHA-256 复核，并在同一次发布中同步更新 `ANDROID_RELEASE`：
+当前 Android 源码 Manifest 与 `2026-08-11` 正式 Release APK 均已移除 `POST_NOTIFICATIONS`。
+`ANDROID_RELEASE` 保存本次替换包的真实权限、哈希和大小：
 
 | 权限                                                       | 来源              | 用途                                            | Android 运行时敏感权限 |
 | ---------------------------------------------------------- | ----------------- | ----------------------------------------------- | ---------------------- |
 | `android.permission.INTERNET`                              | 应用声明          | 访问轻笺页面、API、文件及用户主动打开的网络服务 | 否                     |
 | `android.permission.ACCESS_NETWORK_STATE`                  | 应用声明          | 判断网络状态并提供断网与重试反馈                | 否                     |
-| `android.permission.POST_NOTIFICATIONS`                    | 应用声明          | 用户开启 App 系统提醒后展示通知栏与桌面未读角标 | 是；Android 13+ 由用户授权 |
 | `android.permission.REQUEST_INSTALL_PACKAGES`              | 应用声明          | 应用内更新：把已下载的轻笺安装包交给系统安装器  | 否；需用户在系统设置授权 |
 | `<applicationId>.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION` | AndroidX 自动生成 | 限制应用内动态广播接收器通信                    | 否；签名级应用内权限   |
 
-当前发布包除可选通知权限外，不声明相机、相册/存储、定位、麦克风、通讯录、短信、电话等运行时权限。
-文件和图片由 Android 系统选择器提供；拍照入口由系统相机 Intent 完成。通知权限拒绝后不影响站内通知中心和核心功能。
+当前源码与已发布 APK 均不声明通知、相机、相册/存储、定位、麦克风、通讯录、短信、电话等运行时权限。
+文件和图片由 Android 系统选择器提供；拍照入口由系统相机 Intent 完成。
 
 ### 2.1 `REQUEST_INSTALL_PACKAGES` 最小化说明
 

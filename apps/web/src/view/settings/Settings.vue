@@ -422,31 +422,6 @@
                 @change="set('notificationsInApp', $event)"
               />
             </div>
-            <template v-if="androidNotificationPilotVisible">
-              <div class="field">
-                <div class="field-head">
-                  <span class="field-label">{{ t('settings.notificationsAndroid') }}</span>
-                  <span class="field-desc">{{ t('settings.notificationsAndroidDesc') }}</span>
-                </div>
-                <BSwitch
-                  :checked="user.preferences.notificationsAndroid !== false"
-                  :aria-label="t('settings.notificationsAndroid')"
-                  @change="set('notificationsAndroid', $event)"
-                />
-              </div>
-              <div class="field">
-                <div class="field-head">
-                  <span class="field-label">{{ t('settings.notificationsAndroidBadge') }}</span>
-                  <span class="field-desc">{{ t('settings.notificationsAndroidBadgeDesc') }}</span>
-                </div>
-                <BSwitch
-                  :checked="user.preferences.notificationsAndroidBadge !== false"
-                  :disabled="user.preferences.notificationsAndroid === false"
-                  :aria-label="t('settings.notificationsAndroidBadge')"
-                  @change="set('notificationsAndroidBadge', $event)"
-                />
-              </div>
-            </template>
             <div v-if="!isGuestUser()" class="field community-chat-notification-field">
               <CommunityChatNotificationSettingsPanel />
             </div>
@@ -796,12 +771,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
-  import {
-    hasAndroidNativeNotificationCapability,
-    isLightNoteAndroidApp,
-    postAndroidOpenLegalDocument,
-    type AndroidLegalDocument,
-  } from '@/utils/androidBridge.ts';
+  import { isLightNoteAndroidApp, postAndroidOpenLegalDocument, type AndroidLegalDocument } from '@/utils/androidBridge.ts';
   import { getHomePagePreference, getMobileHomePreference } from '@/utils/preferences.ts';
   import { APP_FILING_NUMBER, MIIT_QUERY_URL } from '@/config/androidRelease.ts';
   import SettingsMobileIndex, { type SettingsIndexRow } from './SettingsMobileIndex.vue';
@@ -950,14 +920,6 @@
     }
   });
   const user = useUserStore();
-  const androidNotificationPilotVisible = computed(
-    () =>
-      isAndroidApp &&
-      hasAndroidNativeNotificationCapability() &&
-      user.role === 'root' &&
-      !user.adminPreview &&
-      !user.adminContext,
-  );
   // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
   const selectedHomePage = computed(() =>
     bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),

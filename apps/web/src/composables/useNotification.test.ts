@@ -162,7 +162,7 @@ describe('useNotification.fetchList', () => {
     vi.unstubAllGlobals();
   });
 
-  it('Android App 交给原生通知桥处理，不再重复创建浏览器系统通知', async () => {
+  it('Android App 不借用 WebView 浏览器通知模拟后台系统提醒', async () => {
     const created = vi.fn();
     class MockNotification {
       static permission = 'granted';
