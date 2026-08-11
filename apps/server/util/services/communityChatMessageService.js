@@ -11,6 +11,7 @@ import {
 } from './communityChatAccessService.js';
 import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } from './communityChatModerationService.js';
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
+import { publishUserNotificationChanged } from '../notificationRealtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
 
@@ -1285,6 +1286,12 @@ export async function recallCommunityChatMessage({ user, messagePublicId, env = 
         WHERE pinned_message_id = ?`,
       [target.id],
     );
+    const [notificationRecipients] = await connection.query(
+      `SELECT DISTINCT user_id AS userId
+         FROM notification
+        WHERE source_type = 'community_chat_message' AND source_id = ?`,
+      [target.publicId],
+    );
     // 通知中心只展示“直接回复 / 显式提及”。消息本身被撤回后，对应定向通知必须同步消失，
     // 不能让收件人再通过通知读取已经撤回的正文摘要。
     await connection.query(
@@ -1307,6 +1314,7 @@ export async function recallCommunityChatMessage({ user, messagePublicId, env = 
       [target.id],
     );
     await connection.commit();
+    notificationRecipients.forEach(({ userId }) => publishUserNotificationChanged(userId, 'chat_recalled'));
     publishCommunityChatRealtimeEvent('message.updated', {
       roomSlug: target.roomSlug,
       messagePublicId: target.publicId,
@@ -1368,6 +1376,7 @@ export async function deleteCommunityChatMessage({ user, messagePublicId, env = 
       [user.id, target.publicId],
     );
     await connection.commit();
+    publishUserNotificationChanged(user.id, 'chat_deleted');
     return {
       publicId: target.publicId,
       status: 'deleted_for_me',

@@ -148,6 +148,9 @@ export declare const ANDROID_RELEASE: {
   readonly released: boolean;
 };
 
+/** 当前 Android 源码的 Manifest 权限；可以在下一版 APK 构建前领先于 ANDROID_RELEASE。 */
+export declare const ANDROID_SOURCE_PERMISSIONS: ReadonlyArray<string>;
+
 /** 唯一正式分发域名。 */
 export declare const OFFICIAL_HOST: string;
 

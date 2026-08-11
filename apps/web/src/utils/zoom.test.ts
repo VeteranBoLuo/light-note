@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { getRootZoom, normalizeRectForRootZoom, parseCssZoom } from './zoom';
+import { describe, expect, it, vi } from 'vitest';
+import { getRootZoom, normalizeRectForRootZoom, parseCssZoom, scrollIntoContainer } from './zoom';
 
 describe('parseCssZoom', () => {
   it.each([
@@ -46,5 +46,25 @@ describe('getRootZoom', () => {
     document.documentElement.style.zoom = '1.1';
     expect(getRootZoom()).toBe(1.1);
     document.documentElement.style.zoom = '';
+  });
+});
+
+describe('scrollIntoContainer', () => {
+  it('默认平滑滚动，也允许聊天消息导航选择一次到位', () => {
+    const container = document.createElement('div');
+    const target = document.createElement('div');
+    const scrollTo = vi.fn();
+    Object.defineProperties(container, {
+      scrollTop: { configurable: true, writable: true, value: 120 },
+      scrollTo: { configurable: true, value: scrollTo },
+    });
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ top: 100 } as DOMRect);
+    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue({ top: 300 } as DOMRect);
+
+    scrollIntoContainer(container, target, 40);
+    scrollIntoContainer(container, target, 40, 'auto');
+
+    expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 280, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 280, behavior: 'auto' });
   });
 });

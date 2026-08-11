@@ -36,9 +36,13 @@
         :placeholder="t('adminApiLog.filters.minDuration')"
         @enter="reloadLogs"
       />
-      <BInput v-model:value="filters.startDate" type="date" class="log-filter log-filter--date" @change="reloadLogs" />
-      <span class="log-filter-separator">{{ t('adminApiLog.filters.to') }}</span>
-      <BInput v-model:value="filters.endDate" type="date" class="log-filter log-filter--date" @change="reloadLogs" />
+      <DateRangePicker
+        class="log-filter--range"
+        initial-preset="all"
+        :start="filters.startDate"
+        :end="filters.endDate"
+        @change="onDateRangeChange"
+      />
       <span class="admin-toolbar-switch">
         <BSwitch v-model:checked="filters.hideInternal" @change="reloadLogs" />
         {{ t('adminApiLog.filters.hideInternal') }}
@@ -164,6 +168,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
@@ -269,6 +274,11 @@
     const loaded = await reload(options);
     if (loaded) hasLoaded.value = true;
   }
+  function onDateRangeChange(start?: string, end?: string) {
+    filters.startDate = start || '';
+    filters.endDate = end || '';
+    void reloadLogs();
+  }
   function resetFilters() {
     Object.assign(filters, {
       keyword: '',
@@ -364,12 +374,12 @@
   .log-filter--duration {
     width: 118px;
   }
-  .log-filter--date {
-    width: 138px;
+  .log-filter--range {
+    width: 210px;
   }
-  .log-filter-separator {
-    color: var(--sub-text-color);
-    font-size: 12px;
+  .log-filter--range :deep(.drp-trigger.b_btn) {
+    width: 100%;
+    justify-content: space-between;
   }
   .admin-toolbar-switch {
     display: inline-flex;
@@ -433,11 +443,8 @@
     .log-filter--search,
     .log-filter--request,
     .log-filter--duration,
-    .log-filter--date {
+    .log-filter--range {
       width: 100%;
-    }
-    .log-filter-separator {
-      display: none;
     }
     .api-log-detail {
       grid-template-columns: 1fr;

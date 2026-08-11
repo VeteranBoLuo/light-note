@@ -17,7 +17,7 @@ import { apiBasePost } from '@/http/request';
 import { postAndroidMessage } from '@/utils/androidBridge';
 import { encodeFileContentToBase64 } from '@/utils/fileDelivery';
 
-export type NoteExportFormat = 'md' | 'html' | 'pdf';
+export type NoteExportFormat = 'md' | 'html' | 'pdf' | 'zip';
 
 export type AndroidExportOutcome =
   | { ok: true }

@@ -36,7 +36,12 @@
 
     <template #toolbar>
       <BTabs v-model:active-tab="activeSection" variant="segment" :options="tabs" @change="onSectionChange" />
-      <BSelect v-model:value="sourceFilter" class="action-center__select" :options="sourceOptions" />
+      <BSelect
+        v-model:value="sourceFilter"
+        class="action-center__select"
+        :options="sourceOptions"
+        @change="onSourceChange"
+      />
       <BSelect
         v-if="activeSection === 'jobs'"
         v-model:value="statusFilter"
@@ -72,10 +77,23 @@
           variant="panel"
           padding="12px"
           class="action-center__source-card"
+          :class="{ 'is-selected': sourceFilter === source.source }"
+          interactive
+          role="button"
+          tabindex="0"
+          :aria-pressed="sourceFilter === source.source"
+          @click="selectSource(source.source)"
+          @keydown.enter.prevent="selectSource(source.source)"
+          @keydown.space.prevent="selectSource(source.source)"
         >
           <header>
             <strong>{{ sourceLabel(source.source) }}</strong>
-            <BChip :tone="sourceTone(source)">{{ sourcePrimaryValue(source) }}</BChip>
+            <div class="action-center__source-card-badges">
+              <span v-if="sourceFilter === source.source" class="action-center__source-selected">
+                {{ t('adminActionCenter.sourceSelected') }}
+              </span>
+              <BChip :tone="sourceTone(source)">{{ sourcePrimaryValue(source) }}</BChip>
+            </div>
           </header>
           <p v-if="activeSection === 'work'">
             {{ t('adminActionCenter.sourceWorkHint', { count: number(asWorkSource(source).count) }) }}
@@ -265,6 +283,7 @@
     sources: JobSource[];
     items: ActionItem[];
   }>({ attention: 0, running: 0, waiting: 0, completed24h: 0, sources: [], items: [] });
+  let loadSequence = 0;
 
   const tabs = computed<TabItem[]>(() => [
     { key: 'work', label: t('adminActionCenter.tabs.work'), badge: work.value.total },
@@ -308,7 +327,6 @@
     const known = [
       'opinion',
       'security',
-      'community_access',
       'community_report',
       'ai_feedback',
       'ai_document',
@@ -393,16 +411,29 @@
       retryLoading.value = false;
     }
   }
+  function selectSource(source: string) {
+    if (sourceFilter.value === source) return;
+    sourceFilter.value = source;
+    statusFilter.value = 'all';
+    void load();
+  }
+  function onSourceChange() {
+    statusFilter.value = 'all';
+    void load();
+  }
   function onSectionChange() {
     sourceFilter.value = 'all';
     statusFilter.value = 'all';
+    void load();
   }
 
   async function load() {
-    if (loading.value) return;
+    const requestId = ++loadSequence;
+    const requestedSource = sourceFilter.value;
     loading.value = true;
     try {
-      const response: any = await getAdminActionCenter({ limit: 60 });
+      const response: any = await getAdminActionCenter({ limit: 60, source: requestedSource });
+      if (requestId !== loadSequence) return;
       if (response?.status !== 200) throw new Error(response?.msg || t('adminActionCenter.loadFailed'));
       unavailableSources.value = Array.isArray(response.data?.unavailableSources)
         ? response.data.unavailableSources
@@ -424,9 +455,10 @@
       if (!sourceOptions.value.some((option) => option.value === sourceFilter.value)) sourceFilter.value = 'all';
       hasLoaded.value = true;
     } catch (error: any) {
+      if (requestId !== loadSequence) return;
       message.error(error?.message || t('adminActionCenter.loadFailed'));
     } finally {
-      loading.value = false;
+      if (requestId === loadSequence) loading.value = false;
     }
   }
 
@@ -470,6 +502,29 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+  }
+  .action-center__source-card {
+    cursor: pointer;
+  }
+  .action-center__source-card:focus-visible {
+    outline: 2px solid var(--primary-color, #615ced);
+    outline-offset: 2px;
+  }
+  .action-center__source-card.is-selected {
+    border-color: var(--primary-color, #615ced);
+  }
+  .action-center__source-card-badges {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .action-center__source-selected {
+    color: var(--primary-color, #615ced);
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
   }
   .action-center__source-card p {
     margin: 6px 0 0;
@@ -604,6 +659,9 @@
     }
     .action-center__item.is-attention {
       border-color: #d64545;
+    }
+    .action-center__source-card.is-selected {
+      border-color: #615ced;
     }
   }
 </style>

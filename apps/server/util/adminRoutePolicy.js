@@ -73,6 +73,7 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteTree'],
   ['POST', '/note/queryNoteBreadcrumb'],
   ['POST', '/note/getNoteDetail'],
+  ['POST', '/note/getNotesForExport'],
   ['POST', '/note/resolveResourceRefs'],
   ['POST', '/note/resourceBacklinks'],
   ['POST', '/note/queryNoteTagList'],

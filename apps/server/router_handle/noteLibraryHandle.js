@@ -896,6 +896,59 @@ export const getNoteDetail = async (req, res) => {
   }
 };
 
+const BATCH_NOTE_EXPORT_LIMIT = 100;
+
+// 批量导出只读取转换所需的最小字段，一次请求替代逐篇 getNoteDetail，避免列表选择较多时产生请求风暴。
+export const getNotesForExport = async (req, res) => {
+  try {
+    const rawIds = req.body?.ids;
+    if (!Array.isArray(rawIds)) {
+      return res.send(resultData(null, 400, L(req, '笔记 ID 列表无效', 'Invalid note ID list')));
+    }
+
+    const hasInvalidId = rawIds.some((id) => typeof id !== 'string' || !id.trim() || id.trim().length > 128);
+    const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))];
+    if (hasInvalidId || !ids.length || ids.length > BATCH_NOTE_EXPORT_LIMIT || ids.length !== rawIds.length) {
+      return res.send(
+        resultData(
+          null,
+          400,
+          L(
+            req,
+            `一次可导出 1～${BATCH_NOTE_EXPORT_LIMIT} 篇笔记`,
+            `Export 1–${BATCH_NOTE_EXPORT_LIMIT} notes at a time`,
+          ),
+        ),
+      );
+    }
+
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT id, title, content, type
+       FROM note
+       WHERE create_by=? AND del_flag=? AND id IN (${placeholders})`,
+      [req.user.id, '0', ...ids],
+    );
+    const notesById = new Map(
+      rows.map((note) => {
+        const normalized = normalizeCanonicalMarkdownRecord(note);
+        return [String(normalized.id), normalized];
+      }),
+    );
+    const notes = ids.map((id) => notesById.get(id)).filter(Boolean);
+
+    return res.send(
+      resultData({
+        notes,
+        requestedCount: ids.length,
+        missingCount: ids.length - notes.length,
+      }),
+    );
+  } catch (e) {
+    return sendNoteServerError(res, 'batch-export-notes', e);
+  }
+};
+
 // N1 阅读态批量解析：正文里的 canonical 链接只有在当前主体仍拥有、且未删除时才返回可用名称和跳转语义。
 // 不接收 userId，永远使用 auth/admin context 已解析好的 req.user（管理员预览时即目标 subject）。
 export const resolveResourceRefs = async (req, res) => {
@@ -1844,7 +1897,7 @@ export const delNoteTemplate = async (req, res) => {
  * 残留路径分隔符还会被安全规则当成 PATH_TRAVERSAL 特征。
  */
 function sanitizeExportFileName(value, format) {
-  // 三种导出格式的扩展名与 format 同名(md/html/pdf),format 已在调用前过白名单
+  // 导出格式的扩展名与 format 同名(md/html/pdf/zip),format 已在调用前过白名单
   const extension = format;
   const withoutControls = Array.from(String(value ?? ''))
     .filter((char) => char.charCodeAt(0) >= 32 && char.charCodeAt(0) !== 127)

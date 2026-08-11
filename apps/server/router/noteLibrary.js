@@ -36,6 +36,7 @@ router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);
 router.post('/moveNoteNode', noteLibraryHandle.moveNoteNode);
 router.post('/moveNoteNodes', noteLibraryHandle.moveNoteNodes);
 router.post('/getNoteDetail', noteLibraryHandle.getNoteDetail);
+router.post('/getNotesForExport', noteLibraryHandle.getNotesForExport);
 router.post('/resolveResourceRefs', noteLibraryHandle.resolveResourceRefs);
 router.post('/resourceBacklinks', noteLibraryHandle.resourceBacklinks);
 router.post('/delNote', noteLibraryHandle.delNote);

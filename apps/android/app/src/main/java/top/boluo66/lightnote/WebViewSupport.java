@@ -185,6 +185,9 @@ final class WebViewSupport {
             settings.getUserAgentString()
                 + " LightNoteAndroid/" + BuildConfig.VERSION_NAME
                 + " LightNoteSystemTheme/" + systemThemeName(webView.getContext())
+                // 能力标记不能靠 versionName 推断：Debug 与当前正式版可能同号，而旧壳不认识通知桥。
+                // 网页只在看到这个标记时展示 Root 灰度设置并发送 notifications.* 消息。
+                + " LightNoteNativeNotifications/1"
         );
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
         // setBuiltInZoomControls(false) 只关掉缩放控件那套内置机制,useWideViewPort 打开时

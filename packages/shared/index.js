@@ -531,21 +531,36 @@ export const ANDROID_RELEASE = Object.freeze({
   versionName: '1.0.1',
   versionCode: 10001,
   packageName: 'top.boluo66.lightnote',
-  releaseDate: '2026-08-06',
-  fileSizeBytes: 1776721,
-  sha256: '64341baa2358e8d16b81cfd5bf89c51b7b302a2c8688caaa031587fd29ee2990',
+  releaseDate: '2026-08-11',
+  fileSizeBytes: 1784621,
+  sha256: 'ea064f04cca397a6a4602053365dba59e6a385f421fd2a4092c1b81938762b2a',
   certificateSha256: '23:D3:65:AA:C9:33:A3:8D:71:07:0E:0C:2B:DD:C0:CD:B7:E1:7B:41:67:7F:FC:5E:45:2C:96:D8:9A:1C:77:B4',
   downloadPath: '/downloads/android/light-note-1.0.1.apk',
   minAndroidVersion: '8.0',
   permissions: Object.freeze([
     'android.permission.INTERNET',
     'android.permission.ACCESS_NETWORK_STATE',
+    'android.permission.POST_NOTIFICATIONS',
     // 应用内更新:把已下载的轻笺安装包交给系统安装器。仅限来自本域名的自身安装包,
     // 是否安装由系统确认页决定,不具备静默安装能力。与 AndroidManifest 必须一致。
     'android.permission.REQUEST_INSTALL_PACKAGES',
   ]),
   released: true,
 });
+
+/**
+ * 当前 Android 源码声明的权限。
+ *
+ * 这份清单可以领先于 ANDROID_RELEASE：新能力合入源码后、正式 APK 尚未构建时，已发布包的
+ * 版本/哈希/权限元数据仍必须保持不变。真正发新版时，用同一次 Release 构建结果更新上面的
+ * ANDROID_RELEASE，并让 permissions 与这里重新一致。
+ */
+export const ANDROID_SOURCE_PERMISSIONS = Object.freeze([
+  'android.permission.INTERNET',
+  'android.permission.ACCESS_NETWORK_STATE',
+  'android.permission.POST_NOTIFICATIONS',
+  'android.permission.REQUEST_INSTALL_PACKAGES',
+]);
 
 /** 唯一正式分发域名。下载页的安全提示要明确只认这个域名。 */
 export const OFFICIAL_HOST = 'boluo66.top';

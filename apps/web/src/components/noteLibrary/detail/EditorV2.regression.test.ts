@@ -5,6 +5,14 @@ import icon from '@/config/icon';
 import { getNoteTreePageIcon, isMarkdownNoteTreePage } from '@/utils/noteTreePresentation';
 
 const editorSource = readFileSync(resolve(process.cwd(), 'src/components/noteLibrary/detail/Editor.vue'), 'utf8');
+const warmupPreviewSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteEditorWarmupPreview.vue'),
+  'utf8',
+);
+const delayedWarmupSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/detail/useDelayedEditorWarmup.ts'),
+  'utf8',
+);
 const codeMirrorSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/MarkdownCodeMirror.vue'),
   'utf8',
@@ -58,6 +66,29 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).not.toContain('v-model="content"');
     expect(updateHandler).toContain('if (!richEditorRuntimeReady.value) return');
     expect(noteDetailSource).not.toContain('<Transition name="note-content-switch"');
+  });
+
+  it('编辑器快路径使用骨架，只有运行时超过 300ms 才挂载静态正文', () => {
+    expect(editorSource).toContain("editorWarmupPhase === 'skeleton'");
+    expect(editorSource).toContain("editorWarmupPhase === 'preview'");
+    expect(editorSource).toContain('NoteDetailLoadingState');
+    expect(delayedWarmupSource).toContain('NOTE_EDITOR_WARMUP_DELAY_MS = 300');
+    expect(delayedWarmupSource).toContain("phase.value = 'hidden'");
+    expect(delayedWarmupSource).toContain("phase.value = 'preview'");
+  });
+
+  it('移动端富文本预览与真实编辑器共享完整正文排版和资源装饰', () => {
+    expect(editorSource).toContain("'is-mobile': isMobile");
+    expect(editorSource).toContain('--note-editor-content-padding-top: 16px');
+    expect(editorSource).toContain('--note-editor-content-line-height: 1.65');
+    expect(editorSource).toContain('class="note-editor-body note-editor-rich-content"');
+    expect(editorSource).toContain('.note-editor-rich-content {');
+    expect(editorSource).toContain('.note-todo-checkbox {');
+    expect(editorSource).toContain('a.ln-resource-link {');
+    expect(warmupPreviewSource).toContain('note-editor-warmup__content note-editor-rich-content');
+    expect(warmupPreviewSource).toContain('presentResourceReferenceChips');
+    expect(warmupPreviewSource).toContain('normalizeRichMediaTextHtml');
+    expect(warmupPreviewSource).toContain('padding: 14px 16px clamp(160px, 35vh, 360px)');
   });
 
   it('外置工具栏不再检查不存在的 TinyMCE 内置工具栏并循环重建编辑器', () => {
@@ -398,7 +429,9 @@ describe('编辑器 V2 交互回归', () => {
   it('Markdown 与富文本都保留可滚过末行的底部写作空间', () => {
     expect(codeMirrorSource).toContain("padding: '14px 12px clamp(160px, 35vh, 360px)'");
     expect(codeMirrorSource).toContain('max(140px, 32vh, calc(32px + env(safe-area-inset-bottom)))');
-    expect(editorSource).toContain('padding: 12px 20px clamp(180px, 35vh, 380px)');
+    expect(editorSource).toContain(
+      'padding: var(--note-editor-content-padding-top, 12px) 20px clamp(180px, 35vh, 380px)',
+    );
     expect(editorSource).toContain('padding: 10px 10px clamp(160px, 35vh, 360px)');
   });
 
@@ -447,7 +480,9 @@ describe('编辑器 V2 交互回归', () => {
 
   it('富文本空态 placeholder 与首个光标共用正文起点，深色主题沿用可读描述色', () => {
     expect(editorSource).toContain('.mce-content-body > :first-child { margin-top: 0; }');
-    expect(editorSource).toContain('top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88');
+    expect(editorSource).toContain(
+      'top: var(--note-editor-content-padding-top, 12px); left: 20px; color: var(--desc-color); opacity: 0.88',
+    );
   });
 
   it('富文本空段落插入待办后把光标放到复选框后方', () => {

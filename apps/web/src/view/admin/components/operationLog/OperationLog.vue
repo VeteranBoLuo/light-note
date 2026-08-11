@@ -35,18 +35,12 @@
         @input="scheduleSearch"
         @enter="reloadLogs"
       />
-      <BInput
-        v-model:value="filters.startDate"
-        type="date"
-        class="operation-filter operation-filter--date"
-        @change="reloadLogs"
-      />
-      <span class="operation-filter-separator">{{ t('adminOperationLog.filters.to') }}</span>
-      <BInput
-        v-model:value="filters.endDate"
-        type="date"
-        class="operation-filter operation-filter--date"
-        @change="reloadLogs"
+      <DateRangePicker
+        class="operation-filter--range"
+        initial-preset="all"
+        :start="filters.startDate"
+        :end="filters.endDate"
+        @change="onDateRangeChange"
       />
       <span class="admin-toolbar-switch">
         <BSwitch v-model:checked="filters.hideInternal" @change="reloadLogs" />
@@ -141,6 +135,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
@@ -224,6 +219,11 @@
     tableRef.value?.scrollToTop();
     void reload();
   }
+  function onDateRangeChange(start?: string, end?: string) {
+    filters.startDate = start || '';
+    filters.endDate = end || '';
+    reloadLogs();
+  }
   function resetFilters() {
     Object.assign(filters, { keyword: '', module: '', userId: '', startDate: '', endDate: '', hideInternal: true });
     reloadLogs();
@@ -277,12 +277,12 @@
   .operation-filter--user {
     width: min(190px, 20vw);
   }
-  .operation-filter--date {
-    width: 138px;
+  .operation-filter--range {
+    width: 210px;
   }
-  .operation-filter-separator {
-    color: var(--sub-text-color);
-    font-size: 12px;
+  .operation-filter--range :deep(.drp-trigger.b_btn) {
+    width: 100%;
+    justify-content: space-between;
   }
   .admin-toolbar-switch {
     display: inline-flex;
@@ -317,11 +317,8 @@
     .operation-filter,
     .operation-filter--search,
     .operation-filter--user,
-    .operation-filter--date {
+    .operation-filter--range {
       width: 100%;
-    }
-    .operation-filter-separator {
-      display: none;
     }
     .operation-detail {
       grid-template-columns: 1fr;

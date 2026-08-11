@@ -1101,6 +1101,7 @@ describe('communityChatMessageService', () => {
       }
       if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
       if (text.includes('SET pinned_message_id = NULL')) return [{ affectedRows: 0 }, []];
+      if (text.includes('SELECT DISTINCT user_id AS userId')) return [[{ userId: 'user-2' }], []];
       if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
       if (text.includes('SELECT recalled_at AS recalledAt')) {
         return [[{ recalledAt: '2026-08-10T10:00:00.000Z' }], []];
@@ -1182,6 +1183,7 @@ describe('communityChatMessageService', () => {
       }
       if (text.includes("SET status = 'recalled'")) return [{ affectedRows: 1 }, []];
       if (text.includes('SET pinned_message_id = NULL')) return [{ affectedRows: 1 }, []];
+      if (text.includes('SELECT DISTINCT user_id AS userId')) return [[{ userId: 'user-2' }], []];
       if (text.includes('UPDATE notification')) return [{ affectedRows: 1 }, []];
       if (text.includes('INSERT INTO community_chat_moderation_actions')) return [{ affectedRows: 1 }, []];
       if (text.includes('SELECT recalled_at AS recalledAt')) return [[{ recalledAt: new Date() }], []];

@@ -32,7 +32,7 @@
     <string name="privacy_consent_review_badge">隐私与数据使用说明</string>
     <string name="privacy_consent_summary">开始使用前，请阅读并理解隐私政策和用户协议。只有在您同意后，轻笺才会加载在线服务。</string>
     <string name="privacy_point_data">仅在提供功能时处理必要的账号、内容、文件与安全日志</string>
-    <string name="privacy_point_permissions">当前 APK 不申请通讯录、定位、麦克风或存储运行时权限</string>
+    <string name="privacy_point_permissions">仅在你开启系统提醒时申请通知权限；不申请通讯录、定位、麦克风或存储运行时权限</string>
     <string name="privacy_point_third_party">GitHub 登录、AI 与文件服务会按政策说明使用相应第三方服务</string>
     <string name="privacy_consent_notice">点击“同意并继续”即表示您同意当前版本的两份文档；之后可在“设置 → 隐私与协议”中查看，并可从隐私政策全文页撤回同意。</string>
     <string name="privacy_policy">隐私政策</string>
@@ -46,4 +46,12 @@
     <string name="withdraw_privacy_consent_confirm_title">撤回隐私同意？</string>
     <string name="withdraw_privacy_consent_confirm_message">轻笺将停止当前在线页面并返回首次启动说明。账号和云端内容不会被删除。</string>
     <string name="withdraw_privacy_consent_confirm">确认撤回</string>
+    <string name="notification_channel_general">轻笺通知</string>
+    <string name="notification_channel_general_no_badge">轻笺通知（无桌面角标）</string>
+    <string name="notification_channel_general_description">账号通知中心的未读提醒</string>
+    <string name="notification_channel_chat">聊天室回复与提及</string>
+    <string name="notification_channel_chat_description">只提醒回复或提及你的聊天消息，不显示桌面角标</string>
+    <string name="notification_default_title">轻笺有新通知</string>
+    <string name="notification_chat_title">聊天室有新回复</string>
+    <string name="notification_unread_count">%1$d 条未读通知</string>
 </resources>

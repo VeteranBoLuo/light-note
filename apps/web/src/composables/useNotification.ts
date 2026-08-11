@@ -1,6 +1,7 @@
 import { ref, unref, type MaybeRef } from 'vue';
 import notificationApi from '@/api/notificationApi.ts';
 import { useUserStore } from '@/store';
+import { isLightNoteAndroidApp } from '@/utils/androidBridge';
 
 export interface NotificationItem {
   id: string;
@@ -72,6 +73,7 @@ export function useNotification(options: { excludeCommunityChat?: MaybeRef<boole
         if (
           (!browserNotificationBaselineReady || unreadTotal.value > previousUnread) &&
           useUserStore().preferences.notificationsBrowser === true &&
+          !isLightNoteAndroidApp() &&
           typeof Notification !== 'undefined' &&
           Notification.permission === 'granted'
         ) {

@@ -50,7 +50,10 @@ function payload() {
         running: 0,
         waiting: 1,
         completed24h: 4,
-        sources: [{ source: 'email_delivery', total: 2, attention: 1, running: 0, waiting: 0, completed24h: 4 }],
+        sources: [
+          { source: 'bookmark_icon', total: 30, attention: 30, running: 0, waiting: 0, completed24h: 0 },
+          { source: 'email_delivery', total: 2, attention: 1, running: 0, waiting: 0, completed24h: 4 },
+        ],
         items: [
           {
             id: 'mail-1',
@@ -126,5 +129,47 @@ describe('ActionCenter', () => {
     expect(mounted.host.textContent).toContain('ab****@example.com');
     expect(mounted.host.textContent).not.toContain('private@example.com');
     expect(mounted.host.textContent).toContain('DELIVERY_RESULT_UNKNOWN');
+  });
+
+  it('点击来源卡片后从服务端读取该来源明细并显示选中态', async () => {
+    apiMocks.load.mockImplementation(async (params?: { source?: string }) => {
+      const response: any = payload();
+      if (params?.source === 'bookmark_icon') {
+        response.data.jobs.items = [
+          {
+            id: 'bookmark-job-1',
+            source: 'bookmark_icon',
+            status: 'attention',
+            rawStatus: 'failed',
+            title: 'https://bookmark.example.com',
+            ownerLabel: '用户乙',
+            attempts: 3,
+            errorCode: 'ICON_FETCH_FAILED',
+            updatedAt: '2026-08-09 10:00:00',
+          },
+        ];
+      }
+      return response;
+    });
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    const jobTab = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('异步任务健康'),
+    );
+    jobTab!.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('书签图标'));
+
+    const sourceCard = [...mounted.host.querySelectorAll<HTMLElement>('.action-center__source-card')].find((card) =>
+      card.textContent?.includes('书签图标'),
+    );
+    sourceCard!.click();
+
+    await vi.waitFor(() => expect(apiMocks.load).toHaveBeenLastCalledWith({ limit: 60, source: 'bookmark_icon' }));
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('https://bookmark.example.com'));
+    expect(sourceCard!.getAttribute('aria-pressed')).toBe('true');
+    expect(sourceCard!.textContent).toContain('正在查看');
+    expect(mounted.host.textContent).not.toContain('DELIVERY_RESULT_UNKNOWN');
   });
 });

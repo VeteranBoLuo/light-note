@@ -51,10 +51,6 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/userOpinion/UserOpinion.vue'),
       },
       {
-        path: 'communityChatAccess',
-        component: () => import('@/view/admin/components/communityChat/CommunityChatAccessAdmin.vue'),
-      },
-      {
         path: 'communityChatModeration',
         component: () => import('@/view/admin/components/communityChat/CommunityChatModerationAdmin.vue'),
       },
@@ -143,11 +139,6 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'userOpinion',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/userOpinion/UserOpinionMobile.vue'),
-  },
-  {
-    path: 'communityChatAccess',
-    meta: MOBILE_ADMIN_META,
-    component: () => import('@/view/admin/components/communityChat/CommunityChatAccessAdmin.vue'),
   },
   {
     path: 'communityChatModeration',

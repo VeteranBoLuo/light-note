@@ -11,7 +11,20 @@ const mocks = vi.hoisted(() => ({
   refreshUnread: vi.fn(),
   refreshCommunityUnread: vi.fn(),
   resetCommunityUnread: vi.fn(),
+  updatePreference: vi.fn(),
+  user: {
+    id: 'user-1',
+    role: 'user',
+    preferences: {
+      notificationsAndroid: true,
+      communityChatAndroidNotifications: false,
+    },
+  },
 }));
+
+vi.mock('@/store', () => ({ useUserStore: () => mocks.user }));
+
+vi.mock('@/utils/savePreference', () => ({ updatePreference: mocks.updatePreference }));
 
 vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatNotificationSettings: mocks.getSettings,
@@ -82,6 +95,7 @@ beforeEach(() => {
   mocks.updateSettings.mockImplementation(async (payload) => ({ data: settings(payload.enabled, payload.level) }));
   mocks.refreshUnread.mockResolvedValue(undefined);
   mocks.refreshCommunityUnread.mockResolvedValue(null);
+  mocks.updatePreference.mockResolvedValue(undefined);
 });
 
 afterEach(() => {

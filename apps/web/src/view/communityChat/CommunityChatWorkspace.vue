@@ -64,7 +64,15 @@
         </div>
       </header>
 
-      <div class="community-message-stream">
+      <div class="community-message-stream" :aria-busy="initialLoading">
+        <div
+          v-if="initialLoading"
+          class="community-message-skeleton"
+          role="status"
+          :aria-label="t('communityChat.messagesLoading')"
+        >
+          <span v-for="index in 4" :key="index" :class="{ 'is-own': index % 3 === 0 }"></span>
+        </div>
         <div v-if="pinnedMessage" class="community-pinned-message" role="status">
           <BButton
             class="community-pinned-message__jump"
@@ -92,7 +100,6 @@
           aria-live="polite"
           @wheel.passive="handleMessageListUserScrollIntent"
           @touchmove.passive="handleMessageListUserScrollIntent"
-          @pointerdown="stopInitialBottomLock"
           @scroll.passive="handleMessageListScroll"
         >
           <div v-if="access.emergencyReadOnly" class="community-runtime-readonly" role="status">
@@ -110,15 +117,7 @@
             </BButton>
           </div>
 
-          <div
-            v-if="initialLoading"
-            class="community-message-skeleton"
-            :aria-label="t('communityChat.messagesLoading')"
-          >
-            <span v-for="index in 4" :key="index" :class="{ 'is-own': index % 3 === 0 }"></span>
-          </div>
-
-          <div v-else-if="loadError && !chatMessages.length" class="community-message-state" role="status">
+          <div v-if="loadError && !chatMessages.length" class="community-message-state" role="status">
             <strong>{{ t('communityChat.messagesLoadFailed') }}</strong>
             <p>{{ t('communityChat.messagesLoadFailedDescription') }}</p>
             <BButton size="small" @click="loadInitial">{{ t('communityChat.retryMessages') }}</BButton>
@@ -225,19 +224,29 @@
                         v-for="imageItem in chatMessage.images"
                         :key="imageItem.publicId"
                         class="community-message__image"
-                        :style="{ aspectRatio: messageImageAspectRatio(imageItem) }"
+                        :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
+                        :style="messageImageLayoutStyle(imageItem)"
                         :aria-label="t('communityChat.image.preview')"
                         @click.stop="handleMessageImageClick(chatMessage, imageItem)"
                       >
+                        <span class="community-message__image-sizer" aria-hidden="true"></span>
+                        <span
+                          v-if="!isMessageImageReady(imageItem.publicId)"
+                          class="community-message__image-placeholder"
+                          aria-hidden="true"
+                        >
+                          <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
+                        </span>
                         <img
                           :src="imageItem.url"
                           :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
                           :width="positiveImageDimension(imageItem.width)"
                           :height="positiveImageDimension(imageItem.height)"
-                          loading="lazy"
+                          :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
+                          :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
                           decoding="async"
-                          @load="handleMessageImageSettled"
-                          @error="handleMessageImageSettled"
+                          @load="handleMessageImageLoaded($event, imageItem)"
+                          @error="handleMessageImageError(imageItem)"
                         />
                       </BButton>
                     </div>
@@ -617,6 +626,9 @@
   const imageViewerImages = ref<CommunityChatImage[]>([]);
   const imageViewerTracksChatSequence = ref(false);
   const imageViewerInitialPublicId = ref('');
+  const readyMessageImageIds = ref(new Set<string>());
+  const priorityMessageImageIds = ref(new Set<string>());
+  const messageImagePreloads = new Map<string, HTMLImageElement>();
   const imageUploadsInFlight = ref(0);
   const isComposerDragActive = ref(false);
   const removingImageIds = ref(new Set<string>());
@@ -648,9 +660,8 @@
   let pollTimer: number | undefined;
   let markReadTimer: number | undefined;
   let messageScrollFrame: number | undefined;
-  let initialBottomLockTimer: number | undefined;
-  let initialBottomLockFrame: number | undefined;
-  let initialBottomLockActive = false;
+  let messageNavigationGeneration = 0;
+  let programmaticMessageNavigationActive = false;
   let avatarMotionResumeTimer: number | undefined;
   let recallClockTimer: number | undefined;
   let lastMarkedReadMessageId = '';
@@ -679,7 +690,8 @@
   const AVATAR_LONG_PRESS_MS = 480;
   const AVATAR_LONG_PRESS_MOVE_TOLERANCE = 10;
   const AVATAR_MOTION_SCROLL_IDLE_MS = 140;
-  const INITIAL_BOTTOM_LOCK_MS = 3000;
+  const INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT = 8;
+  const INITIAL_IMAGE_PRIORITY_MAX = 4;
 
   const currentRoom = computed(() => props.rooms.find((room) => room.slug === selectedRoomSlug.value) || null);
   const chatImageSequence = computed(() => {
@@ -1105,51 +1117,163 @@
     return width && height ? `${width} / ${height}` : '4 / 3';
   }
 
-  function stopInitialBottomLock() {
-    initialBottomLockActive = false;
-    if (initialBottomLockTimer !== undefined) window.clearTimeout(initialBottomLockTimer);
-    if (initialBottomLockFrame !== undefined) window.cancelAnimationFrame(initialBottomLockFrame);
-    initialBottomLockTimer = undefined;
-    initialBottomLockFrame = undefined;
+  function messageImageLayoutStyle(imageItem: CommunityChatImage) {
+    const width = positiveImageDimension(imageItem.width);
+    const height = positiveImageDimension(imageItem.height);
+    const paddingPercent = width && height ? Math.min(400, Math.max(20, (height / width) * 100)) : 75;
+    return {
+      aspectRatio: messageImageAspectRatio(imageItem),
+      '--community-message-image-padding': `${paddingPercent}%`,
+    };
   }
 
-  function startInitialBottomLock() {
-    stopInitialBottomLock();
-    initialBottomLockActive = true;
-    initialBottomLockTimer = window.setTimeout(stopInitialBottomLock, INITIAL_BOTTOM_LOCK_MS);
+  function isMessageImageReady(publicId: string) {
+    return readyMessageImageIds.value.has(publicId);
   }
 
-  function handleMessageImageSettled() {
-    if (!initialBottomLockActive || initialBottomLockFrame !== undefined) return;
-    initialBottomLockFrame = window.requestAnimationFrame(() => {
-      initialBottomLockFrame = undefined;
-      if (initialBottomLockActive) void scrollToBottom();
-    });
+  function isMessageImagePriority(publicId: string) {
+    return priorityMessageImageIds.value.has(publicId);
+  }
+
+  function markMessageImageReady(publicId: string) {
+    if (!publicId || readyMessageImageIds.value.has(publicId)) return;
+    const next = new Set(readyMessageImageIds.value);
+    next.add(publicId);
+    readyMessageImageIds.value = next;
+  }
+
+  async function decodeMessageImage(image: HTMLImageElement, publicId: string) {
+    try {
+      if (typeof image.decode === 'function') await image.decode();
+    } catch {
+      // 个别旧 WebView 会在图片已经可绘制时拒绝 decode；load 事件仍可作为可靠回退。
+    }
+    if (!isUnmounted) markMessageImageReady(publicId);
+  }
+
+  function releaseMessageImagePreloads({ clearReady = false } = {}) {
+    for (const image of messageImagePreloads.values()) {
+      image.onload = null;
+      image.onerror = null;
+    }
+    messageImagePreloads.clear();
+    priorityMessageImageIds.value = new Set();
+    if (clearReady) readyMessageImageIds.value = new Set();
+  }
+
+  function initialViewportImages(messages: CommunityChatMessage[], focusPublicId = '') {
+    if (!messages.length) return [];
+    const focusIndex = focusPublicId ? messages.findIndex((chatMessage) => chatMessage.publicId === focusPublicId) : -1;
+    const anchorIndex = focusIndex >= 0 ? focusIndex : messages.length - 1;
+    const messageIndexes: number[] = [];
+    if (focusIndex >= 0) {
+      for (let distance = 0; messageIndexes.length < INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT; distance += 1) {
+        const nextIndexes = distance === 0 ? [anchorIndex] : [anchorIndex + distance, anchorIndex - distance];
+        const validIndexes = nextIndexes.filter((index) => index >= 0 && index < messages.length);
+        if (!validIndexes.length && anchorIndex + distance >= messages.length && anchorIndex - distance < 0) break;
+        messageIndexes.push(...validIndexes.slice(0, INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT - messageIndexes.length));
+      }
+    } else {
+      for (
+        let index = anchorIndex;
+        index >= 0 && messageIndexes.length < INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT;
+        index -= 1
+      ) {
+        messageIndexes.push(index);
+      }
+    }
+    const candidates: CommunityChatImage[] = [];
+    for (const index of messageIndexes) {
+      for (const imageItem of messages[index]?.images || []) {
+        if (!imageItem.publicId || !imageItem.url) continue;
+        if (candidates.some((candidate) => candidate.publicId === imageItem.publicId)) continue;
+        candidates.push(imageItem);
+        if (candidates.length >= INITIAL_IMAGE_PRIORITY_MAX) return candidates;
+      }
+    }
+    return candidates;
+  }
+
+  function prewarmInitialViewportImages(messages: CommunityChatMessage[], focusPublicId = '') {
+    const candidates = initialViewportImages(messages, focusPublicId);
+    priorityMessageImageIds.value = new Set(candidates.map((imageItem) => imageItem.publicId));
+    for (const imageItem of candidates) {
+      if (readyMessageImageIds.value.has(imageItem.publicId) || messageImagePreloads.has(imageItem.publicId)) continue;
+      const image = new window.Image();
+      image.decoding = 'async';
+      image.fetchPriority = 'high';
+      image.onload = () => {
+        void decodeMessageImage(image, imageItem.publicId).finally(() => {
+          messageImagePreloads.delete(imageItem.publicId);
+        });
+      };
+      image.onerror = () => {
+        messageImagePreloads.delete(imageItem.publicId);
+      };
+      messageImagePreloads.set(imageItem.publicId, image);
+      image.src = imageItem.url;
+    }
+  }
+
+  function handleMessageImageLoaded(event: Event, imageItem: CommunityChatImage) {
+    const image = event.currentTarget;
+    if (image instanceof HTMLImageElement) void decodeMessageImage(image, imageItem.publicId);
+    else markMessageImageReady(imageItem.publicId);
+  }
+
+  function handleMessageImageError(imageItem: CommunityChatImage) {
+    messageImagePreloads.delete(imageItem.publicId);
+  }
+
+  function nextAnimationFrame() {
+    return new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+
+  function cancelProgrammaticMessageNavigation() {
+    messageNavigationGeneration += 1;
+    programmaticMessageNavigationActive = false;
   }
 
   async function scrollToFocusedMessage(publicId: string) {
-    await nextTick();
-    if (!messageListEl.value) {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+    if (!publicId) return;
+    const navigationGeneration = ++messageNavigationGeneration;
+    programmaticMessageNavigationActive = true;
+    try {
+      await nextTick();
+      if (!messageListEl.value) await nextAnimationFrame();
+      const container = messageListEl.value;
+      if (!container || navigationGeneration !== messageNavigationGeneration) return;
+      const findTarget = () =>
+        Array.from(container.querySelectorAll<HTMLElement>('[data-message-public-id]')).find(
+          (element) => element.getAttribute('data-message-public-id') === publicId,
+        );
+      let target = findTarget();
+      if (!target) {
+        await nextAnimationFrame();
+        if (navigationGeneration !== messageNavigationGeneration) return;
+        target = findTarget();
+      }
+      if (!target) {
+        await scrollToBottom();
+        return;
+      }
+
+      const locateTarget = (element: HTMLElement) => {
+        const centerOffset = Math.max(12, container.clientHeight / 2 - element.offsetHeight / 2);
+        // 聊天消息定位属于导航而非浏览动画。长距离 smooth 在部分 Android WebView 中会被懒加载图片
+        // 或滚动锚点中断，表现为需要连续点击；直接定位配合实色高亮能保证一次点击到位。
+        scrollIntoContainer(container, element, centerOffset, 'auto');
+        lastMessageScrollTop = container.scrollTop;
+      };
+
+      locateTarget(target);
+      // 保持两帧“程序化定位中”，让 scroll 事件先完成，避免被误判为用户上滑而触发历史分页。
+      await nextAnimationFrame();
+      if (navigationGeneration !== messageNavigationGeneration) return;
+      await nextAnimationFrame();
+    } finally {
+      if (navigationGeneration === messageNavigationGeneration) programmaticMessageNavigationActive = false;
     }
-    const container = messageListEl.value;
-    if (!container || !publicId) return;
-    const findTarget = () =>
-      Array.from(container.querySelectorAll<HTMLElement>('[data-message-public-id]')).find(
-        (element) => element.getAttribute('data-message-public-id') === publicId,
-      );
-    let target = findTarget();
-    if (!target) {
-      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
-      target = findTarget();
-    }
-    if (!target) {
-      await scrollToBottom();
-      return;
-    }
-    const centerOffset = Math.max(12, container.clientHeight / 2 - target.offsetHeight / 2);
-    scrollIntoContainer(container, target, centerOffset);
-    lastMessageScrollTop = container.scrollTop;
   }
 
   function showTransientMessageFocus(publicId: string) {
@@ -1205,7 +1329,13 @@
     const { scrollTop, scrollHeight, clientHeight } = element;
     const scrollingUp = scrollTop < lastMessageScrollTop;
     lastMessageScrollTop = scrollTop;
-    if (scrollingUp && scrollTop <= 160 && hasMore.value && !olderLoading.value) {
+    if (
+      !programmaticMessageNavigationActive &&
+      scrollingUp &&
+      scrollTop <= 160 &&
+      hasMore.value &&
+      !olderLoading.value
+    ) {
       void loadOlder();
     }
     if (scrollHeight - scrollTop - clientHeight >= 96) return;
@@ -1231,7 +1361,7 @@
   }
 
   function handleMessageListUserScrollIntent() {
-    stopInitialBottomLock();
+    cancelProgrammaticMessageNavigation();
     pauseAvatarMotionForScroll();
   }
 
@@ -1310,62 +1440,78 @@
     }
   }
 
+  async function requestPinnedMessage(roomSlug: string) {
+    try {
+      const response = await getCommunityChatPinnedMessage(roomSlug);
+      const data = response.data as CommunityChatPinnedMessage;
+      return data?.message || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function commitPinnedMessage(nextPinnedMessage: CommunityChatMessage | null) {
+    const keepBottomAnchored = !initialLoading.value && isNearBottom();
+    pinnedMessage.value = nextPinnedMessage;
+    // 置顶栏位于滚动容器外，在线新增/取消时会改变 messageList 的可用高度。用户本就在底部时，
+    // 同一轮 DOM 更新后补写最终 scrollTop；浏览历史时保持 scrollTop，不抢走当前阅读位置。
+    if (keepBottomAnchored) await scrollToBottom();
+  }
+
   async function loadPinnedMessage() {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug) return;
     const generation = ++pinnedLoadGeneration;
-    try {
-      const response = await getCommunityChatPinnedMessage(roomSlug);
-      if (generation !== pinnedLoadGeneration || roomSlug !== selectedRoomSlug.value) return;
-      const data = response.data as CommunityChatPinnedMessage;
-      pinnedMessage.value = data?.message || null;
-    } catch {
-      if (generation === pinnedLoadGeneration) pinnedMessage.value = null;
-    }
+    const nextPinnedMessage = await requestPinnedMessage(roomSlug);
+    if (generation !== pinnedLoadGeneration || roomSlug !== selectedRoomSlug.value) return;
+    await commitPinnedMessage(nextPinnedMessage);
   }
 
   async function loadInitial({ ignoreFocus = false } = {}) {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug) return;
     const generation = ++loadGeneration;
+    const pinnedGeneration = ++pinnedLoadGeneration;
     const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value;
-    stopInitialBottomLock();
     initialLoading.value = true;
     loadError.value = false;
     pendingNewMessageCount.value = 0;
     try {
-      let response;
-      try {
-        response = await getCommunityChatMessages(
-          roomSlug,
-          requestedFocus
-            ? { focus: requestedFocus, limit: INITIAL_MESSAGE_PAGE_SIZE }
-            : { limit: INITIAL_MESSAGE_PAGE_SIZE },
-        );
-      } catch (error) {
-        if (!requestedFocus || generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) throw error;
-        focusedMessagePublicId.value = '';
-        hasNewerThanFocus.value = false;
-        await clearFocusMessageRoute();
-        message.warning(t('communityChat.sourceMessageUnavailable'));
-        response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
-      }
+      const messagePagePromise = (async () => {
+        try {
+          return await getCommunityChatMessages(
+            roomSlug,
+            requestedFocus
+              ? { focus: requestedFocus, limit: INITIAL_MESSAGE_PAGE_SIZE }
+              : { limit: INITIAL_MESSAGE_PAGE_SIZE },
+          );
+        } catch (error) {
+          if (!requestedFocus || generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) throw error;
+          focusedMessagePublicId.value = '';
+          hasNewerThanFocus.value = false;
+          await clearFocusMessageRoute();
+          message.warning(t('communityChat.sourceMessageUnavailable'));
+          return getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
+        }
+      })();
+      // 首屏消息与置顶栏都会改变消息区结构，两条请求并行，但在同一轮提交后再撤掉覆盖整个消息流的骨架。
+      // 这样等待时间取较慢请求而不是相加，也不会出现“先贴底 → 插入置顶栏 → 图片回调再次贴底”的三段跳动。
+      const [response, nextPinnedMessage] = await Promise.all([messagePagePromise, requestPinnedMessage(roomSlug)]);
       if (generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
+      prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
       chatMessages.value = page.items || [];
+      if (pinnedGeneration === pinnedLoadGeneration) pinnedMessage.value = nextPinnedMessage;
       lastAuthorityRefreshAt = Date.now();
       hasMore.value = Boolean(page.hasMore);
       nextBefore.value = page.nextBefore || null;
       focusedMessagePublicId.value = page.focusPublicId || '';
       hasNewerThanFocus.value = Boolean(page.focusPublicId && page.hasNewer);
-      // 先结束同构骨架，再定位真实消息；否则极快的本地/缓存响应会在消息 DOM 尚未挂载时滚动失败。
-      initialLoading.value = false;
+      // 真实消息始终在覆盖层后完成挂载和定位；覆盖层只在最终 scrollTop 已写入后移除，首帧即最终布局。
       if (focusedMessagePublicId.value) await scrollToFocusedMessage(focusedMessagePublicId.value);
-      else {
-        startInitialBottomLock();
-        await scrollToBottom();
-      }
-      await markLatestRead();
+      else await scrollToBottom();
+      initialLoading.value = false;
+      void markLatestRead();
     } catch {
       if (generation === loadGeneration) loadError.value = true;
     } finally {
@@ -1432,6 +1578,7 @@
       const response = await getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
       if (roomSlug !== selectedRoomSlug.value) return;
       const page = response.data as CommunityChatMessagePage;
+      prewarmInitialViewportImages(page.items || [], page.focusPublicId || '');
       const newMessageCount = (page.items || []).filter((item) => !existingIds.has(item.publicId)).length;
       replaceLatestWindow(page);
       lastAuthorityRefreshAt = Date.now();
@@ -1680,7 +1827,7 @@
       mobileMessageActionsVisible.value = false;
       if (replyTarget.value?.publicId === chatMessage.publicId) cancelReply();
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== chatMessage.publicId);
-      if (pinnedMessage.value?.publicId === chatMessage.publicId) pinnedMessage.value = null;
+      if (pinnedMessage.value?.publicId === chatMessage.publicId) await commitPinnedMessage(null);
       if (focusedMessagePublicId.value === chatMessage.publicId) {
         focusedMessagePublicId.value = '';
         hasNewerThanFocus.value = false;
@@ -1915,7 +2062,7 @@
     try {
       const response = await pinCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200 || !response.data?.message) throw new Error('COMMUNITY_CHAT_PIN_FAILED');
-      pinnedMessage.value = response.data.message as CommunityChatMessage;
+      await commitPinnedMessage(response.data.message as CommunityChatMessage);
       mobileMessageActionsVisible.value = false;
       void recordOperation({ module: '公共聊天室', operation: '管理员置顶消息' });
       message.success(t('communityChat.pin.success'));
@@ -1954,7 +2101,7 @@
     try {
       const response = await unpinCommunityChatMessage(chatMessage.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_UNPIN_FAILED');
-      if (pinnedMessage.value?.publicId === chatMessage.publicId) pinnedMessage.value = null;
+      if (pinnedMessage.value?.publicId === chatMessage.publicId) await commitPinnedMessage(null);
       mobileMessageActionsVisible.value = false;
       void recordOperation({ module: '公共聊天室', operation: '管理员取消置顶消息' });
       message.success(t('communityChat.pin.unpinSuccess'));
@@ -2038,7 +2185,7 @@
       if (response?.status !== 200) throw new Error('COMMUNITY_BLOCK_FAILED');
       void recordOperation({ module: '公共聊天室', operation: '屏蔽消息作者' });
       message.success(t('communityChat.blocks.success', { name: authorName(chatMessage) }));
-      await Promise.all([loadInitial(), loadPinnedMessage()]);
+      await loadInitial();
       if (blocksVisible.value) await loadBlocks();
     } catch (error: any) {
       message.error(error?.message || t('communityChat.blocks.failed'));
@@ -2074,7 +2221,7 @@
       message.success(
         t('communityChat.blocks.unblocked', { name: item.displayName || t('communityChat.memberFallback') }),
       );
-      await Promise.all([loadInitial(), loadPinnedMessage()]);
+      await loadInitial();
     } catch (error: any) {
       message.error(error?.message || t('communityChat.blocks.unblockFailed'));
     } finally {
@@ -2238,6 +2385,7 @@
       imageViewerTracksChatSequence.value = false;
       imageViewerImages.value = [];
       imageViewerInitialPublicId.value = '';
+      releaseMessageImagePreloads({ clearReady: true });
       profileLoadGeneration += 1;
       profileVisible.value = false;
       profileLoading.value = false;
@@ -2260,7 +2408,6 @@
       }
       realtimeAuthorityRefreshPending = false;
       void loadInitial();
-      void loadPinnedMessage();
     },
     { immediate: true },
   );
@@ -2315,7 +2462,7 @@
     if (recallClockTimer !== undefined) window.clearInterval(recallClockTimer);
     if (markReadTimer !== undefined) window.clearTimeout(markReadTimer);
     if (messageScrollFrame !== undefined) window.cancelAnimationFrame(messageScrollFrame);
-    stopInitialBottomLock();
+    cancelProgrammaticMessageNavigation();
     if (avatarMotionResumeTimer !== undefined) window.clearTimeout(avatarMotionResumeTimer);
     if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
     messageListEl.value?.classList.remove('is-actively-scrolling');
@@ -2326,6 +2473,7 @@
     imageViewerVisible.value = false;
     imageViewerTracksChatSequence.value = false;
     imageViewerImages.value = [];
+    releaseMessageImagePreloads({ clearReady: true });
     releasePendingImages();
   });
 </script>
@@ -2780,8 +2928,16 @@
   }
 
   .community-message-skeleton {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    align-content: start;
+    padding: 18px clamp(14px, 3vw, 32px) 22px;
+    box-sizing: border-box;
     display: grid;
     gap: 18px;
+    overflow: hidden;
+    background: var(--card-background);
   }
 
   .community-message-skeleton span {
@@ -3087,11 +3243,15 @@
   }
 
   .community-message__image {
+    position: relative;
+    isolation: isolate;
+    display: block !important;
     width: 100%;
     min-width: 0;
-    height: auto;
+    height: auto !important;
     min-height: 92px;
     max-height: 280px;
+    line-height: 0 !important;
     padding: 0 !important;
     overflow: hidden;
     border: 1px solid var(--surface-border-color) !important;
@@ -3099,13 +3259,40 @@
     background: var(--workspace-panel-bg-color) !important;
   }
 
+  .community-message__image-sizer {
+    display: block;
+    width: 100%;
+    padding-top: var(--community-message-image-padding, 75%);
+    pointer-events: none;
+  }
+
+  .community-message__image-placeholder {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    display: grid;
+    place-items: center;
+    color: var(--text-color-secondary);
+    background: var(--workspace-panel-bg-color);
+    pointer-events: none;
+  }
+
   .community-message__image img {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
     width: 100%;
     height: 100%;
     min-height: 92px;
     max-height: 280px;
     display: block;
     object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.12s ease-out;
+  }
+
+  .community-message__image.is-ready img {
+    opacity: 1;
   }
 
   .community-message__images.has-1 .community-message__image img {

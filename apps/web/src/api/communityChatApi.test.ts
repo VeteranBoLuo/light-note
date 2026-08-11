@@ -18,7 +18,6 @@ const {
   createCommunityChatClientRequestId,
   deleteCommunityChatMessage,
   discardCommunityChatImage,
-  getCommunityChatAdminAccessRequests,
   getCommunityChatAdminRuntimePolicy,
   getCommunityChatAdminReports,
   getCommunityChatAccess,
@@ -33,9 +32,7 @@ const {
   requestCommunityChatAccess,
   recallCommunityChatMessage,
   reportCommunityChatMessage,
-  reviewCommunityChatAdminAccessRequest,
   reviewCommunityChatAdminReport,
-  revokeCommunityChatAdminMember,
   sendCommunityChatMessage,
   toggleCommunityChatMessageLike,
   unblockCommunityChatUser,
@@ -156,30 +153,6 @@ describe('communityChatApi', () => {
     const requestId = createCommunityChatClientRequestId();
     expect(requestId.length).toBeGreaterThanOrEqual(8);
     expect(requestId.length).toBeLessThanOrEqual(64);
-  });
-
-  it('Root 准入审核使用独立管理路径并编码账号 ID', () => {
-    getCommunityChatAdminAccessRequests({ status: 'pending', page: 2, pageSize: 20 });
-    reviewCommunityChatAdminAccessRequest('user/2', { action: 'approve', note: '首批内测' });
-    revokeCommunityChatAdminMember('user/2', '暂停资格');
-
-    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
-      '/api/community-chat/admin/access-requests',
-      { status: 'pending', page: 2, pageSize: 20 },
-      { silent: true },
-    );
-    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
-      1,
-      '/api/community-chat/admin/access-requests/user%2F2/review',
-      { action: 'approve', note: '首批内测' },
-      { silent: true },
-    );
-    expect(mocks.apiBasePost).toHaveBeenNthCalledWith(
-      2,
-      '/api/community-chat/admin/members/user%2F2/revoke',
-      { reason: '暂停资格' },
-      { silent: true },
-    );
   });
 
   it('Root 运行策略通过独立管理路径读取和切换', () => {

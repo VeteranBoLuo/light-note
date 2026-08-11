@@ -422,6 +422,31 @@
                 @change="set('notificationsInApp', $event)"
               />
             </div>
+            <template v-if="androidNotificationPilotVisible">
+              <div class="field">
+                <div class="field-head">
+                  <span class="field-label">{{ t('settings.notificationsAndroid') }}</span>
+                  <span class="field-desc">{{ t('settings.notificationsAndroidDesc') }}</span>
+                </div>
+                <BSwitch
+                  :checked="user.preferences.notificationsAndroid !== false"
+                  :aria-label="t('settings.notificationsAndroid')"
+                  @change="set('notificationsAndroid', $event)"
+                />
+              </div>
+              <div class="field">
+                <div class="field-head">
+                  <span class="field-label">{{ t('settings.notificationsAndroidBadge') }}</span>
+                  <span class="field-desc">{{ t('settings.notificationsAndroidBadgeDesc') }}</span>
+                </div>
+                <BSwitch
+                  :checked="user.preferences.notificationsAndroidBadge !== false"
+                  :disabled="user.preferences.notificationsAndroid === false"
+                  :aria-label="t('settings.notificationsAndroidBadge')"
+                  @change="set('notificationsAndroidBadge', $event)"
+                />
+              </div>
+            </template>
             <div v-if="!isGuestUser()" class="field community-chat-notification-field">
               <CommunityChatNotificationSettingsPanel />
             </div>
@@ -772,6 +797,7 @@
   import { getGlobalShortcutKeys, getGlobalShortcutLabel } from '@/config/keyboardShortcuts.ts';
   import { usePwaInstall } from '@/composables/usePwaInstall';
   import {
+    hasAndroidNativeNotificationCapability,
     isLightNoteAndroidApp,
     postAndroidOpenLegalDocument,
     type AndroidLegalDocument,
@@ -924,6 +950,14 @@
     }
   });
   const user = useUserStore();
+  const androidNotificationPilotVisible = computed(
+    () =>
+      isAndroidApp &&
+      hasAndroidNativeNotificationCapability() &&
+      user.role === 'root' &&
+      !user.adminPreview &&
+      !user.adminContext,
+  );
   // 移动端按移动语义解析：偏好是 resourceCenter 等移动端不支持的值时，要落到实际生效的那一项
   const selectedHomePage = computed(() =>
     bookmark.isMobile ? getMobileHomePreference(user.preferences) : getHomePagePreference(user.preferences),
@@ -1171,6 +1205,7 @@
     { v: 'list', label: t('inbox.todoViewList') },
     { v: 'agenda', label: t('inbox.todoViewAgenda') },
     { v: 'calendar', label: t('inbox.todoViewCalendar') },
+    { v: 'matrix', label: t('inbox.todoViewMatrix') },
   ]);
   const viewOpts = computed(() => [
     { v: 'card', label: t('settings.cardView') },

@@ -159,7 +159,14 @@ export async function getAdminProductInsights(req, res) {
         `SELECT COUNT(DISTINCT b.user_id) AS users, COUNT(*) AS events
            FROM bookmark b
            JOIN user u ON u.id = b.user_id AND u.role = 'user' AND u.del_flag = '0'
-          WHERE b.del_flag = 0 AND b.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+          WHERE b.del_flag = 0
+            AND b.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+               WHERE osr.user_id = b.user_id
+                 AND osr.resource_type = 'bookmark'
+                 AND osr.resource_id = b.id
+            )`,
         [periodDays],
       ),
       optionalQuery(
@@ -167,7 +174,14 @@ export async function getAdminProductInsights(req, res) {
         `SELECT COUNT(DISTINCT n.create_by) AS users, COUNT(*) AS events
            FROM note n
            JOIN user u ON u.id = n.create_by AND u.role = 'user' AND u.del_flag = '0'
-          WHERE n.del_flag = '0' AND n.update_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+          WHERE n.del_flag = '0'
+            AND n.update_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+               WHERE osr.user_id = n.create_by
+                 AND osr.resource_type = 'note'
+                 AND osr.resource_id = n.id
+            )`,
         [periodDays],
       ),
       optionalQuery(
@@ -175,7 +189,14 @@ export async function getAdminProductInsights(req, res) {
         `SELECT COUNT(DISTINCT f.create_by) AS users, COUNT(*) AS events
            FROM files f
            JOIN user u ON u.id = f.create_by AND u.role = 'user' AND u.del_flag = '0'
-          WHERE f.del_flag = 0 AND f.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+          WHERE f.del_flag = 0
+            AND f.create_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+               WHERE osr.user_id = f.create_by
+                 AND osr.resource_type = 'file'
+                 AND osr.resource_id = CAST(f.id AS CHAR)
+            )`,
         [periodDays],
       ),
       optionalQuery(

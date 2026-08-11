@@ -104,6 +104,16 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('批量导出笔记读取在 readonly 与 maintain 模式都放行', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/note/getNotesForExport', 'POST', mode), res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    }
+  });
+
   it('管理员预览时放行目标用户的通知查询', () => {
     for (const path of ['/notification/list', '/notification/unreadCount']) {
       const next = vi.fn();

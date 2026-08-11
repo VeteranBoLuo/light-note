@@ -1,5 +1,4 @@
 import { onBeforeUnmount, onMounted, ref, toValue, type MaybeRefOrGetter, type Ref } from 'vue';
-import { registerGlobalRefreshSource } from './useGlobalRefreshBar';
 
 /**
  * 回到前台时的静默刷新。
@@ -11,8 +10,7 @@ import { registerGlobalRefreshSource } from './useGlobalRefreshBar';
  *
  * 与下拉刷新的分工：下拉是用户主动要最新数据，有明确的手势反馈；
  * 这里是被动补偿，必须完全静默 —— 不进 loading、不闪骨架屏、不弹提示，
- * 失败就保留旧数据当作什么都没发生。唯一的视觉表达是视口顶部那条全局进度条
- * （App.vue 里的 BLoading bar，由 useGlobalRefreshBar 驱动），告诉用户「后台在更新」。
+ * 也不再驱动全局顶部进度条；刷新期间继续展示旧数据，失败则原样保留。
  *
  * 判定用「距上次成功加载的时长」而不是「离开的时长」：用户离开 10 秒但
  * 数据已经 10 分钟没更新过，同样值得刷一次；反过来离开很久却刚刷过则不必。
@@ -45,7 +43,7 @@ export interface UseForegroundRefreshOptions {
 }
 
 export interface UseForegroundRefreshResult {
-  /** 是否正在静默刷新。用于驱动顶部细进度条，不要用它控制骨架屏。 */
+  /** 是否正在静默刷新。只供调用方防并发或诊断，不用于控制全局视觉反馈。 */
   refreshing: Readonly<Ref<boolean>>;
   /** 页面自己完成一次加载后调用，重置陈旧计时。 */
   markLoaded: () => void;
@@ -93,12 +91,6 @@ export function useForegroundRefresh(options: UseForegroundRefreshOptions): UseF
     lastWakeAt = now;
     void refreshIfStale();
   }
-
-  /*
-   * 自动接上顶部那条全局进度条 —— 前台恢复刷新是「页面外触发」的,
-   * 页面自己没有合适位置说这件事。页面无需额外接线。
-   */
-  registerGlobalRefreshSource(refreshing);
 
   onMounted(() => {
     document.addEventListener('visibilitychange', handleWake);

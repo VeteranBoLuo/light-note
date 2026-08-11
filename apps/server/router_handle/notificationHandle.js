@@ -4,6 +4,7 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
 import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
+import { publishUserNotificationChanged } from '../util/notificationRealtimeBroker.js';
 
 // 后台「通知中心」聚合口径:只统计 root 主动下发的通知(system/other),
 // 排除升级 / 反馈回复等系统自动通知。单条 legacy(无 batch_id)按自身 id 独立成组。
@@ -174,6 +175,7 @@ export const remove = async (req, res) => {
        WHERE user_id = ? AND del_flag = 0 AND id IN (${placeholders})`,
       [userId, ...ids],
     );
+    if (Number(result.affectedRows || 0) > 0) publishUserNotificationChanged(userId, 'deleted');
     res.send(resultData({ deleted: result.affectedRows || 0 }));
   } catch (e) {
     res.send(resultData(null, 500, '删除通知失败: ' + e.message));
@@ -195,6 +197,7 @@ export const markRead = async (req, res) => {
        WHERE user_id = ? AND is_read = 0 AND del_flag = 0 AND id IN (${placeholders})`,
       [userId, ...ids],
     );
+    if (Number(result.affectedRows || 0) > 0) publishUserNotificationChanged(userId, 'read');
     res.send(resultData({ updated: result.affectedRows || 0 }));
   } catch (e) {
     res.send(resultData(null, 500, '标记已读失败: ' + e.message));
@@ -213,6 +216,7 @@ export const markAllRead = async (req, res) => {
          ${excludeCommunityChat ? `AND ${COMMUNITY_CHAT_EXCLUDED_SQL}` : ''}`,
       [req.user.id],
     );
+    if (Number(result.affectedRows || 0) > 0) publishUserNotificationChanged(req.user.id, 'read');
     res.send(resultData({ updated: result.affectedRows || 0 }));
   } catch {
     res.send(resultData(null, 500, '标记全部已读失败'));
@@ -332,11 +336,18 @@ export const adminRecall = async (req, res) => {
   const { batchId } = req.body || {};
   if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
   try {
+    const [recipientRows] = await pool.query(
+      'SELECT DISTINCT user_id AS userId FROM notification WHERE batch_id = ? OR id = ?',
+      [batchId, batchId],
+    );
     // 撤回 = 置 recalled=1 + 软删。兼容 legacy 单条(无 batch_id,批次键即自身 id):batch_id 命中 或 id 命中。
     const [r] = await pool.query(
       'UPDATE notification SET recalled = 1, del_flag = 1 WHERE (batch_id = ? OR id = ?) AND recalled = 0',
       [batchId, batchId],
     );
+    if (Number(r.affectedRows || 0) > 0) {
+      recipientRows.forEach(({ userId }) => publishUserNotificationChanged(userId, 'recalled'));
+    }
     res.send(resultData({ recalled: r.affectedRows || 0 }));
   } catch (e) {
     res.send(resultData(null, 500, '撤回失败: ' + e.message));
@@ -350,12 +361,20 @@ export const adminDelete = async (req, res) => {
   if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
   try {
     const typePlaceholders = ADMIN_TYPES.map(() => '?').join(',');
+    const [recipientRows] = await pool.query(
+      `SELECT DISTINCT user_id AS userId FROM notification
+       WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
+      [batchId, batchId, ...ADMIN_TYPES],
+    );
     // 硬删除整批记录即可原子完成「撤回 + 从发送记录移除」。类型白名单避免误删升级、反馈等自动通知。
     const [result] = await pool.query(
       `DELETE FROM notification
        WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
       [batchId, batchId, ...ADMIN_TYPES],
     );
+    if (Number(result.affectedRows || 0) > 0) {
+      recipientRows.forEach(({ userId }) => publishUserNotificationChanged(userId, 'deleted'));
+    }
     res.send(resultData({ deleted: result.affectedRows || 0 }));
   } catch (e) {
     res.send(resultData(null, 500, '删除通知记录失败: ' + e.message));

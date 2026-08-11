@@ -31,13 +31,13 @@ vi.mock('../util/noteImages.js', () => ({
   filterOwnedImageUrls: vi.fn(),
 }));
 vi.mock('../util/noteExportTickets.js', () => ({
-  EXPORT_FORMATS: { md: 'text/markdown', html: 'text/html', pdf: 'application/pdf' },
+  EXPORT_FORMATS: { md: 'text/markdown', html: 'text/html', pdf: 'application/pdf', zip: 'application/zip' },
   MAX_EXPORT_BYTES: 6 * 1024 * 1024,
   createExportTicket,
   consumeExportTicket,
 }));
 
-const { createNoteExportTicket, downloadNoteExportFile } = await import('./noteLibraryHandle.js');
+const { createNoteExportTicket, downloadNoteExportFile, getNotesForExport } = await import('./noteLibraryHandle.js');
 
 function mockRes() {
   const res = {
@@ -155,6 +155,48 @@ describe('createNoteExportTicket', () => {
 
     expect(createExportTicket).not.toHaveBeenCalled();
     expect(res.send).not.toHaveBeenCalled();
+  });
+});
+
+describe('getNotesForExport', () => {
+  const req = (ids) => ({ body: { ids }, user: { id: 'user-1', role: 'user' }, headers: {} });
+
+  it('一次读取所选笔记最小字段，并按前端选择顺序返回', async () => {
+    poolQuery.mockResolvedValueOnce([
+      [
+        { id: 'note-2', title: '第二篇', content: '# 第二篇', type: 'markdown' },
+        { id: 'note-1', title: '第一篇', content: '<p>第一篇</p>', type: 'html' },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getNotesForExport(req(['note-1', 'note-2']), res);
+
+    expect(res.body.status).toBe(200);
+    expect(res.body.data.notes.map((note) => note.id)).toEqual(['note-1', 'note-2']);
+    expect(res.body.data).toMatchObject({ requestedCount: 2, missingCount: 0 });
+    expect(poolQuery.mock.calls[0][0]).toContain('id IN (?,?)');
+    expect(poolQuery.mock.calls[0][1]).toEqual(['user-1', '0', 'note-1', 'note-2']);
+  });
+
+  it('仅返回当前用户仍然存在的笔记，并报告缺失数量', async () => {
+    poolQuery.mockResolvedValueOnce([[{ id: 'note-1', title: '第一篇', content: '', type: 'html' }]]);
+    const res = mockRes();
+
+    await getNotesForExport(req(['note-1', 'note-x']), res);
+
+    expect(res.body.status).toBe(200);
+    expect(res.body.data.notes).toHaveLength(1);
+    expect(res.body.data.missingCount).toBe(1);
+  });
+
+  it('拒绝空列表、重复 ID 和超过上限的批量读取', async () => {
+    for (const ids of [[], ['note-1', 'note-1'], Array.from({ length: 101 }, (_, index) => `note-${index}`)]) {
+      const res = mockRes();
+      await getNotesForExport(req(ids), res);
+      expect(res.body.status).toBe(400);
+    }
+    expect(poolQuery).not.toHaveBeenCalled();
   });
 });
 

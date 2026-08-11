@@ -52,11 +52,6 @@ function rowsFor(sql) {
           ],
         ];
   }
-  if (statement.includes('FROM community_chat_access_requests')) {
-    return summary
-      ? [[{ total: 3 }]]
-      : [[{ id: 'access-1', user_id: 'u-2', alias: '用户乙', create_time: '2026-08-09 09:00:00' }]];
-  }
   if (statement.includes('FROM community_chat_reports'))
     throw Object.assign(new Error('missing'), { code: 'ER_NO_SUCH_TABLE' });
   if (statement.includes('FROM ai_feedback')) {
@@ -190,7 +185,7 @@ describe('后台统一待处理中心', () => {
       status: 200,
       data: {
         unavailableSources: ['community_report'],
-        work: { total: 7, critical: 1 },
+        work: { total: 4, critical: 1 },
         jobs: { attention: 5, running: 2, waiting: 4, completed24h: 37 },
       },
     });
@@ -210,7 +205,27 @@ describe('后台统一待处理中心', () => {
   it('限制单来源读取数量并脱敏邮箱', () => {
     expect(adminActionCenterInternals.itemLimit(999)).toBe(60);
     expect(adminActionCenterInternals.itemLimit(1)).toBe(5);
+    expect(adminActionCenterInternals.itemSource('bookmark_icon')).toBe('bookmark_icon');
+    expect(adminActionCenterInternals.itemSource('unknown_source')).toBeNull();
     expect(adminActionCenterInternals.maskEmail('abcdef@example.com')).toBe('ab****@example.com');
+  });
+
+  it('按来源筛选后再限制明细数量，避免其他队列挤掉书签图标异常', async () => {
+    const res = response();
+    await getAdminActionCenter({ user: { role: 'root' }, body: { limit: 5, source: 'bookmark_icon' } }, res);
+
+    expect(res.body).toMatchObject({ status: 200 });
+    expect(res.body.data.work.items).toEqual([]);
+    expect(res.body.data.jobs.items).toHaveLength(1);
+    expect(res.body.data.jobs.items.every((item) => item.source === 'bookmark_icon')).toBe(true);
+  });
+
+  it('拒绝未知来源筛选且不查询数据库', async () => {
+    const res = response();
+    await getAdminActionCenter({ user: { role: 'root' }, body: { source: 'unknown_source' } }, res);
+
+    expect(res.body).toMatchObject({ status: 400 });
+    expect(query).not.toHaveBeenCalled();
   });
 
   it('明确失败的文档任务可在必需审计事务内重新入队', async () => {

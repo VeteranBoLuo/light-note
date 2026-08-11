@@ -19,7 +19,7 @@ export interface UserPreferences {
   noteViewMode?: 'card' | 'list';
   noteSidebarMode?: 'directory' | 'tags';
   resourceView?: 'card' | 'list';
-  todoView?: 'list' | 'agenda' | 'calendar';
+  todoView?: 'list' | 'agenda' | 'calendar' | 'matrix';
   tagView?: 'card' | 'graph';
   lang?: LanguagePreference;
   homePage?: HomePagePreference;
@@ -28,6 +28,9 @@ export interface UserPreferences {
   notificationsInApp?: boolean;
   notificationsEmail?: boolean;
   notificationsBrowser?: boolean;
+  notificationsAndroid?: boolean;
+  notificationsAndroidBadge?: boolean;
+  communityChatAndroidNotifications?: boolean;
   notificationsDnd?: boolean;
   notificationsDndStart?: string;
   notificationsDndEnd?: string;

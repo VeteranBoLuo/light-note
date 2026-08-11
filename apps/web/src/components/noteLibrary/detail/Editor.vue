@@ -1,5 +1,5 @@
 <template>
-  <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly }">
+  <div id="editor-container" class="note-editor" :class="{ 'is-readonly': readonly, 'is-mobile': isMobile }">
     <!-- HTML 模式：TinyMCE -->
     <template v-if="currentType === 'html'">
       <div id="editor-toolbar" class="note-editor-toolbar" v-show="!readonly">
@@ -28,10 +28,18 @@
       />
       <div v-auto-scrollbar class="note-editor-scroll" @scroll="closeRichMediaTextToolbar">
         <Transition name="note-editor-warmup">
+          <NoteDetailLoadingState
+            v-if="editorWarmupPhase === 'skeleton'"
+            key="rich-editor-skeleton"
+            class="note-editor-runtime-skeleton"
+            variant="editor"
+          />
           <NoteEditorWarmupPreview
-            v-if="!richEditorRuntimeReady && Boolean(content)"
+            v-else-if="editorWarmupPhase === 'preview' && Boolean(content)"
+            key="rich-editor-preview"
             :content="content"
             note-type="html"
+            :resource-refs="resourceRefs"
           />
         </Transition>
         <TinyMceEditor
@@ -40,7 +48,7 @@
           :model-value="content"
           @update:model-value="handleRichContentUpdate"
           tag-name="div"
-          class="note-editor-body"
+          class="note-editor-body note-editor-rich-content"
           :init="editorInit"
           license-key="gpl"
         />
@@ -106,8 +114,15 @@
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
             <Transition name="note-editor-warmup">
+              <NoteDetailLoadingState
+                v-if="editorWarmupPhase === 'skeleton'"
+                key="markdown-editor-skeleton"
+                class="note-editor-runtime-skeleton"
+                variant="editor"
+              />
               <NoteEditorWarmupPreview
-                v-if="!markdownRuntimeReady && Boolean(mdContent)"
+                v-else-if="editorWarmupPhase === 'preview' && Boolean(mdContent)"
+                key="markdown-editor-preview"
                 :content="mdContent"
                 note-type="markdown"
               />
@@ -652,7 +667,9 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import EditorFindBar, { type EditorFindBarExpose } from './EditorFindBar.vue';
   import EditorToolbarV2, { type EditorToolbarAction } from './EditorToolbarV2.vue';
+  import NoteDetailLoadingState from './NoteDetailLoadingState.vue';
   import NoteEditorWarmupPreview from './NoteEditorWarmupPreview.vue';
+  import { useDelayedEditorWarmup } from './useDelayedEditorWarmup';
   import type { MarkdownCodeMirrorExpose, MarkdownSearchRequest } from './MarkdownCodeMirror.vue';
   import { MERMAID_TEMPLATES, mermaidTemplateMarkdown } from '@/config/mermaidTemplates.ts';
   import {
@@ -1035,6 +1052,18 @@
 
   // Markdown 编辑器状态
   const mdContent = ref('');
+  const activeEditorRuntimeReady = computed(() =>
+    currentType.value === 'markdown' ? markdownRuntimeReady.value : richEditorRuntimeReady.value,
+  );
+  const hasActiveEditorContent = computed(() =>
+    Boolean(currentType.value === 'markdown' ? mdContent.value : content.value),
+  );
+  const editorWarmupIdentity = computed(() => `${props.noteId || 'new'}:${currentType.value}`);
+  const { phase: editorWarmupPhase } = useDelayedEditorWarmup({
+    runtimeReady: activeEditorRuntimeReady,
+    hasContent: hasActiveEditorContent,
+    identity: editorWarmupIdentity,
+  });
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
   type MarkdownImageInsertMode = 'image' | 'mediaText';
@@ -1647,6 +1676,15 @@
     clearRichFindMatches();
     richFindVisible.value = false;
   });
+  watch(
+    currentType,
+    (type) => {
+      // 两种编辑器会在格式切换时重新挂载；不能沿用上一次实例的 ready 状态。
+      if (type === 'markdown') markdownRuntimeReady.value = false;
+      else richEditorRuntimeReady.value = false;
+    },
+    { flush: 'sync' },
+  );
   watch(
     () => props.readonly,
     (readonly) => {
@@ -3772,6 +3810,7 @@
   const isNightTheme = computed(() => user.currentTheme === 'night');
 
   function handleMarkdownRuntimeReady() {
+    if (currentType.value !== 'markdown') return;
     markdownRuntimeReady.value = true;
     emits('ready');
   }
@@ -4976,6 +5015,7 @@
         }
         await ensureToolbarRendered();
         window.setTimeout(() => {
+          if (currentType.value !== 'html' || editorRef.value !== editor) return;
           resetUndoHistory(editor);
           refreshResourceReferences();
           decorateRichMediaTextCaptions(editor);
@@ -4987,8 +5027,8 @@
     content_style: [
       '.note-editor-body, .mce-content-body { font-family: inherit; background-color: var(--background-color); color: var(--text-color); padding: 5px 20px clamp(180px, 35vh, 380px); } .note-editor-body h1,.note-editor-body h2,.note-editor-body h3,.note-editor-body h4,.note-editor-body h5,.note-editor-body h6, .mce-content-body h1,.mce-content-body h2,.mce-content-body h3,.mce-content-body h4,.mce-content-body h5,.mce-content-body h6{ margin: 0.6em 0 0.4em; } .note-editor-body table, .mce-content-body table{ border-collapse: collapse; width: 100%; } .note-editor-body table td, .mce-content-body table th, .note-editor-body table td, .mce-content-body table th{ border: 1px solid #d9d9d9; padding: 6px 10px; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"]{ background: var(--pre-bg-color); color: #ffffff; border: 1px solid rgba(148, 163, 184, 0.4); padding: 12px 14px; border-radius: 10px; overflow: auto; } .note-editor-body pre.code-block code, .mce-content-body pre.code-block code, .note-editor-body pre[class*="language-"] code, .mce-content-body pre[class*="language-"] code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; white-space: pre; display: block; } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before{ content: attr(data-language); display: inline-block; margin-bottom: 8px; color: #6b7280; font-size: 12px; text-transform: uppercase; letter-spacing: 0.02em; } .note-editor-body img, .mce-content-body img{ max-width: 100% !important; height: auto !important; box-sizing: border-box; object-fit: contain; } .note-editor-body .note-todo-checkbox, .mce-content-body .note-todo-checkbox{ vertical-align: middle; margin-right: 6px; } .note-editor-body .note-task-list, .mce-content-body .note-task-list{ padding-left:0; list-style:none; } .note-editor-body .note-task-list-item, .mce-content-body .note-task-list-item{ list-style:none; } .note-editor-body a.ln-resource-link, .mce-content-body a.ln-resource-link{ display:inline-flex; align-items:center; max-width:100%; margin:0 2px; padding:1px 7px; border:1px solid color-mix(in srgb, var(--primary-color) 26%, transparent); border-radius:999px; background:color-mix(in srgb, var(--primary-color) 9%, transparent); color:var(--primary-color); line-height:1.55; text-decoration:none; vertical-align:baseline; cursor:pointer; } .note-editor-body a.ln-resource-link[data-ln-resource-state="unavailable"], .mce-content-body a.ln-resource-link[data-ln-resource-state="unavailable"]{ border-style:dashed; color:var(--desc-color); background:color-mix(in srgb, var(--desc-color) 8%, transparent); cursor:not-allowed; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before{ left: 10px; }',
       // TinyMCE 的 placeholder 是绝对定位伪元素，不能继承正文 padding；首个空段落又有浏览器默认 margin。
-      // 把两者统一到 12×20 的正文起点，空笔记获得焦点时 placeholder 与真实光标完全重合。
-      '.note-editor-body, .mce-content-body { padding: 12px 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: 12px; left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
+      // 预览、正文和 placeholder 共用同一组间距变量，移动端运行时交接也不会改变首行位置。
+      '.note-editor-body, .mce-content-body { padding: var(--note-editor-content-padding-top, 12px) 20px clamp(180px, 35vh, 380px); background-color: var(--surface-page-bg, var(--background-color)); line-height: var(--note-editor-content-line-height, 1.65); } .note-editor-body > :first-child, .mce-content-body > :first-child { margin-top: 0; } .mce-content-body:not([dir=rtl])[data-mce-placeholder]:not(.mce-visualblocks)::before { top: var(--note-editor-content-padding-top, 12px); left: 20px; color: var(--desc-color); opacity: 0.88; } .note-editor-body pre.code-block, .mce-content-body pre.code-block, .note-editor-body pre[class*="language-"], .mce-content-body pre[class*="language-"] { background: var(--pre-bg-color); color: var(--pre-text-color); border-color: var(--pre-border-color); box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent); } .note-editor-body pre.code-block[data-language]::before, .mce-content-body pre.code-block[data-language]::before { color: var(--pre-muted-color, var(--desc-color)); }',
       '.note-editor-body img[data-ln-size], .mce-content-body img[data-ln-size] { display:block; height:auto!important; max-width:100%!important; margin-inline:auto; } .note-editor-body img[data-ln-size="original"], .mce-content-body img[data-ln-size="original"] { width:auto!important; } .note-editor-body img[data-ln-size="small"], .mce-content-body img[data-ln-size="small"] { width:40%!important; } .note-editor-body img[data-ln-size="medium"], .mce-content-body img[data-ln-size="medium"] { width:64%!important; } .note-editor-body img[data-ln-size="large"], .mce-content-body img[data-ln-size="large"] { width:82%!important; } .note-editor-body img[data-ln-size="full"], .mce-content-body img[data-ln-size="full"] { width:100%!important; }',
       '.note-editor-body .ln-media-text, .mce-content-body .ln-media-text { --ln-media-width:36%; --ln-media-max-width:340px; --ln-media-max-height:260px; display:block; clear:both; margin:14px 0; } .note-editor-body .ln-media-text[data-ln-media-width="30"], .mce-content-body .ln-media-text[data-ln-media-width="30"] { --ln-media-width:30%; --ln-media-max-width:280px; --ln-media-max-height:220px; } .note-editor-body .ln-media-text[data-ln-media-width="42"], .mce-content-body .ln-media-text[data-ln-media-width="42"] { --ln-media-width:42%; --ln-media-max-width:400px; --ln-media-max-height:300px; } .note-editor-body .ln-media-text__item, .mce-content-body .ln-media-text__item { display:flex; align-items:flex-start; gap:14px; margin:10px 0; padding:10px; border:1px solid var(--surface-border-color, #e3e6eb); border-radius:10px; box-sizing:border-box; } .note-editor-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item, .mce-content-body .ln-media-text[data-ln-media-position="right"] .ln-media-text__item { flex-direction:row-reverse; } .note-editor-body .ln-media-text__media, .mce-content-body .ln-media-text__media { display:flex; flex:0 1 var(--ln-media-width); max-width:var(--ln-media-max-width); min-width:0; justify-content:center; align-items:flex-start; } .note-editor-body .ln-media-text__media img, .mce-content-body .ln-media-text__media img { display:block!important; float:none!important; width:auto!important; max-width:100%!important; height:auto!important; max-height:var(--ln-media-max-height)!important; margin:0!important; border-radius:8px; object-fit:contain; } .note-editor-body .ln-media-text__content, .mce-content-body .ln-media-text__content { position:relative; flex:1 1 auto; min-width:0; min-height:44px; overflow-wrap:anywhere; } .note-editor-body .ln-media-text__content > :first-child, .mce-content-body .ln-media-text__content > :first-child { margin-top:0; } .note-editor-body .ln-media-text__content > :last-child, .mce-content-body .ln-media-text__content > :last-child { margin-bottom:0; } .note-editor-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before, .mce-content-body[contenteditable="true"] .ln-media-text__content[data-mce-placeholder]::before { content:attr(data-mce-placeholder); position:absolute; inset:0 auto auto 0; color:var(--desc-color, #8a919f); pointer-events:none; } .note-editor-body .ln-media-text__item[data-ln-media-item-selected="true"], .mce-content-body .ln-media-text__item[data-ln-media-item-selected="true"] { border-color:var(--primary-color, #615ced); }',
       '.note-editor-body .ln-ai-selection-pending, .mce-content-body .ln-ai-selection-pending { display:inline-flex; width:18px; height:18px; align-items:center; justify-content:center; margin-left:5px; border:1px solid var(--primary-color, #615ced); border-radius:999px; background:var(--background-color, #fff); vertical-align:text-bottom; box-sizing:border-box; } .note-editor-body .ln-ai-selection-pending__spinner, .mce-content-body .ln-ai-selection-pending__spinner { width:9px; height:9px; border:2px solid var(--surface-border-color, #d7d9e0); border-top-color:var(--primary-color, #615ced); border-radius:50%; box-sizing:border-box; animation:ln-ai-selection-spin .7s linear infinite; } @keyframes ln-ai-selection-spin { to { transform:rotate(360deg); } }',
@@ -5063,12 +5103,18 @@
   }
 
   #editor-container.note-editor {
+    --note-editor-content-padding-top: 12px;
+    --note-editor-content-line-height: 1.65;
+
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     height: auto;
     min-height: 0;
     overflow: hidden;
+  }
+  #editor-container.note-editor.is-mobile {
+    --note-editor-content-padding-top: 16px;
   }
   .note-editor-toolbar {
     flex-shrink: 0;
@@ -5224,13 +5270,156 @@
     opacity: 0;
     pointer-events: none;
   }
+  .note-editor-runtime-skeleton {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    min-height: 100%;
+    overflow: hidden;
+    background: var(--surface-page-bg, var(--background-color));
+  }
   .note-editor-body {
     outline: none;
     overflow: visible;
+  }
+  .note-editor-rich-content {
+    box-sizing: border-box;
+    min-height: 100%;
     background-color: var(--surface-page-bg, var(--background-color));
     color: var(--text-color);
-    padding: 12px 20px clamp(180px, 35vh, 380px);
-    min-height: 100%;
+    font-family: inherit;
+    padding: var(--note-editor-content-padding-top, 12px) 20px clamp(180px, 35vh, 380px);
+    line-height: var(--note-editor-content-line-height, 1.65);
+    overflow-wrap: anywhere;
+
+    > :first-child {
+      margin-top: 0;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
+      margin: 0.6em 0 0.4em;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    td,
+    th {
+      padding: 6px 10px;
+      border: 1px solid var(--surface-border-color, #d9d9d9);
+    }
+
+    pre.code-block,
+    pre[class*='language-'] {
+      padding: 12px 14px;
+      overflow: auto;
+      border: 1px solid var(--pre-border-color, rgba(148, 163, 184, 0.4));
+      border-radius: 10px;
+      background: var(--pre-bg-color);
+      box-shadow: inset 0 1px 0 var(--pre-highlight-color, transparent);
+      color: var(--pre-text-color, #ffffff);
+
+      code {
+        display: block;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+        font-size: 13px;
+        white-space: pre;
+      }
+    }
+
+    pre.code-block[data-language]::before {
+      content: attr(data-language);
+      display: inline-block;
+      margin-bottom: 8px;
+      color: var(--pre-muted-color, var(--desc-color));
+      font-size: 12px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    blockquote {
+      margin: 0;
+      padding: 4px 12px;
+      border-left: 3px solid var(--primary-color, #615ced);
+      border-radius: 0 6px 6px 0;
+      background: var(--common-tag-bg-color, #f9f9f9);
+      color: var(--desc-color, #666);
+    }
+
+    a:not(.ln-resource-link) {
+      color: var(--note-editor-link-color, var(--info-color, var(--primary-color)));
+      text-decoration-color: currentColor;
+      text-underline-offset: 2px;
+    }
+
+    img {
+      max-width: 100% !important;
+      height: auto !important;
+      box-sizing: border-box;
+      object-fit: contain;
+    }
+
+    ul,
+    ol {
+      padding-left: 20px;
+    }
+
+    .note-task-list {
+      padding-left: 0 !important;
+      list-style: none !important;
+      list-style-type: none !important;
+    }
+
+    .note-task-list-item {
+      list-style: none !important;
+      list-style-type: none !important;
+    }
+
+    .note-task-list-item::marker {
+      content: '';
+    }
+
+    .note-todo-checkbox {
+      margin: 0 6px 0 0;
+      vertical-align: middle;
+    }
+
+    a.ln-resource-link {
+      display: inline;
+      margin: 0 2px;
+      padding: 0 6px;
+      overflow-wrap: anywhere;
+      border: 1px solid color-mix(in srgb, var(--primary-color) 26%, transparent);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--primary-color) 9%, transparent);
+      color: var(--primary-color);
+      line-height: inherit;
+      text-decoration: none;
+      vertical-align: baseline;
+      cursor: pointer;
+      -webkit-box-decoration-break: clone;
+      box-decoration-break: clone;
+
+      &[data-ln-resource-state='unavailable'] {
+        border-style: dashed;
+        background: color-mix(in srgb, var(--desc-color) 8%, transparent);
+        color: var(--desc-color);
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  #editor-container.note-editor.is-mobile .note-editor-rich-content h1 {
+    font-size: clamp(26px, 8vw, 38px);
+    line-height: 1.2;
+    overflow-wrap: anywhere;
   }
 
   #editor-container .ln-media-text {
@@ -6288,7 +6477,7 @@
     }
   }
 
-  .note-editor-body img[data-ln-size],
+  .note-editor-rich-content img[data-ln-size],
   .md-preview img[data-ln-size],
   .note-conversion-preview__rendered img[data-ln-size],
   .mobile-image-settings__preview img[data-ln-size] {
@@ -6298,35 +6487,35 @@
     margin-inline: auto;
   }
 
-  .note-editor-body img[data-ln-size='original'],
+  .note-editor-rich-content img[data-ln-size='original'],
   .md-preview img[data-ln-size='original'],
   .note-conversion-preview__rendered img[data-ln-size='original'],
   .mobile-image-settings__preview img[data-ln-size='original'] {
     width: auto !important;
   }
 
-  .note-editor-body img[data-ln-size='small'],
+  .note-editor-rich-content img[data-ln-size='small'],
   .md-preview img[data-ln-size='small'],
   .note-conversion-preview__rendered img[data-ln-size='small'],
   .mobile-image-settings__preview img[data-ln-size='small'] {
     width: 40% !important;
   }
 
-  .note-editor-body img[data-ln-size='medium'],
+  .note-editor-rich-content img[data-ln-size='medium'],
   .md-preview img[data-ln-size='medium'],
   .note-conversion-preview__rendered img[data-ln-size='medium'],
   .mobile-image-settings__preview img[data-ln-size='medium'] {
     width: 64% !important;
   }
 
-  .note-editor-body img[data-ln-size='large'],
+  .note-editor-rich-content img[data-ln-size='large'],
   .md-preview img[data-ln-size='large'],
   .note-conversion-preview__rendered img[data-ln-size='large'],
   .mobile-image-settings__preview img[data-ln-size='large'] {
     width: 82% !important;
   }
 
-  .note-editor-body img[data-ln-size='full'],
+  .note-editor-rich-content img[data-ln-size='full'],
   .md-preview img[data-ln-size='full'],
   .note-conversion-preview__rendered img[data-ln-size='full'],
   .mobile-image-settings__preview img[data-ln-size='full'] {

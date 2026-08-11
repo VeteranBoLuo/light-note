@@ -11,6 +11,13 @@
     :title="tag.name"
     @click="handleChipClick"
   >
+    <SvgIcon
+      v-if="showSelectedIndicator && selected"
+      class="resource-tag-chip__selected-icon"
+      :src="icon.filterPanel.check"
+      size="14"
+      aria-hidden="true"
+    />
     <span v-if="showHash" aria-hidden="true">#</span>
     <span class="resource-tag-chip__text">{{ tag.name }}</span>
   </BChip>
@@ -24,11 +31,7 @@
     :max-width="maxWidth"
     :title="tag.name"
   >
-    <BButton
-      class="resource-tag-chip__label tag-detail-label"
-      :disabled="disabled"
-      @click.stop="emit('click', $event)"
-    >
+    <BButton class="resource-tag-chip__label tag-detail-label" :disabled="disabled" @click.stop="emit('click', $event)">
       <span v-if="showHash" aria-hidden="true">#</span>
       <span class="resource-tag-chip__text">{{ tag.name }}</span>
     </BButton>
@@ -67,6 +70,7 @@
       selected?: boolean;
       disabled?: boolean;
       showHash?: boolean;
+      showSelectedIndicator?: boolean;
       maxWidth?: string;
     }>(),
     {
@@ -76,6 +80,7 @@
       selected: false,
       disabled: false,
       showHash: false,
+      showSelectedIndicator: false,
       maxWidth: undefined,
     },
   );
@@ -100,6 +105,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .resource-tag-chip__selected-icon {
+    flex: 0 0 auto;
   }
 
   .tag-detail-chip {
@@ -139,6 +148,5 @@
       --b-chip-bg: var(--chip-tag-hover-bg);
       --b-chip-border: var(--chip-tag-fg);
     }
-
   }
 </style>

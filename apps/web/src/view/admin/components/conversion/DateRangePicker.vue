@@ -68,6 +68,16 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { getRootZoom } from '@/utils/zoom';
 
+  const props = withDefaults(
+    defineProps<{
+      start?: string;
+      end?: string;
+      /** 转化漏斗默认看今日；日志等管理页默认不限时间。 */
+      initialPreset?: 'today' | 'all';
+    }>(),
+    { start: '', end: '', initialPreset: 'today' },
+  );
+
   const emit = defineEmits<{
     change: [start?: string, end?: string];
   }>();
@@ -266,6 +276,26 @@
     opened.value = false;
   }
 
+  function presetForRange(start: string, end: string) {
+    if (!start && !end) return 'all';
+    return presets.find((preset) => preset.start() === start && preset.end() === end)?.key || '';
+  }
+
+  function syncExternalRange(start = '', end = '') {
+    startDate.value = start;
+    endDate.value = end;
+    calStart.value = start;
+    calEnd.value = end;
+    activePreset.value = presetForRange(start, end);
+    if (start) {
+      const date = new Date(start);
+      if (!Number.isNaN(date.getTime())) {
+        baseYear.value = date.getFullYear();
+        baseMonth.value = date.getMonth();
+      }
+    }
+  }
+
   function toggle() {
     if (!opened.value) {
       // 打开时同步日历状态
@@ -320,10 +350,18 @@
     };
   }
 
+  watch(
+    () => [props.start, props.end] as const,
+    ([start, end]) => syncExternalRange(start, end),
+    { immediate: true },
+  );
+
   onMounted(() => {
-    const p = presets.find(p => p.key === 'today')!;
-    startDate.value = p.start();
-    endDate.value = p.end();
+    if (props.start || props.end || props.initialPreset === 'all') return;
+    const preset = presets.find((item) => item.key === 'today')!;
+    activePreset.value = preset.key;
+    startDate.value = preset.start();
+    endDate.value = preset.end();
     emit('change', startDate.value, endDate.value);
   });
 

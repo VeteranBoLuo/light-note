@@ -30,6 +30,7 @@ describe('useNotification.fetchList', () => {
     user.id = 'user-1';
     user.role = 'user';
     user.preferences.notificationsBrowser = false;
+    delete window.LightNoteAndroid;
   });
 
   it('正常返回通知分页数据', async () => {
@@ -158,6 +159,26 @@ describe('useNotification.fetchList', () => {
       title: '新提醒',
       options: expect.objectContaining({ body: '待办内容', tag: 'light-note:new' }),
     });
+    vi.unstubAllGlobals();
+  });
+
+  it('Android App 交给原生通知桥处理，不再重复创建浏览器系统通知', async () => {
+    const created = vi.fn();
+    class MockNotification {
+      static permission = 'granted';
+      constructor(...args: any[]) {
+        created(...args);
+      }
+    }
+    vi.stubGlobal('Notification', MockNotification);
+    window.LightNoteAndroid = { postMessage: vi.fn() };
+    user.preferences.notificationsBrowser = true;
+    getUnreadCount.mockResolvedValue({ status: 200, data: { unreadTotal: 1, byType: { system: 1 } } });
+
+    await useNotification().refreshUnread();
+
+    expect(created).not.toHaveBeenCalled();
+    expect(getNotificationList).not.toHaveBeenCalled();
     vi.unstubAllGlobals();
   });
 });

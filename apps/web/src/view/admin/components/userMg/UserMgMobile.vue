@@ -43,59 +43,70 @@
         </div>
       </section>
 
-      <div class="mobile-user-results" v-auto-scrollbar>
+      <div class="mobile-user-results">
         <BLoading v-if="loading && !userList.length" inline loading :title="t('common.loading')" />
-        <MobileListSurface v-else-if="userList.length" :aria-label="t('adminUserManagement.mobile.listAria')">
-          <MobileListRow v-for="record in userList" :key="record.id" complex>
-            <template #leading>
-              <span class="mobile-user-avatar">
-                <SvgIcon :src="record.headPicture || icon.navigation.user" size="30" />
-              </span>
-            </template>
-            <template #title>
-              <span class="mobile-user-heading">
-                <span>{{ record.adminRemark || record.alias || record.email || '-' }}</span>
-                <BChip :tone="Number(record.delFlag) === 1 ? 'danger' : 'success'">
+        <BVirtualList
+          v-else-if="userList.length"
+          ref="listRef"
+          class="mobile-user-virtual-list"
+          role="list"
+          :aria-label="t('adminUserManagement.mobile.listAria')"
+          :items="userList"
+          item-key="id"
+          :item-height="112"
+          :overscan="5"
+          :loading="loading"
+          :loading-text="t('common.loading')"
+          :has-more="hasMore"
+          @load-more="loadMore"
+        >
+          <template #default="{ item: record }">
+            <MobileListRow complex>
+              <template #leading>
+                <span class="mobile-user-avatar">
+                  <SvgIcon :src="record.headPicture || icon.navigation.user" size="30" />
+                </span>
+              </template>
+              <template #title>
+                <span class="mobile-user-heading">
+                  <span>{{ record.adminRemark || record.alias || record.email || '-' }}</span>
+                  <BChip :tone="Number(record.delFlag) === 1 ? 'danger' : 'success'">
+                    {{
+                      Number(record.delFlag) === 1
+                        ? t('adminUserManagement.detail.statusBanned')
+                        : t('adminUserManagement.detail.statusActive')
+                    }}
+                  </BChip>
+                </span>
+              </template>
+              <template #subtitle>
+                <span class="mobile-user-subtitle-line">{{ record.email || '-' }}</span>
+                <span class="mobile-user-subtitle-line">
                   {{
-                    Number(record.delFlag) === 1
-                      ? t('adminUserManagement.detail.statusBanned')
-                      : t('adminUserManagement.detail.statusActive')
+                    t('adminUserManagement.mobile.resourceSummary', {
+                      bookmarks: record.bookmarkTotal || 0,
+                      notes: record.noteTotal || 0,
+                      storage: formatStorage(record.storageUsed),
+                    })
                   }}
-                </BChip>
-              </span>
-            </template>
-            <template #subtitle>
-              <span>{{ record.email || '-' }}</span>
-              <span>
-                {{
-                  t('adminUserManagement.mobile.resourceSummary', {
-                    bookmarks: record.bookmarkTotal || 0,
-                    notes: record.noteTotal || 0,
-                    storage: formatStorage(record.storageUsed),
-                  })
-                }}
-              </span>
-            </template>
-            <template #meta>
-              <span>{{ t('adminUserManagement.mobile.lastActive', { time: formatTime(record.lastActiveTime) }) }}</span>
-            </template>
-            <template #trailing>
-              <BButton
-                class="mobile-user-more"
-                :aria-label="t('adminUserManagement.mobile.actionsFor', { name: userLabel(record) })"
-                @click="openActions(record)"
-              >
-                <SvgIcon :src="icon.common.more" size="18" />
-              </BButton>
-            </template>
-          </MobileListRow>
-        </MobileListSurface>
+                </span>
+              </template>
+              <template #meta>
+                <span>{{ t('adminUserManagement.mobile.lastActive', { time: formatTime(record.lastActiveTime) }) }}</span>
+              </template>
+              <template #trailing>
+                <BButton
+                  class="mobile-user-more"
+                  :aria-label="t('adminUserManagement.mobile.actionsFor', { name: userLabel(record) })"
+                  @click="openActions(record)"
+                >
+                  <SvgIcon :src="icon.common.more" size="18" />
+                </BButton>
+              </template>
+            </MobileListRow>
+          </template>
+        </BVirtualList>
         <p v-else-if="!loading" class="mobile-user-empty">{{ t('adminUserManagement.mobile.empty') }}</p>
-
-        <BButton v-if="hasMore" class="mobile-user-load-more" :loading="loading" @click="loadMore">
-          {{ t('adminUserManagement.mobile.loadMore') }}
-        </BButton>
-        <p v-else-if="userList.length" class="mobile-user-end">{{ t('adminUserManagement.mobile.noMore') }}</p>
       </div>
     </div>
 
@@ -129,7 +140,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { apiQueryPost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
@@ -140,6 +151,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BVirtualList from '@/components/base/BasicComponents/BVirtualList.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import { type BaseFormItem } from '@/config/formConfig.ts';
   import formRenders from '@/components/base/BasicComponents/BForm/FormRenders.vue';
@@ -148,7 +160,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import MobileListRow from '@/components/mobile/MobileListRow.vue';
-  import MobileListSurface from '@/components/mobile/MobileListSurface.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import GrowthAdminModal from '@/components/growth/GrowthAdminModal.vue';
   import router from '@/router';
@@ -164,6 +175,7 @@
   const statusFilter = ref('active');
   const activityFilter = ref('all');
   const sortFilter = ref('recentlyActive');
+  const listRef = ref<InstanceType<typeof BVirtualList> | null>(null);
   let searchTimer: number | null = null;
 
   const roleOptions = computed(() => [
@@ -275,11 +287,11 @@
 
   function handleSearch() {
     if (searchTimer !== null) window.clearTimeout(searchTimer);
-    searchTimer = window.setTimeout(() => void reload({ silent: true }), 500);
+    searchTimer = window.setTimeout(() => void reloadUsers({ silent: true }), 500);
   }
 
   function reloadForFilter() {
-    void reload();
+    void reloadUsers();
   }
 
   function resetFilters() {
@@ -288,7 +300,7 @@
     statusFilter.value = 'active';
     activityFilter.value = 'all';
     sortFilter.value = 'recentlyActive';
-    void reload();
+    void reloadUsers();
   }
 
   function openActions(record: any) {
@@ -323,7 +335,7 @@
         userApi.deleteUserById(record.id).then((response) => {
           if (response.status === 200) {
             message.success(t('adminUserManagement.deleteSuccess'));
-            void reload();
+            void reloadUsers();
           }
         });
       },
@@ -363,7 +375,7 @@
     const record = userList.value.find((item) => item.id === payload.targetUserId);
     if (record) record.adminRemark = payload.adminRemark;
     if (selectedRecord.value?.id === payload.targetUserId) selectedRecord.value.adminRemark = payload.adminRemark;
-    void reload({ silent: true });
+    void reloadUsers({ silent: true });
   }
 
   const formFields: BaseFormItem[] = [
@@ -380,12 +392,20 @@
         if (response.status === 200) {
           message.success(t('adminUserManagement.saveSuccess'));
           editVisible.value = false;
-          void reload();
+          void reloadUsers();
         }
       });
   }
 
-  onMounted(() => void reload());
+  function reloadUsers(options: { silent?: boolean } = {}) {
+    listRef.value?.scrollToTop();
+    return reload(options);
+  }
+
+  onMounted(() => void reloadUsers());
+  onBeforeUnmount(() => {
+    if (searchTimer !== null) window.clearTimeout(searchTimer);
+  });
 </script>
 
 <style lang="less" scoped>
@@ -428,9 +448,30 @@
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
-    gap: 10px;
-    overflow: auto;
-    padding-right: 4px;
+    overflow: hidden;
+  }
+
+  .mobile-user-virtual-list {
+    flex: 1 1 auto;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--card-background);
+  }
+
+  .mobile-user-virtual-list :deep(.b-virtual-list__item + .b-virtual-list__item) {
+    border-top: 1px solid var(--surface-divider-color);
+  }
+
+  .mobile-user-virtual-list :deep(.mobile-list-row) {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .mobile-user-subtitle-line {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .mobile-user-avatar {
@@ -475,13 +516,7 @@
     color: var(--text-color);
   }
 
-  .mobile-user-load-more.b_btn {
-    width: 100%;
-    min-height: 44px;
-  }
-
-  .mobile-user-empty,
-  .mobile-user-end {
+  .mobile-user-empty {
     margin: 22px 0;
     color: var(--desc-color);
     text-align: center;

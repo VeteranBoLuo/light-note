@@ -7,7 +7,6 @@ import { resolveLightNoteRuntime } from '@/utils/appRuntime.ts';
 import { getLightNoteAndroidVersion } from '@/utils/androidBridge.ts';
 import { clearAdminLoginPreview, getAdminContextToken, getAdminLoginPreviewPreferences } from '@/utils/authStorage.ts';
 import { buildQueryRequestData, type QueryData } from '@/http/queryRequest.ts';
-import { beginNetworkRequestFeedback, finishNetworkRequestFeedback } from '@/composables/useNetworkRequestFeedback';
 
 // 常量定义
 const TIMEOUT = 120000;
@@ -39,9 +38,8 @@ export interface ApiResponse {
 export type RequestOptions = AxiosRequestConfig & {
   silent?: boolean;
   suppressAuthExpired?: boolean;
-  /** 是否把超过 380ms 的前台请求呈现在全局进度条；静默请求默认不呈现。 */
+  /** 兼容旧调用方；全局进度条已移除，本选项不再产生视觉反馈。 */
   feedback?: boolean;
-  __networkFeedbackTracked?: boolean;
 };
 
 const request = axios.create({
@@ -151,7 +149,6 @@ function notifyIpBanned(response?: any) {
 //请求拦截
 request.interceptors.request.use(
   (config) => {
-    const options = config as RequestOptions;
     if (config.url?.includes('/api')) {
       let currentLang = 'zh-CN';
       try {
@@ -192,14 +189,6 @@ request.interceptors.request.use(
       // 说明这是一条「陈旧的在途响应」,notifyAuthExpired 会据此忽略其过期信号,避免误弹「登录已过期」
       (config as any).__reqUserId = useUserStore().id || '';
     }
-    // 所有可能抛错的请求头准备完成后才登记，避免请求尚未发出就异常时让全局进度条永久挂起。
-    if (
-      config.url?.includes('/api') &&
-      (options.feedback === true || (options.feedback !== false && !options.silent))
-    ) {
-      beginNetworkRequestFeedback();
-      options.__networkFeedbackTracked = true;
-    }
     return config;
   },
   (error) => {
@@ -210,11 +199,6 @@ request.interceptors.request.use(
 // 响应拦截
 request.interceptors.response.use(
   (response) => {
-    const requestOptions = response.config as RequestOptions;
-    if (requestOptions.__networkFeedbackTracked) {
-      requestOptions.__networkFeedbackTracked = false;
-      finishNetworkRequestFeedback();
-    }
     const requestId = String(response.headers?.['x-request-id'] || '');
     if (requestId && response.data && typeof response.data === 'object') {
       response.data.requestId = requestId;
@@ -229,10 +213,6 @@ request.interceptors.response.use(
   },
   (error) => {
     const requestOptions = error.config as RequestOptions | undefined;
-    if (requestOptions?.__networkFeedbackTracked) {
-      requestOptions.__networkFeedbackTracked = false;
-      finishNetworkRequestFeedback();
-    }
     const silent = Boolean(requestOptions?.silent);
     // 有HTTP响应（服务器返回了错误状态码）
     if (error.response) {

@@ -165,7 +165,7 @@ res.send(resultData(null, 500, "服务器内部错误")); // 服务端错误
 - Android 以 `MainActivity` 作为唯一桌面入口和 `singleTask` 任务根；隐私同意页只在未授权时由主入口内部打开。同意后重建以主页面为根的任务，Android 13+ 预测返回与旧版返回键统一走同一原生回调。底部一级导航使用替换历史而不是压栈；一级页没有浮层时，系统返回手势把整个任务移到后台但不结束 WebView 进程，再次点桌面图标恢复同一实例。详情页仍正常回退，带 history 占位的弹框/抽屉优先消费返回并关闭浮层。
 - 冷启动开屏由三段接力构成，三者必须是同一套视觉，否则首帧会露出「无标识纯色」而被看成黑屏：`Theme.LightNote.Launcher` 的 `windowBackground`（`splash_window_background.xml`，Android 12 以下系统在 Activity 创建前唯一能画的东西）→ Android 12+ 的 `windowSplashScreenBackground` + `windowSplashScreenAnimatedIcon` → `MainActivity#createLaunchOverlay` 的原生等待层（等 Web 端 `app.ready` 或超时后淡出）。改动任一处的底色、标识资源或尺寸（当前为 288dp 居中）必须同步其余两处。带标识的窗口背景只给启动入口 Activity，应用内浏览器、法律文档和隐私同意页保持纯色，避免内容未铺满时透出标识。
 - Android App 的列表页统一支持顶部下拉刷新，覆盖今日、书签、笔记库、标签、收集箱、云空间和资源中心；手势实现只有 `composables/useAndroidPullRefresh.ts` 一份，页面只声明「刷什么」和「什么状态下不该刷」，阈值、阻尼、方向锁、顶部判定、浮层拦截、竞态与失败提示都在 composable 里收口；指示器同样只有一个实例，由 `MobileAppShell` 渲染在顶栏正下方，页面不再各挂一个（各页滚动容器顶边高度不同，会让同一手势在不同模块弹出的位置不一致）。普通移动浏览器与 PWA 不接管系统页面回弹，继续使用页面内刷新入口。
-- 离开一段时间再回到前台由 `composables/useForegroundRefresh.ts` 补一次静默刷新（默认陈旧阈值 5 分钟，`visibilitychange` 为主、`focus` 兜底）。它与页面自身的软刷新一起注册到 `useGlobalRefreshBar`，共同驱动 `App.vue` 顶部那条既有的 `BLoading bar`；静默刷新不进 loading、不闪骨架屏、失败保留旧数据。本项目没有启用 keep-alive，路由切换会重建页面，所以只有「页面一直在但用户离开了」这一种情况需要它；页面里残留的 `onActivated` 刷新分支实际不会执行，不要依赖。
+- 离开一段时间再回到前台由 `composables/useForegroundRefresh.ts` 补一次静默刷新（默认陈旧阈值 5 分钟，`visibilitychange` 为主、`focus` 兜底）。静默刷新不进入 loading、不闪骨架屏、不驱动全局顶部进度条，刷新期间继续展示旧数据，失败则原样保留。本项目没有启用 keep-alive，路由切换会重建页面，所以只有「页面一直在但用户离开了」这一种情况需要它；页面里残留的 `onActivated` 刷新分支实际不会执行，不要依赖。
 - Web 端通过受信消息通道或 `LightNoteAndroid/<version>` UA 识别轻笺原生环境；通用 Android `wv` 标记只用于旧 WebView 渲染兼容，不能作为轻笺 APK 身份或入口分流依据。原生 App 隐藏 PWA 安装入口，并停用 PWA 安装监听与 Service Worker 注册，避免已经安装的 APK 再次提示安装。
 - SEO 只以无本地访问记录的普通浏览器语义为准：根官网始终返回同一份预渲染 HTML，保留 `index, follow`、自引用 canonical、完整标题与正文；Googlebot Smartphone、百度等窄视口爬虫和普通手机首访获得同一份完整响应式官网，不强制伪装成 PC 视口。回访分流只发生在客户端本地记录存在时，不改变 HTTP 响应与索引产物；`/app` 与业务页面继续 `noindex`。不得按搜索引擎 UA 提供不同内容。
 - 隐私政策和用户协议在浏览器与 App 设置中都长期可访问；App 设置优先通过受信消息通道打开 APK 内置的离线同源文档，通道不可用时回退到网站公开文档。首次启动同意页仍由原生层负责，不能被设置入口替代。
@@ -317,6 +317,10 @@ src/
 
 笔记正文编辑器的 HTML 与 Markdown 仍是两种正式存储格式。两种模式共用 `EditorToolbarV2`：桌面保留高频按钮并把低频能力收进“插入/更多”，编辑区变窄时只收起菜单文字而不移除功能；快捷键帮助使用独立键盘图标，按当前富文本或 Markdown 模式展示真实可用组合键；移动端固定六个 46px 入口，其余能力（含快捷键帮助）进入底部操作面板。撤销、重做由两种编辑器各自的历史栈执行，重做同时兼容 `Ctrl/⌘ + Shift + Z` 与 `Ctrl + Y`；“重复上一步”是独立的格式复用能力，按模式记住最近一次加粗、列表、颜色、渐变等可重复操作，通过 `F4` 或 `Ctrl/⌘ + Alt + R` 再次执行，不得与重做共用语义或状态。移动端正文长按和选区必须由系统原生复制、粘贴、全选菜单接管，不挂载 TinyMCE 选区快捷条、上下文菜单或 Markdown 划词浮层。Markdown 源码由 CodeMirror 6 编辑，GFM 解析只负责语法能力和高亮，数据库正文仍保存原始 Markdown；预览继续走统一的 `marked + DOMPurify` 安全渲染。HTML/Markdown 切换先展示保留、标准化与可能丢失项，确认后才转换；格式切换前的旧态强制写入带 `reason = format_conversion` 的历史还原点。
 
+笔记详情数据与对应编辑器运行时并行加载：正文数据到达后先由编辑区骨架遮住尚未就绪的真实编辑器，运行时在 300ms 内完成时直接交接，不额外挂载整篇静态正文；只有超过阈值的慢路径才显示已获取的安全静态预览。富文本预览必须与 TinyMCE 共用 `note-editor-rich-content` 排版规则，并执行相同的图文结构规范化、待办布局和站内资源引用展示装饰；Markdown 预览按 CodeMirror 的字体、行高和正文起点渲染。静态预览不得发起资源查询或接管交互，真实编辑器就绪后立即移除，以兼顾首次可见速度、长笔记渲染成本和交接时的零位移。
+
+笔记库卡片与列表共用同一批量导出能力：服务端一次只读返回所选笔记的标题、类型和正文，前端可按每篇原格式（HTML 笔记输出 `.html`、Markdown 笔记输出 `.md`），或统一转换为 HTML、Markdown、PDF。每篇笔记生成独立文件，同名文件自动追加序号，最终打包为一个 ZIP；PDF 必须逐篇顺序渲染，避免并行长图占满浏览器内存。移动浏览器优先使用系统分享，Android App 继续通过短时下载票据把 ZIP 交给系统下载目录，不恢复旧的批量 JSON 备份语义。
+
 富文本“图文组合”使用受控的 `section.ln-media-text > figure` 结构，每个 `figure` 只绑定一张图片和一段说明；图片左右位置与 30%/36%/42% 宽度保存为 `data-ln-media-*` 属性，渲染统一使用 flex，禁止借用普通图片的 `float`。桌面端图片列最多 320px，移动端按所选比例并排展示；HTML 转 Markdown 时整段保留为受控 raw HTML，切回富文本和离线导出均恢复同一结构。
 
 富文本“渐变文字”使用 `.ln-text-gradient[data-ln-text-gradient="true"]` 受控结构，只持久化起止十六进制颜色与枚举方向三个 CSS 变量；真实渐变、旧示例的卡片/发光/呼吸/旋转/漂浮效果均由应用语义 class 渲染，不把任意 `background`、阴影或 `animation` 放回正文白名单。历史示例读取时由服务端净化器识别旧内联效果并升级为该语义协议；HTML/Markdown 往返与离线 HTML 导出继续保留受控渐变配置。
@@ -383,6 +387,7 @@ src/
 - 消息动作另提供 `/messages/:publicId/like|recall|delete` 独立资源；`delete` 对当前登录用户创建幂等的个人隐藏关系，只影响该用户自己的读取结果，不能通过提交角色或目标账号改变他人可见性；全局隐藏必须走 Root 治理接口。
 - `COMMUNITY_CHAT_ACCESS_MODE` 接受 `closed`（默认）、`public` 和为未来私密频道保留的 `invite_only`；未知值回退 `closed`。`public` 也必须同时显式设置 `COMMUNITY_CHAT_MESSAGING_ENABLED=true`，realtime 继续依赖消息总开关；候补名单与规则版本只服务邀请制流程。
 - `COMMUNITY_CHAT_REALTIME_ENABLED=true` 才注册有效实时能力；HTTP server 只处理 `/realtime/chat` upgrade，关闭压缩并限制 4 KiB 客户端载荷、连接数、每 IP upgrade 和单连接订阅频率。浏览器必须带可验证 `Origin`：生产默认只允许与 `Host`/可信转发主机同源，额外来源由 `COMMUNITY_CHAT_ALLOWED_ORIGINS` 显式列出；缺失、`null` 或不匹配来源失败关闭。本地 `VITE_ENV=local` WebSocket 代理保留设备访问 Vite 的原始 Host，使局域网 Debug App 的 Origin 继续按同源规则校验，禁止改写成 `127.0.0.1:9001` 后扩大局域网白名单。连接只从 sid Cookie 恢复会话，再查 `user` 实时角色、账号限制与社区可读权限，查询参数和订阅包都不接受 user ID、角色或内部 ID。25 秒 ping/pong 清理失联连接，约 2 分钟复核会话与权限，慢客户端超过发送高水位后要求重连。
+- Root Android App 灰度另用同源 `/realtime/notifications` 接收最小化的 `notification.changed` 失效信号；该连接只接受当前 sid 对应的有效 Root，不接受客户端消息、user ID 或正文，并按两分钟复核会话/角色。事件经 `notification:realtime:v1` 跨实例广播，客户端仍以通知 REST 接口和 MySQL 为唯一权威并保留 30 秒补偿读取。普通通知同步到有角标 channel，数字取不含聊天室的普通未读总数；聊天室回复/@ 使用 `showBadge=false` 的独立 channel、默认关闭。退出或切换账号清空原生通知。此阶段只保证前台及卓易通保留进程场景，不承诺 App 被系统彻底结束后的实时到达。
 - WebSocket 只广播 `message.created`、`message.updated`、`message.removed`、`runtime.changed`、定向 `access.changed` 等小型变化事件；点赞与撤回共用 `message.updated`，事件只携带变化原因、房间和消息公有 ID，消息正文、点赞名单、头像 Data URL 和账号身份不进入事件包。历史、屏蔽过滤、`isOwn` 与消息顺序仍以 REST/MySQL 为准。业务事务提交后才向当前进程和 Redis `community-chat:realtime:v1` 发布，Redis 发布/订阅失败不得回滚已提交消息。前端按 `eventId` 去重，1/2/4 秒指数退避并加抖动，重连、切网或回前台后立即调 REST 补齐；旧 3000 端口 echo 演示已移除。
 - 公共模式下游客取得 `read_only`，可读取 `general` 和消息，但不能发送、回复、举报、屏蔽、写已读位置或产生个人未读；普通登录用户无需邀请直接取得 `active` 和发言权限。`community_chat_members.status = banned` 仍会拒绝访问，active moderator 保留治理角色。Root 普通上下文可管理，管理员预览/代管上下文全部拒绝。
 - 消息写入在同一事务中重新锁定成员限制、`community_chat_runtime_policy` 单行策略、有效禁言和主房间；用户不能提交身份/角色。数据库策略或更高优先级的 `COMMUNITY_CHAT_EMERGENCY_READ_ONLY` 环境硬开关生效时，返回 423 稳定业务码且不落库。内容按纯文本保存，移除控制字符并限制 2,000 个 Unicode 字符，前端只用文本插值渲染。`(user_id, client_request_id)` 唯一键保证发送幂等，回复只能引用 `general` 内 active 消息；发言同时受路由限流与 `slow_mode_seconds` 约束。
@@ -541,11 +546,11 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 
 ## 待整理与待办
 
-- 桌面端和移动端均严格分域：资源中心包含“全部资源 / 待整理”，顶部“待办”包含“列表 / 议程 / 日历”；`/inbox` 只承载待办工作区，待整理继续通过资源中心状态视图进入
+- 桌面端和移动端均严格分域：资源中心包含“全部资源 / 待整理”，顶部“待办”包含“列表 / 议程 / 日历 / 四象限”；`/inbox` 只承载待办工作区，待整理继续通过资源中心状态视图进入
 - 顶部全局搜索仍可搜索待办，但资源中心的类型、数量、筛选和批量操作只允许书签、笔记、文件与标签
 - 待整理资源继续使用 `resource_inbox`；待办独立存入 `todo_items`，不能伪装成笔记或资源关系
 - 待办可被全局搜索找到并通过 `/inbox?tab=todo&todoId=` 定位，但不进资料四页签、`@` 资源选择器、标签体系和待整理；新增待办能力时不得因为"搜索里已经有了"就默认它继承资源能力
-- 待办支持标题、说明、简易清单、优先级、开始时间、截止时间和稳定自定义顺序；列表按逾期、今天、即将到来、以后、无日期和已完成分组，并提供议程/日历视图
+- 待办支持标题、说明、简易清单、优先级、开始时间、截止时间和稳定自定义顺序；列表按逾期、今天、即将到来、以后、无日期和已完成分组，并提供议程、日历和四象限视图。四象限只做派生展示：高优先级视为重要，已逾期或今天截止视为紧急，普通/低优先级合并展示；不新增分类字段，也不通过跨象限拖拽改写待办
 - 逾期摘要与待办列表统一按 `due_at < NOW()` 判断；“今日待办”只统计当前时刻至当天结束之间的未完成任务，同一条待办不能同时进入逾期和今日计数。
 - 移动端待办列表、议程卡片和日历选中日期下方的当天议程列表支持向左拖动露出删除操作；日历月视图格子不承载滑动删除。一次只允许展开一项，点击该卡片之外的区域、纵向滚动、切换视图或进入批量选择都会收起；滑动只展示操作，点击删除后仍必须走统一确认与可撤销删除链路
 - 移动端“我的成长”的概览、任务、成就和资产四个内容 Tab 共用页面滚动容器，但每次切换都回到页面顶部；带成长任务、热力图或回顾锚点的入口继续精准定位目标内容。

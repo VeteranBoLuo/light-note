@@ -70,6 +70,25 @@ describe('deliverExportViaAndroidBridge', () => {
     expect(payload.contentBase64).toBe(btoa(String.fromCharCode(...bytes)));
   });
 
+  it('批量 ZIP 复用下载桥并保留 zip 格式', async () => {
+    apiBasePost.mockResolvedValue({
+      status: 200,
+      data: { downloadUrl: '/api/note/exportFile?token=zip-ticket', fileName: 'lightnote-notes.zip' },
+    });
+
+    const outcome = await deliverExportViaAndroidBridge(
+      exportOptions({
+        content: new Blob(['PK'], { type: 'application/zip' }),
+        fileName: 'lightnote-notes.zip',
+        format: 'zip',
+        mimeType: 'application/zip',
+      }),
+    );
+
+    expect(outcome).toEqual({ ok: true });
+    expect(apiBasePost.mock.calls[0][1]).toMatchObject({ format: 'zip', fileName: 'lightnote-notes.zip' });
+  });
+
   it('内容超限单独报 too_large，让调用方给专门文案', async () => {
     apiBasePost.mockResolvedValue({ status: 413, msg: '笔记内容过大' });
 

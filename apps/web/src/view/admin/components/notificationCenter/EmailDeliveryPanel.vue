@@ -29,9 +29,13 @@
         clearable
         @enter="applyFilters"
       />
-      <BInput v-model:value="filters.startDate" type="date" class="email-date" />
-      <span class="email-date-separator">{{ t('notificationAdmin.email.filters.to') }}</span>
-      <BInput v-model:value="filters.endDate" type="date" class="email-date" />
+      <DateRangePicker
+        class="email-range"
+        initial-preset="all"
+        :start="filters.startDate"
+        :end="filters.endDate"
+        @change="onDateRangeChange"
+      />
       <BButton type="primary" :loading="loading" @click="applyFilters">
         {{ t('notificationAdmin.email.filters.search') }}
       </BButton>
@@ -159,6 +163,7 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   interface EmailItem {
@@ -292,6 +297,11 @@
     refresh();
   }
 
+  function onDateRangeChange(start?: string, end?: string) {
+    filters.value.startDate = start || '';
+    filters.value.endDate = end || '';
+  }
+
   function resetFilters() {
     filters.value = { emailType: 'all', status: 'all', keyword: '', startDate: '', endDate: '' };
     currentPage.value = 1;
@@ -382,12 +392,12 @@
   .email-keyword {
     width: min(280px, 100%);
   }
-  .email-date {
-    width: 148px;
+  .email-range {
+    width: 210px;
   }
-  .email-date-separator {
-    color: var(--desc-color);
-    font-size: 12px;
+  .email-range :deep(.drp-trigger.b_btn) {
+    width: 100%;
+    justify-content: space-between;
   }
   .email-scope-hint {
     margin: 10px 2px 14px;
@@ -486,11 +496,8 @@
   @media (max-width: @admin-bp-mobile) {
     .email-select,
     .email-keyword,
-    .email-date {
+    .email-range {
       width: 100%;
-    }
-    .email-date-separator {
-      display: none;
     }
     .email-detail-row {
       grid-template-columns: 1fr;

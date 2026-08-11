@@ -45,9 +45,13 @@
         :placeholder="t('adminAudit.filters.keyword')"
         @enter="applyFilters"
       />
-      <BInput v-model:value="filters.startDate" type="date" class="admin-audit__date" />
-      <span class="admin-audit__date-separator">{{ t('adminAudit.filters.to') }}</span>
-      <BInput v-model:value="filters.endDate" type="date" class="admin-audit__date" />
+      <DateRangePicker
+        class="admin-audit__range"
+        initial-preset="all"
+        :start="filters.startDate"
+        :end="filters.endDate"
+        @change="onDateRangeChange"
+      />
       <BButton type="primary" :loading="loading" @click="applyFilters">{{ t('adminAudit.filters.search') }}</BButton>
       <BButton :disabled="loading" @click="resetFilters">{{ t('adminAudit.filters.reset') }}</BButton>
     </template>
@@ -183,6 +187,7 @@
   import BPagination from '@/components/base/BasicComponents/BPagination.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
+  import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { getAdminOperationAudits } from '@/api/commonApi';
   import { bookmarkStore } from '@/store';
@@ -302,6 +307,10 @@
     currentPage.value = 1;
     load();
   }
+  function onDateRangeChange(start?: string, end?: string) {
+    filters.value.startDate = start || '';
+    filters.value.endDate = end || '';
+  }
   function resetFilters() {
     filters.value = { action: 'all', outcome: 'all', keyword: '', startDate: '', endDate: '' };
     currentPage.value = 1;
@@ -327,12 +336,12 @@
   .admin-audit__search {
     width: min(260px, 25vw);
   }
-  .admin-audit__date {
-    width: 138px;
+  .admin-audit__range {
+    width: 210px;
   }
-  .admin-audit__date-separator {
-    color: var(--sub-text-color);
-    font-size: 12px;
+  .admin-audit__range :deep(.drp-trigger.b_btn) {
+    width: 100%;
+    justify-content: space-between;
   }
   .admin-stat-card.is-success {
     border-color: #2f9e68 !important;
@@ -436,11 +445,8 @@
   @media (max-width: 767px) {
     .admin-audit__select,
     .admin-audit__search,
-    .admin-audit__date {
+    .admin-audit__range {
       width: 100%;
-    }
-    .admin-audit__date-separator {
-      display: none;
     }
     .admin-audit__card :deep(.b-button) {
       min-height: 44px;

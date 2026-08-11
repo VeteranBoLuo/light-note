@@ -183,9 +183,9 @@ export function withPrintWidth<T>(target: HTMLElement, widthPx: number, run: () 
  * 只改克隆文档没用 —— rect 测量发生在原文档上,必须在渲染前归一、渲染后恢复
  * (导出瞬间页面缩放会闪一下,属可接受代价)。
  */
-export function withNormalizedZoom<T>(run: () => Promise<T>): Promise<T> {
-  const rootStyle = document.documentElement.style;
-  const bodyStyle = document.body.style;
+function withNormalizedDocumentZoom<T>(targetDocument: Document, run: () => Promise<T>): Promise<T> {
+  const rootStyle = targetDocument.documentElement.style;
+  const bodyStyle = targetDocument.body.style;
   const prevRoot = rootStyle.zoom;
   const prevBody = bodyStyle.zoom;
   rootStyle.zoom = '1';
@@ -194,6 +194,10 @@ export function withNormalizedZoom<T>(run: () => Promise<T>): Promise<T> {
     rootStyle.zoom = prevRoot;
     bodyStyle.zoom = prevBody;
   });
+}
+
+export function withNormalizedZoom<T>(run: () => Promise<T>): Promise<T> {
+  return withNormalizedDocumentZoom(document, run);
 }
 
 function replacePdfCheckboxes(clonedDocument: Document) {
@@ -279,10 +283,13 @@ function findSafeCutY(canvas: HTMLCanvasElement, idealY: number, maxBacktrack: n
  * @param selector CSS 选择器，目标元素
  * @param options 配置选项
  */
-async function renderPdfDocument(selector: string, options: PDFOptions): Promise<JsPDF> {
+async function renderPdfDocument(targetOrSelector: string | HTMLElement, options: PDFOptions): Promise<JsPDF> {
   try {
-    // 获取目标元素
-    const target = document.querySelector(selector) as HTMLElement;
+    const selector = typeof targetOrSelector === 'string' ? targetOrSelector : '';
+    const target =
+      typeof targetOrSelector === 'string'
+        ? (document.querySelector(targetOrSelector) as HTMLElement | null)
+        : targetOrSelector;
     if (!target) {
       throw new Error(`Element with selector "${selector}" not found`);
     }
@@ -306,7 +313,7 @@ async function renderPdfDocument(selector: string, options: PDFOptions): Promise
 
     // 生成 canvas(渲染期间固定元素宽度 + 原文档 zoom 归一,克隆文档固定浅色主题)
     const canvas = await withPrintWidth(target, printWidthPx, () =>
-      withNormalizedZoom(() =>
+      withNormalizedDocumentZoom(target.ownerDocument, () =>
         html2canvas(target, {
           scale,
           useCORS: true,
@@ -389,4 +396,50 @@ async function renderPdfDocument(selector: string, options: PDFOptions): Promise
 export async function generatePdfBlob(selector: string, options: PDFOptions = {}): Promise<Blob> {
   const pdf = await renderPdfDocument(selector, options);
   return pdf.output('blob');
+}
+
+/**
+ * 从完整、离线 HTML 文档生成 PDF。
+ *
+ * 批量导出时没有当前编辑器 DOM 可以截图，因此把每篇笔记放进禁用脚本的离屏 iframe，
+ * 让它按单篇 HTML 导出的同一套样式完成布局后再渲染。逐篇创建并销毁 iframe，避免样式
+ * 污染主页面，也不会让多篇长文同时占用 canvas 内存。
+ */
+export async function generatePdfBlobFromHtml(html: string, options: PDFOptions = {}): Promise<Blob> {
+  if (typeof document === 'undefined' || !document.body) {
+    throw new Error('PDF HTML rendering requires a browser document');
+  }
+
+  const frame = document.createElement('iframe');
+  frame.setAttribute('sandbox', 'allow-same-origin');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText =
+    'position:fixed;left:-100000px;top:0;width:800px;height:1px;border:0;pointer-events:none;background:#fff;';
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = window.setTimeout(() => reject(new Error('PDF HTML frame load timed out')), 10_000);
+      frame.onload = () => {
+        window.clearTimeout(timeout);
+        resolve();
+      };
+      frame.onerror = () => {
+        window.clearTimeout(timeout);
+        reject(new Error('PDF HTML frame failed to load'));
+      };
+      frame.srcdoc = String(html || '');
+      document.body.appendChild(frame);
+    });
+
+    const frameDocument = frame.contentDocument;
+    const target = frameDocument?.querySelector<HTMLElement>('.note-export');
+    if (!frameDocument || !target) throw new Error('PDF HTML content is unavailable');
+    await frameDocument.fonts?.ready?.catch(() => undefined);
+    frame.style.height = `${Math.max(target.scrollHeight, 1)}px`;
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const pdf = await renderPdfDocument(target, options);
+    return pdf.output('blob');
+  } finally {
+    frame.remove();
+  }
 }

@@ -105,6 +105,7 @@ html.light-note-mobile-rendering {
   --ln-android-color-mix-black: #111318;
 
   /* 编辑器自身可能声明字重，普通正文继续锁定 regular，真实 strong 仍保留粗体。 */
+  .note-editor-rich-content,
   .note-editor-body,
   .mce-content-body {
     font-weight: 400 !important;
@@ -116,6 +117,8 @@ html.light-note-mobile-rendering {
     font-weight: 400 !important;
   }
 
+  .note-editor-rich-content strong,
+  .note-editor-rich-content b,
   .note-editor-body strong,
   .note-editor-body b,
   .mce-content-body strong,

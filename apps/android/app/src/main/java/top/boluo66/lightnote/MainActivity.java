@@ -1,5 +1,6 @@
 package top.boluo66.lightnote;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ClipData;
@@ -18,6 +19,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
+import android.content.pm.PackageManager;
 import android.provider.MediaStore;
 import android.view.Gravity;
 import android.view.View;
@@ -56,6 +58,8 @@ import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 1002;
+    static final String EXTRA_NOTIFICATION_PATH = "light_note_notification_path";
     private static final long FILE_CHOOSER_LAUNCH_DELAY_MS = 64;
     private static final long FILE_CHOOSER_READY_FALLBACK_MS = 3_000;
     private static final long LAUNCH_TIMEOUT_MS = 10_000;
@@ -90,6 +94,8 @@ public final class MainActivity extends Activity {
             + "})();";
 
     private WebView webView;
+    private NativeNotificationManager nativeNotificationManager;
+    private boolean notificationPermissionPrompted;
     private LinearLayout errorView;
     private TextView errorTitleView;
     private TextView errorMessageView;
@@ -128,6 +134,7 @@ public final class MainActivity extends Activity {
         disableSystemSplashExitAnimation();
         registerSystemBackCallback();
         resolvedNightTheme = WindowInsetsSupport.isNightMode(this);
+        nativeNotificationManager = new NativeNotificationManager(this);
         setContentView(createContentView());
         if (WebViewSupport.isUnsupportedWebView(webView)) {
             showUnsupportedWebView();
@@ -137,7 +144,7 @@ public final class MainActivity extends Activity {
         launchOverlay.postDelayed(launchTimeout, LAUNCH_TIMEOUT_MS);
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(WebViewSupport.HOME_URL);
+            webView.loadUrl(resolveNotificationUrl(getIntent()));
         }
     }
 
@@ -155,6 +162,18 @@ public final class MainActivity extends Activity {
         super.onNewIntent(intent);
         // singleTask 从桌面恢复时只更新启动 Intent，保留现有 WebView、路由和滚动状态。
         setIntent(intent);
+        String targetUrl = resolveNotificationUrl(intent);
+        if (!WebViewSupport.HOME_URL.equals(targetUrl) && webView != null) {
+            webView.loadUrl(targetUrl);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
+        boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+        reportNotificationPermission(granted);
     }
 
     /**
@@ -951,10 +970,84 @@ public final class MainActivity extends Activity {
             } else if ("theme.changed".equals(messageType)) {
                 String theme = payload.optString("theme");
                 runOnUiThread(() -> applyWebTheme(theme));
+            } else if ("notifications.configure".equals(messageType)) {
+                boolean enabled = payload.optBoolean("enabled", false);
+                runOnUiThread(() -> {
+                    nativeNotificationManager.configure(enabled);
+                    if (enabled) ensureNotificationPermission();
+                    else notificationPermissionPrompted = false;
+                });
+            } else if ("notifications.sync".equals(messageType)) {
+                int unreadCount = Math.max(0, payload.optInt("unreadCount", 0));
+                String title = payload.optString("title");
+                String content = payload.optString("content");
+                String path = payload.optString("path");
+                boolean badgeEnabled = payload.optBoolean("badgeEnabled", true);
+                boolean alert = payload.optBoolean("alert", false);
+                runOnUiThread(() -> {
+                    if (!hasNotificationPermission()) {
+                        ensureNotificationPermission();
+                        return;
+                    }
+                    nativeNotificationManager.syncGeneral(unreadCount, title, content, path, badgeEnabled, alert);
+                });
+            } else if ("notifications.chat".equals(messageType)) {
+                String notificationId = payload.optString("notificationId");
+                String title = payload.optString("title");
+                String content = payload.optString("content");
+                String path = payload.optString("path");
+                runOnUiThread(() -> {
+                    if (!hasNotificationPermission()) {
+                        ensureNotificationPermission();
+                        return;
+                    }
+                    nativeNotificationManager.postChat(notificationId, title, content, path);
+                });
+            } else if ("notifications.chat.cancel".equals(messageType)) {
+                String notificationId = payload.optString("notificationId");
+                runOnUiThread(() -> nativeNotificationManager.cancelChat(notificationId));
+            } else if ("notifications.chat.clear".equals(messageType)) {
+                runOnUiThread(() -> nativeNotificationManager.clearChat());
+            } else if ("notifications.clear".equals(messageType)) {
+                runOnUiThread(() -> nativeNotificationManager.clearAll());
             }
         } catch (JSONException error) {
             // 受信页面发来的未知/损坏消息不执行任何原生操作。
         }
+    }
+
+    private boolean hasNotificationPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+            || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void ensureNotificationPermission() {
+        if (hasNotificationPermission() || notificationPermissionPrompted) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionPrompted = true;
+            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, NOTIFICATION_PERMISSION_REQUEST);
+        }
+    }
+
+    private void reportNotificationPermission(boolean granted) {
+        if (webView == null || isFinishing() || isDestroyed()) return;
+        webView.evaluateJavascript(
+            "window.__lightNoteAndroidNotificationPermission&&window.__lightNoteAndroidNotificationPermission("
+                + (granted ? "true" : "false")
+                + ");",
+            null
+        );
+    }
+
+    private static String resolveNotificationUrl(Intent intent) {
+        if (intent == null) return WebViewSupport.HOME_URL;
+        String path = intent.getStringExtra(EXTRA_NOTIFICATION_PATH);
+        if (path == null || !path.startsWith("/") || path.startsWith("//") || path.length() > 2048) {
+            return WebViewSupport.HOME_URL;
+        }
+        Uri base = Uri.parse(WebViewSupport.HOME_URL);
+        if (base.getScheme() == null || base.getAuthority() == null) return WebViewSupport.HOME_URL;
+        return base.getScheme() + "://" + base.getAuthority() + path;
     }
 
     private void restartForPrivacyConsent() {

@@ -22,7 +22,6 @@ const MOBILE_ROUTES = new Set([
   '/userMg',
   '/userOpinion',
   '/resourceGovernance',
-  '/communityChatAccess',
   '/communityChatModeration',
   '/agentLog',
   '/aiFeedback',
@@ -47,19 +46,17 @@ const ICONS = {
   tool: 'i-tool',
 };
 
-function nav(pendingOpinion = 0, pendingSecurity = 0, pendingCommunity = 0, pendingModeration = 0) {
+function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
   return buildAdminNav({
     icons: ICONS,
     pendingOpinion,
     pendingSecurity,
-    pendingCommunity,
     pendingModeration,
     actionCenterTitle: '待处理中心',
     adminAuditTitle: '管理员操作审计',
     productInsightsTitle: '产品运营分析',
     adminGovernanceTitle: '运行策略与权限',
     aiEvaluationTitle: 'AI 问答测试',
-    communityAccessTitle: '社区准入',
     communityModerationTitle: '消息审核',
   });
 }
@@ -70,9 +67,9 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 23 个后台模块，一个都不漏', () => {
+  it('覆盖全部 22 个后台模块，一个都不漏', () => {
     const ids = allItems(nav()).map((item) => item.id);
-    // 20 个 /admin 子路由
+    // 19 个 /admin 子路由
     expect(ids).toEqual(
       expect.arrayContaining([
         'overview',
@@ -85,7 +82,6 @@ describe('后台导航菜单', () => {
         'productInsights',
         'conversion',
         'pointsOps',
-        'communityChatAccess',
         'communityChatModeration',
         'operationLog',
         'adminAudit',
@@ -99,8 +95,8 @@ describe('后台导航菜单', () => {
     );
     // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
     expect(ids).toEqual(expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter']));
-    expect(ids).toHaveLength(23);
-    expect(new Set(ids).size).toBe(23);
+    expect(ids).toHaveLength(22);
+    expect(new Set(ids).size).toBe(22);
   });
 
   it('跨外壳的入口给绝对路径并标记 external，后台子路由拼 /admin/{id}', () => {
@@ -122,17 +118,14 @@ describe('后台导航菜单', () => {
     const quiet = allItems(nav(0, 0, 0));
     expect(quiet.every((item) => !item.badge)).toBe(true);
 
-    const busy = allItems(nav(3, 12, 5, 7));
+    const busy = allItems(nav(3, 12, 7));
     const opinion = busy.find((item) => item.id === 'userOpinion');
     const security = busy.find((item) => item.id === 'securityCenter');
-    const community = busy.find((item) => item.id === 'communityChatAccess');
     const moderation = busy.find((item) => item.id === 'communityChatModeration');
     expect(opinion?.badge).toBe(3);
     expect(opinion?.badgeHint).toContain('3 条反馈待处理');
     expect(security?.badge).toBe(12);
     expect(security?.badgeHint).toContain('12 个高危事件未处理');
-    expect(community?.badge).toBe(5);
-    expect(community?.badgeHint).toContain('5 条社区申请待审核');
     expect(moderation?.badge).toBe(7);
     expect(moderation?.badgeHint).toContain('7 条消息举报待处理');
   });
@@ -160,18 +153,16 @@ describe('后台导航菜单', () => {
       icons: ICONS,
       pendingOpinion: 0,
       pendingSecurity: 0,
-      pendingCommunity: 0,
       pendingModeration: 0,
       actionCenterTitle: '待处理中心',
       adminAuditTitle: '管理员操作审计',
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       aiEvaluationTitle: 'AI 问答测试',
-      communityAccessTitle: '社区准入',
       communityModerationTitle: '消息审核',
     });
 
-    expect(groups.map((group) => group[0].id)).toEqual([
+    expect(groups.map((group) => group.items[0].id)).toEqual([
       'overview',
       'actionCenter',
       'userMg',
@@ -233,7 +224,6 @@ describe('resolveActiveNavId', () => {
       '/admin/overview',
       '/admin/actionCenter',
       '/admin/aiEvaluation',
-      '/admin/communityChatAccess',
       '/admin/communityChatModeration',
       '/admin/todoPlanDiagnostics',
       '/securityCenter/events',
@@ -251,19 +241,17 @@ describe('手机后台菜单', () => {
       icons: ICONS,
       pendingOpinion: 0,
       pendingSecurity: 0,
-      pendingCommunity: 0,
       pendingModeration: 0,
       actionCenterTitle: '待处理中心',
       adminAuditTitle: '管理员操作审计',
       productInsightsTitle: '产品运营分析',
       adminGovernanceTitle: '运行策略与权限',
       aiEvaluationTitle: 'AI 问答测试',
-      communityAccessTitle: '社区准入',
       communityModerationTitle: '消息审核',
     });
 
   it('每一项都指向真实存在的手机路由（点出 404 是最糟的菜单 bug）', () => {
-    const items = mobile().flat();
+    const items = mobile().flatMap((group) => group.items);
     expect(items.length).toBeGreaterThan(0);
     for (const item of items) {
       expect(MOBILE_ROUTES.has(item.url), `${item.title} 指向了不存在的手机路由 ${item.url}`).toBe(true);
@@ -273,7 +261,7 @@ describe('手机后台菜单', () => {
   it('凡是手机上有路由的模块都进菜单，不漏', () => {
     const urls = new Set(
       mobile()
-        .flat()
+        .flatMap((group) => group.items)
         .map((item) => item.url),
     );
     for (const route of MOBILE_ROUTES) {
@@ -283,14 +271,14 @@ describe('手机后台菜单', () => {
 
   it('标题与桌面一致，不各写一套', () => {
     const desktop = new Map(allItems(nav()).map((item) => [item.id, item.title]));
-    for (const item of mobile().flat()) {
+    for (const item of mobile().flatMap((group) => group.items)) {
       expect(item.title).toBe(desktop.get(item.id));
     }
   });
 
   it('手机上不可达的模块不进手机菜单', () => {
     const ids = mobile()
-      .flat()
+      .flatMap((group) => group.items)
       .map((item) => item.id);
     expect(ids).not.toContain('knowledgeBase');
     expect(ids).not.toContain('pointsOps');
@@ -298,21 +286,19 @@ describe('手机后台菜单', () => {
 
   it('按桌面的分组顺序输出，空组不留下来', () => {
     const groups = mobile();
-    expect(groups.every((group) => group.length > 0)).toBe(true);
-    expect(groups[0][0].id).toBe('overview');
+    expect(groups.every((group) => group.items.length > 0)).toBe(true);
+    expect(groups[0].items[0].id).toBe('overview');
   });
 });
 
 describe('社区治理后台路由', () => {
-  it('准入和消息审核的桌面后台子路由与移动端 Root 扁平路由同时存在', () => {
+  it('只保留消息审核，社区准入在桌面与移动端都已移除', () => {
     const desktopShell = adminRouter.find((route) => route.path === '/admin');
-    expect(desktopShell?.children?.some((route) => route.path === 'communityChatAccess')).toBe(true);
+    expect(desktopShell?.children?.some((route) => route.path === 'communityChatAccess')).toBe(false);
     expect(desktopShell?.children?.some((route) => route.path === 'communityChatModeration')).toBe(true);
 
     const mobileRoute = adminRouter.find((route) => route.path === 'communityChatAccess');
-    expect(mobileRoute).toBeTruthy();
-    expect(mobileRoute?.meta?.requireAuth).toBe(true);
-    expect(mobileRoute?.meta?.roles).toHaveLength(1);
+    expect(mobileRoute).toBeFalsy();
 
     const moderationMobileRoute = adminRouter.find((route) => route.path === 'communityChatModeration');
     expect(moderationMobileRoute).toBeTruthy();

@@ -111,7 +111,7 @@
         <template v-else>
           <div class="inbox-toolbar__todo-tabs">
             <BTabs
-              v-if="todoView === 'list'"
+              v-if="todoView === 'list' || todoView === 'matrix'"
               v-model:active-tab="todo.status"
               :options="todoStatusTabOptions"
               variant="pill"
@@ -309,8 +309,17 @@
             <p>{{ emptyStateDesc }}</p>
             <BButton type="primary" @click="handleEmptyStateAction">{{ emptyStateAction }}</BButton>
           </div>
+          <TodoMatrixView
+            v-else-if="isTodoFocused && todoView === 'matrix'"
+            :items="todo.items"
+            :disabled="hasPendingOperation || todoBatchMutating"
+            :deleting-id="deletingTodoId"
+            @toggle-complete="toggleTodo"
+            @edit="openTodoEditor"
+            @delete="confirmDeleteTodo"
+          />
           <TodoScheduleView
-            v-else-if="isTodoFocused && todoView !== 'list'"
+            v-else-if="isTodoFocused && (todoView === 'agenda' || todoView === 'calendar')"
             ref="scheduleViewRef"
             :items="todo.items"
             :view="todoView"
@@ -426,6 +435,7 @@
   import TodoItem from '@/components/todo/TodoItem.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
+  import TodoMatrixView from '@/components/todo/TodoMatrixView.vue';
   import TodoScheduleView from '@/components/todo/TodoScheduleView.vue';
   import { buildIcsFileName, buildTodoCalendarEvent, buildTodoIcs, deliverIcsFile } from '@/utils/ics';
   import { deliverIcsViaAndroidBridge, insertAndroidCalendarEvent } from '@/utils/androidCalendar';
@@ -485,8 +495,10 @@
   const openSwipeTodoId = ref('');
   const openSwipeResourceKey = ref('');
   const scheduleViewRef = ref<{ closeSwipe: () => void } | null>(null);
-  type TodoView = 'list' | 'agenda' | 'calendar';
-  const normalizeTodoView = (value: unknown): TodoView => (value === 'agenda' || value === 'calendar' ? value : 'list');
+  type TodoView = 'list' | 'agenda' | 'calendar' | 'matrix';
+  const normalizeTodoView = (value: unknown): TodoView =>
+    value === 'agenda' || value === 'calendar' || value === 'matrix' ? value : 'list';
+  const todoViewUsesStatusFilter = (view: TodoView) => view === 'list' || view === 'matrix';
   const todoView = ref<TodoView>(normalizeTodoView(user.preferences.todoView));
   const todoSelectionMode = ref(false);
   const resourceSelectionMode = ref(false);
@@ -633,6 +645,7 @@
     { key: 'list', label: t('inbox.todoViewList') },
     { key: 'agenda', label: t('inbox.todoViewAgenda') },
     { key: 'calendar', label: t('inbox.todoViewCalendar') },
+    { key: 'matrix', label: t(bookmark.isMobile ? 'inbox.todoViewMatrixCompact' : 'inbox.todoViewMatrix') },
   ]);
   const actionItems = computed(() => {
     if (inbox.filterType === 'todo') {
@@ -643,7 +656,7 @@
       key: inbox.resourceKey(item),
       item,
     }));
-    // 资源中心的“全部”只展示资源；待办拥有独立的列表 / 议程 / 日历工作区，避免跨域混排和误操作。
+    // 资源中心的“全部”只展示资源；待办拥有独立的列表 / 议程 / 日历 / 四象限工作区。
     return resources;
   });
 
@@ -710,9 +723,9 @@
       todoSelectionMode.value = false;
       selectedTodoIds.value = [];
     }
-    // 状态筛选(未完成/已完成/全部)只属于列表视图:议程/日历始终展示全量,
-    // 用 preserveStatus 保住列表页签的选择,切回列表时按页签口径恢复。
-    if (view !== 'list') {
+    // 列表和四象限共用未完成/已完成/全部；议程、日历始终展示全量。
+    // preserveStatus 保住页签选择，切回有状态筛选的视图时再按该口径恢复。
+    if (!todoViewUsesStatusFilter(view)) {
       if (todo.effectiveStatus !== 'all') void todo.refreshList({ status: 'all', preserveStatus: true });
     } else if (todo.effectiveStatus !== todo.status) {
       void todo.refreshList({ status: todo.status });
@@ -874,7 +887,12 @@
     let refreshed = false;
     let inboxCountsReady = false;
     if (inbox.filterType === 'todo') {
-      refreshed = await todo.refreshList({ silent });
+      // 四象限首次作为默认视图进入时，store 的 effectiveStatus 仍可能是 all；
+      // 显式使用当前状态页签，避免“未完成”高亮却混入已完成待办。
+      refreshed = await todo.refreshList({
+        silent,
+        ...(todoView.value === 'matrix' ? { status: todo.status } : {}),
+      });
       inboxCountsReady = await inbox.refreshCount();
     } else if (inbox.filterType === 'all') {
       const inboxRefreshed = await inbox.refreshList({ silent });

@@ -38,6 +38,7 @@ import { requestTraceMiddleware } from './util/requestTrace.js';
 import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.js';
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
+import { registerNotificationRealtimeHub } from './util/notificationRealtimeHub.js';
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
 
 import dotenv from 'dotenv';
@@ -244,6 +245,7 @@ const server = app.listen(9001, () => {
   console.log('服务器已启动：' + new Date().toLocaleString('zh-CN'));
 });
 registerCommunityChatRealtimeHub(server);
+registerNotificationRealtimeHub(server);
 
 // 端口占用必须是一眼可读的错误。否则它会落进上面的 uncaughtException 兜底,
 // 被 stableAgentErrorCode 脱敏成一个看不出原因的码,表现为"重启完前端还连着旧进程"。

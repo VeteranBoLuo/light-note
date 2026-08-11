@@ -100,6 +100,20 @@ export default defineConfig(({ mode }) => {
                 secure: false,
                 ws: true,
               },
+        // Root App 原生通知只接收“通知数据已变化”信号，正文和未读数仍回源受权 REST。
+        '/realtime/notifications':
+          env.VITE_ENV === 'local'
+            ? {
+                target: 'http://127.0.0.1:9001',
+                changeOrigin: false,
+                ws: true,
+              }
+            : {
+                target: 'https://boluo66.top',
+                changeOrigin: true,
+                secure: false,
+                ws: true,
+              },
         '/obs': {
           target: 'https://obs.cn-south-1.myhuaweicloud.com',
           changeOrigin: true,

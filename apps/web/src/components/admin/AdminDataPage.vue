@@ -1,5 +1,5 @@
 <template>
-  <div class="admin-data-page">
+  <div class="admin-data-page" :class="{ 'is-scroll-layout': layout === 'scroll' }">
     <section class="admin-data-page__surface">
       <header class="admin-data-page__header">
         <div class="admin-data-page__title-block">
@@ -8,16 +8,14 @@
             CommonContainer 顶栏、也不显示底栏（底栏只在 meta.mobileBottomNav 为 true 时出现），
             进来之后除了系统手势没有任何退路。
           -->
-          <button
+          <BButton
             v-if="bookmark.isMobile"
-            type="button"
             class="admin-data-page__back"
-            aria-label="返回后台管理"
+            :aria-label="t('common.back')"
             @click="goBack"
           >
             <svg-icon :src="icon.arrow_left" size="20" />
-            <span>后台管理</span>
-          </button>
+          </BButton>
           <p v-if="eyebrow" class="admin-data-page__eyebrow">{{ eyebrow }}</p>
           <div class="admin-data-page__heading-row">
             <div class="admin-data-page__heading-copy">
@@ -64,6 +62,7 @@
   import router from '@/router';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import { bookmarkStore } from '@/store';
 
   const props = withDefaults(
@@ -133,7 +132,7 @@
   }
 
   /* 桌面端不出现：那边有常驻侧边导航，不需要返回 */
-  .admin-data-page__back {
+  .admin-data-page__back.b_btn {
     .admin-focus-ring(8px);
 
     display: inline-flex;
@@ -291,20 +290,73 @@
   @media (max-width: 960px) {
     .admin-data-page {
       padding-bottom: 0;
-      overflow-x: hidden;
-      overflow-y: auto;
+      overflow: hidden;
       overscroll-behavior-y: contain;
-      -webkit-overflow-scrolling: touch;
     }
 
     .admin-data-page__surface {
-      height: auto;
-      min-height: 100%;
-      padding: 16px;
-      overflow: visible;
+      height: 100%;
+      min-height: 0;
+      padding: 0 14px 14px;
+      gap: 10px;
+      overflow: hidden;
+      border-radius: 0;
+      box-shadow: none;
     }
 
-    .admin-data-page__heading-row,
+    .admin-data-page__title-block {
+      position: relative;
+    }
+
+    .admin-data-page__back.b_btn {
+      position: absolute;
+      z-index: 1;
+      top: 0;
+      left: -8px;
+      width: 44px;
+      height: 52px;
+      margin: 0;
+      padding: 0;
+      justify-content: center;
+      border: 0;
+      border-radius: 12px;
+      color: var(--text-color);
+      background: transparent;
+    }
+
+    .admin-data-page__eyebrow,
+    .admin-data-page__subtitle {
+      display: none;
+    }
+
+    .admin-data-page__heading-row {
+      min-height: 52px;
+      align-items: stretch;
+      flex-direction: column;
+      justify-content: center;
+      gap: 7px;
+    }
+
+    .admin-data-page__heading-copy {
+      min-height: 52px;
+      padding: 0 44px;
+      box-sizing: border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+
+    .admin-data-page__title {
+      font-size: 20px;
+      font-weight: 650;
+    }
+
+    .admin-data-page__actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
     .admin-data-page__toolbar-row {
       align-items: stretch;
       flex-direction: column;
@@ -326,7 +378,22 @@
     }
 
     .admin-data-page__table {
-      min-height: 360px;
+      min-height: 0;
+    }
+
+    .admin-data-page.is-scroll-layout {
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .admin-data-page.is-scroll-layout .admin-data-page__surface {
+      height: auto;
+      min-height: 100%;
+      overflow: visible;
+    }
+
+    .admin-data-page.is-scroll-layout .admin-data-page__table {
+      overflow: visible;
     }
   }
 </style>

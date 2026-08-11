@@ -50,7 +50,7 @@ export const getNoticeSummary = async function () {
   return apiBaseGet('/api/common/noticeSummary', undefined, { silent: true, feedback: false });
 };
 
-export const getAdminActionCenter = async function (params: { limit?: number } = {}) {
+export const getAdminActionCenter = async function (params: { limit?: number; source?: string } = {}) {
   return apiBasePost('/api/common/getAdminActionCenter', params, { silent: true });
 };
 

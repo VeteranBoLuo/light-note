@@ -58,6 +58,14 @@ describe('ResourceTagChip', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
+  it('可为已选交互标签显示明确的勾选标识', () => {
+    const host = mountTag({ interactive: true, selected: true, showSelectedIndicator: true });
+    const chip = host.querySelector<HTMLButtonElement>('button.resource-tag-chip');
+    expect(chip?.classList.contains('b-chip--selected')).toBe(true);
+    expect(chip?.getAttribute('aria-pressed')).toBe('true');
+    expect(chip?.querySelector('.resource-tag-chip__selected-icon')).not.toBeNull();
+  });
+
   it('详情角标使用两个并列 BButton，不产生嵌套按钮，并区分 click/detail', () => {
     const onClick = vi.fn();
     const onDetail = vi.fn();

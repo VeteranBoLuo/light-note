@@ -342,6 +342,51 @@ afterEach(() => {
 });
 
 describe('CommunityChatWorkspace', () => {
+  it.each(['messages-first', 'pin-first'] as const)(
+    '首屏结构按 %s 返回时都保持骨架，直到消息与置顶信息完成后一次展示',
+    async (resolveOrder) => {
+      const messageRequest = deferred<any>();
+      const pinRequest = deferred<any>();
+      const pinned = chatMessage({ publicId: 'message-pinned-bootstrap', content: '首屏置顶信息' });
+      mocks.getMessages.mockReturnValueOnce(messageRequest.promise);
+      mocks.getPinnedMessage.mockReturnValueOnce(pinRequest.promise);
+
+      const host = await mountWorkspace();
+      expect(host.querySelector('.community-message-skeleton')).not.toBeNull();
+      expect(host.querySelector('.community-pinned-message')).toBeNull();
+      expect(host.textContent).not.toContain('首屏置顶信息');
+
+      const resolveMessages = () =>
+        messageRequest.resolve({
+          data: {
+            roomSlug: 'general',
+            items: [pinned],
+            hasMore: false,
+            nextBefore: null,
+            focusPublicId: null,
+            hasNewer: false,
+          },
+        });
+      const resolvePin = () => pinRequest.resolve({ status: 200, data: { roomSlug: 'general', message: pinned } });
+
+      if (resolveOrder === 'messages-first') resolveMessages();
+      else resolvePin();
+      await flushAsync();
+
+      expect(host.querySelector('.community-message-skeleton')).not.toBeNull();
+      expect(host.querySelector('.community-pinned-message')).toBeNull();
+
+      if (resolveOrder === 'messages-first') resolvePin();
+      else resolveMessages();
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.querySelector('.community-message-skeleton')).toBeNull();
+      expect(host.querySelector('.community-pinned-message')?.textContent).toContain('首屏置顶信息');
+      expect(host.querySelector('[data-message-public-id="message-pinned-bootstrap"]')).not.toBeNull();
+    },
+  );
+
   it('实时事件只作为变化信号，并通过 REST 权威窗口补齐消息', async () => {
     WorkspaceRealtimeSocket.instances = [];
     vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
@@ -753,7 +798,7 @@ describe('CommunityChatWorkspace', () => {
     expect(document.body.textContent).toContain('2 / 2');
   });
 
-  it('首屏按图片元数据预留尺寸，并在图片异步撑高时保持贴底直到用户主动滚动', async () => {
+  it('首屏按图片元数据预留尺寸，图片异步解码只替换占位而不二次改写滚动位置', async () => {
     const pendingMessages = deferred<any>();
     mocks.getMessages.mockReturnValueOnce(pendingMessages.promise);
     const host = await mountWorkspace();
@@ -795,20 +840,77 @@ describe('CommunityChatWorkspace', () => {
     const imageButton = host.querySelector<HTMLButtonElement>('.community-message__image');
     const image = imageButton?.querySelector<HTMLImageElement>('img');
     expect(imageButton?.style.aspectRatio).toBe('640 / 480');
+    expect(imageButton?.style.getPropertyValue('--community-message-image-padding')).toBe('75%');
+    expect(imageButton?.querySelector('.community-message__image-sizer')).not.toBeNull();
+    expect(imageButton?.classList.contains('is-ready')).toBe(false);
+    expect(imageButton?.querySelector('.community-message__image-placeholder')).not.toBeNull();
     expect(image?.getAttribute('width')).toBe('640');
     expect(image?.getAttribute('height')).toBe('480');
+    expect(image?.getAttribute('loading')).toBe('eager');
+    expect(image?.getAttribute('fetchpriority')).toBe('high');
     expect(messageList.scrollTop).toBe(600);
 
+    const imageDecode = deferred<void>();
+    Object.defineProperty(image, 'decode', { configurable: true, value: vi.fn(() => imageDecode.promise) });
     scrollHeight = 900;
     image?.dispatchEvent(new Event('load'));
     await flushAnimationFrame();
-    expect(messageList.scrollTop).toBe(900);
+    expect(messageList.scrollTop).toBe(600);
+    expect(imageButton?.classList.contains('is-ready')).toBe(false);
+
+    imageDecode.resolve();
+    await flushAsync();
+    expect(imageButton?.classList.contains('is-ready')).toBe(true);
+    expect(imageButton?.querySelector('.community-message__image-placeholder')).toBeNull();
 
     messageList.dispatchEvent(new WheelEvent('wheel'));
     scrollHeight = 1200;
     image?.dispatchEvent(new Event('load'));
     await flushAnimationFrame();
-    expect(messageList.scrollTop).toBe(900);
+    expect(messageList.scrollTop).toBe(600);
+  });
+
+  it('首屏只优先预热底部最多四张图片，历史图片继续懒加载且不抢占网络', async () => {
+    const items = Array.from({ length: 6 }, (_, index) => {
+      const sequence = index + 1;
+      return chatMessage({
+        publicId: `message-image-priority-${sequence}`,
+        images: [
+          {
+            publicId: `image-priority-${sequence}`,
+            url: `/api/community-chat/images/image-priority-${sequence}`,
+            contentType: 'image/png',
+            fileSize: 12,
+            width: 640,
+            height: 480,
+          },
+        ],
+      });
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items,
+        hasMore: true,
+        nextBefore: 'message-image-priority-1',
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+
+    const host = await mountWorkspace();
+    const images = [...host.querySelectorAll<HTMLImageElement>('.community-message__image img')];
+
+    expect(images).toHaveLength(6);
+    expect(images.slice(0, 2).map((image) => image.getAttribute('loading'))).toEqual(['lazy', 'lazy']);
+    expect(images.slice(2).map((image) => image.getAttribute('loading'))).toEqual(['eager', 'eager', 'eager', 'eager']);
+    expect(images.slice(0, 2).map((image) => image.getAttribute('fetchpriority'))).toEqual(['auto', 'auto']);
+    expect(images.slice(2).map((image) => image.getAttribute('fetchpriority'))).toEqual([
+      'high',
+      'high',
+      'high',
+      'high',
+    ]);
   });
 
   it('回复发送复用稳定 clientRequestId，并把引用消息公有 ID 交给后端', async () => {
@@ -915,6 +1017,65 @@ describe('CommunityChatWorkspace', () => {
     await flushAsync();
     expect(mocks.unpinMessage).toHaveBeenCalledWith('message-pinned');
     expect(host.querySelector('.community-pinned-message')).toBeNull();
+  });
+
+  it('置顶消息一次精准定位，不被延迟图片贴底或顶部自动分页打断', async () => {
+    const pinned = chatMessage({
+      publicId: 'message-pinned-image',
+      content: '一次定位到这条置顶消息',
+      images: [
+        {
+          publicId: 'image-pinned',
+          url: '/api/community-chat/images/image-pinned',
+          contentType: 'image/png',
+          fileSize: 12,
+          width: 640,
+          height: 480,
+        },
+      ],
+    });
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [pinned, chatMessage({ publicId: 'message-latest', content: '最新消息' })],
+        hasMore: true,
+        nextBefore: 'message-pinned-image',
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    mocks.getPinnedMessage.mockResolvedValueOnce({
+      status: 200,
+      data: { roomSlug: 'general', message: pinned },
+    });
+    mocks.scrollIntoContainer.mockImplementation((container: HTMLElement, _target, _offset, behavior) => {
+      expect(behavior).toBe('auto');
+      container.scrollTop = 80;
+      container.dispatchEvent(new Event('scroll'));
+    });
+
+    const host = await mountWorkspace();
+    const messageList = host.querySelector<HTMLElement>('.community-message-list');
+    expect(messageList).not.toBeNull();
+    if (!messageList) return;
+    Object.defineProperties(messageList, {
+      scrollHeight: { configurable: true, value: 1200 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 1200 },
+    });
+
+    mocks.getMessages.mockClear();
+    host.querySelector<HTMLButtonElement>('.community-pinned-message__jump')?.click();
+    await flushAnimationFrame();
+    await flushAnimationFrame();
+
+    expect(messageList.scrollTop).toBe(80);
+    expect(mocks.scrollIntoContainer).toHaveBeenCalledTimes(1);
+    expect(mocks.getMessages).not.toHaveBeenCalled();
+
+    host.querySelector<HTMLImageElement>('.community-message__image img')?.dispatchEvent(new Event('load'));
+    await flushAnimationFrame();
+    expect(messageList.scrollTop).toBe(80);
   });
 
   it('提及在输入框上方用 tag 编辑，发送后在气泡内展示昵称且提交稳定消息公有 ID', async () => {

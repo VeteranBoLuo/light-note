@@ -5,9 +5,25 @@ import { recordAdminOperationAudit } from '../util/adminOperationAudit.js';
 
 const DEFAULT_ITEM_LIMIT = 20;
 const MAX_ITEM_LIMIT = 60;
+const ACTION_CENTER_SOURCES = new Set([
+  'opinion',
+  'security',
+  'community_report',
+  'ai_feedback',
+  'ai_document',
+  'bookmark_icon',
+  'todo_reminder',
+  'account_deletion',
+  'email_delivery',
+]);
 
 function itemLimit(value) {
   return Math.min(Math.max(Number(value) || DEFAULT_ITEM_LIMIT, 5), MAX_ITEM_LIMIT);
+}
+
+function itemSource(value) {
+  const source = String(value || 'all').trim();
+  return source === 'all' || !source ? 'all' : ACTION_CENTER_SOURCES.has(source) ? source : null;
 }
 
 function number(value) {
@@ -131,39 +147,6 @@ async function loadSecurityWork(limit) {
       createdAt: row.created_at,
       updatedAt: row.created_at,
       targetUrl: `/securityCenter/events?eventId=${encodeURIComponent(row.event_id)}`,
-    })),
-  );
-}
-
-async function loadCommunityAccessWork(limit) {
-  const [[summaryRows], [rows]] = await Promise.all([
-    pool.query("SELECT COUNT(*) AS total FROM community_chat_access_requests WHERE status = 'pending'"),
-    pool.query(
-      `SELECT r.id, r.user_id, r.create_time, r.update_time, u.alias
-         FROM community_chat_access_requests r
-         LEFT JOIN user u ON u.id = r.user_id
-        WHERE r.status = 'pending'
-        ORDER BY r.create_time ASC, r.id ASC
-        LIMIT ?`,
-      [limit],
-    ),
-  ]);
-  return workResult(
-    'community_access',
-    '社区准入',
-    summaryRows[0]?.total,
-    0,
-    rows.map((row) => ({
-      id: String(row.id),
-      source: 'community_access',
-      status: 'pending',
-      severity: 'normal',
-      title: '社区准入申请',
-      ownerLabel: row.alias || row.user_id || '',
-      userId: row.user_id || null,
-      createdAt: row.create_time,
-      updatedAt: row.update_time,
-      targetUrl: `/admin/communityChatAccess?requestId=${encodeURIComponent(row.id)}`,
     })),
   );
 }
@@ -520,11 +503,12 @@ async function loadEmailDeliveryJobs(limit) {
 export async function getAdminActionCenter(req, res) {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
   const limit = itemLimit(req.body?.limit);
+  const source = itemSource(req.body?.source);
+  if (!source) return res.send(resultData(null, 400, '不支持的待处理来源'));
   try {
     const results = await Promise.all([
       optionalSource('opinion', () => loadOpinionWork(limit)),
       optionalSource('security', () => loadSecurityWork(limit)),
-      optionalSource('community_access', () => loadCommunityAccessWork(limit)),
       optionalSource('community_report', () => loadCommunityReportWork(limit)),
       optionalSource('ai_feedback', () => loadAiFeedbackWork(limit)),
       optionalSource('ai_document', () => loadAiDocumentJobs(limit)),
@@ -535,18 +519,20 @@ export async function getAdminActionCenter(req, res) {
     ]);
 
     const workSources = results
-      .slice(0, 5)
+      .slice(0, 4)
       .filter((entry) => entry.available)
       .map((entry) => entry.data);
     const jobSources = results
-      .slice(5)
+      .slice(4)
       .filter((entry) => entry.available)
       .map((entry) => entry.data);
-    const workItems = workSources
+    const selectedWorkSources = source === 'all' ? workSources : workSources.filter((entry) => entry.source === source);
+    const selectedJobSources = source === 'all' ? jobSources : jobSources.filter((entry) => entry.source === source);
+    const workItems = selectedWorkSources
       .flatMap((entry) => entry.items)
       .sort(newestFirst)
       .slice(0, limit);
-    const jobItems = jobSources
+    const jobItems = selectedJobSources
       .flatMap((entry) => entry.items)
       .sort(newestFirst)
       .slice(0, limit);
@@ -756,6 +742,7 @@ export async function retryAdminAsyncJob(req, res) {
 
 export const adminActionCenterInternals = {
   itemLimit,
+  itemSource,
   maskEmail,
   newestFirst,
   requeueJob,

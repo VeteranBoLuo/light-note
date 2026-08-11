@@ -35,7 +35,6 @@ export type AdminNavInput = {
   icons: AdminNavIcons;
   pendingOpinion: number;
   pendingSecurity: number;
-  pendingCommunity: number;
   pendingModeration: number;
   /** 国际化标题由调用方注入，菜单事实层不直接依赖 i18n 实例。 */
   actionCenterTitle: string;
@@ -43,7 +42,6 @@ export type AdminNavInput = {
   productInsightsTitle: string;
   adminGovernanceTitle: string;
   aiEvaluationTitle: string;
-  communityAccessTitle: string;
   communityModerationTitle: string;
 };
 
@@ -68,14 +66,12 @@ export function buildAdminNav({
   icons,
   pendingOpinion,
   pendingSecurity,
-  pendingCommunity,
   pendingModeration,
   actionCenterTitle,
   adminAuditTitle,
   productInsightsTitle,
   adminGovernanceTitle,
   aiEvaluationTitle,
-  communityAccessTitle,
   communityModerationTitle,
 }: AdminNavInput): AdminNavEntry[] {
   return [
@@ -143,12 +139,6 @@ export function buildAdminNav({
         { id: 'productInsights', title: productInsightsTitle },
         { id: 'conversion', title: '转化漏斗' },
         { id: 'pointsOps', title: '积分运营' },
-        {
-          id: 'communityChatAccess',
-          title: communityAccessTitle,
-          badge: pendingCommunity,
-          badgeHint: `${pendingCommunity} 条社区申请待审核`,
-        },
         {
           id: 'communityChatModeration',
           title: communityModerationTitle,
@@ -222,7 +212,6 @@ const MOBILE_PATHS: Record<string, string> = {
   aiEvaluation: '/aiEvaluation',
   productInsights: '/productInsights',
   conversion: '/conversion',
-  communityChatAccess: '/communityChatAccess',
   communityChatModeration: '/communityChatModeration',
   notificationCenter: '/notificationCenter',
   operationLog: '/operationLog',
@@ -236,20 +225,36 @@ const MOBILE_PATHS: Record<string, string> = {
   adminGovernance: '/adminGovernance',
 };
 
-export type AdminMobileMenuItem = { id: string; title: string; url: string };
+export type AdminMobileMenuItem = AdminNavItem & { url: string };
+
+export type AdminMobileMenuGroup = {
+  key: string;
+  title: string;
+  icon: string;
+  standalone: boolean;
+  items: AdminMobileMenuItem[];
+};
 
 /**
  * 手机后台菜单。和桌面共用 buildAdminNav 的标题与分组顺序，避免两端漂移——
  * 此前两份菜单各写各的，手机端少 4 个模块、还留着「api日志」这种没统一过的写法。
- * PhoneMenu 按「数组的数组」分组渲染卡片，所以这里输出二维数组。
+ * 输出保留组标题和图标的结构，手机端才能把「常用入口」与业务分组做出明确层级，
+ * 而不是退化为一串无差别的灰色行。
  */
-export function buildAdminMobileMenu(input: AdminNavInput): AdminMobileMenuItem[][] {
+export function buildAdminMobileMenu(input: AdminNavInput): AdminMobileMenuGroup[] {
   return buildAdminNav(input)
     .map((entry) => {
       const items = entry.kind === 'item' ? [entry.item] : entry.items;
-      return items
+      const mobileItems = items
         .filter((item) => MOBILE_PATHS[item.id])
-        .map((item) => ({ id: item.id, title: item.title, url: MOBILE_PATHS[item.id] }));
+        .map((item) => ({ ...item, url: MOBILE_PATHS[item.id] }));
+      return {
+        key: entry.key,
+        title: entry.kind === 'item' ? entry.item.title : entry.title,
+        icon: entry.icon,
+        standalone: entry.kind === 'item',
+        items: mobileItems,
+      };
     })
-    .filter((group) => group.length > 0);
+    .filter((group) => group.items.length > 0);
 }

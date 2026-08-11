@@ -122,11 +122,13 @@ describe('通知中心管理员删除', () => {
   });
 
   it('硬删除整批管理员通知，同时限制为 system/other 类型', async () => {
+    query.mockReset().mockResolvedValueOnce([[{ userId: 'root-1' }]]).mockResolvedValueOnce([{ affectedRows: 3 }]);
     const res = mockRes();
     await adminDelete({ user: { role: 'root' }, body: { batchId: 'batch-1' } }, res);
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls[0][0]).toContain('SELECT DISTINCT user_id AS userId');
+    const [sql, params] = query.mock.calls[1];
     expect(sql).toContain('DELETE FROM notification');
     expect(sql).toContain('batch_id = ? OR id = ?');
     expect(sql).toContain('type IN (?,?)');

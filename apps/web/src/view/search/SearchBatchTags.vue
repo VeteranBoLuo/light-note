@@ -73,9 +73,11 @@
               :key="tag.id"
               :tag="tag"
               class="tag-chip"
+              :class="{ 'tag-chip--selected': selectedTagIds.includes(tag.id) }"
               size="medium"
               interactive
               :selected="selectedTagIds.includes(tag.id)"
+              show-selected-indicator
               @click="toggleTag(tag.id)"
             />
           </div>
@@ -534,6 +536,15 @@
 
   .tag-chip {
     min-height: 30px;
+  }
+
+  .tag-chip.tag-chip--selected.b-chip--tag.b-chip--selected {
+    --b-chip-fg: var(--card-background, var(--background-color));
+    --b-chip-bg: var(--chip-tag-fg);
+    --b-chip-border: var(--chip-tag-fg);
+
+    border-color: var(--chip-tag-fg);
+    border-width: 2px;
   }
 
   .preview-box {

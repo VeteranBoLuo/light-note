@@ -68,7 +68,7 @@
   import { useRoute } from 'vue-router';
   import router from '@/router';
   import { apiBasePost } from '@/http/request.ts';
-  import { getCommunityChatAdminAccessRequests, getCommunityChatAdminReports } from '@/api/communityChatApi.ts';
+  import { getCommunityChatAdminReports } from '@/api/communityChatApi.ts';
   import { useI18n } from 'vue-i18n';
   import { adminNavTarget, buildAdminNav, resolveActiveNavId, type AdminNavItem } from '@/view/admin/admin/adminNav.ts';
 
@@ -77,7 +77,6 @@
 
   const pendingOpinion = ref(0);
   const pendingSecurity = ref(0);
-  const pendingCommunity = ref(0);
   const pendingModeration = ref(0);
 
   const menuEntries = computed(() =>
@@ -94,14 +93,12 @@
       },
       pendingOpinion: pendingOpinion.value,
       pendingSecurity: pendingSecurity.value,
-      pendingCommunity: pendingCommunity.value,
       pendingModeration: pendingModeration.value,
       actionCenterTitle: t('adminActionCenter.title'),
       adminAuditTitle: t('adminAudit.title'),
       productInsightsTitle: t('adminProductInsights.title'),
       adminGovernanceTitle: t('adminGovernance.title'),
       aiEvaluationTitle: t('aiEvaluationAdmin.title'),
-      communityAccessTitle: t('communityChatAdmin.navTitle'),
       communityModerationTitle: t('communityChatModerationAdmin.navTitle'),
     }),
   );
@@ -114,13 +111,12 @@
   }
 
   /**
-   * 反馈和安全复用总览统计；社区准入与消息审核分别复用列表 total，不为导航另建计数接口。
+   * 反馈和安全复用总览统计；消息审核复用列表 total，不为导航另建计数接口。
    * 任一来源取不到都静默保留原值：导航外壳不能被角标请求打断。
    */
   async function loadPending() {
-    const [overviewResult, communityResult, moderationResult] = await Promise.allSettled([
+    const [overviewResult, moderationResult] = await Promise.allSettled([
       apiBasePost('/api/common/getAdminOverview', { hideInternal: true }),
-      getCommunityChatAdminAccessRequests({ status: 'pending', page: 1, pageSize: 1 }),
       getCommunityChatAdminReports({ status: 'pending', page: 1, pageSize: 1 }),
     ]);
     if (overviewResult.status === 'fulfilled') {
@@ -129,10 +125,6 @@
         pendingOpinion.value = Number(res.data?.pending?.opinion || 0);
         pendingSecurity.value = Number(res.data?.pending?.security || 0);
       }
-    }
-    if (communityResult.status === 'fulfilled') {
-      const res: any = communityResult.value;
-      if (res?.status === 200) pendingCommunity.value = Number(res.data?.total || 0);
     }
     if (moderationResult.status === 'fulfilled') {
       const res: any = moderationResult.value;
@@ -148,7 +140,6 @@
         prev &&
         (prev.includes('userOpinion') ||
           prev.includes('securityCenter') ||
-          prev.includes('communityChatAccess') ||
           prev.includes('communityChatModeration')) &&
         path !== prev
       )

@@ -17,9 +17,8 @@ const redisClient = {
 
 vi.mock('./redisClient.js', () => ({ default: redisClient }));
 
-const { MAX_EXPORT_BYTES, consumeExportTicket, createExportTicket, isValidExportToken } = await import(
-  './noteExportTickets.js'
-);
+const { EXPORT_FORMATS, MAX_EXPORT_BYTES, consumeExportTicket, createExportTicket, isValidExportToken } =
+  await import('./noteExportTickets.js');
 
 const baseTicket = () => ({
   userId: 'user-1',
@@ -35,6 +34,10 @@ beforeEach(() => {
 });
 
 describe('createExportTicket', () => {
+  it('允许批量笔记 ZIP 复用同一短时下载票据链路', () => {
+    expect(EXPORT_FORMATS.zip).toBe('application/zip');
+  });
+
   it('票据 token 是合法 base64url，且内容不以明文 token 为键存储', async () => {
     const { token, expiresIn } = await createExportTicket(baseTicket());
 

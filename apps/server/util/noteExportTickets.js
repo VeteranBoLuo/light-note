@@ -36,6 +36,7 @@ export const EXPORT_FORMATS = Object.freeze({
   md: 'text/markdown',
   html: 'text/html',
   pdf: 'application/pdf',
+  zip: 'application/zip',
 });
 
 function sha256(value) {

@@ -52,12 +52,27 @@ describe('笔记库批量 AI 操作语义', () => {
   });
 
   it('桌面与移动端都区分“添加到 AI 助手”和“AI 智能整理”', () => {
-    expect(source).toContain("$t('ai.entry.addSelectedToAssistant')");
+    expect(source).toContain("t('ai.entry.addSelectedToAssistant')");
     expect(source).toContain("$t('bookmarkMg.aiOrganizeBtn')");
     expect(source).toContain("key: 'assistant'");
     expect(source).toContain("key: 'smartOrganize'");
     expect(source).toContain('icon: icon.ai.materials');
     expect(source).toContain('icon: icon.ai.organize');
+  });
+
+  it('桌面批量工具栏只保留高频动作，低频动作收进更多菜单', () => {
+    expect(source).toContain(':menu-options="desktopBatchMoreOptions"');
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'assistant'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'addTags'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'removeTags'/);
+    expect(source).toMatch(/const desktopBatchMoreOptions = computed\(\(\) => \[[\s\S]*key: 'export'/);
+    expect(source).not.toContain('@click="openSelectedNotesAi(\'organize\')"');
+    expect(source).not.toContain('@click="openBatchTags(\'add\')"');
+    expect(source).not.toContain('@click="openBatchTags(\'remove\')"');
+    expect(source).not.toContain('@click="openBatchExportModal"');
+    expect(source).toContain("{{ $t('note.batchDone') }}");
+    expect(zhLocaleSource).toContain("batchDone: '完成'");
+    expect(enLocaleSource).toContain("batchDone: 'Done'");
   });
 
   it('AI 智能整理把当前所选笔记 ID 交给自动打标签弹窗', () => {
@@ -420,5 +435,19 @@ describe('笔记库页面树交互接线', () => {
       /\.note-mobile-navigation-drawer__switcher\s*\{[\s\S]*?padding: 0 16px 12px/,
     );
     expect(mobileNavigationDrawerSource).toMatch(/\.note-mobile-navigation-drawer__pages,[\s\S]*?flex: 1 1 auto/);
+  });
+
+  it('批量导出可选择原格式、HTML、Markdown 或 PDF，并统一打包为 ZIP', () => {
+    expect(source).toContain(':title="$t(\'note.batchExportTitle\')"');
+    expect(source).toContain("key: 'original'");
+    expect(source).toContain("key: 'html'");
+    expect(source).toContain("key: 'markdown'");
+    expect(source).toContain("key: 'pdf'");
+    expect(source).toContain("apiBasePost('/api/note/getNotesForExport'");
+    expect(source).toContain("import('@/utils/noteBatchExport')");
+    expect(source).toContain("format: 'zip'");
+    expect(source).not.toContain("backupKind: 'selected_notes_export'");
+    expect(zhLocaleSource).toContain("batchExportOriginal: '按每篇默认格式'");
+    expect(enLocaleSource).toContain("batchExportOriginal: 'Use Each Note’s Format'");
   });
 });

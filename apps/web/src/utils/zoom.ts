@@ -58,17 +58,23 @@ export function normalizeRectForRootZoom(
 }
 
 /**
- * 在滚动容器内平滑滚动到目标元素,内部已换算界面缩放(<html> zoom)。
+ * 在滚动容器内滚动到目标元素,内部已换算界面缩放(<html> zoom)。
  * 「滚动到某元素」一律用它,不要再裸写 getBoundingClientRect + scrollTo——否则 zoom≠1 时
  * 视觉坐标(rect)与布局坐标(scrollTop)混用会定位偏移(参见本文件顶部说明)。
  * @param container overflow 滚动的容器
  * @param el 目标元素(container 的后代)
  * @param offset 目标顶部距容器顶的留白(px,布局坐标)
+ * @param behavior 滚动行为；锚点导航默认平滑，聊天等必须一次到位的长距离定位可传 auto
  */
-export function scrollIntoContainer(container: HTMLElement, el: HTMLElement, offset = 0): void {
+export function scrollIntoContainer(
+  container: HTMLElement,
+  el: HTMLElement,
+  offset = 0,
+  behavior: ScrollBehavior = 'smooth',
+): void {
   const top =
     (el.getBoundingClientRect().top - container.getBoundingClientRect().top) / getRootZoom() +
     container.scrollTop -
     offset;
-  container.scrollTo({ top, behavior: 'smooth' });
+  container.scrollTo({ top, behavior });
 }

@@ -207,37 +207,6 @@ export interface CommunityChatRuntimePolicy {
   changed?: boolean;
 }
 
-export type CommunityChatAccessRequestStatus = 'pending' | 'approved' | 'rejected';
-export type CommunityChatMemberStatus = 'invited' | 'active' | 'revoked' | 'banned' | null;
-
-export interface CommunityChatAccessRequestItem {
-  id: string;
-  userId: string;
-  status: CommunityChatAccessRequestStatus;
-  requestMessage: string;
-  reviewNote: string;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  createTime: string;
-  updateTime: string;
-  userAlias: string;
-  userEmail: string;
-  memberRole: 'member' | 'moderator' | 'admin' | null;
-  memberStatus: CommunityChatMemberStatus;
-  memberRulesVersion: string | null;
-  rulesAcceptedAt: string | null;
-  joinedAt: string | null;
-  revokedAt: string | null;
-}
-
-export interface CommunityChatAccessRequestPage {
-  items: CommunityChatAccessRequestItem[];
-  total: number;
-  page: number;
-  pageSize: number;
-  status: CommunityChatAccessRequestStatus;
-}
-
 export const getCommunityChatAccess = () => apiBaseGet('/api/community-chat/access', undefined, { silent: true });
 
 export const requestCommunityChatAccess = (message = '') =>
@@ -315,21 +284,6 @@ export const getCommunityChatBlocks = () => apiBaseGet('/api/community-chat/bloc
 
 export const unblockCommunityChatUser = (blockId: string) =>
   apiBasePost(`/api/community-chat/blocks/${encodeURIComponent(blockId)}/unblock`, {}, { silent: true });
-
-export const getCommunityChatAdminAccessRequests = (
-  params: { status?: CommunityChatAccessRequestStatus; page?: number; pageSize?: number } = {},
-) => apiBaseGet('/api/community-chat/admin/access-requests', params, { silent: true });
-
-export const reviewCommunityChatAdminAccessRequest = (
-  userId: string,
-  input: { action: 'approve' | 'reject'; note?: string },
-) =>
-  apiBasePost(`/api/community-chat/admin/access-requests/${encodeURIComponent(userId)}/review`, input, {
-    silent: true,
-  });
-
-export const revokeCommunityChatAdminMember = (userId: string, reason = '') =>
-  apiBasePost(`/api/community-chat/admin/members/${encodeURIComponent(userId)}/revoke`, { reason }, { silent: true });
 
 export const getCommunityChatAdminRuntimePolicy = () =>
   apiBaseGet('/api/community-chat/admin/runtime-policy', undefined, { silent: true });

@@ -1,15 +1,5 @@
 <template>
   <div class="app-root" :class="{ 'has-mobile-bottom-nav': mobileBottomNavActive }">
-    <!--
-      全站唯一的顶部进度条,视口级 fixed 定位,所有模块共用同一个位置。
-      两件事共用它:SPA 路由导航和静默刷新(回到前台的陈旧刷新、切标签一类的软刷新)。
-      Android 原生进度只能感知整页加载,看不到 Vue Router 内部切换,所以 App 内也必须显示这条反馈。
-    -->
-    <BLoading
-      :loading="routeNavigationLoading || globalRefreshing || networkRequestLoading"
-      bar
-      :title="globalLoadingBarTitle"
-    />
     <div v-if="!isOnline" class="app-offline-banner" role="status" aria-live="polite">
       <span class="app-offline-banner__dot" aria-hidden="true"></span>
       {{ t('http.offline') }}
@@ -72,17 +62,14 @@
   } from '@/view/landing/landingAuth.ts';
   import { applyDocumentTheme } from '@/utils/theme.ts';
   import { shouldHideAiEdgeTrigger } from '@/utils/aiEntry.ts';
-  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
-  import { routeNavigationLoading } from '@/router';
-  import { globalRefreshing } from '@/composables/useGlobalRefreshBar';
-  import { networkRequestLoading } from '@/composables/useNetworkRequestFeedback';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { onSystemThemeChange } from '@/utils/systemTheme';
   import { MOBILE_LAYOUT_CONTEXT } from '@/composables/useMobileLayout';
   import { useCommunityChatUnreadRuntime } from '@/composables/useCommunityChatUnreadRuntime';
   import { nudgeVisible } from '@/composables/guestNudge';
   import { usePwaInstall } from '@/composables/usePwaInstall';
+  import { useAndroidNativeNotifications } from '@/composables/useAndroidNativeNotifications';
 
   const Login = defineAsyncComponent(() => import('@/view/login/UserAuthModal.vue'));
   // 图片查看器包含 viewer.js，只有用户真正打开图片时才下载，避免每次启动都解析第三方预览运行时。
@@ -94,9 +81,7 @@
   const FloatQuestion = defineAsyncComponent(() => import('./components/aiAssistant/FloatQuestion.vue'));
   const QuickCaptureModal = defineAsyncComponent(() => import('@/components/inbox/QuickCaptureModal.vue'));
   const GuestNudge = defineAsyncComponent(() => import('@/components/home/GuestNudge.vue'));
-  const AndroidDownloadProgress = defineAsyncComponent(
-    () => import('@/components/base/AndroidDownloadProgress.vue'),
-  );
+  const AndroidDownloadProgress = defineAsyncComponent(() => import('@/components/base/AndroidDownloadProgress.vue'));
   const AdminContextBanner = defineAsyncComponent(() => import('@/components/admin/AdminContextBanner.vue'));
   const PwaInstallGuideModal = defineAsyncComponent({
     loader: () => import('@/components/pwa/PwaInstallGuideModal.vue'),
@@ -126,10 +111,6 @@
     if (!aiAssistant.initialized) return;
     aiAssistant.switchConversation(aiRuntimeIdentity.value, t('ai.greeting'));
   });
-  /* 同一条进度条服务两件事,读屏文案要说清当前是哪一件。 */
-  const globalLoadingBarTitle = computed(() =>
-    globalRefreshing.value && !routeNavigationLoading.value ? t('common.refreshing') : t('common.loading'),
-  );
   const NOTICE_POLLING_INTERVAL = 300 * 1000;
   const NOTICE_MIN_REFRESH_GAP = 10 * 1000;
   const scaleExcludedRouter = new Set([
@@ -218,6 +199,7 @@
     userRole: computed(() => user.role),
     realtimeActive: computed(() => router.currentRoute.value.name !== 'communityChat'),
   });
+  useAndroidNativeNotifications();
   watch(
     mobileBottomNavActive,
     (active) => {
@@ -271,7 +253,6 @@
     '/admin/conversion': '/conversion',
     '/admin/userMg': '/userMg',
     '/admin/userOpinion': '/userOpinion',
-    '/admin/communityChatAccess': '/communityChatAccess',
     '/admin/communityChatModeration': '/communityChatModeration',
     '/admin/operationLog': '/operationLog',
     '/admin/todoPlanDiagnostics': '/todoPlanDiagnostics',
@@ -303,7 +284,6 @@
     '/conversion': '/admin/conversion',
     '/userMg': '/admin/userMg',
     '/userOpinion': '/admin/userOpinion',
-    '/communityChatAccess': '/admin/communityChatAccess',
     '/communityChatModeration': '/admin/communityChatModeration',
     '/operationLog': '/admin/operationLog',
     '/todoPlanDiagnostics': '/admin/todoPlanDiagnostics',
@@ -409,9 +389,11 @@
               : location.pathname === '/home'
                 ? 'home'
                 : 'app';
-        apiBasePost('/api/common/recordConversion', { event: 'page_view', source: pvPage }, { silent: true, feedback: false }).catch(
-          () => {},
-        );
+        apiBasePost(
+          '/api/common/recordConversion',
+          { event: 'page_view', source: pvPage },
+          { silent: true, feedback: false },
+        ).catch(() => {});
       }
     } catch (e) {
       /* 隐私模式 sessionStorage 不可用时忽略 */

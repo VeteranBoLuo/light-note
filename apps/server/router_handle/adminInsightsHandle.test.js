@@ -93,6 +93,27 @@ describe('后台产品洞察与治理快照', () => {
     expect(JSON.stringify(res.body)).not.toContain('user_id');
   });
 
+  it('书签、笔记和云文件采用统计均排除注册时自动生成的示例资源', async () => {
+    const res = response();
+    await getAdminProductInsights({ user: { role: 'root' }, body: { periodDays: 30, cohortWeeks: 8 } }, res);
+
+    const sqlStatements = query.mock.calls.map(([sql]) => String(sql));
+    const resourceQueries = [
+      { table: 'FROM bookmark b', owner: 'b.user_id', type: 'bookmark', resource: 'b.id' },
+      { table: 'FROM note n', owner: 'n.create_by', type: 'note', resource: 'n.id' },
+      { table: 'FROM files f', owner: 'f.create_by', type: 'file', resource: 'CAST(f.id AS CHAR)' },
+    ];
+
+    for (const expected of resourceQueries) {
+      const sql = sqlStatements.find((statement) => statement.includes(expected.table));
+      expect(sql).toContain('NOT EXISTS');
+      expect(sql).toContain('FROM onboarding_seed_resources osr');
+      expect(sql).toContain(`osr.user_id = ${expected.owner}`);
+      expect(sql).toContain(`osr.resource_type = '${expected.type}'`);
+      expect(sql).toContain(`osr.resource_id = ${expected.resource}`);
+    }
+  });
+
   it('周期只接受明确档位，百分比在空分母时稳定为 0', () => {
     expect(adminInsightsHandleInternals.normalizePeriodDays(31)).toBe(30);
     expect(adminInsightsHandleInternals.normalizePeriodDays(90)).toBe(90);
