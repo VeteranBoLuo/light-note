@@ -14,6 +14,13 @@ import {
 } from '../util/security/services/securityRestrictionService.js';
 import { removeUserSessions } from '../util/sessionStore.js';
 import { setIpBan } from '../util/security/services/ipReputation.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  AdminActionError,
+  adminActionErrorResponse,
+  beginAdminAction,
+  finishAdminAction,
+} from '../util/adminActionExecution.js';
 import { isIP } from 'node:net';
 
 const DISPOSITIONS = new Set(['unknown', 'confirmed_attack', 'false_positive', 'authorized_test', 'benign_anomaly']);
@@ -42,6 +49,34 @@ const normalizedExpiry = (body = {}) => {
   const value = normalizedString(body.expiresAt, 64);
   const timestamp = Date.parse(value);
   return { valid: Boolean(value) && Number.isFinite(timestamp) && timestamp > Date.now(), value: value || null };
+};
+
+const appendAdminActionFailureAudit = async (context, error) => {
+  if (!context) return;
+  try {
+    await finishAdminAction(context, {
+      outcome: 'failed',
+      metadata: { errorCode: stableAgentErrorCode(error) },
+    });
+  } catch {
+    // 统一审计工具已经记录稳定错误码。
+  }
+};
+
+const sendAdminActionError = (res, error, fallbackMessage) => {
+  const response = adminActionErrorResponse(error, fallbackMessage);
+  return res.status(response.status).send(resultData({ code: response.code }, response.status, response.message));
+};
+
+const loadSecurityReviewReceipt = async (connection, eventId) => {
+  const [rows] = await connection.query(
+    `SELECT event_id, disposition, workflow_status, handled_status, reviewed_by, reviewed_at, review_reason
+     FROM security_events
+     WHERE event_id = ?
+     LIMIT 1`,
+    [eventId],
+  );
+  return rows[0] || null;
 };
 
 const queryOptionalRows = async (label, sql, params = []) => {
@@ -447,19 +482,24 @@ export const getSecurityReviewClusterDetail = async (req, res) => {
 
 export const setSecurityEventDisposition = async (req, res) => {
   let connection;
+  let actionContext;
   try {
     if (!ensureRootRole(req, res)) return;
+    const eventId = normalizedString(req.params.eventId, 64);
     const disposition = normalizedString(req.body?.disposition, 40);
     if (!DISPOSITIONS.has(disposition)) return res.status(400).send(resultData(null, 400, '无效的事件结论'));
-    const reason = normalizedString(req.body?.reason, 500);
+    actionContext = await beginAdminAction(req, {
+      action: 'security.event.review',
+      targetId: eventId,
+      metadata: { disposition, scope: 'event' },
+    });
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const event = await loadEventForUpdate(connection, req.params.eventId);
+    const event = await loadEventForUpdate(connection, eventId);
     if (!event) {
-      await connection.rollback();
-      return res.status(404).send(resultData(null, 404, '安全事件不存在'));
+      throw new AdminActionError('SECURITY_EVENT_NOT_FOUND', '安全事件不存在', 404);
     }
-    await reviewEvent({ connection, event, disposition, reason, operatorId: req.user.id });
+    await reviewEvent({ connection, event, disposition, reason: actionContext.reason, operatorId: req.user.id });
     let tuningSuggestionId = null;
     if (disposition === 'false_positive' && req.body?.createTuningSuggestion !== false) {
       tuningSuggestionId = await createTuningSuggestionFromEvent({
@@ -467,14 +507,26 @@ export const setSecurityEventDisposition = async (req, res) => {
         event,
         operatorId: req.user.id,
         suggestionType: req.body?.suggestionType,
-        reason,
+        reason: actionContext.reason,
       });
     }
+    const review = await loadSecurityReviewReceipt(connection, eventId);
+    if (!review) throw new AdminActionError('SECURITY_REVIEW_RECEIPT_MISSING', '安全事件回执生成失败', 500);
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: {
+        disposition,
+        handledTotal: 1,
+        tuningSuggestionCreated: Boolean(tuningSuggestionId),
+      },
+      db: connection,
+    });
     await connection.commit();
-    return res.send(resultData({ tuningSuggestionId }, 200, '事件结论已保存'));
-  } catch {
+    return res.send(resultData({ review, handledTotal: 1, tuningSuggestionId, ...receipt }, 200, '事件结论已保存'));
+  } catch (error) {
     if (connection) await connection.rollback().catch(() => {});
-    return res.status(500).send(resultData(null, 500, '保存事件结论失败'));
+    await appendAdminActionFailureAudit(actionContext, error);
+    return sendAdminActionError(res, error, '保存事件结论失败');
   } finally {
     connection?.release();
   }
@@ -482,22 +534,33 @@ export const setSecurityEventDisposition = async (req, res) => {
 
 export const setSecurityClusterDisposition = async (req, res) => {
   let connection;
+  let actionContext;
   try {
     if (!ensureRootRole(req, res)) return;
+    const eventId = normalizedString(req.params.eventId, 64);
     const disposition = normalizedString(req.body?.disposition, 40);
     if (!DISPOSITIONS.has(disposition)) return res.status(400).send(resultData(null, 400, '无效的事件结论'));
-    const reason = normalizedString(req.body?.reason, 500);
+    actionContext = await beginAdminAction(req, {
+      action: 'security.cluster.review',
+      targetId: eventId,
+      metadata: { disposition, scope: 'cluster' },
+    });
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const anchor = await loadEventForUpdate(connection, req.params.eventId);
+    const anchor = await loadEventForUpdate(connection, eventId);
     if (!anchor) {
-      await connection.rollback();
-      return res.status(404).send(resultData(null, 404, '事件簇不存在'));
+      throw new AdminActionError('SECURITY_CLUSTER_NOT_FOUND', '事件簇不存在', 404);
     }
     const events = await loadClusterEventsForUpdate(connection, anchor);
     const targets = events.length ? events : [anchor];
     for (const event of targets) {
-      await reviewEvent({ connection, event, disposition, reason, operatorId: req.user.id });
+      await reviewEvent({
+        connection,
+        event,
+        disposition,
+        reason: actionContext.reason,
+        operatorId: req.user.id,
+      });
     }
     let tuningSuggestionId = null;
     if (disposition === 'false_positive' && req.body?.createTuningSuggestion !== false) {
@@ -506,14 +569,28 @@ export const setSecurityClusterDisposition = async (req, res) => {
         event: anchor,
         operatorId: req.user.id,
         suggestionType: req.body?.suggestionType,
-        reason,
+        reason: actionContext.reason,
       });
     }
+    const review = await loadSecurityReviewReceipt(connection, eventId);
+    if (!review) throw new AdminActionError('SECURITY_REVIEW_RECEIPT_MISSING', '事件簇回执生成失败', 500);
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: {
+        disposition,
+        handledTotal: targets.length,
+        tuningSuggestionCreated: Boolean(tuningSuggestionId),
+      },
+      db: connection,
+    });
     await connection.commit();
-    return res.send(resultData({ handledTotal: targets.length, tuningSuggestionId }, 200, '事件簇结论已保存'));
-  } catch {
+    return res.send(
+      resultData({ review, handledTotal: targets.length, tuningSuggestionId, ...receipt }, 200, '事件簇结论已保存'),
+    );
+  } catch (error) {
     if (connection) await connection.rollback().catch(() => {});
-    return res.status(500).send(resultData(null, 500, '保存事件簇结论失败'));
+    await appendAdminActionFailureAudit(actionContext, error);
+    return sendAdminActionError(res, error, '保存事件簇结论失败');
   } finally {
     connection?.release();
   }
@@ -521,6 +598,7 @@ export const setSecurityClusterDisposition = async (req, res) => {
 
 export const batchSetSecurityReviewDisposition = async (req, res) => {
   let connection;
+  let actionContext;
   try {
     if (!ensureRootRole(req, res)) return;
     const eventIds = Array.from(
@@ -541,7 +619,11 @@ export const batchSetSecurityReviewDisposition = async (req, res) => {
       return res.status(400).send(resultData(null, 400, '无效的事件结论'));
     }
     const scope = req.body?.scope === 'events' ? 'events' : 'clusters';
-    const reason = normalizedString(req.body?.reason, 500);
+    actionContext = await beginAdminAction(req, {
+      action: 'security.review.batch',
+      targetId: eventIds[0],
+      metadata: { disposition, scope, selectedTotal: eventIds.length },
+    });
     const reviewedEventIds = new Set();
     let tuningSuggestionTotal = 0;
 
@@ -550,15 +632,20 @@ export const batchSetSecurityReviewDisposition = async (req, res) => {
     for (const eventId of eventIds) {
       const anchor = await loadEventForUpdate(connection, eventId);
       if (!anchor) {
-        await connection.rollback();
-        return res.status(404).send(resultData({ missingEventId: eventId }, 404, '部分安全事件不存在，请刷新后重试'));
+        throw new AdminActionError('SECURITY_REVIEW_EVENT_NOT_FOUND', '部分安全事件不存在，请刷新后重试', 404);
       }
       const clusterEvents = scope === 'clusters' ? await loadClusterEventsForUpdate(connection, anchor) : [anchor];
       const targets = clusterEvents.length ? clusterEvents : [anchor];
       let reviewedAnchor = false;
       for (const event of targets) {
         if (reviewedEventIds.has(event.event_id)) continue;
-        await reviewEvent({ connection, event, disposition, reason, operatorId: req.user.id });
+        await reviewEvent({
+          connection,
+          event,
+          disposition,
+          reason: actionContext.reason,
+          operatorId: req.user.id,
+        });
         reviewedEventIds.add(event.event_id);
         reviewedAnchor = true;
       }
@@ -568,11 +655,21 @@ export const batchSetSecurityReviewDisposition = async (req, res) => {
           event: anchor,
           operatorId: req.user.id,
           suggestionType: req.body?.suggestionType,
-          reason,
+          reason: actionContext.reason,
         });
         if (suggestionId) tuningSuggestionTotal += 1;
       }
     }
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: {
+        disposition,
+        selectedTotal: eventIds.length,
+        handledTotal: reviewedEventIds.size,
+        tuningSuggestionTotal,
+      },
+      db: connection,
+    });
     await connection.commit();
     return res.send(
       resultData(
@@ -580,14 +677,17 @@ export const batchSetSecurityReviewDisposition = async (req, res) => {
           selectedTotal: eventIds.length,
           handledTotal: reviewedEventIds.size,
           tuningSuggestionTotal,
+          disposition,
+          ...receipt,
         },
         200,
         '批量事件复核结果已保存',
       ),
     );
-  } catch {
+  } catch (error) {
     if (connection) await connection.rollback().catch(() => {});
-    return res.status(500).send(resultData(null, 500, '批量保存事件结论失败'));
+    await appendAdminActionFailureAudit(actionContext, error);
+    return sendAdminActionError(res, error, '批量保存事件结论失败');
   } finally {
     connection?.release();
   }

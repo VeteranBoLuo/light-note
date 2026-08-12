@@ -13,8 +13,22 @@ const userApi = {
   getAdminUserDetail(userId: string) {
     return apiBasePost('/api/user/admin/detail', { userId });
   },
-  deleteUserById(id) {
-    return apiBaseGet(`/api/user/deleteUserById?id=${id}`);
+  updateAdminUser(payload: {
+    userId: string;
+    alias: string;
+    email: string;
+    role: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  }) {
+    return apiBasePost('/api/user/admin/update', payload);
+  },
+  disableAdminUser(userId: string, action: { reason: string; confirmed: true; confirmText: string }) {
+    return apiBasePost('/api/user/admin/disable', { userId, ...action });
+  },
+  restoreAdminUser(userId: string, action: { reason: string; confirmed: true; confirmText: string }) {
+    return apiBasePost('/api/user/admin/restore', { userId, ...action });
   },
   logout() {
     return apiBasePost('/api/user/logout');

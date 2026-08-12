@@ -14,17 +14,24 @@
       <div class="lt-wallet" :aria-label="t('growth.myPoints')">
         <div class="lt-wallet__copy">
           <span>{{ t('growth.myPoints') }}</span>
-          <strong>
+          <strong v-if="lottery">
             <SvgIcon :src="icon.growth.coin" :size="18" aria-hidden="true" />
             {{ points.toLocaleString('en-US') }}
           </strong>
+          <BLoading v-else inline :loading="true" />
         </div>
-        <span class="lt-wallet__level">{{ t('growth.lotteryLevelBenefit', { level: lottery?.level || 0 }) }}</span>
+        <span v-if="lottery" class="lt-wallet__level">{{ t('growth.lotteryLevelBenefit', { level: lottery.level }) }}</span>
       </div>
     </header>
 
-    <div v-if="lotteryLoading && !lottery" class="lt-loading">
+    <div v-if="!lottery && (lotteryLoading || !lotteryError)" class="lt-loading">
       <BLoading inline :loading="true" :title="t('growth.lotteryLoading')" />
+    </div>
+
+    <div v-else-if="lotteryError && !lottery" class="lt-loading lt-loading--error" role="alert">
+      <SvgIcon :src="icon.message.warning" :size="24" aria-hidden="true" />
+      <strong>{{ t('growth.lotteryLoadFailed') }}</strong>
+      <BButton size="small" @click="loadLottery">{{ t('common.retry') }}</BButton>
     </div>
 
     <div v-else class="lt-layout">
@@ -89,6 +96,9 @@
                   <SvgIcon :src="prizeIcon(prize)" :size="25" />
                 </span>
                 <span class="lt-prize__name">{{ prizeLabel(prize) }}</span>
+                <span v-if="prize.compensated" class="lt-prize__compensation">
+                  {{ t('growth.lotteryOverflowCompensated', { n: prize.amount }) }}
+                </span>
                 <span v-if="prize.guaranteed" class="lt-prize__rare is-guaranteed">
                   {{ t('growth.lotteryPityHitBadge') }}
                 </span>
@@ -262,6 +272,7 @@
 
           <BButton
             class="lt-odds-toggle"
+            v-click-log="{ module: '成长', operation: '查看抽奖概率说明' }"
             :aria-expanded="showOdds"
             aria-controls="lottery-odds"
             @click="showOdds = !showOdds"
@@ -277,6 +288,11 @@
           </BButton>
 
           <div v-if="showOdds && lottery" id="lottery-odds" class="lt-odds">
+            <div class="lt-odds__header" aria-hidden="true">
+              <span>{{ t('growth.lotteryOddsPrize') }}</span>
+              <strong>{{ t('growth.lotteryNormalOdds') }}</strong>
+              <strong>{{ t('growth.lotteryPityOdds') }}</strong>
+            </div>
             <div v-for="prize in lottery.pool" :key="prize.id" class="lt-odds__row" :class="{ 'is-rare': prize.rare }">
               <span>
                 <SvgIcon :src="prizeIcon(prize)" :size="15" aria-hidden="true" />
@@ -285,8 +301,18 @@
                   {{ t('growth.lotteryPityPoolBadge') }}
                 </small>
               </span>
-              <strong>{{ prize.rate }}%</strong>
+              <strong>{{ formatRate(prize.normalRate ?? prize.rate) }}</strong>
+              <strong>{{ prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable') }}</strong>
             </div>
+            <p class="lt-odds__note">{{ t('growth.lotteryFreeCountsPity') }}</p>
+            <p v-if="lottery.overflowPolicy" class="lt-odds__note">
+              {{
+                t('growth.lotteryOverflowPolicy', {
+                  max: lottery.overflowPolicy.maxInventory,
+                  points: lottery.overflowPolicy.compensationPoints,
+                })
+              }}
+            </p>
           </div>
         </section>
       </aside>
@@ -310,7 +336,7 @@
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const emit = defineEmits<{ 'focus-header': [] }>();
   const readOnly = computed(() => props.readOnly);
-  const { lottery, lotteryLoading, loadLottery, draw } = useGrowth();
+  const { lottery, lotteryLoading, lotteryError, loadLottery, draw } = useGrowth();
 
   const rolling = ref(false);
   const revealed = ref<LotteryPrize[]>([]);
@@ -351,6 +377,7 @@
   }
 
   const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`);
+  const formatRate = (rate?: number) => `${Number(rate || 0).toFixed(2).replace(/\.00$/, '')}%`;
 
   function prizeIcon(prize: LotteryPrize) {
     return (
@@ -527,6 +554,13 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 20px;
     background: var(--workbench-subcard-bg);
+  }
+
+  .lt-loading--error {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    color: var(--warning-color, #a05f00);
   }
 
   .lt-layout {
@@ -805,6 +839,13 @@
     font-weight: 700;
     line-height: 1.3;
     overflow-wrap: anywhere;
+  }
+
+  .lt-prize__compensation {
+    color: var(--success-color, #1a7d4a);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.35;
   }
 
   .lt-prize__rare {
@@ -1206,12 +1247,27 @@
   }
 
   .lt-odds__row {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 54px 54px;
     align-items: center;
-    justify-content: space-between;
     gap: 10px;
     color: var(--desc-color);
     font-size: 10px;
+  }
+
+  .lt-odds__header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 54px 54px;
+    gap: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid var(--surface-border-color);
+    color: var(--desc-color);
+    font-size: 9px;
+  }
+
+  .lt-odds__header strong,
+  .lt-odds__row > strong {
+    text-align: right;
   }
 
   .lt-odds__row > span {
@@ -1234,6 +1290,13 @@
   .lt-odds__row.is-rare strong {
     color: var(--lt-gold-fg);
     font-weight: 700;
+  }
+
+  .lt-odds__note {
+    margin: 2px 0 0;
+    color: var(--desc-color);
+    font-size: 9px;
+    line-height: 1.45;
   }
 
   @keyframes lt-shake {

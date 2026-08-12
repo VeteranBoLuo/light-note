@@ -67,16 +67,25 @@
     <p class="log-cleanup__note">
       注：操作日志的 IP 记录自 2026-07-02 起生效，此前的历史操作日志无 IP、无法按 IP 追溯清理。
     </p>
+
+    <AdminRiskActionModal
+      v-model:visible="confirmVisible"
+      title="确认清理日志"
+      :impact="confirmImpact"
+      confirm-phrase="确认清理日志"
+      :loading="busy === 'clear-exact' || busy === 'clear-local'"
+      @confirm="confirmClear"
+    />
   </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
-  import { ref } from 'vue';
+  import { computed, ref } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
 
   type Mode = 'exact' | 'local';
@@ -91,8 +100,14 @@
   const ip = ref('');
   const stats = ref<LogStats | null>(null);
   const statsLabel = ref('');
+  const confirmVisible = ref(false);
+  const pendingMode = ref<Mode>('exact');
   // 破坏性操作必须有明确的进行中状态，并在此期间互斥：否则重复点击会发出多次删除请求。
   const busy = ref<BusyState>('');
+  const confirmImpact = computed(() => {
+    const target = pendingMode.value === 'local' ? '本地/回环调试数据' : `IP ${ip.value.trim()}`;
+    return `将物理删除【${target}】在操作日志、API 日志、转化漏斗中的全部记录，无法恢复。`;
+  });
 
   function formatNumber(value: number) {
     return Number(value || 0).toLocaleString('zh-CN');
@@ -124,27 +139,29 @@
       message.error('请输入要清理的 IP');
       return;
     }
-    const target = mode === 'local' ? '本地/回环调试' : `IP ${ip.value.trim()}`;
-    Alert.alert({
-      title: '确认清理',
-      content: `将物理删除【${target}】在操作日志、api 日志、转化漏斗中的全部记录，不可恢复，确认继续？`,
-      async onOk() {
-        busy.value = mode === 'local' ? 'clear-local' : 'clear-exact';
-        try {
-          const res = await apiBasePost('/api/common/clearLogsByIp', payload(mode));
-          if (res.status === 200) {
-            const d = res.data || {};
-            message.success(
-              `清理完成：操作日志 ${d.operationLogs || 0} · api 日志 ${d.apiLogs || 0} · 转化漏斗 ${d.conversionEvents || 0}`,
-            );
-            busy.value = '';
-            await query(mode);
-          }
-        } finally {
-          busy.value = '';
-        }
-      },
-    });
+    pendingMode.value = mode;
+    confirmVisible.value = true;
+  }
+
+  async function confirmClear(action: { reason: string; confirmed: true; confirmText: string }) {
+    const mode = pendingMode.value;
+    busy.value = mode === 'local' ? 'clear-local' : 'clear-exact';
+    try {
+      const res = await apiBasePost('/api/common/clearLogsByIp', { ...payload(mode), ...action });
+      if (res.status === 200) {
+        const d = res.data || {};
+        confirmVisible.value = false;
+        message.success(
+          `清理完成：操作日志 ${d.operationLogs || 0} · API 日志 ${d.apiLogs || 0} · 转化漏斗 ${
+            d.conversionEvents || 0
+          } · 审计 ${String(d.auditId || '').slice(0, 8)}`,
+        );
+        busy.value = '';
+        await query(mode);
+      }
+    } finally {
+      busy.value = '';
+    }
   }
 </script>
 

@@ -1,9 +1,16 @@
 <template>
   <section class="community-notification-settings" :class="{ 'is-compact': compact }">
     <div class="community-notification-settings__head">
-      <div>
+      <span v-if="compact" class="community-notification-settings__head-icon" aria-hidden="true">
+        <SvgIcon :src="icon.settings.notification" size="17" />
+      </span>
+      <div class="community-notification-settings__head-copy">
         <strong>{{ t('communityChat.notifications.title') }}</strong>
-        <span>{{ t('communityChat.notifications.description') }}</span>
+        <span>
+          {{
+            compact ? t('communityChat.notifications.compactDescription') : t('communityChat.notifications.description')
+          }}
+        </span>
       </div>
       <BSwitch
         :checked="settings.enabled"
@@ -42,18 +49,30 @@
         </BButton>
       </div>
 
-      <div class="community-notification-settings__explanation" aria-live="polite">
+      <div v-if="compact" class="community-notification-settings__compact-summary" aria-live="polite">
+        <i aria-hidden="true"></i>
+        <span>{{ currentExplanationDescription }}</span>
+      </div>
+
+      <div v-else class="community-notification-settings__explanation" aria-live="polite">
         <strong>{{ currentExplanationLabel }}</strong>
         <span>{{ currentExplanationDescription }}</span>
       </div>
 
-      <div class="community-notification-settings__channels">
+      <div v-if="compact" class="community-notification-settings__compact-meta">
+        <span :class="{ 'is-active': settings.enabled }">
+          <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactInAppChannel') }}
+        </span>
+        <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactSystemChannel') }} </span>
+      </div>
+
+      <div v-else class="community-notification-settings__channels">
         <span :class="{ 'is-active': settings.enabled }">
           <i aria-hidden="true"></i>{{ t('communityChat.notifications.inAppChannel') }}
         </span>
         <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
       </div>
-      <p class="community-notification-settings__hint">
+      <p v-if="!compact" class="community-notification-settings__hint">
         {{ t('communityChat.notifications.visibilityHint') }}
       </p>
     </template>
@@ -73,10 +92,12 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { useNotification } from '@/composables/useNotification';
+  import icon from '@/config/icon';
 
-  withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
+  const props = withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
   const emit = defineEmits<{ saved: [settings: CommunityChatNotificationSettings] }>();
   const { t } = useI18n();
   const communityUnread = useCommunityChatUnread();
@@ -136,7 +157,13 @@
     settings.value.enabled ? currentLevelLabel.value : t('communityChat.notifications.disabledLabel'),
   );
   const currentExplanationDescription = computed(() =>
-    settings.value.enabled ? currentLevelDescription.value : t('communityChat.notifications.disabledDescription'),
+    settings.value.enabled
+      ? currentLevelDescription.value
+      : t(
+          props.compact
+            ? 'communityChat.notifications.disabledCompactDescription'
+            : 'communityChat.notifications.disabledDescription',
+        ),
   );
 
   function normalizeSettings(value: Partial<CommunityChatNotificationSettings> | null | undefined) {
@@ -226,7 +253,7 @@
     gap: 18px;
   }
 
-  .community-notification-settings__head > div,
+  .community-notification-settings__head-copy,
   .community-notification-settings__explanation {
     min-width: 0;
     display: grid;
@@ -239,7 +266,7 @@
     font-size: 13px;
   }
 
-  .community-notification-settings__head span,
+  .community-notification-settings__head-copy > span,
   .community-notification-settings__explanation span,
   .community-notification-settings__hint {
     color: var(--desc-color);
@@ -364,7 +391,101 @@
   }
 
   .community-notification-settings.is-compact {
-    gap: 13px;
+    gap: 11px;
+    padding: 14px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 16px;
+    background: var(--card-background);
+  }
+
+  .is-compact .community-notification-settings__head {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .community-notification-settings__head-icon {
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 10px;
+    color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--workspace-panel-bg-color));
+  }
+
+  .is-compact .community-notification-settings__head-copy {
+    flex: 1;
+    gap: 2px;
+  }
+
+  .is-compact .community-notification-settings__head-copy > span {
+    line-height: 1.45;
+  }
+
+  .is-compact .community-notification-settings__rail {
+    gap: 6px;
+  }
+
+  .is-compact .community-notification-settings__option {
+    min-height: 40px;
+    padding: 7px 6px;
+  }
+
+  .community-notification-settings__compact-summary {
+    min-width: 0;
+    min-height: 36px;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--workspace-panel-bg-color);
+    font-size: 10px;
+    line-height: 1.5;
+  }
+
+  .community-notification-settings__compact-summary i {
+    width: 7px;
+    height: 7px;
+    margin-top: 4px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--primary-color);
+  }
+
+  .community-notification-settings__compact-meta {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    color: var(--desc-color);
+    font-size: 9px;
+    line-height: 1.4;
+  }
+
+  .community-notification-settings__compact-meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .community-notification-settings__compact-meta span.is-active {
+    color: var(--success-color);
+  }
+
+  .community-notification-settings__compact-meta i {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 6px;
+    border-radius: 50%;
+    background: currentColor;
   }
 
   @media (max-width: 767px) {
@@ -377,8 +498,27 @@
       font-size: 11px;
     }
 
-    .community-notification-settings__head span {
+    .community-notification-settings__head-copy > span {
       max-width: 260px;
+    }
+
+    .community-notification-settings.is-compact {
+      gap: 9px;
+      padding: 11px;
+      border-radius: 14px;
+    }
+
+    .is-compact .community-notification-settings__head-copy > span {
+      max-width: none;
+    }
+
+    .is-compact .community-notification-settings__option {
+      min-height: 42px;
+    }
+
+    .community-notification-settings__compact-summary {
+      min-height: 34px;
+      padding: 7px 9px;
     }
   }
 

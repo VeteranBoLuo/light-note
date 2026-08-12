@@ -15,4 +15,30 @@ describe('cloud file empty state layout', () => {
     expect(source).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.file-label\s*\{[\s\S]*?width:\s*calc\(100% - 54px\)/);
     expect(source).toMatch(/\.mobile-file-more\.b_btn\s*\{[\s\S]*?width:\s*44px/);
   });
+
+  it('移动端文件操作抽屉不提供 AI 助手入口', () => {
+    const mobileActionsSource = source.match(
+      /const mobileFileActions = computed<MobilePageActionItem\[\]>\(\(\) => \{([\s\S]*?)\n  \}\);/,
+    )?.[1];
+    const mobileHandlerSource = source.match(
+      /function handleMobileFileAction\(action: MobilePageActionItem\) \{([\s\S]*?)\n  \}/,
+    )?.[1];
+
+    expect(mobileActionsSource).toBeDefined();
+    expect(mobileActionsSource).not.toContain("key: 'ai'");
+    expect(mobileHandlerSource).toBeDefined();
+    expect(mobileHandlerSource).not.toContain("action.key === 'ai'");
+    expect(source).toContain("label: $t('cloudSpace.aiUseFile')");
+  });
+
+  it('批量下载先选择分别下载或 ZIP，单文件仍直接下载', () => {
+    expect(source).toContain('v-model:visible="batchDownloadChoiceVisible"');
+    expect(source).toContain(`startBatchDownload('individual')`);
+    expect(source).toContain(`startBatchDownload('zip')`);
+    expect(source).toContain('const runBrowserIndividualDownloads = async');
+    expect(source).toContain('const runZipBatchDownload = async');
+    expect(source).toMatch(
+      /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,
+    );
+  });
 });

@@ -30,4 +30,19 @@ describe('useMobileNavigationState', () => {
     expect(restoreResourceScroll('/home')).toBe(true);
     expect(scroll.scrollTop).toBe(268);
   });
+
+  it('笔记库交给页面按列表范围恢复，移动壳不会把它反复归零', () => {
+    const scroll = document.createElement('div');
+    scroll.dataset.mobileResourceScroll = '';
+    scroll.getClientRects = () => [{ width: 320, height: 600 }] as unknown as DOMRectList;
+    document.body.append(scroll);
+
+    const { restoreResourceScroll, saveResourceScroll } = useMobileNavigationState();
+    scroll.scrollTop = 420;
+    saveResourceScroll('/noteLibrary');
+
+    scroll.scrollTop = 135;
+    expect(restoreResourceScroll('/noteLibrary')).toBe(true);
+    expect(scroll.scrollTop).toBe(135);
+  });
 });

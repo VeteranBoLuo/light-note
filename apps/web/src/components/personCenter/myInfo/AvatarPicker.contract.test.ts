@@ -13,6 +13,9 @@ describe('avatar picker integration', () => {
     expect(pickerSource).toContain('<BUpload');
     expect(pickerSource).toContain('v-for="avatar in BUILTIN_AVATARS"');
     expect(pickerSource).toContain('renderBuiltinAvatar(selectedId.value)');
+    expect(pickerSource.indexOf('class="avatar-picker__hero"')).toBeLessThan(
+      pickerSource.indexOf('class="avatar-picker__scroll"'),
+    );
   });
 
   it('does not introduce raw controls or inline static svg icons', () => {

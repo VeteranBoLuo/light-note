@@ -620,6 +620,7 @@ router.post('/share/preview/archive', fileSharePreviewLimiter, fileShareHandle.l
 
 router.post('/queryFolder', fileHandle.queryFolder);
 router.post('/addFolder', fileHandle.addFolder);
+router.post('/ensureFolder', fileHandle.ensureFolder);
 router.post('/associateFile', fileHandle.associateFile);
 router.post('/updateFolder', fileHandle.updateFolder);
 router.post('/deleteFolder', fileHandle.deleteFolder);

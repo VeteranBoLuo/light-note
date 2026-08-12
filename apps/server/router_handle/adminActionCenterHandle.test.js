@@ -76,6 +76,42 @@ function rowsFor(sql) {
           ],
         ];
   }
+  if (statement.includes('FROM feature_requests')) {
+    return summary
+      ? [[{ total: 1, critical: 0 }]]
+      : [
+          [
+            {
+              id: 'feature-1',
+              title: '支持更好的检索',
+              category: 'search',
+              submitter_user_id: 'u-4',
+              vote_count: 8,
+              alias: '用户丁',
+              create_time: '2026-08-09 09:00:00',
+              update_time: '2026-08-09 09:30:00',
+            },
+          ],
+        ];
+  }
+  if (statement.includes('FROM resource_governance_findings')) {
+    return summary
+      ? [[{ total: 1, critical: 1 }]]
+      : [
+          [
+            {
+              id: 'finding-1',
+              issue_code: 'OWNER_MISSING',
+              resource_type: 'file',
+              risk_level: 'blocked',
+              observation_count: 2,
+              estimated_bytes: 1024,
+              first_seen_at: '2026-08-09 08:00:00',
+              last_seen_at: '2026-08-09 10:00:00',
+            },
+          ],
+        ];
+  }
   if (statement.includes('FROM ai_document_jobs')) {
     return summary
       ? [[{ total: 4, attention: 1, running: 1, waiting: 2, completed_24h: 8 }]]
@@ -177,6 +213,47 @@ function rowsFor(sql) {
           ],
         ];
   }
+  if (statement.includes('FROM file_preview_jobs')) {
+    return summary
+      ? [[{ total: 1, attention: 1, running: 0, waiting: 0, completed_24h: 0 }]]
+      : [
+          [
+            {
+              id: 'preview-1',
+              status: 'failed',
+              attempts: 2,
+              file_id: 88,
+              format_id: 'pdf',
+              file_name: '预览文件.pdf',
+              owner_user_id: 'u-5',
+              alias: '用户戊',
+              error_code: 'PREVIEW_CONVERT_FAILED',
+              create_time: '2026-08-09 04:00:00',
+              update_time: '2026-08-09 05:00:00',
+            },
+          ],
+        ];
+  }
+  if (statement.includes('FROM resource_cleanup_jobs')) {
+    return summary
+      ? [[{ total: 1, attention: 1, running: 0, waiting: 0, completed_24h: 0 }]]
+      : [
+          [
+            {
+              id: 'cleanup-1',
+              risk_level: 'safe',
+              status: 'completed_with_errors',
+              total: 5,
+              succeeded: 4,
+              skipped: 0,
+              failed: 1,
+              last_error_code: 'CLEANUP_ITEM_FAILED',
+              create_time: '2026-08-09 03:00:00',
+              update_time: '2026-08-09 04:00:00',
+            },
+          ],
+        ];
+  }
   throw new Error(`unexpected query: ${statement}`);
 }
 
@@ -210,8 +287,9 @@ describe('后台统一待处理中心', () => {
       status: 200,
       data: {
         unavailableSources: ['community_report'],
-        work: { total: 4, critical: 1 },
-        jobs: { attention: 5, running: 2, waiting: 4, completed24h: 37 },
+        work: { total: 6, critical: 2 },
+        jobs: { attention: 7, running: 2, waiting: 4, completed24h: 37 },
+        sla: { policyVersion: expect.any(String), sampled: true },
       },
     });
     expect(res.body.data.jobs.items.find((item) => item.source === 'todo_reminder')).toMatchObject({
@@ -227,6 +305,26 @@ describe('后台统一待处理中心', () => {
     expect(res.body.data.jobs.items.find((item) => item.source === 'ai_document')).toMatchObject({
       status: 'attention',
       canRetry: true,
+    });
+    expect(res.body.data.work.items.find((item) => item.source === 'feature_request')).toMatchObject({
+      ownerTeam: '产品共建',
+      severity: 'high',
+    });
+    expect(res.body.data.work.items.find((item) => item.source === 'security')).toMatchObject({
+      id: 'sec-1',
+      targetUrl: '/securityCenter/review?eventId=sec-1',
+    });
+    expect(res.body.data.work.items.find((item) => item.source === 'resource_governance')).toMatchObject({
+      ownerTeam: '资源治理',
+      severity: 'critical',
+    });
+    expect(res.body.data.jobs.items.find((item) => item.source === 'file_preview')).toMatchObject({
+      ownerTeam: '文件预览服务',
+      status: 'attention',
+    });
+    expect(res.body.data.jobs.items.find((item) => item.source === 'resource_cleanup')).toMatchObject({
+      ownerTeam: '资源治理',
+      status: 'attention',
     });
     const email = res.body.data.jobs.items.find((item) => item.source === 'email_delivery');
     expect(email.ownerLabel).not.toContain('private@');
@@ -249,6 +347,8 @@ describe('后台统一待处理中心', () => {
     expect(res.body.data.work.items).toEqual([]);
     expect(res.body.data.jobs.items).toHaveLength(1);
     expect(res.body.data.jobs.items.every((item) => item.source === 'bookmark_icon')).toBe(true);
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query.mock.calls.every(([sql]) => String(sql).includes('bookmark_icon_jobs'))).toBe(true);
   });
 
   it('拒绝未知来源筛选且不查询数据库', async () => {
@@ -257,6 +357,26 @@ describe('后台统一待处理中心', () => {
 
     expect(res.body).toMatchObject({ status: 400 });
     expect(query).not.toHaveBeenCalled();
+  });
+
+  it('在服务端按分区、SLA 与关键字筛选明细', async () => {
+    const res = response();
+    await getAdminActionCenter(
+      {
+        user: { role: 'root' },
+        body: { section: 'work', slaState: 'overdue', keyword: 'XSS', limit: 20 },
+      },
+      res,
+    );
+
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        filters: { section: 'work', source: 'all', status: 'all', slaState: 'overdue', keyword: 'XSS' },
+        jobs: { items: [] },
+      },
+    });
+    expect(res.body.data.work.items.every((item) => item.slaState === 'overdue')).toBe(true);
   });
 
   it('明确失败的文档任务可在必需审计事务内重新入队', async () => {

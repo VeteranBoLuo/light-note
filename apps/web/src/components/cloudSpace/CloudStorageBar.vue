@@ -7,7 +7,7 @@
   >
     <BButton
       class="storage-usage"
-      :class="statusClass"
+      :class="[statusClass, { 'storage-usage--compact': compact }]"
       :aria-label="t('cloudSpace.storageDetailsAria', { percent: usagePercent })"
     >
       <div class="storage-head">
@@ -140,6 +140,15 @@
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
 
+  withDefaults(
+    defineProps<{
+      compact?: boolean;
+    }>(),
+    {
+      compact: false,
+    },
+  );
+
   const cloud = cloudSpaceStore();
   const router = useRouter();
   const { t } = useI18n();
@@ -244,6 +253,42 @@
 
     &:hover {
       background: transparent;
+    }
+  }
+
+  .storage-usage.storage-usage--compact {
+    width: 100%;
+    min-width: 0;
+    height: 40px;
+    padding: 6px 8px;
+    gap: 5px;
+    border-color: var(--surface-border-color);
+    border-radius: 10px;
+    background: var(--menu-body-bg-color);
+    box-sizing: border-box;
+
+    &:hover {
+      background: var(--menu-body-bg-color);
+    }
+
+    .storage-head {
+      justify-content: flex-end;
+    }
+
+    .storage-title,
+    .storage-value,
+    .storage-status {
+      display: none;
+    }
+
+    .storage-meta {
+      width: 100%;
+      justify-content: flex-end;
+    }
+
+    .storage-percent {
+      min-width: 0;
+      font-size: 11px;
     }
   }
 

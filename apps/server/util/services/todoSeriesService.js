@@ -12,6 +12,7 @@ import {
 import { validateOwnedResourceRefs } from './noteReferenceService.js';
 import { normalizeTodoResourceRefs, replaceTodoResourceRefs } from './todoReferenceService.js';
 import { incrementTodoPlanMetric } from '../todoPlanMetrics.js';
+import { recordTodoCompletion } from '../growthActivityHistory.js';
 
 const WRITE_SCOPES = new Set(['current', 'future', 'series']);
 const DELETE_SCOPES = new Set(['current', 'future', 'series']);
@@ -927,6 +928,13 @@ export async function setV2TodoStatus(connection, userId, current, status, { und
   );
   if (!result.affectedRows) return 0;
   if (status === 'completed') {
+    await recordTodoCompletion(connection, { userId, todoId: current.id });
+    try {
+      const { persistAchievementMetricFromDatabase } = await import('../growthAchievementState.js');
+      await persistAchievementMetricFromDatabase(userId, 'completedTodoCount', { db: connection });
+    } catch (error) {
+      console.warn('[todo-series] 成长成就状态同步失败 code=%s', String(error?.code || 'ACHIEVEMENT_SYNC_FAILED'));
+    }
     await connection.query(
       `UPDATE todo_reminder_jobs
           SET status = 'cancelled', cancel_reason = 'completed', lease_token = NULL, lease_until = NULL

@@ -5,7 +5,6 @@ vi.mock('@/http/request', () => ({ apiBasePost }));
 
 const {
   listAiResultReusableBlocks,
-  getAiConversationLineage,
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
   prepareAiResultNoteReuse,
@@ -115,15 +114,7 @@ describe('AI workspace recovery API', () => {
     expect(JSON.stringify(apiBasePost.mock.calls.at(-1))).not.toContain('回答正文');
   });
 
-  it('分支谱系与版本接口只提交会话/消息标识，不上传标题或回答正文', async () => {
-    apiBasePost.mockResolvedValue({ status: 200, data: { nodes: [] } });
-    await getAiConversationLineage('conversation-1');
-    expect(apiBasePost).toHaveBeenLastCalledWith(
-      '/api/chat/conversations/lineage',
-      { conversationId: 'conversation-1' },
-      { silent: true },
-    );
-
+  it('回答版本接口只提交会话/消息标识，不上传标题或回答正文', async () => {
     apiBasePost.mockResolvedValue({ status: 200, data: { items: [] } });
     await listAiMessageVersions('conversation-1', 'message-1');
     expect(apiBasePost).toHaveBeenLastCalledWith(

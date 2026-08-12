@@ -15,7 +15,7 @@ import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
 
-router.get('/clearApiLogs', commonHandle.clearApiLogs);
+router.post('/clearApiLogs', commonHandle.clearApiLogs);
 
 router.post('/recordOperationLogs', commonHandle.recordOperationLogs);
 
@@ -33,7 +33,7 @@ router.post('/addLogExclude', commonHandle.addLogExcludeFp);
 
 router.post('/removeLogExclude', commonHandle.removeLogExcludeFp);
 
-router.get('/clearOperationLogs', commonHandle.clearOperationLogs);
+router.post('/clearOperationLogs', commonHandle.clearOperationLogs);
 
 router.post('/getIpLogStats', commonHandle.getIpLogStats);
 

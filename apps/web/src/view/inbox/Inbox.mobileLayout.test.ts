@@ -29,13 +29,21 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(/:deep\(\.todo-workspace-toolbar__views\.tab-container\)[\s\S]*?min-height:\s*40px/);
   });
 
-  it('PC 端把待办状态与展示视图拆成不同控件组', () => {
+  it('PC 端用胶囊状态与文字视图区分两套切换，并保持在同一行', () => {
     expect(inboxSource).toContain("t('inbox.todoStatusGroupLabel')");
     expect(inboxSource).toContain("t('inbox.todoViewGroupLabel')");
     expect(inboxSource).toContain('class="inbox-toolbar__todo-status"');
-    expect(inboxSource).toContain('class="inbox-toolbar__todo-divider"');
-    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-status"[\s\S]*?variant="segment"/);
+    expect(inboxSource).not.toContain('class="inbox-toolbar__todo-group-label"');
+    expect(inboxSource).not.toContain('class="inbox-toolbar__todo-divider"');
+    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-status"[\s\S]*?variant="pill"/);
     expect(inboxSource).toMatch(/class="inbox-toolbar__todo-views"[\s\S]*?variant="line"/);
+    expect(inboxSource).toContain("'inbox-toolbar--todo-desktop': isTodoFocused && !isMobileTodoPrimary");
+    expect(inboxSource).toMatch(
+      /\.inbox-toolbar--todo-desktop\s*\{[\s\S]*?padding:\s*3px 0[\s\S]*?background:\s*transparent/,
+    );
+    expect(inboxSource).toMatch(
+      /\.inbox-toolbar__todo-tabs\s*\{[\s\S]*?display:\s*flex[\s\S]*?gap:\s*clamp\(22px, 2vw, 32px\)/,
+    );
     expect(inboxSource).toMatch(
       /\.inbox-toolbar__todo-views :deep\(\.tab\.is-active\)[\s\S]*?color:\s*var\(--todo-accent-color\)/,
     );

@@ -156,15 +156,28 @@ describe('历史成就头像框权益兼容', () => {
   it('把旧成就领取流水对应的头像框合并为已拥有，但读取过程不写装扮表', async () => {
     mocks.query
       .mockResolvedValueOnce([[{ cosmetic_id: 'frame_mint' }]])
-      .mockResolvedValueOnce([[{ ref: 'streak_7' }, { ref: 'bookmark_20' }, { ref: 'unknown_achievement' }]]);
+      .mockResolvedValueOnce([[{ achievementKey: 'streak_7' }]])
+      .mockResolvedValueOnce([[{ achievementKey: 'bookmark_20' }, { achievementKey: 'unknown_achievement' }]]);
 
     await expect(getOwnedCosmetics('user-1')).resolves.toEqual([
       'frame_mint',
       'frame_streak_seed',
       'frame_bookmark_seed',
     ]);
-    expect(mocks.query).toHaveBeenCalledTimes(2);
+    expect(mocks.query).toHaveBeenCalledTimes(3);
+    expect(String(mocks.query.mock.calls[1][0])).not.toContain('UNION');
     expect(mocks.query.mock.calls.some(([sql]) => String(sql).includes('INSERT'))).toBe(false);
+  });
+
+  it('新成就表尚未建立的滚动更新窗口仍可只读回退旧领取账本', async () => {
+    const missingTable = Object.assign(new Error('table missing'), { code: 'ER_NO_SUCH_TABLE' });
+    mocks.query
+      .mockResolvedValueOnce([[]])
+      .mockRejectedValueOnce(missingTable)
+      .mockResolvedValueOnce([[{ achievementKey: 'note_10' }]]);
+
+    await expect(getOwnedCosmetics('user-1')).resolves.toEqual(['frame_note_seed']);
+    expect(mocks.query).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -236,8 +249,8 @@ describe('头像框佩戴校验', () => {
     });
     expect(connection.query).toHaveBeenNthCalledWith(
       1,
-      "SELECT 1 FROM points_log WHERE user_id = ? AND reason = 'achievement' AND ref = ? LIMIT 1",
-      ['user-1', 'streak_7'],
+      expect.stringContaining('SELECT achievement_key FROM user_achievements'),
+      ['user-1', 'streak_7', 'user-1', 'streak_7'],
     );
     expect(connection.query).toHaveBeenNthCalledWith(
       2,

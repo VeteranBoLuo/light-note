@@ -18,22 +18,22 @@
       <!-- 概览 -->
       <div class="nc-stats">
         <div class="nc-stat">
-          <span class="nc-stat-icon">📨</span>
+          <SvgIcon class="nc-stat-icon" :src="icon.settings.notification" size="18" aria-hidden="true" />
           <b class="nc-stat-val">{{ stats.totalSent }}</b>
           <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.sent') }}</span>
         </div>
         <div class="nc-stat">
-          <span class="nc-stat-icon">👀</span>
+          <SvgIcon class="nc-stat-icon" :src="icon.settings.notificationReadAll" size="18" aria-hidden="true" />
           <b class="nc-stat-val">{{ stats.totalRead }}</b>
           <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.read') }}</span>
         </div>
         <div class="nc-stat">
-          <span class="nc-stat-icon">🗂️</span>
+          <SvgIcon class="nc-stat-icon" :src="icon.noteDetail.history" size="18" aria-hidden="true" />
           <b class="nc-stat-val">{{ stats.batches }}</b>
           <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.batches') }}</span>
         </div>
         <div class="nc-stat">
-          <span class="nc-stat-icon">↩️</span>
+          <SvgIcon class="nc-stat-icon" :src="icon.contextMenu.archive" size="18" aria-hidden="true" />
           <b class="nc-stat-val">{{ stats.totalRecalled }}</b>
           <span class="nc-stat-label">{{ t('notificationAdmin.inApp.stats.recalled') }}</span>
         </div>
@@ -66,17 +66,17 @@
               <div v-if="selected.length" class="nc-chips">
                 <span v-for="u in selected" :key="u.id" class="nc-chip">
                   {{ u.alias || u.email }}
-                  <button
-                    type="button"
+                  <BButton
                     class="nc-chip-x"
+                    size="small"
                     :aria-label="`移除收件人 ${u.alias || u.email}`"
                     @click="removeUser(u.id)"
                   >
                     ×
-                  </button>
+                  </BButton>
                 </span>
               </div>
-              <b-input
+              <BInput
                 v-model:value="searchKey"
                 :placeholder="t('notificationAdmin.inApp.compose.searchUsers')"
                 @input="onSearch"
@@ -102,12 +102,12 @@
 
           <div class="nc-field">
             <label class="nc-label">{{ t('notificationAdmin.inApp.compose.type') }}</label>
-            <b-select v-model:value="form.type" :options="typeOptions" mode="single" style="width: 160px" />
+            <BSelect v-model:value="form.type" :options="typeOptions" mode="single" style="width: 160px" />
           </div>
 
           <div class="nc-field">
             <label class="nc-label">{{ t('notificationAdmin.inApp.compose.subject') }}</label>
-            <b-input
+            <BInput
               v-model:value="form.title"
               :placeholder="t('notificationAdmin.inApp.compose.subjectPlaceholder')"
               :maxlength="60"
@@ -127,7 +127,7 @@
 
           <div class="nc-field">
             <label class="nc-label">{{ t('notificationAdmin.inApp.compose.link') }}</label>
-            <b-input v-model:value="form.link" :placeholder="t('notificationAdmin.inApp.compose.linkPlaceholder')" />
+            <BInput v-model:value="form.link" :placeholder="t('notificationAdmin.inApp.compose.linkPlaceholder')" />
           </div>
 
           <div class="nc-compose-foot">
@@ -183,7 +183,14 @@
                   <span v-if="Number(asBatch(record).recalled) === 1" class="nc-recalled-tag">
                     {{ t('notificationAdmin.inApp.history.recalled') }}
                   </span>
-                  <BButton v-else class="nc-recall-btn" size="small" @click="onRecall(asBatch(record))">
+                  <BButton
+                    v-else
+                    class="nc-recall-btn"
+                    size="small"
+                    :loading="recallingBatchId === asBatch(record).batchId"
+                    :disabled="Boolean(recallingBatchId)"
+                    @click="onRecall(asBatch(record))"
+                  >
                     {{ t('notificationAdmin.inApp.history.recall') }}
                   </BButton>
                   <BButton
@@ -249,6 +256,16 @@
     </template>
 
     <EmailDeliveryPanel v-else ref="emailPanelRef" />
+
+    <AdminRiskActionModal
+      v-model:visible="riskVisible"
+      :title="riskConfig.title"
+      :impact="riskConfig.impact"
+      :confirm-phrase="riskConfig.phrase"
+      :confirm-label="riskConfig.label"
+      :loading="riskLoading"
+      @confirm="confirmRiskAction"
+    />
   </AdminDataPage>
 </template>
 
@@ -265,8 +282,10 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import EmailDeliveryPanel from './EmailDeliveryPanel.vue';
 
   const { t, locale } = useI18n();
@@ -374,35 +393,78 @@
   });
 
   const sending = ref(false);
-  function doSend() {
+  type RiskActionKind = 'send' | 'recall' | 'archive';
+  type RiskPayload = { reason: string; confirmed: true; confirmText: string };
+  const riskVisible = ref(false);
+  const riskActionKind = ref<RiskActionKind>('send');
+  const pendingBatch = ref<Batch | null>(null);
+  const recallingBatchId = ref('');
+  const deletingBatchId = ref('');
+  const riskLoading = computed(
+    () => sending.value || Boolean(recallingBatchId.value) || Boolean(deletingBatchId.value),
+  );
+  const riskConfig = computed(() => {
+    if (riskActionKind.value === 'recall') {
+      return {
+        title: t('notificationAdmin.inApp.history.recallTitle'),
+        impact: t('notificationAdmin.inApp.history.recallConfirm', { title: pendingBatch.value?.title || '' }),
+        phrase: '确认撤回通知',
+        label: t('notificationAdmin.inApp.history.recall'),
+      };
+    }
+    if (riskActionKind.value === 'archive') {
+      return {
+        title: t('notificationAdmin.deleteTitle'),
+        impact: t('notificationAdmin.deleteConfirm'),
+        phrase: '确认归档通知',
+        label: t('notificationAdmin.delete'),
+      };
+    }
+    const target =
+      targetMode.value === 'all'
+        ? t('notificationAdmin.inApp.compose.allHint')
+        : t('notificationAdmin.inApp.compose.selectedHint', { count: selected.value.length });
+    return {
+      title: t('notificationAdmin.inApp.compose.confirmTitle'),
+      impact: `${t('notificationAdmin.inApp.compose.confirmContent')} ${target}`,
+      phrase: '确认发送通知',
+      label: t('notificationAdmin.inApp.compose.send'),
+    };
+  });
+
+  async function doSend(action: RiskPayload) {
     sending.value = true;
     const payload: any = {
       type: form.value.type,
       title: form.value.title.trim(),
       content: form.value.content.trim() || undefined,
       link: form.value.link.trim() || undefined,
+      ...action,
     };
     if (targetMode.value === 'all') payload.toAll = true;
     else payload.userIds = selected.value.map((u) => u.id);
 
-    notificationApi
-      .sendNotification(payload)
-      .then((res) => {
-        if (res.status === 200) {
-          message.success(t('notificationAdmin.inApp.compose.sent', { count: res.data?.sent ?? 0 }));
-          // 重置内容,保留类型/模式
-          form.value.title = '';
-          form.value.content = '';
-          form.value.link = '';
-          selected.value = [];
-          searchKey.value = '';
-          results.value = [];
-          refreshAll();
-        }
-      })
-      .finally(() => {
-        sending.value = false;
-      });
+    try {
+      const res = await notificationApi.sendNotification(payload);
+      if (res.status === 200) {
+        riskVisible.value = false;
+        message.success(
+          `${t('notificationAdmin.inApp.compose.sent', { count: res.data?.sent ?? 0 })} · 审计 ${String(
+            res.data?.auditId || '',
+          ).slice(0, 8)}`,
+        );
+        // 重置内容,保留类型/模式
+        form.value.title = '';
+        form.value.content = '';
+        form.value.link = '';
+        selected.value = [];
+        searchKey.value = '';
+        results.value = [];
+        refreshAll();
+      }
+    } finally {
+      sending.value = false;
+    }
   }
   function onSend() {
     if (sending.value) return;
@@ -414,17 +476,9 @@
       message.warning(t('notificationAdmin.inApp.compose.selectHint'));
       return;
     }
-    if (targetMode.value === 'all') {
-      Alert.alert({
-        title: t('notificationAdmin.inApp.compose.confirmTitle'),
-        content: t('notificationAdmin.inApp.compose.confirmContent'),
-        onOk() {
-          doSend();
-        },
-      });
-    } else {
-      doSend();
-    }
+    riskActionKind.value = 'send';
+    pendingBatch.value = null;
+    riskVisible.value = true;
   }
 
   // —— 发送记录 ——
@@ -488,42 +542,59 @@
     loadHistory();
   }
   function onRecall(record: Batch) {
-    Alert.alert({
-      title: t('notificationAdmin.inApp.history.recallTitle'),
-      content: t('notificationAdmin.inApp.history.recallConfirm', { title: record.title }),
-      onOk() {
-        notificationApi.recallNotification(record.batchId).then((res) => {
-          if (res.status === 200) {
-            message.success(t('notificationAdmin.inApp.history.recallSuccess', { count: res.data?.recalled ?? 0 }));
-            refreshAll();
-          }
-        });
-      },
-    });
+    if (riskLoading.value) return;
+    pendingBatch.value = record;
+    riskActionKind.value = 'recall';
+    riskVisible.value = true;
   }
-  const deletingBatchId = ref('');
   function onDelete(record: Batch) {
-    if (deletingBatchId.value) return;
-    Alert.alert({
-      title: t('notificationAdmin.deleteTitle'),
-      content: t('notificationAdmin.deleteConfirm'),
-      okText: t('notificationAdmin.delete'),
-      onOk() {
-        deletingBatchId.value = record.batchId;
-        notificationApi
-          .deleteAdminNotification(record.batchId)
-          .then((res) => {
-            if (res.status === 200) {
-              message.success(t('notificationAdmin.deleted', { count: res.data?.deleted ?? 0 }));
-              if (history.value.length === 1 && currentPage.value > 1) currentPage.value -= 1;
-              refreshAll();
-            }
-          })
-          .finally(() => {
-            deletingBatchId.value = '';
-          });
-      },
-    });
+    if (riskLoading.value) return;
+    pendingBatch.value = record;
+    riskActionKind.value = 'archive';
+    riskVisible.value = true;
+  }
+
+  async function confirmRiskAction(action: RiskPayload) {
+    const batch = pendingBatch.value;
+    if (riskActionKind.value === 'send') {
+      await doSend(action);
+      return;
+    }
+    if (!batch) return;
+    if (riskActionKind.value === 'recall') {
+      recallingBatchId.value = batch.batchId;
+      try {
+        const res = await notificationApi.recallNotification(batch.batchId, action);
+        if (res.status === 200) {
+          riskVisible.value = false;
+          message.success(
+            `${t('notificationAdmin.inApp.history.recallSuccess', {
+              count: res.data?.recalled ?? 0,
+            })} · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`,
+          );
+          refreshAll();
+        }
+      } finally {
+        recallingBatchId.value = '';
+      }
+      return;
+    }
+    deletingBatchId.value = batch.batchId;
+    try {
+      const res = await notificationApi.deleteAdminNotification(batch.batchId, action);
+      if (res.status === 200) {
+        riskVisible.value = false;
+        message.success(
+          `${t('notificationAdmin.deleted', { count: res.data?.archived ?? 0 })} · 审计 ${String(
+            res.data?.auditId || '',
+          ).slice(0, 8)}`,
+        );
+        if (history.value.length === 1 && currentPage.value > 1) currentPage.value -= 1;
+        refreshAll();
+      }
+    } finally {
+      deletingBatchId.value = '';
+    }
   }
 
   // —— 接收明细弹框(发给谁 / 谁已读谁未读) ——

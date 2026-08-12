@@ -63,19 +63,20 @@ describe('knowledgeBaseService', () => {
   });
 
   it('按 ID 更新时拒绝同名冲突', async () => {
-    pool.query.mockResolvedValueOnce([[{ id: 'kb-2' }]]);
+    connection.query.mockResolvedValueOnce([[{ id: 'kb-2' }]]);
     await expect(updateKnowledgeBaseById({ userId: 'root-1', id: 'kb-1', patch: { title: '重复' } })).rejects.toThrow(
       'DUPLICATE_TITLE',
     );
   });
 
   it('按 ID 更新成功后立即清理索引缓存', async () => {
-    pool.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
+    connection.query.mockResolvedValueOnce([{ affectedRows: 1 }]);
 
     await expect(
       updateKnowledgeBaseById({ userId: 'root-1', id: 'kb-1', patch: { content: '已更新' } }),
     ).resolves.toEqual({ id: 'kb-1' });
 
     expect(cacheMocks.invalidateKnowledgeCache).toHaveBeenCalledTimes(1);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
   });
 });

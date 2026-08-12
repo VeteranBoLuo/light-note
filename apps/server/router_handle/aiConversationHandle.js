@@ -3,14 +3,12 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { createNote } from '../util/services/noteService.js';
 import {
   assertAiCloudHistoryEnabled,
-  branchAiConversation,
   clearAiIdentityData,
   clearAiConversations,
   createAiConversation,
   deleteAiConversation,
   exportAiConversations,
   getAiConversation,
-  getAiConversationLineage,
   getOwnedAiMessage,
   listAiConversations,
   listAiMessageVersions,
@@ -85,10 +83,6 @@ export async function getConversation(req, res) {
   );
 }
 
-export async function getConversationLineage(req, res) {
-  return run(req, res, (identity) => getAiConversationLineage(identity, req.body?.conversationId));
-}
-
 export async function listMessageVersions(req, res) {
   return run(req, res, (identity) => listAiMessageVersions(identity, req.body?.conversationId, req.body?.messageId));
 }
@@ -130,15 +124,6 @@ export async function saveMessage(req, res) {
     await assertAiCloudHistoryEnabled(identity);
     return saveAiMessage(identity, req.body?.conversationId, req.body?.message || {});
   });
-}
-
-export async function branchConversation(req, res) {
-  return run(req, res, (identity) =>
-    branchAiConversation(identity, req.body?.conversationId, {
-      throughMessageId: req.body?.throughMessageId,
-      title: req.body?.title,
-    }),
-  );
 }
 
 export async function submitFeedback(req, res) {

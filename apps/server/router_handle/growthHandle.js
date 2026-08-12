@@ -2,8 +2,6 @@ import {
   getGrowth,
   getGrowthDashboard,
   getActivityHeatmap,
-  claimDailyQuestBonus,
-  claimAchievement,
   checkin,
   useProtectCard,
   adminAdjustGrowth,
@@ -29,10 +27,18 @@ import {
 } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
 import { getInventory, useItem } from '../util/items.js';
-import { getWeeklyChallenges, claimWeeklyChallenge } from '../util/weeklyChallenge.js';
-import { getRecap } from '../util/recap.js';
+import { getWeeklyChallenges } from '../util/weeklyChallenge.js';
+import { getRecap, updateRecapState } from '../util/recap.js';
 import { getGrowthTasks } from '../util/growthTaskService.js';
-import { claimGrowthTask } from '../util/growthTaskCompletion.js';
+import { claimGrowthRewards, getGrowthClaimableSnapshot } from '../util/growthClaimService.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  adminActionErrorResponse,
+  beginAdminAction,
+  finishAdminAction,
+} from '../util/adminActionExecution.js';
+import { getGrowthPreferences, updateGrowthPreferences } from '../util/growthPreferences.js';
+import { isGrowthCenterV2Enabled } from '../util/growthFeature.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -40,10 +46,11 @@ export const getMyGrowth = async (req, res) => {
     const userId = req.user?.id || 'visitor';
     const userRole = req.user?.role || 'visitor';
     const growth = await getGrowth(userId, { userRole });
+    growth.features = { growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }) };
     res.send(resultData(growth));
   } catch (error) {
-    console.error('获取成长信息失败:', error);
-    res.send(resultData(null, 500, '获取成长信息失败: ' + error.message));
+    console.error('获取成长信息失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取成长信息失败', 'Failed to load growth data')));
   }
 };
 
@@ -54,8 +61,8 @@ export const doCheckin = async (req, res) => {
     const result = await checkin(req.user.id, { userRole: req.user.role });
     res.send(resultData(result));
   } catch (error) {
-    console.error('签到失败:', error);
-    res.send(resultData(null, 500, '签到失败: ' + error.message));
+    console.error('签到失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '签到失败，请稍后重试', 'Check-in failed. Please try again.')));
   }
 };
 
@@ -66,8 +73,8 @@ export const doUseProtectCard = async (req, res) => {
     const result = await useProtectCard(req.user.id, { userRole: req.user.role, date: req.body?.date });
     res.send(resultData(result));
   } catch (error) {
-    console.error('补签失败:', error);
-    res.send(resultData(null, 500, '补签失败: ' + error.message));
+    console.error('补签失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '补签失败，请稍后重试', 'Make-up check-in failed. Please try again.')));
   }
 };
 
@@ -78,7 +85,7 @@ export const getWeeklyReport = async (req, res) => {
     const report = await buildWeeklyReport(req.user.id, req.user.role);
     res.send(resultData(report));
   } catch (error) {
-    console.error('获取周报失败:', error);
+    console.error('获取周报失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '获取周报失败，请稍后重试'));
   }
 };
@@ -92,22 +99,41 @@ export const getUserGrowthForAdmin = async (req, res) => {
     const g = await getGrowth(userId);
     res.send(resultData(g));
   } catch (error) {
-    console.error('查询用户成长失败:', error);
-    res.send(resultData(null, 500, '查询失败: ' + error.message));
+    console.error('查询用户成长失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, '查询失败'));
   }
 };
 
 // POST /growth/admin/adjust —— 管理员运营调整用户成长(发/扣经验、设等级、增减补签卡;root 专用)
 export const doAdminAdjustGrowth = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  let actionContext = null;
   try {
     const { userId, expDelta, setLevel, cardDelta } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
-    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta });
-    res.send(resultData(result));
+    actionContext = await beginAdminAction(req, {
+      action: 'growth.adjust',
+      targetId: userId,
+      expectedConfirmText: '确认调整成长',
+      metadata: {
+        expDelta: Number(expDelta || 0),
+        setLevel: setLevel == null || setLevel === '' ? null : Number(setLevel),
+        cardsDelta: Number(cardDelta || 0),
+      },
+    });
+    const result = await adminAdjustGrowth(userId, { expDelta, setLevel, cardDelta }, { actionContext });
+    return res.send(resultData(result));
   } catch (error) {
-    console.error('成长运营调整失败:', error);
-    res.send(resultData(null, 500, '调整失败: ' + error.message));
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {}
+    }
+    const response = adminActionErrorResponse(error, '成长运营调整失败');
+    console.error('[GrowthAdminAdjust] 调整失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData({ ok: false, reason: response.code }, response.status, response.message));
   }
 };
 
@@ -119,8 +145,8 @@ export const getDashboard = async (req, res) => {
     const data = await getGrowthDashboard(userId, { userRole });
     res.send(resultData(data));
   } catch (error) {
-    console.error('获取成长看板失败:', error);
-    res.send(resultData(null, 500, '获取成长看板失败: ' + error.message));
+    console.error('获取成长看板失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取成长看板失败', 'Failed to load growth dashboard')));
   }
 };
 
@@ -129,10 +155,10 @@ export const getGrowthTasksHandle = async (req, res) => {
   try {
     const subject = req.resourceUser || req.user || {};
     const userId = subject.role === 'visitor' ? null : subject.id || null;
-    const data = await getGrowthTasks(userId);
+    const data = await getGrowthTasks(userId, { ensureSchema: false });
     res.send(resultData(data));
   } catch (error) {
-    console.error('获取成长任务失败:', error);
+    console.error('获取成长任务失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, L(req, '获取成长任务失败', 'Failed to load growth tasks')));
   }
 };
@@ -143,13 +169,24 @@ export const claimGrowthTaskHandle = async (req, res) => {
   try {
     const taskKey = String(req.body?.taskKey || '').trim();
     if (!taskKey) return res.send(resultData(null, 400, L(req, '缺少任务标识', 'Missing task key')));
-    const result = await claimGrowthTask(req.user.id, taskKey, { userRole: req.user.role });
-    if (result.ok && !result.already) {
-      result.growth = await getGrowth(req.user.id, { userRole: req.user.role });
-    }
-    return res.send(resultData(result));
+    const result = await claimGrowthRewards(
+      req.user.id,
+      { scopes: ['growthTasks'], keys: { growthTasks: [taskKey] } },
+      { userRole: req.user.role },
+    );
+    const receipt = result.receipts[0];
+    return res.send(
+      resultData({
+        ...result,
+        ok: receipt?.status === 'claimed' || receipt?.status === 'already',
+        reason: receipt?.status === 'claimed' ? null : receipt?.status || 'not_found',
+        already: receipt?.status === 'already',
+        taskKey,
+        expGained: Number(receipt?.reward?.exp || 0),
+      }),
+    );
   } catch (error) {
-    console.error('领取成长任务失败 code=%s', String(error?.code || 'GROWTH_TASK_CLAIM_FAILED'));
+    console.error('领取成长任务失败 code=%s', stableAgentErrorCode(error));
     return res.send(resultData(null, 500, L(req, '领取成长任务失败', 'Failed to claim growth task')));
   }
 };
@@ -163,7 +200,7 @@ export const getHeatmap = async (req, res) => {
     const data = await getActivityHeatmap(userId, { userRole, year });
     res.send(resultData(data));
   } catch (error) {
-    console.error('获取活动热力图失败:', error);
+    console.error('获取活动热力图失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '获取活动热力图失败'));
   }
 };
@@ -172,10 +209,17 @@ export const getHeatmap = async (req, res) => {
 export const claimDailyBonus = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const result = await claimDailyQuestBonus(req.user.id, { userRole: req.user.role });
-    res.send(resultData(result));
+    const result = await claimGrowthRewards(req.user.id, { scopes: ['daily'] }, { userRole: req.user.role });
+    res.send(
+      resultData({
+        ...result,
+        expGained: result.exp,
+        pointsEarned: result.points,
+        already: result.claimed === 0 && result.receipts.some((item) => item.status === 'already'),
+      }),
+    );
   } catch (error) {
-    console.error('领取每日奖励失败 code=%s', String(error?.code || 'DAILY_QUEST_CLAIM_FAILED'));
+    console.error('领取每日奖励失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, L(req, '领取失败，请稍后重试', 'Claim failed. Please try again later.')));
   }
 };
@@ -194,8 +238,8 @@ export const getRanks = async (req, res) => {
     }));
     res.send(resultData(ranks));
   } catch (error) {
-    console.error('获取段位表失败:', error);
-    res.send(resultData(null, 500, '获取段位表失败: ' + error.message));
+    console.error('获取段位表失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取段位表失败', 'Failed to load levels')));
   }
 };
 
@@ -288,8 +332,8 @@ export const getShop = async (req, res) => {
       }),
     );
   } catch (error) {
-    console.error('获取积分商店失败:', error);
-    res.send(resultData(null, 500, '获取积分商店失败'));
+    console.error('获取积分商店失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: 'GROWTH_SHOP_UNAVAILABLE' }, 500, '获取积分商店失败'));
   }
 };
 
@@ -302,8 +346,8 @@ export const buyShopItem = async (req, res) => {
     const result = await buyItem(req.user.id, itemId, { userRole: req.user.role });
     res.send(resultData(result));
   } catch (error) {
-    console.error('购买失败:', error);
-    res.send(resultData(null, 500, '购买失败: ' + error.message));
+    console.error('购买失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '兑换失败，请稍后重试', 'Exchange failed. Please try again.')));
   }
 };
 
@@ -313,8 +357,8 @@ export const getInventoryHandle = async (req, res) => {
     const userId = req.user?.id || 'visitor';
     res.send(resultData(await getInventory(userId)));
   } catch (error) {
-    console.error('获取背包失败:', error);
-    res.send(resultData(null, 500, '获取背包失败: ' + error.message));
+    console.error('获取背包失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取资产失败', 'Failed to load assets')));
   }
 };
 
@@ -327,8 +371,8 @@ export const useItemHandle = async (req, res) => {
     const result = await useItem(req.user.id, itemId);
     res.send(resultData(result));
   } catch (error) {
-    console.error('使用物品失败:', error);
-    res.send(resultData(null, 500, '使用物品失败: ' + error.message));
+    console.error('使用物品失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '使用物品失败', 'Failed to use item')));
   }
 };
 
@@ -340,75 +384,37 @@ export const equipTitleHandle = async (req, res) => {
     const result = await equipTitle(req.user.id, titleId || null);
     res.send(resultData(result));
   } catch (error) {
-    console.error('佩戴称号失败:', error);
-    res.send(resultData(null, 500, '佩戴称号失败: ' + error.message));
+    console.error('佩戴称号失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '佩戴称号失败', 'Failed to equip title')));
   }
 };
 
-// GET /growth/claimable —— 待领取总数(成长任务 + 成就 + 每周挑战),供首页/入口红点
+// GET /growth/claimable —— 待领取总数(日常阶段 + 成长任务 + 成就 + 每周挑战),供首页/入口红点
 export const getClaimable = async (req, res) => {
   try {
     const userId = req.user?.id;
-    if (!userId || req.user?.role === 'visitor') return res.send(resultData({ count: 0 }));
-    const [dash, wk, tasks] = await Promise.all([
-      getGrowthDashboard(userId, { userRole: req.user.role }),
-      getWeeklyChallenges(userId),
-      getGrowthTasks(userId),
-    ]);
-    const count = (dash.claimableCount || 0) + (wk.claimableCount || 0) + (tasks.claimableCount || 0);
-    res.send(
-      resultData({
-        count,
-        growthTasks: tasks.claimableCount || 0,
-        achievements: dash.claimableCount || 0,
-        weekly: wk.claimableCount || 0,
-      }),
-    );
+    const data = await getGrowthClaimableSnapshot(userId, { userRole: req.user?.role });
+    res.send(resultData(data));
   } catch (error) {
-    console.error('获取待领取数失败:', error);
+    console.error('获取待领取数失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '获取失败'));
   }
 };
 
-// POST /growth/claimAll —— 一键领取所有可领的成长任务 + 成就 + 每周挑战奖励
+// POST /growth/claimAll —— 按可选范围原子领取日常阶段、成长任务、成就与每周挑战奖励
 export const doClaimAll = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const userId = req.user.id;
-    const userRole = req.user.role;
-    let claimed = 0;
-    let points = 0;
-    let exp = 0;
-    const frames = [];
-    const tasks = await getGrowthTasks(userId);
-    for (const task of tasks.tasks.filter((item) => item.claimable)) {
-      const result = await claimGrowthTask(userId, task.taskKey, { userRole });
-      if (result.ok && !result.already) {
-        claimed++;
-        exp += result.expGained || 0;
-      }
-    }
-    const dash = await getGrowthDashboard(userId, { userRole });
-    for (const a of dash.achievements.filter((x) => x.claimable)) {
-      // 传入已算好的 dashboard,避免每领一个都重跑完整看板聚合;幂等仍由 earnPoints(reason,ref) 保证
-      const r = await claimAchievement(userId, a.key, { userRole, dashboard: dash });
-      if (r.ok) {
-        claimed++;
-        points += r.reward || 0;
-        if (r.frameId) frames.push(r.frameId);
-      }
-    }
-    const wk = await getWeeklyChallenges(userId);
-    for (const c of wk.challenges.filter((x) => x.claimable)) {
-      const r = await claimWeeklyChallenge(userId, c.key);
-      if (r.ok) {
-        claimed++;
-        points += r.reward || 0;
-      }
-    }
-    res.send(resultData({ ok: true, claimed, points, exp, frames }));
+    const result = await claimGrowthRewards(req.user.id, req.body || {}, { userRole: req.user.role });
+    res.send(
+      resultData(
+        result,
+        result.ok ? 200 : result.reason === 'invalid_scope' ? 400 : 409,
+        result.ok ? 'success' : L(req, '领取范围无效', 'Invalid claim scope'),
+      ),
+    );
   } catch (error) {
-    console.error('一键领取失败:', error);
+    console.error('一键领取失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '领取失败'));
   }
 };
@@ -419,8 +425,39 @@ export const getRecapHandle = async (req, res) => {
     const userId = req.user?.id || 'visitor';
     res.send(resultData(await getRecap(userId)));
   } catch (error) {
-    console.error('获取回顾失败:', error);
+    console.error('获取回顾失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, L(req, '获取回顾失败', 'Failed to load recap')));
+  }
+};
+
+export const setRecapState = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    res.send(resultData(await updateRecapState(req.user.id, req.body || {})));
+  } catch (error) {
+    console.error('更新回顾偏好失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '更新回顾偏好失败', 'Failed to update recap preference')));
+  }
+};
+
+export const getPreferences = async (req, res) => {
+  try {
+    res.send(resultData(await getGrowthPreferences(req.user?.id || 'visitor')));
+  } catch (error) {
+    console.error('获取成长偏好失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '获取成长偏好失败', 'Failed to load growth preferences')));
+  }
+};
+
+export const putPreferences = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const result = await updateGrowthPreferences(req.user.id, req.body || {});
+    const status = result.ok ? 200 : 400;
+    res.send(resultData(result, status, result.ok ? 'success' : L(req, '成长偏好无效', 'Invalid growth preferences')));
+  } catch (error) {
+    console.error('保存成长偏好失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData(null, 500, L(req, '保存成长偏好失败', 'Failed to save growth preferences')));
   }
 };
 
@@ -430,8 +467,8 @@ export const getWeekly = async (req, res) => {
     const userId = req.user?.id || 'visitor';
     res.send(resultData(await getWeeklyChallenges(userId)));
   } catch (error) {
-    console.error('获取每周挑战失败:', error);
-    res.send(resultData(null, 500, '获取每周挑战失败: ' + error.message));
+    console.error('获取每周挑战失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取每周挑战失败', 'Failed to load weekly challenges')));
   }
 };
 
@@ -441,10 +478,23 @@ export const doClaimWeekly = async (req, res) => {
   try {
     const { key } = req.body || {};
     if (!key) return res.send(resultData(null, 400, '缺少挑战 key'));
-    res.send(resultData(await claimWeeklyChallenge(req.user.id, key)));
+    const result = await claimGrowthRewards(
+      req.user.id,
+      { scopes: ['weekly'], keys: { weekly: [key] } },
+      { userRole: req.user.role },
+    );
+    const receipt = result.receipts[0];
+    res.send(
+      resultData({
+        ...result,
+        ok: receipt?.status === 'claimed' || receipt?.status === 'already',
+        reason: receipt?.status === 'claimed' ? null : receipt?.status || 'not_found',
+        reward: Number(receipt?.reward?.points || 0),
+      }),
+    );
   } catch (error) {
-    console.error('领取每周挑战失败:', error);
-    res.send(resultData(null, 500, '领取失败: ' + error.message));
+    console.error('领取每周挑战失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '领取失败，请稍后重试', 'Claim failed. Please try again.')));
   }
 };
 
@@ -454,11 +504,13 @@ export const getMyPointsLog = async (req, res) => {
   try {
     const limit = Number(req.query?.limit) || 30;
     const offset = Number(req.query?.offset) || 0;
-    const data = await getPointsLog(req.user.id, { limit, offset });
+    const cursor = req.query?.cursor ? String(req.query.cursor) : null;
+    const filter = req.query?.filter ? String(req.query.filter) : 'all';
+    const data = await getPointsLog(req.user.id, { limit, offset, cursor, filter });
     res.send(resultData(data));
   } catch (error) {
-    console.error('获取积分明细失败:', error);
-    res.send(resultData(null, 500, '获取积分明细失败: ' + error.message));
+    console.error('获取积分明细失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取积分明细失败', 'Failed to load points history')));
   }
 };
 
@@ -468,8 +520,8 @@ export const getPointsOverviewForAdmin = async (req, res) => {
   try {
     res.send(resultData(await getPointsOverview()));
   } catch (error) {
-    console.error('获取积分总览失败:', error);
-    res.send(resultData(null, 500, '获取积分总览失败: ' + error.message));
+    console.error('获取积分总览失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, '获取积分总览失败'));
   }
 };
 
@@ -481,8 +533,8 @@ export const getUserPointsForAdmin = async (req, res) => {
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
     res.send(resultData(await getUserPointsDetail(userId)));
   } catch (error) {
-    console.error('查询用户积分失败:', error);
-    res.send(resultData(null, 500, '查询失败: ' + error.message));
+    console.error('查询用户积分失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, '查询失败'));
   }
 };
 
@@ -502,18 +554,43 @@ export const searchUsersForPointsAdmin = async (req, res) => {
 
 // POST /growth/admin/grantPoints —— 手动发放/扣减积分/存储/补签卡(root)
 export const doAdminGrantPoints = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
+  let actionContext = null;
   try {
-    const { userId, points, cards, storageMb, note } = req.body || {};
+    const { userId, points, cards, storageMb, note, reason } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
-    const result = await adminGrantPoints(userId, { points, cards, storageMb, note });
+    actionContext = await beginAdminAction(req, {
+      action: 'growth.grant_points',
+      targetId: userId,
+      expectedConfirmText: '确认调整资产',
+      metadata: {
+        pointsDelta: Math.trunc(Number(points) || 0),
+        storageMbDelta: Math.trunc(Number(storageMb) || 0),
+        cardsDelta: Math.trunc(Number(cards) || 0),
+      },
+    });
+    const result = await adminGrantPoints(
+      userId,
+      { points, cards, storageMb, note: note || reason },
+      { actionContext },
+    );
     return res.send(resultData(result));
   } catch (error) {
-    if (error instanceof AdminPointsError) {
-      return res.send(resultData({ ok: false, reason: error.code }, error.status, error.message));
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {
+        // 审计工具已记录安全错误码。
+      }
     }
-    console.error('[PointsAdminGrant] 发放失败');
-    return res.send(resultData(null, 500, '资产调整失败'));
+    if (error instanceof AdminPointsError) {
+      return res.send(resultData({ ok: false, reason: error.code }, error.status, '资产调整未执行'));
+    }
+    const response = adminActionErrorResponse(error, '资产调整失败');
+    console.error('[PointsAdminGrant] 发放失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData({ ok: false, reason: response.code }, response.status, response.message));
   }
 };
 
@@ -523,10 +600,23 @@ export const doClaimAchievement = async (req, res) => {
   try {
     const { key } = req.body || {};
     if (!key) return res.send(resultData(null, 400, '缺少成就 key'));
-    const result = await claimAchievement(req.user.id, key, { userRole: req.user.role });
-    res.send(resultData(result));
+    const result = await claimGrowthRewards(
+      req.user.id,
+      { scopes: ['achievements'], keys: { achievements: [key] } },
+      { userRole: req.user.role },
+    );
+    const receipt = result.receipts[0];
+    res.send(
+      resultData({
+        ...result,
+        ok: receipt?.status === 'claimed' || receipt?.status === 'already',
+        reason: receipt?.status === 'claimed' ? null : receipt?.status || 'not_found',
+        reward: Number(receipt?.reward?.points || 0),
+        frameId: receipt?.reward?.frameId || null,
+      }),
+    );
   } catch (error) {
-    console.error('领取成就奖励失败:', error);
+    console.error('领取成就奖励失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData(null, 500, '领取失败'));
   }
 };
@@ -538,8 +628,8 @@ export const getLottery = async (req, res) => {
     const data = await getLotteryStatus(userId, { userRole: req.user?.role });
     res.send(resultData(data));
   } catch (error) {
-    console.error('获取抽奖信息失败:', error);
-    res.send(resultData(null, 500, '获取抽奖信息失败: ' + error.message));
+    console.error('获取抽奖信息失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取抽奖信息失败', 'Failed to load draw details')));
   }
 };
 
@@ -552,8 +642,8 @@ export const doDrawLottery = async (req, res) => {
     const result = await drawLottery(req.user.id, { times, free, userRole: req.user.role });
     res.send(resultData(result));
   } catch (error) {
-    console.error('抽奖失败:', error);
-    res.send(resultData(null, 500, '抽奖失败: ' + error.message));
+    console.error('抽奖失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '抽奖失败，请稍后重试', 'Draw failed. Please try again.')));
   }
 };
 
@@ -567,8 +657,8 @@ export const equipFrameHandle = async (req, res) => {
     });
     res.send(resultData(result));
   } catch (error) {
-    console.error('佩戴头像框失败:', error);
-    res.send(resultData(null, 500, '佩戴失败: ' + error.message));
+    console.error('佩戴头像框失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '佩戴失败', 'Failed to equip frame')));
   }
 };
 
@@ -579,7 +669,7 @@ export const readNotices = async (req, res) => {
     await markNoticesRead(req.user.id);
     res.send(resultData({ ok: true }));
   } catch (error) {
-    console.error('标记升级通知已读失败:', error);
-    res.send(resultData(null, 500, '标记已读失败: ' + error.message));
+    console.error('标记升级通知已读失败 code=%s', stableAgentErrorCode(error));
+    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '标记已读失败', 'Failed to mark as read')));
   }
 };

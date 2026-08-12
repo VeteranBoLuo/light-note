@@ -4,6 +4,7 @@ import {
   hasResourceOrderChanged,
   isNearResourceScrollEnd,
   mergeResourcePage,
+  mergeResourceRefreshedHead,
 } from './resourcePagination';
 
 describe('resource pagination helpers', () => {
@@ -29,6 +30,28 @@ describe('resource pagination helpers', () => {
   it('detects a scroll position close enough to request the next page', () => {
     expect(isNearResourceScrollEnd({ scrollTop: 500, clientHeight: 400, scrollHeight: 1200 })).toBe(true);
     expect(isNearResourceScrollEnd({ scrollTop: 100, clientHeight: 400, scrollHeight: 1200 })).toBe(false);
+  });
+
+  it('刷新第一页时保留已加载尾页并去掉跨页重复项', () => {
+    expect(
+      mergeResourceRefreshedHead(
+        [
+          { id: '1', title: 'old-1' },
+          { id: '2', title: 'old-2' },
+          { id: '3', title: 'old-3' },
+          { id: '4', title: 'old-4' },
+        ],
+        [
+          { id: '3', title: 'new-3' },
+          { id: '1', title: 'new-1' },
+        ],
+      ),
+    ).toEqual([
+      { id: '3', title: 'new-3' },
+      { id: '1', title: 'new-1' },
+      { id: '2', title: 'old-2' },
+      { id: '4', title: 'old-4' },
+    ]);
   });
 
   it('builds adjacent sort anchors without depending on an unloaded tail', () => {

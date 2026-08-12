@@ -4,6 +4,11 @@ import { validateQueryParams } from '../util/request.js';
 import { upsertKnowledgeBase, updateKnowledgeBaseById } from '../util/services/knowledgeBaseService.js';
 import { invalidateKnowledgeCache } from '../util/knowledgeService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  adminActionErrorResponse,
+  beginAdminAction,
+  finishAdminAction,
+} from '../util/adminActionExecution.js';
 
 const KNOWLEDGE_CLIENT_ERRORS = new Set([
   'CONTENT_TOO_LONG',
@@ -17,12 +22,28 @@ const KNOWLEDGE_CLIENT_ERRORS = new Set([
 ]);
 
 const sendKnowledgeError = (res, error) => {
+  const adminResponse = adminActionErrorResponse(error, '知识库操作失败');
+  if (adminResponse.code !== 'ADMIN_ACTION_FAILED') {
+    return res.send(resultData({ code: adminResponse.code }, adminResponse.status, adminResponse.message));
+  }
   const raw = String(error?.message || error || '');
   const match = /^([A-Z][A-Z0-9_]+):\s*(.+)$/.exec(raw);
   if (match?.[1] === 'NOT_FOUND') return res.send(resultData(null, 404, match[2]));
   if (match && KNOWLEDGE_CLIENT_ERRORS.has(match[1])) return res.send(resultData(null, 400, match[2]));
   return res.send(resultData(null, 500, '服务器内部错误'));
 };
+
+async function appendKnowledgeFailureAudit(context, error) {
+  if (!context) return;
+  try {
+    await finishAdminAction(context, {
+      outcome: 'failed',
+      metadata: { errorCode: stableAgentErrorCode(error) },
+    });
+  } catch {
+    // 审计工具已记录安全错误码。
+  }
+}
 
 const ensureRootRole = async (req, res) => {
   try {
@@ -50,7 +71,7 @@ export const listKnowledgeBase = async (req, res) => {
     if (!userId) return;
     const { filters, pageSize, currentPage, order } = validateQueryParams(req.body);
 
-    const conditions = [];
+    const conditions = ['COALESCE(admin_archived, 0) = 0'];
     const params = [];
     if (filters?.category) {
       conditions.push('category = ?');
@@ -60,7 +81,7 @@ export const listKnowledgeBase = async (req, res) => {
       conditions.push('status = ?');
       params.push(filters.status);
     }
-    const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
+    const where = 'WHERE ' + conditions.join(' AND ');
     const offset = pageSize * (currentPage - 1);
 
     const [rows] = await pool.query(
@@ -80,7 +101,10 @@ export const getKnowledgeBaseItem = async (req, res) => {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
     const { id } = req.body;
-    const [rows] = await pool.query('SELECT * FROM knowledge_base WHERE id = ? LIMIT 1', [id]);
+    const [rows] = await pool.query(
+      'SELECT * FROM knowledge_base WHERE id = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
+      [id],
+    );
     if (!rows.length) return res.send(resultData(null, 404, '条目不存在'));
     res.send(resultData(rows[0]));
   } catch (e) {
@@ -96,7 +120,7 @@ export const searchKnowledgeBase = async (req, res) => {
     const { keyword, category, status } = req.body;
     if (!keyword?.trim()) return res.send(resultData({ items: [], total: 0 }));
 
-    const conditions = [];
+    const conditions = ['COALESCE(admin_archived, 0) = 0'];
     const params = ['%' + keyword.trim() + '%', '%' + keyword.trim() + '%'];
     conditions.push('(title LIKE ? OR content LIKE ?)');
     if (category) {
@@ -152,97 +176,224 @@ export const searchKnowledgeBase = async (req, res) => {
 
 /** 新建知识条目 */
 export const createKnowledgeBase = async (req, res) => {
+  let actionContext = null;
   try {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
     const { title, content, category, status, type } = req.body;
+    const publishing = status === 'public';
+    actionContext = await beginAdminAction(req, {
+      action: publishing ? 'knowledge_base.publish' : 'knowledge_base.create',
+      targetId: 'new',
+      expectedConfirmText: publishing ? '确认发布知识' : null,
+      metadata: { operation: 'create', resultingStatus: status || 'internal', contentLength: String(content || '').length },
+    });
     const result = await upsertKnowledgeBase({
       userId,
       createOnly: true,
       input: { title, content, category: category || 'internal', status: status || 'internal', type: type || 'html' },
+      actionContext,
     });
-    res.send(resultData({ id: result.id }));
+    return res.send(resultData({ id: result.id, auditId: result.auditId, requestId: result.requestId }));
   } catch (e) {
-    sendKnowledgeError(res, e);
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
   }
 };
 
 /** 更新知识条目 */
 export const updateKnowledgeBase = async (req, res) => {
+  let actionContext = null;
   try {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
     const { id, ...patch } = req.body;
-    await updateKnowledgeBaseById({ userId, id, patch });
-    res.send(resultData(null));
+    if (!id) return res.send(resultData(null, 400, '缺少 ID'));
+    const [rows] = await pool.query(
+      'SELECT status FROM knowledge_base WHERE id = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
+      [id],
+    );
+    if (!rows.length) return res.send(resultData(null, 404, '条目不存在'));
+    const publishing = patch.status === 'public' && rows[0].status !== 'public';
+    actionContext = await beginAdminAction(req, {
+      action: publishing ? 'knowledge_base.publish' : 'knowledge_base.update',
+      targetId: id,
+      expectedConfirmText: publishing ? '确认发布知识' : null,
+      metadata: {
+        operation: 'update',
+        previousStatus: rows[0].status,
+        resultingStatus: patch.status || rows[0].status,
+        contentLength: patch.content === undefined ? null : String(patch.content || '').length,
+      },
+    });
+    const result = await updateKnowledgeBaseById({ userId, id, patch, actionContext });
+    return res.send(resultData({ auditId: result.auditId, requestId: result.requestId }));
   } catch (e) {
-    sendKnowledgeError(res, e);
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
   }
 };
 
 /** 删除知识条目 */
 export const deleteKnowledgeBase = async (req, res) => {
+  let actionContext = null;
+  let connection = null;
   try {
-    const userId = await ensureRootRole(req, res);
-    if (!userId) return;
     const { id } = req.body;
     if (!id) return res.send(resultData(null, 400, '缺少 ID'));
-    await pool.query('DELETE FROM knowledge_base WHERE id = ?', [id]);
+    actionContext = await beginAdminAction(req, {
+      action: 'knowledge_base.archive',
+      targetId: id,
+      expectedConfirmText: '确认归档知识',
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      "UPDATE knowledge_base SET status = 'internal', admin_archived = 1, updated_by = ? WHERE id = ? AND COALESCE(admin_archived, 0) = 0",
+      [req.user.id, id],
+    );
+    if (!result.affectedRows) throw Object.assign(new Error('知识条目不存在'), { status: 404 });
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0), archived: true },
+      db: connection,
+    });
+    await connection.commit();
     invalidateKnowledgeCache();
-    res.send(resultData(null));
+    return res.send(resultData({ archived: Number(result.affectedRows || 0), ...receipt }));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
+  } finally {
+    connection?.release();
   }
 };
 
 /** 批量更新状态 */
 export const batchUpdateKnowledgeStatus = async (req, res) => {
+  let actionContext = null;
+  let connection = null;
   try {
-    const userId = await ensureRootRole(req, res);
-    if (!userId) return;
     const { ids, status } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
     if (!['public', 'internal'].includes(status)) return res.send(resultData(null, 400, '状态无效'));
-    await pool.query('UPDATE knowledge_base SET status = ?, updated_by = ? WHERE id IN (?)', [status, userId, ids]);
+    actionContext = await beginAdminAction(req, {
+      action: status === 'public' ? 'knowledge_base.publish' : 'knowledge_base.update',
+      targetId: `batch:${ids.length}`,
+      expectedConfirmText: status === 'public' ? '确认发布知识' : null,
+      metadata: { operation: 'batch_status', itemCount: ids.length, resultingStatus: status },
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      'UPDATE knowledge_base SET status = ?, updated_by = ? WHERE id IN (?) AND COALESCE(admin_archived, 0) = 0',
+      [status, req.user.id, ids],
+    );
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0) },
+      db: connection,
+    });
+    await connection.commit();
     invalidateKnowledgeCache();
-    res.send(resultData({ updated: ids.length }));
+    return res.send(resultData({ updated: Number(result.affectedRows || 0), ...receipt }));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
+  } finally {
+    connection?.release();
   }
 };
 
 /** 批量更新分类 */
 export const batchUpdateKnowledgeCategory = async (req, res) => {
+  let actionContext = null;
+  let connection = null;
   try {
-    const userId = await ensureRootRole(req, res);
-    if (!userId) return;
     const { ids, category } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
     if (!category?.trim()) return res.send(resultData(null, 400, '分类不能为空'));
-    await pool.query('UPDATE knowledge_base SET category = ?, updated_by = ? WHERE id IN (?)', [
-      category.trim(),
-      userId,
-      ids,
-    ]);
+    actionContext = await beginAdminAction(req, {
+      action: 'knowledge_base.update',
+      targetId: `batch:${ids.length}`,
+      metadata: { operation: 'batch_category', itemCount: ids.length },
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      'UPDATE knowledge_base SET category = ?, updated_by = ? WHERE id IN (?) AND COALESCE(admin_archived, 0) = 0',
+      [category.trim(), req.user.id, ids],
+    );
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0) },
+      db: connection,
+    });
+    await connection.commit();
     invalidateKnowledgeCache();
-    res.send(resultData({ updated: ids.length }));
+    return res.send(resultData({ updated: Number(result.affectedRows || 0), ...receipt }));
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
+  } finally {
+    connection?.release();
   }
 };
 
 /** 批量删除 */
 export const batchDeleteKnowledgeBase = async (req, res) => {
+  let actionContext = null;
+  let connection = null;
   try {
-    const userId = await ensureRootRole(req, res);
-    if (!userId) return;
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.send(resultData(null, 400, '请选择条目'));
-    await pool.query('DELETE FROM knowledge_base WHERE id IN (?)', [ids]);
+    actionContext = await beginAdminAction(req, {
+      action: 'knowledge_base.archive',
+      targetId: `batch:${ids.length}`,
+      expectedConfirmText: '确认归档知识',
+      metadata: { operation: 'batch_archive', itemCount: ids.length },
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [result] = await connection.query(
+      "UPDATE knowledge_base SET status = 'internal', admin_archived = 1, updated_by = ? WHERE id IN (?) AND COALESCE(admin_archived, 0) = 0",
+      [req.user.id, ids],
+    );
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0), archived: true },
+      db: connection,
+    });
+    await connection.commit();
     invalidateKnowledgeCache();
-    res.send(resultData({ deleted: ids.length }));
+    return res.send(
+      resultData({ archived: Number(result.affectedRows || 0), deleted: Number(result.affectedRows || 0), ...receipt }),
+    );
   } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    await appendKnowledgeFailureAudit(actionContext, e);
+    return sendKnowledgeError(res, e);
+  } finally {
+    connection?.release();
   }
 };
 
@@ -251,7 +402,9 @@ export const getKnowledgeCategories = async (req, res) => {
   try {
     const userId = await ensureRootRole(req, res);
     if (!userId) return;
-    const [rows] = await pool.query('SELECT DISTINCT category FROM knowledge_base ORDER BY category ASC');
+    const [rows] = await pool.query(
+      'SELECT DISTINCT category FROM knowledge_base WHERE COALESCE(admin_archived, 0) = 0 ORDER BY category ASC',
+    );
     const categories = rows.map((r) => r.category);
     // Always include 帮助中心 as default
     if (!categories.includes('帮助中心')) categories.unshift('帮助中心');

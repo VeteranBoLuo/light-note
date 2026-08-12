@@ -28,8 +28,8 @@
         <strong class="admin-stat-value">{{ number(summary.denied) }}</strong>
         <span class="admin-stat-hint">{{
           t('adminAudit.metrics.actionHint', {
-            jobs: number(summary.jobRetries),
-            feedback: number(summary.feedbackTriages),
+            intents: number(summary.intents),
+            terminals: number(summary.terminals),
           })
         }}</span>
       </li>
@@ -219,11 +219,11 @@
   const filters = ref({ action: 'all', outcome: 'all', keyword: '', startDate: '', endDate: '' });
   const detailVisible = ref(false);
   const detail = ref<AuditItem | null>(null);
+  const actionCatalog = ref<Array<{ action: string; riskLevel: string }>>([]);
 
   const actionOptions = computed(() => [
     { value: 'all', label: t('adminAudit.actions.all') },
-    { value: 'async_job.retry', label: t('adminAudit.actions.jobRetry') },
-    { value: 'ai_feedback.triage', label: t('adminAudit.actions.feedbackTriage') },
+    ...actionCatalog.value.map((item) => ({ value: item.action, label: actionLabel(item.action) })),
   ]);
   const outcomeOptions = computed(() => [
     { value: 'all', label: t('adminAudit.outcomes.all') },
@@ -251,9 +251,27 @@
     return value as AuditItem;
   }
   function actionLabel(action: string) {
-    const key =
-      action === 'async_job.retry' ? 'jobRetry' : action === 'ai_feedback.triage' ? 'feedbackTriage' : 'unknown';
-    return t(`adminAudit.actions.${key}`);
+    const keys: Record<string, string> = {
+      'async_job.retry': 'jobRetry',
+      'async_job.dismiss': 'jobDismiss',
+      'ai_feedback.triage': 'feedbackTriage',
+      'opinion.reply': 'opinionReply',
+      'opinion.delete': 'opinionDelete',
+      'user.update': 'userUpdate',
+      'user.delete': 'userDisable',
+      'user.restore': 'userRestore',
+      'growth.adjust': 'growthAdjust',
+      'growth.grant_points': 'pointsAdjust',
+      'notification.send': 'notificationSend',
+      'notification.recall': 'notificationRecall',
+      'notification.archive': 'notificationArchive',
+      'logs.cleanup': 'logsCleanup',
+      'knowledge_base.create': 'knowledgeCreate',
+      'knowledge_base.update': 'knowledgeUpdate',
+      'knowledge_base.publish': 'knowledgePublish',
+      'knowledge_base.archive': 'knowledgeArchive',
+    };
+    return keys[action] ? t(`adminAudit.actions.${keys[action]}`) : action || t('adminAudit.actions.unknown');
   }
   function outcomeLabel(outcome: string) {
     const key = ['intent', 'succeeded', 'failed', 'denied'].includes(outcome) ? outcome : 'unknown';
@@ -297,6 +315,7 @@
       items.value = Array.isArray(response.data?.items) ? response.data.items : [];
       total.value = Number(response.data?.total || 0);
       summary.value = response.data?.summary7d || {};
+      actionCatalog.value = Array.isArray(response.data?.actionCatalog) ? response.data.actionCatalog : [];
     } catch (error: any) {
       message.error(error?.message || t('adminAudit.loadFailed'));
     } finally {

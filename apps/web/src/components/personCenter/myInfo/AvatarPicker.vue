@@ -1,33 +1,33 @@
 <template>
   <component :is="pickerShell" v-bind="pickerShellProps" @close="closePicker" @update:visible="handleShellVisible">
     <div class="avatar-picker" :class="{ 'avatar-picker--desktop': !isMobileLayout }">
-      <div class="avatar-picker__scroll">
-        <section class="avatar-picker__hero">
-          <div class="avatar-picker__preview-shell">
-            <AvatarFramePreview
-              v-if="frameId && !showSpritePreview"
-              :frame-id="frameId"
-              :src="previewSource"
-              :size="isMobileLayout ? 82 : 92"
-              :decorative="false"
-            />
-            <span
-              v-else-if="showSpritePreview && selectedAvatar"
-              class="avatar-picker__preview-art"
-              :style="builtinAvatarPreviewStyle(selectedAvatar)"
-              aria-hidden="true"
-            />
-            <span v-else class="avatar-picker__preview-image">
-              <SvgIcon :src="previewSource" :size="isMobileLayout ? 82 : 92" />
-            </span>
-          </div>
-          <div class="avatar-picker__hero-copy">
-            <strong>{{ selectedAvatar ? t(selectedAvatar.nameKey) : previewTitle }}</strong>
-            <span>{{ selectedAvatar ? t(selectedAvatar.descriptionKey) : previewDescription }}</span>
-            <small v-if="frameId">{{ t('myInfo.avatarFrameKept') }}</small>
-          </div>
-        </section>
+      <section class="avatar-picker__hero">
+        <div class="avatar-picker__preview-shell">
+          <AvatarFramePreview
+            v-if="frameId && !showSpritePreview"
+            :frame-id="frameId"
+            :src="previewSource"
+            :size="isMobileLayout ? 82 : 92"
+            :decorative="false"
+          />
+          <span
+            v-else-if="showSpritePreview && selectedAvatar"
+            class="avatar-picker__preview-art"
+            :style="builtinAvatarPreviewStyle(selectedAvatar)"
+            aria-hidden="true"
+          />
+          <span v-else class="avatar-picker__preview-image">
+            <SvgIcon :src="previewSource" :size="isMobileLayout ? 82 : 92" />
+          </span>
+        </div>
+        <div class="avatar-picker__hero-copy">
+          <strong>{{ selectedAvatar ? t(selectedAvatar.nameKey) : previewTitle }}</strong>
+          <span>{{ selectedAvatar ? t(selectedAvatar.descriptionKey) : previewDescription }}</span>
+          <small v-if="frameId">{{ t('myInfo.avatarFrameKept') }}</small>
+        </div>
+      </section>
 
+      <div class="avatar-picker__scroll" v-auto-scrollbar>
         <section class="avatar-picker__section">
           <div class="avatar-picker__section-heading">
             <div>
@@ -268,16 +268,19 @@
   }
 
   .avatar-picker__scroll {
+    flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
-    padding: 16px 18px 20px;
+    padding: 0 18px 20px;
     overscroll-behavior: contain;
   }
 
   .avatar-picker__hero {
+    flex: 0 0 auto;
     display: flex;
     align-items: center;
     gap: 18px;
+    margin: 16px 18px 0;
     padding: 16px 18px;
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
@@ -530,11 +533,12 @@
 
   @media (max-width: 767px) {
     .avatar-picker__scroll {
-      padding: 12px 12px 18px;
+      padding: 0 12px 18px;
     }
 
     .avatar-picker__hero {
       gap: 13px;
+      margin: 12px 12px 0;
       padding: 12px;
       border-radius: 15px;
     }

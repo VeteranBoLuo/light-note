@@ -16,18 +16,15 @@
 
       <div class="ga-field">
         <label>发放 / 扣减经验</label>
-        <input v-model="expDelta" type="number" class="ga-input" placeholder="正数发放,负数扣减" />
+        <BInput v-model:value="expDelta" type="number" class="ga-control" placeholder="正数发放，负数扣减" />
       </div>
       <div class="ga-field">
         <label>直接设定等级<em>(优先于经验)</em></label>
-        <select v-model="setLevel" class="ga-input">
-          <option value="">不改</option>
-          <option v-for="n in 15" :key="n" :value="n">Lv.{{ n }}</option>
-        </select>
+        <BSelect v-model:value="setLevel" class="ga-control" :options="levelOptions" />
       </div>
       <div class="ga-field">
         <label>增减补签卡</label>
-        <input v-model="cardDelta" type="number" class="ga-input" placeholder="正数赠送,负数扣除" />
+        <BInput v-model:value="cardDelta" type="number" class="ga-control" placeholder="正数赠送，负数扣除" />
       </div>
 
       <div class="ga-actions">
@@ -35,24 +32,59 @@
       </div>
     </div>
   </BModal>
+
+  <AdminRiskActionModal
+    v-model:visible="confirmVisible"
+    title="确认调整成长资产"
+    :impact="confirmImpact"
+    confirm-phrase="确认调整成长"
+    :loading="saving"
+    @confirm="confirmSubmit"
+  />
 </template>
 
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { computed, ref, watch } from 'vue';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import growthApi from '@/api/growthApi.ts';
-  import { recordOperation } from '@/api/commonApi.ts';
 
   const props = defineProps<{ visible: boolean; userId: string; userName?: string }>();
   const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>();
 
   const cur = ref<any>(null);
   const expDelta = ref('');
-  const setLevel = ref<string>('');
+  const setLevel = ref<string | number>('');
   const cardDelta = ref('');
   const saving = ref(false);
+  const confirmVisible = ref(false);
+  const levelOptions = [{ value: '', label: '不改' }, ...Array.from({ length: 15 }, (_, index) => ({
+    value: index + 1,
+    label: `Lv.${index + 1}`,
+  }))];
+  const pendingPayload = computed(() => {
+    const payload: { userId: string; expDelta?: number; setLevel?: number; cardDelta?: number } = {
+      userId: props.userId,
+    };
+    if (setLevel.value !== '') payload.setLevel = Number(setLevel.value);
+    else if (expDelta.value) payload.expDelta = Number(expDelta.value);
+    if (cardDelta.value) payload.cardDelta = Number(cardDelta.value);
+    return payload;
+  });
+  const confirmImpact = computed(() => {
+    const pieces = [
+      pendingPayload.value.setLevel != null ? `设为 Lv.${pendingPayload.value.setLevel}` : '',
+      pendingPayload.value.expDelta ? `经验 ${pendingPayload.value.expDelta > 0 ? '+' : ''}${pendingPayload.value.expDelta}` : '',
+      pendingPayload.value.cardDelta
+        ? `补签卡 ${pendingPayload.value.cardDelta > 0 ? '+' : ''}${pendingPayload.value.cardDelta}`
+        : '',
+    ].filter(Boolean);
+    return `目标：${props.userName || props.userId}（${props.userId}）。将执行：${pieces.join(' · ')}。升级通知仍遵循用户通知偏好。`;
+  });
 
   async function loadCur() {
     cur.value = null;
@@ -64,25 +96,28 @@
     }
   }
 
-  async function submit() {
+  function submit() {
     if (saving.value) return;
-    const payload: any = { userId: props.userId };
-    if (setLevel.value !== '') payload.setLevel = Number(setLevel.value);
-    else if (expDelta.value) payload.expDelta = Number(expDelta.value);
-    if (cardDelta.value) payload.cardDelta = Number(cardDelta.value);
+    const payload = pendingPayload.value;
     if (payload.setLevel === undefined && !payload.expDelta && !payload.cardDelta) {
       message.info('请填写要调整的项');
       return;
     }
+    confirmVisible.value = true;
+  }
+
+  async function confirmSubmit(action: { reason: string; confirmed: true; confirmText: string }) {
+    const payload = { ...pendingPayload.value, ...action };
     saving.value = true;
     try {
       const res = await growthApi.adminAdjustGrowth(payload);
       if (res?.status === 200 && res.data?.ok) {
-        message.success(`已调整:Lv.${res.data.level} ${res.data.name} · 经验 ${res.data.exp} · 补签卡 ${res.data.cards}`);
-        recordOperation({
-          module: '后台管理',
-          operation: `成长运营调整用户 ${props.userName || props.userId}（${JSON.stringify(payload)}）`,
-        });
+        confirmVisible.value = false;
+        message.success(
+          `已调整：Lv.${res.data.level} ${res.data.name} · 经验 ${res.data.exp} · 补签卡 ${
+            res.data.cards
+          } · 审计 ${String(res.data.auditId || '').slice(0, 8)}`,
+        );
         cur.value = { level: res.data.level, name: res.data.name, exp: res.data.exp, protectCards: res.data.cards };
         expDelta.value = '';
         setLevel.value = '';
@@ -151,18 +186,14 @@
     opacity: 0.7;
     margin-left: 4px;
   }
-  .ga-input {
-    height: 34px;
-    padding: 0 10px;
-    border-radius: 8px;
-    border: 1px solid var(--card-border-color);
-    background: var(--background-color);
-    color: var(--text-color);
-    font-size: 13px;
-    outline: none;
+  .ga-control {
+    width: 100%;
   }
-  .ga-input:focus {
-    border-color: var(--primary-color);
+
+  html.light-note-mobile-rendering .ga-cur {
+    background: var(--card-background);
+    border-color: var(--card-border-color);
+    box-shadow: none;
   }
   .ga-actions {
     display: flex;

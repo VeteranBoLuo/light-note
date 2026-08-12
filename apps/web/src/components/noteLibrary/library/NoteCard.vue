@@ -28,8 +28,26 @@
       <span class="note-parent-path__separator" aria-hidden="true">·</span>
       <span class="note-parent-path__text">{{ parentPathText }}</span>
     </BButton>
-    <!-- 摘要按纯文本插值渲染:v-html 会把笔记里写的标签当真执行,块级换行改由 white-space 保留 -->
-    <div class="note-content">{{ summary }}</div>
+    <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
+      <!-- 摘要始终按纯文本插值渲染；图片走独立、受控的缩略图地址，绝不恢复 v-html。 -->
+      <div class="note-content">{{ summary }}</div>
+      <div v-if="hasPreviewImage" class="note-preview-media" aria-hidden="true">
+        <img
+          class="note-preview-image"
+          :class="{ 'is-loaded': previewImageLoaded }"
+          :src="previewImageUrl"
+          alt=""
+          width="720"
+          height="405"
+          loading="lazy"
+          decoding="async"
+          fetchpriority="low"
+          draggable="false"
+          @load="previewImageLoaded = true"
+          @error="previewImageFailed = true"
+        />
+      </div>
+    </div>
     <div class="note-footer">
       <div class="note-footer-chips">
         <div class="note-tags" v-if="note.tags && note.tags.length">
@@ -74,7 +92,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed } from 'vue';
+  import { computed, ref, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, useUserStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -124,6 +142,15 @@
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
+  const previewImageFailed = ref(false);
+  const previewImageLoaded = ref(false);
+  const previewImageUrl = computed(() => String(props.note?.previewImageUrl || '').trim());
+  const hasPreviewImage = computed(() => Boolean(previewImageUrl.value) && !previewImageFailed.value);
+
+  watch(previewImageUrl, () => {
+    previewImageFailed.value = false;
+    previewImageLoaded.value = false;
+  });
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));
@@ -238,6 +265,18 @@
     max-width: 100%;
   }
 
+  .note-preview-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    margin-top: 10px;
+    overflow: hidden;
+
+    &.has-image {
+      gap: 12px;
+    }
+  }
+
   .note-content {
     position: relative;
     box-sizing: border-box;
@@ -246,9 +285,8 @@
     line-height: 1.58;
     flex: 1 1 auto;
     min-height: 0;
-    margin-top: 10px;
     overflow: hidden;
-    max-height: 154px;
+    max-height: 100%;
     // 摘要是纯文本,块级换行靠 pre-line 还原;长英文/URL 不许撑破卡片
     white-space: pre-line;
     word-break: break-word;
@@ -264,6 +302,30 @@
       height: 42px;
       background: linear-gradient(to bottom, transparent, var(--note-card-bg));
       pointer-events: none;
+    }
+  }
+
+  .note-preview-media {
+    flex: 0 0 clamp(88px, 34%, 112px);
+    align-self: stretch;
+    min-height: 0;
+    max-height: 112px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    background: var(--surface-panel-bg);
+  }
+
+  .note-preview-image {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+
+    &.is-loaded {
+      opacity: 1;
     }
   }
 
@@ -438,6 +500,10 @@
       overflow-wrap: break-word;
     }
 
+    .note-preview-body.has-image {
+      gap: 10px;
+    }
+
     .note-content::after {
       display: none;
     }
@@ -456,6 +522,12 @@
     .note-title {
       flex: 1 1 auto;
       min-width: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .note-preview-image {
+      transition: none;
     }
   }
 </style>

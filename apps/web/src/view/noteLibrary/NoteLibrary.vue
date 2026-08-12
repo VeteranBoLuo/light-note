@@ -668,6 +668,7 @@
     hasResourceOrderChanged,
     isNearResourceScrollEnd,
     mergeResourcePage,
+    mergeResourceRefreshedHead,
   } from '@/utils/resourcePagination';
   import {
     buildRootStartDropTarget,
@@ -685,6 +686,7 @@
     NOTE_LIBRARY_LIST_FRESH_MS,
     NOTE_LIBRARY_TAGS_FRESH_MS,
     buildNoteLibraryListCacheKey,
+    type NoteLibraryReturnScrollSnapshot,
   } from '@/store/noteLibraryCache';
 
   const createDeferredLibraryFeature = (loader: () => Promise<any>) =>
@@ -970,6 +972,9 @@
     viewMode: string;
   }
   let desktopPreviewScrollSnapshot: DesktopPreviewScrollSnapshot | null = null;
+  const MOBILE_RETURN_SCROLL_RETRY_DELAYS = [80, 240, 640] as const;
+  const mobileReturnScrollRestoreTimers = new Set<number>();
+  let mobileReturnScrollRestoreRequestId = 0;
   // 用户自存模板(元信息,不含正文);打开 picker 时异步刷新,不阻塞弹窗展示
   const myTemplates = ref<Array<{ id: string; name: string; description?: string; type: string }>>([]);
   const myTemplatesState = ref<'idle' | 'loading' | 'success' | 'error'>('idle');
@@ -1314,6 +1319,8 @@
 
     openingNoteId.value = normalizedId;
     prefetchNoteDetail(user, normalizedId);
+    // 详情预取先启动，随后只做一次同步滚动读数；不监听 scroll，也不阻塞路由导航。
+    captureMobileReturnScroll();
     // 直接提交路由，让详情页真实顶栏先接管画面；编辑器运行时使用正文区域自己的骨架。
     // 这里不能再盖一层 fixed 整页骨架，否则路由或接口稍慢时会把真实详情布局全部遮住。
     void prefetchResolvedRoute(router, { name: 'noteDetail', params: { id: normalizedId } }).catch(() => {
@@ -1659,6 +1666,81 @@
     return noteWorkspaceElement()?.querySelector<HTMLElement>('.note-main-panel [data-mobile-resource-scroll]') ?? null;
   }
 
+  function captureMobileReturnScroll() {
+    if (!bookmark.isMobile) return;
+    const element = noteListScrollElement();
+    if (!element) return;
+    noteLibraryCache.writeReturnScroll(currentListCacheKey.value, {
+      top: element.scrollTop,
+      left: element.scrollLeft,
+      viewMode: currentViewMode.value,
+      routeFullPath: router.currentRoute.value.fullPath,
+      loadedPage: Math.max(1, notePage.value),
+    });
+  }
+
+  function matchingMobileReturnScroll() {
+    if (!bookmark.isMobile) return null;
+    const snapshot = noteLibraryCache.readReturnScroll(currentListCacheKey.value);
+    if (!snapshot) return null;
+    if (snapshot.routeFullPath !== router.currentRoute.value.fullPath) return null;
+    if (snapshot.viewMode !== currentViewMode.value) return null;
+    return snapshot;
+  }
+
+  function restoreMobileReturnScroll(snapshot: NoteLibraryReturnScrollSnapshot) {
+    if (snapshot.routeFullPath !== router.currentRoute.value.fullPath) return false;
+    if (snapshot.viewMode !== currentViewMode.value) return false;
+    const element = noteListScrollElement();
+    if (!element) return false;
+
+    element.scrollLeft = snapshot.left;
+    element.scrollTop = snapshot.top;
+
+    // 列表尾页尚未恢复时，浏览器会把 scrollTop 截到当前最大值；等待缓存/软刷新落地后再试。
+    const maxTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    if (snapshot.top > 1 && maxTop + 1 < snapshot.top) return false;
+    return Math.abs(element.scrollTop - snapshot.top) <= 2;
+  }
+
+  function cancelMobileReturnScrollRestore() {
+    mobileReturnScrollRestoreRequestId += 1;
+    mobileReturnScrollRestoreTimers.forEach((timer) => window.clearTimeout(timer));
+    mobileReturnScrollRestoreTimers.clear();
+  }
+
+  function scheduleMobileReturnScrollRestore(snapshot: NoteLibraryReturnScrollSnapshot, consumeOnSuccess: boolean) {
+    cancelMobileReturnScrollRestore();
+    const requestId = mobileReturnScrollRestoreRequestId;
+    const cacheKey = currentListCacheKey.value;
+
+    const attempt = (retryIndex: number) => {
+      if (requestId !== mobileReturnScrollRestoreRequestId) return;
+      const current = matchingMobileReturnScroll();
+      if (!current || current.updatedAt !== snapshot.updatedAt) return;
+      const restored = restoreMobileReturnScroll(current);
+      if (restored || retryIndex >= MOBILE_RETURN_SCROLL_RETRY_DELAYS.length) {
+        if (consumeOnSuccess) noteLibraryCache.clearReturnScroll(cacheKey);
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        mobileReturnScrollRestoreTimers.delete(timer);
+        attempt(retryIndex + 1);
+      }, MOBILE_RETURN_SCROLL_RETRY_DELAYS[retryIndex]);
+      mobileReturnScrollRestoreTimers.add(timer);
+    };
+
+    nextTick(() => {
+      window.requestAnimationFrame(() => attempt(0));
+    });
+  }
+
+  function scheduleMobileListScrollReset() {
+    nextTick(() => {
+      window.requestAnimationFrame(resetCurrentResourceScroll);
+    });
+  }
+
   function captureDesktopPreviewScroll() {
     if (desktopPreviewOpen.value) return;
     const element = noteListScrollElement();
@@ -1762,14 +1844,22 @@
   async function queryNotePage(targetPage: number, append = false, soft = false) {
     const requestSeq = append ? noteRequestSeq : ++noteRequestSeq;
     const requestCacheKey = currentListCacheKey.value;
+    const returnScrollSnapshot = !append && soft && targetPage === 1 ? matchingMobileReturnScroll() : null;
+    const preservedItems = returnScrollSnapshot ? [...noteList.value] : [];
+    const preservedPage = returnScrollSnapshot
+      ? Math.max(notePage.value, returnScrollSnapshot.loadedPage)
+      : notePage.value;
+    const preservedHasMore = noteHasMore.value;
     if (append) loadingMore.value = true;
     else {
       // soft 时不动 loading:模板继续渲染旧列表,避免切标签整屏闪骨架屏
       if (soft) refreshing.value = true;
       else loading.value = true;
       loadingMore.value = false;
-      notePage.value = 0;
-      noteHasMore.value = false;
+      if (!returnScrollSnapshot) {
+        notePage.value = 0;
+        noteHasMore.value = false;
+      }
     }
 
     try {
@@ -1794,10 +1884,22 @@
       }
 
       const pageItems = Array.isArray(res.data?.items) ? res.data.items : [];
-      noteList.value = append ? mergeResourcePage(noteList.value, pageItems) : pageItems;
       noteTotal.value = Number(res.data?.total || 0);
-      notePage.value = Number(res.data?.page || targetPage);
-      noteHasMore.value = Boolean(res.data?.hasMore);
+      const preserveLoadedTail =
+        Boolean(returnScrollSnapshot) && preservedPage > 1 && preservedItems.length > RESOURCE_LIST_PAGE_SIZE;
+      if (append) {
+        noteList.value = mergeResourcePage(noteList.value, pageItems);
+        notePage.value = Number(res.data?.page || targetPage);
+        noteHasMore.value = Boolean(res.data?.hasMore);
+      } else if (preserveLoadedTail) {
+        noteList.value = mergeResourceRefreshedHead(preservedItems, pageItems);
+        notePage.value = Math.max(Number(res.data?.page || targetPage), preservedPage);
+        noteHasMore.value = noteTotal.value > noteList.value.length || (noteTotal.value === 0 && preservedHasMore);
+      } else {
+        noteList.value = pageItems;
+        notePage.value = Number(res.data?.page || targetPage);
+        noteHasMore.value = Boolean(res.data?.hasMore);
+      }
       noteLibraryCache.writeList(requestCacheKey, {
         items: noteList.value,
         total: noteTotal.value,
@@ -1814,6 +1916,7 @@
         loading.value = false;
         loadingMore.value = false;
         refreshing.value = false;
+        if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, true);
       }
     }
   }
@@ -1951,10 +2054,13 @@
       if (!featuresReady) return;
       const forceRefresh = Array.isArray(previous) && refreshToken !== previous[3];
       const cached = noteLibraryCache.readList(currentListCacheKey.value);
+      const returnScrollSnapshot = matchingMobileReturnScroll();
       if (cached) {
         restoreListSnapshot(cached);
         if (!forceRefresh && Date.now() - cached.updatedAt <= NOTE_LIBRARY_LIST_FRESH_MS) {
           if (batchMode.value) exitBatch();
+          if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, true);
+          else if (bookmark.isMobile) scheduleMobileListScrollReset();
           return;
         }
       }
@@ -1970,9 +2076,8 @@
       if (batchMode.value) exitBatch();
       void reloadNotes(soft);
       if (bookmark.isMobile) {
-        nextTick(() => {
-          window.requestAnimationFrame(resetCurrentResourceScroll);
-        });
+        if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, false);
+        else scheduleMobileListScrollReset();
       }
     },
     { immediate: true },
@@ -2026,6 +2131,7 @@
   }
 
   onBeforeUnmount(() => {
+    cancelMobileReturnScrollRestore();
     if (searchTimer.value) window.clearTimeout(searchTimer.value);
     if (treeSearchTimer.value) window.clearTimeout(treeSearchTimer.value);
     window.removeEventListener('pointermove', onDragPointerMove, true);
@@ -3968,6 +4074,22 @@
       padding: 0;
       grid-template-columns: minmax(0, 1fr);
       gap: 12px;
+      overflow-anchor: none;
+    }
+
+    /*
+     * 移动端返回笔记库时不能继续使用卡片固有高度占位：弱网下异步路由和正文摘要较晚就绪，
+     * 老 WebView 会先按 282px 占位再修正真实高度，并通过滚动锚点把首张卡片顶出视口。
+     * 首批只有分页后的有限节点，移动端直接稳定绘制可避免返回后的随机错位。
+     */
+    .note-library-body > * {
+      content-visibility: visible;
+      contain-intrinsic-size: none;
+    }
+
+    .note-library-body-list .note-list,
+    .note-library-body-list .note-list-skeleton-wrap {
+      overflow-anchor: none;
     }
 
     .note-mobile-current-page-card {

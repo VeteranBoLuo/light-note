@@ -13,6 +13,7 @@
     </template>
 
     <template #actions>
+      <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" compact class="mobile-cloud-storage" />
       <div class="cloud-view-toggle" :aria-label="$t('cloudSpace.viewMode')">
         <BTooltip :title="$t('note.cardView')">
           <BButton class="cloud-view-button" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
@@ -79,7 +80,6 @@
           {{ t('inbox.complete') }}
         </BButton>
       </div>
-      <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" class="mobile-cloud-storage" />
       <!-- 移动端不放第二个文本搜索框：找文件统一走顶栏全局搜索，这里只保留文件夹与类型筛选 -->
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
         <div ref="mobileFolderListRef" class="mobile-folder-list">
@@ -950,12 +950,12 @@
 
   .mobile-cloud-storage {
     display: flex;
-    width: 100%;
+    min-width: 84px;
+    flex: 1 1 auto;
 
     :deep(.storage-usage) {
       width: 100%;
       min-width: 0;
-      padding: 6px 0;
     }
   }
 
@@ -1108,7 +1108,7 @@
       min-width: 0;
       height: 40px;
       box-sizing: border-box;
-      flex: 3 1 0;
+      flex: 0 0 76px;
     }
 
     .cloud-view-button {
@@ -1129,19 +1129,27 @@
     }
 
     .cloud-view-label {
-      display: inline;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      display: none;
     }
 
     .cloud-type-filter {
       min-width: 0;
-      flex: 2 1 0;
+      max-width: 112px;
+      flex: 0 1 112px;
+    }
+
+    .cloud-type-filter :deep(.b-popover-trigger) {
+      display: flex;
+      width: 100%;
+      min-width: 0;
     }
 
     .cloud-type-filter :deep(.filter-button) {
+      width: 100%;
       height: 40px;
+      padding: 0 8px;
+      gap: 5px;
+      font-size: 12px;
     }
 
     .header-handle-group {

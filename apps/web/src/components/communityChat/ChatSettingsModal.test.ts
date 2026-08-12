@@ -67,7 +67,7 @@ describe('ChatSettingsModal', () => {
     };
 
     const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
-      item.textContent?.includes(zhCN.communityChat.settings.blockedUsersAction),
+      item.textContent?.includes(zhCN.communityChat.settings.blockedUsersTitle),
     );
     button?.click();
     await Promise.resolve();
@@ -101,7 +101,7 @@ describe('ChatSettingsModal', () => {
     };
 
     const button = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((item) =>
-      item.textContent?.includes(zhCN.communityChat.settings.ownProfileAction),
+      item.textContent?.includes(zhCN.communityChat.settings.ownProfileTitle),
     );
     button?.click();
     await Promise.resolve();
@@ -109,5 +109,28 @@ describe('ChatSettingsModal', () => {
 
     expect(mocks.closeCurrentMobileOverlayThen).toHaveBeenCalledTimes(1);
     expect(mocks.order).toEqual(['close', 'model', 'next', 'profile']);
+  });
+
+  it('使用两个紧凑管理入口且不重复渲染底部关闭按钮', () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(ChatSettingsModal, { visible: true });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': zhCN },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    expect(host.querySelectorAll('.chat-settings-modal__action')).toHaveLength(2);
+    expect(host.textContent).toContain(zhCN.communityChat.settings.ownProfileTitle);
+    expect(host.textContent).toContain(zhCN.communityChat.settings.blockedUsersTitle);
+    expect(host.textContent).not.toContain(zhCN.common.close);
   });
 });

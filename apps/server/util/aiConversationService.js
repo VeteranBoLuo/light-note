@@ -166,9 +166,6 @@ function mapConversation(row) {
     isPinned: Boolean(row.is_pinned),
     retentionMode: row.retention_mode || 'standard',
     expireAt: row.expire_at || null,
-    rootConversationId: row.root_conversation_id || String(row.id),
-    parentConversationId: row.parent_conversation_id || null,
-    branchFromMessageId: row.branch_from_message_id || null,
     lastMessageAt: row.last_message_at,
     createdAt: row.create_time,
     updatedAt: row.update_time,
@@ -274,7 +271,7 @@ export async function assertAiCloudHistoryEnabled(identity, database = pool) {
   return true;
 }
 
-export async function createAiConversation(identity, input = {}, database = pool, internal = {}) {
+export async function createAiConversation(identity, input = {}, database = pool) {
   const owner = assertAiConversationWritable(identity);
   const id = asString(input.id, 36) || crypto.randomUUID();
   const title = asString(input.title, 255, '新会话');
@@ -284,9 +281,6 @@ export async function createAiConversation(identity, input = {}, database = pool
     throw serviceError('RETENTION_EXPIRE_AT_INVALID', '只有临时会话可以设置过期时间');
   }
   const expireAt = retentionMode === 'temporary' ? normalizeTemporaryExpireAt(input.expireAt) : null;
-  const rootConversationId = asString(internal.rootConversationId, 36) || id;
-  const parentConversationId = asString(internal.parentConversationId, 36) || null;
-  const branchFromMessageId = asString(internal.branchFromMessageId, 36) || null;
   await database.query(
     `INSERT INTO ai_conversations
       (id, actor_user_id, subject_user_id, admin_context_id, admin_context_mode, title, scope_type, scope_json,
@@ -303,9 +297,9 @@ export async function createAiConversation(identity, input = {}, database = pool
       jsonValue(input.scope, {}),
       retentionMode,
       expireAt,
-      rootConversationId,
-      parentConversationId,
-      branchFromMessageId,
+      id,
+      null,
+      null,
     ],
   );
   return getAiConversation(identity, id, { messageLimit: 0 }, database);
@@ -342,84 +336,6 @@ export async function listAiConversations(identity, options = {}, database = poo
   return {
     items: page.map(mapConversation),
     nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
-  };
-}
-
-function lineageTime(row) {
-  const value = new Date(row.create_time || 0).getTime();
-  return Number.isFinite(value) ? value : 0;
-}
-
-function orderConversationLineage(rows, currentConversationId) {
-  const byId = new Map(rows.map((row) => [String(row.id), row]));
-  const children = new Map();
-  const roots = [];
-  for (const row of rows) {
-    const parentId = row.parent_conversation_id ? String(row.parent_conversation_id) : '';
-    if (!parentId || parentId === String(row.id) || !byId.has(parentId)) {
-      roots.push(row);
-      continue;
-    }
-    const siblings = children.get(parentId) || [];
-    siblings.push(row);
-    children.set(parentId, siblings);
-  }
-  const compare = (left, right) =>
-    lineageTime(left) - lineageTime(right) || String(left.id).localeCompare(String(right.id));
-  roots.sort(compare);
-  for (const siblings of children.values()) siblings.sort(compare);
-
-  const ordered = [];
-  const depthById = new Map();
-  const visited = new Set();
-  const visit = (row, depth) => {
-    const id = String(row.id);
-    if (visited.has(id)) return;
-    visited.add(id);
-    depthById.set(id, Math.min(32, Math.max(0, depth)));
-    ordered.push(row);
-    for (const child of children.get(id) || []) visit(child, depth + 1);
-  };
-  for (const root of roots) visit(root, 0);
-  // 历史脏数据若形成环，仍以独立根展示，不能递归卡死或猜测真实父子。
-  for (const row of [...rows].sort(compare)) visit(row, 0);
-
-  return ordered.map((row) => {
-    const id = String(row.id);
-    const parentId = row.parent_conversation_id ? String(row.parent_conversation_id) : null;
-    return {
-      ...mapConversation(row),
-      depth: depthById.get(id) || 0,
-      childCount: (children.get(id) || []).length,
-      parentAvailable: Boolean(parentId && byId.has(parentId)),
-      current: id === currentConversationId,
-    };
-  });
-}
-
-export async function getAiConversationLineage(identity, conversationId, database = pool) {
-  const current = await getOwnedConversationRow(database, identity, conversationId);
-  if (!current) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-  const rootConversationId = asString(current.root_conversation_id, 36) || String(current.id);
-  const [rows] = await database.query(
-    `SELECT * FROM ai_conversations
-     WHERE actor_user_id = ? AND subject_user_id = ? AND admin_context_mode = ?
-       AND admin_context_id <=> ? AND (root_conversation_id = ? OR id = ?) AND ${LIVE_RETENTION_SQL}
-       AND status IN ('active', 'archived')
-     ORDER BY create_time ASC, id ASC LIMIT 201`,
-    [...ownerParams(identity), rootConversationId, rootConversationId],
-  );
-  const truncated = rows.length > 200;
-  const bounded = rows.slice(0, 200);
-  if (!bounded.some((row) => String(row.id) === String(current.id))) {
-    if (bounded.length === 200) bounded[bounded.length - 1] = current;
-    else bounded.push(current);
-  }
-  return {
-    rootConversationId,
-    currentConversationId: String(current.id),
-    nodes: orderConversationLineage(bounded, String(current.id)),
-    truncated,
   };
 }
 
@@ -1410,11 +1326,6 @@ export async function exportAiConversations(identity, database = pool) {
   };
 }
 
-function clonedParentMessageId(message, clonedMessageIds) {
-  if (!message?.parentMessageId) return null;
-  return clonedMessageIds.get(message.parentMessageId) || null;
-}
-
 function normalizeLocalRecoveryReference(value, field, index) {
   if (value == null || value === '') return null;
   const normalized = String(value).trim();
@@ -1457,7 +1368,11 @@ function normalizeLocalRecoveryMessages(rawMessages) {
     return {
       clientId,
       parentClientId: normalizeLocalRecoveryReference(rawMessage.parentClientId, 'parentClientId', index),
-      versionGroupClientId: normalizeLocalRecoveryReference(rawMessage.versionGroupClientId, 'versionGroupClientId', index),
+      versionGroupClientId: normalizeLocalRecoveryReference(
+        rawMessage.versionGroupClientId,
+        'versionGroupClientId',
+        index,
+      ),
       role: rawMessage.role,
       status: rawMessage.status,
       content: rawMessage.content,
@@ -1477,9 +1392,7 @@ function normalizeLocalRecoveryMessages(rawMessages) {
     ...message,
     parentClientId: message.parentClientId && clientIds.has(message.parentClientId) ? message.parentClientId : null,
     versionGroupClientId:
-      message.versionGroupClientId && clientIds.has(message.versionGroupClientId)
-        ? message.versionGroupClientId
-        : null,
+      message.versionGroupClientId && clientIds.has(message.versionGroupClientId) ? message.versionGroupClientId : null,
   }));
 }
 
@@ -1534,89 +1447,14 @@ export async function recoverAiConversationFromLocal(identity, input = {}, datab
         [versionGroupId, messageId, conversation.id],
       );
     }
-    const result = await getAiConversation(identity, conversation.id, { messageLimit: MAX_LOCAL_RECOVERY_MESSAGES }, connection);
+    const result = await getAiConversation(
+      identity,
+      conversation.id,
+      { messageLimit: MAX_LOCAL_RECOVERY_MESSAGES },
+      connection,
+    );
     if (ownsTransaction) await connection.commit();
     return { conversation: result, restoredMessageCount: messages.length };
-  } catch (error) {
-    if (ownsTransaction) await connection.rollback();
-    throw error;
-  } finally {
-    if (ownsTransaction) connection.release();
-  }
-}
-
-export async function branchAiConversation(identity, conversationId, input = {}, database = pool) {
-  assertAiConversationWritable(identity);
-  const ownsTransaction = typeof database?.getConnection === 'function';
-  const connection = ownsTransaction ? await database.getConnection() : database;
-  if (!connection || typeof connection.query !== 'function') {
-    throw serviceError('AI_DATABASE_UNAVAILABLE', 'AI 会话存储暂时不可用', 503);
-  }
-  try {
-    if (ownsTransaction) await connection.beginTransaction();
-    const ownedSource = await getOwnedConversationRow(connection, identity, conversationId);
-    if (!ownedSource) throw serviceError('CONVERSATION_NOT_FOUND', '会话不存在或无权访问', 404);
-    const [messageCountRows] = await connection.query(
-      'SELECT COUNT(*) AS total FROM ai_messages WHERE conversation_id = ?',
-      [ownedSource.id],
-    );
-    const sourceMessageCount = Math.max(0, Number(messageCountRows[0]?.total || 0));
-    if (sourceMessageCount > 200) {
-      throw serviceError(
-        'CONVERSATION_BRANCH_TOO_LARGE',
-        '当前会话消息过多，无法安全创建完整分支；请从较短的会话继续',
-        409,
-      );
-    }
-    const source = await getAiConversation(identity, conversationId, { messageLimit: 200 }, connection);
-    const throughMessageId = asString(input.throughMessageId, 36);
-    const index = throughMessageId
-      ? source.messages.findIndex((message) => message.id === throughMessageId)
-      : source.messages.length - 1;
-    if (throughMessageId && index < 0) throw serviceError('MESSAGE_NOT_FOUND', '分支起点不属于当前会话', 404);
-    const branchFromMessageId = index >= 0 ? source.messages[index].id : null;
-    const branch = await createAiConversation(
-      identity,
-      {
-        title: asString(input.title, 255, `${source.title} · 分支`),
-        scopeType: source.scopeType,
-        scope: source.scope,
-        retentionMode: source.retentionMode,
-        expireAt: source.retentionMode === 'temporary' ? source.expireAt : null,
-      },
-      connection,
-      {
-        rootConversationId: source.rootConversationId || source.id,
-        parentConversationId: source.id,
-        branchFromMessageId,
-      },
-    );
-    const clonedMessageIds = new Map();
-    for (const message of source.messages.slice(0, index + 1)) {
-      const cloned = await saveAiMessage(
-        identity,
-        branch.id,
-        {
-          parentMessageId: clonedParentMessageId(message, clonedMessageIds),
-          role: message.role,
-          content: message.content,
-          status: message.status === 'generating' ? 'stopped' : message.status,
-          contextRefs: message.contextRefs,
-          attachmentRefs: message.attachmentRefs,
-          activity: message.activity,
-          coverage: message.coverage,
-          versionGroupId: message.versionGroupId,
-          modelMeta: message.modelMeta,
-          sources: message.sources,
-          evidence: message.evidence,
-        },
-        connection,
-      );
-      clonedMessageIds.set(message.id, cloned.id);
-    }
-    const result = await getAiConversation(identity, branch.id, { messageLimit: 200 }, connection);
-    if (ownsTransaction) await connection.commit();
-    return result;
   } catch (error) {
     if (ownsTransaction) await connection.rollback();
     throw error;
@@ -1704,7 +1542,6 @@ export const __testing = {
   decodeCursor,
   encodeCursor,
   normalizeTemporaryExpireAt,
-  clonedParentMessageId,
   normalizedOwner,
   normalizeEvidence,
   normalizeLocalRecoveryMessages,

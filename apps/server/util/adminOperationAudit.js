@@ -45,13 +45,14 @@ export async function recordAdminOperationAudit(entry, options = {}) {
     return false;
   }
   try {
+    const auditId = crypto.randomUUID();
     await db.query(
       `INSERT INTO admin_operation_audit
        (id, actor_user_id, action, target_type, target_id, outcome, reason, request_id,
         ip_masked, metadata)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        crypto.randomUUID(),
+        auditId,
         String(entry.actorUserId).slice(0, 255),
         String(entry.action).slice(0, 64),
         entry.targetType ? String(entry.targetType).slice(0, 64) : null,
@@ -63,7 +64,7 @@ export async function recordAdminOperationAudit(entry, options = {}) {
         sanitizeAuditMetadata(entry.metadata),
       ],
     );
-    return true;
+    return auditId;
   } catch (error) {
     console.error('[admin-audit] write failed code=%s', stableAgentErrorCode(error));
     if (required) {

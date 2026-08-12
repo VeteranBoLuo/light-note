@@ -68,3 +68,51 @@ describe.each([
     expect(open).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('笔记卡片缩略图', () => {
+  let cleanup: (() => void) | null = null;
+
+  afterEach(() => {
+    cleanup?.();
+    cleanup = null;
+    document.body.innerHTML = '';
+  });
+
+  it('独立懒加载缩略图，加载失败时无布局阻塞地退化为纯文本卡片', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const previewImageUrl = '/api/note/image-thumbnail/hash.webp?source=note';
+    const app = createApp({
+      render: () =>
+        h(NoteCard, {
+          note: {
+            id: 'note-with-cover',
+            title: '带封面的笔记',
+            type: 'html',
+            tags: [],
+            previewImageUrl,
+          },
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.directive('click-log', {});
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    const image = host.querySelector<HTMLImageElement>('.note-preview-image');
+    expect(image?.getAttribute('src')).toBe(previewImageUrl);
+    expect(image?.getAttribute('loading')).toBe('lazy');
+    expect(image?.getAttribute('decoding')).toBe('async');
+    expect(image?.getAttribute('fetchpriority')).toBe('low');
+
+    image?.dispatchEvent(new Event('load'));
+    await nextTick();
+    expect(image?.classList.contains('is-loaded')).toBe(true);
+
+    image?.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(host.querySelector('.note-preview-media')).toBeNull();
+    expect(host.querySelector('.note-content')?.textContent).toBe('摘要');
+  });
+});

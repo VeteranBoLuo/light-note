@@ -120,6 +120,19 @@ afterEach(() => {
 });
 
 describe('ChatImageViewerModal', () => {
+  it('使用确定尺寸的预览框完整适配横图、竖图和长图', () => {
+    expect(viewerSource).toContain('class="chat-image-viewer__media"');
+    expect(viewerSource).toMatch(
+      /\.chat-image-viewer__media\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*26px 68px;[\s\S]*?overflow:\s*hidden;/u,
+    );
+    expect(viewerSource).toMatch(
+      /\.chat-image-viewer__image\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?inset:\s*0;[\s\S]*?width:\s*100%\s*!important;[\s\S]*?height:\s*100%\s*!important;[\s\S]*?object-fit:\s*contain;/u,
+    );
+    expect(viewerSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.chat-image-viewer__media\s*\{[\s\S]*?inset:\s*0;/u,
+    );
+  });
+
   it('把桌面切换箭头定位在 Tooltip 包裹层，并精简移动端旋转工具', () => {
     expect(viewerSource).toMatch(
       /\.chat-image-viewer__nav-wrap\s*\{[\s\S]*?position:\s*absolute\s*!important;[\s\S]*?top:\s*50%\s*!important;/u,

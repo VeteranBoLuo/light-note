@@ -23,10 +23,10 @@ const normalizeTask = (row) => {
  * 查询启用中的成长任务及指定账号状态。
  * userId 为空时仍返回任务定义，供游客预览；不会读取或写入共享游客账号的数据。
  */
-export async function getGrowthTasks(userId = null) {
-  await ensureGrowthTaskSchema();
+export async function getGrowthTasks(userId = null, { db = pool, ensureSchema = false } = {}) {
+  if (ensureSchema) await ensureGrowthTaskSchema();
   const subjectUserId = userId && userId !== 'visitor' ? userId : null;
-  const [rows] = await pool.query(
+  const [rows] = await db.query(
     `SELECT
        gt.task_key AS taskKey,
        gt.title AS titleKey,
@@ -49,7 +49,10 @@ export async function getGrowthTasks(userId = null) {
   const claimedCount = tasks.filter((task) => task.claimed).length;
   const claimableCount = tasks.filter((task) => task.claimable).length;
   return {
-    tasks,
+    // 新手路线最多同时展开 3 项；已领取项保留在 completedTasks 中，避免领取后页面结构突变。
+    tasks: tasks.filter((task) => !task.claimed).slice(0, 3),
+    completedTasks: tasks.filter((task) => task.claimed),
+    allTasks: tasks,
     totalCount: tasks.length,
     completedCount,
     claimedCount,

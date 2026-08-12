@@ -8,29 +8,48 @@
     layout="scroll"
   >
     <template #metrics>
-      <li class="admin-stat-card" :class="{ 'has-warning': work.total > 0 }">
-        <span class="admin-stat-label">{{ t('adminActionCenter.metrics.pendingWork') }}</span>
-        <strong class="admin-stat-value">{{ number(work.total) }}</strong>
+      <li
+        class="admin-stat-card"
+        :class="{
+          'has-warning': activeSection === 'work' && work.total > 0,
+          'has-danger': activeSection === 'jobs' && jobs.attention > 0,
+        }"
+      >
+        <span class="admin-stat-label">{{
+          t(
+            activeSection === 'work'
+              ? 'adminActionCenter.metrics.pendingWork'
+              : 'adminActionCenter.metrics.jobAttention',
+          )
+        }}</span>
+        <strong class="admin-stat-value">{{ number(activeSection === 'work' ? work.total : jobs.attention) }}</strong>
         <span class="admin-stat-hint">{{
-          t('adminActionCenter.metrics.criticalHint', { count: number(work.critical) })
+          activeSection === 'work'
+            ? t('adminActionCenter.metrics.criticalHint', { count: number(work.critical) })
+            : t('adminActionCenter.metrics.runningHint', { count: number(jobs.running) })
         }}</span>
       </li>
-      <li class="admin-stat-card" :class="{ 'has-danger': jobs.attention > 0 }">
-        <span class="admin-stat-label">{{ t('adminActionCenter.metrics.jobAttention') }}</span>
-        <strong class="admin-stat-value">{{ number(jobs.attention) }}</strong>
+      <li class="admin-stat-card" :class="{ 'has-danger': sla.overdue > 0 }">
+        <span class="admin-stat-label">{{ t('adminActionCenter.metrics.overdue') }}</span>
+        <strong class="admin-stat-value">{{ number(sla.overdue) }}</strong>
         <span class="admin-stat-hint">{{
-          t('adminActionCenter.metrics.runningHint', { count: number(jobs.running) })
+          sla.sampled
+            ? t('adminActionCenter.metrics.overdueSampledHint', { count: number(sla.returnedCount) })
+            : t('adminActionCenter.metrics.dueSoonHint', { count: number(sla.dueSoon) })
         }}</span>
       </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">{{ t('adminActionCenter.metrics.waiting') }}</span>
-        <strong class="admin-stat-value">{{ number(jobs.waiting) }}</strong>
-        <span class="admin-stat-hint">{{ t('adminActionCenter.metrics.waitingHint') }}</span>
-      </li>
-      <li class="admin-stat-card is-success">
-        <span class="admin-stat-label">{{ t('adminActionCenter.metrics.completed24h') }}</span>
-        <strong class="admin-stat-value">{{ number(jobs.completed24h) }}</strong>
-        <span class="admin-stat-hint">{{ t('adminActionCenter.metrics.completedHint') }}</span>
+      <li class="admin-stat-card" :class="{ 'is-success': activeSection === 'jobs' }">
+        <span class="admin-stat-label">{{
+          t(activeSection === 'jobs' ? 'adminActionCenter.metrics.completed24h' : 'adminActionCenter.sla.dueSoon')
+        }}</span>
+        <strong class="admin-stat-value">{{
+          number(activeSection === 'jobs' ? jobs.completed24h : sla.dueSoon)
+        }}</strong>
+        <span class="admin-stat-hint">{{
+          activeSection === 'jobs'
+            ? t('adminActionCenter.metrics.completedHint')
+            : t('adminActionCenter.metrics.dueSoonHint', { count: number(sla.dueSoon) })
+        }}</span>
       </li>
     </template>
 
@@ -47,12 +66,20 @@
         v-model:value="statusFilter"
         class="action-center__select"
         :options="statusOptions"
+        @change="onServerFilterChange"
+      />
+      <BSelect
+        v-model:value="slaFilter"
+        class="action-center__select"
+        :options="slaOptions"
+        @change="onServerFilterChange"
       />
       <BInput
         v-model:value="keyword"
         class="action-center__search"
         clearable
         :placeholder="t('adminActionCenter.searchPlaceholder')"
+        @keyup.enter="load"
       />
       <BButton type="primary" :loading="loading" @click="load">{{ t('common.refresh') }}</BButton>
     </template>
@@ -96,7 +123,12 @@
             </div>
           </header>
           <p v-if="activeSection === 'work'">
-            {{ t('adminActionCenter.sourceWorkHint', { count: number(asWorkSource(source).count) }) }}
+            {{
+              t('adminActionCenter.sourceWorkHint', {
+                count: number(asWorkSource(source).count),
+                overdue: number(source.overdue),
+              })
+            }}
           </p>
           <p v-else>
             {{
@@ -104,6 +136,7 @@
                 attention: number(asJobSource(source).attention),
                 running: number(asJobSource(source).running),
                 waiting: number(asJobSource(source).waiting),
+                overdue: number(source.overdue),
               })
             }}
           </p>
@@ -129,12 +162,20 @@
               <BChip v-else-if="item.severity === 'critical'" tone="danger">{{
                 t('adminActionCenter.status.critical')
               }}</BChip>
+              <BChip v-if="item.slaState && item.slaState !== 'unavailable'" :tone="slaTone(item.slaState)">
+                {{ slaLabel(item.slaState) }}
+              </BChip>
               <strong>{{ item.title }}</strong>
             </div>
             <p class="action-center__meta">
               <span v-if="item.ownerLabel">{{ item.ownerLabel }}</span>
+              <span v-if="item.ownerTeam">{{ t('adminActionCenter.ownerTeam', { team: item.ownerTeam }) }}</span>
               <span>{{ t('adminActionCenter.itemId', { id: shortId(item.id) }) }}</span>
               <span>{{ formatTime(item.updatedAt || item.createdAt) }}</span>
+              <span v-if="item.dueAt">{{ t('adminActionCenter.dueAt', { time: formatBeijingTime(item.dueAt) }) }}</span>
+              <span v-if="item.slaState === 'overdue'" class="action-center__overdue-text">{{
+                t('adminActionCenter.overdueFor', { duration: formatDuration(item.overdueMinutes) })
+              }}</span>
             </p>
             <p v-if="activeSection === 'jobs'" class="action-center__job-meta">
               <span>{{ t('adminActionCenter.attempts', { count: number(item.attempts) }) }}</span>
@@ -322,6 +363,7 @@
 
   type Section = 'work' | 'jobs';
   type ItemStatus = 'pending' | 'waiting' | 'running' | 'attention';
+  type SlaState = 'overdue' | 'due_soon' | 'within_sla' | 'unavailable';
   interface ActionItem {
     id: string;
     source: string;
@@ -347,6 +389,13 @@
     errorCode?: string | null;
     targetUrl?: string;
     canRetry?: boolean;
+    ownerTeam?: string | null;
+    assignee?: string | null;
+    slaMinutes?: number | null;
+    dueAt?: string | null;
+    slaState?: SlaState;
+    ageMinutes?: number | null;
+    overdueMinutes?: number;
   }
   interface TodoReminderDiagnosticJob {
     id: string;
@@ -398,6 +447,10 @@
     label: string;
     count: number;
     critical: number;
+    overdue: number;
+    dueSoon: number;
+    oldestAgeMinutes: number;
+    sampled: boolean;
   }
   interface JobSource {
     source: string;
@@ -407,15 +460,67 @@
     running: number;
     waiting: number;
     completed24h: number;
+    overdue: number;
+    dueSoon: number;
+    oldestAgeMinutes: number;
+    sampled: boolean;
   }
+
+  const WORK_SOURCE_KEYS = [
+    'opinion',
+    'security',
+    'community_report',
+    'ai_feedback',
+    'feature_request',
+    'resource_governance',
+  ] as const;
+  const JOB_SOURCE_KEYS = [
+    'ai_document',
+    'bookmark_icon',
+    'todo_reminder',
+    'account_deletion',
+    'email_delivery',
+    'file_preview',
+    'resource_cleanup',
+  ] as const;
+  const SOURCE_KEYS = [...WORK_SOURCE_KEYS, ...JOB_SOURCE_KEYS] as const;
+
+  function routeQueryValue(value: unknown) {
+    return String(Array.isArray(value) ? value[0] || '' : value || '').trim();
+  }
+
+  const initialQuery = router.currentRoute?.value?.query || {};
+  const initialSection = routeQueryValue(initialQuery.section) === 'jobs' ? 'jobs' : 'work';
+  const initialSources = initialSection === 'jobs' ? JOB_SOURCE_KEYS : WORK_SOURCE_KEYS;
+  const requestedSource = routeQueryValue(initialQuery.source);
+  const requestedStatus = routeQueryValue(initialQuery.status);
+  const requestedSla = routeQueryValue(initialQuery.slaState);
 
   const { t, locale } = useI18n();
   const loading = ref(false);
   const hasLoaded = ref(false);
-  const activeSection = ref<Section>('work');
-  const sourceFilter = ref('all');
-  const statusFilter = ref('all');
-  const keyword = ref('');
+  const activeSection = ref<Section>(initialSection);
+  const sourceFilter = ref(
+    requestedSource === 'all' || (initialSources as readonly string[]).includes(requestedSource)
+      ? requestedSource
+      : 'all',
+  );
+  const statusFilter = ref(
+    ['all', 'attention', 'running', 'waiting'].includes(requestedStatus) ? requestedStatus : 'all',
+  );
+  const slaFilter = ref(
+    ['all', 'overdue', 'due_soon', 'within_sla', 'unavailable'].includes(requestedSla) ? requestedSla : 'all',
+  );
+  const keyword = ref(routeQueryValue(initialQuery.keyword).slice(0, 120));
+  const sla = ref({
+    policyVersion: '',
+    overdue: 0,
+    dueSoon: 0,
+    oldestAgeMinutes: 0,
+    returnedCount: 0,
+    unavailableCount: 0,
+    sampled: false,
+  });
   const unavailableSources = ref<string[]>([]);
   const retryVisible = ref(false);
   const retryLoading = ref(false);
@@ -448,13 +553,23 @@
   const activeSources = computed(() => (activeSection.value === 'work' ? work.value.sources : jobs.value.sources));
   const sourceOptions = computed(() => [
     { value: 'all', label: t('adminActionCenter.allSources') },
-    ...activeSources.value.map((source) => ({ value: source.source, label: sourceLabel(source.source) })),
+    ...(activeSection.value === 'work' ? WORK_SOURCE_KEYS : JOB_SOURCE_KEYS).map((source) => ({
+      value: source,
+      label: sourceLabel(source),
+    })),
   ]);
   const statusOptions = computed(() => [
     { value: 'all', label: t('adminActionCenter.status.all') },
     { value: 'attention', label: t('adminActionCenter.status.attention') },
     { value: 'running', label: t('adminActionCenter.status.running') },
     { value: 'waiting', label: t('adminActionCenter.status.waiting') },
+  ]);
+  const slaOptions = computed(() => [
+    { value: 'all', label: t('adminActionCenter.sla.all') },
+    { value: 'overdue', label: t('adminActionCenter.sla.overdue') },
+    { value: 'due_soon', label: t('adminActionCenter.sla.dueSoon') },
+    { value: 'within_sla', label: t('adminActionCenter.sla.within') },
+    { value: 'unavailable', label: t('adminActionCenter.sla.unavailable') },
   ]);
   const currentItems = computed(() => (activeSection.value === 'work' ? work.value.items : jobs.value.items));
   const filteredItems = computed(() => {
@@ -463,6 +578,7 @@
       if (sourceFilter.value !== 'all' && item.source !== sourceFilter.value) return false;
       if (activeSection.value === 'jobs' && statusFilter.value !== 'all' && item.status !== statusFilter.value)
         return false;
+      if (slaFilter.value !== 'all' && item.slaState !== slaFilter.value) return false;
       if (!search) return true;
       return [item.id, item.title, item.ownerLabel, item.errorCode, item.rawStatus]
         .filter(Boolean)
@@ -483,18 +599,7 @@
     return source as JobSource;
   }
   function sourceLabel(source: string) {
-    const known = [
-      'opinion',
-      'security',
-      'community_report',
-      'ai_feedback',
-      'ai_document',
-      'bookmark_icon',
-      'todo_reminder',
-      'account_deletion',
-      'email_delivery',
-    ];
-    return known.includes(source) ? t(`adminActionCenter.sources.${source}`) : source;
+    return (SOURCE_KEYS as readonly string[]).includes(source) ? t(`adminActionCenter.sources.${source}`) : source;
   }
   function statusLabel(status: ItemStatus) {
     return t(`adminActionCenter.status.${status}`);
@@ -504,6 +609,15 @@
     if (status === 'running') return 'success';
     if (status === 'waiting') return 'pending';
     return 'neutral';
+  }
+  function slaTone(state: SlaState): 'danger' | 'pending' | 'success' | 'neutral' {
+    if (state === 'overdue') return 'danger';
+    if (state === 'due_soon') return 'pending';
+    if (state === 'within_sla') return 'success';
+    return 'neutral';
+  }
+  function slaLabel(state: SlaState) {
+    return t(`adminActionCenter.sla.${state === 'due_soon' ? 'dueSoon' : state === 'within_sla' ? 'within' : state}`);
   }
   function itemTone(item: ActionItem): 'danger' | 'pending' | 'neutral' {
     if (item.severity === 'critical' || item.status === 'attention') return 'danger';
@@ -523,6 +637,12 @@
   function formatBeijingTime(value?: string | null) {
     return formatAdminDateTime(value, locale.value, { source: 'utc' });
   }
+  function formatDuration(value?: number | null) {
+    const minutes = Math.max(0, Number(value || 0));
+    if (minutes < 60) return t('adminActionCenter.duration.minutes', { count: number(minutes) });
+    if (minutes < 24 * 60) return t('adminActionCenter.duration.hours', { count: number(Math.floor(minutes / 60)) });
+    return t('adminActionCenter.duration.days', { count: number(Math.floor(minutes / (24 * 60))) });
+  }
   function shortId(value: string) {
     const id = String(value || '');
     return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
@@ -531,12 +651,45 @@
     if (item.targetUrl) return item.targetUrl;
     return '';
   }
+  function currentActionCenterPath() {
+    return router.currentRoute?.value?.path === '/actionCenter' ? '/actionCenter' : '/admin/actionCenter';
+  }
+  function actionCenterReturnTo() {
+    const params = new URLSearchParams();
+    params.set('section', activeSection.value);
+    if (sourceFilter.value !== 'all') params.set('source', sourceFilter.value);
+    if (activeSection.value === 'jobs' && statusFilter.value !== 'all') params.set('status', statusFilter.value);
+    if (slaFilter.value !== 'all') params.set('slaState', slaFilter.value);
+    if (keyword.value.trim()) params.set('keyword', keyword.value.trim().slice(0, 120));
+    const query = params.toString();
+    return `${currentActionCenterPath()}${query ? `?${query}` : ''}`;
+  }
   function hasItemAction(item: ActionItem) {
     return item.source === 'todo_reminder' || Boolean(itemTarget(item));
   }
   function openItem(item: ActionItem) {
     if (item.source === 'todo_reminder') {
       void openTodoDiagnostic(item);
+      return;
+    }
+    if (item.source === 'opinion') {
+      const mobile = currentActionCenterPath() === '/actionCenter';
+      void router.push({
+        path: mobile ? '/userOpinion' : '/admin/userOpinion',
+        query: { opinionId: item.id, returnTo: actionCenterReturnTo() },
+      });
+      return;
+    }
+    if (item.source === 'security') {
+      const mobile = currentActionCenterPath() === '/actionCenter';
+      void router.push({
+        path: mobile ? '/securityCenterMobile' : '/securityCenter/review',
+        query: {
+          ...(mobile ? { tab: 'review' } : {}),
+          eventId: item.id,
+          returnTo: actionCenterReturnTo(),
+        },
+      });
       return;
     }
     const target = itemTarget(item);
@@ -682,15 +835,21 @@
     if (sourceFilter.value === source) return;
     sourceFilter.value = source;
     statusFilter.value = 'all';
+    slaFilter.value = 'all';
     void load();
   }
   function onSourceChange() {
     statusFilter.value = 'all';
+    slaFilter.value = 'all';
     void load();
   }
   function onSectionChange() {
     sourceFilter.value = 'all';
     statusFilter.value = 'all';
+    slaFilter.value = 'all';
+    void load();
+  }
+  function onServerFilterChange() {
     void load();
   }
 
@@ -699,12 +858,28 @@
     const requestedSource = sourceFilter.value;
     loading.value = true;
     try {
-      const response: any = await getAdminActionCenter({ limit: 60, source: requestedSource });
+      const response: any = await getAdminActionCenter({
+        limit: 60,
+        section: activeSection.value,
+        source: requestedSource,
+        status: activeSection.value === 'jobs' ? (statusFilter.value as ItemStatus | 'all') : 'all',
+        slaState: slaFilter.value as SlaState | 'all',
+        keyword: keyword.value.trim(),
+      });
       if (requestId !== loadSequence) return;
       if (response?.status !== 200) throw new Error(response?.msg || t('adminActionCenter.loadFailed'));
       unavailableSources.value = Array.isArray(response.data?.unavailableSources)
         ? response.data.unavailableSources
         : [];
+      sla.value = {
+        policyVersion: String(response.data?.sla?.policyVersion || ''),
+        overdue: Number(response.data?.sla?.overdue || 0),
+        dueSoon: Number(response.data?.sla?.dueSoon || 0),
+        oldestAgeMinutes: Number(response.data?.sla?.oldestAgeMinutes || 0),
+        returnedCount: Number(response.data?.sla?.returnedCount || 0),
+        unavailableCount: Number(response.data?.sla?.unavailableCount || 0),
+        sampled: Boolean(response.data?.sla?.sampled),
+      };
       work.value = {
         total: Number(response.data?.work?.total || 0),
         critical: Number(response.data?.work?.critical || 0),
@@ -848,6 +1023,10 @@
   .action-center__job-meta code {
     color: var(--danger-color, #e5484d);
     overflow-wrap: anywhere;
+  }
+  .action-center__overdue-text {
+    color: var(--danger-color, #e5484d);
+    font-weight: 700;
   }
   .action-center__empty {
     min-height: 180px;

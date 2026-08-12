@@ -1,6 +1,13 @@
 import type { ResourceType } from '@/config/resourceColor.ts';
 
 export type RecentResourceType = Exclude<ResourceType, 'tag'>;
+export type AdminRecentPeriod = 'recent' | 'today';
+export type AdminRecentFilterType = 'all' | 'resource' | 'user' | RecentResourceType;
+
+export type AdminRecentFilter = {
+  period: AdminRecentPeriod;
+  type: AdminRecentFilterType;
+};
 
 export type AdminRecentResource = {
   id: string | number;
@@ -23,4 +30,6 @@ export type AdminRecentUser = {
 export type AdminRecentData = {
   recentResources: AdminRecentResource[];
   recentUsers: AdminRecentUser[];
+  filter?: AdminRecentFilter & { timezone?: 'Asia/Shanghai' };
+  limit?: number;
 };

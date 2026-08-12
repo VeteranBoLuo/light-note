@@ -22,7 +22,7 @@ vi.mock('./items.js', () => ({
   grantItem: mocks.grantItem,
 }));
 
-import { drawLottery } from './lottery.js';
+import { drawLottery, getLotteryStatus } from './lottery.js';
 
 function mockGrowthConnection(lotteryCount) {
   const conn = {
@@ -54,6 +54,7 @@ function mockGrowthConnection(lotteryCount) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.poolQuery.mockResolvedValue([[{ points: 4_200 }]]);
+  mocks.grantItem.mockResolvedValue({ ok: true, qty: 1, overflowQty: 0 });
   vi.spyOn(Math, 'random').mockReturnValue(0);
 });
 
@@ -112,5 +113,77 @@ describe('积分抽奖保底反馈', () => {
       nextPityIn: 10,
     });
     expect(result.results[0]).toMatchObject({ rare: true, guaranteed: true });
+  });
+
+  it('补签卡库存已满时明确转换为 70 积分补偿', async () => {
+    const conn = mockGrowthConnection(9);
+    mocks.grantItem.mockResolvedValueOnce({ ok: true, qty: 0, overflowQty: 1 });
+
+    const result = await drawLottery('user-1', { times: 1 });
+
+    expect(result.results[0]).toMatchObject({
+      kind: 'points',
+      amount: 70,
+      compensated: true,
+      compensationReason: 'makeup_card_full',
+      originalReward: { kind: 'card', amount: 1 },
+      guaranteed: true,
+    });
+    expect(conn.query).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO points_log'),
+      ['user-1', 70, 'lottery_compensation', 'makeup_card_full'],
+    );
+  });
+
+  it('免费抽也累计全局次数并可触发第十抽保底', async () => {
+    const conn = mockGrowthConnection(9);
+    mocks.levelForExp.mockReturnValueOnce(3);
+
+    const result = await drawLottery('user-1', {
+      free: true,
+      calendar: { dayKey: '20260812', timezone: 'Asia/Shanghai' },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      free: true,
+      cost: 0,
+      pityTriggered: true,
+      pityHitIndexes: [1],
+      pityProgressAfter: 0,
+    });
+    expect(conn.query).toHaveBeenCalledWith(
+      expect.stringContaining('lottery_free_day = ?'),
+      ['20260812', 1, 'user-1'],
+    );
+    expect(conn.query).toHaveBeenCalledWith(expect.stringContaining('lottery_count = lottery_count + ?'), [1, 'user-1']);
+  });
+
+  it('抽奖状态按账号日期重置免费次数并公示两套概率', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([
+      [
+        {
+          points: 120,
+          exp: 500,
+          lottery_count: 9,
+          lottery_free_day: '20260811',
+          lottery_free_used: 1,
+        },
+      ],
+    ]);
+    mocks.levelForExp.mockReturnValueOnce(3);
+
+    const result = await getLotteryStatus('user-1', {
+      calendar: { dayKey: '20260812', timezone: 'Asia/Singapore' },
+    });
+
+    expect(result).toMatchObject({
+      freeDaily: 1,
+      freeRemaining: 1,
+      toPity: 1,
+      pityCountsFreeDraws: true,
+      timezone: 'Asia/Singapore',
+    });
+    expect(result.pool.every((prize) => 'normalRate' in prize && 'pityRate' in prize)).toBe(true);
   });
 });

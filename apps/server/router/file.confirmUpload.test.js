@@ -52,6 +52,7 @@ vi.mock('../router_handle/fileHandle.js', () => ({
   getFileInfo: vi.fn(),
   queryFolder: vi.fn(),
   addFolder: vi.fn(),
+  ensureFolder: vi.fn(),
   associateFile: vi.fn(),
   updateFolder: vi.fn(),
   deleteFolder: vi.fn(),

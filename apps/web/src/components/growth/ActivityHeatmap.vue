@@ -8,14 +8,30 @@
       <BSelect
         v-if="yearOptions.length > 1"
         v-model:value="selectedYear"
+        v-click-log="{ module: '成长', operation: '筛选成长热力图年份' }"
         class="activity-heatmap__year"
         :options="yearOptions"
         :aria-label="t('growth.heatmapYearPicker')"
         @change="handleYearChange"
       />
+      <BSelect
+        v-model:value="selectedType"
+        v-click-log="{ module: '成长', operation: '筛选成长热力图活动类型' }"
+        class="activity-heatmap__type"
+        :options="typeOptions"
+        :aria-label="t('growth.heatmapTypeFilter')"
+        @change="selectedCell = null"
+      />
     </div>
 
-    <div ref="scrollRef" class="activity-heatmap__scroll">
+    <div v-if="loading && !data" class="activity-heatmap__skeleton" aria-hidden="true">
+      <span v-for="index in 35" :key="index"></span>
+    </div>
+    <div v-else-if="loadError && !data" class="activity-heatmap__error">
+      <span>{{ t('growth.heatmapLoadFailed') }}</span>
+      <BButton size="small" @click="load(selectedYear)">{{ t('common.retry') }}</BButton>
+    </div>
+    <div v-else ref="scrollRef" class="activity-heatmap__scroll">
       <div class="activity-heatmap__grid-wrap">
         <div class="activity-heatmap__months" :style="gridColumnsStyle">
           <span v-for="(label, index) in monthLabels" :key="index" class="activity-heatmap__month">{{ label }}</span>
@@ -55,11 +71,14 @@
 
     <p v-if="selectedCell" class="activity-heatmap__selected" role="status">{{ cellDetailTip(selectedCell) }}</p>
 
-    <div class="activity-heatmap__foot">
+    <div v-if="data" class="activity-heatmap__foot">
       <div class="activity-heatmap__stats">
-        <span>{{ t('growth.heatmapActiveDays', { n: summary.activeDays }) }}</span>
-        <span>{{ t('growth.heatmapLongest', { n: summary.longestStreak }) }}</span>
-        <span v-if="shownYear === currentYear">{{ t('growth.heatmapWeek', { n: summary.weekCount }) }}</span>
+        <span>{{ t('growth.heatmapActiveDays', { n: displaySummary.activeDays }) }}</span>
+        <span>{{ t('growth.heatmapLongest', { n: displaySummary.longestStreak }) }}</span>
+        <span v-if="shownYear === currentYear">{{ t('growth.heatmapWeek', { n: displaySummary.weekCount }) }}</span>
+        <span v-if="shownYear === currentYear && Number(summary.weeklyTarget || 0) > 0">
+          {{ t('growth.heatmapWeeklyGoal', { current: summary.weekActiveDays || 0, target: summary.weeklyTarget }) }}
+        </span>
       </div>
 
       <div class="activity-heatmap__legend">
@@ -75,10 +94,15 @@
       </div>
     </div>
 
-    <p v-if="loadError" class="activity-heatmap__error">{{ t('growth.heatmapLoadFailed') }}</p>
-    <p v-else-if="!loading && summary.activeDays === 0" class="activity-heatmap__empty">{{
+    <div v-if="loadError && data" class="activity-heatmap__error">
+      <span>{{ t('growth.heatmapLoadFailed') }}</span><BButton size="small" @click="load(selectedYear)">{{ t('common.retry') }}</BButton>
+    </div>
+    <p v-else-if="data && !loading && displaySummary.activeDays === 0" class="activity-heatmap__empty">{{
       t('growth.heatmapEmpty')
     }}</p>
+    <p v-if="data?.timezone" class="activity-heatmap__rules">
+      {{ t('growth.heatmapRules', { timezone: data.timezone }) }}
+    </p>
   </div>
 </template>
 
@@ -87,10 +111,11 @@
   import { useI18n } from 'vue-i18n';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import BButton from '@/components/base/BasicComponents/BButton.vue';
   import growthApi from '@/api/growthApi.ts';
   import { getRootZoom } from '@/utils/zoom.ts';
 
-  const activityTypes = ['bookmark', 'note', 'file', 'checkin'] as const;
+  const activityTypes = ['bookmark', 'note', 'file', 'todo', 'organize', 'checkin'] as const;
   type ActivityType = (typeof activityTypes)[number];
   type ActivityBreakdown = Record<ActivityType, number>;
 
@@ -104,7 +129,14 @@
     year: number;
     availableYears: number[];
     days: HeatmapDay[];
-    summary: { activeDays: number; longestStreak: number; weekCount: number };
+    summary: {
+      activeDays: number;
+      longestStreak: number;
+      weekCount: number;
+      weekActiveDays?: number;
+      weeklyTarget?: number;
+    };
+    timezone?: string;
   }
 
   interface HeatmapCell {
@@ -122,7 +154,8 @@
   const currentYear = new Date().getFullYear();
   const selectedYear = ref(currentYear);
   const data = ref<HeatmapData | null>(null);
-  const loading = ref(false);
+  const selectedType = ref<'all' | ActivityType>('all');
+  const loading = ref(true);
   const loadError = ref(false);
   const selectedCell = ref<HeatmapCell | null>(null);
   const scrollRef = ref<HTMLElement | null>(null);
@@ -133,12 +166,21 @@
       bookmark: Math.max(0, Number(breakdown?.bookmark || 0)),
       note: Math.max(0, Number(breakdown?.note || 0)),
       file: Math.max(0, Number(breakdown?.file || 0)),
+      todo: Math.max(0, Number(breakdown?.todo || 0)),
+      organize: Math.max(0, Number(breakdown?.organize || 0)),
       checkin: Math.max(0, Number(breakdown?.checkin || 0)),
     };
   }
 
   const shownYear = computed(() => data.value?.year || selectedYear.value);
   const summary = computed(() => data.value?.summary || { activeDays: 0, longestStreak: 0, weekCount: 0 });
+  const typeOptions = computed(() => [
+    { value: 'all', label: t('growth.heatmapTypeAll') },
+    ...activityTypes.map((type) => ({
+      value: type,
+      label: t(`growth.heatmapFilter${type[0].toUpperCase()}${type.slice(1)}`),
+    })),
+  ]);
   const yearOptions = computed(() => {
     const years = data.value?.availableYears?.length ? data.value.availableYears : [currentYear];
     return years.map((year) => ({ value: year, label: t('growth.heatmapYear', { year }) }));
@@ -146,7 +188,9 @@
   const activityByDay = computed(() => {
     const result = new Map<string, HeatmapDay>();
     for (const item of data.value?.days || []) {
-      result.set(item.day, { ...item, breakdown: normalizeBreakdown(item.breakdown) });
+      const breakdown = normalizeBreakdown(item.breakdown);
+      const count = selectedType.value === 'all' ? Object.values(breakdown).reduce((sum, value) => sum + value, 0) : breakdown[selectedType.value];
+      result.set(item.day, { ...item, count, breakdown });
     }
     return result;
   });
@@ -222,6 +266,29 @@
       previousMonth = firstCellInYear.month;
     }
     return labels;
+  });
+
+  const displaySummary = computed(() => {
+    if (selectedType.value === 'all') return summary.value;
+    const active = (data.value?.days || [])
+      .filter((item) => normalizeBreakdown(item.breakdown)[selectedType.value] > 0)
+      .map((item) => item.day)
+      .sort();
+    let longest = 0;
+    let current = 0;
+    let previous = '';
+    for (const day of active) {
+      const gap = previous ? Math.round((dateFromKey(day).getTime() - dateFromKey(previous).getTime()) / 86_400_000) : 1;
+      current = gap === 1 ? current + 1 : 1;
+      longest = Math.max(longest, current);
+      previous = day;
+    }
+    const recent = new Set(Array.from({ length: 7 }, (_, index) => formatDay(addDays(new Date(), -index))));
+    const weekCount = (data.value?.days || []).reduce(
+      (sum, item) => sum + (recent.has(item.day) ? normalizeBreakdown(item.breakdown)[selectedType.value] : 0),
+      0,
+    );
+    return { activeDays: active.length, longestStreak: longest, weekCount };
   });
 
   function breakdownText(cell: Pick<HeatmapCell, 'breakdown'>) {
@@ -345,6 +412,9 @@
     width: 100px;
     flex: 0 0 auto;
   }
+  .activity-heatmap__type { width: 128px; flex: 0 0 auto; }
+  .activity-heatmap__skeleton { display: grid; grid-template-columns: repeat(7, 13px); gap: 4px; min-height: 116px; align-content: center; }
+  .activity-heatmap__skeleton span { width: 13px; height: 13px; border-radius: 3px; background: var(--hover-background); animation: heatmap-pulse 1.1s ease-in-out infinite alternate; }
   .activity-heatmap__scroll {
     overflow-x: auto;
     overscroll-behavior-x: contain;
@@ -473,8 +543,13 @@
     color: var(--desc-color);
   }
   .activity-heatmap__error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     color: var(--danger-color, var(--text-color));
   }
+  .activity-heatmap__rules { margin: 0; color: var(--desc-color); font-size: 10.5px; line-height: 1.5; }
   @keyframes heatmap-pulse {
     from {
       opacity: 0.5;
@@ -495,8 +570,15 @@
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    .activity-heatmap.is-loading .activity-heatmap__cell:not(.is-blank) {
+    .activity-heatmap.is-loading .activity-heatmap__cell:not(.is-blank),
+    .activity-heatmap__skeleton span {
       animation: none;
     }
+  }
+  :global(html.light-note-mobile-rendering) .activity-heatmap__cell.is-today,
+  :global(html.light-note-mobile-rendering) .activity-heatmap__cell.is-selected {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 1px;
+    box-shadow: none;
   }
 </style>

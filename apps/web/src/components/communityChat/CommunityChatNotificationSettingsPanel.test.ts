@@ -56,10 +56,10 @@ async function flushAsync() {
   await nextTick();
 }
 
-async function mountPanel() {
+async function mountPanel(compact = false) {
   const host = document.createElement('div');
   document.body.append(host);
-  const app = createApp(CommunityChatNotificationSettingsPanel);
+  const app = createApp(CommunityChatNotificationSettingsPanel, { compact });
   app.use(
     createI18n({
       legacy: false,
@@ -67,6 +67,7 @@ async function mountPanel() {
       messages: { 'zh-CN': zhCN },
     }),
   );
+  app.component('OriginalIcon', { template: '<span aria-hidden="true" />' });
   app.mount(host);
   await flushAsync();
   cleanup = () => {
@@ -146,5 +147,18 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     expect(host.querySelector('[role="radio"][aria-checked="true"]')?.textContent).toContain(
       zhCN.communityChat.notifications.levelMentionsOnly,
     );
+  });
+
+  it('紧凑模式收起重复说明与渠道胶囊，只保留当前档位摘要', async () => {
+    const host = await mountPanel(true);
+
+    expect(host.querySelector('.community-notification-settings')?.classList.contains('is-compact')).toBe(true);
+    expect(host.querySelector('.community-notification-settings__compact-summary')).not.toBeNull();
+    expect(host.querySelector('.community-notification-settings__compact-meta')).not.toBeNull();
+    expect(host.querySelector('.community-notification-settings__explanation')).toBeNull();
+    expect(host.querySelector('.community-notification-settings__channels')).toBeNull();
+    expect(host.querySelector('.community-notification-settings__hint')).toBeNull();
+    expect(host.textContent).toContain(zhCN.communityChat.notifications.compactDescription);
+    expect(host.textContent).toContain(zhCN.communityChat.notifications.levelMentionsDescription);
   });
 });

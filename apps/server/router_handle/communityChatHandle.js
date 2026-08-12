@@ -1,5 +1,6 @@
 import { L, reqLang, resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { recordServerOperation } from '../util/operationLog.js';
 import {
   CommunityChatError,
   acceptCommunityChatRules,
@@ -73,6 +74,27 @@ function requireRegistered(req, res) {
     .status(403)
     .send(resultData({ code: 'LOGIN_REQUIRED' }, 403, L(req, '请先注册或登录', 'Please register or sign in first')));
   return false;
+}
+
+const COMMUNITY_CHAT_NOTIFICATION_LEVEL_LOG_LABELS = Object.freeze({
+  official: '仅管理员',
+  mentions_only: '仅提及',
+  mentions: '管理员和提及',
+  all: '全部消息',
+});
+
+async function recordCommunityChatNotificationSettingsOperation(req, settings) {
+  const enabledLabel = settings?.enabled ? '开启' : '关闭';
+  const levelLabel = COMMUNITY_CHAT_NOTIFICATION_LEVEL_LOG_LABELS[settings?.level] || '未知范围';
+  try {
+    await recordServerOperation(req, {
+      module: '公共聊天室',
+      operation: `保存聊天室提醒设置【${enabledLabel}；范围：${levelLabel}】`,
+    });
+  } catch (error) {
+    // 设置已经由领域事务提交；日志异常不能把成功操作伪装成保存失败。
+    console.error('[社区客厅] 提醒设置操作日志写入失败 code=%s', stableAgentErrorCode(error));
+  }
 }
 
 // multer 解析文件前先拒绝游客和管理员预览身份，避免未授权请求写入系统临时目录。
@@ -177,6 +199,7 @@ export async function updateNotificationSettings(req, res) {
       enabled: req.body?.enabled,
       level: req.body?.level,
     });
+    await recordCommunityChatNotificationSettingsOperation(req, data);
     return res.send(resultData(data, 200, L(req, '聊天室提醒设置已保存', 'Chat notification settings saved')));
   } catch (error) {
     return sendError(req, res, error);

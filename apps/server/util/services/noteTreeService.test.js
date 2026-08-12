@@ -13,6 +13,7 @@ const {
   prepareOwnedNotePhysicalDelete,
   prepareOwnedNotePlacement,
   queryOwnedNoteTree,
+  resolveOwnedNoteBreadcrumb,
   resolveOwnedNoteCreateTarget,
   resolveNoteBreadcrumbFromSnapshot,
   resolveNoteDepthFromSnapshot,
@@ -45,6 +46,77 @@ describe('noteTreeService 只读树模型', () => {
     ]);
     expect(resolveNoteDepthFromSnapshot(snapshot, 'grandchild')).toBe(3);
     expect(resolveNoteDescendantIdsFromSnapshot(snapshot, 'root-a')).toEqual(['child-top', 'child-a', 'grandchild']);
+  });
+
+  it('单篇面包屑只沿目标父链做主键联结，不再扫描账号整棵笔记树', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue([
+        [
+          {
+            breadcrumb_0_id: 'grandchild',
+            breadcrumb_0_title: '孙页面',
+            breadcrumb_1_id: 'child-a',
+            breadcrumb_1_title: '子 A',
+            breadcrumb_2_id: 'root-a',
+            breadcrumb_2_title: '根 A',
+          },
+        ],
+      ]),
+    };
+
+    await expect(resolveOwnedNoteBreadcrumb({ userId: 'user-1', noteId: 'grandchild', db })).resolves.toEqual({
+      items: [
+        { id: 'root-a', title: '根 A' },
+        { id: 'child-a', title: '子 A' },
+        { id: 'grandchild', title: '孙页面' },
+      ],
+    });
+
+    const [sql, params] = db.query.mock.calls[0];
+    expect(sql).toContain('LEFT JOIN note breadcrumb_node_1');
+    expect(sql).toContain('WHERE breadcrumb_node_0.id = ?');
+    expect(sql).not.toContain('ORDER BY');
+    expect(params).toEqual(['grandchild', 'user-1']);
+  });
+
+  it('定向父链读取历史循环时按根层孤儿语义降级', async () => {
+    const db = {
+      query: vi.fn().mockResolvedValue([
+        [
+          {
+            breadcrumb_0_id: 'descendant',
+            breadcrumb_0_title: '环下页面',
+            breadcrumb_1_id: 'cycle-a',
+            breadcrumb_1_title: '环 A',
+            breadcrumb_2_id: 'cycle-b',
+            breadcrumb_2_title: '环 B',
+            breadcrumb_3_id: 'cycle-a',
+            breadcrumb_3_title: '环 A',
+          },
+        ],
+      ]),
+    };
+
+    await expect(resolveOwnedNoteBreadcrumb({ userId: 'user-1', noteId: 'descendant', db })).resolves.toEqual({
+      items: [
+        { id: 'cycle-a', title: '环 A' },
+        { id: 'descendant', title: '环下页面' },
+      ],
+    });
+  });
+
+  it('定向父链拒绝历史超深结构，避免返回被静默截断的面包屑', async () => {
+    const joinedRow = {};
+    for (let index = 0; index <= MAX_NOTE_TREE_DEPTH; index += 1) {
+      joinedRow[`breadcrumb_${index}_id`] = `depth-${index + 1}`;
+      joinedRow[`breadcrumb_${index}_title`] = `第 ${index + 1} 层`;
+    }
+    const db = { query: vi.fn().mockResolvedValue([[joinedRow]]) };
+
+    await expect(resolveOwnedNoteBreadcrumb({ userId: 'user-1', noteId: 'depth-1', db })).rejects.toMatchObject({
+      code: 'NOTE_TREE_DEPTH_EXCEEDED',
+      status: 409,
+    });
   });
 
   it('读取历史孤儿、自指和多节点循环时降级到根层并明确标记', () => {

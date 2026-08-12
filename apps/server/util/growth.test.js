@@ -44,6 +44,19 @@ import {
   getGrowth,
 } from './growth.js';
 
+function accountCalendar(dayKey, makeupDays = []) {
+  return {
+    timezone: 'Asia/Shanghai',
+    utcOffsetMinutes: 480,
+    serverOffsetMinutes: 480,
+    shiftMinutes: 0,
+    dayKey,
+    weekKey: '202632',
+    previousDayKey: makeupDays[0] || null,
+    makeupDays,
+  };
+}
+
 afterEach(() => vi.useRealTimers());
 
 describe('growth 段位表', () => {
@@ -183,12 +196,14 @@ describe('每日经验上限与一次性奖励隔离', () => {
       throw new Error(`未预期的查询: ${sql}`);
     });
 
-    const growth = await getGrowth('user-1', { userRole: 'user' });
+    const growth = await getGrowth('user-1', { userRole: 'user', calendar: accountCalendar('20260806') });
 
     expect(growth).toMatchObject({ dailyExp: 86, dailyCap: 200, dailyCapReached: false });
     const capQuery = pool.query.mock.calls.find(([sql]) => sql.includes('SUM(amount)'));
     expect(capQuery?.[1]).toEqual([
       'user-1',
+      0,
+      '20260806',
       'growth_task',
       'first_own_resource',
       'milestone',
@@ -353,7 +368,13 @@ describe('游客成长数据隔离', () => {
 
     expect(pool.query).not.toHaveBeenCalled();
     expect(heatmap.days).toEqual([]);
-    expect(heatmap.summary).toEqual({ activeDays: 0, longestStreak: 0, weekCount: 0 });
+    expect(heatmap.summary).toEqual({
+      activeDays: 0,
+      longestStreak: 0,
+      weekCount: 0,
+      weekActiveDays: 0,
+      weeklyTarget: 0,
+    });
   });
 });
 
@@ -374,21 +395,53 @@ describe('知识活动热力图', () => {
       ])
       .mockResolvedValueOnce([[{ y: 2026 }, { y: 2024 }, { y: 2026 }, { y: 1999 }]]);
 
-    const heatmap = await getActivityHeatmap('user-1', { userRole: 'user', year: 2026 });
+    const heatmap = await getActivityHeatmap('user-1', {
+      userRole: 'user',
+      year: 2026,
+      calendar: accountCalendar('20260722'),
+    });
 
     expect(pool.query).toHaveBeenCalledTimes(2);
     expect(pool.query.mock.calls[0][0]).toContain("source = 'checkin'");
+    expect(pool.query.mock.calls[0][0]).toContain("source = 'todo_complete'");
+    expect(pool.query.mock.calls[0][0]).toContain("source = 'organize_complete'");
+    expect(pool.query.mock.calls[0][0]).toContain("SHA2(CONCAT('todo:'");
+    expect(pool.query.mock.calls[0][0]).toContain("SHA2(CONCAT('organize:'");
     expect(pool.query.mock.calls[0][0]).toContain("'bookmark' AS activity_type");
     expect(pool.query.mock.calls[0][0]).toContain('onboarding_seed_resources');
     expect(pool.query.mock.calls[1][0]).toContain('onboarding_seed_resources');
     expect(heatmap.days).toEqual([
-      { day: '2026-07-20', count: 1, breakdown: { bookmark: 1, note: 0, file: 0, checkin: 0 } },
-      { day: '2026-07-21', count: 4, breakdown: { bookmark: 0, note: 3, file: 0, checkin: 1 } },
-      { day: '2026-07-22', count: 2, breakdown: { bookmark: 1, note: 0, file: 1, checkin: 0 } },
+      {
+        day: '2026-07-20',
+        count: 1,
+        breakdown: { bookmark: 1, note: 0, file: 0, todo: 0, organize: 0, checkin: 0 },
+      },
+      {
+        day: '2026-07-21',
+        count: 4,
+        breakdown: { bookmark: 0, note: 3, file: 0, todo: 0, organize: 0, checkin: 1 },
+      },
+      {
+        day: '2026-07-22',
+        count: 2,
+        breakdown: { bookmark: 1, note: 0, file: 1, todo: 0, organize: 0, checkin: 0 },
+      },
     ]);
-    expect(heatmap.summary).toEqual({ activeDays: 3, longestStreak: 3, weekCount: 7 });
+    expect(heatmap.summary).toEqual({
+      activeDays: 3,
+      longestStreak: 3,
+      weekCount: 7,
+      weekActiveDays: 3,
+      weeklyTarget: 0,
+    });
     expect(heatmap.availableYears).toEqual([2026, 2024]);
-    expect(heatmap.includedTypes).toEqual(['bookmark', 'note', 'file', 'checkin']);
+    expect(heatmap.includedTypes).toEqual(['bookmark', 'note', 'file', 'todo', 'organize', 'checkin']);
+    expect(heatmap.countingRules).toEqual({
+      excludesSeedResources: true,
+      preservesDeletedResourceHistory: true,
+      todoTimeField: 'completed_at',
+      organizeTimeField: 'complete_time',
+    });
   });
 });
 
@@ -421,6 +474,24 @@ describe('补签窗口', () => {
       query: vi.fn(async (sql) => {
         if (sql.includes('SELECT streak, last_checkin_date'))
           return [[{ streak: 1, last_checkin_date: '20260716', streak_protect_cards: 1 }]];
+        if (sql.includes('SELECT exp, streak, last_checkin_date')) {
+          return [
+            [
+              {
+                exp: 0,
+                streak: 3,
+                last_checkin_date: '20260716',
+                last_notified_level: 1,
+                streak_protect_cards: 0,
+                points: 0,
+                equipped_title: null,
+                equipped_frame: null,
+                storage_bonus_mb: 0,
+              },
+            ],
+          ];
+        }
+        if (sql.includes('SUM(amount)')) return [[{ used: 0 }]];
         if (sql.includes('COUNT(*) AS c')) return [[{ c: 0 }]];
         if (sql.includes('SELECT day FROM growth_events'))
           return [[{ day: '20260716' }, { day: '20260715' }, { day: '20260714' }]];
@@ -450,7 +521,10 @@ describe('补签窗口', () => {
       throw new Error(`未预期的 pool 查询: ${sql}`);
     });
 
-    const result = await useProtectCard('user-1', { date: '20260715' });
+    const result = await useProtectCard('user-1', {
+      date: '20260715',
+      calendar: accountCalendar('20260717', ['20260716', '20260715', '20260714']),
+    });
 
     expect(result).toMatchObject({ ok: true, date: '20260715', streak: 3 });
     expect(connection.query).toHaveBeenCalledWith(
@@ -560,14 +634,19 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     mockRootQueries();
     earnPoints.mockResolvedValue(true);
 
-    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+    const result = await claimDailyQuestBonus('root-1', {
+      userRole: 'root',
+      calendar: accountCalendar('20260806'),
+    });
 
     // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 10, capped: false });
     expect(earnPoints).toHaveBeenCalledWith('root-1', 10, 'quest', '20260806:2');
     const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
-    expect(contentCountCall?.[0]).toContain('td.del_flag = 0 AND td.create_time >= CURDATE()');
-    expect(contentCountCall?.[1]).toEqual(['root-1', 'root-1', 'root-1', 'root-1', 'root-1', 'root-1']);
+    expect(contentCountCall?.[0]).toContain("DATE_FORMAT(DATE_ADD(td.create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?");
+    expect(contentCountCall?.[1]).toEqual(
+      Array.from({ length: 6 }, () => ['root-1', 0, '20260806']).flat(),
+    );
     // 没走 grantExp,所以不该有 growth_events 的写入连接
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
@@ -577,7 +656,10 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     useAugust6();
     mockRootQueries({ legacyClaimed: true });
 
-    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+    const result = await claimDailyQuestBonus('root-1', {
+      userRole: 'root',
+      calendar: accountCalendar('20260806'),
+    });
 
     expect(result).toMatchObject({ ok: true, already: true });
     expect(result.pointsEarned).toBeUndefined();
@@ -591,7 +673,10 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     mockRootQueries({ completedTodo: 1 });
     earnPoints.mockResolvedValue(true);
 
-    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+    const result = await claimDailyQuestBonus('root-1', {
+      userRole: 'root',
+      calendar: accountCalendar('20260806'),
+    });
 
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
     expect(earnPoints).toHaveBeenNthCalledWith(1, 'root-1', 10, 'quest', '20260806:2');
@@ -603,7 +688,10 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     useAugust6();
     mockRootQueries({ createdToday: 0 });
 
-    const result = await claimDailyQuestBonus('root-1', { userRole: 'root' });
+    const result = await claimDailyQuestBonus('root-1', {
+      userRole: 'root',
+      calendar: accountCalendar('20260806'),
+    });
 
     expect(result).toEqual({ ok: false, reason: 'incomplete' });
     expect(earnPoints).not.toHaveBeenCalled();

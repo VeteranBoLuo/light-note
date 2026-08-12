@@ -49,6 +49,9 @@ importers:
       express-rate-limit:
         specifier: ^8.5.1
         version: 8.5.2(express@5.0.0)
+      htmlparser2:
+        specifier: 10.1.0
+        version: 10.1.0
       image-size:
         specifier: 2.0.2
         version: 2.0.2

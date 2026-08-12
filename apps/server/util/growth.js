@@ -15,6 +15,8 @@ import { earnPoints, earnStorage, getAchievementFrameByKey, titleName } from './
 import { grantItem } from './items.js';
 import { createNotification } from './notification.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
+import { finishAdminAction } from './adminActionExecution.js';
+import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(前期平滑、中期明显、后期加速):Lv1 1G → Lv10 6G → Lv15 20G。
@@ -53,11 +55,11 @@ const DAILY_EXP_CAP_EXEMPT_SOURCES = Object.freeze([
   'profile_done',
 ]);
 const DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS = DAILY_EXP_CAP_EXEMPT_SOURCES.map(() => '?').join(', ');
-const DAILY_QUEST_STAGES = [
+export const DAILY_QUEST_STAGES = [
   { key: 'basic', required: 2, exp: 5, points: 10, source: 'daily_quest_2' },
   { key: 'complete', required: 3, exp: 10, points: 20, source: 'daily_quest_3' },
 ];
-const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
+export const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
 
 // 连签里程碑大奖:累计连续签到命中当天即发(积分/永久存储/补签卡),按 ref=days 一次性幂等。
 // 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
@@ -69,7 +71,7 @@ export const STREAK_MILESTONES = [
 ];
 
 const CHECKIN_BASE = 5; // 每日签到基础 +5
-const HEATMAP_ACTIVITY_TYPES = ['bookmark', 'note', 'file', 'checkin'];
+const HEATMAP_ACTIVITY_TYPES = ['bookmark', 'note', 'file', 'todo', 'organize', 'checkin'];
 
 // 游客在 user 表中有固定的共享账号 ID，并不一定等于字面量 "visitor"。
 // 所有成长数据都必须以角色为准隔离，避免游客继承共享账号的历史成长/奖励记录。
@@ -82,12 +84,17 @@ function isDailyExpCapExemptSource(source) {
 }
 
 // 发放与展示共用同一查询，避免「页面还没到 200，后端却已停止增长」。
-async function getDailyLimitedExpTotal(db, userId) {
+async function getDailyLimitedExpTotal(db, userId, calendar = null) {
+  const dayClause = calendar
+    ? "DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?"
+    : 'create_time >= CURDATE()';
   const [[row]] = await db.query(
     `SELECT COALESCE(SUM(amount), 0) AS used FROM growth_events
-     WHERE user_id = ? AND status = 'granted' AND create_time >= CURDATE()
+     WHERE user_id = ? AND status = 'granted' AND ${dayClause}
        AND source NOT IN (${DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS})`,
-    [userId, ...DAILY_EXP_CAP_EXEMPT_SOURCES],
+    calendar
+      ? [userId, calendar.shiftMinutes, calendar.dayKey, ...DAILY_EXP_CAP_EXEMPT_SOURCES]
+      : [userId, ...DAILY_EXP_CAP_EXEMPT_SOURCES],
   );
   return Number(row?.used || 0);
 }
@@ -190,7 +197,7 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
     );
   } catch (notifyErr) {
     // 通知故障绝不阻断成长主流程；通知中心表尚未就绪时也可安全降级。
-    console.error('写升级通知失败(不影响升级):', notifyErr.message);
+    console.error('写升级通知失败(不影响升级) code=%s', stableAgentErrorCode(notifyErr));
   }
 }
 
@@ -203,7 +210,7 @@ async function writeLevelUpNotification(conn, userId, level, { source = null } =
  * @returns {Promise<{granted:number, duplicated?:boolean, skipped?:string, leveledUp?:boolean, fromLevel?:number, toLevel?:number, exp?:number, level?:number}>}
  */
 export async function grantExp(userId, source, opts = {}, conn = null) {
-  const { refId = null, day = null, amount = 0, meta = null, userRole = null } = opts;
+  const { refId = null, day = null, amount = 0, meta = null, userRole = null, calendar = null } = opts;
   if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: 'visitor' };
   if (userRole === 'root') return { granted: 0, skipped: 'root' }; // 站长跳过发放(权益=满级另算)
   if (!(amount > 0)) return { granted: 0, skipped: 'noop' };
@@ -239,7 +246,7 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
     // 3. 日 EXP 硬顶:只统计受限的日常/创造来源，一次性奖励始终单独计算。
     // daily_quest 不豁免，与签到、新增内容、批量导入共用 200/日额度。
     const capExempt = isDailyExpCapExemptSource(source);
-    const used = capExempt ? 0 : await getDailyLimitedExpTotal(c, userId);
+    const used = capExempt ? 0 : await getDailyLimitedExpTotal(c, userId, calendar);
     const grantAmount = capExempt ? amount : Math.max(0, Math.min(amount, DAILY_EXP_CAP - used));
     if (grantAmount > 0) {
       await c.query('UPDATE growth_events SET amount = ? WHERE id = ?', [grantAmount, eventId]);
@@ -255,6 +262,12 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
        ON DUPLICATE KEY UPDATE exp = exp + ?, level = ?`,
       [userId, afterExp, toLevel, grantAmount, toLevel],
     );
+    try {
+      const { persistAchievementUnlocksForMetrics } = await import('./growthAchievementState.js');
+      await persistAchievementUnlocksForMetrics(userId, { level: toLevel }, { db: c, currentLevel: toLevel });
+    } catch (error) {
+      console.warn('[growth] 等级成就状态同步失败 code=%s', stableAgentErrorCode(error));
+    }
 
     // 5. 升级 → 逐级落 level_up 里程碑(唯一键去重;通知中心第三刀读此)
     let leveledUp = false;
@@ -331,32 +344,51 @@ export function hashRef(str) {
 export async function awardCreate(userId, kind, refId, { userRole = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { granted: 0, skipped: true };
   if (!refId) return { granted: 0, skipped: 'no-ref' };
-  // 首次笔记/书签已迁移为成长任务；文件没有对应首批任务，不再额外发同类一次性奖励。
-  if (kind === 'note' || kind === 'bookmark') {
+  // 功能发现任务只记录一次业务事实，经验仍由用户主动领取。
+  if (kind === 'note' || kind === 'bookmark' || kind === 'file') {
     try {
       const { completeGrowthTask } = await import('./growthTaskCompletion.js');
-      await completeGrowthTask(userId, kind === 'note' ? 'first_note' : 'first_bookmark', { userRole });
+      const taskKey = kind === 'note' ? 'first_note' : kind === 'bookmark' ? 'first_bookmark' : 'first_file';
+      await completeGrowthTask(userId, taskKey, { userRole });
     } catch (error) {
       console.warn('[growth] 首次成长任务状态同步失败 code=%s', stableAgentErrorCode(error));
     }
   }
   // root 不进入经验账本，但上面的成长任务完成事实仍需正常记录并自动收口。
   if (userRole === 'root') return { granted: 0, skipped: true };
+  const calendar = await getGrowthCalendarContext(userId);
   // 当日第 N 条衰减
   const [[row]] = await pool.query(
-    `SELECT COUNT(*) AS c FROM growth_events WHERE user_id=? AND source=? AND status='granted' AND create_time >= CURDATE()`,
-    [userId, kind],
+    `SELECT COUNT(*) AS c FROM growth_events
+      WHERE user_id=? AND source=? AND status='granted'
+        AND DATE_FORMAT(DATE_ADD(create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?`,
+    [userId, kind, calendar.shiftMinutes, calendar.dayKey],
   );
   const nth = Number(row?.c || 0) + 1;
-  return grantExp(userId, kind, { refId: String(refId), amount: createAmount(kind, nth), userRole });
+  const grant = await grantExp(userId, kind, {
+    refId: String(refId),
+    amount: createAmount(kind, nth),
+    userRole,
+    calendar,
+  });
+  try {
+    const { persistAchievementMetricFromDatabase } = await import('./growthAchievementState.js');
+    const metric = kind === 'note' ? 'noteCount' : kind === 'bookmark' ? 'bookmarkCount' : 'fileCount';
+    await persistAchievementMetricFromDatabase(userId, metric);
+  } catch (error) {
+    console.warn('[growth] 创作成就状态同步失败 code=%s', stableAgentErrorCode(error));
+  }
+  return grant;
 }
 
 /**
  * 读取用户成长快照(用于 /growth/me 与前端徽章)。
  * level 以 levelForExp(exp) 为权威;root 直接按满级展示(权益=满级,不依赖账本)。
  */
-export async function getGrowth(userId, { userRole = null } = {}) {
+export async function getGrowth(userId, { userRole = null, db = pool, calendar = null } = {}) {
   const isGuest = isVisitorGrowthActor(userId, userRole);
+  const accountCalendar = calendar || (!isGuest ? await getGrowthCalendarContext(userId, { db }) : null);
+  const effectiveDayKey = accountCalendar?.dayKey || dayKey();
   let exp = 0;
   let streak = 0;
   let lastCheckin = null;
@@ -369,7 +401,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   let equippedFrame = null;
   let storageBonus = 0;
   if (!isGuest) {
-    const [rows] = await pool.query(
+    const [rows] = await db.query(
       'SELECT exp, streak, last_checkin_date, last_notified_level, streak_protect_cards, points, equipped_title, equipped_frame, storage_bonus_mb FROM user_growth WHERE user_id = ?',
       [userId],
     );
@@ -386,8 +418,8 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     }
     // 补签判定:有卡时查今天之前最近 3 个自然日；今天是否签到不影响补历史漏签。
     if (protectCards > 0) {
-      const candidates = getMakeupCandidateDays();
-      const [checkedRows] = await pool.query(
+      const candidates = accountCalendar?.makeupDays || getMakeupCandidateDays();
+      const [checkedRows] = await db.query(
         `SELECT day FROM growth_events
          WHERE user_id = ? AND source = 'checkin' AND status = 'granted'
            AND day IN (${candidates.map(() => '?').join(',')})`,
@@ -416,7 +448,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
   // 今日已获经验(仅计入受日顶约束的来源,口径与 grantExp 日顶一致),供前端展示"每日上限"进度
   let dailyExp = 0;
   if (!isGuest && userRole !== 'root') {
-    dailyExp = await getDailyLimitedExpTotal(pool, userId);
+    dailyExp = await getDailyLimitedExpTotal(db, userId, accountCalendar);
   }
   return {
     exp,
@@ -434,7 +466,7 @@ export async function getGrowth(userId, { userRole = null } = {}) {
     equippedFrame, // 已佩戴头像框装扮 id
     canUseProtectCard, // 最近 3 个自然日内存在漏签且有卡
     makeupDays, // 可补的 YYYYMMDD，按由近到远排序；前端仅展示这些日期
-    checkedInToday: lastCheckin === dayKey(),
+    checkedInToday: lastCheckin === effectiveDayKey,
     levelStartExp: rank.cumExp,
     nextLevelExp: nextExp,
     expToNext: need,
@@ -450,15 +482,15 @@ export async function getGrowth(userId, { userRole = null } = {}) {
 
 // ============================================================================
 // 成长看板(派生层) —— 成就墙 / 统计 / 每日任务 / 时间线
-// 全部从既有数据(user_growth / growth_events / 资源表 / user.create_time)派生,
-// 不新增表、不改 schema,零风险叠加在现有增长引擎之上。前端按 key 映射图标与 i18n 文案。
+// 进度从 user_growth / growth_events / 资源表 / user.create_time 派生；永久解锁与领取状态
+// 只读 user_achievements。Schema 与历史回填统一在服务启动阶段完成，GET 请求不补写数据。
 // ============================================================================
 
 // 成就定义:阈值单一事实源。group=分类;metric=进度所依据的统计字段;target=解锁阈值;reward=解锁后可领的积分。
 // minLevel 只用于高数量资源头像框：200 档需 Lv.5，500 档需 Lv.8。等级本身受每日经验硬顶约束，
 // 已经代表持续使用时长，不再叠加注册/活跃天数或内容质量判定，避免误伤正常导入和高频创作。
 // reward 按长期积累难度递增：首签 10；中阶 40~120；高阶 150~500；里程碑级 600~800。
-// 领取幂等由 points_log(reason='achievement', ref=key)保证,无需额外表。
+// points_log(reason='achievement', ref=key)负责到账幂等，user_achievements 负责永久解锁与领取展示状态。
 export const ACHIEVEMENTS = [
   { key: 'streak_1', group: 'checkin', metric: 'maxStreak', target: 1, reward: 10 },
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
@@ -519,8 +551,13 @@ function dailyQuestKeyFor(userId, day) {
   return DAILY_QUEST_KEYS[digest.readUInt32BE(0) % DAILY_QUEST_KEYS.length];
 }
 
-async function getDailyQuestState(userId, growth, { isGuest = false } = {}) {
-  const randomKey = dailyQuestKeyFor(userId || 'visitor', dayKey());
+export async function getDailyQuestState(userId, growth, { isGuest = false, db = pool, calendar = null } = {}) {
+  const effectiveDayKey = calendar?.dayKey || dayKey();
+  const dailyCondition = (column) =>
+    calendar
+      ? `DATE_FORMAT(DATE_ADD(${column}, INTERVAL ? MINUTE), '%Y%m%d') = ?`
+      : `${column} >= CURDATE()`;
+  const randomKey = dailyQuestKeyFor(userId || 'visitor', effectiveDayKey);
   let metrics = {
     created: 0,
     daily_note: 0,
@@ -530,27 +567,30 @@ async function getDailyQuestState(userId, growth, { isGuest = false } = {}) {
     daily_organize: 0,
   };
   if (!isGuest) {
-    const [[row]] = await pool.query(
+    const [[row]] = await db.query(
       `SELECT
         (SELECT COUNT(*) FROM bookmark b
-          WHERE b.user_id = ? AND b.del_flag = 0 AND b.create_time >= CURDATE()
+          WHERE b.user_id = ? AND b.del_flag = 0 AND ${dailyCondition('b.create_time')}
             AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id=b.user_id AND osr.resource_type='bookmark' AND osr.resource_id=b.id)) AS bookmarks,
         (SELECT COUNT(*) FROM note n
-          WHERE n.create_by = ? AND n.del_flag = 0 AND n.create_time >= CURDATE()
+          WHERE n.create_by = ? AND n.del_flag = 0 AND ${dailyCondition('n.create_time')}
             AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id=n.create_by AND osr.resource_type='note' AND osr.resource_id=n.id)) AS notes,
         (SELECT COUNT(*) FROM files f
-          WHERE f.create_by = ? AND f.del_flag = 0 AND f.create_time >= CURDATE()
+          WHERE f.create_by = ? AND f.del_flag = 0 AND ${dailyCondition('f.create_time')}
             AND NOT EXISTS (SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id=f.create_by AND osr.resource_type='file' AND osr.resource_id=CAST(f.id AS CHAR))) AS files,
         (SELECT COUNT(*) FROM todo_items td
-          WHERE td.user_id = ? AND td.del_flag = 0 AND td.create_time >= CURDATE()) AS todosCreated,
+          WHERE td.user_id = ? AND td.del_flag = 0 AND ${dailyCondition('td.create_time')}) AS todosCreated,
         (SELECT COUNT(*) FROM todo_items td
-          WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed' AND td.completed_at >= CURDATE()) AS todosCompleted,
+          WHERE td.user_id = ? AND td.del_flag = 0 AND td.status = 'completed'
+            AND ${dailyCondition('td.completed_at')}) AS todosCompleted,
         (SELECT COUNT(*) FROM resource_inbox ri
-          WHERE ri.user_id = ? AND ri.status = 'completed' AND ri.complete_time >= CURDATE()) AS organized`,
-      [userId, userId, userId, userId, userId, userId],
+          WHERE ri.user_id = ? AND ri.status = 'completed' AND ${dailyCondition('ri.complete_time')}) AS organized`,
+      calendar
+        ? Array.from({ length: 6 }, () => [userId, calendar.shiftMinutes, effectiveDayKey]).flat()
+        : [userId, userId, userId, userId, userId, userId],
     );
     const bookmarks = Number(row?.bookmarks || 0);
     const notes = Number(row?.notes || 0);
@@ -588,73 +628,138 @@ function longestConsecutiveRun(days) {
 }
 
 /**
- * 知识活动热力图(贡献格子)。数据全部现成、零新表。口径：
+ * 知识活动热力图(贡献格子)。口径：
  * - 资源新增直接从三张资源表 create_time 读取(归属列不同:bookmark=user_id,note/files=create_by);
  *   软删仍计入其创建当天(不加 del_flag) —— 今天建明天删不该让昨天的格子熄灭。
- * - 签到只从 growth_events 读 source='checkin' 这类"一手且互斥"的活动事件;
- *   绝不直接 COUNT(growth_events) —— 否则 first_own_resource/milestone 等派生奖励会把一次行为放大成多格,
- *   且资源类事件会与上面的资源表重复。amount 可为 0 仍计(触顶/root/补签)。
- * - 自然年边界 [YYYY-01-01, (YYYY+1)-01-01),按服务器本地时区分日(当前为中文用户群,风险可接受);
+ * - 签到及待办/整理的不可变历史只读取明确白名单 source；待办/整理当前表仅兜底迁移前数据，
+ *   已固化事件的业务行会被排除，避免同一行为重复计数。其余奖励/里程碑事件一律不计。
+ * - 自然年边界 [YYYY-01-01, (YYYY+1)-01-01),按账号时区分日；签到 day 本身已使用同一账号日历；
  *   day/输出统一 YYYY-MM-DD 字符串,前端不再做 Date 解析(避免 toISOString 类偏移)。
  * - 每格同时返回各来源的次数，用于前端解释“这几次活动来自哪里”；总数和明细来自同一条聚合，避免二次查询口径漂移。
  * 性能:个人级数据量小,首期不加缓存;如实测慢再按 EXPLAIN 补复合索引 + 短 TTL 缓存。
  */
-export async function getActivityHeatmap(userId, { userRole = null, year = null } = {}) {
+export async function getActivityHeatmap(userId, { userRole = null, year = null, calendar = null } = {}) {
   const now = new Date();
-  const currentYear = now.getFullYear();
+  const isGuest = isVisitorGrowthActor(userId, userRole);
+  const accountCalendar = isGuest ? null : calendar || (await getGrowthCalendarContext(userId));
+  const currentDayKey = accountCalendar?.dayKey || dayKey(now);
+  const currentYear = Number(currentDayKey.slice(0, 4));
   let y = Number(year);
   if (!Number.isInteger(y) || y < 2000 || y > currentYear) y = currentYear;
 
   const base = {
     year: y,
-    timezone: 'server-local',
+    timezone: accountCalendar?.timezone || 'Asia/Shanghai',
     rangeStart: `${y}-01-01`,
     rangeEndExclusive: `${y + 1}-01-01`,
     availableYears: [currentYear],
     days: [],
-    summary: { activeDays: 0, longestStreak: 0, weekCount: 0 },
+    summary: {
+      activeDays: 0,
+      longestStreak: 0,
+      weekCount: 0,
+      weekActiveDays: 0,
+      weeklyTarget: Number(accountCalendar?.weeklyActiveTarget || 0),
+    },
     includedTypes: [...HEATMAP_ACTIVITY_TYPES],
+    countingRules: {
+      excludesSeedResources: true,
+      preservesDeletedResourceHistory: true,
+      todoTimeField: 'completed_at',
+      organizeTimeField: 'complete_time',
+    },
   };
   // 游客共用 user 表中的一个真实账号 ID，不能只比较字面量 "visitor"，否则会读到该共享账号的历史活动。
-  if (isVisitorGrowthActor(userId, userRole)) return base;
+  if (isGuest) return base;
 
-  const start = `${y}-01-01 00:00:00`;
-  const end = `${y + 1}-01-01 00:00:00`;
+  const shiftMinutes = accountCalendar.shiftMinutes;
   const dayStart = `${y}0101`;
   const dayEnd = `${y}1231`;
 
   // 一次 UNION ALL 归一为 {day, activity_type},按日和来源聚合；不 JOIN 三张资源表(避免多态重复),也不逐日 365 次查询。
   const [rows] = await pool.query(
     `SELECT day, activity_type, COUNT(*) AS cnt FROM (
-       SELECT DATE_FORMAT(b.create_time, '%Y%m%d') AS day, 'bookmark' AS activity_type FROM bookmark b
-         WHERE b.user_id = ? AND b.create_time >= ? AND b.create_time < ?
+       SELECT DATE_FORMAT(DATE_ADD(b.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'bookmark' AS activity_type FROM bookmark b
+         WHERE b.user_id = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
            )
        UNION ALL
-       SELECT DATE_FORMAT(n.create_time, '%Y%m%d') AS day, 'note' AS activity_type FROM note n
-         WHERE n.create_by = ? AND n.create_time >= ? AND n.create_time < ?
+       SELECT DATE_FORMAT(DATE_ADD(n.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'note' AS activity_type FROM note n
+         WHERE n.create_by = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
            )
        UNION ALL
-       SELECT DATE_FORMAT(f.create_time, '%Y%m%d') AS day, 'file' AS activity_type FROM files f
-         WHERE f.create_by = ? AND f.create_time >= ? AND f.create_time < ?
+       SELECT DATE_FORMAT(DATE_ADD(f.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'file' AS activity_type FROM files f
+         WHERE f.create_by = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = f.create_by AND osr.resource_type = 'file'
                AND osr.resource_id = CAST(f.id AS CHAR)
            )
        UNION ALL
+       SELECT DATE_FORMAT(DATE_ADD(td.completed_at, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'todo' AS activity_type
+         FROM todo_items td
+        WHERE td.user_id = ? AND td.completed_at IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM growth_events ge
+             WHERE ge.user_id = td.user_id AND ge.source = 'todo_complete'
+               AND ge.ref_id = SHA2(CONCAT('todo:', CAST(td.id AS CHAR)), 256)
+          )
+       UNION ALL
+       SELECT DATE_FORMAT(DATE_ADD(ge.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'todo' AS activity_type
+         FROM growth_events ge
+        WHERE ge.user_id = ? AND ge.source = 'todo_complete' AND ge.status = 'granted'
+       UNION ALL
+       SELECT DATE_FORMAT(DATE_ADD(ri.complete_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'organize' AS activity_type
+         FROM resource_inbox ri
+        WHERE ri.user_id = ? AND ri.complete_time IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1 FROM onboarding_seed_resources osr
+            WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+              AND osr.resource_id = ri.resource_id
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM growth_events ge
+             WHERE ge.user_id = ri.user_id AND ge.source = 'organize_complete'
+               AND ge.ref_id = SHA2(CONCAT('organize:', ri.resource_type, ':', ri.resource_id), 256)
+          )
+       UNION ALL
+       SELECT DATE_FORMAT(DATE_ADD(ge.create_time, INTERVAL ? MINUTE), '%Y%m%d') AS day, 'organize' AS activity_type
+         FROM growth_events ge
+        WHERE ge.user_id = ? AND ge.source = 'organize_complete' AND ge.status = 'granted'
+       UNION ALL
        SELECT day, 'checkin' AS activity_type FROM growth_events
          WHERE user_id = ? AND source = 'checkin'
            AND status = 'granted' AND day IS NOT NULL AND day >= ? AND day <= ?
      ) t
+     WHERE day >= ? AND day <= ?
      GROUP BY day, activity_type
      ORDER BY day ASC, activity_type ASC`,
-    [userId, start, end, userId, start, end, userId, start, end, userId, dayStart, dayEnd],
+    [
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      userId,
+      dayStart,
+      dayEnd,
+      dayStart,
+      dayEnd,
+    ],
   );
 
   const activityByDay = new Map();
@@ -688,28 +793,41 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
   const longestStreak = longestConsecutiveRun(dayKeys); // 仅当前年份范围内的最长连续
   // 近 7 天只对当前年有语义；浏览历史年时返回 0，前端不展示这个当前态指标。
   const weekKeys = new Set();
-  for (let i = 0; i < 7; i++) weekKeys.add(dayKey(addCalendarDays(now, -i)));
+  for (let i = 0; i < 7; i++) weekKeys.add(dayKeyAtOffset(now, accountCalendar.utcOffsetMinutes, -i));
   const weekCount =
     y === currentYear
       ? days.reduce((sum, activity) => (weekKeys.has(activity.day.replaceAll('-', '')) ? sum + activity.count : sum), 0)
+      : 0;
+  const accountDate = new Date(
+    Date.UTC(
+      Number(currentDayKey.slice(0, 4)),
+      Number(currentDayKey.slice(4, 6)) - 1,
+      Number(currentDayKey.slice(6, 8)),
+    ),
+  );
+  const accountWeekday = accountDate.getUTCDay() || 7;
+  const currentWeekStart = dayKeyAtOffset(now, accountCalendar.utcOffsetMinutes, 1 - accountWeekday);
+  const weekActiveDays =
+    y === currentYear
+      ? dayKeys.filter((key) => key >= currentWeekStart && key <= currentDayKey).length
       : 0;
 
   // 只提供真实有活动的历史年份，避免把用户带到一串没有意义的空年份；当前年始终可看。
   const [yearRows] = await pool.query(
     `SELECT DISTINCT y FROM (
-       SELECT YEAR(b.create_time) AS y FROM bookmark b
+       SELECT YEAR(DATE_ADD(b.create_time, INTERVAL ? MINUTE)) AS y FROM bookmark b
          WHERE b.user_id = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = b.user_id AND osr.resource_type = 'bookmark' AND osr.resource_id = b.id
            )
-       UNION ALL SELECT YEAR(n.create_time) FROM note n
+       UNION ALL SELECT YEAR(DATE_ADD(n.create_time, INTERVAL ? MINUTE)) FROM note n
          WHERE n.create_by = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
              WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
            )
-       UNION ALL SELECT YEAR(f.create_time) FROM files f
+       UNION ALL SELECT YEAR(DATE_ADD(f.create_time, INTERVAL ? MINUTE)) FROM files f
          WHERE f.create_by = ?
            AND NOT EXISTS (
              SELECT 1 FROM onboarding_seed_resources osr
@@ -718,10 +836,51 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
            )
        UNION ALL SELECT CAST(LEFT(day, 4) AS UNSIGNED) FROM growth_events
          WHERE user_id = ? AND source = 'checkin' AND status = 'granted' AND day IS NOT NULL
+       UNION ALL SELECT YEAR(DATE_ADD(td.completed_at, INTERVAL ? MINUTE)) FROM todo_items td
+         WHERE td.user_id = ? AND td.completed_at IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM growth_events ge
+              WHERE ge.user_id = td.user_id AND ge.source = 'todo_complete'
+                AND ge.ref_id = SHA2(CONCAT('todo:', CAST(td.id AS CHAR)), 256)
+           )
+       UNION ALL SELECT YEAR(DATE_ADD(ge.create_time, INTERVAL ? MINUTE)) FROM growth_events ge
+         WHERE ge.user_id = ? AND ge.source = 'todo_complete' AND ge.status = 'granted'
+       UNION ALL SELECT YEAR(DATE_ADD(ri.complete_time, INTERVAL ? MINUTE)) FROM resource_inbox ri
+         WHERE ri.user_id = ? AND ri.complete_time IS NOT NULL
+           AND NOT EXISTS (
+             SELECT 1 FROM onboarding_seed_resources osr
+             WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+               AND osr.resource_id = ri.resource_id
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM growth_events ge
+              WHERE ge.user_id = ri.user_id AND ge.source = 'organize_complete'
+                AND ge.ref_id = SHA2(CONCAT('organize:', ri.resource_type, ':', ri.resource_id), 256)
+           )
+       UNION ALL SELECT YEAR(DATE_ADD(ge.create_time, INTERVAL ? MINUTE)) FROM growth_events ge
+         WHERE ge.user_id = ? AND ge.source = 'organize_complete' AND ge.status = 'granted'
      ) activity_years
      WHERE y BETWEEN ? AND ?
      ORDER BY y DESC`,
-    [userId, userId, userId, userId, 2000, currentYear],
+    [
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      shiftMinutes,
+      userId,
+      2000,
+      currentYear,
+    ],
   );
   const availableYears = Array.from(
     new Set(
@@ -733,13 +892,20 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
 
   return {
     year: y,
-    timezone: 'server-local',
+    timezone: accountCalendar.timezone,
     rangeStart: `${y}-01-01`,
     rangeEndExclusive: `${y + 1}-01-01`,
     availableYears,
     days,
-    summary: { activeDays, longestStreak, weekCount },
+    summary: {
+      activeDays,
+      longestStreak,
+      weekCount,
+      weekActiveDays,
+      weeklyTarget: Number(accountCalendar.weeklyActiveTarget || 0),
+    },
     includedTypes: [...HEATMAP_ACTIVITY_TYPES],
+    countingRules: base.countingRules,
   };
 }
 
@@ -747,9 +913,11 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null 
  * 成长看板聚合:统计 + 成就(解锁/进度) + 今日任务 + 近期时间线。
  * 游客返回全零/全未解锁(仍可展示"待收集"引导)。root 统计真实、等级满级。
  */
-export async function getGrowthDashboard(userId, { userRole = null } = {}) {
+export async function getGrowthDashboard(userId, { userRole = null, db = pool, calendar = null } = {}) {
   const isGuest = isVisitorGrowthActor(userId, userRole);
-  const growth = await getGrowth(userId, { userRole });
+  const accountCalendar = calendar || (!isGuest ? await getGrowthCalendarContext(userId, { db }) : null);
+  const effectiveDayKey = accountCalendar?.dayKey || dayKey();
+  const growth = await getGrowth(userId, { userRole, db, calendar: accountCalendar });
 
   const stats = {
     joinDays: 0,
@@ -762,6 +930,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     tagCount: 0,
     completedTodoCount: 0,
     organizedResourceCount: 0,
+    pendingResourceCount: 0,
     weekExp: 0,
     checkinDays: [],
   };
@@ -771,7 +940,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 资源计数 + 注册时间(合并成一条查询)。
     // 注册时间兜底:部分早期/root 账号 user.create_time 为 NULL,退而用最早的书签/笔记时间作为"入驻"起点,
     // 避免"陪伴 0 天"。
-    const [[row]] = await pool.query(
+    const [[row]] = await db.query(
       `SELECT
         (SELECT COUNT(*) FROM bookmark b
           WHERE b.user_id = ? AND b.del_flag = 0
@@ -807,6 +976,13 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
               WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
                 AND osr.resource_id = ri.resource_id
             )) AS organizedResourceCount,
+        (SELECT COUNT(*) FROM resource_inbox ri
+          WHERE ri.user_id = ? AND ri.status = 'pending'
+            AND NOT EXISTS (
+              SELECT 1 FROM onboarding_seed_resources osr
+              WHERE osr.user_id = ri.user_id AND osr.resource_type = ri.resource_type
+                AND osr.resource_id = ri.resource_id
+            )) AS pendingResourceCount,
         (SELECT create_time FROM user WHERE id = ?) AS createTime,
         (SELECT MIN(b.create_time) FROM bookmark b
           WHERE b.user_id = ? AND b.del_flag = 0
@@ -820,7 +996,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
               SELECT 1 FROM onboarding_seed_resources osr
               WHERE osr.user_id = n.create_by AND osr.resource_type = 'note' AND osr.resource_id = n.id
             )) AS firstNote`,
-      [userId, userId, userId, userId, userId, userId, userId, userId, userId],
+      [userId, userId, userId, userId, userId, userId, userId, userId, userId, userId],
     );
     stats.bookmarkCount = Number(row.bookmarkCount || 0);
     stats.noteCount = Number(row.noteCount || 0);
@@ -828,23 +1004,20 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     stats.tagCount = Number(row.tagCount || 0);
     stats.completedTodoCount = Number(row.completedTodoCount || 0);
     stats.organizedResourceCount = Number(row.organizedResourceCount || 0);
+    stats.pendingResourceCount = Number(row.pendingResourceCount || 0);
     const joinTimes = [row.createTime, row.firstBookmark, row.firstNote]
       .filter(Boolean)
       .map((d) => new Date(d).getTime())
       .filter((n) => !Number.isNaN(n));
     if (joinTimes.length) {
       const earliest = Math.min(...joinTimes);
-      // 按自然日计(注册当天=第 1 天),与签到口径一致,避免「连签 2 天却陪伴 1 天」的割裂:
-      // 旧算法用「经过的整 24 小时数」,昨晚注册今天看还不满 24h 就只算 1 天。
-      const startDay = new Date(earliest);
-      startDay.setHours(0, 0, 0, 0);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      stats.joinDays = Math.max(1, Math.round((today.getTime() - startDay.getTime()) / 86_400_000) + 1);
+      // 按账号时区的自然日计（注册当天=第 1 天），避免服务器与账号跨日时陪伴天数/成就提前或延后。
+      const joinedDayKey = dayKeyAtOffset(new Date(earliest), accountCalendar?.utcOffsetMinutes);
+      stats.joinDays = Math.max(1, daysBetween(effectiveDayKey, joinedDayKey) + 1);
     }
 
     // 签到天集合 → 累计签到 + 最长连签(从账本派生,无需新列)
-    const [ckRows] = await pool.query(
+    const [ckRows] = await db.query(
       `SELECT DISTINCT day FROM growth_events
        WHERE user_id = ? AND source = 'checkin' AND day IS NOT NULL
        ORDER BY day ASC`,
@@ -857,7 +1030,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     stats.checkinDays = days; // 签到日期(YYYYMMDD)数组,供前端签到日历高亮
 
     // 近 7 天获得经验
-    const [[wk]] = await pool.query(
+    const [[wk]] = await db.query(
       `SELECT COALESCE(SUM(amount), 0) AS s FROM growth_events
        WHERE user_id = ? AND status = 'granted' AND create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)`,
       [userId],
@@ -867,7 +1040,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
     // 成长足迹:从真实活动派生(书签/笔记/文件 + 升级里程碑),合并按时间倒序取 15。
     // 不再只读 growth_events —— root/免账本用户没有账本记录,否则足迹恒空(用户反馈)。
     const [[bmRows], [ntRows], [flRows], [msRows]] = await Promise.all([
-      pool.query(
+      db.query(
         `SELECT b.name, b.create_time FROM bookmark b
          WHERE b.user_id = ? AND b.del_flag = 0
            AND NOT EXISTS (
@@ -877,7 +1050,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
          ORDER BY b.create_time DESC LIMIT 12`,
         [userId],
       ),
-      pool.query(
+      db.query(
         `SELECT n.title, n.create_time FROM note n
          WHERE n.create_by = ? AND n.del_flag = 0
            AND NOT EXISTS (
@@ -887,7 +1060,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
          ORDER BY n.create_time DESC LIMIT 12`,
         [userId],
       ),
-      pool.query(
+      db.query(
         `SELECT f.file_name, f.create_time FROM files f
          WHERE f.create_by = ? AND f.del_flag = 0
            AND NOT EXISTS (
@@ -898,7 +1071,7 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
          ORDER BY f.create_time DESC LIMIT 12`,
         [userId],
       ),
-      pool.query(
+      db.query(
         "SELECT meta, create_time FROM growth_events WHERE user_id = ? AND source = 'milestone' ORDER BY create_time DESC LIMIT 12",
         [userId],
       ),
@@ -917,32 +1090,28 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
 
   // 成就进度:统一用 stats + 当前等级派生(root 等级=满级,资源统计真实)
   // 永久解锁模型(业界惯例):一旦达标即永久解锁,此后删内容让指标回落也【不退回未解锁、不重复置灰/高亮】。
-  // 事实源仍用 points_log(无需额外表):reason='achievement'=已领取;reason='ach_unlock'(delta=0)=已解锁的永久标记。
-  let claimedKeys = new Set();
-  let unlockedKeys = new Set();
+  // 永久状态来自独立表；GET 只做读取与当前进度派生，不再在请求过程中补写账本。
+  const achievementState = new Map();
   if (!isGuest) {
-    const [cRows] = await pool.query(
-      "SELECT reason, ref FROM points_log WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock')",
+    const [cRows] = await db.query(
+      `SELECT achievement_key AS achievementKey, unlocked_at AS unlockedAt, claimed_at AS claimedAt
+       FROM user_achievements WHERE user_id = ?`,
       [userId],
     );
-    for (const r of cRows) {
-      unlockedKeys.add(r.ref);
-      if (r.reason === 'achievement') claimedKeys.add(r.ref);
-    }
+    for (const row of cRows) achievementState.set(row.achievementKey, row);
   }
   const metrics = { ...stats, level: growth.level };
-  const newlyUnlocked = []; // 本次读取里首次达标、尚无永久标记的成就 → 待落库固化
   const achievements = ACHIEVEMENTS.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
     const minLevel = Math.max(0, Number(a.minLevel || 0));
     const currentLevel = Number(growth.level || 0);
     const rewardFrame = getAchievementFrameByKey(a.key);
-    const claimed = claimedKeys.has(a.key);
-    // 永久解锁 = 已领取 / 有解锁标记 / 或当前刚达标(后者首次出现时落标记固化,之后指标回落也不退回)
-    const everUnlocked = claimed || unlockedKeys.has(a.key);
+    const state = achievementState.get(a.key);
+    const claimed = Boolean(state?.claimedAt);
+    // 已写入的永久状态优先；尚未入表但当前达标仍可展示和领取，领取事务会固化状态。
+    const everUnlocked = Boolean(state?.unlockedAt);
     const requirementsMet = meetsAchievementRequirement(a, metrics);
     const unlocked = everUnlocked || requirementsMet;
-    if (!isGuest && !everUnlocked && requirementsMet) newlyUnlocked.push(a.key);
     return {
       key: a.key,
       group: a.group,
@@ -955,38 +1124,34 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
       frameId: rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
       claimed, // 是否已领取奖励
       claimable: unlocked && !claimed, // 可领取(已解锁且未领)
+      unlockedAt: state?.unlockedAt || null,
+      claimedAt: state?.claimedAt || null,
     };
   });
-  // 首次达标 → 落一条永久解锁标记(delta=0,不影响积分余额;幂等 INSERT..WHERE NOT EXISTS 防并发重复)。
-  // 用户「积分明细」查询会排除 ach_unlock,不污染流水展示。
-  for (const key of newlyUnlocked) {
-    await pool.query(
-      `INSERT INTO points_log (user_id, delta, reason, ref)
-       SELECT ?, 0, 'ach_unlock', ? FROM DUAL
-       WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = 'ach_unlock' AND ref = ?)`,
-      [userId, key, userId, key],
-    );
-  }
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const claimableCount = achievements.filter((a) => a.claimable).length; // 待领取数(前端红点/汇总)
 
   // 每日三任务：签到、创建任一内容、按用户+日期稳定抽取的一项随机任务。
   // 随机项不依赖完成后的可选集合，因此同一天刷新、跨 PC/移动端都不会换题。
   const expGranted = userRole !== 'root';
-  const { quests, completedCount } = await getDailyQuestState(userId, growth, { isGuest });
+  const { quests, completedCount } = await getDailyQuestState(userId, growth, {
+    isGuest,
+    db,
+    calendar: accountCalendar,
+  });
   let legacyClaimed = false;
   let claimedRefs = new Set();
   if (!isGuest) {
-    const [rows] = await pool.query(
+    const [rows] = await db.query(
       `SELECT ref FROM points_log
        WHERE user_id = ? AND reason = 'quest' AND ref IN (?, ?, ?)`,
-      [userId, dayKey(), `${dayKey()}:2`, `${dayKey()}:3`],
+      [userId, effectiveDayKey, `${effectiveDayKey}:2`, `${effectiveDayKey}:3`],
     );
     claimedRefs = new Set(rows.map((row) => String(row.ref)));
-    legacyClaimed = claimedRefs.has(dayKey());
+    legacyClaimed = claimedRefs.has(effectiveDayKey);
   }
   const stages = DAILY_QUEST_STAGES.map((stage) => {
-    const ref = `${dayKey()}:${stage.required}`;
+    const ref = `${effectiveDayKey}:${stage.required}`;
     const claimed = legacyClaimed || claimedRefs.has(ref);
     return {
       key: stage.key,
@@ -1036,21 +1201,22 @@ export async function getGrowthDashboard(userId, { userRole = null } = {}) {
  * 后端二次核算任务完成状态,防前端伪造;游客不发。
  * 满级(含 root)照发积分；root 不写经验账本。
  */
-export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
+export async function claimDailyQuestBonus(userId, { userRole = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
-  const g = await getGrowth(userId, { userRole });
+  const accountCalendar = calendar || (await getGrowthCalendarContext(userId));
+  const g = await getGrowth(userId, { userRole, calendar: accountCalendar });
   // 与 getGrowthDashboard 同一判定:root 的经验不入账,考核项和幂等来源都要跟着变
   const expGranted = userRole !== 'root';
 
-  const today = dayKey();
-  const { completedCount } = await getDailyQuestState(userId, g);
+  const today = accountCalendar.dayKey;
+  const { completedCount } = await getDailyQuestState(userId, g, { calendar: accountCalendar });
   if (completedCount < DAILY_QUEST_STAGES[0].required) return { ok: false, reason: 'incomplete' };
   const [[legacy]] = await pool.query(
     "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason = 'quest' AND ref = ?",
     [userId, today],
   );
   if (Number(legacy?.c || 0) > 0) {
-    return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+    return { ok: true, already: true, growth: await getGrowth(userId, { userRole, calendar: accountCalendar }) };
   }
 
   let expGained = 0;
@@ -1062,7 +1228,7 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
     eligibleCount++;
     const ref = `${today}:${stage.required}`;
     const grant = expGranted
-      ? await grantExp(userId, stage.source, { day: today, amount: stage.exp, userRole })
+      ? await grantExp(userId, stage.source, { day: today, amount: stage.exp, userRole, calendar: accountCalendar })
       : { granted: 0, duplicated: false };
     const gotPoints = await earnPoints(userId, stage.points, 'quest', ref);
     // root 不写经验账本，积分流水就是唯一的阶段幂等事实源。
@@ -1072,7 +1238,7 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
     leveledUp ||= Boolean(grant.leveledUp);
   }
   if (eligibleCount > 0 && duplicateCount === eligibleCount) {
-    return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+    return { ok: true, already: true, growth: await getGrowth(userId, { userRole, calendar: accountCalendar }) };
   }
   return {
     ok: true,
@@ -1081,7 +1247,7 @@ export async function claimDailyQuestBonus(userId, { userRole = null } = {}) {
     // capped 专指「今日经验已达上限被截断」;root 本就不发经验,不能让前端误报成撞了日顶
     capped: expGranted && expGained === 0,
     leveledUp,
-    growth: await getGrowth(userId, { userRole }),
+    growth: await getGrowth(userId, { userRole, calendar: accountCalendar }),
   };
 }
 
@@ -1160,7 +1326,9 @@ export async function generateGrowthNudges() {
     const [risk] = await pool.query(
       `SELECT ug.user_id, ug.streak, u.preferences FROM user_growth ug
          JOIN user u ON u.id = ug.user_id
-        WHERE ug.last_checkin_date = ? AND ug.streak >= 3 AND ug.last_checkin_date <> ?`,
+         LEFT JOIN user_growth_preferences ugp ON ugp.user_id = ug.user_id
+        WHERE ug.last_checkin_date = ? AND ug.streak >= 3 AND ug.last_checkin_date <> ?
+          AND COALESCE(ugp.streak_reminder_enabled, 1) = 1`,
       [yesterday, today],
     );
     let sent = 0;
@@ -1187,7 +1355,7 @@ export async function generateGrowthNudges() {
     }
     console.log(`[成长提醒] 连签将断候选 ${risk.length} 人,新发提醒 ${sent} 条`);
   } catch (e) {
-    console.warn('[成长提醒] 生成失败:', e.message);
+    console.warn('[成长提醒] 生成失败 code=%s', stableAgentErrorCode(e));
   }
 }
 
@@ -1201,12 +1369,13 @@ export async function markNoticesRead(userId) {
  * 签到(主动)。当日仅一次;连续加成 +min(streak,5);断签回退 3 天不清零。
  * root 也可签到(更新 streak 展示),但不发经验、权益仍满级。
  */
-export async function checkin(userId, { userRole = null } = {}) {
+export async function checkin(userId, { userRole = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
-  const today = dayKey();
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db: conn }));
+    const today = accountCalendar.dayKey;
     const [rows] = await conn.query(
       'SELECT exp, level, streak, last_checkin_date FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
@@ -1217,8 +1386,9 @@ export async function checkin(userId, { userRole = null } = {}) {
       g = { exp: 0, level: 1, streak: 0, last_checkin_date: null };
     }
     if (g.last_checkin_date === today) {
+      const growth = await getGrowth(userId, { userRole, db: conn, calendar: accountCalendar });
       await conn.commit();
-      return { ok: true, already: true, growth: await getGrowth(userId, { userRole }) };
+      return { ok: true, already: true, growth };
     }
 
     let streak;
@@ -1238,7 +1408,12 @@ export async function checkin(userId, { userRole = null } = {}) {
     if (streak > 0 && streak % 7 === 0) {
       await grantItem(conn, userId, 'makeup_card', 1);
     }
-    const grant = await grantExp(userId, 'checkin', { day: today, amount, meta: { streak }, userRole }, conn);
+    const grant = await grantExp(
+      userId,
+      'checkin',
+      { day: today, amount, meta: { streak }, userRole, calendar: accountCalendar },
+      conn,
+    );
     // root 不经 grantExp 写入 events(第 94 行对 root return),手动记一条签到事件供日历/统计/成就使用
     if (userRole === 'root' && grant.skipped === 'root') {
       await conn.query(
@@ -1264,6 +1439,21 @@ export async function checkin(userId, { userRole = null } = {}) {
         milestone = { days: ms.days, points: ms.points, storageMb: ms.storageMb || 0, cards: ms.cards || 0 };
       }
     }
+    try {
+      const [[checkinRow]] = await conn.query(
+        "SELECT COUNT(DISTINCT day) AS total FROM growth_events WHERE user_id = ? AND source = 'checkin' AND status = 'granted'",
+        [userId],
+      );
+      const { persistAchievementUnlocksForMetrics } = await import('./growthAchievementState.js');
+      await persistAchievementUnlocksForMetrics(
+        userId,
+        { maxStreak: streak, totalCheckins: Number(checkinRow?.total || 0) },
+        { db: conn },
+      );
+    } catch (error) {
+      console.warn('[growth] 签到成就状态同步失败 code=%s', stableAgentErrorCode(error));
+    }
+    const growth = await getGrowth(userId, { userRole, db: conn, calendar: accountCalendar });
     await conn.commit();
 
     return {
@@ -1274,7 +1464,7 @@ export async function checkin(userId, { userRole = null } = {}) {
       pointsEarned: gotCheckinPoints ? checkinPoints : 0,
       milestone, // 命中连签里程碑时的大奖详情(供前端庆祝),否则 null
       leveledUp: !!grant.leveledUp,
-      growth: await getGrowth(userId, { userRole }),
+      growth,
     };
   } catch (e) {
     try {
@@ -1289,14 +1479,18 @@ export async function checkin(userId, { userRole = null } = {}) {
 }
 
 // 使用补签卡:可补今天之前最近 3 个自然日的任一漏签，补签到记录和连签，不发经验/积分/里程碑奖励。
-export async function useProtectCard(userId, { userRole = null, date = null } = {}) {
+export async function useProtectCard(userId, { userRole = null, date = null, calendar = null } = {}) {
   if (isVisitorGrowthActor(userId, userRole)) return { ok: false, reason: 'visitor' };
-  // 未传日期时兼容旧客户端，默认仍尝试补昨天；新版前端会明确传入用户选择的日期。
-  const makeupDate = date || getMakeupCandidateDays()[0];
-  if (!isMakeupCandidateDay(makeupDate)) return { ok: false, reason: 'outside_window' };
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db: conn }));
+    // 未传日期时兼容旧客户端，默认仍尝试补昨天；新版前端会明确传入用户选择的日期。
+    const makeupDate = date || accountCalendar.makeupDays[0];
+    if (!dateFromDayKey(makeupDate) || !accountCalendar.makeupDays.includes(makeupDate)) {
+      await conn.rollback();
+      return { ok: false, reason: 'outside_window' };
+    }
     const [rows] = await conn.query(
       'SELECT streak, last_checkin_date, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
@@ -1335,15 +1529,16 @@ export async function useProtectCard(userId, { userRole = null, date = null } = 
     const daySet = new Set((events || []).map((row) => row.day));
     const correctedStreak = countStreakEndingAt(daySet, events[0]?.day || null);
     await conn.query('UPDATE user_growth SET streak = ? WHERE user_id = ?', [correctedStreak, userId]);
+    const growth = await getGrowth(userId, { userRole, db: conn, calendar: accountCalendar });
     await conn.commit();
-    return { ok: true, date: makeupDate, streak: correctedStreak, growth: await getGrowth(userId, { userRole }) };
+    return { ok: true, date: makeupDate, streak: correctedStreak, growth };
   } catch (e) {
     try {
       await conn.rollback();
     } catch {
       /* ignore */
     }
-    return { ok: false, reason: 'error', error: e.message };
+    throw e;
   } finally {
     conn.release();
   }
@@ -1351,7 +1546,11 @@ export async function useProtectCard(userId, { userRole = null, date = null } = 
 
 // 管理员运营:直接调整目标用户成长(发/扣经验、设等级、增减补签卡)。
 // root 专用,绕过日顶与账本;升级时仅补发最终等级通知，不额外补等级卡或里程碑奖励。
-export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null, cardDelta = 0 } = {}) {
+export async function adminAdjustGrowth(
+  userId,
+  { expDelta = 0, setLevel = null, cardDelta = 0 } = {},
+  { actionContext = null } = {},
+) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'no_user' };
   const conn = await pool.getConnection();
   try {
@@ -1384,15 +1583,30 @@ export async function adminAdjustGrowth(userId, { expDelta = 0, setLevel = null,
     if (level > fromLevel && (await isLevelUpNotificationEnabled(conn, userId))) {
       await writeLevelUpNotification(conn, userId, level, { source: 'admin_adjust' });
     }
+    const receipt = actionContext
+      ? await finishAdminAction(actionContext, {
+          outcome: 'succeeded',
+          metadata: {
+            expDelta: Number(expDelta || 0),
+            setLevel: setLevel == null || setLevel === '' ? null : Number(setLevel),
+            cardsDelta: Number(cardDelta || 0),
+            resultingExp: exp,
+            resultingLevel: level,
+            resultingCards: cards,
+          },
+          db: conn,
+        })
+      : {};
     await conn.commit();
-    return { ok: true, exp, level, name: rankOf(level).name, cards, leveledUp: level > fromLevel };
+    return { ok: true, exp, level, name: rankOf(level).name, cards, leveledUp: level > fromLevel, ...receipt };
   } catch (e) {
     try {
       await conn.rollback();
     } catch {
       /* ignore */
     }
-    return { ok: false, reason: 'error', error: e.message };
+    if (actionContext) throw e;
+    return { ok: false, reason: 'GROWTH_ADJUST_FAILED' };
   } finally {
     conn.release();
   }

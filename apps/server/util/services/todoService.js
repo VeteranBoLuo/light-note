@@ -15,6 +15,7 @@ import {
   setV2TodoStatus,
   snoozeV2Todo,
 } from './todoSeriesService.js';
+import { recordTodoCompletion } from '../growthActivityHistory.js';
 
 const STATUS = new Set(['pending', 'completed']);
 const FILTER_STATUS = new Set(['all', ...STATUS]);
@@ -512,6 +513,13 @@ export async function setTodoStatus(connection, userId, id, status, { undoComple
     [status, id, userId, status],
   );
   if (status === 'completed' && result.affectedRows) {
+    await recordTodoCompletion(connection, { userId, todoId: id });
+    try {
+      const { persistAchievementMetricFromDatabase } = await import('../growthAchievementState.js');
+      await persistAchievementMetricFromDatabase(userId, 'completedTodoCount', { db: connection });
+    } catch (error) {
+      console.warn('[todo] 成长成就状态同步失败 code=%s', String(error?.code || 'ACHIEVEMENT_SYNC_FAILED'));
+    }
     await connection.query(
       `UPDATE todo_reminders SET status = 'paused_complete'
        WHERE todo_id = ? AND user_id = ? AND status IN ('pending','processing')`,

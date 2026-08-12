@@ -5,7 +5,7 @@
     <div v-else class="tl-list">
       <div v-for="(it, i) in items" :key="i" class="tl-row">
         <span class="tl-dot" :class="`src-${it.source}`"></span>
-        <span class="tl-icon">{{ iconOf(it) }}</span>
+        <span class="tl-icon"><SvgIcon :src="iconOf(it)" size="16" /></span>
         <span class="tl-label">
           <span class="tl-kind">{{ labelOf(it) }}</span>
           <span v-if="it.name" class="tl-name">{{ it.name }}</span>
@@ -20,22 +20,24 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import type { TimelineItem } from '@/composables/useGrowth.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   defineProps<{ items: TimelineItem[] }>();
   const { t, te, locale } = useI18n();
 
   const ICONS: Record<string, string> = {
-    checkin: '📅',
-    bookmark: '🔖',
-    note: '📝',
-    file: '📁',
-    first_own_resource: '✨',
-    milestone: '🎖️',
-    profile_done: '🧑',
-    manual: '🎁',
+    checkin: icon.growth.checkin,
+    bookmark: icon.resource.bookmark,
+    note: icon.resource.note,
+    file: icon.resource.file,
+    first_own_resource: icon.growth.create,
+    milestone: icon.growth.level,
+    profile_done: icon.navigation.user,
+    manual: icon.growth.reward,
   };
   function iconOf(it: TimelineItem) {
-    return ICONS[it.source] || '⭐';
+    return ICONS[it.source] || icon.growth.level;
   }
   function labelOf(it: TimelineItem): string {
     if (it.source === 'milestone') {
@@ -119,8 +121,8 @@
   }
   .tl-icon {
     flex: 0 0 auto;
-    font-size: 15px;
-    line-height: 1;
+    display: grid;
+    place-items: center;
   }
   .tl-label {
     flex: 1 1 auto;

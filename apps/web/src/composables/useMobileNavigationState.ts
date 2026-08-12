@@ -7,7 +7,9 @@ import { getMobileHomePath, type UserPreferences } from '@/utils/preferences';
 const LAST_RESOURCE_STORAGE_KEY = 'ln-mobile-last-resource';
 const lastMobileResourcePath = ref<MobileResourcePath | null>(readStoredResourcePath());
 const resourceScrollPositions = new Map<MobileResourcePath, number>();
-const nonPersistentScrollPaths = new Set<MobileResourcePath>(['/noteLibrary']);
+// 笔记库需要按账号、目录/标签和搜索范围恢复，不能只用 /noteLibrary 这一层全局 key。
+// 这里把它交给页面自身管理；返回 true 也会阻止 MobileAppShell 的多轮重试把页面反复归零。
+const pageManagedScrollPaths = new Set<MobileResourcePath>(['/noteLibrary']);
 
 function readStoredResourcePath(): MobileResourcePath | null {
   try {
@@ -68,7 +70,7 @@ export function getMobileResourceEntryPath(): MobileResourcePath {
 
 function saveResourceScroll(path: MobileResourcePath | null) {
   if (!path) return;
-  if (nonPersistentScrollPaths.has(path)) {
+  if (pageManagedScrollPaths.has(path)) {
     resourceScrollPositions.delete(path);
     return;
   }
@@ -78,9 +80,7 @@ function saveResourceScroll(path: MobileResourcePath | null) {
 
 function restoreResourceScroll(path: MobileResourcePath | null) {
   if (!path) return false;
-  if (nonPersistentScrollPaths.has(path)) {
-    return resetMobileScrollElement(findResourceScrollElement());
-  }
+  if (pageManagedScrollPaths.has(path)) return true;
   const top = resourceScrollPositions.get(path);
   if (top == null) return false;
   const element = findResourceScrollElement();

@@ -1030,7 +1030,12 @@ export const saveUserInfo = async (req, res) => {
   try {
     const targetId = req.body.id || req.user?.id;
     const isRoot = req.user?.role === 'root';
-    const id = isRoot ? targetId : req.user?.id;
+    if (isRoot && targetId !== req.user?.id) {
+      return res.send(
+        resultData(null, 409, L(req, '后台修改用户请使用专用管理接口', 'Use the dedicated admin user endpoint')),
+      );
+    }
+    const id = req.user?.id;
     if (!id || (!isRoot && req.body.id && req.body.id !== req.user?.id)) {
       return res.send(
         resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
@@ -1038,17 +1043,7 @@ export const saveUserInfo = async (req, res) => {
     }
     // 定义允许更新的字段列表
     const selfAllowedFields = ['alias', 'email', 'phone_number', 'location', 'preferences', 'head_picture'];
-    const rootAllowedFields = [
-      ...selfAllowedFields,
-      // 注:不含 password —— 编辑弹框直接改 password 会明文写库、绕过 scrypt,导致该用户登录失败。
-      // 改密码请走 configPassword(scrypt 加密),不在此表单改。
-      'role',
-      'ip',
-      'del_flag',
-      'github_id',
-      'login_type',
-    ];
-    const allowedFields = isRoot ? rootAllowedFields : selfAllowedFields;
+    const allowedFields = selfAllowedFields;
     // 过滤请求体，只保留允许的字段
     const filteredBody = snakeCaseKeys(mergeExistingProperties(req.body, [], ['id']));
     const finalBody = {};
@@ -1107,22 +1102,13 @@ export const saveUserInfo = async (req, res) => {
 };
 
 export const deleteUserById = (req, res) => {
-  try {
-    if (req.user?.role !== 'root') {
-      return res.send(
-        resultData(null, 403, L(req, '没有操作权限', 'You do not have permission to perform this action.')),
-      );
-    }
-    pool
-      .query('update user set del_flag=1 where id=?', [req.query.id])
-      .then(async ([result]) => {
-        await removeUserSessions(req.query.id);
-        res.send(resultData(result));
-      })
-      .catch((err) => res.send(resultData(null, 500, L(req, '服务器内部错误: ', 'Server error: ') + err.message)));
-  } catch (e) {
-    res.send(resultData(null, 400, L(req, '客户端请求异常：', 'Bad request: ') + e)); // 设置状态码为400
-  }
+  return res.send(
+    resultData(
+      null,
+      req.user?.role === 'root' ? 410 : 403,
+      L(req, '该旧接口已停用，请使用后台用户管理', 'This legacy endpoint is disabled'),
+    ),
+  );
 };
 
 export const startGithubOAuth = async (req, res) => {

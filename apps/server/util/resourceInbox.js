@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { decodeOffsetCursor, encodeOffsetCursor, normalizePageLimit } from './pageCursor.js';
+import { recordOrganizeCompletions } from './growthActivityHistory.js';
 
 export const RESOURCE_TYPES = Object.freeze(['bookmark', 'note', 'file']);
 export const INBOX_SOURCES = Object.freeze(['quick_capture', 'manual', 'duplicate_requeue', 'admin_demo']);
@@ -234,6 +235,19 @@ export async function completeResources(connection, { userId, items }) {
       [userId, type, ...ids],
     );
     completed += Number(result.affectedRows || 0);
+    await recordOrganizeCompletions(connection, { userId, resourceType: type, resourceIds: ids });
+  }
+  if (completed > 0) {
+    try {
+      const [{ completeGrowthTask }, { persistAchievementMetricFromDatabase }] = await Promise.all([
+        import('./growthTaskCompletion.js'),
+        import('./growthAchievementState.js'),
+      ]);
+      await completeGrowthTask(userId, 'first_organize', { connection });
+      await persistAchievementMetricFromDatabase(userId, 'organizedResourceCount', { db: connection });
+    } catch (error) {
+      console.warn('[resource-inbox] 成长状态同步失败 code=%s', String(error?.code || 'GROWTH_SYNC_FAILED'));
+    }
   }
   return { completed };
 }

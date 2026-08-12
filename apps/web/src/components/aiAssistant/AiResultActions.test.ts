@@ -13,7 +13,6 @@ const applyAiChangeSet = vi.fn();
 const undoAiChangeSet = vi.fn();
 const saveAiMessageAsNote = vi.fn();
 const submitAiFeedback = vi.fn();
-const branchAiConversation = vi.fn();
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: routerPush }) }));
 vi.mock('@/components/base/BasicComponents/BModal/Alert.ts', () => ({ default: { alert } }));
@@ -29,7 +28,6 @@ vi.mock('@/api/aiWorkspaceApi', () => ({
   undoAiChangeSet,
   saveAiMessageAsNote,
   submitAiFeedback,
-  branchAiConversation,
 }));
 
 const { default: AiResultActions } = await import('./AiResultActions.vue');

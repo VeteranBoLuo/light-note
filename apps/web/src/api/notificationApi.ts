@@ -33,6 +33,9 @@ export const sendNotification = (payload: {
   title: string;
   content?: string;
   link?: string;
+  reason: string;
+  confirmed: true;
+  confirmText: string;
 }) => apiBasePost('/api/notification/send', payload);
 
 // 后台通知中心(仅 root):概览统计
@@ -43,10 +46,16 @@ export const getAdminList = (params: { currentPage?: number; pageSize?: number }
   apiBasePost('/api/notification/admin/list', params);
 
 // 后台通知中心(仅 root):撤回一个批次
-export const recallNotification = (batchId: string) => apiBasePost('/api/notification/admin/recall', { batchId });
+export const recallNotification = (
+  batchId: string,
+  action: { reason: string; confirmed: true; confirmText: string },
+) => apiBasePost('/api/notification/admin/recall', { batchId, ...action });
 
 // 后台通知中心(仅 root):删除一个批次(同时撤回并从发送记录移除)
-export const deleteAdminNotification = (batchId: string) => apiBasePost('/api/notification/admin/delete', { batchId });
+export const deleteAdminNotification = (
+  batchId: string,
+  action: { reason: string; confirmed: true; confirmText: string },
+) => apiBasePost('/api/notification/admin/delete', { batchId, ...action });
 
 // 后台通知中心(仅 root):某批次接收者与已读明细(发给谁、谁已读谁未读)
 export const getBatchRecipients = (batchId: string) => apiBasePost('/api/notification/admin/recipients', { batchId });

@@ -10,9 +10,131 @@
     <!-- 加载态：此前 data 为 null 时全部显示「—」，分不清是在加载还是真的没有数据 -->
     <p v-if="loading && !data" class="ov-loading">正在加载全站数据…</p>
 
+    <section v-if="data" class="ov-today" aria-labelledby="ov-today-title">
+      <header class="ov-today__header">
+        <div>
+          <h3 id="ov-today-title">今日运营</h3>
+          <p>
+            北京时间自然日 · 主值为今日新增，辅助值为全站累计 ·
+            {{ hideInternal ? '不含内部账号与新手种子资源' : '包含内部账号，仍不含新手种子资源' }}
+            <span v-if="sameTimeCutoff"> · {{ t('adminOverview.sameTimeCutoff', { time: sameTimeCutoff }) }}</span>
+          </p>
+        </div>
+        <div class="ov-today__capacity" aria-label="全站容量">
+          <span class="ov-today__capacity-item">
+            <span class="ov-today__capacity-label">全站存储</span>
+            <strong class="ov-today__capacity-value">{{ mb(data.resources.storageMb) }}</strong>
+            <span class="ov-today__capacity-hint">云盘文件占用</span>
+          </span>
+          <span class="ov-today__capacity-item" :class="{ 'is-warning': Number(data.resources.trashCount || 0) > 0 }">
+            <span class="ov-today__capacity-label">回收站待清理</span>
+            <strong class="ov-today__capacity-value">{{ mb(data.resources.trashMb) }}</strong>
+            <span class="ov-today__capacity-hint">{{ n(data.resources.trashCount) }} 个文件</span>
+          </span>
+        </div>
+      </header>
+      <ul class="admin-stats ov-today__stats">
+        <li class="admin-stat-card ov-today__stat-card">
+          <BButton
+            block
+            class="ov-today__stat-action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增用户' })"
+            @click="drillDownTodayRecent('user')"
+          >
+            <span class="admin-stat-label">新增用户</span>
+            <strong class="admin-stat-value">{{ n(data.users.today) }}</strong>
+            <span class="admin-stat-hint">累计 {{ n(data.users.total) }}</span>
+            <span v-if="baselineText('users')" class="ov-today__baseline">{{ baselineText('users') }}</span>
+            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+          </BButton>
+        </li>
+        <li class="admin-stat-card ov-today__stat-card">
+          <BButton
+            block
+            class="ov-today__stat-action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增资源' })"
+            @click="drillDownTodayRecent('resource')"
+          >
+            <span class="admin-stat-label">新增资源</span>
+            <strong class="admin-stat-value">{{ n(todayResourceTotal) }}</strong>
+            <span class="admin-stat-hint">累计 {{ n(totalResourceTotal) }}</span>
+            <span v-if="baselineText('resources')" class="ov-today__baseline">{{ baselineText('resources') }}</span>
+            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+          </BButton>
+        </li>
+        <li class="admin-stat-card ov-today__stat-card">
+          <BButton
+            block
+            class="ov-today__stat-action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增书签' })"
+            @click="drillDownTodayRecent('bookmark')"
+          >
+            <span class="admin-stat-label">新增书签</span>
+            <strong class="admin-stat-value">{{ n(data.resources.bookmarkToday) }}</strong>
+            <span class="admin-stat-hint">累计 {{ n(data.resources.bookmarkTotal) }}</span>
+            <span v-if="baselineText('bookmarks')" class="ov-today__baseline">{{ baselineText('bookmarks') }}</span>
+            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+          </BButton>
+        </li>
+        <li class="admin-stat-card ov-today__stat-card">
+          <BButton
+            block
+            class="ov-today__stat-action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增笔记' })"
+            @click="drillDownTodayRecent('note')"
+          >
+            <span class="admin-stat-label">新增笔记</span>
+            <strong class="admin-stat-value">{{ n(data.resources.noteToday) }}</strong>
+            <span class="admin-stat-hint">累计 {{ n(data.resources.noteTotal) }}</span>
+            <span v-if="baselineText('notes')" class="ov-today__baseline">{{ baselineText('notes') }}</span>
+            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+          </BButton>
+        </li>
+        <li class="admin-stat-card ov-today__stat-card">
+          <BButton
+            block
+            class="ov-today__stat-action"
+            :aria-label="t('adminOverviewRecent.viewMetricDetails', { metric: '新增文件' })"
+            @click="drillDownTodayRecent('file')"
+          >
+            <span class="admin-stat-label">新增文件</span>
+            <strong class="admin-stat-value">{{ n(data.resources.fileToday) }}</strong>
+            <span class="admin-stat-hint">累计 {{ n(data.resources.fileTotal) }}</span>
+            <span v-if="baselineText('files')" class="ov-today__baseline">{{ baselineText('files') }}</span>
+            <span class="ov-today__stat-link">{{ t('adminOverviewRecent.viewTodayDetails') }}</span>
+          </BButton>
+        </li>
+        <li class="admin-stat-card">
+          <span class="admin-stat-label">新增待办</span>
+          <strong class="admin-stat-value">{{ n(data.todos.createdToday) }}</strong>
+          <span class="admin-stat-hint">累计 {{ n(data.todos.total) }}</span>
+          <span v-if="baselineText('todos')" class="ov-today__baseline">{{ baselineText('todos') }}</span>
+        </li>
+      </ul>
+    </section>
+
+    <section v-if="todayInsights.length" class="ov-insights" aria-labelledby="ov-insights-title">
+      <strong id="ov-insights-title" class="ov-insights__title">{{ t('adminOverview.insightTitle') }}</strong>
+      <ul class="ov-insights__list">
+        <li
+          v-for="insight in todayInsights"
+          :key="insight.metric"
+          class="ov-insights__item"
+          :class="{ 'is-down': insight.direction === 'down' }"
+        >
+          <span>{{ insightText(insight) }}</span>
+          <BButton size="small" class="ov-insights__action" @click="openInsight(insight)">
+            {{
+              insight.metric === 'users' ? t('adminOverview.viewConversion') : t('adminOverviewRecent.viewTodayDetails')
+            }}
+          </BButton>
+        </li>
+      </ul>
+    </section>
+
     <!-- 待办提示:有待处理事项时高亮 -->
     <div v-if="data && pendingTotal > 0" class="ov-todo">
-      <span class="ov-todo-icon">🔔</span>
+      <SvgIcon class="ov-todo-icon" :src="icon.settings.notification" size="16" aria-hidden="true" />
       <span class="ov-todo-text">待处理事项</span>
       <BButton
         v-if="data.pending.opinion > 0"
@@ -38,70 +160,25 @@
       >
         未处理高危安全事件 {{ data.pending.security }} 起
       </BButton>
+      <BButton size="small" class="ov-todo-center" @click="go('actionCenter')">
+        {{ t('adminOverview.openActionCenter') }}
+      </BButton>
     </div>
 
-    <!-- 用户与内容:累计为主 + 今日增量 -->
-    <p class="ov-section-title">用户与内容 <span class="ov-section-tip">累计总量 · 今日增量</span></p>
-    <ul class="admin-stats">
+    <p class="ov-section-title"> 运行与待办健康 <span class="ov-section-tip">系统运行、事项积压与完成情况</span> </p>
+    <ul class="admin-stats ov-health-stats">
       <li class="admin-stat-card">
-        <span class="admin-stat-label">总用户</span>
-        <strong class="admin-stat-value">{{ n(data?.users.total) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.users.today) }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">书签</span>
-        <strong class="admin-stat-value">{{ n(data?.resources.bookmarkTotal) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.resources.bookmarkToday) }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">笔记</span>
-        <strong class="admin-stat-value">{{ n(data?.resources.noteTotal) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.resources.noteToday) }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">文件</span>
-        <strong class="admin-stat-value">{{ n(data?.resources.fileTotal) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.resources.fileToday) }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">全站存储</span>
-        <strong class="admin-stat-value">{{ mb(data?.resources.storageMb) }}</strong>
-        <span class="admin-stat-hint">云盘文件占用</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">回收站待清理</span>
-        <strong class="admin-stat-value">{{ mb(data?.resources.trashMb) }}</strong>
-        <span class="admin-stat-hint">{{ n(data?.resources.trashCount) }} 个文件</span>
-      </li>
-    </ul>
-
-    <!-- AI 用量:累计为主 + 今日增量；金额以 AI 监控的供应商余额变化为准。 -->
-    <p class="ov-section-title">AI 用量 <span class="ov-section-tip">累计总量 · 今日增量</span></p>
-    <ul class="admin-stats">
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">调用次数</span>
-        <strong class="admin-stat-value">{{ n(data?.ai.totalCount) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.ai.todayCount) }}</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">Token 消耗</span>
-        <strong class="admin-stat-value">{{ n(data?.ai.totalTokens) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.ai.todayTokens) }}</span>
-      </li>
-    </ul>
-
-    <!-- 活跃与健康:近期动态 -->
-    <p class="ov-section-title">活跃与健康 <span class="ov-section-tip">近期动态</span></p>
-    <ul class="admin-stats">
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">今日活跃用户</span>
+        <span class="admin-stat-label">活跃用户</span>
         <strong class="admin-stat-value">{{ n(data?.active.today) }}</strong>
-        <span class="admin-stat-hint">
-          近 {{ data?.active?.periodDays || 7 }} 天 {{ n(data?.active?.period ?? data?.active?.week) }}
-        </span>
+        <span class="admin-stat-hint">登录会话口径</span>
       </li>
       <li class="admin-stat-card">
-        <span class="admin-stat-label">今日 API 请求</span>
+        <span class="admin-stat-label">AI 调用</span>
+        <strong class="admin-stat-value">{{ n(data?.ai.todayCount) }}</strong>
+        <span class="admin-stat-hint">Token {{ n(data?.ai.todayTokens) }}</span>
+      </li>
+      <li class="admin-stat-card">
+        <span class="admin-stat-label">API 请求</span>
         <strong class="admin-stat-value">{{ n(data?.system.apiToday) }}</strong>
         <span class="admin-stat-hint ov-api-health">
           <span :class="{ 'ov-warn': (data?.system.apiBusinessErrorsToday || 0) > 0 }"
@@ -115,55 +192,24 @@
           >
         </span>
       </li>
-      <li class="admin-stat-card ov-link-card">
-        <BButton class="ov-link-action" @click="go('agentLog')">
-          <span class="admin-stat-label">AI 监控</span>
-          <strong class="admin-stat-value" aria-hidden="true">→</strong>
-          <span class="admin-stat-hint">调用明细</span>
-        </BButton>
-      </li>
-    </ul>
-
-    <p class="ov-section-title">待办运行 <span class="ov-section-tip">全站聚合 · 不展示待办正文</span></p>
-    <ul class="admin-stats ov-todo-stats">
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">待办总量</span>
-        <strong class="admin-stat-value">{{ n(data?.todos?.total) }}</strong>
-        <span class="admin-stat-hint">{{ delta(data?.todos?.createdToday) }}</span>
-      </li>
       <li class="admin-stat-card">
         <span class="admin-stat-label">当前未完成</span>
-        <strong class="admin-stat-value">{{ n(data?.todos?.pending) }}</strong>
-        <span class="admin-stat-hint">今日到期 {{ n(data?.todos?.dueToday) }}</span>
+        <strong class="admin-stat-value">{{ n(data?.todos.pending) }}</strong>
+        <span class="admin-stat-hint">今日到期 {{ n(data?.todos.dueToday) }}</span>
       </li>
       <li class="admin-stat-card" :class="{ 'ov-todo-overdue': (data?.todos?.overdue || 0) > 0 }">
-        <span class="admin-stat-label">今日完成</span>
-        <strong class="admin-stat-value">{{ n(data?.todos?.completedToday) }}</strong>
+        <span class="admin-stat-label">当前逾期</span>
+        <strong class="admin-stat-value" :class="{ 'ov-err': (data?.todos?.overdue || 0) > 0 }">
+          {{ n(data?.todos?.overdue) }}
+        </strong>
         <span class="admin-stat-hint" :class="{ 'ov-err': (data?.todos?.overdue || 0) > 0 }">
-          当前逾期 {{ n(data?.todos?.overdue) }}
+          {{ data ? ((data.todos.overdue || 0) > 0 ? '需优先处理' : '暂无逾期') : '—' }}
         </span>
       </li>
-    </ul>
-
-    <!-- 游客转化:累计 -->
-    <p class="ov-section-title">游客转化 <span class="ov-section-tip">累计</span></p>
-    <ul class="admin-stats">
       <li class="admin-stat-card">
-        <span class="admin-stat-label">累计访客</span>
-        <strong class="admin-stat-value">{{ n(data?.conversion.visitors) }}</strong>
-        <span class="admin-stat-hint">独立指纹</span>
-      </li>
-      <li class="admin-stat-card">
-        <span class="admin-stat-label">累计注册</span>
-        <strong class="admin-stat-value">{{ n(data?.conversion.registers) }}</strong>
-        <span class="admin-stat-hint">整体转化 {{ convRate }}%</span>
-      </li>
-      <li class="admin-stat-card ov-link-card">
-        <BButton class="ov-link-action" @click="go('conversion')">
-          <span class="admin-stat-label">转化漏斗</span>
-          <strong class="admin-stat-value" aria-hidden="true">→</strong>
-          <span class="admin-stat-hint">详细分析</span>
-        </BButton>
+        <span class="admin-stat-label">今日完成</span>
+        <strong class="admin-stat-value">{{ n(data?.todos.completedToday) }}</strong>
+        <span class="admin-stat-hint">北京时间自然日</span>
       </li>
     </ul>
 
@@ -180,32 +226,48 @@
       :period-days="Number(trendDays)"
       :granularity="data.trendPeriod?.granularity || 'day'"
     />
-    <AdminRecentAdditions
-      :data="recentData"
-      :loading="recentLoading"
-      :error="recentError"
-      :stacked="bookmark.isMobile || bookmark.isTablet"
-      :mobile="bookmark.isMobile"
-      @retry="loadRecent"
-      @view-users="go('userMg')"
-    />
+    <div ref="recentAnchor" class="ov-recent-anchor">
+      <AdminRecentAdditions
+        :data="recentData"
+        :loading="recentLoading"
+        :error="recentError"
+        :stacked="bookmark.isMobile || bookmark.isTablet"
+        :mobile="bookmark.isMobile"
+        :filter="recentFilter"
+        :filtered-total="recentFilteredTotal"
+        @retry="loadRecent"
+        @view-users="go('userMg')"
+        @filter-change="changeRecentFilter"
+      />
+    </div>
   </AdminDataPage>
 </template>
 
 <script lang="ts" setup>
-  import { ref, computed, onMounted } from 'vue';
+  import { ref, computed, nextTick, onMounted } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { apiBasePost } from '@/http/request.ts';
   import router from '@/router';
   import { bookmarkStore } from '@/store';
   import AdminGrowthTrendCard from './AdminGrowthTrendCard.vue';
   import AdminRecentAdditions from './AdminRecentAdditions.vue';
-  import type { AdminRecentData } from './adminRecentTypes.ts';
+  import {
+    buildAdminTodayInsights,
+    type AdminTodayBaseline,
+    type AdminTodayInsight,
+    type AdminTodayMetricKey,
+  } from './adminTodayInsights.ts';
+  import type { AdminRecentData, AdminRecentFilter, AdminRecentFilterType } from './adminRecentTypes.ts';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { scrollIntoContainer } from '@/utils/zoom.ts';
 
   const bookmark = bookmarkStore();
+  const { t } = useI18n();
   const data = ref<any>(null);
   const hideInternal = ref(true);
   const loading = ref(false);
@@ -213,7 +275,9 @@
   const recentData = ref<AdminRecentData | null>(null);
   const recentLoading = ref(false);
   const recentError = ref(false);
-  const recentScope = ref<boolean | null>(null);
+  const recentScope = ref<string | null>(null);
+  const recentFilter = ref<AdminRecentFilter>({ period: 'recent', type: 'all' });
+  const recentAnchor = ref<HTMLElement | null>(null);
   const trendDays = ref('7');
   const trendOptions = [
     { key: '7', label: '近 7 天' },
@@ -224,26 +288,104 @@
   const trendCache = new Map<string, any>();
   let trendRequestSequence = 0;
   let recentRequestSequence = 0;
+  const todayResourceTotal = computed(() =>
+    data.value
+      ? Number(data.value.resources.bookmarkToday || 0) +
+        Number(data.value.resources.noteToday || 0) +
+        Number(data.value.resources.fileToday || 0)
+      : null,
+  );
+  const totalResourceTotal = computed(() =>
+    data.value
+      ? Number(data.value.resources.bookmarkTotal || 0) +
+        Number(data.value.resources.noteTotal || 0) +
+        Number(data.value.resources.fileTotal || 0)
+      : null,
+  );
+  const sameTimeCutoff = computed(() => {
+    const baseline = data.value?.todayBaseline as AdminTodayBaseline | undefined;
+    return baseline?.available && baseline.mode === 'same_elapsed_time' ? baseline.cutoffTime : '';
+  });
+  const todayInsights = computed(() =>
+    data.value
+      ? buildAdminTodayInsights(
+          {
+            users: Number(data.value.users.today || 0),
+            resources: Number(todayResourceTotal.value || 0),
+            bookmarks: Number(data.value.resources.bookmarkToday || 0),
+            notes: Number(data.value.resources.noteToday || 0),
+            files: Number(data.value.resources.fileToday || 0),
+            todos: Number(data.value.todos.createdToday || 0),
+          },
+          data.value.todayBaseline,
+        )
+      : [],
+  );
+  const recentFilteredTotal = computed(() => {
+    if (!data.value || recentFilter.value.period !== 'today') return null;
+    switch (recentFilter.value.type) {
+      case 'all':
+        return Number(data.value.users.today || 0) + Number(todayResourceTotal.value || 0);
+      case 'resource':
+        return Number(todayResourceTotal.value || 0);
+      case 'user':
+        return Number(data.value.users.today || 0);
+      case 'bookmark':
+        return Number(data.value.resources.bookmarkToday || 0);
+      case 'note':
+        return Number(data.value.resources.noteToday || 0);
+      case 'file':
+        return Number(data.value.resources.fileToday || 0);
+      default:
+        return null;
+    }
+  });
 
   const pageSubtitle = computed(() =>
-    data.value ? `全站累计规模与近期动态一览 · 更新于 ${data.value.generatedAt}` : '全站累计规模与近期动态一览',
+    data.value ? `今日运营、系统健康与趋势 · 更新于 ${data.value.generatedAt}` : '今日运营、系统健康与趋势',
   );
 
   const n = (v: any) => (v == null ? '—' : Number(v).toLocaleString());
-  const delta = (v: any) => (v == null ? '今日 —' : `今日 +${Number(v).toLocaleString()}`);
   const mb = (v: any) => {
     const m = Number(v || 0);
     return m >= 1024 ? `${(m / 1024).toFixed(2)} GB` : `${m} MB`;
   };
 
-  const pendingTotal = computed(() => (data.value ? data.value.pending.opinion + data.value.pending.security : 0));
-  const convRate = computed(() => {
-    const c = data.value?.conversion;
-    if (!c || !c.visitors) return 0;
-    return Math.round((c.registers / c.visitors) * 1000) / 10;
-  });
+  function baselineText(metric: AdminTodayMetricKey) {
+    const baseline = data.value?.todayBaseline as AdminTodayBaseline | undefined;
+    const values = baseline?.available ? baseline.metrics?.[metric] : null;
+    if (!values) return '';
+    return t('adminOverview.todayBaseline', {
+      yesterday: n(values.yesterday),
+      days: baseline?.sampleDays || 7,
+      average: n(values.average7d),
+    });
+  }
 
-  // 趋势双线迷你图:归一化到 viewBox 高度(顶部留 2、底部到 40)
+  function insightText(insight: AdminTodayInsight) {
+    const metric = t(`adminOverview.metric.${insight.focus || insight.metric}`);
+    const base =
+      insight.changePercent == null
+        ? t('adminOverview.insightFromZero', { metric, current: n(insight.current) })
+        : t('adminOverview.insightChange', {
+            metric,
+            direction: t(`adminOverview.direction.${insight.direction}`),
+            percent: insight.changePercent,
+            current: n(insight.current),
+            average: n(insight.average7d),
+          });
+    return insight.cause
+      ? `${base}${t('adminOverview.insightCause', { component: t(`adminOverview.metric.${insight.cause}`) })}`
+      : base;
+  }
+
+  const pendingTotal = computed(() => (data.value ? data.value.pending.opinion + data.value.pending.security : 0));
+  const insightRecentType: Record<NonNullable<AdminTodayInsight['focus']>, AdminRecentFilterType> = {
+    bookmarks: 'bookmark',
+    notes: 'note',
+    files: 'file',
+  };
+
   function go(id: string) {
     router.push(bookmark.isMobile ? `/${id}` : `/admin/${id}`);
   }
@@ -255,6 +397,14 @@
     });
   }
 
+  function openInsight(insight: AdminTodayInsight) {
+    if (insight.metric === 'users') {
+      go('conversion');
+      return;
+    }
+    void drillDownTodayRecent(insight.focus ? insightRecentType[insight.focus] : 'resource');
+  }
+
   async function load() {
     trendRequestSequence += 1;
     trendLoading.value = false;
@@ -264,14 +414,11 @@
       const res: any = await apiBasePost('/api/common/getAdminOverview', { hideInternal: hideInternal.value });
       if (res.status === 200) {
         data.value = res.data;
-        data.value.active.period = res.data.active?.week || 0;
-        data.value.active.periodDays = 7;
         trendCache.clear();
         trendCache.set(`${hideInternal.value}:7`, {
           trend: res.data.trend,
           days: 7,
           granularity: 'day',
-          activeUsers: res.data.active?.week || 0,
         });
         if (trendDays.value !== '7') await loadTrend();
       }
@@ -282,14 +429,17 @@
 
   async function loadRecent() {
     const hideInternalValue = hideInternal.value;
+    const filter = { ...recentFilter.value };
+    const scopeKey = `${hideInternalValue}:${filter.period}:${filter.type}`;
     const requestSequence = ++recentRequestSequence;
-    if (recentScope.value !== hideInternalValue) recentData.value = null;
-    recentScope.value = hideInternalValue;
+    if (recentScope.value !== scopeKey) recentData.value = null;
+    recentScope.value = scopeKey;
     recentLoading.value = true;
     recentError.value = false;
     try {
       const response: any = await apiBasePost('/api/common/getAdminOverviewRecent', {
         hideInternal: hideInternalValue,
+        ...filter,
       });
       if (requestSequence !== recentRequestSequence) return;
       if (response.status === 200) recentData.value = response.data;
@@ -301,6 +451,23 @@
     }
   }
 
+  function changeRecentFilter(filter: AdminRecentFilter) {
+    if (filter.period === recentFilter.value.period && filter.type === recentFilter.value.type) return;
+    recentFilter.value = filter;
+    void loadRecent();
+  }
+
+  async function drillDownTodayRecent(type: AdminRecentFilterType) {
+    recentFilter.value = { period: 'today', type };
+    void loadRecent();
+    await nextTick();
+    const target = recentAnchor.value;
+    const container = target?.closest<HTMLElement>('.admin-data-page__table');
+    if (!target || !container) return;
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    scrollIntoContainer(container, target, 8, reducedMotion ? 'auto' : 'smooth');
+  }
+
   async function loadTrend() {
     if (!data.value) return;
     const days = Number(trendDays.value);
@@ -309,8 +476,6 @@
     if (cached) {
       data.value.trend = cached.trend;
       data.value.trendPeriod = { days: cached.days, granularity: cached.granularity };
-      data.value.active.period = cached.activeUsers;
-      data.value.active.periodDays = cached.days;
       return;
     }
     const requestSequence = ++trendRequestSequence;
@@ -324,8 +489,6 @@
       trendCache.set(cacheKey, response.data);
       data.value.trend = response.data.trend;
       data.value.trendPeriod = { days: response.data.days, granularity: response.data.granularity };
-      data.value.active.period = response.data.activeUsers;
-      data.value.active.periodDays = response.data.days;
     } finally {
       if (requestSequence === trendRequestSequence) trendLoading.value = false;
     }
@@ -341,11 +504,111 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 13px;
     color: var(--text-color);
+    font-size: 13px;
     white-space: nowrap;
     cursor: pointer;
-    flex-shrink: 0;
+  }
+
+  .ov-today {
+    display: grid;
+    gap: 10px;
+  }
+  .ov-today__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .ov-today__header h3,
+  .ov-today__header p {
+    margin: 0;
+  }
+  .ov-today__header h3 {
+    color: var(--text-color);
+    font-size: 15px;
+  }
+  .ov-today__header p {
+    margin-top: 3px;
+    color: var(--sub-text-color);
+    font-size: 11px;
+  }
+  .ov-today__capacity {
+    display: grid;
+    flex: 0 1 340px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    width: min(100%, 340px);
+  }
+  .ov-today__capacity-item {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+
+    &.is-warning {
+      border-color: var(--warning-color);
+    }
+  }
+  .ov-today__capacity-label,
+  .ov-today__capacity-hint {
+    overflow-wrap: anywhere;
+    color: var(--sub-text-color);
+    font-size: 10px;
+  }
+  .ov-today__capacity-value {
+    overflow-wrap: anywhere;
+    color: var(--text-color);
+    font-size: 14px;
+    line-height: 1.25;
+  }
+  .ov-today__capacity-item.is-warning .ov-today__capacity-hint {
+    color: var(--warning-color);
+    font-weight: 600;
+  }
+  .ov-today__stat-card {
+    padding: 0;
+  }
+  .ov-today__stat-action.b_btn {
+    width: 100%;
+    height: 100%;
+    min-height: 118px;
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-direction: column;
+    padding: 12px 14px;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-color);
+    line-height: 1.35;
+    text-align: left;
+    white-space: normal;
+
+    &:hover {
+      background: var(--hover-background);
+    }
+  }
+  .ov-today__stat-link {
+    margin-top: auto;
+    padding-top: 7px;
+    color: var(--primary-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .ov-today__baseline {
+    display: block;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+    color: var(--desc-color);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .ov-today__stats,
+  .ov-health-stats {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .ov-loading {
@@ -394,7 +657,7 @@
     color: var(--text-color);
   }
   .ov-todo-icon {
-    font-size: 15px;
+    color: #d97706;
   }
   .ov-todo-text {
     font-weight: 600;
@@ -432,6 +695,57 @@
     }
   }
 
+  .ov-todo-center.b_btn {
+    margin-left: auto;
+    border-color: var(--warning-color);
+    background: var(--card-background);
+    color: var(--text-color);
+  }
+
+  .ov-insights {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--card-border-color);
+    border-left: 3px solid var(--primary-color);
+    border-radius: 10px;
+    background: var(--card-background);
+    color: var(--text-color);
+  }
+  .ov-insights__title {
+    flex: none;
+    padding-top: 5px;
+    font-size: 12px;
+  }
+  .ov-insights__list {
+    display: grid;
+    flex: 1;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .ov-insights__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+    color: var(--text-color);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+  .ov-insights__item.is-down {
+    color: var(--warning-color);
+    font-weight: 600;
+  }
+  .ov-insights__action.b_btn {
+    flex: none;
+    color: var(--primary-color);
+  }
+
   .ov-err {
     color: var(--danger-color) !important;
     font-weight: 600;
@@ -464,7 +778,36 @@
     font-size: 12px;
   }
 
+  .ov-recent-anchor {
+    min-width: 0;
+  }
+
   @media (max-width: 720px) {
+    .ov-today__stats,
+    .ov-health-stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .ov-today__header {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .ov-today__capacity {
+      flex-basis: auto;
+      width: 100%;
+    }
+    .ov-insights,
+    .ov-insights__item {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .ov-insights__title {
+      padding-top: 0;
+    }
+    .ov-insights__action.b_btn,
+    .ov-todo-center.b_btn {
+      align-self: flex-start;
+      margin-left: 0;
+    }
     .ov-trend-head {
       align-items: flex-start;
       flex-direction: column;
@@ -473,6 +816,13 @@
     .ov-trend-control {
       width: 100%;
       justify-content: space-between;
+    }
+  }
+
+  @media (min-width: 721px) and (max-width: 1024px) {
+    .ov-today__stats,
+    .ov-health-stats {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
 
@@ -491,36 +841,8 @@
     font-weight: 600;
   }
 
-  /* 卡片负责表面和高度，BButton 只负责交互。不再让按钮的默认 32px
-     高度与 admin-stat-card 竞争，否则标题、箭头和提示会溢出卡片。 */
-  .ov-link-card {
-    padding: 0;
-    overflow: hidden;
-    transition: border-color 0.15s;
-  }
-
-  .ov-link-card:hover,
-  .ov-link-card:focus-within {
-    border-color: var(--primary-color);
-  }
-
-  .ov-link-action {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: flex-start;
-    flex: 1;
-    width: 100%;
-    min-height: 100%;
-    height: auto !important;
-    padding: 12px 14px;
-    border: 0 !important;
-    border-radius: 11px;
-    background: transparent;
-    line-height: normal;
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    white-space: normal;
+  :global(html.light-note-mobile-rendering) .ov-todo,
+  :global(html.light-note-mobile-rendering) .ov-insights {
+    box-shadow: none;
   }
 </style>

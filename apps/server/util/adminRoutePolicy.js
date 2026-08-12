@@ -69,6 +69,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 
 declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteList'],
+  ['GET', '/note/image-thumbnail/:fileName'],
   ['POST', '/note/getNoteTreeFeatures'],
   ['POST', '/note/queryNoteTree'],
   ['POST', '/note/queryNoteBreadcrumb'],
@@ -138,6 +139,7 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'file', [
   ['POST', '/file/updateFile'],
   ['POST', '/file/preview/prepare'],
   ['POST', '/file/addFolder'],
+  ['POST', '/file/ensureFolder'],
   ['POST', '/file/associateFile'],
   ['POST', '/file/updateFolder'],
   ['POST', '/file/deleteFolder'],
@@ -319,9 +321,14 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/lottery'],
   ['GET', '/growth/recap'],
   ['GET', '/growth/claimable'],
+  ['GET', '/growth/preferences'],
   ['GET', '/growth/weekly'],
   ['GET', '/growth/points/log'],
   ['GET', '/growth/heatmap'],
+]);
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'growth_preferences', [
+  ['PUT', '/growth/preferences'],
+  ['POST', '/growth/recap/state'],
 ]);
 declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
   ['POST', '/growth/checkin'],
@@ -353,7 +360,6 @@ declare(ADMIN_POLICIES.AI_USE, 'agent', [
 declare(ADMIN_POLICIES.READ, 'agent', [
   ['POST', '/chat/conversations/list'],
   ['POST', '/chat/conversations/get'],
-  ['POST', '/chat/conversations/lineage'],
   ['POST', '/chat/conversations/messages/versions'],
   ['POST', '/chat/conversations/export'],
   ['POST', '/chat/conversations/note-targets'],
@@ -376,7 +382,6 @@ declare(ADMIN_POLICIES.AI_STATE_WRITE, 'agent', [
   ['POST', '/chat/conversations/clear-all-data'],
   ['POST', '/chat/conversations/messages/save'],
   ['POST', '/chat/conversations/messages/version-group'],
-  ['POST', '/chat/conversations/branch'],
   ['POST', '/chat/conversations/feedback'],
   ['POST', '/chat/conversations/reuse-note/prepare'],
   ['POST', '/chat/change-sets/create'],
@@ -416,14 +421,17 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/user/admin/detail'],
   // 管理员私有备注只能在普通 Root 管理会话中维护，不能借目标用户代管上下文读写。
   ['POST', '/user/admin/remark'],
+  ['POST', '/user/admin/update'],
+  ['POST', '/user/admin/disable'],
+  ['POST', '/user/admin/restore'],
   ['POST', '/common/getApiLogs'],
-  ['GET', '/common/clearApiLogs'],
+  ['POST', '/common/clearApiLogs'],
   ['POST', '/common/getConversionFunnel'],
   ['POST', '/common/getOperationLogs'],
   ['POST', '/common/getLogExclude'],
   ['POST', '/common/addLogExclude'],
   ['POST', '/common/removeLogExclude'],
-  ['GET', '/common/clearOperationLogs'],
+  ['POST', '/common/clearOperationLogs'],
   ['POST', '/common/getIpLogStats'],
   ['POST', '/common/clearLogsByIp'],
   ['POST', '/resource-governance/scans'],
@@ -564,6 +572,9 @@ function resolvePolicy(method, path) {
   }
   if (/^\/updateLog\/image\/[^/]+\/[^/]+$/.test(path)) {
     return routePolicies.get(`${method} /updateLog/image/:logId/:fileName`);
+  }
+  if (/^\/note\/image-thumbnail\/[^/]+$/.test(path)) {
+    return routePolicies.get(`${method} /note/image-thumbnail/:fileName`);
   }
   if (/^\/resource-governance\/(?:scans|findings|jobs)\/[^/]+$/.test(path)) {
     const resource = path.split('/')[2];

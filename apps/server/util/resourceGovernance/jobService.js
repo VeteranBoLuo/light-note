@@ -6,6 +6,7 @@ import { stableAgentErrorCode } from '../agent/logSafety.js';
 import { canCreateCleanupJob, resourceGovernanceCleanupEnabled } from './registry.js';
 import { evidenceHash, hasAnyLocalImageReference, inspectLocalImage, parseJson } from './safety.js';
 import { recordGovernanceAudit } from './scanService.js';
+import { deleteNoteImageThumbnail } from '../noteImageThumbnail.js';
 
 const TOKEN_TTL_MS = 5 * 60 * 1000;
 const CLEANUP_LEASE_MINUTES = 5;
@@ -319,6 +320,7 @@ async function executeCleanupItem(job, item, db) {
     return { status: 'skipped_referenced', resultCode: 'IMAGE_REFERENCED', releasedBytes: 0 };
   }
   try {
+    await deleteNoteImageThumbnail(`https://boluo66.top/uploads/${inspection.fileName}`).catch(() => false);
     await fsP.unlink(inspection.filePath);
   } catch (error) {
     if (error?.code === 'ENOENT') {

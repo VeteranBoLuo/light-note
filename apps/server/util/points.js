@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
+import { finishAdminAction } from './adminActionExecution.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -518,18 +519,61 @@ export async function getStorageBonus(userId) {
 // ============================================================================
 
 // 用户积分流水(分页,新→旧)。reason 原样返回,前端按类型映射文案。
-export async function getPointsLog(userId, { limit = 30, offset = 0 } = {}) {
-  const lim = Math.min(100, Math.max(1, Number(limit) || 30));
-  const off = Math.max(0, Number(offset) || 0); // lim/off 已 clamp 为整数,直接内插避免 LIMIT 占位符类型坑
+function encodePointsCursor(id) {
+  return Buffer.from(JSON.stringify({ id: Number(id) }), 'utf8').toString('base64url');
+}
+
+function decodePointsCursor(cursor) {
+  if (!cursor) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(String(cursor), 'base64url').toString('utf8'));
+    const id = Number(parsed?.id);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+function pointsLogFilterSql(filter) {
+  if (filter === 'earned') return "delta > 0 AND reason NOT LIKE 'lottery_%' AND reason NOT LIKE '%admin%'";
+  if (filter === 'spent') return "delta < 0 AND reason NOT LIKE 'lottery_%' AND reason NOT LIKE '%admin%'";
+  if (filter === 'lottery') return "reason LIKE 'lottery_%'";
+  if (filter === 'system') return "reason LIKE '%admin%'";
+  return '1 = 1';
+}
+
+export async function getPointsLog(userId, { limit = 30, offset = 0, cursor = null, filter = 'all' } = {}) {
+  const lim = Math.min(100, Math.max(1, Math.trunc(Number(limit) || 30)));
+  const off = Math.max(0, Math.trunc(Number(offset) || 0)); // lim/off 已 clamp 为整数,直接内插避免 LIMIT 占位符类型坑
+  const cursorId = decodePointsCursor(cursor);
+  const normalizedFilter = ['all', 'earned', 'spent', 'lottery', 'system'].includes(filter) ? filter : 'all';
+  const filterSql = pointsLogFilterSql(normalizedFilter);
+  const cursorSql = cursorId ? 'AND id < ?' : '';
+  const pagingSql = cursorId ? '' : `OFFSET ${off}`;
   // 排除 ach_unlock:那是成就"永久解锁"的内部标记(delta=0),非积分流水,不该出现在用户明细里
-  const [rows] = await pool.query(
-    `SELECT delta, reason, ref, create_time FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock' ORDER BY id DESC LIMIT ${lim} OFFSET ${off}`,
+  const [rawRows] = await pool.query(
+    `SELECT id, delta, reason, ref, create_time
+       FROM points_log
+      WHERE user_id = ? AND reason <> 'ach_unlock' AND ${filterSql} ${cursorSql}
+      ORDER BY id DESC LIMIT ${lim + 1} ${pagingSql}`,
+    cursorId ? [userId, cursorId] : [userId],
+  );
+  const [[c]] = await pool.query(
+    `SELECT COUNT(*) AS c FROM points_log
+      WHERE user_id = ? AND reason <> 'ach_unlock' AND ${filterSql}`,
     [userId],
   );
-  const [[c]] = await pool.query("SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason <> 'ach_unlock'", [
-    userId,
-  ]);
-  return { rows: rows.map(enrichPointsLogRow), total: Number(c.c || 0), limit: lim, offset: off };
+  const hasMore = rawRows.length > lim;
+  const rows = rawRows.slice(0, lim);
+  return {
+    rows: rows.map(enrichPointsLogRow),
+    total: Number(c.c || 0),
+    limit: lim,
+    offset: off,
+    filter: normalizedFilter,
+    hasMore,
+    nextCursor: hasMore && rows.length ? encodePointsCursor(rows[rows.length - 1].id) : null,
+  };
 }
 
 function enrichPointsLogRow(row) {
@@ -634,7 +678,11 @@ export class AdminPointsError extends Error {
 }
 
 // 运营手动发放/扣减(root):目标校验、余额边界、资产更新与审计流水必须在同一事务。
-export async function adminGrantPoints(userId, { points = 0, cards = 0, storageMb = 0, note = '' } = {}) {
+export async function adminGrantPoints(
+  userId,
+  { points = 0, cards = 0, storageMb = 0, note = '' } = {},
+  { actionContext = null } = {},
+) {
   const p = Math.trunc(Number(points) || 0);
   const s = Math.trunc(Number(storageMb) || 0);
   const c = Math.trunc(Number(cards) || 0);
@@ -688,6 +736,20 @@ export async function adminGrantPoints(userId, { points = 0, cards = 0, storageM
         WHERE user_id = ?`,
       [nextPoints, nextStorage, nextCards, String(userId).trim()],
     );
+    const receipt = actionContext
+      ? await finishAdminAction(actionContext, {
+          outcome: 'succeeded',
+          metadata: {
+            pointsDelta: p,
+            storageMbDelta: s,
+            cardsDelta: c,
+            resultingPoints: nextPoints,
+            resultingStorageMb: nextStorage,
+            resultingCards: nextCards,
+          },
+          db: conn,
+        })
+      : {};
     await conn.commit();
     return {
       ok: true,
@@ -695,6 +757,7 @@ export async function adminGrantPoints(userId, { points = 0, cards = 0, storageM
       storageBonusMb: nextStorage,
       cards: nextCards,
       user: { userId: users[0].id, alias: users[0].alias || null, email: users[0].email || null },
+      ...receipt,
     };
   } catch (error) {
     try {
@@ -732,10 +795,26 @@ export async function getUserPointsDetail(userId) {
 
 async function getClaimedAchievementFrameIds(userId, conn = pool) {
   if (!userId) return [];
-  const [rows] = await conn.query("SELECT DISTINCT ref FROM points_log WHERE user_id = ? AND reason = 'achievement'", [
-    userId,
-  ]);
-  const claimedKeys = new Set(rows.map((row) => row.ref).filter(Boolean));
+  let achievementRows = [];
+  try {
+    [achievementRows] = await conn.query(
+      `SELECT achievement_key AS achievementKey
+         FROM user_achievements WHERE user_id = ? AND claimed_at IS NOT NULL`,
+      [userId],
+    );
+  } catch (error) {
+    // 滚动更新的短窗期内旧库可能尚未创建独立成就表；GET 仍只读回退到旧账本。
+    if (error?.code !== 'ER_NO_SUCH_TABLE') throw error;
+  }
+  // 两张历史表的 collation 可能不同，分别读取后在 JS 合并，避免 SQL UNION 直接 500。
+  const [legacyRows] = await conn.query(
+    `SELECT ref AS achievementKey
+       FROM points_log WHERE user_id = ? AND reason = 'achievement' AND ref IS NOT NULL`,
+    [userId],
+  );
+  const claimedKeys = new Set(
+    [...achievementRows, ...legacyRows].map((row) => row.achievementKey || row.ref).filter(Boolean),
+  );
   return FRAME_CATALOG.filter(
     (item) => item.acquisition === 'achievement' && item.achievementKey && claimedKeys.has(item.achievementKey),
   ).map((item) => item.id);
@@ -877,8 +956,14 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
     try {
       await conn.beginTransaction();
       const [claimed] = await conn.query(
-        "SELECT 1 FROM points_log WHERE user_id = ? AND reason = 'achievement' AND ref = ? LIMIT 1",
-        [userId, item.achievementKey],
+        `SELECT 1 FROM (
+           SELECT achievement_key FROM user_achievements
+            WHERE user_id = ? AND achievement_key = ? AND claimed_at IS NOT NULL
+           UNION
+           SELECT ref FROM points_log
+            WHERE user_id = ? AND reason = 'achievement' AND ref = ?
+         ) claimed LIMIT 1`,
+        [userId, item.achievementKey, userId, item.achievementKey],
       );
       if (!claimed.length) {
         await conn.rollback();

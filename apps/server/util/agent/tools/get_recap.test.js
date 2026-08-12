@@ -12,6 +12,9 @@ describe('get_recap', () => {
 
   it('一次返回本周、那年今日与尘封收藏，支撑真实的本周回顾', async () => {
     mocks.query
+      // 回顾与成长中心共用账号时区口径：先读偏好与数据库时区偏移。
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([[{ serverOffset: 0 }]])
       .mockResolvedValueOnce([
         [
           {
@@ -34,12 +37,13 @@ describe('get_recap', () => {
             create_time: '2025-01-01T00:00:00.000Z',
           },
         ],
-      ]);
+      ])
+      .mockResolvedValueOnce([[]]);
 
     const raw = await tool.execute({}, { userId: 'user-1' });
     const output = tool.transform(raw);
 
-    expect(mocks.query).toHaveBeenCalledTimes(3);
+    expect(mocks.query).toHaveBeenCalledTimes(6);
     expect(raw.weekly).toHaveLength(1);
     expect(output).toContain('最近 7 天新增内容');
     expect(output).toContain('本周笔记');

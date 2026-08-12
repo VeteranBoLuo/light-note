@@ -1,6 +1,7 @@
 import pool from '../db/index.js';
 import { levelForExp } from './growth.js';
 import { grantItem } from './items.js';
+import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
 
 // 积分抽奖·盲盒。纯积分消耗池(健康的积分出口):单抽 88 / 十连 800(省 80)。
 // 每 10 抽保底一次稀有(补签卡/AI包/存储);奖池期望值 < 单抽成本,长期是净消耗,但用稀有大奖制造惊喜。
@@ -10,6 +11,7 @@ import { grantItem } from './items.js';
 export const DRAW_COST = 88;
 export const TEN_DRAW_COST = 800;
 const PITY_EVERY = 10; // 每第 N 抽保底稀有
+export const MAKEUP_CARD_OVERFLOW_POINTS = 70;
 
 // 每日免费抽奖次数(随等级解锁):Lv1-2 无 → Lv3-5:1 → Lv6-9:2 → Lv10-14:3 → 满级:5。
 export function freeDrawsFor(level) {
@@ -24,13 +26,6 @@ export function freeDrawsFor(level) {
 // 据 exp + 角色解析等级(root 视为满级),供免费次数计算
 function levelOf(exp, userRole) {
   return userRole === 'root' ? 15 : levelForExp(Number(exp) || 0);
-}
-
-function dayKey(d = new Date()) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}${m}${day}`;
 }
 
 // 奖池:weight 为权重(相对值);tier=rare 的项参与保底。kind 决定发奖方式。
@@ -85,8 +80,29 @@ async function grantReward(conn, userId, prize) {
       userId,
     ]);
   } else if (prize.kind === 'card') {
-    // 补签卡:统一走 grantItem(上限 2;已满则本次不叠加,概率低可接受)
-    await grantItem(conn, userId, 'makeup_card', prize.amount);
+    const grant = (await grantItem(conn, userId, 'makeup_card', prize.amount)) || {};
+    if (Number(grant.overflowQty || 0) > 0) {
+      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
+        userId,
+        MAKEUP_CARD_OVERFLOW_POINTS,
+        'lottery_compensation',
+        'makeup_card_full',
+      ]);
+      await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [
+        MAKEUP_CARD_OVERFLOW_POINTS,
+        userId,
+      ]);
+      return {
+        id: prize.id,
+        kind: 'points',
+        amount: MAKEUP_CARD_OVERFLOW_POINTS,
+        name: `+${MAKEUP_CARD_OVERFLOW_POINTS} 积分`,
+        rare: true,
+        compensated: true,
+        compensationReason: 'makeup_card_full',
+        originalReward: { kind: prize.kind, amount: prize.amount },
+      };
+    }
   } else if (prize.kind === 'ai_pack') {
     await conn.query('UPDATE user_growth SET ai_bonus_tokens = ai_bonus_tokens + ? WHERE user_id = ?', [
       prize.amount,
@@ -106,7 +122,7 @@ async function grantReward(conn, userId, prize) {
  * 抽奖。times=1 单抽 / 10 十连。事务内:校验余额 → 扣分 → 逐抽(含保底)→ 发奖 → 累计次数。
  * @returns {{ok:boolean, reason?:string, msg?:string, cost?:number, points?:number, results?:Array}}
  */
-export async function drawLottery(userId, { times = 1, free = false, userRole = null } = {}) {
+export async function drawLottery(userId, { times = 1, free = false, userRole = null, calendar = null } = {}) {
   const n = free ? 1 : times >= 10 ? 10 : 1; // 免费仅单抽
   const conn = await pool.getConnection();
   try {
@@ -120,7 +136,9 @@ export async function drawLottery(userId, { times = 1, free = false, userRole = 
       await conn.rollback();
       return { ok: false, reason: 'no_growth', msg: '成长数据未初始化,先签到试试' };
     }
-    const today = dayKey();
+    // 免费次数与保底都按账号日历累计，避免用户跨时区时提前重置或延后一天。
+    const accountCalendar = free ? calendar || (await getGrowthCalendarContext(userId, { db: conn })) : calendar;
+    const today = accountCalendar?.dayKey || dayKeyAtOffset();
     let cost = free ? 0 : n === 10 ? TEN_DRAW_COST : DRAW_COST;
     if (free) {
       // 免费抽:校验今日剩余免费次数(随等级)
@@ -196,7 +214,7 @@ export async function drawLottery(userId, { times = 1, free = false, userRole = 
 }
 
 // 抽奖页初始数据:余额、成本、已抽次数、距下次保底、每日免费次数(随等级)、奖池(供前端公示概率)
-export async function getLotteryStatus(userId, { userRole = null } = {}) {
+export async function getLotteryStatus(userId, { userRole = null, calendar = null } = {}) {
   let points = 0;
   let count = 0;
   let exp = 0;
@@ -215,9 +233,12 @@ export async function getLotteryStatus(userId, { userRole = null } = {}) {
       freeUsed = Number(rows[0].lottery_free_used || 0);
     }
   }
+  const accountCalendar =
+    userId && userId !== 'visitor' ? calendar || (await getGrowthCalendarContext(userId)) : calendar;
+  const today = accountCalendar?.dayKey || dayKeyAtOffset();
   const level = levelOf(exp, userRole);
   const freeDaily = freeDrawsFor(level); // 当前等级每日免费次数
-  const usedToday = freeDay === dayKey() ? freeUsed : 0;
+  const usedToday = freeDay === today ? freeUsed : 0;
   const freeRemaining = Math.max(0, freeDaily - usedToday); // 今日剩余免费次数
   const toPity = (PITY_EVERY - (count % PITY_EVERY)) % PITY_EVERY || PITY_EVERY; // 距离下次保底还差几抽
   const prizes = LOTTERY_POOL.map((x) => ({
@@ -225,7 +246,9 @@ export async function getLotteryStatus(userId, { userRole = null } = {}) {
     kind: x.kind,
     amount: x.amount,
     name: x.name,
-    rate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2), // 百分比,公示用
+    rate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2), // 兼容旧前端
+    normalRate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2),
+    pityRate: x.tier === 'rare' ? +((x.weight / RARE_WEIGHT) * 100).toFixed(2) : 0,
     rare: x.tier === 'rare',
   }));
   return {
@@ -235,9 +258,16 @@ export async function getLotteryStatus(userId, { userRole = null } = {}) {
     singleCost: DRAW_COST,
     tenCost: TEN_DRAW_COST,
     pityEvery: PITY_EVERY,
+    pityCountsFreeDraws: true,
+    overflowPolicy: {
+      itemId: 'makeup_card',
+      maxInventory: 2,
+      compensationPoints: MAKEUP_CARD_OVERFLOW_POINTS,
+    },
     level,
     freeDaily,
     freeRemaining,
+    timezone: accountCalendar?.timezone || 'Asia/Shanghai',
     pool: prizes,
   };
 }

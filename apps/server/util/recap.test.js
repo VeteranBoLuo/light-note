@@ -30,14 +30,25 @@ describe('growth recap', () => {
       .mockResolvedValueOnce([
         [{ type: 'bookmark', id: 'b1', title: '旧书签', url: 'https://example.com', create_time: '2025-08-01' }],
       ])
+      .mockResolvedValueOnce([[]])
       .mockResolvedValueOnce([[]]);
 
-    await expect(getRecap('user-1')).resolves.toEqual({
+    await expect(
+      getRecap('user-1', {
+        calendar: { dayKey: '20260801', timezone: 'Asia/Shanghai', shiftMinutes: 0 },
+      }),
+    ).resolves.toEqual({
       weekly: [{ type: 'note', id: 'n1', title: '(无标题)', url: null, time: '2026-08-01' }],
       onThisDay: [{ type: 'bookmark', id: 'b1', title: '旧书签', url: 'https://example.com', time: '2025-08-01' }],
       buried: [],
+      stableDate: '2026-08-01',
+      timezone: 'Asia/Shanghai',
     });
-    expect(pool.query).toHaveBeenCalledTimes(3);
-    expect(pool.query.mock.calls.every(([, params]) => params[0] === 'user-1' && params[1] === 'user-1')).toBe(true);
+    expect(pool.query).toHaveBeenCalledTimes(4);
+    expect(pool.query.mock.calls.slice(0, 3).every(([, params]) => params[0] === 'user-1' && params[1] === 'user-1')).toBe(
+      true,
+    );
+    expect(pool.query.mock.calls[3][1]).toEqual(['user-1']);
+    expect(pool.query.mock.calls[2][0]).toContain("CRC32(CONCAT('2026-08-01'");
   });
 });

@@ -12,7 +12,9 @@
           :style="{ animationDelay: `${(r - 1) * 0.5}s` }"
         ></div>
 
-        <div v-if="tier >= 4" class="lvup-crown" :class="{ 'crown-gold': tier >= 5 }" aria-hidden="true">👑</div>
+        <div v-if="tier >= 4" class="lvup-crown" :class="{ 'crown-gold': tier >= 5 }" aria-hidden="true">
+          <SvgIcon :src="icon.growth.crown" size="31" />
+        </div>
 
         <div class="lvup-badge" :class="`tier-${tier}`">
           <span class="lvup-badge-shine"></span>
@@ -40,6 +42,8 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { tierOf } from '@/config/growthTier';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const props = defineProps<{ level: number; name: string }>();
   const emit = defineEmits<{ (e: 'close'): void }>();
@@ -179,7 +183,7 @@
     top: 58px;
     left: 50%;
     z-index: 3;
-    font-size: 30px;
+    color: #fff4c4;
     line-height: 1;
     filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
     animation: lvup-crown-in 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) 0.15s both;
@@ -418,5 +422,11 @@
     .lvup-crown {
       animation: none;
     }
+  }
+
+  :global(.disable-animations) .lvup-mask,
+  :global(.disable-animations) .lvup-stage * {
+    animation: none !important;
+    transition: none !important;
   }
 </style>

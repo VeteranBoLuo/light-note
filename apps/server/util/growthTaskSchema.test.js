@@ -9,15 +9,18 @@ import { GROWTH_TASK_DEFINITIONS } from './growthTaskCatalog.js';
 import { ensureGrowthTaskSchema } from './growthTaskSchema.js';
 
 describe('growthTaskSchema', () => {
-  it('定义四个可完成任务，且启动初始化会创建表、幂等种子并禁用退役任务', async () => {
-    expect(GROWTH_TASK_DEFINITIONS).toHaveLength(4);
+  it('定义七个无时限发现任务，且启动初始化会创建表、幂等种子并禁用退役任务', async () => {
+    expect(GROWTH_TASK_DEFINITIONS).toHaveLength(7);
     expect(GROWTH_TASK_DEFINITIONS.map((task) => task.taskKey)).toEqual([
       'profile_avatar',
       'first_note',
       'first_bookmark',
       'first_todo',
+      'first_file',
+      'first_organize',
+      'first_reuse',
     ]);
-    expect(GROWTH_TASK_DEFINITIONS.map((task) => task.rewardExp)).toEqual([50, 50, 30, 30]);
+    expect(GROWTH_TASK_DEFINITIONS.map((task) => task.rewardExp)).toEqual([50, 50, 30, 30, 30, 40, 50]);
 
     pool.query
       .mockResolvedValueOnce([[{ tableCount: 1 }], []])
@@ -37,6 +40,9 @@ describe('growthTaskSchema', () => {
     expect(pool.query.mock.calls[5][0]).toContain('SET claimed_at = COALESCE');
     expect(pool.query.mock.calls[6][0]).toContain('ON DUPLICATE KEY UPDATE');
     expect(pool.query.mock.calls[6][1]).not.toContain('growth.tasks.firstReview.title');
+    expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstFile.title');
+    expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstOrganize.title');
+    expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstReuse.title');
     expect(pool.query.mock.calls[7]).toEqual([
       expect.stringContaining('UPDATE growth_tasks SET enabled = 0'),
       ['first_review'],

@@ -37,6 +37,33 @@ export const GROWTH_TASK_DEFINITIONS = Object.freeze([
     enabled: true,
     sortOrder: 40,
   }),
+  Object.freeze({
+    id: 'growth-task-first-file',
+    taskKey: 'first_file',
+    titleKey: 'growth.tasks.firstFile.title',
+    descriptionKey: 'growth.tasks.firstFile.description',
+    rewardExp: 30,
+    enabled: true,
+    sortOrder: 50,
+  }),
+  Object.freeze({
+    id: 'growth-task-first-organize',
+    taskKey: 'first_organize',
+    titleKey: 'growth.tasks.firstOrganize.title',
+    descriptionKey: 'growth.tasks.firstOrganize.description',
+    rewardExp: 40,
+    enabled: true,
+    sortOrder: 60,
+  }),
+  Object.freeze({
+    id: 'growth-task-first-reuse',
+    taskKey: 'first_reuse',
+    titleKey: 'growth.tasks.firstReuse.title',
+    descriptionKey: 'growth.tasks.firstReuse.description',
+    rewardExp: 50,
+    enabled: true,
+    sortOrder: 70,
+  }),
 ]);
 
 // 已下线任务只用于把既有数据库定义置为禁用；历史完成状态与已发经验保留，不做回收。

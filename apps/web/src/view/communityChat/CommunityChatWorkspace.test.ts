@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
 import workspaceSource from './CommunityChatWorkspace.vue?raw';
+import { clearCommunityChatDraftMemory } from '@/composables/useCommunityChatDraftMemory';
 
 const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
@@ -266,6 +267,7 @@ async function mountWorkspace(options: { rooms?: any[]; access?: any } = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearCommunityChatDraftMemory();
   mocks.bookmark.authModalTab = '登录';
   mocks.bookmark.authModalSource = '';
   mocks.bookmark.isShowLogin = false;
@@ -693,6 +695,108 @@ describe('CommunityChatWorkspace', () => {
     expect(messageList.scrollTop).toBe(1000);
     expect(host.querySelector('.community-message-list__new')).toBeNull();
     expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-2');
+  });
+
+  it('仅切换模块导致组件重建时恢复当前账号与频道的未发送草稿', async () => {
+    const firstHost = await mountWorkspace();
+    const firstTextarea = firstHost.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
+    expect(firstTextarea).not.toBeNull();
+    if (!firstTextarea) return;
+    firstTextarea.value = '切到资料模块后还要继续输入';
+    firstTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flushAsync();
+
+    cleanup?.();
+    cleanup = undefined;
+    const secondHost = await mountWorkspace();
+    const secondTextarea = secondHost.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
+    expect(secondTextarea?.value).toBe('切到资料模块后还要继续输入');
+  });
+
+  it('PC 上滑一小段显示回到底部，移动端需要更大的离底距离', async () => {
+    const desktopHost = await mountWorkspace();
+    const desktopList = desktopHost.querySelector<HTMLElement>('.community-message-list');
+    expect(desktopList).not.toBeNull();
+    if (!desktopList) return;
+    Object.defineProperties(desktopList, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 450 },
+    });
+    desktopList.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    const desktopButton = desktopHost.querySelector<HTMLButtonElement>('.community-message-list__new');
+    expect(desktopButton?.textContent).toContain('回到底部');
+    desktopButton?.click();
+    await flushAsync();
+    expect(desktopList.scrollTop).toBe(1000);
+
+    cleanup?.();
+    cleanup = undefined;
+    mocks.bookmark.isMobile = true;
+    const mobileHost = await mountWorkspace();
+    const mobileList = mobileHost.querySelector<HTMLElement>('.community-message-list');
+    expect(mobileList).not.toBeNull();
+    if (!mobileList) return;
+    Object.defineProperties(mobileList, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 360 },
+    });
+    mobileList.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    expect(mobileHost.querySelector('.community-message-list__new')).toBeNull();
+    mobileList.scrollTop = 260;
+    mobileList.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    expect(mobileHost.querySelector('.community-message-list__new')?.textContent).toContain('回到底部');
+  });
+
+  it('移动端键盘改变消息区高度时只为正在浏览最新消息的用户保持底部锚定', async () => {
+    let resizeCallback: ResizeObserverCallback | null = null;
+    class KeyboardResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal('ResizeObserver', KeyboardResizeObserver);
+    mocks.bookmark.isMobile = true;
+    const host = await mountWorkspace();
+    const list = host.querySelector<HTMLElement>('.community-message-list');
+    const textarea = host.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
+    expect(list).not.toBeNull();
+    expect(textarea).not.toBeNull();
+    if (!list || !textarea || !resizeCallback) return;
+
+    Object.defineProperties(list, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 600 },
+    });
+    textarea.focus();
+    await flushAsync();
+    list.scrollTop = 540;
+    resizeCallback([], {} as ResizeObserver);
+    await flushAnimationFrame();
+    expect(list.scrollTop).toBe(1000);
+
+    list.dispatchEvent(new Event('touchmove'));
+    list.scrollTop = 500;
+    resizeCallback([], {} as ResizeObserver);
+    await flushAnimationFrame();
+    expect(list.scrollTop).toBe(500);
+
+    textarea.blur();
+    await flushAsync();
+    list.scrollTop = 240;
+    textarea.focus();
+    await flushAsync();
+    resizeCallback([], {} as ResizeObserver);
+    await flushAnimationFrame();
+    expect(list.scrollTop).toBe(240);
   });
 
   it('首屏只取最新 30 条，上滑接近顶部时用游标自动加载更早消息', async () => {

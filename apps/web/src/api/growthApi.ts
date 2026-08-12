@@ -1,4 +1,4 @@
-import { apiBaseGet, apiBasePost } from '@/http/request.ts';
+import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request.ts';
 
 // 读当前用户成长快照(游客返回 Lv.1 默认;root 满级)
 export const getMyGrowth = () => apiBaseGet('/api/growth/me');
@@ -34,6 +34,9 @@ export const adminAdjustGrowth = (payload: {
   expDelta?: number;
   setLevel?: number | null;
   cardDelta?: number;
+  reason: string;
+  confirmed: true;
+  confirmText: string;
 }) => apiBasePost('/api/growth/admin/adjust', payload);
 
 // 标记升级通知已读(查看成长页后)
@@ -66,6 +69,24 @@ export const claimAchievement = (key: string) => apiBasePost('/api/growth/achiev
 
 // 那年今日 · 智能回顾
 export const getRecap = () => apiBaseGet('/api/growth/recap');
+export const updateRecapState = (payload: { type: 'bookmark' | 'note'; id: string; action: 'snooze_7d' | 'dismiss' }) =>
+  apiBasePost('/api/growth/recap/state', payload);
+
+export const getClaimable = () => apiBaseGet('/api/growth/claimable');
+export const claimAll = (payload?: {
+  scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly'>;
+  keys?: Partial<Record<'daily' | 'growthTasks' | 'achievements' | 'weekly', string[]>>;
+}) => apiBasePost('/api/growth/claimAll', payload || {});
+
+export const getGrowthPreferences = () => apiBaseGet('/api/growth/preferences');
+export const updateGrowthPreferences = (payload: {
+  weeklyActiveTarget?: 0 | 3 | 5 | 7;
+  streakReminderEnabled?: boolean;
+  celebrationEnabled?: boolean;
+  lowPressureMode?: boolean;
+  timezone?: string;
+  utcOffsetMinutes?: number;
+}) => apiBasePut('/api/growth/preferences', payload);
 
 // 知识活动热力图(贡献格子);year 可选,默认当前年
 export const getHeatmap = (year?: number) =>
@@ -76,8 +97,15 @@ export const getWeekly = () => apiBaseGet('/api/growth/weekly');
 export const claimWeekly = (key: string) => apiBasePost('/api/growth/weekly/claim', { key });
 
 // 积分明细(分页)
-export const getPointsLog = (limit = 30, offset = 0) =>
-  apiBaseGet(`/api/growth/points/log?limit=${limit}&offset=${offset}`);
+export const getPointsLog = (
+  limit = 30,
+  options: { offset?: number; cursor?: string | null; filter?: 'all' | 'earned' | 'spent' | 'lottery' | 'system' } = {},
+) => {
+  const query = new URLSearchParams({ limit: String(limit), filter: options.filter || 'all' });
+  if (options.cursor) query.set('cursor', options.cursor);
+  else if (options.offset) query.set('offset', String(options.offset));
+  return apiBaseGet(`/api/growth/points/log?${query.toString()}`);
+};
 
 // —— root 积分运营 ——
 export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
@@ -90,6 +118,9 @@ export const adminGrantPoints = (payload: {
   cards?: number;
   storageMb?: number;
   note?: string;
+  reason: string;
+  confirmed: true;
+  confirmText: string;
 }) => apiBasePost('/api/growth/admin/grantPoints', payload);
 
 export default {
@@ -115,6 +146,11 @@ export default {
   drawLottery,
   claimAchievement,
   getRecap,
+  updateRecapState,
+  getClaimable,
+  claimAll,
+  getGrowthPreferences,
+  updateGrowthPreferences,
   getHeatmap,
   getWeekly,
   claimWeekly,

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import AdminRecentAdditions from './AdminRecentAdditions.vue';
-import type { AdminRecentData } from './adminRecentTypes.ts';
+import type { AdminRecentData, AdminRecentFilter } from './adminRecentTypes.ts';
 
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
@@ -16,9 +16,16 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 let cleanup: (() => void) | undefined;
 
-function mountRecent(options: { data: AdminRecentData | null; loading?: boolean; error?: boolean }) {
+function mountRecent(options: {
+  data: AdminRecentData | null;
+  loading?: boolean;
+  error?: boolean;
+  filter?: AdminRecentFilter;
+  filteredTotal?: number | null;
+}) {
   const onRetry = vi.fn();
   const onViewUsers = vi.fn();
+  const onFilterChange = vi.fn();
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -27,6 +34,7 @@ function mountRecent(options: { data: AdminRecentData | null; loading?: boolean;
         ...options,
         onRetry,
         onViewUsers,
+        onFilterChange,
       }),
   });
   app.mount(host);
@@ -34,7 +42,7 @@ function mountRecent(options: { data: AdminRecentData | null; loading?: boolean;
     app.unmount();
     host.remove();
   };
-  return { host, onRetry, onViewUsers };
+  return { host, onRetry, onViewUsers, onFilterChange };
 }
 
 afterEach(() => {
@@ -113,6 +121,52 @@ describe('AdminRecentAdditions', () => {
     expect(lists).toHaveLength(2);
     expect(lists[0].children).toHaveLength(20);
     expect(lists[1].children).toHaveLength(20);
+  });
+
+  it('今日用户筛选只展示用户明细，并说明权威总数与展示上限', async () => {
+    const data: AdminRecentData = {
+      recentResources: [],
+      recentUsers: [
+        {
+          id: 'user-today',
+          name: '今日用户',
+          role: 'user',
+          createdAt: '2026-08-12T01:00:00.000Z',
+        },
+      ],
+      limit: 20,
+    };
+    const { host } = mountRecent({
+      data,
+      filter: { period: 'today', type: 'user' },
+      filteredTotal: 4,
+    });
+    await nextTick();
+
+    expect(host.querySelectorAll('.admin-recent__card')).toHaveLength(1);
+    expect(host.querySelector('.admin-recent__card--resources')).toBeNull();
+    expect(host.querySelector('.admin-recent__card--users')).not.toBeNull();
+    expect(host.textContent).toContain('adminOverviewRecent.todaySubtitleWithTotal');
+    expect(host.textContent).toContain('adminOverviewRecent.filteredTitle.todayUsers');
+    expect(host.querySelectorAll('.admin-recent__filter')).toHaveLength(2);
+  });
+
+  it('筛选控件通过统一事件切换时间范围', async () => {
+    const { host, onFilterChange } = mountRecent({
+      data: { recentResources: [], recentUsers: [] },
+      filter: { period: 'recent', type: 'all' },
+    });
+    await nextTick();
+
+    (host.querySelector('.admin-recent__filter--period .select-trigger') as HTMLElement).click();
+    await nextTick();
+    const visibleDropdown = Array.from(document.body.querySelectorAll<HTMLElement>('.select-dropdown')).find(
+      (element) => element.style.display !== 'none',
+    );
+    (visibleDropdown?.querySelectorAll<HTMLElement>('.select-option')[1] as HTMLElement).click();
+    await nextTick();
+
+    expect(onFilterChange).toHaveBeenCalledWith({ period: 'today', type: 'all' });
   });
 
   it('加载失败时提供重试动作', async () => {

@@ -1,7 +1,7 @@
 <template>
   <div class="dq">
     <div class="dq-head">
-      <span class="dq-title">{{ t('growth.dashTasks') }}</span>
+      <span class="dq-title-wrap"><span class="dq-title">{{ t('growth.dashTasks') }}</span><small>{{ t('growth.dailyResetTime') }}</small></span>
       <span class="dq-count" :class="{ allDone }">{{ doneCount }}/{{ quests.length }}</span>
     </div>
     <div class="dq-list">
@@ -14,6 +14,15 @@
           <span v-if="q.random" class="dq-random">{{ t('growth.questRandomTag') }}</span>
         </span>
         <span v-if="q.target && !q.done" class="dq-prog">{{ q.cur ?? 0 }}/{{ q.target }}</span>
+        <BButton
+          v-if="!q.done && q.key !== 'checkin' && !readOnly"
+          size="small"
+          class="dq-go"
+          v-click-log="{ module: '成长', operation: `前往日常任务-${q.key}` }"
+          @click="$emit('go', q.key)"
+        >
+          {{ t('growth.tasksGoTo') }}
+        </BButton>
         <span v-else-if="q.done" class="dq-tag">{{ t('growth.questDone') }}</span>
       </div>
     </div>
@@ -145,7 +154,7 @@
       dailyCapReached: false,
     },
   );
-  defineEmits<{ (e: 'claim'): void }>();
+  defineEmits<{ (e: 'claim'): void; (e: 'go', key: string): void }>();
   const { t, te } = useI18n();
 
   const QUEST_LABEL_KEYS: Record<string, string> = {
@@ -222,6 +231,9 @@
     font-size: 14px;
     font-weight: 700;
   }
+  .dq-title-wrap { display: flex; flex-direction: column; }
+  .dq-title-wrap small { margin-top: 2px; color: var(--primary-color); font-size: 10.5px; font-weight: 500; }
+  .dq-go { flex: 0 0 auto; color: var(--primary-color); }
   .dq-count {
     font-size: 12px;
     font-weight: 600;

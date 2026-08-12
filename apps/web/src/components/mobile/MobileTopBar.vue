@@ -26,10 +26,10 @@
         v-if="equippedFrameId"
         :frame-id="equippedFrameId"
         :src="profileAvatarSource"
-        :size="28"
+        :size="32"
         aria-hidden="true"
       />
-      <SvgIcon v-else class="mobile-top-bar__profile-avatar" :src="profileAvatarSource" size="32" aria-hidden="true" />
+      <SvgIcon v-else class="mobile-top-bar__profile-avatar" :src="profileAvatarSource" size="36" aria-hidden="true" />
       <span
         v-if="profileAttentionLabel"
         class="mobile-top-bar__profile-dot"

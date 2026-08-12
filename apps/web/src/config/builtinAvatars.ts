@@ -1,4 +1,5 @@
 import avatarSpriteUrl from '@/assets/img/light-note-avatar-sprite-v2.webp';
+import avatarVarietySpriteUrl from '@/assets/img/light-note-avatar-sprite-variety-v1.webp';
 
 const AVATAR_GRID_SIZE = 3;
 const AVATAR_OUTPUT_SIZE = 256;
@@ -14,10 +15,27 @@ export type BuiltinAvatarId =
   | 'galaxy-observatory'
   | 'ink-pavilion'
   | 'aurora-whale'
-  | 'card-robot';
+  | 'card-robot'
+  | 'capybara-notes'
+  | 'red-panda-bookmark'
+  | 'sprout-astronaut'
+  | 'mountain-fox'
+  | 'tea-journal-spirit'
+  | 'library-mushroom'
+  | 'pixel-owl'
+  | 'porcelain-rabbit'
+  | 'sunflower-turntable';
+
+type BuiltinAvatarSprite = 'classic' | 'variety';
+
+const AVATAR_SPRITE_URLS: Record<BuiltinAvatarSprite, string> = {
+  classic: avatarSpriteUrl,
+  variety: avatarVarietySpriteUrl,
+};
 
 export interface BuiltinAvatar {
   id: BuiltinAvatarId;
+  sprite: BuiltinAvatarSprite;
   row: number;
   column: number;
   nameKey: string;
@@ -27,6 +45,7 @@ export interface BuiltinAvatar {
 export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   {
     id: 'pineapple-scribe',
+    sprite: 'classic',
     row: 0,
     column: 0,
     nameKey: 'myInfo.builtinAvatarNames.pineappleScribe',
@@ -34,6 +53,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'moon-reader',
+    sprite: 'classic',
     row: 0,
     column: 1,
     nameKey: 'myInfo.builtinAvatarNames.moonReader',
@@ -41,6 +61,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'paper-crane',
+    sprite: 'classic',
     row: 0,
     column: 2,
     nameKey: 'myInfo.builtinAvatarNames.paperCrane',
@@ -48,6 +69,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'cloud-archive',
+    sprite: 'classic',
     row: 1,
     column: 0,
     nameKey: 'myInfo.builtinAvatarNames.cloudArchive',
@@ -55,6 +77,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'koi-lotus',
+    sprite: 'classic',
     row: 1,
     column: 1,
     nameKey: 'myInfo.builtinAvatarNames.koiLotus',
@@ -62,6 +85,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'galaxy-observatory',
+    sprite: 'classic',
     row: 1,
     column: 2,
     nameKey: 'myInfo.builtinAvatarNames.galaxyObservatory',
@@ -69,6 +93,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'ink-pavilion',
+    sprite: 'classic',
     row: 2,
     column: 0,
     nameKey: 'myInfo.builtinAvatarNames.inkPavilion',
@@ -76,6 +101,7 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'aurora-whale',
+    sprite: 'classic',
     row: 2,
     column: 1,
     nameKey: 'myInfo.builtinAvatarNames.auroraWhale',
@@ -83,10 +109,83 @@ export const BUILTIN_AVATARS: readonly BuiltinAvatar[] = [
   },
   {
     id: 'card-robot',
+    sprite: 'classic',
     row: 2,
     column: 2,
     nameKey: 'myInfo.builtinAvatarNames.cardRobot',
     descriptionKey: 'myInfo.builtinAvatarDescriptions.cardRobot',
+  },
+  {
+    id: 'capybara-notes',
+    sprite: 'variety',
+    row: 0,
+    column: 0,
+    nameKey: 'myInfo.builtinAvatarNames.capybaraNotes',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.capybaraNotes',
+  },
+  {
+    id: 'red-panda-bookmark',
+    sprite: 'variety',
+    row: 0,
+    column: 1,
+    nameKey: 'myInfo.builtinAvatarNames.redPandaBookmark',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.redPandaBookmark',
+  },
+  {
+    id: 'sprout-astronaut',
+    sprite: 'variety',
+    row: 0,
+    column: 2,
+    nameKey: 'myInfo.builtinAvatarNames.sproutAstronaut',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.sproutAstronaut',
+  },
+  {
+    id: 'mountain-fox',
+    sprite: 'variety',
+    row: 1,
+    column: 0,
+    nameKey: 'myInfo.builtinAvatarNames.mountainFox',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.mountainFox',
+  },
+  {
+    id: 'tea-journal-spirit',
+    sprite: 'variety',
+    row: 1,
+    column: 1,
+    nameKey: 'myInfo.builtinAvatarNames.teaJournalSpirit',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.teaJournalSpirit',
+  },
+  {
+    id: 'library-mushroom',
+    sprite: 'variety',
+    row: 1,
+    column: 2,
+    nameKey: 'myInfo.builtinAvatarNames.libraryMushroom',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.libraryMushroom',
+  },
+  {
+    id: 'pixel-owl',
+    sprite: 'variety',
+    row: 2,
+    column: 0,
+    nameKey: 'myInfo.builtinAvatarNames.pixelOwl',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.pixelOwl',
+  },
+  {
+    id: 'porcelain-rabbit',
+    sprite: 'variety',
+    row: 2,
+    column: 1,
+    nameKey: 'myInfo.builtinAvatarNames.porcelainRabbit',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.porcelainRabbit',
+  },
+  {
+    id: 'sunflower-turntable',
+    sprite: 'variety',
+    row: 2,
+    column: 2,
+    nameKey: 'myInfo.builtinAvatarNames.sunflowerTurntable',
+    descriptionKey: 'myInfo.builtinAvatarDescriptions.sunflowerTurntable',
   },
 ] as const;
 
@@ -94,40 +193,42 @@ export const BUILTIN_AVATAR_SPRITE_URL = avatarSpriteUrl;
 
 export function builtinAvatarPreviewStyle(avatar: BuiltinAvatar) {
   return {
-    backgroundImage: `url("${avatarSpriteUrl}")`,
+    backgroundImage: `url("${AVATAR_SPRITE_URLS[avatar.sprite]}")`,
     backgroundPosition: `${avatar.column * 50}% ${avatar.row * 50}%`,
     backgroundRepeat: 'no-repeat',
     backgroundSize: `${AVATAR_GRID_SIZE * 100}% ${AVATAR_GRID_SIZE * 100}%`,
   };
 }
 
-let spriteImagePromise: Promise<HTMLImageElement> | null = null;
+const spriteImagePromises = new Map<string, Promise<HTMLImageElement>>();
 
-function loadSpriteImage(): Promise<HTMLImageElement> {
-  if (spriteImagePromise) return spriteImagePromise;
+function loadSpriteImage(spriteUrl: string): Promise<HTMLImageElement> {
+  const cachedPromise = spriteImagePromises.get(spriteUrl);
+  if (cachedPromise) return cachedPromise;
 
-  spriteImagePromise = new Promise((resolve, reject) => {
+  const imagePromise = new Promise<HTMLImageElement>((resolve, reject) => {
     const image = new Image();
     image.decoding = 'async';
     image.onload = () => resolve(image);
     image.onerror = () => {
-      spriteImagePromise = null;
+      spriteImagePromises.delete(spriteUrl);
       reject(new Error('BUILTIN_AVATAR_SPRITE_LOAD_FAILED'));
     };
-    image.src = avatarSpriteUrl;
+    image.src = spriteUrl;
   });
-  return spriteImagePromise;
+  spriteImagePromises.set(spriteUrl, imagePromise);
+  return imagePromise;
 }
 
 /**
- * 内置头像使用一张精灵图交付，用户确认后再裁成独立的 256px Data URL。
- * 这样既避免首屏加载九张大图，也兼容当前头像接口与聊天室头像接口的数据格式。
+ * 内置头像按系列使用紧凑精灵图交付，用户确认后再裁成独立的 256px Data URL。
+ * 这样既避免首屏加载十八张大图，也兼容当前头像接口与聊天室头像接口的数据格式。
  */
 export async function renderBuiltinAvatar(id: BuiltinAvatarId): Promise<string> {
   const avatar = BUILTIN_AVATARS.find((item) => item.id === id);
   if (!avatar) throw new Error('BUILTIN_AVATAR_NOT_FOUND');
 
-  const image = await loadSpriteImage();
+  const image = await loadSpriteImage(AVATAR_SPRITE_URLS[avatar.sprite]);
   const sourceWidth = image.naturalWidth / AVATAR_GRID_SIZE;
   const sourceHeight = image.naturalHeight / AVATAR_GRID_SIZE;
   if (!sourceWidth || !sourceHeight) throw new Error('BUILTIN_AVATAR_SPRITE_SIZE_INVALID');

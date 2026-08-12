@@ -2,12 +2,6 @@
   <div class="ai-chat-container">
     <!-- 主聊天容器 -->
     <div ref="chatWrapperRef" class="chat-wrapper">
-      <AiConversationLineageNavigator
-        v-if="lineageConversationId"
-        :conversation-id="lineageConversationId"
-        @open="openConversation"
-        @unavailable="clearMissingCloudConversation"
-      />
       <!-- 消息区域 -->
       <main
         class="messages-container"
@@ -89,7 +83,6 @@
             :source-count="message.sources?.length || 0"
             :evidence-count="message.evidence?.length || 0"
             @feedback="message.feedback = $event"
-            @branched="openConversation"
           />
           <div v-if="message.interactions?.length || message.confirmations?.length" class="ai-message-action-stack">
             <AiInteractionCard
@@ -183,7 +176,6 @@
   import AiActivitySummary from '@/components/aiAssistant/AiActivitySummary.vue';
   import AiJobCard from '@/components/aiAssistant/AiJobCard.vue';
   import AiAnswerVersionSwitcher from '@/components/aiAssistant/AiAnswerVersionSwitcher.vue';
-  import AiConversationLineageNavigator from '@/components/aiAssistant/AiConversationLineageNavigator.vue';
   import AiResultActions from '@/components/aiAssistant/AiResultActions.vue';
   import AiSourceCards, { type AiSource } from '@/components/aiAssistant/AiSourceCards.vue';
   import type { AiCoverageReport, AiSourceCoverage } from '@/components/aiAssistant/aiSourceNavigation';
@@ -385,9 +377,9 @@
   const translationConfig = ref({ source: 'auto', target: 'zh' });
   const regenerationPreparing = ref(false);
   const cloudRecoveryPending = ref(false);
-  // 本地持久化可能保留了已删除、过期或换号后不再归属的云端会话 ID。
-  // 只有 get 会话成功后才允许请求谱系，避免打开 AI 时用未经校验的旧 ID 直接触发 404。
-  const lineageConversationId = ref('');
+  // 本地持久化可能保留已删除、过期或换号后不再归属的云端会话 ID；
+  // 记录本轮已通过轻量 get 校验的 ID，避免发送前重复请求，也不能把未经校验的旧 ID 当成可写目标。
+  const validatedCloudConversationId = ref('');
   const MESSAGE_WINDOW_SIZE = 24;
   const MESSAGE_WINDOW_STEP = 20;
   const visibleMessageCount = ref(MESSAGE_WINDOW_SIZE);
@@ -413,13 +405,13 @@
     const normalizedId = String(cloudId || '').trim();
     if (!normalizedId || aiAssistant.runtimeIdentityKey !== runtimeKey) return;
     if (conversationId.value === normalizedId) aiAssistant.markCloudConversationMissing(normalizedId);
-    if (lineageConversationId.value === normalizedId) lineageConversationId.value = '';
+    if (validatedCloudConversationId.value === normalizedId) validatedCloudConversationId.value = '';
   }
 
-  // 任意地方切换/清空云端会话时，先撤下上一个会话的谱系导航；等新会话读取成功后再恢复。
+  // 任意地方切换/清空云端会话时，撤销上一个会话的校验标记；新会话读取成功后再恢复。
   watch(conversationId, (currentId) => {
-    if (lineageConversationId.value && lineageConversationId.value !== String(currentId || '').trim()) {
-      lineageConversationId.value = '';
+    if (validatedCloudConversationId.value && validatedCloudConversationId.value !== String(currentId || '').trim()) {
+      validatedCloudConversationId.value = '';
     }
   });
 
@@ -718,7 +710,7 @@
       cancelLatestConversationChoice();
     }
     const switched = aiAssistant.switchConversation(conversationIdentity.value, t('ai.greeting'));
-    lineageConversationId.value = '';
+    validatedCloudConversationId.value = '';
     if (!cloudHistoryEnabled()) aiAssistant.setCloudConversationId('');
     if (!switched) {
       // Store 由 App 根层提前初始化后，页面首次挂载和路由返回都会走这里。
@@ -899,7 +891,7 @@
     aiAssistant.clearCloudConversationRecovery();
     // 待发送材料随会话边界失效:会话 A 挂的引用不能跟进会话 B
     aiAssistant.detachAllComposerMaterials();
-    lineageConversationId.value = cloudConversation.id;
+    validatedCloudConversationId.value = cloudConversation.id;
     persistHistory();
     resetScrollState();
   }
@@ -931,7 +923,7 @@
         // 发送前做一次只读取会话元数据的轻量确认，避免另一台设备刚删除后继续把消息发向失效 ID。
         await getAiCloudConversation(existingId, 0);
         if (aiAssistant.runtimeIdentityKey !== runtimeKey) return 'cancelled';
-        lineageConversationId.value = existingId;
+        validatedCloudConversationId.value = existingId;
         return 'ready';
       } catch (error) {
         if (isConversationNotFoundError(error)) clearMissingCloudConversation(existingId, runtimeKey);
@@ -969,11 +961,11 @@
     if (staleCloudConversationId.value) return null;
     if (conversationId.value) {
       const existingId = conversationId.value;
-      if (lineageConversationId.value === existingId) return existingId;
+      if (validatedCloudConversationId.value === existingId) return existingId;
       try {
         // 刷新后恢复的 ID 还没有经过本轮身份/保留策略校验，先轻量读取；不覆盖当前本机历史。
         await getAiCloudConversation(existingId, 0);
-        if (aiAssistant.runtimeIdentityKey === runtimeKey) lineageConversationId.value = existingId;
+        if (aiAssistant.runtimeIdentityKey === runtimeKey) validatedCloudConversationId.value = existingId;
         return existingId;
       } catch (error) {
         if (isConversationNotFoundError(error)) clearMissingCloudConversation(existingId, runtimeKey);
@@ -987,7 +979,7 @@
       .then((created) => {
         if (aiAssistant.runtimeIdentityKey !== runtimeKey) return null;
         aiAssistant.setCloudConversationId(created.id);
-        lineageConversationId.value = created.id;
+        validatedCloudConversationId.value = created.id;
         return created.id;
       })
       .catch(() => null)
@@ -1145,8 +1137,7 @@
       traceId: cloudMessage.traceId || undefined,
       recovered: cloudMessage.modelMeta?.recovered === true,
       artifacts: normalizeAiArtifacts(cloudMessage.modelMeta?.artifacts),
-      generatedBy:
-        cloudMessage.modelMeta?.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
+      generatedBy: cloudMessage.modelMeta?.generatedBy === 'action_continuation' ? 'action_continuation' : undefined,
       entityRefs: normalizeCloudEntityRefs(cloudMessage.modelMeta?.entityRefs),
       actionSettlements: normalizeCloudActionSettlements(cloudMessage.modelMeta?.actionSettlements),
       stage: typeof cloudMessage.modelMeta?.stage === 'string' ? cloudMessage.modelMeta.stage : undefined,
@@ -1325,7 +1316,7 @@
     );
     aiAssistant.setCloudConversationId(cloudConversation.id);
     aiAssistant.clearCloudConversationRecovery();
-    lineageConversationId.value = cloudConversation.id;
+    validatedCloudConversationId.value = cloudConversation.id;
     messages.value = cloudMessages.length ? cloudMessages : [createGreetingMessage()];
     persistHistory();
     restoreConversationViewport();
@@ -1508,7 +1499,7 @@
     (enabled) => {
       if (enabled !== false) return;
       cloudConversationCreation = null;
-      lineageConversationId.value = '';
+      validatedCloudConversationId.value = '';
       aiAssistant.setCloudConversationId('');
     },
   );
@@ -2182,7 +2173,9 @@
       await apiBasePost(
         '/api/chat/agent',
         {
-          ...(actionContinuation ? createInternalActionContinuationRequest(actionContinuation) : { message: inputText }),
+          ...(actionContinuation
+            ? createInternalActionContinuationRequest(actionContinuation)
+            : { message: inputText }),
           stream: true,
           sessionId: sessionId.value,
           enableTranslation: enableTranslation.value,
@@ -2664,7 +2657,7 @@
     void persistSettledAgentActionMessage(index);
   };
 
-  // 重新生成保留旧答案，并用原消息的不可变材料快照创建同一版本组的新分支。
+  // 重新生成保留旧答案，并用原消息的不可变材料快照创建同一版本组的新版本。
   const handleRegenerate = async (index: number) => {
     if (isLoading.value || regenerationPreparing.value) return; // 生成中不打断
     let userIdx = index - 1;

@@ -36,6 +36,7 @@ const mocks = vi.hoisted(() => ({
   reviewReport: vi.fn(),
   getNotificationSettings: vi.fn(),
   updateNotificationSettings: vi.fn(),
+  recordServerOperation: vi.fn(),
 }));
 
 vi.mock('../util/common.js', () => ({
@@ -44,6 +45,7 @@ vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
 }));
 vi.mock('../util/agent/logSafety.js', () => ({ stableAgentErrorCode: () => 'TEST_ERROR' }));
+vi.mock('../util/operationLog.js', () => ({ recordServerOperation: mocks.recordServerOperation }));
 vi.mock('../util/services/communityChatAccessService.js', async (importOriginal) => {
   const original = await importOriginal();
   return {
@@ -483,8 +485,74 @@ describe('communityChatHandle', () => {
     );
 
     expect(mocks.updateNotificationSettings).toHaveBeenCalledWith({ user, enabled: true, level: 'mentions' });
+    expect(mocks.recordServerOperation).toHaveBeenCalledWith(
+      expect.objectContaining({ user }),
+      {
+        module: '公共聊天室',
+        operation: '保存聊天室提醒设置【开启；范围：管理员和提及】',
+      },
+    );
     expect(updateRes.send).toHaveBeenCalledWith(
       expect.objectContaining({ data: { enabled: true, level: 'mentions' }, msg: '聊天室提醒设置已保存' }),
+    );
+  });
+
+  it.each([
+    ['official', '仅管理员'],
+    ['mentions_only', '仅提及'],
+    ['mentions', '管理员和提及'],
+    ['all', '全部消息'],
+  ])('聊天室提醒四档范围成功保存后写入明确操作日志：%s', async (level, label) => {
+    const user = { id: 'user-1', role: 'user' };
+    const req = { user, body: { enabled: true, level } };
+    const res = mockRes();
+    mocks.updateNotificationSettings.mockResolvedValue({ enabled: true, level });
+
+    await updateNotificationSettings(req, res);
+
+    expect(mocks.recordServerOperation).toHaveBeenCalledWith(req, {
+      module: '公共聊天室',
+      operation: `保存聊天室提醒设置【开启；范围：${label}】`,
+    });
+  });
+
+  it('关闭聊天室提醒成功后记录关闭状态，日志失败不反向影响业务结果', async () => {
+    const user = { id: 'user-1', role: 'user' };
+    const req = { user, body: { enabled: false, level: 'mentions_only' } };
+    const res = mockRes();
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.updateNotificationSettings.mockResolvedValue({ enabled: false, level: 'mentions_only' });
+    mocks.recordServerOperation.mockRejectedValueOnce(new Error('operation log unavailable'));
+
+    await updateNotificationSettings(req, res);
+
+    expect(mocks.recordServerOperation).toHaveBeenCalledWith(req, {
+      module: '公共聊天室',
+      operation: '保存聊天室提醒设置【关闭；范围：仅提及】',
+    });
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { enabled: false, level: 'mentions_only' }, status: 200 }),
+    );
+    expect(consoleError).toHaveBeenCalledWith('[社区客厅] 提醒设置操作日志写入失败 code=%s', 'TEST_ERROR');
+    consoleError.mockRestore();
+  });
+
+  it('聊天室提醒设置保存失败时不写入成功操作日志', async () => {
+    const req = {
+      user: { id: 'user-1', role: 'user' },
+      body: { enabled: true, level: 'all' },
+    };
+    const res = mockRes();
+    mocks.updateNotificationSettings.mockRejectedValue(
+      new CommunityChatError('INVALID_NOTIFICATION_LEVEL', 400, '聊天室提醒范围无效', 'Invalid level'),
+    );
+
+    await updateNotificationSettings(req, res);
+
+    expect(mocks.recordServerOperation).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { code: 'INVALID_NOTIFICATION_LEVEL' }, status: 400 }),
     );
   });
 

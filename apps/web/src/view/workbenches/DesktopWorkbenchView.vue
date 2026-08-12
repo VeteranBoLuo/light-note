@@ -182,14 +182,21 @@
           <DailyQuests
             :quests="dailyGrowthQuests"
             :bonus="dailyGrowthBonus"
-            :claiming="claimingDailyGrowth"
+            :claiming="claimingDailyGrowth || claimingRewards"
             :read-only="growthReadOnly"
             @claim="claimDailyGrowth"
           />
         </article>
 
         <article v-if="showGrowthTasks" class="panel-card today-growth-panel">
-          <GrowthTasks :data="growthTasks" compact :max-visible="2" show-view-all @view="openGrowthTasks" />
+          <GrowthTasks
+            :data="growthTasks"
+            compact
+            :max-visible="2"
+            show-view-all
+            :read-only="growthReadOnly"
+            @view="openGrowthTasks"
+          />
         </article>
       </section>
 
@@ -433,6 +440,7 @@
     dashboardLoading,
     growthTasks,
     growthTasksLoading,
+    claimingRewards,
     loadDashboard,
     loadGrowthTasks,
     claimDailyBonus,
@@ -451,7 +459,7 @@
   );
 
   async function claimDailyGrowth() {
-    if (growthReadOnly.value || claimingDailyGrowth.value) return;
+    if (growthReadOnly.value || claimingDailyGrowth.value || claimingRewards.value) return;
     claimingDailyGrowth.value = true;
     try {
       const res = await claimDailyBonus();

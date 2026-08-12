@@ -1,5 +1,11 @@
 <template>
   <div class="inv">
+    <div v-if="!inv && (inventoryLoading || !inventoryError)" class="inv-state"><BLoading size="small" /></div>
+    <div v-else-if="inventoryError && !inv" class="inv-state inv-state--error">
+      <span>{{ t('growth.inventoryLoadFailed') }}</span>
+      <BButton size="small" @click="loadInventory">{{ t('common.retry') }}</BButton>
+    </div>
+    <template v-else>
     <div class="inv-head">
       <h3 class="inv-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.inventoryTitle') }}</h3>
       <p class="inv-sub">{{ t('growth.inventorySubtitle') }}</p>
@@ -69,6 +75,7 @@
         </div>
       </div>
     </div>
+    </template>
   </div>
 </template>
 
@@ -79,6 +86,7 @@
   import type { InventoryItem } from '@/composables/useGrowth.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -87,7 +95,16 @@
   const { t, locale } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
-  const { inventory, growth, loadInventory, loadDashboard, useItem, useProtectCard } = useGrowth();
+  const {
+    inventory,
+    inventoryLoading,
+    inventoryError,
+    growth,
+    loadInventory,
+    loadDashboard,
+    useItem,
+    useProtectCard,
+  } = useGrowth();
   const inv = inventory;
   const makeupDate = computed(() => growth.value?.makeupDays?.[0] || null);
   const canMakeup = computed(() => !!makeupDate.value);
@@ -118,7 +135,7 @@
       if (res?.status === 200 && res.data?.ok) {
         if (it.id === 'ai_pack') message.success(t('growth.aiPackUseOk', { n: fmtTokens(res.data.amount || 0) }));
         else message.success(t('growth.itemUse'));
-        recordOperation({ module: '成长', operation: `使用物品 ${it.name}` });
+        recordOperation({ module: '成长', operation: '使用成长物品' });
       } else {
         message.info(t('growth.itemUseFail'));
       }
@@ -146,7 +163,7 @@
       const res = await useProtectCard(date);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
+        recordOperation({ module: '成长', operation: '使用补签卡' });
         await loadDashboard(); // 同步签到日历的逐日高亮与统计
       } else {
         message.info(t('growth.protectCardFail'));
@@ -169,6 +186,17 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+  }
+  .inv-state {
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+  }
+  .inv-state--error {
+    flex-direction: column;
   }
   .inv-head {
     display: flex;

@@ -179,12 +179,16 @@ function resolveFeaturedAchievements(unlockedAchievements, storedValue) {
 
 async function loadUnlockedAchievements(db, userId, level) {
   const [rows] = await db.query(
-    `SELECT ref, MAX(id) AS latestId
-       FROM points_log
-      WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock') AND ref IS NOT NULL
-      GROUP BY ref
-      ORDER BY latestId DESC`,
-    [userId],
+    `SELECT ref, MAX(latestId) AS latestId FROM (
+       SELECT achievement_key AS ref, UNIX_TIMESTAMP(unlocked_at) AS latestId
+         FROM user_achievements WHERE user_id = ?
+       UNION ALL
+       SELECT ref, id AS latestId
+         FROM points_log WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock') AND ref IS NOT NULL
+     ) unlocked
+     GROUP BY ref
+     ORDER BY latestId DESC, ref ASC`,
+    [userId, userId],
   );
   const latestIds = new Map(
     rows

@@ -71,9 +71,7 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq('/user/admin/remark', 'POST', mode), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 
@@ -90,9 +88,7 @@ describe('adminRoutePolicyMiddleware', () => {
       adminRoutePolicyMiddleware(createReq(path, method, 'maintain'), res, next);
       expect(next).not.toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(403);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }));
     }
   });
 
@@ -109,6 +105,17 @@ describe('adminRoutePolicyMiddleware', () => {
       const next = vi.fn();
       const res = createRes();
       adminRoutePolicyMiddleware(createReq('/note/getNotesForExport', 'POST', mode), res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    }
+  });
+
+  it('卡片缩略图动态 GET 路径在 readonly 与 maintain 模式都按只读接口放行', () => {
+    const fileName = `${'a'.repeat(64)}.webp`;
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(`/note/image-thumbnail/${fileName}`, 'GET', mode), res, next);
       expect(next).toHaveBeenCalledTimes(1);
       expect(res.json).not.toHaveBeenCalled();
     }
@@ -184,6 +191,14 @@ describe('adminRoutePolicyMiddleware', () => {
       '/growth/tasks',
       '/growth/ranks',
       '/growth/weeklyReport',
+      '/growth/heatmap',
+      '/growth/shop',
+      '/growth/inventory',
+      '/growth/lottery',
+      '/growth/recap',
+      '/growth/claimable',
+      '/growth/preferences',
+      '/growth/weekly',
       '/growth/points/log',
     ]) {
       const next = vi.fn();
@@ -192,13 +207,27 @@ describe('adminRoutePolicyMiddleware', () => {
     }
 
     for (const mode of ['readonly', 'maintain']) {
-      for (const path of ['/growth/checkin', '/growth/shop/buy', '/growth/lottery/draw']) {
+      for (const path of [
+        '/growth/checkin',
+        '/growth/tasks/claim',
+        '/growth/shop/buy',
+        '/growth/lottery/draw',
+        '/growth/achievement/claim',
+        '/growth/claimAll',
+        '/growth/weekly/claim',
+        '/growth/recap/state',
+      ]) {
         const next = vi.fn();
         const res = createRes();
         adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
         expect(next).not.toHaveBeenCalled();
         expect(res.status).toHaveBeenCalledWith(403);
       }
+      const preferencesNext = vi.fn();
+      const preferencesRes = createRes();
+      adminRoutePolicyMiddleware(createReq('/growth/preferences', 'PUT', mode), preferencesRes, preferencesNext);
+      expect(preferencesNext).not.toHaveBeenCalled();
+      expect(preferencesRes.status).toHaveBeenCalledWith(403);
     }
   });
 
@@ -206,7 +235,6 @@ describe('adminRoutePolicyMiddleware', () => {
     for (const path of [
       '/chat/conversations/list',
       '/chat/conversations/get',
-      '/chat/conversations/lineage',
       '/chat/conversations/messages/versions',
       '/chat/conversations/export',
       '/chat/conversations/reuse-note/blocks',
@@ -227,7 +255,6 @@ describe('adminRoutePolicyMiddleware', () => {
       '/chat/conversations/clear-all-data',
       '/chat/conversations/messages/save',
       '/chat/conversations/messages/version-group',
-      '/chat/conversations/branch',
       '/chat/conversations/feedback',
       '/chat/conversations/reuse-note/prepare',
       '/chat/change-sets/create',

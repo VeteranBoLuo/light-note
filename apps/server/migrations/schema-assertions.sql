@@ -1401,3 +1401,79 @@ WHERE NOT EXISTS (
     AND index_name='PRIMARY'
     AND column_name='user_id'
 );
+
+-- 44) 后台通知与知识库归档必须保留业务事实，同时从当前工作列表隐藏（期望 0 行）
+SELECT '[44] missing_admin_governance_archive_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'notification' tab, 'admin_archived' col, 'notification.admin_archived' n UNION ALL
+  SELECT 'knowledge_base', 'admin_archived', 'knowledge_base.admin_archived'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[44] invalid_admin_governance_archive_default' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.column_name='admin_archived'
+  AND actual.table_name IN ('notification', 'knowledge_base')
+  AND NOT (actual.is_nullable='NO' AND actual.column_default='0');
+
+SELECT '[44] missing_admin_governance_archive_index' AS check_name,
+  CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'notification' tab, 'idx_notification_admin_history' ix UNION ALL
+  SELECT 'knowledge_base', 'idx_knowledge_admin_archive'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 46) 成长中心 V2 的永久状态、偏好与回顾状态必须独立存在（期望 0 行）
+SELECT '[46] missing_growth_center_v2_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'user_achievements' t UNION ALL
+  SELECT 'user_growth_preferences' UNION ALL
+  SELECT 'growth_recap_state'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.t
+ AND actual.engine='InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[46] missing_growth_center_v2_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'user_achievements' tab, 'unlocked_at' col, 'user_achievements.unlocked_at' n UNION ALL
+  SELECT 'user_achievements', 'claimed_at', 'user_achievements.claimed_at' UNION ALL
+  SELECT 'user_growth_preferences', 'weekly_active_target', 'user_growth_preferences.weekly_active_target' UNION ALL
+  SELECT 'user_growth_preferences', 'low_pressure_mode', 'user_growth_preferences.low_pressure_mode' UNION ALL
+  SELECT 'user_growth_preferences', 'timezone', 'user_growth_preferences.timezone' UNION ALL
+  SELECT 'user_growth_preferences', 'utc_offset_minutes', 'user_growth_preferences.utc_offset_minutes' UNION ALL
+  SELECT 'growth_recap_state', 'snoozed_until', 'growth_recap_state.snoozed_until' UNION ALL
+  SELECT 'growth_recap_state', 'dismissed_at', 'growth_recap_state.dismissed_at'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[46] missing_growth_center_v2_index' AS check_name, CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'user_achievements' tab, 'PRIMARY' ix UNION ALL
+  SELECT 'user_achievements', 'idx_user_achievements_status' UNION ALL
+  SELECT 'user_growth_preferences', 'PRIMARY' UNION ALL
+  SELECT 'growth_recap_state', 'PRIMARY' UNION ALL
+  SELECT 'growth_recap_state', 'idx_growth_recap_available'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

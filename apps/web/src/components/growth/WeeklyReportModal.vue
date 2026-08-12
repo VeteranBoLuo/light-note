@@ -49,7 +49,7 @@
             </section>
 
             <section class="wr-hero">
-              <div class="wr-hero-emblem" aria-hidden="true">{{ milestone.emoji }}</div>
+              <div class="wr-hero-emblem" aria-hidden="true"><SvgIcon :src="milestone.icon" size="36" /></div>
               <div>
                 <span class="wr-hero-kicker">{{ t('growth.wrWeeklyHighlight') }}</span>
                 <h2>{{ milestone.title }}</h2>
@@ -105,11 +105,15 @@
                 <span class="is-bookmark" :style="{ flexGrow: composition.bookmarks }"></span>
                 <span class="is-note" :style="{ flexGrow: composition.notes }"></span>
                 <span class="is-file" :style="{ flexGrow: composition.files }"></span>
+                <span class="is-todo" :style="{ flexGrow: composition.todos }"></span>
+                <span class="is-organized" :style="{ flexGrow: composition.organized }"></span>
               </div>
               <div class="wr-composition-legend">
                 <span><i class="is-bookmark"></i>{{ t('growth.wrBookmark') }} {{ composition.bookmarks }}</span>
                 <span><i class="is-note"></i>{{ t('growth.wrNote') }} {{ composition.notes }}</span>
                 <span><i class="is-file"></i>{{ t('growth.wrFile') }} {{ composition.files }}</span>
+                <span><i class="is-todo"></i>{{ t('growth.wrTodo') }} {{ composition.todos }}</span>
+                <span><i class="is-organized"></i>{{ t('growth.wrOrganized') }} {{ composition.organized }}</span>
               </div>
             </section>
 
@@ -168,11 +172,22 @@
         </p>
 
         <div class="wr-insight-actions">
-          <BButton :loading="sharing" :disabled="exporting" @click="sharePoster">
+          <BButton
+            block
+            type="primary"
+            class="wr-save-cloud-action"
+            :loading="cloudSaving"
+            :disabled="posterActionBusy && !cloudSaving"
+            @click="savePosterToCloud"
+          >
+            <SvgIcon :src="icon.common.folder" size="16" />
+            {{ cloudSaving ? t('growth.wrSavingToCloud') : t('growth.wrSaveToCloud') }}
+          </BButton>
+          <BButton block :loading="sharing" :disabled="posterActionBusy && !sharing" @click="sharePoster">
             <SvgIcon :src="icon.cloudSpace.share" size="16" />
             {{ t('growth.wrShare') }}
           </BButton>
-          <BButton type="primary" :loading="exporting" :disabled="sharing" @click="downloadPoster">
+          <BButton block :loading="exporting" :disabled="posterActionBusy && !exporting" @click="downloadPoster">
             <SvgIcon :src="icon.cloudSpace.download" size="16" />
             {{ exporting ? t('growth.wrExporting') : t('growth.wrExport') }}
           </BButton>
@@ -192,6 +207,7 @@
   import icon from '@/config/icon';
   import { useUserStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
+  import { ensureCloudFolder, uploadCloudFile } from '@/api/cloudFileUploadApi';
   import { prepareMaskedIconsForCanvas } from '@/utils/canvasExport';
 
   type Direction = 'up' | 'down' | 'flat';
@@ -200,6 +216,8 @@
     bookmarks?: number;
     notes?: number;
     files?: number;
+    todos?: number;
+    organized?: number;
     exp?: number;
     checkins?: number;
     total?: number;
@@ -208,6 +226,8 @@
     bookmarks?: number;
     notes?: number;
     files?: number;
+    todos?: number;
+    organized?: number;
     exp?: number;
     checkinDays?: number;
     activeDays?: number;
@@ -221,7 +241,7 @@
     period?: { start?: string; end?: string; week?: number; weekYear?: number };
     days?: ReportDay[];
     bestDay?: ReportDay | null;
-    prev?: { bookmarks?: number; notes?: number; files?: number; exp?: number };
+    prev?: { bookmarks?: number; notes?: number; files?: number; todos?: number; organized?: number; exp?: number };
   };
 
   const props = defineProps<{ visible: boolean; report: WeeklyReport | null }>();
@@ -234,6 +254,8 @@
   const posterNaturalSize = ref({ width: 500, height: 650 });
   const exporting = ref(false);
   const sharing = ref(false);
+  const cloudSaving = ref(false);
+  const posterActionBusy = computed(() => exporting.value || sharing.value || cloudSaving.value);
 
   const modalVisible = computed({
     get: () => props.visible,
@@ -247,13 +269,24 @@
     bookmarks: safeNumber(props.report?.bookmarks),
     notes: safeNumber(props.report?.notes),
     files: safeNumber(props.report?.files),
+    todos: safeNumber(props.report?.todos),
+    organized: safeNumber(props.report?.organized),
   }));
-  const totalOutput = computed(() => composition.value.bookmarks + composition.value.notes + composition.value.files);
+  const totalOutput = computed(
+    () =>
+      composition.value.bookmarks +
+      composition.value.notes +
+      composition.value.files +
+      composition.value.todos +
+      composition.value.organized,
+  );
   const previousOutput = computed(
     () =>
       safeNumber(props.report?.prev?.bookmarks) +
       safeNumber(props.report?.prev?.notes) +
-      safeNumber(props.report?.prev?.files),
+      safeNumber(props.report?.prev?.files) +
+      safeNumber(props.report?.prev?.todos) +
+      safeNumber(props.report?.prev?.organized),
   );
   const activeDays = computed(() =>
     Math.min(7, safeNumber(props.report?.activeDays, safeNumber(props.report?.checkinDays))),
@@ -328,37 +361,49 @@
     const checkins = safeNumber(props.report?.checkinDays);
     if (checkins >= 7)
       return {
-        emoji: '🔥',
+        icon: icon.growth.checkin,
         title: t('growth.wrMilestoneFullAttendance'),
         description: t('growth.wrMilestoneFullAttendanceDesc'),
       };
     if (composition.value.notes >= 10)
       return {
-        emoji: '✍️',
+        icon: icon.resource.note,
         title: t('growth.wrMilestoneWriter'),
         description: t('growth.wrMilestoneWriterDesc', { n: composition.value.notes }),
       };
     if (composition.value.bookmarks >= 20)
       return {
-        emoji: '📚',
+        icon: icon.resource.bookmark,
         title: t('growth.wrMilestoneCollector'),
         description: t('growth.wrMilestoneCollectorDesc', { n: composition.value.bookmarks }),
       };
     if (composition.value.files >= 10)
       return {
-        emoji: '🗂️',
+        icon: icon.resource.file,
         title: t('growth.wrMilestoneOrganizer'),
         description: t('growth.wrMilestoneOrganizerDesc', { n: composition.value.files }),
       };
+    if (composition.value.todos >= 7)
+      return {
+        icon: icon.growth.action,
+        title: t('growth.wrMilestoneDoer'),
+        description: t('growth.wrMilestoneDoerDesc', { n: composition.value.todos }),
+      };
+    if (composition.value.organized >= 7)
+      return {
+        icon: icon.growth.organize,
+        title: t('growth.wrMilestoneCurator'),
+        description: t('growth.wrMilestoneCuratorDesc', { n: composition.value.organized }),
+      };
     if (totalOutput.value >= 10)
       return {
-        emoji: '✨',
+        icon: icon.growth.level,
         title: t('growth.wrMilestoneMomentum'),
         description: t('growth.wrMilestoneMomentumDesc', { n: totalOutput.value }),
       };
     if (!totalOutput.value && !checkins)
-      return { emoji: '🌙', title: t('growth.wrMilestonePause'), description: t('growth.wrMilestonePauseDesc') };
-    return { emoji: '🌱', title: t('growth.wrMilestoneSeed'), description: t('growth.wrMilestoneSeedDesc') };
+      return { icon: icon.noteDetail.history, title: t('growth.wrMilestonePause'), description: t('growth.wrMilestonePauseDesc') };
+    return { icon: icon.growth.create, title: t('growth.wrMilestoneSeed'), description: t('growth.wrMilestoneSeedDesc') };
   });
   const headline = computed(() => {
     if (!totalOutput.value && !activeDays.value) return t('growth.wrHeadlineEmpty');
@@ -380,7 +425,14 @@
   });
   const chartDays = computed(() => {
     const days = normalizedDays.value.map((day) => {
-      const total = safeNumber(day.total, safeNumber(day.bookmarks) + safeNumber(day.notes) + safeNumber(day.files));
+      const total = safeNumber(
+        day.total,
+        safeNumber(day.bookmarks) +
+          safeNumber(day.notes) +
+          safeNumber(day.files) +
+          safeNumber(day.todos) +
+          safeNumber(day.organized),
+      );
       const activity = total + (safeNumber(day.checkins) > 0 ? 1 : 0);
       return { ...day, total, activity };
     });
@@ -416,6 +468,8 @@
       [t('growth.wrBookmark'), composition.value.bookmarks],
       [t('growth.wrNote'), composition.value.notes],
       [t('growth.wrFile'), composition.value.files],
+      [t('growth.wrTodo'), composition.value.todos],
+      [t('growth.wrOrganized'), composition.value.organized],
     ] as const;
     const winner = [...entries].sort((a, b) => b[1] - a[1])[0];
     return winner[1] ? t('growth.wrDominantType', { type: winner[0] }) : t('growth.wrNoComposition');
@@ -440,6 +494,9 @@
     if (activeDays.value < 7) return t('growth.wrGoalActiveDays', { n: 7 - activeDays.value });
     if (composition.value.notes < 3) return t('growth.wrGoalNotes', { n: 3 - composition.value.notes });
     if (composition.value.bookmarks < 5) return t('growth.wrGoalBookmarks', { n: 5 - composition.value.bookmarks });
+    if (composition.value.todos < 3) return t('growth.wrGoalTodos', { n: 3 - composition.value.todos });
+    if (composition.value.organized < 3)
+      return t('growth.wrGoalOrganized', { n: 3 - composition.value.organized });
     return t('growth.wrGoalKeepMomentum');
   });
 
@@ -561,14 +618,14 @@
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   async function downloadPoster() {
-    if (exporting.value || sharing.value) return;
+    if (posterActionBusy.value) return;
     exporting.value = true;
     try {
       saveBlob(await canvasToBlob(await renderPoster()));
       message.success(t('growth.wrExportSuccess'));
       recordOperation({
         module: '成长',
-        operation: `导出成长周报图片成功【${props.report?.period?.end || props.report?.generatedAt || '本周'}】`,
+        operation: '导出成长周报图片成功',
       });
     } catch (error) {
       console.error('导出周报失败:', error);
@@ -578,7 +635,7 @@
     }
   }
   async function sharePoster() {
-    if (sharing.value || exporting.value) return;
+    if (posterActionBusy.value) return;
     sharing.value = true;
     try {
       const blob = await canvasToBlob(await renderPoster());
@@ -599,6 +656,26 @@
       }
     } finally {
       sharing.value = false;
+    }
+  }
+  async function savePosterToCloud() {
+    if (posterActionBusy.value) return;
+    cloudSaving.value = true;
+    try {
+      const blob = await canvasToBlob(await renderPoster());
+      const file = new File([blob], posterFilename(), { type: 'image/png' });
+      const folder = await ensureCloudFolder('周报');
+      await uploadCloudFile(file, folder.id);
+      message.success(t('growth.wrCloudSaveSuccess'));
+      recordOperation({
+        module: '成长',
+        operation: '保存成长周报到云空间成功',
+      });
+    } catch (error) {
+      console.error('保存周报到云空间失败:', error);
+      message.error(t('growth.wrCloudSaveFailed'));
+    } finally {
+      cloudSaving.value = false;
     }
   }
 </script>
@@ -842,7 +919,7 @@
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 20px;
     background: rgba(7, 10, 27, 0.45);
-    font-size: 34px;
+    color: var(--wr-secondary);
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.08);
   }
   .wr-hero-kicker {
@@ -987,8 +1064,15 @@
   .wr-composition .is-file {
     background: #36c8ed;
   }
+  .wr-composition .is-todo {
+    background: #34d399;
+  }
+  .wr-composition .is-organized {
+    background: #fbbf24;
+  }
   .wr-composition-legend {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 8px;
   }
@@ -1161,16 +1245,22 @@
 
   .wr-insight-actions {
     display: grid;
-    grid-template-columns: repeat(2, max-content);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: center;
-    align-self: flex-end;
-    justify-content: flex-end;
+    align-self: stretch;
     gap: 10px;
+    width: 100%;
     margin-top: auto;
     padding-top: 2px;
   }
   .wr-insight-actions .b_btn {
-    min-width: 116px;
+    min-width: 0;
+    width: 100%;
+    gap: 6px;
+  }
+  .wr-save-cloud-action {
+    grid-column: 1 / -1;
+    justify-self: stretch;
   }
 
   @media (max-width: 820px) {
@@ -1280,15 +1370,6 @@
     }
     .wr-insight-grid {
       grid-template-columns: 1fr;
-    }
-    .wr-insight-actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      align-self: stretch;
-      width: 100%;
-    }
-    .wr-insight-actions .b_btn {
-      min-width: 0;
     }
   }
 

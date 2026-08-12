@@ -29,7 +29,15 @@ describe('成长周报 V2', () => {
     expect(source).toContain('prepareMaskedIconsForCanvas(exportPoster, window)');
     expect(source).toContain('exportHost.remove()');
     expect(source).toMatch(/\.wr-poster\s*\{[\s\S]*?box-sizing:\s*border-box/);
-    expect(source).toMatch(/\.wr-insight-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, max-content\)/);
+    expect(source).toMatch(
+      /\.wr-insight-actions\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2, minmax\(0, 1fr\)\)[\s\S]*?align-self:\s*stretch[\s\S]*?width:\s*100%/,
+    );
+    expect(source).toMatch(/\.wr-insight-actions \.b_btn\s*\{[\s\S]*?width:\s*100%/);
+    expect(source).toMatch(/\.wr-save-cloud-action\s*\{[\s\S]*?grid-column:\s*1 \/ -1[\s\S]*?justify-self:\s*stretch/);
+    expect(source.match(/<BButton[\s\S]*?\bblock\b/g)).toHaveLength(3);
+    expect(source).toContain("ensureCloudFolder('周报')");
+    expect(source).toContain('uploadCloudFile(file, folder.id)');
+    expect(source).toMatch(/class="wr-save-cloud-action"[\s\S]*?wrSaveToCloud/);
   });
 
   it('提供真实趋势、内容构成、经验状态和下周目标', () => {
@@ -42,7 +50,15 @@ describe('成长周报 V2', () => {
   });
 
   it('中英文均包含新版周报关键文案', () => {
-    for (const key of ['wrPosterPreview', 'wrActivityTrend', 'wrExpRoleExcluded', 'wrNextGoal', 'wrSaveTip']) {
+    for (const key of [
+      'wrPosterPreview',
+      'wrActivityTrend',
+      'wrExpRoleExcluded',
+      'wrNextGoal',
+      'wrSaveTip',
+      'wrSaveToCloud',
+      'wrCloudSaveSuccess',
+    ]) {
       expect(zhSource).toContain(`${key}:`);
       expect(enSource).toContain(`${key}:`);
     }

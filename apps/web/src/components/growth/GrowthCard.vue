@@ -191,7 +191,17 @@
   const bookmark = bookmarkStore();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
-  const { growth: g, dashboard, load, loadDashboard, doCheckin, useProtectCard, markRead } = useGrowth();
+  const {
+    growth: g,
+    dashboard,
+    preferences,
+    load,
+    loadDashboard,
+    loadPreferences,
+    doCheckin,
+    useProtectCard,
+    markRead,
+  } = useGrowth();
   const emit = defineEmits<{ (event: 'activity-changed'): void }>();
   const checking = ref(false);
   const lvUp = ref<{ level: number; name: string } | null>(null); // 升级动画数据
@@ -228,14 +238,18 @@
           }
           recordOperation({
             module: '成长',
-            operation: `每日签到（连续 ${res.data.streak} 天，经验+${res.data.expGained}、积分+${pts}）`,
+            operation: '每日签到成功',
           });
           if (res.data.leveledUp && res.data.growth) {
-            lvUp.value = { level: res.data.growth.level, name: res.data.growth.name }; // 触发升级庆祝动画
+            if (preferences.value?.celebrationEnabled !== false) {
+              lvUp.value = { level: res.data.growth.level, name: res.data.growth.name };
+            } else {
+              message.success(t('growth.leveledUp', { lv: res.data.growth.level, name: res.data.growth.name }));
+            }
             markRead(); // 签到升级当场已看动画 → 立即标记已读,避免刷新页面重复弹
             recordOperation({
               module: '成长',
-              operation: `升级到 Lv.${res.data.growth.level} ${res.data.growth.name}`,
+              operation: '成长等级提升',
             });
           }
           // 连签里程碑大奖:额外弹一条庆祝并记录(奖励含积分/永久存储/补签卡)
@@ -247,7 +261,7 @@
             message.success(t('growth.streakMilestoneToast', { days: m.days, reward: parts.join(' · ') }));
             recordOperation({
               module: '成长',
-              operation: `连签里程碑 ${m.days} 天达成（+${m.points}积分${m.storageMb ? '、+' + m.storageMb + 'MB' : ''}${m.cards ? '、+' + m.cards + '补签卡' : ''}）`,
+              operation: '连签里程碑达成',
             });
           }
         }
@@ -265,10 +279,14 @@
 
   onMounted(async () => {
     document.addEventListener('scroll', closeEarnPopoverOnScroll, true);
-    await load(true); // 强制拉最新(升级是后端异步发生,不 force 会读到升级前的缓存)
+    await Promise.all([load(true), loadPreferences()]); // 强制拉最新并尊重成长偏好
     // 进成长页即视为查看升级通知:提示 + 标记已读(清红点)
     if (g.value?.hasUnreadLevelUp) {
-      lvUp.value = { level: g.value.level, name: g.value.name }; // 之前升级未看过 → 进页补一次庆祝动画
+      if (preferences.value?.celebrationEnabled !== false) {
+        lvUp.value = { level: g.value.level, name: g.value.name };
+      } else {
+        message.info(t('growth.leveledUp', { lv: g.value.level, name: g.value.name }));
+      }
       markRead();
     }
   });
@@ -301,7 +319,7 @@
       const res = await useProtectCard(date);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.protectCardOk', { n: res.data.streak }));
-        recordOperation({ module: '成长', operation: `使用补签卡补签 ${date}（连签续至 ${res.data.streak} 天）` });
+        recordOperation({ module: '成长', operation: '使用补签卡' });
         loadDashboard();
         emit('activity-changed');
       } else {

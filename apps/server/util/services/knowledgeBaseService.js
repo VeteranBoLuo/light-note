@@ -1,6 +1,7 @@
 import pool from '../../db/index.js';
 import { generateUUID } from '../agent/data.js';
 import { invalidateKnowledgeCache } from '../knowledgeService.js';
+import { finishAdminAction } from '../adminActionExecution.js';
 
 const STATUSES = new Set(['public', 'internal']);
 const TYPES = new Set(['html', 'markdown']);
@@ -33,13 +34,19 @@ export async function findKnowledgeByTitle(title, connection = pool) {
   const normalizedTitle = String(title || '').trim();
   if (!normalizedTitle) return null;
   const [rows] = await connection.query(
-    'SELECT id, title, category, status, type FROM knowledge_base WHERE title = ? LIMIT 1',
+    'SELECT id, title, category, status, type FROM knowledge_base WHERE title = ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
     [normalizedTitle],
   );
   return rows[0] || null;
 }
 
-export async function upsertKnowledgeBase({ userId, input, createOnly = false, maxContentLength = 1_000_000 } = {}) {
+export async function upsertKnowledgeBase({
+  userId,
+  input,
+  createOnly = false,
+  maxContentLength = 1_000_000,
+  actionContext = null,
+} = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少操作用户');
   const value = normalizeInput(input, maxContentLength);
   const connection = await pool.getConnection();
@@ -52,9 +59,17 @@ export async function upsertKnowledgeBase({ userId, input, createOnly = false, m
         'UPDATE knowledge_base SET content = ?, category = ?, status = ?, type = ?, updated_by = ? WHERE id = ?',
         [value.content, value.category, value.status, value.type, userId, existing.id],
       );
+      if (actionContext) actionContext.baseEntry.targetId = existing.id;
+      const receipt = actionContext
+        ? await finishAdminAction(actionContext, {
+            outcome: 'succeeded',
+            metadata: { operation: 'updated', resultingStatus: value.status },
+            db: connection,
+          })
+        : {};
       await connection.commit();
       invalidateKnowledgeCache();
-      return { id: existing.id, title: value.title, action: 'updated' };
+      return { id: existing.id, title: value.title, action: 'updated', ...receipt };
     }
     const id = generateUUID();
     const [[sortRow]] = await connection.query('SELECT COALESCE(MAX(sort), -1) + 1 AS next_sort FROM knowledge_base');
@@ -74,9 +89,17 @@ export async function upsertKnowledgeBase({ userId, input, createOnly = false, m
         userId,
       ],
     );
+    if (actionContext) actionContext.baseEntry.targetId = id;
+    const receipt = actionContext
+      ? await finishAdminAction(actionContext, {
+          outcome: 'succeeded',
+          metadata: { operation: 'created', resultingStatus: value.status },
+          db: connection,
+        })
+      : {};
     await connection.commit();
     invalidateKnowledgeCache();
-    return { id, title: value.title, action: 'created' };
+    return { id, title: value.title, action: 'created', ...receipt };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -85,7 +108,13 @@ export async function upsertKnowledgeBase({ userId, input, createOnly = false, m
   }
 }
 
-export async function updateKnowledgeBaseById({ userId, id, patch = {}, maxContentLength = 1_000_000 } = {}) {
+export async function updateKnowledgeBaseById({
+  userId,
+  id,
+  patch = {},
+  maxContentLength = 1_000_000,
+  actionContext = null,
+} = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少操作用户');
   if (!id) throw new Error('ID_REQUIRED: 缺少 ID');
   const fields = [];
@@ -94,11 +123,6 @@ export async function updateKnowledgeBaseById({ userId, id, patch = {}, maxConte
     const title = String(patch.title || '').trim();
     if (!title) throw new Error('TITLE_REQUIRED: 标题不能为空');
     if (title.length > 255) throw new Error('TITLE_TOO_LONG: 标题不能超过 255 个字符');
-    const [duplicates] = await pool.query('SELECT id FROM knowledge_base WHERE title = ? AND id <> ? LIMIT 1', [
-      title,
-      id,
-    ]);
-    if (duplicates.length) throw new Error('DUPLICATE_TITLE: 已存在同名知识条目');
     fields.push('title = ?');
     params.push(title);
   }
@@ -130,8 +154,38 @@ export async function updateKnowledgeBaseById({ userId, id, patch = {}, maxConte
   if (!fields.length) throw new Error('EMPTY_PATCH: 没有需要更新的字段');
   fields.push('updated_by = ?');
   params.push(userId, id);
-  const [result] = await pool.query(`UPDATE knowledge_base SET ${fields.join(', ')} WHERE id = ?`, params);
-  if (!result.affectedRows) throw new Error('NOT_FOUND: 知识条目不存在');
-  invalidateKnowledgeCache();
-  return { id };
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    if (patch.title !== undefined) {
+      const [duplicates] = await connection.query(
+        'SELECT id FROM knowledge_base WHERE title = ? AND id <> ? AND COALESCE(admin_archived, 0) = 0 LIMIT 1',
+        [String(patch.title || '').trim(), id],
+      );
+      if (duplicates.length) throw new Error('DUPLICATE_TITLE: 已存在同名知识条目');
+    }
+    const [result] = await connection.query(
+      `UPDATE knowledge_base SET ${fields.join(', ')} WHERE id = ? AND COALESCE(admin_archived, 0) = 0`,
+      params,
+    );
+    if (!result.affectedRows) throw new Error('NOT_FOUND: 知识条目不存在');
+    const receipt = actionContext
+      ? await finishAdminAction(actionContext, {
+          outcome: 'succeeded',
+          metadata: {
+            changedFields: Object.keys(patch).filter((key) => ['title', 'content', 'category', 'status', 'type'].includes(key)),
+            resultingStatus: patch.status || null,
+          },
+          db: connection,
+        })
+      : {};
+    await connection.commit();
+    invalidateKnowledgeCache();
+    return { id, ...receipt };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }

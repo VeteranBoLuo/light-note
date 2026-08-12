@@ -18,9 +18,17 @@ import {
 } from '../util/services/noteReferenceService.js';
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
+import { extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
+import {
+  ensureNoteImageThumbnail,
+  getExistingNoteImageThumbnailPath,
+  noteImageThumbnailPathname,
+  resolveOwnedNoteThumbnailSource,
+} from '../util/noteImageThumbnail.js';
 import { promises as fsP } from 'node:fs';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { validateNoteImageUpload } from '../util/noteImageUpload.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
 import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
@@ -172,6 +180,14 @@ export const uploadNoteImage = async (req, res) => {
     if (!req.file) {
       return res.send(resultData(null, 400, '没有上传文件'));
     }
+    try {
+      await validateNoteImageUpload(req.file);
+    } catch (error) {
+      discardUploadedFile(req.file);
+      return res.send(
+        resultData(null, Number(error?.status || 400), L(req, error?.zh || '图片无效', error?.en || 'Invalid image')),
+      );
+    }
     const userId = req.user.id;
     const fileUrl = `https://boluo66.top/uploads/${req.file.filename}`;
     const noteId = String(req.body.noteId || '').trim();
@@ -183,6 +199,7 @@ export const uploadNoteImage = async (req, res) => {
         return res.send(resultData(null, 404, '笔记不存在'));
       }
       await pool.query('INSERT INTO note_images SET ?', [insertData({ noteId, url: fileUrl })]);
+      void ensureNoteImageThumbnail(fileUrl).catch(() => {});
       return res.send(resultData({ url: fileUrl }));
     }
 
@@ -202,6 +219,7 @@ export const uploadNoteImage = async (req, res) => {
     } finally {
       connection.release();
     }
+    void ensureNoteImageThumbnail(fileUrl).catch(() => {});
     triggerResourceCreateEffects({
       request: req,
       userId,
@@ -830,6 +848,10 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+      if (pagination.enabled) {
+        const previewSource = extractNoteCardPreviewImage(note.content, note.type);
+        note.previewImageUrl = previewSource ? noteImageThumbnailPathname(previewSource) : '';
+      }
       if (treeSnapshot && (hasTreeFilter || rootTreeScope)) {
         const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
         note.path = path;
@@ -857,11 +879,41 @@ export const queryNoteList = async (req, res) => {
   }
 };
 
+// 卡片缩略图与正文图片彻底分离：已生成文件直接命中长期缓存；历史图片只在图片请求的冷路径
+// 校验归属并单并发生成，不阻塞笔记列表 JSON 和文字卡片首屏。
+export const getNoteImageThumbnail = async (req, res) => {
+  const fileName = String(req.params?.fileName || '').toLowerCase();
+  const match = /^([a-f0-9]{64})\.webp$/u.exec(fileName);
+  if (!match) return res.status(404).end();
+  const key = match[1];
+  try {
+    let filePath = await getExistingNoteImageThumbnailPath(key);
+    if (!filePath) {
+      const sourceUrl = await resolveOwnedNoteThumbnailSource({
+        key,
+        sourceUrl: req.query?.source,
+        userId: req.user?.id,
+        db: pool,
+      });
+      if (!sourceUrl) return res.status(404).end();
+      filePath = await ensureNoteImageThumbnail(sourceUrl);
+    }
+    if (!filePath) return res.status(404).end();
+    const image = await fsP.readFile(filePath);
+    res.set('Cache-Control', 'private, max-age=31536000, immutable');
+    res.set('X-Content-Type-Options', 'nosniff');
+    return res.type('image/webp').send(image);
+  } catch (error) {
+    console.warn('[note-thumbnail] read failed code=%s', stableAgentErrorCode(error));
+    return res.status(404).end();
+  }
+};
+
 export const getNoteDetail = async (req, res) => {
   try {
     const userId = req.user.id;
     const noteTreeFeatures = resolveNoteTreeFeatures(noteTreeFeatureIdentity(req));
-    // 先登记正文查询，再并行读取轻量目录快照，避免测试与观测日志中的请求顺序漂移。
+    // 先登记正文查询，再并行沿当前笔记的父链读取面包屑，避免测试与观测日志中的请求顺序漂移。
     const detailPromise = pool.query('select * from note where id=? and create_by=? and del_flag=?', [
       req.body.id,
       userId,
@@ -878,7 +930,7 @@ export const getNoteDetail = async (req, res) => {
           })
       : Promise.resolve([]);
     // 归属校验:只能读自己的笔记(游客=共享 visitor 账号),防止传他人 note id 越权读取;越权/不存在统一 404 不泄露存在性
-    // 正文与轻量目录快照并行读取，聚合响应不会把两个数据库往返串行叠加到移动端首屏延迟上。
+    // 正文与定向父链并行读取；父链查询最多 8 层，不再让单篇详情耗时随账号笔记总量增长。
     const [[result], breadcrumb] = await Promise.all([detailPromise, breadcrumbPromise]);
     if (result.length === 0) {
       return res.send(resultData(null, 404, '笔记不存在'));

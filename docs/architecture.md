@@ -228,79 +228,83 @@ src/
 
 ## 数据库核心表
 
-| 表                                                     | 作用                             | 主键类型         |
-| ------------------------------------------------------ | -------------------------------- | ---------------- |
-| `user`                                                 | 用户                             | UUID             |
-| `bookmark`                                             | 书签                             | UUID             |
-| `note`                                                 | 笔记                             | UUID             |
-| `files`                                                | 云空间文件                       | 自增             |
-| `folders`                                              | 云空间文件夹                     | 自增             |
-| `file_preview_artifacts`                               | 云文件派生预览及压缩包目录缓存   | 自增             |
-| `file_preview_jobs`                                    | 云文件异步预览任务               | 自增             |
-| `tag`                                                  | 标签                             | UUID             |
-| `resource_tag_relations`                               | 资源-标签关联                    | 无独立 id        |
-| `onboarding_seed_resources`                            | 注册示例资源来源标记             | 复合主键         |
-| `resource_inbox`                                       | 书签/笔记/文件待整理关系         | UUID             |
-| `todo_items`                                           | 待处理中的待办事项               | UUID             |
-| `todo_reminders`                                       | 待办 v1 历史提醒调度记录         | UUID             |
-| `todo_series`                                          | 待办 v2 任务系列模板与生成游标   | UUID             |
-| `todo_series_resource_refs`                            | 待办 v2 系列参考资料模板         | UUID             |
-| `todo_reminder_rules`                                  | 待办 v2 每项提醒规则             | UUID             |
-| `todo_reminder_jobs`                                   | 待办 v2 实际渠道投递 Job         | UUID             |
-| `todo_plan_requests` / `todo_plan_mutations`           | v2 创建与系列操作幂等请求        | UUID             |
-| `todo_plan_runtime_metrics`                            | v2 调度低基数累计诊断指标        | 指标名           |
-| `email_delivery_logs`                                  | 系统邮件 SMTP 投递记录           | UUID             |
-| `account_deletion_requests`                            | 账号注销物理清理重试队列         | UUID             |
-| `tag_relations`                                        | 标签-标签关联                    | 无独立 id        |
-| `api_logs`                                             | API 请求日志                     | UUID             |
-| `operation_logs`                                       | 操作日志                         | UUID             |
-| `security_events`                                      | 安全事件                         | 自增             |
-| `conversion_events`                                    | 游客转化事件                     | 自增             |
-| `admin_context_audit`                                  | 管理员预览与内容维护审计         | UUID             |
-| `admin_user_remarks`                                   | Root 对用户设置的私有备注名      | 复合主键         |
-| `resource_governance_scans`                            | 资源治理只读扫描任务与租约       | UUID             |
-| `resource_governance_findings`                         | 治理候选、风险和无正文证据       | UUID             |
-| `resource_cleanup_jobs` / `resource_cleanup_job_items` | 低风险清理批次与逐项结果         | UUID / 复合主键  |
-| `resource_governance_audit`                            | 扫描、忽略与清理最小审计         | 自增             |
-| `agent_logs`                                           | AI 请求、用量和阶段追踪          | UUID             |
-| `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位    | 复合键 / 自增    |
-| `user_growth`                                          | 成长快照、积分及永久 AI 加油余额 | 用户 UUID        |
-| `ai_provider_balance_snapshots`                        | AI 供应商每日账户余额快照        | 自增             |
-| `ai_evaluation_runs`                                   | 管理员手动 AI 冒烟结构化结果     | UUID             |
-| `ai_document_sources`                                  | AI 文档来源与解析状态            | UUID             |
-| `ai_document_chunks`                                   | AI 文档正文片段与定位            | 自增             |
-| `ai_document_jobs`                                     | AI 文档异步解析任务              | 自增             |
-| `ai_conversations` / `ai_messages`                     | AI 持久会话与消息快照            | UUID             |
-| `ai_message_sources` / `ai_message_evidence`           | 消息来源与不可变证据片段         | 自增             |
-| `ai_feedback`                                          | AI 回答反馈与原因                | UUID             |
-| `ai_content_chunks`                                    | 个人知识统一词法索引元数据       | 自增             |
-| `ai_content_generations`                               | 个人知识索引的账号级失效代际     | 账号 ID          |
-| `ai_change_sets` / `ai_change_items`                   | 可审阅变更集、执行回执与撤销     | UUID             |
-| `ai_memories`                                          | 候选、已确认与临时记忆           | UUID             |
-| `ai_response_events`                                   | SSE 终态短期恢复事件             | 自增             |
-| `ai_product_events`                                    | 无正文 AI 产品学习事件           | UUID             |
-| `note_template`                                        | 用户自存笔记模板                 | UUID             |
-| `feature_requests`                                     | 共建轻笺公开需求                 | UUID             |
-| `feature_request_votes`                                | 共建建议唯一投票                 | 复合主键         |
-| `feature_request_updates`                              | 共建建议公开时间线               | UUID             |
-| `community_chat_rooms`                                 | 社区房间目录（当前仅 general）   | 自增             |
-| `community_chat_runtime_policy`                        | 单行发言运行策略与切换人         | 固定值 1         |
-| `community_chat_access_requests`                       | 社区内测申请与审核状态           | UUID             |
-| `community_chat_members`                               | 社区成员、角色与规则确认         | 用户 UUID        |
+| 表                                                     | 作用                                 | 主键类型         |
+| ------------------------------------------------------ | ------------------------------------ | ---------------- |
+| `user`                                                 | 用户                                 | UUID             |
+| `bookmark`                                             | 书签                                 | UUID             |
+| `note`                                                 | 笔记                                 | UUID             |
+| `files`                                                | 云空间文件                           | 自增             |
+| `folders`                                              | 云空间文件夹                         | 自增             |
+| `file_preview_artifacts`                               | 云文件派生预览及压缩包目录缓存       | 自增             |
+| `file_preview_jobs`                                    | 云文件异步预览任务                   | 自增             |
+| `tag`                                                  | 标签                                 | UUID             |
+| `resource_tag_relations`                               | 资源-标签关联                        | 无独立 id        |
+| `onboarding_seed_resources`                            | 注册示例资源来源标记                 | 复合主键         |
+| `resource_inbox`                                       | 书签/笔记/文件待整理关系             | UUID             |
+| `todo_items`                                           | 待处理中的待办事项                   | UUID             |
+| `todo_reminders`                                       | 待办 v1 历史提醒调度记录             | UUID             |
+| `todo_series`                                          | 待办 v2 任务系列模板与生成游标       | UUID             |
+| `todo_series_resource_refs`                            | 待办 v2 系列参考资料模板             | UUID             |
+| `todo_reminder_rules`                                  | 待办 v2 每项提醒规则                 | UUID             |
+| `todo_reminder_jobs`                                   | 待办 v2 实际渠道投递 Job             | UUID             |
+| `todo_plan_requests` / `todo_plan_mutations`           | v2 创建与系列操作幂等请求            | UUID             |
+| `todo_plan_runtime_metrics`                            | v2 调度低基数累计诊断指标            | 指标名           |
+| `email_delivery_logs`                                  | 系统邮件 SMTP 投递记录               | UUID             |
+| `account_deletion_requests`                            | 账号注销物理清理重试队列             | UUID             |
+| `tag_relations`                                        | 标签-标签关联                        | 无独立 id        |
+| `api_logs`                                             | API 请求日志                         | UUID             |
+| `operation_logs`                                       | 操作日志                             | UUID             |
+| `security_events`                                      | 安全事件                             | 自增             |
+| `conversion_events`                                    | 游客转化事件                         | 自增             |
+| `admin_context_audit`                                  | 管理员预览与内容维护审计             | UUID             |
+| `admin_user_remarks`                                   | Root 对用户设置的私有备注名          | 复合主键         |
+| `resource_governance_scans`                            | 资源治理只读扫描任务与租约           | UUID             |
+| `resource_governance_findings`                         | 治理候选、风险和无正文证据           | UUID             |
+| `resource_cleanup_jobs` / `resource_cleanup_job_items` | 低风险清理批次与逐项结果             | UUID / 复合主键  |
+| `resource_governance_audit`                            | 扫描、忽略与清理最小审计             | 自增             |
+| `agent_logs`                                           | AI 请求、用量和阶段追踪              | UUID             |
+| `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位        | 复合键 / 自增    |
+| `user_growth`                                          | 成长快照、积分及永久 AI 加油余额     | 用户 UUID        |
+| `growth_events` / `points_log`                         | 经验与积分不可变账本             | 自增             |
+| `growth_tasks` / `user_growth_tasks`                   | 成长任务定义、达成与领取状态       | 任务键 / 复合键  |
+| `user_achievements`                                    | 用户成就永久解锁与领取状态         | 用户 + 成就     |
+| `user_growth_preferences` / `growth_recap_state`       | 成长偏好与内容回顾抑制状态           | 用户 / 复合键    |
+| `ai_provider_balance_snapshots`                        | AI 供应商每日账户余额快照            | 自增             |
+| `ai_evaluation_runs`                                   | 管理员手动 AI 冒烟结构化结果         | UUID             |
+| `ai_document_sources`                                  | AI 文档来源与解析状态                | UUID             |
+| `ai_document_chunks`                                   | AI 文档正文片段与定位                | 自增             |
+| `ai_document_jobs`                                     | AI 文档异步解析任务                  | 自增             |
+| `ai_conversations` / `ai_messages`                     | AI 持久会话与消息快照                | UUID             |
+| `ai_message_sources` / `ai_message_evidence`           | 消息来源与不可变证据片段             | 自增             |
+| `ai_feedback`                                          | AI 回答反馈与原因                    | UUID             |
+| `ai_content_chunks`                                    | 个人知识统一词法索引元数据           | 自增             |
+| `ai_content_generations`                               | 个人知识索引的账号级失效代际         | 账号 ID          |
+| `ai_change_sets` / `ai_change_items`                   | 可审阅变更集、执行回执与撤销         | UUID             |
+| `ai_memories`                                          | 候选、已确认与临时记忆               | UUID             |
+| `ai_response_events`                                   | SSE 终态短期恢复事件                 | 自增             |
+| `ai_product_events`                                    | 无正文 AI 产品学习事件               | UUID             |
+| `note_template`                                        | 用户自存笔记模板                     | UUID             |
+| `feature_requests`                                     | 共建轻笺公开需求                     | UUID             |
+| `feature_request_votes`                                | 共建建议唯一投票                     | 复合主键         |
+| `feature_request_updates`                              | 共建建议公开时间线                   | UUID             |
+| `community_chat_rooms`                                 | 社区房间目录（当前仅 general）       | 自增             |
+| `community_chat_runtime_policy`                        | 单行发言运行策略与切换人             | 固定值 1         |
+| `community_chat_access_requests`                       | 社区内测申请与审核状态               | UUID             |
+| `community_chat_members`                               | 社区成员、角色与规则确认             | 用户 UUID        |
 | `community_chat_member_profiles`                       | 社区公开简介、轻笺资历隐私与精选成就 | 用户 UUID        |
-| `community_chat_user_settings`                         | 社区通知与隐私偏好               | 用户 UUID        |
-| `community_chat_access_audit`                          | 私密房间预留准入与访问审计       | 自增             |
-| `community_chat_messages`                              | 消息、回复、幂等与原文保留式撤回 | 自增 + 公有 UUID |
-| `community_chat_message_likes`                         | 消息点赞关系                     | 消息 + 用户      |
-| `community_chat_message_deletions`                     | 用户个人隐藏消息关系             | 消息 + 用户      |
-| `community_chat_reads`                                 | 用户在聊天室的单调阅读位置       | 房间 + 用户      |
-| `community_chat_blocks`                                | 用户单向屏蔽关系                 | 公有 UUID        |
-| `community_chat_reports`                               | 消息举报与最小证据快照           | 公有 UUID        |
-| `community_chat_moderation_actions`                    | 不可变更的举报处置审计           | 公有 UUID        |
-| `community_chat_member_sanctions`                      | 社区成员禁言处罚                 | 公有 UUID        |
-| `update_logs`                                          | Markdown 更新日志及 OBS 图片键   | UUID             |
-| `opinion`                                              | 用户反馈                         | UUID             |
-| `help_config` / `help_config_draft`                    | 帮助中心                         | UUID             |
+| `community_chat_user_settings`                         | 社区通知与隐私偏好                   | 用户 UUID        |
+| `community_chat_access_audit`                          | 私密房间预留准入与访问审计           | 自增             |
+| `community_chat_messages`                              | 消息、回复、幂等与原文保留式撤回     | 自增 + 公有 UUID |
+| `community_chat_message_likes`                         | 消息点赞关系                         | 消息 + 用户      |
+| `community_chat_message_deletions`                     | 用户个人隐藏消息关系                 | 消息 + 用户      |
+| `community_chat_reads`                                 | 用户在聊天室的单调阅读位置           | 房间 + 用户      |
+| `community_chat_blocks`                                | 用户单向屏蔽关系                     | 公有 UUID        |
+| `community_chat_reports`                               | 消息举报与最小证据快照               | 公有 UUID        |
+| `community_chat_moderation_actions`                    | 不可变更的举报处置审计               | 公有 UUID        |
+| `community_chat_member_sanctions`                      | 社区成员禁言处罚                     | 公有 UUID        |
+| `update_logs`                                          | Markdown 更新日志及 OBS 图片键       | UUID             |
+| `opinion`                                              | 用户反馈                             | UUID             |
+| `help_config` / `help_config_draft`                    | 帮助中心                             | UUID             |
 
 更新日志使用 `update_logs` 单表保存标题、发布日期、摘要、兼容摘要、标签、Markdown 正文及该条日志拥有的 OBS object key 集合。编辑器以 Markdown 为唯一正文输入，历史重点更新首次编辑时自动转换为 Markdown，`highlights` 仅作为工作台等旧读模型的自动生成兼容字段。公开正文统一经 `marked + DOMPurify` 渲染；图片存放在 `update-logs/{logId}/` 前缀，页面使用稳定站内地址，由后端为私有 OBS 对象生成短时下载签名。保存正文时按 Markdown 实际引用收敛 `image_keys`，事务提交后清理被移除的对象；删除日志同样先提交业务事务再清理 OBS。旧 `config_json` 数据由幂等迁移导入，迁移前公开读取仍可回退旧格式。
 
@@ -322,17 +326,23 @@ src/
 
 笔记库卡片与列表共用同一批量导出能力：服务端一次只读返回所选笔记的标题、类型和正文，前端可按每篇原格式（HTML 笔记输出 `.html`、Markdown 笔记输出 `.md`），或统一转换为 HTML、Markdown、PDF。每篇笔记生成独立文件，同名文件自动追加序号，最终打包为一个 ZIP；PDF 必须逐篇顺序渲染，避免并行长图占满浏览器内存。移动浏览器优先使用系统分享，Android App 继续通过短时下载票据把 ZIP 交给系统下载目录，不恢复旧的批量 JSON 备份语义。
 
+笔记库卡片图片预览只识别正文开头的本站已上传图片：列表 SQL 仍只返回最多 4000 字符正文前缀，服务端在这段有界文本中同步提取首图并返回独立 `previewImageUrl`，不恢复 `v-html`，也不为列表增加图片查询。卡片使用固定区域、原生懒加载和异步解码；失败时原位退回纯文本，列表视图不挂载图片。原图保持不变，卡片只读取服务端单并发生成的 720px、质量 76 WebP 派生图；新上传图片异步预热，历史图片通过 `backfill:note-thumbnails` 批量补齐，图片请求冷路径仅作兜底。派生缓存位于上传目录之外，原图物理清理时同步删除，不进入后台图库或资源引用计数。
+
 富文本“图文组合”使用受控的 `section.ln-media-text > figure` 结构，每个 `figure` 只绑定一张图片和一段说明；图片左右位置与 30%/36%/42% 宽度保存为 `data-ln-media-*` 属性，渲染统一使用 flex，禁止借用普通图片的 `float`。桌面端图片列最多 320px，移动端按所选比例并排展示；HTML 转 Markdown 时整段保留为受控 raw HTML，切回富文本和离线导出均恢复同一结构。
 
 富文本“渐变文字”使用 `.ln-text-gradient[data-ln-text-gradient="true"]` 受控结构，只持久化起止十六进制颜色与枚举方向三个 CSS 变量；真实渐变、旧示例的卡片/发光/呼吸/旋转/漂浮效果均由应用语义 class 渲染，不把任意 `background`、阴影或 `animation` 放回正文白名单。历史示例读取时由服务端净化器识别旧内联效果并升级为该语义协议；HTML/Markdown 往返与离线 HTML 导出继续保留受控渐变配置。
 
 笔记标题、正文或正文类型更新使用 `note.revision` 乐观并发控制；当前 Web 客户端写入必须携带已读取的 revision，服务端事务内 `FOR UPDATE` 后不匹配即返回 `NOTE_VERSION_CONFLICT` 和经过净化的当前快照，不允许静默覆盖。未保存草稿按账号/代管上下文与笔记 ID 隔离保存在 IndexedDB `lightnote-note-drafts-v1/noteDrafts`，250ms 合并写入、30 天过期且每个身份域最多 20 条；仅在 IndexedDB 不可用时使用 localStorage 应急副本，并在恢复后自动迁回。版本冲突只能由用户选择保留云端、另存副本或二次确认覆盖。`note_versions.source_revision` 记录快照对应版本，`reason` 区分自动保存、格式转换、AI 修改、AI 撤销和恢复；HTML/Markdown 切换使用 `POST /api/note/convertMode`，请求必须携带 `baseRevision`、目标正文和预览指纹，服务端在同一事务内复核指纹、强制留档、更新正文/类型并同步资源引用。格式转换、AI 写入/撤销与版本恢复必须强制留档，不受普通自动保存的三分钟合并窗口影响。HTML 正文在创建、更新、AI 写入、导入、模板保存、新用户示例、历史恢复和旧数据读取边界统一经过服务端 allowlist 净化；Markdown 源码不得经过 HTML 净化器改写。
 
+笔记详情顶栏按可用宽度分层：桌面端直接展示标签、历史版本和导出三个高频操作，其余低频动作保留在“更多”；平板和移动端继续从菜单或操作抽屉进入，不能因桌面直出而丢失入口。只读状态仍必须隐藏写操作，但保留导出等允许的只读能力。
+
 页面树采用六个账号级 Feature Flag 分阶段灰度：`note_tree_read`、`note_tree_write`、`note_tree_mobile`、`note_tree_subtree_trash`、`ai_note_branch_scope`、`ai_note_branch_analysis`。生产环境未配置时默认关闭，Root/测试账号先行，普通账号按 subject ID 稳定分桶；显式急停对所有身份生效。下游开关必须依赖上游读取/写入能力，API 与 Agent 执行边界都重新校验。页面树遥测复用无正文 `ai_product_events`，只记录枚举和数量/耗时桶，不记录标题、路径、正文、搜索词或页面 ID。
 
 书签、笔记库和云空间主列表采用服务端分页：前端首屏固定请求 48 条，接近滚动容器底部时增量合并下一页，接口同时返回当前筛选条件下的 `total / page / pageSize / hasMore`。关键词、标签、目录/文件夹、无标签和文件分类必须先在 SQL 中完成过滤与总数统计，再应用 `LIMIT / OFFSET`；云文件只为当前页生成签名地址。书签通过全局同置顶分组锚点排序；笔记在页面树模式按当前 `parentId + isTop` 兄弟组锚点排序，旧调用未传树模式时继续兼容平铺读取。目录内关键词搜索由服务端从 owner 树快照扩展后代 ID，并返回面包屑路径与子页面数量。已加载前缀可以拖拽、未加载尾部不会被局部编号覆盖；拖到当前已加载末尾只表示插入该锚点之后，只有加载到真实末尾后才能拖到全局最后。标签编辑、标签详情和管理页等尚未迁移的旧调用显式使用不分页模式并保持原响应结构，后续迁移前不得依赖分页默认值。
 
 云空间文件预览统一由 `FilePreview.vue` 承载，桌面与移动端的上一个、下一个和下载操作固定使用同一套底部控制栏。视频默认暂停并由用户明确开始播放，音视频在进入播放器前通过 `canPlayType()` 做浏览器能力判断，真实解码失败仍回到可下载的稳定错误态；卡片视频使用完整比例缩略图、播放标识和可用时长。PDF 必须继续由前端主动拉取签名地址的字节数据并交给 `PdfPreview.vue` / PDF.js 渲染，禁止改回 `iframe`、`embed` 或直接导航到对象存储地址，避免浏览器把“查看”处理成下载。
+
+云空间批量下载在多选时必须先让用户选择“分别下载”或“打包为 ZIP”；单文件仍走普通下载。普通浏览器分别触发每个文件的下载，ZIP 模式继续用有进度、可取消的前端打包；Android App 因系统 `DownloadManager` 无法保存 WebView Blob，只提供逐个交接并在选择器中明确说明 ZIP 不可用，不能静默把所选文件改成另一种结果。
 
 新增格式由 `@lightnote/shared` 的统一注册表同时驱动前后端分类：ZIP/RAR/RAR5/7Z/TAR 及 GZ/BZ2/XZ 系列压缩包只在服务端调用 7-Zip 生成受限目录清单，前端支持目录导航、搜索和分页，不解压或读取包内正文；`.doc/.xls/.ppt/.rtf/.odt/.ods/.odp` 由独立 Worker 调用 LibreOffice 分别按 Writer、Calc、Impress 过滤器转换为私有 PDF，再沿用 `PdfPreview.vue`；TSV、JSONL/NDJSON、SRT、VTT、ICS、VCF、DIFF、PATCH 直接走已有文本预览。派生结果以源对象 ETag、大小、格式和策略版本作为缓存指纹，源文件变化后重新排队。分享页首次准备预览仍执行分享密码、有效期和次数校验并计一次下载授权，后续轮询使用短时随机票据，不重复计数。
 
@@ -396,6 +406,7 @@ src/
 - 消息写入在同一事务中重新锁定成员限制、`community_chat_runtime_policy` 单行策略、有效禁言和主房间；用户不能提交身份/角色。数据库策略或更高优先级的 `COMMUNITY_CHAT_EMERGENCY_READ_ONLY` 环境硬开关生效时，返回 423 稳定业务码且不落库。内容按纯文本保存，移除控制字符并限制 2,000 个 Unicode 字符，前端只用文本插值渲染。`(user_id, client_request_id)` 唯一键保证发送幂等，回复只能引用 `general` 内 active 消息；发言同时受路由限流与 `slow_mode_seconds` 约束。
 - 图片上传在写入对象存储前锁定当前账号行，串行统计 `uploading/pending/delete_pending/deleting` 未绑定记录；达到 12 张时返回稳定的 429 业务码，避免并发上传绕过配额。登记成功后才写私有 OBS，发送消息时按所有者和顺序原子绑定，取消或 24 小时过期进入可重试清理。
 - 历史以消息公有 UUID 作为向前游标、服务端按自增 ID 排序，默认/首屏页大小为 30；前端接近列表顶部时自动请求 `before` 下一页并保持当前阅读锚点，接口不会一次性返回全量历史。返回对象不暴露内部账号 ID，头像字段只给当前窗口内可复用的 `/api/community-chat/messages/:publicId/author-avatar` 短地址，浏览器再按需读取并缓存头像正文，避免列表重复携带大段 Base64。消息行公开显示作者昵称、角色、已佩戴头像框、等级、段位和历史已佩戴称号；点击头像或昵称只能用消息公有 ID 请求 `/messages/:publicId/author-profile`，公开名片返回昵称、身份、等级、称号、头像框稀有度、最多 60 字简介、按账号注册时间计算且可关闭的轻笺资历和最多 3 项精选成就，`/author-profile/achievements` 才延迟读取其全部已解锁成就。登录用户从聊天室设置进入 `/profile/me` 编辑自己的简介、轻笺资历可见性和精选成就，保存使用 `baseRevision` 乐观并发版本，且只能选择服务端核验为已解锁的成就。两类公开接口都会重新校验消息可见性、个人删除和屏蔽关系，始终不返回账号 ID、邮箱、经验值、资源数量或私人内容；官方账号可举报但不可屏蔽。前端复用 `AvatarFramePreview` 组合渲染，移动端用底部抽屉、PC 用弹窗，共享同一资料内容和权限判断。阅读位置通过 `GREATEST(last_read_message_id, new_id)` 单调推进，主房间未读排除自己的消息，并按用户保存的 `official / mentions_only / mentions / all` 四档范围过滤：`official` 只计管理员消息，`mentions_only` 只计普通成员发出的显式提及和直接引用回复，管理员消息不计入，两档严格互斥；`mentions` 合并前两类，`all` 再计普通非定向消息。游客不记未读。通知关闭时房间目录不查询也不返回聊天室未读，桌面入口和移动底栏角标归零，公共聊天历史仍可主动查看。
+- 聊天输入草稿使用当前页面运行时内存，按登录身份和房间隔离；路由切到其他模块再返回时恢复，页面刷新后允许丢失，不能写入长期存储或串到另一身份。消息列表离底部超过 128px（桌面）或 320px（移动）后显示“回到底部”，有未读新消息或深链焦点时优先显示原有强语义按钮；点击后清零距离和新消息提示。
 - 举报只接受消息公有 ID、原因枚举和最多 500 字说明；事务内重新校验成员和消息状态，证据快照只保留审核所需的频道、作者显示信息、正文和时间。相同用户对同一消息重复举报幂等。屏蔽同样从消息解析作者，不接受客户端 user ID；被屏蔽作者从历史、回复目标和未读统计中排除，官方安全账号不可屏蔽。
 - Root 审核列表不依赖消息开放开关，但拒绝管理员预览身份。每份待处理举报只能终态处置一次；除“无需处置”外都会隐藏消息，禁言与封禁同时写成员处罚或访问审计，所有动作和原因写入不可变更审核动作表。发言事务会再次检查有效禁言，封禁立即使社区访问失败关闭。
 - Root 运行策略管理只接受普通 Root 上下文，`GET/PUT /api/community-chat/admin/runtime-policy` 分别读取和切换数据库权威状态。切换原因必填，与动作、前后状态在同一事务写入 `community_chat_moderation_actions`；环境硬开关生效时后台不得恢复发言。
@@ -485,14 +496,14 @@ AI 前端由 `useAiAssistantStore` 承担会话域、草稿、单个材料 `cont
 
 持久会话链路包括：
 
-- `ai_conversations` 保存标题、范围、归档状态、保留策略和分支谱系；`ai_messages` 保存消息、请求/追踪 ID、材料快照、活动、覆盖度和答案版本组。
+- `ai_conversations` 保存标题、范围、归档状态和保留策略；`ai_messages` 保存消息、请求/追踪 ID、材料快照、活动、覆盖度和答案版本组。
 - 来源和证据分别进入 `ai_message_sources` 与 `ai_message_evidence`；客户端提交的消息 ID 不被信任，服务端生成 UUID，并仅以 `(conversation_id, request_id, role)` 做 owner 内幂等。
 - 会话中心支持列表、搜索、重命名、归档、单条删除/撤销、导出和“清除全部 AI 数据”。单条删除先在服务端改为隐藏状态，默认提供 15 秒（可配置 5 秒～2 分钟）的权威撤销窗口；窗口结束后定时器会事务清理关联记忆、Change Set 与会话子表，应用重启或定时器丢失时由会话保留调度器兜底。UI 用 `BCard` 展示撤销条，但是否可恢复最终由服务端状态与时间判断。总清除是无撤销事务：普通 self/normal 账号按 `subject_user_id` 清除该主体全部可控 AI 对象，包含曾由管理员授权上下文为该主体产生的对象，响应 `scope=subject_user`；管理员 `maintain` 调用只清当前 actor + subject + mode + context 四维域，响应 `scope=owner_domain`，`readonly` 不能调用。两种范围都覆盖会话、记忆、Change Set、产品事件与 SSE 恢复事件；普通 self 还会在同一事务推进 `ai_content_generations` 并删除 `ai_content_chunks`，提交后只驱逐本进程缓存，代际/schema 失败会让整个清除回滚；owner-domain 清除不触碰 subject 级索引代际。`agent_logs`、配额用量和请求占位账本按独立安全/运营保留策略保留；`ai_provider_balance_snapshots` 是供应商级运营账本，不归属任何用户，也不随用户清除删除。任何必需 AI 表或字段缺失时，总清除返回 `AI_DATA_CLEAR_SCHEMA_UNAVAILABLE`（503）、回滚整个事务，不会把“未检查”误报为“已清空”。
-- 会话谱系以 `root_conversation_id / parent_conversation_id / branch_from_message_id` 保存，并由 owner 四维 + live retention 查询；从指定消息创建分支会在同一事务克隆截至该点的消息与 parent 映射，继承 retention/expire 后立即打开，超过 200 条安全上限则返回 `CONVERSATION_BRANCH_TOO_LARGE`（409）且不部分写。fresh schema 的 root 为 NOT NULL；既有库增量迁移保持 nullable，使滚动/回滚旧后端可继续插入 NULL 独立根，新版查询同时按 root ID 或自身 ID 兼容。UI 用 B 组件展示最多 200 节点的分支树和前后导航；遗留会话只回填 `root=id`，不从标题/正文推断历史关系。
-- 重新生成保留全部旧答案，并用 `versionGroupId` 形成同会话版本组；版本 API 只读取 owner 内同 conversation 的 completed assistant 消息，最多 50 个。回答下方切换器只滚动/聚焦已保存版本，不隐藏、覆盖或删除旧答案；目标不在当前最多 200 条已加载消息时明确提示不可定位。`aiCloudHistory=false` 仍阻断自动 hydrate/create/save，但不误伤用户显式打开历史、谱系、分支和版本管理。
+- AI 问答分支功能已下线；历史 migration 中的 `root_conversation_id / parent_conversation_id / branch_from_message_id` 仅为已部署数据库和 fresh schema 兼容保留，运行时不再暴露谱系读取、分支创建或分支导航。新会话继续写入 `root_conversation_id=id`、其余两列为 NULL，以兼容 fresh schema 的非空约束。
+- 重新生成保留全部旧答案，并用 `versionGroupId` 形成同会话版本组；版本 API 只读取 owner 内同 conversation 的 completed assistant 消息，最多 50 个。回答下方切换器只滚动/聚焦已保存版本，不隐藏、覆盖或删除旧答案；目标不在当前最多 200 条已加载消息时明确提示不可定位。`aiCloudHistory=false` 仍阻断自动 hydrate/create/save，但不误伤用户显式打开历史和版本管理。
 - 账号 Settings 的“全量数据” JSON 导出同样按 `subject_user_id` 覆盖该账号的会话/消息/来源/证据/反馈、记忆、Change Set、产品事件、`agent_logs` 和配额用量，并返回 schema 版本、分域计数、不可用分域和排除清单。可重建内容/文档索引、10 分钟 SSE 恢复事件、请求级配额占位和供应商级 `ai_provider_balance_snapshots` 不具单用户可移植性，因此显式列为排除项。普通 self 总清除和导出虽然都是 subject 级，包含/排除与保留政策仍不同；管理员 maintain 清除则是更窄的 owner 域。接口和产品文案必须以返回的 scope 与 retained/exclusions 解释，不能混用。
 - 会话中心已用 `BSelect` 提供逐会话 `standard` / `temporary` / `indefinite` 保留策略；temporary 可选 1、7、30 天，显示权威到期时间及自动级联会话、消息、来源/证据、记忆、Change Set 的范围。服务端严格校验 patch，回显时只映射最近合法档位；temporary 由启动/周期调度器物理删除，同一调度器也收口超过撤销窗口的软删除会话。standard/indefinite 的长期产品政策仍需验收。
-- 登录账号的 Settings AI 区提供 `aiCloudHistory` 云端会话历史开关，使用账号 preferences 同步。关闭后 `ChatContainer` 不再自动 hydrate/create/save 云会话并清除当前 `cloudConversationId`；服务端 create/save 自动持久化 handler 也会按 subject 权威读取偏好，关闭或主体不可验证时失败关闭并返回 `AI_CLOUD_HISTORY_DISABLED`（409）。缺少该偏好字段默认开启，以兼容既有账号。本地 v3 Store 历史继续保留，既有云端历史不会因切换而删除；Change Set 等显式后台成果的直接 Service 写入、分支创建和历史管理不被自动持久化门禁误伤。仍需真实账号和多设备偏好传播验证。草稿和尚未发送的材料始终是本地窗口状态，不能被当作长期记忆。
+- 登录账号的 Settings AI 区提供 `aiCloudHistory` 云端会话历史开关，使用账号 preferences 同步。关闭后 `ChatContainer` 不再自动 hydrate/create/save 云会话并清除当前 `cloudConversationId`；服务端 create/save 自动持久化 handler 也会按 subject 权威读取偏好，关闭或主体不可验证时失败关闭并返回 `AI_CLOUD_HISTORY_DISABLED`（409）。缺少该偏好字段默认开启，以兼容既有账号。本地 v3 Store 历史继续保留，既有云端历史不会因切换而删除；Change Set 等显式后台成果的直接 Service 写入和历史管理不被自动持久化门禁误伤。仍需真实账号和多设备偏好传播验证。草稿和尚未发送的材料始终是本地窗口状态，不能被当作长期记忆。
 - 云历史开启时，新设备没有本地会话 ID 会自动加载云端最近活跃会话；已有设备继续恢复本机最后选择的会话。AI 抽屉关闭时不销毁，因此每次重新打开都主动拉取当前会话：同一 ID 直接同步新消息；若另一个会话在本设备上次云端检查后成为最新，则使用 `Alert.alert()` 询问是否切换。用户选择留在当前或明确从会话中心打开任一会话后，Store v3 记录已确认的最新 `(lastMessageAt, id)` 检查点，避免同一更新重复打扰；检查点只表示本设备已经见过该云端位置，不作为消息顺序或并发写入的权威版本。
 
 ### 证据与检索
@@ -653,7 +664,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - **建表 schema 是双轨,两条并存,排查时都要看**：
   - **轨道 A — 手工 `migrations/*.sql`**（现约 57 个 dated 文件）：**没有自动迁移 runner**,靠人工/DBA 执行(如 `rename_admin_to_user`、`conversion_events_ip`),deploy 脚本不跑迁移;建表直接用 `CREATE TABLE IF NOT EXISTS`(MySQL 5.7 支持)。已有 `migrations/schema-assertions.sql` 做启动/发布期 schema 断言(约定"有输出=失败",目前主要覆盖 AI 工作区表)。
-  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）/ `ensureResourceGovernanceSchema`。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。资源治理 Schema 也由部署前 `check:resource-governance` 幂等初始化，保证 Schema 断言在应用重启前可通过。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
+  - **轨道 B — app 启动时 `ensure*()` 运行时建表/补列**：`app.js` 还会调用 `ensureSecurityTables` / `ensureNotificationTable`（`notification` + `batch_id`/`recalled` 列）/ `ensurePointsSchema`（建 `points_log` / `user_cosmetics` / `user_item` / 兼容表 `ai_daily_bonus` + `ALTER user_growth` 补 `points`/`equipped_title`/`equipped_frame`/`storage_bonus_mb`/`ai_bonus_tokens`/`lottery_*` 列）/ `ensureNoteTreeSchema`（补 `note.parent_id`、子树删除批次列及页面树索引）/ `ensureBookmarkSnapshotTable` / `ensureBookmarkHealthTable` / `ensureFeatureRequestTables` / `ensureGrowthTaskSchema` / `ensureGrowthCenterSchema`（成就状态、成长偏好、回顾状态及旧数据幂等回填）/ `ensureAiDocumentSchema` / `ensureFilePreviewSchema` / `ensureCommunityChatSchema`（社区访问预留、偏好、审计、单一主房间、文本消息与阅读位置）/ `ensureResourceGovernanceSchema`。`ai_bonus_tokens` 是永久 AI 加油余额；配额闸门在同一事务内先占等级每日额度，再自动占该余额。成长任务由 `growth_tasks` 与 `user_growth_tasks` 保存定义、达成状态和 `claimed_at` 手动领取事实；业务事件只能标记达成，领取接口才可写经验账本。资源治理 Schema 也由部署前 `check:resource-governance` 幂等初始化，保证 Schema 断言在应用重启前可通过。运行时**加列**因 MySQL 5.7 不支持 `ADD COLUMN IF NOT EXISTS`,才先查 `information_schema` 再条件 `ALTER`(这是加列的手法,不是 A 轨 CREATE TABLE 的)。
   - 同一张表可能被两轨分建:如 `growth_events` 主表在迁移 `20260708_growth.sql`,而 `user_growth` 的积分/装扮/抽奖列由 `ensurePointsSchema` 运行时补。**只读 `migrations/` 会漏掉 B 轨的表;只 grep 代码里的 `CREATE TABLE` 又会漏掉 A 轨迁移建的表——两边都要查,别信任何一侧的"未命中"。**
 - **Schema 基线门禁**：`note.revision`、`note_versions.source_revision/reason`、旧版兼容列 `files.share_token`、独立分享表和文件预览任务表已由 `20260807_note_editor_safety.sql`、`20260730_file_share_lifecycle.sql`、`20260808_file_preview_artifacts.sql` 和 `tag_db.sql` 补齐；发布前运行 `pnpm --filter server check:schema` 与 `pnpm --filter server check:file-previews`，关键表、索引或已启用的 7-Zip/LibreOffice 运行时缺失时禁止重启应用。旧 `share_token` 仅用于迁移兼容，新写入统一使用 `file_shares.token_hash`。
 - 基线 `tag_db.sql` 可能已过期，仍含 `note_tags` / `tag_bookmark_relations` 等旧表；现行代码走 `tag` + `resource_tag_relations` 统一多态关联。
@@ -667,7 +678,8 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 
 - 段位特权（`util/growth.js` 的 `RANKS`）被多个模块读取：**AI 每日 token 额度**（`aiQuota`）、**回收站保留天数**（`trashHandle`）、**云空间容量**、**每日抽奖次数**。AI 调用先消耗当日等级额度，耗尽后才扣 `user_growth.ai_bonus_tokens` 永久余额；兑换、抽奖与历史背包转换都只能增加此余额。改等级阈值、特权表或余额扣减顺序会牵连这些模块，不是孤立改动。
 - 云空间等级容量采用 15 级曲线：`1 / 1.25 / 1.5 / 1.75 / 2 / 2.5 / 3 / 4 / 5 / 6 / 8 / 10.5 / 13.5 / 16.5 / 20 GB`，再叠加 `user_growth.storage_bonus_mb` 永久扩容。正常文件与回收站文件共用同一额度；移入回收站不释放容量，恢复不重复占用，只有彻底删除、清空或过期物理清理才释放。上传预检、写库前权威拦截及容量明细统一复用 `util/storageUsage.js`；AI 附件保存、工作台、管理员用户统计和 Agent 存储查询也必须按 `del_flag IN (0, 1)` 保持同一口径。同名覆盖只计算新旧文件差额。
-- 成长周报由 `util/weeklyReport.js` 聚合，不新建周报表：实时预览统计“含今天的最近 7 个自然日”，每周一通知固定统计上周一至周日，并把快照写入 `notification.meta.weeklyReport`。返回值除总量与上周对比外，还包含固定 7 天 `days`、`activeDays`、`bestDay`、自然周 `period`、等级进度和 `expStatus`；前端据此绘制真实趋势并解释最高等级/免经验账号的零经验，禁止把缺失日数据伪造成趋势。旧通知缺少新增字段时必须降级展示。导出周报卡只包含聚合指标，不包含资源标题或正文。
+- 成长周报由 `util/weeklyReport.js` 聚合，不新建周报表：实时预览统计“含今天的最近 7 个自然日”，每周一通知固定统计上周一至周日，并把快照写入 `notification.meta.weeklyReport`。返回值除总量与上周对比外，还包含固定 7 天 `days`、`activeDays`、`bestDay`、自然周 `period`、等级进度和 `expStatus`；前端据此绘制真实趋势并解释最高等级/免经验账号的零经验，禁止把缺失日数据伪造成趋势。旧通知缺少新增字段时必须降级展示。导出周报卡只包含聚合指标，不包含资源标题或正文；除本地图片下载外，还可通过标准云文件预签名上传链路保存到账号的“周报”目录，目录不存在时由 owner 事务接口原子复用或创建，禁止客户端先查后建造成重复目录。
+- `GET /growth/claimable` 只读返回日常阶段、一次性任务、成就、周挑战和 `nextAction`；`POST /growth/claimAll` 在单事务、同一用户锁内重新核算选定范围，统一写入经验、积分、道具和头像框回执。重复请求必须幂等，任一项失败必须整体回滚；所有成长 GET 接口禁止顺带建表、回填解锁或修正领取状态。
 - 一次性成长任务采用“事件达成、用户领取”两阶段模型：`status = completed` 只表示业务条件已满足，`claimed_at` 才表示奖励已领取。头像等资料保存接口必须等待达成状态同步后再响应；经验发放只允许从领取事务进入，并用成长账本唯一来源键保证重复点击幂等。
 - 头像框目录由 `util/points.js` 的 `FRAME_CATALOG` 统一维护，并用 `acquisition = shop | achievement` 区分获取方式；`SHOP_ITEMS` 只包含可扣积分购买的商品。完整目录及所有头像框入口按“基础 → 进阶 → 炫彩 → 传说”稳定递增，同档保留目录顺序；当前 25 款按 `5 / 6 / 6 / 8` 分布，积分框为 `3 / 3 / 3 / 4`，成就框为 `2 / 3 / 3 / 4`。笔记与文件都按 200 炫彩、500 传说形成双阶梯，避免直接把中间成就拔高后掏空炫彩档；200 数量档同时要求 Lv.5，书签/笔记/文件的 500 数量档同时要求 Lv.8，等级受每日经验硬顶约束，因此不再重复叠加注册天数或内容质量条件。视觉复杂度、价格与等级门槛必须匹配档位：积分框从 220 积分、无等级门槛的静态基础款，严格递增至 3200 积分、Lv.12 的传说款；积分基础框只使用静态材质，从进阶开始允许持续动效，并随价格和档位递增层数、外轨、光点与动效强度。免费成就框只有炫彩及以上允许持续动效；除传说外，免费框的视觉复杂度比同稀有度积分框低一档，即免费进阶按积分基础的静态预算设计，免费炫彩必须与积分进阶严格同档，使用同等级的主体轻动、完整单轨和随轨光点，不能弱化成几乎不可见的装饰，也不能升级到积分炫彩的多层动态结构或彗星。高亮持续能量环（如霓虹）归入传说。签到框按 7 天进阶、30 天炫彩、365 天传说形成阶梯，365 天“岁序长明”是签到线最高难度身份框，视觉强度必须高于其他常规传说；传说成就框不受免费框降档限制，可按实际难度使用完整轨道、强光晕等身份视觉。成就专属框必须直接展示对应 `achDesc` 及附加等级条件，不能只显示来源或数值进度。所有商店预览、顶栏、个人中心、聊天室佩戴态和后台用户管理复用 `AvatarFramePreview` 的 64px 固定设计画布，再整体等比缩放到目标头像尺寸；禁止按入口尺寸重新计算描边、渐变与轨道几何。后台用户分页接口随列表一次性左连接 `user_growth.equipped_frame`，禁止为每行头像追加独立请求；失效或未知框 ID 必须回退普通头像。`GET /growth/shop` 同时返回 `items` 与完整 `frames` 供同一页面展示，购买接口只校验 `SHOP_ITEMS`，佩戴接口校验完整目录与装扮权益；Root 自己的普通管理会话额外获得全目录直接佩戴能力，用于小头像和多端视觉验收，不扣积分、不补写 `user_cosmetics`，管理员预览上下文不继承该调试特权。成就领取仍以 `points_log(reason = achievement, ref = key)` 幂等，并在同一事务内发放积分和可选头像框；兼容头像框上线前的历史领取流水时，读取链路只把对应框合并为已拥有，首次佩戴再在事务内幂等补齐 `user_cosmetics` 并更新 `equipped_frame`，避免管理员只读预览产生写入。公共用户卡继续从该领取事实展示成就，不能只改前端状态。
 

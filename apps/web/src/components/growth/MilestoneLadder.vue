@@ -1,19 +1,19 @@
 <template>
   <div class="ml">
     <div class="ml-head">
-      <div class="ml-title">🏁 {{ t('growth.milestoneLadderTitle') }}</div>
+      <div class="ml-title"><SvgIcon :src="icon.growth.rank" size="16" /> {{ t('growth.milestoneLadderTitle') }}</div>
       <div class="ml-hint">{{ t('growth.milestoneLadderHint') }}</div>
     </div>
     <div class="ml-track">
       <div v-for="m in milestones" :key="m.days" class="ml-node" :class="{ reached: m.reached }">
         <div class="ml-day">{{ t('growth.milestoneDayN', { n: m.days }) }}</div>
         <div class="ml-rewards">
-          <span class="ml-rw">🪙 {{ m.points }}</span>
-          <span v-if="m.storageMb" class="ml-rw">💾 {{ fmtMb(m.storageMb) }}</span>
-          <span v-if="m.cards" class="ml-rw">🎫 {{ m.cards }}</span>
+          <span class="ml-rw"><SvgIcon :src="icon.growth.coin" size="12" /> {{ m.points }}</span>
+          <span v-if="m.storageMb" class="ml-rw"><SvgIcon :src="icon.growth.storage" size="12" /> {{ fmtMb(m.storageMb) }}</span>
+          <span v-if="m.cards" class="ml-rw"><SvgIcon :src="icon.growth.reward" size="12" /> {{ m.cards }}</span>
         </div>
         <div class="ml-state">
-          <span v-if="m.reached" class="ml-reached">✓ {{ t('growth.milestoneReached') }}</span>
+          <span v-if="m.reached" class="ml-reached"><SvgIcon :src="icon.filterPanel.check" size="12" /> {{ t('growth.milestoneReached') }}</span>
           <span v-else class="ml-remain">{{ Math.max(0, m.days - (currentStreak || 0)) }}d</span>
         </div>
       </div>
@@ -24,6 +24,8 @@
 <script setup lang="ts">
   import { useI18n } from 'vue-i18n';
   import type { StreakMilestone } from '@/composables/useGrowth.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const { t } = useI18n();
   defineProps<{ milestones: StreakMilestone[]; currentStreak?: number }>();
@@ -38,6 +40,9 @@
     gap: 12px;
   }
   .ml-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
     font-size: 15px;
     font-weight: 700;
   }
@@ -84,6 +89,10 @@
     color: var(--desc-color);
   }
   .ml-rw {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     white-space: nowrap;
   }
   .ml-state {
@@ -91,8 +100,14 @@
     font-size: 11px;
   }
   .ml-reached {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     color: #d97706;
     font-weight: 700;
+  }
+  :global(html.light-note-mobile-rendering) .ml-node.reached {
+    border-color: #d97706;
   }
   .ml-remain {
     color: var(--desc-color);

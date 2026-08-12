@@ -312,6 +312,7 @@
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
+  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory.ts';
   import { formatAdminLocation, resolveAdminLoginMethod } from './userAdminProfileFormat';
 
   interface UserAdminDetail {
@@ -448,11 +449,16 @@
     loading.value = false;
   }
 
-  function openOperationLogs() {
+  async function openOperationLogs() {
     const userId = String(detail.value?.profile?.id || props.userInfo?.id || '');
     if (!userId) return;
-    close();
-    router.push({ path: bookmark.isMobile ? '/operationLog' : '/admin/operationLog', query: { userId } });
+    const returnTo = bookmark.isMobile ? '/userMg' : '/admin/userMg';
+    await closeCurrentMobileOverlayThen(close, () =>
+      router.push({
+        path: bookmark.isMobile ? '/operationLog' : '/admin/operationLog',
+        query: { userId, returnTo },
+      }),
+    );
   }
 
   watch(

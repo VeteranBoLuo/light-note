@@ -7,9 +7,7 @@ import zhCN from '@/i18n/locales/zh-CN';
 /**
  * 笔记详情顶栏在三个断点下的操作可达性。
  *
- * 历史版本 / 标签 / 导出曾限定 isDesktop，把平板一起挡掉了：平板走的是非移动端
- * 分支，没有「更多」下拉菜单兜底，于是这三个功能在平板上完全无法访问。
- * 这组断言的重点就是「平板不能比桌面少功能」。
+ * 桌面空间充足时直接展示历史版本 / 标签 / 导出；平板和手机仍通过更多菜单保证功能可达。
  */
 const layout = { isMobile: false, isTablet: false, isDesktop: true };
 
@@ -94,9 +92,10 @@ function reachableActions(host: HTMLElement) {
     .map((item) => item.textContent || '')
     .join(' ');
   return {
-    history: menuText.includes(zhCN.noteDetail.history.entry),
-    tag: menuText.includes(zhCN.noteDetail.tags),
-    export: menuText.includes(zhCN.noteDetail.export),
+    history:
+      menuText.includes(zhCN.noteDetail.history.entry) || !!host.querySelector('.note-header-title-icon--history'),
+    tag: menuText.includes(zhCN.noteDetail.tags) || !!host.querySelector('.note-header-title-icon--tag'),
+    export: menuText.includes(zhCN.noteDetail.export) || !!host.querySelector('.note-header-title-icon--export'),
   };
 }
 
@@ -117,15 +116,22 @@ describe('NoteHeader 断点下的操作可达性', () => {
     cleanup = undefined;
   });
 
-  it('桌面端从紧凑的更多菜单提供历史版本、标签与导出', async () => {
+  it('桌面端把历史版本、标签与导出直接展示在顶栏', async () => {
     const host = mount();
     await nextTick();
 
     expect(reachableActions(host)).toEqual({ history: true, tag: true, export: true });
+    expect(host.querySelector('.note-header-title-icon--history')).not.toBeNull();
+    expect(host.querySelector('.note-header-title-icon--tag')).not.toBeNull();
+    expect(host.querySelector('.note-header-title-icon--export')).not.toBeNull();
+    const menuText = host.querySelector('.dropdown-stub')?.textContent || '';
+    expect(menuText).not.toContain(zhCN.noteDetail.history.entry);
+    expect(menuText).not.toContain(zhCN.noteDetail.tags);
+    expect(menuText).not.toContain(zhCN.noteDetail.export);
   });
 
-  /** 这条是回归重点：平板与桌面共用同一份更多菜单，不因断点丢功能。 */
-  it('平板与桌面拿到同一组更多菜单操作，不因断点丢功能', async () => {
+  /** 这条是回归重点：平板不摊开按钮，但不能因此丢功能。 */
+  it('平板仍从更多菜单访问同一组操作', async () => {
     setLayout('tablet');
     const host = mount();
     await nextTick();

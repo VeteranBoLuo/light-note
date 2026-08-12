@@ -107,6 +107,12 @@ export async function cleanupOrphanNoteImages(urls, { strict = false } = {}) {
         continue;
       }
       try {
+        try {
+          const { deleteNoteImageThumbnail } = await import('./noteImageThumbnail.js');
+          await deleteNoteImageThumbnail(u);
+        } catch {
+          // 派生缓存不可用不能反过来阻断原图的既有清理语义；缓存可由后续治理任务回收。
+        }
         await fsP.unlink(path.join(NOTE_IMAGE_DIR, fileName));
         deleted += 1;
       } catch (error) {

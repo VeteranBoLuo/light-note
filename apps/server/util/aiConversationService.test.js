@@ -13,7 +13,6 @@ vi.mock('./aiDocument/service.js', () => ({ deleteAllDocumentSources }));
 import {
   __testing,
   assertAiCloudHistoryEnabled,
-  branchAiConversation,
   cleanupExpiredAiConversations,
   cleanupDeletedAiConversations,
   clearAiIdentityData,
@@ -21,7 +20,6 @@ import {
   deleteAiConversation,
   exportAiConversations,
   getAiConversation,
-  getAiConversationLineage,
   listAiConversations,
   listAiMessageVersions,
   prepareAiMessageVersionGroup,
@@ -105,7 +103,9 @@ describe('AI conversation isolation', () => {
     await expect(
       recoverAiConversationFromLocal(
         identity,
-        { messages: [{ clientId: 'local-1', role: 'user', status: 'completed', content: 'readonly must not restore' }] },
+        {
+          messages: [{ clientId: 'local-1', role: 'user', status: 'completed', content: 'readonly must not restore' }],
+        },
         database,
       ),
     ).rejects.toMatchObject({ code: 'ADMIN_PREVIEW_READONLY', status: 403 });
@@ -144,12 +144,30 @@ describe('AI conversation isolation', () => {
       }
       if (normalizedSql.startsWith('SELECT * FROM ai_conversations')) return [[conversation]];
       if (normalizedSql.includes('SELECT id FROM ai_messages WHERE id = ? AND conversation_id = ?')) {
-        const found = recoveredMessages.find((message) => message.id === params[0] && message.conversation_id === params[1]);
+        const found = recoveredMessages.find(
+          (message) => message.id === params[0] && message.conversation_id === params[1],
+        );
         return [found ? [{ id: found.id }] : []];
       }
-      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ?')) return [[]];
+      if (normalizedSql.includes('SELECT id FROM ai_messages WHERE conversation_id = ? AND request_id = ?'))
+        return [[]];
       if (normalizedSql.includes('INSERT INTO ai_messages')) {
-        const [id, conversationId, parentMessageId, requestId, traceId, role, content, status, contextRefs, attachmentRefs, activity, coverage, versionGroupId, modelMeta] = params;
+        const [
+          id,
+          conversationId,
+          parentMessageId,
+          requestId,
+          traceId,
+          role,
+          content,
+          status,
+          contextRefs,
+          attachmentRefs,
+          activity,
+          coverage,
+          versionGroupId,
+          modelMeta,
+        ] = params;
         recoveredMessages.push({
           id,
           conversation_id: conversationId,
@@ -176,11 +194,15 @@ describe('AI conversation isolation', () => {
         return [{ affectedRows: 1 }];
       }
       if (normalizedSql.startsWith('SELECT * FROM ai_messages WHERE id = ?')) {
-        const found = recoveredMessages.find((message) => message.id === params[0] && message.conversation_id === params[1]);
+        const found = recoveredMessages.find(
+          (message) => message.id === params[0] && message.conversation_id === params[1],
+        );
         return [found ? [found] : []];
       }
       if (normalizedSql.startsWith('UPDATE ai_messages SET version_group_id')) {
-        const found = recoveredMessages.find((message) => message.id === params[1] && message.conversation_id === params[2]);
+        const found = recoveredMessages.find(
+          (message) => message.id === params[1] && message.conversation_id === params[2],
+        );
         if (found) found.version_group_id = params[0];
         return [{ affectedRows: found ? 1 : 0 }];
       }
@@ -490,46 +512,7 @@ describe('AI conversation isolation', () => {
   });
 });
 
-describe('AI conversation lineage and answer versions', () => {
-  it('滚动发布时把旧后端写入的 NULL 根与新版子分支一起返回，不依赖 current 注入', async () => {
-    const root = {
-      id: 'root-1',
-      title: 'Root',
-      root_conversation_id: null,
-      parent_conversation_id: null,
-      status: 'active',
-      retention_mode: 'standard',
-      create_time: '2026-07-19 10:00:00',
-    };
-    const child = {
-      id: 'child-1',
-      title: 'Child',
-      root_conversation_id: 'root-1',
-      parent_conversation_id: 'root-1',
-      branch_from_message_id: 'message-1',
-      status: 'active',
-      retention_mode: 'standard',
-      create_time: '2026-07-19 10:01:00',
-    };
-    const databaseFor = (current) => ({
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([[current]])
-        .mockResolvedValueOnce([[root, child]]),
-    });
-
-    for (const current of [root, child]) {
-      const database = databaseFor(current);
-      const result = await getAiConversationLineage(normalIdentity, current.id, database);
-      expect(result.nodes.map((node) => node.id)).toEqual(['root-1', 'child-1']);
-      expect(result.nodes.find((node) => node.id === current.id)?.current).toBe(true);
-      expect(database.query.mock.calls[1][0]).toContain('(root_conversation_id = ? OR id = ?)');
-      expect(database.query.mock.calls[1][0]).toContain('admin_context_id <=> ?');
-      expect(database.query.mock.calls[1][0]).toContain("retention_mode <> 'temporary'");
-      expect(database.query.mock.calls[1][1]).toEqual(['user-1', 'user-1', 'normal', null, 'root-1', 'root-1']);
-    }
-  });
-
+describe('AI answer versions', () => {
   it('版本列表只读取同会话同 versionGroupId，并兼容以首个回答 ID 作为组锚点', async () => {
     const database = {
       query: vi
@@ -572,107 +555,6 @@ describe('AI conversation lineage and answer versions', () => {
     expect(connection.query.mock.calls[2][1]).toEqual(['answer-1', 'answer-1', 'conversation-1']);
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
-  });
-
-  it('分支创建在同一事务连接中写入谱系并继承保留策略', async () => {
-    let branchRow;
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi.fn(async (sql, params = []) => {
-        if (String(sql).includes('INSERT INTO ai_conversations')) {
-          branchRow = {
-            id: params[0],
-            title: params[5],
-            scope_type: params[6],
-            scope_json: params[7],
-            retention_mode: params[8],
-            expire_at: params[9],
-            root_conversation_id: params[10],
-            parent_conversation_id: params[11],
-            branch_from_message_id: params[12],
-            status: 'active',
-          };
-          return [{ affectedRows: 1 }];
-        }
-        if (String(sql).includes('SELECT * FROM ai_conversations')) {
-          if (params[0] === 'source-1') {
-            return [
-              [
-                {
-                  id: 'source-1',
-                  title: 'Source',
-                  scope_type: 'global',
-                  scope_json: '{}',
-                  status: 'active',
-                  retention_mode: 'indefinite',
-                  root_conversation_id: 'root-1',
-                },
-              ],
-            ];
-          }
-          return [[branchRow]];
-        }
-        if (String(sql).includes('SELECT COUNT(*) AS total FROM ai_messages')) return [[{ total: 0 }]];
-        if (String(sql).includes('SELECT * FROM ai_messages')) return [[]];
-        return [{ affectedRows: 1 }];
-      }),
-    };
-    const database = { getConnection: vi.fn().mockResolvedValue(connection) };
-    const branch = await branchAiConversation(normalIdentity, 'source-1', {}, database);
-    expect(branch).toMatchObject({ rootConversationId: 'root-1', parentConversationId: 'source-1' });
-    expect(connection.beginTransaction).toHaveBeenCalledOnce();
-    expect(connection.commit).toHaveBeenCalledOnce();
-    expect(connection.rollback).not.toHaveBeenCalled();
-    expect(connection.release).toHaveBeenCalledOnce();
-    expect(branchRow).toMatchObject({
-      retention_mode: 'indefinite',
-      root_conversation_id: 'root-1',
-      parent_conversation_id: 'source-1',
-      branch_from_message_id: null,
-    });
-  });
-
-  it('超过安全克隆上限时在 owner 校验后稳定拒绝，不创建静默截断分支', async () => {
-    const connection = {
-      beginTransaction: vi.fn(),
-      commit: vi.fn(),
-      rollback: vi.fn(),
-      release: vi.fn(),
-      query: vi
-        .fn()
-        .mockResolvedValueOnce([[{ id: 'source-large', status: 'active', retention_mode: 'standard' }]])
-        .mockResolvedValueOnce([[{ total: 201 }]]),
-    };
-    await expect(
-      branchAiConversation(
-        normalIdentity,
-        'source-large',
-        { throughMessageId: 'message-201' },
-        {
-          getConnection: vi.fn().mockResolvedValue(connection),
-        },
-      ),
-    ).rejects.toMatchObject({ code: 'CONVERSATION_BRANCH_TOO_LARGE', status: 409 });
-    expect(connection.query.mock.calls[0][0]).toContain('admin_context_id <=> ?');
-    expect(connection.query.mock.calls[1]).toEqual([
-      'SELECT COUNT(*) AS total FROM ai_messages WHERE conversation_id = ?',
-      ['source-large'],
-    ]);
-    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO ai_conversations'))).toBe(
-      false,
-    );
-    expect(connection.commit).not.toHaveBeenCalled();
-    expect(connection.rollback).toHaveBeenCalledOnce();
-  });
-
-  it('克隆消息只映射已在新分支创建的父 ID，不泄漏源会话消息 ID', () => {
-    const ids = new Map([['source-user', 'branch-user']]);
-    expect(__testing.clonedParentMessageId({ parentMessageId: 'source-user' }, ids)).toBe('branch-user');
-    expect(__testing.clonedParentMessageId({ parentMessageId: 'not-cloned' }, ids)).toBeNull();
-    expect(__testing.clonedParentMessageId({ parentMessageId: null }, ids)).toBeNull();
   });
 });
 

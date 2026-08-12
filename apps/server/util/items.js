@@ -21,7 +21,7 @@ export const CONSUMABLES = {
   ai_pack: {
     id: 'ai_pack',
     name: 'AI 加油包',
-    icon: '⚡',
+    icon: 'ai',
     backing: 'user_item',
     effect: 'ai_tokens',
     tokens: 600_000,
@@ -31,7 +31,7 @@ export const CONSUMABLES = {
   makeup_card: {
     id: 'makeup_card',
     name: '补签卡',
-    icon: '🎫',
+    icon: 'checkin',
     backing: 'card_column',
     stackMax: 2,
     desc: '可补最近 3 个自然日内的漏签、续上连签(上限 2 张)。补签不发经验、积分或额外奖励。',
@@ -58,9 +58,29 @@ export async function grantItem(conn, userId, itemId, qty = 1) {
   const n = Math.trunc(Number(qty) || 0);
   if (n <= 0) return { ok: false, reason: 'bad_qty' };
   if (def.backing === 'card_column') {
-    // 补签卡:沿用 user_growth.streak_protect_cards,封顶 stackMax
-    await db.query('UPDATE user_growth SET streak_protect_cards = LEAST(?, streak_protect_cards + ?) WHERE user_id = ?', [def.stackMax || 2, n, userId]);
-    return { ok: true, itemId, qty: n, backing: 'card_column' };
+    // 返回实际到账量，调用方可对满仓溢出做显式补偿。事务调用时 FOR UPDATE 也会串行化抽奖/兑换。
+    const stackMax = def.stackMax || 2;
+    const [[row]] = await db.query(
+      'SELECT streak_protect_cards AS qty FROM user_growth WHERE user_id = ? FOR UPDATE',
+      [userId],
+    );
+    if (!row) return { ok: false, reason: 'growth_missing', itemId, qty: 0, overflowQty: n };
+    const before = Number(row.qty || 0);
+    const grantedQty = Math.max(0, Math.min(n, stackMax - before));
+    if (grantedQty > 0) {
+      await db.query('UPDATE user_growth SET streak_protect_cards = streak_protect_cards + ? WHERE user_id = ?', [
+        grantedQty,
+        userId,
+      ]);
+    }
+    return {
+      ok: true,
+      itemId,
+      qty: grantedQty,
+      requestedQty: n,
+      overflowQty: n - grantedQty,
+      backing: 'card_column',
+    };
   }
   // 其余消耗品:进背包 user_item,可叠加
   await db.query(

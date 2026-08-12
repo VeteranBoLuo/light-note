@@ -49,6 +49,17 @@ export async function ensureNotificationTable() {
   await ensureIndex('notification', 'idx_batch', 'KEY idx_batch (batch_id)');
   // recalled:管理员撤回标记(区别于用户自行删除的 del_flag —— 二者语义不同,不可混用)
   await ensureColumn('notification', 'recalled', "recalled tinyint NOT NULL DEFAULT 0 COMMENT '管理员是否已撤回'");
+  // 管理员历史归档只影响后台列表可见性，保留原通知行作为发送、阅读与审计依据。
+  await ensureColumn(
+    'notification',
+    'admin_archived',
+    "admin_archived tinyint NOT NULL DEFAULT 0 COMMENT '管理员发送历史是否归档'",
+  );
+  await ensureIndex(
+    'notification',
+    'idx_notification_admin_history',
+    'KEY idx_notification_admin_history (admin_archived, type, create_time, batch_id)',
+  );
   // v2 待办提醒按 Job 写稳定来源键，Worker 超时重试也不会生成两条站内通知。
   await ensureColumn('notification', 'source_type', 'source_type varchar(32) DEFAULT NULL');
   await ensureColumn('notification', 'source_id', 'source_id varchar(64) DEFAULT NULL');

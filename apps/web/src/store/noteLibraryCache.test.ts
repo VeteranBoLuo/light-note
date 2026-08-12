@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import useNoteLibraryCacheStore, { buildNoteLibraryListCacheKey } from './noteLibraryCache';
+import useNoteLibraryCacheStore, {
+  NOTE_LIBRARY_RETURN_SCROLL_TTL_MS,
+  buildNoteLibraryListCacheKey,
+} from './noteLibraryCache';
 
 describe('noteLibraryCache', () => {
   beforeEach(() => {
@@ -51,5 +54,43 @@ describe('noteLibraryCache', () => {
     snapshot.items[0].isCheck = true;
 
     expect(store.readList(key)?.items[0]).toEqual({ id: 'note-a', isCheck: false });
+  });
+
+  it('按列表范围隔离一次性返回位置，并允许恢复后清除', () => {
+    const store = useNoteLibraryCacheStore();
+    const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory', parentId: 'folder-a' });
+    const secondKey = buildNoteLibraryListCacheKey('user-a', { mode: 'tags', tagId: 'tag-a' });
+    const snapshot = {
+      top: 640,
+      left: 0,
+      viewMode: 'card',
+      routeFullPath: '/noteLibrary?parent=folder-a',
+      loadedPage: 3,
+    };
+
+    store.writeReturnScroll(firstKey, snapshot);
+
+    expect(store.readReturnScroll(firstKey)).toMatchObject(snapshot);
+    expect(store.readReturnScroll(secondKey)).toBeNull();
+    store.clearReturnScroll(firstKey);
+    expect(store.readReturnScroll(firstKey)).toBeNull();
+  });
+
+  it('返回位置只保留在短期内存会话中', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-12T00:00:00Z'));
+    const store = useNoteLibraryCacheStore();
+    const key = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
+    store.writeReturnScroll(key, {
+      top: 240,
+      left: 0,
+      viewMode: 'list',
+      routeFullPath: '/noteLibrary',
+      loadedPage: 1,
+    });
+
+    vi.advanceTimersByTime(NOTE_LIBRARY_RETURN_SCROLL_TTL_MS + 1);
+
+    expect(store.readReturnScroll(key)).toBeNull();
   });
 });

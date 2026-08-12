@@ -52,10 +52,6 @@
             <SvgIcon :src="icon.filterPanel.check" size="14" aria-hidden="true" />
             {{ t('ai.resultActions.applySelection') }}
           </BButton>
-          <BButton :disabled="busy || branching || !conversationId" :loading="branching" @click="createBranch">
-            <SvgIcon :src="icon.ai.branch" size="14" aria-hidden="true" />
-            {{ t('ai.resultActions.branch') }}
-          </BButton>
         </div>
       </template>
     </BPopover>
@@ -353,7 +349,6 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import {
     applyAiChangeSet,
-    branchAiConversation,
     listAiResultReusableBlocks,
     listAiResultNoteTargets,
     prepareAiResultNoteReuse,
@@ -388,12 +383,10 @@
     feedback: [value: { rating: 'helpful' | 'unhelpful'; reason?: string; resolved?: boolean }];
     saved: [note: { id: string; title: string }];
     reused: [value: { mode: ReuseMode; noteId: string; changeSetId?: string; status: 'applied' | 'undone' }];
-    branched: [conversationId: string];
   }>();
   const { t } = useI18n();
   const router = useRouter();
   const saving = ref(false);
-  const branching = ref(false);
   const submitting = ref(false);
   const feedbackVisible = ref(false);
   const feedbackReason = ref<FeedbackReason>('incorrect');
@@ -747,21 +740,6 @@
   function openSecondaryAction(mode: Exclude<ReuseMode, 'create'>) {
     moreOpen.value = false;
     openReuse(mode);
-  }
-
-  async function createBranch() {
-    if (!props.conversationId) return;
-    moreOpen.value = false;
-    branching.value = true;
-    try {
-      const branched = await branchAiConversation(props.conversationId, props.messageId);
-      emit('branched', branched.id);
-      message.success(t('ai.resultActions.branchCreated'));
-    } catch {
-      message.warning(t('ai.resultActions.branchFailed'));
-    } finally {
-      branching.value = false;
-    }
   }
 
   watch(targetNoteId, () => {

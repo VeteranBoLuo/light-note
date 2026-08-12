@@ -1,7 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import zhCN from '@/i18n/locales/zh-CN';
+
+const topBarSource = readFileSync(resolve(process.cwd(), 'src/components/mobile/MobileTopBar.vue'), 'utf8');
 
 const release = { versionName: '1.0.1', downloadPath: '/downloads/android/light-note-1.0.1.apk', released: true };
 let userAgent = '';
@@ -100,6 +104,12 @@ describe('移动顶栏 · 头像入口', () => {
   it('首屏主动加载成长快照，确保头像框和升级提醒无需先进入个人中心', () => {
     mount();
     expect(loadGrowth).toHaveBeenCalledTimes(1);
+  });
+
+  it('在 44px 点击区内放大头像主体，但不挤压顶栏布局', () => {
+    expect(topBarSource).toContain(':size="32"');
+    expect(topBarSource).toContain('profileAvatarSource" size="36"');
+    expect(topBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;/u);
   });
 
   it('左侧使用头像入口并导航到个人中心', async () => {

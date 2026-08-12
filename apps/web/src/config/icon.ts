@@ -92,6 +92,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5h6v6H4V5Zm10 0h6v6h-6V5ZM4 15h6v4H4v-4Zm10 0h6v4h-6v-4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
     level:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m12 3l2.2 4.45l4.9.7l-3.55 3.45l.85 4.9L12 14.2L7.6 16.5l.85-4.9L4.9 8.15l4.9-.7L12 3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M8 20h8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    crown:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 7l4.2 4L12 5l3.8 6L20 7l-1.5 11h-13L4 7Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 15h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     tenure:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M12 20v-7m0 0c0-3.5 2.1-5.6 6.25-6.25C18.1 10.8 16 12.9 12 13Zm0 2c0-2.9-1.75-4.65-5.25-5.25c.1 3.45 1.85 5.2 5.25 5.25Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M7.5 20h9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     // 成就徽记：每个成就拥有独立图形，统一由 AchievementEmblem 组合成同一套徽章视觉。
@@ -612,8 +614,6 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M8 4.5A3.5 3.5 0 0 0 4.5 8c0 .8.27 1.54.72 2.13A4 4 0 0 0 7 17.7V20h5V6.5A3.5 3.5 0 0 0 8.5 3c-.8 0-1.54.27-2.13.72"/><path d="M16 4.5A3.5 3.5 0 0 1 19.5 8c0 .8-.27 1.54-.72 2.13A4 4 0 0 1 17 17.7V20h-5V6.5A3.5 3.5 0 0 1 15.5 3c.8 0 1.54.27 2.13.72M8 9.5h4m0 4h4"/></g></svg>',
     pending:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M5.6 5.6l-2-2"/></g></svg>',
-    branch:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="7" r="2"/><circle cx="6" cy="19" r="2"/><path d="M6 7v10M8 11h4a6 6 0 0 0 6-2"/></g></svg>',
     feedbackUp:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M8 10v10H4V10zM8 18h8.2a2 2 0 0 0 1.94-1.52l1.4-5.5A2 2 0 0 0 17.6 8.5H14l.5-3a2 2 0 0 0-1.98-2.33L8 10"/></g></svg>',
     feedbackDown:

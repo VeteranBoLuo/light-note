@@ -21,6 +21,24 @@ export function mergeResourcePage<T>(current: T[], incoming: T[], getKey: (item:
   return Array.from(merged.values());
 }
 
+/**
+ * 刷新第一页时替换已加载前缀，并保留后续分页内容。
+ * 用于从详情返回长列表：既让首屏数据更新，也不因只刷新 page=1 而丢掉用户已经滚到的页。
+ */
+export function mergeResourceRefreshedHead<T>(
+  current: T[],
+  refreshedHead: T[],
+  getKey: (item: T) => string = getResourceId,
+): T[] {
+  const normalizedHead = mergeResourcePage([], refreshedHead, getKey);
+  const refreshedKeys = new Set(normalizedHead.map(getKey).filter(Boolean));
+  const preservedTail = current.filter((item) => {
+    const key = getKey(item);
+    return key && !refreshedKeys.has(key);
+  });
+  return [...normalizedHead, ...preservedTail].slice(0, Math.max(current.length, normalizedHead.length));
+}
+
 export function isNearResourceScrollEnd(
   element: Pick<HTMLElement, 'scrollTop' | 'clientHeight' | 'scrollHeight'>,
   threshold = RESOURCE_LOAD_MORE_THRESHOLD,

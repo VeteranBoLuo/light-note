@@ -29,6 +29,7 @@ export interface Growth {
   dailyExp?: number;
   dailyCap?: number;
   dailyCapReached?: boolean;
+  features?: { growthCenterV2?: boolean };
 }
 
 export interface Rank {
@@ -53,6 +54,8 @@ export interface Achievement {
   frameId?: string | null; // 可选头像框奖励
   claimed?: boolean; // 是否已领取
   claimable?: boolean; // 已解锁且未领
+  unlockedAt?: string | null;
+  claimedAt?: string | null;
 }
 
 export interface GrowthStats {
@@ -66,6 +69,7 @@ export interface GrowthStats {
   tagCount: number;
   completedTodoCount: number;
   organizedResourceCount: number;
+  pendingResourceCount?: number;
   weekExp: number;
   checkinDays: string[];
 }
@@ -176,8 +180,13 @@ export interface LotteryPrize {
   amount: number;
   name: string;
   rate?: number; // 概率%(仅状态接口返回)
+  normalRate?: number;
+  pityRate?: number;
   rare?: boolean;
   guaranteed?: boolean; // 本次结果是否由第 N 抽保底触发
+  compensated?: boolean;
+  compensationReason?: 'makeup_card_full' | string;
+  originalReward?: { kind: string; amount: number };
 }
 
 export interface LotteryStatus {
@@ -187,6 +196,8 @@ export interface LotteryStatus {
   singleCost: number;
   tenCost: number;
   pityEvery: number;
+  pityCountsFreeDraws?: boolean;
+  overflowPolicy?: { itemId: string; maxInventory: number; compensationPoints: number };
   level: number;
   freeDaily: number; // 当前等级每日免费次数
   freeRemaining: number; // 今日剩余免费次数
@@ -237,6 +248,38 @@ export interface RecapData {
   weekly?: RecapItem[];
   onThisDay: RecapItem[];
   buried: RecapItem[];
+  stableDate?: string;
+  timezone?: string;
+}
+
+export interface GrowthPreferences {
+  weeklyActiveTarget: 0 | 3 | 5 | 7;
+  streakReminderEnabled: boolean;
+  celebrationEnabled: boolean;
+  lowPressureMode: boolean;
+  timezone: string;
+  utcOffsetMinutes: number;
+}
+
+export interface ClaimableItemGroup<T = any> {
+  count: number;
+  items: T[];
+}
+
+export interface GrowthClaimable {
+  count: number;
+  daily: ClaimableItemGroup;
+  growthTasks: ClaimableItemGroup<GrowthTask>;
+  achievements: ClaimableItemGroup<Achievement>;
+  weekly: ClaimableItemGroup<WeeklyChallenge>;
+  today?: { completed: number; total: number; claimableCount: number };
+  nextAction?: {
+    type: string;
+    key: string;
+    action: string;
+    progress: { current: number; target: number } | null;
+    reward?: { exp: number; points: number } | null;
+  } | null;
 }
 
 export interface GrowthTask {
@@ -254,6 +297,8 @@ export interface GrowthTask {
 
 export interface GrowthTasksData {
   tasks: GrowthTask[];
+  completedTasks?: GrowthTask[];
+  allTasks?: GrowthTask[];
   totalCount: number;
   completedCount: number;
   claimedCount: number;
@@ -266,7 +311,8 @@ const RETIRED_GROWTH_TASK_KEYS = new Set(['first_review']);
 
 // 兼容前后端滚动更新：旧后端进程可能短暂返回已退役任务，前端仍需按当前产品口径收敛计数与展示。
 function normalizeGrowthTasks(data: GrowthTasksData): GrowthTasksData {
-  const tasks = (Array.isArray(data.tasks) ? data.tasks : [])
+  const normalize = (input: GrowthTask[]) =>
+    input
     .filter((task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey))
     .map((task) => {
       // 滚动发布期间旧后端没有 claimed 字段；旧流程的 completed 已自动发奖，因此按已领取兼容。
@@ -278,16 +324,23 @@ function normalizeGrowthTasks(data: GrowthTasksData): GrowthTasksData {
         claimedAt: task.claimedAt || null,
       };
     });
-  const completedCount = tasks.filter((task) => task.completed).length;
-  const claimedCount = tasks.filter((task) => task.claimed).length;
+  const tasks = normalize(Array.isArray(data.tasks) ? data.tasks : []);
+  const completedTasks = normalize(Array.isArray(data.completedTasks) ? data.completedTasks : []);
+  const allTasks = normalize(
+    Array.isArray(data.allTasks) ? data.allTasks : [...tasks, ...completedTasks.filter((task) => !tasks.some((x) => x.taskKey === task.taskKey))],
+  );
+  const completedCount = allTasks.filter((task) => task.completed).length;
+  const claimedCount = allTasks.filter((task) => task.claimed).length;
   return {
     tasks,
-    totalCount: tasks.length,
+    completedTasks,
+    allTasks,
+    totalCount: allTasks.length,
     completedCount,
     claimedCount,
-    claimableCount: tasks.filter((task) => task.claimable).length,
-    remainingCount: tasks.length - completedCount,
-    activeCount: tasks.length - claimedCount,
+    claimableCount: allTasks.filter((task) => task.claimable).length,
+    remainingCount: allTasks.length - completedCount,
+    activeCount: allTasks.length - claimedCount,
   };
 }
 
@@ -301,11 +354,27 @@ const lottery = ref<LotteryStatus | null>(null);
 const weekly = ref<WeeklyData | null>(null);
 const recap = ref<RecapData | null>(null);
 const growthTasks = ref<GrowthTasksData | null>(null);
+const claimable = ref<GrowthClaimable | null>(null);
+const preferences = ref<GrowthPreferences | null>(null);
 const loading = ref(false);
+const growthError = ref(false);
 const dashboardLoading = ref(false);
+const dashboardError = ref(false);
+const claimableLoading = ref(false);
+const claimableError = ref(false);
+const preferencesLoading = ref(false);
+const preferencesError = ref(false);
+const recapLoading = ref(false);
+const recapError = ref(false);
+const claimingRewards = ref(false);
 const shopLoading = ref(false);
+const shopError = ref(false);
+const inventoryLoading = ref(false);
+const inventoryError = ref(false);
 const lotteryLoading = ref(false);
+const lotteryError = ref(false);
 const growthTasksLoading = ref(false);
+const growthTasksError = ref(false);
 let loadedOnce = false;
 let ranksLoaded = false;
 let ownerId: string | null = null; // 成长缓存归属的账号,切号即作废
@@ -315,9 +384,17 @@ let growthRequestOwnerId: string | null = null;
 let growthTasksRequest: Promise<GrowthTasksData | null> | null = null;
 let growthTasksRequestOwnerId: string | null = null;
 let growthRequestVersion = 0;
+let ownerGeneration = 0;
+let claimRequestVersion = 0;
+
+function isCurrentGrowthOwner(uid: string, generation: number) {
+  return ownerGeneration === generation && ownerId === uid && (useUserStore().id || 'visitor') === uid;
+}
 
 // 登出/切换账号时作废用户成长缓存(ranks 段位表全局通用,与账号无关,不清)
 export function resetGrowth() {
+  ownerGeneration += 1;
+  claimRequestVersion += 1;
   growth.value = null;
   dashboard.value = null;
   shop.value = null;
@@ -326,6 +403,8 @@ export function resetGrowth() {
   weekly.value = null;
   recap.value = null;
   growthTasks.value = null;
+  claimable.value = null;
+  preferences.value = null;
   loadedOnce = false;
   ownerId = null;
   growthTasksOwnerId = null;
@@ -335,7 +414,24 @@ export function resetGrowth() {
   growthTasksRequestOwnerId = null;
   growthRequestVersion += 1;
   loading.value = false;
+  growthError.value = false;
   growthTasksLoading.value = false;
+  growthTasksError.value = false;
+  dashboardLoading.value = false;
+  dashboardError.value = false;
+  claimableLoading.value = false;
+  claimableError.value = false;
+  preferencesLoading.value = false;
+  preferencesError.value = false;
+  recapLoading.value = false;
+  recapError.value = false;
+  shopLoading.value = false;
+  shopError.value = false;
+  inventoryLoading.value = false;
+  inventoryError.value = false;
+  lotteryLoading.value = false;
+  lotteryError.value = false;
+  claimingRewards.value = false;
 }
 
 // 积分余额单一事实源是 growth.points;商店/抽奖各自缓存了余额副本,
@@ -347,26 +443,61 @@ function syncPointsToViews() {
   if (shop.value) shop.value.points = p;
 }
 
+function ensureGrowthOwner(uid: string) {
+  if (ownerId === uid) return;
+  // 任一成长入口都可能先发请求；不能依赖 /growth/me 恰好先执行来完成账号隔离。
+  growth.value = null;
+  dashboard.value = null;
+  shop.value = null;
+  inventory.value = null;
+  lottery.value = null;
+  weekly.value = null;
+  recap.value = null;
+  growthTasks.value = null;
+  claimable.value = null;
+  preferences.value = null;
+  loadedOnce = false;
+  ownerId = uid;
+  ownerGeneration += 1;
+  claimRequestVersion += 1;
+  growthRequest = null;
+  growthRequestOwnerId = null;
+  growthRequestVersion += 1;
+  growthTasksOwnerId = null;
+  growthTasksRequest = null;
+  growthTasksRequestOwnerId = null;
+  loading.value = false;
+  growthError.value = false;
+  dashboardLoading.value = false;
+  dashboardError.value = false;
+  growthTasksLoading.value = false;
+  growthTasksError.value = false;
+  claimableLoading.value = false;
+  claimableError.value = false;
+  preferencesLoading.value = false;
+  preferencesError.value = false;
+  recapLoading.value = false;
+  recapError.value = false;
+  shopLoading.value = false;
+  shopError.value = false;
+  inventoryLoading.value = false;
+  inventoryError.value = false;
+  lotteryLoading.value = false;
+  lotteryError.value = false;
+  claimingRewards.value = false;
+}
+
 export function useGrowth() {
   async function load(force = false) {
     const uid = useUserStore().id || 'visitor';
-    if (ownerId !== uid) {
-      // 账号变了(登出→游客 / 换号):旧缓存立即作废,防止显示上一个账号的等级/经验
-      growth.value = null;
-      loadedOnce = false;
-      ownerId = uid;
-      growthTasks.value = null;
-      growthTasksOwnerId = null;
-      growthTasksRequest = null;
-      growthTasksRequestOwnerId = null;
-      growthTasksLoading.value = false;
-    }
+    ensureGrowthOwner(uid);
     if (loadedOnce && !force) return growth.value;
     // 多个首屏组件会同时读取成长信息。在同账号请求仍在进行时直接复用，
     // 避免缓存尚未写入前重复调用 /growth/me；force 只跳过已完成缓存，不绕过在途合并。
     if (growthRequest && growthRequestOwnerId === uid) return growthRequest;
 
     loading.value = true;
+    growthError.value = false;
     growthRequestOwnerId = uid;
     const requestVersion = ++growthRequestVersion;
     let request: Promise<Growth | null>;
@@ -378,9 +509,12 @@ export function useGrowth() {
         if (growthRequestVersion === requestVersion && ownerId === uid && res?.status === 200 && res.data) {
           growth.value = res.data as Growth;
           loadedOnce = true;
+        } else if (growthRequestVersion === requestVersion && ownerId === uid) {
+          growthError.value = true;
         }
       } catch (err) {
         console.warn('加载成长信息失败:', err);
+        if (growthRequestVersion === requestVersion && ownerId === uid) growthError.value = true;
       } finally {
         // 只允许当前最新请求清理共享状态，避免旧账号请求晚返回后干扰新账号加载态。
         if (growthRequestVersion === requestVersion && growthRequest === request) {
@@ -397,51 +531,63 @@ export function useGrowth() {
 
   // 成长看板(成就墙/统计/今日任务/时间线):每次进成长页强制刷新(数据随操作实时变化)
   async function loadDashboard() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
     dashboardLoading.value = true;
+    dashboardError.value = false;
     try {
       const res = await growthApi.getDashboard();
+      if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) {
         dashboard.value = res.data as GrowthDashboard;
-      }
+      } else dashboardError.value = true;
     } catch (err) {
       console.warn('加载成长看板失败:', err);
+      if (generation === ownerGeneration) dashboardError.value = true;
     } finally {
-      dashboardLoading.value = false;
+      if (generation === ownerGeneration) dashboardLoading.value = false;
     }
-    return dashboard.value;
+    return generation === ownerGeneration ? dashboard.value : null;
   }
 
   // 成长任务定义与完成状态:成长页和“今日”摘要共享同一份短缓存/在途请求。
   async function loadGrowthTasks(force = false) {
     const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
     if (growthTasksOwnerId !== uid) {
       growthTasks.value = null;
       growthTasksOwnerId = uid;
       growthTasksRequest = null;
       growthTasksRequestOwnerId = null;
       growthTasksLoading.value = false;
+      growthTasksError.value = false;
     }
     if (growthTasks.value && !force) return growthTasks.value;
     if (growthTasksRequest && growthTasksRequestOwnerId === uid) return growthTasksRequest;
 
     growthTasksLoading.value = true;
+    growthTasksError.value = false;
     growthTasksRequestOwnerId = uid;
+    const generation = ownerGeneration;
     const request = Promise.resolve().then(async () => {
       try {
         const res = await growthApi.getGrowthTasks();
-        if (growthTasksRequestOwnerId === uid && res?.status === 200 && res.data) {
+        if (isCurrentGrowthOwner(uid, generation) && growthTasksRequestOwnerId === uid && res?.status === 200 && res.data) {
           growthTasks.value = normalizeGrowthTasks(res.data as GrowthTasksData);
+        } else if (isCurrentGrowthOwner(uid, generation) && growthTasksRequestOwnerId === uid) {
+          growthTasksError.value = true;
         }
       } catch (err) {
         console.warn('加载成长任务失败:', err);
+        if (isCurrentGrowthOwner(uid, generation)) growthTasksError.value = true;
       } finally {
-        if (growthTasksRequest === request) {
+        if (isCurrentGrowthOwner(uid, generation) && growthTasksRequest === request) {
           growthTasksRequest = null;
           growthTasksRequestOwnerId = null;
           growthTasksLoading.value = false;
         }
       }
-      return growthTasks.value;
+      return isCurrentGrowthOwner(uid, generation) ? growthTasks.value : null;
     });
     growthTasksRequest = request;
     return request;
@@ -450,19 +596,32 @@ export function useGrowth() {
   // 一次性成长任务只在用户主动点击后领取；成功后同步任务领取态与全局成长快照。
   async function claimGrowthTask(taskKey: string) {
     const uid = useUserStore().id || 'visitor';
-    const res = await growthApi.claimGrowthTask(taskKey);
-    if (res?.status === 200 && res.data?.ok) {
-      // 领取请求返回期间若切换了账号，只把响应交给原调用方，不得覆盖新账号缓存。
-      if ((useUserStore().id || 'visitor') !== uid) return res;
-      if (res.data.growth) {
-        ownerId = uid;
-        growth.value = res.data.growth as Growth;
-        loadedOnce = true;
+    ensureGrowthOwner(uid);
+    if (claimingRewards.value) return null;
+    claimingRewards.value = true;
+    const generation = ownerGeneration;
+    const claimVersion = ++claimRequestVersion;
+    try {
+      const res = await growthApi.claimGrowthTask(taskKey);
+      if (res?.status === 200 && res.data?.ok) {
+        // 领取请求返回期间若切换了账号，只把响应交给原调用方，不得覆盖新账号缓存。
+        if (!isCurrentGrowthOwner(uid, generation)) return res;
+        if (res.data.growth) {
+          ownerId = uid;
+          growth.value = res.data.growth as Growth;
+          loadedOnce = true;
+        }
+        await Promise.all([
+          loadGrowthTasks(true),
+          res.data.growth ? Promise.resolve(growth.value) : load(true),
+          loadClaimable(),
+        ]);
+        syncPointsToViews();
       }
-      await Promise.all([loadGrowthTasks(true), res.data.growth ? Promise.resolve(growth.value) : load(true)]);
-      syncPointsToViews();
+      return res;
+    } finally {
+      if (claimVersion === claimRequestVersion) claimingRewards.value = false;
     }
-    return res;
   }
 
   // 段位表:15 级只在首次拉取一次(内容基本不变)
@@ -482,8 +641,11 @@ export function useGrowth() {
 
   // 返回签到结果(含 already / expGained / leveledUp);成功则就地刷新共享 growth
   async function doCheckin() {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
     const res = await growthApi.checkin();
-    if (res?.status === 200 && res.data?.growth) {
+    if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
       syncPointsToViews();
@@ -494,8 +656,11 @@ export function useGrowth() {
 
   // 使用补签卡:成功则刷新成长快照(卡数/连签/可补签态更新)
   async function useProtectCard(date?: string) {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
     const res = await growthApi.useProtectCard(date);
-    if (res?.status === 200 && res.data?.growth) {
+    if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
       growth.value = res.data.growth as Growth;
       loadedOnce = true;
       loadInventory(); // 补签卡数量变化 → 刷新背包
@@ -505,51 +670,80 @@ export function useGrowth() {
 
   // 领取今日任务奖励:成功则刷新成长快照 + 看板(经验/等级/领取态实时更新)
   async function claimDailyBonus() {
-    const res = await growthApi.claimDailyBonus();
-    if (res?.status === 200 && res.data?.ok && res.data?.growth) {
-      growth.value = res.data.growth as Growth;
-      loadedOnce = true;
-      await loadDashboard();
-      syncPointsToViews();
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    if (claimingRewards.value) return null;
+    claimingRewards.value = true;
+    const generation = ownerGeneration;
+    const claimVersion = ++claimRequestVersion;
+    try {
+      const res = await growthApi.claimDailyBonus();
+      if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok && res.data?.growth) {
+        growth.value = res.data.growth as Growth;
+        loadedOnce = true;
+        await Promise.all([loadDashboard(), loadClaimable()]);
+        syncPointsToViews();
+      }
+      return res;
+    } finally {
+      if (claimVersion === claimRequestVersion) claimingRewards.value = false;
     }
-    return res;
   }
 
   // 标记升级通知已读(查看成长页后):清后端 + 本地未读标记
   async function markRead() {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
     try {
       await growthApi.markNoticesRead();
     } catch {
       /* 忽略 */
     }
-    if (growth.value) growth.value.hasUnreadLevelUp = false;
+    if (isCurrentGrowthOwner(uid, generation) && growth.value) growth.value.hasUnreadLevelUp = false;
   }
 
   // 积分商店:每次打开强制刷新(余额/已拥有随购买实时变化)
   async function loadShop() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
     shopLoading.value = true;
+    shopError.value = false;
     try {
       const res = await growthApi.getShop();
+      if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) {
         shop.value = res.data as Shop;
+      } else {
+        shopError.value = true;
       }
     } catch (err) {
       console.warn('加载积分商店失败:', err);
+      if (generation === ownerGeneration) shopError.value = true;
     } finally {
-      shopLoading.value = false;
+      if (generation === ownerGeneration) shopLoading.value = false;
     }
-    return shop.value;
+    return generation === ownerGeneration ? shop.value : null;
   }
 
   // 背包 + 资产:每次进成长页刷新(使用/购买/抽奖/签到后数量随之变化)
   async function loadInventory() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
+    inventoryLoading.value = true;
+    inventoryError.value = false;
     try {
       const res = await growthApi.getInventory();
+      if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) inventory.value = res.data as Inventory;
+      else inventoryError.value = true;
     } catch (err) {
       console.warn('加载背包失败:', err);
+      if (generation === ownerGeneration) inventoryError.value = true;
+    } finally {
+      if (generation === ownerGeneration) inventoryLoading.value = false;
     }
-    return inventory.value;
+    return generation === ownerGeneration ? inventory.value : null;
   }
 
   // 使用一件历史背包消耗品(旧 AI 加油包 → 永久余额);成功则刷新背包与资产
@@ -592,18 +786,25 @@ export function useGrowth() {
 
   // 抽奖状态:余额/成本/保底/奖池概率
   async function loadLottery() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
     lotteryLoading.value = true;
+    lotteryError.value = false;
     try {
       const res = await growthApi.getLottery();
+      if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) {
         lottery.value = res.data as LotteryStatus;
+      } else {
+        lotteryError.value = true;
       }
     } catch (err) {
       console.warn('加载抽奖信息失败:', err);
+      if (generation === ownerGeneration) lotteryError.value = true;
     } finally {
-      lotteryLoading.value = false;
+      if (generation === ownerGeneration) lotteryLoading.value = false;
     }
-    return lottery.value;
+    return generation === ownerGeneration ? lottery.value : null;
   }
 
   // 抽奖:times=1 单抽 / 10 十连;free=true 用每日免费次数(单抽)。成功则刷新抽奖状态 + 成长快照
@@ -619,44 +820,161 @@ export function useGrowth() {
 
   // 领取成就奖励:成功则刷新看板、成长快照和头像框目录(成就框立即进入装扮库)
   async function claimAchievement(key: string) {
-    const res = await growthApi.claimAchievement(key);
-    if (res?.status === 200 && res.data?.ok) {
-      const refreshes: Array<Promise<unknown>> = [loadDashboard(), load(true)];
-      if (res.data.frameId) refreshes.push(loadShop());
-      await Promise.all(refreshes);
-      syncPointsToViews();
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    if (claimingRewards.value) return null;
+    claimingRewards.value = true;
+    const generation = ownerGeneration;
+    const claimVersion = ++claimRequestVersion;
+    try {
+      const res = await growthApi.claimAchievement(key);
+      if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
+        const refreshes: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
+        if (res.data.frameId) refreshes.push(loadShop());
+        await Promise.all(refreshes);
+        syncPointsToViews();
+      }
+      return res;
+    } finally {
+      if (claimVersion === claimRequestVersion) claimingRewards.value = false;
     }
-    return res;
   }
 
   // 每周挑战:进度 + 领取
   async function loadWeekly() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
     try {
       const res = await growthApi.getWeekly();
-      if (res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
+      if (generation === ownerGeneration && res?.status === 200 && res.data) weekly.value = res.data as WeeklyData;
     } catch (err) {
       console.warn('加载每周挑战失败:', err);
     }
-    return weekly.value;
+    return generation === ownerGeneration ? weekly.value : null;
   }
   async function claimWeekly(key: string) {
-    const res = await growthApi.claimWeekly(key);
-    if (res?.status === 200 && res.data?.ok) {
-      await Promise.all([loadWeekly(), load(true)]);
-      syncPointsToViews();
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    if (claimingRewards.value) return null;
+    claimingRewards.value = true;
+    const generation = ownerGeneration;
+    const claimVersion = ++claimRequestVersion;
+    try {
+      const res = await growthApi.claimWeekly(key);
+      if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
+        await Promise.all([loadWeekly(), load(true), loadClaimable()]);
+        syncPointsToViews();
+      }
+      return res;
+    } finally {
+      if (claimVersion === claimRequestVersion) claimingRewards.value = false;
     }
-    return res;
   }
 
   // 那年今日 · 智能回顾
   async function loadRecap() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
+    recapLoading.value = true;
+    recapError.value = false;
     try {
       const res = await growthApi.getRecap();
+      if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) recap.value = res.data as RecapData;
+      else recapError.value = true;
     } catch (err) {
       console.warn('加载回顾失败:', err);
+      if (generation === ownerGeneration) recapError.value = true;
+    } finally {
+      if (generation === ownerGeneration) recapLoading.value = false;
     }
-    return recap.value;
+    return generation === ownerGeneration ? recap.value : null;
+  }
+
+  async function setRecapState(item: RecapItem, action: 'snooze_7d' | 'dismiss') {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
+    const res = await growthApi.updateRecapState({ type: item.type, id: item.id, action });
+    if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) await loadRecap();
+    return res;
+  }
+
+  async function loadClaimable() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
+    claimableLoading.value = true;
+    claimableError.value = false;
+    try {
+      const res = await growthApi.getClaimable();
+      if (generation !== ownerGeneration) return null;
+      if (res?.status === 200 && res.data) claimable.value = res.data as GrowthClaimable;
+      else claimableError.value = true;
+    } catch (err) {
+      console.warn('加载待领取奖励失败:', err);
+      if (generation === ownerGeneration) claimableError.value = true;
+    } finally {
+      if (generation === ownerGeneration) claimableLoading.value = false;
+    }
+    return generation === ownerGeneration ? claimable.value : null;
+  }
+
+  async function claimAllRewards(scopes?: Array<'daily' | 'growthTasks' | 'achievements' | 'weekly'>) {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    if (claimingRewards.value) return null;
+    claimingRewards.value = true;
+    const generation = ownerGeneration;
+    const claimVersion = ++claimRequestVersion;
+    try {
+      const res = await growthApi.claimAll(scopes?.length ? { scopes } : undefined);
+      if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
+        if (res.data.growth) {
+          growth.value = res.data.growth as Growth;
+          loadedOnce = true;
+        }
+        await Promise.all([loadDashboard(), loadGrowthTasks(true), loadWeekly(), loadClaimable(), loadInventory()]);
+        if (Array.isArray(res.data.frames) && res.data.frames.length) await loadShop();
+        syncPointsToViews();
+      }
+      return res;
+    } finally {
+      if (claimVersion === claimRequestVersion) claimingRewards.value = false;
+    }
+  }
+
+  async function loadPreferences() {
+    ensureGrowthOwner(useUserStore().id || 'visitor');
+    const generation = ownerGeneration;
+    preferencesLoading.value = true;
+    preferencesError.value = false;
+    try {
+      const res = await growthApi.getGrowthPreferences();
+      if (generation !== ownerGeneration) return null;
+      if (res?.status === 200 && res.data) preferences.value = res.data as GrowthPreferences;
+      else preferencesError.value = true;
+    } catch (err) {
+      console.warn('加载成长偏好失败:', err);
+      if (generation === ownerGeneration) preferencesError.value = true;
+    } finally {
+      if (generation === ownerGeneration) preferencesLoading.value = false;
+    }
+    return generation === ownerGeneration ? preferences.value : null;
+  }
+
+  async function savePreferences(patch: Partial<GrowthPreferences>) {
+    const uid = useUserStore().id || 'visitor';
+    ensureGrowthOwner(uid);
+    const generation = ownerGeneration;
+    const res = await growthApi.updateGrowthPreferences({
+      ...patch,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || preferences.value?.timezone,
+      utcOffsetMinutes: -new Date().getTimezoneOffset(),
+    });
+    if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
+      preferences.value = res.data as GrowthPreferences;
+    }
+    return res;
   }
 
   return {
@@ -669,11 +987,27 @@ export function useGrowth() {
     weekly,
     recap,
     growthTasks,
+    claimable,
+    preferences,
     loading,
+    growthError,
     dashboardLoading,
+    dashboardError,
+    claimableLoading,
+    claimableError,
+    preferencesLoading,
+    preferencesError,
+    recapLoading,
+    recapError,
+    claimingRewards,
     shopLoading,
+    shopError,
+    inventoryLoading,
+    inventoryError,
     lotteryLoading,
+    lotteryError,
     growthTasksLoading,
+    growthTasksError,
     load,
     loadRanks,
     loadDashboard,
@@ -695,5 +1029,10 @@ export function useGrowth() {
     loadWeekly,
     claimWeekly,
     loadRecap,
+    setRecapState,
+    loadClaimable,
+    claimAllRewards,
+    loadPreferences,
+    savePreferences,
   };
 }

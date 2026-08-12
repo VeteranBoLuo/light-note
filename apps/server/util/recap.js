@@ -1,9 +1,9 @@
 import pool from '../db/index.js';
+import { getGrowthCalendarContext } from './growthPreferences.js';
 
 // 那年今日·智能回顾:把吃灰的旧收藏/笔记重新推到面前,防「收藏=遗忘」。
 // - onThisDay:同月同日、往年创建的内容(去年今日/前年今日)
-// - buried:90 天前创建、随机取几条(尘封回顾)
-// 纯派生查询,不新增表。ORDER BY RAND() 在个人级数据量下开销可忽略。
+// - buried:90 天前创建、按用户与日期稳定取样；同一天刷新不会换内容。
 
 const recapText = (expression) => `CONVERT(${expression} USING utf8mb4) COLLATE utf8mb4_unicode_ci`;
 
@@ -40,42 +40,106 @@ function fmt(rows) {
   }));
 }
 
-export async function getRecap(userId) {
+async function loadRecapBlocklist(userId, db = pool) {
+  const result = await db.query(
+    `SELECT resource_type AS resourceType, resource_id AS resourceId,
+            snoozed_until AS snoozedUntil, dismissed_at AS dismissedAt
+       FROM growth_recap_state WHERE user_id = ?`,
+    [String(userId)],
+  );
+  const states = Array.isArray(result?.[0]) ? result[0] : [];
+  return new Set(
+    states
+      .filter((state) => state.dismissedAt || (state.snoozedUntil && new Date(state.snoozedUntil).getTime() > Date.now()))
+      .map((state) => `${state.resourceType}:${state.resourceId}`),
+  );
+}
+
+function filterAvailableRecaps(rows, blocked) {
+  return rows.filter((row) => !blocked.has(`${row.type}:${row.id}`));
+}
+
+export async function getRecap(userId, { calendar = null, db = pool } = {}) {
   if (!userId || userId === 'visitor') return { weekly: [], onThisDay: [], buried: [] };
 
+  const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db }));
+  const dayKey = /^\d{8}$/.test(String(accountCalendar.dayKey)) ? String(accountCalendar.dayKey) : null;
+  if (!dayKey) throw new Error('GROWTH_CALENDAR_INVALID');
+  const stableDate = `${dayKey.slice(0, 4)}-${dayKey.slice(4, 6)}-${dayKey.slice(6, 8)}`;
+  const accountDate = `DATE '${stableDate}'`;
+  const shiftMinutes = Math.trunc(Number(accountCalendar.shiftMinutes || 0));
+  const shiftedCreateTime = `DATE_ADD(create_time, INTERVAL ${shiftMinutes} MINUTE)`;
+
   const [[weekly], [onDay], [buried]] = await Promise.all([
-    pool.query(
+    db.query(
       buildRecapUnion(
-        'create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
-        'create_time >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
+        `${shiftedCreateTime} >= DATE_SUB(${accountDate}, INTERVAL 6 DAY)
+          AND ${shiftedCreateTime} < DATE_ADD(${accountDate}, INTERVAL 1 DAY)`,
+        `${shiftedCreateTime} >= DATE_SUB(${accountDate}, INTERVAL 6 DAY)
+          AND ${shiftedCreateTime} < DATE_ADD(${accountDate}, INTERVAL 1 DAY)`,
         'create_time DESC',
         20,
       ),
       [userId, userId],
     ),
-    pool.query(
+    db.query(
       buildRecapUnion(
-        `MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
-          AND YEAR(create_time) < YEAR(CURDATE())`,
-        `MONTH(create_time) = MONTH(CURDATE()) AND DAY(create_time) = DAY(CURDATE())
-          AND YEAR(create_time) < YEAR(CURDATE())`,
+        `MONTH(${shiftedCreateTime}) = MONTH(${accountDate}) AND DAY(${shiftedCreateTime}) = DAY(${accountDate})
+          AND YEAR(${shiftedCreateTime}) < YEAR(${accountDate})`,
+        `MONTH(${shiftedCreateTime}) = MONTH(${accountDate}) AND DAY(${shiftedCreateTime}) = DAY(${accountDate})
+          AND YEAR(${shiftedCreateTime}) < YEAR(${accountDate})`,
         'create_time DESC',
         12,
       ),
       [userId, userId],
     ),
-    pool.query(
+    db.query(
       buildRecapUnion(
-        'create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY)',
-        'create_time < DATE_SUB(CURDATE(), INTERVAL 90 DAY)',
-        'RAND()',
-        6,
+        `${shiftedCreateTime} < DATE_SUB(${accountDate}, INTERVAL 90 DAY)`,
+        `${shiftedCreateTime} < DATE_SUB(${accountDate}, INTERVAL 90 DAY)`,
+        `CRC32(CONCAT('${stableDate}', ':', type, ':', id)) ASC`,
+        60,
       ),
       [userId, userId],
     ),
   ]);
 
-  return { weekly: fmt(weekly), onThisDay: fmt(onDay), buried: fmt(buried) };
+  const blocked = await loadRecapBlocklist(userId, db);
+  const availableWeekly = filterAvailableRecaps(weekly, blocked);
+  const availableOnDay = filterAvailableRecaps(onDay, blocked);
+  const availableBuried = filterAvailableRecaps(buried, blocked);
+  return {
+    weekly: fmt(availableWeekly),
+    onThisDay: fmt(availableOnDay),
+    buried: fmt(availableBuried.slice(0, 6)),
+    stableDate,
+    timezone: accountCalendar.timezone,
+  };
+}
+
+export async function updateRecapState(userId, { type, id, action } = {}) {
+  const resourceType = String(type || '');
+  const resourceId = String(id || '').trim().slice(0, 255);
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (!['bookmark', 'note'].includes(resourceType) || !resourceId) return { ok: false, reason: 'invalid_resource' };
+  if (!['snooze_7d', 'dismiss'].includes(action)) return { ok: false, reason: 'invalid_action' };
+  const table = resourceType === 'bookmark' ? 'bookmark' : 'note';
+  const ownerColumn = resourceType === 'bookmark' ? 'user_id' : 'create_by';
+  const [[owned]] = await pool.query(
+    `SELECT COUNT(*) AS count FROM ${table} WHERE id = ? AND ${ownerColumn} = ? AND del_flag = 0`,
+    [resourceId, String(userId)],
+  );
+  if (!Number(owned?.count || 0)) return { ok: false, reason: 'not_found' };
+  await pool.query(
+    `INSERT INTO growth_recap_state
+       (user_id, resource_type, resource_id, snoozed_until, dismissed_at)
+     VALUES (?, ?, ?, ${action === 'snooze_7d' ? 'DATE_ADD(NOW(), INTERVAL 7 DAY)' : 'NULL'}, ${action === 'dismiss' ? 'NOW()' : 'NULL'})
+     ON DUPLICATE KEY UPDATE
+       snoozed_until = VALUES(snoozed_until),
+       dismissed_at = VALUES(dismissed_at)`,
+    [String(userId), resourceType, resourceId],
+  );
+  return { ok: true, action };
 }
 
 export { buildRecapUnion };

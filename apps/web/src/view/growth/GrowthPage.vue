@@ -2,13 +2,18 @@
   <div ref="growthPageRef" class="growth-page">
     <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
       <header v-if="!useWideDesktopLayout" class="growth-hero">
-        <BButton class="growth-back" @click="goBack">
+        <BButton class="growth-back" v-click-log="{ module: '成长', operation: '返回上一页' }" @click="goBack">
           <svg-icon :src="icon.arrow_left" size="16" />
           <span>{{ t('common.back') }}</span>
         </BButton>
         <h1 class="growth-title">{{ t('growth.pageTitle') }}</h1>
         <p class="growth-subtitle">{{ t('growth.pageSubtitle') }}</p>
-        <BButton class="growth-report-btn" :loading="wrLoading" @click="openWeeklyReport">
+        <BButton
+          class="growth-report-btn"
+          :loading="wrLoading"
+          v-click-log="{ module: '成长', operation: '打开成长周报' }"
+          @click="openWeeklyReport"
+        >
           <SvgIcon :src="icon.growth.rank" size="15" /> {{ t('growth.weeklyReportEntry') }}
         </BButton>
       </header>
@@ -21,7 +26,7 @@
       <div class="growth-workspace" :class="{ 'growth-workspace--wide': useWideDesktopLayout }">
         <aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">
           <header class="growth-hero growth-hero--sidebar">
-            <BButton class="growth-back" @click="goBack">
+            <BButton class="growth-back" v-click-log="{ module: '成长', operation: '返回上一页' }" @click="goBack">
               <SvgIcon :src="icon.arrow_left" size="16" />
               <span>{{ t('common.back') }}</span>
             </BButton>
@@ -36,6 +41,7 @@
                 :class="{ 'is-active': activeSection === section.key }"
                 :aria-current="activeSection === section.key ? 'page' : undefined"
                 :aria-expanded="section.key === 'rewards' ? rewardsExpanded : undefined"
+                v-click-log="{ module: '成长', operation: `切换成长模块-${section.key}` }"
                 @click="selectSection(section.key)"
               >
                 <span class="growth-side-nav-icon" aria-hidden="true">
@@ -64,6 +70,7 @@
                   class="growth-side-subnav-item"
                   :class="{ 'is-active': activeRewardSection === rewardSection.key }"
                   :aria-current="activeRewardSection === rewardSection.key ? 'page' : undefined"
+                  v-click-log="{ module: '成长', operation: `切换奖励子页-${rewardSection.key}` }"
                   @click="selectRewardSection(rewardSection.key)"
                 >
                   <SvgIcon :src="rewardSection.icon" size="15" aria-hidden="true" />
@@ -73,7 +80,12 @@
             </template>
           </nav>
 
-          <BButton class="growth-side-report" :loading="wrLoading" @click="openWeeklyReport">
+          <BButton
+            class="growth-side-report"
+            :loading="wrLoading"
+            v-click-log="{ module: '成长', operation: '打开成长周报' }"
+            @click="openWeeklyReport"
+          >
             <SvgIcon :src="icon.growth.rank" size="16" />
             <span>{{ t('growth.weeklyReportEntry') }}</span>
           </BButton>
@@ -86,83 +98,204 @@
             class="growth-section-tabs"
             variant="segment"
             :options="sectionOptions"
+            v-click-log="{ module: '成长', operation: '切换成长模块' }"
             @select="handleSectionTabSelect"
           />
 
-          <section v-if="activeSection === 'overview'" class="growth-panel">
-            <GrowthCard :read-only="isAdminContext" @activity-changed="refreshHeatmap" />
-          </section>
-
-          <div v-if="activeSection === 'overview'" class="growth-row growth-overview-row">
-            <section class="growth-panel growth-panel--flex">
-              <GrowthStats :stats="stats" />
+          <template v-if="activeSection === 'overview'">
+            <section v-if="growthV2Enabled" class="growth-panel growth-panel--today">
+              <TodayGrowthCard
+                :data="claimable"
+                :growth="growth"
+                :loading="
+                  claimableLoading ||
+                  (!claimable && !claimableError) ||
+                  preferencesLoading ||
+                  (!preferences && !preferencesError)
+                "
+                :error="claimableError"
+                :claiming="claimingRewards"
+                :read-only="isAdminContext"
+                :low-pressure="lowPressureMode"
+                @retry="loadClaimable"
+                @claim-all="onClaimAll"
+                @action="handleGrowthAction"
+              />
             </section>
-            <section id="growth-heatmap" class="growth-panel growth-panel--flex">
-              <ActivityHeatmap ref="heatmapRef" />
-            </section>
-          </div>
 
-          <template v-if="activeSection === 'tasks'">
-            <div class="growth-row">
+            <section class="growth-panel">
+              <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"><BLoading size="small" /></div>
+              <div v-else-if="growthError && !growth" class="growth-state growth-state--error">
+                <span>{{ t('growth.growthLoadFailed') }}</span>
+                <BButton size="small" @click="load(true)">{{ t('common.retry') }}</BButton>
+              </div>
+              <GrowthCard v-else :read-only="isAdminContext" @activity-changed="refreshOverview" />
+            </section>
+
+            <div class="growth-row growth-overview-row">
               <section class="growth-panel growth-panel--flex">
-                <DailyQuests
-                  :quests="quests"
-                  :bonus="questBonus"
-                  :claiming="claiming"
-                  :read-only="isAdminContext"
-                  :daily-exp="growth?.dailyExp || 0"
-                  :daily-cap="growth?.dailyCap || 0"
-                  :daily-cap-reached="Boolean(growth?.dailyCapReached)"
-                  show-experience-sources
-                  @claim="onClaim"
-                />
+                <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"><BLoading size="small" /></div>
+                <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
+                  <span>{{ t('growth.dashboardLoadFailed') }}</span>
+                  <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
+                </div>
+                <GrowthStats v-else :stats="stats" />
               </section>
-              <section v-if="showGrowthTasks" id="growth-tasks" class="growth-panel growth-panel--flex">
-                <GrowthTasks :data="growthTasks" :show-completed="true" :read-only="isAdminContext" />
+              <section id="growth-heatmap" class="growth-panel growth-panel--flex">
+                <ActivityHeatmap ref="heatmapRef" />
               </section>
             </div>
+
+            <section v-if="growthV2Enabled" id="growth-recap" class="growth-panel growth-footprint">
+              <header class="growth-panel-heading">
+                <div>
+                  <h2>{{ t('growth.footprintTitle') }}</h2>
+                  <p>{{ t('growth.footprintSubtitle') }}</p>
+                </div>
+              </header>
+              <GrowthTimeline v-if="timeline.length" :items="timeline" />
+              <div v-if="recapLoading && !recap" class="growth-state"><BLoading size="small" /></div>
+              <div v-else-if="recapError && !recap" class="growth-state growth-state--error">
+                <span>{{ t('growth.recapLoadFailed') }}</span>
+                <BButton size="small" @click="loadRecap">{{ t('common.retry') }}</BButton>
+              </div>
+              <RecapCard v-if="showRecap" :read-only="isAdminContext" />
+              <div v-if="!recapLoading && !recapError && !timeline.length && !showRecap" class="growth-state">{{ t('growth.footprintEmpty') }}</div>
+            </section>
+
+            <section v-if="growthV2Enabled" class="growth-panel">
+              <GrowthPreferencesCard
+                :preferences="preferences"
+                :loading="preferencesLoading || (!preferences && !preferencesError)"
+                :error="preferencesError"
+                :saving="preferencesSaving"
+                :read-only="isAdminContext"
+                @save="onSavePreferences"
+                @retry="loadPreferences"
+              />
+            </section>
+          </template>
+
+          <template v-if="activeSection === 'tasks'">
+            <header v-if="growthV2Enabled" class="growth-section-heading">
+              <div>
+                <h2>{{ t('growth.taskCenterTitle') }}</h2>
+                <p>{{ t('growth.taskCenterSubtitle') }}</p>
+              </div>
+              <BButton
+                v-if="claimableCount > 0"
+                type="primary"
+                :loading="claimingRewards"
+                :disabled="isAdminContext || claimingRewards"
+                @click="onClaimAll"
+              >
+                <SvgIcon :src="icon.growth.reward" size="15" />
+                {{ t('growth.claimAllCount', { n: claimableCount }) }}
+              </BButton>
+            </header>
+
+            <section v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-panel growth-state">
+              <BLoading size="small" />
+            </section>
+            <section v-else-if="dashboardError && !dashboard" class="growth-panel growth-state growth-state--error">
+              <span>{{ t('growth.dashboardLoadFailed') }}</span>
+              <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
+            </section>
+            <section v-else class="growth-panel">
+              <DailyQuests
+                :quests="quests"
+                :bonus="questBonus"
+                :claiming="claimingRewards"
+                :read-only="isAdminContext"
+                :daily-exp="growth?.dailyExp || 0"
+                :daily-cap="growth?.dailyCap || 0"
+                :daily-cap-reached="Boolean(growth?.dailyCapReached)"
+                show-experience-sources
+                @claim="onClaim"
+                @go="handleQuestAction"
+              />
+            </section>
+
+            <section id="growth-tasks" class="growth-panel">
+              <div v-if="!growthTasks && (growthTasksLoading || !growthTasksError)" class="growth-state"><BLoading size="small" /></div>
+              <div v-else-if="growthTasksError && !growthTasks" class="growth-state growth-state--error">
+                <span>{{ t('growth.tasksLoadFailed') }}</span>
+                <BButton size="small" @click="loadGrowthTasks(true)">{{ t('common.retry') }}</BButton>
+              </div>
+              <GrowthTasks
+                v-else
+                :data="growthTasks"
+                :show-completed="true"
+                :read-only="isAdminContext"
+                :low-pressure="lowPressureMode"
+              />
+            </section>
+
             <section class="growth-panel">
               <WeeklyChallenge :read-only="isAdminContext" />
             </section>
           </template>
 
           <template v-if="activeSection === 'achievements'">
-            <section class="growth-panel">
-              <AchievementWall
-                :achievements="achievements"
-                :unlocked-count="dashboard?.unlockedCount || 0"
-                :total-achievements="dashboard?.totalAchievements || achievements.length"
-                :claimable-count="dashboard?.claimableCount || 0"
-                :claiming-key="claimingAch"
-                :read-only="isAdminContext"
-                @claim="onClaimAchievement"
-              />
+            <section v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-panel growth-state">
+              <BLoading size="small" />
             </section>
-            <section v-if="streakMilestones.length" class="growth-panel">
-              <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
+            <section v-else-if="dashboardError && !dashboard" class="growth-panel growth-state growth-state--error">
+              <span>{{ t('growth.dashboardLoadFailed') }}</span>
+              <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
             </section>
-            <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
-            <section v-if="showRecap" id="growth-recap" class="growth-panel"><RecapCard /></section>
+            <template v-else>
+              <section v-if="growthV2Enabled" class="growth-panel">
+                <AchievementHighlights :achievements="achievements" />
+              </section>
+              <section class="growth-panel">
+                <AchievementWall
+                  :achievements="achievements"
+                  :unlocked-count="dashboard?.unlockedCount || 0"
+                  :total-achievements="dashboard?.totalAchievements || achievements.length"
+                  :claimable-count="dashboard?.claimableCount || 0"
+                  :claiming-key="claimingAch || (claimingRewards ? '__busy__' : null)"
+                  :read-only="isAdminContext"
+                  @claim="onClaimAchievement"
+                />
+              </section>
+              <section v-if="streakMilestones.length" class="growth-panel">
+                <MilestoneLadder :milestones="streakMilestones" :current-streak="currentStreak" />
+              </section>
+              <template v-if="!growthV2Enabled">
+                <section class="growth-panel"><GrowthTimeline :items="timeline" /></section>
+                <section v-if="showRecap" id="growth-recap" class="growth-panel">
+                  <RecapCard :read-only="isAdminContext" />
+                </section>
+              </template>
+            </template>
           </template>
 
           <template v-if="activeSection === 'rewards'">
+            <BButton
+              v-if="growthV2Enabled && preferences && freeLotteryRemaining > 0 && !lowPressureMode"
+              class="growth-free-lottery-hint"
+              v-click-log="{ module: '成长', operation: '打开免费抽奖提示' }"
+              @click="selectRewardSection('lottery')"
+            >
+              <SvgIcon :src="icon.growth.reward" size="17" />
+              <span>{{ t('growth.freeLotteryHint', { n: freeLotteryRemaining }) }}</span>
+              <SvgIcon :src="icon.arrow_right" size="13" />
+            </BButton>
             <BTabs
               v-if="!useWideDesktopLayout"
               v-model:active-tab="activeRewardSection"
               class="growth-reward-tabs"
               variant="line"
               :options="rewardSectionOptions"
+              v-click-log="{ module: '成长', operation: '切换资产与奖励子页' }"
               @select="handleRewardTabSelect"
             />
             <section class="growth-panel">
-              <PointsShop v-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
-              <LotteryDraw
-                v-else-if="activeRewardSection === 'lottery'"
-                :read-only="isAdminContext"
-                @focus-header="scrollLotteryToPreferredPosition"
-              />
-              <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
-              <PointsLedger v-else />
+              <MyInventory v-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
+              <PointsShop v-else-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
+              <PointsLedger v-else-if="activeRewardSection === 'ledger'" />
+              <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
             </section>
           </template>
         </main>
@@ -191,7 +324,11 @@
   import PointsLedger from '@/components/growth/PointsLedger.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
+  import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
+  import GrowthPreferencesCard from '@/components/growth/GrowthPreferencesCard.vue';
+  import AchievementHighlights from '@/components/growth/AchievementHighlights.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
@@ -203,7 +340,7 @@
   import { bookmarkStore, useUserStore } from '@/store';
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
-  import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
+  import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
   import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
@@ -217,15 +354,17 @@
   const bookmark = bookmarkStore();
   const routeSection = String(route.query.section || '');
   const routeRewardSection = String(route.query.reward || '');
+  const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger'];
+  const hasRewardDeepLink = validRewardSections.includes(routeRewardSection as RewardSection);
   const activeSection = ref<GrowthSection>(
     ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
       ? (routeSection as GrowthSection)
       : 'overview',
   );
   const activeRewardSection = ref<RewardSection>(
-    ['shop', 'lottery', 'inventory', 'ledger'].includes(routeRewardSection)
+    hasRewardDeepLink
       ? (routeRewardSection as RewardSection)
-      : 'shop',
+      : 'inventory',
   );
   const rewardsExpanded = ref(activeSection.value === 'rewards');
   const growthPageRef = ref<HTMLElement | null>(null);
@@ -234,41 +373,77 @@
     { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
     { key: 'tasks', label: t('growth.mobileTabTasks'), icon: icon.growth.action },
     { key: 'achievements', label: t('growth.mobileTabAchievements'), icon: icon.growth.level },
-    { key: 'rewards', label: t('growth.mobileTabRewards'), icon: icon.growth.reward },
+    {
+      key: 'rewards',
+      label:
+        growthV2Enabled.value && !bookmark.isMobile
+          ? t('growth.assetsRewardsTitle')
+          : t('growth.mobileTabRewards'),
+      icon: icon.growth.reward,
+    },
   ]);
-  const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => [
-    { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
-    { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
-    { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
-    { key: 'ledger', label: t('growth.rewardTabLedger'), icon: icon.noteDetail.history },
-  ]);
+  const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
+    const options: GrowthNavOption<RewardSection>[] = [
+      { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
+      { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
+      { key: 'ledger', label: t('growth.rewardTabLedger'), icon: icon.noteDetail.history },
+      { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
+    ];
+    return growthV2Enabled.value
+      ? options
+      : [options[1], options[3], options[0], options[2]];
+  });
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
     growth,
     dashboard,
     recap,
     growthTasks,
+    lottery,
+    claimable,
+    preferences,
+    loading: growthLoading,
+    growthError,
+    dashboardLoading,
+    dashboardError,
+    growthTasksLoading,
+    growthTasksError,
+    claimableLoading,
+    claimableError,
+    preferencesLoading,
+    preferencesError,
+    recapLoading,
+    recapError,
+    claimingRewards,
     load,
     loadDashboard,
     loadGrowthTasks,
     loadRecap,
+    loadLottery,
+    loadClaimable,
+    claimAllRewards,
+    loadPreferences,
+    savePreferences,
     claimDailyBonus,
     claimAchievement,
   } = useGrowth();
+  const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 ?? import.meta.env.DEV);
   const hasRecap = computed(
     () =>
       !!recap.value &&
       ((recap.value.weekly?.length || 0) > 0 || recap.value.onThisDay.length > 0 || recap.value.buried.length > 0),
   );
-  const activeGrowthTaskCount = computed(() => growthTasks.value?.tasks.filter((task) => !task.claimed).length ?? 0);
-  const showGrowthTasks = computed(() => !growthTasks.value || activeGrowthTaskCount.value > 0);
   const showRecap = computed(() => hasRecap.value);
+  const claimableCount = computed(() => Number(claimable.value?.count || 0));
+  const lowPressureMode = computed(() => Boolean(preferences.value?.lowPressureMode));
+  const freeLotteryRemaining = computed(() => Number(lottery.value?.freeRemaining || 0));
+  const preferencesSaving = ref(false);
   const heatmapRef = ref<{ reload: () => void | Promise<void> } | null>(null);
 
   function sectionForHash(hash: string): GrowthSection | null {
     if (hash === '#growth-tasks') return 'tasks';
     if (hash === '#growth-heatmap') return 'overview';
-    if (hash === '#growth-recap') return 'achievements';
+    if (hash === '#growth-recap') return growthV2Enabled.value ? 'overview' : 'achievements';
     return null;
   }
 
@@ -285,8 +460,9 @@
     });
   }
 
-  function refreshHeatmap() {
+  function refreshOverview() {
     void heatmapRef.value?.reload();
+    void Promise.all([loadDashboard(), loadClaimable()]);
   }
 
   async function scrollLotteryToPreferredPosition() {
@@ -325,7 +501,7 @@
       return;
     }
     activeSection.value = section;
-    handleSectionTabSelect();
+    handleSectionTabSelect(section);
   }
 
   function selectRewardSection(section: RewardSection) {
@@ -357,25 +533,119 @@
   const streakMilestones = computed(() => dashboard.value?.streakMilestones || []);
   const currentStreak = computed(() => dashboard.value?.currentStreak ?? growth.value?.streak ?? 0);
 
-  const claiming = ref(false);
   async function onClaim() {
-    if (isAdminContext.value || claiming.value) return;
-    claiming.value = true;
+    if (isAdminContext.value || claimingRewards.value) return;
     try {
       const res = await claimDailyBonus();
       if (res?.status === 200 && res.data?.ok) {
         const feedback = resolveDailyQuestClaimFeedback(res.data);
         if (feedback.level === 'success') {
           message.success(t(feedback.key, feedback.params));
-          recordOperation({ module: '成长', operation: dailyQuestClaimLogText(res.data) });
+          recordOperation({ module: '成长', operation: '领取日常任务阶段奖励' });
         } else {
           message.info(t(feedback.key, feedback.params));
         }
       }
     } catch (err) {
       console.error('领取每日奖励失败:', err);
+    }
+  }
+
+  async function onClaimAll() {
+    if (isAdminContext.value || claimingRewards.value) return;
+    try {
+      const res = await claimAllRewards();
+      if (res?.status === 200 && res.data?.ok) {
+        const claimed = Number(res.data.claimed || 0);
+        if (claimed > 0) {
+          const frameCount = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
+          message.success(
+            t(frameCount > 0 ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
+              n: claimed,
+              exp: Number(res.data.exp || 0),
+              points: Number(res.data.points || 0),
+              frames: frameCount,
+            }),
+          );
+          recordOperation({ module: '成长', operation: '一键领取成长奖励成功' });
+        } else {
+          message.info(t('growth.claimAllEmpty'));
+        }
+      } else {
+        message.error(t('growth.claimAllFailed'));
+      }
+    } catch (error) {
+      console.error('一键领取成长奖励失败:', error);
+      message.error(t('growth.claimAllFailed'));
+    }
+  }
+
+  function handleQuestAction(key: string) {
+    const actionByQuest: Record<string, string> = {
+      create: 'create_note',
+      daily_note: 'create_note',
+      daily_bookmark: 'create_bookmark',
+      daily_file: 'upload_file',
+      daily_todo: 'open_todos',
+      daily_organize: 'open_inbox',
+    };
+    handleGrowthAction(actionByQuest[key] || 'open_growth_tasks');
+  }
+
+  function handleGrowthAction(action: string) {
+    if (action === 'open_weekly_report') {
+      void openWeeklyReport();
+      return;
+    }
+    if (action === 'profile') {
+      if (bookmark.isMobile) void router.push('/myInfo');
+      else window.dispatchEvent(new CustomEvent('light-note:open-profile'));
+      return;
+    }
+    if (action === 'create_note' || action === 'reuse_knowledge') {
+      void router.push('/noteLibrary');
+      return;
+    }
+    if (action === 'create_bookmark') {
+      void router.push('/home');
+      return;
+    }
+    if (action === 'upload_file') {
+      void router.push('/cloudSpace');
+      return;
+    }
+    if (action === 'create_todo' || action === 'open_todos') {
+      void router.push({ path: '/inbox', query: { tab: 'todo' } });
+      return;
+    }
+    if (action === 'open_inbox') {
+      void router.push('/inbox');
+      return;
+    }
+    if (action === 'checkin') {
+      activeSection.value = 'overview';
+      return;
+    }
+    activeSection.value = 'tasks';
+  }
+
+  async function onSavePreferences(value: Parameters<typeof savePreferences>[0]) {
+    if (isAdminContext.value || preferencesSaving.value) return;
+    preferencesSaving.value = true;
+    try {
+      const res = await savePreferences(value);
+      if (res?.status === 200 && res.data?.ok) {
+        message.success(t('growth.preferencesSaved'));
+        recordOperation({ module: '成长', operation: '保存成长偏好成功' });
+        void heatmapRef.value?.reload();
+      } else {
+        message.error(t('growth.preferencesSaveFailed'));
+      }
+    } catch (error) {
+      console.error('保存成长偏好失败:', error);
+      message.error(t('growth.preferencesSaveFailed'));
     } finally {
-      claiming.value = false;
+      preferencesSaving.value = false;
     }
   }
 
@@ -390,7 +660,6 @@
       if (res?.status === 200) {
         wrData.value = res.data;
         wrVisible.value = true;
-        recordOperation({ module: '成长', operation: '查看本周周报' });
       } else {
         message.error(t('growth.weeklyReportFailed'));
       }
@@ -403,12 +672,10 @@
   }
 
   onMounted(() => {
-    recordOperation({ module: '成长', operation: '查看我的成长' });
     void load(); // 任务分区也需要今日经验与每日上限；共享请求会与概览卡片自动合并。
-    loadDashboard(); // 每次进页刷新(签到/创建后数据实时变化)
-    // 只加载当前分区的专属数据；奖励子页在挂载时加载，避免 PC 首屏同时请求整页所有模块。
-    if (activeSection.value === 'tasks') loadGrowthTasks(true);
-    if (activeSection.value === 'achievements') loadRecap();
+    void Promise.all([loadDashboard(), loadClaimable(), loadPreferences(), loadRecap()]);
+    if (activeSection.value === 'tasks') void loadGrowthTasks(true);
+    if (activeSection.value === 'rewards') void loadLottery();
     scrollToHash();
   });
 
@@ -422,13 +689,18 @@
    */
   useForegroundRefresh({
     refresh: () => {
-      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true)];
+      const requests: Array<Promise<unknown>> = [loadDashboard(), load(true), loadClaimable()];
       if (activeSection.value === 'tasks') requests.push(loadGrowthTasks(true));
-      if (activeSection.value === 'achievements') requests.push(loadRecap());
+      if (
+        (growthV2Enabled.value && activeSection.value === 'overview') ||
+        (!growthV2Enabled.value && activeSection.value === 'achievements')
+      )
+        requests.push(loadRecap());
+      if (activeSection.value === 'rewards') requests.push(loadLottery());
       return Promise.all(requests);
     },
     // 领取奖励在途或周报弹框开着时不插队刷新：会把面板数据换到用户正在看的内容底下。
-    canRefresh: () => !claiming.value && !claimingAch.value && !wrVisible.value,
+    canRefresh: () => !claimingRewards.value && !claimingAch.value && !wrVisible.value,
   });
 
   // 工作台「查看全部成长任务」会带 hash；已在成长页时再进一次不会重挂载（router-view key 固定），
@@ -455,9 +727,11 @@
     () => route.query.reward,
     (reward) => {
       const requested = String(reward || '');
-      const nextReward = ['shop', 'lottery', 'inventory', 'ledger'].includes(requested)
+      const nextReward = validRewardSections.includes(requested as RewardSection)
         ? (requested as RewardSection)
-        : 'shop';
+        : growthV2Enabled.value
+          ? 'inventory'
+          : 'shop';
       if (activeRewardSection.value !== nextReward) activeRewardSection.value = nextReward;
     },
   );
@@ -466,7 +740,9 @@
     rewardsExpanded.value = section === 'rewards';
     void router.replace({ query: { ...route.query, section } });
     if (section === 'tasks') void loadGrowthTasks();
-    if (section === 'achievements') void loadRecap();
+    if (section === 'overview' && growthV2Enabled.value) void loadRecap();
+    if (section === 'achievements' && !growthV2Enabled.value) void loadRecap();
+    if (section === 'rewards') void loadLottery();
   });
 
   watch(activeRewardSection, (reward) => {
@@ -474,9 +750,17 @@
       void router.replace({ query: { ...route.query, section: 'rewards', reward } });
   });
 
+  watch(
+    growthV2Enabled,
+    (enabled) => {
+      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'inventory' : 'shop';
+    },
+    { immediate: true },
+  );
+
   const claimingAch = ref<string | null>(null);
   async function onClaimAchievement(key: string) {
-    if (isAdminContext.value || claimingAch.value) return;
+    if (isAdminContext.value || claimingAch.value || claimingRewards.value) return;
     claimingAch.value = key;
     try {
       const res = await claimAchievement(key);
@@ -486,11 +770,11 @@
           message.success(t('growth.achClaimFrameOk', { n: res.data.reward, name: frameName }));
           recordOperation({
             module: '成长',
-            operation: `领取成就奖励 ${key}（+${res.data.reward} 积分、头像框「${frameName}」）`,
+            operation: `领取成就奖励成功-${key}`,
           });
         } else {
           message.success(t('growth.achClaimOk', { n: res.data.reward }));
-          recordOperation({ module: '成长', operation: `领取成就奖励 ${key}（+${res.data.reward} 积分）` });
+          recordOperation({ module: '成长', operation: `领取成就奖励成功-${key}` });
         }
       } else if (res?.data?.reason === 'claimed') {
         message.info(t('growth.achClaimedAlready'));
@@ -789,6 +1073,71 @@
     flex: 1 1 0;
     min-width: 0;
   }
+  .growth-panel--today {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .growth-section-heading,
+  .growth-panel-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .growth-section-heading h2,
+  .growth-panel-heading h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 18px;
+  }
+  .growth-section-heading p,
+  .growth-panel-heading p {
+    margin: 3px 0 0;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .growth-footprint {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .growth-state {
+    min-height: 112px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .growth-state--error {
+    flex-direction: column;
+    color: var(--warning-color, #a05f00);
+  }
+  .growth-free-lottery-hint.b_btn {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 0 14px;
+    border: 1px solid var(--primary-color);
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: var(--workbench-subcard-bg);
+    box-shadow: none;
+  }
+  .growth-free-lottery-hint span {
+    flex: 1;
+    text-align: left;
+  }
+  :global(html.light-note-mobile-rendering) .growth-free-lottery-hint.b_btn {
+    border-color: var(--primary-color);
+    background: var(--background-color);
+    box-shadow: none;
+  }
   .growth-section-tabs {
     position: sticky;
     top: 0;
@@ -843,6 +1192,13 @@
     }
     .growth-row {
       flex-direction: column;
+    }
+    .growth-section-heading {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .growth-section-heading .b_btn {
+      width: 100%;
     }
   }
 </style>

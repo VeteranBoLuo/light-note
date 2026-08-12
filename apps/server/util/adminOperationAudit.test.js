@@ -29,7 +29,7 @@ describe('管理员操作审计', () => {
 
   it('不在审计元数据中保存敏感内容', async () => {
     const db = { query: vi.fn().mockResolvedValue([{ affectedRows: 1 }]) };
-    await recordAdminOperationAudit(
+    const auditId = await recordAdminOperationAudit(
       {
         actorUserId: 'root-1',
         action: 'ai_feedback.triage',
@@ -39,6 +39,7 @@ describe('管理员操作审计', () => {
       },
       { db, required: true },
     );
+    expect(auditId).toMatch(/[0-9a-f-]{36}/u);
     expect(JSON.stringify(db.query.mock.calls[0])).not.toContain("password='secret'");
     expect(JSON.stringify(db.query.mock.calls[0])).toContain('tableHints');
   });

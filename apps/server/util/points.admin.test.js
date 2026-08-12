@@ -101,6 +101,29 @@ describe('积分流水来源语义', () => {
     expect(result.rows[0]).toMatchObject({ sourceType: 'achievement', sourceKey: 'streak_7' });
     expect(result.rows[1]).toMatchObject({ sourceType: 'weekly', sourceKey: 'wk_todo', sourceMeta: '202632' });
   });
+
+  it('返回稳定记录 ID、游标并把分页参数截断为安全整数', async () => {
+    mocks.query
+      .mockResolvedValueOnce([
+        [
+          { id: 12, delta: -88, reason: 'lottery_cost', ref: 'x1', create_time: '2026-08-06 12:00:00' },
+          { id: 11, delta: 30, reason: 'lottery_win', ref: 'p30', create_time: '2026-08-06 11:00:00' },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ c: 2 }]]);
+
+    const result = await getPointsLog('user-1', { limit: 1.9, offset: 2.8, filter: 'lottery' });
+
+    expect(result).toMatchObject({
+      rows: [{ id: 12 }],
+      limit: 1,
+      offset: 2,
+      filter: 'lottery',
+      hasMore: true,
+      nextCursor: expect.any(String),
+    });
+    expect(String(mocks.query.mock.calls[0][0])).toContain('ORDER BY id DESC LIMIT 2 OFFSET 2');
+  });
 });
 
 describe('AI 加油包兑换', () => {

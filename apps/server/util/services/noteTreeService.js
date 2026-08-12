@@ -7,6 +7,30 @@ export { MAX_NOTE_TREE_DEPTH, NOTE_TREE_ROOT_KEY } from '../noteTreeConstants.js
 
 const ACTIVE_NOTE = 0;
 const MAX_NOTE_TREE_SEARCH_LENGTH = 120;
+// 写路径最多允许 8 层；额外联结 1 层只用于识别历史超深父链，避免返回截断且误导性的面包屑。
+const NOTE_BREADCRUMB_LOOKUP_NODE_COUNT = MAX_NOTE_TREE_DEPTH + 1;
+const OWNED_NOTE_BREADCRUMB_SQL = (() => {
+  const selectColumns = Array.from({ length: NOTE_BREADCRUMB_LOOKUP_NODE_COUNT }, (_, index) => {
+    const alias = `breadcrumb_node_${index}`;
+    return `${alias}.id AS breadcrumb_${index}_id, ${alias}.title AS breadcrumb_${index}_title`;
+  }).join(',\n       ');
+  const joins = Array.from({ length: NOTE_BREADCRUMB_LOOKUP_NODE_COUNT - 1 }, (_, index) => {
+    const childAlias = `breadcrumb_node_${index}`;
+    const parentAlias = `breadcrumb_node_${index + 1}`;
+    return `LEFT JOIN note ${parentAlias}
+        ON ${parentAlias}.id = ${childAlias}.parent_id
+       AND ${parentAlias}.create_by = breadcrumb_node_0.create_by
+       AND ${parentAlias}.del_flag = ${ACTIVE_NOTE}`;
+  }).join('\n      ');
+
+  return `SELECT ${selectColumns}
+      FROM note breadcrumb_node_0
+      ${joins}
+     WHERE breadcrumb_node_0.id = ?
+       AND breadcrumb_node_0.create_by = ?
+       AND breadcrumb_node_0.del_flag = ${ACTIVE_NOTE}
+     LIMIT 1`;
+})();
 
 function normalizeId(value) {
   const normalized = String(value ?? '').trim();
@@ -142,6 +166,36 @@ function queryDb(db) {
     throw new NoteTreeError('NOTE_TREE_DB_REQUIRED', '笔记树数据库连接不可用', 500);
   }
   return db;
+}
+
+function resolveTargetedNoteBreadcrumb(row) {
+  const upwardPath = [];
+  const pathIndex = new Map();
+
+  for (let index = 0; index < NOTE_BREADCRUMB_LOOKUP_NODE_COUNT; index += 1) {
+    const id = normalizeId(row?.[`breadcrumb_${index}_id`]);
+    if (!id) break;
+
+    const seenAt = pathIndex.get(id);
+    if (seenAt !== undefined) {
+      // 与 buildNoteTree 的历史坏数据恢复语义保持一致：环上的节点降级为根，
+      // 目标节点若位于环下方则仍保留到第一个环节点的有效路径。
+      upwardPath.splice(seenAt + 1);
+      break;
+    }
+    if (index >= MAX_NOTE_TREE_DEPTH) {
+      throw new NoteTreeError('NOTE_TREE_DEPTH_EXCEEDED', `笔记目录最多支持 ${MAX_NOTE_TREE_DEPTH} 层`, 409);
+    }
+
+    pathIndex.set(id, upwardPath.length);
+    upwardPath.push({
+      id,
+      title: String(row?.[`breadcrumb_${index}_title`] ?? ''),
+    });
+  }
+
+  if (!upwardPath.length) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+  return upwardPath.reverse();
 }
 
 export async function loadOwnedNoteTree(userId, options = {}) {
@@ -389,8 +443,17 @@ export async function queryOwnedNoteTree({ userId, parentId = null, depth = 1, k
 }
 
 export async function resolveOwnedNoteBreadcrumb({ userId, noteId, db = pool } = {}) {
-  const snapshot = await loadOwnedNoteTree(userId, { db });
-  return { items: resolveNoteBreadcrumbFromSnapshot(snapshot, noteId) };
+  const normalizedUserId = normalizeId(userId);
+  if (!normalizedUserId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
+  const normalizedNoteId = normalizeId(noteId);
+  if (!normalizedNoteId) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+
+  // 单篇详情只沿目标节点的父链做主键联结，不再读取并排序该账号的全部笔记。
+  // 这样详情首屏的数据库工作量只与最多 8 层目录深度有关，与账号笔记总量无关。
+  const [rows] = await queryDb(db).query(OWNED_NOTE_BREADCRUMB_SQL, [normalizedNoteId, normalizedUserId]);
+  const row = Array.isArray(rows) ? rows[0] : null;
+  if (!row) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+  return { items: resolveTargetedNoteBreadcrumb(row) };
 }
 
 /**

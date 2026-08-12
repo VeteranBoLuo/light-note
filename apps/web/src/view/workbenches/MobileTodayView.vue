@@ -105,18 +105,38 @@
       </BButton>
     </section>
 
+    <section v-if="todaySettled && growthClaimableCount > 0" class="mobile-today__growth-claim">
+      <span><SvgIcon :src="icon.growth.reward" size="17" />{{ t('growth.claimAllCount', { n: growthClaimableCount }) }}</span>
+      <BButton
+        type="primary"
+        size="small"
+        :loading="claimingRewards"
+        :disabled="growthReadOnly || claimingRewards"
+        @click="claimAllGrowth"
+      >
+        {{ t('growth.claimAll') }}
+      </BButton>
+    </section>
+
     <section v-if="todaySettled && showDailyGrowthTasks" class="mobile-today__growth">
       <DailyQuests
         :quests="dailyGrowthQuests"
         :bonus="dailyGrowthBonus"
-        :claiming="claimingDailyGrowth"
+        :claiming="claimingDailyGrowth || claimingRewards"
         :read-only="growthReadOnly"
         @claim="claimDailyGrowth"
       />
     </section>
 
     <section v-if="todaySettled && showGrowthTasks" class="mobile-today__growth">
-      <GrowthTasks :data="growthTasks" compact :max-visible="3" show-view-all @view="openGrowthTasks" />
+      <GrowthTasks
+        :data="growthTasks"
+        compact
+        :max-visible="3"
+        show-view-all
+        :read-only="growthReadOnly"
+        @view="openGrowthTasks"
+      />
     </section>
 
     <!-- 不放「查看全部待办」：底部导航已有待办一级入口，这里重复只会占位 -->
@@ -166,7 +186,17 @@
   const inbox = inboxStore();
   const user = useUserStore();
   const scrollRef = ref<HTMLElement | null>(null);
-  const { dashboard, growthTasks, loadDashboard, loadGrowthTasks, claimDailyBonus } = useGrowth();
+  const {
+    dashboard,
+    growthTasks,
+    claimable,
+    claimingRewards,
+    loadDashboard,
+    loadGrowthTasks,
+    loadClaimable,
+    claimDailyBonus,
+    claimAllRewards,
+  } = useGrowth();
   const growthReadOnly = computed(() => Boolean(user.adminContext));
   const dailyGrowthQuests = computed(() => dashboard.value?.quests || []);
   const dailyGrowthBonus = computed(
@@ -176,9 +206,35 @@
   const showDailyGrowthTasks = computed(() => Boolean(dashboard.value && !dailyGrowthBonus.value.claimed));
   const claimingDailyGrowth = ref(false);
   const showGrowthTasks = computed(() => Boolean(growthTasks.value?.tasks.some((task) => !task.claimed)));
+  const growthClaimableCount = computed(() => Number(claimable.value?.count || 0));
+
+  async function claimAllGrowth() {
+    if (growthReadOnly.value || claimingRewards.value) return;
+    try {
+      const res = await claimAllRewards();
+      if (res?.status === 200 && res.data?.ok) {
+        const claimed = Number(res.data.claimed || 0);
+        if (claimed > 0) {
+          const frames = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
+          message.success(
+            t(frames > 0 ? 'growth.claimAllSuccessWithFrames' : 'growth.claimAllSuccess', {
+              n: claimed,
+              exp: Number(res.data.exp || 0),
+              points: Number(res.data.points || 0),
+              frames,
+            }),
+          );
+          recordOperation({ module: '工作台', operation: '一键领取成长奖励成功' });
+        } else message.info(t('growth.claimAllEmpty'));
+      }
+    } catch (error) {
+      console.error('今日一键领取成长奖励失败:', error);
+      message.error(t('growth.claimAllFailed'));
+    }
+  }
 
   async function claimDailyGrowth() {
-    if (growthReadOnly.value || claimingDailyGrowth.value) return;
+    if (growthReadOnly.value || claimingDailyGrowth.value || claimingRewards.value) return;
     claimingDailyGrowth.value = true;
     try {
       const res = await claimDailyBonus();
@@ -395,7 +451,7 @@
     enabled: true,
     externalBusy: initialTodayLoading,
     getScrollContainer: () => scrollRef.value,
-    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]),
+    onRefresh: () => Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]),
   });
   /*
    * 从后台切回来时补一次数据。今日页最需要这个:日期、待办和签到状态都跟"今天"绑定,
@@ -406,7 +462,7 @@
     refresh: () => {
       // 先让日期/问候语跟上真实时间,再取数据,避免出现"今天的数据 + 昨天的标题"。
       clockTick.value += 1;
-      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true)]);
+      return Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
     },
     canRefresh: () => !initialTodayLoading.value,
   });
@@ -424,7 +480,7 @@
       inboxItems.value = [];
       continueItems.value = [];
       counts.value = { overdue: 0, dueToday: 0, inbox: 0, todoPending: 0, unreadNotification: 0 };
-      if (user.id) void loadToday();
+      if (user.id) void Promise.all([loadToday(), loadDashboard(), loadGrowthTasks(true), loadClaimable()]);
     },
   );
 
@@ -434,6 +490,7 @@
   onMounted(() => {
     void loadDashboard();
     void loadGrowthTasks();
+    void loadClaimable();
   });
 
   /*
@@ -444,6 +501,7 @@
   onActivated(() => {
     if (dashboard.value) void loadDashboard();
     if (growthTasks.value) void loadGrowthTasks(true);
+    if (claimable.value) void loadClaimable();
   });
 </script>
 
@@ -472,6 +530,27 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 14px;
     background: var(--card-background);
+  }
+
+  .mobile-today__growth-claim {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--primary-color);
+    border-radius: 14px;
+    background: var(--card-background);
+  }
+
+  .mobile-today__growth-claim > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-color);
+    font-size: 13px;
+    font-weight: 700;
   }
 
   .mobile-today__pending {

@@ -11,6 +11,7 @@ import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
 import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
+import { ensureGrowthCenterSchema } from './util/growthCenterSchema.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
@@ -104,8 +105,15 @@ try {
 ensureNotificationTable().catch((err) => console.error('通知表初始化失败 code=%s', stableAgentErrorCode(err)));
 // 白名单缓存必须在开始接请求前加载完:否则重启后的空窗期(异步加载未完成)会漏过滤、记下本该跳过的自己人日志(如部署后立刻用白名单设备操作)
 await initLogExclude().catch((err) => console.error('日志白名单初始化失败 code=%s', stableAgentErrorCode(err)));
-ensurePointsSchema().catch((err) => console.error('积分表初始化失败 code=%s', stableAgentErrorCode(err)));
-ensureGrowthTaskSchema().catch((err) => console.error('成长任务表初始化失败 code=%s', stableAgentErrorCode(err)));
+// 成长中心读取接口必须保持纯只读，因此相关 Schema 在监听 HTTP 前完成，而不是在 GET 内兜底建表。
+try {
+  await ensurePointsSchema();
+  await ensureGrowthTaskSchema();
+  await ensureGrowthCenterSchema();
+} catch (err) {
+  console.error('成长中心 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
+  process.exit(1);
+}
 ensureNoteTreeSchema().catch((err) => console.error('笔记页面树初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));

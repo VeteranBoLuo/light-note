@@ -13,7 +13,12 @@
           <span>{{ t('growth.totalExp', { n: g.exp.toLocaleString('en-US') }) }}</span>
         </div>
       </div>
-      <BButton size="small" class="growth-link" @click="goGrowth">
+      <BButton
+        size="small"
+        class="growth-link"
+        v-click-log="{ module: '工作台', operation: '查看成长中心' }"
+        @click="goGrowth"
+      >
         {{ t('workbench.growth.view') }}
       </BButton>
     </div>
@@ -39,7 +44,8 @@
           size="small"
           :type="g.checkedInToday ? '' : 'primary'"
           :loading="checking"
-          :disabled="g.checkedInToday || checking"
+          :disabled="readOnly || g.checkedInToday || checking"
+          :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
           class="checkin-button"
           @click="onCheckin"
         >
@@ -49,8 +55,9 @@
           v-if="claimable > 0"
           size="small"
           type="success"
-          :loading="claiming"
-          :disabled="claiming"
+          :loading="claimingRewards"
+          :disabled="readOnly || claimingRewards"
+          :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
           class="claim-button"
           @click="onClaimAll"
         >
@@ -62,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import { useGrowth } from '@/composables/useGrowth.ts';
@@ -70,29 +77,28 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { apiBaseGet, apiBasePost } from '@/http/request.ts';
+  import { useUserStore } from '@/store';
 
   const { t } = useI18n();
   const router = useRouter();
-  const { growth: g, load, loadGrowthTasks, doCheckin } = useGrowth();
+  const user = useUserStore();
+  const readOnly = computed(() => Boolean(user.adminContext));
+  const {
+    growth: g,
+    claimable: claimableData,
+    claimingRewards,
+    load,
+    loadClaimable,
+    claimAllRewards,
+    doCheckin,
+  } = useGrowth();
   const checking = ref(false);
-  const claimable = ref(0);
-  const claiming = ref(false);
-
-  async function loadClaimable() {
-    try {
-      const res = await apiBaseGet('/api/growth/claimable');
-      if (res?.status === 200 && res.data) claimable.value = Number(res.data.count || 0);
-    } catch {
-      // 成长奖励是增强信息，接口临时不可用时不阻断工作台。
-    }
-  }
+  const claimable = computed(() => Number(claimableData.value?.count || 0));
 
   async function onClaimAll() {
-    if (claiming.value) return;
-    claiming.value = true;
+    if (readOnly.value || claimingRewards.value) return;
     try {
-      const res = await apiBasePost('/api/growth/claimAll');
+      const res = await claimAllRewards();
       if (res?.status === 200 && res.data?.ok) {
         if (res.data.claimed > 0) {
           const frameCount = Array.isArray(res.data.frames) ? res.data.frames.length : 0;
@@ -107,30 +113,23 @@
           );
           recordOperation({
             module: '工作台',
-            operation: `一键领取成长奖励（${res.data.claimed} 项,经验+${res.data.exp || 0},积分+${
-              res.data.points || 0
-            }${frameCount ? `,头像框+${frameCount}` : ''}）`,
+            operation: '一键领取成长奖励成功',
           });
         } else {
           message.info(t('growth.claimAllNone'));
         }
-        claimable.value = 0;
-        await Promise.all([load(true), loadGrowthTasks(true)]);
       }
     } catch (error) {
       console.error('一键领取失败:', error);
-    } finally {
-      claiming.value = false;
     }
   }
 
   function goGrowth() {
-    recordOperation({ module: '工作台', operation: '查看成长中心' });
     router.push('/growth');
   }
 
   async function onCheckin() {
-    if (checking.value || g.value?.checkedInToday) return;
+    if (readOnly.value || checking.value || g.value?.checkedInToday) return;
     checking.value = true;
     try {
       const res = await doCheckin();

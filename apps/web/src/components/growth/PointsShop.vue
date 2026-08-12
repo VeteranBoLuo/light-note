@@ -1,5 +1,11 @@
 <template>
   <div class="ps">
+    <div v-if="!shop && (shopLoading || !shopError)" class="ps-state"><BLoading size="small" /></div>
+    <div v-else-if="shopError && !shop" class="ps-state ps-state--error">
+      <span>{{ t('growth.shopLoadFailed') }}</span>
+      <BButton size="small" @click="loadShop">{{ t('common.retry') }}</BButton>
+    </div>
+    <template v-else>
     <div class="ps-head">
       <div class="ps-head-left">
         <div class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</div>
@@ -26,7 +32,10 @@
           <div class="ps-item-desc">{{ itemDesc(it) }}</div>
         </div>
         <div class="ps-item-foot">
-          <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+          <span class="ps-purchase-meta">
+            <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+            <small v-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
+          </span>
           <BButton
             size="small"
             type="primary"
@@ -85,6 +94,7 @@
           <span v-else class="ps-purchase-meta">
             <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
             <span v-if="it.owned" class="ps-item-owned">{{ t('growth.shopOwned') }}</span>
+            <small v-else-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
           </span>
           <template v-if="canEquipFrame(it)">
             <BButton
@@ -143,6 +153,7 @@
         pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : ''
       }}</div>
     </BModal>
+    </template>
   </div>
 </template>
 
@@ -152,6 +163,7 @@
   import { useGrowth, type ShopItem } from '@/composables/useGrowth.ts';
   import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
@@ -164,7 +176,7 @@
   const { t, te } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
-  const { dashboard, shop, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
+  const { dashboard, shop, shopLoading, shopError, loadShop, buyItem, equipFrame, claimAchievement } = useGrowth();
   const user = useUserStore();
   const avatarSrc = computed(() => user.headPicture || icon.navigation.user);
 
@@ -269,6 +281,16 @@
     return (s.points || 0) >= Number(it.cost || 0);
   }
 
+  function unavailableLabel(it: ShopItem) {
+    const s = shop.value;
+    if (!s || it.owned || it.acquisition === 'achievement') return '';
+    if (s.isVisitor) return t('growth.shopLoginRequired');
+    if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
+    if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return t('growth.shopCardMax');
+    const shortfall = Math.max(0, Number(it.cost || 0) - Number(s.points || 0));
+    return shortfall > 0 ? t('growth.shopShortfall', { n: shortfall }) : '';
+  }
+
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
     if (canBuyNow(it)) return t('growth.shopBuy');
@@ -306,7 +328,7 @@
       const res = await buyItem(it.id);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.shopBuyOk'));
-        recordOperation({ module: '成长', operation: `兑换「${itemName(it)}」（-${it.cost} 积分）` });
+        recordOperation({ module: '成长', operation: '兑换成长权益' });
       } else {
         message.error(res?.data?.msg || t('growth.shopInsufficient'));
       }
@@ -325,7 +347,7 @@
       const res = await claimAchievement(it.achievementKey);
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.frameAchievementClaimOk', { name: itemName(it) }));
-        recordOperation({ module: '成长', operation: `领取成就头像框「${itemName(it)}」` });
+        recordOperation({ module: '成长', operation: '领取成就头像框' });
       } else {
         message.error(res?.data?.msg || t('growth.operationFailed'));
       }
@@ -346,7 +368,7 @@
         if (frameId) {
           const it = frames.value.find((i) => i.id === frameId);
           message.success(t('growth.shopEquipOk', { name: it ? itemName(it) : '' }));
-          recordOperation({ module: '成长', operation: `佩戴头像框「${it ? itemName(it) : frameId}」` });
+          recordOperation({ module: '成长', operation: '佩戴头像框' });
         } else {
           message.success(t('growth.shopUnequipOk'));
           recordOperation({ module: '成长', operation: '卸下头像框' });
@@ -371,6 +393,17 @@
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+  .ps-state {
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+  }
+  .ps-state--error {
+    flex-direction: column;
   }
   .ps-head {
     display: flex;
@@ -783,6 +816,12 @@
     color: var(--desc-color);
     font-size: 11px;
     font-weight: 700;
+  }
+  .ps-item-unavailable {
+    color: var(--desc-color);
+    font-size: 10.5px;
+    font-weight: 500;
+    white-space: nowrap;
   }
   .ps-achievement-progress {
     display: inline-flex;

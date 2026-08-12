@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => {
     connection,
     pool: { getConnection: vi.fn(() => Promise.resolve(connection)), query: vi.fn() },
     applySecurityEventHandle: vi.fn(),
+    beginAdminAction: vi.fn(),
+    finishAdminAction: vi.fn(),
   };
 });
 
@@ -22,9 +24,34 @@ vi.mock('../util/common.js', () => ({
 vi.mock('../util/security/services/securityEventHandling.js', () => ({
   applySecurityEventHandle: mocks.applySecurityEventHandle,
 }));
+vi.mock('../util/adminActionExecution.js', () => {
+  class AdminActionError extends Error {
+    constructor(code, message, status = 400) {
+      super(message);
+      this.code = code;
+      this.status = status;
+    }
+  }
+  return {
+    AdminActionError,
+    beginAdminAction: mocks.beginAdminAction,
+    finishAdminAction: mocks.finishAdminAction,
+    adminActionErrorResponse: (error, fallbackMessage) => ({
+      status: error?.status || 500,
+      message: error?.message || fallbackMessage,
+      code: error?.code || 'ADMIN_ACTION_FAILED',
+    }),
+  };
+});
 
-const { batchSetSecurityReviewDisposition, getSecurityOverviewV2, getSecurityReviewClusters, getSecurityRuleQuality } =
-  await import('./securityV2Handle.js');
+const {
+  batchSetSecurityReviewDisposition,
+  getSecurityOverviewV2,
+  getSecurityReviewClusters,
+  getSecurityRuleQuality,
+  setSecurityClusterDisposition,
+  setSecurityEventDisposition,
+} = await import('./securityV2Handle.js');
 
 function createResponse() {
   return {
@@ -50,6 +77,18 @@ describe('securityV2Handle 批量事件复核', () => {
     mocks.connection.commit.mockResolvedValue();
     mocks.connection.rollback.mockResolvedValue();
     mocks.applySecurityEventHandle.mockResolvedValue();
+    mocks.beginAdminAction.mockImplementation(async (req, input) => ({
+      definition: { action: input.action, riskLevel: 'high', auditRequired: true },
+      reason: String(req.body?.reason || ''),
+      requestId: 'request-1',
+      intentAuditId: 'intent-1',
+      baseEntry: {},
+      metadata: input.metadata || {},
+    }));
+    mocks.finishAdminAction.mockImplementation(async (_context, options) => ({
+      auditId: options.outcome === 'succeeded' ? 'audit-1' : 'audit-failed-1',
+      requestId: 'request-1',
+    }));
   });
 
   it('在同一事务中处理所选事件簇内的全部事件', async () => {
@@ -72,6 +111,7 @@ describe('securityV2Handle 批量事件复核', () => {
           scope: 'clusters',
           disposition: 'confirmed_attack',
           reason: '批量复核',
+          confirmed: true,
         },
       },
       res,
@@ -81,7 +121,103 @@ describe('securityV2Handle 批量事件复核', () => {
     expect(mocks.applySecurityEventHandle).toHaveBeenCalledTimes(2);
     expect(mocks.connection.commit).toHaveBeenCalledTimes(1);
     expect(mocks.connection.rollback).not.toHaveBeenCalled();
+    expect(mocks.beginAdminAction).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ action: 'security.review.batch', targetId: 'event-1' }),
+    );
+    expect(mocks.finishAdminAction).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ outcome: 'succeeded', db: mocks.connection }),
+    );
     expect(res.body).toMatchObject({ status: 200, data: { selectedTotal: 1, handledTotal: 2 } });
+  });
+
+  it('单条事件处置返回数据库权威状态与审计回执', async () => {
+    const event = { event_id: 'event-1', cluster_key: null };
+    mocks.connection.query.mockImplementation((sql) => {
+      if (sql.includes('SELECT * FROM security_events WHERE event_id = ? LIMIT 1 FOR UPDATE')) {
+        return Promise.resolve([[event]]);
+      }
+      if (sql.includes('UPDATE security_events')) return Promise.resolve([{ affectedRows: 1 }]);
+      if (sql.includes('SELECT event_id, disposition, workflow_status')) {
+        return Promise.resolve([
+          [
+            {
+              event_id: 'event-1',
+              disposition: 'confirmed_attack',
+              workflow_status: 'resolved',
+              handled_status: 'processed',
+              reviewed_by: 'root-1',
+              reviewed_at: '2026-08-12 18:00:00',
+              review_reason: '已核对请求链路',
+            },
+          ],
+        ]);
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const res = createResponse();
+
+    await setSecurityEventDisposition(
+      {
+        user: { id: 'root-1', role: 'root' },
+        adminContext: null,
+        params: { eventId: 'event-1' },
+        body: { disposition: 'confirmed_attack', reason: '已核对请求链路', confirmed: true },
+      },
+      res,
+    );
+
+    expect(mocks.beginAdminAction).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ action: 'security.event.review', targetId: 'event-1' }),
+    );
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        handledTotal: 1,
+        requestId: 'request-1',
+        auditId: 'audit-1',
+        review: { event_id: 'event-1', disposition: 'confirmed_attack', workflow_status: 'resolved' },
+      },
+    });
+  });
+
+  it('事件簇处置在同一事务更新整簇并返回锚点回执', async () => {
+    const anchor = { event_id: 'event-1', cluster_key: 'cluster-1' };
+    const clusterEvents = [anchor, { event_id: 'event-2', cluster_key: 'cluster-1' }];
+    mocks.connection.query.mockImplementation((sql) => {
+      if (sql.includes('SELECT * FROM security_events WHERE event_id = ? LIMIT 1 FOR UPDATE')) {
+        return Promise.resolve([[anchor]]);
+      }
+      if (sql.includes('WHERE cluster_key = ?')) return Promise.resolve([clusterEvents]);
+      if (sql.includes('UPDATE security_events')) return Promise.resolve([{ affectedRows: 1 }]);
+      if (sql.includes('SELECT event_id, disposition, workflow_status')) {
+        return Promise.resolve([[{ event_id: 'event-1', disposition: 'benign_anomaly', workflow_status: 'resolved' }]]);
+      }
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const res = createResponse();
+
+    await setSecurityClusterDisposition(
+      {
+        user: { id: 'root-1', role: 'root' },
+        adminContext: null,
+        params: { eventId: 'event-1' },
+        body: { disposition: 'benign_anomaly', reason: '已核对事件簇上下文', confirmed: true },
+      },
+      res,
+    );
+
+    expect(mocks.applySecurityEventHandle).toHaveBeenCalledTimes(2);
+    expect(mocks.beginAdminAction).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ action: 'security.cluster.review', targetId: 'event-1' }),
+    );
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: { handledTotal: 2, requestId: 'request-1', auditId: 'audit-1' },
+    });
   });
 
   it('任一事件不存在时回滚整批操作', async () => {
@@ -92,7 +228,13 @@ describe('securityV2Handle 批量事件复核', () => {
       {
         user: { id: 'root-1', role: 'root' },
         adminContext: null,
-        body: { eventIds: ['missing-event'], scope: 'events', disposition: 'false_positive' },
+        body: {
+          eventIds: ['missing-event'],
+          scope: 'events',
+          disposition: 'false_positive',
+          reason: '已核对批量复核范围',
+          confirmed: true,
+        },
       },
       res,
     );

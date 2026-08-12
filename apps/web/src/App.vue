@@ -932,6 +932,11 @@
     --mobile-shell-bottom-height: calc(56px + env(safe-area-inset-bottom));
   }
 
+  :root.light-note-keyboard-open,
+  :root.light-note-keyboard-open .app-root.has-mobile-bottom-nav {
+    --mobile-shell-bottom-height: 0px;
+  }
+
   .app-offline-banner {
     position: fixed;
     z-index: 1190;

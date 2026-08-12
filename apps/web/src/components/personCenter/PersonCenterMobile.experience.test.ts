@@ -90,6 +90,7 @@ describe('mobile personal center experience', () => {
       /\.avatar-frame--celestial \.avatar-frame__motif\s*\{[\s\S]*?border:\s*var\(--frame-constellation-stroke\) dotted/,
     );
     expect(avatarFrameSource).not.toContain('avatar-frame--compact');
+    expect(desktopPersonCenterSource).toContain(':size="32"');
     expect(desktopPersonCenterSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(navigationRightAreaSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);

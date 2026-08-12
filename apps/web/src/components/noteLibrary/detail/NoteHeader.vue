@@ -123,6 +123,36 @@
           target-type="note"
           :target-id="note.id"
         />
+        <BTooltip
+          v-if="bookmark.isDesktop && !readonly"
+          :title="$t('noteDetail.tagsWithCount', { count: visibleTags.length })"
+        >
+          <BButton
+            class="note-header-title-icon note-header-title-icon--tag"
+            :aria-label="$t('noteDetail.tagsWithCount', { count: visibleTags.length })"
+            @click="openTagConfig"
+          >
+            <SvgIcon :src="icon.manage_categoryBtn_tag" size="18" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+        <BTooltip v-if="bookmark.isDesktop && !readonly && note?.id" :title="$t('noteDetail.history.entry')">
+          <BButton
+            class="note-header-title-icon note-header-title-icon--history"
+            :aria-label="$t('noteDetail.history.entry')"
+            @click="openHistory"
+          >
+            <SvgIcon :src="icon.noteDetail.history" size="18" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
+        <BTooltip v-if="bookmark.isDesktop" :title="$t('noteDetail.export')">
+          <BButton
+            class="note-header-title-icon note-header-title-icon--export"
+            :aria-label="$t('noteDetail.export')"
+            @click="openExport"
+          >
+            <SvgIcon :src="icon.noteDetail.exportLine" size="18" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
         <BDropdown trigger="click" align="right" :menu-options="desktopMenuOptions">
           <BButton class="note-header-title-icon note-header-desktop-more" :aria-label="$t('common.more')">
             <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
@@ -452,19 +482,24 @@
     return props.updateTime ? `${t('noteDetail.savedAt')} ${props.updateTime}` : t('noteDetail.saved');
   });
 
-  function openMobileTagConfig() {
+  function openTagConfig() {
     updateTag();
     recordOperation(OPERATION_LOG_MAP.note.updateTag);
   }
 
-  function openMobileSaveAsTemplate() {
+  function openSaveAsTemplate() {
     emit('saveAsTemplate');
     recordOperation(OPERATION_LOG_MAP.note.saveAsTemplate);
   }
 
-  function openMobileExport() {
+  function openExport() {
     openExportModal();
     recordOperation(OPERATION_LOG_MAP.note.exportNote);
+  }
+
+  function openHistory() {
+    emit('history');
+    recordOperation(OPERATION_LOG_MAP.note.history);
   }
 
   const mobileActionsTitle = computed(() => {
@@ -556,14 +591,11 @@
     createChild: () => emit('createChild'),
     attachPages: () => emit('attachPages'),
     movePage: () => emit('movePage'),
-    tags: openMobileTagConfig,
-    saveAsTemplate: openMobileSaveAsTemplate,
+    tags: openTagConfig,
+    saveAsTemplate: openSaveAsTemplate,
     manageTemplates: () => emit('manageTemplates'),
-    history: () => {
-      emit('history');
-      recordOperation(OPERATION_LOG_MAP.note.history);
-    },
-    export: openMobileExport,
+    history: openHistory,
+    export: openExport,
     delete: () => emit('del'),
   };
 
@@ -576,24 +608,26 @@
   }
 
   const desktopMenuOptions = computed<HeaderMenuOption[]>(() => {
-    const options: HeaderMenuOption[] = [
-      {
+    const options: HeaderMenuOption[] = [];
+    // 桌面顶栏空间充足，标签、历史和导出直接展示；平板继续通过同一份菜单保证可达性。
+    if (!bookmark.isDesktop) {
+      options.push({
         label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
         icon: icon.manage_categoryBtn_tag,
-        function: openMobileTagConfig,
-      },
-    ];
+        function: openTagConfig,
+      });
+    }
     if (!props.readonly) {
       options.push({
         label: t('note.saveAsTemplate'),
         icon: icon.noteDetail.template,
-        function: openMobileSaveAsTemplate,
+        function: openSaveAsTemplate,
       });
-      if (props.note?.id) {
+      if (props.note?.id && !bookmark.isDesktop) {
         options.push({
           label: t('noteDetail.history.entry'),
           icon: icon.noteDetail.history,
-          function: () => emit('history'),
+          function: openHistory,
         });
       }
     }
@@ -602,11 +636,13 @@
       icon: icon.noteDetail.template,
       function: () => emit('manageTemplates'),
     });
-    options.push({
-      label: t('noteDetail.export'),
-      icon: icon.noteDetail.exportLine,
-      function: openMobileExport,
-    });
+    if (!bookmark.isDesktop) {
+      options.push({
+        label: t('noteDetail.export'),
+        icon: icon.noteDetail.exportLine,
+        function: openExport,
+      });
+    }
     if (!props.readonly) {
       options.push(
         { divider: true },
@@ -687,9 +723,8 @@
         exportModalVisible.value = false;
         const title = props.note.title || t('noteDetail.unnamedDoc');
         const content = props.note.content || '';
-        const { buildNoteExportHtml, inlineMermaidForExport, renderMarkdownForExport } = await import(
-          '@/utils/noteExport'
-        );
+        const { buildNoteExportHtml, inlineMermaidForExport, renderMarkdownForExport } =
+          await import('@/utils/noteExport');
         // md 笔记的 content 是 Markdown 源码,直接塞进 <body> 只会显示 `#`、`- [ ]` 原文,
         // 必须先按站内同口径渲染成 HTML。
         // 富文本笔记的正文已经是 HTML,但里面的 mermaid 源码块同样要在导出时渲染成内联 SVG

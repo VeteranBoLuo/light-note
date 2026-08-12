@@ -5,8 +5,12 @@
     :subtitle="t('adminOperationLog.subtitle')"
     :toolbar-hint="t('adminOperationLog.toolbarHint')"
     :summary-count="total"
+    :back-to="returnTo || undefined"
   >
     <template #actions>
+      <BButton v-if="returnTo && !bookmark.isMobile" @click="goBackToUserManagement">
+        {{ t('adminOperationLog.backToUserManagement') }}
+      </BButton>
       <BButton type="danger" @click="clearOperationLogs">{{ t('adminOperationLog.clear') }}</BButton>
     </template>
 
@@ -64,9 +68,18 @@
       @row-click="openDetail"
     >
       <template #bodyCell="{ text, record, column }">
-        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{ record.alias || record.email || '-' }}</span>
-        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{ formatTimeOnly(record.createTime) }}</span>
-        <span v-else-if="column.key === 'mobileOperation'" class="admin-log-mobile-operation" :title="record.operation || ''">{{ record.operation || '-' }}</span>
+        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{
+          record.alias || record.email || '-'
+        }}</span>
+        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{
+          formatTimeOnly(record.createTime)
+        }}</span>
+        <span
+          v-else-if="column.key === 'mobileOperation'"
+          class="admin-log-mobile-operation"
+          :title="record.operation || ''"
+          >{{ record.operation || '-' }}</span
+        >
         <span v-else-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
           {{ text?.os || t('apiLog.unknown') }}
         </span>
@@ -126,13 +139,23 @@
       >
     </dl>
   </BModal>
+
+  <AdminRiskActionModal
+    v-model:visible="clearVisible"
+    :title="t('adminOperationLog.clearTitle')"
+    :impact="t('adminOperationLog.clearConfirm')"
+    confirm-phrase="确认清理日志"
+    :loading="clearing"
+    @confirm="confirmClearOperationLogs"
+  />
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useRoute } from 'vue-router';
-  import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
+  import { useRoute, useRouter } from 'vue-router';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -140,7 +163,6 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
@@ -151,8 +173,13 @@
     getApiLogRuntimeLabelKey,
   } from '@/utils/apiLogPresentation.ts';
 
+  // 移动端路由外壳会向页面组件透传布局 style；本页包含多个根节点，
+  // 该属性无法安全落到唯一根节点，显式丢弃可避免无意义的 Vue 警告。
+  defineOptions({ inheritAttrs: false });
+
   const { t, locale } = useI18n();
   const route = useRoute();
+  const router = useRouter();
   const bookmark = bookmarkStore();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const filters = reactive({
@@ -165,7 +192,14 @@
   });
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
+  const clearVisible = ref(false);
+  const clearing = ref(false);
   let timer: number | null = null;
+
+  const returnTo = computed(() => {
+    const value = String(route.query.returnTo || '');
+    return value === '/admin/userMg' || value === '/userMg' ? value : '';
+  });
 
   const columns = computed(() =>
     bookmark.isMobile
@@ -237,18 +271,25 @@
     detailVisible.value = true;
   }
   function clearOperationLogs() {
-    Alert.alert({
-      title: t('adminOperationLog.clearTitle'),
-      content: t('adminOperationLog.clearConfirm'),
-      onOk() {
-        apiBaseGet('/api/common/clearOperationLogs', {}).then((response: any) => {
-          if (response?.status === 200) {
-            message.success(t('adminOperationLog.clearSuccess'));
-            reloadLogs();
-          }
-        });
-      },
-    });
+    clearVisible.value = true;
+  }
+  function goBackToUserManagement() {
+    if (returnTo.value) void router.push(returnTo.value);
+  }
+  async function confirmClearOperationLogs(payload: { reason: string; confirmed: true; confirmText: string }) {
+    clearing.value = true;
+    try {
+      const response = await apiBasePost('/api/common/clearOperationLogs', payload);
+      if (response?.status === 200) {
+        clearVisible.value = false;
+        message.success(
+          `${t('adminOperationLog.clearSuccess')} · 审计 ${String(response.data?.auditId || '').slice(0, 8)}`,
+        );
+        reloadLogs();
+      }
+    } finally {
+      clearing.value = false;
+    }
   }
   function runtimeLabel(record: any) {
     return `${t(getApiLogRuntimeLabelKey(record?.system?.runtime))}${getApiLogAppVersionSuffix(

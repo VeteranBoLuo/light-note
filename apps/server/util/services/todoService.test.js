@@ -736,7 +736,8 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[1][0]).toContain('COUNT(*)');
     expect(connection.query.mock.calls[2][0]).toContain('SELECT * FROM todo_items');
     expect(connection.query.mock.calls[4][0]).toContain('UPDATE todo_items');
-    expect(connection.query.mock.calls[5][0]).toContain("status = 'paused_complete'");
+    const pauseReminderCall = connection.query.mock.calls.find(([sql]) => String(sql).includes("status = 'paused_complete'"));
+    expect(pauseReminderCall?.[0]).toContain('UPDATE todo_reminders');
     expect(result).toMatchObject({
       state: 'changed',
       todoId: 'todo-4',

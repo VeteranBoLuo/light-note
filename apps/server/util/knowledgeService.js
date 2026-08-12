@@ -328,7 +328,9 @@ async function loadSearchBundle(onlyPublic) {
   const generation = cacheGenerations.get(key) || 0;
 
   const loading = (async () => {
-    const whereClause = onlyPublic ? " WHERE status = 'public'" : '';
+    const whereClause = onlyPublic
+      ? " WHERE status = 'public' AND COALESCE(admin_archived, 0) = 0"
+      : ' WHERE COALESCE(admin_archived, 0) = 0';
     const [rows] = await pool.query(
       `SELECT id, title, content, type, category, status
          FROM knowledge_base${whereClause} ORDER BY sort ASC, created_at ASC`,

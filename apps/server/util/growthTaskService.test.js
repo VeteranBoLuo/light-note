@@ -6,6 +6,7 @@ vi.mock('../db/index.js', () => ({
 vi.mock('./growthTaskSchema.js', () => ({ ensureGrowthTaskSchema: vi.fn() }));
 
 import pool from '../db/index.js';
+import { ensureGrowthTaskSchema } from './growthTaskSchema.js';
 import { getGrowthTasks } from './growthTaskService.js';
 
 describe('growthTaskService', () => {
@@ -65,6 +66,33 @@ describe('growthTaskService', () => {
           claimedAt: null,
         },
       ],
+      completedTasks: [],
+      allTasks: [
+        {
+          taskKey: 'profile_avatar',
+          titleKey: 'growth.tasks.profileAvatar.title',
+          descriptionKey: 'growth.tasks.profileAvatar.description',
+          rewardExp: 50,
+          status: 'completed',
+          completed: true,
+          claimed: false,
+          claimable: true,
+          completedAt: '2026-08-01 10:00:00',
+          claimedAt: null,
+        },
+        {
+          taskKey: 'first_note',
+          titleKey: 'growth.tasks.firstNote.title',
+          descriptionKey: 'growth.tasks.firstNote.description',
+          rewardExp: 50,
+          status: 'pending',
+          completed: false,
+          claimed: false,
+          claimable: false,
+          completedAt: null,
+          claimedAt: null,
+        },
+      ],
       totalCount: 2,
       completedCount: 1,
       claimedCount: 0,
@@ -74,6 +102,7 @@ describe('growthTaskService', () => {
     });
     expect(pool.query).toHaveBeenCalledWith(expect.stringContaining('LEFT JOIN user_growth_tasks'), ['user-1']);
     expect(pool.query.mock.calls[0][0]).toContain('WHERE gt.enabled = 1');
+    expect(ensureGrowthTaskSchema).not.toHaveBeenCalled();
   });
 
   it('游客预览使用空 subject id，不读取共享游客账号历史状态', async () => {
@@ -81,6 +110,8 @@ describe('growthTaskService', () => {
 
     await expect(getGrowthTasks('visitor')).resolves.toEqual({
       tasks: [],
+      completedTasks: [],
+      allTasks: [],
       totalCount: 0,
       completedCount: 0,
       claimedCount: 0,
@@ -89,5 +120,6 @@ describe('growthTaskService', () => {
       activeCount: 0,
     });
     expect(pool.query.mock.calls[0][1]).toEqual([null]);
+    expect(ensureGrowthTaskSchema).not.toHaveBeenCalled();
   });
 });

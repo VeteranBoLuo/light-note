@@ -9,7 +9,10 @@ const apiMocks = vi.hoisted(() => ({
   dismiss: vi.fn(),
   todoDiagnostic: vi.fn(),
 }));
-const routerMocks = vi.hoisted(() => ({ push: vi.fn() }));
+const routerMocks = vi.hoisted(() => ({
+  push: vi.fn(),
+  currentRoute: { value: { path: '/admin/actionCenter', query: {} as Record<string, string> } },
+}));
 const messageMocks = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }));
 
 vi.mock('@/api/commonApi', () => ({
@@ -35,12 +38,21 @@ function payload() {
     status: 200,
     data: {
       unavailableSources: ['community_report'],
+      sla: {
+        policyVersion: '2026-08-12.1',
+        overdue: 1,
+        dueSoon: 1,
+        oldestAgeMinutes: 180,
+        returnedCount: 3,
+        unavailableCount: 0,
+        sampled: true,
+      },
       work: {
         total: 2,
         critical: 1,
         sources: [
-          { source: 'opinion', count: 1, critical: 0 },
-          { source: 'security', count: 1, critical: 1 },
+          { source: 'opinion', count: 1, critical: 0, overdue: 0 },
+          { source: 'security', count: 1, critical: 1, overdue: 1 },
         ],
         items: [
           {
@@ -52,6 +64,9 @@ function payload() {
             ownerLabel: '用户甲',
             updatedAt: '2026-08-09 12:00:00',
             targetUrl: '/admin/userOpinion?opinionId=opinion-1',
+            ownerTeam: '用户服务',
+            slaState: 'due_soon',
+            dueAt: '2026-08-12T05:00:00.000Z',
           },
         ],
       },
@@ -61,9 +76,33 @@ function payload() {
         waiting: 1,
         completed24h: 4,
         sources: [
-          { source: 'bookmark_icon', total: 30, attention: 30, running: 0, waiting: 0, completed24h: 0 },
-          { source: 'email_delivery', total: 2, attention: 1, running: 0, waiting: 0, completed24h: 4 },
-          { source: 'todo_reminder', total: 5, attention: 0, running: 0, waiting: 5, completed24h: 0 },
+          {
+            source: 'bookmark_icon',
+            total: 30,
+            attention: 30,
+            running: 0,
+            waiting: 0,
+            completed24h: 0,
+            overdue: 1,
+          },
+          {
+            source: 'email_delivery',
+            total: 2,
+            attention: 1,
+            running: 0,
+            waiting: 0,
+            completed24h: 4,
+            overdue: 1,
+          },
+          {
+            source: 'todo_reminder',
+            total: 5,
+            attention: 0,
+            running: 0,
+            waiting: 5,
+            completed24h: 0,
+            overdue: 0,
+          },
         ],
         items: [
           {
@@ -77,6 +116,10 @@ function payload() {
             errorCode: 'DELIVERY_RESULT_UNKNOWN',
             updatedAt: '2026-08-09 11:00:00',
             targetUrl: '/notificationCenter?tab=email',
+            ownerTeam: '通知服务',
+            slaState: 'overdue',
+            dueAt: '2026-08-09T12:00:00.000Z',
+            overdueMinutes: 180,
           },
           {
             id: 'todo-job-1',
@@ -90,6 +133,9 @@ function payload() {
             scheduledAt: '2026-08-12T03:10:00Z',
             scheduledAtUtc: '2026-08-12T03:10:00Z',
             updatedAt: '2026-08-12T02:43:25Z',
+            ownerTeam: '待办与通知服务',
+            slaState: 'within_sla',
+            dueAt: '2026-08-12T03:20:00Z',
           },
         ],
       },
@@ -118,6 +164,7 @@ describe('ActionCenter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    routerMocks.currentRoute.value = { path: '/admin/actionCenter', query: {} };
     apiMocks.load.mockResolvedValue(payload());
     apiMocks.retry.mockResolvedValue({ status: 200, data: { status: 'queued' } });
     apiMocks.dismiss.mockResolvedValue({ status: 200, data: { status: 'cancelled' } });
@@ -172,7 +219,86 @@ describe('ActionCenter', () => {
     expect(mounted.host.textContent).toContain('部分来源暂不可用');
     expect(mounted.host.textContent).toContain('消息举报');
     mounted.host.querySelector<HTMLButtonElement>('.action-center__item button')!.click();
-    expect(routerMocks.push).toHaveBeenCalledWith('/admin/userOpinion?opinionId=opinion-1');
+    expect(routerMocks.push).toHaveBeenCalledWith({
+      path: '/admin/userOpinion',
+      query: {
+        opinionId: 'opinion-1',
+        returnTo: '/admin/actionCenter?section=work',
+      },
+    });
+    expect(mounted.host.textContent).toContain('即将到期');
+    expect(mounted.host.textContent).toContain('负责团队：用户服务');
+  });
+
+  it('移动端进入反馈时使用手机路由并携带当前待处理筛选', async () => {
+    routerMocks.currentRoute.value = {
+      path: '/actionCenter',
+      query: { section: 'work', source: 'opinion', slaState: 'due_soon', keyword: '功能' },
+    };
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    mounted.host.querySelector<HTMLButtonElement>('.action-center__item button')!.click();
+    expect(routerMocks.push).toHaveBeenCalledWith({
+      path: '/userOpinion',
+      query: {
+        opinionId: 'opinion-1',
+        returnTo: '/actionCenter?section=work&source=opinion&slaState=due_soon&keyword=%E5%8A%9F%E8%83%BD',
+      },
+    });
+    expect(apiMocks.load).toHaveBeenCalledWith(
+      expect.objectContaining({ section: 'work', source: 'opinion', slaState: 'due_soon', keyword: '功能' }),
+    );
+  });
+
+  it.each([
+    {
+      path: '/admin/actionCenter',
+      targetPath: '/securityCenter/review',
+      extraQuery: {},
+      returnTo: '/admin/actionCenter?section=work&source=security&slaState=overdue',
+    },
+    {
+      path: '/actionCenter',
+      targetPath: '/securityCenterMobile',
+      extraQuery: { tab: 'review' },
+      returnTo: '/actionCenter?section=work&source=security&slaState=overdue',
+    },
+  ])('从 $path 精确定位安全事件并携带返回队列上下文', async ({ path, targetPath, extraQuery, returnTo }) => {
+    routerMocks.currentRoute.value = {
+      path,
+      query: { section: 'work', source: 'security', slaState: 'overdue' },
+    };
+    const response: any = payload();
+    response.data.work.items = [
+      {
+        id: 'security-event-1',
+        source: 'security',
+        status: 'pending',
+        severity: 'critical',
+        title: 'SSRF_PRIVATE_HOST',
+        ownerLabel: '/chat/generateBookmarkMeta',
+        updatedAt: '2026-08-12 12:00:00',
+        targetUrl: '/securityCenter/review?eventId=security-event-1',
+        ownerTeam: '安全治理',
+        slaState: 'overdue',
+      },
+    ];
+    apiMocks.load.mockResolvedValue(response);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('SSRF_PRIVATE_HOST'));
+
+    mounted.host.querySelector<HTMLButtonElement>('.action-center__item button')!.click();
+    expect(routerMocks.push).toHaveBeenCalledWith({
+      path: targetPath,
+      query: {
+        ...extraQuery,
+        eventId: 'security-event-1',
+        returnTo,
+      },
+    });
   });
 
   it('切换到异步任务后展示脱敏收件人和结果未知状态', async () => {
@@ -231,6 +357,9 @@ describe('ActionCenter', () => {
             attempts: 3,
             errorCode: 'ICON_FETCH_FAILED',
             updatedAt: '2026-08-09 10:00:00',
+            ownerTeam: '书签服务',
+            slaState: 'overdue',
+            overdueMinutes: 120,
           },
         ];
       }
@@ -251,7 +380,16 @@ describe('ActionCenter', () => {
     );
     sourceCard!.click();
 
-    await vi.waitFor(() => expect(apiMocks.load).toHaveBeenLastCalledWith({ limit: 60, source: 'bookmark_icon' }));
+    await vi.waitFor(() =>
+      expect(apiMocks.load).toHaveBeenLastCalledWith({
+        limit: 60,
+        section: 'jobs',
+        source: 'bookmark_icon',
+        status: 'all',
+        slaState: 'all',
+        keyword: '',
+      }),
+    );
     await vi.waitFor(() => expect(mounted.host.textContent).toContain('https://bookmark.example.com'));
     expect(sourceCard!.getAttribute('aria-pressed')).toBe('true');
     expect(sourceCard!.textContent).toContain('正在查看');

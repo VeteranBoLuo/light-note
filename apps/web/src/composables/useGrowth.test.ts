@@ -5,6 +5,9 @@ const mocks = vi.hoisted(() => ({
   getMyGrowth: vi.fn(),
   getGrowthTasks: vi.fn(),
   claimGrowthTask: vi.fn(),
+  getDashboard: vi.fn(),
+  getClaimable: vi.fn(),
+  claimAll: vi.fn(),
 }));
 
 vi.mock('@/store', () => ({
@@ -16,6 +19,9 @@ vi.mock('@/api/growthApi.ts', () => ({
     getMyGrowth: mocks.getMyGrowth,
     getGrowthTasks: mocks.getGrowthTasks,
     claimGrowthTask: mocks.claimGrowthTask,
+    getDashboard: mocks.getDashboard,
+    getClaimable: mocks.getClaimable,
+    claimAll: mocks.claimAll,
   },
 }));
 
@@ -53,6 +59,19 @@ describe('useGrowth load', () => {
     mocks.getMyGrowth.mockReset();
     mocks.getGrowthTasks.mockReset();
     mocks.claimGrowthTask.mockReset();
+    mocks.getDashboard.mockReset();
+    mocks.getClaimable.mockReset();
+    mocks.claimAll.mockReset();
+    mocks.getClaimable.mockResolvedValue({
+      status: 200,
+      data: {
+        count: 0,
+        daily: { count: 0, items: [] },
+        growthTasks: { count: 0, items: [] },
+        achievements: { count: 0, items: [] },
+        weekly: { count: 0, items: [] },
+      },
+    });
   });
 
   it('合并同一账号同时发起的成长请求', async () => {
@@ -93,6 +112,52 @@ describe('useGrowth load', () => {
     expect(mocks.getMyGrowth).toHaveBeenCalledTimes(2);
     expect(useGrowth().growth.value).toEqual(newData);
     expect(useGrowth().loading.value).toBe(false);
+  });
+
+  it('账号切换后看板等模块缓存也不会被旧请求覆盖', async () => {
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: growth(2) }).mockResolvedValueOnce({
+      status: 200,
+      data: growth(6),
+    });
+    await useGrowth().load();
+    const oldDashboard = deferred<{ status: number; data: any }>();
+    const newDashboard = deferred<{ status: number; data: any }>();
+    mocks.getDashboard.mockReturnValueOnce(oldDashboard.promise).mockReturnValueOnce(newDashboard.promise);
+
+    const oldRequest = useGrowth().loadDashboard();
+    mocks.user.id = 'user-b';
+    await useGrowth().load();
+    const newRequest = useGrowth().loadDashboard();
+
+    const newData = { stats: { noteCount: 8 }, achievements: [], quests: [], timeline: [] };
+    newDashboard.resolve({ status: 200, data: newData });
+    await expect(newRequest).resolves.toEqual(newData);
+    oldDashboard.resolve({ status: 200, data: { stats: { noteCount: 1 } } });
+    await expect(oldRequest).resolves.toBeNull();
+
+    expect(useGrowth().dashboard.value).toEqual(newData);
+    expect(useGrowth().dashboardLoading.value).toBe(false);
+  });
+
+  it('账号切换后忽略旧账号统一领取的成长快照', async () => {
+    const oldClaim = deferred<{ status: number; data: any }>();
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: growth(2) }).mockResolvedValueOnce({
+      status: 200,
+      data: growth(6),
+    });
+    await useGrowth().load();
+    mocks.claimAll.mockReturnValueOnce(oldClaim.promise);
+
+    const claimRequest = useGrowth().claimAllRewards();
+    mocks.user.id = 'user-b';
+    await useGrowth().load();
+
+    oldClaim.resolve({ status: 200, data: { ok: true, claimed: 1, growth: growth(9) } });
+    await expect(claimRequest).resolves.toMatchObject({ status: 200 });
+
+    expect(useGrowth().growth.value).toEqual(growth(6));
+    expect(useGrowth().claimingRewards.value).toBe(false);
+    expect(mocks.getDashboard).not.toHaveBeenCalled();
   });
 
   it('请求同步失败后清理在途状态并允许重试', async () => {

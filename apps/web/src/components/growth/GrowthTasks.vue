@@ -26,7 +26,9 @@
           'growth-task--claimed': task.claimed,
         }"
       >
-        <span class="growth-task__marker" aria-hidden="true">{{ task.completed ? '✓' : '○' }}</span>
+        <span class="growth-task__marker" aria-hidden="true">
+          <SvgIcon :src="task.completed ? icon.message.success : icon.growth.create" size="18" />
+        </span>
         <div class="growth-task__body">
           <strong>{{ t(task.titleKey) }}</strong>
           <span>{{ t(task.descriptionKey) }}</span>
@@ -38,7 +40,7 @@
           size="small"
           type="primary"
           :loading="claimingTaskKey === task.taskKey"
-          :disabled="Boolean(claimingTaskKey)"
+          :disabled="Boolean(claimingTaskKey) || claimingRewards"
           @click="claimTask(task)"
         >
           {{ t('growth.tasksClaim') }}
@@ -47,6 +49,7 @@
           v-else-if="!task.completed && !readOnly"
           class="growth-task__go"
           size="small"
+          v-click-log="{ module: '成长', operation: `前往新手任务-${task.taskKey}` }"
           @click="navigateToTask(task)"
         >
           {{ t('growth.tasksGoTo') }}
@@ -57,7 +60,23 @@
       </article>
     </div>
 
-    <div v-else class="growth-tasks__empty">{{ t('growth.tasksAllDone') }}</div>
+    <div v-else class="growth-tasks__empty">
+      <span>{{ t('growth.tasksAllDone') }}</span>
+      <BButton v-if="completedTasks.length" size="small" @click="completedExpanded = !completedExpanded">
+        {{ completedExpanded ? t('growth.tasksCollapseCompleted') : t('growth.tasksShowCompleted', { n: completedTasks.length }) }}
+      </BButton>
+    </div>
+
+    <div v-if="completedExpanded && completedTasks.length" class="growth-tasks__list growth-tasks__list--completed">
+      <article v-for="task in completedTasks" :key="task.taskKey" class="growth-task growth-task--claimed">
+        <span class="growth-task__marker" aria-hidden="true"><SvgIcon :src="icon.message.success" size="18" /></span>
+        <div class="growth-task__body">
+          <strong>{{ t(task.titleKey) }}</strong>
+          <span>{{ t(task.descriptionKey) }}</span>
+        </div>
+        <span class="growth-task__completed">{{ t('growth.tasksClaimed') }}</span>
+      </article>
+    </div>
 
     <BButton v-if="showViewAll" class="growth-tasks__action" size="small" @click="$emit('view')">
       {{ t('growth.tasksViewAll') }}
@@ -74,6 +93,8 @@
   import { bookmarkStore } from '@/store';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { recordOperation } from '@/api/commonApi.ts';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const props = withDefaults(
     defineProps<{
@@ -83,22 +104,24 @@
       showViewAll?: boolean;
       showCompleted?: boolean;
       readOnly?: boolean;
+      lowPressure?: boolean;
     }>(),
-    { compact: false, maxVisible: 99, showViewAll: false, showCompleted: false, readOnly: false },
+    { compact: false, maxVisible: 99, showViewAll: false, showCompleted: false, readOnly: false, lowPressure: false },
   );
   defineEmits<{ (event: 'view'): void }>();
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
-  const { claimGrowthTask } = useGrowth();
+  const { claimGrowthTask, claimingRewards } = useGrowth();
   const claimingTaskKey = ref<string | null>(null);
+  const completedExpanded = ref(false);
 
-  const allTasks = computed<GrowthTask[]>(() => props.data?.tasks || []);
-  const pendingTasks = computed<GrowthTask[]>(() => (props.data?.tasks || []).filter((task) => !task.completed));
-  const activeTasks = computed<GrowthTask[]>(() => (props.data?.tasks || []).filter((task) => !task.claimed));
+  const allTasks = computed<GrowthTask[]>(() => props.data?.allTasks || props.data?.tasks || []);
+  const completedTasks = computed<GrowthTask[]>(() => props.data?.completedTasks || allTasks.value.filter((task) => task.claimed));
+  const pendingTasks = computed<GrowthTask[]>(() => allTasks.value.filter((task) => !task.completed));
+  const activeTasks = computed<GrowthTask[]>(() => (props.data?.tasks || allTasks.value).filter((task) => !task.claimed));
   const visibleTasks = computed(() => {
-    const tasks = props.showCompleted ? allTasks.value : activeTasks.value;
-    return tasks.slice(0, Math.max(0, props.maxVisible));
+    return activeTasks.value.slice(0, Math.max(0, props.maxVisible));
   });
   const totalCount = computed(() => Number(props.data?.totalCount || 0));
   const completedCount = computed(() => Number(props.data?.completedCount || 0));
@@ -109,13 +132,16 @@
   const progress = computed(() => (totalCount.value ? Math.round((completedCount.value / totalCount.value) * 100) : 0));
   const progressLabel = computed(() => ({ completed: completedCount.value, total: totalCount.value }));
   const remainingLabel = computed(() => {
+    if (props.lowPressure && (claimableCount.value > 0 || remainingCount.value > 0)) {
+      return t('growth.tasksLowPressureHint');
+    }
     if (claimableCount.value > 0) return t('growth.tasksClaimable', { n: claimableCount.value });
     if (remainingCount.value > 0) return t('growth.tasksRemaining', { n: remainingCount.value });
     return t('growth.tasksAllDone');
   });
 
   async function claimTask(task: GrowthTask) {
-    if (props.readOnly || claimingTaskKey.value || !task.claimable) return;
+    if (props.readOnly || claimingTaskKey.value || claimingRewards.value || !task.claimable) return;
     claimingTaskKey.value = task.taskKey;
     try {
       const res = await claimGrowthTask(task.taskKey);
@@ -157,6 +183,15 @@
         break;
       case 'first_todo':
         void router.push({ path: '/inbox', query: { tab: 'todo' } });
+        break;
+      case 'first_file':
+        void router.push('/cloudSpace');
+        break;
+      case 'first_organize':
+        void router.push('/inbox');
+        break;
+      case 'first_reuse':
+        void router.push('/noteLibrary');
         break;
       default:
         break;
@@ -221,6 +256,10 @@
     gap: 8px;
   }
 
+  .growth-tasks__list--completed {
+    opacity: 0.78;
+  }
+
   .growth-task {
     display: flex;
     align-items: center;
@@ -247,8 +286,8 @@
     text-align: center;
     flex: 0 0 auto;
     color: var(--primary-color);
-    font-size: 20px;
-    line-height: 1;
+    display: grid;
+    place-items: center;
   }
 
   .growth-task--completed .growth-task__marker {

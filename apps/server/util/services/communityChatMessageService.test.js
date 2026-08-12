@@ -259,7 +259,7 @@ describe('communityChatMessageService', () => {
           ];
         }
         if (text.includes('FROM points_log')) {
-          expect(params).toEqual(['user-2']);
+          expect(params).toEqual(['user-2', 'user-2']);
           return [
             [
               { ref: 'streak_7', latestId: 2 },

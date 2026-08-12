@@ -132,9 +132,6 @@ export interface AiConversationSummary {
   isPinned?: boolean;
   retentionMode: AiRetentionMode;
   expireAt: string | null;
-  rootConversationId: string;
-  parentConversationId: string | null;
-  branchFromMessageId: string | null;
   lastMessageAt: string;
   createdAt: string;
   updatedAt: string;
@@ -142,20 +139,6 @@ export interface AiConversationSummary {
 
 export interface AiConversation extends AiConversationSummary {
   messages: AiCloudMessage[];
-}
-
-export interface AiConversationLineageNode extends AiConversationSummary {
-  depth: number;
-  childCount: number;
-  parentAvailable: boolean;
-  current: boolean;
-}
-
-export interface AiConversationLineage {
-  rootConversationId: string;
-  currentConversationId: string;
-  nodes: AiConversationLineageNode[];
-  truncated: boolean;
 }
 
 export interface AiMessageVersionSummary {
@@ -345,9 +328,6 @@ export const listAiConversations = (
 export const getAiConversation = (conversationId: string, messageLimit = 100) =>
   post<AiConversation>('/api/chat/conversations/get', { conversationId, messageLimit });
 
-export const getAiConversationLineage = (conversationId: string) =>
-  post<AiConversationLineage>('/api/chat/conversations/lineage', { conversationId });
-
 export const updateAiConversation = (conversationId: string, patch: Record<string, unknown>) =>
   post<AiConversationSummary>('/api/chat/conversations/update', { conversationId, patch });
 
@@ -397,9 +377,6 @@ export const prepareAiMessageVersionGroup = (conversationId: string, messageId: 
     '/api/chat/conversations/messages/version-group',
     { conversationId, messageId },
   );
-
-export const branchAiConversation = (conversationId: string, throughMessageId?: string, title?: string) =>
-  post<AiConversation>('/api/chat/conversations/branch', { conversationId, throughMessageId, title });
 
 export const submitAiFeedback = (input: {
   conversationId: string;

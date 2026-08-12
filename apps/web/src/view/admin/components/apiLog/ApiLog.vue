@@ -27,8 +27,8 @@
         @input="scheduleSearch"
         @enter="reloadLogs"
       />
-      <BSelect v-model:value="filters.method" class="log-filter" :options="methodOptions" @change="reloadLogs" />
-      <BSelect v-model:value="filters.status" class="log-filter" :options="statusOptions" @change="reloadLogs" />
+      <BSelect v-model:value="filters.method" class="log-filter" :options="methodOptions" @change="reloadLogs()" />
+      <BSelect v-model:value="filters.status" class="log-filter" :options="statusOptions" @change="reloadLogs()" />
       <BInput
         v-model:value="filters.minDurationMs"
         type="number"
@@ -44,7 +44,7 @@
         @change="onDateRangeChange"
       />
       <span class="admin-toolbar-switch">
-        <BSwitch v-model:checked="filters.hideInternal" @change="reloadLogs" />
+        <BSwitch v-model:checked="filters.hideInternal" @change="reloadLogs()" />
         {{ t('adminApiLog.filters.hideInternal') }}
       </span>
       <BButton @click="resetFilters">{{ t('adminApiLog.filters.reset') }}</BButton>
@@ -65,10 +65,19 @@
       @row-click="openDetail"
     >
       <template #bodyCell="{ text, record, column }">
-        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{ record.alias || record.email || '-' }}</span>
-        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{ formatTimeOnly(record.requestTime) }}</span>
-        <span v-else-if="column.key === 'action'" class="admin-log-mobile-action" :title="`${record.method || ''} ${record.url || ''}`">
-          <b>{{ record.method || '-' }}</b><span>{{ record.url || '-' }}</span>
+        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{
+          record.alias || record.email || '-'
+        }}</span>
+        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{
+          formatTimeOnly(record.requestTime)
+        }}</span>
+        <span
+          v-else-if="column.key === 'action'"
+          class="admin-log-mobile-action"
+          :title="`${record.method || ''} ${record.url || ''}`"
+        >
+          <b>{{ record.method || '-' }}</b
+          ><span>{{ record.url || '-' }}</span>
         </span>
         <BChip v-else-if="column.key === 'statusCode'" :tone="statusTone(record.statusCode)">
           {{ record.statusCode || '-' }}
@@ -159,13 +168,23 @@
       </div>
     </dl>
   </BModal>
+
+  <AdminRiskActionModal
+    v-model:visible="clearVisible"
+    :title="t('adminApiLog.clearTitle')"
+    :impact="t('adminApiLog.clearConfirm')"
+    confirm-phrase="确认清理日志"
+    :loading="clearing"
+    @confirm="confirmClearApiLogs"
+  />
 </template>
 
 <script lang="ts" setup>
   import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute } from 'vue-router';
-  import { apiBaseGet, apiQueryPost } from '@/http/request.ts';
+  import { apiBasePost, apiQueryPost } from '@/http/request.ts';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -175,7 +194,6 @@
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import DateRangePicker from '@/view/admin/components/conversion/DateRangePicker.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
   import { useAdminCursorList } from '@/composables/useAdminCursorList.ts';
@@ -191,10 +209,12 @@
   const bookmark = bookmarkStore();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
   const filters = reactive({
-    keyword: '',
+    keyword: String(route.query.keyword || '').slice(0, 120),
     requestId: String(route.query.requestId || '').slice(0, 64),
-    method: '',
-    status: '',
+    method: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(String(route.query.method || '').toUpperCase())
+      ? String(route.query.method).toUpperCase()
+      : '',
+    status: ['success', '4xx', '5xx'].includes(String(route.query.status || '')) ? String(route.query.status) : '',
     minDurationMs: '',
     startDate: '',
     endDate: '',
@@ -202,6 +222,8 @@
   });
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
+  const clearVisible = ref(false);
+  const clearing = ref(false);
   const hasLoaded = ref(false);
   let timer: number | null = null;
 
@@ -302,18 +324,20 @@
     detailVisible.value = true;
   }
   function clearApiLogs() {
-    Alert.alert({
-      title: t('adminApiLog.clearTitle'),
-      content: t('adminApiLog.clearConfirm'),
-      onOk() {
-        apiBaseGet('/api/common/clearApiLogs', {}).then((response: any) => {
-          if (response?.status === 200) {
-            message.success(t('adminApiLog.clearSuccess'));
-            void reloadLogs();
-          }
-        });
-      },
-    });
+    clearVisible.value = true;
+  }
+  async function confirmClearApiLogs(payload: { reason: string; confirmed: true; confirmText: string }) {
+    clearing.value = true;
+    try {
+      const response = await apiBasePost('/api/common/clearApiLogs', payload);
+      if (response?.status === 200) {
+        clearVisible.value = false;
+        message.success(`${t('adminApiLog.clearSuccess')} · 审计 ${String(response.data?.auditId || '').slice(0, 8)}`);
+        await reloadLogs();
+      }
+    } finally {
+      clearing.value = false;
+    }
   }
   function statusTone(value: unknown): 'success' | 'pending' | 'danger' | 'neutral' {
     const code = Number(value);

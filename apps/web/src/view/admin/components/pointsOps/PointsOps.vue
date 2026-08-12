@@ -66,7 +66,10 @@
               <span class="pops-top-alias">{{ u.alias || '(未设昵称)' }}</span>
               <span class="pops-top-email">{{ u.email || u.userId }}</span>
             </BButton>
-            <b class="pops-top-pts">🪙 {{ u.points.toLocaleString('en-US') }}</b>
+            <b class="pops-top-pts">
+              <SvgIcon :src="icon.growth.coin" size="15" aria-hidden="true" />
+              {{ u.points.toLocaleString('en-US') }}
+            </b>
           </div>
           <div v-if="!ov?.top?.length" class="pops-empty">暂无持有人</div>
         </div>
@@ -91,20 +94,20 @@
       <div v-if="selectedUser" class="pops-grant">
         <div class="pops-field-row">
           <div class="pops-field"
-            ><label>积分(±)</label><b-input v-model:value="form.points" type="number" placeholder="如 100 或 -50"
+            ><label>积分(±)</label><BInput v-model:value="form.points" type="number" placeholder="如 100 或 -50"
           /></div>
           <div class="pops-field"
-            ><label>存储MB(±)</label><b-input v-model:value="form.storageMb" type="number" placeholder="如 512"
+            ><label>存储MB(±)</label><BInput v-model:value="form.storageMb" type="number" placeholder="如 512"
           /></div>
           <div class="pops-field"
-            ><label>补签卡(±)</label><b-input v-model:value="form.cards" type="number" placeholder="0~2"
+            ><label>补签卡(±)</label><BInput v-model:value="form.cards" type="number" placeholder="0~2"
           /></div>
         </div>
         <div class="pops-field"
-          ><label>备注</label><b-input v-model:value="form.note" placeholder="发放原因(记入流水 ref)"
+          ><label>流水备注（可选）</label><BInput v-model:value="form.note" placeholder="如活动编号；操作原因将在确认时填写"
         /></div>
         <div class="pops-actions">
-          <BButton type="primary" size="small" :disabled="!selectedUser || querying || granting" @click="grant()">
+          <BButton type="primary" size="small" :disabled="!selectedUser || querying || granting" @click="openGrant">
             发放 / 扣减
           </BButton>
         </div>
@@ -117,18 +120,10 @@
           <code>{{ selectedUser?.userId }}</code>
         </div>
         <div class="pops-detail-bal">
-          <span
-            >余额 🪙 <b>{{ detail.balance?.points ?? 0 }}</b></span
-          >
-          <span
-            >扩容 💾 <b>{{ detail.balance?.storageBonusMb ?? 0 }}MB</b></span
-          >
-          <span
-            >补签卡 🎫 <b>{{ detail.balance?.cards ?? 0 }}</b></span
-          >
-          <span
-            >抽奖 🎰 <b>{{ detail.balance?.lotteryCount ?? 0 }}</b> 次</span
-          >
+          <span><SvgIcon :src="icon.growth.coin" size="15" aria-hidden="true" />余额 <b>{{ detail.balance?.points ?? 0 }}</b></span>
+          <span><SvgIcon :src="icon.growth.storage" size="15" aria-hidden="true" />扩容 <b>{{ detail.balance?.storageBonusMb ?? 0 }}MB</b></span>
+          <span><SvgIcon :src="icon.growth.reward" size="15" aria-hidden="true" />补签卡 <b>{{ detail.balance?.cards ?? 0 }}</b></span>
+          <span><SvgIcon :src="icon.noteDetail.history" size="15" aria-hidden="true" />抽奖 <b>{{ detail.balance?.lotteryCount ?? 0 }}</b> 次</span>
         </div>
         <div class="pops-detail-log">
           <BTable v-if="detail.log?.length" :data="logRows" :columns="logColumns" row-key="rowKey">
@@ -153,6 +148,15 @@
         </div>
       </div>
     </div>
+
+    <AdminRiskActionModal
+      v-model:visible="grantVisible"
+      :title="grantTitle"
+      :impact="grantImpact"
+      confirm-phrase="确认调整资产"
+      :loading="granting"
+      @confirm="confirmGrant"
+    />
   </AdminDataPage>
 </template>
 
@@ -162,8 +166,10 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
-  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import growthApi from '@/api/growthApi.ts';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import AdminUserPicker, { type AdminUserSearchResult } from './AdminUserPicker.vue';
@@ -185,6 +191,7 @@
   const detail = ref<any>(null);
   const querying = ref(false);
   const granting = ref(false);
+  const grantVisible = ref(false);
   const selectedUser = ref<AdminUserSearchResult | null>(null);
   const form = ref({ userId: '', points: '', storageMb: '', cards: '', note: '' });
   const logColumns = [
@@ -238,30 +245,47 @@
     }
   }
 
-  async function grant(confirmedGrant = false) {
+  const adjustment = computed(() => ({
+    points: parseAdjustment(form.value.points),
+    storageMb: parseAdjustment(form.value.storageMb),
+    cards: parseAdjustment(form.value.cards),
+  }));
+  const grantTitle = computed(() =>
+    adjustment.value.points < 0 || adjustment.value.storageMb < 0 || adjustment.value.cards < 0
+      ? '确认扣减资产'
+      : '确认发放资产',
+  );
+  const grantImpact = computed(() => {
+    if (!selectedUser.value) return '';
+    const parts = [
+      adjustment.value.points
+        ? `积分 ${adjustment.value.points > 0 ? '+' : ''}${adjustment.value.points}`
+        : '',
+      adjustment.value.storageMb
+        ? `存储 ${adjustment.value.storageMb > 0 ? '+' : ''}${adjustment.value.storageMb}MB`
+        : '',
+      adjustment.value.cards ? `补签卡 ${adjustment.value.cards > 0 ? '+' : ''}${adjustment.value.cards}` : '',
+    ].filter(Boolean);
+    return `目标：${selectedUser.value.alias || '(未设昵称)'}（${selectedUser.value.userId}）。${parts.join(
+      ' · ',
+    )}。预计调整后：积分 ${projectedBalance.value.points} / 存储 ${projectedBalance.value.storageMb}MB / 补签卡 ${
+      projectedBalance.value.cards
+    }。`;
+  });
+
+  function openGrant() {
     if (!selectedUser.value?.userId) return;
-    const points = parseAdjustment(form.value.points);
-    const storageMb = parseAdjustment(form.value.storageMb);
-    const cards = parseAdjustment(form.value.cards);
+    const { points, storageMb, cards } = adjustment.value;
     if (!points && !storageMb && !cards) {
       message.info('请至少填写一项发放数量');
       return;
     }
-    // 直接改动用户资产，必须先让操作者复核账号与数量（此前只有 disabled，没有确认）
-    const parts = [
-      points ? `积分 ${points > 0 ? '+' : ''}${points}` : '',
-      storageMb ? `存储 ${storageMb > 0 ? '+' : ''}${storageMb}MB` : '',
-      cards ? `补签卡 ${cards > 0 ? '+' : ''}${cards}` : '',
-    ].filter(Boolean);
-    // Alert 只有 onOk（无 onCancel），统一用回调续跑而不是 await Promise
-    if (!confirmedGrant) {
-      Alert.alert({
-        title: points < 0 || storageMb < 0 || cards < 0 ? '确认扣减' : '确认发放',
-        content: `目标用户 ${selectedUser.value.alias || '(未设昵称)'}\n${selectedUser.value.email || '未绑定邮箱'}\n${selectedUser.value.userId}\n\n${parts.join(' · ')}\n\n调整后：积分 ${projectedBalance.value.points} / 存储 ${projectedBalance.value.storageMb}MB / 补签卡 ${projectedBalance.value.cards}\n\n将立即写入并记入审计流水，确认继续？`,
-        onOk: () => grant(true),
-      });
-      return;
-    }
+    grantVisible.value = true;
+  }
+
+  async function confirmGrant(action: { reason: string; confirmed: true; confirmText: string }) {
+    if (!selectedUser.value?.userId) return;
+    const { points, storageMb, cards } = adjustment.value;
     granting.value = true;
     try {
       const res = await growthApi.adminGrantPoints({
@@ -270,10 +294,14 @@
         storageMb,
         cards,
         note: form.value.note,
+        ...action,
       });
       if (res.status === 200 && res.data?.ok) {
+        grantVisible.value = false;
         message.success(
-          `已更新:积分 ${res.data.points} / 存储 ${res.data.storageBonusMb}MB / 补签卡 ${res.data.cards}`,
+          `已更新：积分 ${res.data.points} / 存储 ${res.data.storageBonusMb}MB / 补签卡 ${
+            res.data.cards
+          } · 审计 ${String(res.data.auditId || '').slice(0, 8)}`,
         );
         form.value.points = '';
         form.value.storageMb = '';

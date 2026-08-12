@@ -1,7 +1,9 @@
 <template>
   <BDrawer
     :open="open"
-    :title="t('securityV2.review.eventTitle', { name: detail.event?.matchedRule || detail.event?.primaryRuleCode || '-' })"
+    :title="
+      t('securityV2.review.eventTitle', { name: detail.event?.matchedRule || detail.event?.primaryRuleCode || '-' })
+    "
     width="680px"
     :mobile-full-screen="true"
     body-padding="0"
@@ -11,17 +13,36 @@
       <BLoading v-if="loading" inline loading class="security-detail-loading" :title="t('common.loading')" />
       <div v-else class="security-detail-body">
         <div class="security-detail-summary">
-          <div class="security-detail-stat"><span>{{ t('securityV2.review.threatScore') }}</span><strong>{{ number(event.threatScore) }}</strong></div>
-          <div class="security-detail-stat"><span>{{ t('securityV2.review.confidence') }}</span><strong>{{ number(event.confidence) }}%</strong></div>
-          <div class="security-detail-stat"><span>{{ t('securityV2.review.action') }}</span><strong>{{ event.blocked ? t('securityV2.common.blocked') : t('securityV2.common.logged') }}</strong></div>
-          <div class="security-detail-stat"><span>{{ t('securityV2.review.hit') }}</span><strong>{{ detail.similarEvents?.length || 1 }}</strong></div>
+          <div class="security-detail-stat"
+            ><span>{{ t('securityV2.review.threatScore') }}</span
+            ><strong>{{ number(event.threatScore) }}</strong></div
+          >
+          <div class="security-detail-stat"
+            ><span>{{ t('securityV2.review.confidence') }}</span
+            ><strong>{{ number(event.confidence) }}%</strong></div
+          >
+          <div class="security-detail-stat"
+            ><span>{{ t('securityV2.review.action') }}</span
+            ><strong>{{ event.blocked ? t('securityV2.common.blocked') : t('securityV2.common.logged') }}</strong></div
+          >
+          <div class="security-detail-stat"
+            ><span>{{ t('securityV2.review.hit') }}</span
+            ><strong>{{ detail.similarEvents?.length || 1 }}</strong></div
+          >
         </div>
 
         <section class="security-detail-section">
           <h4>{{ t('securityV2.review.why') }}</h4>
           <div class="security-banner is-warning no-margin">
-            <span class="security-pill is-warning">{{ t('securityV2.review.pending') }}</span>
-            <div><strong>{{ primaryEvidence?.evidenceMessage || event.decisionReason || event.matchedRule || '-' }}</strong><p>{{ t('securityV2.review.markedReason') }}</p></div>
+            <span class="security-pill" :class="dispositionClass(event.disposition)">{{
+              dispositionLabel(event.disposition)
+            }}</span>
+            <div>
+              <strong>{{
+                primaryEvidence?.evidenceMessage || event.decisionReason || event.matchedRule || '-'
+              }}</strong>
+              <p>{{ event.reviewReason || t('securityV2.review.markedReason') }}</p>
+            </div>
           </div>
         </section>
 
@@ -31,7 +52,10 @@
             <i></i>
             <div>
               <strong>{{ evidence.ruleCode }} · {{ evidence.matchedField || '-' }}</strong>
-              <p>{{ evidence.evidenceMessage || '-' }} · {{ evidenceMode(evidence.policyMode) }} · {{ number(evidence.confidence) }}%</p>
+              <p
+                >{{ evidence.evidenceMessage || '-' }} · {{ evidenceMode(evidence.policyMode) }} ·
+                {{ number(evidence.confidence) }}%</p
+              >
               <code>{{ evidence.matchedValuePreview || '-' }}</code>
             </div>
             <span class="security-pill is-warning">+{{ number(evidence.scoreDelta) }}</span>
@@ -42,33 +66,77 @@
         <section class="security-detail-section">
           <h4>{{ t('securityV2.review.context') }}</h4>
           <div class="security-detail-summary">
-            <div class="security-detail-stat"><span>{{ t('securityV2.review.endpoint') }}</span><strong>{{ event.requestMethod || '-' }} {{ event.requestPath || '-' }}</strong></div>
-            <div class="security-detail-stat"><span>{{ t('securityV2.review.account') }}</span><strong>{{ event.alias || event.email || event.userId || t('securityV2.common.anonymous') }}</strong></div>
-            <div class="security-detail-stat"><span>{{ t('securityV2.review.response') }}</span><strong>{{ event.statusCode || '-' }}</strong></div>
-            <div class="security-detail-stat"><span>{{ t('securityV2.review.requestId') }}</span><strong>{{ event.eventId || '-' }}</strong></div>
+            <div class="security-detail-stat"
+              ><span>{{ t('securityV2.review.endpoint') }}</span
+              ><strong>{{ event.requestMethod || '-' }} {{ event.requestPath || '-' }}</strong></div
+            >
+            <div class="security-detail-stat"
+              ><span>{{ t('securityV2.review.account') }}</span
+              ><strong>{{
+                event.alias || event.email || event.userId || t('securityV2.common.anonymous')
+              }}</strong></div
+            >
+            <div class="security-detail-stat"
+              ><span>{{ t('securityV2.review.response') }}</span
+              ><strong>{{ event.statusCode || '-' }}</strong></div
+            >
+            <div class="security-detail-stat"
+              ><span>{{ t('securityV2.review.requestId') }}</span
+              ><strong>{{ event.eventId || '-' }}</strong></div
+            >
           </div>
         </section>
 
         <section class="security-detail-section">
           <h4>{{ t('securityV2.review.advice') }}</h4>
-          <div class="security-advice-row"><span class="is-tune">调</span><div><strong>{{ t('securityV2.review.storageAdvice') }}</strong><small>{{ t('securityV2.review.storageAdviceDesc') }}</small></div></div>
-          <div class="security-advice-row"><span class="is-block">阻</span><div><strong>{{ t('securityV2.review.activeAdvice') }}</strong><small>{{ t('securityV2.review.activeAdviceDesc') }}</small></div></div>
+          <div class="security-advice-row"
+            ><span class="is-tune">调</span
+            ><div
+              ><strong>{{ t('securityV2.review.storageAdvice') }}</strong
+              ><small>{{ t('securityV2.review.storageAdviceDesc') }}</small></div
+            ></div
+          >
+          <div class="security-advice-row"
+            ><span class="is-block">阻</span
+            ><div
+              ><strong>{{ t('securityV2.review.activeAdvice') }}</strong
+              ><small>{{ t('securityV2.review.activeAdviceDesc') }}</small></div
+            ></div
+          >
         </section>
 
-        <section class="security-detail-section security-more-actions">
+        <section v-if="readOnly" class="security-detail-section security-readonly-notice">
+          <h4>{{ t('securityV2.review.mobileReadOnlyTitle') }}</h4>
+          <p>{{ t('securityV2.review.mobileReadOnlyDesc') }}</p>
+        </section>
+
+        <section v-else class="security-detail-section security-more-actions">
           <h4>{{ t('securityV2.review.more') }}</h4>
           <BButton :disabled="!event.sourceIp" @click="denySource">{{ t('securityV2.review.sourceDeny') }}</BButton>
           <BButton :disabled="!event.userId" @click="openAccountRisk">{{ t('securityV2.review.accountRisk') }}</BButton>
         </section>
       </div>
-      <footer class="security-detail-footer">
-        <BButton @click="saveDisposition('benign_anomaly')">{{ t('securityV2.review.benignAction') }}</BButton>
-        <BButton @click="saveDisposition('authorized_test')">{{ t('securityV2.review.authorizedAction') }}</BButton>
-        <BButton class="is-false" @click="saveDisposition('false_positive')">{{ t('securityV2.review.falseAction') }}</BButton>
-        <BButton type="danger" @click="saveDisposition('confirmed_attack')">{{ t('securityV2.review.confirmAction') }}</BButton>
+      <footer v-if="!readOnly" class="security-detail-footer">
+        <BButton @click="openDisposition('benign_anomaly')">{{ t('securityV2.review.benignAction') }}</BButton>
+        <BButton @click="openDisposition('authorized_test')">{{ t('securityV2.review.authorizedAction') }}</BButton>
+        <BButton class="is-false" @click="openDisposition('false_positive')">{{
+          t('securityV2.review.falseAction')
+        }}</BButton>
+        <BButton type="danger" @click="openDisposition('confirmed_attack')">{{
+          t('securityV2.review.confirmAction')
+        }}</BButton>
       </footer>
     </div>
   </BDrawer>
+
+  <AdminRiskActionModal
+    v-model:visible="reviewModalVisible"
+    :title="t('securityV2.review.dispositionConfirmTitle')"
+    :impact="reviewImpact"
+    :confirm-label="dispositionLabel(pendingDisposition)"
+    :loading="saving"
+    @confirm="saveDisposition"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -80,34 +148,98 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import { apiBaseGet, apiBasePost } from '@/http/request';
   import { securityCenterMessages } from './securityCenterI18n';
 
-  const props = defineProps<{ open: boolean; eventId: string; raw?: boolean }>();
-  const emit = defineEmits<{ close: []; saved: [] }>();
+  const props = withDefaults(defineProps<{ open: boolean; eventId: string; raw?: boolean; readOnly?: boolean }>(), {
+    raw: false,
+    readOnly: false,
+  });
+  const emit = defineEmits<{ close: []; saved: [receipt: Record<string, unknown>] }>();
   const { t } = useI18n({ useScope: 'local', messages: securityCenterMessages });
   const router = useRouter();
   const loading = ref(false);
+  const saving = ref(false);
+  const reviewModalVisible = ref(false);
+  const pendingDisposition = ref('');
   const detail = reactive<any>({ event: {}, evidence: [], similarEvents: [], sourceAnalysis: {}, accountAnalysis: {} });
   const event = computed(() => detail.event || {});
   const primaryEvidence = computed(() => detail.evidence?.[0]);
   const number = (value: unknown) => Number(value || 0);
-  const evidenceMode = (mode: string) => mode ? t(`securityV2.common.${mode === 'block' ? 'block' : 'observe'}`) : '-';
+  const evidenceMode = (mode: string) =>
+    mode ? t(`securityV2.common.${mode === 'block' ? 'block' : 'observe'}`) : '-';
+  const reviewImpact = computed(() =>
+    t(props.raw ? 'securityV2.review.dispositionImpactEvent' : 'securityV2.review.dispositionImpactCluster', {
+      id: props.eventId,
+      disposition: dispositionLabel(pendingDisposition.value),
+    }),
+  );
+
+  function dispositionLabel(value: unknown) {
+    const key =
+      value === 'confirmed_attack'
+        ? 'confirmed'
+        : value === 'false_positive'
+          ? 'falsePositive'
+          : value === 'authorized_test'
+            ? 'authorized'
+            : value === 'benign_anomaly'
+              ? 'benign'
+              : 'pending';
+    return t(`securityV2.review.${key}`);
+  }
+  function dispositionClass(value: unknown) {
+    if (value === 'confirmed_attack') return 'is-danger';
+    if (value === 'false_positive' || value === 'authorized_test' || value === 'benign_anomaly') return 'is-success';
+    return 'is-warning';
+  }
 
   async function loadDetail() {
     if (!props.open || !props.eventId) return;
     loading.value = true;
-    const res = await apiBaseGet(`/api/security/v2/review/clusters/${encodeURIComponent(props.eventId)}`, {}, { silent: true }).catch(() => null).finally(() => { loading.value = false; });
+    const res = await apiBaseGet(
+      `/api/security/v2/review/clusters/${encodeURIComponent(props.eventId)}`,
+      {},
+      { silent: true },
+    )
+      .catch(() => null)
+      .finally(() => {
+        loading.value = false;
+      });
     if (res?.status === 200) Object.assign(detail, res.data || {});
   }
-  async function saveDisposition(disposition: string) {
+  function openDisposition(disposition: string) {
+    if (props.readOnly || saving.value) return;
+    pendingDisposition.value = disposition;
+    reviewModalVisible.value = true;
+  }
+  async function saveDisposition(payload: { reason: string; confirmed: true }) {
+    if (!pendingDisposition.value || saving.value) return;
     const kind = props.raw ? 'events' : 'clusters';
-    const res = await apiBasePost(`/api/security/v2/${kind}/${encodeURIComponent(props.eventId)}/disposition`, {
-      disposition,
-      reason: t('securityV2.review.reviewReason'),
-      createTuningSuggestion: disposition === 'false_positive',
-    }).catch(() => null);
-    if (res?.status === 200) { message.success(t('securityV2.review.success')); emit('saved'); emit('close'); }
+    const disposition = pendingDisposition.value;
+    saving.value = true;
+    try {
+      const res = await apiBasePost(
+        `/api/security/v2/${kind}/${encodeURIComponent(props.eventId)}/disposition`,
+        {
+          disposition,
+          reason: payload.reason,
+          confirmed: payload.confirmed,
+          createTuningSuggestion: disposition === 'false_positive',
+        },
+        { silent: true },
+      ).catch(() => null);
+      if (res?.status !== 200 || !res.data?.auditId || !res.data?.requestId) {
+        message.error(res?.msg || t('securityV2.review.dispositionFailed'));
+        return;
+      }
+      reviewModalVisible.value = false;
+      emit('saved', { ...res.data, disposition: res.data?.review?.disposition || disposition });
+      emit('close');
+    } finally {
+      saving.value = false;
+    }
   }
   function denySource() {
     Alert.alert({
@@ -116,7 +248,11 @@
       okText: t('securityV2.access.sourceApply'),
       cancelText: t('securityV2.common.close'),
       onOk: async () => {
-        const res = await apiBasePost('/api/security/v2/source-denies/apply', { ip: event.value.sourceIp, minutes: 60, reason: t('securityV2.review.reviewReason') }).catch(() => null);
+        const res = await apiBasePost('/api/security/v2/source-denies/apply', {
+          ip: event.value.sourceIp,
+          minutes: 60,
+          reason: t('securityV2.review.reviewReason'),
+        }).catch(() => null);
         if (res?.status === 200) message.success(t('securityV2.access.sourceApplied'));
       },
     });
@@ -124,13 +260,28 @@
   function openAccountRisk() {
     Alert.alert({
       title: t('securityV2.review.accountRisk'),
-      content: t('securityV2.review.accountSummary', { score: number(detail.accountAnalysis?.riskScore), events: number(detail.accountAnalysis?.totalEvents), restrictions: number(detail.accountAnalysis?.activeRestrictions) }),
+      content: t('securityV2.review.accountSummary', {
+        score: number(detail.accountAnalysis?.riskScore),
+        events: number(detail.accountAnalysis?.totalEvents),
+        restrictions: number(detail.accountAnalysis?.activeRestrictions),
+      }),
       okText: t('securityV2.review.manageAccess'),
       cancelText: t('securityV2.common.close'),
-      onOk: () => { emit('close'); router.push({ name: 'securityCenterAccess', query: { userId: event.value.userId } }); },
+      onOk: () => {
+        emit('close');
+        router.push({ name: 'securityCenterAccess', query: { userId: event.value.userId } });
+      },
     });
   }
   watch(() => [props.open, props.eventId], loadDetail, { immediate: true });
+  watch(
+    () => props.open,
+    (open) => {
+      if (open) return;
+      reviewModalVisible.value = false;
+      pendingDisposition.value = '';
+    },
+  );
 </script>
 
 <style lang="less" scoped>

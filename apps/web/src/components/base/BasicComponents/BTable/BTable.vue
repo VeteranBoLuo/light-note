@@ -59,6 +59,7 @@
                 v-for="col in props.columns"
                 :key="col.key"
                 class="table-cell"
+                :class="{ 'table-cell--overflow-visible': col.overflowVisible }"
                 :style="{ width: col.width || 'auto' }"
               >
                 <slot
@@ -536,6 +537,10 @@
     display: flex;
     align-items: center;
     gap: 4px;
+  }
+
+  .table-cell.table-cell--overflow-visible {
+    overflow: visible;
   }
 
   .cell-text {

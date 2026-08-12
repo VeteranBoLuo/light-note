@@ -476,6 +476,45 @@
     </div>
     <b-loading :loading="cloud.loading" class="both-center" />
 
+    <BModal
+      v-model:visible="batchDownloadChoiceVisible"
+      :title="$t('cloudSpace.batchDownloadChooseTitle')"
+      width="520px"
+      :show-footer="false"
+    >
+      <div class="batch-download-choice">
+        <p class="batch-download-choice__hint">{{ $t('cloudSpace.batchDownloadChooseHint') }}</p>
+        <div class="batch-download-choice__options">
+          <BButton class="batch-download-choice__option" @click="startBatchDownload('individual')">
+            <span class="batch-download-choice__icon">
+              <SvgIcon :src="icon.cloudSpace.download" size="24" aria-hidden="true" />
+            </span>
+            <span class="batch-download-choice__copy">
+              <strong>{{ $t('cloudSpace.batchDownloadIndividual') }}</strong>
+              <small>{{ $t('cloudSpace.batchDownloadIndividualDesc') }}</small>
+            </span>
+          </BButton>
+          <BButton
+            class="batch-download-choice__option"
+            :disabled="batchDownloadZipUnavailable"
+            @click="startBatchDownload('zip')"
+          >
+            <span class="batch-download-choice__icon">
+              <SvgIcon :src="icon.contextMenu.archive" size="24" aria-hidden="true" />
+            </span>
+            <span class="batch-download-choice__copy">
+              <strong>{{ $t('cloudSpace.batchDownloadZip') }}</strong>
+              <small>{{
+                batchDownloadZipUnavailable
+                  ? $t('cloudSpace.batchDownloadZipUnavailableInApp')
+                  : $t('cloudSpace.batchDownloadZipDesc')
+              }}</small>
+            </span>
+          </BButton>
+        </div>
+      </div>
+    </BModal>
+
     <b-modal v-model:visible="shareDescVisible" :title="$t('cloudSpace.share')" width="450px" :show-footer="false">
       <div class="share-desc-body">
         <div class="share-desc-tip">{{ $t('cloudSpace.shareDescTip') }}</div>
@@ -685,7 +724,6 @@
       { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
       { key: 'share', label: t('cloudSpace.share'), icon: icon.cloudSpace.share },
       { key: 'move', label: t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile },
-      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.ask },
       {
         key: 'inbox',
         label: file.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
@@ -708,7 +746,6 @@
     else if (action.key === 'tags') void openTagDialog(file);
     else if (action.key === 'share') void handleShareFile(file.id, file.fileName, file.fileType);
     else if (action.key === 'move') emit('moveField', [file]);
-    else if (action.key === 'ai') void openFilesInAi([file]);
     else if (action.key === 'inbox') void toggleFileInbox(file);
     else if (action.key === 'delete') handleDelFile(file);
   }
@@ -886,6 +923,9 @@
     { value: 30, label: t('cloudSpace.shareExpiryThirtyDays') },
   ]);
   const batchDownloadLoading = ref(false);
+  const batchDownloadChoiceVisible = ref(false);
+  const batchDownloadChoiceFiles = ref<any[]>([]);
+  const batchDownloadZipUnavailable = computed(() => hasAndroidBridge());
   const batchDownloadAbortController = ref<AbortController | null>(null);
   const batchDownloadCancelled = ref(false);
   const tagModalVisible = ref(false);
@@ -1256,28 +1296,71 @@
     }
   };
 
-  const handleBatchDownload = async () => {
-    if (!hasSelection.value) {
-      message.warning(t('cloudSpace.selectFilesToDownload'));
-      return;
-    }
+  const runBrowserIndividualDownloads = async (selectedFiles: any[]) => {
+    batchDownloadLoading.value = true;
+    batchDownloadCancelled.value = false;
+    downloadProgress.value = {
+      visible: true,
+      percent: 0,
+      current: 0,
+      total: selectedFiles.length,
+      phaseText: t('cloudSpace.batchDownloadSubmitting'),
+    };
 
-    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
-    if (selectedFiles.length === 1) {
-      const success = await downloadField(selectedFiles[0].id);
-      if (success) {
-        recordOperation({ module: '云空间', operation: `下载文件成功【${selectedFiles[0].fileName}】` });
+    let succeeded = 0;
+    let failed = 0;
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        if (batchDownloadCancelled.value) break;
+        try {
+          const { downloadUrl, fileName } = await getDownloadMeta(selectedFiles[i], i);
+          if (batchDownloadCancelled.value) break;
+          const anchor = document.createElement('a');
+          anchor.href = downloadUrl;
+          anchor.download = fileName;
+          anchor.rel = 'noopener';
+          anchor.style.display = 'none';
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          succeeded += 1;
+        } catch (error) {
+          if (isBatchDownloadCancelledError(error)) break;
+          failed += 1;
+          console.error('individual file download failed:', error);
+        }
+        downloadProgress.value.current = i + 1;
+        downloadProgress.value.percent = Math.round(((i + 1) / selectedFiles.length) * 100);
+        // 给浏览器留出消费连续下载事件的机会，降低后一项被合并或吞掉的概率。
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
       }
-      return;
+    } finally {
+      batchDownloadLoading.value = false;
+      window.setTimeout(() => {
+        downloadProgress.value.visible = false;
+      }, 600);
     }
 
-    // 按「桥在不在」而不是 UA 分流：桥就是这条路唯一需要的能力，UA 判断会把没有桥的
-    // WebView 也推进 App 分支，结果每个文件都 post 失败
-    if (hasAndroidBridge()) {
-      await runAndroidBatchDownload(selectedFiles);
-      return;
+    if (batchDownloadCancelled.value) {
+      message.info(
+        succeeded > 0
+          ? t('cloudSpace.batchDownloadCancelledPartial', { count: succeeded })
+          : t('cloudSpace.batchDownloadCancelled'),
+      );
+    } else if (!succeeded) {
+      message.error(t('cloudSpace.batchDownloadFailed'));
+    } else if (failed > 0) {
+      message.warning(t('cloudSpace.batchDownloadPartial', { success: succeeded, failed }));
+    } else {
+      message.success(t('cloudSpace.batchDownloadHandedOff', { count: succeeded }));
     }
 
+    if (succeeded > 0) {
+      recordOperation({ module: '云空间', operation: `分别下载文件成功【${succeeded}个】` });
+    }
+  };
+
+  const runZipBatchDownload = async (selectedFiles: any[]) => {
     batchDownloadLoading.value = true;
     batchDownloadCancelled.value = false;
     batchDownloadAbortController.value = new AbortController();
@@ -1360,6 +1443,50 @@
         downloadProgress.value.visible = false;
       }, 600);
     }
+  };
+
+  type BatchDownloadMode = 'individual' | 'zip';
+
+  const startBatchDownload = async (mode: BatchDownloadMode) => {
+    const selectedFiles = batchDownloadChoiceFiles.value.slice();
+    batchDownloadChoiceVisible.value = false;
+    batchDownloadChoiceFiles.value = [];
+    if (selectedFiles.length < 2 || batchDownloadLoading.value) return;
+
+    if (mode === 'zip') {
+      if (hasAndroidBridge()) {
+        message.info(t('cloudSpace.batchDownloadZipUnavailableInApp'));
+        return;
+      }
+      await runZipBatchDownload(selectedFiles);
+      return;
+    }
+
+    // 原生桥存在时逐个交给系统 DownloadManager；普通浏览器则连续触发标准文件下载。
+    if (hasAndroidBridge()) {
+      await runAndroidBatchDownload(selectedFiles);
+    } else {
+      await runBrowserIndividualDownloads(selectedFiles);
+    }
+  };
+
+  const handleBatchDownload = async () => {
+    if (!hasSelection.value) {
+      message.warning(t('cloudSpace.selectFilesToDownload'));
+      return;
+    }
+
+    const selectedFiles = cloud.fileList.filter((item) => selectedRows.value.includes(item.id));
+    if (selectedFiles.length === 1) {
+      const success = await downloadField(selectedFiles[0].id);
+      if (success) {
+        recordOperation({ module: '云空间', operation: `下载文件成功【${selectedFiles[0].fileName}】` });
+      }
+      return;
+    }
+
+    batchDownloadChoiceFiles.value = selectedFiles;
+    batchDownloadChoiceVisible.value = true;
   };
 
   function resetShareForm() {
@@ -1748,6 +1875,65 @@
       }
     }
   }
+  .batch-download-choice {
+    display: grid;
+    gap: 16px;
+  }
+  .batch-download-choice__hint {
+    margin: 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .batch-download-choice__options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .batch-download-choice__option.b_btn {
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: 112px;
+    padding: 18px;
+    justify-content: flex-start;
+    gap: 12px;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.4;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 12px;
+    background: var(--card-background);
+  }
+  .batch-download-choice__option.b_btn:not(.disabled):hover {
+    border-color: var(--primary-color) !important;
+    background: var(--menu-active-bg-color);
+  }
+  .batch-download-choice__icon {
+    width: 42px;
+    height: 42px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 12px;
+    color: var(--primary-color);
+    background: var(--menu-active-bg-color);
+  }
+  .batch-download-choice__copy {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+  }
+  .batch-download-choice__copy strong {
+    color: var(--text-color);
+    font-size: 15px;
+  }
+  .batch-download-choice__copy small {
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.55;
+  }
   .file-container {
     min-height: 0;
     flex: 1;
@@ -1969,6 +2155,12 @@
     }
   }
   @media (max-width: 767px) {
+    .batch-download-choice__options {
+      grid-template-columns: 1fr;
+    }
+    .batch-download-choice__option.b_btn {
+      min-height: 92px;
+    }
     .file-label {
       // 右侧“更多”现在是完整 44px 触控按钮；额外留出 10px 呼吸位，
       // 避免待整理角标紧贴按钮，看起来像整组操作被挤到了标题旁边。

@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/CloudStorageBar.vue'), 'utf8');
+const pageSource = readFileSync(resolve(process.cwd(), 'src/view/cloudSpace/cloudSpace.vue'), 'utf8');
 
 describe('CloudStorageBar compact layout', () => {
   it('keeps the preferred title, capacity, and percent horizontal layout', () => {
@@ -20,6 +21,17 @@ describe('CloudStorageBar compact layout', () => {
   it('uses an explicit visible dark-theme track and no card-like hover background', () => {
     expect(source).toMatch(/\[data-theme='night'\][\s\S]*?\.storage-bar\s*\{[\s\S]*?background:\s*#5d6677;/);
     expect(source).toMatch(/&:hover\s*\{\s*background:\s*transparent;/);
+  });
+
+  it('offers a compact progress-only trigger for the mobile single-row toolbar', () => {
+    expect(source).toContain("'storage-usage--compact': compact");
+    expect(source).toMatch(/\.storage-usage\.storage-usage--compact[\s\S]*?height:\s*40px/u);
+    expect(source).toMatch(/\.storage-title,[\s\S]*?\.storage-value,[\s\S]*?\.storage-status[\s\S]*?display:\s*none/u);
+    expect(pageSource).toMatch(
+      /<template #actions>[\s\S]*?<CloudStorageBar[\s\S]*?compact[\s\S]*?<div class="cloud-view-toggle"/u,
+    );
+    expect(pageSource).not.toMatch(/<div class="cloud-container"[\s\S]*?<CloudStorageBar/u);
+    expect(pageSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?\.cloud-view-label\s*\{\s*display:\s*none;/u);
   });
 
   it('explains the shared quota and separates current files from Trash', () => {

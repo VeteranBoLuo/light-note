@@ -5,20 +5,50 @@ import { createI18n } from 'vue-i18n';
 const apiBasePost = vi.fn();
 const messageSuccess = vi.fn();
 const messageError = vi.fn();
-const alert = vi.fn();
 const routerReplace = vi.fn();
+const routerPush = vi.fn();
+const routeState = { query: {} as Record<string, string> };
 
 vi.mock('@/http/request', () => ({ apiBasePost }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
   default: { success: messageSuccess, error: messageError },
 }));
-vi.mock('@/components/base/BasicComponents/BModal/Alert', () => ({ default: { alert } }));
+vi.mock('@/components/admin/AdminRiskActionModal.vue', () => ({
+  default: {
+    name: 'AdminRiskActionModalStub',
+    props: ['visible'],
+    emits: ['confirm', 'update:visible'],
+    setup(props: { visible: boolean }, { emit }: { emit: (event: string, payload: unknown) => void }) {
+      return () =>
+        props.visible
+          ? h(
+              'button',
+              {
+                class: 'risk-confirm',
+                onClick: () => emit('confirm', { reason: '已核对事件簇业务上下文', confirmed: true }),
+              },
+              '提交复核',
+            )
+          : null;
+    },
+  },
+}));
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: {} }),
-  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
+  useRoute: () => routeState,
+  useRouter: () => ({ replace: routerReplace, push: routerPush }),
 }));
 vi.mock('./EventDetailDrawer.vue', () => ({
-  default: { name: 'EventDetailDrawerStub', render: () => h('div') },
+  default: {
+    name: 'EventDetailDrawerStub',
+    props: ['open', 'eventId'],
+    render() {
+      return h('div', {
+        class: 'event-detail-stub',
+        'data-open': String(this.open),
+        'data-event-id': this.eventId,
+      });
+    },
+  },
 }));
 
 const { default: Events } = await import('./Events.vue');
@@ -67,9 +97,19 @@ function mountEvents() {
 describe('安全中心事件复核筛选与批量操作', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    routeState.query = {};
     apiBasePost.mockImplementation((url: string) => {
       if (url === '/api/security/v2/review/batch-disposition') {
-        return Promise.resolve({ status: 200, data: { selectedTotal: 1, handledTotal: 2 } });
+        return Promise.resolve({
+          status: 200,
+          data: {
+            selectedTotal: 1,
+            handledTotal: 2,
+            disposition: 'false_positive',
+            requestId: 'request-1',
+            auditId: 'audit-1',
+          },
+        });
       }
       return Promise.resolve({
         status: 200,
@@ -115,19 +155,36 @@ describe('安全中心事件复核筛选与批量操作', () => {
     expect(host.textContent).toContain('已选择 1 个事件簇');
 
     findButton(host, '标记误报')!.click();
-    expect(alert).toHaveBeenCalledTimes(1);
-    await alert.mock.calls[0][0].onOk();
+    await nextTick();
+    host.querySelector<HTMLButtonElement>('.risk-confirm')!.click();
     await flushPromises();
 
-    const batchCall = apiBasePost.mock.calls.find(
-      ([url]) => url === '/api/security/v2/review/batch-disposition',
-    );
+    const batchCall = apiBasePost.mock.calls.find(([url]) => url === '/api/security/v2/review/batch-disposition');
     expect(batchCall?.[1]).toMatchObject({
       eventIds: ['event-1'],
       scope: 'clusters',
       disposition: 'false_positive',
+      reason: '已核对事件簇业务上下文',
+      confirmed: true,
       createTuningSuggestion: true,
     });
     expect(messageSuccess).toHaveBeenCalledWith('已复核 1 个事件簇，共处理 2 条事件');
+    expect(host.textContent).toContain('处置回执');
+    expect(host.textContent).toContain('审计 audit-1');
+  });
+
+  it('深链打开精确事件，并能返回保留筛选的待处理队列', async () => {
+    routeState.query = {
+      eventId: 'event-linked-1',
+      returnTo: '/admin/actionCenter?section=work&source=security&slaState=overdue',
+    };
+    const host = mountEvents();
+    await flushPromises();
+
+    const drawer = host.querySelector<HTMLElement>('.event-detail-stub')!;
+    expect(drawer.dataset.open).toBe('true');
+    expect(drawer.dataset.eventId).toBe('event-linked-1');
+    findButton(host, '返回待处理中心')!.click();
+    expect(routerPush).toHaveBeenCalledWith('/admin/actionCenter?section=work&source=security&slaState=overdue');
   });
 });

@@ -2,9 +2,7 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import i18n from '@/i18n';
   import { BaseOptions } from '@/config/bookmarkCfg.ts';
-  import { bookmarkStore, useUserStore } from '@/store';
-  const user = useUserStore();
-  const bookmark = bookmarkStore();
+  import { bookmarkStore } from '@/store';
 
   export function SelectionSearch(value: string, option: { label: string; value: any }) {
     if (option.label.toUpperCase().indexOf(value.toUpperCase()) > -1) {
@@ -32,12 +30,17 @@
 
   const render = {
     // 基础下拉框
-    getSelector(options: BaseOptions[], mode: 'multiple' | 'tags' | 'combobox' = 'combobox', placeholder = i18n.global.t('common.pleaseSelect')) {
+    getSelector(
+      options: BaseOptions[],
+      mode: 'multiple' | 'tags' | 'combobox' = 'combobox',
+      placeholder = i18n.global.t('common.pleaseSelect'),
+    ) {
       return genSelector(options, mode, placeholder);
     },
 
     // 标签列表
     getTagSelector(outId?) {
+      const bookmark = bookmarkStore();
       let options = [];
       bookmark.tagList.forEach((tag) => {
         if (tag.id !== outId) {

@@ -1,8 +1,11 @@
 import express from 'express';
 const router = express.Router();
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
 import * as noteLibraryHandle from '../router_handle/noteLibraryHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
+import { resultData } from '../util/common.js';
+import { NOTE_IMAGE_MAX_BYTES, noteImageExtensionForMimeType } from '../util/noteImageUpload.js';
 
 // 游客拦截必须先于 multer 落盘,否则游客请求也会在磁盘留下孤儿文件
 const blockVisitorUpload = (req, res, next) => {
@@ -15,21 +18,42 @@ const storage = multer.diskStorage({
     cb(null, '/www/wwwroot/images');
   },
   filename: (req, file, cb) => {
-    const decodedName = Buffer.from(file.originalname, 'latin1').toString('utf-8');
-    const uniqueSuffix = Date.now();
-    cb(null, 'note-' + uniqueSuffix + '-' + decodedName);
+    const extension = noteImageExtensionForMimeType(file.mimetype);
+    cb(null, `note-${Date.now()}-${randomUUID()}${extension}`);
   },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: NOTE_IMAGE_MAX_BYTES, files: 1 },
+  fileFilter: (req, file, cb) => {
+    if (!noteImageExtensionForMimeType(file.mimetype)) {
+      const error = new Error('NOTE_IMAGE_TYPE_UNSUPPORTED');
+      error.code = 'NOTE_IMAGE_TYPE_UNSUPPORTED';
+      return cb(error);
+    }
+    return cb(null, true);
+  },
+});
+
+const receiveNoteImage = (req, res, next) => {
+  upload.single('file')(req, res, (error) => {
+    if (!error) return next();
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      return res.send(resultData(null, 413, '单张图片不能超过 20MB'));
+    }
+    return res.send(resultData(null, 400, '仅支持 JPG、PNG、WebP 或 GIF 图片'));
+  });
+};
 
 // 归属校验、事务与建档逻辑在 handler 层(uploadNoteImage);游客拦截前置于 multer
-router.post('/uploadImage', blockVisitorUpload, upload.single('file'), noteLibraryHandle.uploadNoteImage);
+router.post('/uploadImage', blockVisitorUpload, receiveNoteImage, noteLibraryHandle.uploadNoteImage);
 
 router.post('/updateNote', noteLibraryHandle.updateNote);
 router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.get('/image-thumbnail/:fileName', noteLibraryHandle.getNoteImageThumbnail);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
 router.post('/queryNoteBreadcrumb', noteLibraryHandle.queryNoteBreadcrumb);

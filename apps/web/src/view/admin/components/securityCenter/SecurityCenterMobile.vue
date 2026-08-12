@@ -1,8 +1,8 @@
 <template>
-  <CommonContainer :title="t('securityV2.title')" @back-click="router.push('/admin')">
+  <CommonContainer :title="t('securityV2.title')" @back-click="goBack">
     <template #navigation>
       <div class="security-mobile-nav">
-        <BButton class="security-mobile-icon" :aria-label="t('securityV2.common.back')" @click="router.push('/admin')"
+        <BButton class="security-mobile-icon" :aria-label="t('securityV2.common.back')" @click="goBack"
           ><SvgIcon :src="icon.arrow_left" size="22"
         /></BButton>
         <strong>{{ t('securityV2.title') }}</strong>
@@ -108,6 +108,10 @@
       </section>
 
       <section v-else-if="mobileTab === 'review'" class="security-mobile-panel" data-section="review">
+        <div v-if="returnTo" class="security-mobile-return">
+          <span>{{ t('securityV2.review.fromActionCenter') }}</span>
+          <BButton @click="goBack">{{ t('securityV2.review.backToQueue') }}</BButton>
+        </div>
         <div class="security-mobile-section-title"
           ><strong>{{ t('securityV2.mobile.reviewEvents') }}</strong
           ><span>{{ t('securityV2.mobile.viewAll', { count: summary.pendingReview || 0 }) }}</span></div
@@ -135,13 +139,6 @@
             ><span class="security-pill is-warning">{{ t('securityV2.overview.needsContext') }}</span
             ><span>{{ formatTime(event.lastSeenAt) }}</span></div
           >
-          <div class="security-mobile-event-actions" @click.stop>
-            <BButton @click="classify(event, 'false_positive')">{{ t('securityV2.review.falsePositive') }}</BButton>
-            <BButton @click="classify(event, 'authorized_test')">{{ t('securityV2.review.authorized') }}</BButton>
-            <BButton type="danger" @click="classify(event, 'confirmed_attack')">{{
-              t('securityV2.review.confirmAction')
-            }}</BButton>
-          </div>
         </article>
         <div v-if="!reviewQueue.length" class="security-empty">{{ t('securityV2.common.noData') }}</div>
       </section>
@@ -156,7 +153,7 @@
       }}</BButton>
     </nav>
 
-    <EventDetailDrawer :open="drawerOpen" :event-id="activeEventId" @close="drawerOpen = false" @saved="loadOverview" />
+    <EventDetailDrawer :open="drawerOpen" :event-id="activeEventId" read-only @close="closeDetail" />
   </CommonContainer>
 </template>
 
@@ -168,8 +165,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
+  import { normalizeAdminActionCenterReturnTo } from '@/utils/adminNavigation.ts';
   import EventDetailDrawer from './EventDetailDrawer.vue';
   import { securityCenterMessages } from './securityCenterI18n';
 
@@ -185,7 +182,12 @@
   const mobileTabs = new Set<MobileTab>(['overview', 'review']);
   const normalizeTab = (value: unknown): MobileTab =>
     mobileTabs.has(String(value) as MobileTab) ? (String(value) as MobileTab) : 'overview';
-  const mobileTab = ref<MobileTab>(normalizeTab(route.query.tab));
+  const normalizeEventId = (value: unknown) =>
+    String(value || '')
+      .trim()
+      .slice(0, 64);
+  const mobileTab = ref<MobileTab>(route.query.eventId ? 'review' : normalizeTab(route.query.tab));
+  const returnTo = computed(() => normalizeAdminActionCenterReturnTo(route.query.returnTo));
   const summary = computed(() => overview.value.summary || {});
   const trend = computed(() => overview.value.trend || []);
   const reviewQueue = computed(() => overview.value.reviewQueue || []);
@@ -285,13 +287,25 @@
       : '-';
   }
   function openDetail(event: any) {
-    activeEventId.value = event.representativeEventId;
+    activeEventId.value = normalizeEventId(event.representativeEventId || event.eventId);
+    if (!activeEventId.value) return;
     drawerOpen.value = true;
+    router.replace({ query: { ...route.query, tab: 'review', eventId: activeEventId.value } });
+  }
+  function closeDetail() {
+    drawerOpen.value = false;
+    activeEventId.value = '';
+    router.replace({ query: { ...route.query, eventId: undefined } });
+  }
+  function goBack() {
+    void router.push(returnTo.value || '/admin');
   }
   function selectTab(tab: MobileTab) {
     if (mobileTab.value === tab) return;
     mobileTab.value = tab;
-    router.replace({ query: { ...route.query, tab } });
+    drawerOpen.value = false;
+    activeEventId.value = '';
+    router.replace({ query: { ...route.query, tab, eventId: undefined } });
   }
   async function loadOverview() {
     loading.value = true;
@@ -312,28 +326,22 @@
       loading.value = false;
     }
   }
-  async function classify(event: any, disposition: string) {
-    const res = await apiBasePost(
-      `/api/security/v2/clusters/${encodeURIComponent(event.representativeEventId)}/disposition`,
-      {
-        disposition,
-        reason: t('securityV2.review.reviewReason'),
-        createTuningSuggestion: disposition === 'false_positive',
-      },
-    ).catch(() => null);
-    if (res?.status === 200) {
-      message.success(t('securityV2.review.success'));
-      loadOverview();
+  function syncMobileRoute(tabValue: unknown, eventIdValue: unknown) {
+    const eventId = normalizeEventId(eventIdValue);
+    const nextTab = eventId ? 'review' : normalizeTab(tabValue);
+    mobileTab.value = nextTab;
+    activeEventId.value = eventId;
+    drawerOpen.value = Boolean(eventId);
+    if ((tabValue != null && String(tabValue) !== nextTab) || (eventId && tabValue == null)) {
+      router.replace({ query: { ...route.query, tab: nextTab } });
     }
   }
-  function syncMobileTab(value: unknown) {
-    const nextTab = normalizeTab(value);
-    mobileTab.value = nextTab;
-    if (value != null && String(value) !== nextTab) router.replace({ query: { ...route.query, tab: nextTab } });
-  }
-  watch(() => route.query.tab, syncMobileTab);
+  watch(
+    () => [route.query.tab, route.query.eventId],
+    ([tab, eventId]) => syncMobileRoute(tab, eventId),
+  );
   onMounted(() => {
-    syncMobileTab(route.query.tab);
+    syncMobileRoute(route.query.tab, route.query.eventId);
     loadOverview();
   });
 </script>

@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const query = vi.fn();
+const getConnection = vi.fn();
 
-vi.mock('../db/index.js', () => ({ default: { query } }));
+vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 vi.mock('../util/common.js', () => ({
   resultData: (data = null, status = 200, msg = '') => ({ data, status, msg }),
 }));
@@ -103,6 +104,7 @@ describe('通知中心管理员删除', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     query.mockReset();
+    getConnection.mockReset();
     query.mockResolvedValue([{ affectedRows: 3 }]);
   });
 
@@ -122,18 +124,40 @@ describe('通知中心管理员删除', () => {
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
   });
 
-  it('硬删除整批管理员通知，同时限制为 system/other 类型', async () => {
-    query.mockReset().mockResolvedValueOnce([{ affectedRows: 3 }]);
+  it('归档整批管理员通知并保留事实行，同时限制为 system/other 类型', async () => {
+    query.mockReset().mockResolvedValue([{ affectedRows: 1 }]);
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async () => [{ affectedRows: 3 }]),
+    };
+    getConnection.mockResolvedValue(connection);
     const res = mockRes();
-    await adminDelete({ user: { role: 'root' }, body: { batchId: 'batch-1' } }, res);
+    await adminDelete(
+      {
+        user: { id: 'root-1', role: 'root' },
+        requestId: 'request-archive',
+        body: {
+          batchId: 'batch-1',
+          reason: '历史通知完成归档',
+          confirmed: true,
+          confirmText: '确认归档通知',
+        },
+      },
+      res,
+    );
 
-    expect(query).toHaveBeenCalledTimes(1);
-    const [sql, params] = query.mock.calls[0];
-    expect(sql).toContain('DELETE FROM notification');
+    const [sql, params] = connection.query.mock.calls.find(([statement]) =>
+      String(statement).includes('UPDATE notification'),
+    );
+    expect(sql).toContain('admin_archived = 1');
     expect(sql).toContain('batch_id = ? OR id = ?');
     expect(sql).toContain('type IN (?,?)');
     expect(params).toEqual(['batch-1', 'batch-1', 'system', 'other']);
-    expect(res.send).toHaveBeenCalledWith({ data: { deleted: 3 }, status: 200, msg: '' });
+    expect(connection.commit).toHaveBeenCalledOnce();
+    expect(res.send.mock.calls[0][0].data).toMatchObject({ archived: 3, deleted: 3, requestId: 'request-archive' });
   });
 });
 

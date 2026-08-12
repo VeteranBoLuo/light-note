@@ -10,7 +10,13 @@
     <div class="aw-bar">
       <div class="aw-bar-fill" :style="{ width: pct + '%' }"></div>
     </div>
-    <BTabs v-model:active-tab="activeFilter" class="aw-filters" variant="pill" :options="filterOptions" />
+    <BTabs
+      v-model:active-tab="activeFilter"
+      v-click-log="{ module: '成长', operation: '筛选成就墙' }"
+      class="aw-filters"
+      variant="pill"
+      :options="filterOptions"
+    />
 
     <div v-for="g in visibleGroups" :key="g" class="aw-group">
       <div class="aw-group-title">{{ t(`growth.achGroup.${g}`) }}</div>
@@ -49,7 +55,8 @@
               <BButton
                 v-if="a.claimable"
                 class="aw-claim"
-                :disabled="readOnly || claimingKey === a.key"
+                :disabled="readOnly || Boolean(claimingKey)"
+                :loading="claimingKey === a.key"
                 :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
                 @click.stop="onClaim(a)"
               >
@@ -91,7 +98,8 @@
         <BButton
           v-if="detail.claimable"
           class="awd-claim"
-          :disabled="readOnly || claimingKey === detail.key"
+          :disabled="readOnly || Boolean(claimingKey)"
+          :loading="claimingKey === detail.key"
           :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
           @click="onClaim(detail)"
         >
@@ -99,6 +107,20 @@
             detail.frameId
               ? t('growth.achClaimWithFrame', { n: detail.reward })
               : t('growth.achClaim', { n: detail.reward })
+          }}
+        </BButton>
+        <BButton
+          v-if="detail.unlocked && !readOnly"
+          class="awd-community"
+          size="small"
+          :loading="communitySaving"
+          :disabled="communitySaving || (!isCommunityFeatured(detail.key) && communityFeaturedKeys.length >= 3)"
+          @click="toggleCommunityFeatured(detail.key)"
+        >
+          {{
+            isCommunityFeatured(detail.key)
+              ? t('growth.achievementRemoveCommunity')
+              : t('growth.achievementShowCommunity')
           }}
         </BButton>
         <div v-else-if="detail.unlocked" class="awd-status unlocked">
@@ -126,6 +148,13 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import { achievementVisualFor, achievementVisualStyle } from '@/config/achievements.ts';
   import icon from '@/config/icon.ts';
+  import {
+    getCommunityChatOwnProfile,
+    updateCommunityChatOwnProfile,
+    type CommunityChatOwnProfile,
+  } from '@/api/communityChatApi.ts';
+  import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
+  import { recordOperation } from '@/api/commonApi.ts';
 
   const props = withDefaults(
     defineProps<{
@@ -151,6 +180,9 @@
   ]);
   const detail = ref<Achievement | null>(null);
   const detailVisible = ref(false);
+  const communityProfile = ref<CommunityChatOwnProfile | null>(null);
+  const communitySaving = ref(false);
+  const communityFeaturedKeys = computed(() => communityProfile.value?.featuredAchievementKeys || []);
   function openDetail(a: Achievement) {
     detail.value = a;
     detailVisible.value = true;
@@ -176,13 +208,25 @@
   );
 
   function byGroup(g: string) {
-    return props.achievements.filter((a) => {
-      if (a.group !== g) return false;
-      if (activeFilter.value === 'claimable') return Boolean(a.claimable);
-      if (activeFilter.value === 'near') return !a.unlocked && prog(a) >= 60;
-      if (activeFilter.value === 'unlocked') return a.unlocked;
-      return true;
-    });
+    return props.achievements
+      .filter((a) => {
+        if (a.group !== g) return false;
+        if (activeFilter.value === 'claimable') return Boolean(a.claimable);
+        if (activeFilter.value === 'near') return !a.unlocked && prog(a) >= 60;
+        if (activeFilter.value === 'unlocked') return a.unlocked;
+        return true;
+      })
+      .sort((left, right) => {
+        const rank = (item: Achievement) => (item.claimable ? 0 : item.unlocked ? 1 : prog(item) >= 60 ? 2 : 3);
+        const category = rank(left) - rank(right);
+        if (category) return category;
+        if (left.unlocked || right.unlocked) {
+          const leftTime = left.unlockedAt ? new Date(left.unlockedAt).getTime() : 0;
+          const rightTime = right.unlockedAt ? new Date(right.unlockedAt).getTime() : 0;
+          if (leftTime !== rightTime) return rightTime - leftTime;
+        }
+        return prog(right) - prog(left) || left.target - right.target || left.key.localeCompare(right.key);
+      });
   }
   function prog(a: Achievement) {
     return a.target ? Math.min(100, Math.round((a.cur / a.target) * 100)) : 0;
@@ -201,6 +245,45 @@
   function frameName(frameId: string) {
     const key = `growth.shopItems.${frameId}.name`;
     return t(key);
+  }
+
+  function isCommunityFeatured(key: string) {
+    return communityFeaturedKeys.value.includes(key);
+  }
+
+  async function ensureCommunityProfile() {
+    if (communityProfile.value) return communityProfile.value;
+    const response = await getCommunityChatOwnProfile();
+    if (response?.status !== 200 || !response.data) throw new Error('COMMUNITY_PROFILE_LOAD_FAILED');
+    communityProfile.value = response.data as CommunityChatOwnProfile;
+    return communityProfile.value;
+  }
+
+  async function toggleCommunityFeatured(key: string) {
+    if (communitySaving.value) return;
+    communitySaving.value = true;
+    try {
+      const current = await ensureCommunityProfile();
+      const featured = current.featuredAchievementKeys.includes(key)
+        ? current.featuredAchievementKeys.filter((item) => item !== key)
+        : [...current.featuredAchievementKeys, key].slice(0, 3);
+      const response = await updateCommunityChatOwnProfile({
+        bio: current.bio,
+        showCommunityTenure: current.showCommunityTenure,
+        featuredAchievementKeys: featured,
+        baseRevision: current.revision,
+      });
+      if (response?.status !== 200 || !response.data) throw new Error('COMMUNITY_PROFILE_UPDATE_FAILED');
+      communityProfile.value = response.data as CommunityChatOwnProfile;
+      message.success(t('growth.achievementCommunitySaved'));
+      recordOperation({ module: '成长', operation: '更新社区展示成就成功' });
+    } catch (error) {
+      console.warn('更新社区精选成就失败:', error);
+      message.info(t('growth.achievementCommunityUnavailable'));
+      communityProfile.value = null;
+    } finally {
+      communitySaving.value = false;
+    }
   }
 </script>
 
@@ -623,6 +706,12 @@
     background: linear-gradient(135deg, #f59e0b, #f97316);
     box-shadow: 0 8px 18px -8px rgba(245, 158, 11, 0.8);
     transition: transform 0.15s;
+  }
+  .awd-community {
+    width: 100%;
+    margin-top: 8px;
+    border: 1px solid var(--primary-color);
+    color: var(--primary-color);
   }
   .awd-claim:hover:not(:disabled) {
     transform: translateY(-1px);

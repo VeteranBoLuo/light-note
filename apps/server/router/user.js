@@ -4,6 +4,11 @@ const router = express.Router();
 
 import * as userHandle from '../router_handle/userHandle.js';
 import { saveAdminUserRemark } from '../router_handle/adminUserRemarkHandle.js';
+import {
+  disableAdminUser,
+  restoreAdminUser,
+  updateAdminUser,
+} from '../router_handle/adminUserOperationsHandle.js';
 
 const loginLimiter = rateLimit({
   windowMs: 5 * 60 * 1000,
@@ -73,6 +78,12 @@ router.post('/getUserList', userHandle.getUserList);
 router.post('/admin/detail', userHandle.getUserAdminDetail);
 
 router.post('/admin/remark', saveAdminUserRemark);
+
+router.post('/admin/update', updateAdminUser);
+
+router.post('/admin/disable', disableAdminUser);
+
+router.post('/admin/restore', restoreAdminUser);
 
 router.post('/registerUser', registerLimiter, userHandle.registerUser);
 

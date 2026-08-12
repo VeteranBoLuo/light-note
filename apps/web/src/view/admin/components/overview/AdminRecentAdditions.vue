@@ -7,13 +7,31 @@
     <div class="admin-recent__heading">
       <div>
         <h3 :id="sectionTitleId">{{ t('adminOverviewRecent.title') }}</h3>
-        <p>{{ t('adminOverviewRecent.subtitle') }}</p>
+        <p>{{ sectionSubtitle }}</p>
       </div>
-      <span v-if="loading && data" class="admin-recent__updating">{{ t('adminOverviewRecent.updating') }}</span>
+      <div class="admin-recent__controls">
+        <span v-if="loading && data" class="admin-recent__updating">{{ t('adminOverviewRecent.updating') }}</span>
+        <BSelect
+          class="admin-recent__filter admin-recent__filter--period"
+          :value="activeFilter.period"
+          :options="periodOptions"
+          :aria-label="t('adminOverviewRecent.filters.periodAria')"
+          :disabled="loading"
+          @change="changePeriod"
+        />
+        <BSelect
+          class="admin-recent__filter admin-recent__filter--type"
+          :value="activeFilter.type"
+          :options="typeOptions"
+          :aria-label="t('adminOverviewRecent.filters.typeAria')"
+          :disabled="loading"
+          @change="changeType"
+        />
+      </div>
     </div>
 
     <div v-if="loading && !data" class="admin-recent__grid" aria-busy="true">
-      <BCard v-for="card in 2" :key="card" variant="panel" padding="16px" class="admin-recent__card">
+      <BCard v-for="card in skeletonCardCount" :key="card" variant="panel" padding="16px" class="admin-recent__card">
         <div class="admin-recent__skeleton-title"></div>
         <div v-for="row in 6" :key="row" class="admin-recent__skeleton-row">
           <span></span>
@@ -27,10 +45,10 @@
       <BButton size="small" @click="emit('retry')">{{ t('common.retry') }}</BButton>
     </BCard>
 
-    <div v-else class="admin-recent__grid">
-      <BCard variant="panel" padding="0" class="admin-recent__card admin-recent__card--resources">
+    <div v-else class="admin-recent__grid" :class="{ 'is-single': !(showResources && showUsers) }">
+      <BCard v-if="showResources" variant="panel" padding="0" class="admin-recent__card admin-recent__card--resources">
         <template #title>
-          <span class="admin-recent__card-title">{{ t('adminOverviewRecent.resources') }}</span>
+          <span class="admin-recent__card-title">{{ resourceCardTitle }}</span>
         </template>
         <template v-if="recentResources.length">
           <ul class="admin-recent__list">
@@ -61,9 +79,9 @@
         <p v-else class="admin-recent__empty">{{ t('adminOverviewRecent.emptyResources') }}</p>
       </BCard>
 
-      <BCard variant="panel" padding="0" class="admin-recent__card admin-recent__card--users">
+      <BCard v-if="showUsers" variant="panel" padding="0" class="admin-recent__card admin-recent__card--users">
         <template #title>
-          <span class="admin-recent__card-title">{{ t('adminOverviewRecent.users') }}</span>
+          <span class="admin-recent__card-title">{{ userCardTitle }}</span>
         </template>
         <template #extra>
           <BButton size="small" class="admin-recent__users-link" @click="emit('viewUsers')">
@@ -104,8 +122,16 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
-  import type { AdminRecentData, AdminRecentResource, RecentResourceType } from './adminRecentTypes.ts';
+  import type {
+    AdminRecentData,
+    AdminRecentFilter,
+    AdminRecentFilterType,
+    AdminRecentPeriod,
+    AdminRecentResource,
+    RecentResourceType,
+  } from './adminRecentTypes.ts';
 
   const props = defineProps<{
     data: AdminRecentData | null;
@@ -113,17 +139,74 @@
     error?: boolean;
     stacked?: boolean;
     mobile?: boolean;
+    filter?: AdminRecentFilter;
+    filteredTotal?: number | null;
   }>();
 
   const emit = defineEmits<{
     retry: [];
     viewUsers: [];
+    filterChange: [filter: AdminRecentFilter];
   }>();
 
   const { t, locale } = useI18n();
   const sectionTitleId = `admin-recent-${Math.random().toString(36).slice(2)}`;
+  const allowedPeriods: AdminRecentPeriod[] = ['recent', 'today'];
+  const allowedTypes: AdminRecentFilterType[] = ['all', 'resource', 'user', 'bookmark', 'note', 'file'];
+  const activeFilter = computed<AdminRecentFilter>(() => props.filter || { period: 'recent', type: 'all' });
   const recentResources = computed(() => props.data?.recentResources || []);
   const recentUsers = computed(() => props.data?.recentUsers || []);
+  const showResources = computed(() => activeFilter.value.type !== 'user');
+  const showUsers = computed(() => ['all', 'user'].includes(activeFilter.value.type));
+  const skeletonCardCount = computed(() => (showResources.value && showUsers.value ? 2 : 1));
+  const periodOptions = computed(() => [
+    { value: 'recent', label: t('adminOverviewRecent.filters.periodRecent') },
+    { value: 'today', label: t('adminOverviewRecent.filters.periodToday') },
+  ]);
+  const typeOptions = computed(() => [
+    { value: 'all', label: t('adminOverviewRecent.filters.typeAll') },
+    { value: 'resource', label: t('adminOverviewRecent.filters.typeResources') },
+    { value: 'user', label: t('adminOverviewRecent.filters.typeUsers') },
+    { value: 'bookmark', label: t('adminOverviewRecent.resourceType.bookmark') },
+    { value: 'note', label: t('adminOverviewRecent.resourceType.note') },
+    { value: 'file', label: t('adminOverviewRecent.resourceType.file') },
+  ]);
+  const sectionSubtitle = computed(() => {
+    if (activeFilter.value.period !== 'today') return t('adminOverviewRecent.subtitle');
+    const limit = Number(props.data?.limit || 20);
+    return props.filteredTotal == null
+      ? t('adminOverviewRecent.todaySubtitle', { limit })
+      : t('adminOverviewRecent.todaySubtitleWithTotal', { count: props.filteredTotal, limit });
+  });
+  const resourceCardTitle = computed(() => {
+    const { period, type } = activeFilter.value;
+    if (['bookmark', 'note', 'file'].includes(type)) {
+      return t(
+        period === 'today'
+          ? 'adminOverviewRecent.filteredTitle.todayResourceType'
+          : 'adminOverviewRecent.filteredTitle.recentResourceType',
+        { type: resourceLabel(type as RecentResourceType) },
+      );
+    }
+    return t(period === 'today' ? 'adminOverviewRecent.filteredTitle.todayResources' : 'adminOverviewRecent.resources');
+  });
+  const userCardTitle = computed(() =>
+    t(
+      activeFilter.value.period === 'today'
+        ? 'adminOverviewRecent.filteredTitle.todayUsers'
+        : 'adminOverviewRecent.users',
+    ),
+  );
+
+  function changePeriod(value: unknown) {
+    if (!allowedPeriods.includes(value as AdminRecentPeriod)) return;
+    emit('filterChange', { ...activeFilter.value, period: value as AdminRecentPeriod });
+  }
+
+  function changeType(value: unknown) {
+    if (!allowedTypes.includes(value as AdminRecentFilterType)) return;
+    emit('filterChange', { ...activeFilter.value, type: value as AdminRecentFilterType });
+  }
 
   function displayUserName(value?: string | null) {
     return String(value || '').trim() || t('adminOverviewRecent.unnamedUser');
@@ -215,11 +298,37 @@
     }
   }
 
+  .admin-recent__controls {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .admin-recent__filter--period {
+    width: 112px;
+  }
+
+  .admin-recent__filter--type {
+    width: 128px;
+  }
+
+  .admin-recent__filter :deep(.select-trigger) {
+    min-height: 30px;
+    font-size: 11px;
+  }
+
   .admin-recent__grid {
     display: grid;
     grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
     gap: 12px;
     align-items: stretch;
+  }
+
+  .admin-recent__grid.is-single {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .admin-recent__card {
@@ -430,6 +539,25 @@
 
   .admin-recent.is-mobile .admin-recent__row {
     padding-inline: 12px;
+  }
+
+  .admin-recent.is-mobile .admin-recent__heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-recent.is-mobile .admin-recent__controls {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .admin-recent.is-mobile .admin-recent__updating {
+    grid-column: 1 / -1;
+  }
+
+  .admin-recent.is-mobile .admin-recent__filter {
+    width: 100%;
   }
 
   .admin-recent.is-mobile .admin-recent__time {

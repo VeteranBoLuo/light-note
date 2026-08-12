@@ -11,6 +11,8 @@ const connection = {
 const getConnection = vi.fn(() => connection);
 const ensureNotVisitor = vi.fn(() => true);
 const triggerResourceCreateEffects = vi.fn();
+const validateNoteImageUpload = vi.fn(async () => ({ width: 100, height: 100 }));
+const ensureNoteImageThumbnail = vi.fn(async () => '/tmp/preview.webp');
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
@@ -37,6 +39,14 @@ vi.mock('../util/noteImages.js', () => ({
   extractNoteImageUrls: vi.fn(() => []),
   filterOwnedImageUrls: vi.fn(async () => []),
 }));
+vi.mock('../util/noteImageUpload.js', () => ({ validateNoteImageUpload }));
+vi.mock('../util/noteImageThumbnail.js', () => ({
+  ensureNoteImageThumbnail,
+  getExistingNoteImageThumbnailPath: vi.fn(),
+  noteImageThumbnailPathname: vi.fn(() => ''),
+  resolveOwnedNoteThumbnailSource: vi.fn(),
+}));
+vi.mock('../util/noteCardPreview.js', () => ({ extractNoteCardPreviewImage: vi.fn(() => '') }));
 // multer 已落盘文件的丢弃走 node:fs promises.unlink
 const { unlinkSpy } = vi.hoisted(() => ({ unlinkSpy: vi.fn() }));
 vi.mock('node:fs', () => ({ promises: { unlink: unlinkSpy } }));
@@ -59,6 +69,8 @@ describe('uploadNoteImage 归属与事务', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     ensureNotVisitor.mockReturnValue(true);
+    validateNoteImageUpload.mockResolvedValue({ width: 100, height: 100 });
+    ensureNoteImageThumbnail.mockResolvedValue('/tmp/preview.webp');
     getConnection.mockResolvedValue(connection);
     connection.query.mockImplementation(async (sql) => {
       if (String(sql).includes('SELECT id, parent_id')) return [[]];
@@ -105,6 +117,7 @@ describe('uploadNoteImage 归属与事务', () => {
     expect(sent.data.url).toContain('note-123-a.png');
     const insertPayload = poolQuery.mock.calls[1][1][0];
     expect(insertPayload.noteId).toBe('my-note');
+    expect(ensureNoteImageThumbnail).toHaveBeenCalledWith(expect.stringContaining('note-123-a.png'));
     expect(unlinkSpy).not.toHaveBeenCalled();
   });
 

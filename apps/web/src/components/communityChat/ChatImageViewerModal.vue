@@ -82,18 +82,19 @@
             <strong>{{ t('communityChat.image.loadFailed') }}</strong>
             <BButton size="small" @click="retryImage">{{ t('communityChat.image.retry') }}</BButton>
           </div>
-          <img
-            v-else-if="currentImage"
-            :key="`${currentImage.publicId}-${imageRenderKey}`"
-            class="chat-image-viewer__image"
-            :class="{ 'is-loaded': imageLoaded }"
-            :src="currentImage.url"
-            :alt="t('communityChat.image.previewAlt')"
-            :style="imageStyle"
-            draggable="false"
-            @load="handleImageLoad"
-            @error="handleImageError"
-          />
+          <div v-else-if="currentImage" class="chat-image-viewer__media">
+            <img
+              :key="`${currentImage.publicId}-${imageRenderKey}`"
+              class="chat-image-viewer__image"
+              :class="{ 'is-loaded': imageLoaded }"
+              :src="currentImage.url"
+              :alt="t('communityChat.image.previewAlt')"
+              :style="imageStyle"
+              draggable="false"
+              @load="handleImageLoad"
+              @error="handleImageError"
+            />
+          </div>
           <div v-else class="chat-image-viewer__empty" role="status">
             {{ t('communityChat.image.noPreview') }}
           </div>
@@ -625,6 +626,7 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
+    position: relative;
     display: grid;
     place-items: center;
     transition: transform 140ms ease;
@@ -643,10 +645,20 @@
     cursor: grabbing;
   }
 
+  .chat-image-viewer__media {
+    position: absolute;
+    inset: 26px 68px;
+    overflow: hidden;
+    min-width: 0;
+    min-height: 0;
+  }
+
   .chat-image-viewer__image {
     display: block;
-    max-width: calc(100% - 136px);
-    max-height: calc(100% - 52px);
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
     object-fit: contain;
     opacity: 0;
     user-select: none;
@@ -782,9 +794,8 @@
       background: #0f1014 !important;
     }
 
-    .chat-image-viewer__image {
-      max-width: 100%;
-      max-height: 100%;
+    .chat-image-viewer__media {
+      inset: 0;
     }
 
     .chat-image-viewer__nav-wrap {

@@ -1,12 +1,17 @@
 <template>
   <div class="wc">
     <div class="wc-head">
-      <div class="wc-title">📆 {{ t('growth.weeklyTitle') }}</div>
+      <div class="wc-title"><SvgIcon :src="icon.common.calendar" size="17" />{{ t('growth.weeklyTitle') }}</div>
       <div class="wc-sub">{{ t('growth.weeklySubtitle') }}</div>
+      <div class="wc-reset">{{ t('growth.weeklyResetTime') }}</div>
     </div>
-    <div class="wc-list">
+    <div v-if="loading && !weekly" class="wc-loading"><BLoading size="small" /></div>
+    <div v-else-if="loadError && !weekly" class="wc-error">
+      <span>{{ t('growth.weeklyLoadFailed') }}</span><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
+    </div>
+    <div v-else-if="challenges.length" class="wc-list">
       <div v-for="c in challenges" :key="c.key" class="wc-item" :class="{ done: c.done }">
-        <span class="wc-icon">{{ ICONS[c.key] || '🎯' }}</span>
+        <span class="wc-icon"><SvgIcon :src="ICONS[c.key] || icon.growth.action" size="21" /></span>
         <div class="wc-main">
           <div class="wc-name">
             {{ nameOf(c.key) }}
@@ -18,17 +23,27 @@
           <BButton
             v-if="c.claimable"
             class="wc-claim"
-            :disabled="readOnly || claimingKey === c.key"
+            :disabled="readOnly || claimingKey === c.key || claimingRewards"
             :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
             @click="onClaim(c)"
           >
-            🪙 {{ t('growth.weeklyClaim', { n: c.reward }) }}
+            <SvgIcon :src="icon.growth.coin" size="13" /> {{ t('growth.weeklyClaim', { n: c.reward }) }}
           </BButton>
-          <span v-else-if="c.claimed" class="wc-claimed">✓ {{ t('growth.weeklyClaimed') }}</span>
-          <span v-else class="wc-reward">🪙 {{ c.reward }}</span>
+          <span v-else-if="c.claimed" class="wc-claimed"><SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyClaimed') }}</span>
+          <BButton
+            v-else-if="!c.done && !readOnly"
+            size="small"
+            class="wc-go"
+            v-click-log="{ module: '成长', operation: `前往每周挑战-${c.key}` }"
+            @click="goToChallenge(c)"
+          >
+            {{ t('growth.tasksGoTo') }}
+          </BButton>
+          <span v-else class="wc-reward"><SvgIcon :src="icon.growth.coin" size="13" />{{ c.reward }}</span>
         </div>
       </div>
     </div>
+    <div v-else class="wc-empty">{{ t('growth.weeklyEmpty') }}</div>
   </div>
 </template>
 
@@ -39,17 +54,24 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { recordOperation } from '@/api/commonApi.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
+  import { useRouter } from 'vue-router';
 
   const { t, te } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
-  const { weekly, loadWeekly, claimWeekly } = useGrowth();
+  const { weekly, loadWeekly, claimWeekly, claimingRewards } = useGrowth();
+  const router = useRouter();
+  const loading = ref(true);
+  const loadError = ref(false);
 
   const ICONS: Record<string, string> = {
-    wk_bookmark: '📚',
-    wk_note: '📝',
-    wk_checkin: '📅',
-    wk_todo: '✅',
-    wk_organize: '🧹',
+    wk_bookmark: icon.resource.bookmark,
+    wk_note: icon.resource.note,
+    wk_checkin: icon.growth.checkin,
+    wk_todo: icon.growth.action,
+    wk_organize: icon.growth.organize,
   };
   const challenges = computed(() => weekly.value?.challenges || []);
 
@@ -63,7 +85,7 @@
 
   const claimingKey = ref<string | null>(null);
   async function onClaim(c: WeeklyChallenge) {
-    if (props.readOnly || claimingKey.value) return;
+    if (props.readOnly || claimingKey.value || claimingRewards.value) return;
     claimingKey.value = c.key;
     try {
       const res = await claimWeekly(c.key);
@@ -80,7 +102,25 @@
     }
   }
 
-  onMounted(loadWeekly);
+  function goToChallenge(challenge: WeeklyChallenge) {
+    if (challenge.metric === 'bookmark') void router.push('/home');
+    else if (challenge.metric === 'note') void router.push('/noteLibrary');
+    else if (challenge.metric === 'todo') void router.push({ path: '/inbox', query: { tab: 'todo' } });
+    else if (challenge.metric === 'organize') void router.push('/inbox');
+    else if (challenge.metric === 'checkin') {
+      void router.replace({ query: { ...router.currentRoute.value.query, section: 'overview' } });
+    }
+  }
+
+  async function reload() {
+    loading.value = true;
+    loadError.value = false;
+    const value = await loadWeekly();
+    loadError.value = !value;
+    loading.value = false;
+  }
+
+  onMounted(reload);
 </script>
 
 <style scoped lang="less">
@@ -90,6 +130,9 @@
     gap: 12px;
   }
   .wc-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 15px;
     font-weight: 700;
   }
@@ -98,6 +141,7 @@
     font-size: 12px;
     color: var(--desc-color);
   }
+  .wc-reset { margin-top: 3px; color: var(--primary-color); font-size: 11px; }
   .wc-list {
     display: flex;
     flex-direction: column;
@@ -116,7 +160,8 @@
     border-color: color-mix(in srgb, #f59e0b 45%, transparent);
   }
   .wc-icon {
-    font-size: 22px;
+    display: grid;
+    place-items: center;
     flex: 0 0 auto;
   }
   .wc-main {
@@ -169,13 +214,22 @@
     cursor: default;
   }
   .wc-claimed {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11.5px;
     font-weight: 700;
     color: #16a34a;
   }
   .wc-reward {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     font-weight: 600;
     color: #d97706;
   }
+  .wc-go { color: var(--primary-color); }
+  .wc-loading, .wc-error, .wc-empty { display: flex; min-height: 90px; align-items: center; justify-content: center; gap: 10px; color: var(--desc-color); font-size: 12px; }
+  :global(html.light-note-mobile-rendering) .wc-item.done { border-color: #f59e0b; box-shadow: none; }
 </style>

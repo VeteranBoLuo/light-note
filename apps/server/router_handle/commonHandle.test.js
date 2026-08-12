@@ -6,9 +6,10 @@ const getConnection = vi.fn();
 vi.mock('../db/index.js', () => ({ default: { query, getConnection } }));
 
 // clearImages 用:文件删除与引用集合均可控
-const { unlinkSpy, collectUsedSpy } = vi.hoisted(() => ({
+const { unlinkSpy, collectUsedSpy, deleteThumbnailSpy } = vi.hoisted(() => ({
   unlinkSpy: vi.fn(),
   collectUsedSpy: vi.fn(),
+  deleteThumbnailSpy: vi.fn(),
 }));
 vi.mock('fs/promises', () => ({
   default: {
@@ -16,6 +17,7 @@ vi.mock('fs/promises', () => ({
   },
 }));
 vi.mock('../util/noteImages.js', () => ({ collectUsedImageNames: collectUsedSpy }));
+vi.mock('../util/noteImageThumbnail.js', () => ({ deleteNoteImageThumbnail: deleteThumbnailSpy }));
 const { mockProcessBookmarkIcons, mockIsBookmarkIconCheckRecent } = vi.hoisted(() => ({
   mockProcessBookmarkIcons: vi.fn().mockResolvedValue([]),
   mockIsBookmarkIconCheckRecent: vi.fn((checkedAt, now = Date.now()) => {
@@ -290,14 +292,107 @@ describe('getAdminOverview 资源统计口径', () => {
 
     const resourceSql = query.mock.calls.find(([sql]) => String(sql).includes('AS bookmarkTotal'))?.[0];
     const trendSql = query.mock.calls.find(([sql]) => String(sql).includes('SELECT d, kind, SUM(c)'))?.[0];
+    const userSql = query.mock.calls.find(
+      ([sql]) => String(sql).includes('AS total') && String(sql).includes('FROM `user`'),
+    )?.[0];
+    const userTrendSql = query.mock.calls.find(
+      ([sql]) => String(sql).includes('GROUP BY d') && String(sql).includes('FROM `user`'),
+    )?.[0];
     expect(resourceSql).toContain('onboarding_seed_resources');
     expect(resourceSql.match(/onboarding_seed_resources/g)).toHaveLength(9);
     expect(resourceSql).toContain('bookmark_owner.del_flag = 0');
     expect(trendSql.match(/onboarding_seed_resources/g)).toHaveLength(3);
     expect(trendSql).toContain('bookmark_owner.del_flag = 0');
+    expect(userSql).toContain("role <> 'visitor'");
+    expect(userTrendSql).toContain("role <> 'visitor'");
     const payload = res.send.mock.calls[0][0];
     expect(payload.data.ai).toEqual({ todayCount: 0, todayTokens: 0, totalCount: 0, totalTokens: 0 });
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('用北京时间截至当前时刻计算昨日同期与前 7 日同期均值，并以一次聚合查询覆盖全部今日指标', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-12T17:40:30+08:00'));
+    const baselineRows = [];
+    for (let day = 5; day <= 11; day += 1) {
+      const d = `2026-08-${String(day).padStart(2, '0')}`;
+      baselineRows.push(
+        { d, kind: 'users', c: day === 11 ? 4 : 2 },
+        { d, kind: 'bookmarks', c: day === 11 ? 4 : 3 },
+        { d, kind: 'notes', c: 2 },
+        { d, kind: 'files', c: 1 },
+        { d, kind: 'todos', c: 5 },
+      );
+    }
+
+    try {
+      query.mockImplementation(async (sql) => {
+        const statement = String(sql);
+        if (statement.includes('same_time_baseline')) return [baselineRows];
+        if (statement.includes('COALESCE(SUM(create_time >= ?)') && statement.includes('FROM `user`')) {
+          return [[{ total: 100, today: 8 }]];
+        }
+        if (statement.includes('AS bookmarkTotal')) {
+          return [
+            [
+              {
+                bookmarkTotal: 30,
+                noteTotal: 20,
+                fileTotal: 10,
+                bookmarkToday: 6,
+                noteToday: 4,
+                fileToday: 2,
+                storageMb: 12,
+                trashMb: 0,
+                trashCount: 0,
+              },
+            ],
+          ];
+        }
+        if (statement.includes('FROM conversion_events')) return [[{ visitors: 0, registers: 0 }]];
+        if (statement.includes('FROM opinion')) return [[{ pending: 0 }]];
+        if (statement.includes('FROM security_events')) return [[{ unhandled: 0 }]];
+        if (statement.includes('FROM todo_items')) {
+          return [[{ total: 12, createdToday: 3, pending: 2, dueToday: 1, overdue: 0, completedToday: 1 }]];
+        }
+        if (statement.includes('FROM user_sessions')) return [[{ activeToday: 1, active7d: 2 }]];
+        if (statement.includes('FROM api_logs')) {
+          return [[{ total: 0, businessErrors: 0, invalidRequests: 0, serverErrors: 0 }]];
+        }
+        if (statement.includes('FROM agent_logs')) return [[{ count: 0, tokens: 0 }]];
+        return [[]];
+      });
+
+      const res = mockRes();
+      await getAdminOverview({ user: { role: 'root' }, body: { hideInternal: true } }, res);
+
+      const baselineCall = query.mock.calls.find(([sql]) => String(sql).includes('same_time_baseline'));
+      expect(baselineCall?.[0]).toContain('TIME(create_time) <= ?');
+      expect(baselineCall?.[0]).toContain('onboarding_seed_resources');
+      expect(baselineCall?.[0]).toContain("role <> 'visitor'");
+      expect(baselineCall?.[1]).toEqual(
+        Array.from({ length: 5 }, () => ['2026-08-05', '2026-08-12', '17:40:30']).flat(),
+      );
+
+      const payload = res.send.mock.calls[0][0].data;
+      expect(payload.todayBaseline).toEqual({
+        available: true,
+        timezone: 'Asia/Shanghai',
+        mode: 'same_elapsed_time',
+        cutoffTime: '17:40',
+        sampleDays: 7,
+        metrics: {
+          users: { yesterday: 4, average7d: 2.3 },
+          resources: { yesterday: 7, average7d: 6.1 },
+          bookmarks: { yesterday: 4, average7d: 3.1 },
+          notes: { yesterday: 2, average7d: 2 },
+          files: { yesterday: 1, average7d: 1 },
+          todos: { yesterday: 5, average7d: 5 },
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -322,7 +417,11 @@ describe('getAdminOverviewTrend 趋势周期', () => {
       await getAdminOverviewTrend({ user: { role: 'root' }, body: { days: 90, hideInternal: true } }, res);
 
       const payload = res.send.mock.calls[0][0];
+      const userTrendSql = query.mock.calls.find(
+        ([sql]) => String(sql).includes('GROUP BY d') && String(sql).includes('FROM `user`'),
+      )?.[0];
       expect(payload.status).toBe(200);
+      expect(userTrendSql).toContain("role <> 'visitor'");
       expect(payload.data).toMatchObject({ days: 90, granularity: 'week', activeUsers: 23 });
       expect(payload.data.trend).toHaveLength(13);
       expect(payload.data.trend.at(-1)).toMatchObject({ users: 2, notes: 3, contentTotal: 3 });
@@ -408,11 +507,96 @@ describe('getAdminOverviewRecent 最近新增', () => {
     expect(String(query.mock.calls[4][0])).toContain('LIMIT 20');
     const payload = res.send.mock.calls[0][0];
     expect(payload.status).toBe(200);
+    expect(payload.data.filter).toEqual({ period: 'recent', type: 'all', timezone: 'Asia/Shanghai' });
+    expect(payload.data.limit).toBe(20);
     expect(payload.data.recentResources.map((item) => item.type)).toEqual(['note', 'file', 'bookmark']);
     expect(payload.data.recentResources[2]).toEqual(expect.objectContaining({ userRemark: '客户甲' }));
     expect(payload.data.recentUsers).toEqual([
       expect.objectContaining({ id: 'user-4', name: '新用户', userRemark: '内测用户', role: 'user' }),
     ]);
+  });
+
+  it('今日用户下钻只查询北京时间当天注册用户', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-12T08:30:00+08:00'));
+    try {
+      query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]).mockResolvedValueOnce([
+        [
+          {
+            id: 'user-today',
+            name: '今日用户',
+            role: 'user',
+            createdAt: new Date('2026-08-12T01:00:00Z'),
+          },
+        ],
+      ]);
+      const res = mockRes();
+
+      await getAdminOverviewRecent(
+        {
+          user: { id: 'root-id', role: 'root' },
+          body: { hideInternal: true, period: 'today', type: 'user' },
+        },
+        res,
+      );
+
+      expect(query).toHaveBeenCalledTimes(2);
+      const [userSql, userParams] = query.mock.calls[1];
+      expect(String(userSql)).toContain('recent_user.create_time >= ?');
+      expect(String(userSql)).toContain('recent_user.create_time < DATE_ADD(?, INTERVAL 1 DAY)');
+      expect(userParams).toEqual(['root-id', '2026-08-12', '2026-08-12']);
+      const payload = res.send.mock.calls[0][0];
+      expect(payload.data.filter).toEqual({ period: 'today', type: 'user', timezone: 'Asia/Shanghai' });
+      expect(payload.data.recentResources).toEqual([]);
+      expect(payload.data.recentUsers).toEqual([expect.objectContaining({ id: 'user-today' })]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('指定资源类型时不重复查询其他资源表或用户表', async () => {
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]).mockResolvedValueOnce([
+      [
+        {
+          id: 'note-only',
+          title: '指定笔记',
+          userId: 'user-1',
+          userName: '小青',
+          createdAt: new Date('2026-08-12T02:00:00Z'),
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: { period: 'today', type: 'note' },
+      },
+      res,
+    );
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(String(query.mock.calls[1][0])).toContain('FROM note');
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.data.recentResources).toEqual([expect.objectContaining({ id: 'note-only', type: 'note' })]);
+    expect(payload.data.recentUsers).toEqual([]);
+  });
+
+  it('拒绝未知筛选值，避免把无效条件静默当成全部数据', async () => {
+    query.mockResolvedValueOnce([[{ role: 'root', del_flag: 0 }]]);
+    const res = mockRes();
+
+    await getAdminOverviewRecent(
+      {
+        user: { id: 'root-id', role: 'root' },
+        body: { period: 'today', type: 'todo' },
+      },
+      res,
+    );
+
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 400 }));
+    expect(query).toHaveBeenCalledTimes(1);
   });
 
   it('非 root 用户无权读取且不执行资源查询', async () => {
@@ -864,7 +1048,25 @@ describe('getConversionFunnel', () => {
 });
 
 describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
-  beforeEach(() => query.mockReset());
+  beforeEach(() => {
+    query.mockReset();
+    getConnection.mockReset();
+  });
+
+  function cleanupConnection(affectedRows) {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        if (/DELETE FROM/.test(String(sql))) return [{ affectedRows }];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    getConnection.mockResolvedValue(connection);
+    return connection;
+  }
 
   it('非 root → 403,不执行任何删除', async () => {
     const res = mockRes();
@@ -885,14 +1087,23 @@ describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
   });
 
   it('root + local 模式 → 三表 DELETE,WHERE 为常量、params 为空(不含用户输入)', async () => {
-    query.mockImplementation((sql) => {
-      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
-      if (/DELETE FROM/.test(sql)) return Promise.resolve([{ affectedRows: 2 }]);
-      return Promise.resolve([[]]);
-    });
+    query.mockResolvedValue([{ affectedRows: 1 }]);
+    const connection = cleanupConnection(2);
     const res = mockRes();
-    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: { mode: 'local' } }, res);
-    const deletes = query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    await clearLogsByIp(
+      {
+        user: { id: 'r', role: 'root' },
+        requestId: 'cleanup-local',
+        body: {
+          mode: 'local',
+          reason: '清理本地联调噪声',
+          confirmed: true,
+          confirmText: '确认清理日志',
+        },
+      },
+      res,
+    );
+    const deletes = connection.query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
     expect(deletes).toHaveLength(3);
     deletes.forEach((c) => {
       expect(c[0]).toContain("LOWER(ip)='::1'");
@@ -901,17 +1112,27 @@ describe('clearLogsByIp 按 IP 清理(破坏性边界)', () => {
     const arg = res.send.mock.calls[0][0];
     expect(arg.status).toBe(200);
     expect(arg.data).toMatchObject({ apiLogs: 2, conversionEvents: 2, operationLogs: 2 });
+    expect(arg.data.auditId).toBeTruthy();
+    expect(connection.commit).toHaveBeenCalledOnce();
   });
 
   it('root + exact 模式 → 三表 DELETE 均以 ip=? 参数化绑定该 IP', async () => {
-    query.mockImplementation((sql) => {
-      if (/FROM user/.test(sql)) return Promise.resolve([[{ role: 'root' }]]);
-      if (/DELETE FROM/.test(sql)) return Promise.resolve([{ affectedRows: 1 }]);
-      return Promise.resolve([[]]);
-    });
+    query.mockResolvedValue([{ affectedRows: 1 }]);
+    const connection = cleanupConnection(1);
     const res = mockRes();
-    await clearLogsByIp({ user: { id: 'r', role: 'root' }, body: { ip: '1.2.3.4' } }, res);
-    const deletes = query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
+    await clearLogsByIp(
+      {
+        user: { id: 'r', role: 'root' },
+        body: {
+          ip: '1.2.3.4',
+          reason: '清理指定测试设备',
+          confirmed: true,
+          confirmText: '确认清理日志',
+        },
+      },
+      res,
+    );
+    const deletes = connection.query.mock.calls.filter((c) => /DELETE FROM/.test(c[0]));
     expect(deletes).toHaveLength(3);
     deletes.forEach((c) => {
       expect(c[0]).toContain('ip = ?');
@@ -1169,9 +1390,11 @@ describe('clearImages 服务端校验与失败上报', () => {
     query.mockReset();
     unlinkSpy.mockReset();
     collectUsedSpy.mockReset();
+    deleteThumbnailSpy.mockReset();
     // ensureRootRole 的复核查询
     query.mockResolvedValue([[{ role: 'root', del_flag: 0 }]]);
     collectUsedSpy.mockResolvedValue(new Set());
+    deleteThumbnailSpy.mockResolvedValue(false);
     unlinkSpy.mockResolvedValue();
   });
 
@@ -1193,6 +1416,14 @@ describe('clearImages 服务端校验与失败上报', () => {
     expect(res.status).toHaveBeenCalledWith(500);
     const sent = res.send.mock.calls.at(-1)[0];
     expect(sent.data.failed).toEqual(['a.png', 'b.png']);
+  });
+
+  it('派生缩略图清理失败时仍继续删除原图', async () => {
+    deleteThumbnailSpy.mockRejectedValueOnce(Object.assign(new Error('cache readonly'), { code: 'EACCES' }));
+    const res = mockRes();
+    await clearImages(rootReq([{ fullFileName: 'a.png' }]), res);
+    expect(unlinkSpy).toHaveBeenCalledWith('/www/wwwroot/images/a.png');
+    expect(res.send.mock.calls.at(-1)[0].data.deleted).toEqual(['a.png']);
   });
 
   it('部分失败时 200 但消息如实报告,ENOENT 视为幂等成功', async () => {

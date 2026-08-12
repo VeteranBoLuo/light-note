@@ -59,7 +59,15 @@ describe('管理员操作审计查询', () => {
     );
     expect(res.body).toMatchObject({
       status: 200,
-      data: { total: 1, items: [{ metadata: { source: 'email' } }] },
+      data: {
+        total: 1,
+        items: [{ metadata: { source: 'email' } }],
+        actionCatalog: expect.arrayContaining([
+          expect.objectContaining({ action: 'async_job.retry' }),
+          expect.objectContaining({ action: 'opinion.reply' }),
+          expect.objectContaining({ action: 'security.event.review' }),
+        ]),
+      },
     });
     const [listSql, listParams] = query.mock.calls[0];
     expect(String(listSql)).toContain('a.action = ?');

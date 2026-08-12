@@ -10,6 +10,7 @@ import { buildOperationLogSystem } from '../util/apiLogSystem.js';
 import { getDeepSeekBalance as queryDeepSeekBalance } from '../util/agent/providerBalance.js';
 import { getDeepSeekDailyBalanceChange } from '../util/agent/providerBalanceSnapshot.js';
 import { collectUsedImageNames } from '../util/noteImages.js';
+import { deleteNoteImageThumbnail } from '../util/noteImageThumbnail.js';
 import { resolveKnowledgeSourceTarget } from '../util/agent/sourceUtils.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { processBookmarkIcons, isBookmarkIconCheckRecent } from '../util/bookmarkIconService.js';
@@ -22,6 +23,7 @@ import {
   isAdminCursorRequest,
   normalizeAdminListLimit,
 } from '../util/adminListCursor.js';
+import { adminActionErrorResponse, beginAdminAction, finishAdminAction } from '../util/adminActionExecution.js';
 
 // 记录游客转化事件(前端 CTA 点击等);允许游客调用,白名单事件防滥用
 export const recordConversion = (req, res) => {
@@ -539,19 +541,58 @@ export const getApiLogs = async (req, res) => {
     return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '查询日志失败'));
   }
 };
-export const clearApiLogs = (req, res) => {
-  if (req.user?.role !== 'root') {
-    return res.send(resultData(null, 403, '没有操作权限'));
-  }
-  pool
-    .query('UPDATE api_logs set del_flag=1')
-    .then(() => {
-      res.send(resultData(null));
-    })
-    .catch((err) => {
-      res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
+async function clearSoftLogTable(req, res, { table, targetId }) {
+  let actionContext = null;
+  let connection = null;
+  try {
+    actionContext = await beginAdminAction(req, {
+      action: 'logs.cleanup',
+      targetId,
+      expectedConfirmText: '确认清理日志',
+      metadata: { cleanupMode: 'soft_all', table },
     });
-};
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [result] = await connection.query(`UPDATE ${table} SET del_flag = 1 WHERE del_flag = 0`);
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0) },
+      db: connection,
+    });
+    await connection.commit();
+    return res.send(
+      resultData({
+        updated: Number(result.affectedRows || 0),
+        ...receipt,
+      }),
+    );
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始错误。
+      }
+    }
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {
+        // 原始错误仍用于响应；审计失败已由审计工具记录安全错误码。
+      }
+    }
+    const response = adminActionErrorResponse(error, '日志清理失败');
+    return res.send(resultData({ code: response.code }, response.status, response.message));
+  } finally {
+    connection?.release();
+  }
+}
+
+// POST /common/clearApiLogs —— 后台软清理 API 日志；原因、确认与双阶段审计由服务端强制。
+export const clearApiLogs = (req, res) => clearSoftLogTable(req, res, { table: 'api_logs', targetId: 'api_logs:all' });
 // 用户操作日志
 export const recordOperationLogs = (req, res) => {
   try {
@@ -751,19 +792,9 @@ LIMIT ?${cursorMode ? '' : ' OFFSET ?'};
   }
 };
 
-export const clearOperationLogs = (req, res) => {
-  if (req.user?.role !== 'root') {
-    return res.send(resultData(null, 403, '没有操作权限'));
-  }
-  pool
-    .query('UPDATE operation_logs set del_flag=1')
-    .then(() => {
-      res.send(resultData(null));
-    })
-    .catch((err) => {
-      res.send(resultData(null, 500, '服务器内部错误: ' + err.message));
-    });
-};
+// POST /common/clearOperationLogs —— 后台软清理操作日志。
+export const clearOperationLogs = (req, res) =>
+  clearSoftLogTable(req, res, { table: 'operation_logs', targetId: 'operation_logs:all' });
 
 // ── 按 IP 清理日志(root 专属的后台清理模块用)──────────────────────────
 // 三张带 ip 列的日志表;operation_logs 的 ip 列由 20260702 迁移补齐,历史行 ip 为 NULL
@@ -806,21 +837,55 @@ export const getIpLogStats = async (req, res) => {
 
 // 物理删除某 IP(或本地回环)在各日志表的全部记录(root 专属;转化漏斗表无 del_flag,统一用物理删除)
 export const clearLogsByIp = async (req, res) => {
-  const userId = await ensureRootRole(req, res);
-  if (!userId) return;
+  let actionContext = null;
+  let connection = null;
   try {
     const mode = req.body?.mode === 'local' ? 'local' : 'exact';
     const ip = String(req.body?.ip || '').trim();
     if (mode === 'exact' && !ip) return res.send(resultData(null, 400, '请输入要清理的 IP'));
+    actionContext = await beginAdminAction(req, {
+      action: 'logs.cleanup',
+      targetId: mode === 'local' ? 'local-loopback' : 'exact-ip',
+      expectedConfirmText: '确认清理日志',
+      metadata: { cleanupMode: mode === 'local' ? 'physical_local' : 'physical_exact_ip' },
+    });
     const { where, params } = buildIpLogWhere(mode, ip);
     const deleted = {};
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
     for (const { table, key } of IP_LOG_TABLES) {
-      const [result] = await pool.query(`DELETE FROM ${table} WHERE ${where}`, params);
+      const [result] = await connection.query(`DELETE FROM ${table} WHERE ${where}`, params);
       deleted[key] = result.affectedRows || 0;
     }
-    res.send(resultData(deleted));
-  } catch (e) {
-    res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { deleted },
+      db: connection,
+    });
+    await connection.commit();
+    return res.send(resultData({ ...deleted, ...receipt }));
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始错误。
+      }
+    }
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {
+        // 审计工具已安全记录错误码。
+      }
+    }
+    const response = adminActionErrorResponse(error, '日志清理失败');
+    return res.send(resultData({ code: response.code }, response.status, response.message));
+  } finally {
+    connection?.release();
   }
 };
 
@@ -1023,6 +1088,9 @@ export const clearImages = async (req, res) => {
         continue;
       }
       try {
+        await deleteNoteImageThumbnail(`https://boluo66.top/uploads/${fullFileName}`).catch((error) => {
+          console.warn('[image-cleanup] thumbnail delete failed code=%s', stableAgentErrorCode(error));
+        });
         await fsP.unlink(path.join(directoryPath, fullFileName));
         deleted.push(fullFileName);
       } catch (error) {
@@ -1257,11 +1325,88 @@ export const getAgentLogsSummary = async (req, res) => {
 
 const ADMIN_TREND_PERIODS = new Set([7, 15, 30, 90]);
 const ADMIN_RECENT_LIMIT = 20;
+const ADMIN_RECENT_PERIODS = new Set(['recent', 'today']);
+const ADMIN_RECENT_TYPES = new Set(['all', 'resource', 'user', 'bookmark', 'note', 'file']);
+const ADMIN_TODAY_BASELINE_DAYS = 7;
 
 function adminOverviewDateHelpers(now = new Date()) {
-  const pad = (value) => String(value).padStart(2, '0');
-  const formatDate = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-  return { pad, formatDate };
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const partsOf = (date) => Object.fromEntries(formatter.formatToParts(date).map((part) => [part.type, part.value]));
+  const formatDate = (date) => {
+    const parts = partsOf(date);
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  };
+  const formatDateTime = (date = now) => {
+    const parts = partsOf(date);
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+  };
+  const formatTime = (date = now) => {
+    const parts = partsOf(date);
+    return `${parts.hour}:${parts.minute}:${parts.second}`;
+  };
+  return { formatDate, formatDateTime, formatTime };
+}
+
+function buildAdminTodayBaseline(rows, dates, cutoffTime) {
+  if (!Array.isArray(rows)) {
+    return {
+      available: false,
+      timezone: 'Asia/Shanghai',
+      mode: 'same_elapsed_time',
+      cutoffTime: cutoffTime.slice(0, 5),
+      sampleDays: dates.length,
+      metrics: {},
+    };
+  }
+
+  const daily = new Map(dates.map((date) => [date, { users: 0, bookmarks: 0, notes: 0, files: 0, todos: 0 }]));
+  rows.forEach((row) => {
+    const bucket = daily.get(String(row.d || ''));
+    const kind = String(row.kind || '');
+    if (bucket && Object.hasOwn(bucket, kind)) bucket[kind] = Number(row.c || 0);
+  });
+
+  const metric = (kind) => {
+    const values = dates.map((date) => Number(daily.get(date)?.[kind] || 0));
+    const sum = values.reduce((total, value) => total + value, 0);
+    return {
+      yesterday: values[values.length - 1] || 0,
+      average7d: values.length ? Number((sum / values.length).toFixed(1)) : 0,
+    };
+  };
+  const resourcesByDate = dates.map((date) => {
+    const bucket = daily.get(date);
+    return Number(bucket?.bookmarks || 0) + Number(bucket?.notes || 0) + Number(bucket?.files || 0);
+  });
+  const resourceSum = resourcesByDate.reduce((total, value) => total + value, 0);
+
+  return {
+    available: true,
+    timezone: 'Asia/Shanghai',
+    mode: 'same_elapsed_time',
+    cutoffTime: cutoffTime.slice(0, 5),
+    sampleDays: dates.length,
+    metrics: {
+      users: metric('users'),
+      resources: {
+        yesterday: resourcesByDate[resourcesByDate.length - 1] || 0,
+        average7d: resourcesByDate.length ? Number((resourceSum / resourcesByDate.length).toFixed(1)) : 0,
+      },
+      bookmarks: metric('bookmarks'),
+      notes: metric('notes'),
+      files: metric('files'),
+      todos: metric('todos'),
+    },
+  };
 }
 
 function buildAdminOverviewScope(hideInternal) {
@@ -1307,15 +1452,13 @@ async function queryAdminOverviewTrend({ days, hideInternal, now = new Date() })
   const scope = buildAdminOverviewScope(hideInternal);
   const dates = [];
   for (let offset = days - 1; offset >= 0; offset -= 1) {
-    const date = new Date(now);
-    date.setHours(0, 0, 0, 0);
-    date.setDate(date.getDate() - offset);
+    const date = new Date(now.getTime() - offset * 24 * 60 * 60 * 1000);
     dates.push(formatDate(date));
   }
   const startDate = dates[0];
   const [userTrendRows, contentTrendRows, activeRows] = await Promise.all([
     pool.query(
-      "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
+      "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?" +
         scope.notIntRole +
         ' GROUP BY d',
       [startDate],
@@ -1408,64 +1551,90 @@ function recentTimestamp(value) {
 export const getAdminOverviewRecent = async (req, res) => {
   const rootUserId = await ensureRootRole(req, res);
   if (!rootUserId) return;
+  const period = req.body?.period == null ? 'recent' : String(req.body.period).trim();
+  const type = req.body?.type == null ? 'all' : String(req.body.type).trim();
+  if (!ADMIN_RECENT_PERIODS.has(period)) return res.send(resultData(null, 400, '最近新增时间范围不受支持'));
+  if (!ADMIN_RECENT_TYPES.has(type)) return res.send(resultData(null, 400, '最近新增类型不受支持'));
   try {
     const hideInternal = req.body?.hideInternal !== false;
     const scope = buildAdminOverviewScope(hideInternal);
+    const today = adminOverviewDateHelpers().formatDate(new Date());
+    const dateFilter = (column) =>
+      period === 'today'
+        ? {
+            sql: ` AND ${column} >= ? AND ${column} < DATE_ADD(?, INTERVAL 1 DAY)`,
+            params: [today, today],
+          }
+        : { sql: '', params: [] };
+    const include = (target) =>
+      type === 'all' || type === target || (type === 'resource' && ['bookmark', 'note', 'file'].includes(target));
     const resourceOwnerRole = hideInternal
       ? ` AND resource_owner.role NOT IN (${INTERNAL_ROLES.map((role) => `'${role}'`).join(', ')})`
       : '';
+    const bookmarkDate = dateFilter('bookmark.create_time');
+    const noteDate = dateFilter('note.create_time');
+    const fileDate = dateFilter('files.create_time');
+    const userDate = dateFilter('recent_user.create_time');
     const [bookmarkRows, noteRows, fileRows, userRows] = await Promise.all([
-      pool.query(
-        `SELECT bookmark.id, bookmark.name AS title, bookmark.create_time AS createdAt,
+      include('bookmark')
+        ? pool.query(
+            `SELECT bookmark.id, bookmark.name AS title, bookmark.create_time AS createdAt,
                 resource_owner.id AS userId, resource_owner.alias AS userName,
                 COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM bookmark
          JOIN \`user\` resource_owner ON resource_owner.id = bookmark.user_id AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE bookmark.del_flag = 0${resourceOwnerRole}${scope.notOnboardingBookmark}
+         WHERE bookmark.del_flag = 0${bookmarkDate.sql}${resourceOwnerRole}${scope.notOnboardingBookmark}
          ORDER BY bookmark.create_time DESC, bookmark.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
-        [rootUserId],
-      ),
-      pool.query(
-        `SELECT note.id, note.title, note.create_time AS createdAt,
+            [rootUserId, ...bookmarkDate.params],
+          )
+        : Promise.resolve([[]]),
+      include('note')
+        ? pool.query(
+            `SELECT note.id, note.title, note.create_time AS createdAt,
                 resource_owner.id AS userId, resource_owner.alias AS userName,
                 COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM note
          JOIN \`user\` resource_owner ON resource_owner.id = note.create_by AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE note.del_flag = 0${resourceOwnerRole}${scope.notOnboardingNote}
+         WHERE note.del_flag = 0${noteDate.sql}${resourceOwnerRole}${scope.notOnboardingNote}
          ORDER BY note.create_time DESC, note.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
-        [rootUserId],
-      ),
-      pool.query(
-        `SELECT files.id, files.file_name AS title, files.create_time AS createdAt,
+            [rootUserId, ...noteDate.params],
+          )
+        : Promise.resolve([[]]),
+      include('file')
+        ? pool.query(
+            `SELECT files.id, files.file_name AS title, files.create_time AS createdAt,
                 resource_owner.id AS userId, resource_owner.alias AS userName,
                 COALESCE(owner_remark.remark_name, '') AS userRemark
          FROM files
          JOIN \`user\` resource_owner ON resource_owner.id = files.create_by AND resource_owner.del_flag = 0
          LEFT JOIN admin_user_remarks owner_remark
            ON owner_remark.admin_user_id = ? AND owner_remark.target_user_id = resource_owner.id
-         WHERE files.del_flag = 0${resourceOwnerRole}${scope.notOnboardingFile}
+         WHERE files.del_flag = 0${fileDate.sql}${resourceOwnerRole}${scope.notOnboardingFile}
          ORDER BY files.create_time DESC, files.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
-        [rootUserId],
-      ),
-      pool.query(
-        `SELECT recent_user.id, recent_user.alias AS name, recent_user.role,
+            [rootUserId, ...fileDate.params],
+          )
+        : Promise.resolve([[]]),
+      include('user')
+        ? pool.query(
+            `SELECT recent_user.id, recent_user.alias AS name, recent_user.role,
                 recent_user.create_time AS createdAt,
                 COALESCE(user_remark.remark_name, '') AS userRemark
          FROM \`user\` recent_user
          LEFT JOIN admin_user_remarks user_remark
            ON user_remark.admin_user_id = ? AND user_remark.target_user_id = recent_user.id
-         WHERE recent_user.del_flag = 0 AND recent_user.role <> 'visitor'${scope.notIntRole}
+         WHERE recent_user.del_flag = 0 AND recent_user.role <> 'visitor'${userDate.sql}${scope.notIntRole}
          ORDER BY recent_user.create_time DESC, recent_user.id DESC
          LIMIT ${ADMIN_RECENT_LIMIT}`,
-        [rootUserId],
-      ),
+            [rootUserId, ...userDate.params],
+          )
+        : Promise.resolve([[]]),
     ]);
 
     const withType = (rows, type) => (rows[0] || []).map((row) => ({ ...row, type }));
@@ -1484,6 +1653,8 @@ export const getAdminOverviewRecent = async (req, res) => {
       resultData({
         recentResources,
         recentUsers: userRows[0] || [],
+        filter: { period, type, timezone: 'Asia/Shanghai' },
+        limit: ADMIN_RECENT_LIMIT,
       }),
     );
   } catch (error) {
@@ -1530,16 +1701,19 @@ export const getAdminOverview = async (req, res) => {
         AND osr.resource_id = CAST(files.id AS CHAR)
     )`;
 
-    // 用 Node 本地时间算今日与近7天序列(与 getAgentLogsSummary 一致,避免 MySQL 时区差异)
+    // 业务看板统一按 Asia/Shanghai 自然日切分，不依赖部署机器或 MySQL 会话时区。
     const now = new Date();
-    const pad = (nn) => String(nn).padStart(2, '0');
-    const dstr = (dt) => `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-    const today = dstr(now);
+    const { formatDate, formatDateTime, formatTime } = adminOverviewDateHelpers(now);
+    const today = formatDate(now);
+    const baselineDates = [];
+    for (let i = ADMIN_TODAY_BASELINE_DAYS; i >= 1; i--) {
+      baselineDates.push(formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
+    }
+    const baselineStart = baselineDates[0];
+    const baselineCutoffTime = formatTime(now);
     const days = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      days.push(dstr(d));
+      days.push(formatDate(new Date(now.getTime() - i * 24 * 60 * 60 * 1000)));
     }
     const weekAgo = days[0];
 
@@ -1568,9 +1742,10 @@ export const getAdminOverview = async (req, res) => {
       sysAgg,
       userTrendRows,
       contentTrendRows,
+      sameTimeBaselineRows,
     ] = await Promise.all([
       pool.query(
-        'SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0' +
+        "SELECT COUNT(*) AS total, COALESCE(SUM(create_time >= ?), 0) AS today FROM `user` WHERE del_flag = 0 AND role <> 'visitor'" +
           notIntRole,
         [today],
       ),
@@ -1640,7 +1815,7 @@ export const getAdminOverview = async (req, res) => {
       // 近7天新增用户按天
       pool
         .query(
-          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND create_time >= ?" +
+          "SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, COUNT(*) AS c FROM `user` WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ?" +
             notIntRole +
             ' GROUP BY d',
           [weekAgo],
@@ -1658,6 +1833,59 @@ export const getAdminOverview = async (req, res) => {
           [weekAgo, weekAgo, weekAgo],
         )
         .catch(() => [[]]),
+      // 今日卡片只补“截至当前时刻”的同期基线；一次 UNION 聚合覆盖全部指标，避免每张卡重复查询。
+      // create_time 先走日期范围，再用 TIME 截取相同日内时刻，防止拿今日半天数据对比历史完整自然日。
+      pool
+        .query(
+          `SELECT d, kind, SUM(c) AS c FROM (
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'users' AS kind, COUNT(*) AS c
+             FROM \`user\`
+             WHERE del_flag = 0 AND role <> 'visitor' AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntRole}
+             GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'bookmarks' AS kind, COUNT(*) AS c
+             FROM bookmark
+             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${activeBookmarkOwner}${notIntUser}${notOnboardingBookmark}
+             GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'notes' AS kind, COUNT(*) AS c
+             FROM note
+             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntCreateBy}${notOnboardingNote}
+             GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'files' AS kind, COUNT(*) AS c
+             FROM files
+             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntCreateBy}${notOnboardingFile}
+             GROUP BY d
+             UNION ALL
+             SELECT DATE_FORMAT(create_time, '%Y-%m-%d') AS d, 'todos' AS kind, COUNT(*) AS c
+             FROM todo_items
+             WHERE del_flag = 0 AND create_time >= ? AND create_time < ? AND TIME(create_time) <= ?${notIntUser}
+             GROUP BY d
+           ) same_time_baseline
+           GROUP BY d, kind`,
+          [
+            baselineStart,
+            today,
+            baselineCutoffTime,
+            baselineStart,
+            today,
+            baselineCutoffTime,
+            baselineStart,
+            today,
+            baselineCutoffTime,
+            baselineStart,
+            today,
+            baselineCutoffTime,
+            baselineStart,
+            today,
+            baselineCutoffTime,
+          ],
+        )
+        .catch((error) => {
+          console.error('[AdminOverview] 同期基线统计失败(忽略) code=%s', stableAgentErrorCode(error));
+          return [null];
+        }),
     ]);
 
     // AI 用量单独兜底(agent_logs 若某环境未建表,不拖垮整个看板)。
@@ -1753,12 +1981,13 @@ export const getAdminOverview = async (req, res) => {
         },
         trend,
         trendPeriod: { days: 7, granularity: 'day' },
-        generatedAt: `${today} ${pad(now.getHours())}:${pad(now.getMinutes())}`,
+        todayBaseline: buildAdminTodayBaseline(sameTimeBaselineRows?.[0], baselineDates, baselineCutoffTime),
+        generatedAt: formatDateTime(now),
       }),
     );
-  } catch (e) {
-    console.error('获取后台总览失败:', e.message);
-    res.send(resultData(null, 500, '获取后台总览失败: ' + e.message));
+  } catch (error) {
+    console.error('[AdminOverview] 查询失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '获取后台总览失败'));
   }
 };
 

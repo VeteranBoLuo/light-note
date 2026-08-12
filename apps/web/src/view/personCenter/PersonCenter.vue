@@ -144,7 +144,7 @@
         v-if="equippedFrameId"
         :frame-id="equippedFrameId"
         :src="user.headPicture || icon.navigation.user"
-        :size="30"
+        :size="32"
       />
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>

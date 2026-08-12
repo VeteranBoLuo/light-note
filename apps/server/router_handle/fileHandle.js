@@ -14,6 +14,7 @@ import { ensureNotVisitor } from '../util/auth.js';
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { ensureOwnedCloudFolder } from '../util/services/cloudFolderService.js';
 
 export const getFileInfo = async (req, res) => {
   try {
@@ -190,6 +191,21 @@ export const addFolder = async (req, res) => {
     res.send(resultData(null, 500, '服务器内部错误: ' + e.message));
   } finally {
     connection.release();
+  }
+};
+
+export const ensureFolder = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const folder = await ensureOwnedCloudFolder({ userId: req.user?.id, name: req.body?.name });
+    return res.send(resultData(folder));
+  } catch (error) {
+    const status = Number(error?.status || 500);
+    const message = status >= 500 ? '服务器暂时无法创建文件夹，请稍后重试' : String(error?.message || '文件夹名称无效');
+    if (status >= 500) console.error('[file] ensure folder failed code=%s', stableAgentErrorCode(error));
+    return res.send(
+      resultData({ code: error?.code || 'FOLDER_ENSURE_FAILED' }, status, message.replace(/^[A-Z_]+:\s*/u, '')),
+    );
   }
 };
 

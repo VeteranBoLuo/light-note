@@ -6,12 +6,22 @@ const MAX_LIST_SNAPSHOTS = 8;
 export const NOTE_LIBRARY_LIST_FRESH_MS = 30_000;
 export const NOTE_LIBRARY_TAGS_FRESH_MS = 5 * 60_000;
 export const NOTE_LIBRARY_FEATURES_FRESH_MS = 5 * 60_000;
+export const NOTE_LIBRARY_RETURN_SCROLL_TTL_MS = 12 * 60 * 60_000;
 
 export interface NoteLibraryListSnapshot {
   items: any[];
   total: number;
   page: number;
   hasMore: boolean;
+  updatedAt: number;
+}
+
+export interface NoteLibraryReturnScrollSnapshot {
+  top: number;
+  left: number;
+  viewMode: string;
+  routeFullPath: string;
+  loadedPage: number;
   updatedAt: number;
 }
 
@@ -54,6 +64,7 @@ export function buildNoteLibraryListCacheKey(scope: string, query: NoteLibraryCa
 
 export default defineStore('noteLibraryCache', () => {
   const listSnapshots = ref<Record<string, NoteLibraryListSnapshot>>({});
+  const returnScrollSnapshots = ref<Record<string, NoteLibraryReturnScrollSnapshot>>({});
   const listAccessOrder = ref<string[]>([]);
   const tagsByScope = ref<Record<string, NoteLibraryTagSnapshot>>({});
   const featuresByScope = ref<Record<string, NoteLibraryFeatureSnapshot>>({});
@@ -62,7 +73,10 @@ export default defineStore('noteLibraryCache', () => {
     listAccessOrder.value = [...listAccessOrder.value.filter((item) => item !== key), key];
     while (listAccessOrder.value.length > MAX_LIST_SNAPSHOTS) {
       const oldest = listAccessOrder.value.shift();
-      if (oldest) delete listSnapshots.value[oldest];
+      if (oldest) {
+        delete listSnapshots.value[oldest];
+        delete returnScrollSnapshots.value[oldest];
+      }
     }
   }
 
@@ -86,6 +100,35 @@ export default defineStore('noteLibraryCache', () => {
       },
     };
     touchListKey(key);
+  }
+
+  function readReturnScroll(key: string) {
+    const snapshot = returnScrollSnapshots.value[key];
+    if (!snapshot) return null;
+    if (Date.now() - snapshot.updatedAt > NOTE_LIBRARY_RETURN_SCROLL_TTL_MS) {
+      delete returnScrollSnapshots.value[key];
+      return null;
+    }
+    touchListKey(key);
+    return { ...snapshot };
+  }
+
+  function writeReturnScroll(key: string, snapshot: Omit<NoteLibraryReturnScrollSnapshot, 'updatedAt'>) {
+    returnScrollSnapshots.value = {
+      ...returnScrollSnapshots.value,
+      [key]: {
+        ...snapshot,
+        top: Math.max(0, Number(snapshot.top) || 0),
+        left: Math.max(0, Number(snapshot.left) || 0),
+        loadedPage: Math.max(1, Number(snapshot.loadedPage) || 1),
+        updatedAt: Date.now(),
+      },
+    };
+    touchListKey(key);
+  }
+
+  function clearReturnScroll(key: string) {
+    delete returnScrollSnapshots.value[key];
   }
 
   function markListsStale(scope: string) {
@@ -138,6 +181,7 @@ export default defineStore('noteLibraryCache', () => {
 
   function reset() {
     listSnapshots.value = {};
+    returnScrollSnapshots.value = {};
     listAccessOrder.value = [];
     tagsByScope.value = {};
     featuresByScope.value = {};
@@ -146,6 +190,9 @@ export default defineStore('noteLibraryCache', () => {
   return {
     readList,
     writeList,
+    readReturnScroll,
+    writeReturnScroll,
+    clearReturnScroll,
     markListsStale,
     readTags,
     writeTags,

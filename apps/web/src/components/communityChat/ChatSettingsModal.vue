@@ -2,37 +2,35 @@
   <BModal
     v-model:visible="visible"
     :title="t('communityChat.settings.title')"
-    width="min(560px, 92vw)"
+    width="min(640px, 92vw)"
     :show-footer="false"
   >
     <div class="chat-settings-modal">
       <CommunityChatNotificationSettingsPanel compact @saved="emit('notificationSaved', $event)" />
 
-      <section class="chat-settings-modal__management chat-settings-modal__management--profile">
-        <div>
-          <strong>{{ t('communityChat.settings.ownProfileTitle') }}</strong>
-          <span>{{ t('communityChat.settings.ownProfileDescription') }}</span>
-        </div>
-        <BButton @click="openOwnProfile">
-          <SvgIcon :src="icon.userCenter.growth" size="16" aria-hidden="true" />
-          {{ t('communityChat.settings.ownProfileAction') }}
+      <section class="chat-settings-modal__management" :aria-label="t('communityChat.settings.managementTitle')">
+        <BButton class="chat-settings-modal__action" @click="openOwnProfile">
+          <span class="chat-settings-modal__action-icon is-profile" aria-hidden="true">
+            <SvgIcon :src="icon.userCenter.growth" size="17" />
+          </span>
+          <span class="chat-settings-modal__action-copy">
+            <strong>{{ t('communityChat.settings.ownProfileTitle') }}</strong>
+            <span>{{ t('communityChat.settings.ownProfileDescription') }}</span>
+          </span>
+          <SvgIcon class="chat-settings-modal__chevron" :src="icon.arrow_right" size="15" aria-hidden="true" />
+        </BButton>
+
+        <BButton class="chat-settings-modal__action" @click="openBlockedUsers">
+          <span class="chat-settings-modal__action-icon" aria-hidden="true">
+            <SvgIcon :src="icon.navigation.permissions" size="17" />
+          </span>
+          <span class="chat-settings-modal__action-copy">
+            <strong>{{ t('communityChat.settings.blockedUsersTitle') }}</strong>
+            <span>{{ t('communityChat.settings.blockedUsersDescription') }}</span>
+          </span>
+          <SvgIcon class="chat-settings-modal__chevron" :src="icon.arrow_right" size="15" aria-hidden="true" />
         </BButton>
       </section>
-
-      <section class="chat-settings-modal__management">
-        <div>
-          <strong>{{ t('communityChat.settings.blockedUsersTitle') }}</strong>
-          <span>{{ t('communityChat.settings.blockedUsersDescription') }}</span>
-        </div>
-        <BButton @click="openBlockedUsers">
-          <SvgIcon :src="icon.navigation.permissions" size="16" aria-hidden="true" />
-          {{ t('communityChat.settings.blockedUsersAction') }}
-        </BButton>
-      </section>
-
-      <div class="chat-settings-modal__footer">
-        <BButton @click="visible = false">{{ t('common.close') }}</BButton>
-      </div>
     </div>
   </BModal>
 </template>
@@ -76,61 +74,134 @@
 <style scoped lang="less">
   .chat-settings-modal {
     display: grid;
-    gap: 18px;
+    gap: 12px;
   }
 
   .chat-settings-modal__management {
     min-width: 0;
-    padding: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    border: 1px solid var(--surface-border-color);
-    border-radius: 13px;
-    background: var(--workspace-panel-bg-color);
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
   }
 
-  .chat-settings-modal__management--profile {
-    border-color: var(--primary-color);
-  }
-
-  .chat-settings-modal__management > div {
+  .chat-settings-modal__action.b_btn {
+    width: 100%;
+    height: auto;
     min-width: 0;
+    min-height: 70px;
+    padding: 11px 12px;
+    justify-content: flex-start;
+    gap: 10px;
+    border: 1px solid var(--surface-border-color) !important;
+    border-radius: 14px;
+    color: var(--text-color);
+    background: var(--workspace-panel-bg-color);
+    line-height: normal;
+    text-align: left;
+    white-space: normal;
+    transition:
+      border-color 0.18s ease,
+      background 0.18s ease;
+  }
+
+  .chat-settings-modal__action.b_btn:hover {
+    border-color: var(--primary-color) !important;
+    background: var(--mobile-selected-bg, var(--card-background));
+  }
+
+  .chat-settings-modal__action-icon {
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 10px;
+    color: var(--desc-color);
+    background: var(--card-background);
+  }
+
+  .chat-settings-modal__action-icon.is-profile {
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    background: var(--mobile-selected-bg, var(--card-background));
+  }
+
+  .chat-settings-modal__action-copy {
+    min-width: 0;
+    flex: 1;
     display: grid;
     gap: 3px;
   }
 
-  .chat-settings-modal__management strong {
+  .chat-settings-modal__action-copy strong {
+    overflow: hidden;
     color: var(--text-color);
     font-size: 12px;
+    line-height: 1.35;
+    text-overflow: ellipsis;
   }
 
-  .chat-settings-modal__management span {
+  .chat-settings-modal__action-copy > span {
+    display: -webkit-box;
+    overflow: hidden;
     color: var(--desc-color);
-    font-size: 10px;
-    line-height: 1.5;
+    font-size: 9px;
+    line-height: 1.45;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
-  .chat-settings-modal__management .b_btn {
+  .chat-settings-modal__chevron {
     flex: 0 0 auto;
-    gap: 5px;
-  }
-
-  .chat-settings-modal__footer {
-    display: flex;
-    justify-content: flex-end;
+    color: var(--desc-color);
   }
 
   @media (max-width: 520px) {
-    .chat-settings-modal__management {
-      align-items: stretch;
-      flex-direction: column;
+    .chat-settings-modal {
+      gap: 9px;
     }
 
-    .chat-settings-modal__management .b_btn,
-    .chat-settings-modal__footer .b_btn {
-      min-height: 44px;
+    .chat-settings-modal__management {
+      gap: 8px;
+    }
+
+    .chat-settings-modal__action.b_btn {
+      min-height: 58px;
+      padding: 9px;
+      gap: 8px;
+      border-radius: 12px;
+    }
+
+    .chat-settings-modal__action-icon {
+      width: 30px;
+      height: 30px;
+      flex-basis: 30px;
+      border-radius: 9px;
+    }
+
+    .chat-settings-modal__action-copy {
+      gap: 0;
+    }
+
+    .chat-settings-modal__action-copy strong {
+      font-size: 11px;
+    }
+
+    .chat-settings-modal__action-copy > span {
+      display: none;
+    }
+
+    .chat-settings-modal__chevron {
+      width: 12px;
+      height: 12px;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chat-settings-modal__action.b_btn {
+      transition: none;
     }
   }
 </style>

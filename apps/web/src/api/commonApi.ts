@@ -50,7 +50,16 @@ export const getNoticeSummary = async function () {
   return apiBaseGet('/api/common/noticeSummary', undefined, { silent: true, feedback: false });
 };
 
-export const getAdminActionCenter = async function (params: { limit?: number; source?: string } = {}) {
+export const getAdminActionCenter = async function (
+  params: {
+    limit?: number;
+    section?: 'all' | 'work' | 'jobs';
+    source?: string;
+    status?: 'all' | 'pending' | 'waiting' | 'running' | 'attention';
+    slaState?: 'all' | 'overdue' | 'due_soon' | 'within_sla' | 'unavailable';
+    keyword?: string;
+  } = {},
+) {
   return apiBasePost('/api/common/getAdminActionCenter', params, { silent: true });
 };
 

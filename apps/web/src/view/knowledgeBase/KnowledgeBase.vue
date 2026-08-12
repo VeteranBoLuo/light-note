@@ -10,12 +10,15 @@
       <!-- Left panel -->
       <div class="kb-left">
         <div class="kb-left-top">
-          <b-input v-model:value="searchKeyword" clearable :placeholder="t('knowledgeBase.searchPlaceholder')" class="kb-search-input" @input="onSearchInput">
+          <BInput v-model:value="searchKeyword" clearable :placeholder="t('knowledgeBase.searchPlaceholder')" class="kb-search-input" @input="onSearchInput">
             <template #prefix>
               <svg-icon :src="icon.navigation.search" size="16" />
             </template>
-          </b-input>
-          <b-button type="primary" @click="startCreate">+ 新建</b-button>
+          </BInput>
+          <BButton type="primary" @click="startCreate">
+            <SvgIcon :src="icon.common.plus" size="15" aria-hidden="true" />
+            新建
+          </BButton>
         </div>
 
         <div class="kb-filters">
@@ -32,7 +35,7 @@
                 <div class="kb-list-item-info">
                   <div class="kb-list-item-title">{{ item.title }}</div>
                   <div class="kb-list-item-meta">
-                    <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
+                    <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '公开' : '内部' }}</span>
                     <span class="kb-category-label">{{ item.category }}</span>
                   </div>
                 </div>
@@ -59,15 +62,18 @@
           <div class="kb-search-results">
             <div class="kb-search-results-header">
               <span class="kb-search-results-count">{{ t('knowledgeBase.searchResults', { count: searchResults.length }) }}</span>
-              <BButton size="small" class="kb-search-clear" @click="clearSearch">✕ {{ t('knowledgeBase.clearSearch') }}</BButton>
+              <BButton size="small" class="kb-search-clear" @click="clearSearch">
+                <SvgIcon :src="icon.navigation.close" size="14" aria-hidden="true" />
+                {{ t('knowledgeBase.clearSearch') }}
+              </BButton>
             </div>
             <div v-if="searchResults.length === 0" class="kb-search-empty">{{ t('knowledgeBase.searchEmpty') }}</div>
             <div v-for="item in searchResults" :key="item.id" class="kb-search-card" @click="selectSearchResult(item)">
-              <div class="kb-search-card-icon">📄</div>
+              <div class="kb-search-card-icon"><SvgIcon :src="icon.help_document" size="20" aria-hidden="true" /></div>
               <div class="kb-search-card-body">
                 <div class="kb-search-card-title" v-html="highlightText(item.title, searchKeyword)"></div>
                 <div class="kb-search-card-meta">
-                  <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '● 公开' : '🔒 内部' }}</span>
+                  <span class="kb-badge" :class="'kb-badge--' + item.status">{{ item.status === 'public' ? '公开' : '内部' }}</span>
                   <span class="kb-category-label">{{ item.category }}</span>
                 </div>
                 <div class="kb-search-card-snippet" v-html="getSearchSnippet(item, searchKeyword)"></div>
@@ -78,21 +84,30 @@
         <!-- 编辑器 -->
         <template v-else>
           <div v-if="returnToSearch" class="kb-return-bar">
-            <BButton size="small" class="kb-return-btn" @click="goBackToSearch">← {{ t('knowledgeBase.backToResults') }}</BButton>
+            <BButton size="small" class="kb-return-btn" @click="goBackToSearch">
+              <SvgIcon :src="icon.arrow_left" size="14" aria-hidden="true" />
+              {{ t('knowledgeBase.backToResults') }}
+            </BButton>
           </div>
           <div v-if="currentItem" class="kb-editor">
             <div class="kb-editor-top">
-              <b-input v-model:value="editTitle" placeholder="标题" class="kb-title-input" />
+              <BInput v-model:value="editTitle" placeholder="标题" class="kb-title-input" />
               <div class="kb-editor-meta">
-                <label class="kb-meta-label">分类：<b-input v-model:value="editCategory" placeholder="输入分类名称" class="kb-category-input" /></label>
+                <label class="kb-meta-label">分类：<BInput v-model:value="editCategory" placeholder="输入分类名称" class="kb-category-input" /></label>
                 <label class="kb-meta-label">状态：<BSelect v-model:value="editStatus" :options="statusOptions" class="kb-meta-select" /></label>
                 <label class="kb-meta-label">类型：<BSelect v-model:value="editType" :options="typeOptions" class="kb-meta-select" /></label>
               </div>
             </div>
             <Editor v-model:content="editContent" v-model:type="editType" class="kb-editor-area" />
             <div class="kb-editor-actions">
-              <b-button type="primary" @click="saveItem" :loading="saving">💾 保存</b-button>
-              <b-button type="danger" @click="deleteItem">🗑 删除</b-button>
+              <BButton type="primary" @click="saveItem" :loading="saving">
+                <SvgIcon :src="icon.noteDetail.saveLine" size="15" aria-hidden="true" />
+                保存
+              </BButton>
+              <BButton type="danger" @click="deleteItem">
+                <SvgIcon :src="icon.noteDetail.deleteLine" size="15" aria-hidden="true" />
+                归档
+              </BButton>
               <span class="kb-editor-time" v-if="currentItem.updated_at">更新于 {{ currentItem.updated_at }}</span>
             </div>
           </div>
@@ -106,6 +121,15 @@
     <BModal v-model:visible="showBatchCategory" title="修改分类" width="360px" @ok="confirmBatchCategory">
       <BSelect v-model:value="batchCategoryValue" :options="categoryOptions" class="kb-batch-category-select" />
     </BModal>
+    <AdminRiskActionModal
+      v-model:visible="riskVisible"
+      :title="riskConfig.title"
+      :impact="riskConfig.impact"
+      :confirm-phrase="riskConfig.phrase"
+      :confirm-label="riskConfig.label"
+      :loading="saving"
+      @confirm="confirmRiskAction"
+    />
   </div>
 </template>
 
@@ -120,9 +144,9 @@ import BSelect from '@/components/base/BasicComponents/BSelect.vue';
 import BButton from '@/components/base/BasicComponents/BButton.vue';
 import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
 import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
 import Editor from '@/components/noteLibrary/detail/Editor.vue';
 import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
 import { apiBasePost } from '@/http/request';
 
 const { t } = useI18n();
@@ -149,6 +173,11 @@ const savedSearchKeyword = ref('');
 const showBatchCategory = ref(false);
 const batchCategoryValue = ref('帮助中心');
 const saving = ref(false);
+type KnowledgeRiskKind = 'save' | 'archive' | 'batchStatus' | 'batchCategory' | 'batchArchive';
+type RiskPayload = { reason: string; confirmed: true; confirmText: string };
+const riskVisible = ref(false);
+const riskKind = ref<KnowledgeRiskKind>('save');
+const pendingBatchStatus = ref<'public' | 'internal'>('internal');
 
 const categories = ref<string[]>(['帮助中心']);
 let unavailableArticleId = '';
@@ -180,8 +209,8 @@ async function loadCategories() {
   }
 }
 const statusOptions = computed(() => [
-  { value: 'public', label: '● 公开' },
-  { value: 'internal', label: '🔒 内部' },
+  { value: 'public', label: '公开' },
+  { value: 'internal', label: '内部' },
 ]);
 const typeOptions = computed(() => [
   { value: 'html', label: 'HTML' },
@@ -189,6 +218,50 @@ const typeOptions = computed(() => [
 ]);
 const categoryFilterOptions = computed(() => [{ value: '', label: '全部分类' }, ...categoryOptions.value]);
 const statusFilterOptions = computed(() => [{ value: '', label: '全部状态' }, ...statusOptions.value]);
+const riskConfig = computed(() => {
+  if (riskKind.value === 'archive') {
+    return {
+      title: '归档知识条目',
+      impact: `将“${editTitle.value || currentId.value}”转为内部状态并从知识库工作台归档。内容与审计证据会保留。`,
+      phrase: '确认归档知识',
+      label: '确认归档',
+    };
+  }
+  if (riskKind.value === 'batchArchive') {
+    return {
+      title: '批量归档知识',
+      impact: `将 ${selectedIds.value.length} 条知识转为内部状态并归档，内容与审计证据会保留。`,
+      phrase: '确认归档知识',
+      label: '确认归档',
+    };
+  }
+  if (riskKind.value === 'batchStatus') {
+    const publishing = pendingBatchStatus.value === 'public';
+    return {
+      title: publishing ? '批量发布知识' : '批量转为内部知识',
+      impact: `将 ${selectedIds.value.length} 条知识调整为“${publishing ? '公开' : '内部'}”。公开内容会进入帮助与 AI 检索范围。`,
+      phrase: publishing ? '确认发布知识' : '',
+      label: publishing ? '确认发布' : '确认调整',
+    };
+  }
+  if (riskKind.value === 'batchCategory') {
+    return {
+      title: '批量修改知识分类',
+      impact: `将 ${selectedIds.value.length} 条知识移动到“${batchCategoryValue.value}”分类。`,
+      phrase: '',
+      label: '确认修改',
+    };
+  }
+  const publishing = editStatus.value === 'public' && (!currentId.value || currentItem.value?.status !== 'public');
+  return {
+    title: publishing ? '发布知识条目' : currentId.value ? '保存知识条目' : '创建知识条目',
+    impact: publishing
+      ? `“${editTitle.value}”将进入公开帮助与 AI 检索范围，请确认内容不含内部信息。`
+      : `将保存“${editTitle.value}”的内容、分类、状态与类型变更。`,
+    phrase: publishing ? '确认发布知识' : '',
+    label: publishing ? '确认发布' : '确认保存',
+  };
+});
 
 // Load list
 async function loadList() {
@@ -280,23 +353,29 @@ function startCreate() {
 }
 
 // Save
-async function saveItem() {
+function saveItem() {
   if (!editTitle.value?.trim()) {
     message.warning('标题不能为空');
     return;
   }
+  riskKind.value = 'save';
+  riskVisible.value = true;
+}
+
+async function executeSave(action: RiskPayload) {
   saving.value = true;
   try {
     if (currentId.value) {
-      await apiBasePost('/api/knowledgeBase/update', {
+      const res = await apiBasePost('/api/knowledgeBase/update', {
         id: currentId.value,
         title: editTitle.value.trim(),
         content: editContent.value,
         category: editCategory.value,
         status: editStatus.value,
         type: editType.value,
+        ...action,
       });
-      message.success('保存成功');
+      message.success(`保存成功 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
     } else {
       const res = await apiBasePost('/api/knowledgeBase/create', {
         title: editTitle.value.trim(),
@@ -304,14 +383,16 @@ async function saveItem() {
         category: editCategory.value,
         status: editStatus.value,
         type: editType.value,
+        ...action,
       });
       if (res.status === 200 && res.data?.id) {
         currentId.value = res.data.id;
         syncArticleRoute(String(res.data.id), true);
-        message.success('创建成功');
+        message.success(`创建成功 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
       }
     }
     await loadList();
+    riskVisible.value = false;
   } finally {
     saving.value = false;
   }
@@ -320,20 +401,8 @@ async function saveItem() {
 // Delete
 function deleteItem() {
   if (!currentId.value) return;
-  Alert.alert({
-    title: '确认删除',
-    content: `确定删除「${editTitle.value}」吗？`,
-    async onOk() {
-      const deletedId = currentId.value;
-      await apiBasePost('/api/knowledgeBase/delete', { id: deletedId });
-      message.success('已删除');
-      listItems.value = listItems.value.filter((item) => String(item.id) !== deletedId);
-      currentId.value = '';
-      currentItem.value = null;
-      syncArticleRoute('', true);
-      await loadList();
-    },
-  });
+  riskKind.value = 'archive';
+  riskVisible.value = true;
 }
 
 // Search
@@ -381,17 +450,6 @@ function getSearchSnippet(item: any, keyword: string): string {
 
 /** 点击搜索结果 → 加载文章，保留搜索状态以便返回 */
 async function selectSearchResult(result: any) {
-  // Auto save current editing item
-  if (currentId.value && editTitle.value?.trim()) {
-    apiBasePost('/api/knowledgeBase/update', {
-      id: currentId.value,
-      title: editTitle.value.trim(),
-      content: editContent.value,
-      category: editCategory.value,
-      status: editStatus.value,
-      type: editType.value,
-    }).catch(() => {});
-  }
   savedSearchKeyword.value = searchKeyword.value;
   returnToSearch.value = true;
   // 直接加载，不经过 selectItem（selectItem 会清空搜索）
@@ -414,51 +472,87 @@ function toggleSelect(id: string) {
 }
 
 // Batch operations
-async function batchSetStatus(status: string) {
-  await apiBasePost('/api/knowledgeBase/batchUpdateStatus', { ids: selectedIds.value, status });
-  message.success(`已更新 ${selectedIds.value.length} 条状态`);
-  selectedIds.value = [];
-  await loadList();
+function batchSetStatus(status: string) {
+  pendingBatchStatus.value = status === 'public' ? 'public' : 'internal';
+  riskKind.value = 'batchStatus';
+  riskVisible.value = true;
 }
 
 function confirmBatchCategory() {
-  apiBasePost('/api/knowledgeBase/batchUpdateCategory', {
-    ids: selectedIds.value,
-    category: batchCategoryValue.value,
-  }).then(() => {
-    message.success(`已更新 ${selectedIds.value.length} 条分类`);
-    selectedIds.value = [];
-    showBatchCategory.value = false;
-    loadList();
-  });
+  showBatchCategory.value = false;
+  riskKind.value = 'batchCategory';
+  riskVisible.value = true;
 }
 
 async function batchDelete() {
-  Alert.alert({
-    title: '确认批量删除',
-    content: `确定删除 ${selectedIds.value.length} 条知识吗？`,
-    async onOk() {
-      const deletedIds = [...selectedIds.value];
-      await apiBasePost('/api/knowledgeBase/batchDelete', { ids: deletedIds });
-      message.success(`已删除 ${deletedIds.length} 条`);
-      listItems.value = listItems.value.filter((item) => !deletedIds.includes(String(item.id)));
-      if (deletedIds.includes(currentId.value)) {
+  riskKind.value = 'batchArchive';
+  riskVisible.value = true;
+}
+
+async function confirmRiskAction(action: RiskPayload) {
+  if (riskKind.value === 'save') {
+    await executeSave(action);
+    return;
+  }
+  saving.value = true;
+  try {
+    if (riskKind.value === 'archive') {
+      const archivedId = currentId.value;
+      const res = await apiBasePost('/api/knowledgeBase/delete', { id: archivedId, ...action });
+      message.success(`已归档 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
+      listItems.value = listItems.value.filter((item) => String(item.id) !== archivedId);
+      currentId.value = '';
+      currentItem.value = null;
+      syncArticleRoute('', true);
+    } else if (riskKind.value === 'batchStatus') {
+      const count = selectedIds.value.length;
+      const res = await apiBasePost('/api/knowledgeBase/batchUpdateStatus', {
+        ids: [...selectedIds.value],
+        status: pendingBatchStatus.value,
+        ...action,
+      });
+      message.success(`已更新 ${count} 条状态 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
+      selectedIds.value = [];
+    } else if (riskKind.value === 'batchCategory') {
+      const count = selectedIds.value.length;
+      const res = await apiBasePost('/api/knowledgeBase/batchUpdateCategory', {
+        ids: [...selectedIds.value],
+        category: batchCategoryValue.value,
+        ...action,
+      });
+      message.success(`已更新 ${count} 条分类 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
+      selectedIds.value = [];
+    } else {
+      const archivedIds = [...selectedIds.value];
+      const res = await apiBasePost('/api/knowledgeBase/batchDelete', { ids: archivedIds, ...action });
+      message.success(`已归档 ${archivedIds.length} 条 · 审计 ${String(res.data?.auditId || '').slice(0, 8)}`);
+      listItems.value = listItems.value.filter((item) => !archivedIds.includes(String(item.id)));
+      if (archivedIds.includes(currentId.value)) {
         currentId.value = '';
         currentItem.value = null;
         syncArticleRoute('', true);
       }
       selectedIds.value = [];
-      await loadList();
-    },
-  });
+    }
+    riskVisible.value = false;
+    await loadList();
+  } finally {
+    saving.value = false;
+  }
 }
 
 // Highlight
 function highlightText(text: string, keyword: string): string {
-  if (!keyword?.trim() || !text) return text || '';
+  const escapedText = String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+  if (!keyword?.trim() || !escapedText) return escapedText;
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`(${escaped})`, 'gi');
-  return text.replace(regex, '<mark class="kb-highlight">$1</mark>');
+  return escapedText.replace(regex, '<mark class="kb-highlight">$1</mark>');
 }
 
 onMounted(() => {

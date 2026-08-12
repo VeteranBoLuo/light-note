@@ -89,7 +89,13 @@
       class="section-switcher"
     />
 
-    <section class="inbox-toolbar" :class="{ 'inbox-toolbar--todo-primary': isMobileTodoPrimary }">
+    <section
+      class="inbox-toolbar"
+      :class="{
+        'inbox-toolbar--todo-primary': isMobileTodoPrimary,
+        'inbox-toolbar--todo-desktop': isTodoFocused && !isMobileTodoPrimary,
+      }"
+    >
       <template v-if="isTodoFocused">
         <template v-if="isMobileTodoPrimary">
           <!-- 移动端待办不放第二个文本搜索框：查找待办统一走顶栏全局搜索，
@@ -110,32 +116,22 @@
         </template>
         <template v-else>
           <div class="inbox-toolbar__todo-tabs">
-            <div v-if="todoView === 'list' || todoView === 'matrix'" class="inbox-toolbar__todo-group">
-              <span class="inbox-toolbar__todo-group-label">{{ t('inbox.todoStatusGroupLabel') }}</span>
-              <BTabs
-                v-model:active-tab="todo.status"
-                class="inbox-toolbar__todo-status"
-                :options="todoStatusTabOptions"
-                variant="segment"
-                :aria-label="t('inbox.todoStatusGroupLabel')"
-                @change="changeTodoStatus"
-              />
-            </div>
-            <span
+            <BTabs
               v-if="todoView === 'list' || todoView === 'matrix'"
-              class="inbox-toolbar__todo-divider"
-              aria-hidden="true"
-            ></span>
-            <div class="inbox-toolbar__todo-group inbox-toolbar__todo-group--views">
-              <span class="inbox-toolbar__todo-group-label">{{ t('inbox.todoViewGroupLabel') }}</span>
-              <BTabs
-                v-model:active-tab="todoView"
-                class="inbox-toolbar__todo-views"
-                :options="todoViewOptions"
-                variant="line"
-                :aria-label="t('inbox.todoViewGroupLabel')"
-              />
-            </div>
+              v-model:active-tab="todo.status"
+              class="inbox-toolbar__todo-status"
+              :options="todoStatusTabOptions"
+              variant="pill"
+              :aria-label="t('inbox.todoStatusGroupLabel')"
+              @change="changeTodoStatus"
+            />
+            <BTabs
+              v-model:active-tab="todoView"
+              class="inbox-toolbar__todo-views"
+              :options="todoViewOptions"
+              variant="line"
+              :aria-label="t('inbox.todoViewGroupLabel')"
+            />
           </div>
           <div class="inbox-toolbar__right inbox-toolbar__right--todo">
             <BInput
@@ -1655,6 +1651,12 @@
     min-width: 0;
     flex: 1;
   }
+  .inbox-toolbar--todo-desktop {
+    min-height: 42px;
+    padding: 3px 0;
+    border-radius: 0;
+    background: transparent;
+  }
   .inbox-toolbar__right {
     display: grid;
     grid-template-columns: minmax(180px, 280px) 130px;
@@ -1668,50 +1670,35 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 18px;
-  }
-  .inbox-toolbar__todo-group {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-  }
-  .inbox-toolbar__todo-group--views {
-    flex: 0 1 auto;
-  }
-  .inbox-toolbar__todo-group-label {
-    flex: 0 0 auto;
-    color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 650;
-    line-height: 1;
-    letter-spacing: 0.04em;
-  }
-  .inbox-toolbar__todo-divider {
-    width: 1px;
-    height: 26px;
-    flex: 0 0 auto;
-    background: var(--surface-divider-color);
+    gap: clamp(22px, 2vw, 32px);
   }
   .inbox-toolbar__todo-status {
-    flex: 0 1 auto;
-    border-radius: 10px;
-    background: var(--card-background);
+    flex: 0 0 auto;
+    gap: 2px;
+    margin: 0;
+    padding: 3px;
+    border: 0;
+    border-radius: 11px;
+    background: var(--workspace-panel-bg-color, var(--background-color));
   }
   .inbox-toolbar__todo-status :deep(.tab) {
-    min-height: 34px;
+    min-height: 32px;
     padding: 0 12px;
-    line-height: 34px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    line-height: 32px;
   }
   .inbox-toolbar__todo-status :deep(.tab.is-active) {
+    border-color: var(--todo-accent-color);
     color: var(--todo-accent-color);
     background: var(--card-background);
-    box-shadow: inset 0 -2px 0 var(--todo-accent-color);
+    box-shadow: none;
+    font-weight: 700;
   }
   .inbox-toolbar__todo-views {
     min-width: 0;
     flex: 0 1 auto;
-    gap: 18px;
+    gap: 16px;
     margin: 0;
     padding: 0 0 4px;
     border-bottom: 0;

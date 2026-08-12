@@ -156,7 +156,6 @@
             >
           </div>
           <div class="security-review-actions">
-            <BButton size="small" @click="markFalsePositive(event)">{{ t('securityV2.review.falsePositive') }}</BButton>
             <BButton
               size="small"
               @click="router.push({ name: 'securityCenterReview', query: { eventId: event.representativeEventId } })"
@@ -177,7 +176,6 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
-  import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import { apiBasePost } from '@/http/request';
   import { securityCenterMessages } from './securityCenterI18n';
 
@@ -362,16 +360,6 @@
       emit('pendingCount', number(nextOverview.summary?.pendingReview));
     } finally {
       loading.value = false;
-    }
-  }
-  async function markFalsePositive(event: any) {
-    const res = await apiBasePost(
-      `/api/security/v2/clusters/${encodeURIComponent(event.representativeEventId)}/disposition`,
-      { disposition: 'false_positive', reason: t('securityV2.review.reviewReason') },
-    ).catch(() => null);
-    if (res?.status === 200) {
-      message.success(t('securityV2.review.success'));
-      loadOverview();
     }
   }
   onMounted(loadOverview);

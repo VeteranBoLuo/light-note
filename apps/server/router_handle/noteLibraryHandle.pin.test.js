@@ -13,6 +13,15 @@ const ensureNotVisitor = vi.fn(() => true);
 const attachPendingStatus = vi.fn();
 const removeInboxRelations = vi.fn();
 const invalidatePersonalKnowledgeCache = vi.fn();
+const { extractNoteCardPreviewImage, noteImageThumbnailPathname } = vi.hoisted(() => ({
+  extractNoteCardPreviewImage: vi.fn((content) =>
+    String(content || '').includes('note-cover.png') ? 'https://boluo66.top/uploads/note-cover.png' : '',
+  ),
+  noteImageThumbnailPathname: vi.fn(
+    () =>
+      '/api/note/image-thumbnail/26e586d299cb38d4ba6d01f174aeba00d28a8ec2fd612a1816cad20acbed227f.webp?source=https%3A%2F%2Fboluo66.top%2Fuploads%2Fnote-cover.png',
+  ),
+}));
 
 vi.mock('../db/index.js', () => ({ default: { getConnection, query: poolQuery } }));
 vi.mock('../util/common.js', () => ({
@@ -39,6 +48,14 @@ vi.mock('../util/noteImages.js', () => ({
   extractNoteImageUrls: vi.fn(() => []),
   filterOwnedImageUrls: vi.fn(),
 }));
+vi.mock('../util/noteCardPreview.js', () => ({ extractNoteCardPreviewImage }));
+vi.mock('../util/noteImageThumbnail.js', () => ({
+  ensureNoteImageThumbnail: vi.fn(),
+  getExistingNoteImageThumbnailPath: vi.fn(),
+  noteImageThumbnailPathname,
+  resolveOwnedNoteThumbnailSource: vi.fn(),
+}));
+vi.mock('../util/noteImageUpload.js', () => ({ validateNoteImageUpload: vi.fn() }));
 vi.mock('../util/personalKnowledgeSearch.js', () => ({ invalidatePersonalKnowledgeCache }));
 
 const {
@@ -84,6 +101,32 @@ describe('笔记置顶 handler', () => {
     expect(lastSent(res).status).toBe(200);
   });
 
+  it('分页列表只为正文开头的本站图片返回独立缩略图地址', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'n-cover',
+            type: 'html',
+            content: '<p>开场</p><img src="https://boluo66.top/uploads/note-cover.png">',
+            tags: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48 } }, res);
+
+    expect(lastSent(res).data.items[0].previewImageUrl).toMatch(
+      /^\/api\/note\/image-thumbnail\/[a-f0-9]{64}\.webp\?source=/,
+    );
+    expect(decodeURIComponent(lastSent(res).data.items[0].previewImageUrl.split('source=')[1])).toBe(
+      'https://boluo66.top/uploads/note-cover.png',
+    );
+    expect(poolQuery).toHaveBeenCalledTimes(2);
+  });
+
   it('笔记详情一次返回正文、能力快照和面包屑', async () => {
     vi.stubEnv('NOTE_TREE_READ_ENABLED', 'true');
     poolQuery
@@ -104,26 +147,10 @@ describe('笔记置顶 handler', () => {
       .mockResolvedValueOnce([
         [
           {
-            id: 'parent',
-            parent_id: null,
-            title: '父页面',
-            type: 'html',
-            revision: 1,
-            sort: 0,
-            is_top: 0,
-            del_flag: 0,
-            update_time: '2026-08-10T10:00:00.000Z',
-          },
-          {
-            id: 'note-1',
-            parent_id: 'parent',
-            title: '当前页面',
-            type: 'html',
-            revision: 1,
-            sort: 0,
-            is_top: 0,
-            del_flag: 0,
-            update_time: '2026-08-10T10:01:00.000Z',
+            breadcrumb_0_id: 'note-1',
+            breadcrumb_0_title: '当前页面',
+            breadcrumb_1_id: 'parent',
+            breadcrumb_1_title: '父页面',
           },
         ],
       ]);
@@ -132,6 +159,9 @@ describe('笔记置顶 handler', () => {
     await getNoteDetail({ user: { id: 'u1', role: 'user' }, body: { id: 'note-1' } }, res);
 
     expect(poolQuery).toHaveBeenCalledTimes(2);
+    expect(poolQuery.mock.calls[1][0]).toContain('LEFT JOIN note breadcrumb_node_1');
+    expect(poolQuery.mock.calls[1][0]).not.toContain('ORDER BY');
+    expect(poolQuery.mock.calls[1][1]).toEqual(['note-1', 'u1']);
     expect(lastSent(res)).toMatchObject({
       status: 200,
       data: {

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref, type Ref } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const shellSource = readFileSync(resolve(process.cwd(), 'src/components/mobile/MobileAppShell.vue'), 'utf8');
 
 const mocks = vi.hoisted(() => ({
   route: { name: 'communityChat', fullPath: '/community-chat' },
@@ -34,6 +38,11 @@ class MockVisualViewport extends EventTarget {
   height = 800;
   width = 390;
   offsetTop = 0;
+}
+
+async function flushViewportFrame() {
+  await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+  await nextTick();
 }
 
 let cleanup: (() => void) | undefined;
@@ -85,29 +94,53 @@ afterEach(() => {
 });
 
 describe('MobileAppShell 软键盘可视高度', () => {
-  it('输入控件聚焦且可视视口缩小时收起底栏，并把壳体限制到键盘上方', async () => {
+  it('对弱网下延迟挂载的资料页滚动容器执行有界重试，并让旧路由恢复请求失效', () => {
+    expect(shellSource).toContain('SCROLL_RESTORE_RETRY_DELAYS = [80, 240, 640, 1280]');
+    expect(shellSource).toContain('requestId !== scrollRestoreRequestId');
+    expect(shellSource).toMatch(/restoreResourceScroll\(path\)[\s\S]*?window\.setTimeout/u);
+  });
+
+  it('输入控件聚焦后从键盘抬升初段逐帧限制壳体，并平滑隐藏仍保持挂载的底栏', async () => {
     const { host } = mountShell();
     const textarea = host.querySelector<HTMLTextAreaElement>('.composer-stub');
     const shell = host.querySelector<HTMLElement>('.mobile-app-shell');
     expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
 
     textarea?.focus();
-    viewport.height = 480;
+    viewport.height = 770;
     viewport.dispatchEvent(new Event('resize'));
-    await nextTick();
+    await flushViewportFrame();
 
     expect(shell?.classList.contains('is-keyboard-open')).toBe(true);
+    expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('770px');
+    expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
+    const bottomNavWrapper = host.querySelector<HTMLElement>('.mobile-app-shell__bottom-nav');
+    expect(bottomNavWrapper?.classList.contains('is-hidden')).toBe(false);
+    expect(Number.parseFloat(shell?.style.getPropertyValue('--mobile-bottom-nav-visible-height') || '0')).toBeLessThan(
+      56,
+    );
+
+    viewport.height = 480;
+    viewport.dispatchEvent(new Event('resize'));
+    await flushViewportFrame();
     expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('480px');
-    expect(host.querySelector('.bottom-nav-stub')).toBeNull();
+    expect(bottomNavWrapper?.classList.contains('is-hidden')).toBe(true);
 
     textarea?.blur();
+    viewport.height = 620;
+    viewport.dispatchEvent(new Event('resize'));
+    await flushViewportFrame();
+    expect(shell?.classList.contains('is-keyboard-open')).toBe(true);
+    expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('620px');
+
     viewport.height = 800;
     viewport.dispatchEvent(new Event('resize'));
-    await nextTick();
+    await flushViewportFrame();
 
     expect(shell?.classList.contains('is-keyboard-open')).toBe(false);
     expect(shell?.style.getPropertyValue('--mobile-visible-viewport-height')).toBe('');
     expect(host.querySelector('.bottom-nav-stub')).not.toBeNull();
+    expect(host.querySelector('.mobile-app-shell__bottom-nav')?.classList.contains('is-hidden')).toBe(false);
   });
 
   it('路由卸下并重新启用壳体时清空上一页残留的键盘视口', async () => {
@@ -118,7 +151,7 @@ describe('MobileAppShell 软键盘可视高度', () => {
     textarea?.focus();
     viewport.height = 480;
     viewport.dispatchEvent(new Event('resize'));
-    await nextTick();
+    await flushViewportFrame();
     expect(host.querySelector('.mobile-app-shell')?.classList.contains('is-keyboard-open')).toBe(true);
 
     enabled.value = false;

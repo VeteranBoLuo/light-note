@@ -27,7 +27,7 @@
         <span class="rl-perk">
           {{ fmtMb(r.spaceMb) }} · {{ fmtToken(r.aiTokenDaily) }} ·
           {{ r.trashDays >= 3650 ? t('growth.trashForever') : t('growth.trashDays', { days: r.trashDays })
-          }}<span v-if="r.freeDraws" class="rl-free">· 🎟️{{ r.freeDraws }}</span>
+          }}<span v-if="r.freeDraws" class="rl-free">· <SvgIcon :src="icon.growth.reward" size="12" />{{ r.freeDraws }}</span>
         </span>
       </div>
     </div>
@@ -40,6 +40,8 @@
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { tierOf, TIER_GRADIENTS } from '@/config/growthTier';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon.ts';
 
   const { t } = useI18n();
   const { growth, ranks, load, loadRanks } = useGrowth();
@@ -183,6 +185,9 @@
     white-space: nowrap;
   }
   .rl-free {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     color: #d97706;
     font-weight: 600;
     margin-left: 2px;

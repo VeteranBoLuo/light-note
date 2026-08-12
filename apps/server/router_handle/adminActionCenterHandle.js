@@ -2,6 +2,12 @@ import pool from '../db/index.js';
 import { resultData } from '../util/common.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { recordAdminOperationAudit } from '../util/adminOperationAudit.js';
+import {
+  ADMIN_WORK_ITEM_POLICY_VERSION,
+  enrichAdminWorkItems,
+  getAdminWorkItemPolicy,
+  summarizeAdminWorkItems,
+} from '../util/adminWorkItemPolicy.js';
 
 const DEFAULT_ITEM_LIMIT = 20;
 const MAX_ITEM_LIMIT = 60;
@@ -10,12 +16,19 @@ const ACTION_CENTER_SOURCES = new Set([
   'security',
   'community_report',
   'ai_feedback',
+  'feature_request',
+  'resource_governance',
   'ai_document',
   'bookmark_icon',
   'todo_reminder',
   'account_deletion',
   'email_delivery',
+  'file_preview',
+  'resource_cleanup',
 ]);
+const ACTION_CENTER_SECTIONS = new Set(['all', 'work', 'jobs']);
+const ACTION_CENTER_STATUSES = new Set(['all', 'pending', 'waiting', 'running', 'attention']);
+const ACTION_CENTER_SLA_STATES = new Set(['all', 'overdue', 'due_soon', 'within_sla', 'unavailable']);
 
 function itemLimit(value) {
   return Math.min(Math.max(Number(value) || DEFAULT_ITEM_LIMIT, 5), MAX_ITEM_LIMIT);
@@ -24,6 +37,16 @@ function itemLimit(value) {
 function itemSource(value) {
   const source = String(value || 'all').trim();
   return source === 'all' || !source ? 'all' : ACTION_CENTER_SOURCES.has(source) ? source : null;
+}
+
+function enumFilter(value, allowed) {
+  const normalized = String(value || 'all').trim();
+  return allowed.has(normalized) ? normalized : null;
+}
+
+function itemKeyword(value) {
+  const keyword = String(value || '').trim();
+  return keyword.length <= 120 ? keyword : null;
 }
 
 function number(value) {
@@ -57,24 +80,32 @@ function newestFirst(left, right) {
 
 async function optionalSource(source, loader) {
   try {
-    return { source, data: await loader(), available: true };
+    return { source, data: await loader(), available: true, checkedAt: new Date().toISOString() };
   } catch (error) {
     console.warn('[admin-action-center] source=%s unavailable code=%s', source, stableAgentErrorCode(error));
-    return { source, data: null, available: false };
+    return { source, data: null, available: false, checkedAt: new Date().toISOString() };
   }
 }
 
 function workResult(source, label, count, critical, items) {
+  const enrichedItems = enrichAdminWorkItems(items);
+  const sla = summarizeAdminWorkItems(enrichedItems);
   return {
     source,
     label,
     count: number(count),
     critical: number(critical),
-    items,
+    ownerTeam: getAdminWorkItemPolicy(source)?.ownerTeam || null,
+    returned: enrichedItems.length,
+    sampled: number(count) > enrichedItems.length,
+    ...sla,
+    items: enrichedItems,
   };
 }
 
 function jobResult(source, label, summary, items) {
+  const enrichedItems = enrichAdminWorkItems(items);
+  const sla = summarizeAdminWorkItems(enrichedItems);
   return {
     source,
     label,
@@ -83,8 +114,31 @@ function jobResult(source, label, summary, items) {
     running: number(summary.running),
     waiting: number(summary.waiting),
     completed24h: number(summary.completed_24h),
-    items,
+    ownerTeam: getAdminWorkItemPolicy(source)?.ownerTeam || null,
+    returned: enrichedItems.length,
+    sampled: number(summary.attention) + number(summary.running) + number(summary.waiting) > enrichedItems.length,
+    ...sla,
+    items: enrichedItems,
   };
+}
+
+function itemMatchesFilters(item, { status, slaState, keyword }) {
+  if (status !== 'all' && item.status !== status) return false;
+  if (slaState !== 'all' && item.slaState !== slaState) return false;
+  if (!keyword) return true;
+  const search = keyword.toLocaleLowerCase();
+  return [item.id, item.title, item.ownerLabel, item.ownerTeam, item.errorCode, item.rawStatus, item.relatedId]
+    .filter(Boolean)
+    .some((value) => String(value).toLocaleLowerCase().includes(search));
+}
+
+function operationalPriorityFirst(left, right) {
+  const priority = { overdue: 0, due_soon: 1, within_sla: 2, unavailable: 3 };
+  const slaDelta = (priority[left.slaState] ?? 4) - (priority[right.slaState] ?? 4);
+  if (slaDelta !== 0) return slaDelta;
+  if (left.severity === 'critical' && right.severity !== 'critical') return -1;
+  if (right.severity === 'critical' && left.severity !== 'critical') return 1;
+  return newestFirst(left, right);
 }
 
 async function loadOpinionWork(limit) {
@@ -156,7 +210,7 @@ async function loadSecurityWork(limit) {
       score: number(row.threat_score),
       createdAt: row.created_at,
       updatedAt: row.created_at,
-      targetUrl: `/securityCenter/events?eventId=${encodeURIComponent(row.event_id)}`,
+      targetUrl: `/securityCenter/review?eventId=${encodeURIComponent(row.event_id)}`,
     })),
   );
 }
@@ -245,6 +299,86 @@ async function loadAiFeedbackWork(limit) {
       createdAt: row.create_time,
       updatedAt: row.update_time,
       targetUrl: `/admin/aiFeedback?feedbackId=${encodeURIComponent(row.id)}`,
+    })),
+  );
+}
+
+async function loadFeatureRequestWork(limit) {
+  const [[summaryRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(vote_count >= 20), 0) AS critical
+         FROM feature_requests
+        WHERE del_flag = 0 AND moderation_status = 'pending_review'`,
+    ),
+    pool.query(
+      `SELECT fr.id, fr.title, fr.category, fr.submitter_user_id, fr.vote_count,
+              fr.create_time, fr.update_time, u.alias
+         FROM feature_requests fr
+         LEFT JOIN user u ON u.id = fr.submitter_user_id
+        WHERE fr.del_flag = 0 AND fr.moderation_status = 'pending_review'
+        ORDER BY (fr.vote_count >= 20) DESC, fr.vote_count DESC, fr.create_time ASC, fr.id ASC
+        LIMIT ?`,
+      [limit],
+    ),
+  ]);
+  return workResult(
+    'feature_request',
+    '共建审核',
+    summaryRows[0]?.total,
+    summaryRows[0]?.critical,
+    rows.map((row) => ({
+      id: String(row.id),
+      source: 'feature_request',
+      status: 'pending',
+      severity: number(row.vote_count) >= 20 ? 'critical' : number(row.vote_count) >= 5 ? 'high' : 'normal',
+      title: row.title || row.category || '共建建议',
+      ownerLabel: row.alias || row.submitter_user_id || '',
+      userId: row.submitter_user_id || null,
+      score: number(row.vote_count),
+      createdAt: row.create_time,
+      updatedAt: row.update_time,
+      targetUrl: `/co-build?admin=1&requestId=${encodeURIComponent(row.id)}`,
+    })),
+  );
+}
+
+async function loadResourceGovernanceWork(limit) {
+  const [[summaryRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(risk_level = 'blocked'), 0) AS critical
+         FROM resource_governance_findings
+        WHERE state = 'open' AND risk_level IN ('review', 'blocked')`,
+    ),
+    pool.query(
+      `SELECT id, issue_code, resource_type, risk_level, estimated_bytes,
+              observation_count, first_seen_at, last_seen_at
+         FROM resource_governance_findings
+        WHERE state = 'open' AND risk_level IN ('review', 'blocked')
+        ORDER BY (risk_level = 'blocked') DESC, first_seen_at ASC, id ASC
+        LIMIT ?`,
+      [limit],
+    ),
+  ]);
+  return workResult(
+    'resource_governance',
+    '资源复核',
+    summaryRows[0]?.total,
+    summaryRows[0]?.critical,
+    rows.map((row) => ({
+      id: String(row.id),
+      source: 'resource_governance',
+      status: 'pending',
+      severity: row.risk_level === 'blocked' ? 'critical' : 'high',
+      title: row.issue_code || '资源治理发现',
+      ownerLabel: row.resource_type || '',
+      userId: null,
+      score: number(row.observation_count),
+      estimatedBytes: number(row.estimated_bytes),
+      createdAt: row.first_seen_at,
+      updatedAt: row.last_seen_at,
+      targetUrl: `/admin/resourceGovernance?findingId=${encodeURIComponent(row.id)}`,
     })),
   );
 }
@@ -688,48 +822,205 @@ async function loadEmailDeliveryJobs(limit) {
   );
 }
 
+async function loadFilePreviewJobs(limit) {
+  const [[summaryRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(status = 'failed' OR (status = 'processing' AND locked_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS attention,
+              COALESCE(SUM(status = 'processing' AND (locked_at IS NULL OR locked_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE))), 0) AS running,
+              COALESCE(SUM(status = 'queued'), 0) AS waiting,
+              COALESCE(SUM(status = 'completed' AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
+         FROM file_preview_jobs
+        WHERE status IN ('queued', 'processing', 'failed')
+           OR (status = 'completed' AND update_time >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
+    ),
+    pool.query(
+      `SELECT j.id, j.status, j.attempts, j.available_at, j.locked_at, j.error_code,
+              j.create_time, j.update_time, a.file_id, a.format_id, a.owner_user_id,
+              f.file_name, u.alias
+         FROM file_preview_jobs j
+         JOIN file_preview_artifacts a ON a.id = j.artifact_id
+         LEFT JOIN files f ON f.id = a.file_id
+         LEFT JOIN user u ON u.id = a.owner_user_id
+        WHERE j.status IN ('queued', 'processing', 'failed')
+        ORDER BY (j.status = 'failed') DESC, j.update_time DESC, j.id DESC
+        LIMIT ?`,
+      [limit],
+    ),
+  ]);
+  return jobResult(
+    'file_preview',
+    '文件预览',
+    summaryRows[0] || {},
+    rows.map((row) => {
+      const stale =
+        row.status === 'processing' && row.locked_at && Date.now() - new Date(row.locked_at).getTime() > 10 * 60_000;
+      return {
+        id: String(row.id),
+        source: 'file_preview',
+        rawStatus: row.status,
+        status: row.status === 'failed' || stale ? 'attention' : row.status === 'processing' ? 'running' : 'waiting',
+        title: row.file_name || `${row.format_id || '文件'} ${row.file_id}`,
+        ownerLabel: row.alias || row.owner_user_id || '',
+        userId: row.owner_user_id || null,
+        relatedId: row.file_id ? String(row.file_id) : null,
+        attempts: number(row.attempts),
+        scheduledAt: row.available_at,
+        createdAt: row.create_time,
+        updatedAt: row.update_time,
+        errorCode: row.error_code || null,
+        canRetry: false,
+        targetUrl: '/admin/apiLog?keyword=file_preview',
+      };
+    }),
+  );
+}
+
+async function loadResourceCleanupJobs(limit) {
+  const [[summaryRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total,
+              COALESCE(SUM(status = 'completed_with_errors' OR (status = 'running' AND lease_expires_at < NOW())), 0) AS attention,
+              COALESCE(SUM(status = 'running' AND (lease_expires_at IS NULL OR lease_expires_at >= NOW())), 0) AS running,
+              COALESCE(SUM(status = 'pending'), 0) AS waiting,
+              COALESCE(SUM(status IN ('completed', 'completed_with_errors') AND finished_at >= DATE_SUB(NOW(), INTERVAL 1 DAY)), 0) AS completed_24h
+         FROM resource_cleanup_jobs
+        WHERE status IN ('pending', 'running', 'completed_with_errors')
+           OR (status = 'completed' AND finished_at >= DATE_SUB(NOW(), INTERVAL 1 DAY))`,
+    ),
+    pool.query(
+      `SELECT id, risk_level, status, total, succeeded, skipped, failed,
+              lease_expires_at, last_error_code, create_time, update_time
+         FROM resource_cleanup_jobs
+        WHERE status IN ('pending', 'running', 'completed_with_errors')
+        ORDER BY (status = 'completed_with_errors') DESC,
+                 (status = 'running' AND lease_expires_at < NOW()) DESC,
+                 update_time DESC, id DESC
+        LIMIT ?`,
+      [limit],
+    ),
+  ]);
+  return jobResult(
+    'resource_cleanup',
+    '资源清理',
+    summaryRows[0] || {},
+    rows.map((row) => {
+      const stale =
+        row.status === 'running' && row.lease_expires_at && new Date(row.lease_expires_at).getTime() < Date.now();
+      return {
+        id: String(row.id),
+        source: 'resource_cleanup',
+        rawStatus: row.status,
+        status:
+          row.status === 'completed_with_errors' || stale
+            ? 'attention'
+            : row.status === 'running'
+              ? 'running'
+              : 'waiting',
+        title: `资源清理 ${String(row.id).slice(0, 8)}`,
+        ownerLabel: `${number(row.succeeded)}/${number(row.total)} 已完成`,
+        userId: null,
+        attempts: number(row.failed),
+        createdAt: row.create_time,
+        updatedAt: row.update_time,
+        errorCode: row.last_error_code || (number(row.failed) > 0 ? 'CLEANUP_ITEMS_FAILED' : null),
+        canRetry: false,
+        targetUrl: `/admin/resourceGovernance?jobId=${encodeURIComponent(row.id)}`,
+      };
+    }),
+  );
+}
+
+const ACTION_CENTER_LOADERS = Object.freeze({
+  opinion: loadOpinionWork,
+  security: loadSecurityWork,
+  community_report: loadCommunityReportWork,
+  ai_feedback: loadAiFeedbackWork,
+  feature_request: loadFeatureRequestWork,
+  resource_governance: loadResourceGovernanceWork,
+  ai_document: loadAiDocumentJobs,
+  bookmark_icon: loadBookmarkIconJobs,
+  todo_reminder: loadTodoReminderJobs,
+  account_deletion: loadAccountDeletionJobs,
+  email_delivery: loadEmailDeliveryJobs,
+  file_preview: loadFilePreviewJobs,
+  resource_cleanup: loadResourceCleanupJobs,
+});
+
+function selectedSourceLoaders({ section, source }) {
+  return Object.entries(ACTION_CENTER_LOADERS).filter(([sourceKey]) => {
+    if (source !== 'all' && source !== sourceKey) return false;
+    const policySection = getAdminWorkItemPolicy(sourceKey)?.section;
+    return section === 'all' || section === policySection;
+  });
+}
+
 export async function getAdminActionCenter(req, res) {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅管理员可查看'));
   const limit = itemLimit(req.body?.limit);
   const source = itemSource(req.body?.source);
+  const section = enumFilter(req.body?.section, ACTION_CENTER_SECTIONS);
+  const status = enumFilter(req.body?.status, ACTION_CENTER_STATUSES);
+  const slaState = enumFilter(req.body?.slaState, ACTION_CENTER_SLA_STATES);
+  const keyword = itemKeyword(req.body?.keyword);
   if (!source) return res.send(resultData(null, 400, '不支持的待处理来源'));
+  if (!section || !status || !slaState || keyword === null) {
+    return res.send(resultData(null, 400, '待处理筛选条件不合法'));
+  }
   try {
-    const results = await Promise.all([
-      optionalSource('opinion', () => loadOpinionWork(limit)),
-      optionalSource('security', () => loadSecurityWork(limit)),
-      optionalSource('community_report', () => loadCommunityReportWork(limit)),
-      optionalSource('ai_feedback', () => loadAiFeedbackWork(limit)),
-      optionalSource('ai_document', () => loadAiDocumentJobs(limit)),
-      optionalSource('bookmark_icon', () => loadBookmarkIconJobs(limit)),
-      optionalSource('todo_reminder', () => loadTodoReminderJobs(limit)),
-      optionalSource('account_deletion', () => loadAccountDeletionJobs(limit)),
-      optionalSource('email_delivery', () => loadEmailDeliveryJobs(limit)),
-    ]);
+    const results = await Promise.all(
+      selectedSourceLoaders({ section, source }).map(([sourceKey, loader]) =>
+        optionalSource(sourceKey, () => loader(limit)),
+      ),
+    );
 
     const workSources = results
-      .slice(0, 4)
+      .filter((entry) => getAdminWorkItemPolicy(entry.source)?.section === 'work')
       .filter((entry) => entry.available)
       .map((entry) => entry.data);
     const jobSources = results
-      .slice(4)
+      .filter((entry) => getAdminWorkItemPolicy(entry.source)?.section === 'jobs')
       .filter((entry) => entry.available)
       .map((entry) => entry.data);
-    const selectedWorkSources = source === 'all' ? workSources : workSources.filter((entry) => entry.source === source);
-    const selectedJobSources = source === 'all' ? jobSources : jobSources.filter((entry) => entry.source === source);
+    const selectedWorkSources =
+      section === 'jobs' ? [] : source === 'all' ? workSources : workSources.filter((entry) => entry.source === source);
+    const selectedJobSources =
+      section === 'work' ? [] : source === 'all' ? jobSources : jobSources.filter((entry) => entry.source === source);
+    const filters = { status, slaState, keyword };
     const workItems = selectedWorkSources
       .flatMap((entry) => entry.items)
-      .sort(newestFirst)
+      .filter((item) => itemMatchesFilters(item, filters))
+      .sort(operationalPriorityFirst)
       .slice(0, limit);
     const jobItems = selectedJobSources
       .flatMap((entry) => entry.items)
-      .sort(newestFirst)
+      .filter((item) => itemMatchesFilters(item, filters))
+      .sort(operationalPriorityFirst)
       .slice(0, limit);
     const unavailableSources = results.filter((entry) => !entry.available).map((entry) => entry.source);
+    const sourceSummaries = [...workSources, ...jobSources];
+    const returnedCount = sourceSummaries.reduce((sum, entry) => sum + entry.returned, 0);
+    const slaUnavailable = sourceSummaries.reduce((sum, entry) => sum + entry.slaUnavailable, 0);
 
     return res.send(
       resultData({
         generatedAt: new Date().toISOString(),
+        filters: { section, source, status, slaState, keyword },
         unavailableSources,
+        sourceHealth: results.map(({ source: sourceKey, available, checkedAt }) => ({
+          source: sourceKey,
+          available,
+          checkedAt,
+        })),
+        sla: {
+          policyVersion: ADMIN_WORK_ITEM_POLICY_VERSION,
+          overdue: sourceSummaries.reduce((sum, entry) => sum + entry.overdue, 0),
+          dueSoon: sourceSummaries.reduce((sum, entry) => sum + entry.dueSoon, 0),
+          oldestAgeMinutes: sourceSummaries.reduce((oldest, entry) => Math.max(oldest, entry.oldestAgeMinutes), 0),
+          returnedCount,
+          unavailableCount: slaUnavailable,
+          sampled: unavailableSources.length > 0 || sourceSummaries.some((entry) => entry.sampled),
+        },
         work: {
           total: workSources.reduce((sum, entry) => sum + entry.count, 0),
           critical: workSources.reduce((sum, entry) => sum + entry.critical, 0),
@@ -994,7 +1285,10 @@ export async function dismissAdminAsyncJob(req, res) {
 export const adminActionCenterInternals = {
   itemLimit,
   itemSource,
+  itemKeyword,
+  itemMatchesFilters,
   maskEmail,
   newestFirst,
+  operationalPriorityFirst,
   requeueJob,
 };

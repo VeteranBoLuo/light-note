@@ -4,6 +4,13 @@ import { resultData } from '../util/common.js';
 import { ensureNotVisitor } from '../util/auth.js';
 import { createNotification } from '../util/notification.js';
 import { EMAIL_EFFECTIVE_STATUS_SQL, maskEmail } from '../util/emailDelivery.js';
+import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import {
+  AdminActionError,
+  adminActionErrorResponse,
+  beginAdminAction,
+  finishAdminAction,
+} from '../util/adminActionExecution.js';
 
 // 后台「通知中心」聚合口径:只统计 root 主动下发的通知(system/other),
 // 排除升级 / 反馈回复等系统自动通知。单条 legacy(无 batch_id)按自身 id 独立成组。
@@ -223,9 +230,6 @@ export const markAllRead = async (req, res) => {
 // 接收人四选一:toAll(全体非游客) / role(按角色) / userIds(多选) / userId(单发)。
 // 同一次发送共享 batch_id,便于后台按批查看已读率与撤回。
 export const send = async (req, res) => {
-  if (req.user?.role !== 'root') {
-    return res.send(resultData(null, 403, '没有操作权限'));
-  }
   const {
     userId,
     userIds,
@@ -242,33 +246,70 @@ export const send = async (req, res) => {
   if (!ADMIN_TYPES.includes(type)) {
     return res.send(resultData(null, 400, '通知类型不合法'));
   }
+  let actionContext = null;
+  let connection = null;
   try {
+    const batchId = crypto.randomUUID();
+    const recipientScope = toAll ? 'all' : role ? 'role' : Array.isArray(userIds) && userIds.length ? 'users' : 'user';
+    actionContext = await beginAdminAction(req, {
+      action: 'notification.send',
+      targetId: batchId,
+      expectedConfirmText: '确认发送通知',
+      metadata: { recipientScope, type, titleLength: title.trim().length },
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
     let recipients = [];
     if (toAll) {
-      const [users] = await pool.query("SELECT id FROM user WHERE del_flag = 0 AND role != 'visitor'");
+      const [users] = await connection.query("SELECT id FROM user WHERE del_flag = 0 AND role != 'visitor'");
       recipients = users.map((u) => u.id);
     } else if (role) {
-      const [users] = await pool.query('SELECT id FROM user WHERE del_flag = 0 AND role = ?', [role]);
+      const [users] = await connection.query('SELECT id FROM user WHERE del_flag = 0 AND role = ?', [role]);
       recipients = users.map((u) => u.id);
     } else if (Array.isArray(userIds) && userIds.length) {
       recipients = [...new Set(userIds.filter(Boolean))];
     } else if (userId) {
       recipients = [userId];
     } else {
-      return res.send(resultData(null, 400, '缺少接收用户'));
+      throw new AdminActionError('NOTIFICATION_RECIPIENT_REQUIRED', '缺少接收用户');
     }
     if (!recipients.length) {
-      return res.send(resultData(null, 400, '没有匹配的接收用户'));
+      throw new AdminActionError('NOTIFICATION_RECIPIENT_EMPTY', '没有匹配的接收用户');
     }
-    const batchId = crypto.randomUUID();
     const payload = { type, title: title.trim(), content, link, batchId };
     // 用户量小,循环写入即可(与原实现一致)
     for (const uid of recipients) {
-      await createNotification(uid, payload);
+      await createNotification(uid, payload, connection);
     }
-    res.send(resultData({ sent: recipients.length, batchId }));
-  } catch (e) {
-    res.send(resultData(null, 500, '发送通知失败: ' + e.message));
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { recipientCount: recipients.length },
+      db: connection,
+    });
+    await connection.commit();
+    return res.send(resultData({ sent: recipients.length, batchId, ...receipt }));
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始业务错误。
+      }
+    }
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {
+        // 审计工具已记录安全错误码。
+      }
+    }
+    const response = adminActionErrorResponse(error, '发送通知失败');
+    return res.send(resultData({ code: response.code }, response.status, response.message));
+  } finally {
+    connection?.release();
   }
 };
 
@@ -310,14 +351,18 @@ export const adminList = async (req, res) => {
     const [items] = await pool.query(
       `SELECT ${GROUP_KEY} AS batchId, MIN(type) AS type, MIN(title) AS title, MIN(content) AS content, MIN(link) AS link,
               COUNT(*) AS recipients, COALESCE(SUM(is_read), 0) AS readCount, MAX(recalled) AS recalled, MIN(create_time) AS createTime
-       FROM notification WHERE ${typeIn}
+       FROM notification WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
        GROUP BY ${GROUP_KEY}
        ORDER BY createTime DESC
        LIMIT ? OFFSET ?`,
       [...ADMIN_TYPES, pageSize, offset],
     );
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM (SELECT ${GROUP_KEY} FROM notification WHERE ${typeIn} GROUP BY ${GROUP_KEY}) t`,
+      `SELECT COUNT(*) AS total FROM (
+         SELECT ${GROUP_KEY} FROM notification
+         WHERE ${typeIn} AND COALESCE(admin_archived, 0) = 0
+         GROUP BY ${GROUP_KEY}
+       ) t`,
       ADMIN_TYPES,
     );
     res.send(resultData({ items, total, currentPage, pageSize }));
@@ -328,37 +373,97 @@ export const adminList = async (req, res) => {
 
 // POST /notification/admin/recall —— 撤回一个批次(软删该批全部;仅 root)
 export const adminRecall = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   const { batchId } = req.body || {};
   if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
+  let actionContext = null;
+  let connection = null;
   try {
+    actionContext = await beginAdminAction(req, {
+      action: 'notification.recall',
+      targetId: batchId,
+      expectedConfirmText: '确认撤回通知',
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
     // 撤回 = 置 recalled=1 + 软删。兼容 legacy 单条(无 batch_id,批次键即自身 id):batch_id 命中 或 id 命中。
-    const [r] = await pool.query(
+    const [r] = await connection.query(
       'UPDATE notification SET recalled = 1, del_flag = 1 WHERE (batch_id = ? OR id = ?) AND recalled = 0',
       [batchId, batchId],
     );
-    res.send(resultData({ recalled: r.affectedRows || 0 }));
-  } catch (e) {
-    res.send(resultData(null, 500, '撤回失败: ' + e.message));
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(r.affectedRows || 0) },
+      db: connection,
+    });
+    await connection.commit();
+    return res.send(resultData({ recalled: r.affectedRows || 0, ...receipt }));
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {}
+    }
+    const response = adminActionErrorResponse(error, '撤回通知失败');
+    return res.send(resultData({ code: response.code }, response.status, response.message));
+  } finally {
+    connection?.release();
   }
 };
 
-// POST /notification/admin/delete —— 删除一个管理员发送批次(同时具备撤回效果;仅 root)
+// POST /notification/admin/delete —— 兼容旧路径：归档批次并保留发送、阅读与审计依据。
 export const adminDelete = async (req, res) => {
-  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
   const { batchId } = req.body || {};
   if (!batchId) return res.send(resultData(null, 400, '缺少批次标识'));
+  let actionContext = null;
+  let connection = null;
   try {
+    actionContext = await beginAdminAction(req, {
+      action: 'notification.archive',
+      targetId: batchId,
+      expectedConfirmText: '确认归档通知',
+    });
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
     const typePlaceholders = ADMIN_TYPES.map(() => '?').join(',');
-    // 硬删除整批记录即可原子完成「撤回 + 从发送记录移除」。类型白名单避免误删升级、反馈等自动通知。
-    const [result] = await pool.query(
-      `DELETE FROM notification
+    const [result] = await connection.query(
+      `UPDATE notification
+       SET recalled = 1, del_flag = 1, admin_archived = 1
        WHERE (batch_id = ? OR id = ?) AND type IN (${typePlaceholders})`,
       [batchId, batchId, ...ADMIN_TYPES],
     );
-    res.send(resultData({ deleted: result.affectedRows || 0 }));
-  } catch (e) {
-    res.send(resultData(null, 500, '删除通知记录失败: ' + e.message));
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { affectedRows: Number(result.affectedRows || 0), archived: true },
+      db: connection,
+    });
+    await connection.commit();
+    return res.send(resultData({ archived: result.affectedRows || 0, deleted: result.affectedRows || 0, ...receipt }));
+  } catch (error) {
+    if (connection) {
+      try {
+        await connection.rollback();
+      } catch {}
+    }
+    if (actionContext) {
+      try {
+        await finishAdminAction(actionContext, {
+          outcome: 'failed',
+          metadata: { errorCode: stableAgentErrorCode(error) },
+        });
+      } catch {}
+    }
+    const response = adminActionErrorResponse(error, '归档通知记录失败');
+    return res.send(resultData({ code: response.code }, response.status, response.message));
+  } finally {
+    connection?.release();
   }
 };
 
