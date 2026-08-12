@@ -13,9 +13,11 @@ import {
 
 const PROFILE_CACHE_TTL_MS = 60_000;
 const PROFILE_CACHE_MAX_ENTRIES = 100;
+const MAX_FEATURED_ACHIEVEMENTS = 3;
 
 interface CachedProfile {
   profile: CommunityChatAuthorProfile;
+  allAchievements: CommunityChatPublicAchievement[] | null;
   cachedAt: number;
 }
 
@@ -52,6 +54,27 @@ function validAchievementCollection(value: unknown): value is CommunityChatAchie
     Array.isArray((value as CommunityChatAchievementCollection).achievements) &&
     typeof (value as CommunityChatAchievementCollection).achievementCount === 'number',
   );
+}
+
+function normalizePublicProfile(value: CommunityChatAuthorProfile) {
+  const achievements = value.achievements.filter(
+    (achievement): achievement is CommunityChatPublicAchievement =>
+      Boolean(achievement && typeof achievement.key === 'string' && typeof achievement.group === 'string'),
+  );
+  const legacyAllAchievements =
+    achievements.length > MAX_FEATURED_ACHIEVEMENTS ? achievements : null;
+  const featuredAchievements = achievements.slice(0, MAX_FEATURED_ACHIEVEMENTS);
+  const achievementCount = Math.max(Number(value.achievementCount || 0), achievements.length);
+  return {
+    profile: {
+      ...value,
+      achievements: featuredAchievements,
+      achievementCount,
+      hasMoreAchievements:
+        Boolean(value.hasMoreAchievements) || achievementCount > featuredAchievements.length,
+    },
+    allAchievements: legacyAllAchievements,
+  };
 }
 
 /**
@@ -106,13 +129,28 @@ export function useCommunityChatProfile() {
     // Map 的插入顺序同时作为简单 LRU；命中后移到末尾。
     profileCache.delete(messagePublicId);
     profileCache.set(messagePublicId, entry);
-    return entry.profile;
+    return entry;
   }
 
-  function writeCachedProfile(messagePublicId: string, value: CommunityChatAuthorProfile) {
+  function writeCachedProfile(
+    messagePublicId: string,
+    value: CommunityChatAuthorProfile,
+    allAchievementsValue: CommunityChatPublicAchievement[] | null,
+  ) {
     profileCache.delete(messagePublicId);
-    profileCache.set(messagePublicId, { profile: value, cachedAt: Date.now() });
+    profileCache.set(messagePublicId, {
+      profile: value,
+      allAchievements: allAchievementsValue,
+      cachedAt: Date.now(),
+    });
     pruneProfileCache();
+  }
+
+  function applyCachedProfile(entry: CachedProfile) {
+    profile.value = entry.profile;
+    allAchievements.value = entry.allAchievements;
+    profileLoading.value = false;
+    profileError.value = false;
   }
 
   function resetSecondaryViews() {
@@ -138,8 +176,7 @@ export function useCommunityChatProfile() {
 
     const cached = readCachedProfile(message.publicId);
     if (cached) {
-      profile.value = cached;
-      profileLoading.value = false;
+      applyCachedProfile(cached);
       return;
     }
 
@@ -190,10 +227,8 @@ export function useCommunityChatProfile() {
     if (!options.force) {
       const cached = readCachedProfile(messagePublicId);
       if (cached) {
-        profile.value = cached;
-        profileLoading.value = false;
-        profileError.value = false;
-        return cached;
+        applyCachedProfile(cached);
+        return cached.profile;
       }
     }
 
@@ -205,9 +240,11 @@ export function useCommunityChatProfile() {
       const value = response.data as unknown;
       if (!validAuthorProfile(value)) throw new Error('COMMUNITY_PROFILE_INVALID');
       if (generation !== profileGeneration || messagePublicId !== targetPublicId.value) return null;
-      writeCachedProfile(messagePublicId, value);
-      profile.value = value;
-      return value;
+      const normalized = normalizePublicProfile(value);
+      writeCachedProfile(messagePublicId, normalized.profile, normalized.allAchievements);
+      profile.value = normalized.profile;
+      allAchievements.value = normalized.allAchievements;
+      return normalized.profile;
     } catch (error) {
       if (generation === profileGeneration && messagePublicId === targetPublicId.value) {
         profile.value = null;

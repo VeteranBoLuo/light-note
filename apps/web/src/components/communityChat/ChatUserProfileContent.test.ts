@@ -10,15 +10,6 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 vi.mock('@/components/growth/AvatarFramePreview.vue', () => ({
   default: { props: ['frameId', 'src', 'size'], template: '<span class="avatar-frame-stub" />' },
 }));
-vi.mock('@/components/base/BasicComponents/BActionMenu.vue', () => ({
-  default: {
-    props: ['items'],
-    emits: ['select'],
-    template:
-      '<div class="action-menu-stub"><slot /><span v-for="item in items" :key="item.key" class="action-item-stub">{{ item.label }}</span></div>',
-  },
-}));
-
 const { default: ChatUserProfileContent } = await import('./ChatUserProfileContent.vue');
 
 function profile(overrides: Partial<CommunityChatAuthorProfile> = {}): CommunityChatAuthorProfile {
@@ -135,16 +126,41 @@ describe('ChatUserProfileContent', () => {
     expect(host.textContent).not.toContain('user_id');
   });
 
-  it('官方成员仍可被举报，但不提供屏蔽动作', () => {
+  it('官方成员直接提供举报按钮，但不提供屏蔽动作', () => {
+    const onReport = vi.fn();
     const host = mountProfile({
       profile: profile({ role: 'official' }),
       authenticated: true,
-      canReply: true,
-      canMention: true,
+      onReport,
     });
 
     expect(host.textContent).toContain(zhCN.communityChat.report.action);
     expect(host.textContent).not.toContain(zhCN.communityChat.blocks.action);
+    expect(host.textContent).not.toContain(zhCN.communityChat.replyAction);
+    expect(host.textContent).not.toContain(zhCN.communityChat.mentionAction);
+    findButton(host, zhCN.communityChat.report.action)?.click();
+    expect(onReport).toHaveBeenCalledTimes(1);
+  });
+
+  it('查看其他成员名片时直接提供屏蔽和举报，不再提供回复、提及或更多菜单', () => {
+    const onBlock = vi.fn();
+    const onReport = vi.fn();
+    const host = mountProfile({
+      profile: profile(),
+      authenticated: true,
+      onBlock,
+      onReport,
+    });
+
+    expect(host.textContent).toContain(zhCN.communityChat.blocks.action);
+    expect(host.textContent).toContain(zhCN.communityChat.report.action);
+    expect(host.textContent).not.toContain(zhCN.communityChat.replyAction);
+    expect(host.textContent).not.toContain(zhCN.communityChat.mentionAction);
+    expect(host.querySelector('.b-action-menu-anchor')).toBeNull();
+    findButton(host, zhCN.communityChat.blocks.action)?.click();
+    findButton(host, zhCN.communityChat.report.action)?.click();
+    expect(onBlock).toHaveBeenCalledTimes(1);
+    expect(onReport).toHaveBeenCalledTimes(1);
   });
 
   it('只有存在更多成就时才请求全部成就子视图', async () => {
@@ -156,5 +172,42 @@ describe('ChatUserProfileContent', () => {
 
     expect(onLoadAllAchievements).toHaveBeenCalledTimes(1);
     expect(host.textContent).toContain(zhCN.communityChat.profile.allAchievements);
+  });
+
+  it('兼容旧接口全量成就，精选区域最多展示三项并保留查看全部入口', () => {
+    const achievements = [
+      { key: 'streak_1', group: 'checkin' },
+      { key: 'streak_7', group: 'checkin' },
+      { key: 'note_10', group: 'create' },
+      { key: 'todo_20', group: 'action' },
+    ];
+    const host = mountProfile({
+      profile: profile({ achievements, achievementCount: 4, hasMoreAchievements: false }),
+    });
+
+    expect(host.textContent).toContain(zhCN.growth.achName.streak_1);
+    expect(host.textContent).toContain(zhCN.growth.achName.streak_7);
+    expect(host.textContent).toContain(zhCN.growth.achName.note_10);
+    expect(host.textContent).not.toContain(zhCN.growth.achName.todo_20);
+    expect(host.textContent).toContain(zhCN.communityChat.profile.viewAllAchievements.replace('{count}', '4'));
+  });
+
+  it('公开预览直接复用当前公开名片，不依赖个人配置接口成功', async () => {
+    const onRequestOwn = vi.fn();
+    const host = mountProfile({
+      profile: profile(),
+      isOwn: true,
+      authenticated: true,
+      ownError: true,
+      onRequestOwn,
+    });
+
+    findButton(host, zhCN.communityChat.profile.previewAction)?.click();
+    await nextTick();
+
+    expect(host.textContent).toContain(zhCN.communityChat.profile.previewDescription);
+    expect(host.textContent).toContain('薄荷');
+    expect(host.textContent).not.toContain(zhCN.communityChat.profile.ownLoadFailed);
+    expect(onRequestOwn).not.toHaveBeenCalled();
   });
 });

@@ -117,6 +117,32 @@ describe('useCommunityChatProfile', () => {
     expect(state.profileError.value).toBe(false);
   });
 
+  it('兼容旧后端全量公开成就，摘要只保留三项且查看全部不再请求缺失路由', async () => {
+    const achievements = [
+      { key: 'streak_1', group: 'checkin' },
+      { key: 'streak_7', group: 'checkin' },
+      { key: 'note_10', group: 'create' },
+      { key: 'todo_20', group: 'action' },
+    ];
+    mocks.getPublic.mockResolvedValue({
+      data: {
+        ...publicProfile('旧接口成员'),
+        achievements,
+        achievementCount: achievements.length,
+      },
+    });
+    const state = useCommunityChatProfile();
+
+    state.openForMessage(chatMessage('legacy-message'));
+    await vi.waitFor(() => expect(state.profile.value?.name).toBe('旧接口成员'));
+
+    expect(state.profile.value?.achievements).toHaveLength(3);
+    expect(state.profile.value?.hasMoreAchievements).toBe(true);
+    expect(state.allAchievements.value).toEqual(achievements);
+    await state.loadAllAchievements();
+    expect(mocks.getAchievements).not.toHaveBeenCalled();
+  });
+
   it('自己的名片直接复用可编辑成就，并在保存后更新公开预览与版本', async () => {
     mocks.getOwn.mockResolvedValue({ data: ownProfile(1) });
     mocks.updateOwn.mockResolvedValue({ data: ownProfile(2) });

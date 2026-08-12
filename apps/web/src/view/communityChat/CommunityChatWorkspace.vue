@@ -536,8 +536,6 @@
     :error="profileError"
     :authenticated="props.access.authenticated"
     :is-own="profileIsOwn"
-    :can-mention="profileCanMention"
-    :can-reply="profileCanReply"
     :own-profile="ownProfile"
     :own-loading="ownProfileLoading"
     :own-error="ownProfileError"
@@ -550,8 +548,6 @@
     @request-own="requestOwnProfile"
     @load-all-achievements="requestAllProfileAchievements"
     @save="saveCommunityProfile"
-    @mention="mentionProfileMember"
-    @reply="replyToProfileMember"
     @block="blockProfileMember"
     @report="reportProfileMember"
     @login="loginFromProfile"
@@ -770,12 +766,6 @@
   );
   const canManagePinnedMessage = computed(
     () => props.access.memberRole === 'admin' || props.access.memberRole === 'moderator',
-  );
-  const profileCanMention = computed(() =>
-    profileTargetMessage.value ? canMentionMessage(profileTargetMessage.value) : false,
-  );
-  const profileCanReply = computed(() =>
-    profileTargetMessage.value ? canReplyToMessage(profileTargetMessage.value) : false,
   );
   const imageUploadBusy = computed(() => !canPostCurrentRoom.value || sending.value || imageUploadsInFlight.value > 0);
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
@@ -2088,18 +2078,6 @@
     await closeCurrentMobileOverlayThen(() => {
       profileVisible.value = false;
     }, next);
-  }
-
-  function mentionProfileMember() {
-    const target = profileTargetMessage.value;
-    if (!target) return;
-    void closeProfileThen(() => startMention(target));
-  }
-
-  function replyToProfileMember() {
-    const target = profileTargetMessage.value;
-    if (!target) return;
-    void closeProfileThen(() => startReply(target));
   }
 
   function blockProfileMember() {

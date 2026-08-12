@@ -50,10 +50,10 @@
             <small>{{ t('communityChat.profile.achievementCount', { count: profile.achievementCount }) }}</small>
           </div>
 
-          <AchievementGrid :achievements="profile.achievements" />
+          <AchievementGrid :achievements="featuredAchievements" />
 
           <BButton
-            v-if="profile.hasMoreAchievements"
+            v-if="hasMoreAchievements"
             class="chat-profile-content__view-all"
             @click="openAllAchievements"
           >
@@ -64,34 +64,28 @@
 
         <div v-if="isOwn" class="chat-profile-content__actions chat-profile-content__actions--own">
           <BButton type="primary" @click="beginEdit">
-            <SvgIcon :src="icon.noteDetail.toolbar.edit" size="16" aria-hidden="true" />
+            <SvgIcon :src="icon.communityChat.profileEdit" size="16" aria-hidden="true" />
             {{ t('communityChat.profile.editAction') }}
           </BButton>
           <BButton @click="openPreview">
-            <SvgIcon :src="icon.noteDetail.toolbar.viewPreview" size="16" aria-hidden="true" />
+            <SvgIcon :src="icon.communityChat.profilePreview" size="16" aria-hidden="true" />
             {{ t('communityChat.profile.previewAction') }}
           </BButton>
         </div>
 
-        <div v-else-if="authenticated" class="chat-profile-content__actions">
-          <BButton type="primary" :disabled="!canReply" @click="emit('reply')">
-            <SvgIcon :src="icon.noteDetail.toolbar.quote" size="16" aria-hidden="true" />
-            {{ t('communityChat.replyAction') }}
+        <div
+          v-else-if="authenticated"
+          class="chat-profile-content__actions chat-profile-content__actions--moderation"
+          :class="{ 'is-single': profile.role === 'official' }"
+        >
+          <BButton v-if="profile.role !== 'official'" @click="emit('block')">
+            <SvgIcon :src="icon.navigation.permissions" size="16" aria-hidden="true" />
+            {{ t('communityChat.blocks.action') }}
           </BButton>
-          <BButton :disabled="!canMention" @click="emit('mention')">
-            <SvgIcon :src="icon.noteDetail.toolbar.mention" size="16" aria-hidden="true" />
-            {{ t('communityChat.mentionAction') }}
+          <BButton type="danger" @click="emit('report')">
+            <SvgIcon :src="icon.message.warning" size="16" aria-hidden="true" />
+            {{ t('communityChat.report.action') }}
           </BButton>
-          <BActionMenu
-            :items="moreActionItems"
-            placement="top-right"
-            :aria-label="t('communityChat.profile.moreActions')"
-            @select="handleMoreAction"
-          >
-            <BButton :aria-label="t('communityChat.profile.moreActions')">
-              <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
-            </BButton>
-          </BActionMenu>
         </div>
 
         <div v-else class="chat-profile-content__visitor-action">
@@ -125,26 +119,23 @@
       </section>
 
       <section v-else-if="view === 'preview'" class="chat-profile-content__subview">
-        <div v-if="ownLoading" class="chat-profile-content__subview-state">
-          <BLoading inline loading :title="t('communityChat.profile.loadingOwn')" />
-        </div>
-        <div v-else-if="ownError || !ownProfile" class="chat-profile-content__subview-state" role="status">
+        <div v-if="!previewProfile" class="chat-profile-content__subview-state" role="status">
           <SvgIcon :src="icon.message.warning" size="22" aria-hidden="true" />
           <span>{{ t('communityChat.profile.ownLoadFailed') }}</span>
-          <BButton size="small" @click="emit('requestOwn')">{{ t('communityChat.profile.retry') }}</BButton>
+          <BButton size="small" @click="emit('retry')">{{ t('communityChat.profile.retry') }}</BButton>
         </div>
         <template v-else>
           <p class="chat-profile-content__subview-description">{{ t('communityChat.profile.previewDescription') }}</p>
-          <ProfileIdentity :profile="ownProfile.publicPreview" />
+          <ProfileIdentity :profile="previewProfile" />
           <div class="chat-profile-content__preview-card">
-            <p :class="{ 'is-empty': !ownProfile.publicPreview.bio }">
-              {{ ownProfile.publicPreview.bio || t('communityChat.profile.bioEmpty') }}
+            <p :class="{ 'is-empty': !previewProfile.bio }">
+              {{ previewProfile.bio || t('communityChat.profile.bioEmpty') }}
             </p>
-            <p v-if="ownProfile.publicPreview.communityTenureLabel" class="chat-profile-content__tenure">
+            <p v-if="previewProfile.communityTenureLabel" class="chat-profile-content__tenure">
               <SvgIcon :src="icon.growth.tenure" size="15" aria-hidden="true" />
-              <span>{{ ownProfile.publicPreview.communityTenureLabel }}</span>
+              <span>{{ previewProfile.communityTenureLabel }}</span>
             </p>
-            <AchievementGrid :achievements="ownProfile.publicPreview.achievements" />
+            <AchievementGrid :achievements="previewProfile.achievements.slice(0, 3)" />
           </div>
         </template>
       </section>
@@ -288,8 +279,6 @@
     CommunityChatOwnProfile,
     CommunityChatPublicAchievement,
   } from '@/api/communityChatApi';
-  import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
-  import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -310,8 +299,6 @@
       error?: boolean;
       authenticated?: boolean;
       isOwn?: boolean;
-      canMention?: boolean;
-      canReply?: boolean;
       ownProfile?: CommunityChatOwnProfile | null;
       ownLoading?: boolean;
       ownError?: boolean;
@@ -327,8 +314,6 @@
       error: false,
       authenticated: false,
       isOwn: false,
-      canMention: false,
-      canReply: false,
       ownProfile: null,
       ownLoading: false,
       ownError: false,
@@ -345,8 +330,6 @@
     requestOwn: [];
     loadAllAchievements: [];
     save: [input: CommunityChatProfileUpdateInput];
-    mention: [];
-    reply: [];
     block: [];
     report: [];
     login: [];
@@ -357,6 +340,16 @@
   const draftShowTenure = ref(true);
   const draftFeaturedKeys = ref<string[]>([]);
   const draftBaseRevision = ref(0);
+  const featuredAchievements = computed(() => (props.profile?.achievements || []).slice(0, 3));
+  const hasMoreAchievements = computed(() => {
+    if (!props.profile) return false;
+    return (
+      Boolean(props.profile.hasMoreAchievements) ||
+      props.profile.achievementCount > featuredAchievements.value.length ||
+      props.profile.achievements.length > featuredAchievements.value.length
+    );
+  });
+  const previewProfile = computed(() => props.ownProfile?.publicPreview || props.profile || null);
 
   function achievementName(key: string) {
     const i18nKey = `growth.achName.${key}`;
@@ -462,24 +455,6 @@
     return t('communityChat.profile.editTitle');
   });
 
-  const moreActionItems = computed<BActionMenuItem[]>(() => {
-    const items: BActionMenuItem[] = [];
-    if (props.profile?.role !== 'official') {
-      items.push({
-        key: 'block',
-        label: t('communityChat.blocks.action'),
-        icon: icon.navigation.permissions,
-      });
-    }
-    items.push({
-      key: 'report',
-      label: t('communityChat.report.action'),
-      icon: icon.message.warning,
-      danger: true,
-    });
-    return items;
-  });
-
   const draftBioLength = computed(() => {
     const value = String(draftBio.value || '');
     if (typeof Intl?.Segmenter === 'function') {
@@ -516,7 +491,6 @@
 
   function openPreview() {
     view.value = 'preview';
-    emit('requestOwn');
   }
 
   function openAllAchievements() {
@@ -549,11 +523,6 @@
       featuredAchievementKeys: [...draftFeaturedKeys.value],
       baseRevision: draftBaseRevision.value,
     });
-  }
-
-  function handleMoreAction(key: string) {
-    if (key === 'block') emit('block');
-    if (key === 'report') emit('report');
   }
 
   watch(
@@ -863,6 +832,14 @@
 
   .chat-profile-content__actions--own {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-profile-content__actions--moderation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chat-profile-content__actions--moderation.is-single {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .chat-profile-content__actions .b_btn {

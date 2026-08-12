@@ -45,8 +45,6 @@
       error?: boolean;
       authenticated?: boolean;
       isOwn?: boolean;
-      canMention?: boolean;
-      canReply?: boolean;
       ownProfile?: CommunityChatOwnProfile | null;
       ownLoading?: boolean;
       ownError?: boolean;
@@ -62,8 +60,6 @@
       error: false,
       authenticated: false,
       isOwn: false,
-      canMention: false,
-      canReply: false,
       ownProfile: null,
       ownLoading: false,
       ownError: false,
@@ -80,8 +76,6 @@
     requestOwn: [];
     loadAllAchievements: [];
     save: [input: CommunityChatProfileUpdateInput];
-    mention: [];
-    reply: [];
     block: [];
     report: [];
     login: [];
@@ -96,8 +90,6 @@
     error: props.error,
     authenticated: props.authenticated,
     isOwn: props.isOwn,
-    canMention: props.canMention,
-    canReply: props.canReply,
     ownProfile: props.ownProfile,
     ownLoading: props.ownLoading,
     ownError: props.ownError,
@@ -113,8 +105,6 @@
     requestOwn: () => emit('requestOwn'),
     loadAllAchievements: () => emit('loadAllAchievements'),
     save: (input: CommunityChatProfileUpdateInput) => emit('save', input),
-    mention: () => emit('mention'),
-    reply: () => emit('reply'),
     block: () => emit('block'),
     report: () => emit('report'),
     login: () => emit('login'),

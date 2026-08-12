@@ -57,6 +57,10 @@ export default {
   communityChat: {
     defaultAvatar:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="#615ced"/><circle cx="20" cy="15" r="7" fill="#fff"/><path d="M8.5 35c1.15-7.25 5-10.9 11.5-10.9S30.35 27.75 31.5 35" fill="#fff"/></svg>',
+    profileEdit:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="17" height="16" rx="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="8.4" cy="9" r="2.1" stroke="currentColor" stroke-width="1.6"/><path d="M5.8 15c.55-1.75 1.65-2.65 3.3-2.65c1.05 0 1.9.36 2.52 1.06M14.2 16.8l.55-2.5l3.55-3.55a1.45 1.45 0 0 1 2.05 2.05l-3.55 3.55l-2.6.45Z" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    profilePreview:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="4" width="17" height="16" rx="2.4" stroke="currentColor" stroke-width="1.7"/><circle cx="8.2" cy="9" r="2" stroke="currentColor" stroke-width="1.6"/><path d="M5.7 14.4c.55-1.55 1.6-2.35 3.15-2.35c.9 0 1.65.27 2.25.8M12.7 15.1s1.45-2.45 3.95-2.45s3.95 2.45 3.95 2.45s-1.45 2.45-3.95 2.45s-3.95-2.45-3.95-2.45Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"/><circle cx="16.65" cy="15.1" r="1.05" fill="currentColor"/></svg>',
   },
   message: {
     success:
