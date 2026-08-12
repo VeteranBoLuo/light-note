@@ -17,4 +17,11 @@ describe('BViewer 全局图片预览布局', () => {
     expect(source).toContain('z-index: 901');
     expect(source).not.toContain('z-index: 2020');
   });
+
+  it('等待当前图片完成展示后才显示保存按钮', () => {
+    expect(source).toContain('viewerVisible.value && imageReady.value && canSaveImage');
+    expect(source).toContain('viewed(e) {\n          imageReady.value = true;');
+    expect(source).toContain('hidden() {');
+    expect(source).toContain('imageReady.value = false;');
+  });
 });

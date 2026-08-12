@@ -44,12 +44,16 @@
   const viewSrc = ref();
   /** 预览是否正在显示:按钮只在看图时出现,不能在 viewer 关掉后留在屏幕上 */
   const viewerVisible = ref(false);
+  /** viewer.js 确认当前图片完成展示后才提供保存操作，避免遮罩先于图片出现时按钮突兀闪现。 */
+  const imageReady = ref(false);
   const viewerToolbarVisible = ref(false);
   let currentViewer: Viewer | null = null;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
 
   // 判定与命名规则见 viewerSave.ts(纯函数,已被单测覆盖)
-  const saveVisible = computed(() => viewerVisible.value && canSaveImage(viewSrc.value, isLightNoteAndroidApp()));
+  const saveVisible = computed(
+    () => viewerVisible.value && imageReady.value && canSaveImage(viewSrc.value, isLightNoteAndroidApp()),
+  );
 
   const saving = ref(false);
 
@@ -111,6 +115,7 @@
     historyHandle = null;
     currentViewer?.destroy();
     currentViewer = null;
+    imageReady.value = false;
     viewSrc.value = `${bookmark.viewer.src}`;
     nextTick(() => {
       const options: Record<string, any> = bookmark.viewer.options || {};
@@ -126,12 +131,14 @@
           if (historyHandle) releaseMobileOverlayHistory(historyHandle);
           historyHandle = null;
           viewerVisible.value = false;
+          imageReady.value = false;
           viewerToolbarVisible.value = false;
           viewer.destroy();
           if (currentViewer === viewer) currentViewer = null;
           viewSrc.value = '';
         },
         viewed(e) {
+          imageReady.value = true;
           // 默认把图压到 200px:头像、反馈截图这类小图放到原尺寸反而糊。
           // 调用方传了自己的 viewed 就以它为准(思维导图要铺满视口才看得清)。
           if (typeof options.viewed === 'function') {
@@ -158,6 +165,7 @@
     if (historyHandle) releaseMobileOverlayHistory(historyHandle);
     historyHandle = null;
     viewerVisible.value = false;
+    imageReady.value = false;
     viewerToolbarVisible.value = false;
     currentViewer?.destroy();
     currentViewer = null;

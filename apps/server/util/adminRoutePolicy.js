@@ -282,6 +282,13 @@ declare(ADMIN_POLICIES.READ, 'notification', [
   ['POST', '/notification/unreadCount'],
 ]);
 
+// 应用级聊天室角标会先查询访问能力；这两个接口只计算并返回权限/未读数，
+// 不推进 community_chat_reads。真正改变已读位置的 PUT /rooms/:slug/read 不在此处放行。
+declare(ADMIN_POLICIES.READ, 'community_chat', [
+  ['GET', '/community-chat/access'],
+  ['GET', '/community-chat/rooms'],
+]);
+
 declare(ADMIN_POLICIES.READ, 'feature_request', [
   ['POST', '/featureRequest/listPublic'],
   ['POST', '/featureRequest/getPublicDetail'],

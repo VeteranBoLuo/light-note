@@ -124,6 +124,18 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('聊天室访问能力与房间角标查询只读放行，不包含推进已读位置的接口', () => {
+    const declared = getDeclaredAdminRoutePolicies();
+    for (const path of ['/community-chat/access', '/community-chat/rooms']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq(path, 'GET'), res, next);
+      expect(next).toHaveBeenCalledTimes(1);
+      expect(res.json).not.toHaveBeenCalled();
+    }
+    expect(declared.has('PUT /community-chat/rooms/:slug/read')).toBe(false);
+  });
+
   it('管理员预览时通知状态写入降级为空操作', () => {
     for (const path of ['/notification/markRead', '/notification/markAllRead', '/notification/delete']) {
       const next = vi.fn();
