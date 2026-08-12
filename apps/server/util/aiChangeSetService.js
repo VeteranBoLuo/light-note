@@ -872,18 +872,6 @@ async function executeAiChangeSet(identity, id, selection, database, retryRevisi
     if (Number(finalized?.affectedRows || 0) !== 1) {
       throw changeError('CHANGE_SET_FINALIZE_CONFLICT', '变更集状态已变化，整批执行未提交', 409);
     }
-    if (
-      identity.adminContextMode === 'normal' &&
-      String(row.request_id || '').startsWith('note-reuse:') &&
-      selectedIds.length > 0
-    ) {
-      const [[userRow]] = await connection.query('SELECT role FROM user WHERE id = ? LIMIT 1', [identity.subjectUserId]);
-      const { completeGrowthTask } = await import('./growthTaskCompletion.js');
-      await completeGrowthTask(identity.subjectUserId, 'first_reuse', {
-        userRole: userRow?.role || 'user',
-        connection,
-      });
-    }
     await connection.commit();
     await invalidatePersonalKnowledgeCache(identity.subjectUserId, { persist: false });
     return getAiChangeSet(identity, row.id, database);

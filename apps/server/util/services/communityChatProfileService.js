@@ -178,23 +178,33 @@ function resolveFeaturedAchievements(unlockedAchievements, storedValue) {
 }
 
 async function loadUnlockedAchievements(db, userId, level) {
-  const [rows] = await db.query(
-    `SELECT ref, MAX(latestId) AS latestId FROM (
-       SELECT achievement_key AS ref, UNIX_TIMESTAMP(unlocked_at) AS latestId
-         FROM user_achievements WHERE user_id = ?
-       UNION ALL
-       SELECT ref, id AS latestId
-         FROM points_log WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock') AND ref IS NOT NULL
-     ) unlocked
-     GROUP BY ref
-     ORDER BY latestId DESC, ref ASC`,
-    [userId, userId],
-  );
-  const latestIds = new Map(
-    rows
-      .map((row) => [String(row.ref || ''), Number(row.latestId || 0)])
-      .filter(([key]) => KNOWN_ACHIEVEMENTS.has(key)),
-  );
+  // 两张历史表的字符排序规则并不一致：旧 points_log.ref 使用
+  // utf8mb4_general_ci，新 user_achievements.achievement_key 使用
+  // utf8mb4_unicode_ci。不要在 SQL 中 UNION 两列，否则既有数据库会因
+  // ER_CANT_AGGREGATE_NCOLLATIONS 让整张社区名片读取失败。
+  const [[achievementRows], [legacyRows]] = await Promise.all([
+    db.query(
+      `SELECT achievement_key AS ref, UNIX_TIMESTAMP(unlocked_at) AS latestId
+         FROM user_achievements
+        WHERE user_id = ?
+        ORDER BY unlocked_at DESC, achievement_key ASC`,
+      [userId],
+    ),
+    db.query(
+      `SELECT ref, MAX(id) AS latestId
+         FROM points_log
+        WHERE user_id = ? AND reason IN ('achievement', 'ach_unlock') AND ref IS NOT NULL
+        GROUP BY ref
+        ORDER BY latestId DESC, ref ASC`,
+      [userId],
+    ),
+  ]);
+  const latestIds = new Map();
+  for (const row of [...legacyRows, ...achievementRows]) {
+    const key = String(row.ref || '');
+    if (!KNOWN_ACHIEVEMENTS.has(key)) continue;
+    latestIds.set(key, Math.max(latestIds.get(key) || 0, Number(row.latestId || 0)));
+  }
   const unlockedKeys = new Set(latestIds.keys());
   for (const achievement of ACHIEVEMENTS) {
     if (achievement.group === 'level' && level >= achievement.target) unlockedKeys.add(achievement.key);

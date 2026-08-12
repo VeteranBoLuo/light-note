@@ -49,6 +49,7 @@ describe('communityChatProfileService', () => {
           expect(params).toEqual([messagePublicId, 'general', 'viewer-1', 'viewer-1']);
           return [[authorRow()], []];
         }
+        if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) {
           return [
             [
@@ -94,6 +95,7 @@ describe('communityChatProfileService', () => {
       query: vi.fn(async (sql) => {
         const text = String(sql);
         if (text.includes('JOIN community_chat_rooms room')) return [[authorRow({ authorHasAvatar: 0 })], []];
+        if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
@@ -122,6 +124,7 @@ describe('communityChatProfileService', () => {
         if (text.includes('FROM user account')) {
           return [[authorRow({ authorUserId: 'root-1', authorAccountRole: 'root', featuredAchievements: '[]' })], []];
         }
+        if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
         throw new Error(`unexpected query: ${sql}`);
       }),
@@ -151,6 +154,7 @@ describe('communityChatProfileService', () => {
         if (text.includes('SELECT account.role AS authorAccountRole')) {
           return [[{ authorAccountRole: 'root', authorExp: 0 }], []];
         }
+        if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
         if (text.includes('INSERT INTO community_chat_member_profiles')) return [{ affectedRows: 1 }, []];
         throw new Error(`unexpected transaction query: ${sql}`);
@@ -174,6 +178,7 @@ describe('communityChatProfileService', () => {
             [],
           ];
         }
+        if (text.includes('FROM user_achievements')) return [[], []];
         if (text.includes('FROM points_log')) return [[{ ref: 'streak_7', latestId: 2 }], []];
         throw new Error(`unexpected pool query: ${sql}`);
       }),
@@ -195,6 +200,39 @@ describe('communityChatProfileService', () => {
     const insertCall = connection.query.mock.calls.find(([sql]) => String(sql).includes('INSERT INTO'));
     expect(insertCall?.[1]).toEqual(['root-1', '公开 简介', 1, '["streak_7"]', 1]);
     expect(result).toMatchObject({ bio: '公开简介', revision: 1, featuredAchievementKeys: ['streak_7'] });
+  });
+
+  it('永久成就和旧积分记录分开查询，避免不同排序规则的列参与 UNION', async () => {
+    const queries = [];
+    const db = {
+      query: vi.fn(async (sql) => {
+        const text = String(sql);
+        queries.push(text);
+        if (text.includes('JOIN community_chat_rooms room')) return [[authorRow({ authorExp: 0 })], []];
+        if (text.includes('FROM user_achievements')) {
+          return [[{ ref: 'streak_7', latestId: 100 }], []];
+        }
+        if (text.includes('FROM points_log')) {
+          return [[{ ref: 'note_10', latestId: 20 }], []];
+        }
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const profile = await getCommunityChatMessageAuthorProfile({
+      user: { id: 'visitor-1', role: 'visitor' },
+      messagePublicId: 'message-1',
+      env: PUBLIC_ENV,
+      db,
+    });
+
+    expect(queries.filter((sql) => sql.includes('FROM user_achievements'))).toHaveLength(1);
+    expect(queries.filter((sql) => sql.includes('FROM points_log'))).toHaveLength(1);
+    expect(queries.some((sql) => /\bUNION\b/i.test(sql))).toBe(false);
+    expect(profile.achievements).toEqual([
+      { key: 'streak_7', group: 'checkin' },
+      { key: 'note_10', group: 'create' },
+    ]);
   });
 
   it('并发版本冲突时回滚且不覆盖新资料', async () => {

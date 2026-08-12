@@ -9,8 +9,8 @@ import { GROWTH_TASK_DEFINITIONS } from './growthTaskCatalog.js';
 import { ensureGrowthTaskSchema } from './growthTaskSchema.js';
 
 describe('growthTaskSchema', () => {
-  it('定义七个无时限发现任务，且启动初始化会创建表、幂等种子并禁用退役任务', async () => {
-    expect(GROWTH_TASK_DEFINITIONS).toHaveLength(7);
+  it('定义六个无时限发现任务，且启动初始化会创建表、幂等种子并禁用退役任务', async () => {
+    expect(GROWTH_TASK_DEFINITIONS).toHaveLength(6);
     expect(GROWTH_TASK_DEFINITIONS.map((task) => task.taskKey)).toEqual([
       'profile_avatar',
       'first_note',
@@ -18,9 +18,8 @@ describe('growthTaskSchema', () => {
       'first_todo',
       'first_file',
       'first_organize',
-      'first_reuse',
     ]);
-    expect(GROWTH_TASK_DEFINITIONS.map((task) => task.rewardExp)).toEqual([50, 50, 30, 30, 30, 40, 50]);
+    expect(GROWTH_TASK_DEFINITIONS.map((task) => task.rewardExp)).toEqual([50, 50, 30, 30, 30, 40]);
 
     pool.query
       .mockResolvedValueOnce([[{ tableCount: 1 }], []])
@@ -42,10 +41,10 @@ describe('growthTaskSchema', () => {
     expect(pool.query.mock.calls[6][1]).not.toContain('growth.tasks.firstReview.title');
     expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstFile.title');
     expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstOrganize.title');
-    expect(pool.query.mock.calls[6][1]).toContain('growth.tasks.firstReuse.title');
+    expect(pool.query.mock.calls[6][1]).not.toContain('growth.tasks.firstReuse.title');
     expect(pool.query.mock.calls[7]).toEqual([
       expect.stringContaining('UPDATE growth_tasks SET enabled = 0'),
-      ['first_review'],
+      ['first_review', 'first_reuse'],
     ]);
     expect(pool.query.mock.calls[8][0]).toContain('INSERT INTO user_growth_tasks');
     expect(pool.query.mock.calls[8][0]).toContain("u.role = 'root'");

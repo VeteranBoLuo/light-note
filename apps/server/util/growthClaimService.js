@@ -19,7 +19,6 @@ const ACTION_BY_TASK = Object.freeze({
   first_todo: 'create_todo',
   first_file: 'upload_file',
   first_organize: 'open_inbox',
-  first_reuse: 'reuse_knowledge',
 });
 
 const ACTION_BY_QUEST = Object.freeze({
@@ -72,9 +71,6 @@ function addReceipt(receipts, summary, receipt) {
 function isActionableForDashboard(action, dashboard) {
   const stats = dashboard?.stats || {};
   if (action === 'open_inbox') return Number(stats.pendingResourceCount || 0) > 0;
-  if (action === 'reuse_knowledge') {
-    return Number(stats.bookmarkCount || 0) + Number(stats.noteCount || 0) + Number(stats.fileCount || 0) > 0;
-  }
   return true;
 }
 

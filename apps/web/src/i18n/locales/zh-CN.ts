@@ -3935,7 +3935,6 @@ export default {
       first_todo: '创建第一个待办',
       first_file: '上传第一个文件',
       first_organize: '完成第一次资源整理',
-      first_reuse: '完成第一次知识复用',
       create: '新增一条内容',
       daily_note: '写一篇笔记',
       daily_bookmark: '收藏一条书签',
@@ -4345,10 +4344,6 @@ export default {
       firstOrganize: {
         title: '完成第一次整理',
         description: '从待整理中归档一项资源',
-      },
-      firstReuse: {
-        title: '完成第一次知识复用',
-        description: '把已有内容用于一次新的笔记行动',
       },
     },
     dashStats: '数据统计',

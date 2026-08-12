@@ -190,9 +190,6 @@
       case 'first_organize':
         void router.push('/inbox');
         break;
-      case 'first_reuse':
-        void router.push('/noteLibrary');
-        break;
       default:
         break;
     }

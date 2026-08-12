@@ -4060,7 +4060,6 @@ export default {
       first_todo: 'Create your first todo',
       first_file: 'Upload your first file',
       first_organize: 'Complete your first organization',
-      first_reuse: 'Reuse knowledge for the first time',
       create: 'Create one item',
       daily_note: 'Write one note',
       daily_bookmark: 'Save one bookmark',
@@ -4485,10 +4484,6 @@ export default {
       firstOrganize: {
         title: 'Complete your first organization',
         description: 'Archive one item from your organization inbox',
-      },
-      firstReuse: {
-        title: 'Reuse knowledge for the first time',
-        description: 'Use existing content in a new note action',
       },
     },
     dashStats: 'Statistics',

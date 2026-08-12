@@ -602,7 +602,7 @@
       else window.dispatchEvent(new CustomEvent('light-note:open-profile'));
       return;
     }
-    if (action === 'create_note' || action === 'reuse_knowledge') {
+    if (action === 'create_note') {
       void router.push('/noteLibrary');
       return;
     }

@@ -55,16 +55,7 @@ export const GROWTH_TASK_DEFINITIONS = Object.freeze([
     enabled: true,
     sortOrder: 60,
   }),
-  Object.freeze({
-    id: 'growth-task-first-reuse',
-    taskKey: 'first_reuse',
-    titleKey: 'growth.tasks.firstReuse.title',
-    descriptionKey: 'growth.tasks.firstReuse.description',
-    rewardExp: 50,
-    enabled: true,
-    sortOrder: 70,
-  }),
 ]);
 
 // 已下线任务只用于把既有数据库定义置为禁用；历史完成状态与已发经验保留，不做回收。
-export const RETIRED_GROWTH_TASK_KEYS = Object.freeze(['first_review']);
+export const RETIRED_GROWTH_TASK_KEYS = Object.freeze(['first_review', 'first_reuse']);
