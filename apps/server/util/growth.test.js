@@ -42,6 +42,7 @@ import {
   awardCreate,
   grantExp,
   getGrowth,
+  generateGrowthNudges,
 } from './growth.js';
 
 function accountCalendar(dayKey, makeupDays = []) {
@@ -582,6 +583,22 @@ describe('后台成长调整的升级通知', () => {
     expect(result).toMatchObject({ ok: true, level: 3, leveledUp: true });
     expect(createNotification).not.toHaveBeenCalled();
     expect(grantItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('成长提醒', () => {
+  it('按二进制用户标识关联新旧排序规则的成长表', async () => {
+    vi.clearAllMocks();
+    pool.query.mockResolvedValueOnce([[]]);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    await generateGrowthNudges();
+
+    logSpy.mockRestore();
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    expect(pool.query.mock.calls[0][0]).toContain(
+      'LEFT JOIN user_growth_preferences ugp ON BINARY ugp.user_id = BINARY ug.user_id',
+    );
   });
 });
 

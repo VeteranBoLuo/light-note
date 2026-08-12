@@ -259,7 +259,7 @@ export const getSecurityOverviewV2 = async (req, res) => {
        WHERE e.created_at >= ?
          AND COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type) IS NOT NULL
        GROUP BY COALESCE(NULLIF(e.primary_rule_code, ''), NULLIF(e.matched_rule, ''), e.attack_type)
-       ORDER BY COALESCE(falsePositiveRate, 0) DESC, rawHits DESC
+       ORDER BY falsePositiveRate DESC, rawHits DESC
        LIMIT 5`,
       [cutoff],
     );

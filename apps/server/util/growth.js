@@ -1326,7 +1326,7 @@ export async function generateGrowthNudges() {
     const [risk] = await pool.query(
       `SELECT ug.user_id, ug.streak, u.preferences FROM user_growth ug
          JOIN user u ON u.id = ug.user_id
-         LEFT JOIN user_growth_preferences ugp ON ugp.user_id = ug.user_id
+         LEFT JOIN user_growth_preferences ugp ON BINARY ugp.user_id = BINARY ug.user_id
         WHERE ug.last_checkin_date = ? AND ug.streak >= 3 AND ug.last_checkin_date <> ?
           AND COALESCE(ugp.streak_reminder_enabled, 1) = 1`,
       [yesterday, today],

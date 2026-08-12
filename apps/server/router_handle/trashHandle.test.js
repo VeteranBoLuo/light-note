@@ -201,6 +201,14 @@ describe('回收站与待整理关系', () => {
     await cleanupAllExpiredTrash();
 
     logSpy.mockRestore();
+    const noteExpirySql = query.mock.calls.find(([sql]) =>
+      String(sql).includes('SELECT n.id, n.create_by FROM note n'),
+    )?.[0];
+    const fileExpirySql = query.mock.calls.find(([sql]) =>
+      String(sql).includes('SELECT f.id, f.obs_key, f.create_by'),
+    )?.[0];
+    expect(noteExpirySql).toContain('ON BINARY g.user_id = BINARY n.create_by');
+    expect(fileExpirySql).toContain('ON BINARY g.user_id = BINARY f.create_by');
     expect(deleteNoteResourceRefsForNotes).toHaveBeenCalledWith(connection, ['expired-note']);
     expect(deleteNoteResourceRefsForNotes.mock.invocationCallOrder[0]).toBeLessThan(
       connection.commit.mock.invocationCallOrder[0],

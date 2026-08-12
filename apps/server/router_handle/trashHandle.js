@@ -80,7 +80,7 @@ async function cleanupExpiredFiles(connection, userId = null) {
   const userCond = userId ? ` AND f.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('f.create_by')}`;
   const [rows] = await connection.query(
     `SELECT f.id, f.obs_key, f.create_by, f.file_name FROM files f
-     LEFT JOIN user_growth g ON g.user_id = f.create_by
+     LEFT JOIN user_growth g ON BINARY g.user_id = BINARY f.create_by
      WHERE ${expiryWhere('f')}${userCond}`,
   );
 
@@ -118,7 +118,9 @@ async function cleanupExpiredFiles(connection, userId = null) {
 async function cleanupExpiredNotes(connection, userId = null) {
   const userCond = userId ? ` AND n.create_by = ${pool.escape(userId)}` : ` AND ${NOT_ROOT_CONDITION('n.create_by')}`;
   const [notes] = await connection.query(
-    `SELECT n.id, n.create_by FROM note n LEFT JOIN user_growth g ON g.user_id = n.create_by WHERE ${expiryWhere('n')}${userCond}`,
+    `SELECT n.id, n.create_by FROM note n
+     LEFT JOIN user_growth g ON BINARY g.user_id = BINARY n.create_by
+     WHERE ${expiryWhere('n')}${userCond}`,
   );
   if (notes.length === 0) return { count: 0, imageUrls: [], userIds: [] };
   const candidatesByUser = new Map();

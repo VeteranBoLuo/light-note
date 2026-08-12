@@ -258,15 +258,13 @@ describe('communityChatMessageService', () => {
             [],
           ];
         }
+        if (text.includes('FROM user_achievements')) {
+          expect(params).toEqual(['user-2']);
+          return [[{ ref: 'streak_7', latestId: 2 }], []];
+        }
         if (text.includes('FROM points_log')) {
-          expect(params).toEqual(['user-2', 'user-2']);
-          return [
-            [
-              { ref: 'streak_7', latestId: 2 },
-              { ref: 'unknown-achievement', latestId: 1 },
-            ],
-            [],
-          ];
+          expect(params).toEqual(['user-2']);
+          return [[{ ref: 'unknown-achievement', latestId: 1 }], []];
         }
         throw new Error(`unexpected query: ${sql}`);
       }),

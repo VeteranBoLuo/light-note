@@ -962,10 +962,11 @@ export const getUserAdminDetail = async (req, res) => {
       ),
       readSection(
         'accountDeletion',
-        `SELECT request_id, status, attempts, next_retry_at, create_time, update_time, completed_at
+        `SELECT id AS request_id, status, attempts, next_retry_at,
+                requested_at AS create_time, update_time, completed_at
          FROM account_deletion_requests
          WHERE user_id = ?
-         ORDER BY create_time DESC
+         ORDER BY requested_at DESC
          LIMIT 1`,
         [targetUserId],
       ),

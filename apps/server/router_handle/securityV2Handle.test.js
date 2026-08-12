@@ -329,6 +329,8 @@ describe('securityV2Handle 安全态势', () => {
     const noisyRulesSql = mocks.pool.query.mock.calls[3][0];
     expect(noisyRulesSql).toContain('FROM security_events e');
     expect(noisyRulesSql).not.toContain('security_event_evidence');
+    expect(noisyRulesSql).toContain('ORDER BY falsePositiveRate DESC, rawHits DESC');
+    expect(noisyRulesSql).not.toContain('COALESCE(falsePositiveRate');
     expect(res.body).toMatchObject({
       status: 200,
       data: {

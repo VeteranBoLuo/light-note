@@ -956,16 +956,18 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
     try {
       await conn.beginTransaction();
       const [claimed] = await conn.query(
-        `SELECT 1 FROM (
-           SELECT achievement_key FROM user_achievements
-            WHERE user_id = ? AND achievement_key = ? AND claimed_at IS NOT NULL
-           UNION
-           SELECT ref FROM points_log
-            WHERE user_id = ? AND reason = 'achievement' AND ref = ?
-         ) claimed LIMIT 1`,
+        `SELECT (
+           EXISTS(
+             SELECT 1 FROM user_achievements
+              WHERE user_id = ? AND achievement_key = ? AND claimed_at IS NOT NULL
+           ) OR EXISTS(
+             SELECT 1 FROM points_log
+              WHERE user_id = ? AND reason = 'achievement' AND ref = ?
+           )
+         ) AS claimed`,
         [userId, item.achievementKey, userId, item.achievementKey],
       );
-      if (!claimed.length) {
+      if (!Boolean(Number(claimed[0]?.claimed))) {
         await conn.rollback();
         return { ok: false, reason: 'not_owned', msg: '未拥有该装扮' };
       }

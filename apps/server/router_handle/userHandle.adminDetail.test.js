@@ -119,6 +119,10 @@ describe('后台用户管理增强', () => {
     expect(payload.data.sessions[0].id).toMatch(/^[a-f0-9]{16}$/);
     expect(JSON.stringify(payload.data.sessions[0])).not.toContain('secret-session-id');
     expect(JSON.stringify(payload.data.sessions[0])).not.toContain('secret-device-digest');
+    const deletionCall = query.mock.calls.find(([sql]) => normalized(sql).includes('FROM account_deletion_requests'));
+    expect(normalized(deletionCall[0])).toContain('SELECT id AS request_id');
+    expect(normalized(deletionCall[0])).toContain('requested_at AS create_time');
+    expect(normalized(deletionCall[0])).toContain('ORDER BY requested_at DESC');
   });
 
   it('用户列表将角色、停用状态和活跃范围纳入服务端查询与游标域', async () => {

@@ -247,11 +247,14 @@ describe('头像框佩戴校验', () => {
       ok: true,
       equipped: 'frame_streak_seed',
     });
-    expect(connection.query).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining('SELECT achievement_key FROM user_achievements'),
-      ['user-1', 'streak_7', 'user-1', 'streak_7'],
-    );
+    expect(connection.query).toHaveBeenNthCalledWith(1, expect.stringContaining('SELECT 1 FROM user_achievements'), [
+      'user-1',
+      'streak_7',
+      'user-1',
+      'streak_7',
+    ]);
+    expect(String(connection.query.mock.calls[0][0])).toContain('EXISTS(');
+    expect(String(connection.query.mock.calls[0][0])).not.toContain('UNION');
     expect(connection.query).toHaveBeenNthCalledWith(
       2,
       'INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)',
