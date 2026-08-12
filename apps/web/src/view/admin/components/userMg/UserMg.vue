@@ -50,6 +50,7 @@
       :loading="loading"
       :has-more="hasMore"
       :remote-sort="true"
+      :row-height="48"
       :sort="sortState"
       @load-more="loadMore"
       @sort-change="onSortChange"
@@ -57,7 +58,16 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'headPicture'">
-          <svg-icon style="border-radius: 50%" :src="record.headPicture || icon.navigation.user" :size="30" />
+          <span class="usermg-avatar" aria-hidden="true">
+            <AvatarFramePreview
+              v-if="frameVariant(record.equippedFrame)"
+              :frame-id="record.equippedFrame"
+              :src="record.headPicture || icon.navigation.user"
+              :size="30"
+              pause-when-offscreen
+            />
+            <svg-icon v-else style="border-radius: 50%" :src="record.headPicture || icon.navigation.user" :size="30" />
+          </span>
         </template>
         <template v-else-if="column.key === 'adminRemark'">
           <span class="usermg-remark" :class="{ 'is-empty': !record.adminRemark }">
@@ -133,6 +143,8 @@
   import { apiQueryPost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import { frameVariant } from '@/config/growthFrames.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BForm from '@/components/base/BasicComponents/BForm/BForm.vue';
   import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
@@ -449,6 +461,16 @@
       color: var(--desc-color);
       font-weight: 400;
     }
+  }
+
+  .usermg-avatar {
+    width: 44px;
+    height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    vertical-align: middle;
   }
 
   /* 图标形态的操作按钮：重置浏览器默认外观，保持原来「一个图标」的观感 */

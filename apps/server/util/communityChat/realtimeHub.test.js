@@ -69,14 +69,14 @@ function connectClient(url, origin, options = {}) {
   return { events, opened, waitFor, ws };
 }
 
-async function subscribe(client) {
+async function subscribe(client, presenceClientId = '') {
   await client.opened;
   client.ws.send(
     JSON.stringify({
       protocolVersion: 1,
       type: 'room.subscribe',
       requestId: 'subscribe-0001',
-      payload: { roomSlug: 'general' },
+      payload: { roomSlug: 'general', ...(presenceClientId ? { presenceClientId } : {}) },
     }),
   );
   return client.waitFor('room.subscribed');
@@ -106,6 +106,38 @@ describe('communityChat realtime hub', () => {
     broker.publish('message.updated', { roomSlug: 'general', messagePublicId: 'message-0001', reason: 'recall' });
     const updated = await client.waitFor('message.updated');
     expect(updated.payload).toEqual({ roomSlug: 'general', messagePublicId: 'message-0001', reason: 'recall' });
+  });
+
+  it('在线人数按账号或游客浏览器去重，并在离线宽限后广播减少', async () => {
+    const db = {
+      query: vi.fn(async (_sql, params) => [[{ id: params[0], alias: params[0], role: 'user', del_flag: '0' }], []]),
+    };
+    const { hub, origin, url } = await createHarness({
+      db,
+      presenceGraceMs: 30,
+      getSessionById: async (sid) => ({ user_id: sid }),
+      getRestrictions: async () => [],
+      assertReadAccess: async ({ user }) => ({ memberRole: user.role }),
+    });
+    const guestFirst = connectClient(url, origin);
+    const guestSecondTab = connectClient(url, origin);
+    const userFirst = connectClient(url, origin, { headers: { Cookie: 'sid=user-a' } });
+    const userSecondDevice = connectClient(url, origin, { headers: { Cookie: 'sid=user-a' } });
+
+    expect((await subscribe(guestFirst, 'guest-device-0001')).payload.onlineCount).toBe(1);
+    expect((await subscribe(guestSecondTab, 'guest-device-0001')).payload.onlineCount).toBe(1);
+    expect((await subscribe(userFirst, 'user-device-000001')).payload.onlineCount).toBe(2);
+    expect((await subscribe(userSecondDevice, 'user-device-000002')).payload.onlineCount).toBe(2);
+    expect(hub.getOnlineCount()).toBe(2);
+
+    userFirst.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(hub.getOnlineCount()).toBe(2);
+    userSecondDevice.ws.close();
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(hub.getOnlineCount()).toBe(1);
+    const changed = guestFirst.events.filter((event) => event.type === 'presence.changed').at(-1);
+    expect(changed?.payload).toEqual({ onlineCount: 1 });
   });
 
   it('按实时数据库账号认证 sid，并且定向权限事件不会泄漏给其他连接', async () => {

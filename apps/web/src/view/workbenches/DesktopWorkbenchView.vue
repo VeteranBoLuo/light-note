@@ -21,11 +21,7 @@
           <p>{{ t('workbench.subtitle') }}</p>
           <small class="workbench-data-scope">
             {{ t('workbench.meta.todayRange') }}
-            <span
-              class="workbench-data-updated"
-              :aria-busy="!lastUpdatedAt"
-              aria-live="polite"
-            >
+            <span class="workbench-data-updated" :aria-busy="!lastUpdatedAt" aria-live="polite">
               ·
               {{ lastUpdatedAt ? t('workbench.meta.lastUpdated', { time: lastUpdatedAt }) : t('common.loading') }}
             </span>
@@ -487,6 +483,7 @@
     noteTotal: 0,
     fileTotal: 0,
     usedSpace: 0,
+    trashFileSize: 0,
   });
   const weeklyStats = ref({ bookmark: 0, note: 0, file: 0, tag: 0 });
   const todayStats = ref({
@@ -511,7 +508,7 @@
   const fileVisible = ref(false);
   const activeFile = ref<any>(null);
 
-  const maxSpaceMb = computed(() => growth.value?.spaceMb || cloud.maxSpace || 512);
+  const maxSpaceMb = computed(() => growth.value?.spaceMb || cloud.maxSpace || 1024);
   const storagePercent = computed(() => {
     if (!maxSpaceMb.value) return 0;
     return Math.min(100, Number(((cloud.usedSpace / maxSpaceMb.value) * 100).toFixed(1)));
@@ -884,11 +881,14 @@
         noteTotal: Number(data.counts?.noteTotal || 0),
         fileTotal: Number(data.counts?.fileTotal || 0),
         usedSpace: Number(data.counts?.usedSpace || 0),
+        trashFileSize: Number(data.counts?.trashFileSize || 0),
       };
       user.bookmarkTotal = workbenchCounts.value.bookmarkTotal;
       user.tagTotal = workbenchCounts.value.tagTotal;
       user.noteTotal = workbenchCounts.value.noteTotal;
       cloud.usedSpace = workbenchCounts.value.usedSpace;
+      cloud.trashSpace = workbenchCounts.value.trashFileSize;
+      cloud.activeSpace = Math.max(0, workbenchCounts.value.usedSpace - workbenchCounts.value.trashFileSize);
       weeklyStats.value = {
         bookmark: Number(data.weeklyStats?.bookmark || 0),
         note: Number(data.weeklyStats?.note || 0),

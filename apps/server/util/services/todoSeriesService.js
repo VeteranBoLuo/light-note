@@ -148,6 +148,7 @@ function previewSummary(preview) {
   const timeParts = [];
   if (timing.startTime) timeParts.push(`${timing.startTime} 开始`);
   if (timing.dueTime) timeParts.push(`${timing.dueTime} 截止`);
+  if (!timeParts.length && taskMode === 'independent') timeParts.push('全天待办（未设置开始和截止时间）');
   const channelLabel = reminder.channels.map((channel) => (channel === 'in_app' ? '站内' : '邮箱')).join(' + ');
   let reminderLabel = '不提醒';
   if (reminder.mode === 'once') {

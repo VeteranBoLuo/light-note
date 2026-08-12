@@ -394,7 +394,7 @@ describe('CommunityChatWorkspace', () => {
     const socket = WorkspaceRealtimeSocket.instances[0];
     expect(socket.url).toContain('/realtime/chat');
     socket.open();
-    socket.message('room.subscribed', { roomSlug: 'general' });
+    socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 6 });
     await flushAsync();
 
     mocks.getMessages.mockClear();
@@ -414,6 +414,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 });
     expect(host.textContent).toContain('实时补齐的新消息');
     expect(host.textContent).toContain(zhCN.communityChat.realtimeConnected);
+    expect(host.textContent).toContain('在线人数 6');
 
     mocks.getMessages.mockResolvedValueOnce({
       data: {

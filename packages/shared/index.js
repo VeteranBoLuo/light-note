@@ -19,15 +19,17 @@ export const STATUS = Object.freeze({
  * 网站合规展示信息（前后端共享的单一事实源）。
  *
  * 产品品牌始终是“轻笺”；“轻笺知识库”只用于网站备案全称及合规位置。
- * 公安备案通过前不得填写占位编号，编号和查询地址必须同时存在才允许页面展示。
+ * 网站公安备案通过前不得填写占位编号；编号、查询地址和官方徽标必须同时存在才允许页面展示。
+ * APP 公安注册登记仅展示登记结果，不得把这里的网站公安备案号冒充为 APP 公安备案号。
  */
 export const SITE_COMPLIANCE = Object.freeze({
   productName: '轻笺',
   websiteFilingName: '轻笺知识库',
   websiteIcpNumber: '蜀ICP备2026017699号-1',
   miitQueryUrl: 'https://beian.miit.gov.cn/',
-  publicSecurityFilingNumber: '',
-  publicSecurityQueryUrl: '',
+  publicSecurityFilingNumber: '川公网安备51200002001211号',
+  publicSecurityQueryUrl: 'https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211',
+  publicSecurityBadgePath: '/public-security-filing-badge.png',
 });
 
 // 云文件在线预览格式注册表。这里是前后端关于“扩展名 -> 预览策略”的单一事实源；

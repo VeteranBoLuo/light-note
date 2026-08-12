@@ -29,6 +29,16 @@ describe('communityChat realtime protocol', () => {
     });
   });
 
+  it('允许只用于游客去重的稳定客户端标识，但拒绝伪造身份或非法标识', () => {
+    const parsed = parseCommunityChatClientMessage(
+      subscription({ payload: { roomSlug: 'general', presenceClientId: 'device-12345678-abcd' } }),
+    );
+    expect(parsed.payload).toEqual({ roomSlug: 'general', presenceClientId: 'device-12345678-abcd' });
+    expect(() =>
+      parseCommunityChatClientMessage(subscription({ payload: { roomSlug: 'general', presenceClientId: 'short' } })),
+    ).toThrowError(expect.objectContaining({ code: 'REALTIME_PRESENCE_CLIENT_ID_INVALID' }));
+  });
+
   it('拒绝客户端提交 userId、role 或未知房间', () => {
     expect(() => parseCommunityChatClientMessage(subscription({ userId: 'root-user' }))).toThrowError(
       CommunityChatRealtimeProtocolError,

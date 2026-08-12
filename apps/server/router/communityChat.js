@@ -90,6 +90,8 @@ router.get('/messages/:publicId/author-profile', handle.messageAuthorProfile);
 router.get('/messages/:publicId/author-profile/achievements', handle.messageAuthorAchievements);
 router.get('/messages/:publicId/author-avatar', handle.messageAuthorAvatar);
 router.get('/profile/me', handle.ownProfile);
+router.put('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
+// 兼容尚未升级的本地或旧版客户端；生产代理使用 PUT 作为公开写入方法。
 router.patch('/profile/me', profileWriteLimiter, handle.updateOwnProfile);
 router.get('/profile/me/avatar', handle.ownProfileAvatar);
 router.put('/messages/:publicId/like', messageWriteLimiter, handle.toggleMessageLike);

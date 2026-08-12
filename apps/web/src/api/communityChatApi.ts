@@ -1,4 +1,4 @@
-import { apiBaseGet, apiBasePatch, apiBasePost, apiBasePut } from '@/http/request';
+import { apiBaseGet, apiBasePost, apiBasePut } from '@/http/request';
 
 export type CommunityChatAccessStatus =
   'login_required' | 'read_only' | 'closed' | 'not_invited' | 'requested' | 'rules_required' | 'active' | 'restricted';
@@ -274,7 +274,7 @@ export const updateCommunityChatOwnProfile = (input: {
   showCommunityTenure: boolean;
   featuredAchievementKeys: string[];
   baseRevision: number;
-}) => apiBasePatch('/api/community-chat/profile/me', input, { silent: true });
+}) => apiBasePut('/api/community-chat/profile/me', input, { silent: true });
 
 export const sendCommunityChatMessage = (roomSlug: string, input: SendCommunityChatMessageInput) =>
   apiBasePost(`${roomPath(roomSlug)}/messages`, input, { silent: true });

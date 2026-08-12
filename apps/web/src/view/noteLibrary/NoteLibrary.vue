@@ -172,7 +172,7 @@
       <template #sidebar>
         <aside class="note-sidebar-panel">
           <NoteWorkspaceSidebar
-            v-model:mode="noteSidebarMode"
+            :mode="noteSidebarMode"
             :current-parent-id="currentParentId"
             :active-page-id="previewNoteId"
             :browse-parent-id="currentParentId"
@@ -196,6 +196,7 @@
             :drop-target-active="dragDropTargetActive"
             :drop-target-position="dragDropTarget?.position || ''"
             :menu-disabled="noteDragging"
+            @update:mode="setNoteSidebarModeFromUser"
             @toggle="toggleTreeNode"
             @select="selectDirectory"
             @select-tag="selectMobileDirectoryTag"
@@ -574,6 +575,7 @@
       :write-enabled="noteTreeWriteEnabled"
       @select="selectDirectory"
       @select-tag="selectMobileDirectoryTag"
+      @mode-change="setNoteSidebarModeFromUser"
       @open-page="openDirectoryPage($event.id)"
       @create="showNewChildPicker"
       @attach="openAttachPages"
@@ -675,6 +677,7 @@
     type NoteTreeDropTarget,
   } from '@/utils/noteTreeDrop';
   import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
+  import { updatePreference } from '@/utils/savePreference';
   import { getRootZoom } from '@/utils/zoom';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import {
@@ -763,6 +766,12 @@
   }
 
   const noteSidebarMode = ref<'directory' | 'tags'>(initialNoteClassificationMode());
+
+  function setNoteSidebarModeFromUser(mode: 'directory' | 'tags') {
+    noteSidebarMode.value = mode;
+    if (user.preferences.noteSidebarMode === mode) return;
+    void updatePreference({ noteSidebarMode: mode }).catch(() => message.warning(t('settings.saveFailed')));
+  }
   // 目录能力快照返回前先按账号的目录偏好渲染同尺寸标题栏，避免首屏骨架整体下移。
   const showDesktopDirectoryHeader = computed(
     () =>

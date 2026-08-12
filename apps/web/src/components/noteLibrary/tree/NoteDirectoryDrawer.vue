@@ -10,7 +10,7 @@
     @close="requestClose"
   >
     <div class="note-directory-drawer">
-      <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" />
+      <BTabs v-model:active-tab="activeTab" :options="tabs" variant="segment" @change="handleModeChange" />
 
       <template v-if="activeTab === 'directory'">
         <nav class="note-drawer-breadcrumb" :aria-label="t('note.currentDirectory')">
@@ -90,11 +90,9 @@
             >
               <SvgIcon :src="icon.arrow_right" size="15" aria-hidden="true" />
             </BButton>
-            <BDropdown :trigger="'click'" :align="'right'" :menu-options="directoryActions(item)" @click.stop>
-              <BButton class="note-drawer-more" :aria-label="t('common.more')">
-                <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
-              </BButton>
-            </BDropdown>
+            <BButton class="note-drawer-more" :aria-label="t('common.more')" @click.stop="openDirectoryActions(item)">
+              <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
+            </BButton>
           </div>
           <p v-if="!items.length && !error" class="note-drawer-empty">{{ t('note.noSubpages') }}</p>
           <p v-if="error" class="note-drawer-error">{{ error }}</p>
@@ -113,6 +111,12 @@
       />
     </div>
   </BDrawer>
+  <MobilePageActionsDrawer
+    v-model:open="directoryActionDrawerOpen"
+    :object-title="directoryActionNode?.title || t('note.untitled')"
+    :actions="directoryActionOptions"
+    @action="handleDirectoryAction"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -120,10 +124,12 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDrawer from '@/components/base/BasicComponents/BDrawer.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, {
+    type MobilePageActionItem,
+  } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import NoteTagSidebar from '@/components/noteLibrary/library/NoteTagSidebar.vue';
   import icon from '@/config/icon';
   import { apiBasePost } from '@/http/request';
@@ -166,6 +172,7 @@
   const emit = defineEmits<{
     select: [parentId: string | null];
     selectTag: [key: string];
+    modeChange: [mode: 'directory' | 'tags'];
     openPage: [node: NoteTreeItem];
     create: [node: NoteTreeItem];
     attach: [node: NoteTreeItem];
@@ -180,6 +187,8 @@
   const items = ref<NoteTreeItem[]>([]);
   const loading = ref(false);
   const error = ref('');
+  const directoryActionDrawerOpen = ref(false);
+  const directoryActionNode = ref<NoteTreeItem | null>(null);
   let requestSeq = 0;
   let loadScheduleSeq = 0;
   let historyHandle: MobileOverlayHistoryHandle | null = null;
@@ -191,6 +200,10 @@
   ]);
   const browseTitle = computed(() => breadcrumb.value[breadcrumb.value.length - 1]?.title || t('note.knowledgeRoot'));
   const isBrowsingSelectedDirectory = computed(() => browseParentId.value === props.currentParentId);
+
+  function handleModeChange(mode: string) {
+    if (mode === 'directory' || mode === 'tags') emit('modeChange', mode);
+  }
 
   function registerHistory() {
     if (!open.value || historyHandle) return;
@@ -256,48 +269,71 @@
     });
   }
 
-  function directoryActions(node: NoteTreeItem) {
+  const directoryActionOptions = computed<MobilePageActionItem[]>(() => {
+    const node = directoryActionNode.value;
+    if (!node) return [];
     return [
       {
+        key: 'openPage',
         label: t('note.openPageBody'),
         icon: icon.noteTree.openPage,
-        function: () => closeAndEmit('openPage', node),
       },
       ...(props.writeEnabled
         ? [
             {
+              key: 'toggleTop',
               label: node.isTop ? t('common.unpin') : t('common.pin'),
               icon: node.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
-              function: () => closeAndEmit('toggleTop', node),
             },
             {
+              key: 'create',
               label: t('note.newChildPage'),
               icon: icon.common.add,
-              function: () => closeAndEmit('create', node),
             },
             {
+              key: 'attach',
               label: t('note.addExistingPages'),
               icon: icon.noteTree.move,
-              function: () => closeAndEmit('attach', node),
             },
             {
+              key: 'move',
               label: t('note.moveThisPage'),
               icon: icon.noteTree.move,
-              function: () => closeAndEmit('move', node),
             },
           ]
         : []),
       ...(props.writeEnabled
         ? [
             {
+              key: 'delete',
               label: t('note.moveToTrash'),
               icon: icon.table_delete,
               danger: true,
-              function: () => closeAndEmit('delete', node),
+              dividerBefore: true,
             },
           ]
         : []),
     ];
+  });
+
+  function openDirectoryActions(node: NoteTreeItem) {
+    directoryActionNode.value = node;
+    directoryActionDrawerOpen.value = true;
+  }
+
+  function handleDirectoryAction(action: MobilePageActionItem) {
+    const node = directoryActionNode.value;
+    if (!node) return;
+    if (
+      action.key === 'openPage' ||
+      action.key === 'create' ||
+      action.key === 'attach' ||
+      action.key === 'toggleTop' ||
+      action.key === 'move' ||
+      action.key === 'delete'
+    ) {
+      void closeAndEmit(action.key, node);
+    }
   }
 
   async function browseTo(parentId: string | null) {
@@ -364,6 +400,8 @@
         scheduleDirectoryLevelLoad();
         return;
       }
+      directoryActionDrawerOpen.value = false;
+      directoryActionNode.value = null;
       loadScheduleSeq += 1;
       requestSeq += 1;
       if (historyHandle) releaseMobileOverlayHistory(historyHandle);

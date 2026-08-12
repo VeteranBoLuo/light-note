@@ -2,7 +2,12 @@ import express from 'express';
 const router = express.Router();
 
 import * as commonHandle from '../router_handle/commonHandle.js';
-import { getAdminActionCenter, retryAdminAsyncJob } from '../router_handle/adminActionCenterHandle.js';
+import {
+  dismissAdminAsyncJob,
+  getAdminActionCenter,
+  getAdminTodoReminderDiagnostic,
+  retryAdminAsyncJob,
+} from '../router_handle/adminActionCenterHandle.js';
 import { getAdminOperationAudits } from '../router_handle/adminAuditHandle.js';
 import { updateAdminAiFeedbackTriage } from '../router_handle/adminAiFeedbackHandle.js';
 import { getAdminGovernance, getAdminProductInsights } from '../router_handle/adminInsightsHandle.js';
@@ -56,7 +61,9 @@ router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);
 router.post('/getAdminActionCenter', getAdminActionCenter);
+router.post('/getAdminTodoReminderDiagnostic', getAdminTodoReminderDiagnostic);
 router.post('/retryAdminAsyncJob', retryAdminAsyncJob);
+router.post('/dismissAdminAsyncJob', dismissAdminAsyncJob);
 router.post('/getAdminOperationAudits', getAdminOperationAudits);
 router.post('/getAdminProductInsights', getAdminProductInsights);
 router.post('/getAdminGovernance', getAdminGovernance);

@@ -41,16 +41,16 @@
         :tone="trashFileSizeWarnLevel"
         :description="
           trashFileSizeWarnLevel === 'danger'
-            ? $t('trash.trashSizeWarning500', { size: trashFileSizeMB })
-            : $t('trash.trashSizeWarning200', { size: trashFileSizeMB })
+            ? $t('trash.trashSizeWarning500', { size: trashFileSizeText, percent: trashFileSizePercent })
+            : $t('trash.trashSizeWarning200', { size: trashFileSizeText, percent: trashFileSizePercent })
         "
         :icon="icon.common.important"
       />
       <div v-else-if="trashFileSizeWarnLevel" :class="['trash-size-warning', `is-${trashFileSizeWarnLevel}`]">
         <span>{{
           trashFileSizeWarnLevel === 'danger'
-            ? $t('trash.trashSizeWarning500', { size: trashFileSizeMB })
-            : $t('trash.trashSizeWarning200', { size: trashFileSizeMB })
+            ? $t('trash.trashSizeWarning500', { size: trashFileSizeText, percent: trashFileSizePercent })
+            : $t('trash.trashSizeWarning200', { size: trashFileSizeText, percent: trashFileSizePercent })
         }}</span>
       </div>
 
@@ -127,7 +127,9 @@
               <template #title>{{ item.name || '-' }}</template>
               <template #subtitle>
                 {{ $t(`trash.${item.resourceType}`) }}
-                <template v-if="item.resourceType === 'file' && item.fileSize"> · {{ formatTrashSize(item.fileSize) }}</template>
+                <template v-if="item.resourceType === 'file' && item.fileSize">
+                  · {{ formatTrashSize(item.fileSize) }}</template
+                >
                 <template v-else-if="item.resourceType === 'note' && Number(item.batchCount || 1) > 1">
                   · {{ $t('trash.noteTreeBatch', { count: item.batchCount }) }}
                 </template>
@@ -175,9 +177,7 @@
                       {{ formatTrashSize((record as any).fileSize) }}
                     </span>
                     <span
-                      v-else-if="
-                        (record as any).resourceType === 'note' && Number((record as any).batchCount || 1) > 1
-                      "
+                      v-else-if="(record as any).resourceType === 'note' && Number((record as any).batchCount || 1) > 1"
                       class="trash-name-size"
                     >
                       {{ $t('trash.noteTreeBatch', { count: (record as any).batchCount }) }}
@@ -265,7 +265,8 @@
     selectedItems,
     retainDays,
     trashFileSize,
-    trashFileSizeMB,
+    trashFileSizeText,
+    trashFileSizePercent,
     trashFileSizeWarnLevel,
     pageSubtitle,
     setFilter,

@@ -142,7 +142,26 @@ describe('useCommunityChatUnreadRuntime', () => {
     await nextTick();
 
     expect(useCommunityChatUnread().totalUnread.value).toBe(0);
-    expect(mocks.socketOptions?.enabled.value).toBe(false);
+    expect(mocks.socketOptions?.enabled.value).toBe(true);
+    expect(mocks.socketOptions?.roomSlug.value).toBe('general');
+  });
+
+  it('游客不产生未读，但会复用公共房间连接参与项目在线人数', async () => {
+    const runtime = await mountRuntime();
+    runtime.userId.value = '';
+    runtime.userRole.value = 'visitor';
+    await flushRequests();
+
+    mocks.getAccess.mockClear();
+    mocks.getRooms.mockClear();
+    await vi.advanceTimersByTimeAsync(__test__.FALLBACK_REFRESH_INTERVAL_MS);
+    await flushRequests();
+
+    expect(mocks.socketOptions?.enabled.value).toBe(true);
+    expect(mocks.socketOptions?.roomSlug.value).toBe('general');
+    expect(useCommunityChatUnread().totalUnread.value).toBe(0);
+    expect(mocks.getAccess).not.toHaveBeenCalled();
+    expect(mocks.getRooms).not.toHaveBeenCalled();
   });
 
   it('服务端关闭 realtime 时保留低频 REST 兜底但不反复建立 WebSocket', async () => {

@@ -58,25 +58,15 @@
         {{ t('inbox.deleteSelected') }}
       </BButton>
     </div>
-    <BPopover
+    <BButton
       v-else-if="showMenu && !selectionMode"
-      v-model:open="menuOpen"
-      trigger="click"
-      placement="bottom-right"
-      overlay-class-name="resource-center-menu-popover"
+      class="resource-center-topbar__menu"
+      :aria-label="t('inbox.mobileMenu')"
+      :title="t('inbox.mobileMenu')"
+      @click="menuOpen = true"
     >
-      <BButton class="resource-center-topbar__menu" :aria-label="t('inbox.mobileMenu')" :title="t('inbox.mobileMenu')">
         <SvgIcon :src="icon.common.more" size="19" aria-hidden="true" />
-      </BButton>
-      <template #content>
-        <div class="resource-center-topbar__menu-content">
-          <BButton @click="emitMenu('create')">{{ createLabel || t('inbox.quickCapture') }}</BButton>
-          <BButton v-if="allowBatch" @click="emitMenu('batch')">{{ t('inbox.mobileBatchSelect') }}</BButton>
-          <BButton v-if="allowSort" @click="emitMenu('sort')">{{ t('inbox.mobileSort') }}</BButton>
-          <BButton @click="emitMenu('filter')">{{ t('inbox.mobileFilter') }}</BButton>
-        </div>
-      </template>
-    </BPopover>
+    </BButton>
     <BButton
       v-else
       class="resource-center-topbar__action"
@@ -87,18 +77,26 @@
       <SvgIcon :src="icon.common.plus" size="20" aria-hidden="true" />
     </BButton>
   </header>
+  <MobilePageActionsDrawer
+    v-model:open="menuOpen"
+    :title="t('inbox.mobileMenu')"
+    :actions="menuActions"
+    @action="emitMenu"
+  />
 </template>
 
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, {
+    type MobilePageActionItem,
+  } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
 
-  withDefaults(
+  const props = withDefaults(
     defineProps<{
       keyword: string;
       inputId: string;
@@ -142,10 +140,20 @@
 
   const { t } = useI18n();
   const menuOpen = ref(false);
+  const menuActions = computed<MobilePageActionItem[]>(() => {
+    const actions: MobilePageActionItem[] = [
+      { key: 'create', label: props.createLabel || t('inbox.quickCapture'), icon: icon.common.plus },
+    ];
+    if (props.allowBatch) actions.push({ key: 'batch', label: t('inbox.mobileBatchSelect') });
+    if (props.allowSort) actions.push({ key: 'sort', label: t('inbox.mobileSort') });
+    actions.push({ key: 'filter', label: t('inbox.mobileFilter') });
+    return actions;
+  });
 
-  function emitMenu(event: 'create' | 'batch' | 'sort' | 'filter') {
-    menuOpen.value = false;
-    emit(event);
+  function emitMenu(action: MobilePageActionItem) {
+    if (action.key === 'create' || action.key === 'batch' || action.key === 'sort' || action.key === 'filter') {
+      emit(action.key);
+    }
   }
 </script>
 
@@ -232,17 +240,6 @@
     border-radius: 11px;
     color: var(--text-color);
     background: transparent !important;
-  }
-
-  .resource-center-topbar__menu-content {
-    display: grid;
-    min-width: 190px;
-    gap: 6px;
-  }
-
-  .resource-center-topbar__menu-content :deep(.b_btn) {
-    width: 100%;
-    justify-content: flex-start;
   }
 
   .resource-center-topbar__action:active {

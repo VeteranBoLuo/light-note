@@ -19,6 +19,14 @@ describe('QuickCaptureModal 移动端布局', () => {
     );
     expect(source).not.toMatch(/\.capture-intro-strip\s*\{[^}]*max-height:/);
   });
+
+  it('文件选择把整块浅紫区域作为 BButton 触发入口', () => {
+    expect(source).toMatch(
+      /<BUpload\s+block[\s\S]*?<BButton block class="file-capture__dropzone"/,
+    );
+    expect(source).toMatch(/\.file-capture__dropzone\s*\{[\s\S]*?width:\s*100%;/);
+    expect(source).not.toContain('file-capture__picker');
+  });
 });
 
 describe('QuickCaptureModal 桌面端布局', () => {

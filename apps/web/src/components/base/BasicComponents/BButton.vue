@@ -3,7 +3,7 @@
     class="b_btn"
     :type="nativeType"
     :style="{ border }"
-    :class="[btnClass, sizeClass, { loading, disabled }]"
+    :class="[btnClass, sizeClass, { loading, disabled, 'is-block': block }]"
     :disabled="disabled || loading"
     :aria-busy="loading || undefined"
   >
@@ -33,6 +33,10 @@
       default: false,
     },
     disabled: {
+      type: Boolean,
+      default: false,
+    },
+    block: {
       type: Boolean,
       default: false,
     },
@@ -93,6 +97,10 @@
       outline: 2px solid var(--primary-color, #615ced);
       outline-offset: 2px;
     }
+  }
+
+  .b_btn.is-block {
+    width: 100%;
   }
   .primary_btn {
     background-color: #615ced;

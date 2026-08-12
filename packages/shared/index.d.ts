@@ -26,8 +26,9 @@ export declare const SITE_COMPLIANCE: {
   readonly websiteFilingName: '轻笺知识库';
   readonly websiteIcpNumber: '蜀ICP备2026017699号-1';
   readonly miitQueryUrl: 'https://beian.miit.gov.cn/';
-  readonly publicSecurityFilingNumber: string;
-  readonly publicSecurityQueryUrl: string;
+  readonly publicSecurityFilingNumber: '川公网安备51200002001211号';
+  readonly publicSecurityQueryUrl: 'https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211';
+  readonly publicSecurityBadgePath: '/public-security-filing-badge.png';
 };
 
 export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';

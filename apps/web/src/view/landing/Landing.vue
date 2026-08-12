@@ -313,7 +313,19 @@
             <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
             <template v-if="hasPublicSecurityFiling">
               <span class="footer-sep">|</span>
-              <a :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+              <a
+                class="public-security-filing-link"
+                :href="PUBLIC_SECURITY_QUERY_URL"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <img
+                  class="public-security-filing-badge"
+                  :src="PUBLIC_SECURITY_BADGE_PATH"
+                  alt=""
+                  width="20"
+                  height="20"
+                />
                 {{ PUBLIC_SECURITY_FILING_NUMBER }}
               </a>
             </template>
@@ -419,6 +431,7 @@
   import { markMobileLandingVisited } from '@/utils/mobileLandingVisit.ts';
   import {
     MIIT_QUERY_URL,
+    PUBLIC_SECURITY_BADGE_PATH,
     PUBLIC_SECURITY_FILING_NUMBER,
     PUBLIC_SECURITY_QUERY_URL,
     WEBSITE_FILING_NAME,
@@ -1804,6 +1817,16 @@
   }
   .landing-footer a:hover {
     color: #615ced;
+  }
+  .public-security-filing-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .public-security-filing-badge {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
   }
   .footer-sep {
     color: #333;

@@ -109,4 +109,9 @@ describe('BUpload semantics', () => {
     trigger?.click();
     expect(click).not.toHaveBeenCalled();
   });
+
+  it('supports a full-width trigger without changing the default sizing contract', () => {
+    const blockHost = mountUpload({ block: true });
+    expect(blockHost.querySelector('.b-upload-trigger')?.classList.contains('is-block')).toBe(true);
+  });
 });

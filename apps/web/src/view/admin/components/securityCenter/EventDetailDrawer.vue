@@ -7,8 +7,9 @@
     body-padding="0"
     @close="emit('close')"
   >
-    <BLoading :loading="loading" class="security-detail-loading">
-      <div class="security-detail-body">
+    <div class="security-detail-layout">
+      <BLoading v-if="loading" inline loading class="security-detail-loading" :title="t('common.loading')" />
+      <div v-else class="security-detail-body">
         <div class="security-detail-summary">
           <div class="security-detail-stat"><span>{{ t('securityV2.review.threatScore') }}</span><strong>{{ number(event.threatScore) }}</strong></div>
           <div class="security-detail-stat"><span>{{ t('securityV2.review.confidence') }}</span><strong>{{ number(event.confidence) }}%</strong></div>
@@ -66,7 +67,7 @@
         <BButton class="is-false" @click="saveDisposition('false_positive')">{{ t('securityV2.review.falseAction') }}</BButton>
         <BButton type="danger" @click="saveDisposition('confirmed_attack')">{{ t('securityV2.review.confirmAction') }}</BButton>
       </footer>
-    </BLoading>
+    </div>
   </BDrawer>
 </template>
 

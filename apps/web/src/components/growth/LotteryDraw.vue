@@ -51,7 +51,6 @@
         </div>
 
         <div
-          ref="stageRef"
           class="lt-stage"
           :class="{ 'is-rolling': rolling, 'has-result': revealed.length }"
           :aria-busy="rolling || undefined"
@@ -296,7 +295,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useGrowth, type LotteryPrize } from '@/composables/useGrowth.ts';
   import { useUserStore } from '@/store';
@@ -309,11 +308,11 @@
 
   const { t } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
+  const emit = defineEmits<{ 'focus-header': [] }>();
   const readOnly = computed(() => props.readOnly);
   const { lottery, lotteryLoading, loadLottery, draw } = useGrowth();
 
   const rolling = ref(false);
-  const stageRef = ref<HTMLElement | null>(null);
   const revealed = ref<LotteryPrize[]>([]);
   const hitBest = ref(false);
   const pityTriggered = ref(false);
@@ -383,16 +382,6 @@
     return prize.name;
   }
 
-  async function revealStageOnMobile() {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    if (!window.matchMedia('(max-width: 760px)').matches) return;
-    await nextTick();
-    const reduceMotion =
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches ||
-      document.documentElement.classList.contains('disable-animations');
-    stageRef.value?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
-  }
-
   async function onDraw(times: number, free = false) {
     if (readOnly.value || (free ? !canFree.value : !canDraw(times))) return;
     rolling.value = true;
@@ -400,8 +389,9 @@
     hitBest.value = false;
     pityTriggered.value = false;
     try {
-      // 手机端抽取按钮在舞台下方，点击后主动回到舞台，让动画与结果直接进入视野。
-      await revealStageOnMobile();
+      // 滚动容器由成长页持有；统一让父页面把“积分抽奖”标题与余额留在视野内。
+      // 禁止在这里对舞台调用 scrollIntoView，否则会越过标题，回到用户反馈的图一位置。
+      emit('focus-header');
       const res = await draw(times, free);
       // 保留最短揭晓时长，避免网络响应过快导致舞台动画闪烁。
       await new Promise((resolve) => setTimeout(resolve, 650));
@@ -1336,7 +1326,6 @@
       min-height: 280px;
       padding: 18px;
       border-radius: 17px;
-      scroll-margin-top: 58px;
     }
 
     .lt-prizes {

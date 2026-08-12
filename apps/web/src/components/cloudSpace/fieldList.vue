@@ -140,6 +140,7 @@
           </div>
           <div v-if="!batchMode" class="file-card-more" @click.stop>
             <b-dropdown
+              v-if="!bookmark.isMobile"
               class="card-more-menu"
               :trigger="'click'"
               :menu-options="[
@@ -185,6 +186,14 @@
                 <svg-icon class="more-icon" :src="icon.common.more" size="20" />
               </BTooltip>
             </b-dropdown>
+            <BButton
+              v-else
+              class="mobile-file-more"
+              :aria-label="$t('common.more')"
+              @click="openMobileFileActions(item)"
+            >
+              <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+            </BButton>
           </div>
         </div>
         <div class="file-card-body">
@@ -364,6 +373,7 @@
               />
             </BTooltip>
             <b-dropdown
+              v-if="!bookmark.isMobile"
               :trigger="'click'"
               align="right"
               :menu-options="[
@@ -411,6 +421,14 @@
             >
               <svg-icon class="download-icon" :src="icon.common.more" size="20" />
             </b-dropdown>
+            <BButton
+              v-else
+              class="mobile-file-more"
+              :aria-label="$t('common.more')"
+              @click="openMobileFileActions(item)"
+            >
+              <SvgIcon :src="icon.common.more" size="20" aria-hidden="true" />
+            </BButton>
           </div>
         </div>
         <div class="default-area" v-if="!bookmark.isMobile">
@@ -547,6 +565,14 @@
       </div>
     </b-modal>
 
+    <MobilePageActionsDrawer
+      v-if="bookmark.isMobile"
+      v-model:open="mobileFileActionsOpen"
+      :object-title="mobileActionFile?.fileName || $t('common.more')"
+      :actions="mobileFileActions"
+      @action="handleMobileFileAction"
+    />
+
     <FileTagConfig
       v-if="tagModalVisible"
       v-model:visible="tagModalVisible"
@@ -628,6 +654,7 @@
   import { isNearResourceScrollEnd } from '@/utils/resourcePagination';
   import CloudTextCardPreview from '@/components/cloudSpace/CloudTextCardPreview.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
+  import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
 
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
@@ -647,6 +674,44 @@
 
   const batchMode = computed(() => props.batchMode ?? false);
   const fieldListRef = ref<HTMLElement | null>(null);
+  const mobileFileActionsOpen = ref(false);
+  const mobileActionFile = ref<any | null>(null);
+  const mobileFileActions = computed<MobilePageActionItem[]>(() => {
+    const file = mobileActionFile.value;
+    if (!file) return [];
+    return [
+      { key: 'rename', label: t('common.reName'), icon: icon.cloudSpace.rename },
+      { key: 'download', label: t('cloudSpace.download'), icon: icon.cloudSpace.download },
+      { key: 'tags', label: t('cloudSpace.relateTags'), icon: icon.manage_categoryBtn_tag },
+      { key: 'share', label: t('cloudSpace.share'), icon: icon.cloudSpace.share },
+      { key: 'move', label: t('cloudSpace.moveFile'), icon: icon.cloudSpace.moveFile },
+      { key: 'ai', label: t('cloudSpace.aiUseFile'), icon: icon.ai.ask },
+      {
+        key: 'inbox',
+        label: file.isPending ? t('inbox.removeExisting') : t('inbox.addExisting'),
+        icon: icon.contextMenu.inbox,
+      },
+      { key: 'delete', label: t('common.delete'), icon: icon.noteDetail.delete, danger: true, dividerBefore: true },
+    ];
+  });
+
+  function openMobileFileActions(file: any) {
+    mobileActionFile.value = file;
+    mobileFileActionsOpen.value = true;
+  }
+
+  function handleMobileFileAction(action: MobilePageActionItem) {
+    const file = mobileActionFile.value;
+    if (!file) return;
+    if (action.key === 'rename') openRenameModal(file);
+    else if (action.key === 'download') void handleDownloadFile(file);
+    else if (action.key === 'tags') void openTagDialog(file);
+    else if (action.key === 'share') void handleShareFile(file.id, file.fileName, file.fileType);
+    else if (action.key === 'move') emit('moveField', [file]);
+    else if (action.key === 'ai') void openFilesInAi([file]);
+    else if (action.key === 'inbox') void toggleFileInbox(file);
+    else if (action.key === 'delete') handleDelFile(file);
+  }
 
   /*
    * 下拉刷新。三类数据里只需并发两个请求:queryFieldList 的 finally 本身就会
@@ -1905,7 +1970,9 @@
   }
   @media (max-width: 767px) {
     .file-label {
-      width: calc(100% - 38px);
+      // 右侧“更多”现在是完整 44px 触控按钮；额外留出 10px 呼吸位，
+      // 避免待整理角标紧贴按钮，看起来像整组操作被挤到了标题旁边。
+      width: calc(100% - 54px);
     }
     .field-item--batch .file-label {
       width: 100%;
@@ -2177,6 +2244,16 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease;
+  }
+
+  .mobile-file-more.b_btn {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-color);
   }
   .file-card-more .more-icon {
     color: rgba(255, 255, 255, 0.7);

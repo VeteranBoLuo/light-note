@@ -27,7 +27,7 @@ describe('cloud space pagination', () => {
     setActivePinia(createPinia());
     mocks.apiBasePost.mockResolvedValue({
       status: 200,
-      data: { totalSizeMB: 10, quotaMB: 512 },
+      data: { totalSizeMB: 10, activeSizeMB: 8, trashSizeMB: 2, quotaMB: 1024, sharedWithTrash: true },
     });
   });
 

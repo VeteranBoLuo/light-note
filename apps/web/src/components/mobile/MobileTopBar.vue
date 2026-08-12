@@ -16,7 +16,6 @@
     <BButton
       v-else
       class="mobile-top-bar__profile"
-      :class="{ 'mobile-top-bar__profile--active': route.meta.mobileShell === 'profile' }"
       :aria-label="t('mobileNavigation.profile')"
       :title="t('mobileNavigation.profile')"
       :aria-current="route.meta.mobileShell === 'profile' ? 'page' : undefined"
@@ -208,10 +207,6 @@
     color: var(--text-color);
     background: transparent !important;
     overflow: visible;
-  }
-
-  .mobile-top-bar__profile--active {
-    border-color: var(--primary-color);
   }
 
   .mobile-top-bar__profile-avatar {

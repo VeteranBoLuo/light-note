@@ -46,14 +46,25 @@ function localDayDiff(start: string, end: string) {
   return Math.max(0, Math.round((Date.UTC(ey, em - 1, ed) - Date.UTC(sy, sm - 1, sd)) / 86_400_000));
 }
 
-function localToday() {
-  const now = new Date();
+export function todoTodayInTimezone(timezone = 'Asia/Shanghai', now = new Date()) {
   const pad = (value: number) => String(value).padStart(2, '0');
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    if (values.year && values.month && values.day) return `${values.year}-${values.month}-${values.day}`;
+  } catch {
+    // 非法时区最终仍会由服务端校验；这里回退到浏览器日期，保证表单可以继续编辑。
+  }
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 export function suggestTodoPlanEndDate(anchorAt?: string | null) {
-  const anchorDate = datePart(anchorAt) || localToday();
+  const anchorDate = datePart(anchorAt) || todoTodayInTimezone();
   const [year, month, day] = anchorDate.split('-').map(Number);
   const result = new Date(Date.UTC(year, month - 1, day + 30));
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -63,16 +74,21 @@ export function suggestTodoPlanEndDate(anchorAt?: string | null) {
 function normalizeTiming(draft: TodoCreateDraftV3): TodoPlanTiming {
   const startDate = datePart(draft.timing.startAt);
   const dueDate = datePart(draft.timing.dueAt);
-  const anchorDate = startDate || dueDate;
-  const startTime = startDate ? timePart(draft.timing.startAt) : null;
-  const dueTime = dueDate ? timePart(draft.timing.dueAt) : null;
+  const timezone = draft.timing.timezone || 'Asia/Shanghai';
   const dueDateEndsScheduledPlan = Boolean(
     draft.independentTasks.enabled &&
     draft.independentTasks.plan.type === 'scheduled' &&
     draft.independentTasks.plan.end?.mode === 'until' &&
-    dueDate &&
-    dueDate === draft.independentTasks.plan.end.untilDate,
+    dueDate,
   );
+  // 独立重复计划仍需要日期来确定“每天/每周”的第一项，但日期不代表开始时刻。
+  // “按日期结束”的截止日期表示计划末日，不能被误当成首项日期；没有开始日期时从计划时区的今天生成。
+  const anchorDate =
+    startDate ||
+    (dueDateEndsScheduledPlan ? null : dueDate) ||
+    (draft.independentTasks.enabled ? todoTodayInTimezone(timezone) : null);
+  const startTime = startDate ? timePart(draft.timing.startAt) : null;
+  const dueTime = dueDate ? timePart(draft.timing.dueAt) : null;
   const dueDayOffset =
     startDate && dueDate
       ? dueDateEndsScheduledPlan
@@ -82,7 +98,7 @@ function normalizeTiming(draft: TodoCreateDraftV3): TodoPlanTiming {
         : localDayDiff(startDate, dueDate)
       : 0;
   return {
-    timezone: draft.timing.timezone || 'Asia/Shanghai',
+    timezone,
     anchorDate,
     startTime,
     dueTime,
@@ -112,7 +128,11 @@ function normalizeSingleReminder(
     stop: { type: 'completion_or_due' as const },
   };
   const startDate =
-    repeat.startDate || datePart(repeat.startAt) || datePart(timing.startAt) || datePart(timing.dueAt) || localToday();
+    repeat.startDate ||
+    datePart(repeat.startAt) ||
+    datePart(timing.startAt) ||
+    datePart(timing.dueAt) ||
+    todoTodayInTimezone();
   return {
     version: 1,
     mode: 'repeat',
@@ -130,6 +150,15 @@ function normalizeSingleReminder(
 
 export function normalizeTodoCreateDraft(draft: TodoCreateDraftV3): TodoPlanDraft {
   const timing = normalizeTiming(draft);
+  const plan =
+    draft.independentTasks.enabled &&
+    draft.independentTasks.plan.type === 'scheduled' &&
+    draft.independentTasks.plan.end?.mode === 'until'
+      ? {
+          ...draft.independentTasks.plan,
+          end: { mode: 'until' as const, untilDate: datePart(draft.timing.dueAt) },
+        }
+      : draft.independentTasks.plan;
   const base = {
     title: draft.task.title.trim(),
     description: draft.task.description.trim(),
@@ -145,7 +174,7 @@ export function normalizeTodoCreateDraft(draft: TodoCreateDraftV3): TodoPlanDraf
     return {
       ...base,
       taskMode: 'independent',
-      plan: draft.independentTasks.plan,
+      plan,
       reminder: draft.independentTasks.reminder,
     };
   }
@@ -221,7 +250,7 @@ export function applyQuickPreset(draft: TodoCreateDraftV3, initial?: TodoCreateI
     mode: 'repeat',
     repeat: {
       kind: 'interval',
-      startAt: `${datePart(initial.dueAt) || localToday()} 09:00`,
+      startAt: `${datePart(initial.dueAt) || todoTodayInTimezone()} 09:00`,
       intervalMinutes: 1440,
       stop: { type: initial.dueAt ? 'completion_or_due' : 'completion' },
     },

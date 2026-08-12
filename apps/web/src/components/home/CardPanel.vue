@@ -101,7 +101,13 @@
       </a>
       <template v-if="hasPublicSecurityFiling">
         <span class="beian-separator">|</span>
-        <a class="icp-beian-link" :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+        <a
+          class="icp-beian-link public-security-filing-link"
+          :href="PUBLIC_SECURITY_QUERY_URL"
+          target="_blank"
+          rel="noreferrer"
+        >
+          <img :src="PUBLIC_SECURITY_BADGE_PATH" alt="" width="20" height="20" />
           {{ PUBLIC_SECURITY_FILING_NUMBER }}
         </a>
       </template>
@@ -122,6 +128,7 @@
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import {
     MIIT_QUERY_URL,
+    PUBLIC_SECURITY_BADGE_PATH,
     PUBLIC_SECURITY_FILING_NUMBER,
     PUBLIC_SECURITY_QUERY_URL,
     WEBSITE_FILING_NAME,
@@ -635,6 +642,18 @@
 
   .icp-beian-link:hover {
     opacity: 0.82;
+  }
+
+  .public-security-filing-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .public-security-filing-link img {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
   }
 
   @media (max-width: 768px) {

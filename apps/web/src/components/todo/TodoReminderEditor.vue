@@ -45,8 +45,8 @@
   const { t } = useI18n();
   const modeOptions = computed<Array<{ value: TodoSingleReminderMode; label: string }>>(() => [
     { value: 'none', label: t('inbox.todoReminderNone') },
-    { value: 'once', label: t('inbox.todoReminderOnce') },
-    { value: 'repeat', label: t('inbox.todoReminderRepeat') },
+    { value: 'once', label: t('inbox.todoReminderOnceCompact') },
+    { value: 'repeat', label: t('inbox.todoReminderRepeatCompact') },
   ]);
 
   function setMode(mode: TodoSingleReminderMode) {
@@ -128,11 +128,11 @@
 
   @media (max-width: 767px) {
     .todo-reminder-editor-v3__mode :deep(.b_btn) {
-      height: auto;
+      height: 44px;
       min-height: 44px;
-      padding-block: 6px;
+      padding: 0 4px;
       line-height: 1.35;
-      white-space: normal;
+      white-space: nowrap;
     }
   }
 

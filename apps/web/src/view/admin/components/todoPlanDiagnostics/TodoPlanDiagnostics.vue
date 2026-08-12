@@ -92,11 +92,11 @@
           >
           <div
             ><dt>{{ t('todoPlanDiagnosticsAdmin.generatedThrough') }}</dt
-            ><dd>{{ date(item.generatedThroughDate) }}</dd></div
+            ><dd>{{ dateOnly(item.generatedThroughDate) }}</dd></div
           >
           <div
             ><dt>{{ t('todoPlanDiagnosticsAdmin.nextReminder') }}</dt
-            ><dd>{{ date(item.nextReminderAt) }}</dd></div
+            ><dd>{{ beijingTime(item.nextReminderAtUtc) }}</dd></div
           >
           <div
             ><dt>{{ t('todoPlanDiagnosticsAdmin.jobs') }}</dt
@@ -121,8 +121,8 @@
         }}</BChip>
         <span v-else-if="column.key === 'rule'">{{ ruleLabel(record) }}</span>
         <span v-else-if="column.key === 'instances'">{{ progressLabel(record) }}</span>
-        <span v-else-if="column.key === 'generatedThroughDate'">{{ date(record.generatedThroughDate) }}</span>
-        <span v-else-if="column.key === 'nextReminderAt'">{{ date(record.nextReminderAt) }}</span>
+        <span v-else-if="column.key === 'generatedThroughDate'">{{ dateOnly(record.generatedThroughDate) }}</span>
+        <span v-else-if="column.key === 'nextReminderAtUtc'">{{ beijingTime(record.nextReminderAtUtc) }}</span>
         <span
           v-else-if="column.key === 'jobs'"
           :class="{ 'todo-plan-diagnostics__error': record.failedJobCount + record.unknownJobCount > 0 }"
@@ -137,11 +137,11 @@
           <span>{{ t('todoPlanDiagnosticsAdmin.version', { version: record.version }) }}</span>
           <span>{{
             t('todoPlanDiagnosticsAdmin.nextOccurrence', {
-              date: date(record.nextOccurrenceDate),
+              date: dateOnly(record.nextOccurrenceDate),
               no: record.nextOccurrenceNo,
             })
           }}</span>
-          <span>{{ t('todoPlanDiagnosticsAdmin.timezone', { timezone: record.timezone }) }}</span>
+          <span>{{ t('todoPlanDiagnosticsAdmin.timezone', { timezone: timezoneLabel(record.timezone) }) }}</span>
           <span v-if="record.parentSeriesId">{{
             t('todoPlanDiagnosticsAdmin.parentSeries', { id: record.parentSeriesId })
           }}</span>
@@ -157,6 +157,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useRoute } from 'vue-router';
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
@@ -167,6 +168,7 @@
   import { apiBasePost } from '@/http/request';
   import { bookmarkStore } from '@/store';
   import type { Column } from '@/components/base/BasicComponents/BTable/config';
+  import { formatAdminDateTime } from '@/utils/adminDateTime';
 
   type SeriesStatus = 'active' | 'paused' | 'ended';
   interface SeriesDiagnostic {
@@ -189,15 +191,17 @@
     pendingJobCount: number;
     failedJobCount: number;
     unknownJobCount: number;
-    nextReminderAt?: string | null;
+    nextReminderAtUtc?: string | null;
     lastGenerationError?: string | null;
   }
   type Metrics = Record<string, number>;
 
   const { t, locale } = useI18n();
+  const route = useRoute();
   const bookmark = bookmarkStore();
   const loading = ref(false);
-  const keyword = ref('');
+  const routeKeyword = Array.isArray(route.query.keyword) ? route.query.keyword[0] : route.query.keyword;
+  const keyword = ref(String(routeKeyword || '').trim());
   const status = ref<'all' | SeriesStatus>('all');
   const series = ref<SeriesDiagnostic[]>([]);
   const metrics = ref<Metrics>({});
@@ -214,7 +218,7 @@
     { key: 'rule', title: t('todoPlanDiagnosticsAdmin.rule'), width: '150px' },
     { key: 'instances', title: t('todoPlanDiagnosticsAdmin.instances'), width: '130px' },
     { key: 'generatedThroughDate', title: t('todoPlanDiagnosticsAdmin.generatedThrough'), width: '120px' },
-    { key: 'nextReminderAt', title: t('todoPlanDiagnosticsAdmin.nextReminder'), width: '160px' },
+    { key: 'nextReminderAtUtc', title: t('todoPlanDiagnosticsAdmin.nextReminder'), width: '160px' },
     { key: 'jobs', title: t('todoPlanDiagnosticsAdmin.jobs'), width: '150px' },
     { key: 'detail', title: t('common.detail'), width: '76px', ellipsis: false },
   ]);
@@ -222,8 +226,16 @@
   function n(value: unknown) {
     return Number(value || 0).toLocaleString(locale.value);
   }
-  function date(value?: string | null) {
-    return value ? new Date(value).toLocaleString(locale.value, { hour12: false }) : '-';
+  function dateOnly(value?: string | null) {
+    return value ? String(value).slice(0, 10) : '-';
+  }
+  function beijingTime(value?: string | null) {
+    return formatAdminDateTime(value, locale.value, { source: 'utc' });
+  }
+  function timezoneLabel(value?: string | null) {
+    return ['Asia/Shanghai', 'Asia/Chongqing', 'Asia/Harbin'].includes(String(value || ''))
+      ? t('todoPlanDiagnosticsAdmin.beijingTimezone')
+      : value || t('todoPlanDiagnosticsAdmin.beijingTimezone');
   }
   function duration(seconds: unknown) {
     const value = Number(seconds || 0);

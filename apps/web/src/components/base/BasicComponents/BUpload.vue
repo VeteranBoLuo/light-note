@@ -2,7 +2,7 @@
   <div
     v-if="!triggerless"
     class="b-upload-trigger"
-    :class="{ 'is-disabled': disabled }"
+    :class="{ 'is-disabled': disabled, 'is-block': block }"
     :tabindex="hasDefaultSlot ? undefined : disabled ? -1 : 0"
     :role="hasDefaultSlot ? undefined : 'button'"
     :aria-label="hasDefaultSlot ? undefined : ariaLabel || t('cloudSpace.uploadFile')"
@@ -69,6 +69,8 @@
       rawFile?: boolean;
       disabled?: boolean;
       ariaLabel?: string;
+      // 横向铺满父容器，供整行拖拽区、移动端操作入口等场景使用。
+      block?: boolean;
       // 业务通过组件 ref.open() 唤起文件选择器时，不渲染默认上传卡片。
       triggerless?: boolean;
     }>(),
@@ -79,6 +81,7 @@
       rawFile: false,
       disabled: false,
       ariaLabel: '',
+      block: false,
       triggerless: false,
     }, // 默认总大小限制为10MB
   );
@@ -167,6 +170,11 @@
   .b-upload-trigger {
     width: max-content;
     border-radius: 8px;
+
+    &.is-block {
+      display: block;
+      width: 100%;
+    }
 
     &:focus-visible {
       outline: 2px solid var(--primary-color, #615ced);

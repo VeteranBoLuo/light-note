@@ -70,7 +70,7 @@ async function queryCounts(userId) {
         (SELECT COUNT(*) FROM tag WHERE user_id = ? AND del_flag = 0) AS tagTotal,
         (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) AS noteTotal,
         (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS fileTotal,
-        COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE create_by = ? AND del_flag = 0), 0) AS usedSpace,
+        COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE create_by = ? AND del_flag IN (0, 1)), 0) AS usedSpace,
         COALESCE((SELECT ROUND(SUM(file_size) / 1048576, 2) FROM files WHERE create_by = ? AND del_flag = 1), 0) AS trashFileSize
     `,
     [userId, userId, userId, userId, userId, userId],

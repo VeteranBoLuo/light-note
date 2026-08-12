@@ -313,6 +313,10 @@
     min-width: 0;
     transition: transform 180ms cubic-bezier(0.22, 0.8, 0.3, 1);
   }
+  .mobile-swipe-delete.is-open .mobile-swipe-delete__content :deep(.todo-item) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
   .is-enabled .mobile-swipe-actions__content {
     touch-action: pan-y;
   }

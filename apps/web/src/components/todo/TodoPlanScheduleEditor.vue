@@ -322,6 +322,7 @@
   } from '@/api/todoApi';
   import { generateUUID } from '@/utils/common';
   import { toTodoLocalInput } from '@/utils/todoPlanning';
+  import { todoTodayInTimezone } from './todoDraftNormalizer';
 
   const props = withDefaults(
     defineProps<{
@@ -361,6 +362,7 @@
   const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai';
   const form = reactive({
     scope: 'current' as TodoPlanScope,
+    anchorDate: '',
     startAt: '',
     dueAt: '',
     timezone: browserTimezone,
@@ -575,10 +577,10 @@
     const anchorSource = form.startAt || form.dueAt;
     if (!props.title.trim()) throw new Error(t('inbox.todoTitleRequired'));
     if (!form.planType) throw new Error(t('inbox.todoLegacyChooseNewPlan'));
-    if (!anchorSource && (form.planType !== 'once' || form.reminderMode !== 'none')) {
-      throw new Error(t('inbox.todoPlanTimingRequired'));
-    }
-    const startDate = form.startAt ? datePart(form.startAt) : datePart(anchorSource || '');
+    const needsPlanDate = form.planType !== 'once' || form.reminderMode !== 'none';
+    const anchorDate =
+      datePart(anchorSource || '') || form.anchorDate || (needsPlanDate ? todoTodayInTimezone(form.timezone) : '');
+    const startDate = form.startAt ? datePart(form.startAt) : anchorDate;
     const dueDayOffset = anchorSource && form.dueAt ? calendarDayDiff(startDate, form.dueAt) : 0;
     const selectedWeekdays = Object.entries(weekdayState)
       .filter(([, selected]) => selected)
@@ -622,7 +624,7 @@
       resourceRefs: props.resourceRefs,
       timing: {
         timezone: form.timezone,
-        anchorDate: anchorSource ? datePart(anchorSource) : null,
+        anchorDate: anchorDate || null,
         startTime: timePart(form.startAt),
         dueTime: timePart(form.dueAt),
         dueDayOffset,
@@ -698,6 +700,8 @@
     form.startAt = toTodoLocalInput(item?.startAt);
     form.dueAt = toTodoLocalInput(item?.dueAt || props.initialDueAt);
     form.timezone = item?.instanceTimezone || item?.series?.timezone || browserTimezone;
+    form.anchorDate =
+      item?.occurrenceDate || timing?.anchorDate || (item?.seriesId ? todoTodayInTimezone(form.timezone) : '');
     form.planType =
       props.legacyConversion && item?.recurrence ? '' : plan?.type || (item?.series?.repeatMode ?? 'once');
     form.frequency = plan?.frequency || 'daily';
@@ -707,12 +711,13 @@
     form.afterEndMode = plan?.end?.mode === 'count' ? 'count' : 'never';
     form.endCount = plan?.end?.count || 30;
     form.untilAt = plan?.end?.untilDate ? `${plan.end.untilDate}T23:55` : '';
-    form.monthDay = plan?.monthDay || Number(datePart(form.startAt || form.dueAt).slice(8, 10)) || 1;
+    const anchorDate = datePart(form.startAt || form.dueAt) || form.anchorDate;
+    form.monthDay = plan?.monthDay || Number(anchorDate.slice(8, 10)) || 1;
     form.shortMonthPolicy = plan?.shortMonthPolicy || 'last_day';
     for (const day of Object.keys(weekdayState))
       weekdayState[Number(day)] = Boolean(plan?.weekdays?.includes(Number(day)));
     if (!plan?.weekdays?.length) {
-      const anchor = new Date(`${datePart(form.startAt || form.dueAt)}T00:00:00`);
+      const anchor = new Date(`${anchorDate || todoTodayInTimezone(form.timezone)}T00:00:00`);
       const isoDay = anchor.getDay() === 0 ? 7 : anchor.getDay();
       weekdayState[isoDay || 1] = true;
     }
@@ -720,7 +725,8 @@
     const reminder = item?.reminder as TodoReminderV2Config | null | undefined;
     const v2Reminder = reminder && ['once_per_instance', 'nudge'].includes(reminder.mode) ? reminder : null;
     form.reminderMode = v2Reminder?.mode || 'none';
-    form.triggerType = v2Reminder?.trigger?.type || (form.startAt ? 'at_start' : 'before_due');
+    form.triggerType =
+      v2Reminder?.trigger?.type || (form.startAt ? 'at_start' : form.dueAt ? 'before_due' : 'fixed_time');
     form.fixedTime = v2Reminder?.trigger?.fixedTime || '09:00';
     form.offsetMinutes = v2Reminder?.trigger?.offsetMinutes ?? 30;
     form.inAppReminder = v2Reminder ? v2Reminder.channels.includes('in_app') : true;

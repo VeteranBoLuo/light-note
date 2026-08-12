@@ -65,7 +65,12 @@
       @row-click="openDetail"
     >
       <template #bodyCell="{ text, record, column }">
-        <BChip v-if="column.key === 'statusCode'" :tone="statusTone(record.statusCode)">
+        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{ record.alias || record.email || '-' }}</span>
+        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{ formatTimeOnly(record.requestTime) }}</span>
+        <span v-else-if="column.key === 'action'" class="admin-log-mobile-action" :title="`${record.method || ''} ${record.url || ''}`">
+          <b>{{ record.method || '-' }}</b><span>{{ record.url || '-' }}</span>
+        </span>
+        <BChip v-else-if="column.key === 'statusCode'" :tone="statusTone(record.statusCode)">
           {{ record.statusCode || '-' }}
         </BChip>
         <span v-else-if="column.key === 'durationMs'" :class="{ 'is-slow': Number(record.durationMs) >= 1000 }">
@@ -92,6 +97,7 @@
     width="min(720px, 94vw)"
     :show-footer="false"
     :mask-closable="true"
+    content-class="admin-log-detail-content"
     fullscreen-mobile
   >
     <dl v-if="selectedRecord" class="api-log-detail">
@@ -213,10 +219,9 @@
   const logColumns = computed(() =>
     bookmark.isMobile
       ? [
-          { title: t('adminApiLog.columns.time'), key: 'requestTime', width: '150px' },
-          { title: t('adminApiLog.columns.method'), key: 'method', width: '72px' },
-          { title: t('adminApiLog.columns.status'), key: 'statusCode', width: '74px', ellipsis: false },
-          { title: t('adminApiLog.columns.url'), key: 'url', width: 'minmax(180px, 1.6fr)' },
+          { title: t('adminApiLog.columns.user'), key: 'user', width: '86px' },
+          { title: t('adminApiLog.columns.time'), key: 'mobileTime', width: '74px' },
+          { title: t('adminOperationLog.columns.operation'), key: 'action', width: 'minmax(0, 1fr)' },
         ]
       : [
           { title: t('adminApiLog.columns.user'), key: 'alias', width: '130px' },
@@ -327,6 +332,13 @@
     const date = new Date(String(value).replace(' ', 'T'));
     return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : String(value);
   }
+  function formatTimeOnly(value: unknown) {
+    if (!value) return '-';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      : String(value);
+  }
   function shortId(value: unknown) {
     const text = String(value || '');
     return text.length > 14 ? `${text.slice(0, 12)}…` : text || '-';
@@ -397,6 +409,25 @@
     color: var(--sub-text-color);
     font-size: 11px;
   }
+  .admin-log-mobile-user,
+  .admin-log-mobile-time,
+  .admin-log-mobile-action,
+  .admin-log-mobile-action span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .admin-log-mobile-action {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .admin-log-mobile-action b {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+    font-size: 10px;
+  }
   .api-log-detail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -451,6 +482,17 @@
     }
     .api-log-detail > div.is-wide {
       grid-column: auto;
+    }
+    :global(.admin-log-detail-content) {
+      padding: 16px !important;
+      overflow-y: auto;
+      background: var(--surface-page-bg, var(--background-color));
+    }
+    .api-log-detail > div {
+      padding: 11px 12px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 10px;
+      background: var(--card-background);
     }
   }
 </style>

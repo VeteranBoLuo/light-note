@@ -57,7 +57,7 @@ describe('todoPlanDiagnosticsService', () => {
               pendingJobCount: 7,
               failedJobCount: 2,
               unknownJobCount: 1,
-              nextReminderAt: '2026-08-07 09:00:00',
+              nextReminderAtUtc: '2026-08-07T01:00:00Z',
             },
           ],
         ]),
@@ -79,7 +79,9 @@ describe('todoPlanDiagnosticsService', () => {
       scheduleRule: { plan: { frequency: 'daily' } },
       nextOccurrenceNo: 9,
       completedCount: 3,
+      nextReminderAtUtc: '2026-08-07T01:00:00Z',
     });
+    expect(db.query.mock.calls[1][0]).toContain('series_id IS NOT NULL');
     expect(db.query.mock.calls[3][0]).toContain('LIMIT 100');
     expect(db.query.mock.calls[3][1]).toEqual([
       'active',

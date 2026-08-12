@@ -9,6 +9,7 @@ const simpleSource = readSource('TodoSimpleEditorForm.vue');
 const reminderSource = readSource('TodoReminderEditor.vue');
 const repeatReminderSource = readSource('TodoReminderRepeatEditor.vue');
 const independentSource = readSource('TodoIndependentTaskPlanEditor.vue');
+const independentTemplate = independentSource.split('<script setup')[0];
 const draftSource = readSource('useTodoCreateDraft.ts');
 const mobileCreateSource = readFileSync(resolve(process.cwd(), 'src/view/todo/TodoCreate.vue'), 'utf8');
 const todoCreateRouteSource = readFileSync(resolve(process.cwd(), 'src/router/modules/todoCreate.ts'), 'utf8');
@@ -49,13 +50,15 @@ describe('待办创建页原型布局', () => {
     expect(reminderSource).toMatch(
       /\.todo-reminder-editor-v3__mode :deep\(\.b_btn\)\s*\{[\s\S]*?width:\s*100%[\s\S]*?min-width:\s*0/,
     );
+    expect(reminderSource).toContain("t('inbox.todoReminderOnceCompact')");
+    expect(reminderSource).toContain("t('inbox.todoReminderRepeatCompact')");
     expect(repeatReminderSource).toMatch(
       /\.todo-reminder-repeat__segment\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,
     );
     expect(repeatReminderSource).toMatch(
       /\.todo-reminder-repeat__segment :deep\(\.b_btn\)\s*\{[\s\S]*?width:\s*100%[\s\S]*?min-width:\s*0/,
     );
-    expect(reminderSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?min-height:\s*44px/);
+    expect(reminderSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?height:\s*44px[\s\S]*?white-space:\s*nowrap/);
     expect(repeatReminderSource).toMatch(/@media \(max-width: 767px\)[\s\S]*?min-height:\s*44px/);
   });
 
@@ -82,7 +85,50 @@ describe('待办创建页原型布局', () => {
     expect(independentSource).toContain("value: 'keep_overdue'");
     expect(independentSource).toContain("value: 'restart_today_keep_count'");
     expect(independentSource).toContain("value: 'skip_missed'");
-    expect(independentSource).toContain("t('inbox.todoPastChoiceTitle')");
+    expect(independentSource).toContain('v-if="needsPastPolicy"');
+    expect(independentSource).toContain("t('inbox.todoGuidedPastTitle')");
+    expect(independentSource).toContain('pastPolicyHint(option.value)');
+    expect(simpleSource).toContain("preview?.requiredChoices?.includes('pastPolicy')");
+  });
+
+  it('高级计划改为重复、结束、提醒三步引导，并把低频时间项折叠', () => {
+    expect(independentTemplate.indexOf("t('inbox.todoGuidedRepeatTitle')")).toBeLessThan(
+      independentTemplate.indexOf("t('inbox.todoGuidedEndTitle')"),
+    );
+    expect(independentTemplate.indexOf("t('inbox.todoGuidedEndTitle')")).toBeLessThan(
+      independentTemplate.indexOf("t('inbox.todoGuidedReminderTitle')"),
+    );
+    expect(independentSource).toContain('todo-independent-plan__choices--two');
+    expect(independentSource).toContain(':aria-pressed="planType === option.value"');
+    expect(independentSource).toContain(':aria-pressed="endMode === option.value"');
+    expect(independentSource).toContain(':aria-pressed="reminderMode === option.value"');
+    expect(independentSource).not.toContain('.b_btn.is-active::before');
+    expect(independentSource).toContain('moreSettingsOpen');
+    expect(independentSource).toContain('todo-independent-plan-more-fields');
+    expect(independentSource).toMatch(
+      /\.todo-independent-plan label,[\s\S]*?\.todo-independent-plan__field[\s\S]*?align-content:\s*start/,
+    );
+  });
+
+  it('开启高级功能后回到编辑器顶部，让用户先看到模式变化提示', () => {
+    expect(simpleSource).toContain('ref="editorBodyRef"');
+    expect(simpleSource).toMatch(/if \(enabled && previous === false\)[\s\S]*?nextTick\(scrollEditorToTop\)/);
+    expect(simpleSource).toMatch(
+      /function scrollEditorToTop\(\)[\s\S]*?editorBody\.scrollTop = 0[\s\S]*?parent\.scrollTop = 0/,
+    );
+  });
+
+  it('移动端高级模式在顶部提供明确的关闭入口', () => {
+    expect(simpleSource).toContain('class="todo-simple-editor__mode-exit"');
+    expect(simpleSource).toContain("t('inbox.todoDisableAdvanced')");
+    expect(simpleSource).toContain('@click="disableAdvancedMode"');
+    expect(simpleSource).toMatch(
+      /function disableAdvancedMode\(\)[\s\S]*?draft\.independentTasks\.enabled = false[\s\S]*?nextTick\(scrollEditorToTop\)/,
+    );
+    expect(simpleSource).toMatch(
+      /todo-simple-editor__mode-exit\.b_btn\)[\s\S]*?border:\s*0 !important[\s\S]*?background:\s*transparent !important/,
+    );
+    expect(simpleSource).toMatch(/todo-simple-editor__mode-exit\.b_btn\)[\s\S]*?min-height:\s*44px/);
   });
 
   it('高级计划默认按日期结束，并完整配置固定时刻和长期运行语义', () => {
@@ -91,9 +137,14 @@ describe('待办创建页原型布局', () => {
     expect(independentSource).toContain('v-model:value="fixedTime" type="time"');
     expect(independentSource).toContain("t('inbox.todoReminderFixedTimeHint')");
     expect(independentSource).toContain("t('inbox.todoPlanNoEndHint')");
-    expect(independentSource).toContain("t('inbox.todoPlanEndModeHint')");
-    expect(independentSource).toContain("t('inbox.todoPlanEndUsesDueDate')");
-    expect(independentSource).toContain(`v-if="endMode === 'until' && !scheduledEndUsesDueDate"`);
+    expect(independentSource).toContain("t('inbox.todoPlanEndByDateHint')");
+    expect(independentSource).toContain("t('inbox.todoPlanEndByCountHint')");
+    expect(independentSource).not.toContain('v-model:value="untilAt"');
+    expect(independentSource).toContain('autoFilledUntilDueAt');
+    expect(independentSource).toContain('todoTodayInTimezone(props.draft.timing.timezone)');
+    expect(independentTemplate.indexOf("t('inbox.todoGuidedEndTitle')")).toBeLessThan(
+      independentTemplate.indexOf("t('inbox.todoStartAt')"),
+    );
   });
 
   it('高级提醒默认每条一次，多次催办必须明确配置间隔、次数和停止条件', () => {
@@ -130,10 +181,18 @@ describe('待办创建页原型布局', () => {
     );
   });
 
-  it('普通与高级创建页都使用简洁的开始时间可选标题，不额外堆叠说明', () => {
+  it('开始和截止按结束方式与提醒时机防呆，并就近解释每个时间字段', () => {
     expect(simpleSource).toMatch(/todoStartAt[\s\S]*?v-model:value="startAt"/);
-    expect(independentSource).toMatch(/todoStartAt[\s\S]*?v-model:value="startAt"/);
+    expect(independentSource).toContain('v-else-if="triggerType === \'at_start\'"');
+    expect(independentSource).toContain('v-if="!scheduledEndUsesDueAt"');
+    expect(independentSource).toContain("t('inbox.todoGuidedUsesEndDue')");
     expect(simpleSource).not.toMatch(/v-model:value="startAt"[\s\S]{0,120}todoStartAtOptional/);
-    expect(independentSource).not.toMatch(/v-model:value="startAt"[\s\S]{0,120}todoStartAtOptional/);
+    expect(independentSource).toContain("t('inbox.todoPlanStartTimePurpose')");
+    expect(independentSource).toContain('reminderTriggerHint');
+    expect(independentSource).toContain("t('inbox.todoPlanTimezoneHint')");
+    expect(independentTemplate.indexOf("triggerType === 'fixed_time'")).toBeLessThan(
+      independentTemplate.indexOf("triggerType === 'at_start'"),
+    );
+    expect(independentSource).not.toContain("t('inbox.todoPlanEndDate')");
   });
 });

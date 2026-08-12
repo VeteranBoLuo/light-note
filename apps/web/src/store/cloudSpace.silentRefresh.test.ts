@@ -17,7 +17,10 @@ beforeEach(() => {
   setActivePinia(createPinia());
   apiQueryPost.mockReset();
   apiBasePost.mockReset();
-  apiBasePost.mockResolvedValue({ status: 200, data: { totalSizeMB: 10, quotaMB: 100 } });
+  apiBasePost.mockResolvedValue({
+    status: 200,
+    data: { totalSizeMB: 10, activeSizeMB: 8, trashSizeMB: 2, quotaMB: 100, sharedWithTrash: true },
+  });
 });
 
 describe('queryFieldList 的静默模式', () => {
@@ -66,11 +69,17 @@ describe('queryFieldList 的静默模式', () => {
 describe('getUsedSpace / queryFolder 可等待且失败不清空', () => {
   it('成功时返回 true 并写入用量', async () => {
     const cloud = cloudSpaceStore();
-    apiBasePost.mockResolvedValueOnce({ status: 200, data: { totalSizeMB: 42, quotaMB: 512 } });
+    apiBasePost.mockResolvedValueOnce({
+      status: 200,
+      data: { totalSizeMB: 42, activeSizeMB: 30, trashSizeMB: 12, quotaMB: 1024, sharedWithTrash: true },
+    });
 
     await expect(cloud.getUsedSpace()).resolves.toBe(true);
     expect(cloud.usedSpace).toBe(42);
-    expect(cloud.maxSpace).toBe(512);
+    expect(cloud.activeSpace).toBe(30);
+    expect(cloud.trashSpace).toBe(12);
+    expect(cloud.maxSpace).toBe(1024);
+    expect(cloud.sharedWithTrash).toBe(true);
   });
 
   it('用量请求失败时保留上一次的值，不写成 0', async () => {
@@ -108,6 +117,9 @@ describe('账号身份切换', () => {
     expect(cloud.fileList).toEqual([]);
     expect(cloud.folderList).toEqual([]);
     expect(cloud.usedSpace).toBe(0);
+    expect(cloud.activeSpace).toBe(0);
+    expect(cloud.trashSpace).toBe(0);
+    expect(cloud.maxSpace).toBe(1024);
     expect(cloud.fileTotal).toBe(0);
     expect(cloud.folder?.id).toBe('all');
     expect(cloud.loading).toBe(true);

@@ -176,13 +176,20 @@ describe('Landing CTA', () => {
     expect(mocks.routerPush).toHaveBeenCalledWith('/support');
   });
 
-  it('在官网页脚公开备案全称并提供关于页面入口', async () => {
+  it('在官网页脚公开网站 ICP 与公安备案信息', async () => {
     const host = await mountLanding();
     const footer = host.querySelector<HTMLElement>('.landing-footer');
     const aboutLink = footer?.querySelector<HTMLAnchorElement>('a[href="/about.html"]');
+    const publicSecurityLink = footer?.querySelector<HTMLAnchorElement>(
+      'a[href="https://beian.mps.gov.cn/#/query/webSearch?code=51200002001211"]',
+    );
 
     expect(footer?.textContent).toContain('轻笺知识库');
     expect(footer?.textContent).toContain('蜀ICP备2026017699号-1');
+    expect(footer?.textContent).toContain('川公网安备51200002001211号');
+    expect(publicSecurityLink?.querySelector('img')?.getAttribute('src')).toBe(
+      '/public-security-filing-badge.png',
+    );
     expect(aboutLink).not.toBeNull();
   });
 });

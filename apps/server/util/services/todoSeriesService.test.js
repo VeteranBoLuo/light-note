@@ -139,6 +139,27 @@ describe('todoSeriesService v2', () => {
     expect(preview.displaySummary.reminder).toBe('当天 10:00 提醒一次 · 站内');
   });
 
+  it('无开始和截止时间的独立计划在预览中明确标为全天待办', () => {
+    const preview = previewTodoPlan(
+      {
+        taskMode: 'independent',
+        title: '每天点外卖',
+        timing: { timezone: 'Asia/Shanghai' },
+        plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 1 } },
+        reminder: {
+          mode: 'once_per_instance',
+          trigger: { type: 'fixed_time', fixedTime: '11:10' },
+          channels: ['in_app'],
+        },
+      },
+      { now: new Date('2026-08-06T00:00:00.000Z') },
+    );
+
+    expect(preview.displaySummary.range).toBe('2026-08-06');
+    expect(preview.displaySummary.timing).toBe('全天待办（未设置开始和截止时间）');
+    expect(preview.displaySummary.reminder).toBe('当天 11:10 提醒一次 · 站内');
+  });
+
   it('按最大次数催办的 Job 不把截止时间保存为停止线', () => {
     const rows = todoSeriesInternals.jobRowsForOccurrence({
       userId: 'user-1',

@@ -54,6 +54,10 @@ export const getAdminActionCenter = async function (params: { limit?: number; so
   return apiBasePost('/api/common/getAdminActionCenter', params, { silent: true });
 };
 
+export const getAdminTodoReminderDiagnostic = async function (params: { id: string }) {
+  return apiBasePost('/api/common/getAdminTodoReminderDiagnostic', params, { silent: true });
+};
+
 export const retryAdminAsyncJob = async function (params: {
   source: string;
   id: string;
@@ -62,6 +66,15 @@ export const retryAdminAsyncJob = async function (params: {
   confirmText: '确认重试任务';
 }) {
   return apiBasePost('/api/common/retryAdminAsyncJob', params, { silent: true });
+};
+
+export const dismissAdminAsyncJob = async function (params: {
+  source: string;
+  id: string;
+  reason: string;
+  confirmed: true;
+}) {
+  return apiBasePost('/api/common/dismissAdminAsyncJob', params, { silent: true });
 };
 
 export const getAdminOperationAudits = async function (params: {

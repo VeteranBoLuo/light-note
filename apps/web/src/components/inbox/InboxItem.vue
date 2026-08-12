@@ -42,35 +42,23 @@
         </BButton>
       </div>
       <div v-if="!selectionMode" class="inbox-item__actions inbox-item__actions--mobile" @click.stop>
-        <BPopover v-model:open="mobileMenuOpen" trigger="click" placement="bottom-right">
-          <BButton class="inbox-item__more" :aria-label="t('common.more')" :title="t('common.more')">
-            <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
-          </BButton>
-          <template #content>
-            <div class="inbox-item__mobile-menu">
-              <BButton @click="runMobileAction(() => emit('open'))">{{ t('inbox.organize') }}</BButton>
-              <BButton
-                type="primary"
-                :loading="completing"
-                :disabled="disabled"
-                @click="runMobileAction(() => emit('complete'))"
-              >
-                {{ t('inbox.complete') }}
-              </BButton>
-              <BButton
-                type="danger"
-                :loading="deleting"
-                :disabled="disabled"
-                @click="runMobileAction(() => emit('delete'))"
-              >
-                {{ t('inbox.deleteResource') }}
-              </BButton>
-            </div>
-          </template>
-        </BPopover>
+        <BButton
+          class="inbox-item__more"
+          :aria-label="t('common.more')"
+          :title="t('common.more')"
+          @click="mobileMenuOpen = true"
+        >
+          <SvgIcon :src="icon.common.more" size="18" aria-hidden="true" />
+        </BButton>
       </div>
     </article>
   </MobileSwipeActions>
+  <MobilePageActionsDrawer
+    v-model:open="mobileMenuOpen"
+    :object-title="item.title || t('inbox.untitled')"
+    :actions="mobileMenuActions"
+    @action="handleMobileMenuAction"
+  />
 </template>
 
 <script setup lang="ts">
@@ -78,8 +66,10 @@
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
-  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, {
+    type MobilePageActionItem,
+  } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import MobileSwipeActions, { type MobileSwipeActionItem } from '@/components/mobile/MobileSwipeActions.vue';
   import icon from '@/config/icon';
   import type { InboxItem } from '@/api/inboxApi';
@@ -108,6 +98,30 @@
   }>();
   const { t, locale } = useI18n();
   const mobileMenuOpen = ref(false);
+  const mobileMenuActions = computed<MobilePageActionItem[]>(() => [
+    {
+      key: 'open',
+      label: t('inbox.organize'),
+      icon: icon.common.more,
+      disabled: props.disabled,
+    },
+    {
+      key: 'complete',
+      label: t('inbox.complete'),
+      icon: icon.filterPanel.check,
+      loading: props.completing,
+      disabled: props.disabled,
+    },
+    {
+      key: 'delete',
+      label: t('inbox.deleteResource'),
+      icon: icon.table_delete,
+      danger: true,
+      dividerBefore: true,
+      loading: props.deleting,
+      disabled: props.disabled,
+    },
+  ]);
   const swipeActions = computed<MobileSwipeActionItem[]>(() => [
     {
       key: 'complete',
@@ -146,9 +160,10 @@
     else if (action.key === 'delete') emit('delete');
   }
 
-  function runMobileAction(action: () => void) {
-    mobileMenuOpen.value = false;
-    action();
+  function handleMobileMenuAction(action: MobilePageActionItem) {
+    if (action.key === 'open') emit('open');
+    else if (action.key === 'complete') emit('complete');
+    else if (action.key === 'delete') emit('delete');
   }
 </script>
 
@@ -290,13 +305,4 @@
     }
   }
 
-  .inbox-item__mobile-menu {
-    display: grid;
-    min-width: 168px;
-    gap: 6px;
-  }
-  .inbox-item__mobile-menu :deep(.b_btn) {
-    width: 100%;
-    justify-content: flex-start;
-  }
 </style>

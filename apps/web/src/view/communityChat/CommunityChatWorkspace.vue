@@ -44,7 +44,12 @@
             <SvgIcon :src="icon.ai.conversations" size="17" />
           </span>
           <div>
-            <strong>{{ currentRoom.name }}</strong>
+            <div class="community-conversation-header__title-line">
+              <strong>{{ currentRoom.name }}</strong>
+              <span v-if="realtimeEnabled && onlineCount !== null" class="community-conversation-header__online">
+                {{ t('communityChat.onlineCount', { count: onlineCount }) }}
+              </span>
+            </div>
             <small>{{ currentRoom.description }}</small>
           </div>
         </div>
@@ -434,7 +439,7 @@
             :rows="1"
             :maxlength="2000"
             :submit-on-enter="true"
-            :placeholder="t('communityChat.messagePlaceholder')"
+            :placeholder="t(bookmark.isMobile ? 'communityChat.messagePlaceholderMobile' : 'communityChat.messagePlaceholder')"
             :disabled="sending"
             @enter="sendMessage"
           />
@@ -458,7 +463,9 @@
                   <SvgIcon :src="icon.noteDetail.toolbar.image" size="19" aria-hidden="true" />
                 </BButton>
               </BUpload>
-              <span class="community-composer__upload-hint">{{ t('communityChat.image.inputHint') }}</span>
+              <span class="community-composer__upload-hint">{{
+                t(bookmark.isMobile ? 'communityChat.image.inputHintMobile' : 'communityChat.image.inputHint')
+              }}</span>
             </div>
             <div class="community-composer__actions">
               <span :class="{ 'is-near-limit': draftLength > 1800 }">{{ draftLength }}/2000</span>
@@ -771,7 +778,7 @@
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
   const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
-  const { status: realtimeStatus } = useCommunityChatSocket({
+  const { onlineCount, status: realtimeStatus } = useCommunityChatSocket({
     enabled: realtimeEnabled,
     roomSlug: selectedRoomSlug,
     identityKey: realtimeIdentityKey,
@@ -2070,7 +2077,8 @@
         await loadOwnProfile({ force: true }).catch(() => undefined);
         return;
       }
-      message.error(error?.message || t('communityChat.profile.saveFailed'));
+      const apiMessage = error?.response?.data?.msg || error?.data?.msg;
+      message.error(apiMessage || t('communityChat.profile.saveFailed'));
     }
   }
 
@@ -2815,6 +2823,13 @@
     gap: 3px;
   }
 
+  .community-conversation-header__title-line {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   .community-conversation-header__title strong,
   .community-conversation-header__title small {
     overflow: hidden;
@@ -2823,8 +2838,18 @@
   }
 
   .community-conversation-header__title strong {
+    min-width: 0;
+    flex: 0 1 auto;
     color: var(--text-color);
     font-size: 15px;
+  }
+
+  .community-conversation-header__online {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .community-conversation-header__title small {
@@ -3867,6 +3892,14 @@
     .community-conversation-header__title small,
     .community-conversation-header__delivery {
       display: none;
+    }
+
+    .community-conversation-header__title-line {
+      gap: 6px;
+    }
+
+    .community-conversation-header__online {
+      font-size: 10px;
     }
 
     .community-conversation-header__settings {

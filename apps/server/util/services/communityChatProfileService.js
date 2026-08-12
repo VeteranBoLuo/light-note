@@ -209,18 +209,18 @@ function publicAchievement(achievement) {
 
 function tenureLabel(row, locale) {
   if (!Boolean(Number(row.showCommunityTenure ?? 1))) return null;
-  const joinedAt = row.authorJoinedAt || row.authorMemberCreatedAt;
-  const joinedTime = joinedAt ? new Date(joinedAt).getTime() : Number.NaN;
+  const registeredAt = row.authorRegisteredAt;
+  const joinedTime = registeredAt ? new Date(registeredAt).getTime() : Number.NaN;
   if (!Number.isFinite(joinedTime)) return null;
   const days = Math.max(0, Math.floor((Date.now() - joinedTime) / 86_400_000));
   const english = String(locale || '').toLowerCase().startsWith('en');
-  if (days < 30) return english ? 'Joined within the past month' : '加入社区未满 1 个月';
+  if (days < 30) return english ? 'Joined Light Note within the past month' : '加入轻笺未满 1 个月';
   if (days < 365) {
     const months = Math.max(1, Math.floor(days / 30));
-    return english ? `Community member for about ${months} month${months === 1 ? '' : 's'}` : `加入社区约 ${months} 个月`;
+    return english ? `Joined Light Note about ${months} month${months === 1 ? '' : 's'} ago` : `加入轻笺约 ${months} 个月`;
   }
   const years = Math.max(1, Math.floor(days / 365));
-  return english ? `Community member for about ${years} year${years === 1 ? '' : 's'}` : `加入社区约 ${years} 年`;
+  return english ? `Joined Light Note about ${years} year${years === 1 ? '' : 's'} ago` : `加入轻笺约 ${years} 年`;
 }
 
 function publicFrame(frameId) {
@@ -286,8 +286,7 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
-            membership.joined_at AS authorJoinedAt,
-            membership.create_time AS authorMemberCreatedAt,
+            account.create_time AS authorRegisteredAt,
             profile.bio,
             profile.show_community_tenure AS showCommunityTenure,
             profile.featured_achievements AS featuredAchievements,
@@ -345,8 +344,7 @@ async function loadOwnAuthor({ user, env, db }) {
             COALESCE(growth.exp, 0) AS authorExp,
             growth.equipped_title AS authorTitleId,
             growth.equipped_frame AS authorFrameId,
-            membership.joined_at AS authorJoinedAt,
-            membership.create_time AS authorMemberCreatedAt,
+            account.create_time AS authorRegisteredAt,
             profile.bio,
             profile.show_community_tenure AS showCommunityTenure,
             profile.featured_achievements AS featuredAchievements,

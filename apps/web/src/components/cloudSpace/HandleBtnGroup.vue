@@ -1,6 +1,6 @@
 <template>
   <b-space :size="15">
-    <CloudStorageBar v-if="!bookmark.isMobile" />
+    <CloudStorageBar v-if="!bookmark.isMobile" ref="cloudStorageBar" />
     <!-- 上传按钮及提示 -->
     <div class="upload-container" :class="{ 'upload-container--mobile': bookmark.isMobile }">
       <b-upload ref="uploadPicker" multiple raw-file class="upload-btn" @change="handleChange" :max-total-size="null">
@@ -67,7 +67,8 @@
   import { reactive, ref } from 'vue';
   import icon from '@/config/icon';
   import { recordOperation } from '@/api/commonApi.ts';
-  import { autoRename } from '@/utils/common.ts';
+  import { autoRename, formatStorageSize } from '@/utils/common.ts';
+  import { getUploadStorageShortfall } from './cloudStorageCapacity';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
@@ -76,7 +77,9 @@
   const bookmark = bookmarkStore();
   const cloud = cloudSpaceStore();
   const { t } = useI18n();
+  const emit = defineEmits<{ storageQuota: [shortfallMb: number] }>();
   const uploadPicker = ref<{ open: () => void } | null>(null);
+  const cloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
   const pendingUploadFolderId = ref<string | null>(null);
   const MIN_PROGRESS_VISIBLE_MS = 800;
   // 格式化速度
@@ -101,6 +104,27 @@
 
   // 上传控制器
   let uploadController = ref<AbortController | null>(null);
+
+  async function showStorageQuotaDetails(filesData: Array<{ fileSize: number }>, serverShortfallMb = 0) {
+    await cloud.getUsedSpace();
+    const incomingMb =
+      filesData.reduce((total, file) => total + Math.max(0, Number(file.fileSize) || 0), 0) / 1024 / 1024;
+    const shortfallMb = Math.max(
+      0.1,
+      Number(serverShortfallMb) ||
+        getUploadStorageShortfall(incomingMb, Number(cloud.usedSpace || 0), Number(cloud.maxSpace || 0)),
+    );
+    message.warning(
+      t('cloudSpace.storageUploadBlocked', {
+        capacity: formatStorageSize(shortfallMb),
+      }),
+    );
+    if (cloudStorageBar.value) {
+      cloudStorageBar.value.openDetails(shortfallMb);
+    } else {
+      emit('storageQuota', shortfallMb);
+    }
+  }
 
   const uploadFiles = async (files, folderId = null) => {
     if (blockGuestWrite('upload-file')) return;
@@ -177,6 +201,10 @@
     try {
       // 第一步：调用后端获取预签名上传URL
       const uploadRes = await apiBasePost('/api/file/uploadFiles', { files: filesData });
+      if (Number(uploadRes.status) === 413) {
+        await showStorageQuotaDetails(filesData, Number(uploadRes.data?.shortfallMB || 0));
+        return;
+      }
       if (uploadRes.status !== 200) {
         throw new Error(uploadRes.msg || t('cloudSpace.uploadFailed'));
       }
@@ -248,6 +276,10 @@
 
       if (confirmFiles.length > 0) {
         const confirmRes = await apiBasePost('/api/file/confirmUpload', { files: confirmFiles, folderId });
+        if (Number(confirmRes.status) === 413) {
+          await showStorageQuotaDetails(filesData, Number(confirmRes.data?.shortfallMB || 0));
+          return;
+        }
         if (confirmRes.status === 200) {
           // 处理确认结果
           const successFiles = confirmRes.data.filter((item) => item.status === '已上传');

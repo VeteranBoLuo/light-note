@@ -30,4 +30,10 @@ describe('笔记库路由布局根节点', () => {
       openDirectorySource.indexOf('mobileDirectoryOpen.value = true'),
     );
   });
+
+  it('桌面侧栏和移动抽屉切换目录/标签时共用账号偏好保存逻辑', () => {
+    expect(templateSource).toContain('@update:mode="setNoteSidebarModeFromUser"');
+    expect(templateSource).toContain('@mode-change="setNoteSidebarModeFromUser"');
+    expect(source).toContain('updatePreference({ noteSidebarMode: mode })');
+  });
 });

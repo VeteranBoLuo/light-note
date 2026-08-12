@@ -169,7 +169,7 @@ const queryUserInfoById = async (id) => {
       LEFT JOIN (
         SELECT create_by, ROUND(SUM(file_size) / 1048576, 2) AS storage_used
         FROM files
-        WHERE del_flag = 0
+        WHERE del_flag IN (0, 1)
         GROUP BY create_by
       ) f ON u.id = f.create_by
       WHERE u.id = ?
@@ -726,8 +726,10 @@ export const getUserList = async (req, res) => {
               END AS head_picture,
               u.phone_number, u.role, u.ip,
               u.create_time, u.last_active_time, u.del_flag,
+              ug.equipped_frame,
               COALESCE(aur.remark_name, '') AS admin_remark
        FROM user u
+       LEFT JOIN user_growth ug ON ug.user_id = u.id
        LEFT JOIN admin_user_remarks aur
          ON aur.admin_user_id = ? AND aur.target_user_id = u.id
        WHERE ${whereSql}${cursorFilter}
@@ -755,7 +757,7 @@ export const getUserList = async (req, res) => {
           ids,
         ),
         pool.query(
-          `SELECT create_by AS userId, ROUND(SUM(file_size) / 1048576, 2) AS total FROM files WHERE del_flag = 0 AND create_by IN (${placeholders}) GROUP BY create_by`,
+          `SELECT create_by AS userId, ROUND(SUM(file_size) / 1048576, 2) AS total FROM files WHERE del_flag IN (0, 1) AND create_by IN (${placeholders}) GROUP BY create_by`,
           ids,
         ),
       ]);
@@ -871,8 +873,12 @@ export const getUserAdminDetail = async (req, res) => {
            (SELECT COUNT(*) FROM note WHERE create_by = ? AND del_flag = 0) AS note_total,
            (SELECT COUNT(*) FROM files WHERE create_by = ? AND del_flag = 0) AS file_total,
            (SELECT COALESCE(ROUND(SUM(file_size) / 1048576, 2), 0)
-              FROM files WHERE create_by = ? AND del_flag = 0) AS storage_used`,
-        [targetUserId, targetUserId, targetUserId, targetUserId, targetUserId],
+              FROM files WHERE create_by = ? AND del_flag IN (0, 1)) AS storage_used,
+           (SELECT COALESCE(ROUND(SUM(file_size) / 1048576, 2), 0)
+              FROM files WHERE create_by = ? AND del_flag = 0) AS active_storage_used,
+           (SELECT COALESCE(ROUND(SUM(file_size) / 1048576, 2), 0)
+              FROM files WHERE create_by = ? AND del_flag = 1) AS trash_storage_used`,
+        [targetUserId, targetUserId, targetUserId, targetUserId, targetUserId, targetUserId, targetUserId],
       ),
       readSection(
         'todos',
@@ -894,7 +900,7 @@ export const getUserAdminDetail = async (req, res) => {
       readSection(
         'growth',
         `SELECT exp, level, streak, streak_protect_cards, last_checkin_date,
-                points, equipped_title, storage_bonus_mb, ai_bonus_tokens, updated_at
+                points, equipped_title, equipped_frame, storage_bonus_mb, ai_bonus_tokens, updated_at
          FROM user_growth WHERE user_id = ? LIMIT 1`,
         [targetUserId],
       ),

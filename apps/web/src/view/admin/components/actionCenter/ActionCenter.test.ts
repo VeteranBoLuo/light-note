@@ -3,11 +3,21 @@ import { createApp, h, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
-const apiMocks = vi.hoisted(() => ({ load: vi.fn(), retry: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  load: vi.fn(),
+  retry: vi.fn(),
+  dismiss: vi.fn(),
+  todoDiagnostic: vi.fn(),
+}));
 const routerMocks = vi.hoisted(() => ({ push: vi.fn() }));
 const messageMocks = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }));
 
-vi.mock('@/api/commonApi', () => ({ getAdminActionCenter: apiMocks.load, retryAdminAsyncJob: apiMocks.retry }));
+vi.mock('@/api/commonApi', () => ({
+  getAdminActionCenter: apiMocks.load,
+  getAdminTodoReminderDiagnostic: apiMocks.todoDiagnostic,
+  retryAdminAsyncJob: apiMocks.retry,
+  dismissAdminAsyncJob: apiMocks.dismiss,
+}));
 vi.mock('@/router', () => ({ default: routerMocks }));
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({ default: messageMocks }));
 vi.mock('@/components/admin/AdminDataPage.vue', () => ({
@@ -53,6 +63,7 @@ function payload() {
         sources: [
           { source: 'bookmark_icon', total: 30, attention: 30, running: 0, waiting: 0, completed24h: 0 },
           { source: 'email_delivery', total: 2, attention: 1, running: 0, waiting: 0, completed24h: 4 },
+          { source: 'todo_reminder', total: 5, attention: 0, running: 0, waiting: 5, completed24h: 0 },
         ],
         items: [
           {
@@ -66,6 +77,19 @@ function payload() {
             errorCode: 'DELIVERY_RESULT_UNKNOWN',
             updatedAt: '2026-08-09 11:00:00',
             targetUrl: '/notificationCenter?tab=email',
+          },
+          {
+            id: 'todo-job-1',
+            source: 'todo_reminder',
+            status: 'waiting',
+            rawStatus: 'pending',
+            title: '点外卖',
+            ownerLabel: '菠萝',
+            attempts: 0,
+            groupCount: 5,
+            scheduledAt: '2026-08-12T03:10:00Z',
+            scheduledAtUtc: '2026-08-12T03:10:00Z',
+            updatedAt: '2026-08-12T02:43:25Z',
           },
         ],
       },
@@ -96,6 +120,42 @@ describe('ActionCenter', () => {
     vi.clearAllMocks();
     apiMocks.load.mockResolvedValue(payload());
     apiMocks.retry.mockResolvedValue({ status: 200, data: { status: 'queued' } });
+    apiMocks.dismiss.mockResolvedValue({ status: 200, data: { status: 'cancelled' } });
+    apiMocks.todoDiagnostic.mockResolvedValue({
+      status: 200,
+      data: {
+        todo: { id: 'todo-1', title: '点外卖', ownerLabel: '菠萝' },
+        job: {
+          id: 'todo-job-1',
+          todoId: 'todo-1',
+          status: 'pending',
+          health: 'waiting',
+          channel: 'in_app',
+          attempts: 0,
+          scheduledAtUtc: '2026-08-12T03:10:00Z',
+          timezone: 'Asia/Shanghai',
+        },
+        rule: {
+          id: 'rule-1',
+          mode: 'single_schedule',
+          schedule: {
+            mode: 'repeat',
+            repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5], localTime: '11:10' },
+          },
+        },
+        relatedJobs: [
+          {
+            id: 'todo-job-1',
+            todoId: 'todo-1',
+            status: 'pending',
+            health: 'waiting',
+            channel: 'in_app',
+            attempts: 0,
+            scheduledAtUtc: '2026-08-12T03:10:00Z',
+          },
+        ],
+      },
+    });
   });
 
   afterEach(() => {
@@ -129,6 +189,31 @@ describe('ActionCenter', () => {
     expect(mounted.host.textContent).toContain('ab****@example.com');
     expect(mounted.host.textContent).not.toContain('private@example.com');
     expect(mounted.host.textContent).toContain('DELIVERY_RESULT_UNKNOWN');
+  });
+
+  it('待办提醒固定显示北京时间，并在当前 Job 上打开上下文诊断', async () => {
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    const jobTab = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('异步任务健康'),
+    );
+    jobTab!.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('点外卖'));
+
+    expect(mounted.host.textContent).toContain('11:10');
+    expect(mounted.host.textContent).toContain('北京时间');
+    const card = [...mounted.host.querySelectorAll<HTMLElement>('.action-center__item')].find((item) =>
+      item.textContent?.includes('点外卖'),
+    );
+    card!.querySelector<HTMLButtonElement>('button')!.click();
+
+    await vi.waitFor(() => expect(apiMocks.todoDiagnostic).toHaveBeenCalledWith({ id: 'todo-job-1' }));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('待办提醒诊断'));
+    expect(document.body.textContent).toContain('每周 周一、周二、周三、周四、周五 11:10 提醒');
+    expect(document.body.textContent).not.toContain('上海时间');
+    expect(routerMocks.push).not.toHaveBeenCalledWith('/admin/todoPlanDiagnostics');
   });
 
   it('点击来源卡片后从服务端读取该来源明细并显示选中态', async () => {

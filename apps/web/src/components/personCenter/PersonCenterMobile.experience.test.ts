@@ -95,6 +95,78 @@ describe('mobile personal center experience', () => {
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);
   });
 
+  it('keeps free and paid frame effects aligned with acquisition, price and rarity', () => {
+    const section = (start: string, end: string) =>
+      avatarFrameSource.slice(avatarFrameSource.indexOf(start), avatarFrameSource.indexOf(end));
+    const paidBasicSection = section('/* 薄荷：', '/* 初光：');
+    const freeAdvancedSection = section('/* 七日晨光：', '/* 鎏金：');
+    const goldSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 鎏金：'),
+      avatarFrameSource.indexOf('/* 樱绯：'),
+    );
+    const oceanSection = section('/* 潮汐：', '/* 极光：');
+    const auroraSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 极光：'),
+      avatarFrameSource.indexOf('/* 星河：'),
+    );
+    const galaxySection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 星河：'),
+      avatarFrameSource.indexOf('/* 赤焰：'),
+    );
+    const flameSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 赤焰：'),
+      avatarFrameSource.indexOf('/* 龙曜：'),
+    );
+    const neonSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 霓虹：'),
+      avatarFrameSource.indexOf('/* 晚霞：'),
+    );
+    const noteMasterpieceSection = section('/* 文心长河：', '/* 云阙宝库：');
+    const fileVaultSection = section('/* 云阙宝库：', '/* 翰墨星海：');
+    const streakMonthSection = section('/* 月华渐盈：', '/* 岁序长明：');
+
+    expect(paidBasicSection).not.toContain('animation:');
+    expect(freeAdvancedSection).not.toContain('animation:');
+
+    expect(goldSection).toContain('积分进阶入门档');
+    expect(goldSection).toContain('animation: frame-gold-glint');
+    expect(goldSection).toContain('animation: frame-premium-orbit 14s');
+    expect(goldSection).not.toContain('avatar-frame__comet');
+
+    expect(oceanSection).toContain('.avatar-frame--ocean .avatar-frame__ring::before');
+    expect(oceanSection).toContain('animation: frame-ocean-current');
+    expect(oceanSection).toContain('animation: frame-ocean-orbit');
+    expect(oceanSection).not.toContain('avatar-frame__comet');
+
+    expect(auroraSection).toContain('animation: frame-aurora-turn');
+    expect(auroraSection).toContain('animation: frame-aurora-wave');
+    expect(auroraSection).toContain('.avatar-frame--aurora .avatar-frame__orbit::before');
+    expect(auroraSection).not.toContain('avatar-frame__comet');
+
+    expect(flameSection).toContain('.avatar-frame--flame .avatar-frame__orbit::before');
+    expect(flameSection).toContain('.avatar-frame--flame .avatar-frame__orbit::after');
+    expect(flameSection).toContain('animation: frame-flame-comet');
+
+    expect(neonSection).toContain('.avatar-frame--neon .avatar-frame__orbit::before');
+    expect(neonSection).toContain('.avatar-frame--neon .avatar-frame__orbit::after');
+    expect(neonSection).toContain('animation: frame-neon-comet');
+
+    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__ring::before');
+    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__motif::before');
+    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__orbit::before');
+    expect(galaxySection).toContain('animation: frame-galaxy-comet');
+
+    for (const freeColorfulSection of [noteMasterpieceSection, fileVaultSection, streakMonthSection]) {
+      expect(freeColorfulSection.match(/animation:/g)).toHaveLength(2);
+      expect(freeColorfulSection).not.toContain('avatar-frame__comet');
+      expect(freeColorfulSection).toContain('orbit::after');
+      expect(freeColorfulSection).not.toContain('animation: frame-gift-epic-orbit');
+    }
+    expect(noteMasterpieceSection).toContain('animation: frame-free-colorful-orbit');
+    expect(fileVaultSection).toContain('animation: frame-free-colorful-orbit-reverse');
+    expect(streakMonthSection).toContain('animation: frame-free-colorful-moon-orbit');
+  });
+
   it('closes avatar overlay history before navigating and stabilizes the initial frame tabs', () => {
     expect(framePickerSource).toContain('closeCurrentMobileOverlayThen(closeDrawer');
     expect(framePickerSource).toContain("emit('navigate', 'achievements')");

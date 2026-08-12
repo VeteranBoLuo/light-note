@@ -349,10 +349,21 @@
       padding: 12px;
     }
 
-    .archive-toolbar,
-    .archive-entry-main {
+    .archive-toolbar {
       align-items: stretch;
       flex-direction: column;
+    }
+
+    .archive-entry {
+      min-height: 64px;
+      gap: 10px;
+      padding: 8px 4px;
+    }
+
+    .archive-entry-main {
+      min-width: 0;
+      align-items: center;
+      flex-direction: row;
     }
 
     .archive-summary {
@@ -367,6 +378,23 @@
     .archive-entry-action,
     .archive-breadcrumb {
       min-height: 44px;
+    }
+
+    .archive-entry-action {
+      min-width: 0;
+      max-width: none;
+      flex: 1;
+      justify-content: flex-start;
+      padding: 0 4px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+    }
+
+    .archive-entry-meta {
+      flex: 0 0 auto;
+      justify-content: flex-end;
+      white-space: nowrap;
     }
   }
 </style>

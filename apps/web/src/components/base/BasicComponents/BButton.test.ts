@@ -49,4 +49,9 @@ describe('BButton semantics', () => {
     const { host } = mountButton({ nativeType: 'submit' });
     expect(host.querySelector<HTMLButtonElement>('button.b_btn')?.type).toBe('submit');
   });
+
+  it('supports filling the available row width', () => {
+    const { host } = mountButton({ block: true });
+    expect(host.querySelector<HTMLButtonElement>('button.b_btn')?.classList.contains('is-block')).toBe(true);
+  });
 });

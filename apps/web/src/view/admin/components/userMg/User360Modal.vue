@@ -15,8 +15,15 @@
 
       <template v-else-if="detail">
         <header class="user-360__identity">
-          <span class="user-360__avatar" aria-hidden="true">
-            <SvgIcon :src="userInfo?.headPicture || icon.navigation.user" size="38" />
+          <span class="user-360__avatar" :class="{ 'is-framed': equippedFrameId }" aria-hidden="true">
+            <AvatarFramePreview
+              v-if="equippedFrameId"
+              :frame-id="equippedFrameId"
+              :src="userInfo?.headPicture || icon.navigation.user"
+              :size="38"
+              pause-when-offscreen
+            />
+            <SvgIcon v-else :src="userInfo?.headPicture || icon.navigation.user" size="38" />
           </span>
           <span class="user-360__identity-copy">
             <strong>{{ displayName }}</strong>
@@ -42,7 +49,12 @@
           <article role="listitem">
             <span>{{ t('adminUserManagement.detail.resourceTotal') }}</span>
             <strong>{{ formatCount(resourceTotal) }}</strong>
-            <small>{{ formatStorage(detail.resources?.storageUsed) }}</small>
+            <small>{{
+              t('adminUserManagement.detail.sharedStorageUsage', {
+                total: formatStorage(detail.resources?.storageUsed),
+                trash: formatStorage(detail.resources?.trashStorageUsed),
+              })
+            }}</small>
           </article>
           <article role="listitem">
             <span>{{ t('adminUserManagement.detail.pendingTodos') }}</span>
@@ -81,14 +93,22 @@
                 ><dt>{{ t('adminUserManagement.detail.alias') }}</dt
                 ><dd>{{ detail.profile?.alias || '-' }}</dd></div
               >
-              <div
-                ><dt>{{ t('adminUserManagement.detail.loginType') }}</dt
-                ><dd>{{ detail.profile?.loginType || '-' }}</dd></div
-              >
-              <div
-                ><dt>{{ t('adminUserManagement.detail.location') }}</dt
-                ><dd>{{ detail.profile?.location || '-' }}</dd></div
-              >
+              <div>
+                <dt>{{ t('adminUserManagement.detail.loginType') }}</dt>
+                <dd
+                  ><BChip tone="neutral" size="small">{{ loginTypeLabel }}</BChip></dd
+                >
+              </div>
+              <div class="user-360__definition-item--wide">
+                <dt>{{ t('adminUserManagement.detail.location') }}</dt>
+                <dd v-if="locationParts.length" class="user-360__location">
+                  <template v-for="(part, index) in locationParts" :key="part">
+                    <span v-if="index" class="user-360__location-separator" aria-hidden="true">/</span>
+                    <BChip tone="neutral" size="small">{{ part }}</BChip>
+                  </template>
+                </dd>
+                <dd v-else>-</dd>
+              </div>
               <div
                 ><dt>{{ t('adminUserManagement.detail.ip') }}</dt
                 ><dd>{{ detail.profile?.ip || '-' }}</dd></div
@@ -286,10 +306,13 @@
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BTabs, { type TabItem } from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import icon from '@/config/icon.ts';
+  import { frameVariant } from '@/config/growthFrames.ts';
   import userApi from '@/api/userApi.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { bookmarkStore } from '@/store';
+  import { formatAdminLocation, resolveAdminLoginMethod } from './userAdminProfileFormat';
 
   interface UserAdminDetail {
     profile?: Record<string, any>;
@@ -320,6 +343,10 @@
   const displayName = computed(
     () => detail.value?.profile?.adminRemark || detail.value?.profile?.alias || detail.value?.profile?.email || '-',
   );
+  const equippedFrameId = computed(() => {
+    const frameId = detail.value?.growth?.equippedFrame || props.userInfo?.equippedFrame;
+    return frameVariant(frameId) ? frameId : null;
+  });
   const resourceTotal = computed(() =>
     ['bookmarkTotal', 'noteTotal', 'fileTotal', 'tagTotal'].reduce(
       (total, field) => total + Number(detail.value?.resources?.[field] || 0),
@@ -335,6 +362,10 @@
     const role = String(detail.value?.profile?.role || 'user');
     return t(`adminUserManagement.detail.roles.${role}`);
   });
+  const loginTypeLabel = computed(() =>
+    t(`adminUserManagement.detail.loginMethods.${resolveAdminLoginMethod(detail.value?.profile?.loginType)}`),
+  );
+  const locationParts = computed(() => formatAdminLocation(detail.value?.profile?.location));
   const tabOptions = computed<TabItem[]>(() => [
     { key: 'overview', label: t('adminUserManagement.detail.tabs.overview') },
     { key: 'activity', label: t('adminUserManagement.detail.tabs.activity') },
@@ -480,6 +511,12 @@
     object-fit: cover;
   }
 
+  .user-360__avatar.is-framed {
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
+  }
+
   .user-360__identity-copy {
     min-width: 0;
     display: flex;
@@ -616,6 +653,10 @@
     min-width: 0;
   }
 
+  .user-360__definition-grid .user-360__definition-item--wide {
+    grid-column: 1 / -1;
+  }
+
   .user-360__definition-grid dt {
     margin-bottom: 3px;
     color: var(--desc-color);
@@ -626,6 +667,18 @@
     margin: 0;
     overflow-wrap: anywhere;
     font-size: 13px;
+  }
+
+  .user-360__location {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .user-360__location-separator {
+    color: var(--desc-color);
+    font-size: 11px;
   }
 
   .user-360__resource-grid {

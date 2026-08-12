@@ -69,11 +69,9 @@
         >
           <SvgIcon :src="icon.arrow_right" size="17" aria-hidden="true" />
         </BButton>
-        <BDropdown :trigger="'click'" :align="'right'" :menu-options="pageActions(item)">
-          <BButton class="note-mobile-page-level-list__more" :aria-label="t('common.more')">
-            <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
-          </BButton>
-        </BDropdown>
+        <BButton class="note-mobile-page-level-list__more" :aria-label="t('common.more')" @click="openPageActions(item)">
+          <SvgIcon :src="icon.common.more" size="17" aria-hidden="true" />
+        </BButton>
       </div>
 
       <p v-if="!visibleItems.length" class="note-mobile-page-level-list__empty">
@@ -81,6 +79,12 @@
       </p>
     </div>
   </section>
+  <MobilePageActionsDrawer
+    v-model:open="pageActionDrawerOpen"
+    :object-title="pageActionItem?.title || t('note.untitled')"
+    :actions="pageActionOptions"
+    @action="handlePageAction"
+  />
 </template>
 
 <script setup lang="ts">
@@ -88,10 +92,12 @@
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import MobilePageActionsDrawer, {
+    type MobilePageActionItem,
+  } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import icon from '@/config/icon';
   import useNoteWorkspaceStore, { NOTE_TREE_ROOT_KEY } from '@/store/noteWorkspace';
   import type { NoteBreadcrumbItem, NoteTreeItem } from '@/types/noteTree';
@@ -135,6 +141,8 @@
   const levelParentId = ref<string | null>(null);
   const levelBreadcrumb = ref<NoteBreadcrumbItem[]>([]);
   const searchValue = ref('');
+  const pageActionDrawerOpen = ref(false);
+  const pageActionItem = ref<NoteTreeItem | null>(null);
   let searchTimer = 0;
 
   const searchActive = computed(() => Boolean(treeSearchKeyword.value.trim()));
@@ -191,63 +199,83 @@
     else if (item.id !== props.currentPageId) emit('openPage', item.id);
   }
 
-  function pageActions(item: NoteTreeItem) {
+  const pageActionOptions = computed<MobilePageActionItem[]>(() => {
+    const item = pageActionItem.value;
+    if (!item) return [];
     return [
       ...(item.hasChildren
         ? [
             {
+              key: 'browse',
               label: t('note.browseChildPages'),
               icon: icon.noteTree.sidebarOpen,
-              function: () => browseLevel(item.id),
             },
           ]
         : []),
       ...(props.writeEnabled
         ? [
             {
+              key: 'toggleTop',
               label: item.isTop ? t('common.unpin') : t('common.pin'),
               icon: item.isTop ? icon.contextMenu.unpin : icon.contextMenu.pin,
-              function: () => emit('toggleTop', item),
             },
             {
+              key: 'create',
               label: t('note.newChildPage'),
               icon: icon.common.add,
-              function: () => emit('create', item),
             },
             {
+              key: 'attach',
               label: t('note.addExistingPages'),
               icon: icon.noteTree.move,
-              function: () => emit('attach', item),
             },
             {
+              key: 'rename',
               label: t('note.renamePage'),
               icon: icon.cloudSpace.rename,
-              function: () => emit('rename', item),
             },
             {
+              key: 'move',
               label: t('note.moveThisPage'),
               icon: icon.noteTree.move,
-              function: () => emit('move', item),
             },
           ]
         : []),
       {
+        key: 'copyLink',
         label: t('common.copyLink'),
         icon: icon.cloudSpace.preview.copy,
-        function: () => emit('copyLink', item),
       },
       ...(props.writeEnabled
         ? [
-            { divider: true },
             {
+              key: 'delete',
               label: t('note.moveToTrash'),
               icon: icon.table_delete,
               danger: true,
-              function: () => emit('delete', item),
+              dividerBefore: true,
             },
           ]
         : []),
     ];
+  });
+
+  function openPageActions(item: NoteTreeItem) {
+    pageActionItem.value = item;
+    pageActionDrawerOpen.value = true;
+  }
+
+  function handlePageAction(action: MobilePageActionItem) {
+    const item = pageActionItem.value;
+    if (!item) return;
+    if (action.key === 'browse') void browseLevel(item.id);
+    else if (action.key === 'toggleTop') emit('toggleTop', item);
+    else if (action.key === 'create') emit('create', item);
+    else if (action.key === 'attach') emit('attach', item);
+    else if (action.key === 'rename') emit('rename', item);
+    else if (action.key === 'move') emit('move', item);
+    else if (action.key === 'copyLink') emit('copyLink', item);
+    else if (action.key === 'delete') emit('delete', item);
   }
 
   watch(

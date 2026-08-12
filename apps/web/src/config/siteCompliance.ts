@@ -12,8 +12,11 @@ export const WEBSITE_ICP_NUMBER = SITE_COMPLIANCE.websiteIcpNumber;
 /** 工信部备案查询入口。 */
 export const MIIT_QUERY_URL = SITE_COMPLIANCE.miitQueryUrl;
 
-/** 公安联网备案通过后再同时填写编号与查询地址；空值时页面不展示。 */
+/** 网站公安联网备案；不得作为 APP 公安备案号展示。 */
 export const PUBLIC_SECURITY_FILING_NUMBER = SITE_COMPLIANCE.publicSecurityFilingNumber;
 export const PUBLIC_SECURITY_QUERY_URL = SITE_COMPLIANCE.publicSecurityQueryUrl;
+export const PUBLIC_SECURITY_BADGE_PATH = SITE_COMPLIANCE.publicSecurityBadgePath;
 
-export const hasPublicSecurityFiling = Boolean(PUBLIC_SECURITY_FILING_NUMBER && PUBLIC_SECURITY_QUERY_URL);
+export const hasPublicSecurityFiling = Boolean(
+  PUBLIC_SECURITY_FILING_NUMBER && PUBLIC_SECURITY_QUERY_URL && PUBLIC_SECURITY_BADGE_PATH,
+);

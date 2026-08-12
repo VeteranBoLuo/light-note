@@ -22,14 +22,11 @@ describe('LotteryDraw 自适应设计', () => {
     expect(source).toMatch(/@media \(max-width: 380px\)[\s\S]*?\.lt-prizes\s*\{\s*grid-template-columns:\s*repeat\(4,/);
   });
 
-  it('手机点击抽奖后自动滚回舞台，并尊重减少动画设置', () => {
-    expect(source).toContain('ref="stageRef"');
-    expect(source).toContain("window.matchMedia('(max-width: 760px)')");
-    expect(source).toContain("window.matchMedia('(prefers-reduced-motion: reduce)')");
-    expect(source).toContain(
-      "stageRef.value?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })",
-    );
-    expect(source).toContain('scroll-margin-top: 58px;');
+  it('手机点击抽奖后交给成长页定位标题，不再把开奖舞台强行顶到页签下方', () => {
+    expect(source).toContain("const emit = defineEmits<{ 'focus-header': [] }>();");
+    expect(source).toContain("emit('focus-header')");
+    expect(source).not.toContain('stageRef');
+    expect(source).not.toMatch(/\.scrollIntoView\s*\(/);
   });
 
   it('手机首屏压缩重复说明，并把标题、积分余额保持在同一行', () => {

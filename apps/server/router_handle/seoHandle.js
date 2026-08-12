@@ -32,8 +32,10 @@ const SITE = 'https://boluo66.top';
 const BRAND = SITE_COMPLIANCE.productName;
 const HELP_PATH = '/helpCenter'; // 单一来源，避免路径散落在各处手改漏改
 const PUBLIC_SECURITY_FILING_HTML =
-  SITE_COMPLIANCE.publicSecurityFilingNumber && SITE_COMPLIANCE.publicSecurityQueryUrl
-    ? ` · <a href="${SITE_COMPLIANCE.publicSecurityQueryUrl}">${SITE_COMPLIANCE.publicSecurityFilingNumber}</a>`
+  SITE_COMPLIANCE.publicSecurityFilingNumber &&
+  SITE_COMPLIANCE.publicSecurityQueryUrl &&
+  SITE_COMPLIANCE.publicSecurityBadgePath
+    ? ` · <a href="${SITE_COMPLIANCE.publicSecurityQueryUrl}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:4px"><img src="${SITE_COMPLIANCE.publicSecurityBadgePath}" alt="" width="20" height="20">${SITE_COMPLIANCE.publicSecurityFilingNumber}</a>`
     : '';
 
 const escapeHtml = (s) =>

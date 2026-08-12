@@ -63,8 +63,19 @@
           <template #default="{ item: record }">
             <MobileListRow complex>
               <template #leading>
-                <span class="mobile-user-avatar">
-                  <SvgIcon :src="record.headPicture || icon.navigation.user" size="30" />
+                <span
+                  class="mobile-user-avatar"
+                  :class="{ 'is-framed': frameVariant(record.equippedFrame) }"
+                  aria-hidden="true"
+                >
+                  <AvatarFramePreview
+                    v-if="frameVariant(record.equippedFrame)"
+                    :frame-id="record.equippedFrame"
+                    :src="record.headPicture || icon.navigation.user"
+                    :size="30"
+                    pause-when-offscreen
+                  />
+                  <SvgIcon v-else :src="record.headPicture || icon.navigation.user" size="30" />
                 </span>
               </template>
               <template #title>
@@ -145,6 +156,8 @@
   import { apiQueryPost } from '@/http/request.ts';
   import icon from '@/config/icon.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import { frameVariant } from '@/config/growthFrames.ts';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -475,16 +488,21 @@
   }
 
   .mobile-user-avatar {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: visible;
     border: 1px solid var(--surface-border-color);
     border-radius: 50%;
     background: var(--workspace-panel-bg-color);
     color: var(--primary-color);
+  }
+
+  .mobile-user-avatar.is-framed {
+    border-color: transparent;
+    background: transparent;
   }
 
   .mobile-user-avatar :deep(img) {

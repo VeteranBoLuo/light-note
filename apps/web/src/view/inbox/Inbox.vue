@@ -110,19 +110,32 @@
         </template>
         <template v-else>
           <div class="inbox-toolbar__todo-tabs">
-            <BTabs
+            <div v-if="todoView === 'list' || todoView === 'matrix'" class="inbox-toolbar__todo-group">
+              <span class="inbox-toolbar__todo-group-label">{{ t('inbox.todoStatusGroupLabel') }}</span>
+              <BTabs
+                v-model:active-tab="todo.status"
+                class="inbox-toolbar__todo-status"
+                :options="todoStatusTabOptions"
+                variant="segment"
+                :aria-label="t('inbox.todoStatusGroupLabel')"
+                @change="changeTodoStatus"
+              />
+            </div>
+            <span
               v-if="todoView === 'list' || todoView === 'matrix'"
-              v-model:active-tab="todo.status"
-              :options="todoStatusTabOptions"
-              variant="pill"
-              @change="changeTodoStatus"
-            />
-            <BTabs
-              v-model:active-tab="todoView"
-              class="inbox-toolbar__todo-views"
-              :options="todoViewOptions"
-              variant="pill"
-            />
+              class="inbox-toolbar__todo-divider"
+              aria-hidden="true"
+            ></span>
+            <div class="inbox-toolbar__todo-group inbox-toolbar__todo-group--views">
+              <span class="inbox-toolbar__todo-group-label">{{ t('inbox.todoViewGroupLabel') }}</span>
+              <BTabs
+                v-model:active-tab="todoView"
+                class="inbox-toolbar__todo-views"
+                :options="todoViewOptions"
+                variant="line"
+                :aria-label="t('inbox.todoViewGroupLabel')"
+              />
+            </div>
           </div>
           <div class="inbox-toolbar__right inbox-toolbar__right--todo">
             <BInput
@@ -1655,13 +1668,66 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    gap: 6px;
+    gap: 18px;
   }
-  .inbox-toolbar__todo-tabs > :deep(.tab-container) {
+  .inbox-toolbar__todo-group {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .inbox-toolbar__todo-group--views {
     flex: 0 1 auto;
   }
+  .inbox-toolbar__todo-group-label {
+    flex: 0 0 auto;
+    color: var(--desc-color);
+    font-size: 11px;
+    font-weight: 650;
+    line-height: 1;
+    letter-spacing: 0.04em;
+  }
+  .inbox-toolbar__todo-divider {
+    width: 1px;
+    height: 26px;
+    flex: 0 0 auto;
+    background: var(--surface-divider-color);
+  }
+  .inbox-toolbar__todo-status {
+    flex: 0 1 auto;
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+  .inbox-toolbar__todo-status :deep(.tab) {
+    min-height: 34px;
+    padding: 0 12px;
+    line-height: 34px;
+  }
+  .inbox-toolbar__todo-status :deep(.tab.is-active) {
+    color: var(--todo-accent-color);
+    background: var(--card-background);
+    box-shadow: inset 0 -2px 0 var(--todo-accent-color);
+  }
   .inbox-toolbar__todo-views {
-    flex-shrink: 0;
+    min-width: 0;
+    flex: 0 1 auto;
+    gap: 18px;
+    margin: 0;
+    padding: 0 0 4px;
+    border-bottom: 0;
+  }
+  .inbox-toolbar__todo-views :deep(.tab) {
+    min-height: 34px;
+    box-sizing: border-box;
+    padding: 5px 1px 7px;
+  }
+  .inbox-toolbar__todo-views :deep(.tab.is-active) {
+    color: var(--todo-accent-color);
+    font-weight: 650;
+  }
+  .inbox-toolbar__todo-views :deep(.underline) {
+    bottom: 0;
+    background: var(--todo-accent-color);
   }
   .inbox-batch {
     display: flex;

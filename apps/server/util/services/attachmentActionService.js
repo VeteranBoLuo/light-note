@@ -4,6 +4,7 @@ import { promises as fsP } from 'node:fs';
 import { imageSize } from 'image-size';
 import pool from '../../db/index.js';
 import { getUserSpaceMb } from '../growth.js';
+import { BYTES_PER_MB, getAccountedStorageBytes } from '../storageUsage.js';
 import { normalizeDocumentFileName, validateDocumentDescriptor } from '../aiDocument/parser.js';
 import {
   bucketBaseUrl,
@@ -351,13 +352,12 @@ export async function saveAttachmentToCloud({
         folderName: prepared.folderName,
         folderStrategy: prepared.folderStrategy,
       });
-      const [usageRows] = await connection.query(
-        'SELECT COALESCE(SUM(file_size), 0) AS used FROM files WHERE create_by = ? AND del_flag = 0',
-        [userId],
-      );
-      const usedBytes = Number(usageRows[0]?.used || 0);
-      if (usedBytes + descriptor.fileSize > Number(quotaMb) * 1024 * 1024) {
-        throw serviceError('STORAGE_QUOTA_EXCEEDED', `云空间已达上限（${quotaMb}MB），请先清理文件`);
+      const usedBytes = await getAccountedStorageBytes(connection, userId);
+      if (usedBytes + descriptor.fileSize > Number(quotaMb) * BYTES_PER_MB) {
+        throw serviceError(
+          'STORAGE_QUOTA_EXCEEDED',
+          `云空间容量不足（总容量 ${quotaMb}MB），回收站文件同样占用容量，请清理回收站或扩容后重试`,
+        );
       }
       const requestedName = normalizeCloudFileName(prepared.fileName, descriptor.fileName);
       const finalName = await uniqueCloudFileName(connection, userId, requestedName);

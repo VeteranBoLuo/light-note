@@ -65,6 +65,7 @@ function normalizeArgs(args = {}) {
   return {
     timeRange: isAllTimeExpression(requestedTimeRange) ? '全部' : requestedTimeRange,
     resourceType: normalizeResourceType(args.resourceType ?? args.type),
+    registeredWithin: String(args.registeredWithin || args.userRegisteredWithin || '').trim(),
     includeInternal: args.includeInternal === true,
     limit: normalizeLimit(args.limit),
   };
@@ -80,8 +81,18 @@ const SOURCES = Object.freeze({
   file: { table: 'files', ownerColumn: 'create_by', titleColumn: 'file_name', seedType: 'file' },
 });
 
-// files.id 是整型而另两张表是字符串主键，UNION 前统一成字符串，顺带对上 seed 表里存的 CHAR 值。
+// bookmark 仍是历史 utf8_general_ci 表，note/files 已是 utf8mb4_unicode_ci。
+// MySQL 5.7 不会替 UNION 自动选择兼容排序规则，所有字符串投影必须显式收敛到同一口径。
+const UNION_TEXT_COLLATION = 'utf8mb4_unicode_ci';
 const ID_EXPRESSION = 'CAST(t.id AS CHAR)';
+
+function asUnionText(expression) {
+  return `CONVERT(${expression} USING utf8mb4) COLLATE ${UNION_TEXT_COLLATION}`;
+}
+
+function asUnionId(expression) {
+  return `CAST(${expression} AS CHAR CHARACTER SET utf8mb4) COLLATE ${UNION_TEXT_COLLATION}`;
+}
 
 function buildBranch(kind, time) {
   const source = SOURCES[kind];
@@ -98,8 +109,9 @@ function buildBranch(kind, time) {
     ` AND osr.resource_id = ${ID_EXPRESSION})`;
   params.push(source.seedType);
   const sql =
-    `SELECT '${kind}' AS resource_type, ${ID_EXPRESSION} AS resource_id,` +
-    ` t.${source.titleColumn} AS title, t.${source.ownerColumn} AS owner_id, t.create_time` +
+    `SELECT ${asUnionText(`'${kind}'`)} AS resource_type, ${asUnionId('t.id')} AS resource_id,` +
+    ` ${asUnionText(`t.${source.titleColumn}`)} AS title,` +
+    ` ${asUnionText(`t.${source.ownerColumn}`)} AS owner_id, t.create_time` +
     ` FROM ${source.table} t WHERE ${where}`;
   return { sql, params };
 }
@@ -120,6 +132,7 @@ export default {
     '回答“今天平台新增的笔记都有哪些”“这些资源的标题分别是什么”“昨天大家都收藏了什么”这类需要逐条明细、且不限定某一个用户的问题时用它。' +
     'get_resource_creation_ranking 只给每人的数量排行，需要具体标题就用本工具，两者统计口径一致（都不含引导示例资源和内部账号）。' +
     '只查某一位用户自己的资源时用 query_notes / query_bookmarks / query_files 并传 user。' +
+    '如果是在“今天新增了哪些用户”之后追问“他们今天新增了哪些资源”，必须同时传 registeredWithin="今天" 与 timeRange="今天"。' +
     '本工具不返回正文内容。timeRange 必填，问累计或当前总量时传“全部”。',
   parameters: {
     type: 'object',
@@ -140,6 +153,11 @@ export default {
         type: 'boolean',
         description: '是否包含 root/test 等内部账号，默认 false',
       },
+      registeredWithin: {
+        type: 'string',
+        description:
+          '可选：只列该注册时间段内新增用户创建的资源，例如“今天”“昨天”。用于承接“今天新增了哪些用户”后的追问',
+      },
       limit: {
         type: 'integer',
         description: '返回条数，默认30，最大100',
@@ -158,10 +176,18 @@ export default {
       userFilters.push(`(u.role IS NULL OR u.role NOT IN (${INTERNAL_ROLES.map(() => '?').join(', ')}))`);
       userParams.push(...INTERNAL_ROLES);
     }
+    const registeredTime = normalized.registeredWithin
+      ? parseRequiredTimeRange(normalized.registeredWithin, { label: '用户注册时间' })
+      : null;
+    if (registeredTime) {
+      userFilters.push('u.create_time >= ? AND u.create_time <= ?');
+      userParams.push(registeredTime.start, registeredTime.end);
+    }
 
     const from =
       `FROM (${union.sql}) resources` +
-      ` INNER JOIN \`user\` u ON u.id = resources.owner_id` +
+      // user.id 也来自历史 utf8 表；按二进制 ID 连接可避免再次触发跨排序规则比较。
+      ` INNER JOIN \`user\` u ON BINARY u.id = BINARY resources.owner_id` +
       ` WHERE ${userFilters.join(' AND ')}`;
 
     const [[rows], [countRows]] = await Promise.all([
@@ -180,6 +206,7 @@ export default {
       timeRange: normalized.timeRange,
       resourceType: normalized.resourceType,
       includeInternal: normalized.includeInternal,
+      registeredWithin: normalized.registeredWithin || null,
       total: Number(countRows[0]?.total || 0),
       items: rows.map((row) => ({
         resourceType: row.resource_type,
@@ -194,7 +221,9 @@ export default {
   },
   transform(raw) {
     const items = raw?.items || [];
-    const period = raw?.timeRange === '全部' ? '平台全部' : `${raw?.timeRange || '指定时间段'}平台新增`;
+    const cohort = raw?.registeredWithin ? `${raw.registeredWithin}注册用户中，` : '';
+    const period =
+      raw?.timeRange === '全部' ? `${cohort}平台全部` : `${cohort}${raw?.timeRange || '指定时间段'}平台新增`;
     const scope = raw?.resourceType === 'all' ? '资源' : RESOURCE_TYPES[raw.resourceType].label;
     if (!items.length) return `${period}的${scope}：没有记录`;
 
@@ -223,7 +252,9 @@ export default {
   },
   summarize(raw) {
     const items = raw?.items || [];
-    const period = raw?.timeRange === '全部' ? '平台全部' : `${raw?.timeRange || '指定时间段'}平台新增`;
+    const cohort = raw?.registeredWithin ? `${raw.registeredWithin}注册用户中，` : '';
+    const period =
+      raw?.timeRange === '全部' ? `${cohort}平台全部` : `${cohort}${raw?.timeRange || '指定时间段'}平台新增`;
     const scope = raw?.resourceType === 'all' ? '资源' : RESOURCE_TYPES[raw.resourceType].label;
     if (!items.length) return `${period}${scope}清单：无记录`;
     const owners = new Set(items.map((item) => item.userId));

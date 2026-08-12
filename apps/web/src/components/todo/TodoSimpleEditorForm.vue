@@ -1,9 +1,14 @@
 <template>
   <div class="todo-simple-editor" :class="{ 'is-mobile': mobile }">
-    <div class="todo-simple-editor__body">
+    <div ref="editorBodyRef" class="todo-simple-editor__body">
       <main class="todo-simple-editor__main">
         <div v-if="draft.independentTasks.enabled" class="todo-simple-editor__mode-notice">
-          <strong>{{ t('inbox.todoIndependentEnabled') }}</strong>
+          <div class="todo-simple-editor__mode-head">
+            <strong>{{ t('inbox.todoIndependentEnabled') }}</strong>
+            <BButton v-if="mobile" class="todo-simple-editor__mode-exit" size="small" @click="disableAdvancedMode">
+              {{ t('inbox.todoDisableAdvanced') }}
+            </BButton>
+          </div>
           <span>{{ t('inbox.todoIndependentEnabledHint') }}</span>
         </div>
 
@@ -134,7 +139,11 @@
             <strong>{{ t('inbox.todoIndependentToggleTitle') }}</strong>
             <span>{{ t('inbox.todoIndependentToggleHint') }}</span>
           </div>
-          <TodoIndependentTaskPlanEditor v-else :draft="draft" />
+          <TodoIndependentTaskPlanEditor
+            v-else
+            :draft="draft"
+            :needs-past-policy="Boolean(preview?.requiredChoices?.includes('pastPolicy'))"
+          />
         </section>
 
         <TodoPlanPreviewCard
@@ -183,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BDateTimePicker from '@/components/base/BasicComponents/BDateTimePicker.vue';
@@ -234,6 +243,7 @@
   const checklistOpen = ref(false);
   const resourcePickerVisible = ref(false);
   const resourceRefs = ref<TodoResourceRefView[]>([]);
+  const editorBodyRef = ref<HTMLElement | null>(null);
   let previewTimer: ReturnType<typeof setTimeout> | null = null;
   let previewSequence = 0;
 
@@ -296,6 +306,7 @@
               dueDate || plan.end.untilDate || suggestTodoPlanEndDate(draft.timing.startAt || draft.timing.dueAt),
           };
         }
+        void nextTick(scrollEditorToTop);
       }
       emit('advanced-change', enabled);
     },
@@ -312,6 +323,29 @@
       return;
     }
     previewTimer = setTimeout(() => void loadPreview(), 260);
+  }
+
+  function scrollEditorToTop() {
+    const editorBody = editorBodyRef.value;
+    if (!editorBody) return;
+    editorBody.scrollTop = 0;
+
+    // PC 由组件内容区滚动；移动抽屉和独立新建页由外层壳滚动。
+    // 找到最近的真实滚动祖先即可同时覆盖两种入口，避免依赖 UA 或页面路由。
+    let parent = editorBody.parentElement;
+    while (parent) {
+      if (/auto|scroll/.test(window.getComputedStyle(parent).overflowY)) {
+        parent.scrollTop = 0;
+        break;
+      }
+      parent = parent.parentElement;
+    }
+  }
+
+  function disableAdvancedMode() {
+    if (!draft.independentTasks.enabled) return;
+    draft.independentTasks.enabled = false;
+    void nextTick(scrollEditorToTop);
   }
 
   async function loadPreview() {
@@ -522,6 +556,28 @@
     color: var(--primary-color);
     font-size: 12px;
     line-height: 1.55;
+  }
+
+  .todo-simple-editor__mode-head {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .todo-simple-editor__mode-head strong {
+    min-width: 0;
+  }
+
+  .todo-simple-editor__mode-notice :deep(.todo-simple-editor__mode-exit.b_btn) {
+    flex: 0 0 auto;
+    border: 0 !important;
+    background: transparent !important;
+    color: var(--primary-color);
+    padding: 0 4px;
+    font-weight: 700;
+    white-space: nowrap;
   }
 
   .todo-simple-editor label,
@@ -750,6 +806,10 @@
     margin-bottom: 0;
   }
 
+  .is-mobile .todo-simple-editor__mode-notice :deep(.todo-simple-editor__mode-exit.b_btn) {
+    min-height: 44px;
+  }
+
   .is-mobile .todo-simple-editor__advanced.is-enabled > header {
     display: none;
   }
@@ -787,5 +847,4 @@
   .is-mobile .todo-simple-editor__footer :deep(.b_btn) {
     min-height: 48px;
   }
-
 </style>

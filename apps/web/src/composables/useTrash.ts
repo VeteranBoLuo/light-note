@@ -7,6 +7,7 @@ import { blockGuestWrite } from '@/composables/useGuestGuard';
 import { useGrowth } from '@/composables/useGrowth.ts';
 import { recordOperation } from '@/api/commonApi.ts';
 import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
+import cloudSpaceStore from '@/store/cloudSpace.ts';
 
 export type TrashResourceType = 'bookmark' | 'note' | 'file';
 export interface TrashItem {
@@ -26,9 +27,21 @@ export function formatTrashSize(bytes: number): string {
   return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+export function getTrashStorageUsagePercent(bytes: number, quotaMb: number) {
+  const quotaBytes = Math.max(1, (Number(quotaMb) || 1024) * 1024 * 1024);
+  return Number(Math.min(100, (Math.max(0, Number(bytes) || 0) / quotaBytes) * 100).toFixed(1));
+}
+
+export function getTrashStorageWarnLevel(percent: number): 'danger' | 'warning' | '' {
+  if (Number(percent) >= 30) return 'danger';
+  if (Number(percent) >= 15) return 'warning';
+  return '';
+}
+
 export function useTrash() {
   const { t } = useI18n();
   const { growth, load: loadGrowth } = useGrowth();
+  const cloud = cloudSpaceStore();
   const loading = ref(false);
   const emptyingAll = ref(false);
   const restoringAll = ref(false);
@@ -42,13 +55,10 @@ export function useTrash() {
 
   const retainDays = computed(() => growth.value?.trashDays || 30);
   const trashFileSizeText = computed(() => formatTrashSize(trashFileSize.value));
-  const trashFileSizeMB = computed(() => (trashFileSize.value / 1024 / 1024).toFixed(1));
-  const trashFileSizeWarnLevel = computed<'danger' | 'warning' | ''>(() => {
-    const megabytes = trashFileSize.value / 1024 / 1024;
-    if (megabytes > 500) return 'danger';
-    if (megabytes > 200) return 'warning';
-    return '';
-  });
+  const trashFileSizePercent = computed(() =>
+    getTrashStorageUsagePercent(trashFileSize.value, Number(growth.value?.spaceMb || cloud.maxSpace || 1024)),
+  );
+  const trashFileSizeWarnLevel = computed(() => getTrashStorageWarnLevel(trashFileSizePercent.value));
   const selectedItems = computed<TrashEntry[]>(() => {
     const selected = new Set(selectedIds.value);
     return items.value
@@ -56,9 +66,7 @@ export function useTrash() {
       .map((item) => ({ id: item.id, resourceType: item.resourceType, batchCount: item.batchCount }));
   });
   const pageSubtitle = computed(() =>
-    total.value
-      ? t('trash.summary', { count: total.value, size: trashFileSizeText.value })
-      : t('trash.subtitle'),
+    total.value ? t('trash.summary', { count: total.value, size: trashFileSizeText.value }) : t('trash.subtitle'),
   );
 
   async function fetchTrashFileSize() {
@@ -130,7 +138,7 @@ export function useTrash() {
       }
       message.success(t('trash.restoreSuccess'));
       recordOperation({ ...OPERATION_LOG_MAP.trash.restore, operation: `恢复回收站资源成功【${success}项】` });
-      await fetchList();
+      await Promise.all([fetchList(), cloud.getUsedSpace()]);
     } catch (error: any) {
       message.error(error?.message || t('trash.restoreFailed'));
     }
@@ -162,7 +170,7 @@ export function useTrash() {
         ...OPERATION_LOG_MAP.trash.permanentDelete,
         operation: `永久删除回收站资源成功【${success}项】`,
       });
-      await fetchList();
+      await Promise.all([fetchList(), cloud.getUsedSpace()]);
     } catch (error: any) {
       message.error(error?.message || t('common.deleteFailed'));
     }
@@ -199,7 +207,7 @@ export function useTrash() {
           operation: `一键恢复全部回收站资源成功【${restored}项】`,
         });
       }
-      await fetchList();
+      await Promise.all([fetchList(), cloud.getUsedSpace()]);
     } catch (error: any) {
       message.error(error?.message || t('trash.restoreFailed'));
     } finally {
@@ -226,7 +234,7 @@ export function useTrash() {
       if (deleted > 0) {
         recordOperation({ ...OPERATION_LOG_MAP.trash.emptyAll, operation: `清空回收站成功【${deleted}项】` });
       }
-      await fetchList();
+      await Promise.all([fetchList(), cloud.getUsedSpace()]);
     } catch (error: any) {
       message.error(error?.message || t('common.deleteFailed'));
     } finally {
@@ -240,8 +248,9 @@ export function useTrash() {
   });
 
   onMounted(() => {
-    fetchList();
-    loadGrowth();
+    void fetchList();
+    void loadGrowth();
+    void cloud.getUsedSpace();
   });
   onBeforeUnmount(() => {
     if (keywordTimer) clearTimeout(keywordTimer);
@@ -260,7 +269,7 @@ export function useTrash() {
     retainDays,
     trashFileSize,
     trashFileSizeText,
-    trashFileSizeMB,
+    trashFileSizePercent,
     trashFileSizeWarnLevel,
     pageSubtitle,
     fetchList,

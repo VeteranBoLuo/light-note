@@ -30,6 +30,16 @@ function number(value) {
   return Number(value || 0);
 }
 
+function parseJson(value, fallback = null) {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function maskEmail(value) {
   const email = String(value || '').trim();
   const at = email.indexOf('@');
@@ -356,12 +366,44 @@ async function loadTodoReminderJobs(limit) {
           OR (status = 'sent' AND sent_at >= DATE_SUB(UTC_TIMESTAMP(), INTERVAL 1 DAY))`,
     ),
     pool.query(
-      `SELECT j.id, j.user_id, j.todo_id, j.channel, j.status, j.retry_count, j.scheduled_at_utc,
-              j.lease_until, j.last_error, j.create_time, j.update_time, t.title, u.alias
+      `SELECT j.id, j.user_id, j.todo_id, j.series_id, j.rule_id, j.channel, j.status, j.retry_count,
+              CONCAT(DATE_FORMAT(j.scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z') AS scheduled_at_utc_iso,
+              DATE_FORMAT(DATE_ADD(j.scheduled_at_utc, INTERVAL 8 HOUR), '%Y-%m-%d %H:%i:%s')
+                AS scheduled_at_beijing,
+              DATE_FORMAT(j.scheduled_at_local, '%Y-%m-%d %H:%i:%s') AS scheduled_at_local_text,
+              j.timezone, j.lease_until, j.last_error, j.create_time, j.update_time, t.title, u.alias,
+              CASE
+                WHEN j.status = 'failed' THEN 'delivery_failed'
+                WHEN j.status = 'unknown' THEN 'delivery_unknown'
+                WHEN j.status = 'processing' AND j.lease_until < UTC_TIMESTAMP() THEN 'lease_expired'
+                WHEN j.status = 'pending'
+                  AND j.scheduled_at_utc < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE) THEN 'overdue'
+                ELSE NULL
+              END AS attention_reason,
+              CASE WHEN j.status = 'pending' THEN (
+                SELECT COUNT(*)
+                  FROM todo_reminder_jobs grouped
+                 WHERE grouped.user_id = j.user_id
+                   AND grouped.todo_id = j.todo_id
+                   AND (grouped.rule_id <=> j.rule_id)
+                   AND grouped.channel = j.channel
+                   AND grouped.status = 'pending'
+              ) ELSE 1 END AS group_count
          FROM todo_reminder_jobs j
          LEFT JOIN todo_items t ON t.id = j.todo_id
          LEFT JOIN user u ON u.id = j.user_id
         WHERE j.status IN ('pending', 'processing', 'failed', 'unknown')
+          AND (j.status <> 'pending' OR j.id = (
+            SELECT grouped.id
+              FROM todo_reminder_jobs grouped
+             WHERE grouped.user_id = j.user_id
+               AND grouped.todo_id = j.todo_id
+               AND (grouped.rule_id <=> j.rule_id)
+               AND grouped.channel = j.channel
+               AND grouped.status = 'pending'
+             ORDER BY grouped.scheduled_at_utc, grouped.id
+             LIMIT 1
+          ))
         ORDER BY (j.status IN ('failed', 'unknown')) DESC, j.scheduled_at_utc ASC, j.id ASC
         LIMIT ?`,
       [limit],
@@ -372,11 +414,7 @@ async function loadTodoReminderJobs(limit) {
     '待办提醒',
     summaryRows[0] || {},
     rows.map((row) => {
-      const staleProcessing =
-        row.status === 'processing' && row.lease_until && new Date(row.lease_until).getTime() < Date.now();
-      const overduePending =
-        row.status === 'pending' && new Date(row.scheduled_at_utc).getTime() < Date.now() - 10 * 60_000;
-      const attention = ['failed', 'unknown'].includes(row.status) || staleProcessing || overduePending;
+      const attention = Boolean(row.attention_reason);
       return {
         id: String(row.id),
         source: 'todo_reminder',
@@ -386,9 +424,17 @@ async function loadTodoReminderJobs(limit) {
         ownerLabel: row.alias || row.user_id || '',
         userId: row.user_id || null,
         relatedId: row.todo_id || null,
+        seriesId: row.series_id || null,
+        ruleId: row.rule_id || null,
         channel: row.channel,
         attempts: number(row.retry_count),
-        scheduledAt: row.scheduled_at_utc,
+        scheduledAt: row.scheduled_at_utc_iso,
+        scheduledAtUtc: row.scheduled_at_utc_iso,
+        scheduledAtBeijing: row.scheduled_at_beijing,
+        scheduledAtLocal: row.scheduled_at_local_text,
+        timezone: row.timezone || null,
+        attentionReason: row.attention_reason || null,
+        groupCount: Math.max(1, number(row.group_count)),
         createdAt: row.create_time,
         updatedAt: row.update_time,
         errorCode: row.last_error || null,
@@ -397,6 +443,148 @@ async function loadTodoReminderJobs(limit) {
       };
     }),
   );
+}
+
+function todoReminderDiagnosticState(row) {
+  if (row.attention_reason) return 'attention';
+  if (row.status === 'processing') return 'running';
+  if (row.status === 'pending') return 'waiting';
+  if (row.status === 'paused') return 'paused';
+  if (row.status === 'sent') return 'sent';
+  return 'terminal';
+}
+
+function mapTodoReminderDiagnosticJob(row) {
+  return {
+    id: String(row.id),
+    todoId: String(row.todo_id),
+    seriesId: row.series_id || null,
+    ruleId: row.rule_id || null,
+    status: row.status,
+    health: todoReminderDiagnosticState(row),
+    attentionReason: row.attention_reason || null,
+    channel: row.channel,
+    attempts: number(row.retry_count),
+    scheduledAtUtc: row.scheduled_at_utc_iso || null,
+    scheduledAtBeijing: row.scheduled_at_beijing || null,
+    scheduledAtLocal: row.scheduled_at_local_text || null,
+    timezone: row.timezone || 'Asia/Shanghai',
+    originalScheduledAtUtc: row.original_scheduled_at_utc_iso || null,
+    stopAtUtc: row.stop_at_utc_iso || null,
+    leaseUntilUtc: row.lease_until_utc_iso || null,
+    sentAtUtc: row.sent_at_utc_iso || null,
+    errorCode: row.last_error || null,
+    createdAt: row.create_time || null,
+    updatedAt: row.update_time || null,
+  };
+}
+
+export async function getAdminTodoReminderDiagnostic(req, res) {
+  if (!req.user?.id || req.user?.role !== 'root' || req.adminContext) {
+    return res.send(resultData(null, 403, '仅管理员本人可查看待办提醒诊断'));
+  }
+  const id = String(req.body?.id || '').trim();
+  if (!id || id.length > 255) return res.send(resultData(null, 400, '缺少有效的提醒任务 ID'));
+  try {
+    const [rows] = await pool.query(
+      `SELECT j.id, j.user_id, j.todo_id, j.series_id, j.rule_id, j.channel, j.status, j.retry_count,
+              CONCAT(DATE_FORMAT(j.original_scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z')
+                AS original_scheduled_at_utc_iso,
+              CONCAT(DATE_FORMAT(j.scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z') AS scheduled_at_utc_iso,
+              DATE_FORMAT(DATE_ADD(j.scheduled_at_utc, INTERVAL 8 HOUR), '%Y-%m-%d %H:%i:%s')
+                AS scheduled_at_beijing,
+              DATE_FORMAT(j.scheduled_at_local, '%Y-%m-%d %H:%i:%s') AS scheduled_at_local_text,
+              IF(j.stop_at_utc IS NULL, NULL,
+                CONCAT(DATE_FORMAT(j.stop_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z')) AS stop_at_utc_iso,
+              IF(j.lease_until IS NULL, NULL,
+                CONCAT(DATE_FORMAT(j.lease_until, '%Y-%m-%dT%H:%i:%s'), 'Z')) AS lease_until_utc_iso,
+              IF(j.sent_at IS NULL, NULL,
+                CONCAT(DATE_FORMAT(j.sent_at, '%Y-%m-%dT%H:%i:%s'), 'Z')) AS sent_at_utc_iso,
+              j.timezone, j.last_error, j.create_time, j.update_time,
+              t.title, t.description, t.priority, COALESCE(NULLIF(u.alias, ''), u.id) AS owner_label,
+              r.mode AS rule_mode, r.trigger_type, r.fixed_local_time, r.offset_minutes,
+              r.repeat_interval_minutes, r.stop_type, r.max_count, r.schedule_json,
+              r.channels AS rule_channels, r.quiet_policy,
+              CASE
+                WHEN j.status = 'failed' THEN 'delivery_failed'
+                WHEN j.status = 'unknown' THEN 'delivery_unknown'
+                WHEN j.status = 'processing' AND j.lease_until < UTC_TIMESTAMP() THEN 'lease_expired'
+                WHEN j.status = 'pending'
+                  AND j.scheduled_at_utc < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE) THEN 'overdue'
+                ELSE NULL
+              END AS attention_reason
+         FROM todo_reminder_jobs j
+         LEFT JOIN todo_items t ON t.id = j.todo_id AND t.user_id = j.user_id
+         LEFT JOIN todo_reminder_rules r ON r.id = j.rule_id
+         LEFT JOIN user u ON u.id = j.user_id
+        WHERE j.id = ?
+        LIMIT 1`,
+      [id],
+    );
+    const row = rows[0];
+    if (!row) return res.send(resultData(null, 404, '提醒任务不存在'));
+
+    const [relatedRows] = await pool.query(
+      `SELECT id, todo_id, series_id, rule_id, channel, status, retry_count,
+              CONCAT(DATE_FORMAT(original_scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z')
+                AS original_scheduled_at_utc_iso,
+              CONCAT(DATE_FORMAT(scheduled_at_utc, '%Y-%m-%dT%H:%i:%s'), 'Z') AS scheduled_at_utc_iso,
+              DATE_FORMAT(DATE_ADD(scheduled_at_utc, INTERVAL 8 HOUR), '%Y-%m-%d %H:%i:%s')
+                AS scheduled_at_beijing,
+              DATE_FORMAT(scheduled_at_local, '%Y-%m-%d %H:%i:%s') AS scheduled_at_local_text,
+              timezone, last_error, create_time, update_time,
+              CASE
+                WHEN status = 'failed' THEN 'delivery_failed'
+                WHEN status = 'unknown' THEN 'delivery_unknown'
+                WHEN status = 'processing' AND lease_until < UTC_TIMESTAMP() THEN 'lease_expired'
+                WHEN status = 'pending'
+                  AND scheduled_at_utc < DATE_SUB(UTC_TIMESTAMP(), INTERVAL 10 MINUTE) THEN 'overdue'
+                ELSE NULL
+              END AS attention_reason
+         FROM todo_reminder_jobs
+        WHERE user_id = ? AND todo_id = ? AND (rule_id <=> ?)
+        ORDER BY (scheduled_at_utc >= UTC_TIMESTAMP()) DESC,
+                 CASE WHEN scheduled_at_utc >= UTC_TIMESTAMP() THEN scheduled_at_utc END ASC,
+                 CASE WHEN scheduled_at_utc < UTC_TIMESTAMP() THEN scheduled_at_utc END DESC,
+                 id ASC
+        LIMIT 12`,
+      [row.user_id, row.todo_id, row.rule_id || null],
+    );
+    const versionedSchedule = parseJson(row.schedule_json, null);
+    return res.send(
+      resultData({
+        timeStandard: { id: 'beijing', label: '北京时间', utcOffset: '+08:00' },
+        todo: {
+          id: String(row.todo_id),
+          title: row.title || `待办 ${row.todo_id}`,
+          description: row.description || '',
+          priority: number(row.priority),
+          ownerLabel: row.owner_label || row.user_id,
+        },
+        job: mapTodoReminderDiagnosticJob(row),
+        rule: row.rule_id
+          ? {
+              id: String(row.rule_id),
+              mode: row.rule_mode,
+              triggerType: row.trigger_type,
+              fixedLocalTime: row.fixed_local_time ? String(row.fixed_local_time).slice(0, 5) : null,
+              offsetMinutes: row.offset_minutes === null ? null : number(row.offset_minutes),
+              repeatIntervalMinutes: row.repeat_interval_minutes === null ? null : number(row.repeat_interval_minutes),
+              stopType: row.stop_type || null,
+              maxCount: row.max_count === null ? null : number(row.max_count),
+              channels: parseJson(row.rule_channels, []),
+              quietPolicy: row.quiet_policy || 'defer_once',
+              schedule: versionedSchedule?.version === 2 ? versionedSchedule.schedule : null,
+            }
+          : null,
+        relatedJobs: relatedRows.map(mapTodoReminderDiagnosticJob),
+        generatedAt: new Date().toISOString(),
+      }),
+    );
+  } catch (error) {
+    console.error('[admin-action-center] todo reminder diagnostic failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '待办提醒诊断加载失败'));
+  }
 }
 
 async function loadAccountDeletionJobs(limit) {
@@ -737,6 +925,69 @@ export async function retryAdminAsyncJob(req, res) {
             : '任务重试失败',
       ),
     );
+  }
+}
+
+export async function dismissAdminAsyncJob(req, res) {
+  const actorUserId = req.user?.id;
+  const source = String(req.body?.source || '').trim();
+  const id = String(req.body?.id || '').trim();
+  const reason = String(req.body?.reason || '').trim();
+  let connection = null;
+  try {
+    if (!actorUserId || req.user?.role !== 'root' || req.adminContext) {
+      return res.send(resultData(null, 403, '仅管理员本人可移除异常任务'));
+    }
+    const [actorRows] = await pool.query('SELECT role, del_flag FROM user WHERE id = ? LIMIT 1', [actorUserId]);
+    if (!actorRows[0] || actorRows[0].role !== 'root' || Number(actorRows[0].del_flag || 0) !== 0) {
+      return res.send(resultData(null, 403, '管理员身份复核失败'));
+    }
+    if (source !== 'bookmark_icon' || !id || id.length > 255) {
+      return res.send(resultData(null, 400, '该任务不支持从异常列表移除'));
+    }
+    if (reason.length < 6 || reason.length > 500 || req.body?.confirmed !== true) {
+      return res.send(resultData(null, 400, '请填写操作原因并确认移除'));
+    }
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.query('SELECT id, status FROM bookmark_icon_jobs WHERE id = ? LIMIT 1 FOR UPDATE', [
+      id,
+    ]);
+    if (!rows[0]) throw retryError('JOB_NOT_FOUND', '任务不存在', 404);
+    if (rows[0].status !== 'failed') throw retryError('JOB_NOT_DISMISSIBLE', '只有失败任务可以移除', 409);
+    const [result] = await connection.query(
+      `UPDATE bookmark_icon_jobs
+          SET status = 'cancelled', locked_at = NULL, locked_by = NULL
+        WHERE id = ? AND status = 'failed'`,
+      [id],
+    );
+    await recordAdminOperationAudit(
+      {
+        actorUserId,
+        action: 'async_job.dismiss',
+        targetType: source,
+        targetId: id,
+        outcome: 'succeeded',
+        reason,
+        requestId: req.requestId,
+        affectedRows: Number(result.affectedRows || 0),
+        ip: req.ip,
+        metadata: { previousStatus: 'failed', nextStatus: 'cancelled' },
+      },
+      { db: connection, required: true },
+    );
+    await connection.commit();
+    connection.release();
+    connection = null;
+    return res.send(resultData({ source, id, status: 'cancelled' }));
+  } catch (error) {
+    if (connection) {
+      await connection.rollback().catch(() => {});
+      connection.release();
+    }
+    console.error('[admin-action-center] dismiss failed source=%s code=%s', source, stableAgentErrorCode(error));
+    const status = Number(error?.status || 500);
+    return res.send(resultData(null, status, status < 500 ? error.message : '异常任务移除失败'));
   }
 }
 

@@ -16,9 +16,7 @@ const ROW = {
 };
 
 function mockRows(rows, total = rows.length) {
-  mocks.query.mockImplementation((sql) =>
-    Promise.resolve(sql.includes('COUNT(*)') ? [[{ total }]] : [rows]),
-  );
+  mocks.query.mockImplementation((sql) => Promise.resolve(sql.includes('COUNT(*)') ? [[{ total }]] : [rows]));
 }
 
 describe('query_platform_resources 工具', () => {
@@ -43,9 +41,20 @@ describe('query_platform_resources 工具', () => {
     expect(sql).toContain('u.del_flag = 0');
     expect(sql).toContain('u.role NOT IN (?, ?)');
     // 归属列三张表各不相同，UNION 前必须各按各的列取。
-    expect(sql).toContain('t.user_id AS owner_id');
-    expect(sql).toContain('t.create_by AS owner_id');
+    expect(sql).toContain('CONVERT(t.user_id USING utf8mb4) COLLATE utf8mb4_unicode_ci AS owner_id');
+    expect(sql).toContain('CONVERT(t.create_by USING utf8mb4) COLLATE utf8mb4_unicode_ci AS owner_id');
     expect(params.slice(-3)).toEqual(['root', 'test', 30]);
+  });
+
+  it('联合历史 utf8 与 utf8mb4 表时统一所有字符串投影和用户 ID 比较口径', async () => {
+    await tool.execute({ timeRange: '今天' });
+    const [sql] = mocks.query.mock.calls[0];
+
+    expect(sql.match(/AS CHAR CHARACTER SET utf8mb4\) COLLATE utf8mb4_unicode_ci AS resource_id/g)).toHaveLength(3);
+    expect(sql).toContain('CONVERT(t.name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS title');
+    expect(sql).toContain('CONVERT(t.title USING utf8mb4) COLLATE utf8mb4_unicode_ci AS title');
+    expect(sql).toContain('CONVERT(t.file_name USING utf8mb4) COLLATE utf8mb4_unicode_ci AS title');
+    expect(sql).toContain('ON BINARY u.id = BINARY resources.owner_id');
   });
 
   it('限定单一类型时不联合其它表', async () => {
@@ -77,6 +86,15 @@ describe('query_platform_resources 工具', () => {
     const [sql] = mocks.query.mock.calls[0];
 
     expect(sql).not.toContain('u.role NOT IN');
+  });
+
+  it('可把资源明细限定为上一问中的新注册用户', async () => {
+    const raw = await tool.execute({ timeRange: '今天', registeredWithin: '今天' });
+    const [sql, params] = mocks.query.mock.calls[0];
+
+    expect(sql).toContain('u.create_time >= ? AND u.create_time <= ?');
+    expect(params).toHaveLength(14);
+    expect(raw.registeredWithin).toBe('今天');
   });
 
   it('limit 收敛到 1..100', async () => {

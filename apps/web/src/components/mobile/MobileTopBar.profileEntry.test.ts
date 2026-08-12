@@ -111,13 +111,13 @@ describe('移动顶栏 · 头像入口', () => {
     expect(replace).toHaveBeenCalledWith('/personCenter');
   });
 
-  it('位于个人中心时用实色描边和 aria-current 表示当前入口', () => {
+  it('位于个人中心时保留 aria-current 语义但不额外套头像圆环', () => {
     route.name = 'personCenter';
     route.path = '/personCenter';
     route.meta.mobileShell = 'profile';
     const host = mount();
     const entry = host.querySelector('.mobile-top-bar__profile') as HTMLButtonElement;
-    expect(entry.classList.contains('mobile-top-bar__profile--active')).toBe(true);
+    expect(entry.classList.contains('mobile-top-bar__profile--active')).toBe(false);
     expect(entry.getAttribute('aria-current')).toBe('page');
   });
 

@@ -64,7 +64,10 @@
       @row-click="openDetail"
     >
       <template #bodyCell="{ text, record, column }">
-        <span v-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
+        <span v-if="column.key === 'user'" class="admin-log-mobile-user">{{ record.alias || record.email || '-' }}</span>
+        <span v-else-if="column.key === 'mobileTime'" class="admin-log-mobile-time">{{ formatTimeOnly(record.createTime) }}</span>
+        <span v-else-if="column.key === 'mobileOperation'" class="admin-log-mobile-operation" :title="record.operation || ''">{{ record.operation || '-' }}</span>
+        <span v-else-if="column.key === 'system'" :style="{ color: getApiLogOsColor(text?.os), fontSize: '12px' }">
           {{ text?.os || t('apiLog.unknown') }}
         </span>
         <span
@@ -83,6 +86,7 @@
     width="min(620px, 94vw)"
     :show-footer="false"
     :mask-closable="true"
+    content-class="admin-log-detail-content"
     fullscreen-mobile
   >
     <dl v-if="selectedRecord" class="operation-detail">
@@ -166,9 +170,9 @@
   const columns = computed(() =>
     bookmark.isMobile
       ? [
-          { title: t('adminOperationLog.columns.time'), key: 'createTime', width: '150px' },
-          { title: t('adminOperationLog.columns.module'), key: 'module', width: '120px' },
-          { title: t('adminOperationLog.columns.operation'), key: 'operation', width: 'minmax(200px, 1.5fr)' },
+          { title: t('adminOperationLog.columns.user'), key: 'user', width: '86px' },
+          { title: t('adminOperationLog.columns.time'), key: 'mobileTime', width: '74px' },
+          { title: t('adminOperationLog.columns.operation'), key: 'mobileOperation', width: 'minmax(0, 1fr)' },
         ]
       : [
           { title: t('adminOperationLog.columns.user'), key: 'alias', width: '130px' },
@@ -257,6 +261,13 @@
     const date = new Date(String(value).replace(' ', 'T'));
     return Number.isFinite(date.getTime()) ? date.toLocaleString(locale.value, { hour12: false }) : String(value);
   }
+  function formatTimeOnly(value: unknown) {
+    if (!value) return '-';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isFinite(date.getTime())
+      ? date.toLocaleTimeString(locale.value, { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      : String(value);
+  }
 
   onMounted(reloadLogs);
   onUnmounted(() => {
@@ -292,6 +303,15 @@
     font-size: 12px;
     white-space: nowrap;
   }
+  .admin-log-mobile-user,
+  .admin-log-mobile-time,
+  .admin-log-mobile-operation {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .operation-detail {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -322,6 +342,17 @@
     }
     .operation-detail {
       grid-template-columns: 1fr;
+    }
+    :global(.admin-log-detail-content) {
+      padding: 16px !important;
+      overflow-y: auto;
+      background: var(--surface-page-bg, var(--background-color));
+    }
+    .operation-detail > div {
+      padding: 11px 12px;
+      border: 1px solid var(--surface-border-color);
+      border-radius: 10px;
+      background: var(--card-background);
     }
   }
 </style>

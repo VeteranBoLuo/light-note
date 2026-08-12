@@ -50,6 +50,7 @@ import getUserDetail from './get_user_detail.js';
 import getPendingFeedback from './get_pending_feedback.js';
 import getResourceCreationRanking from './get_resource_creation_ranking.js';
 import queryPlatformResources from './query_platform_resources.js';
+import queryNewUserResources from './query_new_user_resources.js';
 import getCheckinRanking from './get_checkin_ranking.js';
 import { getTodoPlanFeatureState } from '../../todoPlanFeature.js';
 
@@ -107,5 +108,6 @@ export default [
   getPendingFeedback,
   getResourceCreationRanking,
   queryPlatformResources,
+  queryNewUserResources,
   getCheckinRanking,
 ];

@@ -323,7 +323,9 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     unmount = () => app.unmount();
     await flushUi();
 
-    const deleteAction = document.querySelector<HTMLButtonElement>('.dropdown-option--danger');
+    click('.note-drawer-more');
+    await flushUi();
+    const deleteAction = document.querySelector<HTMLButtonElement>('.mobile-page-actions__item.is-danger');
     expect(deleteAction).not.toBeNull();
     deleteAction!.click();
     await flushUi();
@@ -373,7 +375,9 @@ describe('NoteDirectoryDrawer 返回层级', () => {
     expect(mocks.apiBasePost).not.toHaveBeenCalled();
     expect(document.querySelector('.note-drawer-row-title')?.textContent).toContain('离线目录');
     expect(document.querySelector('.note-drawer-row-pin')).not.toBeNull();
-    const unpinAction = [...document.querySelectorAll<HTMLButtonElement>('.dropdown-option')].find((option) =>
+    click('.note-drawer-more');
+    await flushUi();
+    const unpinAction = [...document.querySelectorAll<HTMLButtonElement>('.mobile-page-actions__item')].find((option) =>
       option.textContent?.includes('取消置顶'),
     );
     expect(unpinAction).toBeDefined();
@@ -413,5 +417,38 @@ describe('NoteDirectoryDrawer 返回层级', () => {
 
     expect(document.querySelector('.note-drawer-tags')).not.toBeNull();
     expect(mocks.apiBasePost).not.toHaveBeenCalled();
+  });
+
+  it('用户直接切换目录与标签时向页面层派发偏好模式', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const modeChanged = vi.fn();
+    const app = createApp(
+      defineComponent({
+        setup() {
+          return () => h(NoteDirectoryDrawer, { open: true, currentParentId: null, onModeChange: modeChanged });
+        },
+      }),
+    );
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { note: {}, common: {} } },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    unmount = () => app.unmount();
+    await flushUi();
+
+    const tabs = document.querySelectorAll<HTMLElement>('[role="tab"]');
+    expect(tabs).toHaveLength(2);
+    tabs[1].click();
+    await flushUi();
+
+    expect(modeChanged).toHaveBeenCalledWith('tags');
   });
 });

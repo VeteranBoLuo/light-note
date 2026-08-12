@@ -36,6 +36,8 @@ const GROUPS = {
     'get_points_overview',
     'get_pending_feedback',
     'get_resource_creation_ranking',
+    'query_platform_resources',
+    'query_new_user_resources',
     'get_checkin_ranking',
   ],
   adminUsers: [
@@ -43,6 +45,8 @@ const GROUPS = {
     'get_user_detail',
     'get_active_users',
     'get_resource_creation_ranking',
+    'query_platform_resources',
+    'query_new_user_resources',
     'get_checkin_ranking',
   ],
   adminLogs: ['query_api_logs', 'query_operation_logs'],

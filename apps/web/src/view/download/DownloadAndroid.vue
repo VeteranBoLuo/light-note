@@ -231,7 +231,13 @@
             <a :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">{{ WEBSITE_ICP_NUMBER }}</a>
           </span>
           <span v-if="hasPublicSecurityFiling" class="dl-filing-item">
-            <a :href="PUBLIC_SECURITY_QUERY_URL" target="_blank" rel="noopener noreferrer">
+            <a
+              class="public-security-filing-link"
+              :href="PUBLIC_SECURITY_QUERY_URL"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img :src="PUBLIC_SECURITY_BADGE_PATH" alt="" width="20" height="20" />
               {{ PUBLIC_SECURITY_FILING_NUMBER }}
             </a>
           </span>
@@ -263,6 +269,7 @@
     formatFileSize,
   } from '@/config/androidRelease.ts';
   import {
+    PUBLIC_SECURITY_BADGE_PATH,
     PUBLIC_SECURITY_FILING_NUMBER,
     PUBLIC_SECURITY_QUERY_URL,
     hasPublicSecurityFiling,
@@ -795,6 +802,16 @@
     display: inline-flex;
     align-items: center;
     gap: 5px;
+  }
+  .public-security-filing-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .public-security-filing-link img {
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
   }
   .dl-foot a {
     color: var(--desc-color);

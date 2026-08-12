@@ -54,6 +54,45 @@ describe('todoPlanCalculator', () => {
     expect(preview.firstOccurrence).toMatchObject({ occurrenceDate: null, startAt: null, dueAt: null });
   });
 
+  it('重复任务未填开始和截止时间时从计划时区的今天生成全天待办，固定提醒仍独立生效', () => {
+    const input = {
+      taskMode: 'independent',
+      title: '每天点外卖',
+      timing: { timezone: 'Asia/Shanghai', anchorDate: null, startTime: null, dueTime: null },
+      plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 2 } },
+      reminder: {
+        mode: 'once_per_instance',
+        trigger: { type: 'fixed_time', fixedTime: '11:10' },
+        channels: ['in_app'],
+      },
+    };
+    const preview = calculateTodoPlan(input, { now: NOW });
+
+    expect(preview.normalizedPlan.timing).toEqual({
+      timezone: 'Asia/Shanghai',
+      anchorDate: '2026-08-06',
+      startTime: null,
+      dueTime: null,
+      dueDayOffset: 0,
+    });
+    expect(preview.occurrences).toEqual([
+      expect.objectContaining({ occurrenceDate: '2026-08-06', startAt: null, dueAt: null }),
+      expect.objectContaining({ occurrenceDate: '2026-08-07', startAt: null, dueAt: null }),
+    ]);
+    expect(preview.requiredChoices).toEqual([]);
+    expect(preview.reminderJobCount).toBe(2);
+    expect(preview.nextReminderAt).toBe('2026-08-06 11:10:00');
+
+    const afterTodayReminder = calculateTodoPlan(input, { now: new Date('2026-08-06T04:00:00.000Z') });
+    expect(afterTodayReminder.firstOccurrence.occurrenceDate).toBe('2026-08-06');
+    expect(afterTodayReminder.reminderMoments[0].moments[0]).toMatchObject({
+      scheduledAtLocal: '2026-08-06 11:10:00',
+      deliverable: false,
+      skippedReason: 'past',
+    });
+    expect(afterTodayReminder.nextReminderAt).toBe('2026-08-07 11:10:00');
+  });
+
   it('一次性任务的开始与截止日期允许跨越 30 天', () => {
     const preview = calculateTodoPlan(
       {
@@ -102,7 +141,7 @@ describe('todoPlanCalculator', () => {
     ).toThrow(/截止日期超出支持范围/);
   });
 
-  it('无日期任务开启提醒时必须先补充具体日期和时间', () => {
+  it('无日期的一次性任务开启按日固定提醒时必须先补充计划日期', () => {
     expect(() =>
       calculateTodoPlan(
         {
@@ -117,7 +156,7 @@ describe('todoPlanCalculator', () => {
         },
         { now: NOW },
       ),
-    ).toThrow(/具体日期和时间/);
+    ).toThrow(/具体计划日期/);
   });
 
   it('以次数为事实源生成 8 月 5 日到 9 月 3 日共 30 项', () => {

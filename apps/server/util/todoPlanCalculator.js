@@ -154,7 +154,7 @@ function normalizeEnd(value, type) {
   return { mode };
 }
 
-function normalizeTiming(input, timezone, { allowUndated = false } = {}) {
+function normalizeTiming(input, timezone, { allowUndated = false, defaultAnchorDate = null } = {}) {
   const timing = input && typeof input === 'object' ? input : {};
   const startTime = parsePlainTime(timing.startTime, '开始时间', { optional: true });
   const dueTime = parsePlainTime(timing.dueTime, '截止时间', { optional: true });
@@ -162,10 +162,10 @@ function normalizeTiming(input, timezone, { allowUndated = false } = {}) {
   if (!Number.isSafeInteger(dueDayOffset) || dueDayOffset < 0) {
     throw planError('TODO_PLAN_DUE_OFFSET_INVALID', '截止日期偏移必须是非负整数');
   }
-  const anchorValue = String(timing.anchorDate || '').trim();
+  const anchorValue = String(timing.anchorDate || defaultAnchorDate || '').trim();
   if (!anchorValue) {
     if (startTime || dueTime) throw planError('TODO_PLAN_DATE_REQUIRED', '设置任务时间时必须选择具体日期');
-    if (!allowUndated) throw planError('TODO_PLAN_TIMING_REQUIRED', '重复任务必须设置首项日期和时间');
+    if (!allowUndated) throw planError('TODO_PLAN_DATE_REQUIRED', '重复任务需要一个计划日期');
     return {
       timezone,
       anchorDate: null,
@@ -176,7 +176,6 @@ function normalizeTiming(input, timezone, { allowUndated = false } = {}) {
   }
   const anchorDate = parsePlainDate(anchorValue, '首项日期');
   resolveDueDate(anchorDate, dueDayOffset);
-  if (!startTime && !dueTime) throw planError('TODO_PLAN_TIMING_REQUIRED', '请至少设置开始时间或截止时间');
   if (startTime && dueTime && dueDayOffset === 0 && Temporal.PlainTime.compare(dueTime, startTime) < 0) {
     throw planError('TODO_PLAN_DUE_BEFORE_START', '截止时间早于开始时间，请明确选择次日截止');
   }
@@ -252,7 +251,7 @@ function normalizeReminder(input, timing) {
   const mode = String(raw.mode || 'none');
   if (!REMINDER_MODES.has(mode)) throw planError('TODO_REMINDER_MODE_INVALID', '每项提醒方式无效');
   if (mode === 'none') return { mode, channels: [], quietPolicy: 'defer_once' };
-  if (!timing.anchorDate) throw planError('TODO_REMINDER_DATE_REQUIRED', '开启提醒前请设置具体日期和时间');
+  if (!timing.anchorDate) throw planError('TODO_REMINDER_DATE_REQUIRED', '开启提醒前请设置具体计划日期');
   const channels = [...new Set((Array.isArray(raw.channels) ? raw.channels : []).map(String))];
   if (!channels.length || channels.some((channel) => !REMINDER_CHANNELS.has(channel))) {
     throw planError('TODO_REMINDER_CHANNEL_INVALID', '请至少选择一种有效提醒渠道');
@@ -797,7 +796,12 @@ export function calculateTodoPlan(input = {}, options = {}) {
   if (inferredTaskMode === 'single' && requestedPlanType !== 'once') {
     throw planError('TODO_SINGLE_TASK_PLAN_INVALID', '默认单任务不能生成多个待办，请在高级功能中启用独立任务计划');
   }
-  const timing = normalizeTiming(input.timing, timezone, { allowUndated: requestedPlanType === 'once' });
+  const timing = normalizeTiming(input.timing, timezone, {
+    allowUndated: requestedPlanType === 'once',
+    // 重复计划必须有日期锚点，但它不等同于“开始时间”。用户不填时间时，
+    // 从计划时区的今天生成全天待办，startAt / dueAt 仍保持为空。
+    defaultAnchorDate: requestedPlanType === 'once' ? null : dateString(today),
+  });
   const plan = normalizePlan(input.plan, timing, today);
   const reminder =
     inferredTaskMode === 'single' && input.singleTaskReminder

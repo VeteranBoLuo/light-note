@@ -30,6 +30,14 @@ import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
+import {
+  BYTES_PER_MB,
+  getAccountedStorageBytes,
+  getActiveReplacementBytes,
+  getProjectedStorageBytes,
+  getStorageUsageBreakdown,
+  storageBytesToMb,
+} from '../util/storageUsage.js';
 const router = express.Router();
 const fileShareAccessLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -100,16 +108,43 @@ const formatFileRecord = (file) => {
 
 // ---- 云空间容量配额 ----
 // 按用户成长等级下发:容量随 level 提升,root=满级。曲线见 growth.js RANKS.spaceMb。
-// 新用户(无成长账本)=Lv1 512MB,满级 20480MB(20G)。
+// 新用户(无成长账本)=Lv1 1024MB,满级 20480MB(20G)；正常区与回收站共享容量。
 async function storageQuotaMB(user) {
   return await getUserSpaceMb(user?.id, user?.role);
 }
-async function getUsedBytes(db, userId) {
-  const [rows] = await db.query(
-    'SELECT COALESCE(SUM(file_size), 0) AS used FROM files WHERE create_by = ? AND del_flag = 0',
-    [userId],
+
+function summarizeIncomingFiles(files) {
+  const sizeByName = new Map();
+  for (const file of Array.isArray(files) ? files : []) {
+    const fileName = String(file?.fileName || file?.filename || '').trim();
+    const fileSize = Number(file?.fileSize ?? file?.file_size);
+    if (!fileName || !Number.isFinite(fileSize) || fileSize < 0) continue;
+    // 同一请求出现同名文件时最终只会保留最后一个，容量预判也按最终状态计算。
+    sizeByName.set(fileName, fileSize);
+  }
+  return {
+    fileNames: [...sizeByName.keys()],
+    incomingBytes: [...sizeByName.values()].reduce((sum, size) => sum + size, 0),
+  };
+}
+
+function storageQuotaError(req, { quotaMB, usedBytes, incomingBytes, replacementBytes }) {
+  const projectedBytes = getProjectedStorageBytes({ usedBytes, incomingBytes, replacementBytes });
+  const quotaBytes = Number(quotaMB) * BYTES_PER_MB;
+  return resultData(
+    {
+      errorCode: 'STORAGE_QUOTA_EXCEEDED',
+      quotaMB: Number(quotaMB),
+      usedMB: storageBytesToMb(usedBytes),
+      shortfallMB: storageBytesToMb(Math.max(0, projectedBytes - quotaBytes)),
+    },
+    413,
+    L(
+      req,
+      `云空间容量不足（总容量 ${quotaMB}MB），回收站文件同样占用容量；请清理回收站、提升等级或兑换扩容包后重试`,
+      `Cloud storage is full (${quotaMB} MB total). Files in Trash also count; empty Trash, level up, or redeem an expansion pack and try again.`,
+    ),
   );
-  return Number(rows[0]?.used || 0);
 }
 
 router.post('/uploadFiles', async (req, res) => {
@@ -127,12 +162,15 @@ router.post('/uploadFiles', async (req, res) => {
     }
 
     // 容量早拦:签发预签名 URL 前先按前端上报的 fileSize 拦一道,避免白传 OBS(无 size 时留给 /confirmUpload 权威拦)
-    const incomingBytes = files.reduce((s, f) => s + (Number(f.fileSize ?? f.file_size) || 0), 0);
+    const { fileNames, incomingBytes } = summarizeIncomingFiles(files);
     if (incomingBytes > 0) {
-      const used = await getUsedBytes(pool, userId);
+      const [usedBytes, replacementBytes] = await Promise.all([
+        getAccountedStorageBytes(pool, userId),
+        getActiveReplacementBytes(pool, userId, fileNames),
+      ]);
       const quotaMB = await storageQuotaMB(req.user);
-      if (used + incomingBytes > quotaMB * 1024 * 1024) {
-        return res.send(resultData(null, 413, `云空间已达上限(${quotaMB}MB),清理回收站或删除文件后再上传`));
+      if (getProjectedStorageBytes({ usedBytes, incomingBytes, replacementBytes }) > quotaMB * BYTES_PER_MB) {
+        return res.send(storageQuotaError(req, { quotaMB, usedBytes, incomingBytes, replacementBytes }));
       }
     }
 
@@ -205,16 +243,17 @@ router.post('/confirmUpload', async (req, res) => {
     // 否则普通直传与 AI 保存并发时，即使 OBS 对象键互不冲突，也可能写出两条同名文件记录。
     await connection.query('SELECT id FROM user WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
 
-    // 容量强校验(权威:写库前拦截,补现有"只签 URL 不校验"缺口)。回收站不占(del_flag=1 不计入)。
-    const incomingBytes = verifiedFiles.reduce((s, f) => s + f.fileSize, 0);
+    // 容量强校验（权威）：正常文件与回收站文件共享容量，同名覆盖只计算新旧差额。
+    const { fileNames, incomingBytes } = summarizeIncomingFiles(verifiedFiles);
     if (incomingBytes > 0) {
-      const used = await getUsedBytes(connection, userId);
+      const usedBytes = await getAccountedStorageBytes(connection, userId);
+      const replacementBytes = await getActiveReplacementBytes(connection, userId, fileNames);
       const quotaMB = await storageQuotaMB(req.user);
-      if (used + incomingBytes > quotaMB * 1024 * 1024) {
+      if (getProjectedStorageBytes({ usedBytes, incomingBytes, replacementBytes }) > quotaMB * BYTES_PER_MB) {
         await connection.rollback();
         transactionStarted = false;
         // 早退触发下方 finally 的 connection.release(),不重复释放
-        return res.send(resultData(null, 413, `云空间已达上限(${quotaMB}MB),清理回收站或删除文件后再上传`));
+        return res.send(storageQuotaError(req, { quotaMB, usedBytes, incomingBytes, replacementBytes }));
       }
     }
 
@@ -531,14 +570,18 @@ router.post('/queryTotalFileSize', async (req, res) => {
     // 获取用户ID
     const userId = req.user.id;
 
-    // 构建SQL查询
-    const sql = 'SELECT COALESCE(SUM(file_size), 0) as total_size FROM files WHERE create_by = ? AND del_flag = 0';
-    const [result] = await pool.query(sql, [userId]);
-    // 提取总大小（MB）保留两位小数（无文件时 total_size=0,避免 NaN）
-    const totalSizeMB = parseFloat((Number(result[0].total_size || 0) / (1024 * 1024)).toFixed(2));
+    const usage = await getStorageUsageBreakdown(pool, userId);
     // 一并下发容量配额(前端 store 据此设 maxSpace,按等级正确显示)
     const quotaMB = await storageQuotaMB(req.user);
-    res.send(resultData({ totalSizeMB, quotaMB }));
+    res.send(
+      resultData({
+        totalSizeMB: storageBytesToMb(usage.totalBytes),
+        activeSizeMB: storageBytesToMb(usage.activeBytes),
+        trashSizeMB: storageBytesToMb(usage.trashBytes),
+        quotaMB,
+        sharedWithTrash: true,
+      }),
+    );
   } catch (error) {
     // 处理错误
     return sendFileServerError(res, 'query-total-size', error);

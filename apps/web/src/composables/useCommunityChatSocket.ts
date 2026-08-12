@@ -43,6 +43,11 @@ const BROADCAST_EVENT_TYPES = new Set([
   'access.changed',
 ]);
 const MAX_SEEN_EVENT_IDS = 512;
+// 与 HTTP 请求的 X-Device-Id 共用同一 localStorage 键，但不引入包含路由等依赖的 common.ts，
+// 避免这个应用级轻量连接反向扩大首屏模块依赖。
+const PRESENCE_CLIENT_ID_STORAGE_KEY = 'ln_log_device_id';
+const PRESENCE_CLIENT_ID_PATTERN = /^[A-Za-z0-9:_-]{12,80}$/;
+let fallbackPresenceClientId = '';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
@@ -79,10 +84,32 @@ function subscribeRequestId(random: () => number) {
   return `subscribe:${Date.now().toString(36)}:${Math.floor(random() * 0x7fffffff).toString(36)}`.slice(0, 64);
 }
 
+function resolvePresenceClientId() {
+  try {
+    const stored = localStorage.getItem(PRESENCE_CLIENT_ID_STORAGE_KEY);
+    if (stored && PRESENCE_CLIENT_ID_PATTERN.test(stored)) return stored;
+    const generated =
+      globalThis.crypto?.randomUUID?.() ||
+      `runtime:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 14)}`;
+    localStorage.setItem(PRESENCE_CLIENT_ID_STORAGE_KEY, generated);
+    return generated;
+  } catch {
+    // Safari 隐私模式等环境可能禁用存储；运行期标识仍能保证单页内稳定。
+  }
+  if (!fallbackPresenceClientId) {
+    fallbackPresenceClientId =
+      globalThis.crypto?.randomUUID?.() ||
+      `runtime:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 14)}`;
+  }
+  return fallbackPresenceClientId;
+}
+
 export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
   const status = ref<CommunityChatRealtimeStatus>('disabled');
+  const onlineCount = ref<number | null>(null);
   const isConnected = computed(() => status.value === 'connected');
   const random = options.random || Math.random;
+  const presenceClientId = resolvePresenceClientId();
   const seenEventIds = new Map<string, true>();
   let mounted = false;
   let socket: WebSocket | null = null;
@@ -114,6 +141,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
 
   function closeCurrentSocket() {
     clearHandshakeTimer();
+    onlineCount.value = null;
     const current = socket;
     socket = null;
     generation += 1;
@@ -196,7 +224,10 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
             protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
             type: 'room.subscribe',
             requestId: subscribeRequestId(random),
-            payload: { roomSlug: options.roomSlug.value },
+            payload: {
+              roomSlug: options.roomSlug.value,
+              ...(presenceClientId ? { presenceClientId } : {}),
+            },
           }),
         );
       } catch {
@@ -217,10 +248,17 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
       if (!rememberEvent(event.eventId)) return;
       if (event.type === 'room.subscribed') {
         if (event.payload.roomSlug !== options.roomSlug.value) return;
+        const count = Number(event.payload.onlineCount);
+        if (Number.isInteger(count) && count >= 0) onlineCount.value = count;
         clearHandshakeTimer();
         reconnectAttempts = 0;
         status.value = 'connected';
         void options.onSynchronized?.();
+        return;
+      }
+      if (event.type === 'presence.changed') {
+        const count = Number(event.payload.onlineCount);
+        if (Number.isInteger(count) && count >= 0) onlineCount.value = count;
         return;
       }
       if (!BROADCAST_EVENT_TYPES.has(event.type)) return;
@@ -311,6 +349,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
 
   return {
     isConnected,
+    onlineCount,
     reconnect: restart,
     status,
   };
@@ -320,5 +359,6 @@ export const __test__ = {
   BROADCAST_EVENT_TYPES,
   MAX_SEEN_EVENT_IDS,
   isPlainObject,
+  resolvePresenceClientId,
   subscribeRequestId,
 };

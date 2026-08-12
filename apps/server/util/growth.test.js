@@ -58,9 +58,9 @@ describe('growth 段位表', () => {
   });
 
   it('权益(容量/AI token)随等级单调不降,端点符合当前方案', () => {
-    expect(RANKS[0].spaceMb).toBe(512);
-    expect(RANKS[9].spaceMb).toBe(5120);
-    expect(RANKS[14].spaceMb).toBe(20480);
+    expect(RANKS.map((rank) => rank.spaceMb)).toEqual([
+      1024, 1280, 1536, 1792, 2048, 2560, 3072, 4096, 5120, 6144, 8192, 10752, 13824, 16896, 20480,
+    ]);
     expect(RANKS.map((rank) => rank.aiTokenDaily)).toEqual([
       500_000, 600_000, 760_000, 900_000, 1_100_000, 1_300_000, 1_500_000, 1_760_000, 2_000_000, 2_300_000, 2_600_000,
       3_000_000, 3_300_000, 3_600_000, 4_000_000,

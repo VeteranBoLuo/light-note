@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   apiBaseGet: vi.fn(),
-  apiBasePatch: vi.fn(),
   apiBasePost: vi.fn(),
   apiBasePut: vi.fn(),
 }));
 
 vi.mock('@/http/request', () => ({
   apiBaseGet: mocks.apiBaseGet,
-  apiBasePatch: mocks.apiBasePatch,
   apiBasePost: mocks.apiBasePost,
   apiBasePut: mocks.apiBasePut,
 }));
@@ -160,7 +158,7 @@ describe('communityChatApi', () => {
     );
   });
 
-  it('个人社区名片只读取当前登录身份，并通过 PATCH 携带乐观并发版本', () => {
+  it('个人社区名片只读取当前登录身份，并通过 PUT 携带乐观并发版本', () => {
     getCommunityChatOwnProfile();
     updateCommunityChatOwnProfile({
       bio: '喜欢整理知识',
@@ -170,7 +168,7 @@ describe('communityChatApi', () => {
     });
 
     expect(mocks.apiBaseGet).toHaveBeenCalledWith('/api/community-chat/profile/me', undefined, { silent: true });
-    expect(mocks.apiBasePatch).toHaveBeenCalledWith(
+    expect(mocks.apiBasePut).toHaveBeenCalledWith(
       '/api/community-chat/profile/me',
       {
         bio: '喜欢整理知识',

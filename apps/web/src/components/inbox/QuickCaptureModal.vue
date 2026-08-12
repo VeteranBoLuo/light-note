@@ -70,21 +70,25 @@
               </div>
             </template>
 
-            <div v-else class="file-capture" @dragover.prevent @drop.prevent="handleDrop">
-              <div class="file-capture__dropzone">
-                <!-- 来源显式传 'picker',与 handleDrop/handlePaste 一致;别简写成 @change="addFiles",
-                     那样 BUpload 以后多 emit 一个参数就会顶掉 source -->
-                <BUpload
-                  :multiple="true"
-                  :raw-file="true"
-                  :max-total-size="MAX_FILE_TOTAL_SIZE"
-                  @change="(selected) => addFiles(selected, 'picker')"
-                >
-                  <BButton>{{ t('inbox.chooseFiles') }}</BButton>
-                </BUpload>
-                <span>{{ t('inbox.dropOrPasteFiles') }}</span>
-                <kbd>{{ t('inbox.pasteShortcut') }}</kbd>
-              </div>
+            <div v-else class="file-capture">
+              <!-- 来源显式传 'picker',与 handleDrop/handlePaste 一致;别简写成 @change="addFiles",
+                   那样 BUpload 以后多 emit 一个参数就会顶掉 source。整块面板作为 BButton，
+                   让浅紫色选择区本身就是明确、可键盘访问的文件选择入口。 -->
+              <BUpload
+                block
+                :multiple="true"
+                :raw-file="true"
+                :max-total-size="MAX_FILE_TOTAL_SIZE"
+                @change="(selected) => addFiles(selected, 'picker')"
+              >
+                <BButton block class="file-capture__dropzone" @dragover.prevent @drop.prevent.stop="handleDrop">
+                  <strong>{{ t('inbox.chooseFiles') }}</strong>
+                  <template v-if="!bookmark.isMobile">
+                    <span>{{ t('inbox.dropOrPasteFiles') }}</span>
+                    <kbd>{{ t('inbox.pasteShortcut') }}</kbd>
+                  </template>
+                </BButton>
+              </BUpload>
               <div v-if="files.length" class="file-selection">
                 <div class="file-selection__header">
                   <div>
@@ -259,7 +263,13 @@
     captureType.value === 'todo' ? t('inbox.todoCaptureHint') : t('inbox.captureHint'),
   );
   const capturePanelTitle = computed(() => t(`inbox.quickCapturePanels.${captureType.value}.title`));
-  const capturePanelHint = computed(() => t(`inbox.quickCapturePanels.${captureType.value}.hint`));
+  const capturePanelHint = computed(() =>
+    t(
+      bookmark.isMobile && captureType.value === 'file'
+        ? 'inbox.quickCapturePanels.file.mobileHint'
+        : `inbox.quickCapturePanels.${captureType.value}.hint`,
+    ),
+  );
   const capturePlaceholder = computed(() =>
     captureType.value === 'bookmark' ? t('inbox.urlPlaceholder') : t('inbox.textPlaceholder'),
   );
@@ -752,6 +762,7 @@
     gap: 12px;
   }
   .file-capture__dropzone {
+    width: 100%;
     min-height: 112px;
     border: 1px dashed color-mix(in srgb, var(--primary-color) 28%, var(--card-border-color));
     border-radius: 12px;
@@ -764,6 +775,11 @@
     padding: 18px;
     box-sizing: border-box;
     background: color-mix(in srgb, var(--primary-color) 2.5%, var(--card-background));
+  }
+  .file-capture__dropzone strong {
+    color: var(--text-color);
+    font-size: 14px;
+    font-weight: 600;
   }
   .file-capture__dropzone > span {
     font-size: 12px;

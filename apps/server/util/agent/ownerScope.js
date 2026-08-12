@@ -23,6 +23,7 @@ export function personalScopeHint(label) {
     `本工具一次只返回一位用户的${label}：不传 user 就是当前登录用户自己的${label}，不会跨用户检索；` +
     `管理员要看指定用户的${label}必须传 user；` +
     `要一次性列出全平台各用户新增的${label}（例如“今天平台新增的${label}有哪些”“这些${label}的标题分别是什么”），` +
-    `改用 query_platform_resources，不要用本工具逐个用户去凑。`
+    `改用 query_platform_resources，不要用本工具逐个用户去凑；` +
+    `若问题同时限定“新注册用户”和“这些用户新增的资源”，改用 query_new_user_resources 一次完成。`
   );
 }

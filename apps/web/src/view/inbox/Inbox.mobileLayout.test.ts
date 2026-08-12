@@ -29,6 +29,18 @@ describe('移动端待办页签布局', () => {
     expect(inboxSource).toMatch(/:deep\(\.todo-workspace-toolbar__views\.tab-container\)[\s\S]*?min-height:\s*40px/);
   });
 
+  it('PC 端把待办状态与展示视图拆成不同控件组', () => {
+    expect(inboxSource).toContain("t('inbox.todoStatusGroupLabel')");
+    expect(inboxSource).toContain("t('inbox.todoViewGroupLabel')");
+    expect(inboxSource).toContain('class="inbox-toolbar__todo-status"');
+    expect(inboxSource).toContain('class="inbox-toolbar__todo-divider"');
+    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-status"[\s\S]*?variant="segment"/);
+    expect(inboxSource).toMatch(/class="inbox-toolbar__todo-views"[\s\S]*?variant="line"/);
+    expect(inboxSource).toMatch(
+      /\.inbox-toolbar__todo-views :deep\(\.tab\.is-active\)[\s\S]*?color:\s*var\(--todo-accent-color\)/,
+    );
+  });
+
   it('桌面概览使用语义图标和独立深浅主题 Token', () => {
     expect(inboxSource).toContain('icon.todoSummary.overdue');
     expect(inboxSource).toContain('icon.todoSummary.today');

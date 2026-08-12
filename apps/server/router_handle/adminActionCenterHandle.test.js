@@ -14,8 +14,13 @@ vi.mock('../db/index.js', () => ({
   default: { query, getConnection },
 }));
 
-const { getAdminActionCenter, retryAdminAsyncJob, adminActionCenterInternals } =
-  await import('./adminActionCenterHandle.js');
+const {
+  dismissAdminAsyncJob,
+  getAdminActionCenter,
+  getAdminTodoReminderDiagnostic,
+  retryAdminAsyncJob,
+  adminActionCenterInternals,
+} = await import('./adminActionCenterHandle.js');
 
 function response() {
   return {
@@ -116,7 +121,27 @@ function rowsFor(sql) {
               retry_count: 1,
               title: '提醒',
               user_id: 'u-3',
+              scheduled_at_utc_iso: '2026-08-09T01:00:00Z',
+              scheduled_at_beijing: '2026-08-09 09:00:00',
+              scheduled_at_local_text: '2026-08-09 09:00:00',
+              timezone: 'Asia/Shanghai',
+              attention_reason: 'delivery_unknown',
+              group_count: 1,
               update_time: '2026-08-09 07:00:00',
+            },
+            {
+              id: 'todo-job-2',
+              status: 'pending',
+              retry_count: 0,
+              title: '点外卖',
+              user_id: 'u-3',
+              scheduled_at_utc_iso: '2026-08-12T03:10:00Z',
+              scheduled_at_beijing: '2026-08-12 11:10:00',
+              scheduled_at_local_text: '2026-08-12 11:10:00',
+              timezone: 'Asia/Shanghai',
+              attention_reason: null,
+              group_count: 5,
+              update_time: '2026-08-09 06:00:00',
             },
           ],
         ];
@@ -192,6 +217,12 @@ describe('后台统一待处理中心', () => {
     expect(res.body.data.jobs.items.find((item) => item.source === 'todo_reminder')).toMatchObject({
       status: 'attention',
       canRetry: false,
+    });
+    expect(res.body.data.jobs.items.find((item) => item.id === 'todo-job-2')).toMatchObject({
+      status: 'waiting',
+      scheduledAtUtc: '2026-08-12T03:10:00Z',
+      scheduledAtBeijing: '2026-08-12 11:10:00',
+      groupCount: 5,
     });
     expect(res.body.data.jobs.items.find((item) => item.source === 'ai_document')).toMatchObject({
       status: 'attention',
@@ -284,5 +315,107 @@ describe('后台统一待处理中心', () => {
     expect(res.body.msg).toContain('重复提醒');
     expect(connection.rollback).toHaveBeenCalledOnce();
     expect(connection.commit).not.toHaveBeenCalled();
+  });
+
+  it('按 Job 打开上下文诊断，并同时返回北京时间与同规则近期任务', async () => {
+    query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('JOIN todo_items t')) {
+        return [
+          [
+            {
+              id: 'todo-job-2',
+              user_id: 'u-3',
+              todo_id: 'todo-1',
+              series_id: null,
+              rule_id: 'rule-1',
+              channel: 'in_app',
+              status: 'pending',
+              retry_count: 0,
+              scheduled_at_utc_iso: '2026-08-12T03:10:00Z',
+              scheduled_at_beijing: '2026-08-12 11:10:00',
+              scheduled_at_local_text: '2026-08-12 11:10:00',
+              original_scheduled_at_utc_iso: '2026-08-12T03:10:00Z',
+              timezone: 'Asia/Shanghai',
+              title: '点外卖',
+              description: '每天定时点外卖',
+              priority: 1,
+              owner_label: '菠萝',
+              rule_mode: 'single_schedule',
+              trigger_type: 'fixed_time',
+              schedule_json: JSON.stringify({
+                version: 2,
+                schedule: {
+                  mode: 'repeat',
+                  repeat: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5], localTime: '11:10' },
+                },
+              }),
+              rule_channels: JSON.stringify(['in_app']),
+              quiet_policy: 'defer_once',
+              attention_reason: null,
+            },
+          ],
+        ];
+      }
+      if (statement.includes('FROM todo_reminder_jobs') && statement.includes('ORDER BY')) {
+        return [
+          [
+            {
+              id: 'todo-job-2',
+              todo_id: 'todo-1',
+              series_id: null,
+              rule_id: 'rule-1',
+              channel: 'in_app',
+              status: 'pending',
+              retry_count: 0,
+              scheduled_at_utc_iso: '2026-08-12T03:10:00Z',
+              scheduled_at_beijing: '2026-08-12 11:10:00',
+              scheduled_at_local_text: '2026-08-12 11:10:00',
+              timezone: 'Asia/Shanghai',
+              attention_reason: null,
+            },
+          ],
+        ];
+      }
+      throw new Error(`unexpected query: ${statement}`);
+    });
+    const res = response();
+    await getAdminTodoReminderDiagnostic({ user: { id: 'root-1', role: 'root' }, body: { id: 'todo-job-2' } }, res);
+
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        timeStandard: { label: '北京时间', utcOffset: '+08:00' },
+        todo: { title: '点外卖' },
+        job: {
+          health: 'waiting',
+          scheduledAtUtc: '2026-08-12T03:10:00Z',
+          scheduledAtBeijing: '2026-08-12 11:10:00',
+        },
+        rule: { mode: 'single_schedule', schedule: { mode: 'repeat' } },
+      },
+    });
+    expect(res.body.data.relatedJobs).toHaveLength(1);
+  });
+
+  it('已查看的书签图标失败任务可取消并从异常列表移除', async () => {
+    connection.query.mockImplementation(async (sql) => {
+      const statement = String(sql);
+      if (statement.includes('SELECT id, status FROM bookmark_icon_jobs')) return [[{ id: 12, status: 'failed' }]];
+      if (statement.includes('UPDATE bookmark_icon_jobs')) return [{ affectedRows: 1 }];
+      if (statement.includes('INSERT INTO admin_operation_audit')) return [{ affectedRows: 1 }];
+      throw new Error(`unexpected connection query: ${statement}`);
+    });
+    const res = response();
+    await dismissAdminAsyncJob(
+      {
+        user: { id: 'root-1', role: 'root' },
+        body: { source: 'bookmark_icon', id: '12', reason: '管理员已查看并移除异常', confirmed: true },
+      },
+      res,
+    );
+
+    expect(res.body).toMatchObject({ status: 200, data: { status: 'cancelled' } });
+    expect(connection.commit).toHaveBeenCalledOnce();
   });
 });

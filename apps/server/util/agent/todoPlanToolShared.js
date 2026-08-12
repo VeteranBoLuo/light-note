@@ -42,6 +42,12 @@ export function normalizeTodoPlanToolArgs(input = {}) {
   const singleRepeat = object(singleTaskReminder.repeat);
   const singleStop = object(singleRepeat.stop);
   const priority = Number(input.priority ?? 1);
+  const startTime = cleanString(timing.startTime || input.startTime, 5) || null;
+  const dueTime = cleanString(timing.dueTime || input.dueTime, 5) || null;
+  const reminderTriggerType = cleanString(
+    trigger.type || (startTime ? 'at_start' : dueTime ? 'before_due' : 'fixed_time'),
+    24,
+  );
   return {
     taskMode,
     title: cleanString(input.title, MAX_TITLE),
@@ -51,8 +57,8 @@ export function normalizeTodoPlanToolArgs(input = {}) {
     timing: {
       timezone: cleanString(timing.timezone || input.timezone || 'Asia/Shanghai', 64),
       anchorDate: cleanString(timing.anchorDate || input.anchorDate, 10),
-      startTime: cleanString(timing.startTime || input.startTime, 5) || null,
-      dueTime: cleanString(timing.dueTime || input.dueTime, 5) || null,
+      startTime,
+      dueTime,
       dueDayOffset: Number(timing.dueDayOffset || input.dueDayOffset || 0),
     },
     plan: {
@@ -85,8 +91,10 @@ export function normalizeTodoPlanToolArgs(input = {}) {
     reminder: {
       mode: cleanString(reminder.mode || 'none', 24),
       trigger: {
-        type: cleanString(trigger.type || (timing.startTime ? 'at_start' : 'before_due'), 24),
-        ...(trigger.fixedTime ? { fixedTime: cleanString(trigger.fixedTime, 5) } : {}),
+        type: reminderTriggerType,
+        ...(reminderTriggerType === 'fixed_time'
+          ? { fixedTime: cleanString(trigger.fixedTime || '09:00', 5) }
+          : {}),
         ...(trigger.offsetMinutes === undefined ? {} : { offsetMinutes: Number(trigger.offsetMinutes) }),
       },
       channels: Array.isArray(reminder.channels) ? reminder.channels.map((item) => cleanString(item, 16)) : [],
@@ -157,7 +165,10 @@ const timingSchema = {
   type: 'object',
   properties: {
     timezone: { type: 'string', description: 'IANA 时区，例如 Asia/Shanghai' },
-    anchorDate: { type: 'string', description: '首项日期 YYYY-MM-DD，必须是具体日期' },
+    anchorDate: {
+      type: 'string',
+      description: '首项日期 YYYY-MM-DD，可选；独立重复计划省略时按计划时区的今天开始，且不会补写开始或截止时间',
+    },
     startTime: { type: 'string', description: '每项开始时刻 HH:mm，可选' },
     dueTime: { type: 'string', description: '每项截止时刻 HH:mm，可选' },
     dueDayOffset: {
@@ -166,7 +177,7 @@ const timingSchema = {
       description: '截止相对开始日期的自然日偏移，可跨月或跨年',
     },
   },
-  required: ['timezone', 'anchorDate'],
+  required: ['timezone'],
 };
 
 const planSchema = {

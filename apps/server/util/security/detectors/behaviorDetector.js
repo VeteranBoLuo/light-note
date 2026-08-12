@@ -21,6 +21,15 @@ export const isPublicSeoReadRequest = (context = {}) =>
   ['GET', 'HEAD'].includes(String(context.method || '').toUpperCase()) &&
   PUBLIC_SEO_READ_PATH.test(String(context.path || ''));
 
+// 同一路由里的资源 ID 不是“不同接口”。不归一化会把正常列表进入详情、头像和图片请求
+// 当成几十条不同路径，移动端首屏很容易刚好在阈值 40 后被记成“41 个不同路径”。
+export const normalizeBehaviorPath = (value = '') =>
+  String(value || '')
+    .split('?')[0]
+    .replace(/\/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, '/:id')
+    .replace(/\/[0-9a-f]{24,}(?=\/|$)/gi, '/:id')
+    .replace(/\/\d+(?=\/|$)/g, '/:id');
+
 export const detectRequestBehavior = (context) => {
   // sitemap 会引导爬虫连续读取全部公开帮助文章。这里仅跳过这些只读页面的
   // 高频/路径枚举统计，避免正常收录被误判为 API 枚举；签名检测、404 扫描
@@ -36,11 +45,17 @@ export const detectRequestBehavior = (context) => {
   }
 
   const ip = context.sourceIp || 'unknown';
-  addWindowEvent(`req:${ip}`, { path: context.path }, 60 * 1000);
-  addWindowEvent(`path:${ip}`, { path: context.path }, 60 * 1000);
+  const normalizedPath = normalizeBehaviorPath(context.path);
+  addWindowEvent(`req:${ip}`, { path: normalizedPath }, 60 * 1000);
+  addWindowEvent(`path:${ip}`, { path: normalizedPath }, 60 * 1000);
 
   const requestCount1m = countWindowEvents(`req:${ip}`, 60 * 1000);
   const uniquePathCount1m = uniqueWindowValues(`path:${ip}`, 'path', 60 * 1000);
+  // 已认证网页会并发加载导航角标、资料统计、通知、成长等多个正常端点，使用与匿名探测器相同的
+  // 40 路径阈值会把常规首屏误报成接口枚举。登录态提高到至少 80；签名、404 和高频规则仍照常生效。
+  const pathEnumerationThreshold = context.userId
+    ? Math.max(80, SECURITY_CONFIG.pathEnumerationPerMinute * 2)
+    : SECURITY_CONFIG.pathEnumerationPerMinute;
   const result = [];
 
   if (requestCount1m > SECURITY_CONFIG.highFrequencyPerMinute) {
@@ -59,7 +74,8 @@ export const detectRequestBehavior = (context) => {
     );
   }
 
-  if (uniquePathCount1m > SECURITY_CONFIG.pathEnumerationPerMinute) {
+  // 一个滑窗只在首次越线时产一条证据，避免第 41、42、43…个请求重复堆出同类事件。
+  if (uniquePathCount1m === pathEnumerationThreshold + 1) {
     result.push(
       evidence({
         code: 'API_ENUMERATION',

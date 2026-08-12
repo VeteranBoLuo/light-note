@@ -57,6 +57,20 @@ describe('Agent 待办计划工具', () => {
     expect(preview.firstOccurrence.dueAt).toBe('2027-08-06 18:00:00');
   });
 
+  it('AI 独立计划可省略日期和任务时间，并默认使用当天固定提醒', () => {
+    const normalized = normalizeTodoPlanToolArgs({
+      taskMode: 'independent',
+      title: '每天点外卖',
+      timing: { timezone: 'Asia/Shanghai' },
+      plan: { type: 'scheduled', frequency: 'daily', interval: 1, end: { mode: 'count', count: 3 } },
+      reminder: { mode: 'once_per_instance', channels: ['in_app'] },
+    });
+
+    expect(TODO_PLAN_TOOL_PARAMETERS.properties.timing.required).toEqual(['timezone']);
+    expect(normalized.timing).toMatchObject({ anchorDate: '', startTime: null, dueTime: null });
+    expect(normalized.reminder.trigger).toEqual({ type: 'fixed_time', fixedTime: '09:00' });
+  });
+
   it('确认卡同时展示实例与提醒 Job 数，不把两者混为一谈', async () => {
     const preview = await previewTodoPlan.execute(normalizeTodoPlanToolArgs(input));
     expect(todoPlanPreviewCard(preview)).toMatchObject({

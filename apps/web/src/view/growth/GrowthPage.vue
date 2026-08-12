@@ -152,10 +152,15 @@
               class="growth-reward-tabs"
               variant="line"
               :options="rewardSectionOptions"
+              @select="handleRewardTabSelect"
             />
             <section class="growth-panel">
               <PointsShop v-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
-              <LotteryDraw v-else-if="activeRewardSection === 'lottery'" :read-only="isAdminContext" />
+              <LotteryDraw
+                v-else-if="activeRewardSection === 'lottery'"
+                :read-only="isAdminContext"
+                @focus-header="scrollLotteryToPreferredPosition"
+              />
               <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
               <PointsLedger v-else />
             </section>
@@ -199,6 +204,7 @@
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { dailyQuestClaimLogText, resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
+  import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
   type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
@@ -283,9 +289,34 @@
     void heatmapRef.value?.reload();
   }
 
-  function handleSectionTabSelect() {
+  async function scrollLotteryToPreferredPosition() {
+    if (!bookmark.isMobile) return;
+    await nextTick();
+    // BTabs 先 emit select、再更新 v-model；同时 LotteryDraw 还需要一次挂载布局。
+    // 等两个绘制帧后再读取标题坐标，避免拿旧奖励页高度计算后被新面板顶偏。
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    });
+    const container = growthPageRef.value;
+    const lotteryTitle = document.getElementById('lottery-title');
+    if (!container || !lotteryTitle) return;
+    // 直接以“积分抽奖”标题为准，在标题上方保留主 Tab、间距和卡片内边距。
+    // 不再依赖旧面板的锚点位置，保证标题始终完整出现在首屏而不是被滚到顶部之外。
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    scrollIntoContainer(container, lotteryTitle, 112, reduceMotion ? 'auto' : 'smooth');
+  }
+
+  function handleSectionTabSelect(section: string) {
     // 四个成长分区共享同一滚动容器；切换或再次点击当前 Tab 都从页面顶部开始。
+    if (section === 'rewards' && activeRewardSection.value === 'lottery') {
+      void scrollLotteryToPreferredPosition();
+      return;
+    }
     void nextTick(() => resetMobileScrollElement(growthPageRef.value));
+  }
+
+  function handleRewardTabSelect(section: string) {
+    if (section === 'lottery') void scrollLotteryToPreferredPosition();
   }
 
   function selectSection(section: GrowthSection) {
@@ -299,7 +330,7 @@
 
   function selectRewardSection(section: RewardSection) {
     activeRewardSection.value = section;
-    handleSectionTabSelect();
+    if (section === 'lottery') void scrollLotteryToPreferredPosition();
   }
 
   // 空缺省:游客 / 加载前统一给零值,组件照常渲染(成就全未解锁、统计为 0,呈现"待收集"引导)

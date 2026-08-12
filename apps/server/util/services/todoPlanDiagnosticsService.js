@@ -31,11 +31,14 @@ export async function getTodoPlanDiagnostics(db, input = {}) {
             FROM todo_series
            WHERE status = 'active' AND repeat_mode = 'scheduled' AND generated_through_date IS NOT NULL) AS seriesGenerationLagSeconds,
          (SELECT COUNT(*) FROM todo_reminder_jobs
-           WHERE status = 'pending' AND scheduled_at_utc < UTC_TIMESTAMP()) AS reminderJobsOverdue,
+           WHERE series_id IS NOT NULL AND status = 'pending' AND scheduled_at_utc < UTC_TIMESTAMP())
+           AS reminderJobsOverdue,
          (SELECT COALESCE(AVG(GREATEST(0, TIMESTAMPDIFF(SECOND, original_scheduled_at_utc, sent_at))), 0)
-            FROM todo_reminder_jobs WHERE status = 'sent' AND sent_at IS NOT NULL) AS reminderDeliveryLatencySeconds`,
+            FROM todo_reminder_jobs
+           WHERE series_id IS NOT NULL AND status = 'sent' AND sent_at IS NOT NULL)
+           AS reminderDeliveryLatencySeconds`,
     ),
-    db.query(`SELECT status, COUNT(*) AS count FROM todo_reminder_jobs GROUP BY status`),
+    db.query(`SELECT status, COUNT(*) AS count FROM todo_reminder_jobs WHERE series_id IS NOT NULL GROUP BY status`),
     db.query(`SELECT metric_name AS metricName, metric_value AS metricValue FROM todo_plan_runtime_metrics`),
     db.query(
       `SELECT s.id, s.user_id AS userId, COALESCE(NULLIF(u.alias, ''), u.email, s.user_id) AS userLabel,
@@ -55,7 +58,8 @@ export async function getTodoPlanDiagnostics(db, input = {}) {
               COALESCE(j.failedJobCount, 0) AS failedJobCount,
               COALESCE(j.unknownJobCount, 0) AS unknownJobCount,
               COALESCE(j.pendingJobCount, 0) AS pendingJobCount,
-              j.nextReminderAt
+              IF(j.nextReminderAtUtc IS NULL, NULL,
+                CONCAT(DATE_FORMAT(j.nextReminderAtUtc, '%Y-%m-%dT%H:%i:%s'), 'Z')) AS nextReminderAtUtc
          FROM todo_series s
          LEFT JOIN user u ON u.id = s.user_id
          LEFT JOIN (
@@ -74,7 +78,8 @@ export async function getTodoPlanDiagnostics(db, input = {}) {
                   SUM(status = 'failed') AS failedJobCount,
                   SUM(status = 'unknown') AS unknownJobCount,
                   SUM(status IN ('pending','processing','paused')) AS pendingJobCount,
-                  MIN(CASE WHEN status IN ('pending','processing','paused') THEN scheduled_at_local END) AS nextReminderAt
+                  MIN(CASE WHEN status IN ('pending','processing','paused') THEN scheduled_at_utc END)
+                    AS nextReminderAtUtc
              FROM todo_reminder_jobs
             WHERE series_id IS NOT NULL
             GROUP BY series_id
@@ -133,7 +138,7 @@ export async function getTodoPlanDiagnostics(db, input = {}) {
       pendingJobCount: number(row.pendingJobCount),
       failedJobCount: number(row.failedJobCount),
       unknownJobCount: number(row.unknownJobCount),
-      nextReminderAt: row.nextReminderAt || null,
+      nextReminderAtUtc: row.nextReminderAtUtc || null,
     })),
     generatedAt: new Date().toISOString(),
   };

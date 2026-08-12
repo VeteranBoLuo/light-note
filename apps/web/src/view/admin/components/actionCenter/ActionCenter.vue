@@ -139,13 +139,18 @@
             <p v-if="activeSection === 'jobs'" class="action-center__job-meta">
               <span>{{ t('adminActionCenter.attempts', { count: number(item.attempts) }) }}</span>
               <span v-if="item.scheduledAt">{{
-                t('adminActionCenter.scheduledAt', { time: formatTime(item.scheduledAt) })
+                t('adminActionCenter.scheduledAt', {
+                  time: formatBeijingTime(item.scheduledAtUtc || item.scheduledAt),
+                })
+              }}</span>
+              <span v-if="numberValue(item.groupCount) > 1">{{
+                t('adminActionCenter.groupedJobs', { count: number(item.groupCount) })
               }}</span>
               <code v-if="item.errorCode">{{ item.errorCode }}</code>
             </p>
           </div>
           <div class="action-center__item-actions">
-            <BButton v-if="itemTarget(item)" size="small" @click="openItem(item)">
+            <BButton v-if="hasItemAction(item)" size="small" @click="openItem(item)">
               {{ activeSection === 'work' ? t('adminActionCenter.openWork') : t('adminActionCenter.openDiagnostics') }}
             </BButton>
             <BButton
@@ -155,6 +160,14 @@
               @click="openRetry(item)"
             >
               {{ t('adminActionCenter.retry.action') }}
+            </BButton>
+            <BButton
+              v-if="activeSection === 'jobs' && item.source === 'bookmark_icon' && item.status === 'attention'"
+              size="small"
+              type="danger"
+              @click="confirmDismiss(item)"
+            >
+              {{ t('adminActionCenter.dismiss.action') }}
             </BButton>
           </div>
         </BCard>
@@ -203,6 +216,84 @@
         </div>
       </template>
     </BModal>
+
+    <BModal
+      v-model:visible="todoDiagnosticVisible"
+      :title="t('adminActionCenter.diagnostic.title')"
+      width="min(760px, 94vw)"
+      :mask-closable="!todoDiagnosticLoading"
+      :esc-closable="!todoDiagnosticLoading"
+    >
+      <BLoading v-if="todoDiagnosticLoading" loading :title="t('adminActionCenter.diagnostic.loading')" />
+      <div v-else-if="todoDiagnostic" class="action-center__diagnostic">
+        <header class="action-center__diagnostic-heading">
+          <div>
+            <small>{{ todoDiagnostic.todo.ownerLabel }}</small>
+            <strong>{{ todoDiagnostic.todo.title }}</strong>
+          </div>
+          <BChip :tone="diagnosticTone(todoDiagnostic.job)">{{ diagnosticStateLabel(todoDiagnostic.job) }}</BChip>
+        </header>
+
+        <section class="action-center__diagnostic-primary">
+          <div class="is-time">
+            <span>{{ t('adminActionCenter.diagnostic.scheduledAt') }}</span>
+            <strong>{{ formatBeijingTime(todoDiagnostic.job.scheduledAtUtc) }}</strong>
+            <small>{{ t('adminActionCenter.diagnostic.beijingTime') }}</small>
+          </div>
+          <div>
+            <span>{{ t('adminActionCenter.diagnostic.result') }}</span>
+            <strong>{{ attentionReasonLabel(todoDiagnostic.job) }}</strong>
+            <small v-if="todoDiagnostic.job.errorCode"
+              ><code>{{ todoDiagnostic.job.errorCode }}</code></small
+            >
+          </div>
+          <div>
+            <span>{{ t('adminActionCenter.diagnostic.channel') }}</span>
+            <strong>{{ channelLabel(todoDiagnostic.job.channel) }}</strong>
+            <small>{{ t('adminActionCenter.attempts', { count: number(todoDiagnostic.job.attempts) }) }}</small>
+          </div>
+        </section>
+
+        <section class="action-center__diagnostic-section">
+          <h4>{{ t('adminActionCenter.diagnostic.rule') }}</h4>
+          <p>{{ diagnosticRuleLabel(todoDiagnostic.rule) }}</p>
+          <div class="action-center__diagnostic-meta">
+            <span>{{
+              t('adminActionCenter.diagnostic.timezone', { timezone: timezoneLabel(todoDiagnostic.job.timezone) })
+            }}</span>
+            <span>{{ t('adminActionCenter.diagnostic.todoId', { id: shortId(todoDiagnostic.todo.id) }) }}</span>
+            <span>{{ t('adminActionCenter.diagnostic.jobId', { id: shortId(todoDiagnostic.job.id) }) }}</span>
+          </div>
+        </section>
+
+        <section class="action-center__diagnostic-section">
+          <h4>{{
+            t('adminActionCenter.diagnostic.relatedJobs', { count: number(todoDiagnostic.relatedJobs.length) })
+          }}</h4>
+          <div class="action-center__diagnostic-jobs">
+            <div v-for="job in todoDiagnostic.relatedJobs" :key="job.id">
+              <span>{{ formatBeijingTime(job.scheduledAtUtc) }}</span>
+              <BChip :tone="diagnosticTone(job)">{{ diagnosticStateLabel(job) }}</BChip>
+              <small>{{ channelLabel(job.channel) }}</small>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div v-else class="action-center__empty">
+        <strong>{{ t('adminActionCenter.diagnostic.emptyTitle') }}</strong>
+        <span>{{ t('adminActionCenter.diagnostic.emptyHint') }}</span>
+      </div>
+      <template #footer>
+        <div class="action-center__retry-footer">
+          <BButton v-if="todoDiagnostic?.job.seriesId" :disabled="todoDiagnosticLoading" @click="openSeriesDiagnostic">
+            {{ t('adminActionCenter.diagnostic.openSeries') }}
+          </BButton>
+          <BButton type="primary" :disabled="todoDiagnosticLoading" @click="todoDiagnosticVisible = false">
+            {{ t('common.close') }}
+          </BButton>
+        </div>
+      </template>
+    </BModal>
   </AdminDataPage>
 </template>
 
@@ -220,7 +311,14 @@
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTabs, { type TabItem } from '@/components/base/BasicComponents/BTabs.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
-  import { getAdminActionCenter, retryAdminAsyncJob } from '@/api/commonApi';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
+  import {
+    dismissAdminAsyncJob,
+    getAdminActionCenter,
+    getAdminTodoReminderDiagnostic,
+    retryAdminAsyncJob,
+  } from '@/api/commonApi';
+  import { formatAdminDateTime } from '@/utils/adminDateTime';
 
   type Section = 'work' | 'jobs';
   type ItemStatus = 'pending' | 'waiting' | 'running' | 'attention';
@@ -235,11 +333,65 @@
     userId?: string | null;
     attempts?: number;
     scheduledAt?: string | null;
+    scheduledAtUtc?: string | null;
+    scheduledAtBeijing?: string | null;
+    scheduledAtLocal?: string | null;
+    timezone?: string | null;
+    attentionReason?: string | null;
+    groupCount?: number;
+    relatedId?: string | null;
+    seriesId?: string | null;
+    ruleId?: string | null;
     createdAt?: string | null;
     updatedAt?: string | null;
     errorCode?: string | null;
     targetUrl?: string;
     canRetry?: boolean;
+  }
+  interface TodoReminderDiagnosticJob {
+    id: string;
+    todoId: string;
+    seriesId?: string | null;
+    ruleId?: string | null;
+    status: string;
+    health: 'attention' | 'running' | 'waiting' | 'paused' | 'sent' | 'terminal';
+    attentionReason?: string | null;
+    channel: string;
+    attempts: number;
+    scheduledAtUtc?: string | null;
+    scheduledAtBeijing?: string | null;
+    scheduledAtLocal?: string | null;
+    timezone?: string | null;
+    errorCode?: string | null;
+  }
+  interface TodoReminderDiagnosticRule {
+    id: string;
+    mode: string;
+    triggerType?: string | null;
+    fixedLocalTime?: string | null;
+    offsetMinutes?: number | null;
+    repeatIntervalMinutes?: number | null;
+    stopType?: string | null;
+    maxCount?: number | null;
+    channels?: string[];
+    quietPolicy?: string;
+    schedule?: {
+      mode?: string;
+      once?: { type?: string; fixedAt?: string; offsetMinutes?: number };
+      repeat?: {
+        kind?: string;
+        intervalMinutes?: number;
+        weekdays?: number[];
+        monthDays?: number[];
+        localTime?: string;
+      };
+    } | null;
+  }
+  interface TodoReminderDiagnostic {
+    todo: { id: string; title: string; ownerLabel: string; description?: string; priority?: number };
+    job: TodoReminderDiagnosticJob;
+    rule: TodoReminderDiagnosticRule | null;
+    relatedJobs: TodoReminderDiagnosticJob[];
   }
   interface WorkSource {
     source: string;
@@ -269,6 +421,10 @@
   const retryLoading = ref(false);
   const retryJob = ref<ActionItem | null>(null);
   const retryReason = ref('');
+  const todoDiagnosticVisible = ref(false);
+  const todoDiagnosticLoading = ref(false);
+  const todoDiagnostic = ref<TodoReminderDiagnostic | null>(null);
+  let todoDiagnosticSequence = 0;
   const work = ref<{ total: number; critical: number; sources: WorkSource[]; items: ActionItem[] }>({
     total: 0,
     critical: 0,
@@ -317,6 +473,9 @@
   function number(value: unknown) {
     return Number(value || 0).toLocaleString(locale.value);
   }
+  function numberValue(value: unknown) {
+    return Number(value || 0);
+  }
   function asWorkSource(source: WorkSource | JobSource) {
     return source as WorkSource;
   }
@@ -359,10 +518,10 @@
     return activeSection.value === 'work' ? number(asWorkSource(source).count) : number(asJobSource(source).attention);
   }
   function formatTime(value?: string | null) {
-    if (!value) return '-';
-    const date = new Date(String(value).replace(' ', 'T'));
-    if (!Number.isFinite(date.getTime())) return String(value);
-    return date.toLocaleString(locale.value, { hour12: false });
+    return formatAdminDateTime(value, locale.value, { source: 'beijing' });
+  }
+  function formatBeijingTime(value?: string | null) {
+    return formatAdminDateTime(value, locale.value, { source: 'utc' });
   }
   function shortId(value: string) {
     const id = String(value || '');
@@ -370,12 +529,97 @@
   }
   function itemTarget(item: ActionItem) {
     if (item.targetUrl) return item.targetUrl;
-    if (item.source === 'todo_reminder') return '/admin/todoPlanDiagnostics';
     return '';
   }
+  function hasItemAction(item: ActionItem) {
+    return item.source === 'todo_reminder' || Boolean(itemTarget(item));
+  }
   function openItem(item: ActionItem) {
+    if (item.source === 'todo_reminder') {
+      void openTodoDiagnostic(item);
+      return;
+    }
     const target = itemTarget(item);
     if (target) router.push(target);
+  }
+  async function openTodoDiagnostic(item: ActionItem) {
+    const requestId = ++todoDiagnosticSequence;
+    todoDiagnostic.value = null;
+    todoDiagnosticVisible.value = true;
+    todoDiagnosticLoading.value = true;
+    try {
+      const response: any = await getAdminTodoReminderDiagnostic({ id: item.id });
+      if (requestId !== todoDiagnosticSequence) return;
+      if (response?.status !== 200) throw new Error(response?.msg || t('adminActionCenter.diagnostic.loadFailed'));
+      if (!response.data?.todo?.id || !response.data?.job?.id) {
+        throw new Error(t('adminActionCenter.diagnostic.loadFailed'));
+      }
+      todoDiagnostic.value = {
+        todo: response.data?.todo,
+        job: response.data?.job,
+        rule: response.data?.rule || null,
+        relatedJobs: Array.isArray(response.data?.relatedJobs) ? response.data.relatedJobs : [],
+      } as TodoReminderDiagnostic;
+    } catch (error: any) {
+      if (requestId !== todoDiagnosticSequence) return;
+      message.error(error?.message || t('adminActionCenter.diagnostic.loadFailed'));
+    } finally {
+      if (requestId === todoDiagnosticSequence) todoDiagnosticLoading.value = false;
+    }
+  }
+  function diagnosticTone(job: TodoReminderDiagnosticJob): 'danger' | 'pending' | 'success' | 'neutral' {
+    if (job.health === 'attention') return 'danger';
+    if (job.health === 'running' || job.health === 'sent') return 'success';
+    if (job.health === 'waiting') return 'pending';
+    return 'neutral';
+  }
+  function diagnosticStateLabel(job: TodoReminderDiagnosticJob) {
+    return t(`adminActionCenter.diagnostic.state.${job.health}`);
+  }
+  function attentionReasonLabel(job: TodoReminderDiagnosticJob) {
+    if (job.attentionReason) return t(`adminActionCenter.diagnostic.reason.${job.attentionReason}`);
+    return t(`adminActionCenter.diagnostic.reason.${job.health}`);
+  }
+  function channelLabel(channel: string) {
+    return t(`adminActionCenter.diagnostic.channelLabel.${channel === 'email' ? 'email' : 'in_app'}`);
+  }
+  function timezoneLabel(timezone?: string | null) {
+    return ['Asia/Shanghai', 'Asia/Chongqing', 'Asia/Harbin'].includes(String(timezone || ''))
+      ? t('adminActionCenter.diagnostic.beijingTime')
+      : timezone || t('adminActionCenter.diagnostic.beijingTime');
+  }
+  function diagnosticRuleLabel(rule: TodoReminderDiagnosticRule | null) {
+    if (!rule) return t('adminActionCenter.diagnostic.ruleUnavailable');
+    const schedule = rule.schedule;
+    if (schedule?.mode === 'repeat') {
+      const repeat = schedule.repeat || {};
+      if (repeat.kind === 'weekly') {
+        const weekdays = (repeat.weekdays || [])
+          .map((day) => t(`adminActionCenter.diagnostic.weekday.${day}`))
+          .join(locale.value.startsWith('zh') ? '、' : ', ');
+        return t('adminActionCenter.diagnostic.weeklyRule', {
+          weekdays: weekdays || '-',
+          time: repeat.localTime || rule.fixedLocalTime || '-',
+        });
+      }
+      if (repeat.kind === 'monthly') {
+        return t('adminActionCenter.diagnostic.monthlyRule', {
+          days: (repeat.monthDays || []).join(locale.value.startsWith('zh') ? '、' : ', ') || '-',
+          time: repeat.localTime || rule.fixedLocalTime || '-',
+        });
+      }
+      return t('adminActionCenter.diagnostic.intervalRule', {
+        minutes: number(repeat.intervalMinutes || rule.repeatIntervalMinutes),
+      });
+    }
+    if (schedule?.mode === 'once') return t('adminActionCenter.diagnostic.onceRule');
+    return t(`adminActionCenter.diagnostic.ruleMode.${rule.mode || 'unknown'}`);
+  }
+  function openSeriesDiagnostic() {
+    const seriesId = todoDiagnostic.value?.job.seriesId;
+    if (!seriesId) return;
+    todoDiagnosticVisible.value = false;
+    router.push({ path: '/admin/todoPlanDiagnostics', query: { keyword: seriesId } });
   }
   function openRetry(item: ActionItem) {
     retryJob.value = item;
@@ -410,6 +654,29 @@
     } finally {
       retryLoading.value = false;
     }
+  }
+  function confirmDismiss(item: ActionItem) {
+    Alert.alert({
+      title: t('adminActionCenter.dismiss.title'),
+      content: t('adminActionCenter.dismiss.content', { title: item.title }),
+      okText: t('adminActionCenter.dismiss.confirm'),
+      okType: 'danger',
+      onOk: async () => {
+        try {
+          const response: any = await dismissAdminAsyncJob({
+            source: item.source,
+            id: item.id,
+            reason: t('adminActionCenter.dismiss.auditReason'),
+            confirmed: true,
+          });
+          if (response?.status !== 200) throw new Error(response?.msg || t('adminActionCenter.dismiss.failed'));
+          message.success(t('adminActionCenter.dismiss.success'));
+          await load();
+        } catch (error: any) {
+          message.error(error?.message || t('adminActionCenter.dismiss.failed'));
+        }
+      },
+    });
   }
   function selectSource(source: string) {
     if (sourceFilter.value === source) return;
@@ -622,6 +889,104 @@
     padding: 12px 16px;
     border-top: 1px solid var(--card-border-color);
   }
+  .action-center__diagnostic {
+    display: grid;
+    gap: 14px;
+    padding: 2px 2px 8px;
+  }
+  .action-center__diagnostic-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .action-center__diagnostic-heading > div {
+    min-width: 0;
+    display: grid;
+    gap: 3px;
+  }
+  .action-center__diagnostic-heading small,
+  .action-center__diagnostic-primary small,
+  .action-center__diagnostic-jobs small {
+    color: var(--sub-text-color);
+  }
+  .action-center__diagnostic-heading strong {
+    color: var(--text-color);
+    font-size: 18px;
+    overflow-wrap: anywhere;
+  }
+  .action-center__diagnostic-primary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .action-center__diagnostic-primary > div {
+    min-width: 0;
+    display: grid;
+    align-content: start;
+    gap: 5px;
+    padding: 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .action-center__diagnostic-primary > div.is-time {
+    border-color: var(--todo-accent-color, #0ea5e9);
+  }
+  .action-center__diagnostic-primary span,
+  .action-center__diagnostic-section h4 {
+    color: var(--sub-text-color);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .action-center__diagnostic-primary strong {
+    color: var(--text-color);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+  .action-center__diagnostic-primary .is-time strong {
+    color: var(--todo-accent-color, #0ea5e9);
+    font-size: 17px;
+  }
+  .action-center__diagnostic-section {
+    display: grid;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--card-border-color);
+  }
+  .action-center__diagnostic-section h4,
+  .action-center__diagnostic-section p {
+    margin: 0;
+  }
+  .action-center__diagnostic-section p {
+    color: var(--text-color);
+    line-height: 1.55;
+  }
+  .action-center__diagnostic-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px 14px;
+    color: var(--sub-text-color);
+    font-size: 11px;
+  }
+  .action-center__diagnostic-jobs {
+    display: grid;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .action-center__diagnostic-jobs > div {
+    min-height: 42px;
+    display: grid;
+    grid-template-columns: minmax(160px, 1fr) auto minmax(72px, auto);
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    color: var(--text-color);
+  }
+  .action-center__diagnostic-jobs > div + div {
+    border-top: 1px solid var(--card-border-color);
+  }
 
   @media (max-width: 767px) {
     .action-center__select,
@@ -642,6 +1007,16 @@
       width: 100%;
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    }
+    .action-center__diagnostic-primary {
+      grid-template-columns: 1fr;
+    }
+    .action-center__diagnostic-jobs > div {
+      min-height: 52px;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .action-center__diagnostic-jobs small {
+      grid-column: 1 / -1;
     }
   }
 

@@ -4,8 +4,13 @@
     v-model:visible="visible"
     :title="t('communityChat.profile.title')"
     width="min(560px, 92vw)"
+    :height="contentView === 'edit' ? 'min(82dvh, 840px)' : 'auto'"
     :show-footer="false"
-    content-class="chat-user-profile-modal__content"
+    :content-class="
+      ['chat-user-profile-modal__content', contentView === 'edit' ? 'chat-user-profile-modal__content--editing' : '']
+        .filter(Boolean)
+        .join(' ')
+    "
   >
     <ChatUserProfileContent v-bind="contentProps" v-on="contentListeners" />
   </BModal>
@@ -20,12 +25,14 @@
     mobile-centered-header
     @close="visible = false"
   >
-    <ChatUserProfileContent v-bind="contentProps" v-on="contentListeners" />
+    <div class="chat-user-profile-drawer__content" :class="{ 'is-editing': contentView === 'edit' }">
+      <ChatUserProfileContent v-bind="contentProps" v-on="contentListeners" />
+    </div>
   </BDrawer>
 </template>
 
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type {
     CommunityChatAuthorProfile,
@@ -83,6 +90,7 @@
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
   const isMobileLayout = useMobileLayout();
+  const contentView = ref<'summary' | 'achievements' | 'preview' | 'edit'>('summary');
 
   const contentProps = computed(() => ({
     profile: props.profile,
@@ -108,6 +116,9 @@
     block: () => emit('block'),
     report: () => emit('report'),
     login: () => emit('login'),
+    viewChange: (view: 'summary' | 'achievements' | 'preview' | 'edit') => {
+      contentView.value = view;
+    },
   };
 </script>
 
@@ -115,5 +126,20 @@
   .chat-user-profile-modal__content {
     max-height: min(72vh, 720px);
     overflow-y: auto;
+  }
+
+  .chat-user-profile-modal__content--editing {
+    max-height: none;
+    overflow: hidden;
+  }
+
+  .chat-user-profile-drawer__content.is-editing {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .chat-user-profile-drawer__content.is-editing > .chat-profile-content {
+    height: 100%;
+    min-height: 0;
   }
 </style>

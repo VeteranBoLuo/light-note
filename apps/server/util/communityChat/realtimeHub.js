@@ -25,6 +25,7 @@ const DEFAULT_REVALIDATE_AFTER_MS = 120_000;
 const DEFAULT_MAX_BUFFERED_BYTES = 256 * 1024;
 const DEFAULT_MAX_CONNECTIONS = 500;
 const DEFAULT_UPGRADES_PER_MINUTE = 60;
+const DEFAULT_PRESENCE_GRACE_MS = 45_000;
 const MAX_CLIENT_MESSAGES_PER_MINUTE = 12;
 
 class CommunityChatRealtimeAccessError extends Error {
@@ -239,6 +240,8 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
   const heartbeatIntervalMs = options.heartbeatIntervalMs || DEFAULT_HEARTBEAT_INTERVAL_MS;
   const revalidateAfterMs = options.revalidateAfterMs || DEFAULT_REVALIDATE_AFTER_MS;
   const maxBufferedBytes = options.maxBufferedBytes || DEFAULT_MAX_BUFFERED_BYTES;
+  const configuredPresenceGraceMs = Number(options.presenceGraceMs ?? DEFAULT_PRESENCE_GRACE_MS);
+  const presenceGraceMs = Number.isFinite(configuredPresenceGraceMs) ? Math.max(0, configuredPresenceGraceMs) : 0;
   const maxConnections = parsePositiveInteger(
     env.COMMUNITY_CHAT_REALTIME_MAX_CONNECTIONS,
     DEFAULT_MAX_CONNECTIONS,
@@ -259,6 +262,11 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
     maxPayload: COMMUNITY_CHAT_REALTIME_MAX_CLIENT_PAYLOAD_BYTES,
   });
   let pendingUpgrades = 0;
+  // Map 的键只在服务端内存中存在：登录账号按 user id，多标签页/多设备仍只计 1；
+  // 游客按浏览器本地稳定标识去重。Set 为空但仍在宽限期时继续计为在线，避免切页抖动。
+  const presenceConnections = new Map();
+  const presenceOfflineTimers = new Map();
+  let closed = false;
 
   function sendEvent(ws, event) {
     if (ws.readyState !== WebSocket.OPEN) return false;
@@ -285,6 +293,76 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
       }),
     );
     safeClose(ws, error?.closeCode || 1008, 'protocol_error');
+  }
+
+  function currentOnlineCount() {
+    return presenceConnections.size;
+  }
+
+  function broadcastPresenceChanged() {
+    if (closed) return;
+    const event = createCommunityChatServerEvent('presence.changed', {
+      onlineCount: currentOnlineCount(),
+    });
+    for (const client of wss.clients) {
+      if (!client.communityChatContext?.rooms?.size) continue;
+      sendEvent(client, event);
+    }
+  }
+
+  function resolvePresenceIdentity(context, presenceClientId = '') {
+    const accountId = String(context.user?.id || '').trim();
+    if (accountId) return `user:${accountId}`;
+    const clientId = String(presenceClientId || '').trim();
+    if (clientId) return `guest:${clientId}`;
+    // 兼容尚未升级的旧前端；新版都会提交稳定标识。该随机键不会对外返回。
+    context.fallbackPresenceId ||= randomUUID();
+    return `guest-connection:${context.fallbackPresenceId}`;
+  }
+
+  function attachPresenceConnection(ws, context, presenceClientId) {
+    const identityKey = resolvePresenceIdentity(context, presenceClientId);
+    if (context.presenceIdentityKey && context.presenceIdentityKey !== identityKey) {
+      throw new CommunityChatRealtimeProtocolError(
+        'REALTIME_PRESENCE_ID_CHANGED',
+        'Realtime presence identity cannot change within one connection',
+      );
+    }
+    context.presenceIdentityKey = identityKey;
+    const offlineTimer = presenceOfflineTimers.get(identityKey);
+    if (offlineTimer) {
+      clearTimeout(offlineTimer);
+      presenceOfflineTimers.delete(identityKey);
+    }
+    const existed = presenceConnections.has(identityKey);
+    const connections = presenceConnections.get(identityKey) || new Set();
+    connections.add(ws);
+    presenceConnections.set(identityKey, connections);
+    return !existed;
+  }
+
+  function detachPresenceConnection(ws, context) {
+    const identityKey = context?.presenceIdentityKey;
+    if (!identityKey) return;
+    const connections = presenceConnections.get(identityKey);
+    if (!connections) return;
+    connections.delete(ws);
+    if (connections.size) return;
+    if (presenceOfflineTimers.has(identityKey)) return;
+    const removePresence = () => {
+      presenceOfflineTimers.delete(identityKey);
+      const latestConnections = presenceConnections.get(identityKey);
+      if (!latestConnections || latestConnections.size) return;
+      presenceConnections.delete(identityKey);
+      broadcastPresenceChanged();
+    };
+    if (presenceGraceMs === 0) {
+      removePresence();
+      return;
+    }
+    const timer = setTimeout(removePresence, presenceGraceMs);
+    timer.unref?.();
+    presenceOfflineTimers.set(identityKey, timer);
   }
 
   async function revalidateSocket(ws, context) {
@@ -320,11 +398,13 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
     context.messageWindow = null;
     context.nextRevalidateAt = Date.now() + revalidateAfterMs;
     context.revalidating = false;
+    context.presenceIdentityKey = '';
     ws.communityChatContext = context;
     ws.isAlive = true;
     ws.on('pong', () => {
       ws.isAlive = true;
     });
+    ws.on('close', () => detachPresenceConnection(ws, context));
     ws.on('message', async (raw, isBinary) => {
       if (isBinary) {
         sendProtocolError(
@@ -348,12 +428,15 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
         const message = parseCommunityChatClientMessage(raw);
         await revalidateSocket(ws, context);
         if (ws.readyState !== WebSocket.OPEN) return;
+        const presenceChanged = attachPresenceConnection(ws, context, message.payload.presenceClientId);
+        // 新连接先只通知已有订阅者，再用 room.subscribed 把相同权威值交给自己，避免重复事件。
+        if (presenceChanged) broadcastPresenceChanged();
         context.rooms.add(message.payload.roomSlug);
         sendEvent(
           ws,
           createCommunityChatServerEvent(
             'room.subscribed',
-            { roomSlug: message.payload.roomSlug },
+            { roomSlug: message.payload.roomSlug, onlineCount: currentOnlineCount() },
             { requestId: message.requestId },
           ),
         );
@@ -461,11 +544,13 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
   }, heartbeatIntervalMs);
   heartbeatTimer.unref?.();
 
-  let closed = false;
   const close = async () => {
     if (closed) return;
     closed = true;
     clearInterval(heartbeatTimer);
+    for (const timer of presenceOfflineTimers.values()) clearTimeout(timer);
+    presenceOfflineTimers.clear();
+    presenceConnections.clear();
     server.off?.('upgrade', upgradeHandler);
     unsubscribeBroker();
     for (const ws of wss.clients) ws.terminate();
@@ -478,6 +563,7 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
 
   return {
     close,
+    getOnlineCount: currentOnlineCount,
     protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
     wss,
   };

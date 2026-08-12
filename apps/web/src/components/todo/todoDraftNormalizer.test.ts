@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { TodoItem } from '@/api/todoApi';
-import { normalizeCurrentTodoPlanDraft, normalizeTodoCreateDraft, type TodoCreateDraftV3 } from './todoDraftNormalizer';
+import {
+  normalizeCurrentTodoPlanDraft,
+  normalizeTodoCreateDraft,
+  todoTodayInTimezone,
+  type TodoCreateDraftV3,
+} from './todoDraftNormalizer';
 
 function scheduledDraft(startAt: string, dueAt: string): TodoCreateDraftV3 {
   return {
@@ -27,6 +32,28 @@ function scheduledDraft(startAt: string, dueAt: string): TodoCreateDraftV3 {
 }
 
 describe('todoDraftNormalizer', () => {
+  it('高级重复任务的两个时间都留空时只补计划时区当天，不补开始或截止时刻', () => {
+    const draft = scheduledDraft('', '');
+    draft.independentTasks.plan.end = { mode: 'count', count: 3 };
+
+    const normalized = normalizeTodoCreateDraft(draft);
+
+    expect(normalized.timing).toEqual({
+      timezone: 'Asia/Shanghai',
+      anchorDate: todoTodayInTimezone('Asia/Shanghai'),
+      startTime: null,
+      dueTime: null,
+      dueDayOffset: 0,
+    });
+  });
+
+  it('计划当天按所选时区计算，而不是直接沿用浏览器本地日期', () => {
+    const nearBeijingMidnight = new Date('2026-08-05T16:30:00.000Z');
+
+    expect(todoTodayInTimezone('Asia/Shanghai', nearBeijingMidnight)).toBe('2026-08-06');
+    expect(todoTodayInTimezone('America/New_York', nearBeijingMidnight)).toBe('2026-08-05');
+  });
+
   it('按日期结束时把截止日期作为计划末日，截止时刻应用到每一项', () => {
     const normalized = normalizeTodoCreateDraft(scheduledDraft('2026-08-07 09:15', '2026-08-24 18:30'));
 
@@ -37,6 +64,27 @@ describe('todoDraftNormalizer', () => {
       dueTime: '18:30',
       dueDayOffset: 0,
     });
+  });
+
+  it('未填开始时间时从计划时区当天生成，而不是把计划结束日期误当成首项日期', () => {
+    const draft = scheduledDraft('', '2026-08-24 18:30');
+
+    const normalized = normalizeTodoCreateDraft(draft);
+
+    expect(normalized.plan.end).toEqual({ mode: 'until', untilDate: '2026-08-24' });
+    expect(normalized.timing).toMatchObject({
+      anchorDate: todoTodayInTimezone('Asia/Shanghai'),
+      startTime: null,
+      dueTime: '18:30',
+      dueDayOffset: 0,
+    });
+  });
+
+  it('按日期结束只认页面上的截止日期，不保留隐藏的旧结束日期', () => {
+    const draft = scheduledDraft('', '');
+    draft.independentTasks.plan.end = { mode: 'until', untilDate: '2026-09-30' };
+
+    expect(normalizeTodoCreateDraft(draft).plan.end).toEqual({ mode: 'until', untilDate: null });
   });
 
   it('每项截止时刻早于开始时刻时保留跨夜语义', () => {
@@ -53,6 +101,14 @@ describe('todoDraftNormalizer', () => {
     const normalized = normalizeTodoCreateDraft(draft);
 
     expect(normalized.timing.dueDayOffset).toBe(365);
+  });
+
+  it('普通无日期待办不会被高级计划的默认日期影响', () => {
+    const draft = scheduledDraft('', '');
+    draft.independentTasks.enabled = false;
+    draft.independentTasks.plan = { type: 'once' };
+
+    expect(normalizeTodoCreateDraft(draft).timing.anchorDate).toBeNull();
   });
 
   it('v2 单任务快捷顺延时保留内容、资料与版本化提醒，只替换截止时间', () => {

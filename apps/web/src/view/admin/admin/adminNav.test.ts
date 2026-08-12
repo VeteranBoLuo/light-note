@@ -9,8 +9,8 @@ import {
 import adminRouter from '@/router/modules/admin';
 
 /**
- * 手机端可达路由。取自 router/modules/admin.ts 的顶级(扁平)路由
- * 与 securityCenter.ts 的 /securityCenterMobile，改路由时这里要同步。
+ * 手机端常驻菜单应覆盖的路由。取自 router/modules/admin.ts 的顶级（扁平）路由
+ * 与 securityCenter.ts 的 /securityCenterMobile；专业诊断深链不计入常驻菜单。
  */
 const MOBILE_ROUTES = new Set([
   '/overview',
@@ -18,7 +18,6 @@ const MOBILE_ROUTES = new Set([
   '/apiLog',
   '/operationLog',
   '/adminAudit',
-  '/todoPlanDiagnostics',
   '/userMg',
   '/userOpinion',
   '/resourceGovernance',
@@ -67,9 +66,9 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 22 个后台模块，一个都不漏', () => {
+  it('覆盖全部 21 个常驻后台模块，专业诊断工具不占菜单入口', () => {
     const ids = allItems(nav()).map((item) => item.id);
-    // 19 个 /admin 子路由
+    // 18 个常驻 /admin 子路由；独立任务系列诊断只保留专业深链
     expect(ids).toEqual(
       expect.arrayContaining([
         'overview',
@@ -85,7 +84,6 @@ describe('后台导航菜单', () => {
         'communityChatModeration',
         'operationLog',
         'adminAudit',
-        'todoPlanDiagnostics',
         'apiLog',
         'logCleanup',
         'logExclude',
@@ -95,8 +93,8 @@ describe('后台导航菜单', () => {
     );
     // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
     expect(ids).toEqual(expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter']));
-    expect(ids).toHaveLength(22);
-    expect(new Set(ids).size).toBe(22);
+    expect(ids).toHaveLength(21);
+    expect(new Set(ids).size).toBe(21);
   });
 
   it('跨外壳的入口给绝对路径并标记 external，后台子路由拼 /admin/{id}', () => {
@@ -225,13 +223,20 @@ describe('resolveActiveNavId', () => {
       '/admin/actionCenter',
       '/admin/aiEvaluation',
       '/admin/communityChatModeration',
-      '/admin/todoPlanDiagnostics',
       '/securityCenter/events',
       '/notificationCenter',
       '/knowledgeBase',
     ]) {
       expect(ids.has(resolveActiveNavId(path))).toBe(true);
     }
+  });
+
+  it('独立任务系列诊断保留深链路由，但不再伪装成所有待办的常驻模块', () => {
+    const ids = new Set(allItems(nav()).map((item) => item.id));
+    const desktopShell = adminRouter.find((route) => route.path === '/admin');
+    expect(desktopShell?.children?.some((route) => route.path === 'todoPlanDiagnostics')).toBe(true);
+    expect(adminRouter.some((route) => route.path === 'todoPlanDiagnostics')).toBe(true);
+    expect(ids.has('todoPlanDiagnostics')).toBe(false);
   });
 });
 
@@ -258,7 +263,7 @@ describe('手机后台菜单', () => {
     }
   });
 
-  it('凡是手机上有路由的模块都进菜单，不漏', () => {
+  it('凡是手机常驻模块都进菜单，不漏', () => {
     const urls = new Set(
       mobile()
         .flatMap((group) => group.items)

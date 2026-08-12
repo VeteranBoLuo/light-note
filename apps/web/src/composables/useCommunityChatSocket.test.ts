@@ -126,15 +126,27 @@ describe('useCommunityChatSocket', () => {
     expect(subscription).toMatchObject({
       protocolVersion: 1,
       type: 'room.subscribe',
-      payload: { roomSlug: 'general' },
+      payload: { roomSlug: 'general', presenceClientId: expect.any(String) },
     });
     expect(subscription).not.toHaveProperty('userId');
     expect(subscription).not.toHaveProperty('role');
     expect(JSON.stringify(subscription)).not.toContain('guest:visitor');
 
-    socket.message(serverEvent('room.subscribed', { roomSlug: 'general' }));
+    socket.message(serverEvent('room.subscribed', { roomSlug: 'general', onlineCount: 6 }));
     expect(mounted.socketState.status.value).toBe('connected');
+    expect(mounted.socketState.onlineCount.value).toBe(6);
     expect(mounted.onSynchronized).toHaveBeenCalledTimes(1);
+  });
+
+  it('在线人数事件只更新共享人数，不触发消息刷新回调', async () => {
+    const mounted = await mountSocket();
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+    socket.message(serverEvent('room.subscribed', { roomSlug: 'general', onlineCount: 2 }));
+    socket.message(serverEvent('presence.changed', { onlineCount: 6 }, 'presence-0002'));
+
+    expect(mounted.socketState.onlineCount.value).toBe(6);
+    expect(mounted.onEvent).not.toHaveBeenCalled();
   });
 
   it('按 eventId 去重业务事件，忽略其他房间和无效 JSON', async () => {

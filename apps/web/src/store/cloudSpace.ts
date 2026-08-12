@@ -9,7 +9,10 @@ export default defineStore('dom', {
     <
       {
         usedSpace: number;
+        activeSpace: number;
+        trashSpace: number;
         maxSpace: number;
+        sharedWithTrash: boolean;
         folderList: { name: string; id?: string; isRename?: boolean }[];
         fileList: {
           id: string;
@@ -43,7 +46,10 @@ export default defineStore('dom', {
       }
     >{
       usedSpace: 0,
-      maxSpace: 512, // 兜底基础配额(MB);真实配额由后端 /queryTotalFileSize 下发 quotaMB 覆盖(按角色/等级)
+      activeSpace: 0,
+      trashSpace: 0,
+      maxSpace: 1024, // 兜底为 Lv.1 1GB；真实配额由后端按角色、等级与永久扩容权益覆盖
+      sharedWithTrash: true,
       folderList: [],
       fileList: [],
       typeCheckValue: [...CLOUD_FILE_CATEGORY_ORDER],
@@ -139,7 +145,10 @@ export default defineStore('dom', {
         const res = await apiBasePost('/api/file/queryTotalFileSize');
         if (requestVersion !== this.usedSpaceRequestVersion) return false;
         if (res?.status !== 200) return false;
-        this.usedSpace = res.data.totalSizeMB;
+        this.usedSpace = Number(res.data.totalSizeMB || 0);
+        this.activeSpace = Number(res.data.activeSizeMB ?? res.data.totalSizeMB ?? 0);
+        this.trashSpace = Number(res.data.trashSizeMB || 0);
+        this.sharedWithTrash = res.data.sharedWithTrash !== false;
         if (res.data.quotaMB) this.maxSpace = res.data.quotaMB;
         return true;
       } catch (error) {
@@ -175,7 +184,10 @@ export default defineStore('dom', {
       this.folderRequestVersion += 1;
       this.usedSpaceRequestVersion += 1;
       this.usedSpace = 0;
-      this.maxSpace = 512;
+      this.activeSpace = 0;
+      this.trashSpace = 0;
+      this.maxSpace = 1024;
+      this.sharedWithTrash = true;
       this.folderList = [];
       this.fileList = [];
       this.typeCheckValue = [...CLOUD_FILE_CATEGORY_ORDER];

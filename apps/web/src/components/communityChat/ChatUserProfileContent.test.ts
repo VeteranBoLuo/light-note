@@ -23,7 +23,7 @@ function profile(overrides: Partial<CommunityChatAuthorProfile> = {}): Community
     levelName: '书生',
     title: null,
     bio: '喜欢整理知识',
-    communityTenureLabel: '加入社区约 2 个月',
+    communityTenureLabel: '加入轻笺约 2 个月',
     achievements: [{ key: 'level_1', group: 'level' }],
     achievementCount: 2,
     hasMoreAchievements: true,
@@ -209,5 +209,29 @@ describe('ChatUserProfileContent', () => {
     expect(host.textContent).toContain('薄荷');
     expect(host.textContent).not.toContain(zhCN.communityChat.profile.ownLoadFailed);
     expect(onRequestOwn).not.toHaveBeenCalled();
+  });
+
+  it('编辑名片时成就卡片可打开大图详情，且不误触发保存', async () => {
+    const onSave = vi.fn();
+    const host = mountProfile({
+      profile: profile(),
+      ownProfile: ownProfile(),
+      isOwn: true,
+      authenticated: true,
+      onSave,
+    });
+
+    findButton(host, zhCN.communityChat.profile.editAction)?.click();
+    await nextTick();
+
+    const availableAchievement = host.querySelector<HTMLElement>('.chat-profile-content__available-item');
+    expect(availableAchievement).not.toBeNull();
+    availableAchievement?.click();
+    await nextTick();
+
+    expect(document.body.textContent).toContain(zhCN.communityChat.profile.achievementDetailTitle);
+    expect(document.body.textContent).toContain(zhCN.growth.achName.streak_7);
+    expect(document.body.textContent).toContain(zhCN.communityChat.profile.achievementUnlocked);
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

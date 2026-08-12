@@ -26,6 +26,7 @@ vi.mock('../db/index.js', () => ({ default: mocks.pool }));
 vi.mock('../util/common.js', () => ({
   resultData: (data, status = 200, msg = '') => ({ data, status, msg }),
   snakeCaseKeys: (value) => value,
+  L: (_req, zh) => zh,
 }));
 vi.mock('../util/growth.js', () => ({
   awardCreate: mocks.awardCreate,
@@ -93,10 +94,33 @@ function request() {
 describe('云空间普通上传覆盖随机 OBS 对象', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getUserSpaceMb.mockResolvedValue(512);
+    mocks.getUserSpaceMb.mockResolvedValue(1024);
     mocks.awardCreate.mockResolvedValue({});
     mocks.deleteObjectFromObs.mockResolvedValue({});
     mocks.getObjectMetadataFromObs.mockResolvedValue({ contentLength: 1024, contentType: 'image/png' });
+  });
+
+  it('签发上传地址前就按正常区与回收站共享容量阻止明显越额文件', async () => {
+    mocks.pool.query.mockImplementation(async (sql) => {
+      const text = String(sql);
+      if (text.includes('del_flag IN (0, 1)')) return [[{ used: 900 * 1024 * 1024 }]];
+      if (text.includes('file_name IN')) return [[{ used: 0 }]];
+      return [[]];
+    });
+    const req = request();
+    req.body.files = [{ fileName: 'large.zip', fileType: 'application/zip', fileSize: 200 * 1024 * 1024 }];
+    const res = response();
+    const handler = mocks.routes.get('/uploadFiles').at(-1);
+
+    await handler(req, res);
+
+    expect(mocks.pool.query.mock.calls.some(([sql]) => String(sql).includes('del_flag IN (0, 1)'))).toBe(true);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 413,
+        data: expect.objectContaining({ errorCode: 'STORAGE_QUOTA_EXCEEDED', shortfallMB: 76 }),
+      }),
+    );
   });
 
   it('事务提交成功后清理被同名上传替换的 AI 随机对象', async () => {
@@ -229,7 +253,7 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     };
     mocks.pool.getConnection.mockResolvedValue(connection);
     mocks.getObjectMetadataFromObs.mockResolvedValue({
-      contentLength: 513 * 1024 * 1024,
+      contentLength: 1025 * 1024 * 1024,
       contentType: 'application/zip',
     });
     const res = response();
@@ -241,5 +265,95 @@ describe('云空间普通上传覆盖随机 OBS 对象', () => {
     expect(connection.commit).not.toHaveBeenCalled();
     expect(connection.query).not.toHaveBeenCalledWith('INSERT INTO files SET ?', expect.anything());
     expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 413 }));
+  });
+
+  it('把回收站文件计入共享容量后拒绝越额上传', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        const text = String(sql);
+        if (text.includes('del_flag IN (0, 1)')) return [[{ used: 900 * 1024 * 1024 }]];
+        if (text.includes('file_name IN')) return [[{ used: 0 }]];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.getObjectMetadataFromObs.mockResolvedValue({
+      contentLength: 200 * 1024 * 1024,
+      contentType: 'application/zip',
+    });
+    const res = response();
+    const handler = mocks.routes.get('/confirmUpload').at(-1);
+
+    await handler(request(), res);
+
+    expect(connection.rollback).toHaveBeenCalledTimes(1);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('del_flag IN (0, 1)'))).toBe(true);
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 413,
+        data: expect.objectContaining({ errorCode: 'STORAGE_QUOTA_EXCEEDED', shortfallMB: 76 }),
+      }),
+    );
+  });
+
+  it('同名覆盖按新旧文件差额核算，替换为更小文件不会误报容量不足', async () => {
+    const connection = {
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn(),
+      release: vi.fn(),
+      query: vi.fn(async (sql) => {
+        const text = String(sql);
+        if (text.includes('del_flag IN (0, 1)')) return [[{ used: 1020 * 1024 * 1024 }]];
+        if (text.includes('file_name IN')) return [[{ used: 100 * 1024 * 1024 }]];
+        if (text.startsWith('SELECT * FROM files')) {
+          return [
+            [{ id: 5, file_name: 'avatar.png', file_size: 100 * 1024 * 1024, obs_key: 'files/user-1/avatar.png' }],
+          ];
+        }
+        if (text === 'INSERT INTO files SET ?') return [{ insertId: 9 }];
+        return [{ affectedRows: 1 }];
+      }),
+    };
+    mocks.pool.getConnection.mockResolvedValue(connection);
+    mocks.getObjectMetadataFromObs.mockResolvedValue({
+      contentLength: 80 * 1024 * 1024,
+      contentType: 'image/png',
+    });
+    const res = response();
+    const handler = mocks.routes.get('/confirmUpload').at(-1);
+
+    await handler(request(), res);
+
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    expect(connection.rollback).not.toHaveBeenCalled();
+    expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ status: 200 }));
+  });
+
+  it('容量接口返回正常区与回收站拆分，并以两者合计作为已用空间', async () => {
+    mocks.pool.query.mockResolvedValueOnce([
+      [{ activeBytes: 100 * 1024 * 1024, trashBytes: 25 * 1024 * 1024, totalBytes: 125 * 1024 * 1024 }],
+    ]);
+    const res = response();
+    const handler = mocks.routes.get('/queryTotalFileSize').at(-1);
+
+    await handler(request(), res);
+
+    expect(res.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 200,
+        data: {
+          totalSizeMB: 125,
+          activeSizeMB: 100,
+          trashSizeMB: 25,
+          quotaMB: 1024,
+          sharedWithTrash: true,
+        },
+      }),
+    );
   });
 });

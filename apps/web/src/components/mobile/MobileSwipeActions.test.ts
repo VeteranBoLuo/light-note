@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import MobileSwipeActions, { type MobileSwipeActionItem } from './MobileSwipeActions.vue';
+
+const source = readFileSync(resolve(process.cwd(), 'src/components/mobile/MobileSwipeActions.vue'), 'utf8');
 
 let cleanup: (() => void) | undefined;
 
@@ -48,6 +52,11 @@ afterEach(() => {
 });
 
 describe('MobileSwipeActions', () => {
+  it('拖动中保留卡片圆角，完全展开后才清除右圆角', () => {
+    expect(source).toContain('.mobile-swipe-delete.is-open .mobile-swipe-delete__content :deep(.todo-item)');
+    expect(source).not.toContain('.mobile-swipe-delete.is-dragging .mobile-swipe-delete__content :deep(.todo-item)');
+  });
+
   it('最多展示两个操作，并按操作总宽度展开', async () => {
     const { host, open } = mountSwipe([
       { key: 'complete', label: '完成整理', tone: 'success' },

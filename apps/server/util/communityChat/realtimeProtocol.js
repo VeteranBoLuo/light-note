@@ -7,8 +7,9 @@ export const COMMUNITY_CHAT_REALTIME_MAX_CLIENT_PAYLOAD_BYTES = 4096;
 
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
 const PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]{1,36}$/;
+const PRESENCE_CLIENT_ID_PATTERN = /^[A-Za-z0-9:_-]{12,80}$/;
 const CLIENT_MESSAGE_KEYS = new Set(['protocolVersion', 'type', 'requestId', 'payload']);
-const SUBSCRIBE_PAYLOAD_KEYS = new Set(['roomSlug']);
+const SUBSCRIBE_PAYLOAD_KEYS = new Set(['roomSlug', 'presenceClientId']);
 const BROADCAST_TYPES = new Set([
   'message.created',
   'message.updated',
@@ -47,8 +48,8 @@ function rawPayloadToString(raw) {
 }
 
 /**
- * 客户端目前只允许订阅唯一公共房间。身份、角色和内部 ID 没有可提交字段，
- * 因而即使恶意客户端尝试附带这些声明，也会因额外字段而失败关闭。
+ * 客户端目前只允许订阅唯一公共房间。身份、角色和内部 ID 没有可提交字段；
+ * presenceClientId 只用于游客同浏览器去重，不参与认证、权限或对外广播。
  */
 export function parseCommunityChatClientMessage(raw) {
   const text = rawPayloadToString(raw);
@@ -80,12 +81,19 @@ export function parseCommunityChatClientMessage(raw) {
   if (value.payload.roomSlug !== COMMUNITY_CHAT_PRIMARY_ROOM_SLUG) {
     throw protocolError('REALTIME_ROOM_UNAVAILABLE', 'Realtime room is unavailable');
   }
+  const presenceClientId = String(value.payload.presenceClientId || '');
+  if (presenceClientId && !PRESENCE_CLIENT_ID_PATTERN.test(presenceClientId)) {
+    throw protocolError('REALTIME_PRESENCE_CLIENT_ID_INVALID', 'Realtime presence client identifier is invalid');
+  }
 
   return {
     protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
     type: 'room.subscribe',
     requestId: value.requestId,
-    payload: { roomSlug: COMMUNITY_CHAT_PRIMARY_ROOM_SLUG },
+    payload: {
+      roomSlug: COMMUNITY_CHAT_PRIMARY_ROOM_SLUG,
+      ...(presenceClientId ? { presenceClientId } : {}),
+    },
   };
 }
 
@@ -166,6 +174,7 @@ export function normalizeCommunityChatBroadcastEvent(value) {
 
 export const __test__ = {
   BROADCAST_TYPES,
+  PRESENCE_CLIENT_ID_PATTERN,
   isPlainObject,
   normalizeBroadcastPayload,
   rawPayloadToString,

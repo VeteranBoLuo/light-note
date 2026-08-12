@@ -38,7 +38,7 @@
           @click.stop="activateCalendarItem(day, item)"
         >
           <span class="todo-calendar-item__main">
-            <time :datetime="item.startAt || item.dueAt || undefined">{{ scheduleTime(item) }}</time>
+            <time :datetime="itemDateTime(item) || undefined">{{ scheduleTime(item) }}</time>
             <strong>{{ item.title }}</strong>
           </span>
           <span class="todo-calendar-item__meta">
@@ -88,7 +88,7 @@
 
     <div v-else class="todo-agenda">
       <article v-for="entry in agendaItems" :key="entry.item.id" class="todo-agenda-item">
-        <time :datetime="entry.item.startAt || entry.item.dueAt || undefined">
+        <time :datetime="itemDateTime(entry.item) || undefined">
           <strong>{{ entry.day }}</strong>
           <span>{{ entry.time }}</span>
         </time>
@@ -199,7 +199,7 @@
         return {
           item,
           day: new Intl.DateTimeFormat(locale.value, { month: 'short', day: 'numeric', weekday: 'short' }).format(date),
-          time: new Intl.DateTimeFormat(locale.value, { hour: '2-digit', minute: '2-digit' }).format(date),
+          time: scheduleTime(item),
         };
       }),
   );
@@ -247,9 +247,13 @@
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
   function itemScheduleAt(item: TodoItem) {
-    return item.startAt || item.dueAt || '';
+    return item.startAt || item.dueAt || (item.occurrenceDate ? `${item.occurrenceDate} 00:00:00` : '');
+  }
+  function itemDateTime(item: TodoItem) {
+    return item.startAt || item.dueAt || item.occurrenceDate || '';
   }
   function scheduleTime(item: TodoItem) {
+    if (!item.startAt && !item.dueAt && item.occurrenceDate) return t('inbox.todoAllDay');
     const value = itemScheduleAt(item);
     if (!value) return '';
     const date = parseDate(value);

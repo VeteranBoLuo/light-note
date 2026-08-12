@@ -23,8 +23,7 @@ function authorRow(overrides = {}) {
     authorExp: 15000,
     authorTitleId: null,
     authorFrameId: 'frame_streak_seed',
-    authorJoinedAt: '2026-07-01T00:00:00.000Z',
-    authorMemberCreatedAt: '2026-07-01T00:00:00.000Z',
+    authorRegisteredAt: '2026-07-01T00:00:00.000Z',
     bio: '喜欢整理知识',
     showCommunityTenure: 1,
     featuredAchievements: null,
@@ -46,6 +45,7 @@ describe('communityChatProfileService', () => {
           expect(text).toContain('community_chat_blocks');
           expect(text).toContain('community_chat_message_deletions');
           expect(text).toContain('community_chat_member_profiles');
+          expect(text).toContain('account.create_time AS authorRegisteredAt');
           expect(params).toEqual([messagePublicId, 'general', 'viewer-1', 'viewer-1']);
           return [[authorRow()], []];
         }
@@ -84,7 +84,7 @@ describe('communityChatProfileService', () => {
       achievementCount: 4,
       hasMoreAchievements: true,
     });
-    expect(profile.communityTenureLabel).toMatch(/^加入社区约 \d+ 个月$/);
+    expect(profile.communityTenureLabel).toMatch(/^加入轻笺约 \d+ 个月$/);
     expect(profile).not.toHaveProperty('authorUserId');
     expect(profile).not.toHaveProperty('exp');
   });

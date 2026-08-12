@@ -50,7 +50,12 @@
           </template>
         </BInput>
       </div>
-      <HandleBtnGroup v-show="!bookmark.isMobile" ref="handleBtnGroup" class="header-handle-group" />
+      <HandleBtnGroup
+        v-show="!bookmark.isMobile"
+        ref="handleBtnGroup"
+        class="header-handle-group"
+        @storage-quota="openMobileStorageDetails"
+      />
     </template>
 
     <div
@@ -74,6 +79,7 @@
           {{ t('inbox.complete') }}
         </BButton>
       </div>
+      <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" class="mobile-cloud-storage" />
       <!-- 移动端不放第二个文本搜索框：找文件统一走顶栏全局搜索，这里只保留文件夹与类型筛选 -->
       <div v-if="bookmark.isMobile" class="mobile-folder-filter">
         <div ref="mobileFolderListRef" class="mobile-folder-list">
@@ -150,6 +156,7 @@
   import { scrollChipIntoCenter } from '@/utils/horizontalChipScroll';
   import { bookmarkStore, cloudSpaceStore, useUserStore } from '@/store';
   import HandleBtnGroup from '@/components/cloudSpace/HandleBtnGroup.vue';
+  import CloudStorageBar from '@/components/cloudSpace/CloudStorageBar.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import CloudFolder from '@/components/cloudSpace/CloudFolder.vue';
   import FileTypeFilter from '@/components/cloudSpace/FileTypeFilter.vue';
@@ -247,10 +254,15 @@
   }
 
   const handleBtnGroup = ref<HandleBtnGroupExposed | null>(null);
+  const mobileCloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
   const mobileFolderCreating = ref(false);
   const mobileFolderMutationId = ref('');
+
+  function openMobileStorageDetails(shortfallMb: number) {
+    mobileCloudStorageBar.value?.openDetails(shortfallMb);
+  }
   // 视图优先取用户偏好(设置页「云空间视图」/ 跨设备),再回退本浏览器独立缓存,最后卡片——与标签详情/资源中心对齐。
   // user 偏好在 App.vue setup 阶段已从 localStorage 早恢复,本路由组件 setup 时已就绪。
   const viewMode = ref<'card' | 'table'>(
@@ -934,6 +946,17 @@
 
   .mobile-folder-filter {
     margin-top: 4px;
+  }
+
+  .mobile-cloud-storage {
+    display: flex;
+    width: 100%;
+
+    :deep(.storage-usage) {
+      width: 100%;
+      min-width: 0;
+      padding: 6px 0;
+    }
   }
 
   .mobile-folder-list {
