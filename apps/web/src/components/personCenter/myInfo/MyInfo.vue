@@ -2,30 +2,26 @@
   <b-modal :mask-closable="false" :title="t('myInfo.title')" v-model:visible="visible" @close="visible = false">
     <div class="home-container">
       <div style="width: 100%" class="flex-justify-center">
-        <BUpload
-          accept="image/*"
-          :multiple="false"
-          :max-total-size="MAX_AVATAR_FILE_SIZE"
-          raw-file
-          @change="handleAvatarChange"
+        <BButton
+          class="user_icon"
+          :class="{ 'user_icon--framed': equippedFrameId }"
+          :disabled="user.role === 'visitor' || !user.id"
+          :aria-label="t('myInfo.chooseAvatar')"
+          v-click-log="{ module: '我的信息', operation: `选择头像` }"
+          @click="avatarPickerOpen = true"
         >
-          <template #default>
-            <div
-              class="user_icon"
-              :class="{ 'user_icon--framed': equippedFrameId }"
-              v-click-log="{ module: '我的信息', operation: `上传头像` }"
-            >
-              <AvatarFramePreview
-                v-if="equippedFrameId"
-                :frame-id="equippedFrameId"
-                :src="headPicture || icon.navigation.user"
-                :size="80"
-                :decorative="false"
-              />
-              <svg-icon v-else :src="headPicture || icon.navigation.user" :size="80" />
-            </div>
-          </template>
-        </BUpload>
+          <AvatarFramePreview
+            v-if="equippedFrameId"
+            :frame-id="equippedFrameId"
+            :src="headPicture || icon.navigation.user"
+            :size="80"
+            :decorative="false"
+          />
+          <svg-icon v-else :src="headPicture || icon.navigation.user" :size="80" />
+          <span v-if="user.role !== 'visitor' && user.id" class="user_icon__edit" aria-hidden="true">
+            <SvgIcon :src="icon.card_edit" :size="13" />
+          </span>
+        </BButton>
       </div>
       <div class="home-user-body">
         <div class="flex-align-center" style="gap: 20px">
@@ -72,6 +68,13 @@
     </template>
   </b-modal>
   <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" :z-index="720" @navigate="handleFrameNavigation" />
+  <AvatarPicker
+    v-model:open="avatarPickerOpen"
+    :current-src="headPicture"
+    :frame-id="equippedFrameId"
+    :z-index="730"
+    @select="handleAvatarSelected"
+  />
 </template>
 
 <script lang="ts" setup>
@@ -85,13 +88,13 @@
   import icon from '@/config/icon.ts';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import PassConfigDlg from '@/components/personCenter/myInfo/PassConfigDlg.vue';
-  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import { useI18n } from 'vue-i18n';
   import { recordOperation } from '@/api/commonApi.ts';
   import { useGrowth } from '@/composables/useGrowth.ts';
-  import { compressAvatarFile } from '@/utils/compressAvatar.ts';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
+  import AvatarPicker from '@/components/personCenter/myInfo/AvatarPicker.vue';
+  import { resolveAccountRoleKind } from '@/config/accountRole';
   import { frameVariant } from '@/config/growthFrames.ts';
   import router from '@/router';
   const user = useUserStore();
@@ -103,8 +106,8 @@
   const bookmark = bookmarkStore();
   const { growth, load: loadGrowth, loadGrowthTasks } = useGrowth();
   const { t, te } = useI18n();
-  const MAX_AVATAR_FILE_SIZE = 5000 * 1024;
   const frameDrawerOpen = ref(false);
+  const avatarPickerOpen = ref(false);
   const equippedFrameId = computed(() => {
     const id = growth.value?.equippedFrame;
     return frameVariant(id) ? id : null;
@@ -124,16 +127,9 @@
     { immediate: true },
   );
 
-  async function handleAvatarChange(files: File[]) {
-    const file = files?.[0];
-    if (!file) return;
-    try {
-      headPicture.value = await compressAvatarFile(file);
-      avatarChanged.value = true;
-    } catch (error) {
-      console.error('头像压缩失败:', error);
-      message.error(t('myInfo.imageProcessingFailed'));
-    }
+  function handleAvatarSelected(source: string) {
+    headPicture.value = source;
+    avatarChanged.value = true;
   }
 
   async function saveUserInfo() {
@@ -186,8 +182,9 @@
       admin: t('myInfo.admin'),
       visitor: t('myInfo.visitor'),
       root: t('myInfo.root'),
+      member: t('personCenter.member'),
     };
-    return roleNames[user.role] || t('myInfo.unknownRole');
+    return roleNames[resolveAccountRoleKind(user.role, user.id)];
   }
   const configPassVisible = ref(false);
   function handleConfigPassword() {
@@ -256,24 +253,31 @@
     cursor: pointer;
     overflow: hidden;
     position: relative;
-    &:hover::after {
-      content: ''; /* 移除硬编码文本 */
-      position: absolute; /* 绝对定位，相对于.preview-div定位 */
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(0, 0, 0, 0.5); /* 半透明的黑色背景 */
-      color: white; /* 文字颜色 */
-      display: flex; /* 使用flex布局使文字居中 */
-      justify-content: center; /* 水平居中 */
-      align-items: center; /* 垂直居中 */
-      font-size: 12px; /* 文字大小 */
+    padding: 0;
+    line-height: normal;
+    background: var(--surface-card-bg);
+    &:hover {
+      border-color: var(--primary-color);
     }
   }
   .user_icon--framed {
     overflow: visible;
     border-color: transparent;
+  }
+  .user_icon__edit {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 25px;
+    height: 25px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid var(--background-color);
+    border-radius: 50%;
+    color: #fff;
+    background: var(--primary-color);
+    pointer-events: none;
   }
   .frame-picker-entry {
     width: 100%;

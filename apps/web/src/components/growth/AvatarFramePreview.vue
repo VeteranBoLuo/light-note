@@ -1155,7 +1155,7 @@
     animation: frame-dragon-comet 4s ease-in-out infinite;
   }
 
-  /* 天穹：以大尺度日蚀星冕和斜贯双星轨压过龙曜，作为积分框的最高视觉档。 */
+  /* 天穹：以日蚀星冕和贴环星轨压过龙曜；星轨保留层次，但不再用夸张椭圆抢占主体。 */
   .avatar-frame--celestial .avatar-frame__ring {
     background:
       radial-gradient(circle at 70% 19%, #fff 0 2.8%, transparent 4%),
@@ -1295,16 +1295,16 @@
   .avatar-frame--celestial .avatar-frame__orbit {
     z-index: 3;
     display: block;
-    inset: -20% -29%;
-    border: 2.5px solid rgba(254, 240, 138, 0.94);
-    border-right-color: rgba(196, 181, 253, 0.76);
-    border-bottom-color: rgba(96, 165, 250, 0.24);
+    inset: -10% -13%;
+    border: 1.75px solid rgba(254, 240, 138, 0.82);
+    border-right-color: rgba(196, 181, 253, 0.62);
+    border-bottom-color: rgba(96, 165, 250, 0.18);
     border-radius: 50%;
     box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.9),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(253, 224, 71, 0.72),
-      inset 0 0 var(--frame-galaxy-orbit-glow) rgba(49, 46, 129, 0.74);
-    transform: rotate(24deg) scaleY(0.68);
+      0 0 var(--frame-galaxy-orbit-glow) rgba(255, 255, 255, 0.72),
+      0 0 var(--frame-galaxy-star-glow) rgba(253, 224, 71, 0.52),
+      inset 0 0 var(--frame-galaxy-orbit-glow) rgba(49, 46, 129, 0.58);
+    transform: rotate(18deg) scaleY(0.86);
     animation: frame-celestial-orbit 7.6s linear infinite;
   }
 
@@ -2614,7 +2614,7 @@
 
   @keyframes frame-celestial-orbit {
     to {
-      transform: rotate(384deg) scaleY(0.68);
+      transform: rotate(378deg) scaleY(0.86);
     }
   }
 

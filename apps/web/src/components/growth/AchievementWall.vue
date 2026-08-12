@@ -19,7 +19,8 @@
           v-for="a in byGroup(g)"
           :key="a.key"
           class="aw-badge"
-          :class="[{ unlocked: a.unlocked }, `tier-${medalTier(a, g)}`]"
+          :class="[{ unlocked: a.unlocked }, achievementCardClass(a)]"
+          :style="achievementVisualStyle(a.key, a.group)"
           :title="tipOf(a)"
           role="button"
           tabindex="0"
@@ -29,7 +30,7 @@
         >
           <div class="aw-badge__main">
             <div class="aw-medal">
-              <SvgIcon class="aw-symbol" :src="groupIcon(g)" size="25" />
+              <AchievementEmblem :achievement-key="a.key" :group="a.group" :locked="!a.unlocked" />
               <span v-if="!a.unlocked" class="aw-lock">
                 <SvgIcon :src="icon.growth.lock" size="11" />
               </span>
@@ -77,9 +78,7 @@
     <!-- 成就详情 -->
     <BModal v-if="detail" v-model:visible="detailVisible" :show-footer="false" width="340px" :mask-closable="true">
       <div class="awd">
-        <div class="awd-medal" :class="[{ unlocked: detail.unlocked }, `tier-${detailTier}`]">
-          <SvgIcon class="awd-symbol" :src="groupIcon(detail.group)" size="40" />
-        </div>
+        <AchievementEmblem :achievement-key="detail.key" :group="detail.group" :size="76" :locked="!detail.unlocked" />
         <div class="awd-name">{{ t(`growth.achName.${detail.key}`) }}</div>
         <div class="awd-desc">{{ conditionOf(detail) }}</div>
         <div v-if="detail.reward" class="awd-reward">
@@ -123,7 +122,9 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
+  import { achievementVisualFor, achievementVisualStyle } from '@/config/achievements.ts';
   import icon from '@/config/icon.ts';
 
   const props = withDefaults(
@@ -193,23 +194,14 @@
   function tipOf(a: Achievement) {
     return conditionOf(a);
   }
+  function achievementCardClass(a: Achievement) {
+    const visual = achievementVisualFor(a.key, a.group);
+    return [`aw-badge--${visual.rarity}`, { 'aw-badge--apex': visual.apex }];
+  }
   function frameName(frameId: string) {
     const key = `growth.shopItems.${frameId}.name`;
     return t(key);
   }
-  function groupIcon(group: string) {
-    return icon.growth[group as keyof typeof icon.growth] || icon.growth.level;
-  }
-  function medalTier(a: Achievement, group: string) {
-    const all = props.achievements.filter((item) => item.group === group);
-    const index = Math.max(
-      0,
-      all.findIndex((item) => item.key === a.key),
-    );
-    const ratio = all.length > 1 ? index / (all.length - 1) : 1;
-    return ratio >= 0.67 ? 'gold' : ratio >= 0.34 ? 'silver' : 'bronze';
-  }
-  const detailTier = computed(() => (detail.value ? medalTier(detail.value, detail.value.group) : 'bronze'));
 </script>
 
 <style scoped lang="less">
@@ -285,19 +277,31 @@
   }
   .aw-badge:not(.unlocked):hover {
     transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary-color) 40%, transparent);
+    border-color: var(--achievement-border);
   }
   .aw-badge.unlocked {
-    border-color: #d99a12;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, #fbbf24 12%, var(--background-color)),
-      var(--background-color)
-    );
+    border-color: var(--achievement-border);
+    background: linear-gradient(180deg, var(--achievement-surface), var(--background-color) 64%);
   }
   .aw-badge.unlocked:hover {
     transform: translateY(-2px);
-    box-shadow: 0 10px 22px -14px color-mix(in srgb, #fbbf24 80%, transparent);
+    box-shadow: 0 10px 22px -14px var(--achievement-shadow);
+  }
+  .aw-badge--legendary.unlocked,
+  .aw-badge--mythic.unlocked {
+    border-color: var(--achievement-border);
+    background:
+      radial-gradient(circle at 15% 0, var(--achievement-metal-glow), transparent 34%),
+      linear-gradient(180deg, var(--achievement-surface), var(--background-color) 70%);
+  }
+  .aw-badge--mythic.unlocked {
+    box-shadow: inset 0 1px 0 var(--achievement-metal-highlight);
+  }
+  .aw-badge--apex.unlocked {
+    border-width: 2px;
+    background:
+      radial-gradient(circle at 14% 0, var(--achievement-metal-glow), transparent 42%),
+      linear-gradient(180deg, var(--achievement-surface), var(--background-color) 74%);
   }
   .aw-badge__main {
     min-width: 0;
@@ -310,45 +314,15 @@
     position: relative;
     width: 46px;
     height: 46px;
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
   }
   .aw-copy {
     min-width: 0;
     display: flex;
     flex-direction: column;
     gap: 4px;
-  }
-  .aw-badge.unlocked .aw-medal {
-    color: #fff;
-    border-color: currentColor;
-  }
-  .aw-badge.unlocked.tier-bronze .aw-medal {
-    background: #b66f3f;
-  }
-  .aw-badge.unlocked.tier-silver .aw-medal {
-    background: #7d8ca3;
-  }
-  .aw-badge.unlocked.tier-gold .aw-medal {
-    background: #d99a12;
-  }
-  .aw-badge:not(.unlocked).tier-bronze .aw-medal {
-    color: #9a5f39;
-  }
-  .aw-badge:not(.unlocked).tier-silver .aw-medal {
-    color: #708096;
-  }
-  .aw-badge:not(.unlocked).tier-gold .aw-medal {
-    color: #b77b05;
-  }
-  .aw-symbol {
-    opacity: 0.55;
-  }
-  .aw-badge.unlocked .aw-symbol {
-    opacity: 1;
   }
   .aw-lock {
     position: absolute;
@@ -363,6 +337,7 @@
     background: var(--desc-color);
     color: var(--background-color);
     box-shadow: 0 0 0 2px var(--background-color);
+    pointer-events: none;
   }
   .aw-name {
     font-size: 13px;
@@ -561,6 +536,24 @@
       width: 100%;
     }
   }
+
+  [data-theme='night'] .aw-badge.unlocked {
+    background: linear-gradient(180deg, var(--achievement-night-surface), var(--background-color) 68%);
+  }
+
+  [data-theme='night'] .aw-badge--legendary.unlocked,
+  [data-theme='night'] .aw-badge--mythic.unlocked,
+  [data-theme='night'] .aw-badge--apex.unlocked {
+    background:
+      radial-gradient(circle at 15% 0, var(--achievement-metal-glow), transparent 36%),
+      linear-gradient(180deg, var(--achievement-night-surface), var(--background-color) 72%);
+  }
+
+  html.light-note-mobile-rendering .aw-badge,
+  html.light-note-mobile-rendering .aw-badge.unlocked {
+    border-color: var(--achievement-border);
+    box-shadow: none;
+  }
 </style>
 
 <!-- 成就详情弹窗内容 teleport 到 body,scoped 命不中,单独非 scoped 块 -->
@@ -572,33 +565,6 @@
     gap: 10px;
     padding: 22px 20px 8px;
     text-align: center;
-  }
-  .awd-medal {
-    width: 76px;
-    height: 76px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: color-mix(in srgb, var(--card-border-color) 28%, transparent);
-  }
-  .awd-medal.unlocked {
-    color: #fff;
-  }
-  .awd-medal.unlocked.tier-bronze {
-    background: #b66f3f;
-  }
-  .awd-medal.unlocked.tier-silver {
-    background: #7d8ca3;
-  }
-  .awd-medal.unlocked.tier-gold {
-    background: #d99a12;
-  }
-  .awd-symbol {
-    opacity: 0.55;
-  }
-  .awd-medal.unlocked .awd-symbol {
-    opacity: 1;
   }
   .awd-name {
     font-size: 17px;

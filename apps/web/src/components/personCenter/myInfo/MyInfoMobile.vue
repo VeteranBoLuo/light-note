@@ -2,36 +2,28 @@
   <CommonContainer :title="t('myInfo.title')" @backClick="handleBack">
     <div class="profile-page">
       <section class="profile-hero" aria-live="polite">
-        <BUpload
-          accept="image/*"
-          :multiple="false"
-          :max-total-size="MAX_AVATAR_FILE_SIZE"
+        <BButton
+          class="profile-avatar"
+          :class="{ 'profile-avatar--disabled': isGuest, 'profile-avatar--framed': equippedFrameId }"
           :disabled="isGuest"
-          raw-file
-          @change="handleAvatarChange"
+          :aria-label="t('myInfo.chooseAvatar')"
+          v-click-log="{ module: '我的信息', operation: `选择头像` }"
+          @click="avatarPickerOpen = true"
         >
-          <template #default>
-            <div
-              class="profile-avatar"
-              :class="{ 'profile-avatar--disabled': isGuest, 'profile-avatar--framed': equippedFrameId }"
-              v-click-log="{ module: '我的信息', operation: `上传头像` }"
-            >
-              <AvatarFramePreview
-                v-if="equippedFrameId"
-                :frame-id="equippedFrameId"
-                :src="headPicture || icon.navigation.user"
-                :size="84"
-                :decorative="false"
-              />
-              <div v-else class="profile-avatar__image">
-                <SvgIcon :src="headPicture || icon.navigation.user" :size="84" />
-              </div>
-              <span v-if="!isGuest" class="profile-avatar__edit" aria-hidden="true">
-                <SvgIcon :src="icon.card_edit" :size="14" />
-              </span>
-            </div>
-          </template>
-        </BUpload>
+          <AvatarFramePreview
+            v-if="equippedFrameId"
+            :frame-id="equippedFrameId"
+            :src="headPicture || icon.navigation.user"
+            :size="84"
+            :decorative="false"
+          />
+          <div v-else class="profile-avatar__image">
+            <SvgIcon :src="headPicture || icon.navigation.user" :size="84" />
+          </div>
+          <span v-if="!isGuest" class="profile-avatar__edit" aria-hidden="true">
+            <SvgIcon :src="icon.card_edit" :size="14" />
+          </span>
+        </BButton>
 
         <div class="profile-hero__copy">
           <strong class="profile-hero__name">{{ displayAlias }}</strong>
@@ -121,6 +113,12 @@
 
     <PassConfigDlg v-model:visible="configPassVisible" />
     <AvatarFramePickerDrawer v-model:open="frameDrawerOpen" @navigate="handleFrameNavigation" />
+    <AvatarPicker
+      v-model:open="avatarPickerOpen"
+      :current-src="headPicture"
+      :frame-id="equippedFrameId"
+      @select="handleAvatarSelected"
+    />
   </CommonContainer>
 </template>
 
@@ -130,7 +128,6 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
-  import BUpload from '@/components/base/BasicComponents/BUpload.vue';
   import CommonContainer from '@/components/base/BasicComponents/CommonContainer.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
@@ -142,10 +139,11 @@
   import PassConfigDlg from './PassConfigDlg.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
+  import AvatarPicker from './AvatarPicker.vue';
+  import { resolveAccountRoleKind } from '@/config/accountRole';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
-  import { compressAvatarFile } from '@/utils/compressAvatar.ts';
   import router from '@/router';
 
   interface ProfileSnapshot {
@@ -159,12 +157,12 @@
   const { growth, load: loadGrowth, loadGrowthTasks } = useGrowth();
   const { t, te } = useI18n();
 
-  const MAX_AVATAR_FILE_SIZE = 5000 * 1024;
   const headPicture = ref('');
   const avatarChanged = ref(false);
   const saving = ref(false);
   const configPassVisible = ref(false);
   const frameDrawerOpen = ref(false);
+  const avatarPickerOpen = ref(false);
   const visible = defineModel<boolean>('visible');
   const userData = ref({ alias: '', email: '' });
   const originalProfile = ref({ alias: '', email: '' });
@@ -231,17 +229,10 @@
     { deep: true },
   );
 
-  async function handleAvatarChange(files: File[]) {
+  function handleAvatarSelected(source: string) {
     if (isGuest.value) return;
-    const file = files?.[0];
-    if (!file) return;
-    try {
-      headPicture.value = await compressAvatarFile(file);
-      avatarChanged.value = true;
-    } catch (error) {
-      console.error('头像压缩失败:', error);
-      message.error(t('myInfo.imageProcessingFailed'));
-    }
+    headPicture.value = source;
+    avatarChanged.value = true;
   }
 
   function handleConfigPassword() {
@@ -332,9 +323,9 @@
       admin: t('myInfo.admin'),
       visitor: t('myInfo.visitor'),
       root: t('myInfo.root'),
-      user: t('personCenter.member'),
+      member: t('personCenter.member'),
     };
-    return roleNames[user.role] || t('myInfo.unknownRole');
+    return roleNames[resolveAccountRoleKind(user.role, user.id)];
   }
 </script>
 
@@ -373,6 +364,8 @@
     color: var(--primary-color);
     background: var(--surface-panel-bg);
     cursor: pointer;
+    padding: 0;
+    line-height: normal;
     transition:
       border-color 0.2s,
       background-color 0.2s;

@@ -74,7 +74,10 @@ describe('mobile personal center experience', () => {
     );
     expect(avatarFrameSource).toMatch(/\.avatar-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(avatarFrameSource).toMatch(
-      /\.avatar-frame--celestial \.avatar-frame__orbit\s*\{[\s\S]*?inset:\s*-20% -29%[\s\S]*?frame-celestial-orbit/,
+      /\.avatar-frame--celestial \.avatar-frame__orbit\s*\{[\s\S]*?inset:\s*-10% -13%[\s\S]*?transform:\s*rotate\(18deg\) scaleY\(0\.86\);[\s\S]*?frame-celestial-orbit/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /@keyframes frame-celestial-orbit\s*\{[\s\S]*?transform:\s*rotate\(378deg\) scaleY\(0\.86\);/,
     );
     expect(avatarFrameSource).toMatch(
       /\.avatar-frame--celestial \.avatar-frame__motif\s*\{[\s\S]*?border:\s*var\(--frame-constellation-stroke\) dotted/,

@@ -195,9 +195,12 @@
                 :key="achievement.key"
                 class="chat-profile-content__selected-item"
               >
-                <span class="chat-profile-content__achievement-icon" aria-hidden="true">
-                  <SvgIcon :src="achievementIcon(achievement.group)" size="16" />
-                </span>
+                <AchievementEmblem
+                  class="chat-profile-content__achievement-icon"
+                  :achievement-key="achievement.key"
+                  :group="achievement.group"
+                  :size="30"
+                />
                 <span>
                   <strong>{{ achievementName(achievement.key) }}</strong>
                   <small>{{ achievementGroupName(achievement.group) }}</small>
@@ -247,9 +250,12 @@
                 :disabled="draftFeaturedKeys.length >= 3"
                 @click="addAchievement(achievement.key)"
               >
-                <span class="chat-profile-content__achievement-icon" aria-hidden="true">
-                  <SvgIcon :src="achievementIcon(achievement.group)" size="15" />
-                </span>
+                <AchievementEmblem
+                  class="chat-profile-content__achievement-icon"
+                  :achievement-key="achievement.key"
+                  :group="achievement.group"
+                  :size="30"
+                />
                 <span>
                   <strong>{{ achievementName(achievement.key) }}</strong>
                   <small>{{ achievementGroupName(achievement.group) }}</small>
@@ -289,6 +295,7 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import AchievementEmblem from '@/components/growth/AchievementEmblem.vue';
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
@@ -350,19 +357,6 @@
   const draftShowTenure = ref(true);
   const draftFeaturedKeys = ref<string[]>([]);
   const draftBaseRevision = ref(0);
-
-  const achievementIcons: Record<string, string> = {
-    checkin: icon.growth.checkin,
-    create: icon.growth.create,
-    action: icon.growth.action,
-    organize: icon.growth.organize,
-    level: icon.growth.level,
-    tenure: icon.growth.tenure,
-  };
-
-  function achievementIcon(group: string) {
-    return achievementIcons[group] || icon.growth.reward;
-  }
 
   function achievementName(key: string) {
     const i18nKey = `growth.achName.${key}`;
@@ -446,7 +440,11 @@
           },
           gridProps.achievements.map((achievement) =>
             h('span', { class: 'chat-profile-content__achievement', key: achievement.key }, [
-              h('span', { 'aria-hidden': 'true' }, [h(SvgIcon, { src: achievementIcon(achievement.group), size: 16 })]),
+              h(AchievementEmblem, {
+                achievementKey: achievement.key,
+                group: achievement.group,
+                size: 30,
+              }),
               h('span', [
                 h('strong', achievementName(achievement.key)),
                 h('small', achievementGroupName(achievement.group)),
@@ -796,15 +794,8 @@
     background: var(--card-background);
   }
 
-  .chat-profile-content__achievement > span:first-child,
   .chat-profile-content__achievement-icon {
-    width: 30px;
-    height: 30px;
-    display: grid;
-    place-items: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 10px;
-    color: var(--primary-color);
+    align-self: center;
   }
 
   .chat-profile-content__achievement > span:last-child,
