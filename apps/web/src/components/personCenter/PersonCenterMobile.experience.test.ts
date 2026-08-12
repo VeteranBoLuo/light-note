@@ -26,6 +26,13 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).not.toContain('profile-overview');
   });
 
+  it('shows only the account email in the profile summary and keeps role labels inside profile editing', () => {
+    expect(personCenterSource).toContain('<span v-if="user.email">{{ user.email }}</span>');
+    expect(personCenterSource).not.toContain('{{ roleName }}');
+    expect(myInfoSource).toContain('resolveAccountRoleLabelKey(user.role, user.id)');
+    expect(desktopMyInfoSource).toContain('resolveAccountRoleLabelKey(user.role, user.id)');
+  });
+
   it('keeps co-build visible in both desktop and mobile personal centers for visitors', () => {
     expect(personCenterSource).toContain("goToProfileModule('/co-build')");
     expect(personCenterSource).toContain("t('personCenter.coBuildDesc')");

@@ -24,9 +24,7 @@
             </BButton>
             <div class="profile-card__copy">
               <strong>{{ user.alias || t('personCenter.defaultNickname') }}</strong>
-              <span
-                >{{ roleName }}<template v-if="user.email"> · {{ user.email }}</template></span
-              >
+              <span v-if="user.email">{{ user.email }}</span>
             </div>
             <BButton class="profile-card__edit" @click="goToProfileModule('/myInfo')">
               <SvgIcon :src="icon.card_edit" size="15" aria-hidden="true" />
@@ -272,12 +270,6 @@
         ? t('pwa.directAvailableShort')
         : t('pwa.addToHomeScreen'),
   );
-  const roleName = computed(() => {
-    if (user.role === 'root') return t('myInfo.root');
-    if (user.role === 'admin') return t('myInfo.admin');
-    if (user.role === 'visitor') return t('myInfo.visitor');
-    return t('personCenter.member');
-  });
   useMobileTopBar(['personCenter'], {
     searchMode: 'icon',
   });

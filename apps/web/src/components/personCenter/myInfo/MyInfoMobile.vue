@@ -140,7 +140,7 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
   import AvatarPicker from './AvatarPicker.vue';
-  import { resolveAccountRoleKind } from '@/config/accountRole';
+  import { resolveAccountRoleLabelKey } from '@/config/accountRole';
   import MobileStickyActionBar from '@/components/mobile/MobileStickyActionBar.vue';
   import { useGrowth } from '@/composables/useGrowth.ts';
   import { frameVariant } from '@/config/growthFrames';
@@ -319,13 +319,7 @@
   }
 
   function getRoleName() {
-    const roleNames = {
-      admin: t('myInfo.admin'),
-      visitor: t('myInfo.visitor'),
-      root: t('myInfo.root'),
-      member: t('personCenter.member'),
-    };
-    return roleNames[resolveAccountRoleKind(user.role, user.id)];
+    return t(resolveAccountRoleLabelKey(user.role, user.id));
   }
 </script>
 

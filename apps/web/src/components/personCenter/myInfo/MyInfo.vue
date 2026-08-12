@@ -94,7 +94,7 @@
   import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue';
   import AvatarFramePickerDrawer from '@/components/growth/AvatarFramePickerDrawer.vue';
   import AvatarPicker from '@/components/personCenter/myInfo/AvatarPicker.vue';
-  import { resolveAccountRoleKind } from '@/config/accountRole';
+  import { resolveAccountRoleLabelKey } from '@/config/accountRole';
   import { frameVariant } from '@/config/growthFrames.ts';
   import router from '@/router';
   const user = useUserStore();
@@ -178,13 +178,7 @@
   }
 
   function getRoleName() {
-    const roleNames = {
-      admin: t('myInfo.admin'),
-      visitor: t('myInfo.visitor'),
-      root: t('myInfo.root'),
-      member: t('personCenter.member'),
-    };
-    return roleNames[resolveAccountRoleKind(user.role, user.id)];
+    return t(resolveAccountRoleLabelKey(user.role, user.id));
   }
   const configPassVisible = ref(false);
   function handleConfigPassword() {
