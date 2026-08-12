@@ -29,24 +29,32 @@
       <span class="note-parent-path__text">{{ parentPathText }}</span>
     </BButton>
     <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
-      <!-- 摘要始终按纯文本插值渲染；图片走独立、受控的缩略图地址，绝不恢复 v-html。 -->
-      <div class="note-content">{{ summary }}</div>
-      <div v-if="hasPreviewImage" class="note-preview-media" aria-hidden="true">
-        <img
-          class="note-preview-image"
-          :class="{ 'is-loaded': previewImageLoaded }"
-          :src="previewImageUrl"
-          alt=""
-          width="720"
-          height="405"
-          loading="lazy"
-          decoding="async"
-          fetchpriority="low"
-          draggable="false"
-          @load="previewImageLoaded = true"
-          @error="previewImageFailed = true"
-        />
-      </div>
+      <!-- 正文仍只做纯文本插值；压缩首图按正文原顺序插入，绝不恢复 v-html。 -->
+      <template v-if="hasPreviewImage">
+        <div v-if="previewTextBeforeImage" class="note-content note-content--segment">
+          {{ previewTextBeforeImage }}
+        </div>
+        <div class="note-preview-media" aria-hidden="true">
+          <img
+            class="note-preview-image"
+            :class="{ 'is-loaded': previewImageLoaded }"
+            :src="displayPreviewImageUrl"
+            alt=""
+            width="720"
+            height="405"
+            loading="lazy"
+            decoding="async"
+            fetchpriority="low"
+            draggable="false"
+            @load="previewImageLoaded = true"
+            @error="handlePreviewImageError"
+          />
+        </div>
+        <div v-if="previewTextAfterImage" class="note-content note-content--segment">
+          {{ previewTextAfterImage }}
+        </div>
+      </template>
+      <div v-else class="note-content">{{ summary }}</div>
     </div>
     <div class="note-footer">
       <div class="note-footer-chips">
@@ -85,7 +93,9 @@
     </div>
     <div v-else-if="!batchMode" class="note-mobile-actions" @click.stop>
       <BButton class="note-more-button" :aria-label="$t('common.more')" @click="emit('action', 'more')">
-        <SvgIcon :src="icon.common.more" size="18" />
+        <span class="note-more-button__visual">
+          <SvgIcon :src="icon.common.more" size="18" />
+        </span>
       </BButton>
     </div>
   </div>
@@ -104,7 +114,8 @@
   import icon from '@/config/icon.ts';
   import NoteFormatBadge from '@/components/noteLibrary/library/NoteFormatBadge.vue';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
-  import { useNoteSummary } from '@/composables/useNoteSummary';
+  import { useNoteCardPreview } from '@/composables/useNoteSummary';
+  import { notePreviewOriginalImageUrl } from '@/utils/noteSummary';
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
@@ -117,8 +128,12 @@
     },
   );
 
-  // 摘要统一走 noteSummaryText(只信 note.type,Markdown 过 marked 再取纯文本)
-  const summary = useNoteSummary(() => props.note, { maxLength: 300 });
+  // 正文与首图顺序共用一次安全解析；图片仍只加载服务端生成的压缩缩略图。
+  const {
+    summary,
+    beforeImage: previewTextBeforeImage,
+    afterImage: previewTextAfterImage,
+  } = useNoteCardPreview(() => props.note, { maxLength: 300 });
 
   const bookmark = bookmarkStore();
   const user = useUserStore();
@@ -145,12 +160,31 @@
   const previewImageFailed = ref(false);
   const previewImageLoaded = ref(false);
   const previewImageUrl = computed(() => String(props.note?.previewImageUrl || '').trim());
+  const displayPreviewImageUrl = ref('');
   const hasPreviewImage = computed(() => Boolean(previewImageUrl.value) && !previewImageFailed.value);
 
-  watch(previewImageUrl, () => {
-    previewImageFailed.value = false;
-    previewImageLoaded.value = false;
-  });
+  watch(
+    previewImageUrl,
+    (url) => {
+      displayPreviewImageUrl.value = url;
+      previewImageFailed.value = false;
+      previewImageLoaded.value = false;
+    },
+    { immediate: true },
+  );
+
+  function handlePreviewImageError() {
+    const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
+    const isLocalDevelopment = import.meta.env.DEV && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname);
+    const originalImageUrl = notePreviewOriginalImageUrl(previewImageUrl.value);
+    if (isLocalDevelopment && originalImageUrl && displayPreviewImageUrl.value !== originalImageUrl) {
+      // 本机通常没有生产 /www 缩略图目录；仅开发环境回退原图，线上/App 始终使用压缩图。
+      displayPreviewImageUrl.value = originalImageUrl;
+      previewImageLoaded.value = false;
+      return;
+    }
+    previewImageFailed.value = true;
+  }
 
   const MAX_VISIBLE_TAGS = 3;
   const visibleTags = computed(() => (props.note.tags || []).slice(0, MAX_VISIBLE_TAGS));
@@ -266,15 +300,11 @@
   }
 
   .note-preview-body {
-    display: flex;
+    display: block;
     flex: 1 1 auto;
     min-height: 0;
     margin-top: 10px;
     overflow: hidden;
-
-    &.has-image {
-      gap: 12px;
-    }
   }
 
   .note-content {
@@ -283,7 +313,6 @@
     color: var(--desc-color);
     font-size: 13px;
     line-height: 1.58;
-    flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
     max-height: 100%;
@@ -303,17 +332,34 @@
       background: linear-gradient(to bottom, transparent, var(--note-card-bg));
       pointer-events: none;
     }
+
+    &--segment {
+      overflow: visible;
+      max-height: none;
+
+      &::after {
+        display: none;
+      }
+    }
+  }
+
+  .note-preview-body:not(.has-image) .note-content {
+    height: 100%;
   }
 
   .note-preview-media {
-    flex: 0 0 clamp(88px, 34%, 112px);
-    align-self: stretch;
-    min-height: 0;
-    max-height: 112px;
+    width: 100%;
+    height: 112px;
     overflow: hidden;
     border: 1px solid var(--surface-border-color);
     border-radius: 9px;
     background: var(--surface-panel-bg);
+    box-sizing: border-box;
+  }
+
+  .note-content + .note-preview-media,
+  .note-preview-media + .note-content {
+    margin-top: 8px;
   }
 
   .note-preview-image {
@@ -457,24 +503,41 @@
 
   .note-mobile-actions {
     position: absolute;
-    top: 12px;
+    top: 6px;
     right: 12px;
     z-index: 3;
   }
 
-  .note-more-button {
+  .note-mobile-actions > .note-more-button {
     width: 30px;
     min-width: 30px;
     height: 30px;
     padding: 0;
     border-radius: 8px;
     color: var(--desc-color);
-    background: color-mix(in srgb, var(--card-background) 88%, transparent);
+    background: transparent;
+  }
+
+  .note-more-button__visual {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--primary-btn-bg-color);
+    transition: background-color 0.2s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .note-mobile-actions > .note-more-button:hover .note-more-button__visual {
+      background: var(--primary-btn-h-bg-color);
+    }
   }
 
   @media (max-width: 1023px) {
-    /* 触控目标按移动端最小热区处理。 */
-    .note-more-button {
+    /* 44px 只承担触控热区，可见灰块仍保持 30px。 */
+    .note-mobile-actions > .note-more-button {
       width: 44px;
       min-width: 44px;
       height: 44px;
@@ -492,16 +555,12 @@
     }
 
     .note-title-row {
-      padding-right: 34px;
+      padding-right: 44px;
     }
 
     .note-content {
       word-break: break-word;
       overflow-wrap: break-word;
-    }
-
-    .note-preview-body.has-image {
-      gap: 10px;
     }
 
     .note-content::after {

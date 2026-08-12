@@ -241,20 +241,19 @@
   const logColumns = computed(() =>
     bookmark.isMobile
       ? [
-          { title: t('adminApiLog.columns.user'), key: 'user', width: '86px' },
-          { title: t('adminApiLog.columns.time'), key: 'mobileTime', width: '74px' },
+          { title: t('adminApiLog.columns.user'), key: 'user', width: '80px' },
+          { title: t('adminApiLog.columns.time'), key: 'mobileTime', width: '100px' },
           { title: t('adminOperationLog.columns.operation'), key: 'action', width: 'minmax(0, 1fr)' },
         ]
       : [
-          { title: t('adminApiLog.columns.user'), key: 'alias', width: '130px' },
-          { title: t('adminApiLog.columns.time'), key: 'requestTime', width: '160px' },
+          { title: t('adminApiLog.columns.user'), key: 'alias', width: '150px' },
+          { title: t('adminApiLog.columns.time'), key: 'requestTime' },
           { title: t('adminApiLog.columns.method'), key: 'method', width: '72px' },
           { title: t('adminApiLog.columns.status'), key: 'statusCode', width: '74px', ellipsis: false },
           { title: t('adminApiLog.columns.duration'), key: 'durationMs', width: '88px' },
-          { title: t('adminApiLog.columns.url'), key: 'url', width: 'minmax(200px, 1.6fr)' },
-          { title: t('adminApiLog.columns.requestId'), key: 'requestId', width: '118px' },
-          { title: t('apiLog.operatingSystem'), key: 'system', width: '105px' },
-          { title: t('apiLog.runtime'), key: 'runtime', width: '100px' },
+          { title: t('adminApiLog.columns.url'), key: 'url', width: '1fr' },
+          { title: t('apiLog.operatingSystem'), key: 'system', width: '80px' },
+          { title: t('apiLog.runtime'), key: 'runtime', width: '80px' },
         ],
   );
 

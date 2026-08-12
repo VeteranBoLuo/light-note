@@ -4,6 +4,8 @@ import path from 'node:path';
 
 export const NOTE_CARD_PREVIEW_MAX_TEXT = 280;
 export const NOTE_CARD_PREVIEW_MAX_BLOCKS = 3;
+export const NOTE_CARD_PREVIEW_SUMMARY_MAX_LENGTH = 300;
+const NOTE_CARD_PREVIEW_SOURCE_MAX_LENGTH = 4000;
 
 const TRUSTED_ORIGINS = new Set(['https://boluo66.top', 'http://boluo66.top']);
 const SAFE_IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
@@ -37,6 +39,7 @@ const BLOCK_TAGS = new Set([
   'ul',
 ]);
 const IGNORED_TAGS = new Set(['code', 'pre', 'script', 'style', 'svg']);
+const SUMMARY_IGNORED_TAGS = new Set(['head', 'noscript', 'script', 'style', 'svg', 'template', 'title']);
 
 function cleanCandidateUrl(value) {
   const raw = String(value || '')
@@ -72,7 +75,43 @@ function sourceFromSrcset(value) {
   return first || '';
 }
 
-function inspectHtmlPreview(content) {
+function isMermaidSourceNode(node) {
+  if (String(node?.name || '').toLowerCase() !== 'pre') return false;
+  if (/language-mermaid/u.test(String(node.attribs?.class || ''))) return true;
+  return (node.children || []).some(
+    (child) =>
+      String(child?.name || '').toLowerCase() === 'code' &&
+      /language-mermaid/u.test(String(child.attribs?.class || '')),
+  );
+}
+
+function normalizePreviewLine(value) {
+  return String(value || '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function truncatePreviewText(value, maxLength) {
+  const text = String(value || '');
+  if (maxLength <= 0 || text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength).trimEnd()}…`;
+}
+
+function truncatePreviewParts(beforeImage, afterImage, maxLength, separator) {
+  if (maxLength <= 0 || beforeImage.length + separator.length + afterImage.length <= maxLength) {
+    return { beforeImage, afterImage };
+  }
+  if (beforeImage.length >= maxLength) {
+    return { beforeImage: truncatePreviewText(beforeImage, maxLength), afterImage: '' };
+  }
+  const remaining = Math.max(0, maxLength - beforeImage.length - separator.length);
+  return {
+    beforeImage,
+    afterImage: remaining > 0 ? truncatePreviewText(afterImage, remaining) : '',
+  };
+}
+
+function inspectHtmlCardPreview(content) {
   const document = parseDocument(String(content || ''), {
     decodeEntities: true,
     lowerCaseAttributeNames: true,
@@ -81,92 +120,97 @@ function inspectHtmlPreview(content) {
   let textLength = 0;
   let blocks = 0;
   let imageUrl = '';
+  let buffer = '';
+  const beforeImage = [];
+  const afterImage = [];
 
-  const visit = (nodes, ignored = false) => {
+  const flush = () => {
+    const text = normalizePreviewLine(buffer);
+    if (text) (imageUrl ? afterImage : beforeImage).push(text);
+    buffer = '';
+  };
+
+  const visit = (nodes, summaryIgnored = false, imageLocationIgnored = false) => {
     for (const node of nodes || []) {
-      if (imageUrl || textLength > NOTE_CARD_PREVIEW_MAX_TEXT || blocks > NOTE_CARD_PREVIEW_MAX_BLOCKS) return;
       if (node.type === 'text') {
-        if (!ignored)
-          textLength += String(node.data || '')
-            .replace(/\s+/gu, ' ')
-            .trim().length;
+        if (!summaryIgnored) buffer += String(node.data || '');
+        if (!imageUrl && !imageLocationIgnored) textLength += normalizePreviewLine(node.data).length;
         continue;
       }
       if (node.type !== 'tag') continue;
       const tagName = String(node.name || '').toLowerCase();
-      const childIgnored = ignored || IGNORED_TAGS.has(tagName);
-      if (!childIgnored && BLOCK_TAGS.has(tagName)) blocks += 1;
-      if (!childIgnored && (tagName === 'img' || tagName === 'source')) {
-        const candidate = tagName === 'img' ? node.attribs?.src : sourceFromSrcset(node.attribs?.srcset);
-        imageUrl = cleanCandidateUrl(candidate);
-        if (imageUrl) return;
+      const childSummaryIgnored = summaryIgnored || SUMMARY_IGNORED_TAGS.has(tagName) || isMermaidSourceNode(node);
+      const childImageLocationIgnored = imageLocationIgnored || IGNORED_TAGS.has(tagName);
+      const isBlock = !childSummaryIgnored && BLOCK_TAGS.has(tagName);
+      if (isBlock) {
+        flush();
+        if (!imageUrl && !childImageLocationIgnored) blocks += 1;
       }
-      visit(node.children, childIgnored);
+      if (
+        !imageUrl &&
+        !childImageLocationIgnored &&
+        textLength <= NOTE_CARD_PREVIEW_MAX_TEXT &&
+        blocks <= NOTE_CARD_PREVIEW_MAX_BLOCKS &&
+        (tagName === 'img' || tagName === 'source')
+      ) {
+        const candidate = tagName === 'img' ? node.attribs?.src : sourceFromSrcset(node.attribs?.srcset);
+        const locatedImageUrl = cleanCandidateUrl(candidate);
+        if (locatedImageUrl) {
+          // 先把已经累计的正文写入图片前半段，再切换位置标记。
+          flush();
+          imageUrl = locatedImageUrl;
+        }
+      }
+      if (tagName === 'br') flush();
+      visit(node.children, childSummaryIgnored, childImageLocationIgnored);
+      if (isBlock) flush();
     }
   };
 
   visit(document.children);
-  return imageUrl;
+  flush();
+  return { beforeImage, afterImage, imageUrl };
 }
 
-function inspectMarkdownPreview(content) {
-  let textLength = 0;
-  let blocks = 0;
-  let imageUrl = '';
-  const seen = new Set();
-
-  const walk = (value) => {
-    if (imageUrl || value == null || textLength > NOTE_CARD_PREVIEW_MAX_TEXT || blocks > NOTE_CARD_PREVIEW_MAX_BLOCKS) {
-      return;
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
-      return;
-    }
-    if (typeof value !== 'object' || seen.has(value)) return;
-    seen.add(value);
-
-    const token = value;
-    const type = String(token.type || '');
-    if (type === 'image') {
-      imageUrl = cleanCandidateUrl(token.href);
-      return;
-    }
-    if (type === 'html') {
-      imageUrl = inspectHtmlPreview(token.raw || token.text);
-      if (imageUrl) return;
-    }
-    if (['heading', 'paragraph', 'blockquote', 'list_item', 'table', 'code'].includes(type)) blocks += 1;
-    if (type === 'text' && !Array.isArray(token.tokens)) {
-      textLength += String(token.text || '')
-        .replace(/\s+/gu, ' ')
-        .trim().length;
-    }
-    if (type === 'code' || type === 'codespan') return;
-
-    for (const [key, child] of Object.entries(token)) {
-      if (['raw', 'text', 'href', 'title'].includes(key)) continue;
-      if (key === 'tokens' || key === 'items' || key === 'header' || key === 'rows') walk(child);
-    }
-  };
-
-  walk(marked.lexer(String(content || ''), { gfm: true }));
-  return imageUrl;
+function previewHtmlFromContent(content, type) {
+  const normalizedType = String(type || '').toLowerCase();
+  if (normalizedType !== 'markdown' && normalizedType !== 'md') return content;
+  return String(marked.parse(String(content || ''), { gfm: true, async: false }));
 }
 
 /**
- * 只为卡片返回正文开头的本站图片。这里不渲染 HTML，也不信任任意外链；
- * 列表正文已被 SQL 截到 4000 字符，因此解析成本和内存都有硬上限。
+ * 服务端一次生成卡片纯文本摘要、首图位置和可信原图地址。
+ * 这里不会渲染 HTML，也不信任任意外链；输入和输出都有硬上限，避免把正文解析工作
+ * 分摊到几十个移动端 WebView 卡片组件上。
  */
-export function extractNoteCardPreviewImage(content, type) {
-  const source = String(content || '').slice(0, 4000);
-  if (!source) return '';
-  try {
-    const normalizedType = String(type || '').toLowerCase();
-    return normalizedType === 'markdown' || normalizedType === 'md'
-      ? inspectMarkdownPreview(source)
-      : inspectHtmlPreview(source);
-  } catch {
-    return '';
+export function buildNoteCardPreview(content, type, options = {}) {
+  const source = String(content || '').slice(0, NOTE_CARD_PREVIEW_SOURCE_MAX_LENGTH);
+  if (!source) {
+    return { summary: '', beforeImage: '', afterImage: '', imageUrl: '', imageLocated: false };
   }
+  try {
+    const maxLength = Math.max(0, Number(options.maxLength ?? NOTE_CARD_PREVIEW_SUMMARY_MAX_LENGTH) || 0);
+    const {
+      beforeImage: beforeLines,
+      afterImage: afterLines,
+      imageUrl,
+    } = inspectHtmlCardPreview(previewHtmlFromContent(source, type));
+    const separator = options.singleLine ? ' ' : '\n';
+    const beforeText = beforeLines.join(separator);
+    const afterText = afterLines.join(separator);
+    const betweenParts = beforeText && afterText ? separator : '';
+    const summary = truncatePreviewText(`${beforeText}${betweenParts}${afterText}`, maxLength);
+    if (!imageUrl) {
+      return { summary, beforeImage: summary, afterImage: '', imageUrl: '', imageLocated: false };
+    }
+    const previewParts = truncatePreviewParts(beforeText, afterText, maxLength, betweenParts);
+    return { summary, ...previewParts, imageUrl, imageLocated: true };
+  } catch {
+    return { summary: '', beforeImage: '', afterImage: '', imageUrl: '', imageLocated: false };
+  }
+}
+
+/** 兼容旧版列表响应：仅返回正文开头的本站图片。 */
+export function extractNoteCardPreviewImage(content, type) {
+  return buildNoteCardPreview(content, type).imageUrl;
 }

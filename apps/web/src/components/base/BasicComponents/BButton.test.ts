@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick } from 'vue';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import BButton from './BButton.vue';
+
+const buttonSource = readFileSync(resolve(process.cwd(), 'src/components/base/BasicComponents/BButton.vue'), 'utf8');
 
 let cleanup: (() => void) | undefined;
 
@@ -53,5 +57,10 @@ describe('BButton semantics', () => {
   it('supports filling the available row width', () => {
     const { host } = mountButton({ block: true });
     expect(host.querySelector<HTMLButtonElement>('button.b_btn')?.classList.contains('is-block')).toBe(true);
+  });
+
+  it('只在真正支持悬浮的精细指针设备上绘制 hover，避免触屏残留状态', () => {
+    expect(buttonSource).toContain('@media (hover: hover) and (pointer: fine)');
+    expect(buttonSource).not.toMatch(/\.default_btn\s*\{[\s\S]*?&:hover/u);
   });
 });

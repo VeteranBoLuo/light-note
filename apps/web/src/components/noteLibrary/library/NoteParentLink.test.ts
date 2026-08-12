@@ -8,7 +8,15 @@ vi.mock('@/store', () => ({
   useUserStore: () => ({ id: 'test-user', role: 'user', visitorWorkspace: false, adminContext: null }),
 }));
 vi.mock('@/router', () => ({ default: { push: vi.fn() } }));
-vi.mock('@/composables/useNoteSummary', () => ({ useNoteSummary: () => computed(() => '摘要') }));
+vi.mock('@/composables/useNoteSummary', () => ({
+  useNoteSummary: () => computed(() => '摘要'),
+  useNoteCardPreview: () => ({
+    summary: computed(() => '摘要'),
+    beforeImage: computed(() => '摘要'),
+    afterImage: computed(() => ''),
+    imageLocated: computed(() => false),
+  }),
+}));
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { name: 'SvgIconStub', template: '<i aria-hidden="true" />' },
 }));
@@ -101,10 +109,13 @@ describe('笔记卡片缩略图', () => {
     await nextTick();
 
     const image = host.querySelector<HTMLImageElement>('.note-preview-image');
+    const previewBodyChildren = [...host.querySelectorAll('.note-preview-body > *')];
     expect(image?.getAttribute('src')).toBe(previewImageUrl);
     expect(image?.getAttribute('loading')).toBe('lazy');
     expect(image?.getAttribute('decoding')).toBe('async');
     expect(image?.getAttribute('fetchpriority')).toBe('low');
+    expect(previewBodyChildren[0]?.classList.contains('note-content')).toBe(true);
+    expect(previewBodyChildren[1]?.classList.contains('note-preview-media')).toBe(true);
 
     image?.dispatchEvent(new Event('load'));
     await nextTick();
@@ -114,5 +125,39 @@ describe('笔记卡片缩略图', () => {
     await nextTick();
     expect(host.querySelector('.note-preview-media')).toBeNull();
     expect(host.querySelector('.note-content')?.textContent).toBe('摘要');
+  });
+
+  it('localhost 缩略图目录缺失时只在开发环境回退到本站原图', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const originalImageUrl = 'https://boluo66.top/uploads/note-local-fallback.jpg';
+    const previewImageUrl = `/api/note/image-thumbnail/hash.webp?source=${encodeURIComponent(originalImageUrl)}`;
+    const app = createApp({
+      render: () =>
+        h(NoteCard, {
+          note: {
+            id: 'note-with-local-cover',
+            title: '本地缩略图回退',
+            type: 'html',
+            tags: [],
+            previewImageUrl,
+          },
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.directive('click-log', {});
+    app.mount(host);
+    cleanup = () => app.unmount();
+    await nextTick();
+
+    const image = host.querySelector<HTMLImageElement>('.note-preview-image')!;
+    image.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(image.getAttribute('src')).toBe(originalImageUrl);
+    expect(host.querySelector('.note-preview-media')).not.toBeNull();
+
+    image.dispatchEvent(new Event('error'));
+    await nextTick();
+    expect(host.querySelector('.note-preview-media')).toBeNull();
   });
 });

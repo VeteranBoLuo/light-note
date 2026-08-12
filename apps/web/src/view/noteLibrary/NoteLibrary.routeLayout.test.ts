@@ -33,6 +33,24 @@ describe('笔记库路由布局根节点', () => {
     expect(openSource).not.toContain('await captureMobileReturnScroll()');
   });
 
+  it('分页列表请求 v2 服务端预览，避免每张卡片在 WebView 主线程解析正文', () => {
+    expect(source).toMatch(/pageSize:\s*RESOURCE_LIST_PAGE_SIZE,[\s\S]*?previewVersion:\s*2/u);
+  });
+
+  it('移动端后台只预热轻量详情路由，用户点击后才加载当前笔记对应的编辑器', () => {
+    const warmupStart = source.indexOf('function scheduleNoteDetailWarmup(notes: any[])');
+    const warmupEnd = source.indexOf('\n  watch(', warmupStart);
+    const warmupSource = source.slice(warmupStart, warmupEnd);
+    const openStart = source.indexOf('async function openDirectoryPage(noteId: string)');
+    const openEnd = source.indexOf('function openLibraryNote(noteOrId: any)', openStart);
+    const openSource = source.slice(openStart, openEnd);
+
+    expect(warmupSource).toContain("name: 'noteDetail'");
+    expect(warmupSource).not.toContain('preloadNoteEditorRuntime');
+    expect(source).not.toContain('noteEditorRuntimeWarmupTimer');
+    expect(openSource).toContain('preloadNoteEditorRuntime(source?.type)');
+  });
+
   it('普通目录切换仍回到顶部，只有匹配的详情返回快照会恢复旧位置', () => {
     expect(source).toContain('if (returnScrollSnapshot) scheduleMobileReturnScrollRestore(returnScrollSnapshot, true)');
     expect(source).toContain('else if (bookmark.isMobile) scheduleMobileListScrollReset()');

@@ -1,7 +1,43 @@
 import { describe, expect, it } from 'vitest';
-import { extractNoteCardPreviewImage, NOTE_CARD_PREVIEW_MAX_TEXT } from './noteCardPreview.js';
+import { buildNoteCardPreview, extractNoteCardPreviewImage, NOTE_CARD_PREVIEW_MAX_TEXT } from './noteCardPreview.js';
 
 describe('笔记卡片首图提取', () => {
+  it('一次生成纯文本摘要，并保留首图在正文中的原始顺序', () => {
+    const preview = buildNoteCardPreview(
+      '<p>图片上方第一段</p><p>图片上方第二段</p><img src="/uploads/note-flow.png"><p>图片下方正文</p>',
+      'html',
+    );
+
+    expect(preview).toEqual({
+      summary: '图片上方第一段\n图片上方第二段\n图片下方正文',
+      beforeImage: '图片上方第一段\n图片上方第二段',
+      afterImage: '图片下方正文',
+      imageUrl: 'https://boluo66.top/uploads/note-flow.png',
+      imageLocated: true,
+    });
+  });
+
+  it('Markdown 摘要不执行 raw HTML，也不把代码和外链图片当成本站首图', () => {
+    const preview = buildNoteCardPreview(
+      [
+        '# 标题',
+        '',
+        '<script>不应显示</script>',
+        '',
+        '`![伪图片](/uploads/note-fake.png)` ![外链](https://example.com/external.png) 本站图片之前',
+        '![本站图片](/uploads/note-real.webp) 本站图片之后',
+      ].join('\n'),
+      'markdown',
+    );
+
+    expect(preview.summary).toContain('标题');
+    expect(preview.summary).toContain('本站图片之前');
+    expect(preview.summary).toContain('本站图片之后');
+    expect(preview.summary).not.toContain('不应显示');
+    expect(preview.imageUrl).toBe('https://boluo66.top/uploads/note-real.webp');
+    expect(preview.imageLocated).toBe(true);
+  });
+
   it('提取 HTML 正文开头的本站图片，不返回外链图片', () => {
     expect(
       extractNoteCardPreviewImage(

@@ -13,7 +13,14 @@ const ensureNotVisitor = vi.fn(() => true);
 const attachPendingStatus = vi.fn();
 const removeInboxRelations = vi.fn();
 const invalidatePersonalKnowledgeCache = vi.fn();
-const { extractNoteCardPreviewImage, noteImageThumbnailPathname } = vi.hoisted(() => ({
+const { buildNoteCardPreview, extractNoteCardPreviewImage, noteImageThumbnailPathname } = vi.hoisted(() => ({
+  buildNoteCardPreview: vi.fn((content) => ({
+    summary: String(content || '').includes('note-cover.png') ? '图片上方\n图片下方' : '纯文本摘要',
+    beforeImage: String(content || '').includes('note-cover.png') ? '图片上方' : '纯文本摘要',
+    afterImage: String(content || '').includes('note-cover.png') ? '图片下方' : '',
+    imageUrl: String(content || '').includes('note-cover.png') ? 'https://boluo66.top/uploads/note-cover.png' : '',
+    imageLocated: String(content || '').includes('note-cover.png'),
+  })),
   extractNoteCardPreviewImage: vi.fn((content) =>
     String(content || '').includes('note-cover.png') ? 'https://boluo66.top/uploads/note-cover.png' : '',
   ),
@@ -48,7 +55,7 @@ vi.mock('../util/noteImages.js', () => ({
   extractNoteImageUrls: vi.fn(() => []),
   filterOwnedImageUrls: vi.fn(),
 }));
-vi.mock('../util/noteCardPreview.js', () => ({ extractNoteCardPreviewImage }));
+vi.mock('../util/noteCardPreview.js', () => ({ buildNoteCardPreview, extractNoteCardPreviewImage }));
 vi.mock('../util/noteImageThumbnail.js', () => ({
   ensureNoteImageThumbnail: vi.fn(),
   getExistingNoteImageThumbnailPath: vi.fn(),
@@ -125,6 +132,35 @@ describe('笔记置顶 handler', () => {
       'https://boluo66.top/uploads/note-cover.png',
     );
     expect(poolQuery).toHaveBeenCalledTimes(2);
+  });
+
+  it('v2 分页列表返回服务端纯文本预览并省略正文前缀', async () => {
+    poolQuery
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'n-cover',
+            type: 'html',
+            content: '<p>图片上方</p><img src="https://boluo66.top/uploads/note-cover.png"><p>图片下方</p>',
+            tags: null,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, previewVersion: 2 } }, res);
+
+    const item = lastSent(res).data.items[0];
+    expect(item).toMatchObject({
+      previewSummary: '图片上方\n图片下方',
+      previewTextBeforeImage: '图片上方',
+      previewTextAfterImage: '图片下方',
+      previewImageLocated: true,
+    });
+    expect(item).not.toHaveProperty('content');
+    expect(buildNoteCardPreview).toHaveBeenCalledTimes(1);
+    expect(extractNoteCardPreviewImage).not.toHaveBeenCalled();
   });
 
   it('笔记详情一次返回正文、能力快照和面包屑', async () => {

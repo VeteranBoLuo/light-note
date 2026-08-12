@@ -106,40 +106,45 @@
     background-color: #615ced;
     color: white;
     transition: all 0.3s;
-    &:hover {
-      background-color: #6b66ef;
-    }
   }
   .danger_btn {
     background-color: #fe2c55;
     color: white;
     transition: all 0.3s;
-    &:hover {
-      background-color: #ff7875;
-    }
   }
   .success_btn {
     background-color: #52c41a;
     color: white;
     transition: all 0.3s;
-    &:hover {
-      background-color: #73d13d;
-    }
   }
   .default_btn {
     color: var(--text-color);
     background-color: var(--primary-btn-bg-color);
     transition: all 0.3s;
-    &:hover {
-      background-color: var(--primary-btn-h-bg-color);
-    }
   }
 
   .function_btn {
     background-color: #554dd5;
     color: white;
     transition: all 0.3s;
-    &:hover {
+  }
+
+  // 触屏 WebView 会把 :hover 保留到下一次点击，按钮因此像一直处于悬浮态。
+  // 只有设备确实支持精细指针悬浮时才绘制 hover；触屏反馈继续由下方 :active 承担。
+  @media (hover: hover) and (pointer: fine) {
+    .primary_btn:hover {
+      background-color: #6b66ef;
+    }
+    .danger_btn:hover {
+      background-color: #ff7875;
+    }
+    .success_btn:hover {
+      background-color: #73d13d;
+    }
+    .default_btn:hover {
+      background-color: var(--primary-btn-h-bg-color);
+    }
+    .function_btn:hover {
       background-color: #6762ee;
     }
   }

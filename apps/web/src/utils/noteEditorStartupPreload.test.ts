@@ -10,7 +10,7 @@ describe('笔记编辑器启动预热策略', () => {
     vi.useRealTimers();
   });
 
-  it('Android App 与 PC 应用页面均可预热，策略不依赖登录状态', () => {
+  it('受支持的平台在正常网络下可预热，策略不依赖登录状态', () => {
     const baseContext = {
       applicationRoute: true,
       online: true,

@@ -1868,6 +1868,9 @@
         {
           page: targetPage,
           pageSize: RESOURCE_LIST_PAGE_SIZE,
+          // v2 让服务端返回已生成的纯文本摘要/首图位置，并省略正文前缀。
+          // 旧服务端会忽略该字段，客户端仍保留 content 解析兜底，支持滚动发布。
+          previewVersion: 2,
           ...(noteTreeReadEnabled.value && noteSidebarMode.value === 'directory'
             ? { parentId: currentParentId.value }
             : {}),
@@ -2159,19 +2162,11 @@
   );
 
   let noteDetailRouteWarmupTimer: number | null = null;
-  let noteEditorRuntimeWarmupTimer: number | null = null;
   let noteDetailWarmupSignature = '';
 
   function clearNoteDetailWarmup() {
     if (noteDetailRouteWarmupTimer !== null) window.clearTimeout(noteDetailRouteWarmupTimer);
-    if (noteEditorRuntimeWarmupTimer !== null) window.clearTimeout(noteEditorRuntimeWarmupTimer);
     noteDetailRouteWarmupTimer = null;
-    noteEditorRuntimeWarmupTimer = null;
-  }
-
-  function shouldAvoidHeavyWarmup() {
-    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    return connection?.saveData === true;
   }
 
   function scheduleNoteDetailWarmup(notes: any[]) {
@@ -2187,13 +2182,6 @@
         // 弱网预热失败不打扰当前列表，用户点击时按正常导航链路重试。
       });
     }, 320);
-    if (shouldAvoidHeavyWarmup()) return;
-    noteEditorRuntimeWarmupTimer = window.setTimeout(() => {
-      noteEditorRuntimeWarmupTimer = null;
-      void preloadNoteEditorRuntime(candidate.type).catch(() => {
-        // 后台预热失败不展示错误，正式打开编辑器时仍会重试。
-      });
-    }, 2_500);
   }
 
   watch(

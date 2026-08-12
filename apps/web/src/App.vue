@@ -755,13 +755,14 @@
     disposeNoteEditorStartupPreload = null;
     const currentRouteName = String(router.currentRoute.value.name || '');
     const applicationRoute = Boolean(currentRouteName && !noteEditorPreloadExcludedRoutes.has(currentRouteName));
-    const supportedPlatform = isAndroidApp || bookmark.isDesktop;
+    // 移动端不在启动后后台解析两套大型编辑器：这类预热会与笔记列表、图片和用户点击
+    // 争抢网络及主线程，反而造成数秒级随机卡顿。移动端只在具体卡片按下后加载对应类型。
+    const supportedPlatform = bookmark.isDesktop;
     if (!appStartupReady.value || !supportedPlatform || !applicationRoute) return;
     disposeNoteEditorStartupPreload = scheduleNoteEditorStartupPreload({
       supportedPlatform,
       applicationRoute,
-      // App 更容易遇到弱网首次点击停顿；PC 稍晚预热，避免与首屏请求争抢网络和解析时间。
-      delayMs: isAndroidApp ? 2_000 : 5_000,
+      delayMs: 5_000,
       prerender: Boolean((window as any).__PRERENDER__),
       preloadRoute: () =>
         prefetchResolvedRoute(router, {

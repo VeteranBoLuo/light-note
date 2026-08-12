@@ -18,7 +18,7 @@ import {
 } from '../util/services/noteReferenceService.js';
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
-import { extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
+import { buildNoteCardPreview, extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
 import {
   ensureNoteImageThumbnail,
   getExistingNoteImageThumbnailPath,
@@ -734,6 +734,9 @@ export const queryNoteList = async (req, res) => {
       .trim()
       .slice(0, 200);
     const pagination = normalizeOptionalPagination(req.body);
+    const requestedPreviewVersion = Number(req.body?.previewVersion || 0);
+    const lightweightCardPreview =
+      pagination.enabled && Number.isFinite(requestedPreviewVersion) && requestedPreviewVersion >= 2;
     const where = ['n.create_by = ?', 'n.del_flag = 0'];
     const params = [userId];
     const treeMode = Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId');
@@ -849,8 +852,17 @@ export const queryNoteList = async (req, res) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
       if (pagination.enabled) {
-        const previewSource = extractNoteCardPreviewImage(note.content, note.type);
+        const cardPreview = lightweightCardPreview ? buildNoteCardPreview(note.content, note.type) : null;
+        const previewSource = cardPreview ? cardPreview.imageUrl : extractNoteCardPreviewImage(note.content, note.type);
         note.previewImageUrl = previewSource ? noteImageThumbnailPathname(previewSource) : '';
+        if (cardPreview) {
+          note.previewSummary = cardPreview.summary;
+          note.previewTextBeforeImage = cardPreview.beforeImage;
+          note.previewTextAfterImage = cardPreview.afterImage;
+          note.previewImageLocated = cardPreview.imageLocated;
+          // v2 客户端只消费上面的纯文本字段；不再把 48 份正文前缀传给 WebView 重复净化和解析。
+          delete note.content;
+        }
       }
       if (treeSnapshot && (hasTreeFilter || rootTreeScope)) {
         const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));

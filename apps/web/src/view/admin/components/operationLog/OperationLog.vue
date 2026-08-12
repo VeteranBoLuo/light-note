@@ -204,18 +204,18 @@
   const columns = computed(() =>
     bookmark.isMobile
       ? [
-          { title: t('adminOperationLog.columns.user'), key: 'user', width: '86px' },
-          { title: t('adminOperationLog.columns.time'), key: 'mobileTime', width: '74px' },
-          { title: t('adminOperationLog.columns.operation'), key: 'mobileOperation', width: 'minmax(0, 1fr)' },
+          { title: t('adminOperationLog.columns.user'), key: 'user', width: '80px' },
+          { title: t('adminOperationLog.columns.time'), key: 'mobileTime', width: '100px' },
+          { title: t('adminOperationLog.columns.operation'), key: 'mobileOperation' },
         ]
       : [
-          { title: t('adminOperationLog.columns.user'), key: 'alias', width: '130px' },
-          { title: t('adminOperationLog.columns.module'), key: 'module', width: '140px' },
-          { title: t('adminOperationLog.columns.operation'), key: 'operation', width: 'minmax(220px, 1.6fr)' },
-          { title: t('adminOperationLog.columns.ip'), key: 'ip', width: '130px' },
-          { title: t('apiLog.operatingSystem'), key: 'system', width: '105px' },
-          { title: t('apiLog.runtime'), key: 'runtime', width: '100px' },
-          { title: t('adminOperationLog.columns.time'), key: 'createTime', width: '160px' },
+          { title: t('adminOperationLog.columns.user'), key: 'alias', width: '150px' },
+          { title: t('adminOperationLog.columns.module'), key: 'module', width: '100px' },
+          { title: t('adminOperationLog.columns.operation'), key: 'operation' },
+          { title: t('adminOperationLog.columns.ip'), key: 'ip', width: '150px' },
+          { title: t('apiLog.operatingSystem'), key: 'system', width: '80px' },
+          { title: t('apiLog.runtime'), key: 'runtime', width: '80px' },
+          { title: t('adminOperationLog.columns.time'), key: 'createTime' },
         ],
   );
 
