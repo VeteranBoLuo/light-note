@@ -16,6 +16,7 @@
     />
 
     <div
+      ref="resultsRef"
       class="resource-picker-panel__results auto-hide-scrollbar"
       :class="{ 'is-scrolling': scrolling }"
       role="listbox"
@@ -105,6 +106,7 @@
   } from '@/composables/useResourcePickerSearch';
   import { useAutoHideScrollbar } from '@/composables/useAutoHideScrollbar';
   import type { AiScopeRef } from '@/types/aiScope';
+  import { scrollNearestIntoContainer } from '@/utils/zoom';
 
   /**
    * 全站唯一的资源选择面板。
@@ -139,15 +141,20 @@
   const { scrolling, onScroll } = useAutoHideScrollbar();
   const innerKeyword = ref('');
   const keywordInputRef = ref<{ focus?: () => void } | null>(null);
+  const resultsRef = ref<HTMLElement | null>(null);
   const { results, loading, activeIndex, search, searchNow, reset } = useResourcePickerSearch({
     allowedTypes: props.allowedTypes,
     perType: props.perType,
   });
 
-  function moveActive(offset: number) {
+  async function moveActive(offset: number) {
     const total = flatOptions.value.length;
     if (!total) return;
     activeIndex.value = (activeIndex.value + offset + total) % total;
+    await nextTick();
+    const container = resultsRef.value;
+    const activeItem = container?.querySelector<HTMLElement>('.resource-picker-panel__item.is-active');
+    if (container && activeItem) scrollNearestIntoContainer(container, activeItem, 'auto');
   }
 
   const typeLabel = (type: string) => t(`ai.sourceTypes.${type}`);

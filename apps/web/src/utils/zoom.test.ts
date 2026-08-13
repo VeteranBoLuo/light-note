@@ -5,6 +5,7 @@ import {
   normalizeRectForRootZoom,
   parseCssZoom,
   scrollIntoContainer,
+  scrollNearestIntoContainer,
 } from './zoom';
 
 describe('parseCssZoom', () => {
@@ -72,6 +73,32 @@ describe('scrollIntoContainer', () => {
 
     expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 280, behavior: 'smooth' });
     expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 280, behavior: 'auto' });
+  });
+});
+
+describe('scrollNearestIntoContainer', () => {
+  it('目标不可见时只滚动指定容器到最近边缘，已经可见时不滚动', () => {
+    const container = document.createElement('div');
+    const target = document.createElement('div');
+    const scrollTo = vi.fn();
+    Object.defineProperties(container, {
+      scrollTop: { configurable: true, writable: true, value: 100 },
+      scrollTo: { configurable: true, value: scrollTo },
+    });
+    vi.spyOn(container, 'getBoundingClientRect').mockReturnValue({ top: 100, bottom: 300 } as DOMRect);
+    const targetRect = vi.spyOn(target, 'getBoundingClientRect');
+
+    targetRect.mockReturnValue({ top: 260, bottom: 340 } as DOMRect);
+    scrollNearestIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 140, behavior: 'auto' });
+
+    targetRect.mockReturnValue({ top: 60, bottom: 90 } as DOMRect);
+    scrollNearestIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 60, behavior: 'auto' });
+
+    targetRect.mockReturnValue({ top: 120, bottom: 180 } as DOMRect);
+    scrollNearestIntoContainer(container, target);
+    expect(scrollTo).toHaveBeenCalledTimes(2);
   });
 });
 

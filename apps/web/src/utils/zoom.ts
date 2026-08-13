@@ -80,6 +80,33 @@ export function scrollIntoContainer(
 }
 
 /**
+ * 仅当目标元素越出滚动容器可视区时，把它移动到最近边缘。
+ *
+ * 与原生 `scrollIntoView({ block: 'nearest' })` 相比，这里只滚动调用方明确传入的容器，
+ * 不会连带推动浮层外面的页面；同时统一换算根节点 CSS zoom，避免设置界面缩放后滚动不足或过量。
+ * 键盘高亮这类连续操作建议使用 `auto`，防止平滑动画在快速连按时排队。
+ */
+export function scrollNearestIntoContainer(
+  container: HTMLElement,
+  el: HTMLElement,
+  behavior: ScrollBehavior = 'auto',
+): void {
+  const containerRect = container.getBoundingClientRect();
+  const elementRect = el.getBoundingClientRect();
+  const zoom = getRootZoom();
+  let delta = 0;
+
+  if (elementRect.top < containerRect.top) delta = elementRect.top - containerRect.top;
+  else if (elementRect.bottom > containerRect.bottom) delta = elementRect.bottom - containerRect.bottom;
+  else return;
+
+  container.scrollTo({
+    top: container.scrollTop + delta / zoom,
+    behavior,
+  });
+}
+
+/**
  * 从目标元素向上查找当前真正承担纵向滚动的祖先。
  *
  * 响应式页面可能在不同断点切换滚动层级：桌面端由内容区滚动，移动端则由页面外壳滚动。

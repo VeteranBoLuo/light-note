@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   routerPush: vi.fn(() => Promise.resolve()),
   recordOperation: vi.fn(() => Promise.resolve()),
   retryAuth: vi.fn(() => Promise.resolve()),
+  messageWarning: vi.fn(),
   user: {
     id: '',
     role: 'visitor',
@@ -37,6 +38,10 @@ vi.mock('@/utils/authStorage.ts', () => ({
 
 vi.mock('@/api/commonApi.ts', () => ({
   recordOperation: mocks.recordOperation,
+}));
+
+vi.mock('@/components/base/BasicComponents/BMessage/BMessage.ts', () => ({
+  default: { warning: mocks.messageWarning },
 }));
 
 vi.mock('@/http/request', () => ({
@@ -80,6 +85,7 @@ let cleanup: (() => void) | undefined;
 let canvasContextSpy: ReturnType<typeof vi.spyOn> | undefined;
 
 beforeEach(() => {
+  mocks.routerPush.mockImplementation(() => Promise.resolve());
   const context = {
     clearRect: vi.fn(),
     beginPath: vi.fn(),
@@ -146,6 +152,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   mocks.routerPush.mockClear();
   mocks.recordOperation.mockClear();
+  mocks.messageWarning.mockClear();
 });
 
 describe('Landing CTA', () => {
@@ -160,6 +167,52 @@ describe('Landing CTA', () => {
     await nextTick();
 
     expect(mocks.routerPush).toHaveBeenCalledWith('/app');
+  });
+
+  it('进入应用导航未完成时只把右侧箭头切换为加载状态并阻止重复点击', async () => {
+    let finishNavigation!: () => void;
+    mocks.routerPush.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          finishNavigation = resolve;
+        }),
+    );
+    const host = await mountLanding();
+    const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.ctaEnterApp'),
+    );
+
+    enterButton?.click();
+    await nextTick();
+
+    expect(enterButton?.textContent).toContain('landing.ctaEnterApp');
+    expect(enterButton?.disabled).toBe(true);
+    expect(enterButton?.getAttribute('aria-busy')).toBe('true');
+    expect(enterButton?.querySelector('.btn-arrow--loading')).not.toBeNull();
+    expect(enterButton?.querySelector('.btn-spinner')).toBeNull();
+    enterButton?.click();
+    expect(mocks.routerPush).toHaveBeenCalledTimes(1);
+
+    finishNavigation();
+    await vi.waitFor(() => {
+      expect(enterButton?.disabled).toBe(false);
+      expect(enterButton?.querySelector('.btn-arrow--loading')).toBeNull();
+    });
+  });
+
+  it('进入应用导航失败时恢复按钮并给出收口提示', async () => {
+    mocks.routerPush.mockRejectedValueOnce(new Error('route load failed'));
+    const host = await mountLanding();
+    const enterButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button')).find((button) =>
+      button.textContent?.includes('landing.ctaEnterApp'),
+    );
+
+    enterButton?.click();
+    await vi.waitFor(() => expect(mocks.messageWarning).toHaveBeenCalledWith('landing.serviceUnavailable'));
+
+    expect(enterButton?.disabled).toBe(false);
+    expect(enterButton?.getAttribute('aria-busy')).toBeNull();
+    expect(enterButton?.querySelector('.btn-arrow--loading')).toBeNull();
   });
 
   it('把官网的支持入口收敛到站内说明页', async () => {

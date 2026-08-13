@@ -27,9 +27,20 @@
               </h1>
               <div class="hero-actions">
                 <template v-if="landingCtaMode === 'enter'">
-                  <BButton type="primary" class="btn-primary" @click="handleEnterApp">
+                  <BButton
+                    type="primary"
+                    class="btn-primary"
+                    :disabled="startingApp"
+                    :aria-busy="startingApp || undefined"
+                    @click="handleEnterApp"
+                  >
                     <span>{{ t('landing.ctaEnterApp') }}</span>
-                    <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="18" aria-hidden="true" />
+                    <SvgIcon
+                      :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
+                      :src="startingApp ? icon.message.loading : icon.arrow_right"
+                      size="18"
+                      aria-hidden="true"
+                    />
                   </BButton>
                 </template>
                 <template v-else>
@@ -265,9 +276,20 @@
             <p class="cta-desc">{{ t('landing.ctaDesc') }}</p>
             <div class="cta-actions">
               <template v-if="landingCtaMode === 'enter'">
-                <BButton type="primary" class="btn-primary btn-large" @click="handleEnterApp">
+                <BButton
+                  type="primary"
+                  class="btn-primary btn-large"
+                  :disabled="startingApp"
+                  :aria-busy="startingApp || undefined"
+                  @click="handleEnterApp"
+                >
                   {{ t('landing.ctaEnterApp') }}
-                  <SvgIcon class="btn-arrow" :src="icon.arrow_right" size="20" aria-hidden="true" />
+                  <SvgIcon
+                    :class="['btn-arrow', { 'btn-arrow--loading': startingApp }]"
+                    :src="startingApp ? icon.message.loading : icon.arrow_right"
+                    size="20"
+                    aria-hidden="true"
+                  />
                 </BButton>
               </template>
               <template v-else>
@@ -533,8 +555,9 @@
   }
   // 统一进入 /app，再由稳定应用入口按设备与首页偏好分发。
   // 「进入」可能来自本机近期登录记录，此时 Pinia 身份仍在恢复；不能再用 isLoggedIn 二次拦截。
-  function enterApp() {
-    router.push('/app');
+  async function enterApp() {
+    void recordOperation(LANDING_OPERATION_LOG.enter);
+    await router.push('/app');
   }
   async function handleStart(source: string) {
     if (startingApp.value) return;
@@ -547,13 +570,15 @@
     try {
       await landingAuth.retry();
       if (isLoggedIn.value) {
-        handleEnterApp();
+        await enterApp();
         return;
       }
       if (landingAuth.status.value === 'anonymous') {
         handleRegister(source);
         return;
       }
+      message.warning(t('landing.serviceUnavailable'));
+    } catch {
       message.warning(t('landing.serviceUnavailable'));
     } finally {
       startingApp.value = false;
@@ -569,10 +594,16 @@
     void recordOperation(LANDING_OPERATION_LOG.register);
     goRegister(source);
   }
-  function handleEnterApp() {
-    if (landingCtaMode.value !== 'enter') return;
-    void recordOperation(LANDING_OPERATION_LOG.enter);
-    enterApp();
+  async function handleEnterApp() {
+    if (landingCtaMode.value !== 'enter' || startingApp.value) return;
+    startingApp.value = true;
+    try {
+      await enterApp();
+    } catch {
+      message.warning(t('landing.serviceUnavailable'));
+    } finally {
+      startingApp.value = false;
+    }
   }
   function openSupport(event: MouseEvent) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -1426,8 +1457,20 @@
   .btn-arrow {
     transition: transform 0.3s ease;
   }
-  .btn-primary:hover .btn-arrow {
+  .btn-primary:hover .btn-arrow:not(.btn-arrow--loading) {
     transform: translateX(4px);
+  }
+  .btn-primary.disabled {
+    opacity: 0.78;
+    cursor: wait;
+  }
+  .btn-arrow--loading {
+    animation: landing-btn-spin 0.8s linear infinite;
+  }
+  @keyframes landing-btn-spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
   .btn-large {
     padding: 16px 44px;

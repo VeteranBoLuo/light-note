@@ -182,6 +182,19 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toMatch(/\.md-preview\s*\{[\s\S]*?> :first-child\s*\{[\s\S]*?margin-top:\s*0;/u);
   });
 
+  it('Markdown 预览中的普通正文和代码块都按栏宽软换行', () => {
+    const previewStyles = sourceBetween(editorSource, '.md-preview {', '@media (max-width: 420px)');
+    expect(previewStyles).toContain('overflow-wrap: anywhere;');
+    expect(previewStyles).toContain('word-break: break-word;');
+    expect(previewStyles).toMatch(
+      /pre\s*\{[\s\S]*?overflow:\s*visible;[\s\S]*?white-space:\s*pre-wrap;[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?word-break:\s*break-word;/u,
+    );
+    expect(previewStyles).toMatch(/pre[\s\S]*?code\s*\{[\s\S]*?white-space:\s*inherit;/u);
+    expect(previewStyles).toMatch(
+      /th,[\s\S]*?td\s*\{[\s\S]*?overflow-wrap:\s*anywhere;[\s\S]*?word-break:\s*break-word;/u,
+    );
+  });
+
   it('模板 Markdown 默认使用完整编辑宽度，同时保留分栏与预览切换', () => {
     expect(editorSource).toContain("isMobile.value || props.context === 'template' ? 'edit' : 'split'");
     expect(editorSource).toContain("{ key: 'split', label: t('note.mdEditPreview')");
