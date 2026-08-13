@@ -41,6 +41,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['security_account_reputation', 'user_id'],
   ['user_sessions', 'user_id'],
   ['community_chat_member_profiles', 'user_id'],
+  ['community_chat_user_identities', 'user_id'],
+  ['community_chat_custom_stickers', 'user_id'],
 ]);
 
 function accountDeletionError(code, message, status = 400) {
@@ -214,6 +216,19 @@ async function collectCleanupArtifacts(connection, tables, userId) {
     const [rows] = await connection.query(
       `SELECT object_key
          FROM ai_document_sources
+        WHERE user_id = ?`,
+      [userId],
+    );
+    for (const row of rows) {
+      const key = String(row.object_key || '').trim();
+      if (key) objectKeys.push(key);
+    }
+  }
+
+  if (tables.has('community_chat_custom_stickers')) {
+    const [rows] = await connection.query(
+      `SELECT object_key
+         FROM community_chat_custom_stickers
         WHERE user_id = ?`,
       [userId],
     );

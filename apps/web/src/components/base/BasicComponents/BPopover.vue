@@ -106,11 +106,21 @@
         lockedPlaceAbove = placeAbove;
       }
     }
-    let top = placeAbove ? rTop - panelH - 6 : rBottom + 6;
+    const desiredTop = rTop - panelH - 6;
+    let top = placeAbove ? desiredTop : rBottom + 6;
     if (panelH) top = Math.max(8, Math.min(top, vh - panelH - 8));
 
     panelStyle.position = 'fixed';
-    panelStyle.top = `${top}px`;
+    // 上方浮层用 bottom 固定触发器上沿。内容高度变化时让面板自然向上生长，
+    // 避免先向下撑开、ResizeObserver 下一帧再改 top 所造成的二次闪动。
+    // 两侧空间都不足、必须贴视口顶边时仍回退 top 钳制。
+    if (placeAbove && (!panelH || desiredTop >= 8)) {
+      panelStyle.top = 'auto';
+      panelStyle.bottom = `${Math.max(8, vh - rTop + 6)}px`;
+    } else {
+      panelStyle.top = `${top}px`;
+      panelStyle.bottom = 'auto';
+    }
     panelStyle.left = `${left}px`;
   }
 

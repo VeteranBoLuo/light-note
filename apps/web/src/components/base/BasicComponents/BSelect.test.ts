@@ -137,6 +137,139 @@ describe('BSelect keyboard interaction', () => {
     expect(input!.value).toBe('');
   });
 
+  it('可输入单选支持精确输入、单数字补零，并拒绝选项范围外的值', async () => {
+    const onValidityChange = vi.fn();
+    const numericOptions = Array.from({ length: 24 }, (_, index) => {
+      const value = String(index).padStart(2, '0');
+      return { label: value, value };
+    });
+    const { host, value } = mountSelect(false, {}, 'single', {
+      options: numericOptions,
+      editable: true,
+      inputmode: 'numeric',
+      maxlength: 2,
+      onValidityChange,
+    });
+    const input = host.querySelector<HTMLInputElement>('.select-search-inline');
+    expect(input).not.toBeNull();
+    expect(input!.inputMode).toBe('numeric');
+    expect(input!.maxLength).toBe(2);
+
+    input!.value = '16';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(value.value).toBe('16');
+    expect(input!.getAttribute('aria-invalid')).toBeNull();
+    expect(input!.getAttribute('aria-expanded')).toBe('false');
+
+    input!.value = '99';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(value.value).toBe('16');
+    expect(input!.getAttribute('aria-invalid')).toBe('true');
+    expect(onValidityChange).toHaveBeenLastCalledWith(false);
+
+    input!.value = '7';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+    expect(input!.getAttribute('aria-invalid')).toBeNull();
+    input!.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+    await nextTick();
+    expect(value.value).toBe('07');
+    expect(input!.value).toBe('');
+    expect(input!.getAttribute('aria-invalid')).toBeNull();
+    expect(onValidityChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it('可输入单选按 Escape 放弃非法草稿并恢复当前选中值', async () => {
+    const { host, value } = mountSelect(false, {}, 'single', {
+      options: [
+        { label: '00', value: '00' },
+        { label: '30', value: '30' },
+      ],
+      editable: true,
+    });
+    value.value = '30';
+    await nextTick();
+    const input = host.querySelector<HTMLInputElement>('.select-search-inline');
+    input!.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
+    input!.value = '99';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    pressKey(input!, 'Escape');
+    await nextTick();
+    expect(value.value).toBe('30');
+    expect(input!.value).toBe('');
+    expect(input!.placeholder).toBe('30');
+    expect(input!.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('阻止冒泡的弹层内切换兄弟选择器时只保留当前下拉', async () => {
+    const timeOptions = Array.from({ length: 24 }, (_, index) => {
+      const value = String(index).padStart(2, '0');
+      return { label: value, value };
+    });
+    const firstValue = ref('10');
+    const secondValue = ref('21');
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        const selectProps = { options: timeOptions, editable: true, inputmode: 'numeric' as const, maxlength: 2 };
+        return () =>
+          h(
+            'div',
+            {
+              onClick: (event: MouseEvent) => event.stopPropagation(),
+            },
+            [
+              h(BSelect, {
+                ...selectProps,
+                value: firstValue.value,
+                'onUpdate:value': (value: string) => (firstValue.value = value),
+              }),
+              h(BSelect, {
+                ...selectProps,
+                value: secondValue.value,
+                'onUpdate:value': (value: string) => (secondValue.value = value),
+              }),
+            ],
+          );
+      },
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'en',
+        messages: {
+          en: { common: { noMatch: 'No matches', pleaseSelect: 'Please select', searchPlaceholder: 'Search' } },
+        },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const inputs = host.querySelectorAll<HTMLInputElement>('.select-search-inline');
+    const suffixes = host.querySelectorAll<HTMLElement>('.select-suffix');
+    suffixes[0]?.click();
+    await nextTick();
+    expect(inputs[0]?.getAttribute('aria-expanded')).toBe('true');
+
+    suffixes[1]?.click();
+    await nextTick();
+    expect(inputs[0]?.getAttribute('aria-expanded')).toBe('false');
+    expect(inputs[1]?.getAttribute('aria-expanded')).toBe('true');
+
+    inputs[0]?.focus();
+    await nextTick();
+    expect(inputs[0]?.getAttribute('aria-expanded')).toBe('true');
+    expect(inputs[1]?.getAttribute('aria-expanded')).toBe('false');
+  });
+
   it('加载时在控件后缀显示进度并暴露 busy 状态', async () => {
     const { host } = mountSelect(true, {}, 'single', { loading: true, allowClear: true });
     const trigger = host.querySelector<HTMLElement>('.select-trigger');

@@ -149,12 +149,26 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     );
   });
 
-  it('紧凑模式收起重复说明与渠道胶囊，只保留当前档位摘要', async () => {
+  it('选择全部消息时明确区分角标范围与通知中心投递范围', async () => {
+    mocks.getSettings.mockResolvedValueOnce({ data: settings(true, 'all') });
+    const host = await mountPanel(true);
+
+    expect(host.textContent).toContain('先选择聊天室角标范围');
+    expect(host.textContent).toContain('普通聊天不会进入通知中心');
+    expect(host.textContent).toContain('全部消息角标');
+    expect(host.textContent).toContain('角标：任何新消息');
+    expect(host.textContent).toContain('通知中心：只接收该档允许的回复或提及');
+    expect(host.textContent).toContain('系统通知：不发送');
+  });
+
+  it('紧凑模式把角标、通知中心与系统通知合并为一条提醒结果栏', async () => {
     const host = await mountPanel(true);
 
     expect(host.querySelector('.community-notification-settings')?.classList.contains('is-compact')).toBe(true);
-    expect(host.querySelector('.community-notification-settings__compact-summary')).not.toBeNull();
-    expect(host.querySelector('.community-notification-settings__compact-meta')).not.toBeNull();
+    expect(host.querySelector('.community-notification-settings__compact-results')).not.toBeNull();
+    expect(host.querySelectorAll('.community-notification-settings__compact-result')).toHaveLength(3);
+    expect(host.querySelector('.community-notification-settings__compact-summary')).toBeNull();
+    expect(host.querySelector('.community-notification-settings__compact-meta')).toBeNull();
     expect(host.querySelector('.community-notification-settings__explanation')).toBeNull();
     expect(host.querySelector('.community-notification-settings__channels')).toBeNull();
     expect(host.querySelector('.community-notification-settings__hint')).toBeNull();

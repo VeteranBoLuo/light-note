@@ -1477,3 +1477,128 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name=expected.tab
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 47) 社区公开身份、稳定提及与表情消息契约必须完整（期望 0 行）
+SELECT '[47] missing_community_chat_identity_table' AS check_name,
+  'community_chat_user_identities' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+   WHERE table_schema=DATABASE()
+     AND table_name='community_chat_user_identities'
+     AND engine='InnoDB'
+);
+
+SELECT '[47] missing_community_chat_identity_column' AS check_name, expected.col AS detail
+FROM (
+  SELECT 'user_id' col UNION ALL
+  SELECT 'public_id' UNION ALL
+  SELECT 'community_id' UNION ALL
+  SELECT 'create_time' UNION ALL
+  SELECT 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_user_identities'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] invalid_community_chat_identity_collation' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_user_identities'
+  AND (
+    (actual.column_name='user_id' AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci'))
+    OR (actual.column_name='public_id' AND (actual.character_set_name <> 'ascii' OR actual.collation_name <> 'ascii_bin'))
+    OR (actual.column_name='community_id' AND (actual.character_set_name <> 'ascii' OR actual.collation_name <> 'ascii_general_ci'))
+  );
+
+SELECT '[47] missing_community_chat_identity_index' AS check_name, expected.ix AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'uk_community_chat_identity_public' UNION ALL
+  SELECT 'uk_community_chat_identity_community'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_user_identities'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[47] missing_community_chat_message_contract_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_messages' tab, 'payload_fingerprint' col, 'community_chat_messages.payload_fingerprint' n UNION ALL
+  SELECT 'community_chat_messages', 'message_kind', 'community_chat_messages.message_kind' UNION ALL
+  SELECT 'community_chat_messages', 'sticker_source', 'community_chat_messages.sticker_source' UNION ALL
+  SELECT 'community_chat_messages', 'sticker_key', 'community_chat_messages.sticker_key' UNION ALL
+  SELECT 'community_chat_messages', 'mention_everyone', 'community_chat_messages.mention_everyone' UNION ALL
+  SELECT 'community_chat_message_mentions', 'sort_order', 'community_chat_message_mentions.sort_order' UNION ALL
+  SELECT 'community_chat_message_mentions', 'display_name_snapshot', 'community_chat_message_mentions.display_name_snapshot' UNION ALL
+  SELECT 'community_chat_message_mentions', 'community_id_snapshot', 'community_chat_message_mentions.community_id_snapshot'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] invalid_community_chat_message_contract_default' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name='community_chat_messages' AND actual.column_name='message_kind'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='text'))
+    OR (actual.table_name='community_chat_messages' AND actual.column_name='mention_everyone'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+    OR (actual.table_name='community_chat_message_mentions' AND actual.column_name='sort_order'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+    OR (actual.table_name='community_chat_message_mentions' AND actual.column_name IN ('display_name_snapshot', 'community_id_snapshot')
+      AND NOT (actual.is_nullable='NO' AND actual.column_default=''))
+  );
+
+SELECT '[47] missing_community_chat_custom_sticker_table' AS check_name,
+  'community_chat_custom_stickers' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+   WHERE table_schema=DATABASE()
+     AND table_name='community_chat_custom_stickers'
+     AND engine='InnoDB'
+);
+
+SELECT '[47] missing_community_chat_custom_sticker_column' AS check_name, expected.col AS detail
+FROM (
+  SELECT 'public_id' col UNION ALL
+  SELECT 'user_id' UNION ALL
+  SELECT 'object_key' UNION ALL
+  SELECT 'content_sha256' UNION ALL
+  SELECT 'content_type' UNION ALL
+  SELECT 'file_size' UNION ALL
+  SELECT 'width' UNION ALL
+  SELECT 'height' UNION ALL
+  SELECT 'name' UNION ALL
+  SELECT 'status' UNION ALL
+  SELECT 'sort_order' UNION ALL
+  SELECT 'create_time' UNION ALL
+  SELECT 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_custom_stickers'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] missing_community_chat_custom_sticker_index' AS check_name, expected.ix AS detail
+FROM (
+  SELECT 'uk_community_chat_custom_sticker_public' ix UNION ALL
+  SELECT 'uk_community_chat_custom_sticker_content' UNION ALL
+  SELECT 'idx_community_chat_custom_sticker_owner_status' UNION ALL
+  SELECT 'idx_community_chat_custom_sticker_status_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_custom_stickers'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

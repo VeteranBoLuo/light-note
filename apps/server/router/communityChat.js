@@ -27,6 +27,16 @@ const messageWriteLimiter = rateLimit({
     res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '发送过于频繁，请稍后再试' }),
 });
 
+const memberSearchLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  keyGenerator: (req) => `community-chat-member-search:${req.user?.id || ipKeyGenerator(req.ip || '')}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (_req, res) =>
+    res.status(429).send({ data: { code: 'RATE_LIMITED' }, status: 429, msg: '搜索过于频繁，请稍后再试' }),
+});
+
 const governanceWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   limit: 20,
@@ -73,11 +83,24 @@ router.get('/access', handle.access);
 router.post('/access-requests', accessWriteLimiter, handle.requestAccess);
 router.post('/membership/accept-rules', accessWriteLimiter, handle.acceptRules);
 router.get('/rooms', handle.rooms);
+router.post('/identity', profileWriteLimiter, handle.ensureIdentity);
 router.get('/settings/notifications', handle.notificationSettings);
 router.put('/settings/notifications', governanceWriteLimiter, handle.updateNotificationSettings);
 router.get('/rooms/:slug/pin', handle.pinnedMessage);
 router.get('/rooms/:slug/messages', handle.messages);
 router.post('/rooms/:slug/messages', messageWriteLimiter, handle.createMessage);
+router.get('/members/search', memberSearchLimiter, handle.searchMembers);
+router.get('/members/:userPublicId/avatar', handle.memberAvatar);
+router.get('/stickers', handle.customStickers);
+router.post(
+  '/stickers',
+  handle.requireImageUploadIdentity,
+  imageWriteLimiter,
+  receiveChatImage,
+  handle.uploadCustomSticker,
+);
+router.get('/stickers/:publicId/content', handle.customStickerContent);
+router.post('/stickers/:publicId/remove', imageWriteLimiter, handle.removeCustomSticker);
 router.post(
   '/rooms/:slug/images',
   handle.requireImageUploadIdentity,

@@ -51,4 +51,51 @@ describe('BInput change payload', () => {
     expect(value.value).toBe('22:30');
     expect(onChange).toHaveBeenCalledWith('22:30');
   });
+
+  it('透传通用键盘、选区与输入法事件，外层阻止后不再触发 enter', async () => {
+    const onKeydown = vi.fn((event: KeyboardEvent) => event.preventDefault());
+    const onEnter = vi.fn();
+    const onSelect = vi.fn();
+    const onCompositionstart = vi.fn();
+    const onCompositionend = vi.fn();
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup: () => () =>
+        h(BInput, {
+          type: 'textarea',
+          submitOnEnter: true,
+          onKeydown,
+          onEnter,
+          onSelect,
+          onCompositionstart,
+          onCompositionend,
+        }),
+    });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': { placeholder: { input: '请输入' } } },
+      }),
+    );
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    textarea.dispatchEvent(new Event('select', { bubbles: true }));
+    textarea.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: 'bo' }));
+    textarea.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '薄' }));
+    await nextTick();
+
+    expect(onKeydown).toHaveBeenCalledTimes(1);
+    expect(onEnter).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onCompositionstart).toHaveBeenCalledTimes(1);
+    expect(onCompositionend).toHaveBeenCalledTimes(1);
+  });
 });

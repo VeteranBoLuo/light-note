@@ -62,6 +62,8 @@ export interface CommunityChatRoomDirectory {
 
 export interface CommunityChatMessageAuthor {
   name: string;
+  userPublicId?: string;
+  communityId?: string;
   role: 'member' | 'moderator' | 'official';
   avatar: string;
   frameId: string | null;
@@ -105,6 +107,7 @@ export interface CommunityChatMessageReply {
   status: 'active' | 'deleted' | 'hidden' | 'unavailable' | string;
   authorName: string;
   hasImages: boolean;
+  hasSticker?: boolean;
 }
 
 export interface CommunityChatImage {
@@ -116,9 +119,48 @@ export interface CommunityChatImage {
   height: number;
 }
 
+export interface CommunityChatMentionItem {
+  userPublicId: string;
+  displayName: string;
+  communityId: string;
+}
+
+export interface CommunityChatSticker {
+  source: 'custom';
+  key: string;
+  url: string;
+}
+
+export interface CommunityChatMemberSearchItem {
+  userPublicId: string;
+  communityId: string;
+  displayName: string;
+  avatar: string;
+  frameId: string | null;
+  level: number;
+  levelName: string;
+  role: 'member' | 'moderator' | 'official';
+  reason: 'official' | 'recent' | 'member';
+}
+
+export interface CommunityChatCustomSticker {
+  publicId: string;
+  name: string;
+  url: string;
+  contentType: 'image/jpeg' | 'image/png' | 'image/webp';
+  fileSize: number;
+  width: number;
+  height: number;
+  createdAt: string | null;
+}
+
 export interface CommunityChatMessage {
   publicId: string;
   content: string;
+  messageKind?: 'text' | 'sticker';
+  stickerSource?: 'custom' | null;
+  stickerKey?: string | null;
+  sticker?: CommunityChatSticker | null;
   status: 'active' | 'recalled';
   createdAt: string;
   editedAt: string | null;
@@ -131,7 +173,9 @@ export interface CommunityChatMessage {
   recallDeadlineAt: string | null;
   isOwn: boolean;
   images: CommunityChatImage[];
+  mentionEveryone?: boolean;
   mentions: string[];
+  mentionItems?: CommunityChatMentionItem[];
   likeCount: number;
   likedByMe: boolean;
   likePreview: string[];
@@ -160,7 +204,12 @@ export interface CommunityChatPinnedMessage {
 export interface SendCommunityChatMessageInput {
   clientRequestId: string;
   content: string;
+  messageKind?: 'text' | 'sticker';
+  stickerSource?: 'custom' | null;
+  stickerKey?: string | null;
   replyToPublicId?: string | null;
+  mentionEveryone?: boolean;
+  mentionUserPublicIds?: string[];
   mentionMessagePublicIds?: string[];
   imagePublicIds?: string[];
 }
@@ -236,6 +285,8 @@ export const acceptCommunityChatRules = (rulesVersion: string) =>
 
 export const getCommunityChatRooms = () => apiBaseGet('/api/community-chat/rooms', undefined, { silent: true });
 
+export const ensureCommunityChatIdentity = () => apiBasePost('/api/community-chat/identity', {}, { silent: true });
+
 export const getCommunityChatNotificationSettings = () =>
   apiBaseGet('/api/community-chat/settings/notifications', undefined, { silent: true });
 
@@ -278,6 +329,22 @@ export const updateCommunityChatOwnProfile = (input: {
 
 export const sendCommunityChatMessage = (roomSlug: string, input: SendCommunityChatMessageInput) =>
   apiBasePost(`${roomPath(roomSlug)}/messages`, input, { silent: true });
+
+export const searchCommunityChatMembers = (params: { roomSlug: string; q?: string; limit?: number }) =>
+  apiBaseGet('/api/community-chat/members/search', params, { silent: true });
+
+export const getCommunityChatCustomStickers = () =>
+  apiBaseGet('/api/community-chat/stickers', undefined, { silent: true });
+
+export const uploadCommunityChatCustomSticker = (file: File, name = '') => {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (name.trim()) formData.append('name', name.trim());
+  return apiBasePost('/api/community-chat/stickers', formData, { silent: true });
+};
+
+export const removeCommunityChatCustomSticker = (stickerPublicId: string) =>
+  apiBasePost(`/api/community-chat/stickers/${encodeURIComponent(stickerPublicId)}/remove`, {}, { silent: true });
 
 export const uploadCommunityChatImage = (roomSlug: string, file: File) => {
   const formData = new FormData();

@@ -40,6 +40,7 @@ import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
+import { startCommunityChatCustomStickerCleanupScheduler } from './util/services/communityChatCustomStickerService.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -131,6 +132,9 @@ ensureCommunityChatSchema()
   .then(() => {
     startCommunityChatImageCleanupScheduler().catch((err) =>
       console.error('社区客厅图片清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+    );
+    startCommunityChatCustomStickerCleanupScheduler().catch((err) =>
+      console.error('社区客厅自定义表情清理调度启动失败 code=%s', stableAgentErrorCode(err)),
     );
   })
   .catch((err) => console.error('社区客厅基础数据表初始化失败 code=%s', stableAgentErrorCode(err)));

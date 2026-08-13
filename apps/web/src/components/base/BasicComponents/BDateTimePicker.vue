@@ -46,17 +46,45 @@
           <section>
             <span>{{ mode === 'range' ? t('common.startTime') : t('common.time') }}</span>
             <div>
-              <BSelect v-model:value="draftStartHour" :options="hourOptions" />
+              <BSelect
+                v-model:value="draftStartHour"
+                :options="hourOptions"
+                editable
+                inputmode="numeric"
+                :maxlength="2"
+                @validity-change="startHourValid = $event"
+              />
               <span>:</span>
-              <BSelect v-model:value="draftStartMinute" :options="minuteOptions" />
+              <BSelect
+                v-model:value="draftStartMinute"
+                :options="minuteOptions"
+                editable
+                inputmode="numeric"
+                :maxlength="2"
+                @validity-change="startMinuteValid = $event"
+              />
             </div>
           </section>
           <section v-if="mode === 'range'">
             <span>{{ t('common.endTime') }}</span>
             <div>
-              <BSelect v-model:value="draftEndHour" :options="hourOptions" />
+              <BSelect
+                v-model:value="draftEndHour"
+                :options="hourOptions"
+                editable
+                inputmode="numeric"
+                :maxlength="2"
+                @validity-change="endHourValid = $event"
+              />
               <span>:</span>
-              <BSelect v-model:value="draftEndMinute" :options="minuteOptions" />
+              <BSelect
+                v-model:value="draftEndMinute"
+                :options="minuteOptions"
+                editable
+                inputmode="numeric"
+                :maxlength="2"
+                @validity-change="endMinuteValid = $event"
+              />
             </div>
           </section>
         </div>
@@ -108,6 +136,10 @@
   const draftStartMinute = ref('00');
   const draftEndHour = ref('00');
   const draftEndMinute = ref('00');
+  const startHourValid = ref(true);
+  const startMinuteValid = ref(true);
+  const endHourValid = ref(true);
+  const endMinuteValid = ref(true);
   const today = toDatePart(new Date());
 
   const mode = computed(() => props.mode);
@@ -116,10 +148,10 @@
     const value = String(index).padStart(2, '0');
     return { value, label: value };
   });
-  const minuteOptions = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'].map((value) => ({
-    value,
-    label: value,
-  }));
+  const minuteOptions = Array.from({ length: 60 }, (_, index) => {
+    const value = String(index).padStart(2, '0');
+    return { value, label: value };
+  });
   const weekdays = computed(() => {
     const base = new Date(2026, 6, 12);
     return Array.from({ length: 7 }, (_, index) =>
@@ -147,9 +179,15 @@
       };
     });
   });
-  const canApply = computed(
-    () => Boolean(draftStartDate.value) && (mode.value === 'single' || Boolean(draftEndDate.value)),
-  );
+  const canApply = computed(() => {
+    const startValid = startHourValid.value && startMinuteValid.value;
+    const endValid = endHourValid.value && endMinuteValid.value;
+    return (
+      Boolean(draftStartDate.value) &&
+      startValid &&
+      (mode.value === 'single' || (Boolean(draftEndDate.value) && endValid))
+    );
+  });
   const displayValue = computed(() => {
     if (!value.value) return '';
     const start = formatDisplay(value.value);
@@ -191,6 +229,10 @@
     draftEndDate.value = end.date;
     draftEndHour.value = end.hour || defaultHour;
     draftEndMinute.value = normalizeMinute(end.minute || defaultMinute);
+    startHourValid.value = true;
+    startMinuteValid.value = true;
+    endHourValid.value = true;
+    endMinuteValid.value = true;
     const anchor = parseLocalDate(start.date || defaultDate);
     viewMonth.value = startOfMonth(anchor);
   }
@@ -279,7 +321,7 @@
   function normalizeMinute(minute: string) {
     const numeric = Number(minute);
     if (!Number.isFinite(numeric)) return '00';
-    return String(Math.min(55, Math.round(numeric / 5) * 5)).padStart(2, '0');
+    return String(Math.min(59, Math.max(0, Math.trunc(numeric)))).padStart(2, '0');
   }
 
   function formatDraft(date: string, hour: string, minute: string) {

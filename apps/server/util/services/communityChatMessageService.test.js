@@ -2,11 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   deliverNotifications: vi.fn(),
+  ensureIdentity: vi.fn(),
 }));
 
 vi.mock('./communityChatNotificationService.js', () => ({
   deliverCommunityChatMessageNotifications: mocks.deliverNotifications,
 }));
+
+vi.mock('./communityChatIdentityService.js', async () => {
+  const actual = await vi.importActual('./communityChatIdentityService.js');
+  return { ...actual, ensureCommunityChatIdentity: mocks.ensureIdentity };
+});
 
 import {
   __test__,
@@ -64,7 +70,9 @@ function messageRow(overrides = {}) {
     replyStatus: '',
     replyAuthorName: '',
     replyImageCount: 0,
+    mentionEveryone: 0,
     mentionNamesHex: '',
+    availableStickerPublicId: null,
     ...overrides,
   };
 }
@@ -83,6 +91,11 @@ describe('communityChatMessageService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.deliverNotifications.mockResolvedValue({ delivered: 0 });
+    mocks.ensureIdentity.mockImplementation(async ({ userId }) => ({
+      userPublicId:
+        userId === 'user-2' ? '22222222-2222-4222-8222-222222222222' : '11111111-1111-4111-8111-111111111111',
+      communityId: userId === 'user-2' ? 'ln_MINT22' : 'ln_OWNER1',
+    }));
   });
 
   it('消息开关缺省关闭时在获取事务连接前失败关闭', async () => {
@@ -98,6 +111,41 @@ describe('communityChatMessageService', () => {
         db,
       }),
     ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_MESSAGING_CLOSED', status: 403 });
+    expect(db.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('普通成员伪造提及所有人参数时在获取事务连接前拒绝', async () => {
+    const db = { getConnection: vi.fn() };
+
+    await expect(
+      createCommunityChatMessage({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        clientRequestId: 'request-everyone-forged',
+        content: '请大家查看',
+        mentionEveryone: true,
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'MENTION_EVERYONE_ROOT_REQUIRED', status: 403 });
+    expect(db.getConnection).not.toHaveBeenCalled();
+  });
+
+  it('Root 也不能把提及所有人与个人提及混入同一条消息', async () => {
+    const db = { getConnection: vi.fn() };
+
+    await expect(
+      createCommunityChatMessage({
+        user: { id: 'root-1', role: 'root' },
+        roomSlug: 'general',
+        clientRequestId: 'request-everyone-conflict',
+        content: '请大家查看',
+        mentionEveryone: true,
+        mentionUserPublicIds: ['22222222-2222-4222-8222-222222222222'],
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'MENTION_EVERYONE_CONFLICT', status: 400 });
     expect(db.getConnection).not.toHaveBeenCalled();
   });
 
@@ -159,6 +207,32 @@ describe('communityChatMessageService', () => {
     expect(result.items[0].author).not.toHaveProperty('id');
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('LEFT JOIN user_growth growth'))).toBe(true);
     expect(db.query.mock.calls.some(([sql]) => String(sql).includes('community_chat_message_mentions'))).toBe(true);
+  });
+
+  it('自定义表情对象已被账号注销清理时返回安全占位，不下发失效内容地址', () => {
+    const active = __test__.toPublicMessage(
+      messageRow({
+        messageKind: 'sticker',
+        stickerSource: 'custom',
+        stickerKey: 'd9fa2cc6-d314-4709-a37f-05937916842b',
+        availableStickerPublicId: 'd9fa2cc6-d314-4709-a37f-05937916842b',
+        content: '',
+      }),
+      'user-1',
+    );
+    const removed = __test__.toPublicMessage(
+      messageRow({
+        messageKind: 'sticker',
+        stickerSource: 'custom',
+        stickerKey: 'd9fa2cc6-d314-4709-a37f-05937916842b',
+        availableStickerPublicId: null,
+        content: '',
+      }),
+      'user-1',
+    );
+
+    expect(active.sticker?.url).toContain('/api/community-chat/stickers/');
+    expect(removed).toMatchObject({ messageKind: 'sticker', sticker: null });
   });
 
   it('按公有消息 ID 定位来源消息，并明确返回是否还有更新消息', async () => {
@@ -616,7 +690,19 @@ describe('communityChatMessageService', () => {
       String(sql).includes('INSERT INTO community_chat_messages'),
     );
     expect(insertCall?.[0]).not.toContain('这是我的第一条消息');
-    expect(insertCall?.[1]?.slice(1)).toEqual([2, 'user-1', 'request-0002', null, '这是我的第一条消息']);
+    expect(insertCall?.[1]).toEqual([
+      result.message.publicId,
+      2,
+      'user-1',
+      'request-0002',
+      expect.stringMatching(/^[a-f0-9]{64}$/),
+      null,
+      'text',
+      null,
+      null,
+      0,
+      '这是我的第一条消息',
+    ]);
     const runtimeQuery = connection.query.mock.calls.find(([sql]) =>
       String(sql).includes('FROM community_chat_runtime_policy'),
     );
@@ -641,6 +727,123 @@ describe('communityChatMessageService', () => {
     });
   });
 
+  it('Root 提及所有人时写入独立标记并随消息对象返回', async () => {
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 33 }, []];
+      if (text.includes('client_request_id')) return [[], []];
+      if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_reads')) return [{ affectedRows: 1 }, []];
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [
+          [
+            messageRow({
+              internalId: 33,
+              publicId: params[0],
+              userId: 'root-1',
+              content: '请大家查看',
+              mentionEveryone: 1,
+            }),
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'root-1', role: 'root' },
+      roomSlug: 'general',
+      clientRequestId: 'request-everyone-root',
+      content: '请大家查看',
+      mentionEveryone: true,
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    const insertCall = connection.query.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO community_chat_messages'),
+    );
+    expect(insertCall?.[0]).toContain('mention_everyone');
+    expect(insertCall?.[1]?.at(-2)).toBe(1);
+    expect(result.message).toMatchObject({ content: '请大家查看', mentionEveryone: true });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('公共模式用稳定用户 UUID 提及尚未发言的已建档账号，不依赖邀请成员行或历史消息', async () => {
+    const targetPublicId = '22222222-2222-4222-8222-222222222222';
+    const connection = createConnection(async (sql, params) => {
+      const text = String(sql);
+      if (text.includes('FROM community_chat_runtime_policy')) return [[{ postingEnabled: 1 }], []];
+      if (text.includes('FROM community_chat_member_sanctions')) return [[], []];
+      if (text.includes('FROM community_chat_rooms')) {
+        return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+      }
+      if (text.includes('WHERE message.user_id = ?') && text.includes('client_request_id')) return [[], []];
+      if (text.includes('community_chat_user_identities identity') && text.includes('identity.public_id IN')) {
+        expect(text).not.toContain('FROM community_chat_messages recent');
+        expect(params).toEqual([targetPublicId, 'user-1', 'user-1', 'user-1']);
+        return [
+          [
+            {
+              userPublicId: targetPublicId,
+              communityId: 'ln_MINT22',
+              userId: 'user-2',
+              displayName: '薄荷',
+            },
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_members')) return [[], []];
+      if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 34 }, []];
+      if (text.includes('INSERT IGNORE INTO community_chat_message_mentions')) {
+        expect(params).toEqual([34, 'user-2', 0, '薄荷', 'ln_MINT22']);
+        return [{ affectedRows: 1 }, []];
+      }
+      if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
+      if (text.includes('INSERT INTO community_chat_reads')) return [{ affectedRows: 1 }, []];
+      if (text.includes('WHERE message.public_id = ?')) {
+        return [
+          [
+            messageRow({
+              internalId: 34,
+              publicId: params[0],
+              userId: 'user-1',
+              content: '请看',
+              mentionNamesHex: Buffer.from('薄荷').toString('hex'),
+            }),
+          ],
+          [],
+        ];
+      }
+      if (text.includes('FROM community_chat_message_images')) return [[], []];
+      if (text.includes('FROM community_chat_message_likes')) return [[], []];
+      throw new Error(`unexpected query: ${sql}`);
+    });
+    const db = { getConnection: vi.fn(async () => connection) };
+
+    const result = await createCommunityChatMessage({
+      user: { id: 'user-1', role: 'user' },
+      roomSlug: 'general',
+      clientRequestId: 'request-stable-mention',
+      content: '请看',
+      mentionUserPublicIds: [targetPublicId],
+      env: PUBLIC_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({ idempotent: false, message: { mentions: ['薄荷'] } });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
   it('显式提及只接受当前房间可见消息，按用户去重后与新消息同事务保存', async () => {
     const targetPublicId = '22222222-2222-4222-8222-222222222222';
     const connection = createConnection(async (sql, params) => {
@@ -653,12 +856,12 @@ describe('communityChatMessageService', () => {
       }
       if (text.includes('WHERE message.user_id = ?') && text.includes('client_request_id')) return [[], []];
       if (text.includes('message.public_id IN')) {
-        expect(params).toEqual([2, targetPublicId, 'user-1', 'user-1']);
-        return [[{ publicId: targetPublicId, userId: 'user-2' }], []];
+        expect(params).toEqual([2, targetPublicId, 'user-1', 'rules-v1', 'user-1', 'user-1']);
+        return [[{ messagePublicId: targetPublicId, userId: 'user-2', displayName: '薄荷' }], []];
       }
       if (text.includes('INSERT INTO community_chat_messages')) return [{ insertId: 32 }, []];
       if (text.includes('INSERT IGNORE INTO community_chat_message_mentions')) {
-        expect(params).toEqual([32, 'user-2']);
+        expect(params).toEqual([32, 'user-2', 0, '薄荷', 'ln_MINT22']);
         return [{ affectedRows: 1 }, []];
       }
       if (text.includes('UPDATE community_chat_rooms')) return [{ affectedRows: 1 }, []];
@@ -980,6 +1183,7 @@ describe('communityChatMessageService', () => {
       status: 'blocked',
       authorName: '',
       hasImages: false,
+      hasSticker: false,
     });
   });
 
@@ -1335,5 +1539,9 @@ describe('communityChatMessageService', () => {
       expect.objectContaining({ code: 'MESSAGE_TOO_LONG' }),
     );
     expect(__test__.normalizeMessageContent('', { allowEmpty: true })).toBe('');
+    expect(__test__.normalizeMentionEveryone(true)).toBe(true);
+    expect(() => __test__.normalizeMentionEveryone('true')).toThrowError(
+      expect.objectContaining({ code: 'INVALID_MENTION_EVERYONE' }),
+    );
   });
 });

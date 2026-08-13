@@ -59,6 +59,16 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     PRIMARY KEY (user_id),
     KEY idx_community_chat_member_status_role (status, role, update_time)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_user_identities (
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    public_id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    community_id varchar(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id),
+    UNIQUE KEY uk_community_chat_identity_public (public_id),
+    UNIQUE KEY uk_community_chat_identity_community (community_id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_member_profiles (
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     bio varchar(255) NOT NULL DEFAULT '',
@@ -102,7 +112,12 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     room_id bigint unsigned NOT NULL,
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     client_request_id varchar(64) NOT NULL,
+    payload_fingerprint char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
     reply_to_id bigint unsigned DEFAULT NULL,
+    message_kind varchar(16) NOT NULL DEFAULT 'text',
+    sticker_source varchar(16) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+    sticker_key varchar(80) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+    mention_everyone tinyint unsigned NOT NULL DEFAULT 0,
     content text NOT NULL,
     status varchar(16) NOT NULL DEFAULT 'active',
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -135,6 +150,9 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
   `CREATE TABLE IF NOT EXISTS community_chat_message_mentions (
     message_id bigint unsigned NOT NULL,
     mentioned_user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    sort_order tinyint unsigned NOT NULL DEFAULT 0,
+    display_name_snapshot varchar(80) NOT NULL DEFAULT '',
+    community_id_snapshot varchar(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '',
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (message_id, mentioned_user_id),
     KEY idx_community_chat_mention_user_message (mentioned_user_id, message_id)
@@ -159,6 +177,27 @@ export const COMMUNITY_CHAT_TABLE_SQL = [
     UNIQUE KEY uk_community_chat_image_object (object_key),
     KEY idx_community_chat_image_owner_status_expiry (owner_user_id, status, expires_at),
     KEY idx_community_chat_image_message_status_sort (message_id, status, sort_order, id)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS community_chat_custom_stickers (
+    id bigint unsigned NOT NULL AUTO_INCREMENT,
+    public_id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    object_key varchar(512) NOT NULL,
+    content_sha256 char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    content_type varchar(64) NOT NULL,
+    file_size int unsigned NOT NULL,
+    width int unsigned NOT NULL,
+    height int unsigned NOT NULL,
+    name varchar(40) NOT NULL DEFAULT '',
+    status varchar(24) NOT NULL DEFAULT 'uploading',
+    sort_order int unsigned NOT NULL DEFAULT 0,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_community_chat_custom_sticker_public (public_id),
+    UNIQUE KEY uk_community_chat_custom_sticker_content (user_id, content_sha256),
+    KEY idx_community_chat_custom_sticker_owner_status (user_id, status, sort_order, id),
+    KEY idx_community_chat_custom_sticker_status_time (status, update_time, id)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
   `CREATE TABLE IF NOT EXISTS community_chat_reads (
     room_id bigint unsigned NOT NULL,
@@ -257,6 +296,63 @@ export const COMMUNITY_CHAT_ROOM_PIN_COLUMNS = [
   },
 ];
 
+export const COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS = [
+  {
+    name: 'payload_fingerprint',
+    ddl: '`payload_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL AFTER `client_request_id`',
+  },
+  {
+    name: 'message_kind',
+    ddl: "`message_kind` varchar(16) NOT NULL DEFAULT 'text' AFTER `reply_to_id`",
+  },
+  {
+    name: 'sticker_source',
+    ddl: '`sticker_source` varchar(16) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL AFTER `message_kind`',
+  },
+  {
+    name: 'sticker_key',
+    ddl: '`sticker_key` varchar(80) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL AFTER `sticker_source`',
+  },
+  {
+    name: 'mention_everyone',
+    ddl: '`mention_everyone` tinyint unsigned NOT NULL DEFAULT 0 AFTER `sticker_key`',
+  },
+];
+
+export const COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS = [
+  {
+    name: 'sort_order',
+    ddl: '`sort_order` tinyint unsigned NOT NULL DEFAULT 0 AFTER `mentioned_user_id`',
+  },
+  {
+    name: 'display_name_snapshot',
+    ddl: "`display_name_snapshot` varchar(80) NOT NULL DEFAULT '' AFTER `sort_order`",
+  },
+  {
+    name: 'community_id_snapshot',
+    ddl: "`community_id_snapshot` varchar(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '' AFTER `display_name_snapshot`",
+  },
+];
+
+async function ensureTableColumns(tableName, columns) {
+  const names = columns.map((column) => column.name);
+  const placeholders = names.map(() => '?').join(',');
+  const [rows] = await pool.query(
+    `SELECT column_name AS columnName
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND column_name IN (${placeholders})`,
+    [tableName, ...names],
+  );
+  const existing = new Set(rows.map((row) => row.columnName));
+  for (const column of columns) {
+    if (!existing.has(column.name)) {
+      await pool.query(`ALTER TABLE \`${tableName}\` ADD COLUMN ${column.ddl}`);
+    }
+  }
+}
+
 async function ensureCommunityChatMessageRecallColumns() {
   const [rows] = await pool.query(
     `SELECT column_name AS columnName
@@ -287,6 +383,14 @@ async function ensureCommunityChatRoomPinColumns() {
       await pool.query(`ALTER TABLE community_chat_rooms ADD COLUMN ${column.ddl}`);
     }
   }
+}
+
+async function ensureCommunityChatMessagePayloadColumns() {
+  await ensureTableColumns('community_chat_messages', COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS);
+}
+
+async function ensureCommunityChatMentionSnapshotColumns() {
+  await ensureTableColumns('community_chat_message_mentions', COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS);
 }
 
 export const COMMUNITY_CHAT_ROOM_SEED_SQL = `
@@ -321,6 +425,8 @@ export function ensureCommunityChatSchema() {
       for (const sql of COMMUNITY_CHAT_TABLE_SQL) await pool.query(sql);
       await ensureCommunityChatMessageRecallColumns();
       await ensureCommunityChatRoomPinColumns();
+      await ensureCommunityChatMessagePayloadColumns();
+      await ensureCommunityChatMentionSnapshotColumns();
       await pool.query(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
       await pool.query(COMMUNITY_CHAT_ROOM_SEED_SQL);
     })().finally(() => {

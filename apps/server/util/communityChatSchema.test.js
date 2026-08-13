@@ -7,6 +7,8 @@ vi.mock('../db/index.js', () => ({ default: { query: mocks.query } }));
 const {
   COMMUNITY_CHAT_ROOM_SEED_SQL,
   COMMUNITY_CHAT_ROOM_PIN_COLUMNS,
+  COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS,
+  COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS,
   COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL,
   COMMUNITY_CHAT_TABLE_SQL,
   ensureCommunityChatSchema,
@@ -18,23 +20,45 @@ describe('ensureCommunityChatSchema', () => {
     mocks.query.mockResolvedValue([[], []]);
   });
 
-  it('幂等创建访问、名片、消息互动、个人删除、图片、治理与运行策略共十七张表并补齐消息置顶字段和默认数据', async () => {
+  it('幂等创建社区身份、消息、自定义表情与治理共十九张表，并补齐增量字段和默认数据', async () => {
     await ensureCommunityChatSchema();
 
-    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(17);
-    expect(mocks.query).toHaveBeenCalledTimes(26);
+    expect(COMMUNITY_CHAT_TABLE_SQL).toHaveLength(19);
+    expect(mocks.query).toHaveBeenCalledTimes(38);
     expect(
-      mocks.query.mock.calls.slice(0, 17).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
+      mocks.query.mock.calls.slice(0, 19).every(([sql]) => String(sql).includes('CREATE TABLE IF NOT EXISTS')),
     ).toBe(true);
-    expect(String(mocks.query.mock.calls[17][0])).toContain('information_schema.COLUMNS');
-    expect(String(mocks.query.mock.calls[18][0])).toContain('ADD COLUMN `recalled_at`');
-    expect(String(mocks.query.mock.calls[19][0])).toContain('ADD COLUMN `recalled_by`');
-    expect(String(mocks.query.mock.calls[20][0])).toContain("TABLE_NAME = 'community_chat_rooms'");
-    expect(String(mocks.query.mock.calls[21][0])).toContain('ADD COLUMN `pinned_message_id`');
-    expect(String(mocks.query.mock.calls[22][0])).toContain('ADD COLUMN `pinned_by`');
-    expect(String(mocks.query.mock.calls[23][0])).toContain('ADD COLUMN `pinned_at`');
-    expect(mocks.query.mock.calls[24][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
-    expect(mocks.query.mock.calls[25][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
+    expect(String(mocks.query.mock.calls[19][0])).toContain('information_schema.COLUMNS');
+    expect(String(mocks.query.mock.calls[20][0])).toContain('ADD COLUMN `recalled_at`');
+    expect(String(mocks.query.mock.calls[21][0])).toContain('ADD COLUMN `recalled_by`');
+    expect(String(mocks.query.mock.calls[22][0])).toContain("TABLE_NAME = 'community_chat_rooms'");
+    expect(String(mocks.query.mock.calls[23][0])).toContain('ADD COLUMN `pinned_message_id`');
+    expect(String(mocks.query.mock.calls[24][0])).toContain('ADD COLUMN `pinned_by`');
+    expect(String(mocks.query.mock.calls[25][0])).toContain('ADD COLUMN `pinned_at`');
+    expect(mocks.query.mock.calls[26][1]).toEqual([
+      'community_chat_messages',
+      'payload_fingerprint',
+      'message_kind',
+      'sticker_source',
+      'sticker_key',
+      'mention_everyone',
+    ]);
+    expect(String(mocks.query.mock.calls[27][0])).toContain('ADD COLUMN `payload_fingerprint`');
+    expect(String(mocks.query.mock.calls[28][0])).toContain('ADD COLUMN `message_kind`');
+    expect(String(mocks.query.mock.calls[29][0])).toContain('ADD COLUMN `sticker_source`');
+    expect(String(mocks.query.mock.calls[30][0])).toContain('ADD COLUMN `sticker_key`');
+    expect(String(mocks.query.mock.calls[31][0])).toContain('ADD COLUMN `mention_everyone`');
+    expect(mocks.query.mock.calls[32][1]).toEqual([
+      'community_chat_message_mentions',
+      'sort_order',
+      'display_name_snapshot',
+      'community_id_snapshot',
+    ]);
+    expect(String(mocks.query.mock.calls[33][0])).toContain('ADD COLUMN `sort_order`');
+    expect(String(mocks.query.mock.calls[34][0])).toContain('ADD COLUMN `display_name_snapshot`');
+    expect(String(mocks.query.mock.calls[35][0])).toContain('ADD COLUMN `community_id_snapshot`');
+    expect(mocks.query.mock.calls[36][0]).toBe(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL);
+    expect(mocks.query.mock.calls[37][0]).toBe(COMMUNITY_CHAT_ROOM_SEED_SQL);
     expect(COMMUNITY_CHAT_ROOM_PIN_COLUMNS.map((column) => column.name)).toEqual([
       'pinned_message_id',
       'pinned_by',
@@ -43,6 +67,18 @@ describe('ensureCommunityChatSchema', () => {
     expect(COMMUNITY_CHAT_RUNTIME_POLICY_SEED_SQL).toContain('VALUES (1, 1)');
     expect(COMMUNITY_CHAT_ROOM_SEED_SQL).toContain("('general'");
     expect(COMMUNITY_CHAT_ROOM_SEED_SQL).not.toContain("('announcements'");
+    expect(COMMUNITY_CHAT_MESSAGE_PAYLOAD_COLUMNS.map((column) => column.name)).toEqual([
+      'payload_fingerprint',
+      'message_kind',
+      'sticker_source',
+      'sticker_key',
+      'mention_everyone',
+    ]);
+    expect(COMMUNITY_CHAT_MENTION_SNAPSHOT_COLUMNS.map((column) => column.name)).toEqual([
+      'sort_order',
+      'display_name_snapshot',
+      'community_id_snapshot',
+    ]);
   });
 
   it('建表失败时不会继续写入频道种子', async () => {
@@ -65,6 +101,7 @@ describe('ensureCommunityChatSchema', () => {
       interactionsMigration,
       pinMigration,
       profileMigration,
+      identityMentionStickerMigration,
       baseline,
       assertions,
     ] = await Promise.all([
@@ -79,6 +116,10 @@ describe('ensureCommunityChatSchema', () => {
       readFile(new URL('../migrations/20260810_community_chat_message_interactions.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260810_community_chat_message_pin.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/20260811_community_chat_member_profiles.sql', import.meta.url), 'utf8'),
+      readFile(
+        new URL('../migrations/20260813_community_chat_identity_mentions_stickers.sql', import.meta.url),
+        'utf8',
+      ),
       readFile(new URL('../tag_db.sql', import.meta.url), 'utf8'),
       readFile(new URL('../migrations/schema-assertions.sql', import.meta.url), 'utf8'),
     ]);
@@ -156,10 +197,19 @@ describe('ensureCommunityChatSchema', () => {
     expect(profileMigration).toContain('featured_achievements json DEFAULT NULL');
     expect(baseline).toContain('CREATE TABLE `community_chat_member_profiles`');
     expect(assertions).toContain('missing_community_chat_profile_table');
-    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain(
-      'CREATE TABLE IF NOT EXISTS community_chat_member_profiles',
-    );
+    expect(COMMUNITY_CHAT_TABLE_SQL.join('\n')).toContain('CREATE TABLE IF NOT EXISTS community_chat_member_profiles');
     expect(notificationsMigration).toContain('idx_community_chat_mention_user_message');
+    expect(identityMentionStickerMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_user_identities`');
+    expect(identityMentionStickerMigration).toContain('`payload_fingerprint`');
+    expect(identityMentionStickerMigration).toContain('`mention_everyone`');
+    expect(identityMentionStickerMigration).toContain('`display_name_snapshot`');
+    expect(identityMentionStickerMigration).toContain('CREATE TABLE IF NOT EXISTS `community_chat_custom_stickers`');
+    expect(baseline).toContain('CREATE TABLE `community_chat_user_identities`');
+    expect(baseline).toContain('CREATE TABLE `community_chat_custom_stickers`');
+    expect(baseline).toContain("`mention_everyone` tinyint unsigned NOT NULL DEFAULT '0'");
+    expect(assertions).toContain('community_chat_messages.mention_everyone');
+    expect(assertions).toContain('missing_community_chat_identity_table');
+    expect(assertions).toContain('missing_community_chat_custom_sticker_table');
     expect(textMigration).toContain('uk_community_chat_message_request');
     expect(textMigration).toContain('last_read_message_id');
     expect(singleRoomMigration).toContain("('general'");
