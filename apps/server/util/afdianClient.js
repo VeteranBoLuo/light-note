@@ -5,6 +5,7 @@ const AFDIAN_OAUTH_AUTHORIZE_URL = 'https://afdian.com/oauth2/authorize';
 const AFDIAN_OAUTH_TOKEN_URL = 'https://afdian.com/api/oauth2/access_token';
 const AFDIAN_QUERY_ORDER_URL = 'https://afdian.com/api/open/query-order';
 const REQUEST_TIMEOUT_MS = 10_000;
+const MAX_OAUTH_CODE_LENGTH = 4096;
 
 // 爱发电官方于 2025-07-01 公布的 Webhook RSA 公钥。
 export const AFDIAN_WEBHOOK_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
@@ -80,7 +81,7 @@ export function buildAfdianAuthorizationUrl(state) {
 
 export async function exchangeAfdianAuthorizationCode(code) {
   const normalizedCode = String(code || '').trim();
-  if (!normalizedCode || normalizedCode.length > 512) {
+  if (!normalizedCode || normalizedCode.length > MAX_OAUTH_CODE_LENGTH) {
     throw afdianError('AFDIAN_OAUTH_CODE_INVALID', '爱发电授权码无效');
   }
   const { clientId, clientSecret, redirectUri } = getAfdianOAuthConfig();

@@ -425,6 +425,26 @@
     void recordOperation({ module: '支持轻笺', operation: '发起爱发电账号关联' });
   }
 
+  function consumeOAuthResult() {
+    const rawResult = router.currentRoute.value.query.afdian;
+    const result = Array.isArray(rawResult) ? rawResult[0] : rawResult;
+    if (!result || !['bound', 'failed', 'session_required'].includes(result)) return;
+
+    const query = { ...router.currentRoute.value.query };
+    delete query.afdian;
+    void router.replace({ query });
+
+    if (result === 'bound') {
+      message.success(t('support.accountLinkSuccess'));
+      return;
+    }
+    if (result === 'session_required') {
+      message.warning(t('support.accountLinkSessionRequired'));
+      return;
+    }
+    message.error(t('support.accountLinkFailed'));
+  }
+
   function confirmUnlink() {
     Alert.alert({
       title: t('support.accountUnlinkTitle'),
@@ -452,7 +472,10 @@
   });
 
   onMounted(() => {
-    void loadSupportState().then(markLoaded);
+    void loadSupportState().then(() => {
+      markLoaded();
+      consumeOAuthResult();
+    });
     void recordOperation({ module: '支持轻笺', operation: '查看支持页面' });
   });
 </script>

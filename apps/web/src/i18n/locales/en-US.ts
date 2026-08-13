@@ -3541,6 +3541,9 @@ export default {
       'Order sync is not configured yet. You can still visit AFDIAN, but attribution cannot be confirmed automatically.',
     accountLinkAction: 'Link AFDIAN',
     accountLinkUnavailable: 'AFDIAN account linking is temporarily unavailable.',
+    accountLinkSuccess: 'AFDIAN account linked successfully',
+    accountLinkFailed: 'Could not link the AFDIAN account. Please start again.',
+    accountLinkSessionRequired: 'Your session has expired. Sign in again before linking AFDIAN.',
     accountUnlinkAction: 'Unlink',
     accountUnlinkTitle: 'Unlink AFDIAN account',
     accountUnlinkDescription:

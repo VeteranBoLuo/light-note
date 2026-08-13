@@ -3,6 +3,8 @@ import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 
+const routeState = vi.hoisted(() => ({ query: {} as Record<string, string> }));
+
 const mocks = vi.hoisted(() => ({
   openAfdianSupportPage: vi.fn(() => true),
   openTrackedAfdianCheckout: vi.fn(() => true),
@@ -19,6 +21,9 @@ const mocks = vi.hoisted(() => ({
   recordOperation: vi.fn(() => Promise.resolve()),
   routerBack: vi.fn(),
   routerPush: vi.fn(() => Promise.resolve()),
+  routerReplace: vi.fn(() => Promise.resolve()),
+  messageSuccess: vi.fn(),
+  messageError: vi.fn(),
   messageWarning: vi.fn(),
 }));
 
@@ -75,12 +80,18 @@ vi.mock('vue-router', async (importOriginal) => {
     useRouter: () => ({
       back: mocks.routerBack,
       push: mocks.routerPush,
+      replace: mocks.routerReplace,
+      currentRoute: { value: routeState },
     }),
   };
 });
 
 vi.mock('@/components/base/BasicComponents/BMessage/BMessage', () => ({
-  default: { warning: mocks.messageWarning },
+  default: {
+    success: mocks.messageSuccess,
+    error: mocks.messageError,
+    warning: mocks.messageWarning,
+  },
 }));
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
@@ -99,6 +110,7 @@ let cleanup: (() => void) | undefined;
 describe('支持轻笺页面', () => {
   beforeEach(() => {
     Object.values(mocks).forEach((mock) => mock.mockClear());
+    routeState.query = {};
   });
 
   afterEach(() => {
@@ -164,5 +176,51 @@ describe('支持轻笺页面', () => {
       operation: '打开爱发电赞助档位:coffee',
     });
     expect(host.textContent).toContain('无需关联也能赞助');
+  });
+
+  it.each([
+    ['bound', '已成功关联爱发电账号', 'success'],
+    ['failed', '爱发电账号关联失败，请重新发起', 'error'],
+    ['session_required', '登录状态已失效，请重新登录后再关联爱发电', 'warning'],
+  ])('明确反馈 OAuth 回调结果 %s 并清理一次性地址参数', async (result, expected, messageType) => {
+    routeState.query = { afdian: result, source: 'test' };
+    if (result === 'bound') {
+      mocks.getAfdianSupportState.mockResolvedValueOnce({
+        authenticated: true,
+        oauthAvailable: true,
+        orderSyncAvailable: true,
+        linked: true,
+        linkedAt: '2026-08-14T00:00:00.000Z',
+        orderCount: 0,
+        totalAmount: '0.00',
+      });
+    }
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp(SupportUs);
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': zhCN },
+      }),
+    );
+    app.directive('click-log', {});
+    app.directive('auto-scrollbar', {});
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    const messageMock =
+      messageType === 'success'
+        ? mocks.messageSuccess
+        : messageType === 'error'
+          ? mocks.messageError
+          : mocks.messageWarning;
+    await vi.waitFor(() => expect(messageMock).toHaveBeenCalledWith(expected));
+    expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'test' } });
+    if (result === 'bound') expect(host.textContent).toContain('已关联');
   });
 });
