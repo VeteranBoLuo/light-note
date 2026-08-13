@@ -10,6 +10,9 @@ describe('API 日志跳过策略', () => {
     '/api/notification/unreadCount',
     '/api/updateLog/list',
     '/api/updateLog/image/log-1/release.webp',
+    '/api/support/state',
+    '/api/support/afdian/webhook',
+    '/api/support/afdian/oauth/callback?code=temporary&state=temporary',
   ])('跳过无审计价值的被动读取接口：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(true);
   });
@@ -20,6 +23,7 @@ describe('API 日志跳过策略', () => {
     '/api/inbox/enqueue',
     '/api/bookmark/getBookmarkList',
     '/api/updateLog/save',
+    '/api/support/checkout?option=coffee',
   ])('保留真实读取与写入接口日志：%s', (url) => {
     expect(shouldSkipApiLog(url)).toBe(false);
   });

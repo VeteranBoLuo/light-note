@@ -5,6 +5,17 @@ import zhCN from '@/i18n/locales/zh-CN';
 
 const mocks = vi.hoisted(() => ({
   openAfdianSupportPage: vi.fn(() => true),
+  openTrackedAfdianCheckout: vi.fn(() => true),
+  openAfdianOAuthPage: vi.fn(() => true),
+  getAfdianSupportState: vi.fn(async () => ({
+    authenticated: true,
+    oauthAvailable: true,
+    orderSyncAvailable: true,
+    linked: false,
+    orderCount: 0,
+    totalAmount: '0.00',
+  })),
+  unlinkAfdianAccount: vi.fn(async () => undefined),
   recordOperation: vi.fn(() => Promise.resolve()),
   routerBack: vi.fn(),
   routerPush: vi.fn(() => Promise.resolve()),
@@ -40,6 +51,13 @@ vi.mock('@/config/support', () => ({
     },
   ],
   openAfdianSupportPage: mocks.openAfdianSupportPage,
+  openTrackedAfdianCheckout: mocks.openTrackedAfdianCheckout,
+  openAfdianOAuthPage: mocks.openAfdianOAuthPage,
+}));
+
+vi.mock('@/api/supportApi', () => ({
+  getAfdianSupportState: mocks.getAfdianSupportState,
+  unlinkAfdianAccount: mocks.unlinkAfdianAccount,
 }));
 
 vi.mock('@/api/commonApi', () => ({
@@ -102,6 +120,7 @@ describe('支持轻笺页面', () => {
     app.directive('auto-scrollbar', {});
     app.mount(host);
     await nextTick();
+    await vi.waitFor(() => expect(host.textContent).toContain('赞助记录与账号关联'));
     cleanup = () => {
       app.unmount();
       host.remove();
@@ -109,8 +128,8 @@ describe('支持轻笺页面', () => {
 
     expect(host.querySelector('h1')?.textContent).toContain('轻笺会一直免费');
     expect(host.textContent).toContain('赞助完全自愿');
-    expect(host.textContent).toContain('赞助排行榜会基于真实订单生成');
-    expect(host.textContent).toContain('真实赞助排行榜将在订单同步后上线');
+    expect(host.textContent).toContain('月度榜与累计榜只会基于已复核订单');
+    expect(host.textContent).toContain('真实订单会安全归并');
     expect(host.textContent).toContain('支持匿名、不参与和撤回');
     expect(host.textContent).not.toContain('不会自动发积分、经验或生成赞助排行榜');
 
@@ -120,10 +139,11 @@ describe('支持轻笺页面', () => {
     action?.click();
     await nextTick();
 
-    expect(mocks.openAfdianSupportPage).toHaveBeenCalledOnce();
+    expect(mocks.openTrackedAfdianCheckout).toHaveBeenCalledWith('custom');
+    expect(mocks.openAfdianSupportPage).not.toHaveBeenCalled();
     expect(mocks.recordOperation).toHaveBeenCalledWith({
       module: '支持轻笺',
-      operation: '打开爱发电赞助主页',
+      operation: '打开爱发电赞助入口',
     });
     expect(mocks.messageWarning).not.toHaveBeenCalled();
 
@@ -137,12 +157,12 @@ describe('支持轻笺页面', () => {
     tierActions[0]?.click();
     await nextTick();
 
-    expect(mocks.openAfdianSupportPage).toHaveBeenLastCalledWith(
-      'https://ifdian.net/order/create?plan_id=4415b194930c11f1ac7b5254001e7c00&product_type=0',
-    );
+    expect(mocks.openTrackedAfdianCheckout).toHaveBeenLastCalledWith('coffee');
+    expect(mocks.openAfdianSupportPage).not.toHaveBeenCalled();
     expect(mocks.recordOperation).toHaveBeenCalledWith({
       module: '支持轻笺',
       operation: '打开爱发电赞助档位:coffee',
     });
+    expect(host.textContent).toContain('无需关联也能赞助');
   });
 });

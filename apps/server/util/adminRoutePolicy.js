@@ -279,6 +279,16 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'user', [
   ['POST', '/opinion/recordOpinion'],
 ]);
 
+// 赞助归属与第三方账号关联属于账号隐私，不允许管理员在代管上下文中读取或变更。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'support', [
+  ['GET', '/support/state'],
+  ['GET', '/support/checkout'],
+  ['GET', '/support/afdian/oauth/start'],
+  ['GET', '/support/afdian/oauth/callback'],
+  ['POST', '/support/afdian/oauth/unlink'],
+  ['POST', '/support/afdian/webhook'],
+]);
+
 declare(ADMIN_POLICIES.READ, 'notification', [
   ['POST', '/notification/list'],
   ['POST', '/notification/unreadCount'],

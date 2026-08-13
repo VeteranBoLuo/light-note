@@ -3456,9 +3456,28 @@ export default {
     platformName: 'AFDIAN',
     platformDescription: 'Choose an amount below, or visit the Light Note creator page on AFDIAN first.',
     primaryAction: 'View AFDIAN page',
-    newPageHint: 'The AFDIAN creator page will open in a new page',
+    newPageHint: 'The AFDIAN support page will open in a new page',
     unavailable: 'The AFDIAN creator page has not been configured yet, so this action is temporarily unavailable.',
     unavailableMessage: 'The AFDIAN creator page has not been configured yet. Please try again later.',
+    accountTitle: 'Support history and account link',
+    accountGuestDescription:
+      'Sign in to Light Note before continuing and a one-time checkout token can safely attribute the order. OAuth is optional.',
+    accountLinkedStatus: 'Linked',
+    accountLinkedDescription:
+      'Your AFDIAN account is linked. Verified past and future orders are merged into one Light Note support history.',
+    accountUnlinkedDescription:
+      'Linking is optional. When signed in, choosing a tier from Light Note can still attribute the verified order to you.',
+    accountOrderSummary: '{count} verified order(s), ¥{amount} in total',
+    accountSyncUnavailable:
+      'Order sync is not configured yet. You can still visit AFDIAN, but attribution cannot be confirmed automatically.',
+    accountLinkAction: 'Link AFDIAN',
+    accountLinkUnavailable: 'AFDIAN account linking is temporarily unavailable.',
+    accountUnlinkAction: 'Unlink',
+    accountUnlinkTitle: 'Unlink AFDIAN account',
+    accountUnlinkDescription:
+      'Future orders from this AFDIAN account will no longer be linked automatically. Orders confirmed through Light Note checkout tokens remain attributed.',
+    accountUnlinkSuccess: 'AFDIAN account unlinked',
+    accountUnlinkFailed: 'Could not unlink the account. Please try again.',
     optionsTitle: 'Choose how to support',
     optionsDescription:
       'Fixed tiers are priced per month and let you choose the number of months on AFDIAN. You can also enter an amount that feels right for you.',
@@ -3503,10 +3522,10 @@ export default {
     disclosurePrivacy:
       'Light Note never asks for your Alipay, WeChat, or card password and does not store payment codes.',
     disclosureRewards:
-      'AFDIAN orders are not yet linked to Light Note accounts, so points and XP are not awarded automatically. The sponsor leaderboard will be built from verified orders.',
-    thanksTitle: 'A verified sponsor leaderboard is coming',
+      'Orders are attributed only after AFDIAN API verification. Linking with OAuth later never creates a duplicate order.',
+    thanksTitle: 'Verified orders are safely merged; public visibility remains your choice',
     thanksDescription:
-      'After order sync is ready, monthly and all-time rankings will only show information supporters consent to publish, with anonymous, opt-out, and withdrawal options. No synthetic data will be used.',
+      'Monthly and all-time rankings will only use verified orders and information supporters consent to publish, with anonymous, opt-out, and withdrawal options. No synthetic data will be used.',
     closingTitle: 'Thank you for helping Light Note go further',
     closingDescription:
       'Using, sharing, giving feedback, or sponsoring are all meaningful ways to support this free project.',

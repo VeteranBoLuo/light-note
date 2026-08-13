@@ -25,6 +25,7 @@
 
 | 编号                                                                   | 日期       | 模块             | 关键词                                           | 状态         |
 | ---------------------------------------------------------------------- | ---------- | ---------------- | ------------------------------------------------ | ------------ |
+| [LN-PIT-019](#ln-pit-019爱发电-webhook-验签成功不等于下单归属可信)     | 2026-08-13 | 赞助、账号关联   | Webhook、签名、custom_order_id、API、幂等、OAuth | 已修复待上线 |
 | [LN-PIT-008](#ln-pit-008本人换头像框后聊天室仍显示旧装扮)              | 2026-08-13 | 聊天室、成长系统 | 头像框、共享状态、消息快照、响应式、性能         | 已修复待上线 |
 | [LN-PIT-007](#ln-pit-007markdown-编辑与预览换行不一致导致正文横向溢出) | 2026-08-13 | 笔记编辑、布局   | Markdown、CodeMirror、软换行、分栏、横向溢出     | 已修复待上线 |
 | [LN-PIT-006](#ln-pit-006待整理状态不能由入口参数代替数据库事实)        | 2026-08-13 | 笔记详情、待整理 | 状态一致性、路由参数、详情聚合、列表缓存、索引   | 已修复待上线 |
@@ -62,6 +63,60 @@
 ```
 
 ## 案例记录
+
+### LN-PIT-019：爱发电 Webhook 验签成功不等于下单归属可信
+
+- 日期：2026-08-13
+- 状态：已修复待上线
+- 影响范围：爱发电下单凭证归属、OAuth 历史订单合并、Webhook 重推与订单同步
+- 关键词：Webhook、RSA、custom_order_id、query-order、唯一订单、OAuth、冲突归属
+
+#### 现象
+
+计划通过下单 URL 的 `custom_order_id` 携带轻笺随机码，再从爱发电 Webhook 读取该字段，把订单直接归入轻笺用户。这样看似已有 RSA 验签，又能立即确认赞助者。
+
+#### 误导线索与排除项
+
+- Webhook 整体带有 `sign`，但这不表示 JSON 中每个字段都进入了签名文本。
+- 随机码不可猜只能证明它来自某次轻笺下单跳转；如果读取它的载荷字段未被签名保护，仍不能把 Webhook 当成归属事实。
+- OAuth 后重新插入“已绑定订单”会让同一爱发电订单在未绑定记录与绑定记录中各出现一次，问题不在前端去重，而在订单事实没有唯一主键。
+
+#### 已确认根因
+
+爱发电官方 Webhook 的 RSA 签名文本只按顺序拼接 `out_trade_no + user_id + plan_id + total_amount`，不包含 `custom_order_id`、`status`、`month` 等字段。因此验签成功只可确认这四个签名字段，不能证明回调里的轻笺随机码可信。Webhook 还可能重推且不保证及时送达，单靠回调也无法完成历史订单归并。
+
+#### 修复方式
+
+- Webhook 验签成功后只按唯一 `provider_order_no` 幂等落一条 pending 订单，不读取回调里的随机码做归属。
+- 服务端随后用爱发电 API Token 调用 `query-order(out_trade_no)`；只有 API 返回的 `custom_order_id` 才可匹配轻笺保存的 SHA-256 凭证摘要。
+- `support_orders.provider_order_no` 建唯一索引；Webhook、全量 API 同步与 OAuth 绑定都更新同一行。
+- OAuth 与下单凭证指向同一轻笺用户时把证据来源升级为 `oauth_checkout`；指向不同用户时保留已有归属并标记 `conflict`，禁止静默转移。
+- Webhook 原始载荷跳过通用日志和通用攻击正文检测，但仅限精确 POST 路径；仍保留 IP 限流、严格字段边界、RSA 验签和 API 二次复核。
+
+#### 防回归约束
+
+1. 第三方回调只能信任其官方签名规范明确覆盖的字段；新增字段必须先确认是否进入签名文本。
+2. 任何支付/赞助归属都必须以第三方订单号作为唯一事实，不得按“未绑定订单”和“OAuth 订单”拆成两张可重复账本。
+3. `custom_order_id` 只保存随机值的摘要，禁止携带用户 ID、邮箱或昵称；OAuth Secret 与 API Token 只存在服务端环境变量。
+4. 第三方自由文本载荷若需绕过通用检测，只能用精确方法 + 精确路径，并由路由补齐限流、验签和二次复核，禁止放宽整个模块。
+5. OAuth 不是赞助前置条件；解绑只能撤销 OAuth 证据，不能删除仍有可信下单凭证支持的订单归属。
+
+#### 验证方法
+
+- 单测断言改变 `custom_order_id` 不会改变官方 Webhook 签名文本，防止以后误把它当成已签名字段。
+- 单测覆盖同一用户的下单凭证 + OAuth 合并为一个归属，以及两个用户证据冲突时不转移。
+- Schema 测试和数据库门禁断言 `uk_support_order_provider`、`uk_support_checkout_token` 及账号关联唯一索引存在。
+- 安全策略测试断言只跳过 `/support/afdian/webhook` 的精确 POST，GET、OAuth 接口和相似路径仍进入通用检测。
+
+#### 相关代码与提交
+
+| 位置                                                     | 作用                                      |
+| -------------------------------------------------------- | ----------------------------------------- |
+| `apps/server/util/afdianClient.js`                       | Webhook 验签文本、OAuth 与查询 API 客户端 |
+| `apps/server/util/afdianSupportService.js`               | 唯一订单账本、归属证据合并与冲突保护      |
+| `apps/server/router_handle/supportHandle.js`             | Webhook 先落库后异步 API 复核             |
+| `apps/server/migrations/20260813_afdian_integration.sql` | 三张支持模块表及唯一索引                  |
+| `apps/server/util/security/requestContext.js`            | Webhook 精确安全检测例外                  |
 
 ### LN-PIT-008：本人换头像框后聊天室仍显示旧装扮
 
