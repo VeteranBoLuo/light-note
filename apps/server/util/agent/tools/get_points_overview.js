@@ -15,6 +15,8 @@ export default {
     return [
       `全站积分:累计发放 ${raw.issued} · 累计消耗 ${raw.spent} · 当前存量 ${raw.outstanding} · 持有人 ${raw.holders}`,
       `抽奖:消耗 ${raw.lottery.cost} 分 / 返还 ${raw.lottery.winPoints} 分,返还率 ${raw.lottery.payoutRatio}% · 累计 ${raw.lottery.draws} 抽`,
+      `每日惊喜积分发行:${raw.lottery.freeWinPoints || 0} 分`,
+      `新版资产输出:${(raw.operationMetrics || []).map((item) => `${item.operationType}${item.itemId ? `/${item.itemId}` : ''} ${item.operations}笔 · AI ${item.aiTokensGranted} · 空间 ${item.storageMbGranted}MB`).join('；') || '暂无'}`,
       `来源分布:${by}`,
       `积分 Top:\n${top}`,
     ].join('\n');

@@ -16,6 +16,11 @@
         <strong class="admin-stat-value up">+{{ (ov?.issued || 0).toLocaleString('en-US') }}</strong>
       </li>
       <li class="admin-stat-card">
+        <span class="admin-stat-label">每日惊喜积分发行</span>
+        <strong class="admin-stat-value up">+{{ (ov?.lottery?.freeWinPoints || 0).toLocaleString('en-US') }}</strong>
+        <span class="admin-stat-hint">与积分抽奖返还分开统计</span>
+      </li>
+      <li class="admin-stat-card">
         <span class="admin-stat-label">累计消耗</span>
         <strong class="admin-stat-value down">-{{ (ov?.spent || 0).toLocaleString('en-US') }}</strong>
       </li>
@@ -46,6 +51,35 @@
             <span class="pops-reason-cnt">{{ r.cnt }} 笔</span>
           </div>
           <div v-if="!ov?.byReason?.length" class="pops-empty">暂无数据</div>
+        </div>
+      </div>
+
+      <div class="pops-block">
+        <div class="pops-block-head"><span>按经济版本 / 操作统计</span></div>
+        <div class="pops-reasons">
+          <div v-for="r in ov?.byEconomyVersion || []" :key="`${r.economyVersion}:${r.operationType}`" class="pops-reason">
+            <span class="pops-reason-name">{{ r.economyVersion }} · {{ r.operationType }}</span>
+            <span class="pops-reason-cnt">{{ r.operations }} 笔<span v-if="r.replays"> · 回放 {{ r.replays }}</span></span>
+          </div>
+          <div v-if="!ov?.byEconomyVersion?.length" class="pops-empty">暂无新版消费收据</div>
+        </div>
+      </div>
+
+      <div class="pops-block">
+        <div class="pops-block-head"><span>新版商品 / 奖池资产输出</span></div>
+        <div class="pops-reasons">
+          <div
+            v-for="r in ov?.operationMetrics || []"
+            :key="`${r.economyVersion}:${r.operationType}:${r.itemId || '-'}`"
+            class="pops-reason"
+          >
+            <span class="pops-reason-name">
+              {{ operationMetricName(r) }}
+              <small>{{ operationMetricDetail(r) }}</small>
+            </span>
+            <span class="pops-reason-cnt">{{ r.operations }} 笔</span>
+          </div>
+          <div v-if="!ov?.operationMetrics?.length" class="pops-empty">暂无新版资产输出</div>
         </div>
       </div>
 
@@ -178,6 +212,31 @@
   const { t, te } = useI18n();
   function reasonLabel(reason: string) {
     return pointsReasonLabel(reason);
+  }
+  function operationMetricName(metric: any) {
+    if (metric.itemId) {
+      return translateIfPresent(`growth.shopItems.${metric.itemId}.name`) || metric.itemId;
+    }
+    return metric.operationType === 'lottery_free'
+      ? '每日惊喜'
+      : metric.operationType === 'lottery_paid'
+        ? '积分抽奖'
+        : metric.operationType;
+  }
+  function translateIfPresent(key: string) {
+    return te(key) ? t(key) : '';
+  }
+  function operationMetricDetail(metric: any) {
+    const parts = [
+      metric.costPoints ? `消耗 ${Number(metric.costPoints).toLocaleString('en-US')} 分` : '',
+      metric.pointsRewarded ? `返还 ${Number(metric.pointsRewarded).toLocaleString('en-US')} 分` : '',
+      metric.aiTokensGranted ? `AI ${Number(metric.aiTokensGranted).toLocaleString('en-US')}` : '',
+      metric.storageMbGranted ? `空间 ${Number(metric.storageMbGranted).toLocaleString('en-US')}MB` : '',
+      metric.makeupCardsGranted ? `补签卡 ${metric.makeupCardsGranted}` : '',
+      metric.drawCount ? `抽数 ${metric.drawCount}` : '',
+      metric.pityHits ? `保底 ${metric.pityHits}` : '',
+    ].filter(Boolean);
+    return parts.join(' · ') || '无积分或资产输出';
   }
   function fmtTime(v: string) {
     const d = new Date(v);
@@ -383,6 +442,16 @@
   }
   .pops-reason-name {
     flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .pops-reason-name small {
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 400;
+    line-height: 1.35;
   }
   .pops-reason-delta,
   .pops-log-delta,
@@ -399,7 +468,7 @@
   .pops-reason-cnt {
     color: var(--desc-color);
     font-size: 11px;
-    width: 52px;
+    min-width: 52px;
     text-align: right;
   }
   .pops-top-rank {
