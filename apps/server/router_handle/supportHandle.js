@@ -4,6 +4,7 @@ import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import {
   buildAfdianAuthorizationUrl,
   exchangeAfdianAuthorizationCode,
+  isAfdianDashboardWebhookTestPayload,
   verifyAfdianWebhookSignature,
 } from '../util/afdianClient.js';
 import { createAfdianOAuthState, consumeAfdianOAuthState } from '../util/afdianOAuthState.js';
@@ -111,6 +112,9 @@ export async function oauthUnlink(req, res) {
 }
 
 export async function webhook(req, res) {
+  if (isAfdianDashboardWebhookTestPayload(req.body)) {
+    return res.json({ ec: 200, em: '' });
+  }
   if (!verifyAfdianWebhookSignature(req.body)) {
     return res.status(400).json({ ec: 400, em: 'invalid signature' });
   }

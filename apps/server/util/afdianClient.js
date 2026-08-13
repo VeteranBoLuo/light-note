@@ -114,6 +114,21 @@ export function verifyAfdianWebhookSignature(payload, { publicKey = AFDIAN_WEBHO
   }
 }
 
+/** 开发者后台“发送测试”仍使用这条无签名公开样例；只允许无副作用确认，禁止落库。 */
+export function isAfdianDashboardWebhookTestPayload(payload) {
+  const order = payload?.data?.order;
+  return (
+    !payload?.sign &&
+    payload?.data?.type === 'order' &&
+    String(order?.out_trade_no || '') === '202106232138371083454010626' &&
+    String(order?.user_id || '') === 'adf397fe8374811eaacee52540025c377' &&
+    String(order?.plan_id || '') === 'a45353328af911eb973052540025c377' &&
+    String(order?.total_amount || '') === '5.00' &&
+    String(order?.show_amount || '') === '5.00' &&
+    Number(order?.status) === 2
+  );
+}
+
 /** 官方验签文本只覆盖这四项；custom_order_id 必须再经查询 API 复核。 */
 export function buildAfdianWebhookSignText(order) {
   return [order?.out_trade_no, order?.user_id, order?.plan_id, order?.total_amount]

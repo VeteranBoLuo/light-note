@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildAfdianAuthorizationUrl,
   buildAfdianWebhookSignText,
+  isAfdianDashboardWebhookTestPayload,
   queryAfdianOrders,
   verifyAfdianWebhookSignature,
 } from './afdianClient.js';
@@ -60,6 +61,31 @@ describe('爱发电客户端协议', () => {
         { publicKey },
       ),
     ).toBe(false);
+  });
+
+  it('只确认开发者后台固定无签名测试夹具，任何变体仍必须验签', () => {
+    const payload = {
+      data: {
+        type: 'order',
+        order: {
+          out_trade_no: '202106232138371083454010626',
+          user_id: 'adf397fe8374811eaacee52540025c377',
+          plan_id: 'a45353328af911eb973052540025c377',
+          total_amount: '5.00',
+          show_amount: '5.00',
+          status: 2,
+        },
+      },
+    };
+
+    expect(isAfdianDashboardWebhookTestPayload(payload)).toBe(true);
+    expect(
+      isAfdianDashboardWebhookTestPayload({
+        ...payload,
+        data: { ...payload.data, order: { ...payload.data.order, out_trade_no: 'real-order-123' } },
+      }),
+    ).toBe(false);
+    expect(isAfdianDashboardWebhookTestPayload({ ...payload, sign: 'unexpected-signature' })).toBe(false);
   });
 
   it('查询 API 只发送签名，不发送 API Token', async () => {

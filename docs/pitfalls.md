@@ -121,6 +121,7 @@
 #### 修复方式
 
 - Webhook 验签成功后只按唯一 `provider_order_no` 幂等落一条 pending 订单，不读取回调里的随机码做归属。
+- 开发者后台“发送测试”仍发送一条公开、无签名的固定文档样例；仅精确匹配该夹具并返回成功，绝不落库。任何字段变体和真实订单仍必须通过 RSA 验签。
 - 服务端随后用爱发电 API Token 调用 `query-order(out_trade_no)`；只有 API 返回的 `custom_order_id` 才可匹配轻笺保存的 SHA-256 凭证摘要。
 - `support_orders.provider_order_no` 建唯一索引；Webhook、全量 API 同步与 OAuth 绑定都更新同一行。
 - OAuth 与下单凭证指向同一轻笺用户时把证据来源升级为 `oauth_checkout`；指向不同用户时保留已有归属并标记 `conflict`，禁止静默转移。
@@ -140,6 +141,7 @@
 - 单测覆盖同一用户的下单凭证 + OAuth 合并为一个归属，以及两个用户证据冲突时不转移。
 - Schema 测试和数据库门禁断言 `uk_support_order_provider`、`uk_support_checkout_token` 及账号关联唯一索引存在。
 - 安全策略测试断言只跳过 `/support/afdian/webhook` 的精确 POST，GET、OAuth 接口和相似路径仍进入通用检测。
+- 客户端测试断言只有爱发电后台固定测试夹具可无副作用确认；修改订单号或携带异常签名后不再命中。
 
 #### 相关代码与提交
 
