@@ -82,6 +82,7 @@ describe('communityChatIdentityService', () => {
       query: vi.fn(async (sql, params) => {
         const text = String(sql);
         expect(text).toContain('community_chat_user_identities identity');
+        expect(text).toContain('CONVERT(identity.community_id USING utf8mb4)');
         expect(text).toContain('blocked.user_id = identity.user_id');
         expect(params).toContain('薄荷');
         return [
@@ -127,7 +128,7 @@ describe('communityChatIdentityService', () => {
       query: vi.fn(async (sql) => {
         const text = String(sql);
         expect(text).toContain('LIMIT 200');
-        expect(text).not.toContain("message.create_time >= DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        expect(text).not.toContain('message.create_time >= DATE_SUB(NOW(), INTERVAL 90 DAY)');
         expect(text).not.toContain("OR membership.status = 'active'");
         return [[], []];
       }),

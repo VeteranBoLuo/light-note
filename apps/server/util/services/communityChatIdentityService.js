@@ -197,7 +197,7 @@ export async function searchCommunityChatMembers({ user, roomSlug, query, limit,
   const queryClause = normalizedQuery
     ? `AND (
          LOCATE(LOWER(?), LOWER(COALESCE(NULLIF(account.alias, ''), ''))) > 0
-         OR LOCATE(LOWER(?), LOWER(identity.community_id)) > 0
+         OR LOCATE(LOWER(?), LOWER(CONVERT(identity.community_id USING utf8mb4))) > 0
        )`
     : '';
   const queryParams = normalizedQuery ? [normalizedQuery, normalizedQuery] : [];
@@ -250,9 +250,9 @@ export async function searchCommunityChatMembers({ user, roomSlug, query, limit,
       ORDER BY
         CASE WHEN account.role = 'root' THEN 0 ELSE 1 END ASC,
         CASE
-          WHEN ? <> '' AND LOWER(identity.community_id) = LOWER(?) THEN 0
+          WHEN ? <> '' AND LOWER(CONVERT(identity.community_id USING utf8mb4)) = LOWER(?) THEN 0
           WHEN ? <> '' AND LOWER(COALESCE(NULLIF(account.alias, ''), '')) = LOWER(?) THEN 1
-          WHEN ? <> '' AND LOWER(identity.community_id) LIKE CONCAT(LOWER(?), '%') THEN 2
+          WHEN ? <> '' AND LOWER(CONVERT(identity.community_id USING utf8mb4)) LIKE CONCAT(LOWER(?), '%') THEN 2
           WHEN ? <> '' AND LOWER(COALESCE(NULLIF(account.alias, ''), '')) LIKE CONCAT(LOWER(?), '%') THEN 3
           ELSE 4
         END ASC,
