@@ -665,13 +665,13 @@
     overflow: hidden;
   }
 
-  :global(html.light-note-mobile-rendering) .profile-card,
-  :global(html.light-note-mobile-rendering) .profile-quick-item {
+  html.light-note-mobile-rendering .profile-card,
+  html.light-note-mobile-rendering .profile-quick-item {
     box-shadow: none;
   }
 
-  :global(html.light-note-mobile-rendering) .profile-card__growth-icon,
-  :global(html.light-note-mobile-rendering) .profile-entry-icon {
+  html.light-note-mobile-rendering .profile-card__growth-icon,
+  html.light-note-mobile-rendering .profile-entry-icon {
     border-color: var(--surface-border-color);
     background: var(--surface-panel-bg);
   }

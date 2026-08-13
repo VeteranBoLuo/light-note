@@ -313,7 +313,7 @@
     background: var(--card-background);
   }
 
-  :global(html.light-note-mobile-rendering) .chat-sticker-panel {
+  html.light-note-mobile-rendering .chat-sticker-panel {
     width: 100%;
     height: min(300px, 38vh);
     min-height: 220px;
@@ -321,7 +321,7 @@
   }
 
   .chat-sticker-panel.is-embedded,
-  :global(html.light-note-mobile-rendering) .chat-sticker-panel.is-embedded {
+  html.light-note-mobile-rendering .chat-sticker-panel.is-embedded {
     width: 100%;
     height: 100%;
     min-height: 0;

@@ -153,7 +153,7 @@
     font-size: 12px;
   }
 
-  :global(html.light-note-mobile-rendering) .chat-emoji-panel {
+  html.light-note-mobile-rendering .chat-emoji-panel {
     width: 100%;
     height: min(300px, 38vh);
     min-height: 220px;
@@ -161,12 +161,12 @@
     box-shadow: none;
   }
 
-  :global(html.light-note-mobile-rendering) .chat-emoji-panel__grid {
+  html.light-note-mobile-rendering .chat-emoji-panel__grid {
     grid-template-columns: repeat(8, minmax(0, 1fr));
   }
 
   .chat-emoji-panel.is-embedded,
-  :global(html.light-note-mobile-rendering) .chat-emoji-panel.is-embedded {
+  html.light-note-mobile-rendering .chat-emoji-panel.is-embedded {
     width: 100%;
     height: 100%;
     min-height: 0;

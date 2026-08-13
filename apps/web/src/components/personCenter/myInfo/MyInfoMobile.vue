@@ -671,7 +671,7 @@
     font-size: 12px;
   }
 
-  :global(html.light-note-mobile-rendering) .profile-decoration-row {
+  html.light-note-mobile-rendering .profile-decoration-row {
     border-color: var(--primary-color);
     background: var(--surface-panel-bg);
   }

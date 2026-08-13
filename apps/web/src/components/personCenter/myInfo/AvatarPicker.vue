@@ -632,14 +632,14 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering) .avatar-picker-card.b_btn,
-  :global(html.light-note-mobile-rendering) .avatar-picker__hero,
-  :global(html.light-note-mobile-rendering) .avatar-picker__section--custom {
+  html.light-note-mobile-rendering .avatar-picker-card.b_btn,
+  html.light-note-mobile-rendering .avatar-picker__hero,
+  html.light-note-mobile-rendering .avatar-picker__section--custom {
     border-color: var(--surface-border-color);
     background: var(--surface-card-bg);
   }
 
-  :global(html.light-note-mobile-rendering) .avatar-picker-card.b_btn.is-selected {
+  html.light-note-mobile-rendering .avatar-picker-card.b_btn.is-selected {
     border-color: var(--primary-color);
     background: var(--surface-panel-bg);
   }

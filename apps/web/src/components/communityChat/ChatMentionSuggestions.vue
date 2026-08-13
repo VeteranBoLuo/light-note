@@ -278,7 +278,7 @@
     height: 4px;
   }
 
-  :global(html.light-note-mobile-rendering) .chat-mention-suggestions {
+  html.light-note-mobile-rendering .chat-mention-suggestions {
     width: 100%;
     height: min(300px, calc(var(--mobile-visible-viewport-height, 100vh) * 0.38));
     max-height: min(300px, calc(var(--mobile-visible-viewport-height, 100vh) * 0.38));

@@ -575,8 +575,8 @@
       animation: none;
     }
   }
-  :global(html.light-note-mobile-rendering) .activity-heatmap__cell.is-today,
-  :global(html.light-note-mobile-rendering) .activity-heatmap__cell.is-selected {
+  html.light-note-mobile-rendering .activity-heatmap__cell.is-today,
+  html.light-note-mobile-rendering .activity-heatmap__cell.is-selected {
     outline: 2px solid var(--primary-color);
     outline-offset: 1px;
     box-shadow: none;

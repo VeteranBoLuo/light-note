@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
+import { compileStyle } from '@vue/compiler-sfc';
 import { describe, expect, it } from 'vitest';
 
 const sourceRoot = resolve(process.cwd(), 'src');
@@ -42,6 +43,27 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
       .map((path) => relative(sourceRoot, path));
 
     expect(violations).toEqual([]);
+  });
+
+  it('scoped 样式不能在根节点 global 结束后继续拼接业务后代', () => {
+    const unsafeGlobalAncestor = /:global\((?:html|body|:root)[^)]*\)\s+[^\s,{]/u;
+    const violations = walk(sourceRoot)
+      .filter((path) => extname(path) === '.vue')
+      .filter((path) => !path.endsWith('.test.ts'))
+      .filter((path) => unsafeGlobalAncestor.test(stripComments(readFileSync(path, 'utf8'))))
+      .map((path) => relative(sourceRoot, path));
+
+    expect(violations).toEqual([]);
+
+    const compiled = compileStyle({
+      source: 'html.light-note-mobile-rendering .component-root { border: 0; }',
+      filename: 'ScopedMobileProbe.vue',
+      id: 'data-v-mobile-probe',
+      scoped: true,
+    });
+    expect(compiled.errors).toEqual([]);
+    expect(compiled.code).toContain('html.light-note-mobile-rendering .component-root[data-v-mobile-probe]');
+    expect(compiled.code).not.toMatch(/html\.light-note-mobile-rendering\s*\{/u);
   });
 
   it('全局 UI 字体栈唯一且不再声明平台独占中文字体', () => {

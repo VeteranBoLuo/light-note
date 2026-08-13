@@ -180,5 +180,5 @@
     .today-growth__next .b_btn { margin-left: 50px; }
   }
   @media (prefers-reduced-motion: reduce) { .today-growth__skeleton span { animation: none; } }
-  :global(html.light-note-mobile-rendering) .today-growth__next { border-color: var(--primary-color); box-shadow: none; }
+  html.light-note-mobile-rendering .today-growth__next { border-color: var(--primary-color); box-shadow: none; }
 </style>

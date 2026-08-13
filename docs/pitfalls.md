@@ -25,6 +25,7 @@
 
 | 编号                                                                        | 日期       | 模块             | 关键词                                           | 状态         |
 | --------------------------------------------------------------------------- | ---------- | ---------------- | ------------------------------------------------ | ------------ |
+| [LN-PIT-016](#ln-pit-016scoped-样式中提前结束根节点-global-会把业务声明泄漏到页面根节点) | 2026-08-13 | 前端样式、移动端 | scoped、global、懒加载、根节点、跨路由、边框     | 已修复待上线 |
 | [LN-PIT-015](#ln-pit-015公开成员搜索不能用社区参与记录代替注册账号全集)     | 2026-08-13 | 聊天室、数据库   | 提及、社区身份、回填、注册、所有人通知           | 已修复并上线 |
 | [LN-PIT-014](#ln-pit-014popover-子内容的百分比宽度会与父级自动宽度形成循环) | 2026-08-13 | 聊天室、交互     | 表情、BPopover、fixed、shrink-to-fit、百分比宽度 | 已修复并上线 |
 | [LN-PIT-013](#ln-pit-013一次性脚本导入实时服务后会被-redis-连接挂住)        | 2026-08-13 | 脚本、聊天室     | CLI、Redis、模块副作用、连接关闭、回填           | 已修复并上线 |
@@ -69,6 +70,71 @@
 ```
 
 ## 案例记录
+
+### LN-PIT-016：scoped 样式中提前结束根节点 global 会把业务声明泄漏到页面根节点
+
+- 日期：2026-08-13
+- 状态：已修复待上线
+- 影响范围：移动浏览器、PWA 与 Android App；加载含问题样式的懒加载分包后会持续影响后续路由
+- 关键词：Vue scoped CSS、`:global()`、`html`、`body`、懒加载、跨路由、边框、根节点污染
+
+#### 现象
+
+应用首次进入“今日”时页面边缘正常；进入聊天室后，移动页面顶部和左侧出现一条细边线。随后切到今日、书签或云空间，边线不会消失，只会跟随当前页面语义色变成紫色或橙色。除边框外，根节点还可能被错误写入组件面板的宽高、最小高度、圆角、阴影或 Grid 列数。
+
+#### 误导线索与排除项
+
+- 源码写成 `:global(html.light-note-mobile-rendering) .chat-expression-panel`，视觉上很像“移动根类下的面板后代”，容易在源码评审时误判为局部选择器。
+- `MobileAppShell`、云空间和今日页面自身都没有对应外框；只检查发生异常的目标页面会找不到来源。
+- CSS 语法合法，类型检查、组件挂载测试和生产构建都不会主动报错；刷新后默认页又恢复正常，容易误判为 WebView GPU 残影。
+- 边框颜色会随页面变化，是因为错误规则只固定了边框宽度和样式，颜色继续取根节点当前 `color`，不是每个页面分别创建了一条边框。
+
+#### 已确认根因
+
+当前 `@vue/compiler-sfc` 对 scoped 样式中的 `:global(...)` 按完整选择器替换处理。写成：
+
+```less
+:global(html.light-note-mobile-rendering) .component-root { /* ... */ }
+```
+
+时，`)` 后面的业务后代不会保留在编译结果中，最终产物会变成：
+
+```css
+html.light-note-mobile-rendering { /* 原本属于组件的声明 */ }
+```
+
+聊天室表情分包首次加载后，因此直接给 `html` 写入了面板边框、宽高和圆角。SPA 已加载的 CSS 分包不会在离开路由时卸载，所以污染会持续到整页刷新；后续页面只改变根节点继承色，边框随之变色。同类写法还存在于成长、个人中心、后台、云空间和全局消息组件，部分规则会直接污染 `html` 或 `body`。
+
+#### 修复方式
+
+- scoped 组件统一使用普通祖先选择器 `html.light-note-mobile-rendering .component-root`；Vue 编译器会把 scope 属性加到组件后代，生成 `html.light-note-mobile-rendering .component-root[data-v-*]`，不会要求 `html` 持有组件 scope 属性。
+- 全仓清理 `:global(html|body|:root...)` 提前结束后再拼接业务后代的写法，不只修复当前聊天室边框。
+- 在移动渲染一致性门禁中扫描所有 Vue 源码，禁止重新引入危险模式；同时用项目实际 `@vue/compiler-sfc` 编译探针，断言允许写法生成完整后代选择器而不是根节点裸规则。
+
+#### 防回归约束
+
+1. scoped 样式需要“全局根状态 + 当前组件后代”时，使用 `html.some-state .component-root` 或把完整后代都放进同一个 `:global(...)`；禁止 `:global(html.some-state) .component-root`。
+2. `html`、`body`、`:root` 的布局、宽高、边框、圆角、阴影、定位、display 和 overflow 变更必须视为全局变更评审，不能只做组件截图验收。
+3. 懒加载页面的样式验收必须覆盖“默认页 → 目标分包 → 离开目标页 → 其他一级页”，不能假设路由离开后 CSS 会卸载。
+4. 生产构建后应检查业务分包中的根节点裸规则；发现组件尺寸或外框声明落到 `html/body` 时禁止发布。
+
+#### 验证方法
+
+- 运行 `renderingParityGate.test.ts`，确认源码危险模式清单为空，编译探针保留组件后代与 scope 属性。
+- 构建后扫描全部 CSS，确认聊天室、成长、个人中心等业务分包不再生成带组件宽高、边框或 Grid 声明的裸 `html.light-note-mobile-rendering { ... }`。
+- 使用同一移动 CSS 视口执行“刷新今日 → 聊天室 → 今日 → 资料 → 云空间”，每一步读取 `html/body` 计算样式；根节点四边必须始终为 `0px none`，组件面板本身仍保留预期尺寸和边框。
+- 在移动浏览器与 Android Debug App 各执行一次上述链路，同时覆盖浅色和深色主题。
+
+#### 相关代码与提交
+
+| 位置                                                               | 作用                               |
+| ------------------------------------------------------------------ | ---------------------------------- |
+| `apps/web/src/config/renderingParityGate.test.ts`                  | 源码危险模式与真实编译结果门禁     |
+| `apps/web/src/components/communityChat/ChatExpressionPanel.vue`   | 本次线上边框的直接触发规则         |
+| `apps/web/src/components/communityChat/ChatEmojiPanel.vue`        | Emoji 面板移动规则                 |
+| `apps/web/src/components/communityChat/ChatCustomStickerPanel.vue`| 自定义表情面板移动规则             |
+| `apps/web/src/components/communityChat/ChatMentionSuggestions.vue`| 提及面板移动规则                   |
+| `apps/web/src/components/base/BasicComponents/BMessage/BMessageContainer.vue` | `body` 根状态的同类修复 |
 
 ### LN-PIT-015：公开成员搜索不能用社区参与记录代替注册账号全集
 

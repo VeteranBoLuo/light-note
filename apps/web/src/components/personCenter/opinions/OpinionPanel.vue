@@ -1148,17 +1148,17 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering) .opinion-history-card,
-  :global(html.light-note-mobile-rendering) .opinion-card {
+  html.light-note-mobile-rendering .opinion-history-card,
+  html.light-note-mobile-rendering .opinion-card {
     box-shadow: none;
   }
 
-  :global(html.light-note-mobile-rendering) .opinion-reply {
+  html.light-note-mobile-rendering .opinion-reply {
     border-color: var(--primary-color);
     background: var(--surface-panel-bg);
   }
 
-  :global(html.light-note-mobile-rendering) .opinion-field :deep(.bl-radio.element-primary) {
+  html.light-note-mobile-rendering .opinion-field :deep(.bl-radio.element-primary) {
     border-color: var(--primary-color);
     box-shadow: none;
   }

@@ -116,7 +116,7 @@
     background: var(--workspace-panel-bg-color);
   }
 
-  :global(html.light-note-mobile-rendering) .chat-expression-panel {
+  html.light-note-mobile-rendering .chat-expression-panel {
     width: 100%;
     height: min(350px, 42vh);
     min-height: 260px;
@@ -125,7 +125,7 @@
     box-shadow: none;
   }
 
-  :global(html.light-note-mobile-rendering) .chat-expression-panel__tab.b_btn.is-active {
+  html.light-note-mobile-rendering .chat-expression-panel__tab.b_btn.is-active {
     border-width: 1px;
     border-style: solid;
   }

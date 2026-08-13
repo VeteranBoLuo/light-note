@@ -939,8 +939,8 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering) .todo-independent-plan__choices :deep(.b_btn.is-active),
-  :global(html.light-note-mobile-rendering) .todo-independent-plan__past-options :deep(.b_btn.is-active) {
+  html.light-note-mobile-rendering .todo-independent-plan__choices :deep(.b_btn.is-active),
+  html.light-note-mobile-rendering .todo-independent-plan__past-options :deep(.b_btn.is-active) {
     border-color: var(--primary-color) !important;
     color: var(--primary-color);
   }

@@ -483,8 +483,8 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering) .product-insights__feature,
-  :global(html.light-note-mobile-rendering) .product-insights__cohort {
+  html.light-note-mobile-rendering .product-insights__feature,
+  html.light-note-mobile-rendering .product-insights__cohort {
     box-shadow: none;
     border-color: var(--surface-border-color);
   }

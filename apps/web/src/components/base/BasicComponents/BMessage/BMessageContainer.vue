@@ -229,20 +229,20 @@
     }
 
     /* 写操作引导和被动浏览提示均占用底部安全区，消息统一叠在提示卡上方。 */
-    :global(body.light-note-has-guest-nudge) .b-message-container {
+    body.light-note-has-guest-nudge .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 166px);
     }
 
-    :global(body.light-note-has-guest-browse-nudge) .b-message-container {
+    body.light-note-has-guest-browse-nudge .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 78px);
     }
 
-    :global(body.light-note-has-guest-nudge.light-note-has-guest-browse-nudge) .b-message-container {
+    body.light-note-has-guest-nudge.light-note-has-guest-browse-nudge .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 230px);
     }
 
     /* 原生下载进度浮层也占着底部,消息同样要叠在它上方(否则文字互相压住看不清) */
-    :global(body.light-note-has-native-download-progress) .b-message-container {
+    body.light-note-has-native-download-progress .b-message-container {
       bottom: calc(var(--mobile-shell-bottom-height, env(safe-area-inset-bottom)) + 104px);
     }
 

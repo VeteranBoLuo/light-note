@@ -32,7 +32,7 @@
     pointer-events: none;
   }
 
-  :global(html.light-note-mobile-rendering) .async-feature-loading {
+  html.light-note-mobile-rendering .async-feature-loading {
     border-color: var(--surface-border-color);
     box-shadow: 0 8px 24px rgba(31, 35, 48, 0.14);
   }
