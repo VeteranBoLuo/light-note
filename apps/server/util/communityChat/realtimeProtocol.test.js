@@ -19,6 +19,18 @@ function subscription(overrides = {}) {
   );
 }
 
+function onlineMembersRequest(overrides = {}) {
+  return Buffer.from(
+    JSON.stringify({
+      protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
+      type: 'presence.members.request',
+      requestId: 'presence-0001',
+      payload: {},
+      ...overrides,
+    }),
+  );
+}
+
 describe('communityChat realtime protocol', () => {
   it('只接受唯一公共房间的最小订阅消息', () => {
     expect(parseCommunityChatClientMessage(subscription())).toEqual({
@@ -37,6 +49,18 @@ describe('communityChat realtime protocol', () => {
     expect(() =>
       parseCommunityChatClientMessage(subscription({ payload: { roomSlug: 'general', presenceClientId: 'short' } })),
     ).toThrowError(expect.objectContaining({ code: 'REALTIME_PRESENCE_CLIENT_ID_INVALID' }));
+  });
+
+  it('在线成员请求不允许客户端提交用户、角色或筛选条件', () => {
+    expect(parseCommunityChatClientMessage(onlineMembersRequest())).toEqual({
+      protocolVersion: 1,
+      type: 'presence.members.request',
+      requestId: 'presence-0001',
+      payload: {},
+    });
+    expect(() =>
+      parseCommunityChatClientMessage(onlineMembersRequest({ payload: { role: 'root' } })),
+    ).toThrowError(expect.objectContaining({ code: 'REALTIME_PRESENCE_REQUEST_FIELDS_INVALID' }));
   });
 
   it('拒绝客户端提交 userId、role 或未知房间', () => {

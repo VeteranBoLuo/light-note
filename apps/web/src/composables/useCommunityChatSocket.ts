@@ -13,6 +13,20 @@ export interface CommunityChatRealtimeEvent {
   payload: Record<string, unknown>;
 }
 
+export interface CommunityChatOnlineMember {
+  alias: string;
+  role: 'root' | 'user' | 'visitor' | 'test';
+  avatar: string;
+  frameId: string;
+}
+
+export interface CommunityChatOnlineMembersSnapshot {
+  onlineCount: number;
+  memberCount: number;
+  guestCount: number;
+  members: CommunityChatOnlineMember[];
+}
+
 interface RealtimeServerEvent {
   protocolVersion: number;
   type: string;
@@ -43,6 +57,8 @@ const BROADCAST_EVENT_TYPES = new Set([
   'access.changed',
 ]);
 const MAX_SEEN_EVENT_IDS = 512;
+const MAX_SERVER_EVENT_PAYLOAD_BYTES = 512 * 1024;
+const PRESENCE_MEMBERS_REQUEST_TIMEOUT_MS = 8000;
 // 与 HTTP 请求的 X-Device-Id 共用同一 localStorage 键，但不引入包含路由等依赖的 common.ts，
 // 避免这个应用级轻量连接反向扩大首屏模块依赖。
 const PRESENCE_CLIENT_ID_STORAGE_KEY = 'ln_log_device_id';
@@ -62,7 +78,7 @@ export function buildCommunityChatSocketUrl(locationLike: Pick<Location, 'href'>
 }
 
 export function parseCommunityChatServerEvent(raw: unknown): RealtimeServerEvent | null {
-  if (typeof raw !== 'string' || raw.length > 16 * 1024) return null;
+  if (typeof raw !== 'string' || raw.length > MAX_SERVER_EVENT_PAYLOAD_BYTES) return null;
   try {
     const value = JSON.parse(raw);
     if (
@@ -82,6 +98,43 @@ export function parseCommunityChatServerEvent(raw: unknown): RealtimeServerEvent
 
 function subscribeRequestId(random: () => number) {
   return `subscribe:${Date.now().toString(36)}:${Math.floor(random() * 0x7fffffff).toString(36)}`.slice(0, 64);
+}
+
+function presenceMembersRequestId(random: () => number) {
+  return `presence:${Date.now().toString(36)}:${Math.floor(random() * 0x7fffffff).toString(36)}`.slice(0, 64);
+}
+
+function parseOnlineMembersSnapshot(payload: Record<string, unknown>): CommunityChatOnlineMembersSnapshot | null {
+  const onlineCount = Number(payload.onlineCount);
+  const memberCount = Number(payload.memberCount);
+  const guestCount = Number(payload.guestCount);
+  if (
+    !Number.isInteger(onlineCount) ||
+    onlineCount < 0 ||
+    !Number.isInteger(memberCount) ||
+    memberCount < 0 ||
+    !Number.isInteger(guestCount) ||
+    guestCount < 0 ||
+    !Array.isArray(payload.members) ||
+    payload.members.length > 500
+  ) {
+    return null;
+  }
+  const members: CommunityChatOnlineMember[] = [];
+  for (const item of payload.members) {
+    if (!isPlainObject(item)) return null;
+    const role = String(item.role || '');
+    if (!['root', 'user', 'visitor', 'test'].includes(role)) return null;
+    const avatar = String(item.avatar || '');
+    if (avatar && !/^https?:\/\//i.test(avatar)) return null;
+    members.push({
+      alias: String(item.alias || '').slice(0, 80),
+      role: role as CommunityChatOnlineMember['role'],
+      avatar: avatar.slice(0, 2048),
+      frameId: String(item.frameId || '').slice(0, 64),
+    });
+  }
+  return { onlineCount, memberCount, guestCount, members };
 }
 
 function resolvePresenceClientId() {
@@ -118,6 +171,24 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
   let reconnectTimer: number | undefined;
   let handshakeTimer: number | undefined;
   let reconnectBlocked = false;
+  const pendingPresenceMemberRequests = new Map<
+    string,
+    {
+      resolve: (snapshot: CommunityChatOnlineMembersSnapshot) => void;
+      reject: (error: Error) => void;
+      timer: number;
+    }
+  >();
+
+  function rejectPendingPresenceMemberRequests(code = 'REALTIME_CONNECTION_UNAVAILABLE') {
+    const error = new Error(code);
+    error.name = 'CommunityChatRealtimeRequestError';
+    for (const request of pendingPresenceMemberRequests.values()) {
+      window.clearTimeout(request.timer);
+      request.reject(error);
+    }
+    pendingPresenceMemberRequests.clear();
+  }
 
   function rememberEvent(eventId: string) {
     if (!eventId || seenEventIds.has(eventId)) return false;
@@ -141,6 +212,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
 
   function closeCurrentSocket() {
     clearHandshakeTimer();
+    rejectPendingPresenceMemberRequests();
     onlineCount.value = null;
     const current = socket;
     socket = null;
@@ -261,6 +333,33 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
         if (Number.isInteger(count) && count >= 0) onlineCount.value = count;
         return;
       }
+      if (event.type === 'presence.members' && event.requestId) {
+        const pending = pendingPresenceMemberRequests.get(event.requestId);
+        if (!pending) return;
+        const snapshot = parseOnlineMembersSnapshot(event.payload);
+        if (!snapshot) {
+          window.clearTimeout(pending.timer);
+          pendingPresenceMemberRequests.delete(event.requestId);
+          const error = new Error('REALTIME_RESPONSE_INVALID');
+          error.name = 'CommunityChatRealtimeRequestError';
+          pending.reject(error);
+          return;
+        }
+        window.clearTimeout(pending.timer);
+        pendingPresenceMemberRequests.delete(event.requestId);
+        pending.resolve(snapshot);
+        return;
+      }
+      if (event.type === 'error' && event.requestId) {
+        const pending = pendingPresenceMemberRequests.get(event.requestId);
+        if (!pending) return;
+        window.clearTimeout(pending.timer);
+        pendingPresenceMemberRequests.delete(event.requestId);
+        const error = new Error(String(event.payload.code || 'REALTIME_REQUEST_FAILED'));
+        error.name = 'CommunityChatRealtimeRequestError';
+        pending.reject(error);
+        return;
+      }
       if (!BROADCAST_EVENT_TYPES.has(event.type)) return;
       if (
         (event.type === 'message.created' || event.type === 'message.updated' || event.type === 'message.removed') &&
@@ -282,6 +381,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
     nextSocket.onclose = () => {
       if (currentGeneration !== generation || socket !== nextSocket) return;
       clearHandshakeTimer();
+      rejectPendingPresenceMemberRequests();
       socket = null;
       scheduleReconnect();
     };
@@ -298,6 +398,44 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
       return;
     }
     connect();
+  }
+
+  function requestOnlineMembers() {
+    return new Promise<CommunityChatOnlineMembersSnapshot>((resolve, reject) => {
+      const current = socket;
+      if (!current || current.readyState !== WebSocket.OPEN || status.value !== 'connected') {
+        const error = new Error('REALTIME_CONNECTION_UNAVAILABLE');
+        error.name = 'CommunityChatRealtimeRequestError';
+        reject(error);
+        return;
+      }
+      const requestId = presenceMembersRequestId(random);
+      const timer = window.setTimeout(() => {
+        const pending = pendingPresenceMemberRequests.get(requestId);
+        if (!pending) return;
+        pendingPresenceMemberRequests.delete(requestId);
+        const error = new Error('REALTIME_REQUEST_TIMEOUT');
+        error.name = 'CommunityChatRealtimeRequestError';
+        pending.reject(error);
+      }, PRESENCE_MEMBERS_REQUEST_TIMEOUT_MS);
+      pendingPresenceMemberRequests.set(requestId, { resolve, reject, timer });
+      try {
+        current.send(
+          JSON.stringify({
+            protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
+            type: 'presence.members.request',
+            requestId,
+            payload: {},
+          }),
+        );
+      } catch {
+        window.clearTimeout(timer);
+        pendingPresenceMemberRequests.delete(requestId);
+        const error = new Error('REALTIME_REQUEST_SEND_FAILED');
+        error.name = 'CommunityChatRealtimeRequestError';
+        reject(error);
+      }
+    });
   }
 
   function handleVisibilityChange() {
@@ -351,6 +489,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
     isConnected,
     onlineCount,
     reconnect: restart,
+    requestOnlineMembers,
     status,
   };
 }
@@ -360,5 +499,7 @@ export const __test__ = {
   MAX_SEEN_EVENT_IDS,
   isPlainObject,
   resolvePresenceClientId,
+  parseOnlineMembersSnapshot,
+  presenceMembersRequestId,
   subscribeRequestId,
 };

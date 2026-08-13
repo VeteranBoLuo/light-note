@@ -57,12 +57,15 @@
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { bookmarkStore } from '@/store';
+  import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
   import { useRouter } from 'vue-router';
 
   const { t, te } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const { weekly, loadWeekly, claimWeekly, claimingRewards } = useGrowth();
   const router = useRouter();
+  const bookmark = bookmarkStore();
   const loading = ref(true);
   const loadError = ref(false);
 
@@ -106,7 +109,9 @@
     if (challenge.metric === 'bookmark') void router.push('/home');
     else if (challenge.metric === 'note') void router.push('/noteLibrary');
     else if (challenge.metric === 'todo') void router.push({ path: '/inbox', query: { tab: 'todo' } });
-    else if (challenge.metric === 'organize') void router.push('/inbox');
+    else if (challenge.metric === 'organize') {
+      void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
+    }
     else if (challenge.metric === 'checkin') {
       void router.replace({ query: { ...router.currentRoute.value.query, section: 'overview' } });
     }

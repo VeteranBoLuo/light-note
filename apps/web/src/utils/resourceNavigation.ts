@@ -15,6 +15,16 @@ export interface NavigableResource {
   title?: string;
 }
 
+/**
+ * 待整理资源的标准入口。
+ *
+ * 移动端的 `/inbox` 一级入口属于待办，必须显式携带 `tab=all` 才会进入
+ * 资源中心的「待整理」分区；桌面端继续沿用既有的 `/inbox` 地址。
+ */
+export function resolvePendingResourcesRoute(isMobile: boolean): RouteLocationRaw {
+  return isMobile ? { path: '/inbox', query: { tab: 'all' } } : '/inbox';
+}
+
 export function resolveResourceRoute(resource: NavigableResource): RouteLocationRaw | null {
   const id = String(resource?.id || '');
   if (!id) return null;

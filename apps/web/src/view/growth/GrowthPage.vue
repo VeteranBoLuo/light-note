@@ -341,6 +341,7 @@
   import { resetMobileScrollElement } from '@/composables/useMobileNavigationState';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { resolveDailyQuestClaimFeedback } from '@/utils/dailyQuestClaim';
+  import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
   import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
@@ -619,7 +620,7 @@
       return;
     }
     if (action === 'open_inbox') {
-      void router.push('/inbox');
+      void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
       return;
     }
     if (action === 'checkin') {

@@ -265,9 +265,9 @@ src/
 | `agent_logs`                                           | AI 请求、用量和阶段追踪              | UUID             |
 | `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位        | 复合键 / 自增    |
 | `user_growth`                                          | 成长快照、积分及永久 AI 加油余额     | 用户 UUID        |
-| `growth_events` / `points_log`                         | 经验与积分不可变账本             | 自增             |
-| `growth_tasks` / `user_growth_tasks`                   | 成长任务定义、达成与领取状态       | 任务键 / 复合键  |
-| `user_achievements`                                    | 用户成就永久解锁与领取状态         | 用户 + 成就     |
+| `growth_events` / `points_log`                         | 经验与积分不可变账本                 | 自增             |
+| `growth_tasks` / `user_growth_tasks`                   | 成长任务定义、达成与领取状态         | 任务键 / 复合键  |
+| `user_achievements`                                    | 用户成就永久解锁与领取状态           | 用户 + 成就      |
 | `user_growth_preferences` / `growth_recap_state`       | 成长偏好与内容回顾抑制状态           | 用户 / 复合键    |
 | `ai_provider_balance_snapshots`                        | AI 供应商每日账户余额快照            | 自增             |
 | `ai_evaluation_runs`                                   | 管理员手动 AI 冒烟结构化结果         | UUID             |
@@ -652,6 +652,7 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 ## 部署与 Schema 现状 · 易踩坑
 
 > 本节记录几条不看代码就不会知道、但一踩就是坑的隐性约束，接手前务必先读。
+> 跨模块事故、性能回退及其完整根因、防回归测试和验收步骤统一记录在 `docs/pitfalls.md`；本节只保留架构与部署不变量。
 
 ### 部署机制：本地打包 → rsync 上传
 

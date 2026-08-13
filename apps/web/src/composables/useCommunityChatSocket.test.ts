@@ -149,6 +149,41 @@ describe('useCommunityChatSocket', () => {
     expect(mounted.onEvent).not.toHaveBeenCalled();
   });
 
+  it('Root 可按需请求在线名单，且请求不携带身份字段', async () => {
+    const mounted = await mountSocket();
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+    socket.message(serverEvent('room.subscribed', { roomSlug: 'general', onlineCount: 3 }));
+
+    const pending = mounted.socketState.requestOnlineMembers();
+    const request = JSON.parse(socket.sent.at(-1) || '{}');
+    expect(request).toMatchObject({
+      protocolVersion: 1,
+      type: 'presence.members.request',
+      payload: {},
+    });
+    expect(request).not.toHaveProperty('userId');
+    expect(request).not.toHaveProperty('role');
+    socket.message({
+      ...serverEvent(
+        'presence.members',
+        {
+          onlineCount: 3,
+          memberCount: 2,
+          guestCount: 1,
+          members: [
+            { alias: '菠萝', role: 'root', avatar: 'https://example.com/root.png', frameId: 'frame-celestial' },
+            { alias: '测试员', role: 'test', avatar: '', frameId: '' },
+          ],
+        },
+        'presence-members-0001',
+      ),
+      requestId: request.requestId,
+    });
+
+    await expect(pending).resolves.toMatchObject({ onlineCount: 3, memberCount: 2, guestCount: 1 });
+  });
+
   it('按 eventId 去重业务事件，忽略其他房间和无效 JSON', async () => {
     const mounted = await mountSocket();
     const socket = FakeWebSocket.instances[0];

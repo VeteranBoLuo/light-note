@@ -140,6 +140,66 @@ describe('communityChat realtime hub', () => {
     expect(changed?.payload).toEqual({ onlineCount: 1 });
   });
 
+  it('只向 Root 返回去重后的在线成员，游客只返回汇总数', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        if (String(sql).includes('LEFT JOIN user_growth')) {
+          return [
+            params.map((id) => ({
+              id,
+              alias: id === 'root-user' ? '菠萝' : '测试成员',
+              role: id === 'root-user' ? 'root' : 'user',
+              avatar: 'https://example.com/avatar.png',
+              frameId: id === 'root-user' ? 'frame-celestial' : null,
+            })),
+            [],
+          ];
+        }
+        const id = params[0];
+        return [[{ id, alias: id, role: id === 'root-user' ? 'root' : 'user', del_flag: '0' }], []];
+      }),
+    };
+    const { origin, url } = await createHarness({
+      db,
+      getSessionById: async (sid) => ({ user_id: sid }),
+      getRestrictions: async () => [],
+      assertReadAccess: async ({ user }) => ({ memberRole: user.role }),
+    });
+    const root = connectClient(url, origin, { headers: { Cookie: 'sid=root-user' } });
+    const rootSecondDevice = connectClient(url, origin, { headers: { Cookie: 'sid=root-user' } });
+    const member = connectClient(url, origin, { headers: { Cookie: 'sid=member-user' } });
+    const guest = connectClient(url, origin);
+    await Promise.all([
+      subscribe(root, 'root-device-000001'),
+      subscribe(rootSecondDevice, 'root-device-000002'),
+      subscribe(member, 'member-device-0001'),
+      subscribe(guest, 'guest-device-0002'),
+    ]);
+
+    root.ws.send(
+      JSON.stringify({ protocolVersion: 1, type: 'presence.members.request', requestId: 'presence-root-0001', payload: {} }),
+    );
+    const snapshot = await root.waitFor('presence.members');
+    expect(snapshot.requestId).toBe('presence-root-0001');
+    expect(snapshot.payload).toMatchObject({ onlineCount: 3, memberCount: 2, guestCount: 1 });
+    expect(snapshot.payload.members).toHaveLength(2);
+    expect(snapshot.payload.members).toContainEqual(
+      expect.objectContaining({ alias: '菠萝', role: 'root', frameId: 'frame-celestial' }),
+    );
+    expect(JSON.stringify(snapshot)).not.toContain('root-user');
+    expect(JSON.stringify(snapshot)).not.toContain('guest-device-0002');
+
+    member.ws.send(
+      JSON.stringify({ protocolVersion: 1, type: 'presence.members.request', requestId: 'presence-user-0001', payload: {} }),
+    );
+    const denied = await member.waitFor('error');
+    expect(denied).toMatchObject({
+      requestId: 'presence-user-0001',
+      payload: { code: 'REALTIME_ROOT_REQUIRED' },
+    });
+    expect(member.ws.readyState).toBe(WebSocket.OPEN);
+  });
+
   it('按实时数据库账号认证 sid，并且定向权限事件不会泄漏给其他连接', async () => {
     const db = {
       query: vi.fn(async (_sql, params) => [[{ id: params[0], alias: params[0], role: 'user', del_flag: '0' }], []]),

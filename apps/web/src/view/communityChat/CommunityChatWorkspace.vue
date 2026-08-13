@@ -46,7 +46,11 @@
           <div>
             <div class="community-conversation-header__title-line">
               <strong>{{ currentRoom.name }}</strong>
-              <span v-if="realtimeEnabled && onlineCount !== null" class="community-conversation-header__online">
+              <span
+                v-if="realtimeEnabled && onlineCount !== null"
+                class="community-conversation-header__online"
+                @click="openOnlineMembers"
+              >
                 {{ t('communityChat.onlineCount', { count: onlineCount }) }}
               </span>
             </div>
@@ -537,6 +541,14 @@
     @manage-profile="openProfileFromSettings"
     @notification-saved="handleNotificationSettingsSaved"
   />
+  <ChatOnlineMembersModal
+    v-model:visible="onlineMembersVisible"
+    :online-count="onlineCount || 0"
+    :snapshot="onlineMembersSnapshot"
+    :loading="onlineMembersLoading"
+    :error="onlineMembersError"
+    @retry="loadOnlineMembers"
+  />
   <MobilePageActionsDrawer
     v-model:open="mobileMessageActionsVisible"
     compact
@@ -622,8 +634,13 @@
   import ChatReportModal from '@/components/communityChat/ChatReportModal.vue';
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
+  import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
-  import { useCommunityChatSocket, type CommunityChatRealtimeEvent } from '@/composables/useCommunityChatSocket';
+  import {
+    useCommunityChatSocket,
+    type CommunityChatOnlineMembersSnapshot,
+    type CommunityChatRealtimeEvent,
+  } from '@/composables/useCommunityChatSocket';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { getCommunityChatDraft, rememberCommunityChatDraft } from '@/composables/useCommunityChatDraftMemory';
   import icon from '@/config/icon';
@@ -701,6 +718,10 @@
   const removingImageIds = ref(new Set<string>());
   const blocksVisible = ref(false);
   const settingsVisible = ref(false);
+  const onlineMembersVisible = ref(false);
+  const onlineMembersLoading = ref(false);
+  const onlineMembersError = ref(false);
+  const onlineMembersSnapshot = ref<CommunityChatOnlineMembersSnapshot | null>(null);
   const blocksLoading = ref(false);
   const blockedUsers = ref<CommunityChatBlockItem[]>([]);
   const unblockingId = ref('');
@@ -804,13 +825,33 @@
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
   const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
-  const { onlineCount, status: realtimeStatus } = useCommunityChatSocket({
+  const { onlineCount, requestOnlineMembers, status: realtimeStatus } = useCommunityChatSocket({
     enabled: realtimeEnabled,
     roomSlug: selectedRoomSlug,
     identityKey: realtimeIdentityKey,
     onEvent: handleRealtimeEvent,
     onSynchronized: handleRealtimeSynchronized,
   });
+  async function loadOnlineMembers() {
+    if (currentUser.role !== 'root' || onlineMembersLoading.value) return;
+    onlineMembersLoading.value = true;
+    onlineMembersError.value = false;
+    try {
+      onlineMembersSnapshot.value = await requestOnlineMembers();
+      void recordOperation({ module: '公共聊天室', operation: 'Root 查看当前在线成员' });
+    } catch {
+      onlineMembersError.value = true;
+    } finally {
+      onlineMembersLoading.value = false;
+    }
+  }
+
+  function openOnlineMembers() {
+    if (currentUser.role !== 'root') return;
+    onlineMembersVisible.value = true;
+    onlineMembersSnapshot.value = null;
+    void loadOnlineMembers();
+  }
   const realtimeStatusLabel = computed(() => {
     if (realtimeStatus.value === 'connected') return t('communityChat.realtimeConnected');
     if (realtimeStatus.value === 'connecting' || realtimeStatus.value === 'reconnecting') {

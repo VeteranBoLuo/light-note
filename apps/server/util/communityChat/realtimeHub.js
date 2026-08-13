@@ -295,8 +295,77 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
     safeClose(ws, error?.closeCode || 1008, 'protocol_error');
   }
 
+  function sendRequestError(ws, requestId, code) {
+    sendEvent(
+      ws,
+      createCommunityChatServerEvent(
+        'error',
+        { code: String(code || 'REALTIME_REQUEST_FAILED').slice(0, 64) },
+        { requestId },
+      ),
+    );
+  }
+
   function currentOnlineCount() {
     return presenceConnections.size;
+  }
+
+  async function loadOnlineMembersSnapshot() {
+    const accountIds = [];
+    let guestCount = 0;
+    for (const identityKey of presenceConnections.keys()) {
+      if (identityKey.startsWith('user:')) {
+        const accountId = identityKey.slice('user:'.length).trim();
+        if (accountId) accountIds.push(accountId);
+      } else {
+        guestCount += 1;
+      }
+    }
+
+    if (!accountIds.length) {
+      return {
+        onlineCount: currentOnlineCount(),
+        memberCount: 0,
+        guestCount,
+        members: [],
+      };
+    }
+
+    const placeholders = accountIds.map(() => '?').join(', ');
+    const [rows] = await db.query(
+      `SELECT account.id, COALESCE(NULLIF(account.alias, ''), '') AS alias, account.role,
+              CASE
+                WHEN account.head_picture LIKE 'https://%' OR account.head_picture LIKE 'http://%'
+                  THEN account.head_picture
+                ELSE ''
+              END AS avatar,
+              growth.equipped_frame AS frameId
+         FROM user account
+         LEFT JOIN user_growth growth ON growth.user_id = account.id
+        WHERE account.id IN (${placeholders})
+          AND (account.role = 'root' OR account.del_flag = 0)`,
+      accountIds,
+    );
+    const accountOrder = new Map(accountIds.map((id, index) => [String(id), index]));
+    const members = rows
+      .map((row) => ({
+        internalId: String(row.id || ''),
+        alias: String(row.alias || '').slice(0, 80),
+        role: ['root', 'user', 'visitor', 'test'].includes(String(row.role || ''))
+          ? String(row.role)
+          : 'user',
+        avatar: String(row.avatar || '').slice(0, 512),
+        frameId: String(row.frameId || '').slice(0, 64),
+      }))
+      .sort((left, right) => (accountOrder.get(left.internalId) ?? 0) - (accountOrder.get(right.internalId) ?? 0))
+      .map(({ internalId: _internalId, ...member }) => member);
+
+    return {
+      onlineCount: currentOnlineCount(),
+      memberCount: members.length,
+      guestCount,
+      members,
+    };
   }
 
   function broadcastPresenceChanged() {
@@ -428,6 +497,27 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
         const message = parseCommunityChatClientMessage(raw);
         await revalidateSocket(ws, context);
         if (ws.readyState !== WebSocket.OPEN) return;
+        if (message.type === 'presence.members.request') {
+          if (!context.rooms.size) {
+            sendRequestError(ws, message.requestId, 'REALTIME_ROOM_SUBSCRIPTION_REQUIRED');
+            return;
+          }
+          if (context.user?.role !== 'root') {
+            sendRequestError(ws, message.requestId, 'REALTIME_ROOT_REQUIRED');
+            return;
+          }
+          try {
+            const snapshot = await loadOnlineMembersSnapshot();
+            sendEvent(
+              ws,
+              createCommunityChatServerEvent('presence.members', snapshot, { requestId: message.requestId }),
+            );
+          } catch (error) {
+            logger.error('[community-chat-realtime] 在线成员读取失败 code=%s', stableAgentErrorCode(error));
+            sendRequestError(ws, message.requestId, 'REALTIME_PRESENCE_MEMBERS_FAILED');
+          }
+          return;
+        }
         const presenceChanged = attachPresenceConnection(ws, context, message.payload.presenceClientId);
         // 新连接先只通知已有订阅者，再用 room.subscribed 把相同权威值交给自己，避免重复事件。
         if (presenceChanged) broadcastPresenceChanged();

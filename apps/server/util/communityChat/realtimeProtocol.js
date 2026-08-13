@@ -10,6 +10,8 @@ const PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]{1,36}$/;
 const PRESENCE_CLIENT_ID_PATTERN = /^[A-Za-z0-9:_-]{12,80}$/;
 const CLIENT_MESSAGE_KEYS = new Set(['protocolVersion', 'type', 'requestId', 'payload']);
 const SUBSCRIBE_PAYLOAD_KEYS = new Set(['roomSlug', 'presenceClientId']);
+const EMPTY_PAYLOAD_KEYS = new Set();
+const CLIENT_MESSAGE_TYPES = new Set(['room.subscribe', 'presence.members.request']);
 const BROADCAST_TYPES = new Set([
   'message.created',
   'message.updated',
@@ -48,8 +50,9 @@ function rawPayloadToString(raw) {
 }
 
 /**
- * 客户端目前只允许订阅唯一公共房间。身份、角色和内部 ID 没有可提交字段；
- * presenceClientId 只用于游客同浏览器去重，不参与认证、权限或对外广播。
+ * 客户端只能订阅唯一公共房间，或在订阅后发起一次在线成员请求。
+ * 身份、角色和内部 ID 均不允许由客户端提交；presenceClientId 只用于游客同浏览器去重，
+ * 不参与认证、权限或对外广播。在线成员请求的 Root 权限由服务端另行校验。
  */
 export function parseCommunityChatClientMessage(raw) {
   const text = rawPayloadToString(raw);
@@ -68,15 +71,26 @@ export function parseCommunityChatClientMessage(raw) {
   if (value.protocolVersion !== COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION) {
     throw protocolError('REALTIME_PROTOCOL_UNSUPPORTED', 'Unsupported realtime protocol version', 1002);
   }
-  if (value.type !== 'room.subscribe') {
+  if (!CLIENT_MESSAGE_TYPES.has(value.type)) {
     throw protocolError('REALTIME_MESSAGE_TYPE_UNSUPPORTED', 'Unsupported realtime message type');
   }
   if (!REQUEST_ID_PATTERN.test(String(value.requestId || ''))) {
     throw protocolError('REALTIME_REQUEST_ID_INVALID', 'Realtime request identifier is invalid');
   }
   if (!isPlainObject(value.payload)) {
-    throw protocolError('REALTIME_SUBSCRIPTION_INVALID', 'Realtime subscription payload is invalid');
+    throw protocolError('REALTIME_PAYLOAD_INVALID', 'Realtime message payload is invalid');
   }
+
+  if (value.type === 'presence.members.request') {
+    assertExactKeys(value.payload, EMPTY_PAYLOAD_KEYS, 'REALTIME_PRESENCE_REQUEST_FIELDS_INVALID');
+    return {
+      protocolVersion: COMMUNITY_CHAT_REALTIME_PROTOCOL_VERSION,
+      type: 'presence.members.request',
+      requestId: value.requestId,
+      payload: {},
+    };
+  }
+
   assertExactKeys(value.payload, SUBSCRIBE_PAYLOAD_KEYS, 'REALTIME_SUBSCRIPTION_FIELDS_INVALID');
   if (value.payload.roomSlug !== COMMUNITY_CHAT_PRIMARY_ROOM_SLUG) {
     throw protocolError('REALTIME_ROOM_UNAVAILABLE', 'Realtime room is unavailable');
@@ -174,6 +188,7 @@ export function normalizeCommunityChatBroadcastEvent(value) {
 
 export const __test__ = {
   BROADCAST_TYPES,
+  CLIENT_MESSAGE_TYPES,
   PRESENCE_CLIENT_ID_PATTERN,
   isPlainObject,
   normalizeBroadcastPayload,

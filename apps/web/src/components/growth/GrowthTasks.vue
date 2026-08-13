@@ -95,6 +95,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
+  import { resolvePendingResourcesRoute } from '@/utils/resourceNavigation';
 
   const props = withDefaults(
     defineProps<{
@@ -188,7 +189,7 @@
         void router.push('/cloudSpace');
         break;
       case 'first_organize':
-        void router.push('/inbox');
+        void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
         break;
       default:
         break;

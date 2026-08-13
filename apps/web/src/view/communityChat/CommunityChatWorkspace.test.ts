@@ -204,7 +204,7 @@ class WorkspaceRealtimeSocket {
     this.onopen?.(new Event('open'));
   }
 
-  message(type: string, payload: Record<string, unknown>, eventId = `${type}-0001`) {
+  message(type: string, payload: Record<string, unknown>, eventId = `${type}-0001`, requestId = '') {
     this.onmessage?.(
       new MessageEvent('message', {
         data: JSON.stringify({
@@ -212,6 +212,7 @@ class WorkspaceRealtimeSocket {
           type,
           eventId,
           serverTime: '2026-08-09T10:00:00.000Z',
+          ...(requestId ? { requestId } : {}),
           payload,
         }),
       }),
@@ -272,6 +273,8 @@ beforeEach(() => {
   mocks.bookmark.authModalSource = '';
   mocks.bookmark.isShowLogin = false;
   mocks.bookmark.isMobile = false;
+  mocks.user.id = 'user-1';
+  mocks.user.role = 'user';
   mocks.route.query = {};
   mocks.routerReplace.mockResolvedValue(undefined);
   mocks.markRead.mockResolvedValue({ data: { unreadCount: 0 } });
@@ -439,6 +442,61 @@ describe('CommunityChatWorkspace', () => {
     expect(host.querySelector('[data-message-public-id="message-1"] .community-message__like')?.textContent).toContain(
       '1',
     );
+  });
+
+  it('只有 Root 点击原在线人数文字后才按需读取成员名单', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    mocks.user.id = 'root-user';
+    mocks.user.role = 'root';
+    const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true, memberRole: 'admin' } });
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 2 });
+    await flushAsync();
+
+    (host.querySelector('.community-conversation-header__online') as HTMLElement).click();
+    await flushAsync();
+    const request = JSON.parse(socket.sent.at(-1) || '{}');
+    expect(request).toMatchObject({ type: 'presence.members.request', payload: {} });
+    expect(document.body.textContent).toContain('当前在线');
+
+    socket.message(
+      'presence.members',
+      {
+        onlineCount: 2,
+        memberCount: 1,
+        guestCount: 1,
+        members: [{ alias: '菠萝', role: 'root', avatar: '', frameId: 'frame-celestial' }],
+      },
+      'presence-members-workspace-0001',
+      request.requestId,
+    );
+    await flushAsync();
+
+    expect(document.body.textContent).toContain('菠萝');
+    expect(document.body.textContent).toContain('游客 1 人');
+    expect(mocks.recordOperation).toHaveBeenCalledWith({
+      module: '公共聊天室',
+      operation: 'Root 查看当前在线成员',
+    });
+  });
+
+  it('普通用户点击在线人数时保持原行为，不读取也不展示成员名单', async () => {
+    WorkspaceRealtimeSocket.instances = [];
+    vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
+    const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true } });
+    const socket = WorkspaceRealtimeSocket.instances[0];
+    socket.open();
+    socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 2 });
+    await flushAsync();
+    const sentBeforeClick = socket.sent.length;
+
+    (host.querySelector('.community-conversation-header__online') as HTMLElement).click();
+    await flushAsync();
+
+    expect(socket.sent).toHaveLength(sentBeforeClick);
+    expect(document.body.textContent).not.toContain('当前在线');
   });
 
   it('首屏历史仍在加载时完成实时订阅，会在首屏落定后再补一次权威窗口', async () => {
