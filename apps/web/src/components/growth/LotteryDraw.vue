@@ -41,7 +41,11 @@
             <span class="lt-kicker">{{ t('growth.lotteryStageKicker') }}</span>
             <strong>{{ t('growth.lotteryRewardDelivery') }}</strong>
           </div>
-          <span class="lt-pity-badge" :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }">
+          <span
+            v-if="activePoolCountsPity"
+            class="lt-pity-badge"
+            :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }"
+          >
             <SvgIcon
               :src="isPityDue || pityTriggered ? icon.growth.reward : icon.growth.level"
               :size="15"
@@ -54,6 +58,10 @@
                   ? t('growth.lotteryPityNow')
                   : t('growth.lotteryPityLeft', { n: pityRemaining })
             }}
+          </span>
+          <span v-else class="lt-pity-badge lt-pity-badge--free">
+            <SvgIcon :src="icon.growth.checkin" :size="15" aria-hidden="true" />
+            {{ t('growth.lotteryFreeNoPityBadge') }}
           </span>
         </div>
 
@@ -117,7 +125,11 @@
           </div>
         </div>
 
-        <div class="lt-pity-panel" :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }">
+        <div
+          v-if="activePoolCountsPity"
+          class="lt-pity-panel"
+          :class="{ 'is-due': isPityDue, 'is-triggered': pityTriggered }"
+        >
           <span class="lt-pity-panel__icon" aria-hidden="true">
             <SvgIcon :src="isPityDue || pityTriggered ? icon.growth.reward : icon.growth.level" :size="20" />
           </span>
@@ -176,7 +188,7 @@
             </span>
             <span class="lt-draw-button__copy">
               <strong>{{ t('growth.lotteryDrawOne') }}</strong>
-              <small>{{ lottery?.singleCost || 88 }} {{ t('growth.points') }}</small>
+              <small>{{ lottery?.paid.singleCost }} {{ t('growth.points') }}</small>
             </span>
           </BButton>
 
@@ -192,7 +204,7 @@
             </span>
             <span class="lt-draw-button__copy">
               <strong>{{ t('growth.lotteryDrawTen') }}</strong>
-              <small>{{ lottery?.tenCost || 800 }} {{ t('growth.points') }}</small>
+              <small>{{ lottery?.paid.tenCost }} {{ t('growth.points') }}</small>
             </span>
             <span v-if="tenSavings > 0" class="lt-draw-button__save">
               {{ t('growth.lotteryTenSave', { n: tenSavings }) }}
@@ -203,6 +215,7 @@
         <p v-if="lottery?.points !== undefined && !hasEnoughAny && !isVisitor" class="lt-tip">
           {{ t('growth.shopInsufficient') }}
         </p>
+        <p v-if="lottery && !activeModeEnabled" class="lt-tip">{{ t('growth.lotteryMaintenance') }}</p>
         <p v-if="isVisitor" class="lt-tip">{{ t('growth.lotteryVisitorTip') }}</p>
       </section>
 
@@ -247,13 +260,20 @@
             </span>
             <div>
               <strong>{{ t('growth.lotteryPoolTitle') }}</strong>
-              <span>{{ t('growth.lotteryPoolHint', { n: pityEvery }) }}</span>
+              <span>{{ activePoolHint }}</span>
             </div>
           </div>
 
-          <div v-if="lottery?.pool.length" class="lt-pool-grid">
+          <BTabs
+            v-model:active-tab="activePoolMode"
+            class="lt-pool-tabs"
+            variant="segment"
+            :options="poolModeOptions"
+          />
+
+          <div v-if="activePool.length" class="lt-pool-grid">
             <div
-              v-for="prize in lottery.pool"
+              v-for="prize in activePool"
               :key="prize.id"
               class="lt-pool-item"
               :class="[{ 'is-rare': prize.rare }, `is-${prizeTone(prize)}`]"
@@ -288,12 +308,17 @@
           </BButton>
 
           <div v-if="showOdds && lottery" id="lottery-odds" class="lt-odds">
-            <div class="lt-odds__header" aria-hidden="true">
+            <div class="lt-odds__header" :class="{ 'is-two-column': !activePoolCountsPity }" aria-hidden="true">
               <span>{{ t('growth.lotteryOddsPrize') }}</span>
               <strong>{{ t('growth.lotteryNormalOdds') }}</strong>
-              <strong>{{ t('growth.lotteryPityOdds') }}</strong>
+              <strong v-if="activePoolCountsPity">{{ t('growth.lotteryPityOdds') }}</strong>
             </div>
-            <div v-for="prize in lottery.pool" :key="prize.id" class="lt-odds__row" :class="{ 'is-rare': prize.rare }">
+            <div
+              v-for="prize in activePool"
+              :key="prize.id"
+              class="lt-odds__row"
+              :class="{ 'is-rare': prize.rare, 'is-two-column': !activePoolCountsPity }"
+            >
               <span>
                 <SvgIcon :src="prizeIcon(prize)" :size="15" aria-hidden="true" />
                 {{ prizeLabel(prize) }}
@@ -302,14 +327,22 @@
                 </small>
               </span>
               <strong>{{ formatRate(prize.normalRate ?? prize.rate) }}</strong>
-              <strong>{{ prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable') }}</strong>
+              <strong v-if="activePoolCountsPity">
+                {{ prize.pityRate ? formatRate(prize.pityRate) : t('growth.lotteryPityNotApplicable') }}
+              </strong>
             </div>
-            <p class="lt-odds__note">{{ t('growth.lotteryFreeCountsPity') }}</p>
-            <p v-if="lottery.overflowPolicy" class="lt-odds__note">
+            <p v-if="activePoolMode === 'free'" class="lt-odds__note">
+              {{
+                lottery.free.countsPaidPity
+                  ? t('growth.lotteryFreeCountsPity')
+                  : t('growth.lotteryFreeDoesNotCountPity')
+              }}
+            </p>
+            <p v-if="activePoolHasMakeupCard && lottery.paid.overflowPolicy" class="lt-odds__note">
               {{
                 t('growth.lotteryOverflowPolicy', {
-                  max: lottery.overflowPolicy.maxInventory,
-                  points: lottery.overflowPolicy.compensationPoints,
+                  max: lottery.paid.overflowPolicy.maxInventory,
+                  points: lottery.paid.overflowPolicy.compensationPoints,
                 })
               }}
             </p>
@@ -327,6 +360,7 @@
   import { useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon.ts';
@@ -343,17 +377,18 @@
   const hitBest = ref(false);
   const pityTriggered = ref(false);
   const showOdds = ref(false);
+  const activePoolMode = ref<'free' | 'paid'>('free');
 
   const user = useUserStore();
   const isVisitor = computed(() => !user.id || user.id === 'visitor');
   const points = computed(() => lottery.value?.points || 0);
-  const freeDaily = computed(() => lottery.value?.freeDaily || 0);
-  const freeRemaining = computed(() => lottery.value?.freeRemaining || 0);
+  const freeDaily = computed(() => lottery.value?.free.daily || 0);
+  const freeRemaining = computed(() => lottery.value?.free.remaining || 0);
   const freePercent = computed(() =>
     freeDaily.value > 0 ? Math.min(100, Math.max(0, (freeRemaining.value / freeDaily.value) * 100)) : 0,
   );
-  const pityEvery = computed(() => lottery.value?.pityEvery || 10);
-  const pityRemaining = computed(() => lottery.value?.toPity || pityEvery.value);
+  const pityEvery = computed(() => lottery.value?.paid.pityEvery || 10);
+  const pityRemaining = computed(() => lottery.value?.paid.toPity || pityEvery.value);
   const pityCurrent = computed(() => Math.max(0, pityEvery.value - pityRemaining.value));
   const pityPercent = computed(() => Math.min(100, (pityCurrent.value / pityEvery.value) * 100));
   const isPityDue = computed(() => Boolean(lottery.value && pityRemaining.value <= 1));
@@ -365,15 +400,36 @@
     return t('growth.lotteryPityProgress', { current: pityCurrent.value, total: pityEvery.value });
   });
   const tenSavings = computed(() =>
-    Math.max(0, (lottery.value?.singleCost || 88) * 10 - (lottery.value?.tenCost || 800)),
+    lottery.value ? Math.max(0, lottery.value.paid.singleCost * 10 - lottery.value.paid.tenCost) : 0,
   );
-  const hasEnoughAny = computed(() => points.value >= (lottery.value?.singleCost || 88));
-  const canFree = computed(() => !rolling.value && !isVisitor.value && freeRemaining.value > 0);
+  const hasEnoughAny = computed(() => Boolean(lottery.value && points.value >= lottery.value.paid.singleCost));
+  const canFree = computed(
+    () => !rolling.value && !isVisitor.value && Boolean(lottery.value?.free.enabled) && freeRemaining.value > 0,
+  );
+  const poolModeOptions = computed(() => [
+    { key: 'free', label: t('growth.lotteryFreePoolTab') },
+    { key: 'paid', label: t('growth.lotteryPaidPoolTab') },
+  ]);
+  const activePool = computed(() =>
+    activePoolMode.value === 'free' ? lottery.value?.free.pool || [] : lottery.value?.paid.pool || [],
+  );
+  const activePoolCountsPity = computed(
+    () => activePoolMode.value === 'paid' || Boolean(lottery.value?.free.countsPaidPity),
+  );
+  const activePoolHasMakeupCard = computed(() => activePool.value.some((prize) => prize.kind === 'card'));
+  const activePoolHint = computed(() =>
+    activePoolMode.value === 'free' && !activePoolCountsPity.value
+      ? t('growth.lotteryFreePoolHint')
+      : t('growth.lotteryPoolHint', { n: pityEvery.value }),
+  );
+  const activeModeEnabled = computed(() =>
+    activePoolMode.value === 'free' ? Boolean(lottery.value?.free.enabled) : Boolean(lottery.value?.paid.enabled),
+  );
 
   function canDraw(times: number) {
     if (rolling.value || isVisitor.value || !lottery.value) return false;
-    const cost = times === 10 ? lottery.value.tenCost : lottery.value.singleCost;
-    return lottery.value.points >= cost;
+    const cost = times === 10 ? lottery.value.paid.tenCost : lottery.value.paid.singleCost;
+    return lottery.value.paid.enabled && lottery.value.points >= cost;
   }
 
   const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`);
@@ -416,6 +472,7 @@
     hitBest.value = false;
     pityTriggered.value = false;
     try {
+      activePoolMode.value = free ? 'free' : 'paid';
       // 滚动容器由成长页持有；统一让父页面把“积分抽奖”标题与余额留在视野内。
       // 禁止在这里对舞台调用 scrollIntoView，否则会越过标题，回到用户反馈的图一位置。
       emit('focus-header');
@@ -432,6 +489,8 @@
             pityTriggered.value ? ' · 触发保底' : ''
           }`,
         });
+      } else if (res?.status === 409 && res.data?.refresh) {
+        message.warning(t('growth.economyCatalogChanged'));
       } else {
         message.error(res?.data?.msg || t('growth.shopInsufficient'));
       }
@@ -882,6 +941,12 @@
     background: var(--lt-gold-bg);
   }
 
+  .lt-pity-badge--free {
+    border-color: var(--success-color, #1a7d4a);
+    color: var(--success-color, #1a7d4a);
+    background: var(--workbench-subcard-bg);
+  }
+
   .lt-pity-panel__icon,
   .lt-side-card__icon {
     width: 36px;
@@ -1145,6 +1210,11 @@
     margin-bottom: 14px;
   }
 
+  .lt-pool-tabs.tab-container {
+    margin-bottom: 12px;
+    border-radius: 10px;
+  }
+
   .lt-pool-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1263,6 +1333,11 @@
     border-bottom: 1px solid var(--surface-border-color);
     color: var(--desc-color);
     font-size: 9px;
+  }
+
+  .lt-odds__row.is-two-column,
+  .lt-odds__header.is-two-column {
+    grid-template-columns: minmax(0, 1fr) 70px;
   }
 
   .lt-odds__header strong,

@@ -1,6 +1,12 @@
 import { ref } from 'vue';
 import growthApi from '@/api/growthApi.ts';
 import { useUserStore } from '@/store';
+import {
+  completePointsEconomyRequest,
+  getOrCreatePointsEconomyRequest,
+  isAmbiguousPointsEconomyFailure,
+  type PointsEconomyOperation,
+} from '@/utils/pointsEconomyRequest';
 
 export interface Growth {
   exp: number;
@@ -146,9 +152,15 @@ export interface ShopItem {
   canEquip?: boolean;
   equipped: boolean;
   canBuy: boolean;
+  repeatable?: boolean;
+  pointsShortfall?: number;
+  levelShortfall?: number;
+  unavailableReasons?: string[];
 }
 
 export interface Shop {
+  economyVersion: string;
+  purchaseEnabled: boolean;
   points: number;
   level: number;
   equippedTitle: string | null;
@@ -190,6 +202,7 @@ export interface LotteryPrize {
 }
 
 export interface LotteryStatus {
+  economyVersion: string;
   points: number;
   count: number;
   toPity: number;
@@ -202,6 +215,25 @@ export interface LotteryStatus {
   freeDaily: number; // 当前等级每日免费次数
   freeRemaining: number; // 今日剩余免费次数
   pool: LotteryPrize[];
+  free: {
+    enabled: boolean;
+    daily: number;
+    remaining: number;
+    countsPaidPity: boolean;
+    poolVersion: string;
+    pool: LotteryPrize[];
+  };
+  paid: {
+    enabled: boolean;
+    singleCost: number;
+    tenCost: number;
+    pityEvery: number;
+    pityProgress: number;
+    toPity: number;
+    poolVersion: string;
+    pool: LotteryPrize[];
+    overflowPolicy: { itemId: string; maxInventory: number; compensationPoints: number };
+  };
 }
 
 export interface LotteryDrawResult {
@@ -217,6 +249,9 @@ export interface LotteryDrawResult {
   pityProgressBefore?: number;
   pityProgressAfter?: number;
   nextPityIn?: number;
+  economyVersion?: string;
+  mode?: 'free' | 'paid';
+  idempotent?: boolean;
 }
 
 export interface WeeklyChallenge {
@@ -717,7 +752,8 @@ export function useGrowth() {
       const res = await growthApi.getShop();
       if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) {
-        shop.value = res.data as Shop;
+        const nextShop = res.data as Shop;
+        shop.value = nextShop;
       } else {
         shopError.value = true;
       }
@@ -761,13 +797,40 @@ export function useGrowth() {
 
   // 购买商品:返回后端 result(ok/reason/msg/points);成功则刷新商店 + 成长快照(余额/卡数/称号变化)
   async function buyItem(itemId: string) {
-    const res = await growthApi.buyShopItem(itemId);
-    if (res?.status === 200 && res.data?.ok) {
-      // AI 加油余额/永久扩容等资产即时到账，购买后同步资产区
-      await Promise.all([loadShop(), load(true), loadInventory()]);
-      syncPointsToViews();
+    const uid = useUserStore().id || 'visitor';
+    const currentShop = shop.value || (await loadShop());
+    const item = currentShop?.items.find((candidate) => candidate.id === itemId) ||
+      currentShop?.frames?.find((candidate) => candidate.id === itemId);
+    if (!currentShop?.economyVersion || !item || item.cost === null) return null;
+    const operation: PointsEconomyOperation = 'shop_buy';
+    const payload = {
+      itemId,
+      economyVersion: currentShop.economyVersion,
+      expectedCost: Number(item.cost),
+    };
+    const pending = getOrCreatePointsEconomyRequest(uid, operation, payload);
+    const requestPayload = pending.payload as typeof payload;
+    try {
+      const res = await growthApi.buyShopItem({ ...requestPayload, clientRequestId: pending.clientRequestId });
+      if (res?.status === 200) {
+        completePointsEconomyRequest(uid, operation, requestPayload);
+        if (res.data?.ok) {
+          await Promise.all([loadShop(), load(true), loadInventory()]);
+          syncPointsToViews();
+        }
+      } else if (res?.status === 409) {
+        if (res.data?.code !== 'IDEMPOTENCY_RESULT_PENDING') {
+          completePointsEconomyRequest(uid, operation, requestPayload);
+        }
+        if (res.data?.refresh) await loadShop();
+      } else if (res?.status !== 200) {
+        completePointsEconomyRequest(uid, operation, requestPayload);
+      }
+      return res;
+    } catch (error) {
+      if (!isAmbiguousPointsEconomyFailure(error)) completePointsEconomyRequest(uid, operation, requestPayload);
+      throw error;
     }
-    return res;
   }
 
   // 佩戴/卸下称号:成功则刷新商店 + 成长快照(已佩戴态变化)
@@ -798,7 +861,8 @@ export function useGrowth() {
       const res = await growthApi.getLottery();
       if (generation !== ownerGeneration) return null;
       if (res?.status === 200 && res.data) {
-        lottery.value = res.data as LotteryStatus;
+        const nextLottery = res.data as LotteryStatus;
+        lottery.value = nextLottery;
       } else {
         lotteryError.value = true;
       }
@@ -813,13 +877,41 @@ export function useGrowth() {
 
   // 抽奖:times=1 单抽 / 10 十连;free=true 用每日免费次数(单抽)。成功则刷新抽奖状态 + 成长快照
   async function draw(times: number, free = false) {
-    const res = await growthApi.drawLottery(times, free);
-    if (res?.status === 200 && res.data?.ok) {
-      // 抽中的 AI 加油余额/补签卡会改变资产或物品，同步刷新
-      await Promise.all([loadLottery(), load(true), loadInventory()]);
-      syncPointsToViews();
+    const uid = useUserStore().id || 'visitor';
+    const currentLottery = lottery.value || (await loadLottery());
+    if (!currentLottery?.economyVersion) return null;
+    const mode = free ? 'free' : 'paid';
+    const normalizedTimes = free ? 1 : times === 10 ? 10 : 1;
+    const expectedCost = free
+      ? 0
+      : normalizedTimes === 10
+        ? currentLottery.paid.tenCost
+        : currentLottery.paid.singleCost;
+    const operation: PointsEconomyOperation = free ? 'lottery_free' : 'lottery_paid';
+    const payload = { mode, times: normalizedTimes, economyVersion: currentLottery.economyVersion, expectedCost } as const;
+    const pending = getOrCreatePointsEconomyRequest(uid, operation, payload);
+    const requestPayload = pending.payload as typeof payload;
+    try {
+      const res = await growthApi.drawLottery({ ...requestPayload, clientRequestId: pending.clientRequestId });
+      if (res?.status === 200) {
+        completePointsEconomyRequest(uid, operation, requestPayload);
+        if (res.data?.ok) {
+          await Promise.all([loadLottery(), load(true), loadInventory()]);
+          syncPointsToViews();
+        }
+      } else if (res?.status === 409) {
+        if (res.data?.code !== 'IDEMPOTENCY_RESULT_PENDING') {
+          completePointsEconomyRequest(uid, operation, requestPayload);
+        }
+        if (res.data?.refresh) await loadLottery();
+      } else if (res?.status !== 200) {
+        completePointsEconomyRequest(uid, operation, requestPayload);
+      }
+      return res;
+    } catch (error) {
+      if (!isAmbiguousPointsEconomyFailure(error)) completePointsEconomyRequest(uid, operation, requestPayload);
+      throw error;
     }
-    return res;
   }
 
   // 领取成就奖励:成功则刷新看板、成长快照和头像框目录(成就框立即进入装扮库)

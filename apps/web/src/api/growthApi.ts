@@ -46,7 +46,12 @@ export const markNoticesRead = () => apiBasePost('/api/growth/notices/read');
 export const getShop = () => apiBaseGet('/api/growth/shop');
 
 // 购买商品(补签卡 / AI 加油包 / 称号)
-export const buyShopItem = (itemId: string) => apiBasePost('/api/growth/shop/buy', { itemId });
+export const buyShopItem = (payload: {
+  itemId: string;
+  clientRequestId: string;
+  economyVersion: string;
+  expectedCost: number;
+}) => apiBasePost('/api/growth/shop/buy', payload, { silent: true });
 
 // 背包(历史消耗品持有)+ 资产(积分/永久扩容/永久 AI 加油余额)总览
 export const getInventory = () => apiBaseGet('/api/growth/inventory');
@@ -62,7 +67,13 @@ export const equipFrame = (frameId: string | null) => apiBasePost('/api/growth/e
 
 // 积分抽奖:状态(余额/成本/保底/奖池概率)+ 抽奖(times=1 单抽 / 10 十连)
 export const getLottery = () => apiBaseGet('/api/growth/lottery');
-export const drawLottery = (times: number, free = false) => apiBasePost('/api/growth/lottery/draw', { times, free });
+export const drawLottery = (payload: {
+  mode: 'free' | 'paid';
+  times: 1 | 10;
+  clientRequestId: string;
+  economyVersion: string;
+  expectedCost: number;
+}) => apiBasePost('/api/growth/lottery/draw', payload, { silent: true });
 
 // 领取成就奖励
 export const claimAchievement = (key: string) => apiBasePost('/api/growth/achievement/claim', { key });

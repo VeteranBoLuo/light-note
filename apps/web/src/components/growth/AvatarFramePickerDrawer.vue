@@ -221,6 +221,7 @@
     if (!frame || processingId.value) return true;
     if (shop.value?.isVisitor) return false;
     if (canEquipFrame(frame) || isAchievementFrame(frame) || !canMeetLevel(frame)) return false;
+    if (shop.value && !shop.value.purchaseEnabled) return true;
     return (shop.value?.points || 0) < Number(frame.cost || 0);
   });
   const actionLabel = computed(() => {
@@ -233,6 +234,7 @@
       return achievementFor(frame)?.claimable ? t('growth.frameAchievementClaim') : t('growth.frameViewAchievement');
     }
     if (!canMeetLevel(frame)) return t('myInfo.goToGrowth');
+    if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
     if ((shop.value?.points || 0) < Number(frame.cost || 0)) return t('growth.shopInsufficient');
     return t('myInfo.redeemAndEquip');
   });
@@ -244,6 +246,7 @@
     if (shop.value?.rootFrameAccess) return t('growth.shopRootPreview');
     if (isAchievementFrame(frame)) return achievementProgress(frame);
     if (!canMeetLevel(frame)) return t('growth.shopLevelNeed', { n: frame.minLevel });
+    if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenance');
     return t('growth.shopNotOwned');
   });
 
@@ -373,6 +376,10 @@
     processingId.value = frame.id;
     try {
       const buyResult = await buyItem(frame.id);
+      if (buyResult?.status === 409 && buyResult.data?.refresh) {
+        message.warning(t('growth.economyCatalogChanged'));
+        return;
+      }
       if (buyResult?.status !== 200 || !buyResult.data?.ok) {
         message.error(buyResult?.data?.msg || t('growth.shopInsufficient'));
         return;
@@ -439,6 +446,7 @@
       else goAchievements();
       return;
     }
+    if (shop.value && !shop.value.purchaseEnabled) return;
 
     Alert.alert({
       title: t('myInfo.redeemFrameTitle'),

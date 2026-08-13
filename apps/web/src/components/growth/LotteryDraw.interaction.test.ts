@@ -17,15 +17,28 @@ vi.mock('@/composables/useGrowth.ts', async () => {
   return {
     useGrowth: () => ({
       lottery: ref({
+        economyVersion: 'points-economy-c4',
         points: 1000,
         level: 15,
-        singleCost: 88,
-        tenCost: 800,
+        singleCost: 170,
+        tenCost: 1600,
         freeDaily: 0,
         freeRemaining: 0,
         pityEvery: 10,
         toPity: 3,
         pool: [],
+        free: { enabled: true, daily: 0, remaining: 0, countsPaidPity: false, poolVersion: 'c4-free-v1', pool: [] },
+        paid: {
+          enabled: true,
+          singleCost: 170,
+          tenCost: 1600,
+          pityEvery: 10,
+          pityProgress: 7,
+          toPity: 3,
+          poolVersion: 'c4-paid-v1',
+          pool: [],
+          overflowPolicy: { itemId: 'makeup_card', maxInventory: 2, compensationPoints: 120 },
+        },
       }),
       lotteryLoading: ref(false),
       loadLottery: mocks.loadLottery,
@@ -70,6 +83,7 @@ describe('LotteryDraw 开奖定位', () => {
         fallbackWarn: false,
       }),
     );
+    app.directive('click-log', {});
     app.mount(host);
     cleanup = () => {
       app.unmount();
@@ -84,5 +98,36 @@ describe('LotteryDraw 开奖定位', () => {
 
     expect(onFocusHeader).toHaveBeenCalledTimes(1);
     expect(mocks.draw).toHaveBeenCalledWith(1, false);
+  });
+
+  it('C4 每日惊喜不展示付费保底，切到积分奖池后才显示', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({ render: () => h(LotteryDraw) });
+    app.use(
+      createI18n({
+        legacy: false,
+        locale: 'zh-CN',
+        messages: { 'zh-CN': {} },
+        missingWarn: false,
+        fallbackWarn: false,
+      }),
+    );
+    app.directive('click-log', {});
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+
+    await nextTick();
+    expect(host.querySelector('.lt-pity-panel')).toBeNull();
+    expect(host.querySelector('.lt-pity-badge--free')).not.toBeNull();
+
+    const paidTab = host.querySelectorAll<HTMLElement>('.lt-pool-tabs [role="tab"]')[1];
+    paidTab?.click();
+    await nextTick();
+    expect(host.querySelector('.lt-pity-panel')).not.toBeNull();
+    expect(host.querySelector('.lt-pity-badge--free')).toBeNull();
   });
 });
