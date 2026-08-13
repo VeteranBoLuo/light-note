@@ -113,6 +113,8 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     expect(host.textContent).toContain(zhCN.communityChat.notifications.disabledLabel);
     expect(host.textContent).toContain('聊天室角标和回复 / 提及通知都会关闭');
     expect(host.textContent).toContain('公共聊天历史仍可在聊天室内主动查看');
+    expect(host.textContent).toContain('PC / 移动端通知中心：不发送');
+    expect(host.textContent).not.toContain('PC / 移动端通知中心：回复或提及');
     expect(host.querySelector('[role="switch"]')?.getAttribute('aria-checked')).toBe('false');
     expect(host.querySelector('.community-notification-settings__channels span')?.classList.contains('is-active')).toBe(
       false,
@@ -174,5 +176,14 @@ describe('CommunityChatNotificationSettingsPanel', () => {
     expect(host.querySelector('.community-notification-settings__hint')).toBeNull();
     expect(host.textContent).toContain(zhCN.communityChat.notifications.compactDescription);
     expect(host.textContent).toContain(zhCN.communityChat.notifications.levelMentionsDescription);
+  });
+
+  it('紧凑模式关闭总开关后明确显示通知中心不发送', async () => {
+    mocks.getSettings.mockResolvedValueOnce({ data: settings(false) });
+    const host = await mountPanel(true);
+
+    expect(host.textContent).toContain('角标：已关闭');
+    expect(host.textContent).toContain('通知中心：不发送');
+    expect(host.textContent).not.toContain('通知中心：只接收该档允许的回复或提及');
   });
 });

@@ -10,6 +10,7 @@ import {
   getHomePagePreference,
   getMobileHomePath,
   isMobileHomeRoute,
+  shouldOpenNoteDirectly,
   type HomePagePreference,
 } from './preferences';
 
@@ -101,5 +102,33 @@ describe('DEFAULT_NOTE_VIEW_MODE', () => {
       expect(line, `${file} 找不到 noteViewMode 赋值`).toBeTruthy();
       expect(line).toContain('DEFAULT_NOTE_VIEW_MODE');
     }
+  });
+});
+
+describe('笔记默认打开方式', () => {
+  it('PC 缺失偏好或关闭开关时先预览，只有明确开启才直接编辑', () => {
+    expect(shouldOpenNoteDirectly(undefined, false)).toBe(false);
+    expect(shouldOpenNoteDirectly({}, false)).toBe(false);
+    expect(shouldOpenNoteDirectly({ noteDirectEdit: false }, false)).toBe(false);
+    expect(shouldOpenNoteDirectly({ noteDirectEdit: true }, false)).toBe(true);
+  });
+
+  it('移动端始终直接编辑，不受 PC 偏好影响', () => {
+    expect(shouldOpenNoteDirectly(undefined, true)).toBe(true);
+    expect(shouldOpenNoteDirectly({ noteDirectEdit: false }, true)).toBe(true);
+  });
+
+  it('设置项仅在 PC 展示，笔记库统一通过偏好裁决打开方式', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const settings = readFileSync(resolve(here, '../view/settings/Settings.vue'), 'utf8');
+    const noteLibrary = readFileSync(resolve(here, '../view/noteLibrary/NoteLibrary.vue'), 'utf8');
+
+    expect(settings).toMatch(
+      /<div v-if="!bookmark\.isMobile" class="field">[\s\S]*?t\('settings\.noteDirectEdit'\)[\s\S]*?set\('noteDirectEdit', \$event\)/u,
+    );
+    expect(settings).toContain(':checked="user.preferences.noteDirectEdit === true"');
+    expect(settings).toContain("@change=\"set('noteDirectEdit', $event)\"");
+    expect(noteLibrary).toContain('shouldOpenNoteDirectly(user.preferences, bookmark.isMobile)');
+    expect(noteLibrary).toContain('return openDirectoryPage(noteId);');
   });
 });

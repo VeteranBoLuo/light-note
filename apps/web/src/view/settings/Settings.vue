@@ -228,6 +228,19 @@
               </div>
             </div>
 
+            <!-- 移动端点击笔记始终直接进入编辑器；该偏好只改变 PC 的库内打开方式。 -->
+            <div v-if="!bookmark.isMobile" class="field">
+              <div class="field-head">
+                <span class="field-label">{{ t('settings.noteDirectEdit') }}</span>
+                <span class="field-desc">{{ t('settings.noteDirectEditDesc') }}</span>
+              </div>
+              <BSwitch
+                :checked="user.preferences.noteDirectEdit === true"
+                :aria-label="t('settings.noteDirectEdit')"
+                @change="set('noteDirectEdit', $event)"
+              />
+            </div>
+
             <div v-if="!bookmark.isMobile" class="field">
               <div class="field-head">
                 <span class="field-label">{{ t('settings.resourceView') }}</span>

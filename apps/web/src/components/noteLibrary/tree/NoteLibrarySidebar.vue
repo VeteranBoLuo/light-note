@@ -43,7 +43,7 @@
           <span class="note-tree-skeleton-line" aria-hidden="true"></span>
         </div>
       </div>
-      <ul v-else v-auto-scrollbar class="note-tree-scroll">
+      <ul v-else ref="treeScrollRef" v-auto-scrollbar class="note-tree-scroll">
         <NoteTreeRow
           v-for="node in rootItems"
           :key="node.id"
@@ -100,7 +100,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, watch } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
@@ -117,6 +117,7 @@
     defineProps<{
       currentParentId?: string | null;
       activePageId?: string | null;
+      treeScrollTop?: number;
       browseParentId?: string | null;
       surface?: 'library' | 'detail';
       childrenByParent: Record<string, NoteTreeItem[]>;
@@ -159,6 +160,7 @@
       menuDisabled: false,
       currentParentId: null,
       activePageId: null,
+      treeScrollTop: 0,
       browseParentId: null,
       surface: 'library',
     },
@@ -196,6 +198,7 @@
         ],
   );
   const rootItems = computed(() => props.childrenByParent[NOTE_TREE_ROOT_KEY] || []);
+  const treeScrollRef = ref<HTMLElement | null>(null);
   const directorySearch = computed({
     get: () => props.searchValue,
     set: (value: string) => emit('search', value),
@@ -206,6 +209,15 @@
       if (!enabled && activeTab.value === 'directory' && props.surface === 'library') activeTab.value = 'tags';
     },
     { immediate: true },
+  );
+  watch(
+    treeScrollRef,
+    async (element) => {
+      if (!element || props.surface !== 'detail') return;
+      await nextTick();
+      element.scrollTop = Math.max(0, Number(props.treeScrollTop || 0));
+    },
+    { flush: 'post' },
   );
 </script>
 

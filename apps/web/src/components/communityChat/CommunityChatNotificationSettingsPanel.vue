@@ -54,7 +54,7 @@
           <i aria-hidden="true"></i>{{ currentCompactBadgeDescription }}
         </span>
         <span class="community-notification-settings__compact-result" :class="{ 'is-active': settings.enabled }">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactInAppChannel') }}
+          <i aria-hidden="true"></i>{{ currentCompactInAppChannelLabel }}
         </span>
         <span class="community-notification-settings__compact-result">
           <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactSystemChannel') }}
@@ -68,7 +68,7 @@
 
       <div v-if="!compact" class="community-notification-settings__channels">
         <span :class="{ 'is-active': settings.enabled }">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.inAppChannel') }}
+          <i aria-hidden="true"></i>{{ currentInAppChannelLabel }}
         </span>
         <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
       </div>
@@ -169,6 +169,20 @@
     settings.value.enabled
       ? currentLevelDescription.value
       : t('communityChat.notifications.disabledCompactBadgeDescription'),
+  );
+  const currentCompactInAppChannelLabel = computed(() =>
+    t(
+      settings.value.enabled
+        ? 'communityChat.notifications.compactInAppChannel'
+        : 'communityChat.notifications.compactInAppChannelDisabled',
+    ),
+  );
+  const currentInAppChannelLabel = computed(() =>
+    t(
+      settings.value.enabled
+        ? 'communityChat.notifications.inAppChannel'
+        : 'communityChat.notifications.inAppChannelDisabled',
+    ),
   );
 
   function normalizeSettings(value: Partial<CommunityChatNotificationSettings> | null | undefined) {
@@ -513,10 +527,17 @@
     .community-notification-settings__compact-results {
       min-height: 34px;
       padding: 7px 9px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 5px;
     }
 
-    .community-notification-settings__compact-result.is-badge {
-      flex-basis: 100%;
+    .community-notification-settings__compact-result {
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
     }
   }
 

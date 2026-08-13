@@ -172,6 +172,7 @@ export default defineStore('noteWorkspace', () => {
   const browseParentId = ref<string | null>(null);
   const libraryTab = ref<NoteWorkspacePrimaryTab>('pages');
   const detailTab = ref<NoteWorkspacePrimaryTab>('pages');
+  const detailTreeScrollTop = ref(0);
   const sidebarPreferredOpen = ref(layout.sidebarPreferredOpen);
   const aiPreferredOpen = ref(layout.aiPreferredOpen);
   const sidebarWidth = ref(layout.sidebarWidth);
@@ -217,6 +218,7 @@ export default defineStore('noteWorkspace', () => {
     loadedKeys.value = new Set();
     breadcrumbByNote.value = {};
     currentBreadcrumb.value = [];
+    detailTreeScrollTop.value = 0;
     treeError.value = '';
     clearTreeSearch();
   }
@@ -237,6 +239,11 @@ export default defineStore('noteWorkspace', () => {
       browseParentId.value = normalizedId(next.browseParentId);
       currentBreadcrumb.value = browseParentId.value ? breadcrumbByNote.value[browseParentId.value] || [] : [];
     }
+  }
+
+  function setDetailTreeScrollTop(value: number) {
+    const normalized = Number(value);
+    detailTreeScrollTop.value = Number.isFinite(normalized) ? Math.max(0, normalized) : 0;
   }
 
   function seedBreadcrumb(noteId: string | null, items: NoteBreadcrumbItem[]) {
@@ -565,6 +572,7 @@ export default defineStore('noteWorkspace', () => {
     currentBreadcrumb,
     currentDirectoryTitle,
     detailTab,
+    detailTreeScrollTop,
     expandedIds,
     libraryTab,
     loadedKeys,
@@ -589,6 +597,7 @@ export default defineStore('noteWorkspace', () => {
     searchTree,
     seedBreadcrumb,
     setAiPreferredOpen,
+    setDetailTreeScrollTop,
     setNavigation,
     setSidebarPreferredOpen,
     setSidebarWidth,

@@ -46,6 +46,7 @@ vi.mock('../obsClient.js', () => ({
 const {
   cleanupCommunityChatCustomStickers,
   getCommunityChatCustomStickerDownload,
+  listCommunityChatCustomStickers,
   removeCommunityChatCustomSticker,
   uploadCommunityChatCustomSticker,
 } = await import('./communityChatCustomStickerService.js');
@@ -79,6 +80,44 @@ describe('communityChatCustomStickerService', () => {
     mocks.putObject.mockResolvedValue({});
     mocks.deleteObject.mockResolvedValue({});
     mocks.poolQuery.mockResolvedValue([{ affectedRows: 1 }, []]);
+  });
+
+  it('个人表情列表返回前端预处理需要的完整限制', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[], []]);
+
+    const result = await listCommunityChatCustomStickers({ user });
+
+    expect(result).toEqual({
+      items: [],
+      maxCount: 40,
+      maxBytes: 2 * 1024 * 1024,
+      maxEdge: 4096,
+      maxPixels: 8_000_000,
+    });
+    expect(mocks.poolQuery.mock.calls[0][0]).toContain('ORDER BY sort_order DESC, id DESC');
+  });
+
+  it('服务端仍拒绝文件体积合格但总像素超限的表情', async () => {
+    mocks.validateImage.mockResolvedValueOnce({
+      contentType: 'image/jpeg',
+      extension: 'jpg',
+      fileSize: 1_800_000,
+      width: 3072,
+      height: 4096,
+      contentSha256: 'b'.repeat(64),
+    });
+
+    await expect(
+      uploadCommunityChatCustomSticker({
+        user,
+        file: { path: '/tmp/high-resolution-small-file.jpg', size: 1_800_000 },
+      }),
+    ).rejects.toMatchObject({
+      code: 'CUSTOM_STICKER_DIMENSIONS_INVALID',
+      status: 400,
+      message: '这张图片的画面尺寸太大，请换一张图片，或先裁剪、缩小后重试',
+    });
+    expect(mocks.getConnection).not.toHaveBeenCalled();
   });
 
   it('上传图片时先写权威记录再上传对象，成功后激活账号私有表情', async () => {
@@ -116,6 +155,27 @@ describe('communityChatCustomStickerService', () => {
     expect(mocks.poolQuery.mock.calls[0][0]).toContain("SET status = 'active'");
   });
 
+  it('个人表情达到 40 个后拒绝继续添加', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[], []])
+      .mockResolvedValueOnce([[{ activeCount: 40, maxSortOrder: 400 }], []]);
+    const connection = connectionWithQuery(query);
+    mocks.getConnection.mockResolvedValue(connection);
+
+    await expect(
+      uploadCommunityChatCustomSticker({
+        user,
+        file: { path: '/tmp/light-note-sticker-test-limit.png', size: 1024 },
+      }),
+    ).rejects.toMatchObject({
+      code: 'CUSTOM_STICKER_LIMIT_REACHED',
+      status: 409,
+      message: '个人表情最多保存 40 个',
+    });
+    expect(mocks.putObject).not.toHaveBeenCalled();
+  });
+
   it('相同账号上传相同图片时直接复用已激活记录，不重复写对象存储', async () => {
     const existing = {
       publicId: 'd9fa2cc6-d314-4709-a37f-05937916842b',
@@ -140,6 +200,39 @@ describe('communityChatCustomStickerService', () => {
     expect(result).toMatchObject({ duplicate: true, sticker: { publicId: existing.publicId } });
     expect(mocks.putObject).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('重新加入已移除表情时更新为最近顺序，刷新后仍排在最前', async () => {
+    const existing = {
+      publicId: 'd9fa2cc6-d314-4709-a37f-05937916842b',
+      objectKey: 'community-chat-stickers/owner/removed.png',
+      name: '旧表情',
+      contentType: 'image/png',
+      fileSize: 1024,
+      width: 320,
+      height: 240,
+      status: 'removed',
+      sortOrder: 10,
+      createdAt: '2026-08-13T10:00:00.000Z',
+    };
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[existing], []])
+      .mockResolvedValueOnce([[{ activeCount: 3, maxSortOrder: 40 }], []])
+      .mockResolvedValueOnce([{ affectedRows: 1 }, []]);
+    const connection = connectionWithQuery(query);
+    mocks.getConnection.mockResolvedValue(connection);
+
+    const result = await uploadCommunityChatCustomSticker({
+      user,
+      file: { path: '/tmp/light-note-sticker-test-restore.png', size: 1024 },
+      name: '重新添加',
+    });
+
+    expect(result).toMatchObject({ duplicate: true, sticker: { publicId: existing.publicId, name: '重新添加' } });
+    expect(query.mock.calls[2][0]).toContain("SET status = 'active', name = ?, sort_order = ?");
+    expect(query.mock.calls[2][1]).toEqual(['重新添加', 50, existing.publicId, user.id]);
+    expect(mocks.putObject).not.toHaveBeenCalled();
   });
 
   it('从个人表情库移除时若已有聊天消息引用，只隐藏库入口并保留对象', async () => {

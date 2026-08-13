@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { prepareCommunityChatSticker } from './prepareCommunityChatSticker';
 
+const STICKER_LIMITS = {
+  maxBytes: 2 * 1024 * 1024,
+  maxEdge: 4096,
+  maxPixels: 8_000_000,
+};
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -8,16 +14,19 @@ afterEach(() => {
   Reflect.deleteProperty(URL, 'revokeObjectURL');
 });
 
-function installImageAndCanvasMocks(encodedBlob: Blob) {
+function installImageAndCanvasMocks(
+  encodedBlob: Blob,
+  dimensions: { width: number; height: number } = { width: 2400, height: 1200 },
+) {
   const createObjectURL = vi.fn(() => 'blob:sticker-test');
   const revokeObjectURL = vi.fn(() => undefined);
   Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
   class ImageStub {
-    naturalWidth = 2400;
-    naturalHeight = 1200;
-    width = 2400;
-    height = 1200;
+    naturalWidth = dimensions.width;
+    naturalHeight = dimensions.height;
+    width = dimensions.width;
+    height = dimensions.height;
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
 
@@ -39,11 +48,31 @@ function installImageAndCanvasMocks(encodedBlob: Blob) {
 describe('prepareCommunityChatSticker', () => {
   it('keeps an image that already fits the server limit unchanged', async () => {
     const source = new File(['small'], 'small.png', { type: 'image/png' });
+    const mocks = installImageAndCanvasMocks(new Blob(['unused'], { type: 'image/webp' }), {
+      width: 320,
+      height: 240,
+    });
 
-    await expect(prepareCommunityChatSticker(source, 2 * 1024 * 1024)).resolves.toEqual({
+    await expect(prepareCommunityChatSticker(source, STICKER_LIMITS)).resolves.toEqual({
       file: source,
       compressed: false,
     });
+    expect(mocks.drawImage).not.toHaveBeenCalled();
+  });
+
+  it('compresses a high-resolution image even when its file size is under 2MiB', async () => {
+    const source = new File(['high-resolution-but-small-jpeg'], 'phone-photo.jpg', { type: 'image/jpeg' });
+    const mocks = installImageAndCanvasMocks(new Blob(['optimized'], { type: 'image/webp' }), {
+      width: 3072,
+      height: 4096,
+    });
+
+    const result = await prepareCommunityChatSticker(source, STICKER_LIMITS);
+
+    expect(source.size).toBeLessThan(STICKER_LIMITS.maxBytes);
+    expect(result.compressed).toBe(true);
+    expect(result.file.name).toBe('phone-photo.webp');
+    expect(mocks.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1200, 1600);
   });
 
   it('compresses an oversized image to a high-quality WebP before upload', async () => {
@@ -53,7 +82,7 @@ describe('prepareCommunityChatSticker', () => {
     });
     const mocks = installImageAndCanvasMocks(new Blob(['compressed'], { type: 'image/webp' }));
 
-    const result = await prepareCommunityChatSticker(source, 2 * 1024 * 1024);
+    const result = await prepareCommunityChatSticker(source, STICKER_LIMITS);
 
     expect(result.compressed).toBe(true);
     expect(result.file).not.toBe(source);
@@ -69,7 +98,7 @@ describe('prepareCommunityChatSticker', () => {
     const source = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'transparent.png', { type: 'image/png' });
     installImageAndCanvasMocks(new Blob(['transparent-compressed'], { type: 'image/png' }));
 
-    const result = await prepareCommunityChatSticker(source, 2 * 1024 * 1024);
+    const result = await prepareCommunityChatSticker(source, STICKER_LIMITS);
 
     expect(result.compressed).toBe(true);
     expect(result.file.name).toBe('transparent.png');
@@ -82,7 +111,7 @@ describe('prepareCommunityChatSticker', () => {
     const stillTooLarge = new Blob([new Uint8Array(maxBytes + 64)], { type: 'image/webp' });
     installImageAndCanvasMocks(stillTooLarge);
 
-    const result = await prepareCommunityChatSticker(source, maxBytes);
+    const result = await prepareCommunityChatSticker(source, { ...STICKER_LIMITS, maxBytes });
 
     expect(result.compressed).toBe(true);
     expect(result.file.type).toBe('image/webp');

@@ -13,6 +13,12 @@ export interface PreparedCommunityChatSticker {
   compressed: boolean;
 }
 
+export interface CommunityChatStickerPreparationLimits {
+  maxBytes: number;
+  maxEdge: number;
+  maxPixels: number;
+}
+
 function loadImage(file: File): Promise<HTMLImageElement> {
   const objectUrl = URL.createObjectURL(file);
   return new Promise((resolve, reject) => {
@@ -50,6 +56,42 @@ function renderImage(image: HTMLImageElement, maxEdge: number): HTMLCanvasElemen
   return canvas;
 }
 
+function imageDimensions(image: HTMLImageElement) {
+  const width = image.naturalWidth || image.width;
+  const height = image.naturalHeight || image.height;
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error('CUSTOM_STICKER_IMAGE_SIZE_INVALID');
+  }
+  return { width, height };
+}
+
+function validateLimits(limits: CommunityChatStickerPreparationLimits) {
+  const { maxBytes, maxEdge, maxPixels } = limits;
+  if (
+    !Number.isFinite(maxBytes) ||
+    !Number.isFinite(maxEdge) ||
+    !Number.isFinite(maxPixels) ||
+    maxBytes < 1 ||
+    maxEdge < 1 ||
+    maxPixels < 1
+  ) {
+    throw new Error('CUSTOM_STICKER_LIMITS_INVALID');
+  }
+  return { maxBytes, maxEdge, maxPixels };
+}
+
+function resolveSafeOutputEdge(
+  width: number,
+  height: number,
+  profileEdge: number,
+  limits: CommunityChatStickerPreparationLimits,
+) {
+  const sourceEdge = Math.max(width, height);
+  const pixelScale = Math.sqrt(limits.maxPixels / (width * height));
+  const scale = Math.min(1, profileEdge / sourceEdge, limits.maxEdge / sourceEdge, pixelScale);
+  return Math.max(1, Math.floor(sourceEdge * scale));
+}
+
 function encodeCanvas(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -74,25 +116,28 @@ function toFile(blob: Blob, source: File) {
 }
 
 /**
- * 仅在原图超过账号表情上限时压缩，避免对已合格图片进行无意义的二次有损编码。
+ * 每次先读取图片尺寸；文件体积与像素尺寸均合格时保留原图，避免无意义的二次有损编码。
  * 优先使用 WebP（可保留 PNG 透明通道），从高质量方案开始逐级尝试；
  * 如果浏览器不支持 WebP，则 PNG 保持透明，JPEG 继续使用 JPEG 回退。
  */
 export async function prepareCommunityChatSticker(
   source: File,
-  maxBytes: number,
+  inputLimits: CommunityChatStickerPreparationLimits,
 ): Promise<PreparedCommunityChatSticker> {
   if (!source || !SUPPORTED_STICKER_TYPES.has(source.type)) {
     throw new Error('CUSTOM_STICKER_IMAGE_TYPE_INVALID');
   }
-  if (!Number.isFinite(maxBytes) || maxBytes < 1) {
-    throw new Error('CUSTOM_STICKER_MAX_BYTES_INVALID');
-  }
-  if (source.size <= maxBytes) {
+  const limits = validateLimits(inputLimits);
+  const image = await loadImage(source);
+  const dimensions = imageDimensions(image);
+  const dimensionsWithinLimits =
+    dimensions.width <= limits.maxEdge &&
+    dimensions.height <= limits.maxEdge &&
+    dimensions.width * dimensions.height <= limits.maxPixels;
+  if (source.size <= limits.maxBytes && dimensionsWithinLimits) {
     return { file: source, compressed: false };
   }
 
-  const image = await loadImage(source);
   let smallestBlob: Blob | null = null;
   let previousEdge = -1;
   let canvas: HTMLCanvasElement | null = null;
@@ -100,10 +145,16 @@ export async function prepareCommunityChatSticker(
   let lastPngFallbackEdge = -1;
 
   for (const profile of OUTPUT_PROFILES) {
-    if (!webpSupported && source.type === 'image/png' && profile.maxEdge === lastPngFallbackEdge) continue;
-    if (profile.maxEdge !== previousEdge) {
-      canvas = renderImage(image, profile.maxEdge);
-      previousEdge = profile.maxEdge;
+    const safeOutputEdge = resolveSafeOutputEdge(
+      dimensions.width,
+      dimensions.height,
+      profile.maxEdge,
+      limits,
+    );
+    if (!webpSupported && source.type === 'image/png' && safeOutputEdge === lastPngFallbackEdge) continue;
+    if (safeOutputEdge !== previousEdge) {
+      canvas = renderImage(image, safeOutputEdge);
+      previousEdge = safeOutputEdge;
     }
     if (!canvas) continue;
 
@@ -117,11 +168,11 @@ export async function prepareCommunityChatSticker(
     if (!webpSupported) {
       const fallbackType = source.type === 'image/png' ? 'image/png' : 'image/jpeg';
       blob = blob.type === fallbackType ? blob : await encodeCanvas(canvas, fallbackType, profile.quality);
-      if (fallbackType === 'image/png') lastPngFallbackEdge = profile.maxEdge;
+      if (fallbackType === 'image/png') lastPngFallbackEdge = safeOutputEdge;
     }
 
     if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
-    if (blob.size <= maxBytes) return { file: toFile(blob, source), compressed: true };
+    if (blob.size <= limits.maxBytes) return { file: toFile(blob, source), compressed: true };
   }
 
   if (!smallestBlob) {

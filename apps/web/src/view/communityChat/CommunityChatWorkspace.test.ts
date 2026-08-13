@@ -305,7 +305,7 @@ beforeEach(() => {
   mocks.searchMembers.mockResolvedValue({ status: 200, data: { items: [] } });
   mocks.getCustomStickers.mockResolvedValue({
     status: 200,
-    data: { items: [], maxCount: 100, maxBytes: 2 * 1024 * 1024 },
+    data: { items: [], maxCount: 40, maxBytes: 2 * 1024 * 1024, maxEdge: 4096, maxPixels: 8_000_000 },
   });
   mocks.prepareSticker.mockImplementation(async (file: File) => ({ file, compressed: false }));
   mocks.uploadCustomSticker.mockResolvedValue({ status: 200, data: {} });
@@ -450,7 +450,7 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.getMessages).toHaveBeenCalledWith('general', { limit: 30 });
     expect(host.textContent).toContain('实时补齐的新消息');
     expect(host.textContent).toContain(zhCN.communityChat.realtimeConnected);
-    expect(host.textContent).toContain('在线人数 6');
+    expect(host.textContent).not.toContain('在线人数 6');
 
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -486,6 +486,7 @@ describe('CommunityChatWorkspace', () => {
     socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 2 });
     await flushAsync();
 
+    expect(host.textContent).toContain('在线人数 2');
     (host.querySelector('.community-conversation-header__online') as HTMLElement).click();
     await flushAsync();
     const request = JSON.parse(socket.sent.at(-1) || '{}');
@@ -523,7 +524,7 @@ describe('CommunityChatWorkspace', () => {
     });
   });
 
-  it('普通用户点击在线人数时保持原行为，不读取也不展示成员名单', async () => {
+  it('普通用户不显示在线人数，也不能读取或展示成员名单', async () => {
     WorkspaceRealtimeSocket.instances = [];
     vi.stubGlobal('WebSocket', WorkspaceRealtimeSocket);
     const host = await mountWorkspace({ access: { ...access, realtimeEnabled: true } });
@@ -531,12 +532,9 @@ describe('CommunityChatWorkspace', () => {
     socket.open();
     socket.message('room.subscribed', { roomSlug: 'general', onlineCount: 2 });
     await flushAsync();
-    const sentBeforeClick = socket.sent.length;
 
-    (host.querySelector('.community-conversation-header__online') as HTMLElement).click();
-    await flushAsync();
-
-    expect(socket.sent).toHaveLength(sentBeforeClick);
+    expect(host.querySelector('.community-conversation-header__online')).toBeNull();
+    expect(host.textContent).not.toContain('在线人数 2');
     expect(document.body.textContent).not.toContain('当前在线');
   });
 
@@ -2025,8 +2023,10 @@ describe('CommunityChatWorkspace', () => {
             createdAt: '2026-08-13T10:00:00.000Z',
           },
         ],
-        maxCount: 100,
+        maxCount: 40,
         maxBytes: 2 * 1024 * 1024,
+        maxEdge: 4096,
+        maxPixels: 8_000_000,
       },
     });
     mocks.sendMessage.mockResolvedValue({
@@ -2079,6 +2079,7 @@ describe('CommunityChatWorkspace', () => {
       stickerSource: 'custom',
       stickerKey: stickerPublicId,
     });
+    expect(host.querySelector('.community-message__sticker.has-image img')).not.toBeNull();
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });
 
@@ -2149,6 +2150,67 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.sticker.uploaded);
   });
 
+  it('重复添加已有表情时保持原位置，不制造刷新前后的排序跳变', async () => {
+    mocks.bookmark.isMobile = true;
+    const firstPublicId = '91a8e525-aa42-4ad5-9d56-e60363f6068a';
+    const duplicatePublicId = 'd9fa2cc6-d314-4709-a37f-05937916842b';
+    const sticker = (publicId: string, name: string) => ({
+      publicId,
+      name,
+      url: `/api/community-chat/stickers/${publicId}/content`,
+      contentType: 'image/png',
+      fileSize: 1024,
+      width: 320,
+      height: 240,
+      createdAt: '2026-08-13T10:00:00.000Z',
+    });
+    mocks.getCustomStickers.mockResolvedValue({
+      status: 200,
+      data: {
+        items: [sticker(firstPublicId, '最新'), sticker(duplicatePublicId, '已有')],
+        maxCount: 40,
+        maxBytes: 2 * 1024 * 1024,
+        maxEdge: 4096,
+        maxPixels: 8_000_000,
+      },
+    });
+    mocks.uploadCustomSticker.mockResolvedValue({
+      status: 200,
+      data: { duplicate: true, sticker: sticker(duplicatePublicId, '已有') },
+    });
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-composer__attach[aria-label="${zhCN.communityChat.expression.action}"]`,
+      )
+      ?.click();
+    await flushAsync();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.chat-expression-panel__tab[aria-label="${zhCN.communityChat.expression.customTab}"]`,
+      )
+      ?.click();
+    await flushAsync();
+
+    const input = Array.from(document.body.querySelectorAll<HTMLInputElement>('.b-upload-native-input')).find(
+      (item) => !item.multiple,
+    );
+    if (!input) throw new Error('missing custom sticker input');
+    const original = new File(['duplicate'], 'duplicate.png', { type: 'image/png' });
+    Object.defineProperty(input, 'files', { configurable: true, value: [original] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    const stickerPaths = Array.from(host.querySelectorAll<HTMLImageElement>('.chat-sticker-panel__image img')).map(
+      (image) => image.getAttribute('src'),
+    );
+    expect(stickerPaths).toEqual([
+      `/api/community-chat/stickers/${firstPublicId}/content`,
+      `/api/community-chat/stickers/${duplicatePublicId}/content`,
+    ]);
+    expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.sticker.duplicate);
+  });
+
   it('个人表情原图超限时先上传浏览器压缩后的文件', async () => {
     mocks.bookmark.isMobile = true;
     const stickerPublicId = 'd9fa2cc6-d314-4709-a37f-05937916842b';
@@ -2193,7 +2255,11 @@ describe('CommunityChatWorkspace', () => {
     input?.dispatchEvent(new Event('change', { bubbles: true }));
     await flushAsync();
 
-    expect(mocks.prepareSticker).toHaveBeenCalledWith(original, 2 * 1024 * 1024);
+    expect(mocks.prepareSticker).toHaveBeenCalledWith(original, {
+      maxBytes: 2 * 1024 * 1024,
+      maxEdge: 4096,
+      maxPixels: 8_000_000,
+    });
     expect(mocks.uploadCustomSticker).toHaveBeenCalledWith(compressed);
     expect(mocks.messageSuccess).toHaveBeenCalledWith(zhCN.communityChat.sticker.compressedAndUploaded);
   });
@@ -2228,6 +2294,46 @@ describe('CommunityChatWorkspace', () => {
 
     expect(mocks.uploadCustomSticker).not.toHaveBeenCalled();
     expect(mocks.messageWarning).toHaveBeenCalledWith(zhCN.communityChat.sticker.compressedTooLarge);
+  });
+
+  it('服务端拒绝图片画面尺寸时显示用户可执行的提示，不暴露技术错误', async () => {
+    mocks.bookmark.isMobile = true;
+    mocks.uploadCustomSticker.mockRejectedValue({
+      code: 'ERR_BAD_REQUEST',
+      response: {
+        status: 400,
+        data: {
+          status: 400,
+          msg: '自定义表情尺寸过大，请压缩后重试',
+          data: { code: 'CUSTOM_STICKER_DIMENSIONS_INVALID' },
+        },
+      },
+    });
+    const host = await mountWorkspace();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-composer__attach[aria-label="${zhCN.communityChat.expression.action}"]`,
+      )
+      ?.click();
+    await flushAsync();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.chat-expression-panel__tab[aria-label="${zhCN.communityChat.expression.customTab}"]`,
+      )
+      ?.click();
+    await flushAsync();
+
+    const input = Array.from(document.body.querySelectorAll<HTMLInputElement>('.b-upload-native-input')).find(
+      (item) => !item.multiple,
+    );
+    if (!input) throw new Error('missing custom sticker input');
+    const original = new File(['photo'], 'photo.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(input, 'files', { configurable: true, value: [original] });
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+
+    expect(mocks.messageError).toHaveBeenCalledWith(zhCN.communityChat.sticker.dimensionsTooLarge);
+    expect(mocks.messageError).not.toHaveBeenCalledWith(expect.stringContaining('CUSTOM_STICKER'));
   });
 
   it('支持上传安全图片并发送纯图片消息，客户端只提交图片公有 ID', async () => {

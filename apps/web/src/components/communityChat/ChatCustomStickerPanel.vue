@@ -88,8 +88,10 @@
   const loadFailed = ref(false);
   const uploading = ref(false);
   const removingId = ref('');
-  const maxCount = ref(100);
+  const maxCount = ref(40);
   const maxBytes = ref(2 * 1024 * 1024);
+  const maxEdge = ref(4096);
+  const maxPixels = ref(8_000_000);
 
   async function load() {
     loading.value = true;
@@ -97,8 +99,10 @@
     try {
       const response = await getCommunityChatCustomStickers();
       items.value = Array.isArray(response.data?.items) ? response.data.items : [];
-      maxCount.value = Math.max(1, Number(response.data?.maxCount || 100));
+      maxCount.value = Math.max(1, Number(response.data?.maxCount || 40));
       maxBytes.value = Math.max(1, Number(response.data?.maxBytes || 2 * 1024 * 1024));
+      maxEdge.value = Math.max(1, Number(response.data?.maxEdge || 4096));
+      maxPixels.value = Math.max(1, Number(response.data?.maxPixels || 8_000_000));
     } catch {
       loadFailed.value = true;
     } finally {
@@ -111,7 +115,11 @@
     if (!file || uploading.value) return;
     uploading.value = true;
     try {
-      const prepared = await prepareCommunityChatSticker(file, maxBytes.value);
+      const prepared = await prepareCommunityChatSticker(file, {
+        maxBytes: maxBytes.value,
+        maxEdge: maxEdge.value,
+        maxPixels: maxPixels.value,
+      });
       if (prepared.file.size > maxBytes.value) {
         message.warning(t('communityChat.sticker.compressedTooLarge'));
         return;
@@ -119,7 +127,12 @@
       const response = await uploadCommunityChatCustomSticker(prepared.file);
       const sticker = response.data?.sticker as CommunityChatCustomSticker | undefined;
       if (!sticker?.publicId) throw new Error('CUSTOM_STICKER_RESPONSE_INVALID');
-      items.value = [sticker, ...items.value.filter((item) => item.publicId !== sticker.publicId)];
+      const existingIndex = items.value.findIndex((item) => item.publicId === sticker.publicId);
+      if (response.data?.duplicate && existingIndex >= 0) {
+        items.value = items.value.map((item, index) => (index === existingIndex ? sticker : item));
+      } else {
+        items.value = [sticker, ...items.value.filter((item) => item.publicId !== sticker.publicId)];
+      }
       message.success(
         t(
           response.data?.duplicate
@@ -130,12 +143,19 @@
         ),
       );
     } catch (error: any) {
-      const isLocalProcessingError = String(error?.message || '').startsWith('CUSTOM_STICKER_');
-      message.error(
-        isLocalProcessingError
-          ? t('communityChat.sticker.compressFailed')
-          : error?.message || t('communityChat.sticker.uploadFailed'),
-      );
+      // Axios 的 ERR_BAD_REQUEST 只是传输层分类；服务端业务码才决定用户应该看到的操作提示。
+      const errorCode = String(error?.response?.data?.data?.code || error?.code || error?.message || '');
+      if (errorCode === 'CUSTOM_STICKER_DIMENSIONS_INVALID') {
+        message.error(t('communityChat.sticker.dimensionsTooLarge'));
+      } else if (errorCode === 'CUSTOM_STICKER_TOO_LARGE') {
+        message.error(t('communityChat.sticker.compressedTooLarge'));
+      } else if (errorCode.startsWith('CUSTOM_STICKER_')) {
+        message.error(t('communityChat.sticker.compressFailed'));
+      } else {
+        const responseMessage = String(error?.response?.data?.msg || error?.message || '');
+        const safeMessage = /request failed with status code/i.test(responseMessage) ? '' : responseMessage;
+        message.error(safeMessage || t('communityChat.sticker.uploadFailed'));
+      }
     } finally {
       uploading.value = false;
     }
@@ -260,7 +280,7 @@
 
   .chat-sticker-panel__grid {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     align-content: start;
     gap: 6px;
     overflow-y: auto;

@@ -12,9 +12,9 @@ import { assertCommunityChatPostingAllowed } from './communityChatModerationServ
 import { validateCommunityChatImage } from './communityChatImageService.js';
 
 export const COMMUNITY_CHAT_CUSTOM_STICKER_MAX_BYTES = 2 * 1024 * 1024;
-export const COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT = 100;
-const CUSTOM_STICKER_MAX_EDGE = 4096;
-const CUSTOM_STICKER_MAX_PIXELS = 8_000_000;
+export const COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT = 40;
+export const COMMUNITY_CHAT_CUSTOM_STICKER_MAX_EDGE = 4096;
+export const COMMUNITY_CHAT_CUSTOM_STICKER_MAX_PIXELS = 8_000_000;
 const CUSTOM_STICKER_CLEANUP_INTERVAL_MS = 30 * 60 * 1000;
 const PUBLIC_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -82,15 +82,17 @@ export async function listCommunityChatCustomStickers({ user, env = process.env,
   const [rows] = await db.query(
     `SELECT public_id AS publicId, name, content_type AS contentType, file_size AS fileSize,
             width, height, create_time AS createdAt
-       FROM community_chat_custom_stickers
+      FROM community_chat_custom_stickers
       WHERE user_id = ? AND status = 'active'
-      ORDER BY sort_order ASC, id ASC`,
+      ORDER BY sort_order DESC, id DESC`,
     [user.id],
   );
   return {
     items: rows.map(publicSticker),
     maxCount: COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT,
     maxBytes: COMMUNITY_CHAT_CUSTOM_STICKER_MAX_BYTES,
+    maxEdge: COMMUNITY_CHAT_CUSTOM_STICKER_MAX_EDGE,
+    maxPixels: COMMUNITY_CHAT_CUSTOM_STICKER_MAX_PIXELS,
   };
 }
 
@@ -118,15 +120,15 @@ export async function uploadCommunityChatCustomSticker({
       );
     }
     if (
-      validated.width > CUSTOM_STICKER_MAX_EDGE ||
-      validated.height > CUSTOM_STICKER_MAX_EDGE ||
-      validated.width * validated.height > CUSTOM_STICKER_MAX_PIXELS
+      validated.width > COMMUNITY_CHAT_CUSTOM_STICKER_MAX_EDGE ||
+      validated.height > COMMUNITY_CHAT_CUSTOM_STICKER_MAX_EDGE ||
+      validated.width * validated.height > COMMUNITY_CHAT_CUSTOM_STICKER_MAX_PIXELS
     ) {
       throw chatError(
         'CUSTOM_STICKER_DIMENSIONS_INVALID',
         400,
-        '自定义表情尺寸过大，请压缩后重试',
-        'The custom sticker dimensions are too large. Compress it and try again.',
+        '这张图片的画面尺寸太大，请换一张图片，或先裁剪、缩小后重试',
+        'This image is too large in width or height. Try another image, or crop or resize it first.',
       );
     }
 
@@ -138,7 +140,7 @@ export async function uploadCommunityChatCustomSticker({
         connection,
         `SELECT public_id AS publicId, object_key AS objectKey, name,
                 content_type AS contentType, file_size AS fileSize, width, height,
-                status, create_time AS createdAt
+                status, sort_order AS sortOrder, create_time AS createdAt
            FROM community_chat_custom_stickers
           WHERE user_id = ? AND content_sha256 = ?
           LIMIT 1 FOR UPDATE`,
@@ -149,11 +151,28 @@ export async function uploadCommunityChatCustomSticker({
         return { sticker: publicSticker(existing), duplicate: true };
       }
       if (existing?.status === 'removed') {
+        const summary = await queryFirst(
+          connection,
+          `SELECT COUNT(*) AS activeCount, COALESCE(MAX(sort_order), 0) AS maxSortOrder
+             FROM community_chat_custom_stickers
+            WHERE user_id = ? AND status = 'active'
+            FOR UPDATE`,
+          [user.id],
+        );
+        if (Number(summary?.activeCount || 0) >= COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT) {
+          throw chatError(
+            'CUSTOM_STICKER_LIMIT_REACHED',
+            409,
+            `个人表情最多保存 ${COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT} 个`,
+            `You can save up to ${COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT} custom stickers`,
+          );
+        }
+        const restoredSortOrder = Number(summary?.maxSortOrder || 0) + 10;
         await connection.query(
           `UPDATE community_chat_custom_stickers
-              SET status = 'active', name = ?, update_time = CURRENT_TIMESTAMP
+              SET status = 'active', name = ?, sort_order = ?, update_time = CURRENT_TIMESTAMP
             WHERE public_id = ? AND user_id = ?`,
-          [normalizedName || existing.name || '', existing.publicId, user.id],
+          [normalizedName || existing.name || '', restoredSortOrder, existing.publicId, user.id],
         );
         await connection.commit();
         return {

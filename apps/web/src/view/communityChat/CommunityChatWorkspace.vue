@@ -47,7 +47,7 @@
             <div class="community-conversation-header__title-line">
               <strong>{{ currentRoom.name }}</strong>
               <span
-                v-if="realtimeEnabled && onlineCount !== null"
+                v-if="canViewOnlinePresence && realtimeEnabled && onlineCount !== null"
                 class="community-conversation-header__online"
                 @click="openOnlineMembers"
               >
@@ -281,7 +281,11 @@
                           />
                         </BButton>
                       </div>
-                      <div v-else-if="chatMessage.messageKind === 'sticker'" class="community-message__sticker">
+                      <div
+                        v-else-if="chatMessage.messageKind === 'sticker'"
+                        class="community-message__sticker"
+                        :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
+                      >
                         <img
                           v-if="chatMessage.sticker?.url"
                           :src="chatMessage.sticker.url"
@@ -410,6 +414,7 @@
                         chatMessage.messageKind === 'sticker'
                       "
                       class="community-message__sticker"
+                      :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
                     >
                       <img
                         v-if="chatMessage.sticker?.url"
@@ -703,6 +708,7 @@
     @notification-saved="handleNotificationSettingsSaved"
   />
   <ChatOnlineMembersModal
+    v-if="canViewOnlinePresence"
     v-model:visible="onlineMembersVisible"
     :online-count="onlineCount || 0"
     :snapshot="onlineMembersSnapshot"
@@ -1004,6 +1010,7 @@
     return hasPayload && draftLength.value <= 2000 && !sending.value && imageUploadsInFlight.value === 0;
   });
   const canMentionEveryone = computed(() => currentUser.role === 'root');
+  const canViewOnlinePresence = computed(() => currentUser.role === 'root');
   const showMentionEveryoneSuggestion = computed(() => {
     if (!canMentionEveryone.value || mentionEveryone.value) return false;
     const query = String(mentionSearchQuery.value || '')
@@ -4028,7 +4035,16 @@
     object-fit: contain;
   }
 
-  .community-message.is-own .community-message__sticker {
+  .community-message__sticker.has-image {
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .community-message.is-own .community-message__sticker:not(.has-image) {
     border-color: var(--primary-color);
   }
 
