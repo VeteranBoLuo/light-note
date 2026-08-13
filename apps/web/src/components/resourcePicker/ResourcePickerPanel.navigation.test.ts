@@ -58,5 +58,15 @@ describe('ResourcePickerPanel 键盘导航', () => {
 
     expect(items[2]?.classList.contains('is-active')).toBe(true);
     expect(scrollTo).toHaveBeenCalledWith({ top: 70, behavior: 'auto' });
+
+    // 程序滚动会让静止鼠标下方换成另一项，此时浏览器可能派发 mouseenter；
+    // 只有用户真正移动鼠标时，才允许鼠标接管键盘高亮。
+    items[1]?.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+    await nextTick();
+    expect(items[2]?.classList.contains('is-active')).toBe(true);
+
+    items[1]?.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    await nextTick();
+    expect(items[1]?.classList.contains('is-active')).toBe(true);
   });
 });

@@ -28,7 +28,7 @@
         class="resource-picker-panel__item"
         :class="{ 'is-active': index === activeIndex }"
         :aria-selected="index === activeIndex"
-        @mouseenter="activeIndex = index"
+        @mousemove="activateFromPointer(index)"
         @click="emit('select', item)"
       >
         <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
@@ -45,7 +45,7 @@
           class="resource-picker-panel__item"
           :class="{ 'is-active': entry.index === activeIndex }"
           :aria-selected="entry.index === activeIndex"
-          @mouseenter="activeIndex = entry.index"
+          @mousemove="activateFromPointer(entry.index)"
           @click="emit('select', entry.item)"
         >
           <span class="resource-picker-panel__dot" :style="{ background: typeColor(entry.item.type) }" />
@@ -66,7 +66,7 @@
           class="resource-picker-panel__item resource-picker-panel__item--scope"
           :class="{ 'is-active': entry.index === activeIndex }"
           :aria-selected="entry.index === activeIndex"
-          @mouseenter="activeIndex = entry.index"
+          @mousemove="activateFromPointer(entry.index)"
           @click="emit('select-scope', entry.scope)"
         >
           <span class="resource-picker-panel__scope-icon" aria-hidden="true">
@@ -155,6 +155,10 @@
     const container = resultsRef.value;
     const activeItem = container?.querySelector<HTMLElement>('.resource-picker-panel__item.is-active');
     if (container && activeItem) scrollNearestIntoContainer(container, activeItem, 'auto');
+  }
+
+  function activateFromPointer(index: number) {
+    if (activeIndex.value !== index) activeIndex.value = index;
   }
 
   const typeLabel = (type: string) => t(`ai.sourceTypes.${type}`);
@@ -284,6 +288,8 @@
 
   .resource-picker-panel__results {
     display: grid;
+    grid-auto-rows: max-content;
+    align-content: start;
     gap: 2px;
     min-height: 0;
     min-width: 0;
@@ -351,6 +357,7 @@
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent !important;
+    line-height: normal;
     text-align: left;
 
     &:hover {
