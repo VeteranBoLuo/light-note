@@ -23,7 +23,7 @@ afterEach(() => {
 describe('爱发电客户端协议', () => {
   it('OAuth 授权地址包含 state 与回调，但永不包含 secret', () => {
     const url = new URL(buildAfdianAuthorizationUrl('A'.repeat(43)));
-    expect(url.origin + url.pathname).toBe('https://afdian.net/oauth2/authorize');
+    expect(url.origin + url.pathname).toBe('https://afdian.com/oauth2/authorize');
     expect(url.searchParams.get('client_id')).toBe('test-client');
     expect(url.searchParams.get('state')).toBe('A'.repeat(43));
     expect(url.toString()).not.toContain('test-secret');
@@ -71,7 +71,8 @@ describe('爱发电客户端协议', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await queryAfdianOrders({ page: 1, per_page: 100 });
-    const [, options] = fetchMock.mock.calls[0];
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://afdian.com/api/open/query-order');
     const body = JSON.parse(String(options.body));
     const expected = crypto
       .createHash('md5')

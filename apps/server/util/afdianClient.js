@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 import { afdianError, getAfdianApiConfig, getAfdianOAuthConfig } from './afdianConfig.js';
 
-const AFDIAN_OAUTH_AUTHORIZE_URL = 'https://afdian.net/oauth2/authorize';
-const AFDIAN_OAUTH_TOKEN_URL = 'https://afdian.net/api/oauth2/access_token';
-const AFDIAN_QUERY_ORDER_URL = 'https://afdian.net/api/open/query-order';
+const AFDIAN_OAUTH_AUTHORIZE_URL = 'https://afdian.com/oauth2/authorize';
+const AFDIAN_OAUTH_TOKEN_URL = 'https://afdian.com/api/oauth2/access_token';
+const AFDIAN_QUERY_ORDER_URL = 'https://afdian.com/api/open/query-order';
 const REQUEST_TIMEOUT_MS = 10_000;
 
 // 爱发电官方于 2025-07-01 公布的 Webhook RSA 公钥。
