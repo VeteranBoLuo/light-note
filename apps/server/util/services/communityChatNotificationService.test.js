@@ -158,6 +158,7 @@ describe('communityChatNotificationService', () => {
     expect(text).toContain('recipient_identity.user_id = reply.user_id');
     expect(text).toContain('recipient_identity.user_id = mention.mentioned_user_id');
     expect(text).toContain('message.mention_everyone = 1');
+    expect(text).toContain('message.mention_everyone = 0 OR settings.user_id IS NOT NULL');
     expect(text).toContain('COALESCE(settings.global_notification_enabled, 1) = 1');
     expect(text).toContain('LEFT JOIN community_chat_user_settings settings');
     expect(text).toContain('JOIN community_chat_user_identities recipient_identity');

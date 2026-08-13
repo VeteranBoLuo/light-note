@@ -62,6 +62,7 @@ import {
   normalizeAdminListLimit,
 } from '../util/adminListCursor.js';
 import { seedNewUserCloudFile, seedNewUserWorkspaceData } from '../util/services/newUserSeedService.js';
+import { ensureCommunityChatIdentity } from '../util/services/communityChatIdentityService.js';
 import {
   processAccountDeletionRequest,
   requestAccountDeletion,
@@ -357,6 +358,17 @@ async function initializeNewUserSamples(userId, req) {
   return true;
 }
 
+async function initializeNewUserCommunityIdentity(userId) {
+  try {
+    await ensureCommunityChatIdentity({ userId });
+    return true;
+  } catch (error) {
+    // 社区身份不应反向制造“账号已写入但注册接口报失败”的半注册状态；存量/异常账号仍可由幂等回填修复。
+    console.warn('[register] 社区身份初始化失败 code=%s', stableAgentErrorCode(error));
+    return false;
+  }
+}
+
 export const registerUser = async (req, res) => {
   try {
     const email = normalizeEmail(req.body?.email);
@@ -418,6 +430,8 @@ export const registerUser = async (req, res) => {
       throw e;
     }
     const userId = userData.id;
+
+    await initializeNewUserCommunityIdentity(userId);
 
     // 数据库示例在短事务内同步完成，注册响应前即可看到；失败降级为空账号，不反向删除已创建用户。
     const samplesReady = await initializeNewUserSamples(userId, req);
@@ -1581,6 +1595,7 @@ export const handleUserDatabaseOperation = async (githubUser, req, { duplicateRe
   if (!createdUserId) return user;
 
   // 仅 GitHub 首次建号执行；已有 GitHub 账号登录、按邮箱绑定旧账号都不会重复初始化。
+  await initializeNewUserCommunityIdentity(createdUserId);
   const samplesReady = await initializeNewUserSamples(createdUserId, req);
 
   // GitHub 首次注册直接持久化头像，补齐“设置头像”成长任务。示例资源仍由种子服务直写，

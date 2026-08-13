@@ -10,7 +10,7 @@
       }}</strong>
       <small>{{ t('communityChat.mentionSearch.keyboardHint') }}</small>
     </header>
-    <div class="chat-mention-suggestions__body">
+    <div class="chat-mention-suggestions__body" :class="{ 'is-loading': loading }">
       <div v-if="showEveryone || items.length" class="chat-mention-suggestions__list" role="listbox">
         <BButton
           v-if="showEveryone"
@@ -89,6 +89,7 @@
 <style scoped lang="less">
   .chat-mention-suggestions {
     width: 100%;
+    height: min(360px, 42vh);
     max-height: min(360px, 42vh);
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
@@ -142,6 +143,11 @@
     gap: 2px;
     flex: 1 1 auto;
     overflow-y: auto;
+  }
+
+  .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__list {
+    max-height: calc(100% - 72px);
+    flex: 0 1 auto;
   }
 
   .chat-mention-suggestions__item {
@@ -246,9 +252,19 @@
     color: var(--desc-color);
   }
 
+  .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__loading {
+    min-height: 72px;
+    padding: 8px;
+    flex: 1 1 auto;
+  }
+
   .chat-mention-suggestions__loading.is-standalone {
     min-height: 88px;
     padding: 8px;
+  }
+
+  .chat-mention-suggestions__body.is-loading .chat-mention-suggestions__loading.is-standalone {
+    min-height: 0;
   }
 
   .chat-mention-suggestions__loading :deep(.b-loading-inline) {
@@ -264,6 +280,7 @@
 
   :global(html.light-note-mobile-rendering) .chat-mention-suggestions {
     width: 100%;
+    height: min(300px, calc(var(--mobile-visible-viewport-height, 100vh) * 0.38));
     max-height: min(300px, calc(var(--mobile-visible-viewport-height, 100vh) * 0.38));
     box-shadow: none;
   }

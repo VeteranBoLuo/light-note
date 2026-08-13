@@ -64,9 +64,11 @@
 
 <style scoped lang="less">
   .chat-expression-panel {
-    width: min(360px, 100%);
+    width: 360px;
+    max-width: 100%;
     height: min(420px, 46vh);
     min-height: 300px;
+    box-sizing: border-box;
     display: grid;
     grid-template-rows: minmax(0, 1fr) auto;
     overflow: hidden;

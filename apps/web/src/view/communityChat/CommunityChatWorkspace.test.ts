@@ -1902,6 +1902,10 @@ describe('CommunityChatWorkspace', () => {
   });
 
   it('提及浮层首帧进入稳定加载态，搜索完成时不重建浮层', async () => {
+    expect(workspaceSource).toContain(':global(.community-composer__mention-popover.b-popover-fade-enter-from)');
+    expect(workspaceSource).toMatch(
+      /\.community-composer__mention-popover\.b-popover-fade-leave-to\)[\s\S]*?transform:\s*none;/u,
+    );
     vi.useFakeTimers();
     mocks.user.role = 'root';
     const request = deferred<{ status: number; data: { items: never[] } }>();
@@ -1928,6 +1932,13 @@ describe('CommunityChatWorkspace', () => {
     expect(document.body.querySelector('.community-composer__mention-popover')).toBe(panel);
     expect(panel?.querySelector('.chat-mention-suggestions__loading')).toBeNull();
     expect(panel?.querySelector('.chat-mention-suggestions__everyone')).not.toBeNull();
+  });
+
+  it('桌面表情浮层使用确定宽度，不被上传后的个人表情网格撑满视口', () => {
+    expect(workspaceSource).toContain('overlay-class-name="community-composer__expression-popover"');
+    expect(workspaceSource).toMatch(
+      /\.community-composer__expression-popover\)\s*\{[\s\S]*?width:\s*360px;[\s\S]*?max-width:\s*calc\(100% - 16px\);[\s\S]*?box-sizing:\s*border-box;/u,
+    );
   });
 
   it('提及关键词变化时立即废弃旧请求，防抖期间不回填旧成员', async () => {

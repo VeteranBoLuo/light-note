@@ -197,6 +197,7 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
        LEFT JOIN community_chat_members recipient_membership ON recipient_membership.user_id = recipient.id
       WHERE message.public_id = ?
         AND message.status = 'active'
+        AND (message.mention_everyone = 0 OR settings.user_id IS NOT NULL)
         AND COALESCE(settings.global_notification_enabled, 1) = 1
         AND (
           (

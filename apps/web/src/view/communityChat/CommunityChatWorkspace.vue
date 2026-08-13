@@ -593,6 +593,7 @@
                 v-model:open="expressionPanelOpen"
                 trigger="click"
                 placement="top-left"
+                overlay-class-name="community-composer__expression-popover"
                 @open-change="handleExpressionPanelOpenChange"
               >
                 <BButton
@@ -4446,6 +4447,18 @@
     width: 360px;
     max-width: calc(100% - 16px);
     overflow: hidden;
+  }
+
+  :global(.community-composer__expression-popover) {
+    width: 360px;
+    max-width: calc(100% - 16px);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  :global(.community-composer__mention-popover.b-popover-fade-enter-from),
+  :global(.community-composer__mention-popover.b-popover-fade-leave-to) {
+    transform: none;
   }
 
   .community-composer__input :deep(.b-textarea) {

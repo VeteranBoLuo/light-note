@@ -8,7 +8,7 @@ import { ensureCommunityChatIdentity } from '../util/services/communityChatIdent
 const apply = process.argv.slice(2).includes('--apply');
 const BATCH_SIZE = 100;
 
-async function loadCandidates(db, limit = BATCH_SIZE) {
+export async function loadCandidates(db, limit = BATCH_SIZE) {
   const [rows] = await db.query(
     `SELECT account.id AS userId
        FROM user account
@@ -18,21 +18,6 @@ async function loadCandidates(db, limit = BATCH_SIZE) {
           SELECT 1
             FROM community_chat_user_identities identity
            WHERE identity.user_id = account.id
-        )
-        AND (
-          account.role = 'root'
-          OR EXISTS (
-            SELECT 1
-              FROM community_chat_members membership
-             WHERE membership.user_id = account.id
-               AND membership.status = 'active'
-          )
-          OR EXISTS (
-            SELECT 1
-              FROM community_chat_messages message
-             WHERE message.user_id = account.id
-               AND message.status IN ('active', 'recalled')
-          )
         )
       ORDER BY account.id ASC
       LIMIT ?`,
@@ -50,17 +35,6 @@ export async function main() {
           AND account.role <> 'visitor'
           AND NOT EXISTS (
             SELECT 1 FROM community_chat_user_identities identity WHERE identity.user_id = account.id
-          )
-          AND (
-            account.role = 'root'
-            OR EXISTS (
-              SELECT 1 FROM community_chat_members membership
-               WHERE membership.user_id = account.id AND membership.status = 'active'
-            )
-            OR EXISTS (
-              SELECT 1 FROM community_chat_messages message
-               WHERE message.user_id = account.id AND message.status IN ('active', 'recalled')
-            )
           )`,
     );
     console.log('[community-chat-identity-backfill] dryRun=true candidates=%d', Number(rows[0]?.candidateCount || 0));
