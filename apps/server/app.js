@@ -10,6 +10,7 @@ import { generateWeeklyReports } from './util/weeklyReport.js';
 import { ensureNotificationTable } from './util/notification.js';
 import { initLogExclude } from './util/logExclude.js';
 import { ensurePointsSchema } from './util/points.js';
+import { assertPointsEconomyActivationReady } from './util/pointsEconomyOperations.js';
 import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
 import { ensureGrowthCenterSchema } from './util/growthCenterSchema.js';
 import { generateGrowthNudges } from './util/growth.js';
@@ -111,6 +112,7 @@ await initLogExclude().catch((err) => console.error('日志白名单初始化失
 // 成长中心读取接口必须保持纯只读，因此相关 Schema 在监听 HTTP 前完成，而不是在 GET 内兜底建表。
 try {
   await ensurePointsSchema();
+  await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
 } catch (err) {

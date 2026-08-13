@@ -12,8 +12,8 @@ import { buildWeeklyReport } from '../util/weeklyReport.js';
 import { L, resultData } from '../util/common.js';
 import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
-  FRAME_CATALOG,
-  SHOP_ITEMS,
+  getActiveFrameCatalog,
+  getActiveShopItems,
   getOwnedCosmetics,
   buyItem,
   equipTitle,
@@ -26,6 +26,8 @@ import {
   AdminPointsError,
 } from '../util/points.js';
 import { drawLottery, getLotteryStatus, freeDrawsFor } from '../util/lottery.js';
+import { getEconomyRuntime } from '../util/pointsEconomyCatalog.js';
+import { PointsEconomyError } from '../util/pointsEconomyOperations.js';
 import { getInventory, useItem } from '../util/items.js';
 import { getWeeklyChallenges } from '../util/weeklyChallenge.js';
 import { getRecap, updateRecapState } from '../util/recap.js';
@@ -246,6 +248,7 @@ export const getRanks = async (req, res) => {
 // GET /growth/shop —— 同一接口返回积分商品与完整头像框目录；前端统一展示，购买与成就领取语义分开。
 export const getShop = async (req, res) => {
   try {
+    const runtime = getEconomyRuntime();
     const userId = req.user?.id || 'visitor';
     const userRole = req.user?.role || 'visitor';
     const isVisitor = !req.user?.id || userRole === 'visitor';
@@ -268,7 +271,7 @@ export const getShop = async (req, res) => {
       owned = await getOwnedCosmetics(userId);
     }
     const ownable = (t) => t === 'title' || t === 'cosmetic';
-    const items = SHOP_ITEMS.map((it) => {
+    const items = getActiveShopItems().map((it) => {
       const isOwned = ownable(it.type) && owned.includes(it.id);
       const meetsLevel = !it.minLevel || level >= it.minLevel;
       const cardFull = it.effect === 'makeup_card' && protectCards >= 2;
@@ -288,10 +291,21 @@ export const getShop = async (req, res) => {
         equipped:
           (it.type === 'title' && equippedTitle === it.id) || (it.type === 'cosmetic' && equippedFrame === it.id),
         // canBuy 仅供前端置灰按钮;真正校验在 buyItem 事务内(级别/余额/上限/已拥有)
-        canBuy: !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
+        repeatable: it.type === 'consumable',
+        pointsShortfall: Math.max(0, Number(it.cost || 0) - points),
+        levelShortfall: Math.max(0, Number(it.minLevel || 0) - level),
+        unavailableReasons: [
+          ...(!runtime.purchaseEnabled ? ['maintenance'] : []),
+          ...(isVisitor ? ['login'] : []),
+          ...(isOwned ? ['owned'] : []),
+          ...(!meetsLevel ? ['level'] : []),
+          ...(cardFull ? ['inventory_full'] : []),
+          ...(points < it.cost ? ['points'] : []),
+        ],
+        canBuy: runtime.purchaseEnabled && !isVisitor && !isOwned && meetsLevel && !cardFull && points >= it.cost,
       };
     });
-    const frames = FRAME_CATALOG.map((frame) => {
+    const frames = getActiveFrameCatalog().map((frame) => {
       const isOwned = owned.includes(frame.id);
       const meetsLevel = !frame.minLevel || level >= frame.minLevel;
       return {
@@ -309,7 +323,18 @@ export const getShop = async (req, res) => {
         owned: isOwned,
         canEquip: rootFrameAccess || isOwned,
         equipped: equippedFrame === frame.id,
+        repeatable: false,
+        pointsShortfall: Math.max(0, Number(frame.cost || 0) - points),
+        levelShortfall: Math.max(0, Number(frame.minLevel || 0) - level),
+        unavailableReasons: [
+          ...(!runtime.purchaseEnabled && frame.acquisition === 'shop' ? ['maintenance'] : []),
+          ...(isVisitor ? ['login'] : []),
+          ...(isOwned ? ['owned'] : []),
+          ...(!meetsLevel ? ['level'] : []),
+          ...(frame.acquisition === 'shop' && points < Number(frame.cost || 0) ? ['points'] : []),
+        ],
         canBuy:
+          runtime.purchaseEnabled &&
           frame.acquisition === 'shop' &&
           !rootFrameAccess &&
           !isVisitor &&
@@ -320,6 +345,8 @@ export const getShop = async (req, res) => {
     });
     res.send(
       resultData({
+        economyVersion: runtime.economyVersion,
+        purchaseEnabled: runtime.purchaseEnabled,
         points,
         level,
         equippedTitle,
@@ -341,11 +368,19 @@ export const getShop = async (req, res) => {
 export const buyShopItem = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const { itemId } = req.body || {};
+    const { itemId, clientRequestId, economyVersion, expectedCost } = req.body || {};
     if (!itemId) return res.send(resultData(null, 400, '缺少商品 id'));
-    const result = await buyItem(req.user.id, itemId, { userRole: req.user.role });
+    const result = await buyItem(req.user.id, itemId, {
+      userRole: req.user.role,
+      clientRequestId,
+      economyVersion,
+      expectedCost,
+    });
     res.send(resultData(result));
   } catch (error) {
+    if (error instanceof PointsEconomyError) {
+      return res.send(resultData(error.data, error.status, error.message));
+    }
     console.error('购买失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '兑换失败，请稍后重试', 'Exchange failed. Please try again.')));
   }
@@ -637,11 +672,22 @@ export const getLottery = async (req, res) => {
 export const doDrawLottery = async (req, res) => {
   if (!ensureNotVisitor(req, res)) return;
   try {
-    const times = Number(req.body?.times) === 10 ? 10 : 1;
+    const times = req.body?.times;
     const free = req.body?.free === true;
-    const result = await drawLottery(req.user.id, { times, free, userRole: req.user.role });
+    const result = await drawLottery(req.user.id, {
+      times,
+      free,
+      mode: req.body?.mode,
+      userRole: req.user.role,
+      clientRequestId: req.body?.clientRequestId,
+      economyVersion: req.body?.economyVersion,
+      expectedCost: req.body?.expectedCost,
+    });
     res.send(resultData(result));
   } catch (error) {
+    if (error instanceof PointsEconomyError) {
+      return res.send(resultData(error.data, error.status, error.message));
+    }
     console.error('抽奖失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '抽奖失败，请稍后重试', 'Draw failed. Please try again.')));
   }

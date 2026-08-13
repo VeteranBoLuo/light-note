@@ -1,6 +1,12 @@
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
 import { finishAdminAction } from './adminActionExecution.js';
+import { getActiveEconomyCatalog, getEconomyRuntime } from './pointsEconomyCatalog.js';
+import {
+  beginPointsEconomyOperation,
+  completePointsEconomyOperation,
+  PointsEconomyError,
+} from './pointsEconomyOperations.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -11,6 +17,15 @@ async function columnMissing(table, col) {
     `SELECT COUNT(*) AS c FROM information_schema.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
     [table, col],
+  );
+  return !Number(rows[0]?.c);
+}
+
+async function indexMissing(table, index) {
+  const [rows] = await pool.query(
+    `SELECT COUNT(*) AS c FROM information_schema.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ?`,
+    [table, index],
   );
   return !Number(rows[0]?.c);
 }
@@ -54,8 +69,67 @@ export async function ensurePointsSchema() {
       PRIMARY KEY (user_id, item_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户持有的消耗品(背包)'
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS points_economy_operations (
+      id BIGINT NOT NULL AUTO_INCREMENT,
+      user_id VARCHAR(64) NOT NULL,
+      request_id VARCHAR(64) NOT NULL,
+      operation_type VARCHAR(32) NOT NULL,
+      economy_version VARCHAR(32) NOT NULL,
+      operation_hash CHAR(64) NOT NULL,
+      status VARCHAR(16) NOT NULL DEFAULT 'pending',
+      result_json JSON DEFAULT NULL,
+      item_id VARCHAR(64) DEFAULT NULL,
+      cost_points INT UNSIGNED NOT NULL DEFAULT 0,
+      points_rewarded INT UNSIGNED NOT NULL DEFAULT 0,
+      ai_tokens_granted BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      storage_mb_granted INT UNSIGNED NOT NULL DEFAULT 0,
+      makeup_cards_granted INT UNSIGNED NOT NULL DEFAULT 0,
+      draw_count SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      pity_hits SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+      replay_count INT UNSIGNED NOT NULL DEFAULT 0,
+      last_replayed_at DATETIME DEFAULT NULL,
+      create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      PRIMARY KEY (id),
+      UNIQUE KEY uk_points_economy_user_request (user_id, request_id),
+      KEY idx_points_economy_version_time (economy_version, create_time),
+      KEY idx_points_economy_status_time (status, create_time),
+      KEY idx_points_economy_metrics (status, economy_version, operation_type, item_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分消费幂等与结果审计收据'
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS points_economy_migration_state (
+      migration_key VARCHAR(64) NOT NULL,
+      completed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      meta JSON DEFAULT NULL,
+      PRIMARY KEY (migration_key)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分经济一次性迁移状态'
+  `);
   if (await columnMissing('user_growth', 'points')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `points` INT NOT NULL DEFAULT 0 COMMENT "积分余额"');
+  }
+  const operationMetricColumns = [
+    ['item_id', 'VARCHAR(64) DEFAULT NULL'],
+    ['cost_points', 'INT UNSIGNED NOT NULL DEFAULT 0'],
+    ['points_rewarded', 'INT UNSIGNED NOT NULL DEFAULT 0'],
+    ['ai_tokens_granted', 'BIGINT UNSIGNED NOT NULL DEFAULT 0'],
+    ['storage_mb_granted', 'INT UNSIGNED NOT NULL DEFAULT 0'],
+    ['makeup_cards_granted', 'INT UNSIGNED NOT NULL DEFAULT 0'],
+    ['draw_count', 'SMALLINT UNSIGNED NOT NULL DEFAULT 0'],
+    ['pity_hits', 'SMALLINT UNSIGNED NOT NULL DEFAULT 0'],
+    ['replay_count', 'INT UNSIGNED NOT NULL DEFAULT 0'],
+    ['last_replayed_at', 'DATETIME DEFAULT NULL'],
+  ];
+  for (const [column, definition] of operationMetricColumns) {
+    if (await columnMissing('points_economy_operations', column)) {
+      await pool.query(`ALTER TABLE \`points_economy_operations\` ADD COLUMN \`${column}\` ${definition}`);
+    }
+  }
+  if (await indexMissing('points_economy_operations', 'idx_points_economy_metrics')) {
+    await pool.query(
+      'ALTER TABLE `points_economy_operations` ADD INDEX `idx_points_economy_metrics` (`status`, `economy_version`, `operation_type`, `item_id`)',
+    );
   }
   if (await columnMissing('user_growth', 'equipped_title')) {
     await pool.query(
@@ -92,196 +166,25 @@ export async function ensurePointsSchema() {
       'ALTER TABLE `user_growth` ADD COLUMN `equipped_frame` VARCHAR(64) DEFAULT NULL COMMENT "已佩戴头像框装扮 id"',
     );
   }
+  if (await columnMissing('user_growth', 'lottery_paid_count')) {
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `lottery_paid_count` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT "C4 付费抽累计次数"',
+    );
+  }
+  if (await columnMissing('user_growth', 'lottery_paid_pity_progress')) {
+    await pool.query(
+      'ALTER TABLE `user_growth` ADD COLUMN `lottery_paid_pity_progress` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT "C4 付费保底进度 0-9"',
+    );
+  }
 }
 
 // ============================================================================
 // 商店目录与头像框目录分源：SHOP_ITEMS 只包含可用积分兑换的商品；FRAME_CATALOG
 // 包含所有可佩戴头像框，并通过 acquisition 区分积分兑换与成就领取。
 // ============================================================================
-const SHOP_UTILITY_ITEMS = [
-  // 补签卡不再上架:连签满7天/升级/里程碑/抽奖均可免费获得且封顶2张,付费购买无意义(见记忆 light-note-points)。
-  // buyItem 仍保留 effect==='makeup_card' 分支以兼容历史,但目录已无此项,正常不可购得。
-  {
-    id: 'ai_pack_small',
-    type: 'consumable',
-    name: 'AI 轻量加油包',
-    desc: '+30 万 tokens · 永久有效,每日等级额度用完后自动使用',
-    cost: 90,
-    effect: 'ai_pack',
-    bonusTokens: 300_000,
-  },
-  {
-    id: 'ai_pack',
-    type: 'consumable',
-    name: 'AI 加油包',
-    desc: '+60 万 tokens · 永久有效,每日等级额度用完后自动使用',
-    cost: 150,
-    effect: 'ai_pack',
-    bonusTokens: 600_000,
-  },
-  {
-    id: 'storage_128',
-    type: 'consumable',
-    name: '扩容包 128MB',
-    desc: '云空间永久 +128MB,低门槛扩容',
-    cost: 250,
-    effect: 'storage',
-    storageMb: 128,
-  },
-  {
-    id: 'storage_512',
-    type: 'consumable',
-    name: '扩容包 512MB',
-    desc: '云空间永久 +512MB,叠加在等级配额之上',
-    cost: 800,
-    effect: 'storage',
-    storageMb: 512,
-  },
-  {
-    id: 'storage_2g',
-    type: 'consumable',
-    name: '扩容包 2GB',
-    desc: '云空间永久 +2GB,大文件党首选',
-    cost: 2500,
-    effect: 'storage',
-    storageMb: 2048,
-  },
-  // 专属称号已下架：历史已佩戴称号仍兼容，并会在社区名片中公开展示；目录不再新增兑换入口。
-];
-
-// 可积分兑换的头像框。它们会进入 SHOP_ITEMS；成就专属框不会进入购买目录。
-const SHOP_FRAME_ITEMS = [
-  {
-    id: 'frame_mint',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'basic',
-    name: '薄荷',
-    desc: '头像框 · 清透薄荷晶环',
-    cost: 220,
-    minLevel: 0,
-  },
-  {
-    id: 'frame_ink',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'basic',
-    name: '墨韵',
-    desc: '头像框 · 墨玉双层笔锋',
-    cost: 320,
-    minLevel: 0,
-  },
-  {
-    id: 'frame_moonstone',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'basic',
-    name: '月白',
-    desc: '头像框 · 月白瓷光',
-    cost: 420,
-    minLevel: 1,
-  },
-  {
-    id: 'frame_gold',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'rare',
-    name: '鎏金',
-    desc: '头像框 · 金光流转',
-    cost: 500,
-    minLevel: 2,
-  },
-  {
-    id: 'frame_sakura',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'rare',
-    name: '樱绯',
-    desc: '头像框 · 樱色浪漫',
-    cost: 600,
-    minLevel: 3,
-  },
-  {
-    id: 'frame_neon',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'legendary',
-    name: '霓虹',
-    desc: '头像框 · 赛博霓虹',
-    cost: 1600,
-    minLevel: 8,
-  },
-  {
-    id: 'frame_sunset',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'rare',
-    name: '晚霞',
-    desc: '头像框 · 暮色渐染',
-    cost: 750,
-    minLevel: 4,
-  },
-  {
-    id: 'frame_ocean',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'epic',
-    name: '潮汐',
-    desc: '头像框 · 深海流光',
-    cost: 900,
-    minLevel: 5,
-  },
-  {
-    id: 'frame_aurora',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'epic',
-    name: '极光',
-    desc: '头像框 · 极光幻彩',
-    cost: 1100,
-    minLevel: 6,
-  },
-  {
-    id: 'frame_flame',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'epic',
-    name: '赤焰',
-    desc: '头像框 · 烈焰跃动',
-    cost: 1300,
-    minLevel: 7,
-  },
-  {
-    id: 'frame_galaxy',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'legendary',
-    name: '星河',
-    desc: '头像框 · 流光星河',
-    cost: 1900,
-    minLevel: 9,
-  },
-  {
-    id: 'frame_dragon',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'legendary',
-    name: '龙曜',
-    desc: '头像框 · 龙鳞金焰',
-    cost: 2400,
-    minLevel: 10,
-  },
-  {
-    id: 'frame_celestial',
-    type: 'cosmetic',
-    effect: 'frame',
-    rarity: 'legendary',
-    name: '天穹',
-    desc: '头像框 · 星环日蚀',
-    cost: 3200,
-    minLevel: 12,
-  },
-];
+// 可积分兑换商品从当前经济目录读取；C3/C4 在滚动发布期可由同一后端安全切换。
+const activeEconomyCatalog = () => getActiveEconomyCatalog();
+const { utilityItems: SHOP_UTILITY_ITEMS, frameItems: SHOP_FRAME_ITEMS } = activeEconomyCatalog();
 
 const ACHIEVEMENT_FRAME_ITEMS = [
   {
@@ -407,12 +310,28 @@ export const FRAME_CATALOG = [
 
 export const SHOP_ITEMS = [...SHOP_UTILITY_ITEMS, ...SHOP_FRAME_ITEMS];
 
+export function getActiveShopItems() {
+  const catalog = activeEconomyCatalog();
+  return [...catalog.utilityItems, ...catalog.frameItems];
+}
+
+export function getActiveFrameCatalog() {
+  return [
+    ...activeEconomyCatalog().frameItems.map((item) => ({ ...item, acquisition: 'shop' })),
+    ...ACHIEVEMENT_FRAME_ITEMS.map((item) => ({ ...item, acquisition: 'achievement' })),
+  ].sort(
+    (left, right) =>
+      (FRAME_RARITY_ORDER[left.rarity] ?? Number.MAX_SAFE_INTEGER) -
+      (FRAME_RARITY_ORDER[right.rarity] ?? Number.MAX_SAFE_INTEGER),
+  );
+}
+
 export function getShopItem(id) {
-  return SHOP_ITEMS.find((i) => i.id === id) || null;
+  return getActiveShopItems().find((i) => i.id === id) || null;
 }
 
 export function getFrameItem(id) {
-  return FRAME_CATALOG.find((item) => item.id === id) || null;
+  return getActiveFrameCatalog().find((item) => item.id === id) || null;
 }
 
 export function getAchievementFrameByKey(key) {
@@ -601,21 +520,58 @@ function enrichPointsLogRow(row) {
 
 // 经济总览(root 运营):发放/消耗/存量、按来源分布、抽奖返还率、持有人 Top。
 export async function getPointsOverview() {
-  const [[issued]] = await pool.query('SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0');
-  const [[spent]] = await pool.query('SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0');
-  const [[outstanding]] = await pool.query('SELECT COALESCE(SUM(points),0) AS s FROM user_growth');
-  const [byReason] = await pool.query(
-    'SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC',
-  );
-  const [[lotCost]] = await pool.query(
-    "SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason='lottery_cost'",
-  );
-  const [[lotWin]] = await pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_win'");
-  const [[lotDraws]] = await pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth');
-  const [[holders]] = await pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0');
-  const [top] = await pool.query(
-    'SELECT g.user_id, g.points, u.alias, u.email FROM user_growth g LEFT JOIN user u ON u.id = g.user_id WHERE g.points > 0 ORDER BY g.points DESC LIMIT 10',
-  );
+  const [
+    [[issued]],
+    [[spent]],
+    [[outstanding]],
+    [byReason],
+    [[lotCost]],
+    [[lotWin]],
+    [[freeWin]],
+    [byVersion],
+    [operationMetrics],
+    [[lotDraws]],
+    [[holders]],
+    [top],
+  ] = await Promise.all([
+    pool.query('SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE delta > 0'),
+    pool.query('SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE delta < 0'),
+    pool.query('SELECT COALESCE(SUM(points),0) AS s FROM user_growth'),
+    pool.query(
+      'SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC',
+    ),
+    pool.query("SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason IN ('lottery_cost','lottery_paid_cost')"),
+    pool.query(
+      "SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason IN ('lottery_win','lottery_compensation','lottery_paid_win','lottery_paid_compensation')",
+    ),
+    pool.query("SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason='lottery_free_win'"),
+    pool.query(
+      `SELECT economy_version AS economyVersion, operation_type AS operationType, COUNT(*) AS operations,
+              COALESCE(SUM(replay_count), 0) AS replays
+         FROM points_economy_operations
+        WHERE status = 'succeeded'
+        GROUP BY economy_version, operation_type
+        ORDER BY economy_version, operation_type`,
+    ),
+    pool.query(
+      `SELECT economy_version AS economyVersion, operation_type AS operationType, item_id AS itemId,
+              COUNT(*) AS operations, COALESCE(SUM(cost_points),0) AS costPoints,
+              COALESCE(SUM(points_rewarded),0) AS pointsRewarded,
+              COALESCE(SUM(ai_tokens_granted),0) AS aiTokensGranted,
+              COALESCE(SUM(storage_mb_granted),0) AS storageMbGranted,
+              COALESCE(SUM(makeup_cards_granted),0) AS makeupCardsGranted,
+              COALESCE(SUM(draw_count),0) AS drawCount, COALESCE(SUM(pity_hits),0) AS pityHits
+         FROM points_economy_operations
+        WHERE status = 'succeeded'
+        GROUP BY economy_version, operation_type, item_id
+        ORDER BY economy_version, operation_type, item_id`,
+    ),
+    pool.query('SELECT COALESCE(SUM(lottery_count),0) AS s FROM user_growth'),
+    pool.query('SELECT COUNT(*) AS c FROM user_growth WHERE points > 0'),
+    pool.query(
+      'SELECT g.user_id, g.points, u.alias, u.email FROM user_growth g LEFT JOIN user u ON u.id = g.user_id WHERE g.points > 0 ORDER BY g.points DESC LIMIT 10',
+    ),
+  ]);
   const cost = Number(lotCost.s);
   return {
     issued: Number(issued.s),
@@ -625,9 +581,29 @@ export async function getPointsOverview() {
     lottery: {
       cost,
       winPoints: Number(lotWin.s),
+      freeWinPoints: Number(freeWin.s),
       draws: Number(lotDraws.s),
       payoutRatio: cost > 0 ? +((Number(lotWin.s) / cost) * 100).toFixed(1) : 0,
     },
+    byEconomyVersion: byVersion.map((row) => ({
+      economyVersion: row.economyVersion,
+      operationType: row.operationType,
+      operations: Number(row.operations || 0),
+      replays: Number(row.replays || 0),
+    })),
+    operationMetrics: operationMetrics.map((row) => ({
+      economyVersion: row.economyVersion,
+      operationType: row.operationType,
+      itemId: row.itemId || null,
+      operations: Number(row.operations || 0),
+      costPoints: Number(row.costPoints || 0),
+      pointsRewarded: Number(row.pointsRewarded || 0),
+      aiTokensGranted: Number(row.aiTokensGranted || 0),
+      storageMbGranted: Number(row.storageMbGranted || 0),
+      makeupCardsGranted: Number(row.makeupCardsGranted || 0),
+      drawCount: Number(row.drawCount || 0),
+      pityHits: Number(row.pityHits || 0),
+    })),
     holders: Number(holders.c),
     top: top.map((r) => ({
       userId: r.user_id,
@@ -835,12 +811,44 @@ export async function getEquippedTitle(userId) {
 
 // 购买:事务内校验余额/等级/上限/是否已拥有 → 扣分 → 生效 → 记流水
 // userRole 用于 root 豁免等级门:root 不走 grantExp,其 level 列停在默认值(视为满级)
-export async function buyItem(userId, itemId, { userRole = null } = {}) {
+export async function buyItem(
+  userId,
+  itemId,
+  { userRole = null, clientRequestId = null, economyVersion = null, expectedCost = null } = {},
+) {
+  const runtime = getEconomyRuntime();
   const item = getShopItem(itemId);
-  if (!item) return { ok: false, reason: 'not_found', msg: '商品不存在' };
+  // 成就专属框属于完整装扮目录但从来不是商店商品，直接拒绝且不创建事务；
+  // 真正已下架的历史积分商品仍继续进入幂等查询，以便响应丢失后的旧收据可以原样回放。
+  if (!item && getFrameItem(itemId)?.acquisition === 'achievement') {
+    return { ok: false, reason: 'not_found', msg: '商品不存在或已下架' };
+  }
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const operation = await beginPointsEconomyOperation(conn, {
+      userId,
+      operationType: 'shop_buy',
+      payload: { itemId },
+      clientRequestId,
+      economyVersion,
+      expectedCost,
+      // 先按请求号尝试回放，使未来目录移除商品后仍能恢复旧成功响应；新请求再进入商品存在性校验。
+      actualCost: item?.cost ?? Number(expectedCost),
+      runtime,
+    });
+    if (operation.replay) {
+      await conn.commit();
+      return operation.replay;
+    }
+    if (!item) {
+      await conn.rollback();
+      return { ok: false, reason: 'not_found', msg: '商品不存在' };
+    }
+    if (!runtime.purchaseEnabled) {
+      await conn.rollback();
+      return { ok: false, reason: 'maintenance', code: 'POINTS_PURCHASES_DISABLED', msg: '积分兑换维护中，请稍后再试' };
+    }
     const [rows] = await conn.query(
       'SELECT points, level, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
@@ -896,15 +904,44 @@ export async function buyItem(userId, itemId, { userRole = null } = {}) {
     } else if (item.type === 'title' || item.type === 'cosmetic') {
       await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, item.id]);
     }
+    const [balances] = await conn.query(
+      'SELECT points, storage_bonus_mb, ai_bonus_tokens FROM user_growth WHERE user_id = ? LIMIT 1',
+      [userId],
+    );
+    const balance = balances[0] || {};
+    const effect =
+      item.effect === 'storage'
+        ? { type: 'storage', amountMb: item.storageMb }
+        : item.effect === 'ai_pack'
+          ? { type: 'ai_pack', amountTokens: item.bonusTokens }
+          : item.effect === 'frame'
+            ? { type: 'frame', frameId: item.id }
+            : { type: item.effect || item.type };
+    const result = {
+      ok: true,
+      idempotent: false,
+      economyVersion: runtime.economyVersion,
+      points: Number(balance.points || 0),
+      item: item.id,
+      itemId: item.id,
+      type: item.type,
+      cost: item.cost,
+      effect,
+      assets: {
+        storageBonusMb: Number(balance.storage_bonus_mb || 0),
+        aiBonusTokens: Number(balance.ai_bonus_tokens || 0),
+      },
+    };
+    await completePointsEconomyOperation(conn, operation, result);
     await conn.commit();
-    const [nb] = await pool.query('SELECT points FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-    return { ok: true, points: Number(nb[0]?.points || 0), item: item.id, type: item.type };
+    return result;
   } catch (e) {
     try {
       await conn.rollback();
     } catch {
       /* ignore */
     }
+    if (e instanceof PointsEconomyError) throw e;
     throw e;
   } finally {
     conn.release();

@@ -1478,8 +1478,67 @@ LEFT JOIN information_schema.statistics actual
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
 
--- 47) 社区公开身份、稳定提及与表情消息契约必须完整（期望 0 行）
-SELECT '[47] missing_community_chat_identity_table' AS check_name,
+-- 47) 积分经济 C4 的幂等收据、迁移状态与付费保底字段必须存在（期望 0 行）
+SELECT '[47] missing_points_economy_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'points_economy_operations' t UNION ALL
+  SELECT 'points_economy_migration_state'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema = DATABASE() AND actual.table_name = expected.t AND actual.engine = 'InnoDB'
+WHERE actual.table_name IS NULL;
+
+SELECT '[47] missing_points_economy_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'points_economy_operations' tab, 'request_id' col, 'points_economy_operations.request_id' n UNION ALL
+  SELECT 'points_economy_operations', 'operation_type', 'points_economy_operations.operation_type' UNION ALL
+  SELECT 'points_economy_operations', 'economy_version', 'points_economy_operations.economy_version' UNION ALL
+  SELECT 'points_economy_operations', 'operation_hash', 'points_economy_operations.operation_hash' UNION ALL
+  SELECT 'points_economy_operations', 'status', 'points_economy_operations.status' UNION ALL
+  SELECT 'points_economy_operations', 'result_json', 'points_economy_operations.result_json' UNION ALL
+  SELECT 'points_economy_operations', 'item_id', 'points_economy_operations.item_id' UNION ALL
+  SELECT 'points_economy_operations', 'cost_points', 'points_economy_operations.cost_points' UNION ALL
+  SELECT 'points_economy_operations', 'points_rewarded', 'points_economy_operations.points_rewarded' UNION ALL
+  SELECT 'points_economy_operations', 'ai_tokens_granted', 'points_economy_operations.ai_tokens_granted' UNION ALL
+  SELECT 'points_economy_operations', 'storage_mb_granted', 'points_economy_operations.storage_mb_granted' UNION ALL
+  SELECT 'points_economy_operations', 'makeup_cards_granted', 'points_economy_operations.makeup_cards_granted' UNION ALL
+  SELECT 'points_economy_operations', 'draw_count', 'points_economy_operations.draw_count' UNION ALL
+  SELECT 'points_economy_operations', 'pity_hits', 'points_economy_operations.pity_hits' UNION ALL
+  SELECT 'points_economy_operations', 'replay_count', 'points_economy_operations.replay_count' UNION ALL
+  SELECT 'points_economy_operations', 'last_replayed_at', 'points_economy_operations.last_replayed_at' UNION ALL
+  SELECT 'user_growth', 'lottery_paid_count', 'user_growth.lottery_paid_count' UNION ALL
+  SELECT 'user_growth', 'lottery_paid_pity_progress', 'user_growth.lottery_paid_pity_progress'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema = DATABASE()
+ AND actual.table_name = expected.tab
+ AND actual.column_name = expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] missing_points_economy_index' AS check_name, CONCAT(expected.tab, '.', expected.ix) AS detail
+FROM (
+  SELECT 'points_economy_operations' tab, 'uk_points_economy_user_request' ix UNION ALL
+  SELECT 'points_economy_operations', 'idx_points_economy_version_time' UNION ALL
+  SELECT 'points_economy_operations', 'idx_points_economy_status_time' UNION ALL
+  SELECT 'points_economy_operations', 'idx_points_economy_metrics'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema = DATABASE()
+ AND actual.table_name = expected.tab
+ AND actual.index_name = expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[47] missing_points_economy_migration_state' AS check_name,
+       'points-economy-c4-paid-pity-v1' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1
+    FROM points_economy_migration_state
+   WHERE migration_key = 'points-economy-c4-paid-pity-v1'
+);
+
+-- 48) 社区公开身份、稳定提及与表情消息契约必须完整（期望 0 行）
+SELECT '[48] missing_community_chat_identity_table' AS check_name,
   'community_chat_user_identities' AS detail
 FROM DUAL
 WHERE NOT EXISTS (
@@ -1489,7 +1548,7 @@ WHERE NOT EXISTS (
      AND engine='InnoDB'
 );
 
-SELECT '[47] missing_community_chat_identity_column' AS check_name, expected.col AS detail
+SELECT '[48] missing_community_chat_identity_column' AS check_name, expected.col AS detail
 FROM (
   SELECT 'user_id' col UNION ALL
   SELECT 'public_id' UNION ALL
@@ -1503,7 +1562,7 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
-SELECT '[47] invalid_community_chat_identity_collation' AS check_name,
+SELECT '[48] invalid_community_chat_identity_collation' AS check_name,
   CONCAT(actual.column_name, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
 FROM information_schema.columns actual
 WHERE actual.table_schema=DATABASE()
@@ -1514,7 +1573,7 @@ WHERE actual.table_schema=DATABASE()
     OR (actual.column_name='community_id' AND (actual.character_set_name <> 'ascii' OR actual.collation_name <> 'ascii_general_ci'))
   );
 
-SELECT '[47] missing_community_chat_identity_index' AS check_name, expected.ix AS detail
+SELECT '[48] missing_community_chat_identity_index' AS check_name, expected.ix AS detail
 FROM (
   SELECT 'PRIMARY' ix UNION ALL
   SELECT 'uk_community_chat_identity_public' UNION ALL
@@ -1526,7 +1585,7 @@ LEFT JOIN information_schema.statistics actual
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
 
-SELECT '[47] missing_community_chat_message_contract_column' AS check_name, expected.n AS detail
+SELECT '[48] missing_community_chat_message_contract_column' AS check_name, expected.n AS detail
 FROM (
   SELECT 'community_chat_messages' tab, 'payload_fingerprint' col, 'community_chat_messages.payload_fingerprint' n UNION ALL
   SELECT 'community_chat_messages', 'message_kind', 'community_chat_messages.message_kind' UNION ALL
@@ -1543,7 +1602,7 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
-SELECT '[47] invalid_community_chat_message_contract_default' AS check_name,
+SELECT '[48] invalid_community_chat_message_contract_default' AS check_name,
   CONCAT(actual.table_name, '.', actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
 FROM information_schema.columns actual
 WHERE actual.table_schema=DATABASE()
@@ -1558,7 +1617,7 @@ WHERE actual.table_schema=DATABASE()
       AND NOT (actual.is_nullable='NO' AND actual.column_default=''))
   );
 
-SELECT '[47] missing_community_chat_custom_sticker_table' AS check_name,
+SELECT '[48] missing_community_chat_custom_sticker_table' AS check_name,
   'community_chat_custom_stickers' AS detail
 FROM DUAL
 WHERE NOT EXISTS (
@@ -1568,7 +1627,7 @@ WHERE NOT EXISTS (
      AND engine='InnoDB'
 );
 
-SELECT '[47] missing_community_chat_custom_sticker_column' AS check_name, expected.col AS detail
+SELECT '[48] missing_community_chat_custom_sticker_column' AS check_name, expected.col AS detail
 FROM (
   SELECT 'public_id' col UNION ALL
   SELECT 'user_id' UNION ALL
@@ -1590,7 +1649,7 @@ LEFT JOIN information_schema.columns actual
  AND actual.column_name=expected.col
 WHERE actual.column_name IS NULL;
 
-SELECT '[47] missing_community_chat_custom_sticker_index' AS check_name, expected.ix AS detail
+SELECT '[48] missing_community_chat_custom_sticker_index' AS check_name, expected.ix AS detail
 FROM (
   SELECT 'uk_community_chat_custom_sticker_public' ix UNION ALL
   SELECT 'uk_community_chat_custom_sticker_content' UNION ALL

@@ -24,7 +24,15 @@ try {
     if (!/^SELECT\b/i.test(statement)) {
       throw new Error('SCHEMA_ASSERTION_MUST_BE_READ_ONLY');
     }
-    const [rows] = await pool.query(statement);
+    let rows;
+    try {
+      [rows] = await pool.query(statement);
+    } catch (error) {
+      if (error?.code !== 'ER_NO_SUCH_TABLE') throw error;
+      failed = true;
+      console.error('[schema-check] missing_table: %s', String(error?.sqlMessage || error?.message || 'unknown'));
+      continue;
+    }
     if (!Array.isArray(rows) || rows.length === 0) continue;
     failed = true;
     for (const row of rows) {

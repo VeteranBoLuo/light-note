@@ -674,6 +674,13 @@ export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
   await deleteIfPresent(
     connection,
     tables,
+    'points_economy_operations',
+    'DELETE FROM points_economy_operations WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
     'admin_user_remarks',
     'DELETE FROM admin_user_remarks WHERE admin_user_id = ? OR target_user_id = ?',
     [userId, userId],
