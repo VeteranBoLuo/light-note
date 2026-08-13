@@ -926,11 +926,20 @@ export const getNoteDetail = async (req, res) => {
     const userId = req.user.id;
     const noteTreeFeatures = resolveNoteTreeFeatures(noteTreeFeatureIdentity(req));
     // 先登记正文查询，再并行沿当前笔记的父链读取面包屑，避免测试与观测日志中的请求顺序漂移。
-    const detailPromise = pool.query('select * from note where id=? and create_by=? and del_flag=?', [
-      req.body.id,
-      userId,
-      '0',
-    ]);
+    const detailPromise = pool.query(
+      `SELECT n.*,
+              EXISTS (
+                SELECT 1
+                FROM resource_inbox i
+                WHERE i.user_id = n.create_by
+                  AND i.resource_type = 'note'
+                  AND i.resource_id = n.id
+                  AND i.status = 'pending'
+              ) AS isPending
+       FROM note n
+       WHERE n.id = ? AND n.create_by = ? AND n.del_flag = ?`,
+      [req.body.id, userId, '0'],
+    );
     const breadcrumbPromise = noteTreeFeatures[NOTE_TREE_FEATURE.READ]
       ? resolveOwnedNoteBreadcrumb({ userId, noteId: req.body.id })
           .then((resolved) => (Array.isArray(resolved?.items) ? resolved.items : []))
@@ -951,6 +960,7 @@ export const getNoteDetail = async (req, res) => {
     return res.send(
       resultData({
         ...normalizeCanonicalMarkdownRecord(result[0]),
+        isPending: Number(result[0].isPending) === 1,
         breadcrumb,
         noteTreeFeatures,
       }),

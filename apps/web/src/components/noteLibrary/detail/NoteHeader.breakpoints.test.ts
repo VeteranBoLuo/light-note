@@ -59,7 +59,7 @@ const { default: NoteHeader } = await import('./NoteHeader.vue');
 
 let cleanup: (() => void) | undefined;
 
-function mount() {
+function mount(options: { isPending?: boolean; readonly?: boolean; onToggleInbox?: () => void } = {}) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -67,11 +67,17 @@ function mount() {
       return () =>
         h(NoteHeader, {
           updateTime: '2026-08-05 10:00:00',
-          readonly: false,
+          readonly: options.readonly ?? false,
           isStartEdit: false,
-          note: { id: 'note-1', title: '示例笔记', content: '<p>x</p>' },
+          note: {
+            id: 'note-1',
+            title: '示例笔记',
+            content: '<p>x</p>',
+            isPending: Boolean(options.isPending),
+          },
           noteType: 'html',
           hasCatalog: true,
+          onToggleInbox: options.onToggleInbox,
         });
     },
   });
@@ -130,6 +136,20 @@ describe('NoteHeader 断点下的操作可达性', () => {
     expect(menuText).not.toContain(zhCN.noteDetail.export);
   });
 
+  it('桌面端显示待整理胶囊，并在更多菜单提供取消或加入操作', async () => {
+    const host = mount({ isPending: true });
+    await nextTick();
+
+    expect(host.querySelector('.inbox-pending-badge')?.textContent).toContain(zhCN.inbox.pendingBadge);
+    expect(host.querySelector('.dropdown-stub')?.textContent).toContain(zhCN.inbox.removeExisting);
+    cleanup?.();
+
+    const regularHost = mount({ isPending: false });
+    await nextTick();
+    expect(regularHost.querySelector('.inbox-pending-badge')).toBeNull();
+    expect(regularHost.querySelector('.dropdown-stub')?.textContent).toContain(zhCN.inbox.addExisting);
+  });
+
   /** 这条是回归重点：平板不摊开按钮，但不能因此丢功能。 */
   it('平板仍从更多菜单访问同一组操作', async () => {
     setLayout('tablet');
@@ -163,5 +183,15 @@ describe('NoteHeader 断点下的操作可达性', () => {
     await nextTick();
     expect(host.querySelector('.mobile-actions-drawer-stub')?.getAttribute('data-open')).toBe('true');
     expect(host.querySelector('.mobile-actions-drawer-stub')?.getAttribute('data-title')).toContain('示例笔记');
+    expect(host.querySelector('.mobile-actions-drawer-stub')?.textContent).toContain(zhCN.inbox.addExisting);
+  });
+
+  it('只读详情不提供待整理写操作', async () => {
+    const host = mount({ isPending: true, readonly: true });
+    await nextTick();
+
+    const actions = host.querySelector('.dropdown-stub')?.textContent || '';
+    expect(actions).not.toContain(zhCN.inbox.removeExisting);
+    expect(actions).not.toContain(zhCN.inbox.addExisting);
   });
 });

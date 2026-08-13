@@ -143,6 +143,52 @@
         </BCard>
       </section>
 
+      <section v-if="activeSection === 'jobs'" class="action-center__batch" aria-live="polite">
+        <div class="action-center__batch-controls">
+          <BSelect
+            v-model:value="batchAction"
+            class="action-center__batch-select"
+            :options="batchActionOptions"
+            :disabled="batchLoading || retryLoading"
+            @change="clearBatchSelection"
+          />
+          <BCheckbox
+            :checked="allBatchEligibleSelected"
+            :indeterminate="batchSelectionIndeterminate"
+            :disabled="!batchEligibleItems.length || batchLoading || retryLoading"
+            @change="toggleAllBatchEligible"
+          >
+            {{ t('adminActionCenter.batch.selectAll', { count: batchEligibleItems.length }) }}
+          </BCheckbox>
+          <span v-if="!batchEligibleItems.length" class="action-center__batch-hint">
+            {{ t('adminActionCenter.batch.noEligible') }}
+          </span>
+          <span v-else-if="!selectedBatchItems.length" class="action-center__batch-hint">
+            {{ t('adminActionCenter.batch.guardHint') }}
+          </span>
+          <strong v-else>{{ t('adminActionCenter.batch.selected', { count: selectedBatchItems.length }) }}</strong>
+        </div>
+        <div v-if="selectedBatchItems.length" class="action-center__batch-actions">
+          <BButton :disabled="batchLoading || retryLoading" @click="clearBatchSelection">
+            {{ t('adminActionCenter.batch.clear') }}
+          </BButton>
+          <BButton
+            :type="batchAction === 'dismiss' ? 'danger' : 'primary'"
+            :loading="batchLoading || retryLoading"
+            @click="executeSelectedBatch"
+          >
+            {{
+              t(
+                batchAction === 'dismiss'
+                  ? 'adminActionCenter.batch.dismissSelected'
+                  : 'adminActionCenter.batch.retrySelected',
+                { count: selectedBatchItems.length },
+              )
+            }}
+          </BButton>
+        </div>
+      </section>
+
       <section class="action-center__items" :aria-label="t('adminActionCenter.listTitle')">
         <BCard
           v-for="item in filteredItems"
@@ -153,6 +199,21 @@
           class="action-center__item"
           :class="`is-${item.status}`"
         >
+          <div
+            v-if="activeSection === 'jobs'"
+            class="action-center__item-select-slot"
+            :class="{ 'is-empty': !isBatchEligible(item) }"
+          >
+            <BCheckbox
+              v-if="isBatchEligible(item)"
+              class="action-center__item-select"
+              :checked="selectedJobKeys.includes(batchItemKey(item))"
+              :disabled="batchLoading || retryLoading"
+              :aria-label="t('adminActionCenter.batch.selectItem', { title: item.title })"
+              @click.stop
+              @change="(checked) => toggleBatchItem(item, checked)"
+            />
+          </div>
           <div class="action-center__item-main">
             <div class="action-center__item-heading">
               <BChip :tone="itemTone(item)">{{ sourceLabel(item.source) }}</BChip>
@@ -198,14 +259,21 @@
               v-if="activeSection === 'jobs' && item.canRetry"
               size="small"
               type="primary"
+              :disabled="batchLoading || retryLoading"
               @click="openRetry(item)"
             >
               {{ t('adminActionCenter.retry.action') }}
             </BButton>
             <BButton
-              v-if="activeSection === 'jobs' && item.source === 'bookmark_icon' && item.status === 'attention'"
+              v-if="
+                activeSection === 'jobs' &&
+                item.source === 'bookmark_icon' &&
+                item.status === 'attention' &&
+                item.rawStatus === 'failed'
+              "
               size="small"
               type="danger"
+              :disabled="batchLoading || retryLoading"
               @click="confirmDismiss(item)"
             >
               {{ t('adminActionCenter.dismiss.action') }}
@@ -228,12 +296,14 @@
       :esc-closable="!retryLoading"
       initial-focus=".action-center__retry-reason textarea"
     >
-      <div v-if="retryJob" class="action-center__retry">
+      <div v-if="retryJobs.length" class="action-center__retry">
         <p>{{
-          t('adminActionCenter.retry.summary', {
-            source: sourceLabel(retryJob.source),
-            title: retryJob.title,
-          })
+          retryJobs.length === 1
+            ? t('adminActionCenter.retry.summary', {
+                source: sourceLabel(retryJobs[0].source),
+                title: retryJobs[0].title,
+              })
+            : t('adminActionCenter.retry.batchSummary', { count: retryJobs.length })
         }}</p>
         <p class="action-center__retry-warning">{{ t('adminActionCenter.retry.warning') }}</p>
         <label>
@@ -335,6 +405,134 @@
         </div>
       </template>
     </BModal>
+
+    <BModal
+      v-model:visible="filePreviewDiagnosticVisible"
+      :title="t('adminActionCenter.filePreviewDiagnostic.title')"
+      width="min(760px, 94vw)"
+      :mask-closable="!filePreviewDiagnosticLoading"
+      :esc-closable="!filePreviewDiagnosticLoading"
+    >
+      <BLoading
+        v-if="filePreviewDiagnosticLoading"
+        loading
+        :title="t('adminActionCenter.filePreviewDiagnostic.loading')"
+      />
+      <div v-else-if="filePreviewDiagnostic" class="action-center__diagnostic">
+        <header class="action-center__diagnostic-heading">
+          <div>
+            <small>{{ filePreviewDiagnostic.file.ownerLabel }}</small>
+            <strong>{{ filePreviewDiagnostic.file.name }}</strong>
+          </div>
+          <BChip :tone="filePreviewDiagnosticTone(filePreviewDiagnostic.job)">
+            {{ filePreviewStateLabel(filePreviewDiagnostic.job.health) }}
+          </BChip>
+        </header>
+
+        <section class="action-center__diagnostic-primary">
+          <div>
+            <span>{{ t('adminActionCenter.filePreviewDiagnostic.result') }}</span>
+            <strong>{{ filePreviewReasonLabel(filePreviewDiagnostic.job.attentionReason) }}</strong>
+            <small v-if="filePreviewDiagnostic.job.errorCode"
+              ><code>{{ filePreviewDiagnostic.job.errorCode }}</code></small
+            >
+          </div>
+          <div>
+            <span>{{ t('adminActionCenter.filePreviewDiagnostic.jobStatus') }}</span>
+            <strong>{{ filePreviewDiagnostic.job.status }}</strong>
+            <small>{{ t('adminActionCenter.attempts', { count: number(filePreviewDiagnostic.job.attempts) }) }}</small>
+          </div>
+          <div>
+            <span>{{ t('adminActionCenter.filePreviewDiagnostic.fileSize') }}</span>
+            <strong>{{ formatBytes(filePreviewDiagnostic.file.size) }}</strong>
+            <small>{{ filePreviewStrategyLabel(filePreviewDiagnostic.artifact.strategy) }}</small>
+          </div>
+        </section>
+
+        <section class="action-center__diagnostic-section">
+          <h4>{{ t('adminActionCenter.filePreviewDiagnostic.artifact') }}</h4>
+          <div class="action-center__diagnostic-meta">
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.format', {
+                value: filePreviewDiagnostic.artifact.formatId || '-',
+              })
+            }}</span>
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.artifactStatus', {
+                value: filePreviewDiagnostic.artifact.status || '-',
+              })
+            }}</span>
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.outputSize', {
+                value: formatBytes(filePreviewDiagnostic.artifact.artifactSize),
+              })
+            }}</span>
+            <span v-if="filePreviewDiagnostic.artifact.entryCount">
+              {{
+                t('adminActionCenter.filePreviewDiagnostic.entries', {
+                  count: number(filePreviewDiagnostic.artifact.entryCount),
+                })
+              }}
+            </span>
+            <span v-if="filePreviewDiagnostic.artifact.containsEncrypted" class="action-center__overdue-text">
+              {{ t('adminActionCenter.filePreviewDiagnostic.encrypted') }}
+            </span>
+            <span v-if="filePreviewDiagnostic.artifact.suspiciousExpansion" class="action-center__overdue-text">
+              {{ t('adminActionCenter.filePreviewDiagnostic.suspiciousExpansion') }}
+            </span>
+          </div>
+        </section>
+
+        <section class="action-center__diagnostic-section">
+          <h4>{{ t('adminActionCenter.filePreviewDiagnostic.timeline') }}</h4>
+          <div class="action-center__diagnostic-meta">
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.availableAt', {
+                time: formatTime(filePreviewDiagnostic.job.availableAt),
+              })
+            }}</span>
+            <span v-if="filePreviewDiagnostic.job.lockedAt">{{
+              t('adminActionCenter.filePreviewDiagnostic.lockedAt', {
+                time: formatTime(filePreviewDiagnostic.job.lockedAt),
+              })
+            }}</span>
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.updatedAt', {
+                time: formatTime(filePreviewDiagnostic.job.updatedAt),
+              })
+            }}</span>
+          </div>
+          <div class="action-center__diagnostic-meta">
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.fileId', { id: shortId(filePreviewDiagnostic.file.id) })
+            }}</span>
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.jobId', { id: shortId(filePreviewDiagnostic.job.id) })
+            }}</span>
+            <span>{{
+              t('adminActionCenter.filePreviewDiagnostic.artifactId', {
+                id: shortId(filePreviewDiagnostic.artifact.id),
+              })
+            }}</span>
+          </div>
+        </section>
+      </div>
+      <div v-else class="action-center__empty">
+        <strong>{{ t('adminActionCenter.filePreviewDiagnostic.emptyTitle') }}</strong>
+        <span>{{ t('adminActionCenter.filePreviewDiagnostic.emptyHint') }}</span>
+      </div>
+      <template #footer>
+        <div class="action-center__retry-footer">
+          <BButton
+            type="primary"
+            :disabled="filePreviewDiagnosticLoading"
+            @click="filePreviewDiagnosticVisible = false"
+          >
+            {{ t('common.close') }}
+          </BButton>
+        </div>
+      </template>
+    </BModal>
   </AdminDataPage>
 </template>
 
@@ -345,6 +543,7 @@
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
+  import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
@@ -356,12 +555,14 @@
   import {
     dismissAdminAsyncJob,
     getAdminActionCenter,
+    getAdminFilePreviewDiagnostic,
     getAdminTodoReminderDiagnostic,
     retryAdminAsyncJob,
   } from '@/api/commonApi';
   import { formatAdminDateTime } from '@/utils/adminDateTime';
 
   type Section = 'work' | 'jobs';
+  type BatchAction = 'retry' | 'dismiss';
   type ItemStatus = 'pending' | 'waiting' | 'running' | 'attention';
   type SlaState = 'overdue' | 'due_soon' | 'within_sla' | 'unavailable';
   interface ActionItem {
@@ -441,6 +642,37 @@
     job: TodoReminderDiagnosticJob;
     rule: TodoReminderDiagnosticRule | null;
     relatedJobs: TodoReminderDiagnosticJob[];
+  }
+  interface FilePreviewDiagnosticJob {
+    id: string;
+    status: string;
+    health: 'attention' | 'running' | 'waiting' | 'completed' | 'terminal';
+    attentionReason: string;
+    attempts: number;
+    availableAt?: string | null;
+    lockedAt?: string | null;
+    errorCode?: string | null;
+    createdAt?: string | null;
+    updatedAt?: string | null;
+  }
+  interface FilePreviewDiagnostic {
+    file: { id: string; name: string; type?: string; size: number; ownerLabel: string };
+    job: FilePreviewDiagnosticJob;
+    artifact: {
+      id: string;
+      status: string;
+      strategy: string;
+      strategyVersion: number;
+      formatId: string;
+      sourceSize: number;
+      artifactSize: number;
+      entryCount: number;
+      totalUncompressedSize: number;
+      containsEncrypted: boolean;
+      suspiciousExpansion: boolean;
+      errorCode?: string | null;
+      lastAccessAt?: string | null;
+    };
   }
   interface WorkSource {
     source: string;
@@ -524,12 +756,19 @@
   const unavailableSources = ref<string[]>([]);
   const retryVisible = ref(false);
   const retryLoading = ref(false);
-  const retryJob = ref<ActionItem | null>(null);
+  const retryJobs = ref<ActionItem[]>([]);
   const retryReason = ref('');
+  const batchAction = ref<BatchAction>('retry');
+  const batchLoading = ref(false);
+  const selectedJobKeys = ref<string[]>([]);
   const todoDiagnosticVisible = ref(false);
   const todoDiagnosticLoading = ref(false);
   const todoDiagnostic = ref<TodoReminderDiagnostic | null>(null);
   let todoDiagnosticSequence = 0;
+  const filePreviewDiagnosticVisible = ref(false);
+  const filePreviewDiagnosticLoading = ref(false);
+  const filePreviewDiagnostic = ref<FilePreviewDiagnostic | null>(null);
+  let filePreviewDiagnosticSequence = 0;
   const work = ref<{ total: number; critical: number; sources: WorkSource[]; items: ActionItem[] }>({
     total: 0,
     critical: 0,
@@ -544,11 +783,13 @@
     sources: JobSource[];
     items: ActionItem[];
   }>({ attention: 0, running: 0, waiting: 0, completed24h: 0, sources: [], items: [] });
+  const workTabTotal = ref(0);
+  const jobTabAttention = ref(0);
   let loadSequence = 0;
 
   const tabs = computed<TabItem[]>(() => [
-    { key: 'work', label: t('adminActionCenter.tabs.work'), badge: work.value.total },
-    { key: 'jobs', label: t('adminActionCenter.tabs.jobs'), badge: jobs.value.attention },
+    { key: 'work', label: t('adminActionCenter.tabs.work'), badge: workTabTotal.value },
+    { key: 'jobs', label: t('adminActionCenter.tabs.jobs'), badge: jobTabAttention.value },
   ]);
   const activeSources = computed(() => (activeSection.value === 'work' ? work.value.sources : jobs.value.sources));
   const sourceOptions = computed(() => [
@@ -585,6 +826,42 @@
         .some((value) => String(value).toLocaleLowerCase().includes(search));
     });
   });
+  const retryEligibleItems = computed(() =>
+    filteredItems.value.filter((item) => activeSection.value === 'jobs' && item.canRetry),
+  );
+  const dismissEligibleItems = computed(() =>
+    filteredItems.value.filter(
+      (item) =>
+        activeSection.value === 'jobs' &&
+        item.source === 'bookmark_icon' &&
+        item.status === 'attention' &&
+        item.rawStatus === 'failed',
+    ),
+  );
+  const batchEligibleItems = computed(() =>
+    batchAction.value === 'retry' ? retryEligibleItems.value : dismissEligibleItems.value,
+  );
+  const selectedBatchItems = computed(() =>
+    batchEligibleItems.value.filter((item) => selectedJobKeys.value.includes(batchItemKey(item))),
+  );
+  const allBatchEligibleSelected = computed(
+    () =>
+      batchEligibleItems.value.length > 0 &&
+      batchEligibleItems.value.every((item) => selectedJobKeys.value.includes(batchItemKey(item))),
+  );
+  const batchSelectionIndeterminate = computed(
+    () => selectedBatchItems.value.length > 0 && selectedBatchItems.value.length < batchEligibleItems.value.length,
+  );
+  const batchActionOptions = computed(() => [
+    {
+      value: 'retry',
+      label: t('adminActionCenter.batch.retryOption', { count: retryEligibleItems.value.length }),
+    },
+    {
+      value: 'dismiss',
+      label: t('adminActionCenter.batch.dismissOption', { count: dismissEligibleItems.value.length }),
+    },
+  ]);
 
   function number(value: unknown) {
     return Number(value || 0).toLocaleString(locale.value);
@@ -643,9 +920,36 @@
     if (minutes < 24 * 60) return t('adminActionCenter.duration.hours', { count: number(Math.floor(minutes / 60)) });
     return t('adminActionCenter.duration.days', { count: number(Math.floor(minutes / (24 * 60))) });
   }
+  function formatBytes(value?: number | null) {
+    const bytes = Math.max(0, Number(value || 0));
+    if (bytes < 1024) return `${number(bytes)} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
   function shortId(value: string) {
     const id = String(value || '');
     return id.length > 14 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
+  }
+  function batchItemKey(item: ActionItem) {
+    return `${item.source}:${item.id}`;
+  }
+  function isBatchEligible(item: ActionItem) {
+    const key = batchItemKey(item);
+    return batchEligibleItems.value.some((candidate) => batchItemKey(candidate) === key);
+  }
+  function toggleBatchItem(item: ActionItem, checked: boolean) {
+    if (!isBatchEligible(item)) return;
+    const key = batchItemKey(item);
+    selectedJobKeys.value = checked
+      ? [...new Set([...selectedJobKeys.value, key])]
+      : selectedJobKeys.value.filter((selectedKey) => selectedKey !== key);
+  }
+  function toggleAllBatchEligible(checked: boolean) {
+    selectedJobKeys.value = checked ? batchEligibleItems.value.map(batchItemKey) : [];
+  }
+  function clearBatchSelection() {
+    selectedJobKeys.value = [];
   }
   function itemTarget(item: ActionItem) {
     if (item.targetUrl) return item.targetUrl;
@@ -665,11 +969,15 @@
     return `${currentActionCenterPath()}${query ? `?${query}` : ''}`;
   }
   function hasItemAction(item: ActionItem) {
-    return item.source === 'todo_reminder' || Boolean(itemTarget(item));
+    return item.source === 'todo_reminder' || item.source === 'file_preview' || Boolean(itemTarget(item));
   }
   function openItem(item: ActionItem) {
     if (item.source === 'todo_reminder') {
       void openTodoDiagnostic(item);
+      return;
+    }
+    if (item.source === 'file_preview') {
+      void openFilePreviewDiagnostic(item);
       return;
     }
     if (item.source === 'opinion') {
@@ -694,6 +1002,43 @@
     }
     const target = itemTarget(item);
     if (target) router.push(target);
+  }
+  async function openFilePreviewDiagnostic(item: ActionItem) {
+    const requestId = ++filePreviewDiagnosticSequence;
+    filePreviewDiagnostic.value = null;
+    filePreviewDiagnosticVisible.value = true;
+    filePreviewDiagnosticLoading.value = true;
+    try {
+      const response: any = await getAdminFilePreviewDiagnostic({ id: item.id });
+      if (requestId !== filePreviewDiagnosticSequence) return;
+      if (response?.status !== 200 || !response.data?.file?.id || !response.data?.job?.id) {
+        throw new Error(response?.msg || t('adminActionCenter.filePreviewDiagnostic.loadFailed'));
+      }
+      filePreviewDiagnostic.value = response.data as FilePreviewDiagnostic;
+    } catch (error: any) {
+      if (requestId !== filePreviewDiagnosticSequence) return;
+      message.error(error?.message || t('adminActionCenter.filePreviewDiagnostic.loadFailed'));
+    } finally {
+      if (requestId === filePreviewDiagnosticSequence) filePreviewDiagnosticLoading.value = false;
+    }
+  }
+  function filePreviewDiagnosticTone(job: FilePreviewDiagnosticJob): 'danger' | 'pending' | 'success' | 'neutral' {
+    if (job.health === 'attention') return 'danger';
+    if (job.health === 'running' || job.health === 'completed') return 'success';
+    if (job.health === 'waiting') return 'pending';
+    return 'neutral';
+  }
+  function filePreviewStateLabel(health: FilePreviewDiagnosticJob['health']) {
+    return t(`adminActionCenter.filePreviewDiagnostic.state.${health}`);
+  }
+  function filePreviewReasonLabel(reason: string) {
+    const supported = ['processing_failed', 'worker_stale', 'processing', 'queued', 'completed', 'terminal'];
+    const key = supported.includes(reason) ? reason : 'terminal';
+    return t(`adminActionCenter.filePreviewDiagnostic.reason.${key}`);
+  }
+  function filePreviewStrategyLabel(strategy: string) {
+    const key = strategy === 'archive_manifest' || strategy === 'converted_pdf' ? strategy : 'unknown';
+    return t(`adminActionCenter.filePreviewDiagnostic.strategy.${key}`);
   }
   async function openTodoDiagnostic(item: ActionItem) {
     const requestId = ++todoDiagnosticSequence;
@@ -775,13 +1120,13 @@
     router.push({ path: '/admin/todoPlanDiagnostics', query: { keyword: seriesId } });
   }
   function openRetry(item: ActionItem) {
-    retryJob.value = item;
+    retryJobs.value = [item];
     retryReason.value = '';
     retryVisible.value = true;
   }
   async function submitRetry() {
-    const job = retryJob.value;
-    if (!job || retryLoading.value) return;
+    const jobsToRetry = [...retryJobs.value];
+    if (!jobsToRetry.length || retryLoading.value) return;
     const reason = retryReason.value.trim();
     if (reason.length < 6) {
       message.warning(t('adminActionCenter.retry.reasonRequired'));
@@ -789,24 +1134,106 @@
     }
     retryLoading.value = true;
     try {
-      const response: any = await retryAdminAsyncJob({
-        source: job.source,
-        id: job.id,
-        reason,
-        confirmed: true,
-        confirmText: '确认重试任务',
-      });
-      if (response?.status !== 200) throw new Error(response?.msg || t('adminActionCenter.retry.failed'));
-      message.success(t('adminActionCenter.retry.success'));
+      const result = await runBatchRequests(jobsToRetry, (job) =>
+        retryAdminAsyncJob({
+          source: job.source,
+          id: job.id,
+          reason,
+          confirmed: true,
+          confirmText: '确认重试任务',
+        }),
+      );
+      if (!result.succeeded) throw new Error(result.firstError || t('adminActionCenter.retry.failed'));
+      if (result.failed) {
+        message.warning(t('adminActionCenter.batch.partial', { succeeded: result.succeeded, failed: result.failed }));
+      } else {
+        message.success(
+          jobsToRetry.length === 1
+            ? t('adminActionCenter.retry.success')
+            : t('adminActionCenter.batch.retrySuccess', { count: result.succeeded }),
+        );
+      }
       retryVisible.value = false;
-      retryJob.value = null;
+      retryJobs.value = [];
       retryReason.value = '';
+      clearBatchSelection();
       await load();
     } catch (error: any) {
       message.error(error?.message || t('adminActionCenter.retry.failed'));
     } finally {
       retryLoading.value = false;
     }
+  }
+  async function runBatchRequests(items: ActionItem[], request: (item: ActionItem) => Promise<any>, concurrency = 3) {
+    let succeeded = 0;
+    let failed = 0;
+    let firstError = '';
+    for (let index = 0; index < items.length; index += concurrency) {
+      const chunk = items.slice(index, index + concurrency);
+      const results = await Promise.all(
+        chunk.map(async (item) => {
+          try {
+            const response: any = await request(item);
+            return response?.status === 200
+              ? { ok: true, error: '' }
+              : { ok: false, error: response?.msg || t('adminActionCenter.batch.requestFailed') };
+          } catch (error: any) {
+            return { ok: false, error: error?.message || t('adminActionCenter.batch.requestFailed') };
+          }
+        }),
+      );
+      results.forEach((result) => {
+        if (result.ok) succeeded += 1;
+        else {
+          failed += 1;
+          if (!firstError) firstError = result.error;
+        }
+      });
+    }
+    return { succeeded, failed, firstError };
+  }
+  function executeSelectedBatch() {
+    const items = [...selectedBatchItems.value];
+    if (!items.length || batchLoading.value || retryLoading.value) return;
+    if (batchAction.value === 'retry') {
+      retryJobs.value = items;
+      retryReason.value = '';
+      retryVisible.value = true;
+      return;
+    }
+    Alert.alert({
+      title: t('adminActionCenter.batch.dismissTitle'),
+      content: t('adminActionCenter.batch.dismissContent', { count: items.length }),
+      okText: t('adminActionCenter.batch.dismissConfirm', { count: items.length }),
+      okType: 'danger',
+      onOk: async () => {
+        batchLoading.value = true;
+        try {
+          const result = await runBatchRequests(items, (item) =>
+            dismissAdminAsyncJob({
+              source: item.source,
+              id: item.id,
+              reason: t('adminActionCenter.dismiss.auditReason'),
+              confirmed: true,
+            }),
+          );
+          if (!result.succeeded) throw new Error(result.firstError || t('adminActionCenter.dismiss.failed'));
+          if (result.failed) {
+            message.warning(
+              t('adminActionCenter.batch.partial', { succeeded: result.succeeded, failed: result.failed }),
+            );
+          } else {
+            message.success(t('adminActionCenter.batch.dismissSuccess', { count: result.succeeded }));
+          }
+          clearBatchSelection();
+          await load();
+        } catch (error: any) {
+          message.error(error?.message || t('adminActionCenter.dismiss.failed'));
+        } finally {
+          batchLoading.value = false;
+        }
+      },
+    });
   }
   function confirmDismiss(item: ActionItem) {
     Alert.alert({
@@ -836,20 +1263,24 @@
     sourceFilter.value = source;
     statusFilter.value = 'all';
     slaFilter.value = 'all';
+    clearBatchSelection();
     void load();
   }
   function onSourceChange() {
     statusFilter.value = 'all';
     slaFilter.value = 'all';
+    clearBatchSelection();
     void load();
   }
   function onSectionChange() {
     sourceFilter.value = 'all';
     statusFilter.value = 'all';
     slaFilter.value = 'all';
+    clearBatchSelection();
     void load();
   }
   function onServerFilterChange() {
+    clearBatchSelection();
     void load();
   }
 
@@ -860,7 +1291,8 @@
     try {
       const response: any = await getAdminActionCenter({
         limit: 60,
-        section: activeSection.value,
+        // 全部来源时同时取两区汇总，Tab badge 不再被当前区的空对象覆盖。
+        section: requestedSource === 'all' ? 'all' : activeSection.value,
         source: requestedSource,
         status: activeSection.value === 'jobs' ? (statusFilter.value as ItemStatus | 'all') : 'all',
         slaState: slaFilter.value as SlaState | 'all',
@@ -894,6 +1326,13 @@
         sources: Array.isArray(response.data?.jobs?.sources) ? response.data.jobs.sources : [],
         items: Array.isArray(response.data?.jobs?.items) ? response.data.jobs.items : [],
       };
+      if (requestedSource === 'all') {
+        workTabTotal.value = work.value.total;
+        jobTabAttention.value = jobs.value.attention;
+      }
+      selectedJobKeys.value = selectedJobKeys.value.filter((key) =>
+        batchEligibleItems.value.some((item) => batchItemKey(item) === key),
+      );
       if (!sourceOptions.value.some((option) => option.value === sourceFilter.value)) sourceFilter.value = 'all';
       hasLoaded.value = true;
     } catch (error: any) {
@@ -978,6 +1417,30 @@
     display: grid;
     gap: 8px;
   }
+  .action-center__batch {
+    min-height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 9px 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+  .action-center__batch-controls,
+  .action-center__batch-actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .action-center__batch-select {
+    width: 240px;
+  }
+  .action-center__batch-hint {
+    color: var(--sub-text-color);
+    font-size: 11px;
+  }
   .action-center__item {
     display: flex;
     align-items: center;
@@ -985,10 +1448,18 @@
     gap: 14px;
     box-shadow: none;
   }
+  .action-center__item-select-slot {
+    width: 24px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .action-center__item.is-attention {
     border-color: var(--danger-color, #e5484d);
   }
   .action-center__item-main {
+    flex: 1 1 auto;
     min-width: 0;
     display: grid;
     gap: 5px;
@@ -1175,11 +1646,28 @@
     .action-center__source-section {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
+    .action-center__batch,
+    .action-center__batch-controls,
+    .action-center__batch-actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .action-center__batch-select,
+    .action-center__batch-actions :deep(.b_btn) {
+      width: 100%;
+    }
     .action-center__item {
       align-items: stretch;
       flex-direction: column;
     }
-    .action-center__item :deep(.b-button) {
+    .action-center__item-select-slot {
+      width: auto;
+      justify-content: flex-start;
+    }
+    .action-center__item-select-slot.is-empty {
+      display: none;
+    }
+    .action-center__item :deep(.b_btn) {
       min-height: 44px;
     }
     .action-center__item-actions {

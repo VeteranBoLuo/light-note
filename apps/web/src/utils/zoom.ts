@@ -78,3 +78,26 @@ export function scrollIntoContainer(
     offset;
   container.scrollTo({ top, behavior });
 }
+
+/**
+ * 从目标元素向上查找当前真正承担纵向滚动的祖先。
+ *
+ * 响应式页面可能在不同断点切换滚动层级：桌面端由内容区滚动，移动端则由页面外壳滚动。
+ * 只按固定 class 取容器会让其中一端对不可滚动元素调用 scrollTo，筛选等状态已经变化，
+ * 但页面没有任何位移，最终表现为“点击无反应”。
+ *
+ * `fallback` 用于内容高度不足、当前没有任何祖先真正溢出时保留调用方的稳定容器。
+ */
+export function findVerticalScrollContainer(
+  element: HTMLElement,
+  fallback: HTMLElement | null = null,
+): HTMLElement | null {
+  let current = element.parentElement;
+  while (current) {
+    const overflowY = window.getComputedStyle(current).overflowY;
+    const allowsVerticalScroll = /^(auto|scroll|overlay)$/u.test(overflowY);
+    if (allowsVerticalScroll && current.scrollHeight > current.clientHeight + 1) return current;
+    current = current.parentElement;
+  }
+  return fallback;
+}

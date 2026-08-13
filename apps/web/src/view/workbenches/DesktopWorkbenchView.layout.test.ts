@@ -14,4 +14,11 @@ describe('桌面工作台头部布局稳定性', () => {
     expect(desktopSource).toMatch(/\.workbench-data-scope\s*\{[\s\S]*?min-height:\s*1\.4em/);
     expect(desktopSource).toMatch(/\.workbench-data-updated\s*\{[\s\S]*?min-width:\s*12em/);
   });
+
+  it('最近更新的三种兼容数据来源统一最多展示五条要点', () => {
+    expect(desktopSource).toContain('const LATEST_UPDATE_ITEM_LIMIT = 5;');
+    expect(desktopSource).toContain('updateLogMarkdownSummaryItems(item.contentMarkdown, LATEST_UPDATE_ITEM_LIMIT)');
+    expect(desktopSource).toContain('item.highlights.slice(0, LATEST_UPDATE_ITEM_LIMIT)');
+    expect(desktopSource).toContain('item.list.slice(0, LATEST_UPDATE_ITEM_LIMIT)');
+  });
 });

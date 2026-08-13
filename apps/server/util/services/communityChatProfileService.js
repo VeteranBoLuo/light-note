@@ -2,6 +2,7 @@ import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG } from '../communityChatFeature.js';
 import { ACHIEVEMENTS, MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
 import { getFrameItem, titleName } from '../points.js';
+import { verifyCommunityChatPresenceAvatarToken } from '../communityChat/presenceAvatarToken.js';
 import {
   CommunityChatError,
   assertCommunityChatMessagingAccess,
@@ -550,6 +551,45 @@ export async function getCommunityChatOwnProfileAvatar({ user, env = process.env
         )
       LIMIT 1`,
     [user.id],
+  );
+  if (!avatar?.source) {
+    throw chatError('COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND', 404, '头像当前不可用', 'Avatar is unavailable');
+  }
+  return { source: String(avatar.source) };
+}
+
+export async function getCommunityChatPresenceMemberAvatar({ user, token, env = process.env, db = pool }) {
+  if (user?.role !== 'root') {
+    throw chatError('COMMUNITY_CHAT_ROOT_REQUIRED', 403, '仅 Root 可查看在线成员头像', 'Root access required');
+  }
+  await assertCommunityChatReadAccess({ user, env, db });
+  let userId = '';
+  try {
+    ({ userId } = verifyCommunityChatPresenceAvatarToken(token, { env }));
+  } catch (error) {
+    if (error?.code === 'COMMUNITY_CHAT_PRESENCE_TOKEN_UNAVAILABLE') {
+      throw chatError(
+        'COMMUNITY_CHAT_PRESENCE_AVATAR_UNAVAILABLE',
+        503,
+        '在线成员头像暂时不可用',
+        'Online member avatars are temporarily unavailable',
+      );
+    }
+    throw chatError('COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND', 404, '头像当前不可用', 'Avatar is unavailable');
+  }
+  const avatar = await queryFirst(
+    db,
+    `SELECT head_picture AS source
+       FROM user
+      WHERE id = ?
+        AND (role = 'root' OR del_flag = 0)
+        AND (
+          head_picture LIKE 'https://%'
+          OR head_picture LIKE 'http://%'
+          OR (head_picture LIKE 'data:image/%;base64,%' AND OCTET_LENGTH(head_picture) <= 524288)
+        )
+      LIMIT 1`,
+    [userId],
   );
   if (!avatar?.source) {
     throw chatError('COMMUNITY_CHAT_AUTHOR_AVATAR_NOT_FOUND', 404, '头像当前不可用', 'Avatar is unavailable');

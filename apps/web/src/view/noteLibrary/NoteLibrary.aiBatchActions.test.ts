@@ -377,7 +377,8 @@ describe('笔记库页面树交互接线', () => {
     expect(breadcrumbStart).toBeGreaterThan(stablePanelStart);
     expect(keyedContentStart).toBeGreaterThan(breadcrumbStart);
     expect(detailSource).not.toContain('<Transition name="note-content-switch"');
-    expect(detailSource).toContain('v-if="canShowPrivateNavigation"\n            class="note-detail-breadcrumb"');
+    expect(detailSource).toContain('v-if="canShowPrivateNavigation || (showInboxOrganizer && !bookmark.isMobile)"');
+    expect(detailSource).toContain('v-if="canShowPrivateNavigation"\n              class="note-detail-breadcrumb"');
     expect(detailSource).not.toContain('canShowPrivateNavigation && detailBreadcrumb.length');
     expect(detailSource).toContain('v-for="item in detailBreadcrumbTailDisplay"');
     expect(detailSource).toContain('class="note-detail-content"');

@@ -24,7 +24,14 @@
           aria-hidden="true"
         />
         {{ tab.label }}
-        <span v-if="tabUnread(tab.value) > 0" class="nt-tab-badge">
+        <span
+          v-if="tabUnread(tab.value) > 0"
+          class="nt-tab-badge"
+          :class="{
+            'is-wide': tabUnread(tab.value) > 9,
+            'is-capped': tabUnread(tab.value) > 99,
+          }"
+        >
           {{ tabUnread(tab.value) > 99 ? '99+' : tabUnread(tab.value) }}
         </span>
       </BButton>
@@ -218,15 +225,31 @@
   }
 
   .nt-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
     min-width: 16px;
     height: 16px;
-    padding: 0 4px;
+    padding: 0;
     border-radius: 999px;
     color: var(--danger-fill-fg, #fff);
     background: var(--danger-fill-bg, #d93b3b);
     font-size: 10px;
-    line-height: 16px;
+    line-height: 1;
     text-align: center;
+    white-space: nowrap;
+    box-sizing: border-box;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nt-tab-badge.is-wide {
+    min-width: 22px;
+    padding: 0 5px;
+  }
+
+  .nt-tab-badge.is-capped {
+    min-width: 28px;
   }
 
   .nt-list {

@@ -225,6 +225,7 @@
           :menu-options="previewMenuOptions"
           @close="closeDesktopPreview"
           @edit="openDirectoryPage(previewNoteId)"
+          @pending-state="syncPreviewNotePendingState"
         />
         <header v-else-if="showDesktopDirectoryHeader" class="note-directory-header">
           <nav class="note-directory-breadcrumbs" :aria-label="$t('note.currentDirectory')">
@@ -643,7 +644,11 @@
     type NoteTreeFeatures,
   } from '@/api/noteTree';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
-  import { buildNoteDetailRequestScope, prefetchNoteDetail } from '@/api/noteDetailPrefetch';
+  import {
+    buildNoteDetailRequestScope,
+    invalidateNoteDetailPrefetch,
+    prefetchNoteDetail,
+  } from '@/api/noteDetailPrefetch';
   import { BUILTIN_NOTE_TEMPLATES, pickTemplateLocale, sortBuiltinNoteTemplates } from '@/config/noteTemplates.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import RightMenu from '@/components/base/RightMenu.vue';
@@ -877,10 +882,7 @@
     noteTreeFeaturesReady.value = true;
   }
 
-  if (
-    !initialFeatureSnapshot ||
-    Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS
-  ) {
+  if (!initialFeatureSnapshot || Date.now() - initialFeatureSnapshot.updatedAt > NOTE_LIBRARY_FEATURES_FRESH_MS) {
     void loadNoteTreeFeatureSnapshot();
   }
   watch(noteCacheScope, (scope, previousScope) => {
@@ -964,6 +966,7 @@
   const mobileDirectoryInitialTab = ref<'directory' | 'tags'>('directory');
   const previewNoteId = ref<string | null>(null);
   const previewNoteSeed = ref<Record<string, any> | null>(null);
+  let previewPendingLocallyChanged = false;
   const desktopPreviewOpen = computed(() => !bookmark.isMobile && Boolean(previewNoteId.value));
   const previewChildCount = computed(() => Math.max(0, Number(previewNoteSeed.value?.childCount || 0)));
   interface DesktopPreviewScrollSnapshot {
@@ -1168,12 +1171,44 @@
     gotoNewNote({ type: template.type, templateId: template.id });
   }
 
+  function syncNotePendingState(noteId: string | null, isPending: boolean) {
+    const normalizedId = String(noteId || '').trim();
+    if (!normalizedId) return;
+    const pending = Boolean(isPending);
+    noteList.value.forEach((item) => {
+      if (String(item?.id || '') === normalizedId) item.isPending = pending;
+    });
+    if (String(previewNoteSeed.value?.id || '') === normalizedId) previewNoteSeed.value!.isPending = pending;
+    if (String(activeMobileNote.value?.id || '') === normalizedId) activeMobileNote.value!.isPending = pending;
+    noteLibraryCache.updateNotePendingState(noteCacheScope.value, normalizedId, pending);
+  }
+
+  function syncPreviewNotePendingState(isPending: boolean) {
+    // 详情请求可能早于用户点击切换、却晚于写请求返回。发生过本地切换后忽略旧详情回包，
+    // 下次打开会因预取已失效而重新读取服务端权威状态。
+    if (previewPendingLocallyChanged) return;
+    syncNotePendingState(previewNoteId.value, isPending);
+  }
+
+  const togglingInboxIds = new Set<string>();
   async function toggleNoteInbox(note: any) {
-    const resource = [{ resourceType: 'note' as const, resourceId: String(note.id) }];
-    const ok = note.isPending
-      ? await removeResourcesFromInbox(resource, '笔记库')
-      : await addResourcesToInbox(resource, '笔记库');
-    if (ok) note.isPending = !note.isPending;
+    const noteId = String(note?.id || '').trim();
+    if (!noteId || togglingInboxIds.has(noteId)) return;
+    togglingInboxIds.add(noteId);
+    const wasPending = Boolean(note.isPending);
+    const resource = [{ resourceType: 'note' as const, resourceId: noteId }];
+    try {
+      const ok = wasPending
+        ? await removeResourcesFromInbox(resource, '笔记库')
+        : await addResourcesToInbox(resource, '笔记库');
+      if (!ok) return;
+      if (previewNoteId.value === noteId) previewPendingLocallyChanged = true;
+      syncNotePendingState(noteId, !wasPending);
+      // 预览可能已经把旧状态写进详情预取；切换后失效，进入编辑页时读取服务端权威状态。
+      invalidateNoteDetailPrefetch(user, noteId);
+    } finally {
+      togglingInboxIds.delete(noteId);
+    }
   }
   function menuForNote(note: any) {
     return [
@@ -1346,6 +1381,7 @@
     const source = (typeof noteOrId === 'object' && noteOrId) ||
       noteList.value.find((item) => String(item.id) === noteId) ||
       findLoadedTreeNode(noteId) || { id: noteId };
+    previewPendingLocallyChanged = false;
     previewNoteSeed.value = { ...source, id: noteId };
     previewNoteId.value = noteId;
     void recordNoteTreeProductEvent('note_tree_page_opened', {
@@ -1358,6 +1394,7 @@
   function closeDesktopPreview(restoreScroll = true) {
     const snapshot = restoreScroll ? desktopPreviewScrollSnapshot : null;
     desktopPreviewScrollSnapshot = null;
+    previewPendingLocallyChanged = false;
     previewNoteId.value = null;
     previewNoteSeed.value = null;
     if (snapshot) void restoreDesktopPreviewScroll(snapshot);
@@ -1820,8 +1857,7 @@
   const currentListCacheKey = computed(() =>
     buildNoteLibraryListCacheKey(noteCacheScope.value, {
       mode: noteSidebarMode.value,
-      parentId:
-        noteTreeReadEnabled.value && noteSidebarMode.value === 'directory' ? currentParentId.value : null,
+      parentId: noteTreeReadEnabled.value && noteSidebarMode.value === 'directory' ? currentParentId.value : null,
       tagId: noteSidebarMode.value === 'tags' ? getActiveNoteTagId() : null,
       keyword: debouncedSearch.value,
     }),
@@ -1957,11 +1993,7 @@
       tagLoading.value = true;
     }
     try {
-      const res = await apiBasePost(
-        '/api/note/queryNoteTagList',
-        { userId: user.id },
-        { feedback: false },
-      );
+      const res = await apiBasePost('/api/note/queryNoteTagList', { userId: user.id }, { feedback: false });
       if (requestScope !== noteCacheScope.value) return;
       if (res.status === 200) {
         // 兼容旧后端:老版本直接返回标签数组,新版本返回带汇总计数的对象

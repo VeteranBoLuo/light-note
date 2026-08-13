@@ -13,7 +13,12 @@ class ResizeObserverStub {
 const mounted: Array<() => void> = [];
 let rangeClientRectsDescriptor: PropertyDescriptor | undefined;
 
-async function mountEditor(initial: string, readonly = false, mobile = false) {
+async function mountEditor(
+  initial: string,
+  readonly = false,
+  mobile = false,
+  onKeydown?: (event: KeyboardEvent) => void,
+) {
   const host = document.createElement('div');
   host.style.height = '400px';
   document.body.appendChild(host);
@@ -28,6 +33,7 @@ async function mountEditor(initial: string, readonly = false, mobile = false) {
           modelValue: model.value,
           readonly,
           mobile,
+          onKeydown,
           'onUpdate:modelValue': (value: string) => (model.value = value),
           onCommand: (command: string) => {
             commands.value.push(command);
@@ -140,6 +146,36 @@ describe('MarkdownCodeMirror', () => {
     expect(commands.value).toContain('heading1');
   });
 
+  it('让外部资源选择器优先处理导航键，未拦截时仍执行编辑器默认键位', async () => {
+    let pickerOpen = true;
+    const handledKeys: string[] = [];
+    const { host, editor, model } = await mountEditor('@资源', false, false, (event) => {
+      handledKeys.push(event.key);
+      if (pickerOpen && ['ArrowDown', 'ArrowUp', 'Enter'].includes(event.key)) event.preventDefault();
+    });
+    const content = host.querySelector<HTMLElement>('.cm-content');
+    editor.value?.setSelection(3);
+
+    content?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowDown', keyCode: 40, bubbles: true, cancelable: true }),
+    );
+    expect(handledKeys).toContain('ArrowDown');
+    expect(editor.value?.getSelection()).toEqual({ from: 3, to: 3 });
+
+    content?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }),
+    );
+    await nextTick();
+    expect(model.value).toBe('@资源');
+
+    pickerOpen = false;
+    content?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true, cancelable: true }),
+    );
+    await nextTick();
+    expect(model.value).toBe('@资源\n');
+  });
+
   it('Mod+F 交给统一顶部搜索栏，并由外置 API 完成查找与替换', async () => {
     const { host, model, editor, commands } = await mountEditor('查找正文，继续查找正文');
 
@@ -175,12 +211,24 @@ describe('MarkdownCodeMirror', () => {
     expect(host.querySelector('.ln-cm-fold-marker')).toBeNull();
   });
 
-  it('桌面端保持一逻辑行一视觉行，移动端继续自动换行', async () => {
+  it('聚焦时只显示光标，不给当前逻辑行添加整块背景', async () => {
+    const { host, editor } = await mountEditor('第一行\n第二行');
+    editor.value?.setSelection(2);
+    editor.value?.focus({ preventScroll: true });
+    await nextTick();
+
+    expect(document.activeElement).toBe(host.querySelector('.cm-content'));
+    expect(host.querySelector('.cm-activeLine')).toBeNull();
+  });
+
+  it('桌面端和移动端都按编辑区宽度软换行且不改写 Markdown 源码', async () => {
     const longLine = '一段很长的 Markdown 正文 '.repeat(30);
     const desktop = await mountEditor(longLine);
     const mobile = await mountEditor(longLine, false, true);
 
-    expect(desktop.host.querySelector('.cm-content')?.classList.contains('cm-lineWrapping')).toBe(false);
+    expect(desktop.host.querySelector('.cm-content')?.classList.contains('cm-lineWrapping')).toBe(true);
     expect(mobile.host.querySelector('.cm-content')?.classList.contains('cm-lineWrapping')).toBe(true);
+    expect(desktop.editor.value?.getValue()).toBe(longLine);
+    expect(mobile.editor.value?.getValue()).toBe(longLine);
   });
 });

@@ -67,10 +67,56 @@
         />
         <BSelect v-model:value="filters.riskLevel" :options="riskOptions" @change="reloadFindings" />
         <BSelect v-model:value="filters.resourceType" :options="resourceOptions" @change="reloadFindings" />
-        <BButton :disabled="selectedIds.length === 0 || !canExecuteSelected" @click="reviewCleanup">
-          {{ selectedActionLabel }}
-        </BButton>
       </div>
+
+      <section class="governance-batch-bar" aria-live="polite">
+        <div class="governance-batch-bar__scopes">
+          <BCheckbox
+            v-if="selectableCleanupFindings.length"
+            :checked="isPageKindSelected('cleanup')"
+            :indeterminate="isPageKindIndeterminate('cleanup')"
+            @change="(checked) => togglePageKind('cleanup', checked)"
+          >
+            {{
+              t('resourceGovernance.selectPageCleanup', {
+                count: selectableCleanupFindings.length,
+              })
+            }}
+          </BCheckbox>
+          <BCheckbox
+            v-if="selectableInvalidOwnerFindings.length"
+            :checked="isPageKindSelected('cleanup_invalid_owner')"
+            :indeterminate="isPageKindIndeterminate('cleanup_invalid_owner')"
+            @change="(checked) => togglePageKind('cleanup_invalid_owner', checked)"
+          >
+            {{
+              t('resourceGovernance.selectPageInvalidOwner', {
+                count: selectableInvalidOwnerFindings.length,
+              })
+            }}
+          </BCheckbox>
+          <span v-if="!selectableFindingCount" class="governance-batch-bar__empty">
+            {{ t('resourceGovernance.noBatchCandidates') }}
+          </span>
+        </div>
+        <div class="governance-batch-bar__actions">
+          <span v-if="selectedIds.length" class="governance-batch-bar__summary">
+            {{
+              t('resourceGovernance.batchSelectedSummary', {
+                count: selectedIds.length,
+                size: formatBytes(selectedEstimatedBytes),
+              })
+            }}
+          </span>
+          <span v-else class="governance-batch-bar__hint">{{ t('resourceGovernance.batchGuardHint') }}</span>
+          <BButton v-if="selectedIds.length" @click="clearSelection">
+            {{ t('resourceGovernance.clearSelection') }}
+          </BButton>
+          <BButton v-if="selectedIds.length" type="danger" :disabled="!canExecuteSelected" @click="reviewCleanup">
+            {{ selectedActionLabel }}
+          </BButton>
+        </div>
+      </section>
 
       <BTable
         v-if="!bookmark.isMobile"
@@ -414,6 +460,7 @@
     GovernanceCapabilities,
     GovernanceFinding,
     GovernanceJob,
+    GovernanceActionKind,
     GovernanceRisk,
     GovernanceScan,
     GovernanceSummary,
@@ -464,6 +511,18 @@
       .filter((finding): finding is GovernanceFinding => Boolean(finding)),
   );
   const selectedActionKind = computed(() => selectedFindings.value[0]?.actionKind || null);
+  const selectableCleanupFindings = computed(() =>
+    findings.value.filter((finding) => finding.actionKind === 'cleanup' && isFindingSelectable(finding)),
+  );
+  const selectableInvalidOwnerFindings = computed(() =>
+    findings.value.filter((finding) => finding.actionKind === 'cleanup_invalid_owner' && isFindingSelectable(finding)),
+  );
+  const selectableFindingCount = computed(
+    () => selectableCleanupFindings.value.length + selectableInvalidOwnerFindings.value.length,
+  );
+  const selectedEstimatedBytes = computed(() =>
+    selectedFindings.value.reduce((total, finding) => total + Number(finding.estimatedBytes || 0), 0),
+  );
   const canExecuteSelected = computed(() => {
     if (selectedActionKind.value === 'cleanup_invalid_owner') return capabilities.reviewCleanupEnabled;
     if (selectedActionKind.value === 'cleanup') return capabilities.cleanupEnabled;
@@ -505,12 +564,12 @@
   ]);
   const findingColumns = computed(() => [
     { title: '', key: 'select', width: '44px', ellipsis: false },
-    { title: t('resourceGovernance.columns.issue'), key: 'issueCode', width: '1.4fr' },
+    { title: t('resourceGovernance.columns.issue'), key: 'issueCode' },
     { title: t('resourceGovernance.columns.resource'), key: 'resourceType', width: '110px' },
     { title: t('resourceGovernance.columns.risk'), key: 'riskLevel', width: '110px' },
     { title: t('resourceGovernance.columns.target'), key: 'targetId', width: '1fr' },
     { title: t('resourceGovernance.columns.space'), key: 'estimatedBytes', width: '100px' },
-    { title: t('resourceGovernance.columns.verified'), key: 'lastVerifiedAt', width: '150px' },
+    { title: t('resourceGovernance.columns.verified'), key: 'lastVerifiedAt' },
   ]);
   const jobColumns = computed(() => [
     { title: t('resourceGovernance.columns.job'), key: 'id', width: '1fr' },
@@ -572,6 +631,30 @@
       currentKind && currentKind !== finding.actionKind
         ? [finding.id]
         : [...new Set([...selectedIds.value, finding.id])];
+  }
+  function selectableFindingsForKind(kind: GovernanceActionKind) {
+    return kind === 'cleanup' ? selectableCleanupFindings.value : selectableInvalidOwnerFindings.value;
+  }
+  function isPageKindSelected(kind: GovernanceActionKind) {
+    const candidates = selectableFindingsForKind(kind);
+    return candidates.length > 0 && candidates.every((finding) => selectedIds.value.includes(finding.id));
+  }
+  function isPageKindIndeterminate(kind: GovernanceActionKind) {
+    const candidates = selectableFindingsForKind(kind);
+    const selectedCount = candidates.filter((finding) => selectedIds.value.includes(finding.id)).length;
+    return selectedCount > 0 && selectedCount < candidates.length;
+  }
+  function togglePageKind(kind: GovernanceActionKind, checked: boolean) {
+    const candidateIds = selectableFindingsForKind(kind).map((finding) => finding.id);
+    if (!checked) {
+      selectedIds.value = selectedIds.value.filter((id) => !candidateIds.includes(id));
+      return;
+    }
+    // 两类治理动作的确认短语与服务端执行器不同，批量选择时不允许混在同一个任务中。
+    selectedIds.value = candidateIds;
+  }
+  function clearSelection() {
+    selectedIds.value = [];
   }
 
   async function reloadFindings() {
@@ -880,9 +963,39 @@
   }
   .governance-toolbar {
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) 150px 160px auto;
+    grid-template-columns: minmax(220px, 1fr) 150px 160px;
     gap: 10px;
     margin-bottom: 12px;
+  }
+  .governance-batch-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 12px;
+    background: var(--card-background, var(--background-color));
+  }
+  .governance-batch-bar__scopes,
+  .governance-batch-bar__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .governance-batch-bar__actions {
+    justify-content: flex-end;
+  }
+  .governance-batch-bar__summary {
+    color: var(--text-color);
+    font-weight: 600;
+  }
+  .governance-batch-bar__hint,
+  .governance-batch-bar__empty {
+    color: var(--desc-color);
+    font-size: 12px;
   }
   .governance-link-button {
     padding: 0;
@@ -1010,6 +1123,18 @@
     }
     .governance-toolbar > :first-child {
       grid-column: 1 / -1;
+    }
+    .governance-batch-bar,
+    .governance-batch-bar__actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .governance-batch-bar__scopes {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .governance-batch-bar__actions :deep(.b_btn) {
+      width: 100%;
     }
     .governance-readonly-note {
       align-items: flex-start;

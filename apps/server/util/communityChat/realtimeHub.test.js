@@ -16,6 +16,7 @@ const REALTIME_ENV = {
   COMMUNITY_CHAT_ACCESS_MODE: 'public',
   COMMUNITY_CHAT_MESSAGING_ENABLED: '1',
   COMMUNITY_CHAT_REALTIME_ENABLED: '1',
+  SESSION_SECRET: 'community-chat-realtime-test-secret-0001',
 };
 
 const cleanups = [];
@@ -149,7 +150,7 @@ describe('communityChat realtime hub', () => {
               id,
               alias: id === 'root-user' ? '菠萝' : '测试成员',
               role: id === 'root-user' ? 'root' : 'user',
-              avatar: 'https://example.com/avatar.png',
+              avatarSource: id === 'root-user' ? 'inline' : 'https://example.com/avatar.png',
               frameId: id === 'root-user' ? 'frame-celestial' : null,
             })),
             [],
@@ -177,7 +178,12 @@ describe('communityChat realtime hub', () => {
     ]);
 
     root.ws.send(
-      JSON.stringify({ protocolVersion: 1, type: 'presence.members.request', requestId: 'presence-root-0001', payload: {} }),
+      JSON.stringify({
+        protocolVersion: 1,
+        type: 'presence.members.request',
+        requestId: 'presence-root-0001',
+        payload: {},
+      }),
     );
     const snapshot = await root.waitFor('presence.members');
     expect(snapshot.requestId).toBe('presence-root-0001');
@@ -186,11 +192,18 @@ describe('communityChat realtime hub', () => {
     expect(snapshot.payload.members).toContainEqual(
       expect.objectContaining({ alias: '菠萝', role: 'root', frameId: 'frame-celestial' }),
     );
+    const rootMember = snapshot.payload.members.find((item) => item.alias === '菠萝');
+    expect(rootMember.avatar).toMatch(/^\/api\/community-chat\/presence\/members\/v1\.[A-Za-z0-9_-]+\/avatar$/);
     expect(JSON.stringify(snapshot)).not.toContain('root-user');
     expect(JSON.stringify(snapshot)).not.toContain('guest-device-0002');
 
     member.ws.send(
-      JSON.stringify({ protocolVersion: 1, type: 'presence.members.request', requestId: 'presence-user-0001', payload: {} }),
+      JSON.stringify({
+        protocolVersion: 1,
+        type: 'presence.members.request',
+        requestId: 'presence-user-0001',
+        payload: {},
+      }),
     );
     const denied = await member.waitFor('error');
     expect(denied).toMatchObject({

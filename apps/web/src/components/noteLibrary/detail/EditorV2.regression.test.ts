@@ -98,10 +98,11 @@ describe('编辑器 V2 交互回归', () => {
     expect(guard).not.toContain('editorReady.value = false');
   });
 
-  it('CodeMirror 拖选有独立高对比选区层，当前行底色不会遮住它', () => {
+  it('CodeMirror 只保留真实文字选区，不用整行底色表达编辑焦点', () => {
     expect(codeMirrorSource).toContain('.cm-selectionLayer .cm-selectionBackground');
     expect(codeMirrorSource).toMatch(/background-color:\s*rgba\(97, 92, 237, 0\.36\)\s*!important/u);
-    expect(codeMirrorSource).toMatch(/'\.cm-activeLine':\s*\{[\s\S]*rgba\(97, 92, 237, 0\.045\)/u);
+    expect(codeMirrorSource).not.toContain('highlightActiveLine()');
+    expect(codeMirrorSource).not.toContain("'.cm-activeLine'");
   });
 
   it('渐变文字使用透明文字填充时仍显式保留可见插入光标', () => {
@@ -160,13 +161,25 @@ describe('编辑器 V2 交互回归', () => {
     expect(codeMirrorSource).not.toContain('.cm-foldGutter');
     expect(codeMirrorSource).not.toContain('.cm-gutters');
     expect(codeMirrorSource).not.toContain('ln-cm-fold-marker');
-    expect(codeMirrorSource).toContain('wrappingCompartment.of(props.mobile ? EditorView.lineWrapping : [])');
+    expect(codeMirrorSource).toContain('EditorView.lineWrapping');
+    expect(codeMirrorSource).not.toContain('props.mobile ? EditorView.lineWrapping : []');
   });
 
   it('Markdown 编辑面始终填满可用宽度，不随最长正文行收缩或增长', () => {
     expect(codeMirrorSource).toMatch(
       /\.markdown-codemirror\s+:deep\(\.cm-editor\)\s*\{[\s\S]*?width:\s*100%;[\s\S]*?min-width:\s*0;[\s\S]*?flex:\s*1 1 auto;/u,
     );
+  });
+
+  it('Markdown 编辑与预览共用字体、行高和正文起点，首个预览块不额外下沉', () => {
+    expect(codeMirrorSource).toContain("fontSize: 'var(--note-markdown-font-size, 13px)'");
+    expect(codeMirrorSource).toContain("lineHeight: 'var(--note-markdown-line-height, 22px)'");
+    expect(codeMirrorSource).toContain('var(--note-markdown-padding-top, 14px)');
+    expect(editorSource).toContain('font-size: var(--note-markdown-font-size, 13px);');
+    expect(editorSource).toContain('line-height: var(--note-markdown-line-height, 22px);');
+    expect(editorSource).toContain('padding: var(--note-markdown-padding-top, 14px)');
+    expect(editorSource).toContain('--note-markdown-line-height: 25.5px;');
+    expect(editorSource).toMatch(/\.md-preview\s*\{[\s\S]*?> :first-child\s*\{[\s\S]*?margin-top:\s*0;/u);
   });
 
   it('模板 Markdown 默认使用完整编辑宽度，同时保留分栏与预览切换', () => {
@@ -428,12 +441,12 @@ describe('编辑器 V2 交互回归', () => {
   });
 
   it('Markdown 与富文本都保留可滚过末行的底部写作空间', () => {
-    expect(codeMirrorSource).toContain("padding: '14px 12px clamp(160px, 35vh, 360px)'");
+    expect(codeMirrorSource).toContain('clamp(160px, 35vh, 360px)');
     expect(codeMirrorSource).toContain('max(140px, 32vh, calc(32px + env(safe-area-inset-bottom)))');
     expect(editorSource).toContain(
       'padding: var(--note-editor-content-padding-top, 12px) 20px clamp(180px, 35vh, 380px)',
     );
-    expect(editorSource).toContain('padding: 10px 10px clamp(160px, 35vh, 360px)');
+    expect(editorSource).toContain('clamp(160px, 35vh, 360px);');
   });
 
   it('笔记内部滚动容器使用滚动时显隐的统一滚动条行为', () => {

@@ -126,7 +126,13 @@ function parseOnlineMembersSnapshot(payload: Record<string, unknown>): Community
     const role = String(item.role || '');
     if (!['root', 'user', 'visitor', 'test'].includes(role)) return null;
     const avatar = String(item.avatar || '');
-    if (avatar && !/^https?:\/\//i.test(avatar)) return null;
+    if (
+      avatar &&
+      !/^https?:\/\//i.test(avatar) &&
+      !/^\/api\/community-chat\/presence\/members\/v1\.[A-Za-z0-9_-]+\/avatar$/u.test(avatar)
+    ) {
+      return null;
+    }
     members.push({
       alias: String(item.alias || '').slice(0, 80),
       role: role as CommunityChatOnlineMember['role'],

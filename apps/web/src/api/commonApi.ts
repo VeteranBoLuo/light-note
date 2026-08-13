@@ -67,6 +67,10 @@ export const getAdminTodoReminderDiagnostic = async function (params: { id: stri
   return apiBasePost('/api/common/getAdminTodoReminderDiagnostic', params, { silent: true });
 };
 
+export const getAdminFilePreviewDiagnostic = async function (params: { id: string }) {
+  return apiBasePost('/api/common/getAdminFilePreviewDiagnostic', params, { silent: true });
+};
+
 export const retryAdminAsyncJob = async function (params: {
   source: string;
   id: string;

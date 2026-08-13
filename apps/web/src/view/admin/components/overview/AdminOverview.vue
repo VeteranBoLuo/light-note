@@ -264,7 +264,7 @@
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
-  import { scrollIntoContainer } from '@/utils/zoom.ts';
+  import { findVerticalScrollContainer, scrollIntoContainer } from '@/utils/zoom.ts';
 
   const bookmark = bookmarkStore();
   const { t } = useI18n();
@@ -462,8 +462,10 @@
     void loadRecent();
     await nextTick();
     const target = recentAnchor.value;
-    const container = target?.closest<HTMLElement>('.admin-data-page__table');
-    if (!target || !container) return;
+    if (!target) return;
+    const fallbackContainer = target.closest<HTMLElement>('.admin-data-page__table');
+    const container = findVerticalScrollContainer(target, fallbackContainer);
+    if (!container) return;
     const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     scrollIntoContainer(container, target, 8, reducedMotion ? 'auto' : 'smooth');
   }

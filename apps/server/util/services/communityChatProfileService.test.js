@@ -4,13 +4,16 @@ import {
   getCommunityChatMessageAuthorAchievements,
   getCommunityChatMessageAuthorProfile,
   getCommunityChatOwnProfile,
+  getCommunityChatPresenceMemberAvatar,
   updateCommunityChatOwnProfile,
 } from './communityChatProfileService.js';
+import { issueCommunityChatPresenceAvatarToken } from '../communityChat/presenceAvatarToken.js';
 
 const PUBLIC_ENV = {
   COMMUNITY_CHAT_ACCESS_MODE: 'public',
   COMMUNITY_CHAT_MESSAGING_ENABLED: '1',
   COMMUNITY_CHAT_RULES_VERSION: 'rules-v1',
+  SESSION_SECRET: 'community-chat-profile-test-secret-0001',
 };
 
 function authorRow(overrides = {}) {
@@ -33,6 +36,34 @@ function authorRow(overrides = {}) {
 }
 
 describe('communityChatProfileService', () => {
+  it('在线成员头像短地址只允许 Root，并在读取时重新解析加密票据', async () => {
+    const token = issueCommunityChatPresenceAvatarToken('online-user-1', { env: PUBLIC_ENV });
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        expect(String(sql)).toContain('SELECT head_picture AS source');
+        expect(params).toEqual(['online-user-1']);
+        return [[{ source: 'data:image/webp;base64,UklGRg==' }], []];
+      }),
+    };
+
+    await expect(
+      getCommunityChatPresenceMemberAvatar({
+        user: { id: 'member-1', role: 'user' },
+        token,
+        env: PUBLIC_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'COMMUNITY_CHAT_ROOT_REQUIRED', status: 403 });
+    await expect(
+      getCommunityChatPresenceMemberAvatar({
+        user: { id: 'root-1', role: 'root' },
+        token,
+        env: PUBLIC_ENV,
+        db,
+      }),
+    ).resolves.toEqual({ source: 'data:image/webp;base64,UklGRg==' });
+  });
+
   it('公开名片复核屏蔽与个人删除，并只通过短地址返回头像', async () => {
     const messagePublicId = '11111111-1111-4111-8111-111111111111';
     const db = {

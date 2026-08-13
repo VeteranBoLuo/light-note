@@ -5,6 +5,8 @@ const mocks = vi.hoisted(() => ({
   getMyGrowth: vi.fn(),
   getGrowthTasks: vi.fn(),
   claimGrowthTask: vi.fn(),
+  checkin: vi.fn(),
+  getInventory: vi.fn(),
   getDashboard: vi.fn(),
   getClaimable: vi.fn(),
   claimAll: vi.fn(),
@@ -19,6 +21,8 @@ vi.mock('@/api/growthApi.ts', () => ({
     getMyGrowth: mocks.getMyGrowth,
     getGrowthTasks: mocks.getGrowthTasks,
     claimGrowthTask: mocks.claimGrowthTask,
+    checkin: mocks.checkin,
+    getInventory: mocks.getInventory,
     getDashboard: mocks.getDashboard,
     getClaimable: mocks.getClaimable,
     claimAll: mocks.claimAll,
@@ -59,9 +63,12 @@ describe('useGrowth load', () => {
     mocks.getMyGrowth.mockReset();
     mocks.getGrowthTasks.mockReset();
     mocks.claimGrowthTask.mockReset();
+    mocks.checkin.mockReset();
+    mocks.getInventory.mockReset();
     mocks.getDashboard.mockReset();
     mocks.getClaimable.mockReset();
     mocks.claimAll.mockReset();
+    mocks.getInventory.mockResolvedValue({ status: 200, data: { items: [] } });
     mocks.getClaimable.mockResolvedValue({
       status: 200,
       data: {
@@ -158,6 +165,23 @@ describe('useGrowth load', () => {
     expect(useGrowth().growth.value).toEqual(growth(6));
     expect(useGrowth().claimingRewards.value).toBe(false);
     expect(mocks.getDashboard).not.toHaveBeenCalled();
+  });
+
+  it('签到响应缺少功能开关时保留成长中心 V2，避免今日成长区块被卸载', async () => {
+    const initialGrowth = { ...growth(4), features: { growthCenterV2: true } };
+    mocks.getMyGrowth.mockResolvedValueOnce({ status: 200, data: initialGrowth });
+    await useGrowth().load();
+    mocks.checkin.mockResolvedValueOnce({
+      status: 200,
+      data: { growth: { ...growth(4), checkedInToday: true } },
+    });
+
+    await useGrowth().doCheckin();
+
+    expect(useGrowth().growth.value).toMatchObject({
+      checkedInToday: true,
+      features: { growthCenterV2: true },
+    });
   });
 
   it('请求同步失败后清理在途状态并允许重试', async () => {

@@ -143,6 +143,9 @@ describe('ChatImageViewerModal', () => {
       /@media \(max-width: 767px\)[\s\S]*?\.chat-image-viewer__tool--rotate-left\s*\{[\s\S]*?display:\s*none\s*!important;/u,
     );
     expect(viewerSource).toContain(':src="icon.cloudSpace.preview.fitPage"');
+    expect(viewerSource).toMatch(
+      /@media \(hover: hover\) and \(pointer: fine\)[\s\S]*?\.chat-image-viewer__nav\.b_btn:hover\s*\{[\s\S]*?background:\s*rgba\(48, 49, 58, 0\.92\);[\s\S]*?color:\s*#fff;/u,
+    );
   });
 
   it('从指定图片打开，并用左右与上下方向键切换当前聊天图片', async () => {
@@ -257,5 +260,86 @@ describe('ChatImageViewerModal', () => {
     expect(document.body.querySelector('.chat-image-viewer__canvas')?.classList.contains('is-pointer-panning')).toBe(
       false,
     );
+  });
+
+  it('在右上角切换全屏，并让 Escape 优先退出全屏而不关闭预览', async () => {
+    const originalFullscreenElement = Object.getOwnPropertyDescriptor(document, 'fullscreenElement');
+    const originalExitFullscreen = Object.getOwnPropertyDescriptor(document, 'exitFullscreen');
+    const originalRequestFullscreen = Object.getOwnPropertyDescriptor(document.documentElement, 'requestFullscreen');
+    let fullscreenElement: Element | null = null;
+    const requestFullscreen = vi.fn(async () => {
+      fullscreenElement = document.documentElement;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    });
+    const exitFullscreen = vi.fn(async () => {
+      fullscreenElement = null;
+      document.dispatchEvent(new Event('fullscreenchange'));
+    });
+
+    Object.defineProperty(document, 'fullscreenElement', {
+      configurable: true,
+      get: () => fullscreenElement,
+    });
+    Object.defineProperty(document, 'exitFullscreen', { configurable: true, value: exitFullscreen });
+    Object.defineProperty(document.documentElement, 'requestFullscreen', {
+      configurable: true,
+      value: requestFullscreen,
+    });
+
+    try {
+      await mountViewer('image-2');
+      const enterButton = document.body.querySelector<HTMLButtonElement>(
+        `button[aria-label="${zhCN.communityChat.image.enterFullscreen}"]`,
+      );
+      expect(enterButton?.closest('.modal-header')).not.toBeNull();
+
+      enterButton?.click();
+      await Promise.resolve();
+      await nextTick();
+
+      expect(requestFullscreen).toHaveBeenCalledOnce();
+      expect(document.body.querySelector('.chat-image-viewer-modal')?.classList.contains('is-fullscreen')).toBe(true);
+      expect(
+        document.body.querySelector(`button[aria-label="${zhCN.communityChat.image.exitFullscreen}"]`),
+      ).not.toBeNull();
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await nextTick();
+
+      expect(exitFullscreen).toHaveBeenCalledOnce();
+      expect(document.body.querySelector('.chat-image-viewer-modal')?.classList.contains('is-fullscreen')).toBe(false);
+      expect(document.body.querySelector('.chat-image-viewer-modal')).not.toBeNull();
+
+      const rejectedRequestFullscreen = vi.fn().mockRejectedValue(new Error('fullscreen denied'));
+      Object.defineProperty(document.documentElement, 'requestFullscreen', {
+        configurable: true,
+        value: rejectedRequestFullscreen,
+      });
+      document.body
+        .querySelector<HTMLButtonElement>(`button[aria-label="${zhCN.communityChat.image.enterFullscreen}"]`)
+        ?.click();
+      await Promise.resolve();
+      await nextTick();
+
+      expect(rejectedRequestFullscreen).toHaveBeenCalledOnce();
+      expect(document.body.querySelector('.chat-image-viewer-modal')?.classList.contains('is-fullscreen')).toBe(true);
+
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await nextTick();
+      expect(document.body.querySelector('.chat-image-viewer-modal')?.classList.contains('is-fullscreen')).toBe(false);
+      expect(document.body.querySelector('.chat-image-viewer-modal')).not.toBeNull();
+    } finally {
+      if (originalFullscreenElement) Object.defineProperty(document, 'fullscreenElement', originalFullscreenElement);
+      else delete (document as Partial<Document>).fullscreenElement;
+      if (originalExitFullscreen) Object.defineProperty(document, 'exitFullscreen', originalExitFullscreen);
+      else delete (document as Partial<Document>).exitFullscreen;
+      if (originalRequestFullscreen) {
+        Object.defineProperty(document.documentElement, 'requestFullscreen', originalRequestFullscreen);
+      } else {
+        delete (document.documentElement as HTMLElement & { requestFullscreen?: () => Promise<void> })
+          .requestFullscreen;
+      }
+    }
   });
 });

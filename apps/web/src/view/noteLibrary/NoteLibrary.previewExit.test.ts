@@ -29,4 +29,15 @@ describe('笔记库桌面预览退出', () => {
     expect(source).toMatch(/function selectMobileDirectoryTag[\s\S]*closeDesktopPreview\(false\);/);
     expect(source).toMatch(/async function resetNoteLibrary[\s\S]*closeDesktopPreview\(false\);/);
   });
+
+  it('预览详情和待整理操作会同步卡片、预览副本与列表缓存', () => {
+    expect(source).toContain('@pending-state="syncPreviewNotePendingState"');
+    expect(source).toMatch(
+      /function syncNotePendingState[\s\S]*noteList\.value\.forEach[\s\S]*previewNoteSeed\.value![\s\S]*updateNotePendingState/u,
+    );
+    expect(source).toMatch(
+      /async function toggleNoteInbox[\s\S]*syncNotePendingState\(noteId, !wasPending\);[\s\S]*invalidateNoteDetailPrefetch/u,
+    );
+    expect(source).toMatch(/function syncPreviewNotePendingState[\s\S]*if \(previewPendingLocallyChanged\) return;/u);
+  });
 });

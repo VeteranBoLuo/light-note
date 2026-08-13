@@ -109,7 +109,8 @@
     content-class="admin-log-detail-content"
     fullscreen-mobile
   >
-    <dl v-if="selectedRecord" class="api-log-detail">
+    <BLoading v-if="detailLoading" loading :title="t('adminApiLog.detail.loading')" />
+    <dl v-else-if="selectedRecord" class="api-log-detail">
       <div
         ><dt>{{ t('adminApiLog.detail.time') }}</dt
         ><dd>{{ formatTime(selectedRecord.requestTime) }}</dd></div
@@ -189,6 +190,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BChip from '@/components/base/BasicComponents/BChip.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BSwitch from '@/components/base/BasicComponents/BSwitch.vue';
@@ -222,10 +224,12 @@
   });
   const selectedRecord = ref<any>(null);
   const detailVisible = ref(false);
+  const detailLoading = ref(false);
   const clearVisible = ref(false);
   const clearing = ref(false);
   const hasLoaded = ref(false);
   let timer: number | null = null;
+  let detailRequestSequence = 0;
 
   const methodOptions = computed(() => [
     { value: '', label: t('adminApiLog.filters.allMethods') },
@@ -318,9 +322,28 @@
     });
     void reloadLogs();
   }
-  function openDetail(record: any) {
+  async function openDetail(record: any) {
+    const requestSequence = ++detailRequestSequence;
     selectedRecord.value = record;
     detailVisible.value = true;
+    detailLoading.value = true;
+    try {
+      const response = await apiBasePost(
+        '/api/common/getApiLogDetail',
+        { id: record?.id },
+        { silent: true, feedback: false },
+      );
+      if (requestSequence !== detailRequestSequence) return;
+      if (response?.status !== 200 || !response.data?.id) {
+        throw new Error(response?.msg || t('adminApiLog.detail.loadFailed'));
+      }
+      selectedRecord.value = { ...record, ...response.data };
+    } catch (error: any) {
+      if (requestSequence !== detailRequestSequence) return;
+      message.error(error?.message || t('adminApiLog.detail.loadFailed'));
+    } finally {
+      if (requestSequence === detailRequestSequence) detailLoading.value = false;
+    }
   }
   function clearApiLogs() {
     clearVisible.value = true;

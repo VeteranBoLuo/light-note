@@ -33,4 +33,11 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toContain("apiBasePost('/api/file/getFileInfo'");
     expect(source).toContain('<FilePreview');
   });
+
+  it('标题区显示权威待整理状态，并把详情状态同步给笔记库', () => {
+    expect(source).toContain('<InboxPendingBadge v-if="previewPending" />');
+    expect(source).toContain('props.seed?.isPending ?? detail.value.isPending');
+    expect(source).toContain("hasOwnProperty.call(detailResult.data, 'isPending')");
+    expect(source).toContain("emit('pendingState', Boolean(detailResult.data.isPending))");
+  });
 });

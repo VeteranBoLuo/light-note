@@ -17,6 +17,7 @@ vi.mock('../db/index.js', () => ({
 const {
   dismissAdminAsyncJob,
   getAdminActionCenter,
+  getAdminFilePreviewDiagnostic,
   getAdminTodoReminderDiagnostic,
   retryAdminAsyncJob,
   adminActionCenterInternals,
@@ -318,10 +319,12 @@ describe('后台统一待处理中心', () => {
       ownerTeam: '资源治理',
       severity: 'critical',
     });
-    expect(res.body.data.jobs.items.find((item) => item.source === 'file_preview')).toMatchObject({
+    const filePreview = res.body.data.jobs.items.find((item) => item.source === 'file_preview');
+    expect(filePreview).toMatchObject({
       ownerTeam: '文件预览服务',
       status: 'attention',
     });
+    expect(filePreview.targetUrl).toBeUndefined();
     expect(res.body.data.jobs.items.find((item) => item.source === 'resource_cleanup')).toMatchObject({
       ownerTeam: '资源治理',
       status: 'attention',
@@ -516,6 +519,61 @@ describe('后台统一待处理中心', () => {
       },
     });
     expect(res.body.data.relatedJobs).toHaveLength(1);
+  });
+
+  it('文件预览诊断按任务 ID 返回队列与派生文件事实', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 7,
+          artifact_id: 19,
+          job_status: 'failed',
+          attempts: 3,
+          available_at: '2026-08-10 16:24:37',
+          locked_at: '2026-08-10 16:24:40',
+          job_error_code: 'OFFICE_CONVERSION_FAILED',
+          job_create_time: '2026-08-10 16:24:37',
+          job_update_time: '2026-08-10 16:24:48',
+          file_id: 88,
+          owner_user_id: 'u-5',
+          strategy: 'converted_pdf',
+          strategy_version: 1,
+          format_id: 'xls',
+          source_size: 2048,
+          artifact_status: 'failed',
+          artifact_size: 0,
+          entry_count: 0,
+          total_uncompressed_size: 0,
+          contains_encrypted: 0,
+          suspicious_expansion: 0,
+          artifact_error_code: 'OFFICE_CONVERSION_FAILED',
+          file_name: '5880线缆选型.xls',
+          file_type: 'application/vnd.ms-excel',
+          file_size: 2048,
+          owner_label: '123',
+        },
+      ],
+    ]);
+    const res = response();
+
+    await getAdminFilePreviewDiagnostic({ user: { id: 'root-1', role: 'root' }, body: { id: '7' } }, res);
+
+    expect(res.body).toMatchObject({
+      status: 200,
+      data: {
+        file: { id: '88', name: '5880线缆选型.xls', size: 2048, ownerLabel: '123' },
+        job: {
+          id: '7',
+          status: 'failed',
+          health: 'attention',
+          attentionReason: 'processing_failed',
+          errorCode: 'OFFICE_CONVERSION_FAILED',
+        },
+        artifact: { id: '19', strategy: 'converted_pdf', formatId: 'xls', status: 'failed' },
+      },
+    });
+    expect(String(query.mock.calls[0][0])).toContain('WHERE j.id = ?');
+    expect(query.mock.calls[0][1]).toEqual(['7']);
   });
 
   it('已查看的书签图标失败任务可取消并从异常列表移除', async () => {

@@ -25,6 +25,7 @@
             :src="member.avatar || icon.communityChat.defaultAvatar"
             :size="38"
             :animated="false"
+            class="chat-online-members-modal__avatar"
           />
           <span class="chat-online-members-modal__copy">
             <strong>{{ member.alias || t('communityChat.memberFallback') }}</strong>
@@ -160,6 +161,13 @@
     min-width: 0;
     display: grid;
     gap: 3px;
+  }
+
+  .chat-online-members-modal__avatar :deep(img),
+  .chat-online-members-modal__avatar :deep(.icon-base64),
+  .chat-online-members-modal__avatar :deep(.icon-fixed-base64) {
+    border-radius: 50%;
+    object-fit: cover;
   }
 
   .chat-online-members-modal__copy strong,

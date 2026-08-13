@@ -173,7 +173,12 @@ describe('useCommunityChatSocket', () => {
           guestCount: 1,
           members: [
             { alias: '菠萝', role: 'root', avatar: 'https://example.com/root.png', frameId: 'frame-celestial' },
-            { alias: '测试员', role: 'test', avatar: '', frameId: '' },
+            {
+              alias: '测试员',
+              role: 'test',
+              avatar: '/api/community-chat/presence/members/v1.opaque-token/avatar',
+              frameId: '',
+            },
           ],
         },
         'presence-members-0001',

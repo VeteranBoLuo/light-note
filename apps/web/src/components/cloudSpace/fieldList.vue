@@ -1763,7 +1763,7 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--surface-divider-color);
     color: var(--desc-color);
-    background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 1.5%, var(--card-background));
+    background: var(--cloud-file-list-header-bg, var(--card-background));
     font-weight: 650;
     font-size: 12px;
   }
@@ -1970,7 +1970,7 @@
       background-color 0.18s,
       box-shadow 0.18s;
     &:hover {
-      background: color-mix(in srgb, var(--resource-file-color, #ff8a00) 3%, var(--card-background));
+      background: var(--cloud-file-list-row-hover-bg, var(--card-background));
       .handle-btn {
         opacity: 1;
       }

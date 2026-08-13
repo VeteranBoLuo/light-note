@@ -315,7 +315,11 @@
           </div>
 
           <div v-if="summaryLoading" class="tag-list tag-list--loading">
-            <span v-for="index in 5" :key="`tag-skeleton-${index}`" class="skeleton-block tag-skeleton"></span>
+            <span
+              v-for="index in HOT_TAG_LIMIT"
+              :key="`tag-skeleton-${index}`"
+              class="skeleton-block tag-skeleton"
+            ></span>
           </div>
           <div v-else-if="topHotTags.length" class="tag-list">
             <BButton
@@ -760,13 +764,15 @@
       value: Number(item.value || 0),
     })),
   );
-  const topHotTags = computed(() => hotTagTable.value.slice(0, 5));
+  const HOT_TAG_LIMIT = 10;
+  const LATEST_UPDATE_ITEM_LIMIT = 5;
+  const topHotTags = computed(() => hotTagTable.value.slice(0, HOT_TAG_LIMIT));
   const latestUpdateLog = computed(() => updateLogList.value[0] || null);
   const latestUpdateItems = computed(() => {
     const item = latestUpdateLog.value;
-    if (item?.contentMarkdown) return updateLogMarkdownSummaryItems(item.contentMarkdown, 4);
-    if (Array.isArray(item?.highlights)) return item.highlights.slice(0, 4);
-    return Array.isArray(item?.list) ? item.list.slice(0, 4) : [];
+    if (item?.contentMarkdown) return updateLogMarkdownSummaryItems(item.contentMarkdown, LATEST_UPDATE_ITEM_LIMIT);
+    if (Array.isArray(item?.highlights)) return item.highlights.slice(0, LATEST_UPDATE_ITEM_LIMIT);
+    return Array.isArray(item?.list) ? item.list.slice(0, LATEST_UPDATE_ITEM_LIMIT) : [];
   });
 
   function displayCount(value: number) {

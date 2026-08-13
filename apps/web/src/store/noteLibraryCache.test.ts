@@ -56,6 +56,39 @@ describe('noteLibraryCache', () => {
     expect(store.readList(key)?.items[0]).toEqual({ id: 'note-a', isCheck: false });
   });
 
+  it('只同步指定账号快照中的笔记待整理状态，并保留快照新鲜度', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-13T00:00:00Z'));
+    const store = useNoteLibraryCacheStore();
+    const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory' });
+    const secondKey = buildNoteLibraryListCacheKey('user-a', { mode: 'tags', tagId: 'tag-a' });
+    const otherUserKey = buildNoteLibraryListCacheKey('user-b', { mode: 'directory' });
+    store.writeList(firstKey, {
+      items: [{ id: 'note-a', isPending: false }],
+      total: 1,
+      page: 1,
+      hasMore: false,
+    });
+    store.writeList(secondKey, {
+      items: [{ id: 'note-a', isPending: false }],
+      total: 1,
+      page: 1,
+      hasMore: false,
+    });
+    store.writeList(otherUserKey, {
+      items: [{ id: 'note-a', isPending: false }],
+      total: 1,
+      page: 1,
+      hasMore: false,
+    });
+
+    store.updateNotePendingState('user-a', 'note-a', true);
+
+    expect(store.readList(firstKey)).toMatchObject({ updatedAt: Date.now(), items: [{ isPending: true }] });
+    expect(store.readList(secondKey)).toMatchObject({ updatedAt: Date.now(), items: [{ isPending: true }] });
+    expect(store.readList(otherUserKey)?.items[0]?.isPending).toBe(false);
+  });
+
   it('按列表范围隔离一次性返回位置，并允许恢复后清除', () => {
     const store = useNoteLibraryCacheStore();
     const firstKey = buildNoteLibraryListCacheKey('user-a', { mode: 'directory', parentId: 'folder-a' });

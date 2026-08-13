@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, nextTick } from 'vue';
+import { createApp, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
@@ -47,6 +47,7 @@ const mocks = vi.hoisted(() => ({
     headPicture: '',
   },
 }));
+const sharedGrowth = ref<{ equippedFrame?: string | null } | null>(null);
 
 vi.mock('@/api/communityChatApi', () => ({
   createCommunityChatClientRequestId: () => 'request-fixed-0001',
@@ -83,6 +84,9 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   },
 }));
 vi.mock('@/store', () => ({ bookmarkStore: () => mocks.bookmark, useUserStore: () => mocks.user }));
+vi.mock('@/composables/useGrowth', () => ({
+  useGrowth: () => ({ growth: sharedGrowth }),
+}));
 vi.mock('@/composables/useNotification', () => ({
   useNotification: () => ({ refreshUnread: vi.fn(async () => {}) }),
 }));
@@ -269,6 +273,7 @@ async function mountWorkspace(options: { rooms?: any[]; access?: any } = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   clearCommunityChatDraftMemory();
+  sharedGrowth.value = null;
   mocks.bookmark.authModalTab = '登录';
   mocks.bookmark.authModalSource = '';
   mocks.bookmark.isShowLogin = false;
@@ -467,7 +472,14 @@ describe('CommunityChatWorkspace', () => {
         onlineCount: 2,
         memberCount: 1,
         guestCount: 1,
-        members: [{ alias: '菠萝', role: 'root', avatar: '', frameId: 'frame-celestial' }],
+        members: [
+          {
+            alias: '菠萝',
+            role: 'root',
+            avatar: '/api/community-chat/presence/members/v1.opaque-token/avatar',
+            frameId: 'frame-celestial',
+          },
+        ],
       },
       'presence-members-workspace-0001',
       request.requestId,
@@ -476,6 +488,9 @@ describe('CommunityChatWorkspace', () => {
 
     expect(document.body.textContent).toContain('菠萝');
     expect(document.body.textContent).toContain('游客 1 人');
+    expect(document.body.querySelector('.chat-online-members-modal__avatar [data-src]')?.getAttribute('data-src')).toBe(
+      '/api/community-chat/presence/members/v1.opaque-token/avatar',
+    );
     expect(mocks.recordOperation).toHaveBeenCalledWith({
       module: '公共聊天室',
       operation: 'Root 查看当前在线成员',
@@ -558,6 +573,46 @@ describe('CommunityChatWorkspace', () => {
       'data:image/webp;base64,member-avatar',
     );
     expect(host.textContent).toContain('Lv.3 秀才');
+  });
+
+  it('本人消息随共享成长状态即时更新头像框，其他用户继续使用消息快照', async () => {
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({ publicId: 'message-own', isOwn: true }),
+          chatMessage({
+            publicId: 'message-other',
+            author: { ...chatMessage().author, name: '远山', frameId: 'frame_mint' },
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+      },
+    });
+    const host = await mountWorkspace();
+    const ownMessage = host.querySelector('[data-message-public-id="message-own"]');
+    const otherMessage = host.querySelector('[data-message-public-id="message-other"]');
+
+    expect(ownMessage?.querySelector('.avatar-frame--mint')).not.toBeNull();
+    expect(otherMessage?.querySelector('.avatar-frame--mint')).not.toBeNull();
+
+    sharedGrowth.value = {};
+    await flushAsync();
+    expect(ownMessage?.querySelector('.avatar-frame--mint')).not.toBeNull();
+
+    sharedGrowth.value = { equippedFrame: 'frame_celestial' };
+    await flushAsync();
+
+    expect(ownMessage?.querySelector('.avatar-frame--celestial')).not.toBeNull();
+    expect(ownMessage?.querySelector('.avatar-frame--mint')).toBeNull();
+    expect(otherMessage?.querySelector('.avatar-frame--mint')).not.toBeNull();
+
+    sharedGrowth.value = { equippedFrame: null };
+    await flushAsync();
+
+    expect(ownMessage?.querySelector('[class*="avatar-frame--"]')).toBeNull();
+    expect(otherMessage?.querySelector('.avatar-frame--mint')).not.toBeNull();
   });
 
   it('点击头像读取公开名片，展示等级与成就但不传内部账号 ID', async () => {

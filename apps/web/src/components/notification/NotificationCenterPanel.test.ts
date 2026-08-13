@@ -18,7 +18,7 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 
 let cleanup: (() => void) | undefined;
 
-function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unavailable' = 'pending') {
+function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unavailable' = 'pending', unreadTotal = 1) {
   const first: NotificationItem = {
     id: 'todo-1',
     type: 'todo_reminder',
@@ -55,12 +55,12 @@ function mountPanel(mobile: boolean, todoState: 'pending' | 'completed' | 'unava
           { value: 'feedback', label: '反馈' },
         ],
         activeTab: 'all',
-        unreadTotal: 1,
+        unreadTotal,
         total: 2,
         loading: false,
         completingTodoId: '',
         mobile,
-        tabUnread: (value: string) => (value === 'all' || value === 'todo_reminder' ? 1 : 0),
+        tabUnread: (value: string) => (value === 'all' || value === 'todo_reminder' ? unreadTotal : 0),
         renderTitle: (item: NotificationItem) => item.title,
         renderContent: (item: NotificationItem) => item.content || '',
         formatTime: () => '5 小时前',
@@ -171,5 +171,26 @@ describe('NotificationCenterPanel', () => {
       /\.notification-popover \.nt-tab\.active\s*\{[\s\S]*?border-color:\s*var\(--primary-color\);[\s\S]*?color:\s*var\(--primary-color\);/,
     );
     expect(bellSource).not.toMatch(/\.notification-popover \.nt-tab\.active\s*\{[^}]*color:\s*#fff;/);
+  });
+
+  it('未读数按个位、两位和 99+ 使用不可收缩的圆形或胶囊角标', async () => {
+    const { host } = mountPanel(true, 'pending', 21);
+    await nextTick();
+
+    const badge = host.querySelector('.nt-tab.active .nt-tab-badge');
+    expect(badge?.textContent?.trim()).toBe('21');
+    expect(badge?.classList.contains('is-wide')).toBe(true);
+    expect(badge?.classList.contains('is-capped')).toBe(false);
+    expect(source).toMatch(/\.nt-tab-badge\s*\{[\s\S]*?display:\s*inline-flex;[\s\S]*?flex:\s*0 0 auto;/);
+    expect(source).toMatch(/\.nt-tab-badge\.is-wide\s*\{[\s\S]*?min-width:\s*22px;[\s\S]*?padding:\s*0 5px;/);
+
+    cleanup?.();
+    cleanup = undefined;
+    const capped = mountPanel(true, 'pending', 128).host.querySelector('.nt-tab.active .nt-tab-badge');
+    await nextTick();
+    expect(capped?.textContent?.trim()).toBe('99+');
+    expect(capped?.classList.contains('is-wide')).toBe(true);
+    expect(capped?.classList.contains('is-capped')).toBe(true);
+    expect(bellSource).toMatch(/\.notification-popover \.nt-tab-badge\.is-capped\s*\{[\s\S]*?min-width:\s*28px;/);
   });
 });

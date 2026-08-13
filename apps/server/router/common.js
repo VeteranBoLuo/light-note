@@ -5,6 +5,7 @@ import * as commonHandle from '../router_handle/commonHandle.js';
 import {
   dismissAdminAsyncJob,
   getAdminActionCenter,
+  getAdminFilePreviewDiagnostic,
   getAdminTodoReminderDiagnostic,
   retryAdminAsyncJob,
 } from '../router_handle/adminActionCenterHandle.js';
@@ -14,6 +15,8 @@ import { getAdminGovernance, getAdminProductInsights } from '../router_handle/ad
 import { recordAiEvent } from '../router_handle/aiTelemetryHandle.js';
 
 router.post('/getApiLogs', commonHandle.getApiLogs);
+
+router.post('/getApiLogDetail', commonHandle.getApiLogDetail);
 
 router.post('/clearApiLogs', commonHandle.clearApiLogs);
 
@@ -61,6 +64,7 @@ router.post('/getAdminOverview', commonHandle.getAdminOverview);
 router.post('/getAdminOverviewTrend', commonHandle.getAdminOverviewTrend);
 router.post('/getAdminOverviewRecent', commonHandle.getAdminOverviewRecent);
 router.post('/getAdminActionCenter', getAdminActionCenter);
+router.post('/getAdminFilePreviewDiagnostic', getAdminFilePreviewDiagnostic);
 router.post('/getAdminTodoReminderDiagnostic', getAdminTodoReminderDiagnostic);
 router.post('/retryAdminAsyncJob', retryAdminAsyncJob);
 router.post('/dismissAdminAsyncJob', dismissAdminAsyncJob);

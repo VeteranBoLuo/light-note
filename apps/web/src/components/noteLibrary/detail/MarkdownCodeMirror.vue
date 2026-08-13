@@ -64,7 +64,6 @@
     drawSelection,
     dropCursor,
     EditorView,
-    highlightActiveLine,
     highlightSpecialChars,
     keymap,
     placeholder as codeMirrorPlaceholder,
@@ -102,7 +101,6 @@
   let view: EditorView | null = null;
   const editableCompartment = new Compartment();
   const phrasesCompartment = new Compartment();
-  const wrappingCompartment = new Compartment();
   let scrollbarIdleTimer: number | null = null;
 
   const markdownHighlightStyle = HighlightStyle.define([
@@ -173,7 +171,6 @@
     autocompletion(),
     rectangularSelection(),
     crosshairCursor(),
-    highlightActiveLine(),
     highlightSelectionMatches(),
     keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...historyKeymap, ...completionKeymap, ...lintKeymap]),
   ];
@@ -184,31 +181,29 @@
       minHeight: '0',
       backgroundColor: 'var(--surface-page-bg, var(--background-color))',
       color: 'var(--text-color)',
-      fontSize: '13px',
+      fontSize: 'var(--note-markdown-font-size, 13px)',
     },
     '&.cm-focused': { outline: 'none' },
     '.cm-scroller': {
       minHeight: '0',
       overflow: 'auto',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace',
-      lineHeight: '22px',
+      fontFamily:
+        'var(--note-markdown-font-family, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace)',
+      lineHeight: 'var(--note-markdown-line-height, 22px)',
       overscrollBehavior: 'contain',
       WebkitOverflowScrolling: 'touch',
     },
     '.cm-content': {
       minHeight: '100%',
       // 保留一段可继续下滚的写作空间，避免光标长期贴在视口最后一行。
-      padding: '14px 12px clamp(160px, 35vh, 360px)',
+      padding:
+        'var(--note-markdown-padding-top, 14px) var(--note-markdown-padding-inline, 16px) clamp(160px, 35vh, 360px)',
       caretColor: 'var(--text-color)',
     },
     '.cm-line': {
-      minHeight: '22px',
-      padding: '0 4px',
-      lineHeight: '22px',
-    },
-    '.cm-activeLine': {
-      // 选区绘制层位于正文行下方；实色当前行背景会把单行拖选完全盖住。
-      backgroundColor: 'rgba(97, 92, 237, 0.045)',
+      minHeight: 'var(--note-markdown-line-height, 22px)',
+      padding: '0',
+      lineHeight: 'var(--note-markdown-line-height, 22px)',
     },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground, ::selection': {
       backgroundColor: 'var(--selection-background, rgba(97, 92, 237, 0.24)) !important',
@@ -259,8 +254,8 @@
         Prec.highest(keymap.of(markdownShortcutBindings)),
         markdown({ extensions: [GFM] }),
         phrasesCompartment.of(EditorState.phrases.of(searchPhrases(props.locale))),
-        // 桌面端保持一行一个逻辑行；移动端屏幕窄，继续自动换行避免横向拖动。
-        wrappingCompartment.of(props.mobile ? EditorView.lineWrapping : []),
+        // 所有端都按编辑区宽度软换行；只改变视觉排版，不改写 Markdown 源码中的真实换行。
+        EditorView.lineWrapping,
         codeMirrorPlaceholder(props.placeholder),
         editorTheme,
         editableCompartment.of([EditorState.readOnly.of(props.readonly), EditorView.editable.of(!props.readonly)]),
@@ -269,20 +264,24 @@
           spellcheck: 'true',
           autocapitalize: 'sentences',
         }),
-        EditorView.domEventHandlers({
-          paste(event) {
-            emit('paste', event);
-            return event.defaultPrevented;
-          },
-          keydown(event) {
-            emit('keydown', event);
-            return event.defaultPrevented;
-          },
-          blur() {
-            emit('blur');
-            return false;
-          },
-        }),
+        // 外部浮层（例如 @ 资源选择器）必须先于 CodeMirror 默认 keymap 获得键盘事件。
+        // 否则 ArrowUp/ArrowDown/Enter 会先被编辑器认领，父组件即使调用 preventDefault 也已经来不及。
+        Prec.highest(
+          EditorView.domEventHandlers({
+            paste(event) {
+              emit('paste', event);
+              return event.defaultPrevented;
+            },
+            keydown(event) {
+              emit('keydown', event);
+              return event.defaultPrevented;
+            },
+            blur() {
+              emit('blur');
+              return false;
+            },
+          }),
+        ),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             const value = update.state.doc.toString();
@@ -455,13 +454,6 @@
     },
   );
 
-  watch(
-    () => props.mobile,
-    (mobile) => {
-      view?.dispatch({ effects: wrappingCompartment.reconfigure(mobile ? EditorView.lineWrapping : []) });
-    },
-  );
-
   onMounted(() => nextTick(createEditor));
 
   onBeforeUnmount(() => {
@@ -538,9 +530,7 @@
   }
 
   .markdown-codemirror.is-mobile :deep(.cm-content) {
-    padding: 16px 14px max(140px, 32vh, calc(32px + env(safe-area-inset-bottom)));
-    font-size: 15px;
-    line-height: 1.7;
+    padding-bottom: max(140px, 32vh, calc(32px + env(safe-area-inset-bottom)));
     -webkit-user-select: text;
     user-select: text;
   }

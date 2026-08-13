@@ -163,6 +163,7 @@ describe('AiResultActions result reuse workflow', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     cleanup?.();
     cleanup = undefined;
     document.body.innerHTML = '';
@@ -193,6 +194,7 @@ describe('AiResultActions result reuse workflow', () => {
   });
 
   it('追加流程支持目标搜索选择、差异预览、版本化执行回执和二次确认撤销', async () => {
+    vi.useFakeTimers();
     mountActions();
     buttonByText('更多')?.click();
     await nextTick();
@@ -200,8 +202,54 @@ describe('AiResultActions result reuse workflow', () => {
     await flush();
     expect(listAiResultNoteTargets).toHaveBeenCalledWith({ keyword: '', limit: 40 });
 
-    document.querySelector<HTMLElement>('.select-trigger')?.click();
+    const targetSearch = document.querySelector<HTMLInputElement>('.ai-result-reuse .select-search-inline');
+    expect(targetSearch).not.toBeNull();
+    expect(document.querySelector('.ai-result-reuse .b-input')).toBeNull();
+    expect(document.querySelector('.ai-result-reuse .b-loading-inline')).toBeNull();
+    expect(targetSearch?.placeholder).toBe('搜索并选择一篇笔记');
+    let resolveTargetSearch!: (value: {
+      items: Array<{
+        id: string;
+        title: string;
+        type: string;
+        contentLength: number;
+        resourceVersion: string;
+        updatedAt: string;
+      }>;
+      total: number;
+    }) => void;
+    listAiResultNoteTargets.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveTargetSearch = resolve;
+        }),
+    );
+    targetSearch!.value = '目标';
+    targetSearch!.dispatchEvent(new Event('input', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(250);
     await nextTick();
+    expect(listAiResultNoteTargets).toHaveBeenLastCalledWith({ keyword: '目标', limit: 40 });
+    expect(document.querySelector('.ai-result-reuse .select-loading')).not.toBeNull();
+    expect(targetSearch?.getAttribute('aria-busy')).toBe('true');
+
+    resolveTargetSearch({
+      items: [
+        {
+          id: 'note-1',
+          title: '目标笔记',
+          type: 'markdown',
+          contentLength: 80,
+          resourceVersion: 'version-1',
+          updatedAt: '2026-07-19 12:00:00',
+        },
+      ],
+      total: 1,
+    });
+    await flush();
+    expect(document.querySelector('.ai-result-reuse .select-loading')).toBeNull();
+
+    targetSearch?.focus();
+    await flush();
     document.querySelector<HTMLElement>('.select-option')?.click();
     await nextTick();
     buttonByText('生成差异预览')?.click();

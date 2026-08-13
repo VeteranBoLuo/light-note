@@ -4,10 +4,11 @@
     :title="t('communityChat.image.previewTitle')"
     :show-footer="false"
     :mask-closable="true"
+    :esc-closable="!isFullscreen"
     :fullscreen-mobile="true"
     width="min(1120px, 94vw)"
     height="min(820px, calc(100vh - 48px))"
-    modal-class="chat-image-viewer-modal"
+    :modal-class="viewerModalClass"
     mask-class="chat-image-viewer-mask"
     content-class="chat-image-viewer-modal__content"
     initial-focus=".chat-image-viewer__stage"
@@ -17,6 +18,20 @@
         <span>{{ t('communityChat.image.previewTitle') }}</span>
         <small v-if="currentImage">{{ positionLabel }}</small>
       </span>
+      <BTooltip
+        v-if="!isMobileLayout"
+        class="chat-image-viewer__fullscreen-wrap"
+        :title="fullscreenActionLabel"
+        :delay="80"
+      >
+        <BButton
+          class="chat-image-viewer__fullscreen-action"
+          :aria-label="fullscreenActionLabel"
+          @click="toggleFullscreen"
+        >
+          <SvgIcon :src="isFullscreen ? icon.ai.restoreWindow : icon.ai.maximize" size="18" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
     </template>
 
     <template #mobileHeader="{ close }">
@@ -161,11 +176,7 @@
           </BButton>
         </BTooltip>
         <BTooltip :title="t('communityChat.image.reset')" :delay="80">
-          <BButton
-            :disabled="!hasTransform"
-            :aria-label="t('communityChat.image.reset')"
-            @click="resetTransform"
-          >
+          <BButton :disabled="!hasTransform" :aria-label="t('communityChat.image.reset')" @click="resetTransform">
             <SvgIcon :src="icon.cloudSpace.preview.fitPage" size="19" aria-hidden="true" />
           </BButton>
         </BTooltip>
@@ -187,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import type { CommunityChatImage } from '@/api/communityChatApi';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -205,6 +216,7 @@
     isHttpImageSrc,
   } from '@/components/base/Viewer/viewerSave';
   import { announceNativeDownloadStart } from '@/composables/useAndroidDownloadProgress';
+  import { useMobileLayout } from '@/composables/useMobileLayout';
 
   const MIN_SCALE = 0.5;
   const MAX_SCALE = 4;
@@ -223,6 +235,7 @@
   );
   const visible = defineModel<boolean>('visible', { default: false });
   const { t } = useI18n();
+  const isMobileLayout = useMobileLayout();
   const stageRef = ref<HTMLElement | null>(null);
   const currentIndex = ref(0);
   const selectedPublicId = ref('');
@@ -235,6 +248,8 @@
   const imageRenderKey = ref(0);
   const saving = ref(false);
   const isPointerPanning = ref(false);
+  const isFullscreen = ref(false);
+  let ownsNativeFullscreen = false;
   let touchStart = { x: 0, y: 0 };
   let panStart = { x: 0, y: 0 };
   let pinchStartDistance = 0;
@@ -270,9 +285,59 @@
   const imageStyle = computed(() => ({
     transform: `translate(${position.value.x}px, ${position.value.y}px) scale(${scale.value}) rotate(${rotation.value}deg)`,
   }));
-  const canDownloadCurrent = computed(() =>
-    canSaveImage(currentImage.value?.url, isLightNoteAndroidApp()),
+  const canDownloadCurrent = computed(() => canSaveImage(currentImage.value?.url, isLightNoteAndroidApp()));
+  const viewerModalClass = computed(() =>
+    isFullscreen.value ? 'chat-image-viewer-modal is-fullscreen' : 'chat-image-viewer-modal',
   );
+  const fullscreenActionLabel = computed(() =>
+    t(isFullscreen.value ? 'communityChat.image.exitFullscreen' : 'communityChat.image.enterFullscreen'),
+  );
+
+  async function enterFullscreen() {
+    if (isMobileLayout.value || isFullscreen.value) return;
+    isFullscreen.value = true;
+
+    const fullscreenTarget = document.documentElement;
+    if (typeof fullscreenTarget.requestFullscreen !== 'function') return;
+
+    try {
+      await fullscreenTarget.requestFullscreen();
+      ownsNativeFullscreen = document.fullscreenElement === fullscreenTarget;
+    } catch {
+      // 浏览器或 WebView 拒绝原生全屏时，保留铺满当前页面的沉浸式降级。
+    }
+  }
+
+  async function exitFullscreen() {
+    const shouldExitNativeFullscreen =
+      ownsNativeFullscreen &&
+      document.fullscreenElement === document.documentElement &&
+      typeof document.exitFullscreen === 'function';
+    ownsNativeFullscreen = false;
+    isFullscreen.value = false;
+    if (!shouldExitNativeFullscreen) return;
+
+    try {
+      await document.exitFullscreen();
+    } catch {
+      // 浏览器已经退出全屏时无需额外提示，页面内状态已恢复。
+    }
+  }
+
+  function toggleFullscreen() {
+    if (isFullscreen.value) void exitFullscreen();
+    else void enterFullscreen();
+  }
+
+  function handleFullscreenChange() {
+    if (document.fullscreenElement === document.documentElement && isFullscreen.value) {
+      ownsNativeFullscreen = true;
+      return;
+    }
+    if (!ownsNativeFullscreen) return;
+    ownsNativeFullscreen = false;
+    isFullscreen.value = false;
+  }
 
   function clampScale(value: number) {
     return Math.min(MAX_SCALE, Math.max(MIN_SCALE, value));
@@ -474,7 +539,14 @@
   }
 
   function handleDocumentKeydown(event: KeyboardEvent) {
-    if (!visible.value || event.defaultPrevented) return;
+    if (!visible.value) return;
+    if (event.key === 'Escape' && isFullscreen.value) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      void exitFullscreen();
+      return;
+    }
+    if (event.defaultPrevented) return;
     const target = event.target instanceof HTMLElement ? event.target : null;
     if (target?.closest('input, textarea, select, [contenteditable="true"]')) return;
     if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
@@ -489,7 +561,10 @@
   watch(
     visible,
     (isVisible) => {
-      if (!isVisible) return;
+      if (!isVisible) {
+        void exitFullscreen();
+        return;
+      }
       const targetIndex = images.value.findIndex((item) => item.publicId === props.initialPublicId);
       currentIndex.value = targetIndex >= 0 ? targetIndex : 0;
       selectedPublicId.value = images.value[currentIndex.value]?.publicId || '';
@@ -523,8 +598,18 @@
     { immediate: true },
   );
 
+  watch(isMobileLayout, (isMobile) => {
+    if (isMobile && isFullscreen.value) void exitFullscreen();
+  });
+
+  onMounted(() => {
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+  });
+
   onBeforeUnmount(() => {
+    document.removeEventListener('fullscreenchange', handleFullscreenChange);
     document.removeEventListener('keydown', handleDocumentKeydown, true);
+    void exitFullscreen();
   });
 </script>
 
@@ -538,6 +623,22 @@
     border: 1px solid rgba(255, 255, 255, 0.14);
     background: #121318 !important;
     color: #fff;
+  }
+
+  .chat-image-viewer-modal.is-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    max-width: none !important;
+    max-height: none !important;
+    transform: none !important;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    animation: none;
   }
 
   .chat-image-viewer-modal > .modal-header {
@@ -569,6 +670,30 @@
     color: rgba(255, 255, 255, 0.62);
     font-size: 12px;
     font-weight: 500;
+  }
+
+  .chat-image-viewer__fullscreen-wrap {
+    position: absolute !important;
+    top: 50% !important;
+    right: 56px;
+    z-index: 1;
+    transform: translateY(-50%);
+  }
+
+  .chat-image-viewer__fullscreen-action.b_btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: #fff;
+  }
+
+  .chat-image-viewer__fullscreen-action.b_btn:hover {
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .chat-image-viewer__mobile-header {
@@ -663,7 +788,9 @@
     opacity: 0;
     user-select: none;
     -webkit-user-drag: none;
-    transition: opacity 120ms ease, transform 120ms ease;
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
     transform-origin: center;
     will-change: transform;
   }
@@ -689,6 +816,14 @@
     border-radius: 12px;
     background: rgba(30, 31, 38, 0.78);
     color: #fff;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .chat-image-viewer__nav.b_btn:hover {
+      border-color: rgba(255, 255, 255, 0.26);
+      background: rgba(48, 49, 58, 0.92);
+      color: #fff;
+    }
   }
 
   .chat-image-viewer__nav.b_btn:disabled {
@@ -794,6 +929,10 @@
       background: #0f1014 !important;
     }
 
+    .chat-image-viewer__fullscreen-wrap {
+      display: none !important;
+    }
+
     .chat-image-viewer__media {
       inset: 0;
     }
@@ -823,7 +962,9 @@
   }
 
   html.light-note-mobile-rendering .chat-image-viewer__image {
-    transition: opacity 120ms ease, transform 120ms ease;
+    transition:
+      opacity 120ms ease,
+      transform 120ms ease;
   }
 
   html.light-note-mobile-rendering .chat-image-viewer__toolbar,

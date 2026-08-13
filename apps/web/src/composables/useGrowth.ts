@@ -443,6 +443,14 @@ function syncPointsToViews() {
   if (shop.value) shop.value.points = p;
 }
 
+// `/growth/me` 才携带成长中心 Feature Flag；签到、补签和领奖返回的是纯成长快照。
+// 操作成功后必须保留当前账号已经确认的功能开关，否则页面会把 V2 区块误判为关闭并立即卸载。
+function applyGrowthMutationSnapshot(snapshot: Growth) {
+  const features = snapshot.features ?? growth.value?.features;
+  growth.value = features ? { ...snapshot, features } : snapshot;
+  loadedOnce = true;
+}
+
 function ensureGrowthOwner(uid: string) {
   if (ownerId === uid) return;
   // 任一成长入口都可能先发请求；不能依赖 /growth/me 恰好先执行来完成账号隔离。
@@ -608,8 +616,7 @@ export function useGrowth() {
         if (!isCurrentGrowthOwner(uid, generation)) return res;
         if (res.data.growth) {
           ownerId = uid;
-          growth.value = res.data.growth as Growth;
-          loadedOnce = true;
+          applyGrowthMutationSnapshot(res.data.growth as Growth);
         }
         await Promise.all([
           loadGrowthTasks(true),
@@ -646,8 +653,7 @@ export function useGrowth() {
     const generation = ownerGeneration;
     const res = await growthApi.checkin();
     if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
-      growth.value = res.data.growth as Growth;
-      loadedOnce = true;
+      applyGrowthMutationSnapshot(res.data.growth as Growth);
       syncPointsToViews();
       loadInventory(); // 签到里程碑/满7天可能发补签卡 → 刷新背包
     }
@@ -661,8 +667,7 @@ export function useGrowth() {
     const generation = ownerGeneration;
     const res = await growthApi.useProtectCard(date);
     if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.growth) {
-      growth.value = res.data.growth as Growth;
-      loadedOnce = true;
+      applyGrowthMutationSnapshot(res.data.growth as Growth);
       loadInventory(); // 补签卡数量变化 → 刷新背包
     }
     return res;
@@ -679,8 +684,7 @@ export function useGrowth() {
     try {
       const res = await growthApi.claimDailyBonus();
       if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok && res.data?.growth) {
-        growth.value = res.data.growth as Growth;
-        loadedOnce = true;
+        applyGrowthMutationSnapshot(res.data.growth as Growth);
         await Promise.all([loadDashboard(), loadClaimable()]);
         syncPointsToViews();
       }
@@ -930,8 +934,7 @@ export function useGrowth() {
       const res = await growthApi.claimAll(scopes?.length ? { scopes } : undefined);
       if (isCurrentGrowthOwner(uid, generation) && res?.status === 200 && res.data?.ok) {
         if (res.data.growth) {
-          growth.value = res.data.growth as Growth;
-          loadedOnce = true;
+          applyGrowthMutationSnapshot(res.data.growth as Growth);
         }
         await Promise.all([loadDashboard(), loadGrowthTasks(true), loadWeekly(), loadClaimable(), loadInventory()]);
         if (Array.isArray(res.data.frames) && res.data.frames.length) await loadShop();

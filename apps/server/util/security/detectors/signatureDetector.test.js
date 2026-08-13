@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { detectSignatures } from './signatureDetector.js';
 
-const detectNumericAnomalies = (path, body) =>
+const detectNumericAnomalies = (path, body, method = 'POST') =>
   detectSignatures({
-    method: 'POST',
+    method,
     path,
     query: {},
     params: {},
@@ -44,5 +44,34 @@ describe('请求参数异常检测', () => {
         }),
       ]);
     }
+  });
+
+  it.each(['official', 'mentions_only', 'mentions', 'all'])('允许聊天室提醒设置的合法级别：%s', (level) => {
+    for (const path of ['/community-chat/settings/notifications', '/api/community-chat/settings/notifications']) {
+      expect(detectNumericAnomalies(path, { enabled: true, level }, 'PUT')).toEqual([]);
+    }
+  });
+
+  it('聊天室提醒设置接口的非法级别仍会被检测', () => {
+    expect(
+      detectNumericAnomalies('/community-chat/settings/notifications', { enabled: true, level: 'unexpected' }, 'PUT'),
+    ).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.level',
+      }),
+    ]);
+  });
+
+  it.each([
+    ['其他接口', '/community-chat/other', 'PUT'],
+    ['其他方法', '/community-chat/settings/notifications', 'POST'],
+  ])('%s 的非数值 level 不受聊天室提醒枚举白名单影响', (_label, path, method) => {
+    expect(detectNumericAnomalies(path, { level: 'all' }, method)).toEqual([
+      expect.objectContaining({
+        ruleCode: 'NUMERIC_PARAM_ANOMALY',
+        matchedField: 'body.level',
+      }),
+    ]);
   });
 });

@@ -188,21 +188,16 @@
               </p>
             </BCard>
 
-            <label>{{ t('ai.resultActions.reuse.searchTarget') }}</label>
-            <BInput
-              v-model:value="targetKeyword"
-              clearable
-              :placeholder="t('ai.resultActions.reuse.searchTargetPlaceholder')"
-              @input="scheduleTargetSearch"
-            />
             <label>{{ t('ai.resultActions.reuse.targetNote') }}</label>
-            <BLoading v-if="targetLoading" inline loading :title="t('common.loading')" />
             <BSelect
-              v-else
               v-model:value="targetNoteId"
               :options="targetOptions"
+              allow-clear
+              show-search
+              :loading="targetLoading"
               :placeholder="t('ai.resultActions.reuse.selectTarget')"
               :aria-label="t('ai.resultActions.reuse.targetNote')"
+              @search="scheduleTargetSearch"
             />
             <p v-if="!targetLoading && !targetOptions.length" class="ai-result-reuse__empty">
               {{ t('ai.resultActions.reuse.noTargets') }}
@@ -409,6 +404,7 @@
   const prepared = ref<PreparedReuse | null>(null);
   const reuseResult = ref<ReuseResult | null>(null);
   let targetSearchTimer: number | undefined;
+  let targetRequestSequence = 0;
 
   const reasonOptions = computed(() =>
     (['incorrect', 'unsupported', 'outdated', 'irrelevant', 'unsafe_action', 'hard_to_use', 'other'] as const).map(
@@ -513,6 +509,11 @@
   }
 
   function resetReuseState(mode: ReuseMode) {
+    if (targetSearchTimer !== undefined) {
+      window.clearTimeout(targetSearchTimer);
+      targetSearchTimer = undefined;
+    }
+    targetRequestSequence += 1;
     reuseMode.value = mode;
     noteTitle.value = '';
     targetKeyword.value = '';
@@ -521,6 +522,7 @@
     reusableBlocks.value = [];
     selectedBlockIds.value = [];
     selectedTargetCache.value = null;
+    targetLoading.value = false;
     prepared.value = null;
     reuseResult.value = null;
   }
@@ -567,18 +569,22 @@
   }
 
   async function loadTargets(keyword = targetKeyword.value) {
+    const requestSequence = ++targetRequestSequence;
     targetLoading.value = true;
     try {
       const result = await listAiResultNoteTargets({ keyword: String(keyword || '').trim(), limit: 40 });
+      if (requestSequence !== targetRequestSequence) return;
       targets.value = result.items;
     } catch {
+      if (requestSequence !== targetRequestSequence) return;
       message.warning(t('ai.resultActions.reuse.targetsFailed'));
     } finally {
-      targetLoading.value = false;
+      if (requestSequence === targetRequestSequence) targetLoading.value = false;
     }
   }
 
-  function scheduleTargetSearch() {
+  function scheduleTargetSearch(keyword: string) {
+    targetKeyword.value = keyword;
     if (targetSearchTimer !== undefined) window.clearTimeout(targetSearchTimer);
     targetSearchTimer = window.setTimeout(() => void loadTargets(), 250);
   }

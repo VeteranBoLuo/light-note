@@ -12,17 +12,7 @@
         <div class="auth-card__glow auth-card__glow--bottom"></div>
 
         <BButton class="auth-close" :title="t('auth.closeEsc')" @click="closeModal">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <SvgIcon :src="icon.common.close" size="18" aria-hidden="true" />
         </BButton>
 
         <header class="auth-brand">
@@ -84,6 +74,8 @@
   import LoginPage from '@/components/login/LoginPage.vue';
   import ResetPage from '@/components/login/ResetPage.vue';
   import RegisterPage from '@/components/login/RegisterPage.vue';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
 
   type AuthMode = '登录' | '注册' | '重置';
 
@@ -707,4 +699,5 @@
       font-size: 27px;
     }
   }
+
 </style>

@@ -11,6 +11,7 @@
         </nav>
         <div class="note-readonly-preview__title-row">
           <h2>{{ displayNote.title || t('note.untitled') }}</h2>
+          <InboxPendingBadge v-if="previewPending" />
           <span v-if="childCount > 0" class="note-readonly-preview__child-count">
             {{ t('note.childPagesCount', { count: childCount }) }}
           </span>
@@ -120,6 +121,7 @@
   import BDropdown from '@/components/base/BasicComponents/BDropdown.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
@@ -173,7 +175,7 @@
       menuOptions: () => [],
     },
   );
-  const emit = defineEmits<{ close: []; edit: [] }>();
+  const emit = defineEmits<{ close: []; edit: []; pendingState: [pending: boolean] }>();
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
@@ -195,6 +197,8 @@
   let inlineFilePreviewRequestId = 0;
 
   const displayNote = computed(() => ({ ...(props.seed || {}), ...detail.value }));
+  // 操作成功后父级会立即更新 seed；优先使用它，避免刚加载的详情副本把新状态覆盖回去。
+  const previewPending = computed(() => Boolean(props.seed?.isPending ?? detail.value.isPending));
   const parentBreadcrumb = computed(() => breadcrumb.value.filter((item) => item.id !== props.noteId));
   const displayTime = computed(() => String(displayNote.value.updateTime || displayNote.value.createTime || '').trim());
 
@@ -387,6 +391,9 @@
         return;
       }
       detail.value = detailResult.data;
+      if (Object.prototype.hasOwnProperty.call(detailResult.data, 'isPending')) {
+        emit('pendingState', Boolean(detailResult.data.isPending));
+      }
       breadcrumb.value = Array.isArray(breadcrumbResult?.data?.items) ? breadcrumbResult.data.items : [];
       const normalizedContent = normalizeNoteContentResourceUrls(String(detailResult.data.content || ''));
       const renderedHtml = await noteContentToHtml(normalizedContent, detailResult.data.type);

@@ -34,7 +34,10 @@
         </div>
         <div class="today-growth__metric">
           <SvgIcon :src="icon.growth.level" size="19" />
-          <span>{{ t('growth.todayExpCap') }}</span>
+          <span class="today-growth__metric-copy">
+            <span>{{ t('growth.todayExpCap') }}</span>
+            <small>{{ t('growth.todayExpCapHint') }}</small>
+          </span>
           <strong>{{ growth?.dailyExp || 0 }}/{{ growth?.dailyCap || 200 }}</strong>
         </div>
         <div class="today-growth__metric">
@@ -148,7 +151,10 @@
   h2 { margin: 2px 0 0; color: var(--text-color); font-size: 18px; }
   .today-growth__metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 15px; }
   .today-growth__metric { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; min-width: 0; padding: 10px; border: 1px solid var(--card-border-color); border-radius: 11px; background: var(--background-color); color: var(--primary-color); }
-  .today-growth__metric span { overflow: hidden; color: var(--desc-color); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .today-growth__metric > span { overflow: hidden; color: var(--desc-color); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .today-growth__metric-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+  .today-growth__metric-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .today-growth__metric-copy small { color: var(--desc-color); font-size: 10px; line-height: 1.25; white-space: normal; }
   .today-growth__metric strong { color: var(--text-color); font-size: 13px; font-variant-numeric: tabular-nums; }
   .today-growth__next { margin-top: 12px; padding: 11px 12px; border: 1px solid var(--primary-color); border-radius: 11px; background: var(--background-color); }
   .today-growth__next-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border: 1px solid var(--primary-color); border-radius: 10px; background: var(--background-color); color: var(--primary-color); }

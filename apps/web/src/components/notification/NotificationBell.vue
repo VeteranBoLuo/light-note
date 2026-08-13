@@ -582,17 +582,29 @@
     font-weight: 700;
   }
   .notification-popover .nt-tab-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
     min-width: 15px;
     height: 15px;
-    padding: 0 4px;
+    padding: 0;
     border-radius: 999px;
     background: #ff4d4f;
     color: #fff;
     font-size: 10px;
-    line-height: 15px;
+    line-height: 1;
     text-align: center;
+    white-space: nowrap;
     box-sizing: border-box;
     font-variant-numeric: tabular-nums;
+  }
+  .notification-popover .nt-tab-badge.is-wide {
+    min-width: 22px;
+    padding: 0 5px;
+  }
+  .notification-popover .nt-tab-badge.is-capped {
+    min-width: 28px;
   }
   .notification-popover .nt-tab.active .nt-tab-badge {
     background: var(--danger-fill-bg, #d93b3b);

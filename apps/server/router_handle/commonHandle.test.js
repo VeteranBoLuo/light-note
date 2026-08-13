@@ -61,6 +61,7 @@ const {
   getAdminOverviewRecent,
   getAdminOverviewTrend,
   getAgentLogs,
+  getApiLogDetail,
   getApiLogs,
   getOperationLogs,
 } = await import('./commonHandle.js');
@@ -1349,9 +1350,93 @@ describe('后台日志组合筛选', () => {
     expect(String(sql)).toContain('a.request_id = ?');
     expect(String(sql)).toContain('a.method = ?');
     expect(String(sql)).toContain('a.duration_ms >= ?');
-    expect(String(sql)).toContain('CAST(a.status_code AS UNSIGNED) >= 500');
+    expect(String(sql)).toContain("a.status_code BETWEEN '500' AND '599'");
+    expect(String(sql)).not.toContain('CAST(a.status_code');
     expect(String(sql)).not.toContain('request-12345678');
     expect(params).toEqual(expect.arrayContaining(['request-12345678', 'POST', 900, '2026-08-01 00:00:00']));
+  });
+
+  it('API 日志首屏不执行空关键词模糊匹配，也不读取长请求体', async () => {
+    query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 'api-log-1',
+            user_id: 'user-1',
+            url: '/api/file/preview/resolve',
+            method: 'POST',
+            system: '{"os":"Windows 10"}',
+            request_time: '2026-08-12 10:35:31',
+            status_code: '200',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const res = mockRes();
+
+    await getApiLogs(
+      { user: { role: 'root' }, body: { cursor: null, limit: 20, filters: { hideInternal: false } } },
+      res,
+    );
+
+    const [listSql] = query.mock.calls[0];
+    expect(String(listSql)).not.toContain('LIKE CONCAT');
+    expect(String(listSql)).not.toContain('a.*');
+    expect(String(listSql)).not.toMatch(/\ba\.req\b/);
+    expect(String(listSql)).toContain("a.del_flag = '0'");
+    expect(String(listSql)).not.toContain('a.del_flag = 0');
+    const payload = res.send.mock.calls[0][0];
+    expect(payload.data.total).toBe(1);
+    expect(payload.data.items[0]).not.toHaveProperty('req');
+  });
+
+  it('API 日志默认隐藏内部账号时用索引计数相减，并保持精确总数口径', async () => {
+    query.mockResolvedValueOnce([[]]).mockResolvedValueOnce([[{ total: 100 }]]);
+    const res = mockRes();
+
+    await getApiLogs(
+      { user: { role: 'root' }, body: { cursor: null, limit: 20, filters: { hideInternal: true } } },
+      res,
+    );
+
+    const [listSql, listParams] = query.mock.calls[0];
+    const [countSql, countParams] = query.mock.calls[1];
+    expect(String(listSql)).toContain('a.user_id NOT IN (SELECT internal_user.id');
+    expect(listParams).toEqual(expect.arrayContaining(['root', 'test']));
+    expect(String(countSql)).toContain('FORCE INDEX (idx_api_logs_admin_list)');
+    expect(String(countSql)).toContain('FORCE INDEX (idx_api_logs_user_time)');
+    expect(String(countSql)).toContain('INNER JOIN user internal_user');
+    expect(countParams).toEqual(['root', 'test']);
+    expect(res.send.mock.calls[0][0].data.total).toBe(100);
+  });
+
+  it('API 日志请求体只在打开单条详情后按 ID 读取', async () => {
+    query.mockResolvedValueOnce([
+      [
+        {
+          id: 'api-log-1',
+          user_id: 'user-1',
+          url: '/api/file/preview/resolve',
+          method: 'POST',
+          req: '{"fileId":88}',
+          system: '{"os":"Windows 10","runtime":"browser"}',
+          request_time: '2026-08-12 10:35:31',
+          status_code: '200',
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getApiLogDetail({ user: { role: 'root' }, body: { id: 'api-log-1' } }, res);
+
+    const [sql, params] = query.mock.calls[0];
+    expect(String(sql)).toContain('a.req');
+    expect(String(sql)).toContain("WHERE a.id = ? AND a.del_flag = '0'");
+    expect(params).toEqual(['api-log-1']);
+    expect(res.send.mock.calls[0][0]).toMatchObject({
+      status: 200,
+      data: { id: 'api-log-1', req: { fileId: 88 }, system: { os: 'Windows 10', runtime: 'browser' } },
+    });
   });
 
   it('操作日志支持用户、模块与日期精确下钻', async () => {

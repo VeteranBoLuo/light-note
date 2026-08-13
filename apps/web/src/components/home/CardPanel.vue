@@ -91,27 +91,6 @@
       <BLoading v-if="bookmark.bookmarkLoadingMore" inline loading :title="$t('common.loading')" />
       <BButton v-else size="small" @click="emit('load-more')">{{ $t('common.loadMore') }}</BButton>
     </div>
-    <div class="beian-wrap">
-      <span class="beian-copy">{{ $t('landing.copyright') }}</span>
-      <span class="beian-separator">|</span>
-      <span>{{ $t('landing.websiteFilingName', { name: WEBSITE_FILING_NAME }) }}</span>
-      <span class="beian-separator">|</span>
-      <a class="icp-beian-link" :href="MIIT_QUERY_URL" target="_blank" rel="noopener noreferrer">
-        {{ $t('landing.websiteIcpNumber', { number: WEBSITE_ICP_NUMBER }) }}
-      </a>
-      <template v-if="hasPublicSecurityFiling">
-        <span class="beian-separator">|</span>
-        <a
-          class="icp-beian-link public-security-filing-link"
-          :href="PUBLIC_SECURITY_QUERY_URL"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <img :src="PUBLIC_SECURITY_BADGE_PATH" alt="" width="20" height="20" />
-          {{ PUBLIC_SECURITY_FILING_NUMBER }}
-        </a>
-      </template>
-    </div>
   </div>
 </template>
 
@@ -126,15 +105,6 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { apiBasePost } from '@/http/request.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
-  import {
-    MIIT_QUERY_URL,
-    PUBLIC_SECURITY_BADGE_PATH,
-    PUBLIC_SECURITY_FILING_NUMBER,
-    PUBLIC_SECURITY_QUERY_URL,
-    WEBSITE_FILING_NAME,
-    WEBSITE_ICP_NUMBER,
-    hasPublicSecurityFiling,
-  } from '@/config/siteCompliance.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { copyTextToClipboard } from '@/utils/common.ts';
   import { useI18n } from 'vue-i18n';
@@ -615,47 +585,6 @@
     }
   }
 
-  .beian-wrap {
-    margin-top: auto;
-    padding: 18px 16px 12px;
-    text-align: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    flex-wrap: wrap;
-    color: var(--text-second-color);
-    opacity: 0.58;
-    font-size: 12px;
-    line-height: 1.3;
-  }
-
-  .icp-beian-link {
-    color: inherit;
-    text-decoration: none;
-  }
-
-  .beian-copy,
-  .beian-separator {
-    color: inherit;
-  }
-
-  .icp-beian-link:hover {
-    opacity: 0.82;
-  }
-
-  .public-security-filing-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .public-security-filing-link img {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
-  }
-
   @media (max-width: 768px) {
     .card-panel-wrap {
       height: 0;
@@ -672,12 +601,6 @@
       grid-template-columns: minmax(0, 1fr);
       padding: 2px 2px 12px;
       gap: 12px;
-    }
-
-    .beian-wrap {
-      padding: 14px 12px 10px;
-      font-size: 11px;
-      gap: 6px;
     }
   }
 

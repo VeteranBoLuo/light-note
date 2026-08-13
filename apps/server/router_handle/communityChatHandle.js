@@ -30,6 +30,7 @@ import {
   getCommunityChatMessageAuthorProfile,
   getCommunityChatOwnProfile,
   getCommunityChatOwnProfileAvatar,
+  getCommunityChatPresenceMemberAvatar,
   updateCommunityChatOwnProfile,
 } from '../util/services/communityChatProfileService.js';
 import {
@@ -387,6 +388,19 @@ export async function ownProfileAvatar(req, res) {
   if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
   try {
     const { source } = await getCommunityChatOwnProfileAvatar({ user: req.user });
+    return sendProfileAvatar(req, res, source);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function presenceMemberAvatar(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const { source } = await getCommunityChatPresenceMemberAvatar({
+      user: req.user,
+      token: req.params?.token,
+    });
     return sendProfileAvatar(req, res, source);
   } catch (error) {
     return sendError(req, res, error);

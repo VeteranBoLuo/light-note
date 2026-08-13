@@ -635,6 +635,7 @@
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
+  import { useGrowth } from '@/composables/useGrowth';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
   import {
     useCommunityChatSocket,
@@ -664,6 +665,7 @@
   const unread = useCommunityChatUnread();
   const bookmark = bookmarkStore();
   const currentUser = useUserStore();
+  const { growth: currentGrowth } = useGrowth();
   const {
     visible: profileVisible,
     targetMessage: profileTargetMessage,
@@ -1018,7 +1020,9 @@
   }
 
   function authorFrameId(chatMessage: CommunityChatMessage) {
-    return frameVariant(chatMessage.author.frameId) ? chatMessage.author.frameId : null;
+    const currentFrameId = currentGrowth.value?.equippedFrame;
+    const frameId = chatMessage.isOwn && currentFrameId !== undefined ? currentFrameId : chatMessage.author.frameId;
+    return frameVariant(frameId) ? frameId : null;
   }
 
   function authorRoleLabel(role: CommunityChatMessage['author']['role']) {

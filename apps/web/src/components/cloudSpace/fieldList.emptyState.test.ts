@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/cloudSpace/fieldList.vue'), 'utf8');
+const themeSource = readFileSync(resolve(process.cwd(), 'src/assets/css/theme.less'), 'utf8');
 
 describe('cloud file empty state layout', () => {
   it('does not keep an empty scroll container above the empty state', () => {
@@ -40,5 +41,14 @@ describe('cloud file empty state layout', () => {
     expect(source).toMatch(
       /if \(selectedFiles\.length === 1\)[\s\S]*?downloadField\(selectedFiles\[0\]\.id\)[\s\S]*?batchDownloadChoiceVisible\.value = true/,
     );
+  });
+
+  it('列表表头与普通行 hover 使用稳定主题色，不再动态混入资源橙色', () => {
+    expect(source).toContain('background: var(--cloud-file-list-header-bg, var(--card-background));');
+    expect(source).toContain('background: var(--cloud-file-list-row-hover-bg, var(--card-background));');
+    expect(themeSource).toContain('--cloud-file-list-header-bg: #fffefc;');
+    expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #fffcf8;');
+    expect(themeSource).toContain('--cloud-file-list-header-bg: #30343d;');
+    expect(themeSource).toContain('--cloud-file-list-row-hover-bg: #33363c;');
   });
 });

@@ -29,16 +29,10 @@
         @create-child="createChildPage"
         @attach-pages="openAttachPages"
         @move-page="openMoveSelf"
+        @toggle-inbox="toggleNoteInbox"
       />
-      <div v-if="isOrganizingFromInbox" class="inbox-organize-banner">
-        <span>{{ t('inbox.organizeEditorHint') }}</span>
-        <BButton type="primary" size="small" :loading="completingInbox" @click="saveAndCompleteInbox">
-          {{ t('inbox.saveAndComplete') }}
-        </BButton>
-      </div>
       <NoteWorkspaceShell
         class="note-body"
-        :class="{ 'note-body--organizing': isOrganizingFromInbox }"
         :mobile="bookmark.isMobile"
         :has-sidebar="canShowDetailSidebar"
         :has-ai="!bookmark.isMobile"
@@ -110,44 +104,59 @@
           :class="{ 'is-switching': isNoteSwitching }"
           :aria-busy="isNoteSwitching"
         >
-          <nav
-            v-if="canShowPrivateNavigation"
-            class="note-detail-breadcrumb"
-            :aria-label="t('note.currentDirectory')"
-            @click.self="openMobileNavigation()"
+          <div
+            v-if="canShowPrivateNavigation || (showInboxOrganizer && !bookmark.isMobile)"
+            class="note-detail-breadcrumb-row"
           >
-            <BButton size="small" class="note-detail-crumb" @click="openBreadcrumbPage(null)">
-              {{ t('note.knowledgeRoot') }}
-            </BButton>
-            <template v-for="item in detailBreadcrumbTailDisplay" :key="item.key">
-              <span class="note-detail-crumb-separator" aria-hidden="true">/</span>
-              <span
-                v-if="item.kind === 'ellipsis'"
-                class="note-detail-crumb-ellipsis"
-                :title="t('note.hiddenBreadcrumbs')"
-                :aria-label="t('note.hiddenBreadcrumbs')"
-              >
-                …
-              </span>
-              <span
-                v-else-if="item.id === note.id"
-                class="note-detail-crumb is-current"
-                :title="item.title || t('note.untitled')"
-                aria-current="page"
-              >
-                {{ item.title || t('note.untitled') }}
-              </span>
-              <BButton
-                v-else
-                size="small"
-                class="note-detail-crumb"
-                :title="item.title || t('note.untitled')"
-                @click="openBreadcrumbPage(item.id)"
-              >
-                {{ item.title || t('note.untitled') }}
+            <nav
+              v-if="canShowPrivateNavigation"
+              class="note-detail-breadcrumb"
+              :aria-label="t('note.currentDirectory')"
+              @click.self="openMobileNavigation()"
+            >
+              <BButton size="small" class="note-detail-crumb" @click="openBreadcrumbPage(null)">
+                {{ t('note.knowledgeRoot') }}
               </BButton>
-            </template>
-          </nav>
+              <template v-for="item in detailBreadcrumbTailDisplay" :key="item.key">
+                <span class="note-detail-crumb-separator" aria-hidden="true">/</span>
+                <span
+                  v-if="item.kind === 'ellipsis'"
+                  class="note-detail-crumb-ellipsis"
+                  :title="t('note.hiddenBreadcrumbs')"
+                  :aria-label="t('note.hiddenBreadcrumbs')"
+                >
+                  …
+                </span>
+                <span
+                  v-else-if="item.id === note.id"
+                  class="note-detail-crumb is-current"
+                  :title="item.title || t('note.untitled')"
+                  aria-current="page"
+                >
+                  {{ item.title || t('note.untitled') }}
+                </span>
+                <BButton
+                  v-else
+                  size="small"
+                  class="note-detail-crumb"
+                  :title="item.title || t('note.untitled')"
+                  @click="openBreadcrumbPage(item.id)"
+                >
+                  {{ item.title || t('note.untitled') }}
+                </BButton>
+              </template>
+            </nav>
+            <BButton
+              v-if="showInboxOrganizer && !bookmark.isMobile"
+              type="primary"
+              size="small"
+              class="note-detail-complete-inbox"
+              :loading="completingInbox"
+              @click="saveAndCompleteInbox"
+            >
+              {{ t('inbox.saveAndComplete') }}
+            </BButton>
+          </div>
           <div :key="noteContentKey" class="note-detail-content">
             <div class="note-body-title n-title">
               <BInput
@@ -312,6 +321,7 @@
   import { normalizeNoteContentResourceUrls } from '@/utils/common.ts';
   import { useGuestGuard } from '@/composables/useGuestGuard';
   import { useInboxOrganizer } from '@/composables/useInboxOrganizer';
+  import { useInboxEnqueue } from '@/composables/useInboxEnqueue';
   import { resolveNoteResourceRefs, type ResolvedResourceReference } from '@/api/noteReferences';
   import { buildResourceHref, resourceRefKey, type ResourceRef } from '@/utils/noteResourceRefs';
   import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
@@ -375,6 +385,7 @@
   const nStore = noteStore();
   const { guardWrite } = useGuestGuard();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
+  const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
   const routeQueryValue = (value: unknown) => {
@@ -412,6 +423,7 @@
     type: initialNoteType,
     revision: 1,
     parentId: null as string | null,
+    isPending: false,
   });
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const noteWorkspace = useNoteWorkspaceStore();
@@ -943,6 +955,7 @@
       return user.id !== note.createBy;
     }
   });
+  const showInboxOrganizer = computed(() => !readonly.value && Boolean(note.id) && Boolean(note.isPending));
   function inputBlur() {
     if (note.title?.trim() && note.title !== note.lastTitle) {
       void syncHeaderTitle();
@@ -1572,6 +1585,7 @@
 
   async function saveAndCompleteInbox() {
     if (!guardWrite(undefined, 'save-note') || !note.id) return;
+    const shouldReturnToInbox = isOrganizingFromInbox.value;
     const saved = await saveImmediately(false);
     if (!saved) return;
     const completed = await completeInboxResource('note', note.id);
@@ -1579,9 +1593,32 @@
       message.warning(t('inbox.completeFailed'));
       return;
     }
+    note.isPending = false;
+    invalidateNoteDetailPrefetch(user, note.id);
+    noteLibraryCache.updateNotePendingState(noteCacheScope.value, note.id, false);
     recordOperation({ module: '笔记', operation: `保存并完成整理笔记【${note.title}】` });
     message.success(t('inbox.saveAndCompleteSuccess'));
-    router.push('/inbox');
+    if (shouldReturnToInbox) router.push('/inbox');
+  }
+
+  const togglingInbox = ref(false);
+  async function toggleNoteInbox() {
+    if (!note.id || readonly.value || togglingInbox.value) return;
+    const wasPending = Boolean(note.isPending);
+    const resource = [{ resourceType: 'note' as const, resourceId: note.id }];
+    togglingInbox.value = true;
+    try {
+      const ok = wasPending
+        ? await removeResourcesFromInbox(resource, '笔记')
+        : await addResourcesToInbox(resource, '笔记');
+      if (!ok) return;
+      const nextPending = !wasPending;
+      note.isPending = nextPending;
+      invalidateNoteDetailPrefetch(user, note.id);
+      noteLibraryCache.updateNotePendingState(noteCacheScope.value, note.id, nextPending);
+    } finally {
+      togglingInbox.value = false;
+    }
   }
 
   function clickSaveNote(flag?: boolean) {
@@ -1737,6 +1774,7 @@
       type: note.type,
       revision: note.revision,
       parentId: note.parentId,
+      isPending: Boolean(note.isPending),
       updateTime: updateTime.value,
       breadcrumb: detailBreadcrumb.value.map((item) => ({ ...item })),
       noteTreeFeatures: { ...noteTreeFeatures.value },
@@ -1878,6 +1916,7 @@
         type: nextType,
         revision: 1,
         parentId: routeQueryValue(query.parent) || null,
+        isPending: false,
       });
       updateTime.value = '';
       nodeType.value = 'add';
@@ -1921,6 +1960,7 @@
           content: normalizeLoadedContent(detailRecord.content || '', rawType),
           revision: Math.max(1, Number(detailRecord.revision || 1)),
           parentId: detailRecord.parentId || null,
+          isPending: Boolean(detailRecord.isPending),
         });
         if (Array.isArray(bundledBreadcrumb)) {
           const seededBreadcrumb = noteWorkspace.seedBreadcrumb(note.id, bundledBreadcrumb);
@@ -2087,18 +2127,37 @@
       }
     }
   }
-  .note-detail-breadcrumb {
+  .note-detail-breadcrumb-row {
     min-width: 0;
     height: 30px;
-    padding: 0 12px;
     flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    border-bottom: 1px solid var(--surface-border-color);
+    color: var(--muted-text-color, var(--desc-color));
+    background: var(--surface-page-bg, var(--background-color));
+    font-size: 11px;
+  }
+
+  .note-detail-breadcrumb {
+    min-width: 0;
+    height: 100%;
+    padding: 0 12px;
+    flex: 1 1 auto;
     display: flex;
     align-items: center;
     gap: 3px;
     overflow: hidden;
-    border-bottom: 1px solid var(--surface-border-color);
-    color: var(--muted-text-color, var(--desc-color));
-    background: var(--surface-page-bg, var(--background-color));
+  }
+
+  .note-detail-complete-inbox.b_btn {
+    flex: 0 0 auto;
+    height: 24px;
+    margin-right: 8px;
+    padding: 0 10px;
+    border-radius: 7px;
     font-size: 11px;
   }
 
@@ -2172,28 +2231,6 @@
     width: 100%;
     min-width: 0;
     background: var(--workspace-panel-bg-color, var(--surface-page-bg));
-  }
-  .inbox-organize-banner {
-    position: fixed;
-    top: var(--note-detail-header-height);
-    left: 0;
-    z-index: 12;
-    width: 100%;
-    height: 48px;
-    padding: 0 20px;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    color: var(--desc-color);
-    background: color-mix(in srgb, var(--primary-color) 8%, var(--background-color));
-    border-bottom: 1px solid color-mix(in srgb, var(--primary-color) 18%, var(--card-border-color));
-    font-size: 13px;
-  }
-  .note-body.note-body--organizing {
-    top: calc(var(--note-detail-header-height) + 48px);
-    height: calc(100% - var(--note-detail-header-height) - 48px);
   }
   .note-body > .note-workspace-shell__main {
     min-width: 0;
@@ -2366,8 +2403,11 @@
       min-width: 0;
     }
 
-    .note-detail-breadcrumb {
+    .note-detail-breadcrumb-row {
       height: 35px;
+    }
+
+    .note-detail-breadcrumb {
       cursor: pointer;
     }
 

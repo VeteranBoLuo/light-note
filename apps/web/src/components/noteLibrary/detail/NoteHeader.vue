@@ -90,6 +90,7 @@
             {{ $t('noteDetail.retrySave') }}
           </BButton>
         </div>
+        <InboxPendingBadge v-if="note?.id && note?.isPending" class="note-header-pending-badge" />
         <BButton v-if="childCount > 0" class="note-header-child-chip" @click="$emit('browseChildren')">
           {{ $t('note.childPagesCount', { count: childCount }) }}
           <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
@@ -206,6 +207,7 @@
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import MobilePageActionsDrawer, { type MobilePageActionItem } from '@/components/mobile/MobilePageActionsDrawer.vue';
   import ResourceBacklinks from '@/components/noteLibrary/detail/ResourceBacklinks.vue';
+  import InboxPendingBadge from '@/components/inbox/InboxPendingBadge.vue';
   import { useI18n } from 'vue-i18n';
   import { computed } from 'vue';
   import { apiBasePost } from '@/http/request.ts';
@@ -261,6 +263,7 @@
     'attachPages',
     'movePage',
     'retrySave',
+    'toggleInbox',
   ]);
 
   const bookmark = bookmarkStore();
@@ -539,6 +542,14 @@
       }
     }
 
+    if (!props.readonly && props.note?.id) {
+      options.push({
+        key: 'toggleInbox',
+        label: t(props.note.isPending ? 'inbox.removeExisting' : 'inbox.addExisting'),
+        icon: icon.contextMenu.inbox,
+      });
+    }
+
     options.push({
       key: 'tags',
       label: t('noteDetail.tagsWithCount', { count: visibleTags.value.length }),
@@ -591,6 +602,7 @@
     createChild: () => emit('createChild'),
     attachPages: () => emit('attachPages'),
     movePage: () => emit('movePage'),
+    toggleInbox: () => emit('toggleInbox'),
     tags: openTagConfig,
     saveAsTemplate: openSaveAsTemplate,
     manageTemplates: () => emit('manageTemplates'),
@@ -609,6 +621,13 @@
 
   const desktopMenuOptions = computed<HeaderMenuOption[]>(() => {
     const options: HeaderMenuOption[] = [];
+    if (!props.readonly && props.note?.id) {
+      options.push({
+        label: t(props.note.isPending ? 'inbox.removeExisting' : 'inbox.addExisting'),
+        icon: icon.contextMenu.inbox,
+        function: () => emit('toggleInbox'),
+      });
+    }
     // 桌面顶栏空间充足，标签、历史和导出直接展示；平板继续通过同一份菜单保证可达性。
     if (!bookmark.isDesktop) {
       options.push({
@@ -1030,6 +1049,9 @@
   .note-header-save-state {
     color: #c0c0c0;
     font-size: 12px;
+  }
+  .note-header-pending-badge {
+    flex: 0 0 auto;
   }
   .note-header-child-chip.b_btn {
     flex: 0 0 auto;

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp, h, nextTick, ref } from 'vue';
 import { createI18n } from 'vue-i18n';
 import BSelect from './BSelect.vue';
@@ -118,6 +118,36 @@ describe('BSelect keyboard interaction', () => {
     expect(value.value).toBe('first');
   });
 
+  it('搜索输入变化时向业务层发送 search 事件', async () => {
+    const onSearch = vi.fn();
+    const { host } = mountSelect(true, {}, 'single', { onSearch, allowClear: true });
+    const input = host.querySelector<HTMLInputElement>('.select-search-inline');
+    expect(input).not.toBeNull();
+
+    input!.value = 'second';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    await nextTick();
+
+    expect(onSearch).toHaveBeenCalledWith('second');
+    expect(input!.getAttribute('aria-expanded')).toBe('true');
+
+    host.querySelector<HTMLElement>('.select-clear')?.click();
+    await nextTick();
+    expect(onSearch).toHaveBeenLastCalledWith('');
+    expect(input!.value).toBe('');
+  });
+
+  it('加载时在控件后缀显示进度并暴露 busy 状态', async () => {
+    const { host } = mountSelect(true, {}, 'single', { loading: true, allowClear: true });
+    const trigger = host.querySelector<HTMLElement>('.select-trigger');
+    const input = host.querySelector<HTMLInputElement>('.select-search-inline');
+
+    expect(trigger?.getAttribute('aria-busy')).toBe('true');
+    expect(input?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('.select-loading')).not.toBeNull();
+    expect(host.querySelector('.select-clear')).toBeNull();
+  });
+
   it('does not select an active option when Enter confirms an IME candidate', async () => {
     const { host, value } = mountSelect(true, {}, 'multiple');
     host.querySelector<HTMLElement>('.select-trigger')?.click();
@@ -174,7 +204,9 @@ describe('BSelect keyboard interaction', () => {
       createI18n({
         legacy: false,
         locale: 'en',
-        messages: { en: { common: { noMatch: 'No matches', pleaseSelect: 'Please select', searchPlaceholder: 'Search' } } },
+        messages: {
+          en: { common: { noMatch: 'No matches', pleaseSelect: 'Please select', searchPlaceholder: 'Search' } },
+        },
       }),
     );
     app.mount(host);

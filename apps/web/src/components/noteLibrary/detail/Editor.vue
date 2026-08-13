@@ -5157,6 +5157,11 @@
   #editor-container.note-editor {
     --note-editor-content-padding-top: 12px;
     --note-editor-content-line-height: 1.65;
+    --note-markdown-font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
+    --note-markdown-font-size: 13px;
+    --note-markdown-line-height: 22px;
+    --note-markdown-padding-top: 14px;
+    --note-markdown-padding-inline: 16px;
 
     display: flex;
     flex: 1 1 auto;
@@ -5167,6 +5172,10 @@
   }
   #editor-container.note-editor.is-mobile {
     --note-editor-content-padding-top: 16px;
+    --note-markdown-font-size: 15px;
+    --note-markdown-line-height: 25.5px;
+    --note-markdown-padding-top: 16px;
+    --note-markdown-padding-inline: 18px;
   }
   .note-editor-toolbar {
     flex-shrink: 0;
@@ -5866,10 +5875,24 @@
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 10px 10px clamp(160px, 35vh, 360px);
+    padding: var(--note-markdown-padding-top, 14px) var(--note-markdown-padding-inline, 16px)
+      clamp(160px, 35vh, 360px);
     color: var(--text-color);
-    font-size: 14px;
-    line-height: 1.7;
+    font-family: var(
+      --note-markdown-font-family,
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      'Courier New',
+      monospace
+    );
+    font-size: var(--note-markdown-font-size, 13px);
+    line-height: var(--note-markdown-line-height, 22px);
+    > :first-child {
+      margin-top: 0;
+    }
     h1,
     h2,
     h3,

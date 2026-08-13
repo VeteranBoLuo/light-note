@@ -8,6 +8,7 @@ const apiMocks = vi.hoisted(() => ({
   retry: vi.fn(),
   dismiss: vi.fn(),
   todoDiagnostic: vi.fn(),
+  filePreviewDiagnostic: vi.fn(),
 }));
 const routerMocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -17,6 +18,7 @@ const messageMocks = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn(), succe
 
 vi.mock('@/api/commonApi', () => ({
   getAdminActionCenter: apiMocks.load,
+  getAdminFilePreviewDiagnostic: apiMocks.filePreviewDiagnostic,
   getAdminTodoReminderDiagnostic: apiMocks.todoDiagnostic,
   retryAdminAsyncJob: apiMocks.retry,
   dismissAdminAsyncJob: apiMocks.dismiss,
@@ -203,6 +205,35 @@ describe('ActionCenter', () => {
         ],
       },
     });
+    apiMocks.filePreviewDiagnostic.mockResolvedValue({
+      status: 200,
+      data: {
+        file: { id: '88', name: '5880线缆选型.xls', size: 2048, ownerLabel: '123' },
+        job: {
+          id: '7',
+          status: 'failed',
+          health: 'attention',
+          attentionReason: 'processing_failed',
+          attempts: 3,
+          availableAt: '2026-08-10 16:24:37',
+          errorCode: 'OFFICE_CONVERSION_FAILED',
+          updatedAt: '2026-08-10 16:24:48',
+        },
+        artifact: {
+          id: '19',
+          status: 'failed',
+          strategy: 'converted_pdf',
+          strategyVersion: 1,
+          formatId: 'xls',
+          sourceSize: 2048,
+          artifactSize: 0,
+          entryCount: 0,
+          totalUncompressedSize: 0,
+          containsEncrypted: false,
+          suspiciousExpansion: false,
+        },
+      },
+    });
   });
 
   afterEach(() => {
@@ -317,6 +348,34 @@ describe('ActionCenter', () => {
     expect(mounted.host.textContent).toContain('DELIVERY_RESULT_UNKNOWN');
   });
 
+  it('切换分区时两个 Tab 保留各自的全局数量，不被当前分区空结果覆盖', async () => {
+    apiMocks.load.mockImplementation(async (params?: { section?: string }) => {
+      const response: any = payload();
+      if (params?.section === 'work') {
+        response.data.jobs = { attention: 0, running: 0, waiting: 0, completed24h: 0, sources: [], items: [] };
+      }
+      if (params?.section === 'jobs') {
+        response.data.work = { total: 0, critical: 0, sources: [], items: [] };
+      }
+      return response;
+    });
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    const tabs = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')];
+    const workTab = tabs.find((tab) => tab.textContent?.includes('人工待处理'))!;
+    const jobTab = tabs.find((tab) => tab.textContent?.includes('异步任务健康'))!;
+    expect(workTab.textContent).toContain('2');
+    expect(jobTab.textContent).toContain('1');
+    expect(apiMocks.load).toHaveBeenLastCalledWith(expect.objectContaining({ section: 'all', source: 'all' }));
+
+    jobTab.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('DELIVERY_RESULT_UNKNOWN'));
+    expect(workTab.textContent).toContain('2');
+    expect(jobTab.textContent).toContain('1');
+  });
+
   it('待办提醒固定显示北京时间，并在当前 Job 上打开上下文诊断', async () => {
     const mounted = mountPage();
     cleanup = mounted.unmount;
@@ -340,6 +399,46 @@ describe('ActionCenter', () => {
     expect(document.body.textContent).toContain('每周 周一、周二、周三、周四、周五 11:10 提醒');
     expect(document.body.textContent).not.toContain('上海时间');
     expect(routerMocks.push).not.toHaveBeenCalledWith('/admin/todoPlanDiagnostics');
+  });
+
+  it('文件预览任务打开真实任务诊断，不再跳到无关的 API 日志搜索', async () => {
+    const response: any = payload();
+    response.data.jobs.items = [
+      {
+        id: '7',
+        source: 'file_preview',
+        status: 'attention',
+        rawStatus: 'failed',
+        title: '5880线缆选型.xls',
+        ownerLabel: '123',
+        attempts: 3,
+        errorCode: 'OFFICE_CONVERSION_FAILED',
+        updatedAt: '2026-08-10 16:24:48',
+        ownerTeam: '文件预览服务',
+        slaState: 'overdue',
+      },
+    ];
+    apiMocks.load.mockResolvedValue(response);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    const jobTab = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('异步任务健康'),
+    );
+    jobTab!.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('5880线缆选型.xls'));
+
+    const card = [...mounted.host.querySelectorAll<HTMLElement>('.action-center__item')].find((item) =>
+      item.textContent?.includes('5880线缆选型.xls'),
+    );
+    card!.querySelector<HTMLButtonElement>('button')!.click();
+
+    await vi.waitFor(() => expect(apiMocks.filePreviewDiagnostic).toHaveBeenCalledWith({ id: '7' }));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('文件预览任务诊断'));
+    expect(document.body.textContent).toContain('OFFICE_CONVERSION_FAILED');
+    expect(document.body.textContent).toContain('Office 转 PDF 预览');
+    expect(routerMocks.push).not.toHaveBeenCalledWith(expect.stringContaining('/admin/apiLog'));
   });
 
   it('点击来源卡片后从服务端读取该来源明细并显示选中态', async () => {
@@ -394,5 +493,65 @@ describe('ActionCenter', () => {
     expect(sourceCard!.getAttribute('aria-pressed')).toBe('true');
     expect(sourceCard!.textContent).toContain('正在查看');
     expect(mounted.host.textContent).not.toContain('DELIVERY_RESULT_UNKNOWN');
+  });
+
+  it('可以全选当前可重试任务并用一次原因批量安全重试', async () => {
+    const response: any = payload();
+    response.data.jobs.items = [
+      {
+        id: 'bookmark-job-1',
+        source: 'bookmark_icon',
+        status: 'attention',
+        rawStatus: 'failed',
+        title: 'https://one.example.com',
+        canRetry: true,
+        attempts: 3,
+        updatedAt: '2026-08-09 10:00:00',
+        slaState: 'overdue',
+      },
+      {
+        id: 'bookmark-job-2',
+        source: 'bookmark_icon',
+        status: 'attention',
+        rawStatus: 'failed',
+        title: 'https://two.example.com',
+        canRetry: true,
+        attempts: 2,
+        updatedAt: '2026-08-09 10:01:00',
+        slaState: 'overdue',
+      },
+    ];
+    apiMocks.load.mockResolvedValue(response);
+    const mounted = mountPage();
+    cleanup = mounted.unmount;
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('功能建议'));
+
+    const jobTab = [...mounted.host.querySelectorAll<HTMLElement>('[role="tab"]')].find((tab) =>
+      tab.textContent?.includes('异步任务健康'),
+    );
+    jobTab!.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('https://one.example.com'));
+
+    mounted.host.querySelector<HTMLElement>('.action-center__batch [role="checkbox"]')!.click();
+    await vi.waitFor(() => expect(mounted.host.textContent).toContain('已选 2 项'));
+    const retrySelected = [...mounted.host.querySelectorAll<HTMLButtonElement>('.action-center__batch button')].find(
+      (button) => button.textContent?.includes('批量安全重试'),
+    );
+    retrySelected!.click();
+    await vi.waitFor(() => expect(document.body.textContent).toContain('将所选 2 项任务'));
+
+    const reason = document.body.querySelector<HTMLTextAreaElement>('.action-center__retry-reason textarea')!;
+    reason.value = '批量重试已确认失败的图标任务';
+    reason.dispatchEvent(new Event('input', { bubbles: true }));
+    const confirm = [...document.body.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('确认安全重试'),
+    );
+    confirm!.click();
+
+    await vi.waitFor(() => expect(apiMocks.retry).toHaveBeenCalledTimes(2));
+    expect(apiMocks.retry).toHaveBeenCalledWith(
+      expect.objectContaining({ source: 'bookmark_icon', reason: '批量重试已确认失败的图标任务' }),
+    );
+    await vi.waitFor(() => expect(messageMocks.success).toHaveBeenCalledWith('已将 2 项任务安全放回原队列'));
   });
 });

@@ -5,14 +5,8 @@ import { describe, expect, it } from 'vitest';
 
 const sourceRoot = resolve(process.cwd(), 'src');
 const commonStyles = readFileSync(resolve(sourceRoot, 'assets/css/common.less'), 'utf8');
-const baselineStyles = readFileSync(
-  resolve(sourceRoot, 'assets/css/mobile-rendering-baseline.less'),
-  'utf8',
-);
-const androidEngineStyles = readFileSync(
-  resolve(sourceRoot, 'assets/css/android-webview-compat.less'),
-  'utf8',
-);
+const baselineStyles = readFileSync(resolve(sourceRoot, 'assets/css/mobile-rendering-baseline.less'), 'utf8');
+const androidEngineStyles = readFileSync(resolve(sourceRoot, 'assets/css/android-webview-compat.less'), 'utf8');
 const styleIndex = readFileSync(resolve(sourceRoot, 'assets/css/index.less'), 'utf8');
 const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 const authModalStyles = readFileSync(resolve(sourceRoot, 'view/login/UserAuthModal.vue'), 'utf8');
@@ -158,10 +152,7 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
       .map((path) => relative(sourceRoot, path))
       .sort();
 
-    expect(containerQueryFiles).toEqual([
-      'components/cloudSpace/fieldList.vue',
-      'view/settings/Settings.vue',
-    ]);
+    expect(containerQueryFiles).toEqual(['components/cloudSpace/fieldList.vue', 'view/settings/Settings.vue']);
     expect(containerTypeFiles).toEqual([
       'components/cloudSpace/fieldList.vue',
       'components/home/CardPanel.vue',
@@ -190,10 +181,7 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
   });
 
   it('移动端不预留旧 WebView 缺失的滚动条槽，关键方形装饰有显式尺寸回退', () => {
-    const avatarStyles = readFileSync(
-      resolve(sourceRoot, 'components/growth/AvatarFramePreview.vue'),
-      'utf8',
-    );
+    const avatarStyles = readFileSync(resolve(sourceRoot, 'components/growth/AvatarFramePreview.vue'), 'utf8');
 
     expect(baselineStyles).toMatch(/scrollbar-gutter:\s*auto\s*!important/u);
     expect(baselineStyles).toMatch(/\.growth-page \.cal-cell\s*\{[\s\S]*?min-height:\s*42px/u);

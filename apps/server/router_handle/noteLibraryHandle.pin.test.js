@@ -177,6 +177,7 @@ describe('笔记置顶 handler', () => {
             create_by: 'u1',
             del_flag: 0,
             revision: 1,
+            isPending: 1,
           },
         ],
       ])
@@ -195,6 +196,10 @@ describe('笔记置顶 handler', () => {
     await getNoteDetail({ user: { id: 'u1', role: 'user' }, body: { id: 'note-1' } }, res);
 
     expect(poolQuery).toHaveBeenCalledTimes(2);
+    expect(poolQuery.mock.calls[0][0]).toContain('EXISTS (');
+    expect(poolQuery.mock.calls[0][0]).toContain("i.resource_type = 'note'");
+    expect(poolQuery.mock.calls[0][0]).toContain("i.status = 'pending'");
+    expect(poolQuery.mock.calls[0][1]).toEqual(['note-1', 'u1', '0']);
     expect(poolQuery.mock.calls[1][0]).toContain('LEFT JOIN note breadcrumb_node_1');
     expect(poolQuery.mock.calls[1][0]).not.toContain('ORDER BY');
     expect(poolQuery.mock.calls[1][1]).toEqual(['note-1', 'u1']);
@@ -203,6 +208,7 @@ describe('笔记置顶 handler', () => {
       data: {
         id: 'note-1',
         content: '<p>正文</p>',
+        isPending: true,
         breadcrumb: [
           { id: 'parent', title: '父页面' },
           { id: 'note-1', title: '当前页面' },
@@ -225,6 +231,7 @@ describe('笔记置顶 handler', () => {
           create_by: 'u1',
           del_flag: 0,
           revision: 1,
+          isPending: 0,
         },
       ],
     ]);
@@ -237,6 +244,7 @@ describe('笔记置顶 handler', () => {
       status: 200,
       data: {
         id: 'note-1',
+        isPending: false,
         breadcrumb: [],
         noteTreeFeatures: { note_tree_read: false },
       },

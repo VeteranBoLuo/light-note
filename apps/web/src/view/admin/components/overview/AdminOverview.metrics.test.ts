@@ -41,6 +41,7 @@ describe('后台运营总览指标去重', () => {
     expect(template).toContain(':filter="recentFilter"');
     expect(template).toContain(':filtered-total="recentFilteredTotal"');
     expect(template).toContain('@filter-change="changeRecentFilter"');
+    expect(source).toContain('findVerticalScrollContainer(target, fallbackContainer)');
     expect(source).toContain('scrollIntoContainer(container, target, 8');
   });
 

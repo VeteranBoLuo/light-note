@@ -721,6 +721,102 @@ export async function getAdminTodoReminderDiagnostic(req, res) {
   }
 }
 
+function filePreviewDiagnosticHealth(row) {
+  if (row.job_status === 'failed') return 'attention';
+  if (row.job_status === 'processing') {
+    const lockedAt = row.locked_at ? new Date(row.locked_at).getTime() : Number.NaN;
+    if (Number.isFinite(lockedAt) && Date.now() - lockedAt > 10 * 60_000) return 'attention';
+    return 'running';
+  }
+  if (row.job_status === 'queued') return 'waiting';
+  if (row.job_status === 'completed') return 'completed';
+  return 'terminal';
+}
+
+function filePreviewAttentionReason(row) {
+  if (row.job_status === 'failed') return 'processing_failed';
+  const lockedAt = row.locked_at ? new Date(row.locked_at).getTime() : Number.NaN;
+  if (row.job_status === 'processing' && Number.isFinite(lockedAt) && Date.now() - lockedAt > 10 * 60_000) {
+    return 'worker_stale';
+  }
+  if (row.job_status === 'processing') return 'processing';
+  if (row.job_status === 'queued') return 'queued';
+  if (row.job_status === 'completed') return 'completed';
+  return 'terminal';
+}
+
+export async function getAdminFilePreviewDiagnostic(req, res) {
+  if (!req.user?.id || req.user?.role !== 'root' || req.adminContext) {
+    return res.send(resultData(null, 403, '仅管理员本人可查看文件预览诊断'));
+  }
+  const id = String(req.body?.id || '').trim();
+  if (!/^\d{1,20}$/.test(id)) return res.send(resultData(null, 400, '缺少有效的文件预览任务 ID'));
+  try {
+    const [rows] = await pool.query(
+      `SELECT j.id, j.artifact_id, j.status AS job_status, j.attempts, j.available_at,
+              j.locked_at, j.error_code AS job_error_code, j.create_time AS job_create_time,
+              j.update_time AS job_update_time,
+              a.file_id, a.owner_user_id, a.strategy, a.strategy_version, a.format_id,
+              a.source_size, a.status AS artifact_status, a.artifact_size, a.entry_count,
+              a.total_uncompressed_size, a.contains_encrypted, a.suspicious_expansion,
+              a.error_code AS artifact_error_code, a.last_access_at,
+              f.file_name, f.file_type, f.file_size,
+              COALESCE(NULLIF(u.alias, ''), u.id) AS owner_label
+         FROM file_preview_jobs j
+         JOIN file_preview_artifacts a ON a.id = j.artifact_id
+         LEFT JOIN files f ON f.id = a.file_id
+         LEFT JOIN user u ON u.id = a.owner_user_id
+        WHERE j.id = ?
+        LIMIT 1`,
+      [id],
+    );
+    const row = rows[0];
+    if (!row) return res.send(resultData(null, 404, '文件预览任务不存在'));
+    return res.send(
+      resultData({
+        file: {
+          id: String(row.file_id),
+          name: row.file_name || `${row.format_id || '文件'} ${row.file_id}`,
+          type: row.file_type || '',
+          size: number(row.file_size || row.source_size),
+          ownerLabel: row.owner_label || row.owner_user_id,
+        },
+        job: {
+          id: String(row.id),
+          status: row.job_status,
+          health: filePreviewDiagnosticHealth(row),
+          attentionReason: filePreviewAttentionReason(row),
+          attempts: number(row.attempts),
+          availableAt: row.available_at || null,
+          lockedAt: row.locked_at || null,
+          errorCode: row.job_error_code || row.artifact_error_code || null,
+          createdAt: row.job_create_time || null,
+          updatedAt: row.job_update_time || null,
+        },
+        artifact: {
+          id: String(row.artifact_id),
+          status: row.artifact_status,
+          strategy: row.strategy,
+          strategyVersion: number(row.strategy_version),
+          formatId: row.format_id,
+          sourceSize: number(row.source_size),
+          artifactSize: number(row.artifact_size),
+          entryCount: number(row.entry_count),
+          totalUncompressedSize: number(row.total_uncompressed_size),
+          containsEncrypted: Boolean(row.contains_encrypted),
+          suspiciousExpansion: Boolean(row.suspicious_expansion),
+          errorCode: row.artifact_error_code || null,
+          lastAccessAt: row.last_access_at || null,
+        },
+        generatedAt: new Date().toISOString(),
+      }),
+    );
+  } catch (error) {
+    console.error('[admin-action-center] file preview diagnostic failed code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '文件预览诊断加载失败'));
+  }
+}
+
 async function loadAccountDeletionJobs(limit) {
   const [[summaryRows], [rows]] = await Promise.all([
     pool.query(
@@ -870,7 +966,6 @@ async function loadFilePreviewJobs(limit) {
         updatedAt: row.update_time,
         errorCode: row.error_code || null,
         canRetry: false,
-        targetUrl: '/admin/apiLog?keyword=file_preview',
       };
     }),
   );

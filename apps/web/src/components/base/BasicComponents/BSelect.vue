@@ -16,6 +16,7 @@
       :tabindex="showSearch || disabled ? -1 : 0"
       :aria-expanded="showSearch ? undefined : isOpen"
       :aria-disabled="disabled || undefined"
+      :aria-busy="loading || undefined"
       :aria-controls="showSearch ? undefined : listboxId"
       :aria-haspopup="showSearch ? undefined : 'listbox'"
       :aria-activedescendant="showSearch ? undefined : activeOptionDomId"
@@ -37,13 +38,14 @@
           role="combobox"
           aria-autocomplete="list"
           :aria-expanded="isOpen"
+          :aria-busy="loading || undefined"
           :aria-controls="listboxId"
           :aria-activedescendant="activeOptionDomId"
           :aria-label="ariaLabel || undefined"
           :aria-labelledby="ariaLabelledby || undefined"
           :disabled="disabled"
           @click.stop
-          @input="keepOpen"
+          @input="handleSearchInput"
           @focus="keepOpen"
           @keydown.stop="handleTriggerKeydown"
         />
@@ -64,7 +66,8 @@
 
       <!-- 后缀 -->
       <span class="select-suffix">
-        <span v-if="showClear" class="select-clear" @click.stop="handleClear">&times;</span>
+        <span v-if="loading" class="select-loading" aria-hidden="true"></span>
+        <span v-else-if="showClear" class="select-clear" @click.stop="handleClear">&times;</span>
         <span v-else class="select-arrow">&#9662;</span>
       </span>
     </div>
@@ -76,6 +79,7 @@
         :id="listboxId"
         role="listbox"
         :aria-multiselectable="isMultiple || undefined"
+        :aria-busy="loading || undefined"
         :data-b-select-id="selectId"
         :class="{ 'has-footer': $slots['dropdown-footer'] }"
         v-show="isOpen"
@@ -90,12 +94,13 @@
             role="combobox"
             aria-autocomplete="list"
             :aria-expanded="isOpen"
+            :aria-busy="loading || undefined"
             :aria-controls="listboxId"
             :aria-activedescendant="activeOptionDomId"
             :aria-label="ariaLabel || undefined"
             :aria-labelledby="ariaLabelledby || undefined"
             @click.stop
-            @input="keepOpen"
+            @input="handleSearchInput"
             @keydown.stop="handleTriggerKeydown"
           />
         </div>
@@ -147,6 +152,7 @@
       ariaLabel?: string;
       ariaLabelledby?: string;
       disabled?: boolean;
+      loading?: boolean;
     }>(),
     {
       options: () => [],
@@ -159,11 +165,13 @@
       ariaLabel: '',
       ariaLabelledby: '',
       disabled: false,
+      loading: false,
     },
   );
 
   const emit = defineEmits<{
     change: [value: any];
+    search: [value: string];
   }>();
 
   const modelValue = defineModel('value');
@@ -218,7 +226,7 @@
   const showClear = computed(() => {
     if (!props.allowClear) return false;
     if (isMultiple.value) return currentValues.value.length > 0;
-    return modelValue.value != null && modelValue.value !== '';
+    return (modelValue.value != null && modelValue.value !== '') || (props.showSearch && Boolean(searchText.value));
   });
 
   // 单选显示文本
@@ -374,6 +382,7 @@
       emit('change', '');
     }
     searchText.value = '';
+    if (props.showSearch) emit('search', '');
     isOpen.value = false;
   }
 
@@ -392,6 +401,11 @@
   function keepOpen() {
     if (props.disabled) return;
     if (!isOpen.value) isOpen.value = true;
+  }
+
+  function handleSearchInput() {
+    keepOpen();
+    emit('search', searchText.value);
   }
 
   function updateDropdownPosition() {
@@ -675,6 +689,32 @@
 
     &:hover {
       color: var(--text-color);
+    }
+  }
+
+  .select-loading {
+    width: 14px;
+    height: 14px;
+    box-sizing: border-box;
+    border: 2px solid var(--card-border-color, #d9d9d9);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: b-select-spin 0.75s linear infinite;
+  }
+
+  @keyframes b-select-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  :global(.disable-animations) .select-loading {
+    animation: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .select-loading {
+      animation: none;
     }
   }
 

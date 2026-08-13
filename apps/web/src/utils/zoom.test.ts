@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getRootZoom, normalizeRectForRootZoom, parseCssZoom, scrollIntoContainer } from './zoom';
+import {
+  findVerticalScrollContainer,
+  getRootZoom,
+  normalizeRectForRootZoom,
+  parseCssZoom,
+  scrollIntoContainer,
+} from './zoom';
 
 describe('parseCssZoom', () => {
   it.each([
@@ -66,5 +72,46 @@ describe('scrollIntoContainer', () => {
 
     expect(scrollTo).toHaveBeenNthCalledWith(1, { top: 280, behavior: 'smooth' });
     expect(scrollTo).toHaveBeenNthCalledWith(2, { top: 280, behavior: 'auto' });
+  });
+});
+
+describe('findVerticalScrollContainer', () => {
+  function setScrollMetrics(element: HTMLElement, scrollHeight: number, clientHeight: number) {
+    Object.defineProperties(element, {
+      scrollHeight: { configurable: true, value: scrollHeight },
+      clientHeight: { configurable: true, value: clientHeight },
+    });
+  }
+
+  it('桌面端优先使用最近的实际滚动内容区', () => {
+    const page = document.createElement('div');
+    const table = document.createElement('div');
+    const target = document.createElement('div');
+    page.style.overflowY = 'hidden';
+    table.style.overflowY = 'auto';
+    setScrollMetrics(page, 900, 900);
+    setScrollMetrics(table, 1600, 500);
+    page.appendChild(table);
+    table.appendChild(target);
+    document.body.appendChild(page);
+
+    expect(findVerticalScrollContainer(target, table)).toBe(table);
+    page.remove();
+  });
+
+  it('移动端内容区展开后跳过它，选择真正滚动的页面外壳', () => {
+    const page = document.createElement('div');
+    const table = document.createElement('div');
+    const target = document.createElement('div');
+    page.style.overflowY = 'auto';
+    table.style.overflowY = 'visible';
+    setScrollMetrics(page, 4600, 840);
+    setScrollMetrics(table, 4500, 4500);
+    page.appendChild(table);
+    table.appendChild(target);
+    document.body.appendChild(page);
+
+    expect(findVerticalScrollContainer(target, table)).toBe(page);
+    page.remove();
   });
 });

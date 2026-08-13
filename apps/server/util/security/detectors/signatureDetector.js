@@ -31,6 +31,14 @@ const isKnownSortEnum = (context, item) => {
   );
 };
 
+const COMMUNITY_CHAT_NOTIFICATION_LEVEL_VALUES = new Set(['official', 'mentions_only', 'mentions', 'all']);
+
+const isKnownCommunityChatNotificationLevelEnum = (context, item) =>
+  String(context.method || '').toUpperCase() === 'PUT' &&
+  /^(?:\/api)?\/community-chat\/settings\/notifications\/?$/i.test(String(context.path || '')) &&
+  String(item.field) === 'body.level' &&
+  COMMUNITY_CHAT_NOTIFICATION_LEVEL_VALUES.has(String(item.value));
+
 const isRuleApplicable = (rule, context) => {
   if (rule.includedContexts && !rule.includedContexts.includes(context)) {
     return false;
@@ -210,8 +218,8 @@ const detectParameterAnomaly = (context) => {
     if (fieldContext !== 'numeric') {
       continue;
     }
-    // 部分列表接口的 sort 是受服务端白名单约束的排序枚举，不是数据库数值排序位。
-    if (isKnownSortEnum(context, item)) {
+    // 部分接口复用了看似数值字段的名称，但实际由服务端枚举白名单严格约束。
+    if (isKnownSortEnum(context, item) || isKnownCommunityChatNotificationLevelEnum(context, item)) {
       continue;
     }
     const value = String(item.value);

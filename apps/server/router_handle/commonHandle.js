@@ -440,25 +440,38 @@ export const getApiLogs = async (req, res) => {
     const startDate = normalizeAdminLogDate(filters.start_date);
     const endDate = normalizeAdminLogDate(filters.end_date, true);
     const minDurationMs = Math.min(Math.max(Number(filters.min_duration_ms) || 0, 0), 600_000);
-    const conditions = [
-      `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%')
-        OR a.url LIKE CONCAT('%', ?, '%') OR a.request_id LIKE CONCAT('%', ?, '%'))`,
-      'a.del_flag = 0',
-    ];
-    const baseParams = [key, key, key, key, key];
+    // api_logs.del_flag / status_code 是历史 varchar 字段。这里必须按字符串比较；写成数字或 CAST
+    // 会让 MySQL 对整列做隐式转换，放弃日志列表索引并扫描、排序整张大表。
+    const conditions = ["a.del_flag = '0'"];
+    const baseParams = [];
+    // 空关键词时 LIKE '%%' 会让高频日志表退化为逐行 OR 判断，并阻断按时间索引快速取得首屏。
+    // 只有用户真的输入关键词时才启用跨用户和接口的模糊搜索。
+    if (key) {
+      conditions.push(
+        `(u.alias LIKE CONCAT('%', ?, '%') OR u.email LIKE CONCAT('%', ?, '%') OR a.ip LIKE CONCAT('%', ?, '%')
+          OR a.url LIKE CONCAT('%', ?, '%') OR a.request_id LIKE CONCAT('%', ?, '%'))`,
+      );
+      baseParams.push(key, key, key, key, key);
+    }
     // 隐藏内部账号(root/test);u.role 为 NULL(join 不到 user,如已删用户)按真实用户保留,避免误删日志
     if (hideInternal) {
-      conditions.push(`(u.role IS NULL OR u.role NOT IN (${rolePh}))`);
+      // 子查询只扫描很小的 user 表，主查询仍可沿 (del_flag, request_time, id) 取得最新日志；
+      // 把角色条件留在 LEFT JOIN 结果上会让优化器更容易退化为全表扫描 + filesort。
+      conditions.push(
+        `a.user_id NOT IN (SELECT internal_user.id FROM user internal_user WHERE internal_user.role IN (${rolePh}))`,
+      );
       baseParams.push(...INTERNAL_ROLES);
     }
-    if (['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const hasMethodFilter = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+    if (hasMethodFilter) {
       conditions.push('a.method = ?');
       baseParams.push(method);
     }
-    if (status === 'success') conditions.push('CAST(a.status_code AS UNSIGNED) BETWEEN 200 AND 399');
-    if (status === '4xx') conditions.push('CAST(a.status_code AS UNSIGNED) BETWEEN 400 AND 499');
-    if (status === '5xx') conditions.push('CAST(a.status_code AS UNSIGNED) >= 500');
-    if (status === 'errors') conditions.push('CAST(a.status_code AS UNSIGNED) >= 400');
+    const hasStatusFilter = ['success', '4xx', '5xx', 'errors'].includes(status);
+    if (status === 'success') conditions.push("a.status_code BETWEEN '200' AND '399'");
+    if (status === '4xx') conditions.push("a.status_code BETWEEN '400' AND '499'");
+    if (status === '5xx') conditions.push("a.status_code BETWEEN '500' AND '599'");
+    if (status === 'errors') conditions.push("a.status_code BETWEEN '400' AND '599'");
     if (requestId) {
       conditions.push('a.request_id = ?');
       baseParams.push(requestId);
@@ -494,34 +507,61 @@ export const getApiLogs = async (req, res) => {
     const whereClause = listConditions.join(' AND ');
     const take = cursorMode ? pageSize + 1 : pageSize;
 
-    const [result] = await pool.query(
-      `SELECT a.*, u.alias, u.email FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${whereClause} ORDER BY a.request_time DESC, a.id DESC LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
+    // 列表不读取 longtext 请求体；请求参数只在点开单条详情时按 ID 懒加载。
+    // 首屏列表和总数互不依赖，并行执行，避免两段数据库耗时串行叠加。
+    const listPromise = pool.query(
+      `SELECT a.id, a.user_id, a.url, a.method, a.ip, a.system, a.request_time,
+              a.status_code, a.request_id, a.duration_ms, u.alias, u.email
+         FROM api_logs a
+         LEFT JOIN user u ON a.user_id = u.id
+        WHERE ${whereClause}
+        ORDER BY a.request_time DESC, a.id DESC
+        LIMIT ?${cursorMode ? '' : ' OFFSET ?'}`,
       [...baseParams, ...cursorParams, take, ...(cursorMode ? [] : [skip])],
     );
+    const shouldCount = !cursorMode || !cursor;
+    const hasBusinessFilters = Boolean(
+      key || hasMethodFilter || hasStatusFilter || requestId || startDate || endDate || minDurationMs > 0,
+    );
+    let totalPromise = Promise.resolve(undefined);
+    if (shouldCount && !hasBusinessFilters) {
+      // 游标负责后续分页，total 只需首屏计算。默认首屏在同一个 SQL 快照中用两个窄索引计数
+      // 相减，避免为了排除 root/test 对 11 万行日志逐行 LEFT JOIN user，同时保证差值口径一致。
+      const defaultCountSql = hideInternal
+        ? `SELECT
+             (SELECT COUNT(*) FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
+               WHERE active_log.del_flag = '0')
+             -
+             (SELECT COUNT(*)
+                FROM api_logs internal_log FORCE INDEX (idx_api_logs_user_time)
+                INNER JOIN user internal_user ON internal_log.user_id = internal_user.id
+               WHERE internal_log.del_flag = '0' AND internal_user.role IN (${rolePh})) AS total`
+        : `SELECT COUNT(*) AS total FROM api_logs active_log FORCE INDEX (idx_api_logs_admin_list)
+            WHERE active_log.del_flag = '0'`;
+      totalPromise = pool
+        .query(defaultCountSql, hideInternal ? INTERNAL_ROLES : [])
+        .then(([rows]) => Math.max(0, Number(rows[0]?.total || 0)));
+    } else if (shouldCount) {
+      // 只有关键词会读取 user 的 alias/email；其他筛选的总数无需关联用户表。
+      const countFrom = key ? 'api_logs a LEFT JOIN user u ON a.user_id = u.id' : 'api_logs a';
+      totalPromise = pool
+        .query(`SELECT COUNT(*) AS total FROM ${countFrom} WHERE ${conditions.join(' AND ')}`, baseParams)
+        .then(([rows]) => Number(rows[0]?.total || 0));
+    }
+    const [[result], total] = await Promise.all([listPromise, totalPromise]);
 
     const hasMore = cursorMode && result.length > pageSize;
     const page = cursorMode ? result.slice(0, pageSize) : result;
 
     page.forEach((row) => {
-      ['req', 'system'].forEach((field) => {
-        if (row[field] && typeof row[field] === 'string') {
-          try {
-            row[field] = JSON.parse(row[field]);
-          } catch (e) {}
-        }
-      });
+      if (row.system && typeof row.system === 'string') {
+        try {
+          row.system = JSON.parse(row.system);
+        } catch (e) {}
+      }
       row.system = normalizeApiLogSystem(row.system);
     });
 
-    let total;
-    if (!cursorMode || !cursor) {
-      const countWhereClause = conditions.join(' AND ');
-      const [totalRes] = await pool.query(
-        `SELECT COUNT(*) AS total FROM api_logs a LEFT JOIN user u ON a.user_id = u.id WHERE ${countWhereClause}`,
-        baseParams,
-      );
-      total = Number(totalRes[0].total || 0);
-    }
     const last = page[page.length - 1];
 
     res.send(
@@ -539,6 +579,37 @@ export const getApiLogs = async (req, res) => {
     const status = e?.code === 'ADMIN_LIST_CURSOR_INVALID' ? 400 : 500;
     console.error('[admin-list] API 日志查询失败 code=%s', stableAgentErrorCode(e));
     return res.send(resultData(null, status, status === 400 ? '查询游标无效' : '查询日志失败'));
+  }
+};
+
+export const getApiLogDetail = async (req, res) => {
+  if (req.user?.role !== 'root') return res.send(resultData(null, 403, '没有操作权限'));
+  const id = String(req.body?.id || '').trim();
+  if (!id || id.length > 255) return res.send(resultData(null, 400, '缺少有效的 API 日志 ID'));
+  try {
+    const [rows] = await pool.query(
+      `SELECT a.id, a.user_id, a.url, a.method, a.req, a.ip, a.system, a.request_time,
+              a.status_code, a.request_id, a.duration_ms, u.alias, u.email
+         FROM api_logs a
+         LEFT JOIN user u ON a.user_id = u.id
+        WHERE a.id = ? AND a.del_flag = '0'
+        LIMIT 1`,
+      [id],
+    );
+    const row = rows[0];
+    if (!row) return res.send(resultData(null, 404, 'API 日志不存在或已清理'));
+    for (const field of ['req', 'system']) {
+      if (row[field] && typeof row[field] === 'string') {
+        try {
+          row[field] = JSON.parse(row[field]);
+        } catch (e) {}
+      }
+    }
+    row.system = normalizeApiLogSystem(row.system);
+    return res.send(resultData(row));
+  } catch (error) {
+    console.error('[admin-list] API 日志详情查询失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, '查询日志详情失败'));
   }
 };
 async function clearSoftLogTable(req, res, { table, targetId }) {

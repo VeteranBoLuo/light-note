@@ -58,7 +58,9 @@ export function buildNoteLibraryListCacheKey(scope: string, query: NoteLibraryCa
     mode: query.mode,
     parentId: String(query.parentId || ''),
     tagId: String(query.tagId || ''),
-    keyword: String(query.keyword || '').trim().toLowerCase(),
+    keyword: String(query.keyword || '')
+      .trim()
+      .toLowerCase(),
   });
 }
 
@@ -144,6 +146,33 @@ export default defineStore('noteLibraryCache', () => {
     listSnapshots.value = next;
   }
 
+  /**
+   * 待整理是资源关系状态，不应为了切换一个布尔值整页重拉列表。
+   * 只更新同一账号已经缓存的笔记副本，并保留原 updatedAt：原本过期的快照仍然过期，
+   * 原本新鲜的快照则可以在返回笔记库时立即显示正确角标。
+   */
+  function updateNotePendingState(scope: string, noteId: string, isPending: boolean) {
+    const normalizedScope = String(scope || 'anonymous');
+    const normalizedId = String(noteId || '').trim();
+    if (!normalizedId) return;
+    const next = { ...listSnapshots.value };
+    for (const [key, snapshot] of Object.entries(next)) {
+      try {
+        if (JSON.parse(key)?.scope !== normalizedScope) continue;
+      } catch {
+        continue;
+      }
+      let changed = false;
+      const items = snapshot.items.map((item) => {
+        if (String(item?.id || '') !== normalizedId) return item;
+        changed = true;
+        return { ...item, isPending };
+      });
+      if (changed) next[key] = { ...snapshot, items };
+    }
+    listSnapshots.value = next;
+  }
+
   function readTags(scope: string) {
     const snapshot = tagsByScope.value[String(scope || 'anonymous')];
     if (!snapshot) return null;
@@ -194,6 +223,7 @@ export default defineStore('noteLibraryCache', () => {
     writeReturnScroll,
     clearReturnScroll,
     markListsStale,
+    updateNotePendingState,
     readTags,
     writeTags,
     readFeatures,

@@ -11,6 +11,7 @@ import {
 import { getSession } from '../sessionStore.js';
 import { assertCommunityChatReadAccess } from '../services/communityChatAccessService.js';
 import { communityChatRealtimeBroker } from './realtimeBroker.js';
+import { issueCommunityChatPresenceAvatarToken } from './presenceAvatarToken.js';
 import {
   COMMUNITY_CHAT_REALTIME_MAX_CLIENT_PAYLOAD_BYTES,
   COMMUNITY_CHAT_REALTIME_PATH,
@@ -337,8 +338,11 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
               CASE
                 WHEN account.head_picture LIKE 'https://%' OR account.head_picture LIKE 'http://%'
                   THEN account.head_picture
+                WHEN account.head_picture LIKE 'data:image/%;base64,%'
+                  AND OCTET_LENGTH(account.head_picture) <= 524288
+                  THEN 'inline'
                 ELSE ''
-              END AS avatar,
+              END AS avatarSource,
               growth.equipped_frame AS frameId
          FROM user account
          LEFT JOIN user_growth growth ON growth.user_id = account.id
@@ -354,7 +358,12 @@ export function registerCommunityChatRealtimeHub(server, options = {}) {
         role: ['root', 'user', 'visitor', 'test'].includes(String(row.role || ''))
           ? String(row.role)
           : 'user',
-        avatar: String(row.avatar || '').slice(0, 512),
+        avatar:
+          row.avatarSource === 'inline'
+            ? `/api/community-chat/presence/members/${encodeURIComponent(
+                issueCommunityChatPresenceAvatarToken(row.id, { env }),
+              )}/avatar`
+            : String(row.avatarSource || '').slice(0, 512),
         frameId: String(row.frameId || '').slice(0, 64),
       }))
       .sort((left, right) => (accountOrder.get(left.internalId) ?? 0) - (accountOrder.get(right.internalId) ?? 0))
