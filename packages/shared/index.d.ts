@@ -31,6 +31,20 @@ export declare const SITE_COMPLIANCE: {
   readonly publicSecurityBadgePath: '/public-security-filing-badge.png';
 };
 
+export type AfdianCheckoutOptionKey = 'coffee' | 'server' | 'companion' | 'custom';
+
+export interface AfdianCheckoutOptionDefinition {
+  readonly key: AfdianCheckoutOptionKey;
+  readonly amount: number | null;
+  readonly planId?: string;
+  readonly creatorId?: string;
+}
+
+/** 公开的爱发电创作者主页，不包含任何服务端凭证。 */
+export declare const AFDIAN_CREATOR_URL: string;
+/** 轻笺爱发电下单档位的前后端唯一事实源。 */
+export declare const AFDIAN_CHECKOUT_OPTIONS: readonly AfdianCheckoutOptionDefinition[];
+
 export type FilePreviewStrategy = 'archive_manifest' | 'converted_pdf';
 export type DerivedFilePreviewType = 'archive' | 'converted-pdf';
 

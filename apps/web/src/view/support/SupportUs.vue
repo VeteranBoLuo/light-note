@@ -31,7 +31,7 @@
                 class="support-primary-action"
                 type="primary"
                 size="large"
-                :disabled="!supportConfigured"
+                :disabled="!supportConfigured || !supportStateReady"
                 @click="handleSupport"
                 v-click-log="{ module: '支持轻笺', operation: '前往爱发电' }"
               >
@@ -48,6 +48,55 @@
             </BCard>
           </div>
         </header>
+
+        <BCard
+          v-if="supportStateReady"
+          as="section"
+          class="support-account"
+          variant="panel"
+          padding="20px"
+          radius="18px"
+          aria-labelledby="support-account-title"
+        >
+          <span class="support-account__icon" aria-hidden="true">
+            <SvgIcon :src="icon.settings.account" size="22" />
+          </span>
+          <div class="support-account__body">
+            <div class="support-account__title-row">
+              <h2 id="support-account-title">{{ t('support.accountTitle') }}</h2>
+              <span v-if="supportState.linked" class="support-account__status">
+                {{ t('support.accountLinkedStatus') }}
+              </span>
+            </div>
+            <p v-if="!supportState.authenticated">{{ t('support.accountGuestDescription') }}</p>
+            <p v-else-if="supportState.linked">{{ t('support.accountLinkedDescription') }}</p>
+            <p v-else>{{ t('support.accountUnlinkedDescription') }}</p>
+            <p v-if="supportState.authenticated && supportState.orderCount > 0" class="support-account__summary">
+              {{
+                t('support.accountOrderSummary', {
+                  count: supportState.orderCount,
+                  amount: supportState.totalAmount,
+                })
+              }}
+            </p>
+            <p
+              v-if="supportState.authenticated && !supportState.orderSyncAvailable"
+              class="support-account__unavailable"
+              role="status"
+            >
+              {{ t('support.accountSyncUnavailable') }}
+            </p>
+          </div>
+          <BButton
+            v-if="supportState.authenticated && supportState.oauthAvailable"
+            class="support-account__action"
+            :type="supportState.linked ? '' : 'primary'"
+            :loading="unlinking"
+            @click="supportState.linked ? confirmUnlink() : handleOAuthLink()"
+          >
+            {{ t(supportState.linked ? 'support.accountUnlinkAction' : 'support.accountLinkAction') }}
+          </BButton>
+        </BCard>
 
         <section class="support-section support-options" aria-labelledby="support-options-title">
           <div class="support-section__heading">
@@ -88,7 +137,7 @@
               <BButton
                 class="support-tier-card__action"
                 type="primary"
-                :disabled="!option.configured"
+                :disabled="!option.configured || !supportStateReady"
                 @click="handleSupportOption(option)"
                 v-click-log="{ module: '支持轻笺', operation: option.logOperation }"
               >
@@ -182,7 +231,7 @@
             class="support-closing__action"
             type="primary"
             size="large"
-            :disabled="!supportConfigured"
+            :disabled="!supportConfigured || !supportStateReady"
             @click="handleSupport"
             v-click-log="{ module: '支持轻笺', operation: '底部前往爱发电' }"
           >
@@ -196,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
@@ -204,16 +253,35 @@
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import icon from '@/config/icon';
-  import { AFDIAN_SUPPORT_CONFIGURED, AFDIAN_SUPPORT_OPTIONS, openAfdianSupportPage } from '@/config/support';
+  import {
+    AFDIAN_SUPPORT_CONFIGURED,
+    AFDIAN_SUPPORT_OPTIONS,
+    openAfdianOAuthPage,
+    openAfdianSupportPage,
+    openTrackedAfdianCheckout,
+  } from '@/config/support';
   import { bookmarkStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
+  import { getAfdianSupportState, unlinkAfdianAccount, type AfdianSupportState } from '@/api/supportApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
 
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
   const supportConfigured = AFDIAN_SUPPORT_CONFIGURED;
+  const supportState = ref<AfdianSupportState>({
+    authenticated: false,
+    oauthAvailable: false,
+    orderSyncAvailable: false,
+    linked: false,
+    orderCount: 0,
+    totalAmount: '0.00',
+  });
+  const supportStateReady = ref(false);
+  const unlinking = ref(false);
 
   const promiseCards = computed(() => [
     {
@@ -316,22 +384,75 @@
   });
 
   function handleSupport() {
-    if (!openAfdianSupportPage()) {
+    const opened =
+      supportState.value.authenticated && supportState.value.orderSyncAvailable
+        ? openTrackedAfdianCheckout('custom')
+        : openAfdianSupportPage();
+    if (!opened) {
       message.warning(t('support.unavailableMessage'));
       return;
     }
-    void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助主页' });
+    void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助入口' });
   }
 
   function handleSupportOption(option: (typeof supportOptions.value)[number]) {
-    if (!openAfdianSupportPage(option.url)) {
+    const opened =
+      supportState.value.authenticated && supportState.value.orderSyncAvailable
+        ? openTrackedAfdianCheckout(option.key)
+        : openAfdianSupportPage(option.url);
+    if (!opened) {
       message.warning(t('support.unavailableMessage'));
       return;
     }
     void recordOperation({ module: '支持轻笺', operation: `打开爱发电赞助档位:${option.key}` });
   }
 
+  async function loadSupportState() {
+    try {
+      supportState.value = await getAfdianSupportState();
+    } catch {
+      // 支持状态属于增强信息；读取失败时保留当前页面和已有状态，不阻断赞助入口。
+    } finally {
+      supportStateReady.value = true;
+    }
+  }
+
+  function handleOAuthLink() {
+    if (!openAfdianOAuthPage()) {
+      message.warning(t('support.accountLinkUnavailable'));
+      return;
+    }
+    void recordOperation({ module: '支持轻笺', operation: '发起爱发电账号关联' });
+  }
+
+  function confirmUnlink() {
+    Alert.alert({
+      title: t('support.accountUnlinkTitle'),
+      content: t('support.accountUnlinkDescription'),
+      okText: t('support.accountUnlinkAction'),
+      async onOk() {
+        unlinking.value = true;
+        try {
+          await unlinkAfdianAccount();
+          await loadSupportState();
+          message.success(t('support.accountUnlinkSuccess'));
+        } catch {
+          message.error(t('support.accountUnlinkFailed'));
+        } finally {
+          unlinking.value = false;
+        }
+      },
+    });
+  }
+
+  const { markLoaded } = useForegroundRefresh({
+    refresh: loadSupportState,
+    staleMs: 1_000,
+    enabled: () => supportStateReady.value,
+  });
+
   onMounted(() => {
+    void loadSupportState().then(markLoaded);
     void recordOperation({ module: '支持轻笺', operation: '查看支持页面' });
   });
 </script>
@@ -369,11 +490,7 @@
     border-radius: 24px;
     background:
       radial-gradient(circle at 8% 12%, color-mix(in srgb, var(--primary-color) 18%, transparent), transparent 34%),
-      radial-gradient(
-        circle at 94% 88%,
-        color-mix(in srgb, var(--primary-color) 12%, transparent),
-        transparent 34%
-      ),
+      radial-gradient(circle at 94% 88%, color-mix(in srgb, var(--primary-color) 12%, transparent), transparent 34%),
       var(--surface-raised-background);
     box-shadow: var(--surface-raised-shadow);
   }
@@ -520,6 +637,73 @@
 
   .support-section {
     margin-top: 34px;
+  }
+
+  .support-account {
+    --b-card-background: var(--surface-panel-bg);
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 14px;
+    border-color: var(--surface-border-color);
+  }
+
+  .support-account__icon {
+    width: 46px;
+    height: 46px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--primary-color);
+    border-radius: 14px;
+    color: var(--primary-color);
+    background: var(--card-background);
+  }
+
+  .support-account__title-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .support-account h2 {
+    margin: 0;
+    color: var(--text-color);
+    font-size: 17px;
+    line-height: 1.4;
+  }
+
+  .support-account p {
+    margin: 5px 0 0;
+    color: var(--desc-color);
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .support-account__status {
+    padding: 2px 8px;
+    border: 1px solid var(--success-color);
+    border-radius: 999px;
+    color: var(--success-color);
+    background: var(--card-background);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .support-account .support-account__summary {
+    color: var(--primary-color);
+    font-weight: 650;
+  }
+
+  .support-account .support-account__unavailable {
+    color: var(--warning-color);
+  }
+
+  .support-account__action {
+    min-height: 38px;
+    height: auto;
   }
 
   .support-section__heading {
@@ -857,6 +1041,21 @@
 
     .support-tier-grid {
       grid-template-columns: 1fr;
+    }
+
+    .support-account {
+      grid-template-columns: 42px minmax(0, 1fr);
+      padding: 18px !important;
+    }
+
+    .support-account__icon {
+      width: 42px;
+      height: 42px;
+    }
+
+    .support-account__action {
+      width: 100%;
+      grid-column: 1 / -1;
     }
 
     .support-tier-card {

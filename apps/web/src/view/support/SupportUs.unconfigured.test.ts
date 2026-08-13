@@ -5,6 +5,17 @@ import zhCN from '@/i18n/locales/zh-CN';
 
 const mocks = vi.hoisted(() => ({
   openAfdianSupportPage: vi.fn(() => false),
+  openTrackedAfdianCheckout: vi.fn(() => false),
+  openAfdianOAuthPage: vi.fn(() => false),
+  getAfdianSupportState: vi.fn(async () => ({
+    authenticated: false,
+    oauthAvailable: false,
+    orderSyncAvailable: false,
+    linked: false,
+    orderCount: 0,
+    totalAmount: '0.00',
+  })),
+  unlinkAfdianAccount: vi.fn(async () => undefined),
   recordOperation: vi.fn(() => Promise.resolve()),
   messageWarning: vi.fn(),
 }));
@@ -18,6 +29,13 @@ vi.mock('@/config/support', () => ({
     { key: 'custom', amount: null, url: '', configured: false },
   ],
   openAfdianSupportPage: mocks.openAfdianSupportPage,
+  openTrackedAfdianCheckout: mocks.openTrackedAfdianCheckout,
+  openAfdianOAuthPage: mocks.openAfdianOAuthPage,
+}));
+
+vi.mock('@/api/supportApi', () => ({
+  getAfdianSupportState: mocks.getAfdianSupportState,
+  unlinkAfdianAccount: mocks.unlinkAfdianAccount,
 }));
 
 vi.mock('@/api/commonApi', () => ({

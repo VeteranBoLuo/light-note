@@ -1602,3 +1602,44 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name='community_chat_custom_stickers'
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 48) 爱发电接入必须具备唯一订单账本、一次性下单凭证与唯一账号关联（期望 0 行）
+SELECT '[48] missing_afdian_support_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'support_checkout_intents' t UNION ALL
+  SELECT 'support_account_links' UNION ALL
+  SELECT 'support_orders'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.t
+ AND actual.engine='InnoDB'
+ AND actual.table_collation='utf8mb4_unicode_ci'
+WHERE actual.table_name IS NULL;
+
+SELECT '[48] invalid_afdian_account_id_collation' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', actual.character_set_name, '/', actual.collation_name) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name='support_checkout_intents' AND actual.column_name='user_id') OR
+    (actual.table_name='support_account_links' AND actual.column_name='user_id') OR
+    (actual.table_name='support_orders' AND actual.column_name='light_note_user_id')
+  )
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[48] missing_afdian_support_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'support_checkout_intents' tn, 'uk_support_checkout_token' ix UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_user' UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_provider_user' UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_provider_private' UNION ALL
+  SELECT 'support_orders', 'uk_support_order_provider' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_user_status' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_retry'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;

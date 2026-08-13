@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AFDIAN_SUPPORT_OPTIONS, normalizeAfdianSupportUrl, openAfdianSupportPage } from './support';
+import {
+  AFDIAN_SUPPORT_OPTIONS,
+  normalizeAfdianSupportUrl,
+  openAfdianOAuthPage,
+  openAfdianSupportPage,
+  openTrackedAfdianCheckout,
+} from './support';
 
 const PLAN_ID = '4415b194930c11f1ac7b5254001e7c00';
 const CREATOR_ID = '9a64b3ac930611f18e8052540025c377';
@@ -21,6 +27,20 @@ describe('爱发电赞助地址', () => {
     expect(normalizeAfdianSupportUrl(`https://ifdian.net/order/create?user_id=${CREATOR_ID}&remark=&fr=afcom`)).toBe(
       `https://ifdian.net/order/create?user_id=${CREATOR_ID}`,
     );
+  });
+
+  it('只保留格式严格的轻笺下单归属凭证', () => {
+    const token = 'A'.repeat(43);
+    expect(
+      normalizeAfdianSupportUrl(
+        `https://ifdian.net/order/create?plan_id=${PLAN_ID}&product_type=0&custom_order_id=${token}`,
+      ),
+    ).toBe(`https://ifdian.net/order/create?plan_id=${PLAN_ID}&product_type=0&custom_order_id=${token}`);
+    expect(
+      normalizeAfdianSupportUrl(
+        `https://ifdian.net/order/create?plan_id=${PLAN_ID}&product_type=0&custom_order_id=user%40example.com`,
+      ),
+    ).toBe('');
   });
 
   it('固化轻笺的三个金额档与自选金额入口', () => {
@@ -69,5 +89,13 @@ describe('爱发电赞助地址', () => {
     opener.mockClear();
     expect(openAfdianSupportPage('https://evil.example/a/lightnote', opener)).toBe(false);
     expect(opener).not.toHaveBeenCalled();
+  });
+
+  it('跟踪下单与 OAuth 只打开轻笺内固定跳转端点', () => {
+    const opener = vi.fn();
+    expect(openTrackedAfdianCheckout('coffee', opener)).toBe(true);
+    expect(openAfdianOAuthPage(opener)).toBe(true);
+    expect(opener).toHaveBeenNthCalledWith(1, '/api/support/checkout?option=coffee', '_blank', 'noopener,noreferrer');
+    expect(opener).toHaveBeenNthCalledWith(2, '/api/support/afdian/oauth/start', '_blank', 'noopener,noreferrer');
   });
 });

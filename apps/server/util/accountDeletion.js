@@ -620,7 +620,57 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'todo_items', 'DELETE FROM todo_items WHERE user_id = ?', [userId]);
 }
 
-async function purgeLogsAndSecurityLinks(connection, tables, userId) {
+export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
+  // 赞助订单作为真实交易对账记录保留，但注销时解除与轻笺账号及跳转凭证的关联。
+  if (tables.has('support_orders')) {
+    if (tables.has('support_checkout_intents')) {
+      await connection.query(
+        `UPDATE support_orders o
+         LEFT JOIN support_checkout_intents i
+           ON i.id = o.checkout_intent_id
+          AND i.user_id <> ?
+            SET o.light_note_user_id = i.user_id,
+                o.checkout_intent_id = i.id,
+                o.ownership_source = CASE WHEN i.id IS NULL THEN 'unlinked' ELSE 'checkout' END
+          WHERE o.light_note_user_id = ?`,
+        [userId, userId],
+      );
+      await connection.query(
+        `UPDATE support_orders o
+         INNER JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+            SET o.checkout_intent_id = NULL,
+                o.ownership_source = CASE
+                  WHEN o.light_note_user_id IS NULL THEN 'unlinked'
+                  ELSE 'oauth'
+                END
+          WHERE i.user_id = ?`,
+        [userId],
+      );
+    } else {
+      await connection.query(
+        `UPDATE support_orders
+            SET light_note_user_id = NULL,
+                checkout_intent_id = NULL,
+                ownership_source = 'unlinked'
+          WHERE light_note_user_id = ?`,
+        [userId],
+      );
+    }
+  }
+  await deleteIfPresent(
+    connection,
+    tables,
+    'support_checkout_intents',
+    'DELETE FROM support_checkout_intents WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'support_account_links',
+    'DELETE FROM support_account_links WHERE user_id = ?',
+    [userId],
+  );
   await deleteIfPresent(
     connection,
     tables,

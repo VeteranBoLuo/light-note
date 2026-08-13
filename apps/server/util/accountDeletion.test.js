@@ -37,6 +37,7 @@ const {
   ACCOUNT_DELETION_CONFIRMATION_TEXT,
   cleanupCompletedAccountDeletionRequests,
   processAccountDeletionRequest,
+  purgeLogsAndSecurityLinks,
   purgeOwnedResources,
   requestAccountDeletion,
   sendAccountDeletionCode,
@@ -167,6 +168,37 @@ describe('账号注销提交', () => {
 });
 
 describe('账号注销后台清理', () => {
+  it('删除爱发电关联和下单凭证，并把真实订单去轻笺账号关联后保留', async () => {
+    const connection = createConnection(async () => [{ affectedRows: 1 }]);
+    const tables = new Set(['support_checkout_intents', 'support_account_links', 'support_orders']);
+
+    await purgeOwnedResources(connection, tables, 'user-1');
+    await purgeLogsAndSecurityLinks(connection, tables, 'user-1');
+
+    expect(
+      connection.query.mock.calls.some(
+        ([sql, params]) => sql.includes('DELETE FROM support_checkout_intents') && params[0] === 'user-1',
+      ),
+    ).toBe(true);
+    expect(
+      connection.query.mock.calls.some(
+        ([sql, params]) => sql.includes('DELETE FROM support_account_links') && params[0] === 'user-1',
+      ),
+    ).toBe(true);
+    const orderUpdates = connection.query.mock.calls.filter(([sql]) => sql.includes('UPDATE support_orders'));
+    expect(orderUpdates[0]?.[0]).toContain('o.light_note_user_id = i.user_id');
+    expect(orderUpdates[0]?.[0]).toContain('i.user_id <> ?');
+    expect(orderUpdates[0]?.[1]).toEqual(['user-1', 'user-1']);
+    expect(orderUpdates[1]?.[0]).toContain('o.checkout_intent_id = NULL');
+    expect(orderUpdates[1]?.[0]).toContain("ELSE 'oauth'");
+    expect(orderUpdates[1]?.[1]).toEqual(['user-1']);
+    const firstSupportDelete = connection.query.mock.calls.findIndex(([sql]) =>
+      sql.includes('DELETE FROM support_checkout_intents'),
+    );
+    const lastOrderUpdate = connection.query.mock.calls.findLastIndex(([sql]) => sql.includes('UPDATE support_orders'));
+    expect(firstSupportDelete).toBeGreaterThan(lastOrderUpdate);
+  });
+
   it('跨排序规则清理引用时显式统一 utf8mb4_unicode_ci，避免注销任务卡在 retry_wait', async () => {
     const connection = createConnection(async () => [{ affectedRows: 0 }]);
     const tables = new Set(['note_resource_refs', 'bookmark', 'note', 'files', 'note_versions']);

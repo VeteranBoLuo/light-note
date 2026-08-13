@@ -51,6 +51,14 @@ export const shouldSkipSecurity = (req) => {
   if (path === '/favicon.ico') return true;
   // /security 管理接口(原有行为)
   if (path.startsWith('/security')) return true;
+  // 爱发电订单字段可能包含用户留言等自由文本，通用攻击正则会误封平台出口 IP。
+  // 只跳过这个精确 POST；路由自身仍有 IP 限流、字段边界、RSA 验签和 API 二次复核。
+  if (
+    req.method === 'POST' &&
+    ['/support/afdian/webhook', '/api/support/afdian/webhook'].includes(String(path).split('?', 1)[0])
+  ) {
+    return true;
+  }
   // 静态只读目录：仅对 GET/HEAD 跳过(静态路由本就不处理写方法，真实文件上传走 /file 仍全程检测)，
   // 既省 1 核机器上对静态资源的无谓检测，又避免加载大量静态资源被计入高频窗口误判为攻击
   if (STATIC_READ_METHODS.has(req.method) && (path.startsWith('/files') || path.startsWith('/uploads'))) {
