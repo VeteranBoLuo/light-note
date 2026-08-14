@@ -2,7 +2,12 @@
   <section class="chat-expression-panel" :aria-label="t('communityChat.expression.title')">
     <div class="chat-expression-panel__body">
       <ChatEmojiPanel v-if="tab === 'emoji'" embedded :recent="recent" @select="emit('selectEmoji', $event)" />
-      <ChatCustomStickerPanel v-else embedded @select="emit('selectSticker', $event)" />
+      <ChatCustomStickerPanel
+        v-else
+        embedded
+        :refresh-key="customStickerRefreshKey"
+        @select="emit('selectSticker', $event)"
+      />
     </div>
 
     <nav class="chat-expression-panel__tabs" :aria-label="t('communityChat.expression.tabs')">
@@ -44,10 +49,12 @@
     defineProps<{
       tab?: ChatExpressionPanelTab;
       recent?: string[];
+      customStickerRefreshKey?: number;
     }>(),
     {
       tab: 'emoji',
       recent: () => [],
+      customStickerRefreshKey: 0,
     },
   );
   const emit = defineEmits<{

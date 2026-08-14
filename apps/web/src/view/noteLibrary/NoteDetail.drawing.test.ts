@@ -11,6 +11,10 @@ const versionHistorySource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteVersionHistory.vue'),
   'utf8',
 );
+const noteHeaderSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/detail/NoteHeader.vue'),
+  'utf8',
+);
 const librarySource = readFileSync(resolve(process.cwd(), 'src/view/noteLibrary/NoteLibrary.vue'), 'utf8');
 
 describe('手绘笔记详情边界', () => {
@@ -57,7 +61,7 @@ describe('手绘笔记详情边界', () => {
     expect(editorTypeSection).not.toContain('icon:');
   });
 
-  it('笔画、拖动与擦除逐帧只更新临时对象，不直接改写响应式 scene', () => {
+  it('笔画、拖动与局部擦除逐帧只更新临时对象，不直接改写响应式 scene', () => {
     const start = drawingSource.indexOf('function handlePointerMove(event: PointerEvent)');
     const end = drawingSource.indexOf('function releasePointer', start);
     const pointerMoveSource = drawingSource.slice(start, end);
@@ -69,8 +73,51 @@ describe('手绘笔记详情边界', () => {
     expect(pointerMoveSource).toContain('activeStroke');
     expect(pointerMoveSource).toContain('dragPreview = moved');
     expect(pointerMoveSource).not.toContain('scene.value =');
-    expect(eraseSource).toContain('erasedElementIds.add(hit.id)');
+    expect(eraseSource).toContain('eraseDrawingElementsAt(source, point, eraserSize.value / 2, createElementId, {');
+    expect(eraseSource).toContain('eraserPreviewElements = result.elements');
     expect(eraseSource).not.toContain('scene.value =');
+    expect(pointerMoveSource).toContain('for (const sample of samples) eraseAt(canvasPoint(sample))');
+  });
+
+  it('颜色与尺寸各自只保留一个工具栏入口，导出统一进入页面更多菜单', () => {
+    const toolbarEnd = drawingSource.indexOf('<div ref="workspaceRef"');
+    const toolbarSource = drawingSource.slice(0, toolbarEnd);
+
+    expect(toolbarSource.match(/class="drawing-color-button"/gu)).toHaveLength(1);
+    expect(toolbarSource).toContain('v-model:value="activeColor"');
+    expect(toolbarSource).toContain('type="color"');
+    expect(toolbarSource).toContain('v-model:open="colorPopoverOpen"');
+    expect(toolbarSource).toContain('v-model:open="sizePopoverOpen"');
+    expect(toolbarSource).toContain('v-if="showSizeControl"');
+    expect(toolbarSource.match(/drawing-size-trigger/gu)).toHaveLength(1);
+    expect(toolbarSource).toContain('v-for="size in activeSizeOptions"');
+    expect(toolbarSource).toContain('class="drawing-size-range"');
+    expect(toolbarSource).toContain(':min="activeSizeRange.min"');
+    expect(toolbarSource).not.toContain("t('note.drawingExportPng')");
+    expect(toolbarSource).not.toContain("t('note.drawingExportJson')");
+    expect(noteHeaderSource).toContain("props.noteType === 'drawing' || !bookmark.isDesktop");
+    expect(noteHeaderSource).toContain("emit('exportDrawing', 'png')");
+    expect(noteHeaderSource).toContain("emit('exportDrawing', 'json')");
+    expect(source).toContain('@export-drawing="exportDrawingNote"');
+    expect(drawingSource).toContain('if (open) sizePopoverOpen.value = false');
+    expect(drawingSource).toContain('if (open) colorPopoverOpen.value = false');
+    expect(drawingSource).toContain('width: 44px');
+    expect(drawingSource).toContain('height: 44px');
+  });
+
+  it('移动端初始缩放同时利用可用宽高且不拉伸画纸', () => {
+    const zoomStart = drawingSource.indexOf('function resolveInitialZoomIndex()');
+    const zoomEnd = drawingSource.indexOf('function fitReadonlyPage()', zoomStart);
+    const zoomSource = drawingSource.slice(zoomStart, zoomEnd);
+
+    expect(drawingSource).toContain('const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5]');
+    expect(zoomSource).toContain('workspace.clientWidth - horizontalPadding');
+    expect(zoomSource).toContain('workspace.clientHeight - verticalPadding');
+    expect(zoomSource).toContain('widthFit * 1.4');
+    expect(drawingSource).toContain(
+      'workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2)',
+    );
+    expect(drawingSource).toContain('height: 100%');
   });
 
   it('选择工具再次点击已选中文本时进入编辑，并原位替换而非追加副本', () => {

@@ -15,20 +15,90 @@
       </BTooltip>
 
       <span class="drawing-toolbar-separator" aria-hidden="true" />
-      <BTooltip v-for="color in DRAWING_COLORS" :key="color" :title="t('note.drawingColor')">
-        <BButton
-          size="small"
-          class="drawing-color-button"
-          :class="{ 'is-active': activeColor === color }"
-          :aria-label="t('note.drawingColor')"
-          :aria-pressed="activeColor === color"
-          @click="activeColor = color"
-        >
-          <span class="drawing-color-dot" :style="{ backgroundColor: color }" />
-        </BButton>
-      </BTooltip>
-      <BButton size="small" class="drawing-value-button" @click="cycleStrokeWidth"> {{ strokeWidth }} px </BButton>
-      <BButton size="small" class="drawing-value-button" @click="cycleFontSize"> {{ fontSize }} px </BButton>
+      <BPopover
+        v-model:open="colorPopoverOpen"
+        trigger="click"
+        placement="bottom-left"
+        overlay-class-name="drawing-color-popover"
+        @open-change="handleColorPopoverChange"
+      >
+        <BTooltip :title="t('note.drawingChooseColor')">
+          <BButton size="small" class="drawing-color-button" :aria-label="t('note.drawingChooseColor')">
+            <span class="drawing-color-dot" :style="{ backgroundColor: activeColor }" />
+          </BButton>
+        </BTooltip>
+        <template #content>
+          <div class="drawing-color-panel">
+            <strong>{{ t('note.drawingColor') }}</strong>
+            <div class="drawing-color-presets" role="list" :aria-label="t('note.drawingPresetColors')">
+              <BButton
+                v-for="color in DRAWING_COLORS"
+                :key="color"
+                class="drawing-color-preset"
+                :class="{ 'is-active': activeColor === color }"
+                :aria-label="color"
+                :aria-pressed="activeColor === color"
+                @click="selectColor(color)"
+              >
+                <span class="drawing-color-dot" :style="{ backgroundColor: color }" />
+              </BButton>
+            </div>
+            <label for="drawing-custom-color">{{ t('note.drawingCustomColor') }}</label>
+            <BInput
+              id="drawing-custom-color"
+              v-model:value="activeColor"
+              class="drawing-custom-color"
+              type="color"
+              height="40px"
+              @change="colorPopoverOpen = false"
+            />
+          </div>
+        </template>
+      </BPopover>
+      <BPopover
+        v-if="showSizeControl"
+        v-model:open="sizePopoverOpen"
+        trigger="click"
+        placement="bottom-left"
+        overlay-class-name="drawing-size-popover"
+        @open-change="handleSizePopoverChange"
+      >
+        <BTooltip :title="activeSizeLabel">
+          <BButton size="small" class="drawing-value-button drawing-size-trigger" :aria-label="activeSizeLabel">
+            {{ activeSize }} px
+          </BButton>
+        </BTooltip>
+        <template #content>
+          <div class="drawing-size-panel">
+            <strong>{{ activeSizeLabel }}</strong>
+            <div class="drawing-size-options" role="list" :aria-label="activeSizeLabel">
+              <BButton
+                v-for="size in activeSizeOptions"
+                :key="size"
+                class="drawing-size-option"
+                :class="{ 'is-active': activeSize === size }"
+                :aria-label="`${activeSizeLabel} ${size} px`"
+                :aria-pressed="activeSize === size"
+                @click="setActiveSize(size)"
+              >
+                {{ size }} px
+              </BButton>
+            </div>
+            <div class="drawing-size-range-row">
+              <input
+                class="drawing-size-range"
+                type="range"
+                :min="activeSizeRange.min"
+                :max="activeSizeRange.max"
+                :value="activeSize"
+                :aria-label="activeSizeLabel"
+                @input="setActiveSizeFromInput"
+              />
+              <span class="drawing-size-current">{{ activeSize }} px</span>
+            </div>
+          </div>
+        </template>
+      </BPopover>
 
       <span class="drawing-toolbar-separator" aria-hidden="true" />
       <BTooltip :title="t('note.drawingUndo')">
@@ -67,18 +137,6 @@
       >
         +
       </BButton>
-      <BTooltip :title="t('note.drawingExportPng')">
-        <BButton size="small" class="drawing-tool-button" :aria-label="t('note.drawingExportPng')" @click="exportPng">
-          <SvgIcon :src="icon.noteDetail.diagramTools.download" size="17" aria-hidden="true" />
-          <span class="drawing-export-label">PNG</span>
-        </BButton>
-      </BTooltip>
-      <BTooltip :title="t('note.drawingExportJson')">
-        <BButton size="small" class="drawing-tool-button" :aria-label="t('note.drawingExportJson')" @click="exportJson">
-          <SvgIcon :src="icon.noteDetail.diagramTools.download" size="17" aria-hidden="true" />
-          <span class="drawing-export-label">JSON</span>
-        </BButton>
-      </BTooltip>
     </div>
 
     <div ref="workspaceRef" class="drawing-workspace">
@@ -97,6 +155,7 @@
           @pointermove="handlePointerMove"
           @pointerup="handlePointerUp"
           @pointercancel="handlePointerCancel"
+          @pointerleave="handlePointerLeave"
         />
         <div
           v-if="textDraft"
@@ -131,9 +190,11 @@
   import { useI18n } from 'vue-i18n';
   import {
     DRAWING_COLORS,
+    DRAWING_FONT_SIZE_RANGE,
     DRAWING_FONT_SIZES,
     DRAWING_PAGE,
     DRAWING_SCENE_LIMITS,
+    DRAWING_STROKE_WIDTH_RANGE,
     DRAWING_STROKE_WIDTHS,
     createEmptyDrawingScene,
     parseDrawingScene,
@@ -148,6 +209,7 @@
   } from '@lightnote/shared/drawing-note';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -155,6 +217,8 @@
   import { buildExportFileName, deliverGeneratedFile } from '@/utils/fileDelivery';
   import { isLightNoteAndroidApp } from '@/utils/androidBridge';
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
+  import { bookmarkStore } from '@/store';
+  import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
 
   type DrawingTool = 'pen' | 'eraser' | 'text' | 'select' | 'hand';
 
@@ -172,6 +236,7 @@
     ready: [];
   }>();
   const { t } = useI18n();
+  const bookmark = bookmarkStore();
 
   const rootRef = ref<HTMLElement | null>(null);
   const workspaceRef = ref<HTMLElement | null>(null);
@@ -183,7 +248,10 @@
   const activeColor = ref<DrawingColor>(DRAWING_COLORS[0]);
   const strokeWidth = ref<DrawingStrokeWidth>(DRAWING_STROKE_WIDTHS[1]);
   const fontSize = ref<DrawingFontSize>(DRAWING_FONT_SIZES[0]);
+  const eraserSize = ref(18);
   const selectedId = ref('');
+  const colorPopoverOpen = ref(false);
+  const sizePopoverOpen = ref(false);
   const textDraft = ref<DrawingTextElement | null>(null);
   const textDraftRows = computed(() => {
     const draft = textDraft.value;
@@ -195,14 +263,16 @@
   });
   const undoStack = ref<string[]>([]);
   const redoStack = ref<string[]>([]);
-  const ZOOM_LEVELS = [0.35, 0.5, 0.75, 1, 1.25, 1.5] as const;
-  const zoomIndex = ref(3);
+  const ZOOM_LEVELS = [0.3, 0.35, 0.4, 0.5, 0.6, 0.75, 1, 1.25, 1.5] as const;
+  const zoomIndex = ref(6);
   const readonlyFitZoom = ref(1);
   const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : ZOOM_LEVELS[zoomIndex.value]));
   const HISTORY_MAX_STATES = 20;
   const HISTORY_MAX_CHARS = 8_000_000;
   const TEXT_DRAG_THRESHOLD_PX = 4;
   const DRAWING_TEXT_LINE_HEIGHT = 1.35;
+  const DRAWING_ERASER_SIZE_RANGE = Object.freeze({ min: 4, max: 64 });
+  const DRAWING_ERASER_SIZES = Object.freeze([8, 18, 36]);
 
   const tools = computed(() => [
     { key: 'pen' as const, label: t('note.drawingPen'), icon: icon.drawingNote.pen },
@@ -211,6 +281,27 @@
     { key: 'select' as const, label: t('note.drawingSelect'), icon: icon.drawingNote.select },
     { key: 'hand' as const, label: t('note.drawingHand'), icon: icon.drawingNote.hand },
   ]);
+  const showSizeControl = computed(() => tool.value === 'pen' || tool.value === 'eraser' || tool.value === 'text');
+  const activeSize = computed(() => {
+    if (tool.value === 'text') return fontSize.value;
+    if (tool.value === 'eraser') return eraserSize.value;
+    return strokeWidth.value;
+  });
+  const activeSizeLabel = computed(() => {
+    if (tool.value === 'text') return t('note.drawingTextSize');
+    if (tool.value === 'eraser') return t('note.drawingEraserSize');
+    return t('note.drawingStrokeSize');
+  });
+  const activeSizeOptions = computed<readonly number[]>(() => {
+    if (tool.value === 'text') return DRAWING_FONT_SIZES;
+    if (tool.value === 'eraser') return DRAWING_ERASER_SIZES;
+    return DRAWING_STROKE_WIDTHS;
+  });
+  const activeSizeRange = computed(() => {
+    if (tool.value === 'text') return DRAWING_FONT_SIZE_RANGE;
+    if (tool.value === 'eraser') return DRAWING_ERASER_SIZE_RANGE;
+    return DRAWING_STROKE_WIDTH_RANGE;
+  });
 
   let activePointerId: number | null = null;
   let activeCanvasRect: DOMRect | null = null;
@@ -218,7 +309,9 @@
   let activeStrokeMaxPairs = 0;
   let mutationSnapshot = '';
   let eraserChanged = false;
-  const erasedElementIds = new Set<string>();
+  let eraserLimitReached = false;
+  let eraserPreviewElements: DrawingElement[] | null = null;
+  let eraserCursorPoint: DrawingPoint | null = null;
   let dragStart: { x: number; y: number; element: DrawingElement } | null = null;
   let dragPreview: DrawingElement | null = null;
   let editSelectedTextOnRelease = false;
@@ -242,21 +335,47 @@
     return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
   }
 
-  function cycleValue<T>(values: readonly T[], value: T) {
-    return values[(values.indexOf(value) + 1) % values.length];
+  function setActiveSize(size: number) {
+    const range = activeSizeRange.value;
+    const normalized = Math.max(range.min, Math.min(range.max, Math.round(size)));
+    if (tool.value === 'text') {
+      fontSize.value = normalized;
+      sizePopoverOpen.value = false;
+      return;
+    }
+    if (tool.value === 'eraser') eraserSize.value = normalized;
+    else strokeWidth.value = normalized;
+    sizePopoverOpen.value = false;
   }
 
-  function cycleStrokeWidth() {
-    strokeWidth.value = cycleValue(DRAWING_STROKE_WIDTHS, strokeWidth.value);
+  function setActiveSizeFromInput(event: Event) {
+    const value = Number((event.target as HTMLInputElement).value);
+    const range = activeSizeRange.value;
+    const normalized = Math.max(range.min, Math.min(range.max, Math.round(value)));
+    if (tool.value === 'text') fontSize.value = normalized;
+    else if (tool.value === 'eraser') eraserSize.value = normalized;
+    else strokeWidth.value = normalized;
   }
 
-  function cycleFontSize() {
-    fontSize.value = cycleValue(DRAWING_FONT_SIZES, fontSize.value);
+  function selectColor(color: DrawingColor) {
+    activeColor.value = color;
+    colorPopoverOpen.value = false;
+  }
+
+  function handleColorPopoverChange(open: boolean) {
+    if (open) sizePopoverOpen.value = false;
+  }
+
+  function handleSizePopoverChange(open: boolean) {
+    if (open) colorPopoverOpen.value = false;
   }
 
   function changeZoom(delta: number) {
     zoomIndex.value = Math.max(0, Math.min(ZOOM_LEVELS.length - 1, zoomIndex.value + delta));
-    nextTick(resizeCanvas);
+    nextTick(() => {
+      resizeCanvas();
+      centerMobileWorkspace();
+    });
   }
 
   function scheduleDraw() {
@@ -368,9 +487,10 @@
     context.clearRect(0, 0, DRAWING_PAGE.width, DRAWING_PAGE.height);
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, DRAWING_PAGE.width, DRAWING_PAGE.height);
-    target.elements.forEach((element) => {
+    const paintedElements = showSelection && eraserPreviewElements ? eraserPreviewElements : target.elements;
+    paintedElements.forEach((element) => {
       // 编辑框已经承载同一文本；画布暂时隐藏原元素，避免视觉上叠成两份。
-      if (!erasedElementIds.has(element.id) && textDraft.value?.id !== element.id) {
+      if (textDraft.value?.id !== element.id) {
         paintElement(context, dragPreview?.id === element.id ? dragPreview : element);
       }
     });
@@ -379,7 +499,7 @@
       const selected =
         dragPreview?.id === selectedId.value
           ? dragPreview
-          : target.elements.find((element) => element.id === selectedId.value);
+          : paintedElements.find((element) => element.id === selectedId.value);
       if (selected) {
         const bounds = elementBounds(context, selected);
         context.save();
@@ -389,6 +509,16 @@
         context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
         context.restore();
       }
+    }
+    if (showSelection && tool.value === 'eraser' && eraserCursorPoint) {
+      context.save();
+      context.beginPath();
+      context.arc(eraserCursorPoint.x, eraserCursorPoint.y, eraserSize.value / 2, 0, Math.PI * 2);
+      context.strokeStyle = '#615ced';
+      context.lineWidth = 1.5;
+      context.setLineDash([5, 3]);
+      context.stroke();
+      context.restore();
     }
   }
 
@@ -408,6 +538,29 @@
     canvas.style.width = `${DRAWING_PAGE.width * zoom.value}px`;
     canvas.style.height = `${DRAWING_PAGE.height * zoom.value}px`;
     scheduleDraw();
+  }
+
+  function centerMobileWorkspace() {
+    const workspace = workspaceRef.value;
+    if (!bookmark.isMobile || !workspace || workspace.scrollWidth <= workspace.clientWidth) return;
+    workspace.scrollLeft = Math.max(0, (workspace.scrollWidth - workspace.clientWidth) / 2);
+  }
+
+  function resolveInitialZoomIndex() {
+    const workspace = workspaceRef.value;
+    if (!workspace) return 0;
+    const style = getComputedStyle(workspace);
+    const horizontalPadding =
+      (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+    const verticalPadding = (Number.parseFloat(style.paddingTop) || 0) + (Number.parseFloat(style.paddingBottom) || 0);
+    const widthFit = Math.max(0.1, (workspace.clientWidth - horizontalPadding) / DRAWING_PAGE.width);
+    const heightFit = Math.max(0.1, (workspace.clientHeight - verticalPadding) / DRAWING_PAGE.height);
+    // 手机竖屏若只按宽度适配，会在短画纸下方留下大量不可用区域；允许有限横向平移来换取更大的书写面积。
+    const preferred = bookmark.isMobile ? Math.min(1, heightFit, widthFit * 1.4) : Math.min(1, widthFit);
+    return ZOOM_LEVELS.reduce(
+      (best, value, index) => (Math.abs(value - preferred) < Math.abs(ZOOM_LEVELS[best] - preferred) ? index : best),
+      0,
+    );
   }
 
   function fitReadonlyPage() {
@@ -447,7 +600,6 @@
     if (!context) return null;
     for (let index = scene.value.elements.length - 1; index >= 0; index -= 1) {
       const element = scene.value.elements[index];
-      if (erasedElementIds.has(element.id)) continue;
       const bounds = elementBounds(context, element);
       const boundsPadding = element.kind === 'text' ? 6 : Math.max(8, element.width + 5);
       if (
@@ -541,10 +693,15 @@
   }
 
   function eraseAt(point: { x: number; y: number }) {
-    const hit = hitElement(point);
-    if (!hit) return;
-    erasedElementIds.add(hit.id);
-    if (selectedId.value === hit.id) selectedId.value = '';
+    const source = eraserPreviewElements || scene.value.elements;
+    const result = eraseDrawingElementsAt(source, point, eraserSize.value / 2, createElementId, {
+      maxElements: DRAWING_SCENE_LIMITS.maxElements,
+      maxStrokes: DRAWING_SCENE_LIMITS.maxStrokes,
+    });
+    if (result.limitReached) eraserLimitReached = true;
+    if (!result.changed) return;
+    eraserPreviewElements = result.elements;
+    selectedId.value = '';
     eraserChanged = true;
     scheduleDraw();
   }
@@ -589,7 +746,9 @@
     if (tool.value === 'eraser') {
       beginMutation();
       eraserChanged = false;
-      erasedElementIds.clear();
+      eraserLimitReached = false;
+      eraserPreviewElements = scene.value.elements;
+      eraserCursorPoint = point;
       eraseAt(point);
       return;
     }
@@ -631,6 +790,10 @@
   }
 
   function handlePointerMove(event: PointerEvent) {
+    if (tool.value === 'eraser') {
+      eraserCursorPoint = canvasPoint(event);
+      scheduleDraw();
+    }
     if (event.pointerId !== activePointerId) return;
     if (panStart && workspaceRef.value) {
       workspaceRef.value.scrollLeft = panStart.left - (event.clientX - panStart.x);
@@ -647,11 +810,11 @@
       scheduleDraw();
       return;
     }
-    const point = canvasPoint(event);
     if (tool.value === 'eraser') {
-      eraseAt(point);
+      for (const sample of samples) eraseAt(canvasPoint(sample));
       return;
     }
+    const point = canvasPoint(event);
     if (dragStart && selectedId.value) {
       const dx = point.x - dragStart.x;
       const dy = point.y - dragStart.y;
@@ -699,14 +862,16 @@
     } else if (tool.value === 'eraser' && eraserChanged) {
       scene.value = {
         ...scene.value,
-        elements: scene.value.elements.filter((element) => !erasedElementIds.has(element.id)),
+        elements: eraserPreviewElements || scene.value.elements,
       };
       emitScene();
     } else {
       mutationSnapshot = '';
     }
+    if (eraserLimitReached) message.warning(t('note.drawingLimitReached'));
     eraserChanged = false;
-    erasedElementIds.clear();
+    eraserLimitReached = false;
+    eraserPreviewElements = null;
     dragStart = null;
     dragPreview = null;
     editSelectedTextOnRelease = false;
@@ -720,10 +885,17 @@
     activeStroke = null;
     activeStrokeMaxPairs = 0;
     eraserChanged = false;
-    erasedElementIds.clear();
+    eraserLimitReached = false;
+    eraserPreviewElements = null;
     dragStart = null;
     dragPreview = null;
     editSelectedTextOnRelease = false;
+    scheduleDraw();
+  }
+
+  function handlePointerLeave() {
+    if (activePointerId !== null || !eraserCursorPoint) return;
+    eraserCursorPoint = null;
     scheduleDraw();
   }
 
@@ -861,7 +1033,7 @@
         scene.value = content ? parseDrawingScene(content) : createEmptyDrawingScene();
         lastEmittedContent = serializeDrawingScene(scene.value);
         selectedId.value = '';
-        erasedElementIds.clear();
+        eraserPreviewElements = null;
         undoStack.value = [];
         redoStack.value = [];
         textLayoutCache.clear();
@@ -876,6 +1048,13 @@
     { immediate: true },
   );
 
+  watch(tool, () => {
+    colorPopoverOpen.value = false;
+    sizePopoverOpen.value = false;
+    eraserCursorPoint = null;
+    scheduleDraw();
+  });
+
   onMounted(() => {
     if (props.readonly) {
       fitReadonlyPage();
@@ -884,13 +1063,9 @@
         workspaceResizeObserver.observe(workspaceRef.value);
       }
     } else {
-      const availableWidth = Math.max(320, (workspaceRef.value?.clientWidth || window.innerWidth) - 32);
-      const preferred = Math.min(1, availableWidth / DRAWING_PAGE.width);
-      zoomIndex.value = ZOOM_LEVELS.reduce(
-        (best, value, index) => (Math.abs(value - preferred) < Math.abs(ZOOM_LEVELS[best] - preferred) ? index : best),
-        0,
-      );
+      zoomIndex.value = resolveInitialZoomIndex();
       resizeCanvas();
+      nextTick(centerMobileWorkspace);
     }
     emit('ready');
   });
@@ -908,8 +1083,8 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 560px;
-    height: calc(100vh - 150px);
+    min-height: 0;
+    height: 100%;
     outline: none;
     color: var(--text-color);
     background: var(--workspace-panel-bg-color);
@@ -948,7 +1123,8 @@
   }
 
   .drawing-tool-button.is-active,
-  .drawing-color-button.is-active {
+  .drawing-color-preset.is-active,
+  .drawing-size-option.is-active {
     color: var(--primary-color);
     border-color: var(--primary-color) !important;
     background: var(--primary-btn-h-bg-color);
@@ -984,9 +1160,69 @@
     text-align: center;
   }
 
-  .drawing-export-label {
-    font-size: 10px;
-    font-weight: 700;
+  .drawing-color-panel,
+  .drawing-size-panel {
+    width: 236px;
+    padding: 12px;
+    box-sizing: border-box;
+    display: grid;
+    gap: 10px;
+    color: var(--text-color);
+    font-size: 12px;
+  }
+
+  .drawing-color-presets,
+  .drawing-size-options {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .drawing-color-preset,
+  .drawing-size-option {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 0;
+    border: 1px solid var(--surface-border-color, var(--card-border-color)) !important;
+    border-radius: 10px;
+    background: var(--card-background);
+  }
+
+  .drawing-color-preset .drawing-color-dot {
+    width: 20px;
+    height: 20px;
+  }
+
+  .drawing-size-range-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .drawing-size-range {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    margin: 0;
+    accent-color: #615ced;
+    cursor: pointer;
+  }
+
+  .drawing-size-current {
+    flex: 0 0 42px;
+    color: var(--desc-color);
+    text-align: right;
+  }
+
+  .drawing-custom-color :deep(.b-input) {
+    padding: 3px !important;
+    border: 1px solid var(--surface-border-color) !important;
+    background: var(--card-background);
+    cursor: pointer;
   }
 
   .drawing-workspace {
@@ -1070,7 +1306,8 @@
     }
 
     .drawing-tool-button.is-active,
-    .drawing-color-button.is-active {
+    .drawing-color-preset.is-active,
+    .drawing-size-option.is-active {
       color: #615ced;
       border-color: #615ced !important;
       background: #eeedff;
@@ -1079,8 +1316,8 @@
 
   @media (max-width: 768px) {
     .drawing-editor {
-      min-height: 480px;
-      height: calc(100vh - 128px);
+      min-height: 0;
+      height: 100%;
     }
 
     .drawing-toolbar {
@@ -1091,8 +1328,9 @@
       padding: 12px;
     }
 
-    .drawing-export-label {
-      display: none;
+    .drawing-color-panel,
+    .drawing-size-panel {
+      width: min(236px, calc(100vw - 24px));
     }
   }
 </style>

@@ -220,7 +220,10 @@
                         <span>{{ replySummary(chatMessage) }}</span>
                       </BButton>
                     </template>
-                    <div class="community-message__primary">
+                    <div
+                      class="community-message__primary"
+                      :class="{ 'is-sticker-only': messageIsStickerOnly(chatMessage) }"
+                    >
                       <div
                         v-if="chatMessage.status === 'recalled' && !chatMessage.canViewRecalledContent"
                         class="community-message__recalled"
@@ -552,6 +555,7 @@
             <ChatExpressionPanel
               v-model:tab="expressionPanelTab"
               :recent="recentEmojis"
+              :custom-sticker-refresh-key="customStickerRefreshKey"
               @select-emoji="insertEmoji"
               @select-sticker="sendCustomSticker"
             />
@@ -621,6 +625,7 @@
                   <ChatExpressionPanel
                     v-model:tab="expressionPanelTab"
                     :recent="recentEmojis"
+                    :custom-sticker-refresh-key="customStickerRefreshKey"
                     @select-emoji="insertEmoji"
                     @select-sticker="sendCustomSticker"
                   />
@@ -779,6 +784,7 @@
     pinCommunityChatMessage,
     recallCommunityChatMessage,
     reportCommunityChatMessage,
+    saveCommunityChatMessageSticker,
     searchCommunityChatMembers,
     sendCommunityChatMessage,
     toggleCommunityChatMessageLike,
@@ -894,6 +900,7 @@
   const mentionEveryone = ref(false);
   const expressionPanelOpen = ref(false);
   const expressionPanelTab = ref<'emoji' | 'custom'>('emoji');
+  const customStickerRefreshKey = ref(0);
   const mentionSuggestionsOpen = ref(false);
   const mentionSearchQuery = ref('');
   const mentionSearchItems = ref<CommunityChatMemberSearchItem[]>([]);
@@ -1190,6 +1197,10 @@
     return Boolean(chatMessage.images?.length);
   }
 
+  function messageIsStickerOnly(chatMessage: CommunityChatMessage) {
+    return chatMessage.messageKind === 'sticker' && !messageHasText(chatMessage) && !messageHasImages(chatMessage);
+  }
+
   function likeActionLabel(chatMessage: CommunityChatMessage) {
     return t(
       chatMessage.likedByMe ? 'communityChat.like.removeActionWithCount' : 'communityChat.like.actionWithCount',
@@ -1375,6 +1386,19 @@
     }
     if (!chatMessage.isOwn && chatMessage.status === 'active') {
       const alreadyReported = reportedMessageIds.value.has(chatMessage.publicId);
+      if (
+        props.access.canPost &&
+        chatMessage.messageKind === 'sticker' &&
+        chatMessage.stickerSource === 'custom' &&
+        Boolean(chatMessage.sticker?.url)
+      ) {
+        if (items.length) items.push({ key: 'message-sticker-divider', divider: true });
+        items.push({
+          key: 'save-sticker',
+          label: t('communityChat.sticker.saveAction'),
+          icon: icon.support.heart,
+        });
+      }
       if (props.access.canPost) {
         if (items.length) items.push({ key: 'message-governance-divider', divider: true });
         items.push({
@@ -1620,8 +1644,19 @@
     programmaticMessageNavigationActive = false;
   }
 
+  function suspendAutomaticBottomAnchorsForMessageNavigation() {
+    cancelInitialBottomAnchor();
+    // 置顶、引用和深链跳转都是用户明确发起的消息导航，优先级必须高于首屏贴底和键盘锚点。
+    // 只清除本次“保持底部”资格；输入框下次重新获得焦点时会按实时位置重新判断。
+    composerKeyboardAnchorAtBottom = false;
+    if (keyboardAnchorFrame === undefined) return;
+    window.cancelAnimationFrame(keyboardAnchorFrame);
+    keyboardAnchorFrame = undefined;
+  }
+
   async function scrollToFocusedMessage(publicId: string) {
     if (!publicId) return;
+    suspendAutomaticBottomAnchorsForMessageNavigation();
     const navigationGeneration = ++messageNavigationGeneration;
     programmaticMessageNavigationActive = true;
     try {
@@ -2022,6 +2057,7 @@
       return;
     }
     latestRefreshInFlight = true;
+    const messageNavigationGenerationAtStart = messageNavigationGeneration;
     const stayAtBottom = isNearBottom();
     const existingIds = new Set(chatMessages.value.map((item) => item.publicId));
     try {
@@ -2036,7 +2072,9 @@
       if (focusedMessagePublicId.value && newMessageCount > 0) {
         hasNewerThanFocus.value = true;
       }
-      if (stayAtBottom) {
+      // 请求发出后用户可能点击了置顶、引用或深链消息。旧请求不得再用发出时记录的
+      // “位于底部”状态覆盖这次明确导航，否则会表现为先定位、随即闪回最新消息。
+      if (stayAtBottom && messageNavigationGenerationAtStart === messageNavigationGeneration) {
         pendingNewMessageCount.value = 0;
         await scrollToBottom();
         await markLatestRead();
@@ -2868,6 +2906,10 @@
       startMention(chatMessage);
       return;
     }
+    if (action === 'save-sticker') {
+      void saveMessageSticker(chatMessage);
+      return;
+    }
     if (action === 'report') {
       reportTarget.value = chatMessage;
       reportVisible.value = true;
@@ -2878,6 +2920,37 @@
       return;
     }
     if (action === 'hide') confirmHide(chatMessage);
+  }
+
+  async function saveMessageSticker(chatMessage: CommunityChatMessage) {
+    if (
+      chatMessage.isOwn ||
+      chatMessage.status !== 'active' ||
+      chatMessage.messageKind !== 'sticker' ||
+      chatMessage.stickerSource !== 'custom' ||
+      messageActionBusyId.value
+    ) {
+      return;
+    }
+    messageActionBusyId.value = chatMessage.publicId;
+    try {
+      const response = await saveCommunityChatMessageSticker(chatMessage.publicId);
+      const duplicate = Boolean(response.data?.duplicate);
+      const restored = Boolean(response.data?.restored);
+      if (!duplicate || restored) customStickerRefreshKey.value += 1;
+      message.success(t(duplicate && !restored ? 'communityChat.sticker.alreadySaved' : 'communityChat.sticker.saved'));
+    } catch (error: any) {
+      const errorCode = String(error?.response?.data?.data?.code || error?.data?.code || error?.code || '');
+      if (errorCode === 'CUSTOM_STICKER_LIMIT_REACHED') {
+        message.error(t('communityChat.sticker.limitReached'));
+      } else if (errorCode === 'CUSTOM_STICKER_MESSAGE_NOT_FOUND') {
+        message.error(t('communityChat.sticker.saveUnavailable'));
+      } else {
+        message.error(t('communityChat.sticker.saveFailed'));
+      }
+    } finally {
+      messageActionBusyId.value = '';
+    }
   }
 
   async function submitReport(payload: { reasonCode: CommunityChatReportReason; detail: string }) {
@@ -3700,7 +3773,7 @@
     background: transparent;
   }
 
-  /* 滚动时每款头像框仍保留一层 transform/opacity 主动效，只暂停滤镜和次级装饰动画。 */
+  /* 滚动时保留每款头像框的 transform/opacity 主体；龙耀前后景必须同步，只暂停局部光效。 */
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--gold .avatar-frame__motif),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--neon .avatar-frame__ring),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--aurora .avatar-frame__motif),
@@ -3710,7 +3783,17 @@
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__orbit),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__comet),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--flame .avatar-frame__ring),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring::before),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring::after),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__motif),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__orbit),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__comet),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature::after),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature-mark),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__dragon-head::before),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__dragon-head::after),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__ring),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__ring::after),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__motif),
@@ -3964,6 +4047,14 @@
     display: flex;
     align-items: flex-start;
     gap: 6px;
+  }
+
+  .community-message__primary.is-sticker-only {
+    align-items: center;
+  }
+
+  .community-message__primary.is-sticker-only .community-message__actions {
+    top: 0;
   }
 
   .community-message.is-own .community-message__primary {

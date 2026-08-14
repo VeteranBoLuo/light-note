@@ -38,13 +38,13 @@
     </div>
 
     <div v-else class="today-actions__content">
-      <div v-if="localTodos.length" class="today-actions__group">
+      <div v-if="visibleTodos.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.todoGroup') }}</strong>
           <span>{{ todoCount }}</span>
         </header>
         <div class="today-actions__rows">
-          <article v-for="todo in localTodos" :key="todo.id" class="today-action-row">
+          <article v-for="todo in visibleTodos" :key="todo.id" class="today-action-row">
             <BCheckbox
               class="today-action-row__check"
               :model-value="false"
@@ -75,13 +75,13 @@
         </div>
       </div>
 
-      <div v-if="localInbox.length" class="today-actions__group">
+      <div v-if="visibleInbox.length" class="today-actions__group">
         <header class="today-actions__group-head">
           <strong>{{ t('workbench.today.inboxGroup') }}</strong>
           <span>{{ inboxCount }}</span>
         </header>
         <div class="today-actions__rows">
-          <article v-for="item in localInbox" :key="inboxKey(item)" class="today-action-row">
+          <article v-for="item in visibleInbox" :key="inboxKey(item)" class="today-action-row">
             <span class="today-action-row__icon" :class="`is-${item.resourceType}`" aria-hidden="true">
               <SvgIcon :src="resourceIcon(item.resourceType)" size="16" />
             </span>
@@ -106,7 +106,7 @@
         </div>
       </div>
 
-      <div v-if="!localTodos.length && !localInbox.length" class="today-actions__empty">
+      <div v-if="!visibleTodos.length && !visibleInbox.length" class="today-actions__empty">
         <strong>{{ t('workbench.today.allDoneTitle') }}</strong>
         <span>{{ t('workbench.today.allDoneDesc') }}</span>
       </div>
@@ -208,6 +208,23 @@
   const localInbox = computed(() =>
     props.inboxItems.filter((item) => item.resourceId && !removedInboxKeys.value.has(inboxKey(item))),
   );
+
+  /**
+   * 桌面工作台把行动区当作摘要而非完整列表，五条是整个区域的共同预算。
+   * 两组同时存在时，待办按「逾期 → 今天到期」优先展示，但最多占四条，
+   * 始终给待整理保留一条；移动端继续走页面主滚动并展示接口返回的全部明细。
+   */
+  const CONTAINED_ACTION_LIMIT = 5;
+  const visibleTodos = computed(() => {
+    if (!props.contained) return localTodos.value;
+    const todoLimit = localInbox.value.length ? CONTAINED_ACTION_LIMIT - 1 : CONTAINED_ACTION_LIMIT;
+    return localTodos.value.slice(0, todoLimit);
+  });
+  const visibleInbox = computed(() => {
+    if (!props.contained) return localInbox.value;
+    const remaining = Math.max(0, CONTAINED_ACTION_LIMIT - visibleTodos.value.length);
+    return localInbox.value.slice(0, remaining);
+  });
 
   /**
    * 分组数量用权威总数减去本轮本地已处理的条数。

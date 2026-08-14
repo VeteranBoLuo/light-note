@@ -16,9 +16,25 @@
       <span class="avatar-frame__motif" aria-hidden="true"></span>
       <span class="avatar-frame__orbit" aria-hidden="true"></span>
       <span class="avatar-frame__comet" aria-hidden="true"></span>
+      <span v-if="hasFrameIdentity" class="avatar-frame__signature" aria-hidden="true">
+        <SvgIcon
+          v-if="variant === 'dragon'"
+          class="avatar-frame__dragon-crest"
+          :src="icon.avatarFrame.dragonCrest"
+          :size="FRAME_DRAGON_ART_SIZE"
+        />
+        <span class="avatar-frame__signature-mark"></span>
+      </span>
       <span class="avatar-frame__portrait">
         <SvgIcon :src="src" :size="FRAME_DESIGN_AVATAR_SIZE" />
       </span>
+      <SvgIcon
+        v-if="variant === 'dragon'"
+        class="avatar-frame__dragon-head"
+        :src="icon.avatarFrame.dragonHead"
+        :size="FRAME_DRAGON_ART_SIZE"
+        aria-hidden="true"
+      />
     </span>
   </div>
 </template>
@@ -26,6 +42,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
 
   // 头像框只维护一份与商店卡片一致的 64px 设计画布，真实入口整体等比缩放。
@@ -34,6 +51,9 @@
   const FRAME_DESIGN_AVATAR_SIZE = 64;
   const FRAME_DESIGN_RIM = 6;
   const FRAME_DESIGN_OUTER_SIZE = FRAME_DESIGN_AVATAR_SIZE + FRAME_DESIGN_RIM * 2;
+  // 96px 素材盒配合带 bleed 的 132px viewBox，主体视觉尺寸不变，但为边缘描边和阴影预留安全区。
+  const FRAME_DRAGON_ART_SIZE = 96;
+  const FRAME_IDENTITY_VARIANTS = new Set(['dragon']);
 
   const props = withDefaults(
     defineProps<{
@@ -80,6 +100,7 @@
   });
 
   const variant = computed(() => frameVariant(props.frameId));
+  const hasFrameIdentity = computed(() => FRAME_IDENTITY_VARIANTS.has(variant.value || ''));
   const frameStyle = computed(() => {
     const displayAvatarSize = Math.max(1, Number(props.size) || 1);
     const scale = displayAvatarSize / FRAME_DESIGN_AVATAR_SIZE;
@@ -140,7 +161,8 @@
   .avatar-frame__ring,
   .avatar-frame__motif,
   .avatar-frame__orbit,
-  .avatar-frame__comet {
+  .avatar-frame__comet,
+  .avatar-frame__signature {
     position: absolute;
     pointer-events: none;
   }
@@ -164,6 +186,19 @@
 
   .avatar-frame__motif {
     z-index: 1;
+  }
+
+  .avatar-frame__signature {
+    z-index: 4;
+    inset: 0;
+    transform-origin: center;
+    will-change: transform;
+  }
+
+  .avatar-frame__signature-mark {
+    position: absolute;
+    display: block;
+    pointer-events: none;
   }
 
   .avatar-frame__portrait {
@@ -2234,6 +2269,324 @@
     animation: frame-eternal-comet 4.4s ease-in-out infinite;
   }
 
+  /* 高阶传说身份结构：语义必须长在框体上，避免外挂小图标沿圆周公转。 */
+  .avatar-frame--dragon .avatar-frame__ring {
+    background: conic-gradient(
+      from 28deg,
+      #09090b,
+      #3f2a13 16%,
+      #f6d27a 31%,
+      #7c4a12 45%,
+      #111827 62%,
+      #d6a84f 81%,
+      #09090b
+    );
+    box-shadow:
+      0 0 0 2px #e4c06b,
+      0 0 0 5px rgba(24, 17, 8, 0.9),
+      inset 0 0 8px rgba(255, 244, 196, 0.46),
+      0 0 13px rgba(202, 138, 4, 0.66),
+      0 0 24px rgba(113, 63, 18, 0.42);
+    animation: frame-dragon-forge-breathe 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__ring::before {
+    display: none;
+  }
+
+  .avatar-frame--dragon .avatar-frame__ring::after {
+    inset: 4%;
+    border: 1.5px solid rgba(255, 244, 196, 0.82);
+    border-right-color: #7c4a12;
+    border-bottom-color: #d6a84f;
+    box-shadow: inset 0 0 7px rgba(9, 9, 11, 0.88);
+    animation: none;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motif {
+    inset: -5%;
+    border: 1px solid rgba(228, 192, 107, 0.62);
+    background: repeating-conic-gradient(from 12deg, rgba(255, 244, 196, 0.72) 0deg 1.5deg, transparent 1.5deg 18deg);
+    filter: drop-shadow(0 0 4px rgba(202, 138, 4, 0.52));
+    animation: frame-dragon-scale-glint 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__orbit {
+    display: none;
+  }
+
+  .avatar-frame--dragon .avatar-frame__comet {
+    display: none;
+  }
+
+  .avatar-frame--dragon .avatar-frame__signature {
+    z-index: 1;
+    inset: -6%;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px rgba(9, 9, 11, 0.96)) drop-shadow(0 0 7px rgba(202, 138, 4, 0.68));
+  }
+
+  .avatar-frame--dragon .avatar-frame__signature::after {
+    position: absolute;
+    inset: 2%;
+    content: '';
+    border-radius: 50%;
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
+    background: conic-gradient(
+      from -35deg,
+      transparent 0 82%,
+      rgba(255, 244, 196, 0.2) 86%,
+      #fff8dc 91%,
+      #d6a84f 94%,
+      transparent 98%
+    );
+    opacity: 0;
+    animation: frame-dragon-scale-sweep 6.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__dragon-crest {
+    position: relative;
+    z-index: 1;
+    display: block;
+    filter: drop-shadow(0 0 1px rgba(9, 9, 11, 0.86)) drop-shadow(0 0 4px rgba(228, 192, 107, 0.68));
+    transform-origin: 50% 55%;
+    animation: frame-dragon-body-breathe 6.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__dragon-head {
+    position: absolute;
+    z-index: 3;
+    inset: 0;
+    display: block;
+    margin: auto;
+    overflow: visible;
+    pointer-events: none;
+    filter: drop-shadow(0 1px 0 rgba(41, 27, 10, 0.7)) drop-shadow(0 0 3px rgba(228, 192, 107, 0.46));
+    transform-origin: 50% 55%;
+    animation: frame-dragon-head-awaken 6.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__dragon-head::before {
+    position: absolute;
+    top: 29.8%;
+    right: 12%;
+    width: 1.3%;
+    height: auto;
+    aspect-ratio: 1;
+    content: '';
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 2px #fff4b8, 0 0 5px #f59e0b;
+    opacity: 0;
+    transform: scale(0.5);
+    animation: frame-dragon-eye-flash 6.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__dragon-head::after {
+    position: absolute;
+    top: 41%;
+    left: 92%;
+    width: 8%;
+    height: 3.2%;
+    content: '';
+    border-radius: 999px;
+    background: linear-gradient(90deg, #fff7c9 0 14%, #fbbf24 36%, #f97316 64%, transparent 100%);
+    filter: drop-shadow(0 0 2px #fde68a) drop-shadow(0 0 5px rgba(249, 115, 22, 0.84));
+    opacity: 0;
+    transform: translateX(-16%) scaleX(0.3);
+    transform-origin: left center;
+    animation: frame-dragon-breath-spark 6.4s ease-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__portrait {
+    width: calc(var(--frame-size) - 4px);
+    height: calc(var(--frame-size) - 4px);
+    border: 2px solid #e4c06b;
+    background: #fffaf0;
+    box-shadow:
+      0 0 0 2px rgba(42, 27, 10, 0.96),
+      0 0 0 3px rgba(246, 210, 122, 0.88),
+      inset 0 0 0 1px rgba(255, 248, 220, 0.92),
+      inset 0 0 12px rgba(113, 63, 18, 0.2),
+      0 0 8px rgba(214, 168, 79, 0.5);
+  }
+
+  .avatar-frame--dragon .avatar-frame__portrait::after {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    content: '';
+    pointer-events: none;
+    border-radius: inherit;
+    background: radial-gradient(circle, transparent 68%, rgba(113, 63, 18, 0.08) 80%, rgba(214, 168, 79, 0.3) 100%);
+  }
+
+  .avatar-frame--dragon .avatar-frame__signature-mark {
+    right: 7%;
+    bottom: 2%;
+    width: 13%;
+    height: auto;
+    aspect-ratio: 1;
+    border: 1px solid rgba(255, 247, 214, 0.92);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #fde68a 28%, #d6a84f 58%, #713f12 100%);
+    box-shadow:
+      0 0 6px rgba(255, 247, 214, 0.96),
+      0 0 13px rgba(202, 138, 4, 0.8);
+    animation: frame-dragon-pearl 6.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__signature-mark::before,
+  .avatar-frame--dragon .avatar-frame__signature-mark::after {
+    display: none;
+  }
+
+  @keyframes frame-dragon-forge-breathe {
+    0%,
+    100% {
+      filter: brightness(0.88) saturate(0.92);
+    }
+    48%,
+    58% {
+      filter: brightness(1.18) saturate(1.08);
+    }
+  }
+
+  @keyframes frame-dragon-scale-glint {
+    0%,
+    100% {
+      opacity: 0.32;
+    }
+    42% {
+      opacity: 0.86;
+    }
+    62% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes frame-dragon-body-breathe {
+    0%,
+    20%,
+    100% {
+      opacity: 0.86;
+      transform: translateY(1px) rotate(0deg) scale(0.98);
+    }
+    48%,
+    58% {
+      opacity: 1;
+      transform: translateY(-1px) rotate(7deg) scale(1.015);
+    }
+    76% {
+      opacity: 0.94;
+      transform: translateY(0) rotate(-3deg) scale(0.995);
+    }
+    88% {
+      opacity: 0.9;
+      transform: translateY(0.5px) rotate(0.7deg) scale(0.985);
+    }
+  }
+
+  @keyframes frame-dragon-scale-sweep {
+    0%,
+    24%,
+    100% {
+      opacity: 0;
+      transform: rotate(-72deg);
+    }
+    42% {
+      opacity: 0.72;
+      transform: rotate(-18deg);
+    }
+    54% {
+      opacity: 1;
+      transform: rotate(58deg);
+    }
+    72% {
+      opacity: 0;
+      transform: rotate(154deg);
+    }
+  }
+
+  @keyframes frame-dragon-head-awaken {
+    0%,
+    20%,
+    100% {
+      opacity: 0.96;
+      transform: translateY(1px) rotate(0deg) scale(0.98);
+    }
+    48%,
+    58% {
+      opacity: 1;
+      transform: translateY(-1px) rotate(7deg) scale(1.015);
+    }
+    76% {
+      opacity: 0.98;
+      transform: translateY(0) rotate(-3deg) scale(0.995);
+    }
+    88% {
+      opacity: 0.97;
+      transform: translateY(0.5px) rotate(0.7deg) scale(0.985);
+    }
+  }
+
+  @keyframes frame-dragon-pearl {
+    0%,
+    20%,
+    100% {
+      opacity: 0.68;
+      transform: scale(0.84);
+    }
+    48%,
+    58% {
+      opacity: 1;
+      transform: scale(1.24);
+    }
+    76% {
+      opacity: 0.82;
+      transform: scale(0.94);
+    }
+  }
+
+  @keyframes frame-dragon-eye-flash {
+    0%,
+    38%,
+    68%,
+    100% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    48% {
+      opacity: 1;
+      transform: scale(1.8);
+    }
+    57% {
+      opacity: 0.58;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes frame-dragon-breath-spark {
+    0%,
+    44%,
+    68%,
+    100% {
+      opacity: 0;
+      transform: translateX(-16%) scaleX(0.3);
+    }
+    51% {
+      opacity: 1;
+      transform: translateX(0) scaleX(0.92);
+    }
+    60% {
+      opacity: 0;
+      transform: translateX(32%) scaleX(1.24);
+    }
+  }
+
   @keyframes frame-premium-orbit {
     to {
       transform: rotate(360deg);
@@ -2866,7 +3219,17 @@
     .avatar-frame__orbit::after,
     .avatar-frame__comet,
     .avatar-frame__comet::before,
-    .avatar-frame__comet::after {
+    .avatar-frame__comet::after,
+    .avatar-frame__signature,
+    .avatar-frame__signature::before,
+    .avatar-frame__signature::after,
+    .avatar-frame__signature-mark,
+    .avatar-frame__signature-mark::before,
+    .avatar-frame__signature-mark::after,
+    .avatar-frame__dragon-crest,
+    .avatar-frame__dragon-head,
+    .avatar-frame__dragon-head::before,
+    .avatar-frame__dragon-head::after {
       animation: none !important;
     }
   }
@@ -2882,7 +3245,17 @@
   .avatar-frame--motion-paused .avatar-frame__orbit::after,
   .avatar-frame--motion-paused .avatar-frame__comet,
   .avatar-frame--motion-paused .avatar-frame__comet::before,
-  .avatar-frame--motion-paused .avatar-frame__comet::after {
+  .avatar-frame--motion-paused .avatar-frame__comet::after,
+  .avatar-frame--motion-paused .avatar-frame__signature,
+  .avatar-frame--motion-paused .avatar-frame__signature::before,
+  .avatar-frame--motion-paused .avatar-frame__signature::after,
+  .avatar-frame--motion-paused .avatar-frame__signature-mark,
+  .avatar-frame--motion-paused .avatar-frame__signature-mark::before,
+  .avatar-frame--motion-paused .avatar-frame__signature-mark::after,
+  .avatar-frame--motion-paused .avatar-frame__dragon-crest,
+  .avatar-frame--motion-paused .avatar-frame__dragon-head,
+  .avatar-frame--motion-paused .avatar-frame__dragon-head::before,
+  .avatar-frame--motion-paused .avatar-frame__dragon-head::after {
     animation: none !important;
   }
 </style>

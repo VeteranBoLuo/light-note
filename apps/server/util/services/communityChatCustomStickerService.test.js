@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   assertPostingAllowed: vi.fn(),
   validateImage: vi.fn(),
   putObject: vi.fn(),
+  copyObject: vi.fn(),
   deleteObject: vi.fn(),
   createSignedUrl: vi.fn(),
 }));
@@ -39,6 +40,7 @@ vi.mock('./communityChatImageService.js', () => ({
 }));
 vi.mock('../obsClient.js', () => ({
   putObjectToObs: mocks.putObject,
+  copyObjectInObs: mocks.copyObject,
   deleteObjectFromObs: mocks.deleteObject,
   createDownloadSignedUrl: mocks.createSignedUrl,
 }));
@@ -48,6 +50,7 @@ const {
   getCommunityChatCustomStickerDownload,
   listCommunityChatCustomStickers,
   removeCommunityChatCustomSticker,
+  saveCommunityChatMessageSticker,
   uploadCommunityChatCustomSticker,
 } = await import('./communityChatCustomStickerService.js');
 
@@ -78,6 +81,7 @@ describe('communityChatCustomStickerService', () => {
       contentSha256: 'a'.repeat(64),
     });
     mocks.putObject.mockResolvedValue({});
+    mocks.copyObject.mockResolvedValue({});
     mocks.deleteObject.mockResolvedValue({});
     mocks.poolQuery.mockResolvedValue([{ affectedRows: 1 }, []]);
   });
@@ -200,6 +204,91 @@ describe('communityChatCustomStickerService', () => {
     expect(result).toMatchObject({ duplicate: true, sticker: { publicId: existing.publicId } });
     expect(mocks.putObject).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('收藏他人的自定义表情时由服务端复制对象并写入当前账号表情库', async () => {
+    const messagePublicId = '2deff89a-0ee2-4bc2-9751-3ef25ff66ab1';
+    const source = {
+      objectKey: 'community-chat-stickers/source-user/original.png',
+      contentSha256: 'c'.repeat(64),
+      contentType: 'image/png',
+      fileSize: 2048,
+      width: 360,
+      height: 300,
+      name: '收到啦',
+    };
+    mocks.poolQuery.mockResolvedValueOnce([[source], []]);
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([[], []])
+      .mockResolvedValueOnce([[{ activeCount: 2, maxSortOrder: 30 }], []])
+      .mockResolvedValueOnce([{ affectedRows: 1 }, []]);
+    const connection = connectionWithQuery(query);
+    mocks.getConnection.mockResolvedValue(connection);
+
+    const result = await saveCommunityChatMessageSticker({ user, messagePublicId });
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      restored: false,
+      sticker: { name: '收到啦', contentType: 'image/png', fileSize: 2048, width: 360, height: 300 },
+    });
+    expect(result.sticker.publicId).toMatch(/^[0-9a-f-]{36}$/i);
+    expect(mocks.copyObject).toHaveBeenCalledWith(
+      source.objectKey,
+      expect.stringMatching(/^community-chat-stickers\/[a-f0-9]{24}\/[0-9a-f-]{36}\.png$/i),
+    );
+    expect(mocks.copyObject.mock.calls[0][1]).not.toBe(source.objectKey);
+    expect(mocks.poolQuery.mock.calls[0][0]).toContain('message.user_id <> ?');
+    expect(mocks.poolQuery.mock.calls[1][0]).toContain("SET status = 'active'");
+  });
+
+  it('重复收藏同一内容时复用账号内已有表情，不重复复制对象', async () => {
+    const source = {
+      objectKey: 'community-chat-stickers/source-user/original.webp',
+      contentSha256: 'd'.repeat(64),
+      contentType: 'image/webp',
+      fileSize: 1024,
+      width: 240,
+      height: 240,
+      name: '',
+    };
+    const existing = {
+      publicId: 'd9fa2cc6-d314-4709-a37f-05937916842b',
+      objectKey: 'community-chat-stickers/current-user/existing.webp',
+      name: '',
+      contentType: 'image/webp',
+      fileSize: 1024,
+      width: 240,
+      height: 240,
+      status: 'active',
+      createdAt: '2026-08-13T10:00:00.000Z',
+    };
+    mocks.poolQuery.mockResolvedValueOnce([[source], []]);
+    const connection = connectionWithQuery(vi.fn().mockResolvedValueOnce([[existing], []]));
+    mocks.getConnection.mockResolvedValue(connection);
+
+    const result = await saveCommunityChatMessageSticker({
+      user,
+      messagePublicId: '2deff89a-0ee2-4bc2-9751-3ef25ff66ab1',
+    });
+
+    expect(result).toMatchObject({ duplicate: true, restored: false, sticker: { publicId: existing.publicId } });
+    expect(mocks.copyObject).not.toHaveBeenCalled();
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it('不可见、已删除或非他人自定义表情消息不能收藏', async () => {
+    mocks.poolQuery.mockResolvedValueOnce([[], []]);
+
+    await expect(
+      saveCommunityChatMessageSticker({
+        user,
+        messagePublicId: '2deff89a-0ee2-4bc2-9751-3ef25ff66ab1',
+      }),
+    ).rejects.toMatchObject({ code: 'CUSTOM_STICKER_MESSAGE_NOT_FOUND', status: 404 });
+    expect(mocks.getConnection).not.toHaveBeenCalled();
+    expect(mocks.copyObject).not.toHaveBeenCalled();
   });
 
   it('重新加入已移除表情时更新为最近顺序，刷新后仍排在最前', async () => {

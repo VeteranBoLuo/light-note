@@ -11,10 +11,13 @@ export const DRAWING_SCENE_LIMITS = Object.freeze({
 });
 export const DRAWING_PAGE = Object.freeze({ width: 1024, height: 1448 });
 export const DRAWING_COLORS = Object.freeze(['#1f2937', '#00a884', '#615ced', '#ec4899']);
+export const DRAWING_STROKE_WIDTH_RANGE = Object.freeze({ min: 1, max: 24 });
+export const DRAWING_FONT_SIZE_RANGE = Object.freeze({ min: 12, max: 72 });
 export const DRAWING_STROKE_WIDTHS = Object.freeze([2, 4, 7]);
 export const DRAWING_FONT_SIZES = Object.freeze([20, 28, 36]);
 
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
+const COLOR_PATTERN = /^#[0-9a-f]{6}$/iu;
 const MIN_COORDINATE = -4096;
 const MAX_COORDINATE = 8192;
 
@@ -44,9 +47,11 @@ function finiteCoordinate(value, field) {
   return Math.round(number * 100) / 100;
 }
 
-function allowedNumber(value, allowed, field) {
+function boundedInteger(value, range, field) {
   const number = Number(value);
-  if (!allowed.includes(number)) invalid('DRAWING_INVALID_STYLE', `${field} 不受支持`);
+  if (!Number.isInteger(number) || number < range.min || number > range.max) {
+    invalid('DRAWING_INVALID_STYLE', `${field} 不受支持`);
+  }
   return number;
 }
 
@@ -56,22 +61,26 @@ function normalizeElementId(value) {
   return id;
 }
 
+function normalizeColor(value) {
+  const color = String(value || '');
+  if (!COLOR_PATTERN.test(color)) invalid('DRAWING_INVALID_STYLE', '手绘颜色不受支持');
+  return color.toLowerCase();
+}
+
 function normalizeStroke(element) {
-  if (!DRAWING_COLORS.includes(element.color)) invalid('DRAWING_INVALID_STYLE', '画笔颜色不受支持');
   if (!Array.isArray(element.points) || element.points.length < 2 || element.points.length % 2 !== 0) {
     invalid('DRAWING_INVALID_POINTS', '画笔轨迹坐标无效');
   }
   return {
     id: normalizeElementId(element.id),
     kind: 'stroke',
-    color: element.color,
-    width: allowedNumber(element.width, DRAWING_STROKE_WIDTHS, '画笔宽度'),
+    color: normalizeColor(element.color),
+    width: boundedInteger(element.width, DRAWING_STROKE_WIDTH_RANGE, '画笔宽度'),
     points: element.points.map((point, index) => finiteCoordinate(point, `points[${index}]`)),
   };
 }
 
 function normalizeText(element) {
-  if (!DRAWING_COLORS.includes(element.color)) invalid('DRAWING_INVALID_STYLE', '文本颜色不受支持');
   const text = String(element.text ?? '');
   if (!text || text.length > DRAWING_SCENE_LIMITS.maxTextElementCharacters) {
     invalid('DRAWING_INVALID_TEXT', '文本内容为空或过长');
@@ -82,8 +91,8 @@ function normalizeText(element) {
     x: finiteCoordinate(element.x, 'x'),
     y: finiteCoordinate(element.y, 'y'),
     width: Math.max(40, finiteCoordinate(element.width, 'width')),
-    fontSize: allowedNumber(element.fontSize, DRAWING_FONT_SIZES, '文字大小'),
-    color: element.color,
+    fontSize: boundedInteger(element.fontSize, DRAWING_FONT_SIZE_RANGE, '文字大小'),
+    color: normalizeColor(element.color),
     text,
   };
 }

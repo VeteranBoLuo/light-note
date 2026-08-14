@@ -360,6 +360,9 @@ export const markCommunityChatRoomRead = (roomSlug: string, lastMessagePublicId?
 
 const messagePath = (messagePublicId: string) => `/api/community-chat/messages/${encodeURIComponent(messagePublicId)}`;
 
+export const saveCommunityChatMessageSticker = (messagePublicId: string) =>
+  apiBasePost(`${messagePath(messagePublicId)}/save-sticker`, {}, { silent: true });
+
 export const toggleCommunityChatMessageLike = (messagePublicId: string) =>
   apiBasePut(`${messagePath(messagePublicId)}/like`, {}, { silent: true });
 

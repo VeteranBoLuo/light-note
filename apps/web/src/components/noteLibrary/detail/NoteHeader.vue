@@ -264,6 +264,7 @@
     'movePage',
     'retrySave',
     'toggleInbox',
+    'exportDrawing',
   ]);
 
   const bookmark = bookmarkStore();
@@ -582,14 +583,12 @@
       });
     }
 
-    // 导出与 readonly 无关(桌面端同样不受限):只读笔记也允许导出留档
-    if (props.noteType !== 'drawing') {
-      options.push({
-        key: 'export',
-        label: t('noteDetail.export'),
-        icon: icon.noteDetail.exportLine,
-      });
-    }
+    // 导出与 readonly 无关：只读笔记同样允许留档，手绘也统一从页面“更多”进入。
+    options.push({
+      key: 'export',
+      label: t('noteDetail.export'),
+      icon: icon.noteDetail.exportLine,
+    });
 
     if (!props.readonly) {
       options.push({
@@ -665,7 +664,7 @@
         function: () => emit('manageTemplates'),
       });
     }
-    if (!bookmark.isDesktop && props.noteType !== 'drawing') {
+    if (props.noteType === 'drawing' || !bookmark.isDesktop) {
       options.push({
         label: t('noteDetail.export'),
         icon: icon.noteDetail.exportLine,
@@ -810,26 +809,48 @@
     {
       key: 'export',
       title: '',
-      actions: [
-        {
-          key: 'pdf',
-          label: t('noteDetail.exportAsPdf'),
-          description: t('noteDetail.exportAsPdfDesc'),
-          onClick: exportToPDF,
-        },
-        {
-          key: 'html',
-          label: t('noteDetail.exportAsHtml'),
-          description: t('noteDetail.exportAsHtmlDesc'),
-          onClick: exportToHTML,
-        },
-        {
-          key: 'markdown',
-          label: t('noteDetail.exportAsMd'),
-          description: t('noteDetail.exportAsMdDesc'),
-          onClick: exportToMarkdown,
-        },
-      ],
+      actions:
+        props.noteType === 'drawing'
+          ? [
+              {
+                key: 'png',
+                label: t('note.drawingExportPng'),
+                description: t('note.drawingExportPngDesc'),
+                onClick: () => {
+                  exportModalVisible.value = false;
+                  emit('exportDrawing', 'png');
+                },
+              },
+              {
+                key: 'json',
+                label: t('note.drawingExportJson'),
+                description: t('note.drawingExportJsonDesc'),
+                onClick: () => {
+                  exportModalVisible.value = false;
+                  emit('exportDrawing', 'json');
+                },
+              },
+            ]
+          : [
+              {
+                key: 'pdf',
+                label: t('noteDetail.exportAsPdf'),
+                description: t('noteDetail.exportAsPdfDesc'),
+                onClick: exportToPDF,
+              },
+              {
+                key: 'html',
+                label: t('noteDetail.exportAsHtml'),
+                description: t('noteDetail.exportAsHtmlDesc'),
+                onClick: exportToHTML,
+              },
+              {
+                key: 'markdown',
+                label: t('noteDetail.exportAsMd'),
+                description: t('noteDetail.exportAsMdDesc'),
+                onClick: exportToMarkdown,
+              },
+            ],
     },
   ]);
 </script>

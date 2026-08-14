@@ -23,6 +23,7 @@
             {{ nameOf(c.key) }}
             <span class="wc-target">{{ c.cur }}/{{ c.target }}</span>
           </div>
+          <div v-if="descriptionOf(c.key)" class="wc-description">{{ descriptionOf(c.key) }}</div>
           <div class="wc-bar"><div class="wc-fill" :style="{ width: pct(c) + '%' }"></div></div>
         </div>
         <div class="wc-action">
@@ -93,6 +94,10 @@
   function nameOf(key: string) {
     const k = 'growth.weeklyName.' + key;
     return te(k) ? t(k) : key;
+  }
+  function descriptionOf(key: string) {
+    const k = 'growth.weeklyDescription.' + key;
+    return te(k) ? t(k) : '';
   }
   function pct(c: WeeklyChallenge) {
     return c.target ? Math.min(100, Math.round((c.cur / c.target) * 100)) : 0;
@@ -214,6 +219,11 @@
     font-size: 11.5px;
     color: var(--desc-color);
     font-variant-numeric: tabular-nums;
+  }
+  .wc-description {
+    color: var(--desc-color);
+    font-size: 11.5px;
+    line-height: 1.4;
   }
   .wc-bar {
     height: 5px;

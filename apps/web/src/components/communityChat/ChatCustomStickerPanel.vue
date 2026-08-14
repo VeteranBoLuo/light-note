@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue';
+  import { onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     getCommunityChatCustomStickers,
@@ -80,7 +80,10 @@
   import icon from '@/config/icon';
   import { prepareCommunityChatSticker } from '@/utils/prepareCommunityChatSticker';
 
-  withDefaults(defineProps<{ embedded?: boolean }>(), { embedded: false });
+  const props = withDefaults(defineProps<{ embedded?: boolean; refreshKey?: number }>(), {
+    embedded: false,
+    refreshKey: 0,
+  });
   const emit = defineEmits<{ select: [publicId: string] }>();
   const { t } = useI18n();
   const items = ref<CommunityChatCustomSticker[]>([]);
@@ -194,6 +197,12 @@
   }
 
   onMounted(load);
+  watch(
+    () => props.refreshKey,
+    (next, previous) => {
+      if (next !== previous) void load();
+    },
+  );
 </script>
 
 <style scoped lang="less">

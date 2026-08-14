@@ -58,7 +58,13 @@ const OVERDUE = {
 
 let cleanup: (() => void) | undefined;
 
-async function mountSection(todos: Record<string, unknown>[]) {
+interface MountSectionOptions {
+  contained?: boolean;
+  inboxItems?: Array<{ resourceType: 'note'; resourceId: string; title: string; collectedAt: string }>;
+  inboxTotal?: number;
+}
+
+async function mountSection(todos: Record<string, unknown>[], options: MountSectionOptions = {}) {
   const host = document.createElement('div');
   document.body.append(host);
   const app = createApp({
@@ -66,7 +72,9 @@ async function mountSection(todos: Record<string, unknown>[]) {
       h(TodayActionSection, {
         overdueTodos: todos,
         dueTodayTodos: [],
-        inboxItems: [],
+        inboxItems: options.inboxItems || [],
+        inboxTotal: options.inboxTotal,
+        contained: options.contained,
       }),
   });
   app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
@@ -77,6 +85,15 @@ async function mountSection(todos: Record<string, unknown>[]) {
     host.remove();
   };
   return host;
+}
+
+function inboxItems(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    resourceType: 'note' as const,
+    resourceId: `note-${index + 1}`,
+    title: `待整理笔记 ${index + 1}`,
+    collectedAt: '2026-08-14 10:00',
+  }));
 }
 
 /** 取这一行的推迟按钮：普通待办叫「明天再看」，重复待办叫「推迟提醒」 */
@@ -220,5 +237,39 @@ describe('工作台今日待办 · 明天再看', () => {
     expect(error).toHaveBeenCalled();
     expect(success).not.toHaveBeenCalled();
     expect(host.querySelectorAll('.today-action-row').length).toBe(1);
+  });
+});
+
+describe('桌面工作台行动摘要布局', () => {
+  it('待办与待整理同时存在时总共只展示五条，并为待整理保留位置', async () => {
+    const host = await mountSection(
+      Array.from({ length: 6 }, (_, index) => ({ ...OVERDUE, id: `todo-${index + 1}`, title: `待办 ${index + 1}` })),
+      { contained: true, inboxItems: inboxItems(5), inboxTotal: 8 },
+    );
+    const groups = host.querySelectorAll('.today-actions__group');
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].querySelectorAll('.today-action-row')).toHaveLength(4);
+    expect(groups[1].querySelectorAll('.today-action-row')).toHaveLength(1);
+    expect(host.querySelectorAll('.today-action-row')).toHaveLength(5);
+    expect(groups[1].querySelector('.today-actions__group-head span')?.textContent).toBe('8');
+  });
+
+  it('只有一条待办时用四条待整理补满摘要预算', async () => {
+    const host = await mountSection([OVERDUE], { contained: true, inboxItems: inboxItems(5) });
+    const groups = host.querySelectorAll('.today-actions__group');
+
+    expect(groups[0].querySelectorAll('.today-action-row')).toHaveLength(1);
+    expect(groups[1].querySelectorAll('.today-action-row')).toHaveLength(4);
+    expect(host.querySelectorAll('.today-action-row')).toHaveLength(5);
+  });
+
+  it('移动端非 contained 模式继续展示接口返回的全部明细', async () => {
+    const host = await mountSection(
+      Array.from({ length: 6 }, (_, index) => ({ ...OVERDUE, id: `todo-${index + 1}` })),
+      { inboxItems: inboxItems(5) },
+    );
+
+    expect(host.querySelectorAll('.today-action-row')).toHaveLength(11);
   });
 });

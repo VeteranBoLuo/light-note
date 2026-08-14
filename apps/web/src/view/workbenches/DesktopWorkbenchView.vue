@@ -115,8 +115,8 @@
 
             <BTabs v-model:active-tab="activeContinueTab" variant="pill" :options="continueTabOptions" />
 
-            <div v-if="summaryLoading" class="content-list content-list--loading">
-              <div v-for="index in 5" :key="`content-skeleton-${index}`" class="content-skeleton-row">
+            <div v-if="summaryLoading" class="content-list content-list--loading content-list--distributed">
+              <div v-for="index in CONTINUE_ITEM_LIMIT" :key="`content-skeleton-${index}`" class="content-skeleton-row">
                 <span class="skeleton-block skeleton-row-icon"></span>
                 <span class="content-skeleton-copy">
                   <span class="skeleton-block content-skeleton-title"></span>
@@ -125,7 +125,11 @@
                 <span class="skeleton-block skeleton-row-meta"></span>
               </div>
             </div>
-            <div v-else-if="activeContinueItems.length" class="content-list">
+            <div
+              v-else-if="activeContinueItems.length"
+              class="content-list"
+              :class="{ 'content-list--distributed': activeContinueItems.length === CONTINUE_ITEM_LIMIT }"
+            >
               <BButton
                 v-for="item in activeContinueItems"
                 :key="item.key"
@@ -636,6 +640,7 @@
     },
   ]);
 
+  const CONTINUE_ITEM_LIMIT = 5;
   const continueTabOptions = computed(() => [
     { key: 'notes', label: t('workbench.tabs.recentNotes'), badge: recentNoteTable.value.length },
     { key: 'files', label: t('workbench.tabs.recentFiles'), badge: recentFileTable.value.length },
@@ -644,7 +649,7 @@
 
   const activeContinueItems = computed<ContinueItem[]>(() => {
     if (activeContinueTab.value === 'files') {
-      return recentFileTable.value.slice(0, 5).map((file) => ({
+      return recentFileTable.value.slice(0, CONTINUE_ITEM_LIMIT).map((file) => ({
         key: `file-${file.id || file.fileName}`,
         type: 'file',
         title: file.fileName || t('workbench.table.fileName'),
@@ -655,7 +660,7 @@
       }));
     }
     if (activeContinueTab.value === 'bookmarks') {
-      return commonBookmarkTable.value.slice(0, 5).map((bookmark) => ({
+      return commonBookmarkTable.value.slice(0, CONTINUE_ITEM_LIMIT).map((bookmark) => ({
         key: `bookmark-${bookmark.id || bookmark.name}`,
         type: 'bookmark',
         title: bookmark.name || t('workbench.table.bookmark'),
@@ -665,7 +670,7 @@
         raw: bookmark,
       }));
     }
-    return recentNoteTable.value.slice(0, 5).map((note) => ({
+    return recentNoteTable.value.slice(0, CONTINUE_ITEM_LIMIT).map((note) => ({
       key: `note-${note.id || note.title}`,
       type: 'note',
       title: note.title || t('noteDetail.unnamedDoc'),
@@ -1270,7 +1275,7 @@
 
   .today-summary-details {
     min-width: 0;
-    height: var(--today-work-area-height);
+    min-height: var(--today-work-area-height);
     display: flex;
   }
 
@@ -1280,7 +1285,7 @@
 
   .today-continue {
     min-width: 0;
-    height: var(--today-work-area-height);
+    min-height: var(--today-work-area-height);
     padding: 8px 10px;
     box-sizing: border-box;
     display: flex;
@@ -1869,6 +1874,13 @@
     background: transparent;
   }
 
+  .content-list--distributed > .content-row,
+  .content-list--distributed > .content-skeleton-row {
+    min-height: 38px;
+    height: auto;
+    flex: 1 1 0;
+  }
+
   .content-row:hover {
     background: color-mix(in srgb, var(--primary-color) 6%, var(--menu-body-bg-color));
   }
@@ -2361,12 +2373,6 @@
 
     .today-summary-body {
       --today-work-area-height: 280px;
-    }
-
-    .today-summary-details,
-    .today-continue {
-      height: auto;
-      min-height: var(--today-work-area-height);
     }
   }
 

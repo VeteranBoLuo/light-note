@@ -10,6 +10,7 @@ const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue
 const desktopMyInfoSource = source('src/components/personCenter/myInfo/MyInfo.vue');
 const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
+const iconSource = source('src/config/icon.ts');
 const pointsShopSource = source('src/components/growth/PointsShop.vue');
 const achievementWallSource = source('src/components/growth/AchievementWall.vue');
 const growthPageSource = source('src/view/growth/GrowthPage.vue');
@@ -125,6 +126,22 @@ describe('mobile personal center experience', () => {
     const noteMasterpieceSection = section('/* 文心长河：', '/* 云阙宝库：');
     const fileVaultSection = section('/* 云阙宝库：', '/* 翰墨星海：');
     const streakMonthSection = section('/* 月华渐盈：', '/* 岁序长明：');
+    const identityVariantSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('const FRAME_IDENTITY_VARIANTS ='),
+      avatarFrameSource.indexOf('const props', avatarFrameSource.indexOf('const FRAME_IDENTITY_VARIANTS =')),
+    );
+    const identityStyleSection = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('/* 高阶传说身份结构：'),
+      avatarFrameSource.indexOf('@keyframes frame-premium-orbit'),
+    );
+    const dragonBodyMotionSection = identityStyleSection.slice(
+      identityStyleSection.indexOf('@keyframes frame-dragon-body-breathe'),
+      identityStyleSection.indexOf('@keyframes frame-dragon-scale-sweep'),
+    );
+    const dragonHeadMotionSection = identityStyleSection.slice(
+      identityStyleSection.indexOf('@keyframes frame-dragon-head-awaken'),
+      identityStyleSection.indexOf('@keyframes frame-dragon-pearl'),
+    );
 
     expect(paidBasicSection).not.toContain('animation:');
     expect(freeAdvancedSection).not.toContain('animation:');
@@ -156,6 +173,57 @@ describe('mobile personal center experience', () => {
     expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__motif::before');
     expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__orbit::before');
     expect(galaxySection).toContain('animation: frame-galaxy-comet');
+
+    expect(avatarFrameSource).toContain('<span v-if="hasFrameIdentity" class="avatar-frame__signature"');
+    expect(avatarFrameSource).toContain('<span class="avatar-frame__signature-mark"></span>');
+    expect(avatarFrameSource).toContain("import icon from '@/config/icon'");
+    expect(identityVariantSection).toContain("new Set(['dragon'])");
+    expect(identityVariantSection).not.toContain("'galaxy'");
+    expect(identityVariantSection).not.toContain("'neon'");
+    expect(identityVariantSection).not.toContain("'celestial'");
+    expect(identityVariantSection).not.toContain("'bookmark-archive'");
+    expect(identityVariantSection).not.toContain("'note-constellation'");
+    expect(identityVariantSection).not.toContain("'file-constellation'");
+    expect(identityVariantSection).not.toContain("'streak-eternal'");
+    expect(identityStyleSection).not.toContain('frame-signature-orbit');
+    expect(identityStyleSection).not.toContain('frame-dragon-guardian');
+    expect(avatarFrameSource).toContain(':src="icon.avatarFrame.dragonCrest"');
+    expect(avatarFrameSource).toContain(':src="icon.avatarFrame.dragonHead"');
+    expect(avatarFrameSource).toContain('const FRAME_DRAGON_ART_SIZE = 96');
+    expect(avatarFrameSource.match(/:size="FRAME_DRAGON_ART_SIZE"/g)).toHaveLength(2);
+    expect(iconSource.match(/viewBox="-6 -6 132 132"/g)).toHaveLength(2);
+    expect(avatarFrameSource.indexOf('class="avatar-frame__dragon-head"')).toBeGreaterThan(
+      avatarFrameSource.indexOf('class="avatar-frame__portrait"'),
+    );
+    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-crest');
+    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head');
+    expect(identityStyleSection).toMatch(
+      /\.avatar-frame--dragon \.avatar-frame__dragon-head\s*\{[\s\S]*?z-index:\s*3;/,
+    );
+    expect(identityStyleSection).toContain('animation: frame-dragon-body-breathe');
+    expect(identityStyleSection).toContain('animation: frame-dragon-head-awaken');
+    expect(identityStyleSection).toContain('animation: frame-dragon-pearl');
+    expect(identityStyleSection).toContain('animation: frame-dragon-eye-flash');
+    expect(identityStyleSection).toContain('animation: frame-dragon-breath-spark');
+    expect(identityStyleSection).toContain('animation: frame-dragon-scale-sweep 6.4s');
+    expect(identityStyleSection.match(/transform-origin: 50% 55%/g)).toHaveLength(2);
+    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__portrait::after');
+    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::before');
+    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::after');
+    expect(dragonBodyMotionSection).toContain('rotate(7deg)');
+    expect(dragonBodyMotionSection).toContain('rotate(-3deg)');
+    expect(dragonHeadMotionSection).toContain('rotate(7deg)');
+    expect(dragonHeadMotionSection).toContain('rotate(-3deg)');
+    expect(iconSource.match(/dragonHead:[\s\S]*?(?=\n\s*},)/)?.[0]).not.toContain('<linearGradient');
+    expect(iconSource.match(/dragonHead:[\s\S]*?(?=\n\s*},)/)?.[0]).toContain('stroke-width="2.9"');
+    expect(identityStyleSection).not.toContain('.avatar-frame--celestial');
+    expect(identityStyleSection).not.toContain('.avatar-frame--bookmark-archive');
+    expect(identityStyleSection).not.toContain('.avatar-frame--note-constellation');
+    expect(identityStyleSection).not.toContain('.avatar-frame--file-constellation');
+    expect(identityStyleSection).not.toContain('.avatar-frame--streak-eternal');
+    expect(avatarFrameSource).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__dragon-crest[\s\S]*?animation:\s*none !important;/,
+    );
 
     for (const freeColorfulSection of [noteMasterpieceSection, fileVaultSection, streakMonthSection]) {
       expect(freeColorfulSection.match(/animation:/g)).toHaveLength(2);

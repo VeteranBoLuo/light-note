@@ -1,6 +1,9 @@
-export type DrawingColor = '#1f2937' | '#00a884' | '#615ced' | '#ec4899';
-export type DrawingStrokeWidth = 2 | 4 | 7;
-export type DrawingFontSize = 20 | 28 | 36;
+/** 经过协议校验的六位十六进制颜色（例如 #1f2937）。 */
+export type DrawingColor = string;
+/** 协议允许范围内的整数画笔宽度。 */
+export type DrawingStrokeWidth = number;
+/** 协议允许范围内的整数文字字号。 */
+export type DrawingFontSize = number;
 
 export interface DrawingStrokeElement {
   id: string;
@@ -42,7 +45,11 @@ export declare const DRAWING_SCENE_LIMITS: Readonly<{
 }>;
 export declare const DRAWING_PAGE: Readonly<{ width: 1024; height: 1448 }>;
 export declare const DRAWING_COLORS: readonly DrawingColor[];
+export declare const DRAWING_STROKE_WIDTH_RANGE: Readonly<{ min: 1; max: 24 }>;
+export declare const DRAWING_FONT_SIZE_RANGE: Readonly<{ min: 12; max: 72 }>;
+/** 常用画笔宽度快捷值；不是协议允许值全集。 */
 export declare const DRAWING_STROKE_WIDTHS: readonly DrawingStrokeWidth[];
+/** 常用文字字号快捷值；不是协议允许值全集。 */
 export declare const DRAWING_FONT_SIZES: readonly DrawingFontSize[];
 
 export declare class DrawingSceneValidationError extends Error {

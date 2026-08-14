@@ -30,6 +30,7 @@
         @attach-pages="openAttachPages"
         @move-page="openMoveSelf"
         @toggle-inbox="toggleNoteInbox"
+        @export-drawing="exportDrawingNote"
       />
       <NoteWorkspaceShell
         class="note-body"
@@ -387,6 +388,12 @@
   const DrawingNoteEditor = createDeferredDetailFeature(
     () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
   );
+
+  function exportDrawingNote(format: 'png' | 'json') {
+    const editor = editorRef.value as { exportPng?: () => Promise<void>; exportJson?: () => Promise<void> } | null;
+    if (format === 'png') void editor?.exportPng?.();
+    else void editor?.exportJson?.();
+  }
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下

@@ -59,6 +59,7 @@ import {
   getCommunityChatCustomStickerDownload,
   listCommunityChatCustomStickers,
   removeCommunityChatCustomSticker,
+  saveCommunityChatMessageSticker,
   uploadCommunityChatCustomSticker,
 } from '../util/services/communityChatCustomStickerService.js';
 
@@ -325,6 +326,24 @@ export async function removeCustomSticker(req, res) {
       stickerPublicId: req.params?.publicId,
     });
     return res.send(resultData(data, 200, L(req, '表情已从个人表情库移除', 'Sticker removed from your library')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function saveMessageSticker(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await saveCommunityChatMessageSticker({
+      user: req.user,
+      messagePublicId: req.params?.publicId,
+    });
+    try {
+      await recordServerOperation(req, { module: '公共聊天室', operation: '收藏聊天表情' });
+    } catch (error) {
+      console.error('[社区客厅] 收藏表情操作日志写入失败 code=%s', stableAgentErrorCode(error));
+    }
+    return res.send(resultData(data, 200, L(req, '表情已收藏', 'Sticker saved')));
   } catch (error) {
     return sendError(req, res, error);
   }

@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   getCustomStickers: vi.fn(),
   uploadCustomSticker: vi.fn(),
   removeCustomSticker: vi.fn(),
+  saveMessageSticker: vi.fn(),
   prepareSticker: vi.fn(),
   reportMessage: vi.fn(),
   toggleLike: vi.fn(),
@@ -70,6 +71,7 @@ vi.mock('@/api/communityChatApi', () => ({
   getCommunityChatCustomStickers: mocks.getCustomStickers,
   uploadCommunityChatCustomSticker: mocks.uploadCustomSticker,
   removeCommunityChatCustomSticker: mocks.removeCustomSticker,
+  saveCommunityChatMessageSticker: mocks.saveMessageSticker,
   reportCommunityChatMessage: mocks.reportMessage,
   toggleCommunityChatMessageLike: mocks.toggleLike,
   recallCommunityChatMessage: mocks.recallMessage,
@@ -310,6 +312,7 @@ beforeEach(() => {
   mocks.prepareSticker.mockImplementation(async (file: File) => ({ file, compressed: false }));
   mocks.uploadCustomSticker.mockResolvedValue({ status: 200, data: {} });
   mocks.removeCustomSticker.mockResolvedValue({ status: 200, data: { removed: true } });
+  mocks.saveMessageSticker.mockResolvedValue({ status: 200, data: { duplicate: false, restored: false } });
   mocks.reportMessage.mockResolvedValue({ status: 200, data: { id: 'report-1', status: 'pending' } });
   mocks.toggleLike.mockResolvedValue({
     status: 200,
@@ -1427,6 +1430,11 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.scrollIntoContainer).toHaveBeenCalledTimes(1);
     expect(mocks.getMessages).not.toHaveBeenCalled();
 
+    // 首屏自动贴底每 120ms 检查一次。明确跳转后即使没有手动滚动，也不能被下一轮检查抢回底部。
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 180));
+    await flushAsync();
+    expect(messageList.scrollTop).toBe(80);
+
     host.querySelector<HTMLImageElement>('.community-message__image img')?.dispatchEvent(new Event('load'));
     await flushAnimationFrame();
     expect(messageList.scrollTop).toBe(80);
@@ -1838,6 +1846,16 @@ describe('CommunityChatWorkspace', () => {
     expect(workspaceSource).toContain('animation-play-state: paused !important;');
     expect(workspaceSource).toContain(':deep(.avatar-frame--celestial .avatar-frame__ring),');
     expect(workspaceSource).not.toContain(':deep(.avatar-frame--celestial .avatar-frame__ring::before),');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame--celestial .avatar-frame__signature::after),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame--dragon .avatar-frame__ring),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame--dragon .avatar-frame__signature),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame--dragon .avatar-frame__signature-mark),');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame--dragon .avatar-frame__dragon-crest),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame--dragon .avatar-frame__dragon-head::before),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame--dragon .avatar-frame__dragon-head::after),');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame--dragon .avatar-frame__dragon-head),');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame--bookmark-archive .avatar-frame__ring),');
+    expect(workspaceSource).not.toContain(':deep(.avatar-frame--bookmark-archive .avatar-frame__signature::before),');
     expect(workspaceSource).not.toContain('content-visibility: auto;');
     expect(workspaceSource).not.toContain('contain: layout style;');
     expect(workspaceSource).toMatch(/\.community-message__avatar\s*\{[\s\S]*?overflow:\s*visible\s*!important;/u);
@@ -2039,6 +2057,17 @@ describe('CommunityChatWorkspace', () => {
     expect(workspaceSource).toContain('overlay-class-name="community-composer__expression-popover"');
     expect(workspaceSource).toMatch(
       /\.community-composer__expression-popover\)\s*\{[\s\S]*?width:\s*360px;[\s\S]*?max-width:\s*calc\(100% - 16px\);[\s\S]*?box-sizing:\s*border-box;/u,
+    );
+  });
+
+  it('他人的自定义表情可从统一操作菜单收藏，纯表情操作栏锚定表情中部', () => {
+    expect(workspaceSource).toContain("key: 'save-sticker'");
+    expect(workspaceSource).toContain("chatMessage.messageKind === 'sticker'");
+    expect(workspaceSource).toContain("chatMessage.stickerSource === 'custom'");
+    expect(workspaceSource).toContain("action === 'save-sticker'");
+    expect(workspaceSource).toContain("'is-sticker-only': messageIsStickerOnly(chatMessage)");
+    expect(workspaceSource).toMatch(
+      /\.community-message__primary\.is-sticker-only\s*\{[\s\S]*?align-items:\s*center;/u,
     );
   });
 

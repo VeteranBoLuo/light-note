@@ -123,6 +123,7 @@ router.post('/messages/:publicId/pin', governanceWriteLimiter, handle.pinMessage
 router.post('/messages/:publicId/unpin', governanceWriteLimiter, handle.unpinMessage);
 router.post('/messages/:publicId/recall', governanceWriteLimiter, handle.recallMessage);
 router.post('/messages/:publicId/delete', governanceWriteLimiter, handle.deleteMessage);
+router.post('/messages/:publicId/save-sticker', imageWriteLimiter, handle.saveMessageSticker);
 router.post('/messages/:publicId/report', governanceWriteLimiter, handle.reportMessage);
 router.post('/messages/:publicId/block-author', governanceWriteLimiter, handle.blockMessageAuthor);
 router.get('/images/:publicId', handle.image);

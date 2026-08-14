@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import pool from '../../db/index.js';
 import { stableAgentErrorCode } from '../agent/logSafety.js';
-import { createDownloadSignedUrl, deleteObjectFromObs, putObjectToObs } from '../obsClient.js';
+import { copyObjectInObs, createDownloadSignedUrl, deleteObjectFromObs, putObjectToObs } from '../obsClient.js';
 import {
   CommunityChatError,
   assertCommunityChatMessagingAccess,
@@ -55,6 +55,18 @@ function normalizeName(value) {
 
 function ownerObjectSegment(userId) {
   return createHash('sha256').update(String(userId)).digest('hex').slice(0, 24);
+}
+
+function extensionForContentType(contentType) {
+  if (contentType === 'image/jpeg') return 'jpg';
+  if (contentType === 'image/png') return 'png';
+  if (contentType === 'image/webp') return 'webp';
+  throw chatError(
+    'CUSTOM_STICKER_CONTENT_TYPE_INVALID',
+    400,
+    '这个表情的图片格式暂不支持收藏',
+    'This sticker image format cannot be saved',
+  );
 }
 
 function publicSticker(row) {
@@ -272,6 +284,177 @@ export async function uploadCommunityChatCustomSticker({
     }
   } finally {
     if (file?.path) await fs.unlink(file.path).catch(() => {});
+  }
+}
+
+export async function saveCommunityChatMessageSticker({
+  user,
+  messagePublicId,
+  env = process.env,
+  db = pool,
+  copyObject = copyObjectInObs,
+  deleteObject = deleteObjectFromObs,
+}) {
+  assertRegisteredUser(user);
+  await assertCommunityChatMessagingAccess({ user, env, db });
+  await assertCommunityChatPostingAllowed({ user, db });
+  const normalizedMessagePublicId = normalizePublicId(messagePublicId);
+  const source = await queryFirst(
+    db,
+    `SELECT sticker.object_key AS objectKey, sticker.content_sha256 AS contentSha256,
+            sticker.content_type AS contentType, sticker.file_size AS fileSize,
+            sticker.width, sticker.height, sticker.name
+       FROM community_chat_messages message
+       JOIN community_chat_rooms room ON room.id = message.room_id AND room.status = 'active'
+       JOIN community_chat_custom_stickers sticker ON sticker.public_id = message.sticker_key
+      WHERE message.public_id = ?
+        AND message.user_id <> ?
+        AND message.status = 'active'
+        AND message.message_kind = 'sticker'
+        AND message.sticker_source = 'custom'
+        AND sticker.status IN ('active', 'removed')
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_message_deletions deletion
+           WHERE deletion.user_id = ? AND deletion.message_id = message.id
+        )
+      LIMIT 1`,
+    [normalizedMessagePublicId, user.id, user.id, user.id],
+  );
+  if (!source) {
+    throw chatError(
+      'CUSTOM_STICKER_MESSAGE_NOT_FOUND',
+      404,
+      '这个表情不存在或当前不可收藏',
+      'This sticker is unavailable or cannot be saved',
+    );
+  }
+
+  const connection = await db.getConnection();
+  let record = null;
+  try {
+    await connection.beginTransaction();
+    const existing = await queryFirst(
+      connection,
+      `SELECT public_id AS publicId, object_key AS objectKey, name,
+              content_type AS contentType, file_size AS fileSize, width, height,
+              status, sort_order AS sortOrder, create_time AS createdAt
+         FROM community_chat_custom_stickers
+        WHERE user_id = ? AND content_sha256 = ?
+        LIMIT 1 FOR UPDATE`,
+      [user.id, source.contentSha256],
+    );
+    if (existing?.status === 'active') {
+      await connection.commit();
+      return { sticker: publicSticker(existing), duplicate: true, restored: false };
+    }
+
+    const summary = await queryFirst(
+      connection,
+      `SELECT COUNT(*) AS activeCount, COALESCE(MAX(sort_order), 0) AS maxSortOrder
+         FROM community_chat_custom_stickers
+        WHERE user_id = ? AND status = 'active'
+        FOR UPDATE`,
+      [user.id],
+    );
+    if (Number(summary?.activeCount || 0) >= COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT) {
+      throw chatError(
+        'CUSTOM_STICKER_LIMIT_REACHED',
+        409,
+        `个人表情最多保存 ${COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT} 个`,
+        `You can save up to ${COMMUNITY_CHAT_CUSTOM_STICKER_MAX_COUNT} custom stickers`,
+      );
+    }
+    const sortOrder = Number(summary?.maxSortOrder || 0) + 10;
+    if (existing?.status === 'removed') {
+      await connection.query(
+        `UPDATE community_chat_custom_stickers
+            SET status = 'active', sort_order = ?, update_time = CURRENT_TIMESTAMP
+          WHERE public_id = ? AND user_id = ?`,
+        [sortOrder, existing.publicId, user.id],
+      );
+      await connection.commit();
+      return {
+        sticker: publicSticker({ ...existing, status: 'active' }),
+        duplicate: true,
+        restored: true,
+      };
+    }
+    if (existing) {
+      throw chatError(
+        'CUSTOM_STICKER_UPLOAD_IN_PROGRESS',
+        409,
+        '相同表情正在上传或清理，请稍后重试',
+        'An identical sticker is being uploaded or cleaned up. Try again later.',
+      );
+    }
+
+    const publicId = randomUUID();
+    const extension = extensionForContentType(source.contentType);
+    const objectKey = `community-chat-stickers/${ownerObjectSegment(user.id)}/${publicId}.${extension}`;
+    await connection.query(
+      `INSERT INTO community_chat_custom_stickers
+         (public_id, user_id, object_key, content_sha256, content_type, file_size,
+          width, height, name, status, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'uploading', ?)`,
+      [
+        publicId,
+        user.id,
+        objectKey,
+        source.contentSha256,
+        source.contentType,
+        source.fileSize,
+        source.width,
+        source.height,
+        source.name || '',
+        sortOrder,
+      ],
+    );
+    await connection.commit();
+    record = { ...source, publicId, objectKey, createdAt: new Date().toISOString() };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  try {
+    await copyObject(source.objectKey, record.objectKey);
+    const [updated] = await db.query(
+      `UPDATE community_chat_custom_stickers
+          SET status = 'active'
+        WHERE public_id = ? AND user_id = ? AND status = 'uploading'`,
+      [record.publicId, user.id],
+    );
+    if (Number(updated?.affectedRows || 0) !== 1) {
+      throw chatError(
+        'CUSTOM_STICKER_UPLOAD_STATE_INVALID',
+        409,
+        '表情收藏状态已失效，请重试',
+        'The sticker save state expired. Try again.',
+      );
+    }
+    return { sticker: publicSticker(record), duplicate: false, restored: false };
+  } catch (error) {
+    await db.query(
+      `UPDATE community_chat_custom_stickers
+          SET status = 'delete_pending'
+        WHERE public_id = ? AND status IN ('uploading', 'active')`,
+      [record.publicId],
+    );
+    try {
+      await deleteObject(record.objectKey);
+      await db.query(`DELETE FROM community_chat_custom_stickers WHERE public_id = ? AND status = 'delete_pending'`, [
+        record.publicId,
+      ]);
+    } catch {
+      // 权威记录保留为 delete_pending，交给后续清理任务重试。
+    }
+    throw error;
   }
 }
 

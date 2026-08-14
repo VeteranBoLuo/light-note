@@ -19,7 +19,9 @@ describe('CloudStorageBar compact layout', () => {
   });
 
   it('uses an explicit visible dark-theme track and no card-like hover background', () => {
-    expect(source).toMatch(/\[data-theme='night'\][\s\S]*?\.storage-bar\s*\{[\s\S]*?background:\s*#5d6677;/);
+    expect(source).toMatch(
+      /:global\(\[data-theme='night'\] \.storage-usage \.storage-bar\)\s*\{[\s\S]*?background:\s*#5d6677;/,
+    );
     expect(source).toMatch(/&:hover\s*\{\s*background:\s*transparent;/);
   });
 
