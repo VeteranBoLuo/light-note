@@ -199,6 +199,7 @@
   ]);
 
   let activePointerId: number | null = null;
+  let activeCanvasRect: DOMRect | null = null;
   let activeStroke: DrawingStrokeElement | null = null;
   let activeStrokeMaxPairs = 0;
   let mutationSnapshot = '';
@@ -386,7 +387,7 @@
   }
 
   function canvasPoint(event: PointerEvent) {
-    const rect = canvasRef.value?.getBoundingClientRect();
+    const rect = activeCanvasRect || canvasRef.value?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
       x: Math.max(0, Math.min(DRAWING_PAGE.width, ((event.clientX - rect.left) / rect.width) * DRAWING_PAGE.width)),
@@ -514,6 +515,7 @@
     rootRef.value?.focus({ preventScroll: true });
     activePointerId = event.pointerId;
     canvasRef.value?.setPointerCapture(event.pointerId);
+    activeCanvasRect = canvasRef.value?.getBoundingClientRect() || null;
     const point = canvasPoint(event);
     if (tool.value === 'hand') {
       const workspace = workspaceRef.value;
@@ -530,6 +532,7 @@
         message.warning(t('note.drawingLimitReached'));
         canvasRef.value?.releasePointerCapture(event.pointerId);
         activePointerId = null;
+        activeCanvasRect = null;
         return;
       }
       beginMutation();
@@ -554,6 +557,7 @@
     if (tool.value === 'text') {
       canvasRef.value?.releasePointerCapture(event.pointerId);
       activePointerId = null;
+      activeCanvasRect = null;
       if (scene.value.elements.filter((element) => element.kind === 'text').length >= DRAWING_SCENE_LIMITS.maxTexts) {
         message.warning(t('note.drawingLimitReached'));
         return;
@@ -624,6 +628,7 @@
     if (event.pointerId !== activePointerId) return false;
     canvasRef.value?.releasePointerCapture(event.pointerId);
     activePointerId = null;
+    activeCanvasRect = null;
     panStart = null;
     return true;
   }
