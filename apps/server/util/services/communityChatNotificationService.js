@@ -118,7 +118,7 @@ export async function updateCommunityChatNotificationSettings({ user, enabled, l
 }
 
 /**
- * 消息提交后只为“直接回复了我”或“显式提及了我”的定向消息生成站内通知。
+ * 消息提交后只为“直接回复了我”“显式提及了我”或 Root 的“提及所有人”生成站内通知。
  *
  * - 聊天室入口角标仍按 official / mentions_only / mentions / all 单独计算，不能把角标范围扩大成通知中心投递范围。
  * - 普通新消息不会进入 PC / 移动端通用通知中心；回复与 @ 使用相同的总开关、档位和屏蔽规则。
@@ -161,6 +161,7 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
                    WHERE notification_image.message_id = message.id
                      AND notification_image.status = 'attached'
                 ) THEN '[图片]'
+                WHEN message.message_kind = 'sticker' THEN '[表情]'
                 ELSE '[新消息]'
               END
             ),
@@ -169,6 +170,7 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
               'version', 1,
               'delivery', 'in_app_only',
               'kind', CASE WHEN reply.user_id = recipient.id THEN 'reply' ELSE 'mention' END,
+              'mentionEveryone', IF(message.mention_everyone = 1, 1, 0),
               'messagePublicId', message.public_id,
               'roomSlug', room.slug,
               'senderName', COALESCE(NULLIF(sender.alias, ''), '轻笺用户')
@@ -182,10 +184,12 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
        LEFT JOIN community_chat_members sender_membership ON sender_membership.user_id = sender.id
        LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id
        LEFT JOIN community_chat_message_mentions mention ON mention.message_id = message.id
-       JOIN user recipient ON (
-                              recipient.id = reply.user_id
-                              OR recipient.id = mention.mentioned_user_id
+       JOIN community_chat_user_identities recipient_identity ON (
+                              message.mention_everyone = 1
+                              OR recipient_identity.user_id = reply.user_id
+                              OR recipient_identity.user_id = mention.mentioned_user_id
                             )
+       JOIN user recipient ON recipient.id = recipient_identity.user_id
                             AND recipient.del_flag = 0
                             AND recipient.role <> 'visitor'
                             AND recipient.id <> message.user_id
@@ -193,6 +197,7 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
        LEFT JOIN community_chat_members recipient_membership ON recipient_membership.user_id = recipient.id
       WHERE message.public_id = ?
         AND message.status = 'active'
+        AND (message.mention_everyone = 0 OR settings.user_id IS NOT NULL)
         AND COALESCE(settings.global_notification_enabled, 1) = 1
         AND (
           (
@@ -219,7 +224,11 @@ export async function deliverCommunityChatMessageNotifications({ messagePublicId
            WHERE (blocked.user_id = recipient.id AND blocked.blocked_user_id = message.user_id)
               OR (blocked.user_id = message.user_id AND blocked.blocked_user_id = recipient.id)
         )
-        AND (reply.user_id IS NOT NULL OR mention.mentioned_user_id IS NOT NULL)`,
+        AND (
+          message.mention_everyone = 1
+          OR reply.user_id IS NOT NULL
+          OR mention.mentioned_user_id IS NOT NULL
+        )`,
     [normalizedPublicId, ...accessParams],
   );
 

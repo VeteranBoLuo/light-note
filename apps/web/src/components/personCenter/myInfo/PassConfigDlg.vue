@@ -559,8 +559,8 @@
     border-radius: 11px;
   }
 
-  :global(html.light-note-mobile-rendering) .password-mobile-intro,
-  :global(html.light-note-mobile-rendering) .password-cfg-container :deep(.b-input) {
+  html.light-note-mobile-rendering .password-mobile-intro,
+  html.light-note-mobile-rendering .password-cfg-container :deep(.b-input) {
     border-color: var(--surface-border-color) !important;
     box-shadow: none;
   }

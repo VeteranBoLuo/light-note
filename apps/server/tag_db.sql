@@ -734,6 +734,21 @@ CREATE TABLE `community_chat_members` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
+-- Table structure for community_chat_user_identities
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_user_identities`;
+CREATE TABLE `community_chat_user_identities` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `community_id` varchar(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uk_community_chat_identity_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_identity_community` (`community_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
 -- Table structure for community_chat_member_profiles
 -- ----------------------------
 DROP TABLE IF EXISTS `community_chat_member_profiles`;
@@ -795,7 +810,12 @@ CREATE TABLE `community_chat_messages` (
   `room_id` bigint unsigned NOT NULL,
   `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `client_request_id` varchar(64) NOT NULL,
+  `payload_fingerprint` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
   `reply_to_id` bigint unsigned DEFAULT NULL,
+  `message_kind` varchar(16) NOT NULL DEFAULT 'text',
+  `sticker_source` varchar(16) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `sticker_key` varchar(80) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `mention_everyone` tinyint unsigned NOT NULL DEFAULT '0',
   `content` text NOT NULL,
   `status` varchar(16) NOT NULL DEFAULT 'active',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -843,6 +863,9 @@ DROP TABLE IF EXISTS `community_chat_message_mentions`;
 CREATE TABLE `community_chat_message_mentions` (
   `message_id` bigint unsigned NOT NULL,
   `mentioned_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `sort_order` tinyint unsigned NOT NULL DEFAULT 0,
+  `display_name_snapshot` varchar(80) NOT NULL DEFAULT '',
+  `community_id_snapshot` varchar(11) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '',
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`message_id`,`mentioned_user_id`),
   KEY `idx_community_chat_mention_user_message` (`mentioned_user_id`,`message_id`)
@@ -872,6 +895,32 @@ CREATE TABLE `community_chat_message_images` (
   UNIQUE KEY `uk_community_chat_image_object` (`object_key`),
   KEY `idx_community_chat_image_owner_status_expiry` (`owner_user_id`,`status`,`expires_at`),
   KEY `idx_community_chat_image_message_status_sort` (`message_id`,`status`,`sort_order`,`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ----------------------------
+-- Table structure for community_chat_custom_stickers
+-- ----------------------------
+DROP TABLE IF EXISTS `community_chat_custom_stickers`;
+CREATE TABLE `community_chat_custom_stickers` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `object_key` varchar(512) NOT NULL,
+  `content_sha256` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `content_type` varchar(64) NOT NULL,
+  `file_size` int unsigned NOT NULL,
+  `width` int unsigned NOT NULL,
+  `height` int unsigned NOT NULL,
+  `name` varchar(40) NOT NULL DEFAULT '',
+  `status` varchar(24) NOT NULL DEFAULT 'uploading',
+  `sort_order` int unsigned NOT NULL DEFAULT 0,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_community_chat_custom_sticker_public` (`public_id`),
+  UNIQUE KEY `uk_community_chat_custom_sticker_content` (`user_id`,`content_sha256`),
+  KEY `idx_community_chat_custom_sticker_owner_status` (`user_id`,`status`,`sort_order`,`id`),
+  KEY `idx_community_chat_custom_sticker_status_time` (`status`,`update_time`,`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ----------------------------
@@ -1148,6 +1197,88 @@ CREATE TABLE IF NOT EXISTS `resource_governance_audit` (
   PRIMARY KEY (`id`),
   KEY `idx_resource_governance_audit_time` (`create_time`,`id`),
   KEY `idx_resource_governance_audit_target` (`target_type`,`target_id`,`create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_checkout_intents` (
+  `id` char(36) NOT NULL,
+  `token_hash` char(64) NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `option_key` varchar(32) NOT NULL,
+  `provider_user_id` varchar(128) DEFAULT NULL,
+  `provider_private_id` varchar(128) DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `first_used_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_checkout_token` (`token_hash`),
+  KEY `idx_support_checkout_user_time` (`user_id`,`create_time`,`id`),
+  KEY `idx_support_checkout_expiry` (`expires_at`,`first_used_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_account_links` (
+  `id` char(36) NOT NULL,
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `provider_user_id` varchar(128) NOT NULL,
+  `provider_private_id` varchar(128) DEFAULT NULL,
+  `provider_name` varchar(100) DEFAULT NULL,
+  `provider_avatar_url` varchar(1024) DEFAULT NULL,
+  `identity_refreshed_at` datetime DEFAULT NULL,
+  `linked_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_link_user` (`user_id`),
+  UNIQUE KEY `uk_support_link_provider_user` (`provider_user_id`),
+  UNIQUE KEY `uk_support_link_provider_private` (`provider_private_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_orders` (
+  `id` char(36) NOT NULL,
+  `provider_order_no` varchar(128) NOT NULL,
+  `provider_user_id` varchar(128) DEFAULT NULL,
+  `provider_private_id` varchar(128) DEFAULT NULL,
+  `checkout_intent_id` char(36) DEFAULT NULL,
+  `light_note_user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `ownership_source` varchar(24) NOT NULL DEFAULT 'unlinked',
+  `plan_id` varchar(128) DEFAULT NULL,
+  `product_type` tinyint unsigned NOT NULL DEFAULT 0,
+  `month` int unsigned NOT NULL DEFAULT 1,
+  `total_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `show_amount` decimal(12,2) NOT NULL DEFAULT 0.00,
+  `provider_status` smallint NOT NULL DEFAULT 0,
+  `verification_state` varchar(24) NOT NULL DEFAULT 'pending',
+  `webhook_signature_valid` tinyint unsigned NOT NULL DEFAULT 0,
+  `webhook_received_at` datetime DEFAULT NULL,
+  `verified_at` datetime DEFAULT NULL,
+  `ranking_observed_at` datetime DEFAULT NULL,
+  `retry_count` int unsigned NOT NULL DEFAULT 0,
+  `next_retry_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_support_order_provider` (`provider_order_no`),
+  KEY `idx_support_order_user_status` (`light_note_user_id`,`verification_state`,`provider_status`,`create_time`),
+  KEY `idx_support_order_provider_user` (`provider_user_id`,`provider_private_id`,`create_time`),
+  KEY `idx_support_order_checkout` (`checkout_intent_id`),
+  KEY `idx_support_order_retry` (`verification_state`,`next_retry_at`,`retry_count`),
+  KEY `idx_support_order_ranking` (`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_public_preferences` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `participate_in_ranking` tinyint unsigned NOT NULL DEFAULT 1,
+  `show_identity` tinyint unsigned NOT NULL DEFAULT 0,
+  `identity_consented_at` datetime DEFAULT NULL,
+  `admin_hidden` tinyint unsigned NOT NULL DEFAULT 0,
+  `admin_hidden_reason` varchar(255) DEFAULT NULL,
+  `admin_hidden_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `admin_hidden_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uk_support_public_id` (`public_id`),
+  KEY `idx_support_public_visibility` (`participate_in_ranking`,`admin_hidden`,`show_identity`,`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

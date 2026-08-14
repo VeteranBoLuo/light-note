@@ -843,8 +843,8 @@
     font-weight: 600;
   }
 
-  :global(html.light-note-mobile-rendering) .ov-todo,
-  :global(html.light-note-mobile-rendering) .ov-insights {
+  html.light-note-mobile-rendering .ov-todo,
+  html.light-note-mobile-rendering .ov-insights {
     box-shadow: none;
   }
 </style>

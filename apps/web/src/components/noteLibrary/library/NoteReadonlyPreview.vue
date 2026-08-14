@@ -49,10 +49,6 @@
         </div>
       </template>
       <article v-else class="note-readonly-preview__article">
-        <div class="note-readonly-preview__notice">
-          <SvgIcon :src="icon.growth.lock" size="15" aria-hidden="true" />
-          <span>{{ t('common.preview') }}</span>
-        </div>
         <DrawingNoteEditor
           v-if="displayNote.type === 'drawing'"
           class="note-readonly-preview__drawing"
@@ -440,8 +436,8 @@
 
   .note-readonly-preview__header {
     flex: 0 0 auto;
-    min-height: 78px;
-    padding: 10px 16px;
+    min-height: 74px;
+    padding: 8px 16px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -567,21 +563,6 @@
     width: min(100%, 780px);
     margin: 0 auto;
     color: var(--text-color);
-  }
-
-  .note-readonly-preview__notice {
-    min-height: 38px;
-    margin-bottom: 22px;
-    padding: 8px 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    border-left: 3px solid var(--resource-note-color, #00a884);
-    border-radius: 0 9px 9px 0;
-    color: var(--resource-note-color, #00a884);
-    background: var(--resource-note-soft-bg, #e9f8f4);
-    font-size: 12px;
-    font-weight: 650;
   }
 
   .note-readonly-preview__content {

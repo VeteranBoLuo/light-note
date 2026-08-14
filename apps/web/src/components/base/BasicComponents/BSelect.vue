@@ -7,21 +7,22 @@
       'is-multiple': isMultiple,
       'is-open': isOpen,
       'is-disabled': disabled,
+      'is-input-invalid': editable && !inlineInputValid,
       'is-tag-tone': chipTone === 'tag',
     }"
   >
     <div
       class="select-trigger"
-      :role="showSearch ? undefined : 'combobox'"
-      :tabindex="showSearch || disabled ? -1 : 0"
-      :aria-expanded="showSearch ? undefined : isOpen"
+      :role="usesInlineInput ? undefined : 'combobox'"
+      :tabindex="usesInlineInput || disabled ? -1 : 0"
+      :aria-expanded="usesInlineInput ? undefined : isOpen"
       :aria-disabled="disabled || undefined"
       :aria-busy="loading || undefined"
-      :aria-controls="showSearch ? undefined : listboxId"
-      :aria-haspopup="showSearch ? undefined : 'listbox'"
-      :aria-activedescendant="showSearch ? undefined : activeOptionDomId"
-      :aria-label="showSearch ? undefined : ariaLabel || undefined"
-      :aria-labelledby="showSearch ? undefined : ariaLabelledby || undefined"
+      :aria-controls="usesInlineInput ? undefined : listboxId"
+      :aria-haspopup="usesInlineInput ? undefined : 'listbox'"
+      :aria-activedescendant="usesInlineInput ? undefined : activeOptionDomId"
+      :aria-label="usesInlineInput ? undefined : ariaLabel || undefined"
+      :aria-labelledby="usesInlineInput ? undefined : ariaLabelledby || undefined"
       @click="toggleOpen"
       @keydown="handleTriggerKeydown"
       @mouseenter="isHovering = true"
@@ -31,10 +32,13 @@
       <!-- 单选：显示文字 -->
       <template v-if="!isMultiple">
         <input
-          v-if="showSearch"
+          v-if="usesInlineInput"
           v-model="searchText"
           class="select-search-inline"
+          :class="{ 'has-editable-value': editable && Boolean(displayText) }"
           :placeholder="displayText || placeholderText"
+          :inputmode="inputmode"
+          :maxlength="maxlength || undefined"
           role="combobox"
           aria-autocomplete="list"
           :aria-expanded="isOpen"
@@ -43,10 +47,12 @@
           :aria-activedescendant="activeOptionDomId"
           :aria-label="ariaLabel || undefined"
           :aria-labelledby="ariaLabelledby || undefined"
+          :aria-invalid="editable && !inlineInputValid ? 'true' : undefined"
           :disabled="disabled"
           @click.stop
           @input="handleSearchInput"
           @focus="keepOpen"
+          @blur="handleInlineBlur"
           @keydown.stop="handleTriggerKeydown"
         />
         <span v-else class="select-text" :class="{ 'is-placeholder': !displayText }">
@@ -153,6 +159,9 @@
       ariaLabelledby?: string;
       disabled?: boolean;
       loading?: boolean;
+      editable?: boolean;
+      inputmode?: 'none' | 'text' | 'decimal' | 'numeric' | 'tel' | 'search' | 'email' | 'url';
+      maxlength?: number;
     }>(),
     {
       options: () => [],
@@ -166,12 +175,16 @@
       ariaLabelledby: '',
       disabled: false,
       loading: false,
+      editable: false,
+      inputmode: 'text',
+      maxlength: 0,
     },
   );
 
   const emit = defineEmits<{
     change: [value: any];
     search: [value: string];
+    validityChange: [valid: boolean];
   }>();
 
   const modelValue = defineModel('value');
@@ -180,6 +193,7 @@
   const placeholderText = computed(() => props.placeholder || t('common.pleaseSelect'));
 
   const isMultiple = computed(() => props.mode === 'multiple');
+  const usesInlineInput = computed(() => props.showSearch || (props.editable && !isMultiple.value));
   const isOpen = ref(false);
   const isHovering = ref(false);
   const searchText = ref('');
@@ -190,6 +204,7 @@
   const selectId = `b-select-${Math.random().toString(36).slice(2, 10)}`;
   const listboxId = `${selectId}-listbox`;
   const activeOptionIndex = ref(-1);
+  const inlineInputValid = ref(true);
   let placementAbove = false;
 
   // 当前选中值（标准化为数组）
@@ -325,7 +340,21 @@
       event.preventDefault();
       // 收起下拉时阻止冒泡:否则 Esc 会继续冒泡到外层(如 BDrawer)把整个抽屉一起关掉。
       event.stopPropagation();
+      if (props.editable) {
+        searchText.value = '';
+        setInlineInputValid(true);
+      }
       isOpen.value = false;
+      return;
+    }
+    if (event.key === 'Enter' && props.editable && typingInSearch && searchText.value.trim()) {
+      event.preventDefault();
+      const match = findEditableMatch(searchText.value, true);
+      if (match) {
+        selectOption(match);
+      } else {
+        setInlineInputValid(false);
+      }
       return;
     }
     if (event.key === 'Enter' || (event.key === ' ' && !typingInSearch)) {
@@ -360,6 +389,7 @@
       modelValue.value = item.value;
       emit('change', item.value);
       searchText.value = '';
+      setInlineInputValid(true);
       isOpen.value = false;
       activeOptionIndex.value = -1;
     }
@@ -382,6 +412,7 @@
       emit('change', '');
     }
     searchText.value = '';
+    setInlineInputValid(true);
     if (props.showSearch) emit('search', '');
     isOpen.value = false;
   }
@@ -392,6 +423,7 @@
     // 打开时的定位统一交给 watch(isOpen),覆盖 toggleOpen / 内联搜索框 @focus @input / keepOpen 所有打开路径
     if (isOpen.value) {
       searchText.value = '';
+      setInlineInputValid(true);
       activeOptionIndex.value = -1;
     } else {
       activeOptionIndex.value = -1;
@@ -405,7 +437,68 @@
 
   function handleSearchInput() {
     keepOpen();
+    if (props.editable) {
+      const raw = searchText.value.trim();
+      const exactMatch = raw ? findEditableMatch(raw, false) : undefined;
+      const pendingMatch = raw && !exactMatch ? findEditableMatch(raw, true) : undefined;
+      if (exactMatch) {
+        if (modelValue.value !== exactMatch.value) {
+          modelValue.value = exactMatch.value;
+          emit('change', exactMatch.value);
+        }
+        // 直接输入完整有效值后无需继续展示只剩一项的浮层，避免时间选择器内遮挡日历。
+        isOpen.value = false;
+        activeOptionIndex.value = -1;
+      }
+      // 空文本仍表示“展示当前选中值”；可补零的单数字也是有效编辑中状态，失焦时再正式提交。
+      setInlineInputValid(!raw || Boolean(exactMatch || pendingMatch));
+    }
     emit('search', searchText.value);
+  }
+
+  function handleInlineBlur() {
+    if (!props.editable) return;
+    const raw = searchText.value.trim();
+    if (!raw) {
+      setInlineInputValid(true);
+      return;
+    }
+    const match = findEditableMatch(raw, true);
+    if (!match) {
+      setInlineInputValid(false);
+      return;
+    }
+    if (modelValue.value !== match.value) {
+      modelValue.value = match.value;
+      emit('change', match.value);
+    }
+    searchText.value = '';
+    setInlineInputValid(true);
+  }
+
+  function findEditableMatch(raw: string, allowNumericAlias: boolean) {
+    const normalized = raw.trim().toLocaleLowerCase();
+    const exactMatches = props.options.filter(
+      (option) =>
+        !option.disabled &&
+        (String(option.value).trim().toLocaleLowerCase() === normalized ||
+          String(option.label).trim().toLocaleLowerCase() === normalized),
+    );
+    if (exactMatches.length === 1) return exactMatches[0];
+    if (!allowNumericAlias || !/^\d+$/.test(normalized)) return undefined;
+    const numericValue = Number(normalized);
+    const numericMatches = props.options.filter((option) => {
+      if (option.disabled) return false;
+      const value = String(option.value).trim();
+      return /^\d+$/.test(value) && Number(value) === numericValue;
+    });
+    return numericMatches.length === 1 ? numericMatches[0] : undefined;
+  }
+
+  function setInlineInputValid(valid: boolean) {
+    if (inlineInputValid.value === valid) return;
+    inlineInputValid.value = valid;
+    emit('validityChange', valid);
   }
 
   function updateDropdownPosition() {
@@ -468,23 +561,35 @@
     });
   }
 
-  // 点击外部关闭
-  function handleClickOutside(e: MouseEvent) {
-    const target = e.target as HTMLElement;
+  function isOwnedEventTarget(target: EventTarget | null) {
+    if (!(target instanceof Element)) return false;
     const dropdown = target.closest<HTMLElement>('.select-dropdown[data-b-select-id]');
-    if (containerRef.value?.contains(target) || dropdown?.dataset.bSelectId === selectId) return;
+    return Boolean(containerRef.value?.contains(target) || dropdown?.dataset.bSelectId === selectId);
+  }
+
+  // 外层 BPopover 会阻止 click 冒泡，必须在捕获阶段识别兄弟选择器并关闭当前浮层。
+  function handleClickOutside(e: MouseEvent) {
+    if (isOwnedEventTarget(e.target)) return;
+    isOpen.value = false;
+  }
+
+  // 键盘 Tab 在相邻可输入选择器间移动时也保持同一时间只展开一个浮层。
+  function handleFocusOutside(e: FocusEvent) {
+    if (isOwnedEventTarget(e.target)) return;
     isOpen.value = false;
   }
 
   onMounted(() => {
-    document.addEventListener('click', handleClickOutside);
+    document.addEventListener('click', handleClickOutside, true);
+    document.addEventListener('focusin', handleFocusOutside, true);
     if (isMultiple.value) {
       searchText.value = '';
     }
   });
 
   onUnmounted(() => {
-    document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('click', handleClickOutside, true);
+    document.removeEventListener('focusin', handleFocusOutside, true);
   });
 
   // 窗口滚动/缩放时更新位置
@@ -546,6 +651,13 @@
         background: color-mix(in srgb, var(--background-color) 92%, var(--card-border-color));
       }
     }
+
+    &.is-input-invalid {
+      .select-trigger {
+        border-color: var(--error-color);
+        box-shadow: 0 0 0 1px var(--error-color);
+      }
+    }
   }
 
   .select-trigger {
@@ -588,6 +700,11 @@
 
     &::placeholder {
       color: var(--desc-color, #999);
+    }
+
+    &.has-editable-value::placeholder {
+      color: var(--text-color);
+      opacity: 1;
     }
   }
 

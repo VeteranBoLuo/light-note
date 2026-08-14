@@ -40,6 +40,9 @@ import { ensureResourceGovernanceSchema } from './util/resourceGovernanceSchema.
 import { ensureCommunityChatSchema } from './util/communityChatSchema.js';
 import { registerCommunityChatRealtimeHub } from './util/communityChat/realtimeHub.js';
 import { startCommunityChatImageCleanupScheduler } from './util/services/communityChatImageService.js';
+import { startCommunityChatCustomStickerCleanupScheduler } from './util/services/communityChatCustomStickerService.js';
+import { ensureAfdianSupportSchema } from './util/afdianSupportSchema.js';
+import { startAfdianReconciliationScheduler } from './util/afdianSupportService.js';
 
 import dotenv from 'dotenv';
 import path from 'path';
@@ -114,6 +117,12 @@ try {
   console.error('成长中心 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);
 }
+try {
+  await ensureAfdianSupportSchema();
+} catch (err) {
+  console.error('爱发电支持模块 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
+  process.exit(1);
+}
 ensureNoteTreeSchema().catch((err) => console.error('笔记页面树初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkSnapshotTable().catch((err) => console.error('书签快照表初始化失败 code=%s', stableAgentErrorCode(err)));
 ensureBookmarkHealthTable().catch((err) => console.error('书签健康表初始化失败 code=%s', stableAgentErrorCode(err)));
@@ -131,6 +140,9 @@ ensureCommunityChatSchema()
   .then(() => {
     startCommunityChatImageCleanupScheduler().catch((err) =>
       console.error('社区客厅图片清理调度启动失败 code=%s', stableAgentErrorCode(err)),
+    );
+    startCommunityChatCustomStickerCleanupScheduler().catch((err) =>
+      console.error('社区客厅自定义表情清理调度启动失败 code=%s', stableAgentErrorCode(err)),
     );
   })
   .catch((err) => console.error('社区客厅基础数据表初始化失败 code=%s', stableAgentErrorCode(err)));
@@ -160,6 +172,7 @@ startAccountDeletionCleanupScheduler().catch((err) =>
   console.error('账号注销清理调度启动失败 code=%s', stableAgentErrorCode(err)),
 );
 startOperationalLogRetentionScheduler();
+startAfdianReconciliationScheduler();
 
 // 回收站定时清理（每天凌晨 3:00）
 function scheduleTrashCleanup() {

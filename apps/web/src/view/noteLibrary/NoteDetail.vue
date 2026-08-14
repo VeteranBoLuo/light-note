@@ -56,6 +56,7 @@
               surface="detail"
               :current-parent-id="null"
               :active-page-id="note.id || null"
+              :tree-scroll-top="detailTreeScrollTop"
               :browse-parent-id="browseParentId"
               :children-by-parent="sidebarTreeChildrenByParent"
               :expanded-ids="sidebarTreeExpandedIds"
@@ -354,6 +355,7 @@
     buildNoteDetailRequestScope,
     consumeNoteDetail,
     invalidateNoteDetailPrefetch,
+    prefetchNoteDetail,
     seedNoteDetail,
   } from '@/api/noteDetailPrefetch';
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
@@ -486,6 +488,7 @@
     aiPreferredOpen,
     browseParentId,
     detailTab,
+    detailTreeScrollTop,
     sidebarPreferredOpen,
     sidebarWidth: noteWorkspaceSidebarWidth,
   } = storeToRefs(noteWorkspace);
@@ -574,6 +577,8 @@
   const editorRef = ref<NoteEditorHandle | null>(null);
   const noteContentKey = ref('note-content:initial');
   const isNoteSwitching = ref(false);
+  const openingPageId = ref<string | null>(null);
+  let noteOpenRequestVersion = 0;
   const contentAutosaveReady = ref(false);
   let promotedDraftRouteId = '';
   const hasSwitchBackup = ref(false);
@@ -1315,12 +1320,32 @@
     if (currentNode?.hasChildren && !expandedIds.value.has(note.id)) await toggleExpanded(currentNode);
   }
 
-  function openNoteDetailPage(id: string) {
-    if (!id) return;
-    return router.push({
-      path: `/noteLibrary/${encodeURIComponent(id)}`,
-      query: detailSourceQuery(),
-    });
+  async function openNoteDetailPage(id: string) {
+    const normalizedId = String(id || '').trim();
+    if (!normalizedId || normalizedId === note.id || normalizedId === openingPageId.value) return;
+
+    const requestVersion = ++noteOpenRequestVersion;
+    openingPageId.value = normalizedId;
+    isNoteSwitching.value = true;
+    try {
+      // 目标详情仍使用独立 RouterView key 隔离编辑器与保存队列，但先让当前页面留在屏幕上。
+      // 请求落入现有的有界预取缓存后再换路由，新实例可同步消费结果，不会暴露整页骨架。
+      await prefetchNoteDetail(user, normalizedId);
+    } catch {
+      // 预取失败仍进入目标页，由详情页既有的错误/重试态收口。
+    }
+    if (requestVersion !== noteOpenRequestVersion) return;
+    try {
+      await router.push({
+        path: `/noteLibrary/${encodeURIComponent(normalizedId)}`,
+        query: detailSourceQuery(),
+      });
+    } finally {
+      if (requestVersion === noteOpenRequestVersion) {
+        openingPageId.value = null;
+        isNoteSwitching.value = false;
+      }
+    }
   }
 
   function openBreadcrumbPage(pageId: string | null) {
@@ -1825,6 +1850,12 @@
     }
   }
 
+  function captureDetailTreeScroll() {
+    if (bookmark.isMobile) return;
+    const treeScroll = document.querySelector<HTMLElement>('.note-detail-sidebar-panel .note-tree-scroll');
+    if (treeScroll) noteWorkspace.setDetailTreeScrollTop(treeScroll.scrollTop);
+  }
+
   function seedCurrentNoteDetail() {
     if (!note.id || nodeType.value === 'share') return;
     seedNoteDetail(user, note.id, {
@@ -1843,6 +1874,7 @@
   }
 
   async function persistBeforeLeave() {
+    captureDetailTreeScroll();
     captureTitleBeforeLeave();
     // 返回发生在失焦事件之前时，主动把当前标题纳入保存队列；不能依赖事件时序。
     if (note.title?.trim() && note.title !== note.lastTitle && note.title !== latestRequestedTitle) {

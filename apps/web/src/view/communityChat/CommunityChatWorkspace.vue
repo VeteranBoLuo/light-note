@@ -47,7 +47,7 @@
             <div class="community-conversation-header__title-line">
               <strong>{{ currentRoom.name }}</strong>
               <span
-                v-if="realtimeEnabled && onlineCount !== null"
+                v-if="canViewOnlinePresence && realtimeEnabled && onlineCount !== null"
                 class="community-conversation-header__online"
                 @click="openOnlineMembers"
               >
@@ -198,40 +198,183 @@
                   <time :datetime="chatMessage.createdAt">{{ formatMessageTime(chatMessage.createdAt) }}</time>
                 </div>
                 <div class="community-message__payload" @click="handleMessageTap($event, chatMessage)">
-                  <div v-if="chatMessage.status === 'recalled'" class="community-message__recalled" role="status">
-                    <span>
-                      {{
-                        chatMessage.canViewRecalledContent
-                          ? t('communityChat.recall.adminVisible')
-                          : t('communityChat.recall.placeholder')
-                      }}
-                    </span>
-                  </div>
-                  <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
-                    <BButton
-                      v-if="chatMessage.reply"
-                      class="community-message__reply"
-                      :disabled="!canJumpToReply(chatMessage)"
-                      :aria-label="t('communityChat.replyJump', { name: replyAuthorName(chatMessage) })"
-                      @click.stop="jumpToMessage(chatMessage.reply.publicId)"
-                    >
-                      <strong>{{ t('communityChat.replyReference', { name: replyAuthorName(chatMessage) }) }}</strong>
-                      <span>{{ replySummary(chatMessage) }}</span>
-                    </BButton>
-                    <p v-if="chatMessage.mentions?.length || chatMessage.content" class="community-message__content">
-                      <span v-if="chatMessage.mentions?.length" class="community-message__mentions">
-                        <span
-                          v-for="(name, index) in chatMessage.mentions"
-                          :key="`${chatMessage.publicId}:mention:${index}`"
-                          class="community-message__mention"
-                        >
-                          @{{ name }}
-                        </span>
-                      </span>
-                      <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
-                    </p>
+                  <div class="community-message__surface">
                     <div
-                      v-if="chatMessage.images?.length"
+                      v-if="chatMessage.status === 'recalled' && chatMessage.canViewRecalledContent"
+                      class="community-message__recalled"
+                      role="status"
+                    >
+                      <span>
+                        {{ t('communityChat.recall.adminVisible') }}
+                      </span>
+                    </div>
+                    <template v-if="chatMessage.status === 'active' || chatMessage.canViewRecalledContent">
+                      <BButton
+                        v-if="chatMessage.reply"
+                        class="community-message__reply"
+                        :disabled="!canJumpToReply(chatMessage)"
+                        :aria-label="t('communityChat.replyJump', { name: replyAuthorName(chatMessage) })"
+                        @click.stop="jumpToMessage(chatMessage.reply.publicId)"
+                      >
+                        <strong>{{ t('communityChat.replyReference', { name: replyAuthorName(chatMessage) }) }}</strong>
+                        <span>{{ replySummary(chatMessage) }}</span>
+                      </BButton>
+                    </template>
+                    <div class="community-message__primary">
+                      <div
+                        v-if="chatMessage.status === 'recalled' && !chatMessage.canViewRecalledContent"
+                        class="community-message__recalled"
+                        role="status"
+                      >
+                        <span>{{ t('communityChat.recall.placeholder') }}</span>
+                      </div>
+                      <p v-else-if="messageHasText(chatMessage)" class="community-message__content">
+                        <span
+                          v-if="chatMessage.mentionEveryone || chatMessage.mentions?.length"
+                          class="community-message__mentions"
+                        >
+                          <span v-if="chatMessage.mentionEveryone" class="community-message__mention">
+                            @{{ t('communityChat.mentionSearch.everyone') }}
+                          </span>
+                          <span
+                            v-for="(name, index) in chatMessage.mentions"
+                            :key="`${chatMessage.publicId}:mention:${index}`"
+                            class="community-message__mention"
+                          >
+                            @{{ name }}
+                          </span>
+                        </span>
+                        <span v-if="chatMessage.content">{{ chatMessage.content }}</span>
+                      </p>
+                      <div
+                        v-else-if="messageHasImages(chatMessage)"
+                        class="community-message__images"
+                        :class="`has-${Math.min(chatMessage.images.length, 4)}`"
+                      >
+                        <BButton
+                          v-for="imageItem in chatMessage.images"
+                          :key="imageItem.publicId"
+                          class="community-message__image"
+                          :class="{ 'is-ready': isMessageImageReady(imageItem.publicId) }"
+                          :style="messageImageLayoutStyle(imageItem)"
+                          :aria-label="t('communityChat.image.preview')"
+                          @click.stop="handleMessageImageClick(chatMessage, imageItem)"
+                        >
+                          <span class="community-message__image-sizer" aria-hidden="true"></span>
+                          <span
+                            v-if="!isMessageImageReady(imageItem.publicId)"
+                            class="community-message__image-placeholder"
+                            aria-hidden="true"
+                          >
+                            <SvgIcon :src="icon.noteDetail.toolbar.image" size="22" />
+                          </span>
+                          <img
+                            :src="imageItem.url"
+                            :alt="t('communityChat.image.messageAlt', { name: authorName(chatMessage) })"
+                            :width="positiveImageDimension(imageItem.width)"
+                            :height="positiveImageDimension(imageItem.height)"
+                            :loading="isMessageImagePriority(imageItem.publicId) ? 'eager' : 'lazy'"
+                            :fetchpriority="isMessageImagePriority(imageItem.publicId) ? 'high' : 'auto'"
+                            decoding="async"
+                            @load="handleMessageImageLoaded($event, imageItem)"
+                            @error="handleMessageImageError(imageItem)"
+                          />
+                        </BButton>
+                      </div>
+                      <div
+                        v-else-if="chatMessage.messageKind === 'sticker'"
+                        class="community-message__sticker"
+                        :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
+                      >
+                        <img
+                          v-if="chatMessage.sticker?.url"
+                          :src="chatMessage.sticker.url"
+                          :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
+                          loading="lazy"
+                          decoding="async"
+                        />
+                        <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
+                      </div>
+                      <div v-if="messageHasActions(chatMessage)" class="community-message__actions">
+                        <BTooltip v-if="canLikeMessage(chatMessage)" :title="likeActionLabel(chatMessage)" :delay="80">
+                          <BButton
+                            size="small"
+                            class="community-message__action community-message__like"
+                            :class="{ 'is-selected': chatMessage.likedByMe }"
+                            :loading="messageActionBusyId === chatMessage.publicId"
+                            :aria-label="likeActionLabel(chatMessage)"
+                            @click.stop="toggleLike(chatMessage)"
+                          >
+                            <SvgIcon :src="icon.coBuild.vote" size="15" aria-hidden="true" />
+                            <span v-if="chatMessage.likeCount">{{ chatMessage.likeCount }}</span>
+                          </BButton>
+                        </BTooltip>
+                        <BTooltip
+                          v-if="canReplyToMessage(chatMessage)"
+                          :title="t('communityChat.replyAction')"
+                          :delay="80"
+                        >
+                          <BButton
+                            size="small"
+                            class="community-message__action"
+                            :aria-label="t('communityChat.replyAction')"
+                            @click.stop="startReply(chatMessage)"
+                          >
+                            <SvgIcon :src="icon.noteDetail.toolbar.quote" size="15" aria-hidden="true" />
+                          </BButton>
+                        </BTooltip>
+                        <BTooltip
+                          v-if="canRecallMessage(chatMessage)"
+                          :title="t('communityChat.recall.action')"
+                          :delay="80"
+                        >
+                          <BButton
+                            size="small"
+                            class="community-message__action is-danger"
+                            :aria-label="t('communityChat.recall.action')"
+                            @click.stop="confirmRecall(chatMessage)"
+                          >
+                            <SvgIcon :src="icon.noteDetail.toolbar.undo" size="15" aria-hidden="true" />
+                          </BButton>
+                        </BTooltip>
+                        <BTooltip
+                          v-if="canDeleteMessage(chatMessage)"
+                          :title="t('communityChat.delete.action')"
+                          :delay="80"
+                        >
+                          <BButton
+                            size="small"
+                            class="community-message__action is-danger"
+                            :aria-label="t('communityChat.delete.action')"
+                            @click.stop="confirmDelete(chatMessage)"
+                          >
+                            <SvgIcon :src="icon.noteDetail.deleteLine" size="15" aria-hidden="true" />
+                          </BButton>
+                        </BTooltip>
+                        <BActionMenu
+                          v-if="messageMenuItems(chatMessage).length"
+                          class="community-message__desktop-more"
+                          :items="messageMenuItems(chatMessage)"
+                          placement="bottom-left"
+                          :disabled="messageActionBusyId === chatMessage.publicId"
+                          :aria-label="t('communityChat.messageActions')"
+                          @select="(action) => handleMessageAction(action, chatMessage)"
+                        >
+                          <BTooltip :title="t('communityChat.moreActions')" :delay="80">
+                            <BButton
+                              size="small"
+                              class="community-message__more"
+                              :loading="messageActionBusyId === chatMessage.publicId"
+                              :aria-label="t('communityChat.moreActions')"
+                            >
+                              <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
+                            </BButton>
+                          </BTooltip>
+                        </BActionMenu>
+                      </div>
+                    </div>
+                    <div
+                      v-if="messageHasText(chatMessage) && messageHasImages(chatMessage)"
                       class="community-message__images"
                       :class="`has-${Math.min(chatMessage.images.length, 4)}`"
                     >
@@ -265,79 +408,23 @@
                         />
                       </BButton>
                     </div>
-                  </template>
-                  <div v-if="messageHasActions(chatMessage)" class="community-message__actions">
-                    <BTooltip v-if="canLikeMessage(chatMessage)" :title="likeActionLabel(chatMessage)" :delay="80">
-                      <BButton
-                        size="small"
-                        class="community-message__action community-message__like"
-                        :class="{ 'is-selected': chatMessage.likedByMe }"
-                        :loading="messageActionBusyId === chatMessage.publicId"
-                        :aria-label="likeActionLabel(chatMessage)"
-                        @click.stop="toggleLike(chatMessage)"
-                      >
-                        <SvgIcon :src="icon.coBuild.vote" size="15" aria-hidden="true" />
-                        <span v-if="chatMessage.likeCount">{{ chatMessage.likeCount }}</span>
-                      </BButton>
-                    </BTooltip>
-                    <BTooltip v-if="canReplyToMessage(chatMessage)" :title="t('communityChat.replyAction')" :delay="80">
-                      <BButton
-                        size="small"
-                        class="community-message__action"
-                        :aria-label="t('communityChat.replyAction')"
-                        @click.stop="startReply(chatMessage)"
-                      >
-                        <SvgIcon :src="icon.noteDetail.toolbar.quote" size="15" aria-hidden="true" />
-                      </BButton>
-                    </BTooltip>
-                    <BTooltip
-                      v-if="canRecallMessage(chatMessage)"
-                      :title="t('communityChat.recall.action')"
-                      :delay="80"
+                    <div
+                      v-if="
+                        (messageHasText(chatMessage) || messageHasImages(chatMessage)) &&
+                        chatMessage.messageKind === 'sticker'
+                      "
+                      class="community-message__sticker"
+                      :class="{ 'has-image': Boolean(chatMessage.sticker?.url) }"
                     >
-                      <BButton
-                        size="small"
-                        class="community-message__action is-danger"
-                        :aria-label="t('communityChat.recall.action')"
-                        @click.stop="confirmRecall(chatMessage)"
-                      >
-                        <SvgIcon :src="icon.noteDetail.toolbar.undo" size="15" aria-hidden="true" />
-                      </BButton>
-                    </BTooltip>
-                    <BTooltip
-                      v-if="canDeleteMessage(chatMessage)"
-                      :title="t('communityChat.delete.action')"
-                      :delay="80"
-                    >
-                      <BButton
-                        size="small"
-                        class="community-message__action is-danger"
-                        :aria-label="t('communityChat.delete.action')"
-                        @click.stop="confirmDelete(chatMessage)"
-                      >
-                        <SvgIcon :src="icon.noteDetail.deleteLine" size="15" aria-hidden="true" />
-                      </BButton>
-                    </BTooltip>
-                    <BActionMenu
-                      v-if="messageMenuItems(chatMessage).length"
-                      class="community-message__desktop-more"
-                      :items="messageMenuItems(chatMessage)"
-                      placement="bottom-left"
-                      :disabled="messageActionBusyId === chatMessage.publicId"
-                      :aria-label="t('communityChat.messageActions')"
-                      @select="(action) => handleMessageAction(action, chatMessage)"
-                    >
-                      <BTooltip :title="t('communityChat.moreActions')" :delay="80">
-                        <BButton
-                          size="small"
-                          class="community-message__more"
-                          :loading="messageActionBusyId === chatMessage.publicId"
-                          :aria-label="t('communityChat.moreActions')"
-                        >
-                          <SvgIcon :src="icon.common.more" size="16" aria-hidden="true" />
-                        </BButton>
-                      </BTooltip>
-                    </BActionMenu>
+                      <img
+                        v-if="chatMessage.sticker?.url"
+                        :src="chatMessage.sticker.url"
+                        :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                      <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
+                    </div>
                   </div>
                 </div>
                 <div v-if="chatMessage.likeCount > 0" class="community-message__reactions" aria-live="polite">
@@ -359,12 +446,12 @@
         </BButton>
         <BButton
           v-else-if="pendingNewMessageCount > 0"
-          class="community-message-list__new"
+          class="community-message-list__new community-message-list__new--unread"
           :aria-label="t('communityChat.newMessages', { count: pendingNewMessageCount })"
           @click="jumpToLatest"
         >
-          <SvgIcon :src="icon.noteTree.chevron" size="15" aria-hidden="true" />
-          <span>{{ t('communityChat.newMessages', { count: pendingNewMessageCount }) }}</span>
+          <SvgIcon :src="icon.ai.scrollDown" size="15" aria-hidden="true" />
+          <span>{{ t('communityChat.newMessages', { count: pendingNewMessageDisplayCount }) }}</span>
         </BButton>
         <BButton
           v-else-if="showBackToBottom"
@@ -418,15 +505,24 @@
             </span>
           </div>
 
-          <div v-if="mentionTargets.length" class="community-composer__mentions">
+          <div v-if="mentionEveryone || mentionTargets.length" class="community-composer__mentions">
             <strong>{{ t('communityChat.mentioning') }}</strong>
             <div>
               <BButton
+                v-if="mentionEveryone"
+                size="small"
+                :aria-label="t('communityChat.cancelMention', { name: t('communityChat.mentionSearch.everyone') })"
+                @click="cancelMentionEveryone"
+              >
+                @{{ t('communityChat.mentionSearch.everyone') }}
+                <SvgIcon :src="icon.common.close" size="12" aria-hidden="true" />
+              </BButton>
+              <BButton
                 v-for="target in mentionTargets"
-                :key="target.publicId"
+                :key="target.key"
                 size="small"
                 :aria-label="t('communityChat.cancelMention', { name: target.name })"
-                @click="cancelMention(target.publicId)"
+                @click="cancelMention(target.key)"
               >
                 @{{ target.name }}
                 <SvgIcon :src="icon.common.close" size="12" aria-hidden="true" />
@@ -437,32 +533,102 @@
           <div v-if="replyTarget" class="community-composer__reply">
             <div>
               <strong>{{ t('communityChat.replyingTo', { name: authorName(replyTarget) }) }}</strong>
-              <span>{{ replyTarget.content || t('communityChat.image.messageFallback') }}</span>
+              <span>{{ messageSummary(replyTarget) }}</span>
             </div>
             <BButton size="small" :aria-label="t('communityChat.cancelReply')" @click="cancelReply">
               <SvgIcon :src="icon.common.close" size="14" aria-hidden="true" />
             </BButton>
           </div>
 
-          <BInput
-            ref="composerInput"
-            v-model:value="draft"
-            class="community-composer__input"
-            type="textarea"
-            :rows="1"
-            :maxlength="2000"
-            :submit-on-enter="true"
-            :placeholder="
-              t(bookmark.isMobile ? 'communityChat.messagePlaceholderMobile' : 'communityChat.messagePlaceholder')
-            "
-            :disabled="sending"
-            @focus="handleComposerFocus"
-            @focusout="handleComposerFocusOut"
-            @enter="sendMessage"
-          />
+          <div v-if="bookmark.isMobile && expressionPanelOpen" class="community-composer__auxiliary">
+            <ChatExpressionPanel
+              v-model:tab="expressionPanelTab"
+              :recent="recentEmojis"
+              @select-emoji="insertEmoji"
+              @select-sticker="sendCustomSticker"
+            />
+          </div>
+
+          <BPopover
+            v-model:open="mentionSuggestionsOpen"
+            class="community-composer__mention-anchor"
+            trigger="manual"
+            placement="top-left"
+            overlay-class-name="community-composer__mention-popover"
+          >
+            <BInput
+              ref="composerInput"
+              v-model:value="draft"
+              class="community-composer__input"
+              type="textarea"
+              :rows="1"
+              :maxlength="2000"
+              :submit-on-enter="true"
+              :placeholder="
+                t(bookmark.isMobile ? 'communityChat.messagePlaceholderMobile' : 'communityChat.messagePlaceholder')
+              "
+              :disabled="sending"
+              @input="handleComposerTextInput"
+              @keydown="handleComposerKeydown"
+              @select="handleComposerSelectionChange"
+              @compositionstart="handleComposerCompositionStart"
+              @compositionend="handleComposerCompositionEnd"
+              @focus="handleComposerFocus"
+              @focusout="handleComposerFocusOut"
+              @enter="sendMessage"
+            />
+            <template #content>
+              <ChatMentionSuggestions
+                embedded
+                :query="mentionSearchQuery"
+                :items="mentionSearchItems"
+                :loading="mentionSearchLoading"
+                :active-index="mentionSearchActiveIndex"
+                :show-everyone="showMentionEveryoneSuggestion"
+                @select="selectMentionSuggestion"
+                @select-everyone="selectMentionEveryone"
+              />
+            </template>
+          </BPopover>
 
           <div class="community-composer__toolbar">
             <div class="community-composer__tools">
+              <BPopover
+                v-if="!bookmark.isMobile"
+                v-model:open="expressionPanelOpen"
+                trigger="click"
+                placement="top-left"
+                overlay-class-name="community-composer__expression-popover"
+                @open-change="handleExpressionPanelOpenChange"
+              >
+                <BButton
+                  class="community-composer__attach"
+                  :class="{ 'is-active': expressionPanelOpen }"
+                  :aria-label="t('communityChat.expression.action')"
+                  :title="t('communityChat.expression.action')"
+                >
+                  <SvgIcon :src="icon.noteDetail.toolbar.emoji" size="19" aria-hidden="true" />
+                </BButton>
+                <template #content>
+                  <ChatExpressionPanel
+                    v-model:tab="expressionPanelTab"
+                    :recent="recentEmojis"
+                    @select-emoji="insertEmoji"
+                    @select-sticker="sendCustomSticker"
+                  />
+                </template>
+              </BPopover>
+              <BButton
+                v-else
+                class="community-composer__attach"
+                :class="{ 'is-active': expressionPanelOpen }"
+                :aria-label="t('communityChat.expression.action')"
+                :title="t('communityChat.expression.action')"
+                @click="toggleMobileExpressionPanel"
+              >
+                <SvgIcon :src="icon.noteDetail.toolbar.emoji" size="19" aria-hidden="true" />
+              </BButton>
+
               <BUpload
                 raw-file
                 multiple
@@ -542,6 +708,7 @@
     @notification-saved="handleNotificationSettingsSaved"
   />
   <ChatOnlineMembersModal
+    v-if="canViewOnlinePresence"
     v-model:visible="onlineMembersVisible"
     :online-count="onlineCount || 0"
     :snapshot="onlineMembersSnapshot"
@@ -596,6 +763,7 @@
     createCommunityChatClientRequestId,
     deleteCommunityChatMessage,
     discardCommunityChatImage,
+    ensureCommunityChatIdentity,
     getCommunityChatBlocks,
     getCommunityChatMessages,
     getCommunityChatPinnedMessage,
@@ -603,6 +771,7 @@
     pinCommunityChatMessage,
     recallCommunityChatMessage,
     reportCommunityChatMessage,
+    searchCommunityChatMembers,
     sendCommunityChatMessage,
     toggleCommunityChatMessageLike,
     unblockCommunityChatUser,
@@ -612,6 +781,7 @@
     type CommunityChatBlockItem,
     type CommunityChatImage,
     type CommunityChatMessage,
+    type CommunityChatMemberSearchItem,
     type CommunityChatMessagePage,
     type CommunityChatPinnedMessage,
     type CommunityChatReportReason,
@@ -622,6 +792,7 @@
   import type { BActionMenuItem } from '@/components/base/BasicComponents/actionMenu';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import BUpload from '@/components/base/BasicComponents/BUpload.vue';
@@ -635,6 +806,8 @@
   import ChatImageViewerModal from '@/components/communityChat/ChatImageViewerModal.vue';
   import ChatUserProfileModal from '@/components/communityChat/ChatUserProfileModal.vue';
   import ChatOnlineMembersModal from '@/components/communityChat/ChatOnlineMembersModal.vue';
+  import ChatExpressionPanel from '@/components/communityChat/ChatExpressionPanel.vue';
+  import ChatMentionSuggestions from '@/components/communityChat/ChatMentionSuggestions.vue';
   import { useGrowth } from '@/composables/useGrowth';
   import { useCommunityChatProfile, type CommunityChatProfileUpdateInput } from '@/composables/useCommunityChatProfile';
   import {
@@ -644,6 +817,7 @@
   } from '@/composables/useCommunityChatSocket';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
   import { getCommunityChatDraft, rememberCommunityChatDraft } from '@/composables/useCommunityChatDraftMemory';
+  import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
@@ -701,7 +875,24 @@
   const draft = ref('');
   const sending = ref(false);
   const replyTarget = ref<CommunityChatMessage | null>(null);
-  const mentionTargets = ref<Array<{ publicId: string; name: string }>>([]);
+  type MentionTarget = {
+    key: string;
+    name: string;
+    communityId?: string;
+    userPublicId?: string;
+    messagePublicId?: string;
+  };
+  const mentionTargets = ref<MentionTarget[]>([]);
+  const mentionEveryone = ref(false);
+  const expressionPanelOpen = ref(false);
+  const expressionPanelTab = ref<'emoji' | 'custom'>('emoji');
+  const mentionSuggestionsOpen = ref(false);
+  const mentionSearchQuery = ref('');
+  const mentionSearchItems = ref<CommunityChatMemberSearchItem[]>([]);
+  const mentionSearchLoading = ref(false);
+  const mentionSearchActiveIndex = ref(-1);
+  const mentionQueryRange = ref<{ start: number; end: number } | null>(null);
+  const composerIsComposing = ref(false);
   const pendingClientRequestId = ref<string | null>(null);
   const reportVisible = ref(false);
   const reportTarget = ref<CommunityChatMessage | null>(null);
@@ -773,6 +964,8 @@
   let suppressedAvatarClickPublicId = '';
   let avatarClickSuppressionTimer: number | undefined;
   let transientFocusTimer: number | undefined;
+  let mentionSearchTimer: number | undefined;
+  let mentionSearchGeneration = 0;
   const INITIAL_MESSAGE_PAGE_SIZE = 30;
   const COMPOSER_INPUT_MIN_HEIGHT = 42;
   const COMPOSER_INPUT_MAX_HEIGHT = 112;
@@ -785,6 +978,9 @@
   const BACK_TO_BOTTOM_MOBILE_THRESHOLD = 320;
 
   const currentRoom = computed(() => props.rooms.find((room) => room.slug === selectedRoomSlug.value) || null);
+  const pendingNewMessageDisplayCount = computed(() =>
+    pendingNewMessageCount.value > 99 ? '99+' : pendingNewMessageCount.value,
+  );
   const chatImageSequence = computed(() => {
     const seen = new Set<string>();
     return chatMessages.value.flatMap((chatMessage) => {
@@ -813,6 +1009,16 @@
     const hasPayload = Boolean(String(draft.value || '').trim()) || pendingImages.value.length > 0;
     return hasPayload && draftLength.value <= 2000 && !sending.value && imageUploadsInFlight.value === 0;
   });
+  const canMentionEveryone = computed(() => currentUser.role === 'root');
+  const canViewOnlinePresence = computed(() => currentUser.role === 'root');
+  const showMentionEveryoneSuggestion = computed(() => {
+    if (!canMentionEveryone.value || mentionEveryone.value) return false;
+    const query = String(mentionSearchQuery.value || '')
+      .trim()
+      .toLocaleLowerCase();
+    if (!query) return true;
+    return ['所有人', '全体', 'everyone', 'all'].some((label) => label.toLocaleLowerCase().includes(query));
+  });
   const canPostCurrentRoom = computed(
     () =>
       props.access.canPost &&
@@ -827,7 +1033,13 @@
   const imageUploadDisabled = computed(() => imageUploadBusy.value || pendingImages.value.length >= 4);
   const realtimeEnabled = computed(() => Boolean(props.access.realtimeEnabled && props.access.canRead));
   const realtimeIdentityKey = computed(() => `${currentUser.id || 'guest'}:${currentUser.role || 'visitor'}`);
-  const { onlineCount, requestOnlineMembers, status: realtimeStatus } = useCommunityChatSocket({
+  const emojiRecentOwnerId = computed(() => currentUser.id || 'visitor');
+  const { recent: recentEmojis, remember: rememberEmoji } = useCommunityChatEmojiRecent(emojiRecentOwnerId);
+  const {
+    onlineCount,
+    requestOnlineMembers,
+    status: realtimeStatus,
+  } = useCommunityChatSocket({
     enabled: realtimeEnabled,
     roomSlug: selectedRoomSlug,
     identityKey: realtimeIdentityKey,
@@ -954,6 +1166,16 @@
     return props.access.authenticated && chatMessage.canDelete && ['active', 'recalled'].includes(chatMessage.status);
   }
 
+  function messageHasText(chatMessage: CommunityChatMessage) {
+    return Boolean(
+      chatMessage.mentionEveryone || chatMessage.mentions?.length || String(chatMessage.content || '').trim(),
+    );
+  }
+
+  function messageHasImages(chatMessage: CommunityChatMessage) {
+    return Boolean(chatMessage.images?.length);
+  }
+
   function likeActionLabel(chatMessage: CommunityChatMessage) {
     return t(
       chatMessage.likedByMe ? 'communityChat.like.removeActionWithCount' : 'communityChat.like.actionWithCount',
@@ -976,6 +1198,7 @@
       .replace(/\s+/g, ' ')
       .trim();
     if (content) return content;
+    if (chatMessage.messageKind === 'sticker' || chatMessage.sticker) return t('communityChat.sticker.messageFallback');
     if (chatMessage.images?.length) return t('communityChat.image.messageFallback');
     return t('communityChat.replyUnavailable');
   }
@@ -991,7 +1214,12 @@
       return (
         String(reply.content || '')
           .replace(/\s+/g, ' ')
-          .trim() || (reply.hasImages ? t('communityChat.image.messageFallback') : t('communityChat.replyUnavailable'))
+          .trim() ||
+        (reply.hasSticker
+          ? t('communityChat.sticker.messageFallback')
+          : reply.hasImages
+            ? t('communityChat.image.messageFallback')
+            : t('communityChat.replyUnavailable'))
       );
     }
     return reply.status === 'recalled' ? t('communityChat.replyRecalled') : t('communityChat.replyUnavailable');
@@ -1139,7 +1367,11 @@
           key: 'mention',
           label: t('communityChat.mentionAction'),
           icon: icon.noteDetail.toolbar.mention,
-          disabled: mentionTargets.value.some((target) => target.publicId === chatMessage.publicId),
+          disabled: mentionTargets.value.some(
+            (target) =>
+              (chatMessage.author.userPublicId && target.userPublicId === chatMessage.author.userPublicId) ||
+              target.messagePublicId === chatMessage.publicId,
+          ),
         });
       }
       if (items.length) items.push({ key: 'message-report-divider', divider: true });
@@ -1475,6 +1707,9 @@
   }
 
   function handleComposerFocus() {
+    if (bookmark.isMobile) {
+      expressionPanelOpen.value = false;
+    }
     if (keyboardAnchorCloseTimer !== undefined) {
       window.clearTimeout(keyboardAnchorCloseTimer);
       keyboardAnchorCloseTimer = undefined;
@@ -1495,6 +1730,17 @@
       window.cancelAnimationFrame(keyboardAnchorFrame);
       keyboardAnchorFrame = undefined;
     }, 320);
+  }
+
+  function handleDocumentPointerDown(event: PointerEvent) {
+    if (!mentionSuggestionsOpen.value || !(event.target instanceof Element)) return;
+    if (
+      event.target.closest('.community-composer__mention-anchor') ||
+      event.target.closest('.community-composer__mention-popover')
+    ) {
+      return;
+    }
+    closeMentionSuggestions();
   }
 
   async function jumpToLatest() {
@@ -1988,7 +2234,12 @@
 
   function startMention(chatMessage: CommunityChatMessage) {
     if (!canMentionMessage(chatMessage)) return;
-    if (mentionTargets.value.some((target) => target.publicId === chatMessage.publicId)) {
+    const userPublicId = String(chatMessage.author.userPublicId || '').trim();
+    const existing = mentionTargets.value.some(
+      (target) =>
+        (userPublicId && target.userPublicId === userPublicId) || target.messagePublicId === chatMessage.publicId,
+    );
+    if (existing) {
       void nextTick(() => composerInput.value?.focus());
       return;
     }
@@ -1997,14 +2248,241 @@
       return;
     }
     const name = authorName(chatMessage);
-    mentionTargets.value = [...mentionTargets.value, { publicId: chatMessage.publicId, name }];
+    mentionEveryone.value = false;
+    mentionTargets.value = [
+      ...mentionTargets.value,
+      userPublicId
+        ? {
+            key: `user:${userPublicId}`,
+            userPublicId,
+            communityId: chatMessage.author.communityId || '',
+            name,
+          }
+        : { key: `message:${chatMessage.publicId}`, messagePublicId: chatMessage.publicId, name },
+    ];
     pendingClientRequestId.value = null;
+    closeMentionSuggestions();
     void nextTick(() => composerInput.value?.focus());
   }
 
-  function cancelMention(publicId: string) {
-    mentionTargets.value = mentionTargets.value.filter((item) => item.publicId !== publicId);
+  function cancelMention(key: string) {
+    mentionTargets.value = mentionTargets.value.filter((item) => item.key !== key);
     pendingClientRequestId.value = null;
+  }
+
+  function cancelMentionEveryone() {
+    mentionEveryone.value = false;
+    pendingClientRequestId.value = null;
+  }
+
+  function closeMentionSuggestions() {
+    if (mentionSearchTimer !== undefined) window.clearTimeout(mentionSearchTimer);
+    mentionSearchTimer = undefined;
+    mentionSearchGeneration += 1;
+    mentionSuggestionsOpen.value = false;
+    mentionSearchLoading.value = false;
+    mentionSearchItems.value = [];
+    mentionSearchActiveIndex.value = -1;
+    mentionQueryRange.value = null;
+  }
+
+  async function loadMentionSuggestions(query: string) {
+    const generation = ++mentionSearchGeneration;
+    mentionSearchLoading.value = true;
+    try {
+      const response = await searchCommunityChatMembers({
+        roomSlug: selectedRoomSlug.value,
+        q: query,
+        limit: 10,
+      });
+      if (generation !== mentionSearchGeneration || !mentionSuggestionsOpen.value) return;
+      const selectedUserIds = new Set(
+        mentionTargets.value.map((target) => target.userPublicId).filter((value): value is string => Boolean(value)),
+      );
+      mentionSearchItems.value = (Array.isArray(response.data?.items) ? response.data.items : []).filter(
+        (item: CommunityChatMemberSearchItem) => !selectedUserIds.has(item.userPublicId),
+      );
+      mentionSearchActiveIndex.value = -1;
+    } catch {
+      if (generation === mentionSearchGeneration) mentionSearchItems.value = [];
+    } finally {
+      if (generation === mentionSearchGeneration) mentionSearchLoading.value = false;
+    }
+  }
+
+  function scheduleMentionSuggestions(query: string) {
+    if (mentionSearchTimer !== undefined) window.clearTimeout(mentionSearchTimer);
+    // 浮层首帧就进入加载态，避免防抖结束后才插入 loading 导致高度和定位二次跳变。
+    // 同时立即废弃上一请求；否则旧响应可能在新查询的 220ms 防抖窗口内短暂回填。
+    mentionSearchGeneration += 1;
+    mentionSearchLoading.value = true;
+    mentionSearchItems.value = [];
+    mentionSearchTimer = window.setTimeout(() => {
+      mentionSearchTimer = undefined;
+      void loadMentionSuggestions(query);
+    }, 220);
+  }
+
+  function detectMentionQuery() {
+    if (
+      composerIsComposing.value ||
+      !canPostCurrentRoom.value ||
+      mentionEveryone.value ||
+      mentionTargets.value.length >= 5
+    ) {
+      closeMentionSuggestions();
+      return;
+    }
+    const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+    if (!textarea) return;
+    const caret = textarea.selectionStart ?? draft.value.length;
+    const prefix = String(draft.value || '').slice(0, caret);
+    const match = /(^|[\s([{（【，。！？])@([^\s@]{0,32})$/u.exec(prefix);
+    if (!match) {
+      closeMentionSuggestions();
+      return;
+    }
+    const query = match[2] || '';
+    const start = caret - Array.from(`@${query}`).join('').length;
+    const sameQuery = mentionSuggestionsOpen.value && mentionSearchQuery.value === query;
+    mentionQueryRange.value = { start, end: caret };
+    mentionSearchQuery.value = query;
+    mentionSuggestionsOpen.value = true;
+    expressionPanelOpen.value = false;
+    if (!sameQuery) {
+      mentionSearchActiveIndex.value = -1;
+      scheduleMentionSuggestions(query);
+    }
+  }
+
+  function handleComposerTextInput() {
+    void nextTick(detectMentionQuery);
+  }
+
+  function handleComposerSelectionChange() {
+    void nextTick(detectMentionQuery);
+  }
+
+  function handleComposerCompositionStart() {
+    composerIsComposing.value = true;
+  }
+
+  function handleComposerCompositionEnd() {
+    composerIsComposing.value = false;
+    void nextTick(detectMentionQuery);
+  }
+
+  function handleComposerKeydown(event: KeyboardEvent) {
+    if (!mentionSuggestionsOpen.value) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeMentionSuggestions();
+      return;
+    }
+    const suggestionCount = mentionSearchItems.value.length + (showMentionEveryoneSuggestion.value ? 1 : 0);
+    if (!suggestionCount) return;
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (mentionSearchActiveIndex.value < 0) {
+        mentionSearchActiveIndex.value = event.key === 'ArrowDown' ? 0 : suggestionCount - 1;
+      } else {
+        const direction = event.key === 'ArrowDown' ? 1 : -1;
+        mentionSearchActiveIndex.value =
+          (mentionSearchActiveIndex.value + direction + suggestionCount) % suggestionCount;
+      }
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      const selectedIndex = mentionSearchActiveIndex.value < 0 ? 0 : mentionSearchActiveIndex.value;
+      if (showMentionEveryoneSuggestion.value && selectedIndex === 0) {
+        selectMentionEveryone();
+        return;
+      }
+      const itemIndex = selectedIndex - (showMentionEveryoneSuggestion.value ? 1 : 0);
+      selectMentionSuggestion(mentionSearchItems.value[itemIndex]);
+    }
+  }
+
+  function selectMentionEveryone() {
+    const range = mentionQueryRange.value;
+    if (!canMentionEveryone.value || !range) return;
+    const before = draft.value.slice(0, range.start);
+    const after = draft.value.slice(range.end);
+    draft.value = `${before}${after}`;
+    mentionTargets.value = [];
+    mentionEveryone.value = true;
+    pendingClientRequestId.value = null;
+    closeMentionSuggestions();
+    void nextTick(() => {
+      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+      composerInput.value?.focus();
+      textarea?.setSelectionRange(range.start, range.start);
+    });
+  }
+
+  function selectMentionSuggestion(item: CommunityChatMemberSearchItem | undefined) {
+    const range = mentionQueryRange.value;
+    if (!item?.userPublicId || !range) return;
+    if (mentionTargets.value.some((target) => target.userPublicId === item.userPublicId)) {
+      closeMentionSuggestions();
+      return;
+    }
+    const before = draft.value.slice(0, range.start);
+    const after = draft.value.slice(range.end);
+    draft.value = `${before}${after}`;
+    mentionEveryone.value = false;
+    mentionTargets.value = [
+      ...mentionTargets.value,
+      {
+        key: `user:${item.userPublicId}`,
+        userPublicId: item.userPublicId,
+        communityId: item.communityId,
+        name: item.displayName,
+      },
+    ];
+    pendingClientRequestId.value = null;
+    closeMentionSuggestions();
+    void nextTick(() => {
+      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+      composerInput.value?.focus();
+      textarea?.setSelectionRange(range.start, range.start);
+    });
+  }
+
+  function handleExpressionPanelOpenChange(open: boolean) {
+    if (!open) return;
+    closeMentionSuggestions();
+  }
+
+  function toggleMobileExpressionPanel() {
+    const willOpen = !expressionPanelOpen.value;
+    expressionPanelOpen.value = willOpen;
+    closeMentionSuggestions();
+    if (willOpen) {
+      const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+      textarea?.blur();
+      void nextTick(scrollToBottom);
+    } else {
+      void nextTick(() => composerInput.value?.focus());
+    }
+  }
+
+  function insertEmoji(emoji: string) {
+    const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+    const start = textarea?.selectionStart ?? draft.value.length;
+    const end = textarea?.selectionEnd ?? start;
+    draft.value = `${draft.value.slice(0, start)}${emoji}${draft.value.slice(end)}`;
+    rememberEmoji(emoji);
+    pendingClientRequestId.value = null;
+    expressionPanelOpen.value = false;
+    closeMentionSuggestions();
+    void nextTick(() => {
+      const nextCaret = start + emoji.length;
+      const nextTextarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
+      nextTextarea?.setSelectionRange(nextCaret, nextCaret);
+      composerInput.value?.focus();
+    });
   }
 
   function openImagePreview(imageItem: CommunityChatImage, sourceImages?: CommunityChatImage[]) {
@@ -2425,6 +2903,9 @@
     images: CommunityChatImage[];
     replyTarget: CommunityChatMessage | null;
     mentions: string[];
+    mentionEveryone?: boolean;
+    messageKind?: 'text' | 'sticker';
+    sticker?: CommunityChatMessage['sticker'];
   }): CommunityChatMessage {
     const previousOwnMessage = [...chatMessages.value].reverse().find((item) => item.isOwn);
     const previousAuthor = previousOwnMessage?.author;
@@ -2435,6 +2916,10 @@
     return {
       publicId: input.publicId,
       content: input.content,
+      messageKind: input.messageKind || 'text',
+      stickerSource: input.sticker?.source || null,
+      stickerKey: input.sticker?.key || null,
+      sticker: input.sticker || null,
       status: 'active',
       createdAt: now.toISOString(),
       editedAt: null,
@@ -2448,12 +2933,16 @@
       isOwn: true,
       images: input.images.map((imageItem) => ({ ...imageItem })),
       mentions: [...input.mentions],
+      mentionEveryone: Boolean(input.mentionEveryone),
+      mentionItems: [],
       likeCount: 0,
       likedByMe: false,
       likePreview: [],
       deliveryState: 'sending',
       author: {
         name: currentUser.alias || currentUser.userName || previousAuthor?.name || t('communityChat.memberFallback'),
+        userPublicId: previousAuthor?.userPublicId,
+        communityId: previousAuthor?.communityId,
         role: authorRole,
         avatar: currentAvatar || previousAuthor?.avatar || '',
         frameId: previousAuthor?.frameId || null,
@@ -2468,6 +2957,7 @@
             status: input.replyTarget.status,
             authorName: authorName(input.replyTarget),
             hasImages: input.replyTarget.images.length > 0,
+            hasSticker: input.replyTarget.messageKind === 'sticker' || Boolean(input.replyTarget.sticker),
           }
         : null,
     };
@@ -2480,12 +2970,18 @@
     const clientRequestId = pendingClientRequestId.value || createCommunityChatClientRequestId();
     pendingClientRequestId.value = clientRequestId;
     const imagePublicIds = pendingImages.value.map((imageItem) => imageItem.publicId);
-    // 提及对象由上方 tag 单独表达；正文不再重复插入 @昵称，提交时直接使用稳定消息公有 ID。
-    const mentionMessagePublicIds = mentionTargets.value.map((target) => target.publicId);
+    // 新客户端以不可变用户公有 UUID 发送；仅对尚未回填身份的旧消息保留历史消息 ID 兼容字段。
+    const mentionUserPublicIds = mentionTargets.value
+      .map((target) => target.userPublicId)
+      .filter((value): value is string => Boolean(value));
+    const mentionMessagePublicIds = mentionTargets.value
+      .map((target) => target.messagePublicId)
+      .filter((value): value is string => Boolean(value));
     const optimisticPublicId = `pending-${clientRequestId}`;
     const draftSnapshot = draft.value;
     const replySnapshot = replyTarget.value;
     const mentionSnapshot = [...mentionTargets.value];
+    const mentionEveryoneSnapshot = mentionEveryone.value;
     const imageSnapshot = pendingImages.value.map((imageItem) => ({ ...imageItem }));
     const optimisticMessage = buildOptimisticMessage({
       publicId: optimisticPublicId,
@@ -2493,12 +2989,14 @@
       images: imageSnapshot,
       replyTarget: replySnapshot,
       mentions: mentionSnapshot.map((target) => target.name),
+      mentionEveryone: mentionEveryoneSnapshot,
     });
     sending.value = true;
     chatMessages.value = [...chatMessages.value, optimisticMessage];
     draft.value = '';
     replyTarget.value = null;
     mentionTargets.value = [];
+    mentionEveryone.value = false;
     pendingImages.value = [];
     await scrollToBottom();
     try {
@@ -2506,7 +3004,9 @@
         clientRequestId,
         content,
         ...(replySnapshot ? { replyToPublicId: replySnapshot.publicId } : {}),
+        ...(mentionUserPublicIds.length ? { mentionUserPublicIds } : {}),
         ...(mentionMessagePublicIds.length ? { mentionMessagePublicIds } : {}),
+        ...(mentionEveryoneSnapshot ? { mentionEveryone: true } : {}),
         ...(imagePublicIds.length ? { imagePublicIds } : {}),
       };
       const response = await sendCommunityChatMessage(roomSlug, payload);
@@ -2523,6 +3023,7 @@
         draft.value = draftSnapshot;
         replyTarget.value = replySnapshot;
         mentionTargets.value = mentionSnapshot;
+        mentionEveryone.value = mentionEveryoneSnapshot;
         pendingImages.value = imageSnapshot;
       }
       emit('accessInvalidated');
@@ -2533,6 +3034,56 @@
         await nextTick();
         composerInput.value?.focus();
       }
+    }
+  }
+
+  async function sendCustomSticker(stickerPublicId: string) {
+    const roomSlug = selectedRoomSlug.value;
+    if (!roomSlug || !canPostCurrentRoom.value || sending.value || !stickerPublicId) return;
+    const clientRequestId = createCommunityChatClientRequestId();
+    const optimisticPublicId = `pending-${clientRequestId}`;
+    const replySnapshot = replyTarget.value;
+    const sticker = {
+      source: 'custom' as const,
+      key: stickerPublicId,
+      url: `/api/community-chat/stickers/${encodeURIComponent(stickerPublicId)}/content`,
+    };
+    const optimisticMessage = buildOptimisticMessage({
+      publicId: optimisticPublicId,
+      content: '',
+      images: [],
+      replyTarget: replySnapshot,
+      mentions: [],
+      messageKind: 'sticker',
+      sticker,
+    });
+    sending.value = true;
+    replyTarget.value = null;
+    expressionPanelOpen.value = false;
+    chatMessages.value = [...chatMessages.value, optimisticMessage];
+    await scrollToBottom();
+    try {
+      const response = await sendCommunityChatMessage(roomSlug, {
+        clientRequestId,
+        content: '',
+        messageKind: 'sticker',
+        stickerSource: 'custom',
+        stickerKey: stickerPublicId,
+        ...(replySnapshot ? { replyToPublicId: replySnapshot.publicId } : {}),
+      });
+      const sentMessage = response.data?.message as CommunityChatMessage | undefined;
+      if (!sentMessage) throw new Error('COMMUNITY_CHAT_SEND_RESPONSE_INVALID');
+      chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
+      if (roomSlug === selectedRoomSlug.value) mergeLatest([sentMessage]);
+      await scrollToBottom();
+      void markLatestRead();
+    } catch (error: any) {
+      chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
+      if (roomSlug === selectedRoomSlug.value) replyTarget.value = replySnapshot;
+      emit('accessInvalidated');
+      message.error(error?.message || t('communityChat.sendFailed'));
+    } finally {
+      sending.value = false;
     }
   }
 
@@ -2556,6 +3107,10 @@
     if (!previousIdentity || nextIdentity === previousIdentity) return;
     rememberCommunityChatDraft(previousIdentity, selectedRoomSlug.value, draft.value);
     draft.value = getCommunityChatDraft(nextIdentity, selectedRoomSlug.value);
+    mentionTargets.value = [];
+    mentionEveryone.value = false;
+    expressionPanelOpen.value = false;
+    closeMentionSuggestions();
     closeCommunityProfile({ reset: true, clearIdentityCache: true });
   });
 
@@ -2571,6 +3126,9 @@
       loadError.value = false;
       replyTarget.value = null;
       mentionTargets.value = [];
+      mentionEveryone.value = false;
+      expressionPanelOpen.value = false;
+      closeMentionSuggestions();
       draft.value = getCommunityChatDraft(realtimeIdentityKey.value, nextRoomSlug);
       pendingClientRequestId.value = null;
       reportVisible.value = false;
@@ -2610,7 +3168,8 @@
     [
       draft,
       () => replyTarget.value?.publicId,
-      () => mentionTargets.value.map((target) => target.publicId).join('|'),
+      () => mentionTargets.value.map((target) => target.key).join('|'),
+      mentionEveryone,
       () => pendingImages.value.map((imageItem) => imageItem.publicId).join('|'),
     ],
     () => {
@@ -2636,11 +3195,15 @@
   }
 
   onMounted(() => {
+    if (props.access.authenticated && props.access.canEnter) {
+      void ensureCommunityChatIdentity().catch(() => undefined);
+    }
     pollTimer = window.setInterval(refreshLatest, 8000);
     recallClockTimer = window.setInterval(() => {
       recallClock.value = Date.now();
     }, 5000);
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    document.addEventListener('pointerdown', handleDocumentPointerDown, true);
     window.addEventListener('resize', syncComposerInputHeight);
     window.visualViewport?.addEventListener('resize', scheduleBottomAnchor);
     const ResizeObserverConstructor = globalThis.ResizeObserver;
@@ -2657,6 +3220,7 @@
     cancelAvatarLongPress();
     clearAvatarClickSuppression();
     resetComposerDragState();
+    closeMentionSuggestions();
     loadGeneration += 1;
     pinnedLoadGeneration += 1;
     closeCommunityProfile({ reset: true });
@@ -2671,6 +3235,7 @@
     if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
     messageListEl.value?.classList.remove('is-actively-scrolling');
     document.removeEventListener('visibilitychange', handleVisibilityChange);
+    document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     window.removeEventListener('resize', syncComposerInputHeight);
     window.visualViewport?.removeEventListener('resize', scheduleBottomAnchor);
     messageListResizeObserver?.disconnect();
@@ -3103,6 +3668,13 @@
     white-space: nowrap;
   }
 
+  .community-message-list__new--unread {
+    border-color: var(--primary-color) !important;
+    color: var(--primary-contrast-color, #fff);
+    background: var(--primary-color) !important;
+    box-shadow: 0 8px 20px rgb(0 0 0 / 12%);
+  }
+
   .community-message-list__older {
     display: flex;
     justify-content: center;
@@ -3286,15 +3858,41 @@
 
   .community-message__payload {
     width: fit-content;
+    min-width: 0;
     max-width: 100%;
-    position: relative;
-    display: grid;
-    justify-items: start;
-    gap: 5px;
+    justify-self: start;
+    display: block;
   }
 
   .community-message.is-own .community-message__payload {
-    justify-items: end;
+    justify-self: end;
+  }
+
+  .community-message__surface {
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .community-message.is-own .community-message__surface {
+    align-items: flex-end;
+  }
+
+  .community-message__primary {
+    width: fit-content;
+    min-width: 0;
+    max-width: 100%;
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .community-message.is-own .community-message__primary {
+    flex-direction: row-reverse;
   }
 
   .community-message__meta {
@@ -3410,8 +4008,44 @@
   }
 
   .community-message.is-recalled .community-message__content,
-  .community-message.is-recalled .community-message__images {
+  .community-message.is-recalled .community-message__images,
+  .community-message.is-recalled .community-message__sticker {
     opacity: 0.76;
+  }
+
+  .community-message__sticker {
+    width: min(176px, 48vw);
+    min-height: 72px;
+    padding: 6px;
+    box-sizing: border-box;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 14px;
+    color: var(--desc-color);
+    background: var(--card-background);
+    font-size: 11px;
+  }
+
+  .community-message__sticker img {
+    width: 100%;
+    max-height: 176px;
+    display: block;
+    object-fit: contain;
+  }
+
+  .community-message__sticker.has-image {
+    min-height: 0;
+    padding: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .community-message.is-own .community-message__sticker:not(.has-image) {
+    border-color: var(--primary-color);
   }
 
   .community-message__content {
@@ -3540,10 +4174,10 @@
   }
 
   .community-message__actions {
-    position: absolute;
+    position: relative;
     top: 4px;
-    left: calc(100% + 6px);
     z-index: 1;
+    flex: 0 0 auto;
     min-height: 24px;
     width: fit-content;
     padding: 2px;
@@ -3556,11 +4190,6 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.16s ease;
-  }
-
-  .community-message.is-own .community-message__actions {
-    right: calc(100% + 6px);
-    left: auto;
   }
 
   .community-message:hover .community-message__actions,
@@ -3768,6 +4397,21 @@
     font-size: 10px;
   }
 
+  .community-composer__auxiliary {
+    min-width: 0;
+    padding: 8px 8px 0;
+    display: flex;
+  }
+
+  .community-composer__auxiliary > * {
+    width: 100%;
+  }
+
+  .community-composer__auxiliary {
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--surface-border-color);
+  }
+
   .community-composer__reply {
     margin: 8px 10px 0;
     padding: 7px 8px 7px 10px;
@@ -3804,8 +4448,33 @@
   }
 
   .community-composer__input {
+    width: 100%;
     min-width: 0;
     display: block;
+  }
+
+  .community-composer__mention-anchor {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+  }
+
+  :global(.community-composer__mention-popover) {
+    width: 360px;
+    max-width: calc(100% - 16px);
+    overflow: hidden;
+  }
+
+  :global(.community-composer__expression-popover) {
+    width: 360px;
+    max-width: calc(100% - 16px);
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  :global(.community-composer__mention-popover.b-popover-fade-enter-from),
+  :global(.community-composer__mention-popover.b-popover-fade-leave-to) {
+    transform: none;
   }
 
   .community-composer__input :deep(.b-textarea) {
@@ -3856,10 +4525,15 @@
   }
 
   .community-composer__attach:hover,
-  .community-composer__attach:focus-visible {
+  .community-composer__attach:focus-visible,
+  .community-composer__attach.is-active {
     border-color: var(--surface-border-color) !important;
     color: var(--primary-color);
     background: var(--workspace-panel-bg-color) !important;
+  }
+
+  .community-composer__attach.is-active {
+    border-color: var(--primary-color) !important;
   }
 
   .community-composer__upload-hint,
@@ -4080,6 +4754,15 @@
       font-size: 13px;
     }
 
+    .community-message__sticker {
+      width: min(148px, 46vw);
+      min-height: 64px;
+    }
+
+    .community-message__sticker img {
+      max-height: 148px;
+    }
+
     .community-message__images {
       width: min(300px, 100%);
     }
@@ -4104,6 +4787,10 @@
 
     .community-composer__surface {
       border-radius: 13px;
+    }
+
+    .community-composer__auxiliary {
+      padding-inline: 6px;
     }
 
     .community-composer__images {

@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
@@ -13,6 +13,7 @@ import { assertCommunityChatPostingAllowed, getCommunityChatBlockedUserIds } fro
 import { publishCommunityChatRealtimeEvent } from '../communityChat/realtimeBroker.js';
 import { deliverCommunityChatMessageNotifications } from './communityChatNotificationService.js';
 import { COMMUNITY_CHAT_IMAGE_MAX_COUNT } from './communityChatImageService.js';
+import { ensureCommunityChatIdentity, normalizeCommunityChatUserPublicIds } from './communityChatIdentityService.js';
 
 export {
   getCommunityChatMessageAuthorAchievements,
@@ -26,6 +27,9 @@ const MAX_MENTION_TARGETS = 5;
 export const COMMUNITY_CHAT_RECALL_WINDOW_SECONDS = 120;
 const ROOM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
+const MESSAGE_KINDS = Object.freeze(['text', 'sticker']);
+const STICKER_SOURCES = Object.freeze(['custom']);
+const CUSTOM_STICKER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
 
@@ -82,6 +86,12 @@ function normalizeMentionMessagePublicIds(value) {
   return normalized;
 }
 
+function normalizeMentionEveryone(value) {
+  if (value === undefined || value === null || value === false) return false;
+  if (value === true) return true;
+  throw chatError('INVALID_MENTION_EVERYONE', 400, '提及所有人的参数无效', 'Invalid mention-everyone value');
+}
+
 function normalizeImagePublicIds(value) {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value)) {
@@ -97,6 +107,55 @@ function normalizeImagePublicIds(value) {
     );
   }
   return normalized;
+}
+
+function normalizeMessageKind(value) {
+  const kind = String(value || 'text').trim();
+  if (!MESSAGE_KINDS.includes(kind)) {
+    throw chatError('INVALID_MESSAGE_KIND', 400, '消息类型无效', 'Invalid message kind');
+  }
+  return kind;
+}
+
+function normalizeStickerSource(value, messageKind) {
+  const source = String(value || '').trim();
+  if (messageKind === 'text') {
+    if (source)
+      throw chatError(
+        'INVALID_STICKER_MESSAGE',
+        400,
+        '文字消息不能携带表情来源',
+        'Text messages cannot include a sticker source',
+      );
+    return null;
+  }
+  if (!STICKER_SOURCES.includes(source)) {
+    throw chatError('INVALID_STICKER_SOURCE', 400, '仅支持个人自定义表情', 'Only custom stickers are supported');
+  }
+  return source;
+}
+
+function normalizeStickerKey(value, messageKind, stickerSource) {
+  const stickerKey = String(value || '').trim();
+  if (messageKind === 'text') {
+    if (stickerKey)
+      throw chatError(
+        'INVALID_STICKER_MESSAGE',
+        400,
+        '文字消息不能携带表情标识',
+        'Text messages cannot include a sticker key',
+      );
+    return null;
+  }
+  const publicId = stickerKey.toLowerCase();
+  if (!CUSTOM_STICKER_ID_PATTERN.test(publicId)) {
+    throw chatError('INVALID_STICKER_KEY', 400, '自定义表情标识无效', 'Invalid custom sticker identifier');
+  }
+  return publicId;
+}
+
+function messagePayloadFingerprint(payload) {
+  return createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
 function normalizeMessageContent(value, { allowEmpty = false } = {}) {
@@ -148,10 +207,15 @@ async function loadRoom(db, roomSlug, { lock = false } = {}) {
 const MESSAGE_SELECT = `
   SELECT message.id AS internalId, message.public_id AS publicId, message.room_id AS roomId,
          message.user_id AS userId, message.content, message.status,
+         message.message_kind AS messageKind, message.sticker_source AS stickerSource,
+         message.sticker_key AS stickerKey, message.mention_everyone AS mentionEveryone,
+         custom_sticker.public_id AS availableStickerPublicId,
          message.create_time AS createdAt, message.edited_at AS editedAt,
          message.recalled_at AS recalledAt, message.recalled_by AS recalledBy,
          account.role AS authorAccountRole,
          CASE WHEN account.del_flag = '0' THEN COALESCE(NULLIF(account.alias, ''), '') ELSE '' END AS authorName,
+         author_identity.public_id AS authorUserPublicId,
+         author_identity.community_id AS authorCommunityId,
          CASE
            WHEN account.role = 'root' THEN 'official'
            WHEN membership.role = 'moderator' AND membership.status = 'active' THEN 'moderator'
@@ -175,6 +239,7 @@ const MESSAGE_SELECT = `
          growth.equipped_frame AS authorFrameId,
          reply.public_id AS replyPublicId,
          reply.user_id AS replyUserId,
+         reply.message_kind AS replyMessageKind,
          CASE WHEN reply.status = 'active' THEN LEFT(reply.content, 280) ELSE '' END AS replyContent,
          CASE WHEN reply.status = 'active' THEN reply.status ELSE COALESCE(reply.status, '') END AS replyStatus,
          CASE
@@ -199,12 +264,48 @@ const MESSAGE_SELECT = `
             WHERE mention.message_id = message.id
          ) AS mentionNamesHex,
          (
+           SELECT GROUP_CONCAT(
+                    HEX(
+                      CAST(
+                        JSON_OBJECT(
+                          'userPublicId', COALESCE(mentioned_identity.public_id, ''),
+                          'displayName', COALESCE(
+                            NULLIF(mention.display_name_snapshot, ''),
+                            CASE
+                              WHEN mentioned_account.del_flag = '0'
+                                THEN COALESCE(NULLIF(mentioned_account.alias, ''), '轻笺用户')
+                              ELSE '轻笺用户'
+                            END
+                          ),
+                          'communityId', COALESCE(
+                            NULLIF(mention.community_id_snapshot, ''),
+                            mentioned_identity.community_id,
+                            ''
+                          )
+                        ) AS CHAR
+                      )
+                    )
+                    ORDER BY mention.sort_order ASC, mention.create_time ASC, mention.mentioned_user_id ASC
+                    SEPARATOR ','
+                  )
+             FROM community_chat_message_mentions mention
+             LEFT JOIN user mentioned_account ON mentioned_account.id = mention.mentioned_user_id
+             LEFT JOIN community_chat_user_identities mentioned_identity
+                    ON mentioned_identity.user_id = mention.mentioned_user_id
+            WHERE mention.message_id = message.id
+         ) AS mentionItemsHex,
+         (
            SELECT COUNT(*)
              FROM community_chat_message_images reply_image
             WHERE reply_image.message_id = reply.id AND reply_image.status = 'attached'
          ) AS replyImageCount
     FROM community_chat_messages message
     LEFT JOIN user account ON account.id = message.user_id
+    LEFT JOIN community_chat_user_identities author_identity ON author_identity.user_id = message.user_id
+    LEFT JOIN community_chat_custom_stickers custom_sticker
+           ON custom_sticker.public_id = message.sticker_key
+          AND message.sticker_source = 'custom'
+          AND custom_sticker.status IN ('active', 'removed')
     LEFT JOIN community_chat_members membership ON membership.user_id = message.user_id
     LEFT JOIN user_growth growth ON growth.user_id = message.user_id
     LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id
@@ -238,6 +339,24 @@ function publicMentionNames(row) {
         return Buffer.from(encodedName, 'hex').toString('utf8').trim();
       } catch {
         return '';
+      }
+    })
+    .filter(Boolean)
+    .slice(0, MAX_MENTION_TARGETS);
+}
+
+function publicMentionItems(row) {
+  return String(row.mentionItemsHex || '')
+    .split(',')
+    .map((encodedItem) => {
+      try {
+        const parsed = JSON.parse(Buffer.from(encodedItem, 'hex').toString('utf8'));
+        const userPublicId = String(parsed?.userPublicId || '').trim();
+        const displayName = String(parsed?.displayName || '').trim();
+        const communityId = String(parsed?.communityId || '').trim();
+        return userPublicId && displayName && communityId ? { userPublicId, displayName, communityId } : null;
+      } catch {
+        return null;
       }
     })
     .filter(Boolean)
@@ -355,9 +474,22 @@ function toPublicMessage(
   );
   const canRecall = row.status === 'active' && (canModerateMessages(memberRole) || isOwn);
   const canDelete = memberRole !== 'visitor' && ['active', 'recalled'].includes(row.status);
+  const mentionItems = contentVisible ? publicMentionItems(row) : [];
+  const sticker =
+    contentVisible && row.messageKind === 'sticker' && row.stickerKey && row.availableStickerPublicId
+      ? {
+          source: 'custom',
+          key: row.stickerKey,
+          url: `/api/community-chat/stickers/${encodeURIComponent(row.stickerKey)}/content`,
+        }
+      : null;
   return {
     publicId: row.publicId,
     content: contentVisible ? row.content : '',
+    messageKind: row.messageKind || 'text',
+    stickerSource: sticker?.source || null,
+    stickerKey: sticker?.key || null,
+    sticker,
     status: row.status,
     createdAt: row.createdAt,
     editedAt: row.editedAt || null,
@@ -370,12 +502,20 @@ function toPublicMessage(
     recallDeadlineAt,
     isOwn,
     images: contentVisible ? images : [],
-    mentions: contentVisible ? publicMentionNames(row) : [],
+    mentionEveryone: contentVisible && Boolean(Number(row.mentionEveryone || 0)),
+    mentions: mentionItems.length
+      ? mentionItems.map((item) => item.displayName)
+      : contentVisible
+        ? publicMentionNames(row)
+        : [],
+    mentionItems,
     likeCount: row.status === 'active' ? Number(likes.likeCount || 0) : 0,
     likedByMe: row.status === 'active' && Boolean(likes.likedByMe),
     likePreview: row.status === 'active' ? likes.likePreview || [] : [],
     author: {
       name: row.authorName || '',
+      userPublicId: row.authorUserPublicId || '',
+      communityId: row.authorCommunityId || '',
       role: row.authorRole || 'member',
       avatar: authorAvatar,
       frameId: row.authorFrameId || null,
@@ -388,6 +528,7 @@ function toPublicMessage(
           status: replyBlocked ? 'blocked' : row.replyStatus || 'unavailable',
           authorName: replyBlocked ? '' : row.replyAuthorName || '',
           hasImages: replyBlocked ? false : Boolean(Number(row.replyImageCount || 0)),
+          hasSticker: replyBlocked ? false : row.replyMessageKind === 'sticker',
         }
       : null,
   };
@@ -623,6 +764,8 @@ async function loadIdempotentMessage(db, userId, clientRequestId, { lock = false
   return queryFirst(
     db,
     `SELECT message.id AS internalId, message.public_id AS publicId, message.room_id AS roomId, message.content,
+            message.payload_fingerprint AS payloadFingerprint,
+            message.mention_everyone AS mentionEveryone,
             message.reply_to_id AS replyToId, reply.public_id AS replyPublicId
        FROM community_chat_messages message
        LEFT JOIN community_chat_messages reply ON reply.id = message.reply_to_id
@@ -676,24 +819,59 @@ async function resolvePendingImages(db, { ownerUserId, publicIds }) {
   return ordered;
 }
 
-async function resolveMentionTargetUserIds(db, { roomId, senderUserId, publicIds }) {
+function assertMentionTargetCount(publicIds) {
+  if (publicIds.length > MAX_MENTION_TARGETS) {
+    throw chatError(
+      'TOO_MANY_MENTION_TARGETS',
+      400,
+      `每条消息最多提及 ${MAX_MENTION_TARGETS} 位成员`,
+      `A message can mention at most ${MAX_MENTION_TARGETS} members`,
+    );
+  }
+}
+
+function uniqueMentionTargets(targets) {
+  const byUserId = new Map();
+  for (const target of targets) {
+    if (!target?.userId || byUserId.has(target.userId)) continue;
+    byUserId.set(target.userId, target);
+  }
+  const result = [...byUserId.values()];
+  assertMentionTargetCount(result);
+  return result;
+}
+
+async function resolveMentionTargetsByUserPublicIds(db, { roomId, senderUserId, publicIds, feature }) {
   if (!publicIds.length) return [];
   const placeholders = publicIds.map(() => '?').join(',');
+  const accessClause =
+    feature.accessMode === 'invite_only'
+      ? `AND (
+           account.role = 'root'
+           OR (membership.status = 'active' AND membership.rules_version = ?)
+         )`
+      : `AND COALESCE(membership.status, '') <> 'banned'`;
+  const accessParams = feature.accessMode === 'invite_only' ? [feature.rulesVersion] : [];
   const [rows] = await db.query(
-    `SELECT message.public_id AS publicId, message.user_id AS userId
-       FROM community_chat_messages message
-       JOIN user account ON account.id = message.user_id AND account.del_flag = 0
-      WHERE message.room_id = ?
-        AND message.public_id IN (${placeholders})
-        AND message.status = 'active'
-        AND message.user_id <> ?
+    `SELECT identity.public_id AS userPublicId, identity.community_id AS communityId,
+            identity.user_id AS userId,
+            COALESCE(NULLIF(account.alias, ''), '轻笺用户') AS displayName
+       FROM community_chat_user_identities identity
+       JOIN user account ON account.id = identity.user_id
+                        AND account.del_flag = 0
+                        AND account.role <> 'visitor'
+      LEFT JOIN community_chat_members membership ON membership.user_id = identity.user_id
+      WHERE identity.public_id IN (${placeholders})
+        AND identity.user_id <> ?
+        ${accessClause}
         AND NOT EXISTS (
           SELECT 1
             FROM community_chat_blocks blocked
-           WHERE blocked.user_id = ? AND blocked.blocked_user_id = message.user_id
+           WHERE (blocked.user_id = ? AND blocked.blocked_user_id = identity.user_id)
+              OR (blocked.user_id = identity.user_id AND blocked.blocked_user_id = ?)
         )
       FOR UPDATE`,
-    [roomId, ...publicIds, senderUserId, senderUserId],
+    [...publicIds, senderUserId, ...accessParams, senderUserId, senderUserId],
   );
   if (rows.length !== publicIds.length) {
     throw chatError(
@@ -703,14 +881,85 @@ async function resolveMentionTargetUserIds(db, { roomId, senderUserId, publicIds
       'A member being mentioned is unavailable',
     );
   }
-  return [...new Set(rows.map((row) => String(row.userId || '')).filter(Boolean))];
+  const byPublicId = new Map(rows.map((row) => [String(row.userPublicId || '').toLowerCase(), row]));
+  return uniqueMentionTargets(publicIds.map((publicId) => byPublicId.get(publicId)).filter(Boolean));
 }
 
-function assertIdempotentPayload(existing, roomId, content, replyPublicId, existingImagePublicIds, imagePublicIds) {
+async function resolveMentionTargetsByMessagePublicIds(db, { roomId, senderUserId, publicIds, feature }) {
+  if (!publicIds.length) return [];
+  const placeholders = publicIds.map(() => '?').join(',');
+  const accessClause =
+    feature.accessMode === 'invite_only'
+      ? `AND (
+           account.role = 'root'
+           OR (membership.status = 'active' AND membership.rules_version = ?)
+         )`
+      : `AND COALESCE(membership.status, '') <> 'banned'`;
+  const accessParams = feature.accessMode === 'invite_only' ? [feature.rulesVersion] : [];
+  const [rows] = await db.query(
+    `SELECT message.public_id AS messagePublicId, message.user_id AS userId,
+            COALESCE(NULLIF(account.alias, ''), '轻笺用户') AS displayName
+       FROM community_chat_messages message
+       JOIN user account ON account.id = message.user_id
+                        AND account.del_flag = 0
+                        AND account.role <> 'visitor'
+       LEFT JOIN community_chat_members membership ON membership.user_id = message.user_id
+      WHERE message.room_id = ?
+        AND message.public_id IN (${placeholders})
+        AND message.status IN ('active', 'recalled')
+        AND message.user_id <> ?
+        ${accessClause}
+        AND NOT EXISTS (
+          SELECT 1 FROM community_chat_blocks blocked
+           WHERE (blocked.user_id = ? AND blocked.blocked_user_id = message.user_id)
+              OR (blocked.user_id = message.user_id AND blocked.blocked_user_id = ?)
+        )
+      FOR UPDATE`,
+    [roomId, ...publicIds, senderUserId, ...accessParams, senderUserId, senderUserId],
+  );
+  if (rows.length !== publicIds.length) {
+    throw chatError(
+      'MENTION_TARGET_UNAVAILABLE',
+      409,
+      '要提及的成员已不可用',
+      'A member being mentioned is unavailable',
+    );
+  }
+  const byMessagePublicId = new Map(rows.map((row) => [row.messagePublicId, row]));
+  const targets = [];
+  for (const messagePublicId of publicIds) {
+    const row = byMessagePublicId.get(messagePublicId);
+    if (!row) continue;
+    const identity = await ensureCommunityChatIdentity({ userId: row.userId, db });
+    targets.push({ ...row, ...identity });
+  }
+  return uniqueMentionTargets(targets);
+}
+
+function assertIdempotentPayload(
+  existing,
+  roomId,
+  content,
+  replyPublicId,
+  mentionEveryone,
+  existingImagePublicIds,
+  imagePublicIds,
+  payloadFingerprint,
+) {
+  if (existing.payloadFingerprint) {
+    if (existing.payloadFingerprint === payloadFingerprint) return;
+    throw chatError(
+      'MESSAGE_REQUEST_ID_CONFLICT',
+      409,
+      '该发送请求标识已经用于另一条消息',
+      'This message request identifier was already used for a different payload',
+    );
+  }
   if (
     Number(existing.roomId) !== Number(roomId) ||
     existing.content !== content ||
     (existing.replyPublicId || null) !== (replyPublicId || null) ||
+    Boolean(Number(existing.mentionEveryone || 0)) !== mentionEveryone ||
     existingImagePublicIds.length !== imagePublicIds.length ||
     existingImagePublicIds.some((publicId, index) => publicId !== imagePublicIds[index])
   ) {
@@ -870,17 +1119,80 @@ export async function createCommunityChatMessage({
   clientRequestId,
   content,
   replyToPublicId,
+  mentionEveryone,
+  mentionUserPublicIds,
   mentionMessagePublicIds,
   imagePublicIds,
+  messageKind,
+  stickerSource,
+  stickerKey,
   env = process.env,
   db = pool,
 }) {
   const normalizedRoomSlug = normalizeRoomSlug(roomSlug);
   const normalizedRequestId = normalizeClientRequestId(clientRequestId);
+  const normalizedMessageKind = normalizeMessageKind(messageKind);
+  const normalizedStickerSource = normalizeStickerSource(stickerSource, normalizedMessageKind);
+  const normalizedStickerKey = normalizeStickerKey(stickerKey, normalizedMessageKind, normalizedStickerSource);
   const normalizedImagePublicIds = normalizeImagePublicIds(imagePublicIds);
-  const normalizedContent = normalizeMessageContent(content, { allowEmpty: normalizedImagePublicIds.length > 0 });
+  const normalizedContent = normalizeMessageContent(content, {
+    allowEmpty: normalizedImagePublicIds.length > 0 || normalizedMessageKind === 'sticker',
+  });
   const normalizedReplyPublicId = normalizePublicMessageId(replyToPublicId, { optional: true });
-  const normalizedMentionPublicIds = normalizeMentionMessagePublicIds(mentionMessagePublicIds);
+  const normalizedMentionEveryone = normalizeMentionEveryone(mentionEveryone);
+  const normalizedMentionUserPublicIds = normalizeCommunityChatUserPublicIds(mentionUserPublicIds);
+  const normalizedMentionMessagePublicIds = normalizeMentionMessagePublicIds(mentionMessagePublicIds);
+  assertMentionTargetCount(normalizedMentionUserPublicIds);
+
+  if (normalizedMentionEveryone && user?.role !== 'root') {
+    throw chatError(
+      'MENTION_EVERYONE_ROOT_REQUIRED',
+      403,
+      '只有 Root 可以提及所有人',
+      'Only Root can mention everyone',
+    );
+  }
+  if (
+    normalizedMentionEveryone &&
+    (normalizedMentionUserPublicIds.length || normalizedMentionMessagePublicIds.length)
+  ) {
+    throw chatError(
+      'MENTION_EVERYONE_CONFLICT',
+      400,
+      '提及所有人不能与成员提及混合使用',
+      'Mentioning everyone cannot be combined with member mentions',
+    );
+  }
+
+  if (
+    normalizedMessageKind === 'sticker' &&
+    (normalizedContent ||
+      normalizedImagePublicIds.length ||
+      normalizedMentionEveryone ||
+      normalizedMentionUserPublicIds.length ||
+      normalizedMentionMessagePublicIds.length)
+  ) {
+    throw chatError(
+      'INVALID_STICKER_MESSAGE',
+      400,
+      '轻笺表情不能混合文字、图片或提及',
+      'A Light Note sticker cannot be combined with text, images, or mentions',
+    );
+  }
+
+  const payloadFingerprint = messagePayloadFingerprint({
+    version: 2,
+    roomSlug: normalizedRoomSlug,
+    messageKind: normalizedMessageKind,
+    stickerSource: normalizedStickerSource,
+    stickerKey: normalizedStickerKey,
+    content: normalizedContent,
+    replyToPublicId: normalizedReplyPublicId,
+    ...(normalizedMentionEveryone ? { mentionEveryone: true } : {}),
+    mentionUserPublicIds: normalizedMentionUserPublicIds,
+    mentionMessagePublicIds: normalizedMentionMessagePublicIds,
+    imagePublicIds: normalizedImagePublicIds,
+  });
 
   if (!getCommunityChatFeatureState(env).messagingEnabled) {
     throw chatError(
@@ -896,7 +1208,12 @@ export async function createCommunityChatMessage({
   let viewerMemberRole = 'member';
   try {
     await connection.beginTransaction();
-    const { memberRole } = await assertCommunityChatMessagingAccess({ user, env, db: connection, lock: true });
+    const { feature, memberRole } = await assertCommunityChatMessagingAccess({
+      user,
+      env,
+      db: connection,
+      lock: true,
+    });
     viewerMemberRole = memberRole;
     await assertCommunityChatPostingEnabled({ env, db: connection, lock: true });
     await assertCommunityChatPostingAllowed({ user, db: connection, lock: true });
@@ -911,8 +1228,10 @@ export async function createCommunityChatMessage({
         room.id,
         normalizedContent,
         normalizedReplyPublicId,
+        normalizedMentionEveryone,
         existingImages,
         normalizedImagePublicIds,
+        payloadFingerprint,
       );
       const message = await loadMessageByPublicId(connection, existing.publicId, user.id, memberRole);
       await connection.commit();
@@ -928,15 +1247,53 @@ export async function createCommunityChatMessage({
       );
     }
 
-    const mentionedUserIds = await resolveMentionTargetUserIds(connection, {
+    const stableMentionTargets = await resolveMentionTargetsByUserPublicIds(connection, {
       roomId: room.id,
       senderUserId: user.id,
-      publicIds: normalizedMentionPublicIds,
+      publicIds: normalizedMentionUserPublicIds,
+      feature,
     });
+    const legacyMentionTargets = await resolveMentionTargetsByMessagePublicIds(connection, {
+      roomId: room.id,
+      senderUserId: user.id,
+      publicIds: normalizedMentionMessagePublicIds,
+      feature,
+    });
+    if (stableMentionTargets.length && legacyMentionTargets.length) {
+      const stableIds = stableMentionTargets.map((target) => target.userId).sort();
+      const legacyIds = legacyMentionTargets.map((target) => target.userId).sort();
+      if (stableIds.length !== legacyIds.length || stableIds.some((value, index) => value !== legacyIds[index])) {
+        throw chatError(
+          'MENTION_TARGET_CONFLICT',
+          409,
+          '新旧提及参数指向的成员不一致',
+          'The new and legacy mention fields refer to different members',
+        );
+      }
+    }
+    const mentionTargets = stableMentionTargets.length ? stableMentionTargets : legacyMentionTargets;
     const pendingImages = await resolvePendingImages(connection, {
       ownerUserId: user.id,
       publicIds: normalizedImagePublicIds,
     });
+    if (normalizedStickerSource === 'custom') {
+      const customSticker = await queryFirst(
+        connection,
+        `SELECT id
+           FROM community_chat_custom_stickers
+          WHERE public_id = ? AND user_id = ? AND status = 'active'
+          LIMIT 1 FOR UPDATE`,
+        [normalizedStickerKey, user.id],
+      );
+      if (!customSticker) {
+        throw chatError(
+          'CUSTOM_STICKER_UNAVAILABLE',
+          409,
+          '这个自定义表情已不可用',
+          'This custom sticker is unavailable',
+        );
+      }
+    }
 
     let replyToId = null;
     if (normalizedReplyPublicId) {
@@ -983,12 +1340,26 @@ export async function createCommunityChatMessage({
       }
     }
 
+    await ensureCommunityChatIdentity({ userId: user.id, db: connection });
     const publicId = randomUUID();
     const [insertResult] = await connection.query(
       `INSERT INTO community_chat_messages
-         (public_id, room_id, user_id, client_request_id, reply_to_id, content, status)
-       VALUES (?, ?, ?, ?, ?, ?, 'active')`,
-      [publicId, room.id, user.id, normalizedRequestId, replyToId, normalizedContent],
+         (public_id, room_id, user_id, client_request_id, payload_fingerprint,
+          reply_to_id, message_kind, sticker_source, sticker_key, mention_everyone, content, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active')`,
+      [
+        publicId,
+        room.id,
+        user.id,
+        normalizedRequestId,
+        payloadFingerprint,
+        replyToId,
+        normalizedMessageKind,
+        normalizedStickerSource,
+        normalizedStickerKey,
+        normalizedMentionEveryone ? 1 : 0,
+        normalizedContent,
+      ],
     );
     const messageId = insertResult.insertId;
     for (const [sortOrder, image] of pendingImages.entries()) {
@@ -1007,12 +1378,19 @@ export async function createCommunityChatMessage({
         );
       }
     }
-    if (mentionedUserIds.length) {
-      const mentionValues = mentionedUserIds.map(() => '(?, ?)').join(',');
+    if (mentionTargets.length) {
+      const mentionValues = mentionTargets.map(() => '(?, ?, ?, ?, ?)').join(',');
       await connection.query(
-        `INSERT IGNORE INTO community_chat_message_mentions (message_id, mentioned_user_id)
+        `INSERT IGNORE INTO community_chat_message_mentions
+           (message_id, mentioned_user_id, sort_order, display_name_snapshot, community_id_snapshot)
          VALUES ${mentionValues}`,
-        mentionedUserIds.flatMap((mentionedUserId) => [messageId, mentionedUserId]),
+        mentionTargets.flatMap((target, sortOrder) => [
+          messageId,
+          target.userId,
+          sortOrder,
+          target.displayName,
+          target.communityId,
+        ]),
       );
     }
     await connection.query(`UPDATE community_chat_rooms SET last_message_id = ? WHERE id = ?`, [messageId, room.id]);
@@ -1030,12 +1408,11 @@ export async function createCommunityChatMessage({
       roomSlug: normalizedRoomSlug,
       messagePublicId: publicId,
     });
-    try {
-      await deliverCommunityChatMessageNotifications({ messagePublicId: publicId, env, db });
-    } catch (error) {
-      // 消息已经提交；提醒是附加能力，失败不能把成功消息伪装成发送失败。
+    // 站内提醒是提交后的附加能力。尤其 Root 的 @所有人可能产生较大扇出，
+    // 不能占用消息事务、拖慢响应，或因提醒链路失败把已成功消息伪装成发送失败。
+    void deliverCommunityChatMessageNotifications({ messagePublicId: publicId, env, db }).catch((error) => {
       console.error('[community-chat] 站内提醒投递失败 code=%s', error?.code || error?.name || 'UNKNOWN');
-    }
+    });
     return { message, idempotent: false };
   } catch (error) {
     await connection.rollback();
@@ -1048,8 +1425,10 @@ export async function createCommunityChatMessage({
           expectedRoomId,
           normalizedContent,
           normalizedReplyPublicId,
+          normalizedMentionEveryone,
           existingImages,
           normalizedImagePublicIds,
+          payloadFingerprint,
         );
         const message = await loadMessageByPublicId(db, existing.publicId, user.id, viewerMemberRole);
         if (message) return { message, idempotent: true };
@@ -1386,6 +1765,7 @@ export const __test__ = {
   normalizeClientRequestId,
   normalizeImagePublicIds,
   normalizeMessageContent,
+  normalizeMentionEveryone,
   normalizeMentionMessagePublicIds,
   normalizePageSize,
   normalizePublicMessageId,

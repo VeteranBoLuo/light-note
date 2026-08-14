@@ -1477,3 +1477,191 @@ LEFT JOIN information_schema.statistics actual
  AND actual.table_name=expected.tab
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+-- 47) 社区公开身份、稳定提及与表情消息契约必须完整（期望 0 行）
+SELECT '[47] missing_community_chat_identity_table' AS check_name,
+  'community_chat_user_identities' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+   WHERE table_schema=DATABASE()
+     AND table_name='community_chat_user_identities'
+     AND engine='InnoDB'
+);
+
+SELECT '[47] missing_community_chat_identity_column' AS check_name, expected.col AS detail
+FROM (
+  SELECT 'user_id' col UNION ALL
+  SELECT 'public_id' UNION ALL
+  SELECT 'community_id' UNION ALL
+  SELECT 'create_time' UNION ALL
+  SELECT 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_user_identities'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] invalid_community_chat_identity_collation' AS check_name,
+  CONCAT(actual.column_name, ' actual=', IFNULL(actual.character_set_name, 'NULL'), '/', IFNULL(actual.collation_name, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND actual.table_name='community_chat_user_identities'
+  AND (
+    (actual.column_name='user_id' AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci'))
+    OR (actual.column_name='public_id' AND (actual.character_set_name <> 'ascii' OR actual.collation_name <> 'ascii_bin'))
+    OR (actual.column_name='community_id' AND (actual.character_set_name <> 'ascii' OR actual.collation_name <> 'ascii_general_ci'))
+  );
+
+SELECT '[47] missing_community_chat_identity_index' AS check_name, expected.ix AS detail
+FROM (
+  SELECT 'PRIMARY' ix UNION ALL
+  SELECT 'uk_community_chat_identity_public' UNION ALL
+  SELECT 'uk_community_chat_identity_community'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_user_identities'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[47] missing_community_chat_message_contract_column' AS check_name, expected.n AS detail
+FROM (
+  SELECT 'community_chat_messages' tab, 'payload_fingerprint' col, 'community_chat_messages.payload_fingerprint' n UNION ALL
+  SELECT 'community_chat_messages', 'message_kind', 'community_chat_messages.message_kind' UNION ALL
+  SELECT 'community_chat_messages', 'sticker_source', 'community_chat_messages.sticker_source' UNION ALL
+  SELECT 'community_chat_messages', 'sticker_key', 'community_chat_messages.sticker_key' UNION ALL
+  SELECT 'community_chat_messages', 'mention_everyone', 'community_chat_messages.mention_everyone' UNION ALL
+  SELECT 'community_chat_message_mentions', 'sort_order', 'community_chat_message_mentions.sort_order' UNION ALL
+  SELECT 'community_chat_message_mentions', 'display_name_snapshot', 'community_chat_message_mentions.display_name_snapshot' UNION ALL
+  SELECT 'community_chat_message_mentions', 'community_id_snapshot', 'community_chat_message_mentions.community_id_snapshot'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tab
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] invalid_community_chat_message_contract_default' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', IFNULL(actual.column_default, 'NULL')) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name='community_chat_messages' AND actual.column_name='message_kind'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='text'))
+    OR (actual.table_name='community_chat_messages' AND actual.column_name='mention_everyone'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+    OR (actual.table_name='community_chat_message_mentions' AND actual.column_name='sort_order'
+      AND NOT (actual.is_nullable='NO' AND actual.column_default='0'))
+    OR (actual.table_name='community_chat_message_mentions' AND actual.column_name IN ('display_name_snapshot', 'community_id_snapshot')
+      AND NOT (actual.is_nullable='NO' AND actual.column_default=''))
+  );
+
+SELECT '[47] missing_community_chat_custom_sticker_table' AS check_name,
+  'community_chat_custom_stickers' AS detail
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM information_schema.tables
+   WHERE table_schema=DATABASE()
+     AND table_name='community_chat_custom_stickers'
+     AND engine='InnoDB'
+);
+
+SELECT '[47] missing_community_chat_custom_sticker_column' AS check_name, expected.col AS detail
+FROM (
+  SELECT 'public_id' col UNION ALL
+  SELECT 'user_id' UNION ALL
+  SELECT 'object_key' UNION ALL
+  SELECT 'content_sha256' UNION ALL
+  SELECT 'content_type' UNION ALL
+  SELECT 'file_size' UNION ALL
+  SELECT 'width' UNION ALL
+  SELECT 'height' UNION ALL
+  SELECT 'name' UNION ALL
+  SELECT 'status' UNION ALL
+  SELECT 'sort_order' UNION ALL
+  SELECT 'create_time' UNION ALL
+  SELECT 'update_time'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_custom_stickers'
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;
+
+SELECT '[47] missing_community_chat_custom_sticker_index' AS check_name, expected.ix AS detail
+FROM (
+  SELECT 'uk_community_chat_custom_sticker_public' ix UNION ALL
+  SELECT 'uk_community_chat_custom_sticker_content' UNION ALL
+  SELECT 'idx_community_chat_custom_sticker_owner_status' UNION ALL
+  SELECT 'idx_community_chat_custom_sticker_status_time'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name='community_chat_custom_stickers'
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+-- 48) 爱发电接入必须具备唯一订单账本、一次性下单凭证与唯一账号关联（期望 0 行）
+SELECT '[48] missing_afdian_support_table' AS check_name, expected.t AS detail
+FROM (
+  SELECT 'support_checkout_intents' t UNION ALL
+  SELECT 'support_account_links' UNION ALL
+  SELECT 'support_orders' UNION ALL
+  SELECT 'support_public_preferences'
+) expected
+LEFT JOIN information_schema.tables actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.t
+ AND actual.engine='InnoDB'
+ AND actual.table_collation='utf8mb4_unicode_ci'
+WHERE actual.table_name IS NULL;
+
+SELECT '[48] invalid_afdian_account_id_collation' AS check_name,
+  CONCAT(actual.table_name, '.', actual.column_name, ' actual=', actual.character_set_name, '/', actual.collation_name) AS detail
+FROM information_schema.columns actual
+WHERE actual.table_schema=DATABASE()
+  AND (
+    (actual.table_name='support_checkout_intents' AND actual.column_name='user_id') OR
+    (actual.table_name='support_account_links' AND actual.column_name='user_id') OR
+    (actual.table_name='support_orders' AND actual.column_name='light_note_user_id') OR
+    (actual.table_name='support_public_preferences' AND actual.column_name IN ('user_id', 'admin_hidden_by'))
+  )
+  AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
+
+SELECT '[48] missing_afdian_support_index' AS check_name, CONCAT(expected.tn, '.', expected.ix) AS detail
+FROM (
+  SELECT 'support_checkout_intents' tn, 'uk_support_checkout_token' ix UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_user' UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_provider_user' UNION ALL
+  SELECT 'support_account_links', 'uk_support_link_provider_private' UNION ALL
+  SELECT 'support_orders', 'uk_support_order_provider' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_user_status' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_retry' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_ranking' UNION ALL
+  SELECT 'support_public_preferences', 'uk_support_public_id' UNION ALL
+  SELECT 'support_public_preferences', 'idx_support_public_visibility'
+) expected
+LEFT JOIN information_schema.statistics actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.index_name=expected.ix
+WHERE actual.index_name IS NULL;
+
+SELECT '[48] missing_afdian_support_management_column' AS check_name,
+  CONCAT(expected.tn, '.', expected.col) AS detail
+FROM (
+  SELECT 'support_account_links' tn, 'provider_name' col UNION ALL
+  SELECT 'support_account_links', 'provider_avatar_url' UNION ALL
+  SELECT 'support_account_links', 'identity_refreshed_at' UNION ALL
+  SELECT 'support_orders', 'ranking_observed_at' UNION ALL
+  SELECT 'support_public_preferences', 'participate_in_ranking' UNION ALL
+  SELECT 'support_public_preferences', 'show_identity' UNION ALL
+  SELECT 'support_public_preferences', 'admin_hidden'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;

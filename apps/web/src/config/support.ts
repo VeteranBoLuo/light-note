@@ -1,3 +1,9 @@
+import {
+  AFDIAN_CHECKOUT_OPTIONS as SHARED_AFDIAN_CHECKOUT_OPTIONS,
+  AFDIAN_CREATOR_URL,
+  type AfdianCheckoutOptionKey,
+} from '@lightnote/shared';
+
 const AFDIAN_CREATOR_HOSTS = new Set(['afdian.com', 'www.afdian.com']);
 const AFDIAN_ORDER_HOSTS = new Set(['ifdian.net', 'www.ifdian.net']);
 const AFDIAN_CREATOR_PATH = /^\/a\/[^/]+(?:\/.*)?$/;
@@ -11,11 +17,11 @@ const AFDIAN_ORDER_QUERY_KEYS = new Set([
   'remark',
   'affiliate_code',
   'fr',
+  // 轻笺后端签发的一次性归属凭证。只允许 URL 安全字符，且不写入日志。
+  'custom_order_id',
 ]);
 
-const DEFAULT_AFDIAN_CREATOR_URL = 'https://afdian.com/a/lightnote';
-
-export type AfdianSupportOptionKey = 'coffee' | 'server' | 'companion' | 'custom';
+export type AfdianSupportOptionKey = AfdianCheckoutOptionKey;
 
 export interface AfdianSupportOption {
   key: AfdianSupportOptionKey;
@@ -47,7 +53,7 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
     const queryKeys = Array.from(url.searchParams.keys());
     if (queryKeys.some((key) => !AFDIAN_ORDER_QUERY_KEYS.has(key))) return '';
 
-    const coreKeys = ['plan_id', 'product_type', 'user_id'];
+    const coreKeys = ['plan_id', 'product_type', 'user_id', 'custom_order_id'];
     if (coreKeys.some((key) => url.searchParams.getAll(key).length > 1)) return '';
 
     const planId = url.searchParams.get('plan_id') || '';
@@ -56,17 +62,23 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
     const hasPlanId = url.searchParams.has('plan_id');
     const hasProductType = url.searchParams.has('product_type');
     const hasUserId = url.searchParams.has('user_id');
+    const customOrderId = url.searchParams.get('custom_order_id') || '';
+    const hasCustomOrderId = url.searchParams.has('custom_order_id');
     const normalizedUrl = new URL(`https://${hostname}${AFDIAN_ORDER_PATH}`);
+
+    if (hasCustomOrderId && !/^[A-Za-z0-9_-]{32,128}$/.test(customOrderId)) return '';
 
     if (hasPlanId) {
       if (!AFDIAN_ID_PATTERN.test(planId) || !hasProductType || productType !== '0' || hasUserId) return '';
       normalizedUrl.searchParams.set('plan_id', planId.toLowerCase());
       normalizedUrl.searchParams.set('product_type', '0');
+      if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
       return normalizedUrl.toString();
     }
 
     if (!hasUserId || !AFDIAN_ID_PATTERN.test(userId) || hasProductType) return '';
     normalizedUrl.searchParams.set('user_id', userId.toLowerCase());
+    if (hasCustomOrderId) normalizedUrl.searchParams.set('custom_order_id', customOrderId);
     return normalizedUrl.toString();
   } catch {
     return '';
@@ -75,7 +87,7 @@ export function normalizeAfdianSupportUrl(value: unknown): string {
 
 function resolveCreatorUrl(value: unknown): string {
   if (typeof value === 'string' && value.trim()) return normalizeAfdianSupportUrl(value);
-  return normalizeAfdianSupportUrl(DEFAULT_AFDIAN_CREATOR_URL);
+  return normalizeAfdianSupportUrl(AFDIAN_CREATOR_URL);
 }
 
 function createSupportOption(
@@ -91,25 +103,30 @@ export const AFDIAN_SUPPORT_URL = resolveCreatorUrl(import.meta.env.VITE_AFDIAN_
 export const AFDIAN_SUPPORT_CONFIGURED = Boolean(AFDIAN_SUPPORT_URL);
 
 export const AFDIAN_SUPPORT_OPTIONS: readonly AfdianSupportOption[] = Object.freeze([
-  createSupportOption(
-    'coffee',
-    6,
-    'https://ifdian.net/order/create?plan_id=4415b194930c11f1ac7b5254001e7c00&product_type=0',
-  ),
-  createSupportOption(
-    'server',
-    18,
-    'https://ifdian.net/order/create?plan_id=a05f9730930c11f1aeb65254001e7c00&product_type=0',
-  ),
-  createSupportOption(
-    'companion',
-    50,
-    'https://ifdian.net/order/create?plan_id=9fc7a358930c11f1abee52540025c377&product_type=0',
-  ),
-  createSupportOption('custom', null, 'https://ifdian.net/order/create?user_id=9a64b3ac930611f18e8052540025c377'),
+  ...SHARED_AFDIAN_CHECKOUT_OPTIONS.map((option) => {
+    const url = new URL('https://ifdian.net/order/create');
+    if (option.planId) {
+      url.searchParams.set('plan_id', option.planId);
+      url.searchParams.set('product_type', '0');
+    } else if (option.creatorId) {
+      url.searchParams.set('user_id', option.creatorId);
+    }
+    return createSupportOption(option.key, option.amount, url.toString());
+  }),
 ]);
 
 type ExternalWindowOpener = (url: string, target: string, features: string) => unknown;
+
+function openNewPage(url: string, openWindow?: ExternalWindowOpener): boolean {
+  const opener =
+    openWindow ||
+    (typeof window !== 'undefined'
+      ? (targetUrl: string, target: string, features: string) => window.open(targetUrl, target, features)
+      : null);
+  if (!opener) return false;
+  opener(url, '_blank', 'noopener,noreferrer');
+  return true;
+}
 
 /**
  * 浏览器/PWA 会新开标签页；轻笺 Android WebView 会拦截这个 _blank 请求，
@@ -119,13 +136,18 @@ export function openAfdianSupportPage(value: unknown = AFDIAN_SUPPORT_URL, openW
   const url = normalizeAfdianSupportUrl(value);
   if (!url) return false;
 
-  const opener =
-    openWindow ||
-    (typeof window !== 'undefined'
-      ? (targetUrl: string, target: string, features: string) => window.open(targetUrl, target, features)
-      : null);
-  if (!opener) return false;
+  return openNewPage(url, openWindow);
+}
 
-  opener(url, '_blank', 'noopener,noreferrer');
-  return true;
+/** 同步打开轻笺后端跳转端点，避免等待接口后再开窗被浏览器或 Android WebView 拦截。 */
+export function openTrackedAfdianCheckout(
+  optionKey: AfdianSupportOptionKey,
+  openWindow?: ExternalWindowOpener,
+): boolean {
+  if (!SHARED_AFDIAN_CHECKOUT_OPTIONS.some((option) => option.key === optionKey)) return false;
+  return openNewPage(`/api/support/checkout?option=${encodeURIComponent(optionKey)}`, openWindow);
+}
+
+export function openAfdianOAuthPage(openWindow?: ExternalWindowOpener): boolean {
+  return openNewPage('/api/support/afdian/oauth/start', openWindow);
 }

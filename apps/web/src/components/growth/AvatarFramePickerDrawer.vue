@@ -912,8 +912,8 @@
     border-radius: 10px;
   }
 
-  :global(html.light-note-mobile-rendering) .frame-card.is-selected,
-  :global(html.light-note-mobile-rendering) .frame-card.is-equipped {
+  html.light-note-mobile-rendering .frame-card.is-selected,
+  html.light-note-mobile-rendering .frame-card.is-equipped {
     border-color: var(--primary-color);
     box-shadow: none;
   }

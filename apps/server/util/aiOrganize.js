@@ -1,4 +1,4 @@
-import { fetchWebMeta } from './fetchWebMeta.js';
+import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
 
 // AI 自动整理:批量给书签生成名称/描述 + 从「已有标签」匹配 + 建议新标签。
@@ -120,7 +120,7 @@ export async function suggestBookmarkMeta({
   if (hasMeta) {
     pageInfo = [`网页名称:${curName}`, `网页描述:${curDesc}`].join('\n');
   } else {
-    const meta = await fetchWebMeta(url, { signal });
+    const meta = await fetchWebMeta(url, { signal, maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES });
     throwIfAborted(signal);
     metadataSource = meta.ok ? 'fetched' : 'inferred';
     fetchReason = meta.ok ? '' : String(meta.reason || 'FETCH_FAILED');

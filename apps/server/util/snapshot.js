@@ -1,5 +1,5 @@
 import pool from '../db/index.js';
-import { fetchWebMeta } from './fetchWebMeta.js';
+import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from './fetchWebMeta.js';
 import { requestAi } from './agent/aiGateway.js';
 import { safeAgentError } from './agent/logSafety.js';
 import { invalidatePersonalKnowledgeCache } from './personalKnowledgeSearch.js';
@@ -54,11 +54,19 @@ export async function archiveBookmark(userId, bookmarkId) {
   if (!rows.length) return { ok: false, reason: 'not_found', msg: '书签不存在' };
   const url = rows[0].url;
   if (!url) return { ok: false, reason: 'no_url', msg: '该书签没有网址' };
-  let meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT, timeout: SNAPSHOT_FETCH_TIMEOUT });
+  let meta = await fetchWebMeta(url, {
+    bodyLimit: SNAPSHOT_LIMIT,
+    maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+    timeout: SNAPSHOT_FETCH_TIMEOUT,
+  });
   // 抓取类失败(网络抖动/反爬/超时偶发)短暂重试一次:很多站"时好时坏",一次重试能明显提升成功率
   if (!meta.ok && meta.reason === 'FETCH_FAILED') {
     await new Promise((resolve) => setTimeout(resolve, 1500));
-    meta = await fetchWebMeta(url, { bodyLimit: SNAPSHOT_LIMIT, timeout: SNAPSHOT_FETCH_TIMEOUT });
+    meta = await fetchWebMeta(url, {
+      bodyLimit: SNAPSHOT_LIMIT,
+      maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
+      timeout: SNAPSHOT_FETCH_TIMEOUT,
+    });
   }
   if (!meta.ok) {
     // 归档失败给出更贴切的原因(SPA/需登录常见)

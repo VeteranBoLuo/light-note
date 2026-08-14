@@ -106,7 +106,7 @@
     color: #d97706;
     font-weight: 700;
   }
-  :global(html.light-note-mobile-rendering) .ml-node.reached {
+  html.light-note-mobile-rendering .ml-node.reached {
     border-color: #d97706;
   }
   .ml-remain {

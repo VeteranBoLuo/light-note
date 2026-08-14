@@ -119,6 +119,7 @@ export async function validateCommunityChatImage(file) {
   }
   return {
     ...validateDimensions(dimensions),
+    contentSha256: createHash('sha256').update(buffer).digest('hex'),
     contentType: imageType.contentType,
     extension: imageType.extension,
     fileSize: buffer.length,

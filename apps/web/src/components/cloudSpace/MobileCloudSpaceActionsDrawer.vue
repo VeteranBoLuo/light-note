@@ -553,8 +553,8 @@
     border-radius: var(--mobile-control-radius, 10px);
   }
 
-  :global(html.light-note-mobile-rendering) .mobile-cloud-actions__item:active,
-  :global(html.light-note-mobile-rendering) .mobile-folder-form :deep(.b-input:focus-visible) {
+  html.light-note-mobile-rendering .mobile-cloud-actions__item:active,
+  html.light-note-mobile-rendering .mobile-folder-form :deep(.b-input:focus-visible) {
     border-color: var(--resource-file-color, #ff8a00) !important;
   }
 </style>

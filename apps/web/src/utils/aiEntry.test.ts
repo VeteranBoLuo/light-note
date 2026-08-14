@@ -5,6 +5,7 @@ import {
   getAiAssistantVisibility,
   normalizeAiAssistantLaunchPayload,
   openAiAssistant,
+  resolveBookmarkAiIntent,
   setAiAssistantVisibility,
   shouldHideAiEdgeTrigger,
 } from './aiEntry';
@@ -58,6 +59,11 @@ describe('aiEntry', () => {
 
   it('保留书签生成笔记入口的专用预填意图', () => {
     expect(normalizeAiAssistantLaunchPayload({ suggestedIntent: 'create_note' }).suggestedIntent).toBe('create_note');
+  });
+
+  it('单个书签在桌面端与移动端统一生成笔记，多个书签仍进入对比', () => {
+    expect(resolveBookmarkAiIntent(1)).toBe('create_note');
+    expect(resolveBookmarkAiIntent(2)).toBe('compare');
   });
 
   it('同步 AI 工作区显隐状态给移动端导航', () => {

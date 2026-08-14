@@ -458,6 +458,9 @@
           h('span', { class: 'chat-profile-content__avatar', 'aria-hidden': 'true' }, [avatar]),
           h('span', { class: 'chat-profile-content__identity-copy' }, [
             h('strong', profile.name || t('communityChat.memberFallback')),
+            profile.communityId
+              ? h('small', { class: 'chat-profile-content__community-id' }, `@${profile.communityId}`)
+              : null,
             h('span', { class: 'chat-profile-content__identity-tags' }, tags),
             profile.title ? h('small', profile.title) : null,
           ]),
@@ -733,6 +736,17 @@
   .chat-profile-content__identity-copy > small {
     color: var(--desc-color);
     font-size: 11px;
+  }
+
+  .chat-profile-content__community-id {
+    width: fit-content;
+    padding: 2px 7px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 999px;
+    color: var(--primary-color) !important;
+    background: var(--card-background);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.02em;
   }
 
   .chat-profile-content__identity-tags {

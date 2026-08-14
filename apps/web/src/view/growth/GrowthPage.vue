@@ -1134,7 +1134,7 @@
     flex: 1;
     text-align: left;
   }
-  :global(html.light-note-mobile-rendering) .growth-free-lottery-hint.b_btn {
+  html.light-note-mobile-rendering .growth-free-lottery-hint.b_btn {
     border-color: var(--primary-color);
     background: var(--background-color);
     box-shadow: none;

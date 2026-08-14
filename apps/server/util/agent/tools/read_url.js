@@ -1,4 +1,4 @@
-import { fetchWebMeta } from '../../fetchWebMeta.js';
+import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from '../../fetchWebMeta.js';
 import { isAgentUrlAllowedByScope } from '../webAccessPolicy.js';
 import redisClient from '../../redisClient.js';
 import crypto from 'node:crypto';
@@ -19,6 +19,8 @@ const REASON_MSG = {
   TIMEOUT: '网站响应超时',
   DNS_FAILED: '无法解析网站域名',
   TLS_FAILED: '网站证书校验失败',
+  CONTENT_TOO_LARGE: '网页内容过大，超出 AI 的安全读取上限',
+  ACCESS_CHALLENGE: '网站要求完成人机验证，暂时无法由 AI 读取',
   FETCH_FAILED: '抓取失败,可能无法访问或超时',
   EMPTY_CONTENT: '未提取到有效正文',
 };
@@ -256,6 +258,7 @@ async function fetchReadablePage(url, signal) {
     signal: direct.controller.signal,
     timeout: 12_000,
     bodyLimit: 12_000,
+    maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES,
   })
     .then((value) => ({ index: 0, value }))
     .catch((error) => {

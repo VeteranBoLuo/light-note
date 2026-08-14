@@ -23,6 +23,7 @@ import updateLogRouter from '../router/updateLog.js';
 import aiEvaluationRouter from '../router/aiEvaluation.js';
 import resourceGovernanceRouter from '../router/resourceGovernance.js';
 import communityChatRouter from '../router/communityChat.js';
+import supportRouter from '../router/support.js';
 
 export { INTERNAL_ROLES } from './internalRoles.js';
 
@@ -180,6 +181,10 @@ export const insertData = function (params) {
 };
 
 export const baseRouter = [
+  {
+    path: '/support',
+    router: supportRouter,
+  },
   {
     path: '/user',
     router: userRouter,

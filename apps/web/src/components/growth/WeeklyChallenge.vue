@@ -236,5 +236,5 @@
   }
   .wc-go { color: var(--primary-color); }
   .wc-loading, .wc-error, .wc-empty { display: flex; min-height: 90px; align-items: center; justify-content: center; gap: 10px; color: var(--desc-color); font-size: 12px; }
-  :global(html.light-note-mobile-rendering) .wc-item.done { border-color: #f59e0b; box-shadow: none; }
+  html.light-note-mobile-rendering .wc-item.done { border-color: #f59e0b; box-shadow: none; }
 </style>

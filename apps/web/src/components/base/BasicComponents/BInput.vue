@@ -12,8 +12,10 @@
       :value="value"
       @input="handleInput"
       @scroll="$emit('scroll', $event)"
-      @keydown.enter="handleEnter"
-      @keydown.esc="handleEscape"
+      @keydown="handleKeydown"
+      @select="$emit('select', $event)"
+      @compositionstart="$emit('compositionstart', $event)"
+      @compositionend="$emit('compositionend', $event)"
       :style="{
         paddingLeft: hasPrefixSlot ? '30px' : '11px',
         paddingRight: hasSuffixSlot ? '30px' : '11px',
@@ -32,7 +34,10 @@
       :value="value"
       :type="type"
       @input="handleInput"
-      @keydown.enter="handleEnter"
+      @keydown="handleKeydown"
+      @select="$emit('select', $event)"
+      @compositionstart="$emit('compositionstart', $event)"
+      @compositionend="$emit('compositionend', $event)"
       :style="{
         paddingLeft: hasPrefixSlot ? '35px' : '11px',
         paddingRight: hasSuffixSlot ? '35px' : '11px',
@@ -68,14 +73,7 @@
       id?: string;
       placeholder?: string;
       type?: string;
-      autocomplete?:
-        | 'off'
-        | 'on'
-        | 'email'
-        | 'username'
-        | 'current-password'
-        | 'new-password'
-        | 'one-time-code';
+      autocomplete?: 'off' | 'on' | 'email' | 'username' | 'current-password' | 'new-password' | 'one-time-code';
       height?: string;
       theme?: 'al-day' | '';
       rows?: number;
@@ -101,7 +99,19 @@
     },
   );
   const value: Ref<string | number | undefined> = defineModel('value');
-  const emit = defineEmits(['input', 'enter', 'focus', 'focusout', 'blur', 'change', 'scroll']);
+  const emit = defineEmits([
+    'input',
+    'enter',
+    'focus',
+    'focusout',
+    'blur',
+    'change',
+    'scroll',
+    'keydown',
+    'select',
+    'compositionstart',
+    'compositionend',
+  ]);
   const inputEl = ref<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   // 获取插槽内容
@@ -138,6 +148,13 @@
       event.preventDefault();
     }
     emit('enter', event);
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    emit('keydown', event);
+    if (event.defaultPrevented) return;
+    if (event.key === 'Enter') handleEnter(event);
+    else if (event.key === 'Escape') handleEscape(event);
   }
 
   function handleEscape(event: KeyboardEvent) {

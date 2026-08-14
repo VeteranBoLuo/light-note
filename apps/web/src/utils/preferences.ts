@@ -18,6 +18,7 @@ export interface UserPreferences {
   theme?: ThemePreference | string;
   noteViewMode?: 'card' | 'list';
   noteSidebarMode?: 'directory' | 'tags';
+  noteDirectEdit?: boolean;
   resourceView?: 'card' | 'list';
   todoView?: 'list' | 'agenda' | 'calendar' | 'matrix';
   tagView?: 'card' | 'graph';
@@ -41,6 +42,14 @@ export interface UserPreferences {
  * 与后端相反，导致「偏好里没有这个 key」的账号（老账号、游客）拿到列表视图。
  */
 export const DEFAULT_NOTE_VIEW_MODE: NonNullable<UserPreferences['noteViewMode']> = 'card';
+
+/**
+ * 已有笔记的默认打开方式：移动端始终进入编辑器；PC 仅在用户明确开启时跳过库内预览。
+ * 缺失值必须保持 false，兼容老账号并确保 PC 默认仍是预览。
+ */
+export function shouldOpenNoteDirectly(preferences?: UserPreferences | null, isMobile = false): boolean {
+  return isMobile || preferences?.noteDirectEdit === true;
+}
 
 export const DEFAULT_HOME_PAGE: ApplicationHomePreference = 'bookmark';
 // 移动端默认进入「今日」——它是每天打开轻笺后处理事情的第一站

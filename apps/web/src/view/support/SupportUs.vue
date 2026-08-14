@@ -31,7 +31,7 @@
                 class="support-primary-action"
                 type="primary"
                 size="large"
-                :disabled="!supportConfigured"
+                :disabled="!supportConfigured || !supportStateReady"
                 @click="handleSupport"
                 v-click-log="{ module: '支持轻笺', operation: '前往爱发电' }"
               >
@@ -48,6 +48,18 @@
             </BCard>
           </div>
         </header>
+
+        <SupportAccountPanel
+          v-if="supportStateReady"
+          :state="supportState"
+          :unlinking="unlinking"
+          :preference-saving="preferenceSaving"
+          @link="handleOAuthLink"
+          @unlink="confirmUnlink"
+          @preference-change="handlePreferenceChange"
+        />
+
+        <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
 
         <section class="support-section support-options" aria-labelledby="support-options-title">
           <div class="support-section__heading">
@@ -88,7 +100,7 @@
               <BButton
                 class="support-tier-card__action"
                 type="primary"
-                :disabled="!option.configured"
+                :disabled="!option.configured || !supportStateReady"
                 @click="handleSupportOption(option)"
                 v-click-log="{ module: '支持轻笺', operation: option.logOperation }"
               >
@@ -182,7 +194,7 @@
             class="support-closing__action"
             type="primary"
             size="large"
-            :disabled="!supportConfigured"
+            :disabled="!supportConfigured || !supportStateReady"
             @click="handleSupport"
             v-click-log="{ module: '支持轻笺', operation: '底部前往爱发电' }"
           >
@@ -196,24 +208,58 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, onMounted } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRouter } from 'vue-router';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
+  import SupportAccountPanel from './SupportAccountPanel.vue';
+  import SupportLeaderboard from './SupportLeaderboard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import icon from '@/config/icon';
-  import { AFDIAN_SUPPORT_CONFIGURED, AFDIAN_SUPPORT_OPTIONS, openAfdianSupportPage } from '@/config/support';
+  import {
+    AFDIAN_SUPPORT_CONFIGURED,
+    AFDIAN_SUPPORT_OPTIONS,
+    openAfdianOAuthPage,
+    openAfdianSupportPage,
+    openTrackedAfdianCheckout,
+  } from '@/config/support';
   import { bookmarkStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
+  import {
+    getAfdianLeaderboard,
+    getAfdianSupportState,
+    unlinkAfdianAccount,
+    updateAfdianPublicPreference,
+    type AfdianLeaderboard,
+    type AfdianSupportState,
+  } from '@/api/supportApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
+  import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
 
   const { t } = useI18n();
   const router = useRouter();
   const bookmark = bookmarkStore();
   const supportConfigured = AFDIAN_SUPPORT_CONFIGURED;
+  const emptySupportState: AfdianSupportState = {
+    authenticated: false,
+    oauthAvailable: false,
+    orderSyncAvailable: false,
+    linked: false,
+    orderCount: 0,
+    totalAmount: '0.00',
+    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    recentOrders: [],
+  };
+  const supportState = ref<AfdianSupportState>({ ...emptySupportState });
+  const supportStateReady = ref(false);
+  const unlinking = ref(false);
+  const preferenceSaving = ref(false);
+  const leaderboard = ref<AfdianLeaderboard | null>(null);
+  const leaderboardLoading = ref(true);
 
   const promiseCards = computed(() => [
     {
@@ -316,22 +362,133 @@
   });
 
   function handleSupport() {
-    if (!openAfdianSupportPage()) {
+    const opened =
+      supportState.value.authenticated && supportState.value.orderSyncAvailable
+        ? openTrackedAfdianCheckout('custom')
+        : openAfdianSupportPage();
+    if (!opened) {
       message.warning(t('support.unavailableMessage'));
       return;
     }
-    void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助主页' });
+    void recordOperation({ module: '支持轻笺', operation: '打开爱发电赞助入口' });
   }
 
   function handleSupportOption(option: (typeof supportOptions.value)[number]) {
-    if (!openAfdianSupportPage(option.url)) {
+    const opened =
+      supportState.value.authenticated && supportState.value.orderSyncAvailable
+        ? openTrackedAfdianCheckout(option.key)
+        : openAfdianSupportPage(option.url);
+    if (!opened) {
       message.warning(t('support.unavailableMessage'));
       return;
     }
     void recordOperation({ module: '支持轻笺', operation: `打开爱发电赞助档位:${option.key}` });
   }
 
+  async function loadSupportState() {
+    try {
+      const next = await getAfdianSupportState();
+      supportState.value = {
+        ...emptySupportState,
+        ...next,
+        publicPreference: { ...emptySupportState.publicPreference, ...next.publicPreference },
+        recentOrders: Array.isArray(next.recentOrders) ? next.recentOrders : [],
+      };
+    } catch {
+      // 支持状态属于增强信息；读取失败时保留当前页面和已有状态，不阻断赞助入口。
+    } finally {
+      supportStateReady.value = true;
+    }
+  }
+
+  async function loadLeaderboard() {
+    leaderboardLoading.value = true;
+    try {
+      leaderboard.value = await getAfdianLeaderboard();
+    } catch {
+      // 排行榜是增强信息，失败不阻断赞助入口与账号管理。
+    } finally {
+      leaderboardLoading.value = false;
+    }
+  }
+
+  async function refreshSupport() {
+    await Promise.all([loadSupportState(), loadLeaderboard()]);
+  }
+
+  async function handlePreferenceChange(value: { participateInRanking: boolean; showIdentity: boolean }) {
+    preferenceSaving.value = true;
+    try {
+      supportState.value.publicPreference = await updateAfdianPublicPreference(value);
+      await loadLeaderboard();
+      message.success(t('support.rankingPreferenceSaved'));
+    } catch {
+      message.error(t('support.rankingPreferenceFailed'));
+    } finally {
+      preferenceSaving.value = false;
+    }
+  }
+
+  function handleOAuthLink() {
+    if (!openAfdianOAuthPage()) {
+      message.warning(t('support.accountLinkUnavailable'));
+      return;
+    }
+    void recordOperation({ module: '支持轻笺', operation: '发起爱发电账号关联' });
+  }
+
+  function consumeOAuthResult() {
+    const currentRoute = router.currentRoute?.value;
+    const rawResult = currentRoute?.query?.afdian;
+    const result = Array.isArray(rawResult) ? rawResult[0] : rawResult;
+    if (!result || !['bound', 'failed', 'session_required'].includes(result)) return;
+
+    const query = { ...currentRoute.query };
+    delete query.afdian;
+    void router.replace({ query });
+
+    if (result === 'bound') {
+      message.success(t('support.accountLinkSuccess'));
+      return;
+    }
+    if (result === 'session_required') {
+      message.warning(t('support.accountLinkSessionRequired'));
+      return;
+    }
+    message.error(t('support.accountLinkFailed'));
+  }
+
+  function confirmUnlink() {
+    Alert.alert({
+      title: t('support.accountUnlinkTitle'),
+      content: t('support.accountUnlinkDescription'),
+      okText: t('support.accountUnlinkAction'),
+      async onOk() {
+        unlinking.value = true;
+        try {
+          await unlinkAfdianAccount();
+          await loadSupportState();
+          message.success(t('support.accountUnlinkSuccess'));
+        } catch {
+          message.error(t('support.accountUnlinkFailed'));
+        } finally {
+          unlinking.value = false;
+        }
+      },
+    });
+  }
+
+  const { markLoaded } = useForegroundRefresh({
+    refresh: refreshSupport,
+    staleMs: 1_000,
+    enabled: () => supportStateReady.value,
+  });
+
   onMounted(() => {
+    void refreshSupport().then(() => {
+      markLoaded();
+      consumeOAuthResult();
+    });
     void recordOperation({ module: '支持轻笺', operation: '查看支持页面' });
   });
 </script>
@@ -369,11 +526,7 @@
     border-radius: 24px;
     background:
       radial-gradient(circle at 8% 12%, color-mix(in srgb, var(--primary-color) 18%, transparent), transparent 34%),
-      radial-gradient(
-        circle at 94% 88%,
-        color-mix(in srgb, var(--primary-color) 12%, transparent),
-        transparent 34%
-      ),
+      radial-gradient(circle at 94% 88%, color-mix(in srgb, var(--primary-color) 12%, transparent), transparent 34%),
       var(--surface-raised-background);
     box-shadow: var(--surface-raised-shadow);
   }

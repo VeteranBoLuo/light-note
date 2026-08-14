@@ -15,6 +15,7 @@ const createNotification = vi.fn();
 const issueLoginSession = vi.fn();
 const recordConversionEvent = vi.fn();
 const completeGrowthTask = vi.fn();
+const ensureCommunityChatIdentity = vi.fn();
 const verifyPassword = vi.fn();
 const hashPassword = vi.fn();
 
@@ -41,6 +42,7 @@ vi.mock('../util/conversion.js', () => ({
   normalizeConversionSource: vi.fn((source) => source || 'unknown'),
 }));
 vi.mock('../util/growthTaskCompletion.js', () => ({ completeGrowthTask }));
+vi.mock('../util/services/communityChatIdentityService.js', () => ({ ensureCommunityChatIdentity }));
 vi.mock('../util/logExclude.js', () => ({
   isSelfTraffic: vi.fn(() => true),
   listLogExclude: vi.fn(),
@@ -79,11 +81,16 @@ describe('新用户示例数据接入注册流程', () => {
     issueLoginSession.mockReset();
     recordConversionEvent.mockReset();
     completeGrowthTask.mockReset();
+    ensureCommunityChatIdentity.mockReset();
     verifyPassword.mockReset();
     hashPassword.mockReset();
     verifyPassword.mockReturnValue(false);
     hashPassword.mockReturnValue('hashed-password');
     completeGrowthTask.mockResolvedValue({ completed: true });
+    ensureCommunityChatIdentity.mockResolvedValue({
+      userPublicId: '11111111-1111-4111-8111-111111111111',
+      communityId: 'ln_TEST22',
+    });
     seedNewUserWorkspaceData.mockResolvedValue({ created: true, folderId: 42 });
     seedNewUserCloudFile.mockResolvedValue({ created: true, id: 7, folderId: 42 });
     createNotification.mockResolvedValue(undefined);
@@ -116,6 +123,7 @@ describe('新用户示例数据接入注册流程', () => {
 
     await registerUser(req, res);
 
+    expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: insertedUser.id });
     expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: insertedUser.id, lang: 'en-US' });
     expect(seedNewUserCloudFile).toHaveBeenCalledWith({
       userId: insertedUser.id,
@@ -253,6 +261,7 @@ describe('新用户示例数据接入注册流程', () => {
     );
 
     expect(user.id).toBe(createdUserId);
+    expect(ensureCommunityChatIdentity).toHaveBeenCalledWith({ userId: createdUserId });
     expect(seedNewUserWorkspaceData).toHaveBeenCalledWith({ userId: createdUserId, lang: 'en-US' });
     expect(seedNewUserCloudFile).toHaveBeenCalledWith({
       userId: createdUserId,
@@ -271,6 +280,7 @@ describe('新用户示例数据接入注册流程', () => {
     );
 
     expect(user.id).toBe('existing-user');
+    expect(ensureCommunityChatIdentity).not.toHaveBeenCalled();
     expect(seedNewUserWorkspaceData).not.toHaveBeenCalled();
     expect(seedNewUserCloudFile).not.toHaveBeenCalled();
   });

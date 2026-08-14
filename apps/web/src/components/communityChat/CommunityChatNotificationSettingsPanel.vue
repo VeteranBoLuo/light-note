@@ -49,9 +49,16 @@
         </BButton>
       </div>
 
-      <div v-if="compact" class="community-notification-settings__compact-summary" aria-live="polite">
-        <i aria-hidden="true"></i>
-        <span>{{ currentExplanationDescription }}</span>
+      <div v-if="compact" class="community-notification-settings__compact-results" aria-live="polite">
+        <span class="community-notification-settings__compact-result is-badge">
+          <i aria-hidden="true"></i>{{ currentCompactBadgeDescription }}
+        </span>
+        <span class="community-notification-settings__compact-result" :class="{ 'is-active': settings.enabled }">
+          <i aria-hidden="true"></i>{{ currentCompactInAppChannelLabel }}
+        </span>
+        <span class="community-notification-settings__compact-result">
+          <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactSystemChannel') }}
+        </span>
       </div>
 
       <div v-else class="community-notification-settings__explanation" aria-live="polite">
@@ -59,16 +66,9 @@
         <span>{{ currentExplanationDescription }}</span>
       </div>
 
-      <div v-if="compact" class="community-notification-settings__compact-meta">
+      <div v-if="!compact" class="community-notification-settings__channels">
         <span :class="{ 'is-active': settings.enabled }">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactInAppChannel') }}
-        </span>
-        <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.compactSystemChannel') }} </span>
-      </div>
-
-      <div v-else class="community-notification-settings__channels">
-        <span :class="{ 'is-active': settings.enabled }">
-          <i aria-hidden="true"></i>{{ t('communityChat.notifications.inAppChannel') }}
+          <i aria-hidden="true"></i>{{ currentInAppChannelLabel }}
         </span>
         <span> <i aria-hidden="true"></i>{{ t('communityChat.notifications.appChannelLater') }} </span>
       </div>
@@ -164,6 +164,25 @@
             ? 'communityChat.notifications.disabledCompactDescription'
             : 'communityChat.notifications.disabledDescription',
         ),
+  );
+  const currentCompactBadgeDescription = computed(() =>
+    settings.value.enabled
+      ? currentLevelDescription.value
+      : t('communityChat.notifications.disabledCompactBadgeDescription'),
+  );
+  const currentCompactInAppChannelLabel = computed(() =>
+    t(
+      settings.value.enabled
+        ? 'communityChat.notifications.compactInAppChannel'
+        : 'communityChat.notifications.compactInAppChannelDisabled',
+    ),
+  );
+  const currentInAppChannelLabel = computed(() =>
+    t(
+      settings.value.enabled
+        ? 'communityChat.notifications.inAppChannel'
+        : 'communityChat.notifications.inAppChannelDisabled',
+    ),
   );
 
   function normalizeSettings(value: Partial<CommunityChatNotificationSettings> | null | undefined) {
@@ -434,14 +453,15 @@
     padding: 7px 6px;
   }
 
-  .community-notification-settings__compact-summary {
+  .community-notification-settings__compact-results {
     min-width: 0;
     min-height: 36px;
     padding: 8px 10px;
     box-sizing: border-box;
     display: flex;
-    align-items: flex-start;
-    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px 16px;
     border: 1px solid var(--surface-border-color);
     border-radius: 10px;
     color: var(--desc-color);
@@ -450,42 +470,30 @@
     line-height: 1.5;
   }
 
-  .community-notification-settings__compact-summary i {
-    width: 7px;
-    height: 7px;
-    margin-top: 4px;
-    flex: 0 0 7px;
-    border-radius: 50%;
-    background: var(--primary-color);
-  }
-
-  .community-notification-settings__compact-meta {
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 5px 14px;
-    color: var(--desc-color);
-    font-size: 9px;
-    line-height: 1.4;
-  }
-
-  .community-notification-settings__compact-meta span {
+  .community-notification-settings__compact-result {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
   }
 
-  .community-notification-settings__compact-meta span.is-active {
+  .community-notification-settings__compact-result.is-badge {
+    color: var(--desc-color);
+  }
+
+  .community-notification-settings__compact-result.is-active {
     color: var(--success-color);
   }
 
-  .community-notification-settings__compact-meta i {
+  .community-notification-settings__compact-result i {
     width: 6px;
     height: 6px;
     flex: 0 0 6px;
     border-radius: 50%;
     background: currentColor;
+  }
+
+  .community-notification-settings__compact-result.is-badge i {
+    background: var(--primary-color);
   }
 
   @media (max-width: 767px) {
@@ -516,9 +524,20 @@
       min-height: 42px;
     }
 
-    .community-notification-settings__compact-summary {
+    .community-notification-settings__compact-results {
       min-height: 34px;
       padding: 7px 9px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-items: start;
+      gap: 5px;
+    }
+
+    .community-notification-settings__compact-result {
+      min-width: 0;
+      max-width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
     }
   }
 

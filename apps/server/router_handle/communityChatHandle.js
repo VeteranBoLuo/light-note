@@ -50,6 +50,17 @@ import {
   getCommunityChatNotificationSettings,
   updateCommunityChatNotificationSettings,
 } from '../util/services/communityChatNotificationService.js';
+import {
+  ensureCommunityChatIdentityForUser,
+  getCommunityChatMemberAvatarSource,
+  searchCommunityChatMembers,
+} from '../util/services/communityChatIdentityService.js';
+import {
+  getCommunityChatCustomStickerDownload,
+  listCommunityChatCustomStickers,
+  removeCommunityChatCustomSticker,
+  uploadCommunityChatCustomSticker,
+} from '../util/services/communityChatCustomStickerService.js';
 
 function rejectAdminPreview(req, res) {
   if (!req.adminContext) return false;
@@ -183,6 +194,15 @@ export async function rooms(req, res) {
   }
 }
 
+export async function ensureIdentity(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    return res.send(resultData(await ensureCommunityChatIdentityForUser({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
 export async function notificationSettings(req, res) {
   if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
   try {
@@ -244,12 +264,83 @@ export async function createMessage(req, res) {
       roomSlug: req.params?.slug,
       clientRequestId: req.body?.clientRequestId,
       content: req.body?.content,
+      messageKind: req.body?.messageKind,
+      stickerSource: req.body?.stickerSource,
+      stickerKey: req.body?.stickerKey,
       replyToPublicId: req.body?.replyToPublicId,
+      mentionEveryone: req.body?.mentionEveryone,
+      mentionUserPublicIds: req.body?.mentionUserPublicIds,
       mentionMessagePublicIds: req.body?.mentionMessagePublicIds,
       imagePublicIds: req.body?.imagePublicIds,
     });
     return res.send(resultData(data, 200, L(req, '消息已发送', 'Message sent')));
   } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function searchMembers(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await searchCommunityChatMembers({
+      user: req.user,
+      roomSlug: req.query?.roomSlug || 'general',
+      query: req.query?.q,
+      limit: req.query?.limit,
+    });
+    return res.send(resultData(data));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function customStickers(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    return res.send(resultData(await listCommunityChatCustomStickers({ user: req.user })));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function uploadCustomSticker(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await uploadCommunityChatCustomSticker({
+      user: req.user,
+      file: req.file,
+      name: req.body?.name,
+    });
+    return res.send(resultData(data, 200, L(req, '表情已加入个人表情库', 'Sticker added to your library')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function removeCustomSticker(req, res) {
+  if (rejectAdminPreview(req, res) || !requireRegistered(req, res)) return;
+  try {
+    const data = await removeCommunityChatCustomSticker({
+      user: req.user,
+      stickerPublicId: req.params?.publicId,
+    });
+    return res.send(resultData(data, 200, L(req, '表情已从个人表情库移除', 'Sticker removed from your library')));
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function customStickerContent(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const data = await getCommunityChatCustomStickerDownload({
+      user: req.user,
+      stickerPublicId: req.params?.publicId,
+    });
+    res.set('Cache-Control', 'private, max-age=60');
+    return res.redirect(302, data.signedUrl);
+  } catch (error) {
+    if (error instanceof CommunityChatError && error.status === 404) return res.status(404).end();
     return sendError(req, res, error);
   }
 }
@@ -350,6 +441,19 @@ export async function messageAuthorAvatar(req, res) {
     const { source } = await getCommunityChatMessageAuthorAvatar({
       user: req.user,
       messagePublicId: req.params?.publicId,
+    });
+    return sendProfileAvatar(req, res, source);
+  } catch (error) {
+    return sendError(req, res, error);
+  }
+}
+
+export async function memberAvatar(req, res) {
+  if (rejectAdminPreview(req, res)) return;
+  try {
+    const { source } = await getCommunityChatMemberAvatarSource({
+      user: req.user,
+      userPublicId: req.params?.userPublicId,
     });
     return sendProfileAvatar(req, res, source);
   } catch (error) {

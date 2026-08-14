@@ -15,8 +15,7 @@ const GROUP_ORDER = Object.freeze(['level', 'tenure', 'checkin', 'create', 'acti
 const MESSAGE_PUBLIC_ID_PATTERN = /^[A-Za-z0-9-]+$/;
 const KNOWN_ACHIEVEMENTS = new Map(ACHIEVEMENTS.map((achievement) => [achievement.key, achievement]));
 
-const chatError = (code, status, zhMessage, enMessage) =>
-  new CommunityChatError(code, status, zhMessage, enMessage);
+const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
 
 function normalizeMessagePublicId(value) {
   const publicId = String(value || '').trim();
@@ -52,12 +51,7 @@ function normalizeBio(value) {
 
 function normalizeFeaturedAchievementKeys(value) {
   if (!Array.isArray(value)) {
-    throw chatError(
-      'COMMUNITY_PROFILE_FEATURED_INVALID',
-      400,
-      '精选成就格式无效',
-      'Invalid featured achievements',
-    );
+    throw chatError('COMMUNITY_PROFILE_FEATURED_INVALID', 400, '精选成就格式无效', 'Invalid featured achievements');
   }
   const keys = value.map((item) => String(item || '').trim());
   if (keys.some((key) => !key || !KNOWN_ACHIEVEMENTS.has(key)) || new Set(keys).size !== keys.length) {
@@ -123,10 +117,9 @@ function parseFeaturedAchievements(value) {
     }
   }
   if (!Array.isArray(parsed)) return null;
-  return [...new Set(parsed.map((item) => String(item || '').trim()).filter((key) => KNOWN_ACHIEVEMENTS.has(key)))].slice(
-    0,
-    MAX_FEATURED_ACHIEVEMENTS,
-  );
+  return [
+    ...new Set(parsed.map((item) => String(item || '').trim()).filter((key) => KNOWN_ACHIEVEMENTS.has(key))),
+  ].slice(0, MAX_FEATURED_ACHIEVEMENTS);
 }
 
 function groupOrder(group) {
@@ -175,7 +168,10 @@ function resolveFeaturedAchievements(unlockedAchievements, storedValue) {
   const unlockedByKey = new Map(unlockedAchievements.map((achievement) => [achievement.key, achievement]));
   const configured = parseFeaturedAchievements(storedValue);
   const keys = configured === null ? defaultFeaturedAchievements(unlockedAchievements) : configured;
-  return keys.map((key) => unlockedByKey.get(key)).filter(Boolean).slice(0, MAX_FEATURED_ACHIEVEMENTS);
+  return keys
+    .map((key) => unlockedByKey.get(key))
+    .filter(Boolean)
+    .slice(0, MAX_FEATURED_ACHIEVEMENTS);
 }
 
 async function loadUnlockedAchievements(db, userId, level) {
@@ -228,11 +224,15 @@ function tenureLabel(row, locale) {
   const joinedTime = registeredAt ? new Date(registeredAt).getTime() : Number.NaN;
   if (!Number.isFinite(joinedTime)) return null;
   const days = Math.max(0, Math.floor((Date.now() - joinedTime) / 86_400_000));
-  const english = String(locale || '').toLowerCase().startsWith('en');
+  const english = String(locale || '')
+    .toLowerCase()
+    .startsWith('en');
   if (days < 30) return english ? 'Joined Light Note within the past month' : '加入轻笺未满 1 个月';
   if (days < 365) {
     const months = Math.max(1, Math.floor(days / 30));
-    return english ? `Joined Light Note about ${months} month${months === 1 ? '' : 's'} ago` : `加入轻笺约 ${months} 个月`;
+    return english
+      ? `Joined Light Note about ${months} month${months === 1 ? '' : 's'} ago`
+      : `加入轻笺约 ${months} 个月`;
   }
   const years = Math.max(1, Math.floor(days / 365));
   return english ? `Joined Light Note about ${years} year${years === 1 ? '' : 's'} ago` : `加入轻笺约 ${years} 年`;
@@ -250,6 +250,8 @@ async function buildProfilePayload({ db, author, avatarPath, locale }) {
   return {
     profile: {
       name: author.authorName || '',
+      userPublicId: author.authorUserPublicId || '',
+      communityId: author.authorCommunityId || '',
       role: author.authorRole || 'member',
       avatar: Boolean(Number(author.authorHasAvatar || 0)) ? avatarPath : '',
       ...publicFrame(author.authorFrameId),
@@ -284,6 +286,8 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
     `SELECT message.user_id AS authorUserId,
             account.role AS authorAccountRole,
             COALESCE(NULLIF(account.alias, ''), '') AS authorName,
+            identity.public_id AS authorUserPublicId,
+            identity.community_id AS authorCommunityId,
             CASE
               WHEN account.role = 'root' THEN 'official'
               WHEN membership.role = 'moderator' AND membership.status = 'active' THEN 'moderator'
@@ -310,6 +314,7 @@ async function loadVisibleMessageAuthor({ user, messagePublicId, env, db }) {
        JOIN community_chat_rooms room ON room.id = message.room_id
        JOIN user account ON account.id = message.user_id AND account.del_flag = 0
        LEFT JOIN community_chat_members membership ON membership.user_id = message.user_id
+       LEFT JOIN community_chat_user_identities identity ON identity.user_id = message.user_id
        LEFT JOIN user_growth growth ON growth.user_id = message.user_id
        LEFT JOIN community_chat_member_profiles profile ON profile.user_id = message.user_id
       WHERE message.public_id = ?
@@ -342,6 +347,8 @@ async function loadOwnAuthor({ user, env, db }) {
     `SELECT account.id AS authorUserId,
             account.role AS authorAccountRole,
             COALESCE(NULLIF(account.alias, ''), '') AS authorName,
+            identity.public_id AS authorUserPublicId,
+            identity.community_id AS authorCommunityId,
             CASE
               WHEN account.role = 'root' THEN 'official'
               WHEN membership.role = 'moderator' AND membership.status = 'active' THEN 'moderator'
@@ -366,6 +373,7 @@ async function loadOwnAuthor({ user, env, db }) {
             COALESCE(profile.revision, 0) AS profileRevision
        FROM user account
        LEFT JOIN community_chat_members membership ON membership.user_id = account.id
+       LEFT JOIN community_chat_user_identities identity ON identity.user_id = account.id
        LEFT JOIN user_growth growth ON growth.user_id = account.id
        LEFT JOIN community_chat_member_profiles profile ON profile.user_id = account.id
       WHERE account.id = ? AND account.del_flag = 0
@@ -504,26 +512,14 @@ export async function updateCommunityChatOwnProfile({
         `UPDATE community_chat_member_profiles
             SET bio = ?, show_community_tenure = ?, featured_achievements = ?, revision = ?
           WHERE user_id = ?`,
-        [
-          normalizedBio,
-          normalizedShowTenure ? 1 : 0,
-          JSON.stringify(normalizedFeaturedKeys),
-          nextRevision,
-          user.id,
-        ],
+        [normalizedBio, normalizedShowTenure ? 1 : 0, JSON.stringify(normalizedFeaturedKeys), nextRevision, user.id],
       );
     } else {
       await connection.query(
         `INSERT INTO community_chat_member_profiles
           (user_id, bio, show_community_tenure, featured_achievements, revision)
          VALUES (?, ?, ?, ?, ?)`,
-        [
-          user.id,
-          normalizedBio,
-          normalizedShowTenure ? 1 : 0,
-          JSON.stringify(normalizedFeaturedKeys),
-          nextRevision,
-        ],
+        [user.id, normalizedBio, normalizedShowTenure ? 1 : 0, JSON.stringify(normalizedFeaturedKeys), nextRevision],
       );
     }
     if (transactionStarted) await connection.commit();

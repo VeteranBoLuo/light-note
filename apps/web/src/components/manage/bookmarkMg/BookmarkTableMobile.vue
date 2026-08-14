@@ -84,7 +84,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { blockGuestWrite } from '@/composables/useGuestGuard';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
-  import { openAiAssistant } from '@/utils/aiEntry';
+  import { openAiAssistant, resolveBookmarkAiIntent } from '@/utils/aiEntry';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { OPERATION_LOG_MAP } from '@/config/logMap';
 
@@ -199,7 +199,7 @@
     }));
     openAiAssistant({
       contextRefs,
-      suggestedIntent: contextRefs.length > 1 ? 'compare' : 'summarize',
+      suggestedIntent: resolveBookmarkAiIntent(contextRefs.length),
       surface: 'bookmark_manage',
     });
   }

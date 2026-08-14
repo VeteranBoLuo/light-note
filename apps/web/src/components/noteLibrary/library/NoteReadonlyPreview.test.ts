@@ -40,4 +40,11 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toContain("hasOwnProperty.call(detailResult.data, 'isPending')");
     expect(source).toContain("emit('pendingState', Boolean(detailResult.data.isPending))");
   });
+
+  it('桌面预览轻微收紧标题区，且不在正文重复展示预览提示', () => {
+    expect(source).toMatch(
+      /\.note-readonly-preview__header\s*\{[\s\S]*min-height:\s*74px;[\s\S]*padding:\s*8px 16px;/u,
+    );
+    expect(source).not.toContain('note-readonly-preview__notice');
+  });
 });

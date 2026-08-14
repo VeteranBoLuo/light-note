@@ -3,6 +3,7 @@ import pool from '../db/index.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
+import { invalidateAfdianLeaderboardCache } from './afdianSupportReadService.js';
 
 export const ACCOUNT_DELETION_CONFIRMATION_TEXT = '注销账号';
 
@@ -41,6 +42,8 @@ const DIRECT_DELETE_TABLES = Object.freeze([
   ['security_account_reputation', 'user_id'],
   ['user_sessions', 'user_id'],
   ['community_chat_member_profiles', 'user_id'],
+  ['community_chat_user_identities', 'user_id'],
+  ['community_chat_custom_stickers', 'user_id'],
 ]);
 
 function accountDeletionError(code, message, status = 400) {
@@ -223,6 +226,19 @@ async function collectCleanupArtifacts(connection, tables, userId) {
     }
   }
 
+  if (tables.has('community_chat_custom_stickers')) {
+    const [rows] = await connection.query(
+      `SELECT object_key
+         FROM community_chat_custom_stickers
+        WHERE user_id = ?`,
+      [userId],
+    );
+    for (const row of rows) {
+      const key = String(row.object_key || '').trim();
+      if (key) objectKeys.push(key);
+    }
+  }
+
   if (tables.has('note_images') && tables.has('note')) {
     const [rows] = await connection.query(
       `SELECT ni.url
@@ -351,6 +367,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     }
 
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -605,7 +622,64 @@ export async function purgeOwnedResources(connection, tables, userId) {
   await deleteIfPresent(connection, tables, 'todo_items', 'DELETE FROM todo_items WHERE user_id = ?', [userId]);
 }
 
-async function purgeLogsAndSecurityLinks(connection, tables, userId) {
+export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
+  // 赞助订单作为真实交易对账记录保留，但注销时解除与轻笺账号及跳转凭证的关联。
+  if (tables.has('support_orders')) {
+    if (tables.has('support_checkout_intents')) {
+      await connection.query(
+        `UPDATE support_orders o
+         LEFT JOIN support_checkout_intents i
+           ON i.id = o.checkout_intent_id
+          AND i.user_id <> ?
+            SET o.light_note_user_id = i.user_id,
+                o.checkout_intent_id = i.id,
+                o.ownership_source = CASE WHEN i.id IS NULL THEN 'unlinked' ELSE 'checkout' END
+          WHERE o.light_note_user_id = ?`,
+        [userId, userId],
+      );
+      await connection.query(
+        `UPDATE support_orders o
+         INNER JOIN support_checkout_intents i ON i.id = o.checkout_intent_id
+            SET o.checkout_intent_id = NULL,
+                o.ownership_source = CASE
+                  WHEN o.light_note_user_id IS NULL THEN 'unlinked'
+                  ELSE 'oauth'
+                END
+          WHERE i.user_id = ?`,
+        [userId],
+      );
+    } else {
+      await connection.query(
+        `UPDATE support_orders
+            SET light_note_user_id = NULL,
+                checkout_intent_id = NULL,
+                ownership_source = 'unlinked'
+          WHERE light_note_user_id = ?`,
+        [userId],
+      );
+    }
+  }
+  await deleteIfPresent(
+    connection,
+    tables,
+    'support_checkout_intents',
+    'DELETE FROM support_checkout_intents WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'support_account_links',
+    'DELETE FROM support_account_links WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
+    'support_public_preferences',
+    'DELETE FROM support_public_preferences WHERE user_id = ?',
+    [userId],
+  );
   await deleteIfPresent(
     connection,
     tables,
@@ -690,6 +764,7 @@ async function purgeDatabaseForUser(userId) {
       await connection.query("DELETE FROM user WHERE id = ? AND role = 'deleted' AND del_flag = 1", [userId]);
     }
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     throw error;

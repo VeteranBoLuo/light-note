@@ -46,6 +46,7 @@ interface UserInfo {
     theme: 'day' | 'night' | 'system' | string; // 主题
     noteViewMode: 'card' | 'list'; // 笔记展示模式：卡片/列表
     noteSidebarMode?: 'directory' | 'tags'; // 笔记库默认侧栏：目录/标签
+    noteDirectEdit?: boolean; // PC 点击已有笔记时是否跳过预览直接编辑
     lang?: 'zh-CN' | 'en-US'; // 语言
     homePage?: 'landing' | 'workbench' | 'resourceCenter' | 'bookmark' | 'noteLibrary' | 'cloudSpace'; // 默认首页
     uiScale?: 'small' | 'medium' | 'large'; // 界面缩放(整体风格:小/标准/大,用 zoom 实现)
@@ -116,6 +117,7 @@ const createDefaultUserState = (): UserState => ({
     theme: 'day', // 主题
     noteViewMode: 'card', // 笔记展示模式：卡片/列表
     noteSidebarMode: 'directory', // 笔记库默认展示目录
+    noteDirectEdit: false, // PC 默认先预览已有笔记；移动端始终直接编辑
     todoView: 'list', // 待办默认视图
     lang: 'zh-CN', // 语言
     hideEmptyTags: false, // 首页标签列表是否隐藏空标签(默认不隐藏)

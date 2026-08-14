@@ -632,7 +632,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import ViewModeToggle from '@/components/base/ViewModeToggle.vue';
-  import { DEFAULT_NOTE_VIEW_MODE } from '@/utils/preferences.ts';
+  import { DEFAULT_NOTE_VIEW_MODE, shouldOpenNoteDirectly } from '@/utils/preferences.ts';
   import type { NoteWorkspaceLayoutState } from '@/utils/noteWorkspaceLayout';
   import { recordOperation } from '@/api/commonApi.ts';
   import {
@@ -1382,12 +1382,21 @@
   function openLibraryNote(noteOrId: any) {
     const noteId = String(typeof noteOrId === 'string' ? noteOrId : noteOrId?.id || '').trim();
     if (!noteId) return;
-    if (bookmark.isMobile) return openDirectoryPage(noteId);
-    prefetchNoteDetail(user, noteId);
-    captureDesktopPreviewScroll();
     const source = (typeof noteOrId === 'object' && noteOrId) ||
       noteList.value.find((item) => String(item.id) === noteId) ||
       findLoadedTreeNode(noteId) || { id: noteId };
+    if (shouldOpenNoteDirectly(user.preferences, bookmark.isMobile)) {
+      // 移动端的 openDirectoryPage 已经负责详情与当前编辑器预热；PC 直达编辑时在跳转前补齐同样的暖机。
+      if (!bookmark.isMobile) {
+        prefetchNoteDetail(user, noteId);
+        void preloadNoteEditorRuntime(source?.type).catch(() => {
+          // 编辑器异步组件挂载时仍会重试。
+        });
+      }
+      return openDirectoryPage(noteId);
+    }
+    prefetchNoteDetail(user, noteId);
+    captureDesktopPreviewScroll();
     previewPendingLocallyChanged = false;
     previewNoteSeed.value = { ...source, id: noteId };
     previewNoteId.value = noteId;

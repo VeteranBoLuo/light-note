@@ -26,6 +26,19 @@ describe('noteWorkspace 目录元数据同步', () => {
     mocks.apiBasePost.mockReset();
   });
 
+  it('详情目录滚动位置仅保存在当前账号工作区，切换账号后归零', () => {
+    const workspace = useNoteWorkspaceStore();
+    workspace.ensureOwner('user-a');
+    workspace.setDetailTreeScrollTop(386.5);
+    expect(workspace.detailTreeScrollTop).toBe(386.5);
+
+    workspace.setDetailTreeScrollTop(Number.NaN);
+    expect(workspace.detailTreeScrollTop).toBe(0);
+    workspace.setDetailTreeScrollTop(240);
+    workspace.ensureOwner('user-b');
+    expect(workspace.detailTreeScrollTop).toBe(0);
+  });
+
   it('保存标题与格式后同步普通树、搜索树和所有已缓存面包屑', () => {
     const workspace = useNoteWorkspaceStore();
     workspace.childrenByParent = { [NOTE_TREE_ROOT_KEY]: [treeNode()] };

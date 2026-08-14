@@ -33,6 +33,10 @@ export interface AiAssistantLaunchPayload {
   query?: string;
 }
 
+export function resolveBookmarkAiIntent(contextCount: number): AiAssistantIntent {
+  return contextCount > 1 ? 'compare' : 'create_note';
+}
+
 function normalizedScopes(value: unknown): AiScopeRef[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();

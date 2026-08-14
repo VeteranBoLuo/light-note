@@ -32,6 +32,35 @@ export const SITE_COMPLIANCE = Object.freeze({
   publicSecurityBadgePath: '/public-security-filing-badge.png',
 });
 
+/**
+ * 爱发电公开下单配置。前端展示与后端签发带归属凭证的下单地址共用这一份事实源，
+ * 避免档位或方案 ID 分别维护后发生错配。这里不包含 OAuth Secret 或 API Token。
+ */
+export const AFDIAN_CREATOR_URL = 'https://afdian.com/a/lightnote';
+
+export const AFDIAN_CHECKOUT_OPTIONS = Object.freeze([
+  Object.freeze({
+    key: 'coffee',
+    amount: 6,
+    planId: '4415b194930c11f1ac7b5254001e7c00',
+  }),
+  Object.freeze({
+    key: 'server',
+    amount: 18,
+    planId: 'a05f9730930c11f1aeb65254001e7c00',
+  }),
+  Object.freeze({
+    key: 'companion',
+    amount: 50,
+    planId: '9fc7a358930c11f1abee52540025c377',
+  }),
+  Object.freeze({
+    key: 'custom',
+    amount: null,
+    creatorId: '9a64b3ac930611f18e8052540025c377',
+  }),
+]);
+
 // 云文件在线预览格式注册表。这里是前后端关于“扩展名 -> 预览策略”的单一事实源；
 // 浏览器端仍负责直接预览，服务端只处理需要受控派生的压缩包目录与旧文档 PDF。
 export const FILE_PREVIEW_STRATEGY = Object.freeze({

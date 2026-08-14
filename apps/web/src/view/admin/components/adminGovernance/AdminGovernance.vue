@@ -664,18 +664,18 @@
     }
   }
 
-  :global(html.light-note-mobile-rendering) .admin-governance__warning,
-  :global(html.light-note-mobile-rendering) .admin-governance__runtime-grid article,
-  :global(html.light-note-mobile-rendering) .admin-governance__role-list article {
+  html.light-note-mobile-rendering .admin-governance__warning,
+  html.light-note-mobile-rendering .admin-governance__runtime-grid article,
+  html.light-note-mobile-rendering .admin-governance__role-list article {
     box-shadow: none;
     border-color: var(--surface-border-color);
   }
 
-  :global(html.light-note-mobile-rendering) .admin-governance__warning.is-danger {
+  html.light-note-mobile-rendering .admin-governance__warning.is-danger {
     border-color: var(--danger-color, #e5484d);
   }
 
-  :global(html.light-note-mobile-rendering) .admin-governance__warning.is-warning {
+  html.light-note-mobile-rendering .admin-governance__warning.is-warning {
     border-color: var(--warning-border-color, #e6a23c);
   }
 </style>
