@@ -19,6 +19,7 @@ describe('noteAiService', () => {
     const note = await findOwnedNoteForAi({ userId: 'user-1', noteId: 'note-1' });
 
     expect(note.id).toBe('note-1');
+    expect(query.mock.calls[0][0]).toContain("IF(type = 'drawing', '', content) AS content");
     expect(query.mock.calls[0][1]).toEqual(['note-1', 'user-1']);
   });
 

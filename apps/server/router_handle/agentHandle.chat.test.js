@@ -733,7 +733,7 @@ describe('agentChat 主链路', () => {
     mocks.poolQuery.mockImplementation(async (sql) => {
       const text = String(sql);
       if (text.includes('SELECT id, parent_id, title')) return [treeRows];
-      if (text.includes('SELECT id, title, content, type, update_time')) return [noteRows];
+      if (text.includes("IF(type = 'drawing', '', content) AS content")) return [noteRows];
       return [[]];
     });
     mocks.requestAi.mockImplementation(async (messages, options = {}) => {

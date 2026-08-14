@@ -80,7 +80,7 @@ async function queryNotes(userId, tagId, limit) {
     `SELECT
       n.id,
       n.title,
-      n.content,
+      IF(n.type = 'drawing', '', n.content) AS content,
       COALESCE(n.update_time, n.create_time) AS update_time
      FROM resource_tag_relations r
      INNER JOIN note n ON r.resource_id = n.id AND r.resource_type = 'note'

@@ -109,6 +109,9 @@ function collectMarkdownHrefs(md) {
 export function extractOwnedResourceRefs({ content, type } = {}) {
   const text = typeof content === 'string' ? content : '';
   if (!text) return [];
+  // 手绘正文是受控 scene JSON，不包含可点击的站内引用。显式短路避免把 JSON 交给 HTML 解析器，
+  // 也让画布保存成本与笔画数量线性相关，而不是额外构建一棵无意义的 DOM。
+  if (normalizeNoteType(type) === 'drawing') return [];
   if (text.length > MAX_CONTENT_LENGTH) {
     const err = new Error(`CONTENT_TOO_LONG: 笔记正文超过 ${MAX_CONTENT_LENGTH} 字符,拒绝解析引用`);
     err.code = 'CONTENT_TOO_LONG';

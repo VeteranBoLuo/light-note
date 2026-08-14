@@ -375,6 +375,7 @@ function loadDompurify(): Promise<{ sanitize: (html: string) => string }> {
  * 笔记内容 → 可安全渲染的 HTML(预览用)。Markdown 经 marked 渲染;统一过 DOMPurify 消毒后再交给 v-html。
  */
 export async function noteContentToHtml(content: string = '', type?: string): Promise<string> {
+  if (type === 'drawing') return '';
   if (!content) return '';
   let html = content;
   if (type === 'markdown') {
@@ -401,6 +402,7 @@ export async function noteContentToHtml(content: string = '', type?: string): Pr
  * AI 助手与历史版本共用此口径,只算"渲染后看得见的文字",两处必然一致。
  */
 export async function noteDisplayText(content: string = '', type?: string): Promise<string> {
+  if (type === 'drawing') return '';
   if (!content) return '';
   let html = content;
   if (type === 'markdown') {

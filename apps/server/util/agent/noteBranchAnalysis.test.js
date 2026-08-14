@@ -175,6 +175,7 @@ describe('noteBranchAnalysis', () => {
       'owner-1',
       ...ids,
     ]);
+    expect(db.query.mock.calls[0][0]).toContain("IF(type = 'drawing', '', content) AS content");
     expect(result.status).toBe('complete');
     expect(result.answer).toContain('页面总数：3 · 已完整覆盖：3 · 未读取：0');
     expect(result.answer).toContain('## 主要主题');

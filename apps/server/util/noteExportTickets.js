@@ -37,6 +37,8 @@ export const EXPORT_FORMATS = Object.freeze({
   html: 'text/html',
   pdf: 'application/pdf',
   zip: 'application/zip',
+  png: 'image/png',
+  json: 'application/json',
 });
 
 function sha256(value) {

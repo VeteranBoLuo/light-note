@@ -53,8 +53,16 @@
           <SvgIcon :src="icon.growth.lock" size="15" aria-hidden="true" />
           <span>{{ t('common.preview') }}</span>
         </div>
+        <DrawingNoteEditor
+          v-if="displayNote.type === 'drawing'"
+          class="note-readonly-preview__drawing"
+          :content="String(displayNote.content || '')"
+          :title="String(displayNote.title || '')"
+          :note-id="String(displayNote.id || noteId)"
+          readonly
+        />
         <div
-          v-if="previewHtml"
+          v-else-if="previewHtml"
           ref="previewContentRef"
           class="note-readonly-preview__content note-rich-content is-image-preview-enabled"
           @click="handlePreviewContentActivation"
@@ -147,6 +155,9 @@
   } from '@/components/aiAssistant/aiSourceNavigation';
 
   const FilePreview = defineAsyncComponent(() => import('@/components/FilePreview.vue'));
+  const DrawingNoteEditor = defineAsyncComponent(
+    () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
+  );
 
   interface PreviewBreadcrumbItem {
     id: string;
@@ -395,6 +406,7 @@
         emit('pendingState', Boolean(detailResult.data.isPending));
       }
       breadcrumb.value = Array.isArray(breadcrumbResult?.data?.items) ? breadcrumbResult.data.items : [];
+      if (detailResult.data.type === 'drawing') return;
       const normalizedContent = normalizeNoteContentResourceUrls(String(detailResult.data.content || ''));
       const renderedHtml = await noteContentToHtml(normalizedContent, detailResult.data.type);
       if (seq !== requestSeq) return;
@@ -435,6 +447,11 @@
     justify-content: space-between;
     gap: 20px;
     border-bottom: 1px solid var(--surface-border-color);
+  }
+
+  .note-readonly-preview__drawing {
+    min-height: 520px;
+    height: min(72vh, 760px);
   }
 
   .note-readonly-preview__heading {

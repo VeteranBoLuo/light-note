@@ -92,6 +92,41 @@ describe('importData 引用同步接入(N0 · P0-1)', () => {
     expect(noteInsert?.[1]?.[0]).toMatchObject({ content: '> 2026-07-24 星期五', type: 'markdown' });
   });
 
+  it('手绘备份按共享 scene 协议规范化，非法 scene 只跳过当前笔记', async () => {
+    const res = mockRes();
+    await importData(
+      req({
+        notes: [
+          {
+            id: 'valid-drawing',
+            title: '草图',
+            type: 'drawing',
+            content: JSON.stringify({
+              v: 1,
+              page: { width: 1024, height: 1448 },
+              elements: [{ id: 's1', kind: 'stroke', color: '#1f2937', width: 4, points: [1.234, 2.345] }],
+            }),
+          },
+          { id: 'invalid-drawing', title: '坏草图', type: 'drawing', content: '{"v":2}' },
+        ],
+      }),
+      res,
+    );
+
+    const noteInserts = connection.query.mock.calls
+      .filter(([sql]) => sql === 'INSERT INTO note SET ?')
+      .map(([, params]) => params[0]);
+    expect(noteInserts).toHaveLength(1);
+    expect(noteInserts[0]).toMatchObject({ title: '草图', type: 'drawing' });
+    expect(noteInserts[0].content).toBe(
+      '{"v":1,"page":{"width":1024,"height":1448},"elements":[{"id":"s1","kind":"stroke","color":"#1f2937","width":4,"points":[1.23,2.35]}]}',
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]).toMatchObject({
+      status: 200,
+      data: { notes: { added: 1, skipped: 1, invalid: 1 } },
+    });
+  });
+
   it('同步抛错 → 整个导入事务回滚,不 commit', async () => {
     extractOwnedResourceRefs.mockReturnValue([{ type: 'note', id: 'n1' }]);
     syncNoteResourceRefs.mockRejectedValueOnce(new Error('sync failed'));

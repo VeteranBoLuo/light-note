@@ -286,6 +286,14 @@ function dedupeAdjacentBlocks(blocks) {
 }
 
 export function parseNoteContent({ content = '', type = 'html' } = {}) {
+  if (String(type || '').toLowerCase() === 'drawing') {
+    return {
+      format: 'html',
+      blocks: [],
+      images: [],
+      checklist: { total: 0, completed: 0, pending: 0, completedItems: [], pendingItems: [] },
+    };
+  }
   const source = String(content || '');
   const format = normalizeNoteFormat(type, source);
   let html = source;

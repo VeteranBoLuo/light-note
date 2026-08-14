@@ -55,7 +55,7 @@
           <SvgIcon :src="icon.noteTree.sidebarOpen" size="19" aria-hidden="true" />
         </BButton>
         <BButton
-          v-if="!readonly"
+          v-if="!readonly && noteType !== 'drawing'"
           class="note-header-mobile-mode-button"
           :class="'is-' + noteType"
           :aria-label="$t('note.switchModeTooltip')"
@@ -97,7 +97,7 @@
         </BButton>
       </div>
       <div class="note-header-actions flex-align-center">
-        <span class="mode-pill-group" v-if="!readonly">
+        <span v-if="!readonly && noteType !== 'drawing'" class="mode-pill-group">
           <BTooltip :title="$t('note.switchModeTooltip')">
             <span class="mode-pill" :class="`is-${noteType}`" @click.stop="$emit('switchMode')">
               {{ noteType === 'html' ? 'HTML' : 'MD' }}
@@ -145,7 +145,7 @@
             <SvgIcon :src="icon.noteDetail.history" size="18" aria-hidden="true" />
           </BButton>
         </BTooltip>
-        <BTooltip v-if="bookmark.isDesktop" :title="$t('noteDetail.export')">
+        <BTooltip v-if="bookmark.isDesktop && noteType !== 'drawing'" :title="$t('noteDetail.export')">
           <BButton
             class="note-header-title-icon note-header-title-icon--export"
             :aria-label="$t('noteDetail.export')"
@@ -558,11 +558,13 @@
     });
 
     if (!props.readonly) {
-      options.push({
-        key: 'saveAsTemplate',
-        label: t('note.saveAsTemplate'),
-        icon: icon.noteDetail.template,
-      });
+      if (props.noteType !== 'drawing') {
+        options.push({
+          key: 'saveAsTemplate',
+          label: t('note.saveAsTemplate'),
+          icon: icon.noteDetail.template,
+        });
+      }
       if (props.note?.id) {
         options.push({
           key: 'history',
@@ -572,18 +574,22 @@
       }
     }
 
-    options.push({
-      key: 'manageTemplates',
-      label: t('note.templateManager.title'),
-      icon: icon.noteDetail.template,
-    });
+    if (props.noteType !== 'drawing') {
+      options.push({
+        key: 'manageTemplates',
+        label: t('note.templateManager.title'),
+        icon: icon.noteDetail.template,
+      });
+    }
 
     // 导出与 readonly 无关(桌面端同样不受限):只读笔记也允许导出留档
-    options.push({
-      key: 'export',
-      label: t('noteDetail.export'),
-      icon: icon.noteDetail.exportLine,
-    });
+    if (props.noteType !== 'drawing') {
+      options.push({
+        key: 'export',
+        label: t('noteDetail.export'),
+        icon: icon.noteDetail.exportLine,
+      });
+    }
 
     if (!props.readonly) {
       options.push({
@@ -637,11 +643,13 @@
       });
     }
     if (!props.readonly) {
-      options.push({
-        label: t('note.saveAsTemplate'),
-        icon: icon.noteDetail.template,
-        function: openSaveAsTemplate,
-      });
+      if (props.noteType !== 'drawing') {
+        options.push({
+          label: t('note.saveAsTemplate'),
+          icon: icon.noteDetail.template,
+          function: openSaveAsTemplate,
+        });
+      }
       if (props.note?.id && !bookmark.isDesktop) {
         options.push({
           label: t('noteDetail.history.entry'),
@@ -650,12 +658,14 @@
         });
       }
     }
-    options.push({
-      label: t('note.templateManager.title'),
-      icon: icon.noteDetail.template,
-      function: () => emit('manageTemplates'),
-    });
-    if (!bookmark.isDesktop) {
+    if (props.noteType !== 'drawing') {
+      options.push({
+        label: t('note.templateManager.title'),
+        icon: icon.noteDetail.template,
+        function: () => emit('manageTemplates'),
+      });
+    }
+    if (!bookmark.isDesktop && props.noteType !== 'drawing') {
       options.push({
         label: t('noteDetail.export'),
         icon: icon.noteDetail.exportLine,

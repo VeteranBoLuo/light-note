@@ -1,5 +1,6 @@
 import pool from '../db/index.js';
-import { normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
+import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
+import { serializeDrawingScene } from '@lightnote/shared/drawing-note';
 import {
   resultData,
   snakeCaseKeys,
@@ -2014,7 +2015,7 @@ export const importData = async (req, res) => {
     const stat = {
       tags: { added: 0, reused: 0 },
       bookmarks: { added: 0, skipped: 0, invalid: 0 },
-      notes: { added: 0, skipped: 0, rerooted: noteImportPlan.missingParentCount },
+      notes: { added: 0, skipped: 0, invalid: 0, rerooted: noteImportPlan.missingParentCount },
       files: { skipped: 0 },
     };
 
@@ -2079,12 +2080,25 @@ export const importData = async (req, res) => {
     for (const entry of noteImportPlan.entries) {
       const n = entry.note;
       const title = String(n?.title || '').trim();
-      const rawContent = n?.content || '';
-      const type = n?.type || 'html';
-      const content =
-        type === 'markdown'
-          ? normalizeMarkdownBlockquoteEntities(rawContent)
-          : sanitizePersistedNoteContent(rawContent, 'html', 'import-note');
+      const rawContent = String(n?.content || '');
+      const type = normalizeNoteType(n?.type || 'html');
+      if (!['html', 'markdown', 'drawing'].includes(type)) {
+        stat.notes.skipped++;
+        continue;
+      }
+      let content;
+      try {
+        content =
+          type === 'drawing'
+            ? serializeDrawingScene(rawContent)
+            : type === 'markdown'
+              ? normalizeMarkdownBlockquoteEntities(rawContent)
+              : sanitizePersistedNoteContent(rawContent, 'html', 'import-note');
+      } catch {
+        stat.notes.skipped++;
+        stat.notes.invalid++;
+        continue;
+      }
       if (!title && !content) continue;
       const k = noteKey(title, content);
       if (existNotes.has(k)) {

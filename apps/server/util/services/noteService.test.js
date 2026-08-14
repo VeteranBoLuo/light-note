@@ -36,7 +36,7 @@ describe('noteService.createNote', () => {
     enqueueResources.mockResolvedValue({ changed: 1 });
   });
 
-  it('只落 html/markdown 类型，并把创建与待整理入队放进同一事务', async () => {
+  it('只落受支持类型，并把创建与待整理入队放进同一事务', async () => {
     const result = await createNote({
       userId: 'user-1',
       userRole: 'user',
@@ -53,6 +53,26 @@ describe('noteService.createNote', () => {
     );
     expect(connection.commit).toHaveBeenCalledTimes(1);
     expect(triggerResourceCreateEffects).toHaveBeenCalledWith(expect.objectContaining({ resourceId: result.id }));
+  });
+
+  it('手绘创建按共享 scene 协议规范化，且不扫描图片或正文引用', async () => {
+    const scene = JSON.stringify({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [{ id: 's1', kind: 'stroke', color: '#1f2937', width: 4, points: [1.234, 2.345] }],
+    });
+    await createNote({
+      userId: 'user-1',
+      userRole: 'user',
+      note: { title: '草图', content: scene, type: 'drawing' },
+    });
+    const inserted = connection.query.mock.calls.find(([sql]) => sql === 'INSERT INTO note SET ?')?.[1]?.[0];
+    expect(inserted).toMatchObject({ title: '草图', type: 'drawing' });
+    expect(inserted.content).toBe(
+      '{"v":1,"page":{"width":1024,"height":1448},"elements":[{"id":"s1","kind":"stroke","color":"#1f2937","width":4,"points":[1.23,2.35]}]}',
+    );
+    expect(extractOwnedResourceRefs).toHaveBeenCalledWith({ content: inserted.content, type: 'drawing' });
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
   });
 
   it('Markdown 创建在服务端写入边界恢复旧页面序列化的引用标记', async () => {

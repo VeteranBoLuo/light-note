@@ -1103,6 +1103,13 @@
             description: t('note.mdDesc'),
             onClick: () => gotoNewNote({ type: 'markdown' }),
           },
+          {
+            key: 'drawing',
+            label: t('note.drawingLabel'),
+            description: t('note.drawingDesc'),
+            icon: icon.resource.noteDrawing,
+            onClick: () => gotoNewNote({ type: 'drawing' }),
+          },
         ],
       },
       {
@@ -1159,7 +1166,7 @@
     attachPagesVisible.value = true;
   }
 
-  function handleMobileBlankSelection(type: 'html' | 'markdown') {
+  function handleMobileBlankSelection(type: 'html' | 'markdown' | 'drawing') {
     gotoNewNote({ type });
   }
 

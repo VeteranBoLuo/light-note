@@ -40,7 +40,7 @@ async function semanticFallback({ userId, keyword, take, time }) {
     params.push(time.start, time.end);
   }
   const [rows] = await pool.query(
-    `SELECT n.id, n.title, LEFT(COALESCE(n.content, ''), 30000) AS content, n.type, n.create_time
+    `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content, n.type, n.create_time
        FROM note n WHERE ${where}`,
     params,
   );
@@ -74,7 +74,7 @@ export default {
     const baseParams = [ctx.userId];
 
     if (keyword) {
-      where += ` AND (n.title LIKE ? OR n.content LIKE ?)`;
+      where += ` AND (n.title LIKE ? OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ?))`;
       const pattern = `%${escapeLikePattern(keyword)}%`;
       baseParams.push(pattern, pattern);
     }
@@ -99,7 +99,7 @@ export default {
 
     const [[rows], [countRes]] = await Promise.all([
       pool.query(
-        `SELECT n.id, n.title, LEFT(COALESCE(n.content, ''), 30000) AS content, n.type, n.create_time
+        `SELECT n.id, n.title, IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 30000)) AS content, n.type, n.create_time
            FROM note n WHERE ${where} ${order} LIMIT ?`,
         [...baseParams, ...orderParams, take],
       ),

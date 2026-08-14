@@ -55,7 +55,7 @@ function createRequest(identity: NoteDetailRequestIdentity, noteId: string) {
   const key = cacheKey(identity, noteId);
   const promise = apiBasePost(
     '/api/note/getNoteDetail',
-    { id: noteId },
+    { id: noteId, drawingSceneVersion: 1 },
     {
       silent: true,
       timeout: NOTE_DETAIL_INTERACTIVE_TIMEOUT,
