@@ -143,14 +143,18 @@ describe('编辑器 V2 交互回归', () => {
     );
   });
 
-  it('目录树 Markdown 与 HTML 都使用可直接识别格式的独立图标', () => {
+  it('目录树 HTML、Markdown 与手绘都使用可直接识别格式的独立图标', () => {
     expect(getNoteTreePageIcon('markdown')).not.toBe(getNoteTreePageIcon('html'));
+    expect(getNoteTreePageIcon('drawing')).not.toBe(getNoteTreePageIcon('html'));
+    expect(getNoteTreePageIcon('drawing')).not.toBe(getNoteTreePageIcon('markdown'));
     expect(getNoteTreePageIcon('html')).toBe(icon.resource.noteHtml);
     expect(getNoteTreePageIcon('markdown')).toBe(icon.resource.noteMarkdown);
+    expect(getNoteTreePageIcon('drawing')).toBe(icon.resource.noteDrawing);
     expect(isMarkdownNoteTreePage('markdown')).toBe(true);
     expect(isMarkdownNoteTreePage('html')).toBe(false);
     expect(getNoteTreePageIcon('html')).toContain('<rect');
     expect(getNoteTreePageIcon('markdown')).toContain('<rect');
+    expect(getNoteTreePageIcon('drawing')).toContain('<path');
   });
 
   it('Markdown 不挂载行号和折叠 gutter，正文保持纯写作边界', () => {

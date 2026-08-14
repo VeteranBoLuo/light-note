@@ -446,8 +446,8 @@
   }
 
   .note-readonly-preview__drawing {
-    min-height: 520px;
-    height: min(72vh, 760px);
+    min-height: 0;
+    height: auto;
   }
 
   .note-readonly-preview__heading {

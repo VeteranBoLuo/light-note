@@ -191,4 +191,25 @@ describe('noteSummary', () => {
   it('空内容返回空串', async () => {
     expect(await noteSummaryText('', 'markdown')).toBe('');
   });
+
+  it('手绘摘要只提取文本元素，不泄露场景 JSON', async () => {
+    const scene = JSON.stringify({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [
+        { id: 's1', kind: 'stroke', color: '#1f2937', width: 4, points: [10, 10, 20, 20] },
+        { id: 't1', kind: 'text', color: '#615ced', fontSize: 20, x: 30, y: 40, width: 200, text: '测试文字' },
+      ],
+    });
+
+    expect(await noteSummaryText(scene, 'drawing')).toBe('测试文字');
+    expect(await noteSummaryText('{"v":1', 'drawing')).toBe('');
+    expect(noteSummaryFromServerPreview({ type: 'drawing', previewSummary: scene })).toBe('');
+    expect(noteCardPreviewFromServer({ type: 'drawing', previewSummary: scene })).toEqual({
+      summary: '',
+      beforeImage: '',
+      afterImage: '',
+      imageLocated: false,
+    });
+  });
 });

@@ -269,12 +269,16 @@ function normalizeServerPreviewText(value: unknown, singleLine: boolean): string
 /** v2 列表响应已经是可信纯文本；返回 null 表示旧服务端，调用方才需要解析 content。 */
 export function noteSummaryFromServerPreview(note: unknown, options: NoteSummaryOptions = {}): string | null {
   if (!hasServerNotePreview(note)) return null;
+  if (note.type === 'drawing') return '';
   const { maxLength = 200, singleLine = false } = options;
   return truncateSummary(normalizeServerPreviewText(note.previewSummary, singleLine), maxLength);
 }
 
 /** 读取 v2 响应中的有序首图预览，整个过程只有字符串整理，不创建 DOM。 */
 export function noteCardPreviewFromServer(note: unknown, options: NoteSummaryOptions = {}): NoteCardPreviewText | null {
+  if (hasServerNotePreview(note) && note.type === 'drawing') {
+    return { summary: '', beforeImage: '', afterImage: '', imageLocated: false };
+  }
   const summary = noteSummaryFromServerPreview(note, options);
   if (summary === null || !hasServerNotePreview(note)) return null;
   const { maxLength = 200, singleLine = false } = options;
@@ -323,9 +327,22 @@ export async function noteSummaryText(
   type?: string,
   options: NoteSummaryOptions = {},
 ): Promise<string> {
-  if (type === 'drawing') return '';
   if (!content) return '';
   const { maxLength = 200, singleLine = false } = options;
+  if (type === 'drawing') {
+    try {
+      const { parseDrawingScene } = await import('@lightnote/shared/drawing-note');
+      const scene = parseDrawingScene(content);
+      const text = scene.elements
+        .filter((element) => element.kind === 'text')
+        .map((element) => element.text.trim())
+        .filter(Boolean)
+        .join(singleLine ? ' ' : '\n');
+      return truncateSummary(text, maxLength);
+    } catch {
+      return '';
+    }
+  }
   const html = await noteContentToHtml(content, type);
   const lines = htmlToSummaryLines(html);
   return truncateSummary(lines.join(singleLine ? ' ' : '\n'), maxLength);

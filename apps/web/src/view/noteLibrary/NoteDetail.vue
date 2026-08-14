@@ -328,6 +328,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { invalidateDrawingPreview } from '@/api/drawingPreview';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import {
     DISABLED_NOTE_TREE_FEATURES,
@@ -472,10 +473,8 @@
   const canShowPrivateNavigation = computed(
     () =>
       noteTreeReadEnabled.value &&
-      nodeType.value === 'edit' &&
-      Boolean(note.id) &&
       Boolean(user.id) &&
-      user.id === note.createBy,
+      (nodeType.value === 'add' || (nodeType.value === 'edit' && Boolean(note.id) && user.id === note.createBy)),
   );
   const canShowDetailSidebar = computed(
     () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
@@ -1446,6 +1445,11 @@
     if (!note.id) return;
     const createdId = note.id;
     const createdParentId = note.parentId;
+    const parentBreadcrumb =
+      createdParentId && detailBreadcrumb.value.at(-1)?.id === createdParentId
+        ? detailBreadcrumb.value.map((item) => ({ ...item }))
+        : [];
+    const canSeedBreadcrumb = !createdParentId || parentBreadcrumb.length > 0;
     nodeType.value = 'edit';
     if (!noteTreeReadEnabled.value) return;
     noteWorkspace.insertCreatedNote({
@@ -1454,12 +1458,19 @@
       title: note.title,
       type: note.type,
     });
+    if (canSeedBreadcrumb) {
+      noteWorkspace.seedBreadcrumb(createdId, [...parentBreadcrumb, { id: createdId, title: note.title }]);
+    }
+    // 服务端已经确认创建成功，本地目录也已完整插入；清除创建前遗留的瞬时读取错误。
+    treeError.value = '';
     noteWorkspace.setNavigation({ activePageId: createdId, browseParentId: null });
-    // 本地树先即时出现并选中新文档；再静默读取服务端排序与完整面包屑进行校准。
-    void nextTick().then(async () => {
-      await loadTreeChildren(createdParentId, true);
-      if (note.id === createdId) await loadDetailBreadcrumb(createdId);
-    });
+    // 新节点的父级、排序和标题均已由创建结果与本地树规则确定，不再强制刷新整棵目录。
+    // 只有直达新增地址且父路径尚未加载的异常场景，才读取一次完整面包屑兜底。
+    if (!canSeedBreadcrumb) {
+      void nextTick().then(async () => {
+        if (note.id === createdId) await loadDetailBreadcrumb(createdId);
+      });
+    }
   }
 
   function createNote(): Promise<string> {
@@ -1607,6 +1618,7 @@
         }
         setUpdateTime();
         saveStatus.value = 'saved';
+        if (isDrawingNote.value && note.id) invalidateDrawingPreview(note.id);
         invalidateNoteReadCaches(note.id);
       } else {
         saveStatus.value = 'error';

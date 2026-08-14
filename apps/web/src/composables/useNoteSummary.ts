@@ -26,8 +26,13 @@ export function useNoteSummary(getNote: () => any, options: NoteSummaryOptions =
         note?.type ?? '',
       ] as const;
     },
-    async ([hasServerPreview, _previewSummary, content, type]) => {
+    async ([hasServerPreview, previewSummary, content, type]) => {
       const current = ++token;
+      if (type === 'drawing') {
+        const text = await noteSummaryText(String(content || previewSummary || ''), 'drawing', options);
+        if (current === token) summary.value = text;
+        return;
+      }
       if (hasServerPreview) {
         const serverSummary = noteSummaryFromServerPreview(getNote(), options);
         if (current === token) summary.value = serverSummary ?? '';
@@ -75,6 +80,13 @@ export function useNoteCardPreview(getNote: () => any, options: NoteSummaryOptio
     },
     async ([hasServerPreview, _summary, _beforeImage, _afterImage, _imageLocated, content, type, previewImageUrl]) => {
       const current = ++token;
+      if (type === 'drawing') {
+        summary.value = '';
+        beforeImage.value = '';
+        afterImage.value = '';
+        imageLocated.value = false;
+        return;
+      }
       if (hasServerPreview) {
         const serverPreview = noteCardPreviewFromServer(getNote(), options);
         if (current !== token) return;

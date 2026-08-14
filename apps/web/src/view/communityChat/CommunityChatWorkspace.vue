@@ -290,8 +290,12 @@
                           v-if="chatMessage.sticker?.url"
                           :src="chatMessage.sticker.url"
                           :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
+                          width="176"
+                          height="176"
                           loading="lazy"
                           decoding="async"
+                          @load="handleStickerImageSettled"
+                          @error="handleStickerImageSettled"
                         />
                         <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
                       </div>
@@ -420,8 +424,12 @@
                         v-if="chatMessage.sticker?.url"
                         :src="chatMessage.sticker.url"
                         :alt="t('communityChat.sticker.messageAlt', { name: authorName(chatMessage) })"
+                        width="176"
+                        height="176"
                         loading="lazy"
                         decoding="async"
+                        @load="handleStickerImageSettled"
+                        @error="handleStickerImageSettled"
                       />
                       <span v-else>{{ t('communityChat.sticker.messageFallback') }}</span>
                     </div>
@@ -939,6 +947,10 @@
   let programmaticMessageNavigationActive = false;
   let avatarMotionResumeTimer: number | undefined;
   let messageListResizeObserver: ResizeObserver | null = null;
+  let initialBottomAnchorTimer: number | undefined;
+  let initialBottomAnchorCheckTimer: number | undefined;
+  let initialBottomAnchorGeneration = 0;
+  let initialBottomAnchorActive = false;
   let keyboardAnchorFrame: number | undefined;
   let keyboardAnchorCloseTimer: number | undefined;
   let composerKeyboardAnchorActive = false;
@@ -974,6 +986,8 @@
   const AVATAR_MOTION_SCROLL_IDLE_MS = 140;
   const INITIAL_IMAGE_PRIORITY_MESSAGE_COUNT = 8;
   const INITIAL_IMAGE_PRIORITY_MAX = 4;
+  const INITIAL_BOTTOM_ANCHOR_WINDOW_MS = 6000;
+  const INITIAL_BOTTOM_ANCHOR_CHECK_MS = 120;
   const BACK_TO_BOTTOM_DESKTOP_THRESHOLD = 128;
   const BACK_TO_BOTTOM_MOBILE_THRESHOLD = 320;
 
@@ -1431,6 +1445,53 @@
     }
   }
 
+  function cancelInitialBottomAnchor() {
+    initialBottomAnchorActive = false;
+    initialBottomAnchorGeneration += 1;
+    if (initialBottomAnchorTimer !== undefined) {
+      window.clearTimeout(initialBottomAnchorTimer);
+      initialBottomAnchorTimer = undefined;
+    }
+    if (initialBottomAnchorCheckTimer !== undefined) {
+      window.clearInterval(initialBottomAnchorCheckTimer);
+      initialBottomAnchorCheckTimer = undefined;
+    }
+  }
+
+  function beginInitialBottomAnchor() {
+    cancelInitialBottomAnchor();
+    initialBottomAnchorActive = true;
+    const generation = initialBottomAnchorGeneration;
+    initialBottomAnchorTimer = window.setTimeout(() => {
+      initialBottomAnchorTimer = undefined;
+      if (generation === initialBottomAnchorGeneration) cancelInitialBottomAnchor();
+    }, INITIAL_BOTTOM_ANCHOR_WINDOW_MS);
+    // Safari/WebView 可能在图片已占位后继续调整滚动视口或输入区高度。仅在首屏短窗口内检查
+    // 是否真的离开底部；没有几何变化时不写 scrollTop，用户主动浏览后则立即整体取消。
+    initialBottomAnchorCheckTimer = window.setInterval(() => {
+      if (!initialBottomAnchorActive || generation !== initialBottomAnchorGeneration) return;
+      const element = messageListEl.value;
+      if (!element) return;
+      if (Math.abs(element.scrollTop - lastMessageScrollTop) > 1) {
+        cancelInitialBottomAnchor();
+        return;
+      }
+      const distance = element.scrollHeight - element.scrollTop - element.clientHeight;
+      if (distance > 1) void restoreInitialBottomAnchor();
+    }, INITIAL_BOTTOM_ANCHOR_CHECK_MS);
+  }
+
+  async function restoreInitialBottomAnchor() {
+    if (!initialBottomAnchorActive || focusedMessagePublicId.value) return;
+    const generation = initialBottomAnchorGeneration;
+    await scrollToBottom();
+    if (!initialBottomAnchorActive || generation !== initialBottomAnchorGeneration) return;
+  }
+
+  function handleStickerImageSettled() {
+    if (initialBottomAnchorActive) void restoreInitialBottomAnchor();
+  }
+
   function positiveImageDimension(value: number) {
     const normalized = Math.floor(Number(value));
     return Number.isFinite(normalized) && normalized > 0 ? normalized : undefined;
@@ -1688,6 +1749,7 @@
 
   function handleMessageListUserScrollIntent() {
     cancelProgrammaticMessageNavigation();
+    cancelInitialBottomAnchor();
     // 用户开始主动浏览历史后，键盘或容器后续的尺寸变化不得再把列表抢回底部。
     composerKeyboardAnchorAtBottom = false;
     pauseAvatarMotionForScroll();
@@ -1805,12 +1867,18 @@
   async function markLatestRead() {
     if (!props.access.authenticated) return;
     const roomSlug = selectedRoomSlug.value;
-    const latestMessage = [...chatMessages.value].reverse().find((item) => item.deliveryState !== 'sending');
-    if (!roomSlug || !latestMessage) return;
-    if (latestMessage.publicId === lastMarkedReadMessageId) return;
+    if (!roomSlug || !chatMessages.value.length) return;
+    // 撤回消息仍保留在消息流里，但服务端明确不允许它作为已读游标。若直接提交最后一条
+    // 撤回消息，接口会返回 READ_MESSAGE_INVALID，移动底栏角标便会一直残留。
+    const latestActiveMessage = [...chatMessages.value]
+      .reverse()
+      .find((item) => item.deliveryState !== 'sending' && item.status === 'active');
+    const readMarkerKey = latestActiveMessage?.publicId || `${roomSlug}:latest-active`;
+    if (readMarkerKey === lastMarkedReadMessageId) return;
     try {
-      await markCommunityChatRoomRead(roomSlug, latestMessage.publicId);
-      lastMarkedReadMessageId = latestMessage.publicId;
+      // 当前窗口全是撤回消息时交由服务端选择该房间最后一条有效消息，避免无效游标。
+      await markCommunityChatRoomRead(roomSlug, latestActiveMessage?.publicId || null);
+      lastMarkedReadMessageId = readMarkerKey;
       unread.markRoomRead(roomSlug);
       emit('roomRead', roomSlug);
     } catch {
@@ -1852,6 +1920,7 @@
     const pinnedGeneration = ++pinnedLoadGeneration;
     const requestedFocus = ignoreFocus ? '' : focusMessageFromRoute.value;
     initialLoading.value = true;
+    cancelInitialBottomAnchor();
     loadError.value = false;
     pendingNewMessageCount.value = 0;
     try {
@@ -1887,7 +1956,10 @@
       hasNewerThanFocus.value = Boolean(page.focusPublicId && page.hasNewer);
       // 真实消息始终在覆盖层后完成挂载和定位；覆盖层只在最终 scrollTop 已写入后移除，首帧即最终布局。
       if (focusedMessagePublicId.value) await scrollToFocusedMessage(focusedMessagePublicId.value);
-      else await scrollToBottom();
+      else {
+        beginInitialBottomAnchor();
+        await restoreInitialBottomAnchor();
+      }
       initialLoading.value = false;
       void markLatestRead();
     } catch {
@@ -3154,6 +3226,7 @@
       lastMarkedReadMessageId = '';
       lastAuthorityRefreshAt = 0;
       lastMessageScrollTop = 0;
+      cancelInitialBottomAnchor();
       if (messageScrollFrame !== undefined) {
         window.cancelAnimationFrame(messageScrollFrame);
         messageScrollFrame = undefined;
@@ -3230,6 +3303,7 @@
     if (messageScrollFrame !== undefined) window.cancelAnimationFrame(messageScrollFrame);
     if (keyboardAnchorFrame !== undefined) window.cancelAnimationFrame(keyboardAnchorFrame);
     if (keyboardAnchorCloseTimer !== undefined) window.clearTimeout(keyboardAnchorCloseTimer);
+    cancelInitialBottomAnchor();
     cancelProgrammaticMessageNavigation();
     if (avatarMotionResumeTimer !== undefined) window.clearTimeout(avatarMotionResumeTimer);
     if (transientFocusTimer !== undefined) window.clearTimeout(transientFocusTimer);
@@ -3597,6 +3671,7 @@
     min-height: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    overflow-anchor: none;
     overscroll-behavior-x: none;
     overscroll-behavior-y: contain;
     touch-action: pan-y;
@@ -4030,13 +4105,15 @@
 
   .community-message__sticker img {
     width: 100%;
-    max-height: 176px;
+    height: 100%;
+    max-height: none;
     display: block;
     object-fit: contain;
   }
 
   .community-message__sticker.has-image {
-    min-height: 0;
+    min-height: auto;
+    aspect-ratio: 1 / 1;
     padding: 0;
     overflow: visible;
     border: 0;

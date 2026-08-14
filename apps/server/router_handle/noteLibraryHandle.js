@@ -24,6 +24,7 @@ import {
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { buildNoteCardPreview, extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
+import { buildDrawingScenePreview } from '../util/drawingPreview.js';
 import {
   ensureNoteImageThumbnail,
   getExistingNoteImageThumbnailPath,
@@ -183,6 +184,8 @@ const normalizeCanonicalMarkdownRecord = (record) => {
 // 弱网 App 不仅下载慢，还要在主线程解析一大块 JSON。保留 4000 字符足够生成卡片/列表摘要，
 // 打开正文仍由 getNoteDetail 返回完整内容；搜索条件也继续在数据库完整正文上执行。
 const NOTE_LIST_CONTENT_PREVIEW_LENGTH = 4000;
+const DRAWING_PREVIEW_BATCH_LIMIT = 12;
+const NOTE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
 // note_images 的归属可信度是图片引用计数体系的地基:
@@ -1046,6 +1049,52 @@ export const queryNoteList = async (req, res) => {
     return res.send(
       resultData(null, 500, L(req, '服务器暂时无法处理，请稍后重试', 'The server is temporarily unavailable')),
     );
+  }
+};
+
+// 手绘完整场景继续与通用列表隔离，仅在卡片进入可视区后按小批次读取。
+// 响应经过元素、轨迹点和文本三重压缩，避免为了几百像素的缩略图传输编辑级数据。
+export const queryDrawingPreviews = async (req, res) => {
+  try {
+    const rawIds = req.body?.ids;
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > DRAWING_PREVIEW_BATCH_LIMIT) {
+      return res.send(
+        resultData(
+          null,
+          400,
+          L(
+            req,
+            `单次最多预览 ${DRAWING_PREVIEW_BATCH_LIMIT} 篇手绘笔记`,
+            `Up to ${DRAWING_PREVIEW_BATCH_LIMIT} previews`,
+          ),
+        ),
+      );
+    }
+    const ids = [...new Set(rawIds.map((id) => String(id || '').trim()))];
+    if (ids.length === 0 || ids.some((id) => !NOTE_ID_PATTERN.test(id))) {
+      return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT id, content, revision
+       FROM note
+       WHERE create_by = ? AND del_flag = 0 AND type = 'drawing' AND id IN (${placeholders})`,
+      [req.user.id, ...ids],
+    );
+    const rowsById = new Map(rows.map((row) => [String(row.id), row]));
+    const items = ids.flatMap((id) => {
+      const row = rowsById.get(id);
+      if (!row) return [];
+      try {
+        return [{ id, revision: Number(row.revision || 0), preview: buildDrawingScenePreview(row.content) }];
+      } catch (error) {
+        console.warn('[note-library] drawing preview skipped id=%s code=%s', id, stableAgentErrorCode(error));
+        return [];
+      }
+    });
+    return res.send(resultData({ items }));
+  } catch (error) {
+    return sendNoteServerError(res, 'query-drawing-previews', error);
   }
 };
 

@@ -47,4 +47,8 @@ describe('NoteReadonlyPreview', () => {
     );
     expect(source).not.toContain('note-readonly-preview__notice');
   });
+
+  it('手绘阅读态只保留外层阅读区滚动，可以抵达整张纸底部', () => {
+    expect(source).toMatch(/\.note-readonly-preview__drawing\s*\{[\s\S]*min-height:\s*0;[\s\S]*height:\s*auto;/u);
+  });
 });

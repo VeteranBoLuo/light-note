@@ -1107,7 +1107,6 @@
             key: 'drawing',
             label: t('note.drawingLabel'),
             description: t('note.drawingDesc'),
-            icon: icon.resource.noteDrawing,
             onClick: () => gotoNewNote({ type: 'drawing' }),
           },
         ],

@@ -54,6 +54,7 @@ router.post('/updateDrawingNote', noteLibraryHandle.updateDrawingNote);
 router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.post('/queryDrawingPreviews', noteLibraryHandle.queryDrawingPreviews);
 router.get('/image-thumbnail/:fileName', noteLibraryHandle.getNoteImageThumbnail);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);

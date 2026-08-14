@@ -23,6 +23,9 @@ vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
 vi.mock('@/components/inbox/InboxPendingBadge.vue', () => ({ default: { template: '<i />' } }));
 vi.mock('@/components/base/PinBadge.vue', () => ({ default: { template: '<i />' } }));
 vi.mock('@/components/noteLibrary/library/NoteFormatBadge.vue', () => ({ default: { template: '<i />' } }));
+vi.mock('@/components/noteLibrary/drawing/DrawingNoteThumbnail.vue', () => ({
+  default: { props: ['content'], template: '<div class="drawing-note-thumbnail-stub" />' },
+}));
 vi.mock('@/components/tag/ResourceTagChip.vue', () => ({ default: { template: '<i />' } }));
 
 const [{ default: NoteCard }, { default: NoteListItem }] = await Promise.all([

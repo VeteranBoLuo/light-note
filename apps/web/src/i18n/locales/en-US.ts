@@ -2955,6 +2955,10 @@ export default {
       currentContent: 'Current content',
       selectedVersion: 'Historical version',
       comparisonBasis: 'Current vs history',
+      drawingDiffAdded: '{count} elements added',
+      drawingDiffRemoved: '{count} elements removed',
+      drawingDiffChanged: '{count} elements changed or moved',
+      drawingDiffHint: 'Compared by canvas element; both canvases use the same scale and scroll together',
       restore: 'Restore this version',
       restoreConfirmTitle: 'Restore Version',
       restoreConfirm:
@@ -3582,7 +3586,8 @@ export default {
     rankingPreferenceTitle: 'Supporter leaderboard visibility',
     rankingNamedDescription: 'You are on the all-time leaderboard with your Light Note name and avatar.',
     rankingAnonymousDescription: 'You are on the all-time leaderboard as an anonymous supporter.',
-    rankingExcludedDescription: 'You are not on the public leaderboard. Your support history remains private to your account.',
+    rankingExcludedDescription:
+      'You are not on the public leaderboard. Your support history remains private to your account.',
     rankingShowIdentity: 'Show Light Note name and avatar',
     rankingLeaveAction: 'Leave leaderboard',
     rankingJoinAction: 'Join leaderboard',
@@ -3670,7 +3675,8 @@ export default {
     forceSync: 'Sync AFDIAN orders',
     overviewHint:
       'Amounts use actual payments from API-verified orders. This-month totals include only orders reliably observed after this feature launched.',
-    listHint: 'Lists are server-paginated and never expose payment codes, credentials, remarks, addresses, or unrelated private data.',
+    listHint:
+      'Lists are server-paginated and never expose payment codes, credentials, remarks, addresses, or unrelated private data.',
     searchPlaceholder: 'Search order number, Light Note name, or AFDIAN name',
     loadFailed: 'Could not load sponsorship management data',
     syncSuccess: 'Order sync completed; {count} order(s) processed',

@@ -69,6 +69,7 @@ declare(ADMIN_POLICIES.CONTENT_DESTRUCTIVE, 'bookmark', [
 
 declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/queryNoteList'],
+  ['POST', '/note/queryDrawingPreviews'],
   ['GET', '/note/image-thumbnail/:fileName'],
   ['POST', '/note/getNoteTreeFeatures'],
   ['POST', '/note/queryNoteTree'],

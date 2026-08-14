@@ -103,4 +103,57 @@ describe('useCommunityChatUnread', () => {
     expect(mocks.getRooms).toHaveBeenCalledTimes(2);
     expect(unread.totalUnread.value).toBe(1);
   });
+
+  it('进入聊天室完成已读后，不被更早发出的目录响应恢复旧角标', async () => {
+    let resolveRooms: (value: unknown) => void = () => {};
+    mocks.getRooms.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRooms = resolve;
+        }),
+    );
+    const unread = useCommunityChatUnread();
+    unread.syncDirectory({
+      messagingEnabled: true,
+      items: [{ slug: 'general', unreadCount: 9, mentionCount: 2 }],
+    } as any);
+
+    const pendingRefresh = unread.refresh();
+    await Promise.resolve();
+    unread.markRoomRead('general');
+    resolveRooms({
+      data: {
+        messagingEnabled: true,
+        items: [{ slug: 'general', unreadCount: 9, mentionCount: 2 }],
+      },
+    });
+    await pendingRefresh;
+
+    expect(unread.totalUnread.value).toBe(0);
+    expect(unread.totalMentions.value).toBe(0);
+
+    mocks.getRooms.mockResolvedValueOnce({
+      data: {
+        messagingEnabled: true,
+        items: [{ slug: 'general', unreadCount: 1, mentionCount: 1 }],
+      },
+    });
+    await unread.refresh();
+
+    expect(unread.totalUnread.value).toBe(1);
+    expect(unread.totalMentions.value).toBe(1);
+  });
+
+  it('页面目录轮询可用请求令牌丢弃账号切换后的旧角标响应', () => {
+    const unread = useCommunityChatUnread();
+    const oldAccountToken = unread.captureDirectorySyncToken();
+
+    unread.reset();
+    unread.syncDirectory(
+      { messagingEnabled: true, items: [{ slug: 'general', unreadCount: 7, mentionCount: 0 }] } as any,
+      oldAccountToken,
+    );
+
+    expect(unread.totalUnread.value).toBe(0);
+  });
 });

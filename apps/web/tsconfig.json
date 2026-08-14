@@ -21,7 +21,7 @@
     "lib": ["DOM", "esnext", "DOM.Iterable"],
     "typeRoots": [
       "node_modules/@types", // 默认值
-      "src/types",
+      "src/types"
     ],
 
     "noImplicitAny": false,
@@ -29,10 +29,11 @@
     "paths": {
       "@": ["src"],
       "@/*": ["src/*"],
+      "@lightnote/shared/drawing-note": ["../../packages/shared/drawingNote.d.ts"]
     },
-    "types": ["vite/client"],
+    "types": ["vite/client"]
   },
   "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.tsx", "src/**/*.vue", "components.d.ts"],
   // 测试文件由 vitest 自行转译/校验,不纳入生产构建的类型检查(避免其 import 的 vitest/node 类型污染全局)
-  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }

@@ -179,6 +179,32 @@ describe('useNoteTree', () => {
     scope.stop();
   });
 
+  it('新建页按父目录加载导航，但不把 add 当成真实笔记查询', async () => {
+    mocks.route.value = {
+      name: 'noteDetail',
+      params: { id: 'add' },
+      query: { parent: 'project' },
+      fullPath: '/noteLibrary/add?parent=project',
+    } as any;
+    const scope = effectScope();
+    const tree = scope.run(() => useNoteTree());
+
+    await vi.waitFor(() => expect(tree?.currentBreadcrumb.value).toHaveLength(2));
+    expect(tree?.activePageId.value).toBeNull();
+    expect(tree?.browseParentId.value).toBe('project');
+    expect(mocks.apiBasePost).toHaveBeenCalledWith(
+      '/api/note/queryNoteBreadcrumb',
+      { noteId: 'project' },
+      { silent: true },
+    );
+    expect(mocks.apiBasePost).not.toHaveBeenCalledWith(
+      '/api/note/queryNoteBreadcrumb',
+      { noteId: 'add' },
+      { silent: true },
+    );
+    scope.stop();
+  });
+
   it('展开节点只在当前浏览会话保存并限制为稳定 ID 列表', async () => {
     sessionStorage.setItem('light-note-note-tree-expanded-ids', JSON.stringify(['saved-node', '', 42]));
     const scope = effectScope();

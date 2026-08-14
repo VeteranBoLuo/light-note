@@ -1,5 +1,5 @@
 <template>
-  <div ref="rootRef" class="drawing-editor" tabindex="0" @keydown="handleKeydown">
+  <div ref="rootRef" class="drawing-editor" :class="{ 'is-readonly': readonly }" tabindex="0" @keydown="handleKeydown">
     <div v-if="!readonly" class="drawing-toolbar" role="toolbar" :aria-label="t('note.drawingToolbar')">
       <BTooltip v-for="item in tools" :key="item.key" :title="item.label">
         <BButton
@@ -83,6 +83,7 @@
 
     <div ref="workspaceRef" class="drawing-workspace">
       <div
+        ref="pageRef"
         class="drawing-page"
         :style="{ width: `${DRAWING_PAGE.width * zoom}px`, height: `${DRAWING_PAGE.height * zoom}px` }"
       >
@@ -102,16 +103,17 @@
           class="drawing-text-editor"
           :style="{
             left: `${textDraft.x * zoom}px`,
-            top: `${textDraft.y * zoom}px`,
+            top: `${textEditorTop(textDraft) * zoom}px`,
             width: `${textDraft.width * zoom}px`,
             fontSize: `${textDraft.fontSize * zoom}px`,
+            color: textDraft.color,
           }"
         >
           <BInput
             ref="textInputRef"
             v-model:value="textDraft.text"
             type="textarea"
-            :rows="3"
+            :rows="textDraftRows"
             :maxlength="4000"
             submit-on-enter
             :placeholder="t('note.drawingTextPlaceholder')"
@@ -173,6 +175,7 @@
 
   const rootRef = ref<HTMLElement | null>(null);
   const workspaceRef = ref<HTMLElement | null>(null);
+  const pageRef = ref<HTMLElement | null>(null);
   const canvasRef = ref<HTMLCanvasElement | null>(null);
   const textInputRef = ref<{ focus?: () => void } | null>(null);
   const scene = shallowRef<DrawingScene>(createEmptyDrawingScene());
@@ -182,13 +185,24 @@
   const fontSize = ref<DrawingFontSize>(DRAWING_FONT_SIZES[0]);
   const selectedId = ref('');
   const textDraft = ref<DrawingTextElement | null>(null);
+  const textDraftRows = computed(() => {
+    const draft = textDraft.value;
+    if (!draft) return 1;
+    const context = canvasRef.value?.getContext('2d');
+    if (!context) return Math.max(1, draft.text.split('\n').length);
+    context.font = `${draft.fontSize}px sans-serif`;
+    return Math.max(1, Math.min(12, layoutText(context, draft).length));
+  });
   const undoStack = ref<string[]>([]);
   const redoStack = ref<string[]>([]);
   const ZOOM_LEVELS = [0.35, 0.5, 0.75, 1, 1.25, 1.5] as const;
   const zoomIndex = ref(3);
-  const zoom = computed(() => ZOOM_LEVELS[zoomIndex.value]);
+  const readonlyFitZoom = ref(1);
+  const zoom = computed(() => (props.readonly ? readonlyFitZoom.value : ZOOM_LEVELS[zoomIndex.value]));
   const HISTORY_MAX_STATES = 20;
   const HISTORY_MAX_CHARS = 8_000_000;
+  const TEXT_DRAG_THRESHOLD_PX = 4;
+  const DRAWING_TEXT_LINE_HEIGHT = 1.35;
 
   const tools = computed(() => [
     { key: 'pen' as const, label: t('note.drawingPen'), icon: icon.drawingNote.pen },
@@ -207,7 +221,9 @@
   const erasedElementIds = new Set<string>();
   let dragStart: { x: number; y: number; element: DrawingElement } | null = null;
   let dragPreview: DrawingElement | null = null;
+  let editSelectedTextOnRelease = false;
   let panStart: { x: number; y: number; left: number; top: number } | null = null;
+  let workspaceResizeObserver: ResizeObserver | null = null;
   let frameId = 0;
   let lastEmittedContent = '';
   const textLayoutCache = new Map<string, string[]>();
@@ -277,6 +293,10 @@
     return lines;
   }
 
+  function textEditorTop(element: DrawingTextElement) {
+    return element.y - (element.fontSize * (DRAWING_TEXT_LINE_HEIGHT - 1)) / 2;
+  }
+
   function elementBounds(context: CanvasRenderingContext2D, element: DrawingElement) {
     const cached = elementBoundsCache.get(element);
     if (cached) return cached;
@@ -286,9 +306,12 @@
       const lines = layoutText(context, element);
       bounds = {
         x: element.x,
-        y: element.y,
+        y: textEditorTop(element),
         width: element.width,
-        height: Math.max(element.fontSize * 1.35, lines.length * element.fontSize * 1.35),
+        height: Math.max(
+          element.fontSize * DRAWING_TEXT_LINE_HEIGHT,
+          lines.length * element.fontSize * DRAWING_TEXT_LINE_HEIGHT,
+        ),
       };
     } else {
       let minX = Infinity;
@@ -336,7 +359,7 @@
     context.font = `${element.fontSize}px sans-serif`;
     context.textBaseline = 'top';
     layoutText(context, element).forEach((line, index) => {
-      context.fillText(line, element.x, element.y + index * element.fontSize * 1.35, element.width);
+      context.fillText(line, element.x, element.y + index * element.fontSize * DRAWING_TEXT_LINE_HEIGHT, element.width);
     });
   }
 
@@ -346,12 +369,13 @@
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, DRAWING_PAGE.width, DRAWING_PAGE.height);
     target.elements.forEach((element) => {
-      if (!erasedElementIds.has(element.id)) {
+      // 编辑框已经承载同一文本；画布暂时隐藏原元素，避免视觉上叠成两份。
+      if (!erasedElementIds.has(element.id) && textDraft.value?.id !== element.id) {
         paintElement(context, dragPreview?.id === element.id ? dragPreview : element);
       }
     });
     if (activeStroke) paintElement(context, activeStroke);
-    if (showSelection && selectedId.value) {
+    if (showSelection && selectedId.value && textDraft.value?.id !== selectedId.value) {
       const selected =
         dragPreview?.id === selectedId.value
           ? dragPreview
@@ -384,6 +408,21 @@
     canvas.style.width = `${DRAWING_PAGE.width * zoom.value}px`;
     canvas.style.height = `${DRAWING_PAGE.height * zoom.value}px`;
     scheduleDraw();
+  }
+
+  function fitReadonlyPage() {
+    const workspace = workspaceRef.value;
+    if (!props.readonly || !workspace) return;
+    const style = getComputedStyle(workspace);
+    const horizontalPadding =
+      (Number.parseFloat(style.paddingLeft) || 0) + (Number.parseFloat(style.paddingRight) || 0);
+    const contentWidth = Math.max(1, workspace.clientWidth - horizontalPadding);
+    const pageStyle = pageRef.value ? getComputedStyle(pageRef.value) : null;
+    const horizontalBorder = pageStyle
+      ? (Number.parseFloat(pageStyle.borderLeftWidth) || 0) + (Number.parseFloat(pageStyle.borderRightWidth) || 0)
+      : 0;
+    readonlyFitZoom.value = Math.min(1, Math.max(1, contentWidth - horizontalBorder) / DRAWING_PAGE.width);
+    nextTick(resizeCanvas);
   }
 
   function canvasPoint(event: PointerEvent) {
@@ -576,6 +615,7 @@
       return;
     }
     const hit = hitElement(point);
+    const shouldEditSelectedText = hit?.kind === 'text' && hit.id === selectedId.value;
     selectedId.value = hit?.id || '';
     if (hit) {
       beginMutation();
@@ -585,6 +625,7 @@
         element: hit.kind === 'stroke' ? { ...hit, points: [...hit.points] } : { ...hit },
       };
       dragPreview = dragStart.element;
+      editSelectedTextOnRelease = shouldEditSelectedText;
     }
     scheduleDraw();
   }
@@ -614,6 +655,9 @@
     if (dragStart && selectedId.value) {
       const dx = point.x - dragStart.x;
       const dy = point.y - dragStart.y;
+      if (editSelectedTextOnRelease && Math.hypot(dx, dy) * zoom.value >= TEXT_DRAG_THRESHOLD_PX) {
+        editSelectedTextOnRelease = false;
+      }
       const original = dragStart.element;
       const moved: DrawingElement =
         original.kind === 'text'
@@ -641,11 +685,17 @@
       activeStrokeMaxPairs = 0;
       emitScene();
     } else if (dragStart && dragPreview) {
-      scene.value = {
-        ...scene.value,
-        elements: scene.value.elements.map((element) => (element.id === dragPreview?.id ? dragPreview : element)),
-      };
-      emitScene();
+      if (editSelectedTextOnRelease && dragStart.element.kind === 'text') {
+        mutationSnapshot = '';
+        textDraft.value = { ...dragStart.element };
+        nextTick(() => textInputRef.value?.focus?.());
+      } else {
+        scene.value = {
+          ...scene.value,
+          elements: scene.value.elements.map((element) => (element.id === dragPreview?.id ? dragPreview : element)),
+        };
+        emitScene();
+      }
     } else if (tool.value === 'eraser' && eraserChanged) {
       scene.value = {
         ...scene.value,
@@ -659,6 +709,7 @@
     erasedElementIds.clear();
     dragStart = null;
     dragPreview = null;
+    editSelectedTextOnRelease = false;
     scheduleDraw();
   }
 
@@ -672,6 +723,7 @@
     erasedElementIds.clear();
     dragStart = null;
     dragPreview = null;
+    editSelectedTextOnRelease = false;
     scheduleDraw();
   }
 
@@ -680,11 +732,16 @@
     if (!draft) return;
     textDraft.value = null;
     if (!draft.text.trim()) return;
+    const existingText = scene.value.elements.some((element) => element.id === draft.id && element.kind === 'text');
     beginMutation();
+    const committedDraft = { ...draft, text: draft.text.slice(0, 4000) };
     scene.value = {
       ...scene.value,
-      elements: [...scene.value.elements, { ...draft, text: draft.text.slice(0, 4000) }],
+      elements: existingText
+        ? scene.value.elements.map((element) => (element.id === draft.id ? committedDraft : element))
+        : [...scene.value.elements, committedDraft],
     };
+    selectedId.value = draft.id;
     textLayoutCache.clear();
     emitScene();
     scheduleDraw();
@@ -820,17 +877,26 @@
   );
 
   onMounted(() => {
-    const availableWidth = Math.max(320, (workspaceRef.value?.clientWidth || window.innerWidth) - 32);
-    const preferred = Math.min(1, availableWidth / DRAWING_PAGE.width);
-    zoomIndex.value = ZOOM_LEVELS.reduce(
-      (best, value, index) => (Math.abs(value - preferred) < Math.abs(ZOOM_LEVELS[best] - preferred) ? index : best),
-      0,
-    );
-    resizeCanvas();
+    if (props.readonly) {
+      fitReadonlyPage();
+      if (typeof ResizeObserver !== 'undefined' && workspaceRef.value) {
+        workspaceResizeObserver = new ResizeObserver(fitReadonlyPage);
+        workspaceResizeObserver.observe(workspaceRef.value);
+      }
+    } else {
+      const availableWidth = Math.max(320, (workspaceRef.value?.clientWidth || window.innerWidth) - 32);
+      const preferred = Math.min(1, availableWidth / DRAWING_PAGE.width);
+      zoomIndex.value = ZOOM_LEVELS.reduce(
+        (best, value, index) => (Math.abs(value - preferred) < Math.abs(ZOOM_LEVELS[best] - preferred) ? index : best),
+        0,
+      );
+      resizeCanvas();
+    }
     emit('ready');
   });
 
   onBeforeUnmount(() => {
+    workspaceResizeObserver?.disconnect();
     if (frameId) cancelAnimationFrame(frameId);
   });
 
@@ -847,6 +913,11 @@
     outline: none;
     color: var(--text-color);
     background: var(--workspace-panel-bg-color);
+  }
+
+  .drawing-editor.is-readonly {
+    min-height: 0;
+    height: auto;
   }
 
   .drawing-toolbar {
@@ -927,6 +998,11 @@
     background: var(--body-background, #f4f5f7);
   }
 
+  .drawing-editor.is-readonly .drawing-workspace {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
   .drawing-page {
     position: relative;
     margin: 0 auto;
@@ -971,10 +1047,17 @@
   }
 
   .drawing-text-editor :deep(.b-textarea) {
-    min-height: 72px;
-    color: #1f2937;
-    background: rgba(255, 255, 255, 0.97);
-    border: 2px solid #615ced;
+    display: block;
+    min-height: 0;
+    padding: 0 !important;
+    overflow: hidden;
+    color: inherit;
+    background-color: rgba(255, 255, 255, 0.97) !important;
+    border: 0 !important;
+    outline: 2px solid #615ced;
+    outline-offset: 0;
+    box-shadow: none !important;
+    font-family: sans-serif;
     font-size: inherit;
     line-height: 1.35;
     resize: none;
