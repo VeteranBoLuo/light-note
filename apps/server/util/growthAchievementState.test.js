@@ -2,12 +2,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../db/index.js', () => ({ default: { query: vi.fn() } }));
 vi.mock('./growth.js', () => ({
-  ACHIEVEMENTS: [
-    { key: 'todo_20', metric: 'completedTodoCount', target: 20 },
-    { key: 'todo_100', metric: 'completedTodoCount', target: 100 },
+  resolveAchievements: () => [
+    { key: 'todo_20', metric: 'completedTodoCount', target: 20, reward: 20 },
+    { key: 'todo_100', metric: 'completedTodoCount', target: 100, reward: 100 },
   ],
   meetsAchievementRequirement: (achievement, metrics) =>
     Number(metrics[achievement.metric] || 0) >= Number(achievement.target || 0),
+}));
+vi.mock('./growthPreferences.js', () => ({
+  getGrowthCalendarContext: vi.fn().mockResolvedValue({ dayKey: '20260814' }),
+}));
+vi.mock('./pointsEarningPolicyState.js', () => ({
+  resolveDailyEarningPolicyVersion: vi.fn().mockResolvedValue('points-earning-c5'),
+}));
+vi.mock('./points.js', () => ({
+  getAchievementFrameByKey: vi.fn().mockReturnValue(null),
 }));
 
 import { persistAchievementUnlocksForMetrics } from './growthAchievementState.js';
@@ -22,10 +31,13 @@ describe('growthAchievementState', () => {
       persistAchievementUnlocksForMetrics('user-1', { completedTodoCount: 20, level: 2 }, { db }),
     ).resolves.toEqual(['todo_20']);
 
-    expect(db.query).toHaveBeenCalledWith(
-      expect.stringContaining('INSERT IGNORE INTO user_achievements'),
-      ['user-1', 'todo_20'],
-    );
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining('INSERT IGNORE INTO user_achievements'), [
+      'user-1',
+      'todo_20',
+      20,
+      null,
+      'points-earning-c5',
+    ]);
     expect(String(db.query.mock.calls[0][0])).not.toContain('UPDATE');
   });
 

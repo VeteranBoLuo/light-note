@@ -8,7 +8,7 @@ describe('growthActivityHistory', () => {
     const [sql, params] = db.query.mock.calls[0];
     expect(sql).toContain("'todo_complete'");
     expect(sql).toContain("SHA2(CONCAT('todo:'");
-    expect(sql).toContain("JSON_OBJECT('kind', 'todo')");
+    expect(sql).toContain("JSON_OBJECT('kind', 'todo', 'meaningful', true)");
     expect(params).toEqual(['user-1', 'todo-sensitive-id', 'user-1']);
   });
 

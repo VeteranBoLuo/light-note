@@ -5,7 +5,9 @@ import { ACHIEVEMENT_KEYS, ACHIEVEMENT_VISUALS, achievementVisualFor } from './a
 
 function serverAchievements() {
   const source = readFileSync(resolve(process.cwd(), '../server/util/growth.js'), 'utf8');
-  const definition = source.match(/export const ACHIEVEMENTS = \[([\s\S]*?)\n\];/)?.[1] || '';
+  // C5 将不可变旧基线命名为 LEGACY_ACHIEVEMENTS，再按策略版本派生运行时目录；
+  // 展示键仍应覆盖基线定义，而不是去解析派生 map 表达式。
+  const definition = source.match(/export const (?:LEGACY_)?ACHIEVEMENTS = \[([\s\S]*?)\n\];/)?.[1] || '';
   return [...definition.matchAll(/\{ key: '([^']+)', group: '([^']+)'/g)].map((match) => ({
     key: match[1],
     group: match[2],

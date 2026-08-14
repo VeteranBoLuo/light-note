@@ -21,6 +21,7 @@
 
     <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
     <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
+    <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
 
     <!-- 实用道具 -->
     <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
@@ -275,7 +276,7 @@
   function canBuyNow(it: ShopItem) {
     if (readOnly.value) return false;
     const s = shop.value;
-    if (!s || s.isVisitor || canEquipFrame(it) || it.acquisition === 'achievement') return false;
+    if (!s || !s.purchaseEnabled || s.isVisitor || canEquipFrame(it) || it.acquisition === 'achievement') return false;
     if (it.minLevel && (s.level || 0) < it.minLevel) return false;
     if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return false;
     return (s.points || 0) >= Number(it.cost || 0);
@@ -284,6 +285,7 @@
   function unavailableLabel(it: ShopItem) {
     const s = shop.value;
     if (!s || it.owned || it.acquisition === 'achievement') return '';
+    if (!s.purchaseEnabled) return t('growth.shopMaintenance');
     if (s.isVisitor) return t('growth.shopLoginRequired');
     if (it.minLevel && (s.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
     if (it.effect === 'makeup_card' && (s.protectCards || 0) >= 2) return t('growth.shopCardMax');
@@ -294,6 +296,7 @@
   // 消耗品按钮文案:可买=兑换;否则按原因给出置灰提示
   function consumableBtn(it: ShopItem) {
     if (canBuyNow(it)) return t('growth.shopBuy');
+    if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
     if (it.id === 'makeup_card' && (shop.value?.protectCards || 0) >= 2) return t('growth.shopCardMax');
     if ((shop.value?.points || 0) < Number(it.cost || 0)) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
@@ -301,6 +304,7 @@
   // 称号按钮文案:未拥有且不可买 → 等级不足 / 积分不足
   function titleBtn(it: ShopItem) {
     if (canBuyNow(it)) return t('growth.shopBuy');
+    if (shop.value && !shop.value.purchaseEnabled) return t('growth.shopMaintenanceShort');
     if (it.minLevel && (shop.value?.level || 0) < it.minLevel) return t('growth.shopLevelNeed', { n: it.minLevel });
     if ((shop.value?.points || 0) < Number(it.cost || 0)) return t('growth.shopInsufficient');
     return t('growth.shopBuy');
@@ -329,6 +333,8 @@
       if (res?.status === 200 && res.data?.ok) {
         message.success(t('growth.shopBuyOk'));
         recordOperation({ module: '成长', operation: '兑换成长权益' });
+      } else if (res?.status === 409 && res.data?.refresh) {
+        message.warning(t('growth.economyCatalogChanged'));
       } else {
         message.error(res?.data?.msg || t('growth.shopInsufficient'));
       }

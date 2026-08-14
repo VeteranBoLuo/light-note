@@ -1,102 +1,106 @@
+import { randomInt } from 'node:crypto';
 import pool from '../db/index.js';
 import { levelForExp } from './growth.js';
 import { grantItem } from './items.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
+import {
+  freeDrawsFor as freeDrawsForCatalog,
+  getEconomyRuntime,
+  LEGACY_POINTS_ECONOMY_VERSION,
+} from './pointsEconomyCatalog.js';
+import {
+  beginPointsEconomyOperation,
+  completePointsEconomyOperation,
+  PointsEconomyError,
+} from './pointsEconomyOperations.js';
 
-// 积分抽奖·盲盒。纯积分消耗池(健康的积分出口):单抽 88 / 十连 800(省 80)。
-// 每 10 抽保底一次稀有(补签卡/AI包/存储);奖池期望值 < 单抽成本,长期是净消耗,但用稀有大奖制造惊喜。
-// 复用 points 的落库口径:积分走 points_log,存储走 storage_bonus_mb,补签卡走上限 2,AI 包即时进入永久余额。
-// 每日免费抽奖次数随等级递增(把「升级」直接变成「解锁更多免费抽」),是等级权益与抽奖的粘合点。
+export const DRAW_COST = 170;
+export const TEN_DRAW_COST = 1600;
+export const MAKEUP_CARD_OVERFLOW_POINTS = 120;
 
-export const DRAW_COST = 88;
-export const TEN_DRAW_COST = 800;
-const PITY_EVERY = 10; // 每第 N 抽保底稀有
-export const MAKEUP_CARD_OVERFLOW_POINTS = 70;
-
-// 每日免费抽奖次数(随等级解锁):Lv1-2 无 → Lv3-5:1 → Lv6-9:2 → Lv10-14:3 → 满级:5。
-export function freeDrawsFor(level) {
-  const lv = Number(level) || 1;
-  if (lv >= 15) return 5;
-  if (lv >= 10) return 3;
-  if (lv >= 6) return 2;
-  if (lv >= 3) return 1;
-  return 0;
+export function freeDrawsFor(level, version) {
+  return freeDrawsForCatalog(level, version);
 }
 
-// 据 exp + 角色解析等级(root 视为满级),供免费次数计算
 function levelOf(exp, userRole) {
   return userRole === 'root' ? 15 : levelForExp(Number(exp) || 0);
 }
 
-// 奖池:weight 为权重(相对值);tier=rare 的项参与保底。kind 决定发奖方式。
-// 展示名/图标在前端按 id 映射 i18n;此处 name 仅作兜底与日志。
-export const LOTTERY_POOL = [
-  { id: 'p10', kind: 'points', amount: 10, name: '+10 积分', weight: 380 },
-  { id: 'p30', kind: 'points', amount: 30, name: '+30 积分', weight: 300 },
-  { id: 'p70', kind: 'points', amount: 70, name: '+70 积分', weight: 130 },
-  { id: 'card', kind: 'card', amount: 1, name: '补签卡 ×1', weight: 60, tier: 'rare' },
-  { id: 'ai', kind: 'ai_pack', amount: 600_000, name: 'AI 加油包', weight: 80, tier: 'rare' },
-  { id: 's128', kind: 'storage', amount: 128, name: '扩容 +128MB', weight: 45, tier: 'rare' },
-  { id: 's512', kind: 'storage', amount: 512, name: '扩容 +512MB(大奖)', weight: 5, tier: 'rare' },
-];
+function poolWeight(pool) {
+  return pool.reduce((sum, item) => sum + Number(item.weight || 0), 0);
+}
 
-const TOTAL_WEIGHT = LOTTERY_POOL.reduce((s, x) => s + x.weight, 0);
-const RARE_POOL = LOTTERY_POOL.filter((x) => x.tier === 'rare');
-const RARE_WEIGHT = RARE_POOL.reduce((s, x) => s + x.weight, 0);
-
-function pickFrom(pool, totalWeight) {
-  let r = Math.random() * totalWeight;
+export function pickWeighted(pool, randomIntFn = randomInt) {
+  const totalWeight = poolWeight(pool);
+  if (!pool.length || !Number.isSafeInteger(totalWeight) || totalWeight <= 0) {
+    throw new Error('LOTTERY_POOL_INVALID');
+  }
+  let cursor = randomIntFn(totalWeight);
+  if (!Number.isSafeInteger(cursor) || cursor < 0 || cursor >= totalWeight) {
+    throw new Error('LOTTERY_RANDOM_OUT_OF_RANGE');
+  }
   for (const item of pool) {
-    r -= item.weight;
-    if (r < 0) return item;
+    cursor -= item.weight;
+    if (cursor < 0) return item;
   }
   return pool[pool.length - 1];
 }
 
-// 单次抽取:drawIndex 为本次抽奖里的全局序号(用于保底判定)
-function rollOne(drawIndex) {
-  if (drawIndex % PITY_EVERY === 0) return pickFrom(RARE_POOL, RARE_WEIGHT); // 保底:第 N 抽必稀有
-  return pickFrom(LOTTERY_POOL, TOTAL_WEIGHT);
+function prizeRates(pool, pityPool = []) {
+  const totalWeight = poolWeight(pool);
+  const pityWeight = poolWeight(pityPool);
+  return pool.map((item) => ({
+    id: item.id,
+    kind: item.kind,
+    amount: item.amount,
+    name: item.name,
+    rate: +((item.weight / totalWeight) * 100).toFixed(2),
+    normalRate: +((item.weight / totalWeight) * 100).toFixed(2),
+    pityRate: item.tier === 'rare' && pityWeight ? +((item.weight / pityWeight) * 100).toFixed(2) : 0,
+    rare: item.tier === 'rare',
+  }));
 }
 
-// 在事务内发放单个奖励(积分/存储/补签卡/AI包)。返回落库明细(前端展示用)。
-async function grantReward(conn, userId, prize) {
+async function grantReward(conn, userId, prize, { mode, version, overflowPoints }) {
+  const c4 = version !== LEGACY_POINTS_ECONOMY_VERSION;
+  const reasonPrefix = mode === 'free' ? 'lottery_free' : 'lottery_paid';
   if (prize.kind === 'points') {
+    const reason = c4 ? `${reasonPrefix}_win` : 'lottery_win';
     await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
       userId,
       prize.amount,
-      'lottery_win',
+      reason,
       prize.id,
     ]);
     await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [prize.amount, userId]);
   } else if (prize.kind === 'storage') {
-    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
-      userId,
-      'lottery_storage',
-      prize.id,
-    ]);
+    if (mode === 'free' && c4) throw new Error('FREE_LOTTERY_ASSET_POLICY_VIOLATION');
     await conn.query('UPDATE user_growth SET storage_bonus_mb = storage_bonus_mb + ? WHERE user_id = ?', [
       prize.amount,
       userId,
     ]);
+    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+      userId,
+      c4 ? 'lottery_paid_asset' : 'lottery_storage',
+      prize.id,
+    ]);
   } else if (prize.kind === 'card') {
+    if (mode === 'free' && c4) throw new Error('FREE_LOTTERY_ASSET_POLICY_VIOLATION');
     const grant = (await grantItem(conn, userId, 'makeup_card', prize.amount)) || {};
     if (Number(grant.overflowQty || 0) > 0) {
+      const reason = c4 ? 'lottery_paid_compensation' : 'lottery_compensation';
       await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
         userId,
-        MAKEUP_CARD_OVERFLOW_POINTS,
-        'lottery_compensation',
+        overflowPoints,
+        reason,
         'makeup_card_full',
       ]);
-      await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [
-        MAKEUP_CARD_OVERFLOW_POINTS,
-        userId,
-      ]);
+      await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [overflowPoints, userId]);
       return {
         id: prize.id,
         kind: 'points',
-        amount: MAKEUP_CARD_OVERFLOW_POINTS,
-        name: `+${MAKEUP_CARD_OVERFLOW_POINTS} 积分`,
+        amount: overflowPoints,
+        name: `+${overflowPoints} 积分`,
         rare: true,
         compensated: true,
         compensationReason: 'makeup_card_full',
@@ -108,6 +112,13 @@ async function grantReward(conn, userId, prize) {
       prize.amount,
       userId,
     ]);
+    if (c4) {
+      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+        userId,
+        mode === 'free' ? 'lottery_free_asset' : 'lottery_paid_asset',
+        prize.id,
+      ]);
+    }
   }
   return {
     id: prize.id,
@@ -118,32 +129,80 @@ async function grantReward(conn, userId, prize) {
   };
 }
 
-/**
- * 抽奖。times=1 单抽 / 10 十连。事务内:校验余额 → 扣分 → 逐抽(含保底)→ 发奖 → 累计次数。
- * @returns {{ok:boolean, reason?:string, msg?:string, cost?:number, points?:number, results?:Array}}
- */
-export async function drawLottery(userId, { times = 1, free = false, userRole = null, calendar = null } = {}) {
-  const n = free ? 1 : times >= 10 ? 10 : 1; // 免费仅单抽
+export async function drawLottery(
+  userId,
+  {
+    times = 1,
+    free = false,
+    mode = null,
+    userRole = null,
+    calendar = null,
+    clientRequestId = null,
+    economyVersion = null,
+    expectedCost = null,
+    randomIntFn = randomInt,
+  } = {},
+) {
+  const runtime = getEconomyRuntime();
+  const hasWriteProtocol = Boolean(clientRequestId && economyVersion && expectedCost !== null && expectedCost !== undefined);
+  if (runtime.requireWriteVersion && hasWriteProtocol) {
+    if ((mode !== 'free' && mode !== 'paid') || (free === true && mode !== 'free')) {
+      throw new PointsEconomyError('INVALID_DRAW_MODE', '抽奖方式无效，请刷新页面后重试');
+    }
+    const requestedTimes = Number(times);
+    if ((mode === 'free' && requestedTimes !== 1) || (mode === 'paid' && ![1, 10].includes(requestedTimes))) {
+      throw new PointsEconomyError('INVALID_DRAW_TIMES', '抽奖次数无效，请刷新页面后重试');
+    }
+  }
+  const drawMode = mode === 'free' || free === true ? 'free' : 'paid';
+  const n = drawMode === 'free' ? 1 : Number(times) === 10 ? 10 : 1;
+  const policy = drawMode === 'free' ? runtime.catalog.freePolicy : runtime.catalog.paidPolicy;
+  const cost = drawMode === 'free' ? 0 : n === 10 ? policy.tenCost : policy.singleCost;
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
+    const operation = await beginPointsEconomyOperation(conn, {
+      userId,
+      operationType: `lottery_${drawMode}`,
+      payload: { mode: drawMode, times: n },
+      clientRequestId,
+      economyVersion,
+      expectedCost,
+      actualCost: cost,
+      runtime,
+    });
+    if (operation.replay) {
+      await conn.commit();
+      return operation.replay;
+    }
+    if (drawMode === 'free' && !runtime.freeLotteryEnabled) {
+      await conn.rollback();
+      return { ok: false, reason: 'maintenance', code: 'POINTS_LOTTERY_FREE_DISABLED', msg: '每日惊喜维护中' };
+    }
+    if (drawMode === 'paid' && !runtime.paidLotteryEnabled) {
+      await conn.rollback();
+      return { ok: false, reason: 'maintenance', code: 'POINTS_LOTTERY_PAID_DISABLED', msg: '积分抽奖维护中' };
+    }
+
+    const paidStateColumns = drawMode === 'paid' ? ', lottery_paid_count, lottery_paid_pity_progress' : '';
     const [rows] = await conn.query(
-      'SELECT points, exp, lottery_count, lottery_free_day, lottery_free_used FROM user_growth WHERE user_id = ? FOR UPDATE',
+      `SELECT points, exp, lottery_count, lottery_free_day, lottery_free_used${paidStateColumns}
+         FROM user_growth WHERE user_id = ? FOR UPDATE`,
       [userId],
     );
-    const g = rows[0];
-    if (!g) {
+    const growth = rows[0];
+    if (!growth) {
       await conn.rollback();
-      return { ok: false, reason: 'no_growth', msg: '成长数据未初始化,先签到试试' };
+      return { ok: false, reason: 'no_growth', msg: '成长数据未初始化，先签到试试' };
     }
-    // 免费次数与保底都按账号日历累计，避免用户跨时区时提前重置或延后一天。
-    const accountCalendar = free ? calendar || (await getGrowthCalendarContext(userId, { db: conn })) : calendar;
+
+    const c4 = runtime.economyVersion !== LEGACY_POINTS_ECONOMY_VERSION;
+    const accountCalendar =
+      drawMode === 'free' ? calendar || (await getGrowthCalendarContext(userId, { db: conn })) : calendar;
     const today = accountCalendar?.dayKey || dayKeyAtOffset();
-    let cost = free ? 0 : n === 10 ? TEN_DRAW_COST : DRAW_COST;
-    if (free) {
-      // 免费抽:校验今日剩余免费次数(随等级)
-      const allowance = freeDrawsFor(levelOf(g.exp, userRole));
-      const usedToday = g.lottery_free_day === today ? Number(g.lottery_free_used) || 0 : 0;
+    if (drawMode === 'free') {
+      const allowance = freeDrawsFor(levelOf(growth.exp, userRole), runtime.economyVersion);
+      const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
       if (usedToday >= allowance) {
         await conn.rollback();
         return { ok: false, reason: 'no_free', msg: '今日免费次数已用完' };
@@ -158,7 +217,7 @@ export async function drawLottery(userId, { times = 1, free = false, userRole = 
         today,
       ]);
     } else {
-      if (Number(g.points) < cost) {
+      if (Number(growth.points) < cost) {
         await conn.rollback();
         return { ok: false, reason: 'insufficient', msg: '积分不足' };
       }
@@ -166,108 +225,175 @@ export async function drawLottery(userId, { times = 1, free = false, userRole = 
       await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
         userId,
         -cost,
-        'lottery_cost',
+        c4 ? 'lottery_paid_cost' : 'lottery_cost',
         n === 10 ? 'x10' : 'x1',
       ]);
     }
-    // 逐抽(全局序号 = 历史累计 + 本次序,用于保底命中)
-    const baseCount = Number(g.lottery_count) || 0;
+
+    const pityEvery = runtime.catalog.paidPolicy.pityEvery;
+    const rarePool = policy.pool.filter((item) => item.tier === 'rare');
+    const legacyBase = Number(growth.lottery_count) || 0;
+    const paidBase = c4
+      ? drawMode === 'paid'
+        ? Number(growth.lottery_paid_pity_progress) || 0
+        : null
+      : legacyBase % pityEvery;
+    let pityProgress = paidBase ?? 0;
     const results = [];
     const pityHitIndexes = [];
-    for (let i = 1; i <= n; i++) {
-      const drawIndex = baseCount + i;
-      const guaranteed = drawIndex % PITY_EVERY === 0;
-      const prize = rollOne(drawIndex);
-      const reward = await grantReward(conn, userId, prize);
-      results.push({ ...reward, guaranteed });
-      if (guaranteed) pityHitIndexes.push(i);
+    for (let index = 1; index <= n; index++) {
+      let guaranteed = false;
+      if (drawMode === 'paid' || (!c4 && policy.countsPaidPity)) {
+        pityProgress += 1;
+        guaranteed = pityProgress >= pityEvery;
+        if (guaranteed) pityProgress = 0;
+      }
+      const prize = pickWeighted(guaranteed ? rarePool : policy.pool, randomIntFn);
+      const reward = await grantReward(conn, userId, prize, {
+        mode: drawMode,
+        version: runtime.economyVersion,
+        overflowPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
+      });
+      results.push({ index, ...reward, guaranteed });
+      if (guaranteed) pityHitIndexes.push(index);
     }
-    await conn.query('UPDATE user_growth SET lottery_count = lottery_count + ? WHERE user_id = ?', [n, userId]);
-    await conn.commit();
-    const [nb] = await pool.query('SELECT points FROM user_growth WHERE user_id = ? LIMIT 1', [userId]);
-    const finalCount = baseCount + n;
-    const pityProgressBefore = baseCount % PITY_EVERY;
-    const pityProgressAfter = finalCount % PITY_EVERY;
-    const nextPityIn = PITY_EVERY - pityProgressAfter || PITY_EVERY;
-    return {
+
+    if (c4 && drawMode === 'paid') {
+      await conn.query(
+        `UPDATE user_growth
+            SET lottery_count = lottery_count + ?,
+                lottery_paid_count = lottery_paid_count + ?,
+                lottery_paid_pity_progress = ?
+          WHERE user_id = ?`,
+        [n, n, pityProgress, userId],
+      );
+    } else if (c4) {
+      await conn.query('UPDATE user_growth SET lottery_count = lottery_count + ? WHERE user_id = ?', [n, userId]);
+    } else {
+      await conn.query('UPDATE user_growth SET lottery_count = lottery_count + ? WHERE user_id = ?', [n, userId]);
+    }
+
+    const [balances] = await conn.query(
+      'SELECT points, storage_bonus_mb, ai_bonus_tokens, streak_protect_cards FROM user_growth WHERE user_id = ? LIMIT 1',
+      [userId],
+    );
+    const balance = balances[0] || {};
+    const result = {
       ok: true,
+      idempotent: false,
+      economyVersion: runtime.economyVersion,
+      mode: drawMode,
       cost,
-      free,
-      points: Number(nb[0]?.points || 0),
+      free: drawMode === 'free',
+      points: Number(balance.points || 0),
       results,
       pityTriggered: pityHitIndexes.length > 0,
       pityHitIndexes,
-      pityProgressBefore,
-      pityProgressAfter,
-      nextPityIn,
+      ...(paidBase === null
+        ? {}
+        : {
+            pityProgressBefore: paidBase,
+            pityProgressAfter: pityProgress,
+            nextPityIn: pityEvery - pityProgress || pityEvery,
+          }),
+      poolVersion: policy.poolVersion,
+      assets: {
+        storageBonusMb: Number(balance.storage_bonus_mb || 0),
+        aiBonusTokens: Number(balance.ai_bonus_tokens || 0),
+        protectCards: Number(balance.streak_protect_cards || 0),
+      },
     };
-  } catch (e) {
+    await completePointsEconomyOperation(conn, operation, {
+      ...result,
+      request: { mode: drawMode, times: n },
+    });
+    await conn.commit();
+    return result;
+  } catch (error) {
     try {
       await conn.rollback();
     } catch {
-      /* ignore */
+      // 保留原始错误。
     }
-    throw e;
+    if (error instanceof PointsEconomyError) throw error;
+    throw error;
   } finally {
     conn.release();
   }
 }
 
-// 抽奖页初始数据:余额、成本、已抽次数、距下次保底、每日免费次数(随等级)、奖池(供前端公示概率)
 export async function getLotteryStatus(userId, { userRole = null, calendar = null } = {}) {
-  let points = 0;
-  let count = 0;
-  let exp = 0;
-  let freeDay = null;
-  let freeUsed = 0;
+  const runtime = getEconomyRuntime();
+  let growth = {};
   if (userId && userId !== 'visitor') {
     const [rows] = await pool.query(
-      'SELECT points, exp, lottery_count, lottery_free_day, lottery_free_used FROM user_growth WHERE user_id = ? LIMIT 1',
+      `SELECT points, exp, lottery_count, lottery_paid_count, lottery_paid_pity_progress,
+              lottery_free_day, lottery_free_used
+         FROM user_growth WHERE user_id = ? LIMIT 1`,
       [userId],
     );
-    if (rows[0]) {
-      points = Number(rows[0].points || 0);
-      count = Number(rows[0].lottery_count || 0);
-      exp = Number(rows[0].exp || 0);
-      freeDay = rows[0].lottery_free_day || null;
-      freeUsed = Number(rows[0].lottery_free_used || 0);
-    }
+    growth = rows[0] || {};
   }
   const accountCalendar =
     userId && userId !== 'visitor' ? calendar || (await getGrowthCalendarContext(userId)) : calendar;
   const today = accountCalendar?.dayKey || dayKeyAtOffset();
-  const level = levelOf(exp, userRole);
-  const freeDaily = freeDrawsFor(level); // 当前等级每日免费次数
-  const usedToday = freeDay === today ? freeUsed : 0;
-  const freeRemaining = Math.max(0, freeDaily - usedToday); // 今日剩余免费次数
-  const toPity = (PITY_EVERY - (count % PITY_EVERY)) % PITY_EVERY || PITY_EVERY; // 距离下次保底还差几抽
-  const prizes = LOTTERY_POOL.map((x) => ({
-    id: x.id,
-    kind: x.kind,
-    amount: x.amount,
-    name: x.name,
-    rate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2), // 兼容旧前端
-    normalRate: +((x.weight / TOTAL_WEIGHT) * 100).toFixed(2),
-    pityRate: x.tier === 'rare' ? +((x.weight / RARE_WEIGHT) * 100).toFixed(2) : 0,
-    rare: x.tier === 'rare',
-  }));
-  return {
-    points,
-    count,
-    toPity,
-    singleCost: DRAW_COST,
-    tenCost: TEN_DRAW_COST,
-    pityEvery: PITY_EVERY,
-    pityCountsFreeDraws: true,
+  const level = levelOf(growth.exp, userRole);
+  const freeDaily = freeDrawsFor(level, runtime.economyVersion);
+  const usedToday = growth.lottery_free_day === today ? Number(growth.lottery_free_used) || 0 : 0;
+  const freeRemaining = Math.max(0, freeDaily - usedToday);
+  const c4 = runtime.economyVersion !== LEGACY_POINTS_ECONOMY_VERSION;
+  const pityEvery = runtime.catalog.paidPolicy.pityEvery;
+  const pityProgress = c4
+    ? Number(growth.lottery_paid_pity_progress) || 0
+    : (Number(growth.lottery_count) || 0) % pityEvery;
+  const rarePool = runtime.catalog.paidPolicy.pool.filter((item) => item.tier === 'rare');
+  // C3 的免费抽仍与付费抽共享奖池并推进同一保底，灰度兼容期必须展示真实保底概率；
+  // C4 的每日惊喜不计付费保底，因此只展示普通概率，不能把保底列误带到免费池。
+  const freePool = prizeRates(
+    runtime.catalog.freePolicy.pool,
+    runtime.catalog.freePolicy.countsPaidPity ? rarePool : [],
+  );
+  const paidPool = prizeRates(runtime.catalog.paidPolicy.pool, rarePool);
+  const paid = {
+    enabled: runtime.paidLotteryEnabled,
+    singleCost: runtime.catalog.paidPolicy.singleCost,
+    tenCost: runtime.catalog.paidPolicy.tenCost,
+    pityEvery,
+    pityProgress,
+    toPity: pityEvery - pityProgress || pityEvery,
+    poolVersion: runtime.catalog.paidPolicy.poolVersion,
+    pool: paidPool,
     overflowPolicy: {
       itemId: 'makeup_card',
       maxInventory: 2,
-      compensationPoints: MAKEUP_CARD_OVERFLOW_POINTS,
+      compensationPoints: runtime.catalog.paidPolicy.cardOverflowPoints,
     },
+  };
+  const free = {
+    enabled: runtime.freeLotteryEnabled,
+    daily: freeDaily,
+    remaining: freeRemaining,
+    countsPaidPity: runtime.catalog.freePolicy.countsPaidPity,
+    poolVersion: runtime.catalog.freePolicy.poolVersion,
+    pool: freePool,
+  };
+  return {
+    economyVersion: runtime.economyVersion,
+    points: Number(growth.points || 0),
     level,
+    timezone: accountCalendar?.timezone || 'Asia/Shanghai',
+    free,
+    paid,
+    // 兼容旧前端的只读字段；新版前端只使用 free / paid 分组。
+    count: c4 ? Number(growth.lottery_paid_count || 0) : Number(growth.lottery_count || 0),
+    toPity: paid.toPity,
+    singleCost: paid.singleCost,
+    tenCost: paid.tenCost,
+    pityEvery,
+    pityCountsFreeDraws: free.countsPaidPity,
+    overflowPolicy: paid.overflowPolicy,
     freeDaily,
     freeRemaining,
-    timezone: accountCalendar?.timezone || 'Asia/Shanghai',
-    pool: prizes,
+    pool: paidPool,
   };
 }

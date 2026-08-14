@@ -1,4 +1,5 @@
-import { FRAME_CATALOG, SHOP_ITEMS, getOwnedCosmetics } from '../../points.js';
+import { getActiveFrameCatalog, getActiveShopItems, getOwnedCosmetics } from '../../points.js';
+import { getEconomyRuntime } from '../../pointsEconomyCatalog.js';
 import { getGrowth, getGrowthDashboard } from '../../growth.js';
 
 // 积分兑换 + 成就头像框 + 我的装扮(只读)。
@@ -15,7 +16,11 @@ export default {
       getOwnedCosmetics(ctx.userId),
     ]);
     const achievementByKey = new Map(dashboard.achievements.map((achievement) => [achievement.key, achievement]));
-    const catalogItems = [...SHOP_ITEMS.filter((item) => item.type !== 'cosmetic'), ...FRAME_CATALOG];
+    const runtime = getEconomyRuntime();
+    const catalogItems = [
+      ...getActiveShopItems().filter((item) => item.type !== 'cosmetic'),
+      ...getActiveFrameCatalog(),
+    ];
     const items = catalogItems.map((it) => ({
       id: it.id,
       name: it.name,
@@ -28,7 +33,14 @@ export default {
       achievement: it.achievementKey ? achievementByKey.get(it.achievementKey) || null : null,
       owned: (it.type === 'title' || it.type === 'cosmetic') && owned.includes(it.id),
     }));
-    return { points: g.points, level: g.level, ownedCount: owned.length, items };
+    return {
+      economyVersion: runtime.economyVersion,
+      purchaseEnabled: runtime.purchaseEnabled,
+      points: g.points,
+      level: g.level,
+      ownedCount: owned.length,
+      items,
+    };
   },
   transform(raw) {
     const own = raw.items.filter((i) => i.owned).map((i) => i.name);
@@ -50,7 +62,8 @@ export default {
           : `进度 ${Math.min(achievement.cur, achievement.target)}/${achievement.target}`;
       return `${item.name} — 成就专属 · ${state}`;
     });
-    return `当前积分 ${raw.points} · 等级 Lv.${raw.level}\n已拥有装扮:${own.length ? own.join('、') : '无'}\n商店可兑换:\n${lines.join('\n')}\n成就头像框:\n${achievementLines.join('\n')}`;
+    const maintenance = raw.purchaseEnabled ? '' : '\n当前积分兑换入口维护中，目录仅供查看。';
+    return `经济版本 ${raw.economyVersion}${maintenance}\n当前积分 ${raw.points} · 等级 Lv.${raw.level}\n已拥有装扮:${own.length ? own.join('、') : '无'}\n商店可兑换:\n${lines.join('\n')}\n成就头像框:\n${achievementLines.join('\n')}`;
   },
   summarize(raw) {
     return `商店:积分 ${raw.points} · 已拥有 ${raw.ownedCount} 件装扮`;

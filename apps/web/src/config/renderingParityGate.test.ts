@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
-import { compileStyle } from '@vue/compiler-sfc';
+import { compileStyle, parse } from '@vue/compiler-sfc';
 import { describe, expect, it } from 'vitest';
 
 const sourceRoot = resolve(process.cwd(), 'src');
@@ -11,6 +11,7 @@ const androidEngineStyles = readFileSync(resolve(sourceRoot, 'assets/css/android
 const styleIndex = readFileSync(resolve(sourceRoot, 'assets/css/index.less'), 'utf8');
 const viteConfig = readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8');
 const authModalStyles = readFileSync(resolve(sourceRoot, 'view/login/UserAuthModal.vue'), 'utf8');
+const lotteryDrawSource = readFileSync(resolve(sourceRoot, 'components/growth/LotteryDraw.vue'), 'utf8');
 
 function walk(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -45,8 +46,8 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(violations).toEqual([]);
   });
 
-  it('scoped 样式不能在根节点 global 结束后继续拼接业务后代', () => {
-    const unsafeGlobalAncestor = /:global\((?:html|body|:root)[^)]*\)\s+[^\s,{]/u;
+  it('scoped 样式不能在 global 结束后继续拼接业务后代', () => {
+    const unsafeGlobalAncestor = /:global\([^)]*\)\s+[^\s,{]/u;
     const violations = walk(sourceRoot)
       .filter((path) => extname(path) === '.vue')
       .filter((path) => !path.endsWith('.test.ts'))
@@ -64,6 +65,32 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(compiled.errors).toEqual([]);
     expect(compiled.code).toContain('html.light-note-mobile-rendering .component-root[data-v-mobile-probe]');
     expect(compiled.code).not.toMatch(/html\.light-note-mobile-rendering\s*\{/u);
+  });
+
+  it('抽奖页禁用动画选择器编译后仍只作用于抽奖组件', () => {
+    const { descriptor } = parse(lotteryDrawSource, { filename: 'LotteryDraw.vue' });
+    const style = descriptor.styles.find((item) => item.scoped);
+
+    expect(style).toBeDefined();
+
+    const compiled = compileStyle({
+      source: style!.content,
+      filename: 'LotteryDraw.vue',
+      id: 'data-v-lottery-gate',
+      scoped: true,
+      preprocessLang: style!.lang,
+    });
+
+    expect(compiled.errors).toEqual([]);
+    for (const selector of [
+      '.disable-animations .lt .lt-prize',
+      '.disable-animations .lt .lt-prize-core',
+      '.disable-animations .lt .lt-progress > span',
+      '.disable-animations .lt .lt-odds-toggle__icon',
+    ]) {
+      expect(compiled.code).toContain(selector);
+    }
+    expect(compiled.code).not.toMatch(/\.disable-animations\s*\{[^}]*animation:\s*none/iu);
   });
 
   it('全局 UI 字体栈唯一且不再声明平台独占中文字体', () => {

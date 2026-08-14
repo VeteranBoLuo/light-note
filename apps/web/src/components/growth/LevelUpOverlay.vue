@@ -1,40 +1,35 @@
 <template>
   <Teleport to="body">
-  <transition name="lvup-fade" appear>
-    <div v-if="visible" class="lvup-mask" @click="close">
-      <div class="lvup-stage" @click.stop>
-        <div class="lvup-rays" :class="`tier-${tier}`"></div>
-        <div v-if="tier >= 5" class="lvup-aura"></div>
-        <div
-          v-for="r in ringCount"
-          :key="r"
-          class="lvup-ring"
-          :style="{ animationDelay: `${(r - 1) * 0.5}s` }"
-        ></div>
+    <transition name="lvup-fade" appear>
+      <div v-if="visible" class="lvup-mask" @click="close">
+        <div class="lvup-stage" @click.stop>
+          <div class="lvup-rays" :class="`tier-${tier}`"></div>
+          <div v-if="tier >= 5" class="lvup-aura"></div>
+          <div v-for="r in ringCount" :key="r" class="lvup-ring" :style="{ animationDelay: `${(r - 1) * 0.5}s` }"></div>
 
-        <div v-if="tier >= 4" class="lvup-crown" :class="{ 'crown-gold': tier >= 5 }" aria-hidden="true">
-          <SvgIcon :src="icon.growth.crown" size="31" />
+          <div v-if="tier >= 4" class="lvup-crown" :class="{ 'crown-gold': tier >= 5 }" aria-hidden="true">
+            <SvgIcon :src="icon.growth.crown" size="31" />
+          </div>
+
+          <div class="lvup-badge" :class="`tier-${tier}`">
+            <span class="lvup-badge-shine"></span>
+            <span class="lvup-lv">Lv.{{ level }}</span>
+          </div>
+
+          <ul class="lvup-confetti" aria-hidden="true">
+            <li v-for="p in pieces" :key="p.i" :style="p.style"></li>
+          </ul>
+
+          <div class="lvup-text">
+            <div class="lvup-title">{{ t('growth.levelUpTitle') }}</div>
+            <div class="lvup-name">{{ t('growth.ranks.' + level) }}</div>
+            <div class="lvup-sub">{{ t('growth.levelUpSub', { lv: level }) }}</div>
+          </div>
+
+          <div class="lvup-hint">{{ t('growth.levelUpDismiss') }}</div>
         </div>
-
-        <div class="lvup-badge" :class="`tier-${tier}`">
-          <span class="lvup-badge-shine"></span>
-          <span class="lvup-lv">Lv.{{ level }}</span>
-        </div>
-
-        <ul class="lvup-confetti" aria-hidden="true">
-          <li v-for="p in pieces" :key="p.i" :style="p.style"></li>
-        </ul>
-
-        <div class="lvup-text">
-          <div class="lvup-title">{{ t('growth.levelUpTitle') }}</div>
-          <div class="lvup-name">{{ t('growth.ranks.' + level) }}</div>
-          <div class="lvup-sub">{{ t('growth.levelUpSub', { lv: level }) }}</div>
-        </div>
-
-        <div class="lvup-hint">{{ t('growth.levelUpDismiss') }}</div>
       </div>
-    </div>
-  </transition>
+    </transition>
   </Teleport>
 </template>
 
@@ -424,8 +419,8 @@
     }
   }
 
-  :global(.disable-animations) .lvup-mask,
-  :global(.disable-animations) .lvup-stage * {
+  :global(.disable-animations .lvup-mask),
+  :global(.disable-animations .lvup-stage *) {
     animation: none !important;
     transition: none !important;
   }

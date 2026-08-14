@@ -350,10 +350,12 @@ declare(ADMIN_POLICIES.READ, 'growth', [
   ['GET', '/growth/preferences'],
   ['GET', '/growth/weekly'],
   ['GET', '/growth/points/log'],
+  ['GET', '/growth/points/summary'],
   ['GET', '/growth/heatmap'],
 ]);
 declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'growth_preferences', [
   ['PUT', '/growth/preferences'],
+  ['PUT', '/growth/preferences/points-goal'],
   ['POST', '/growth/recap/state'],
 ]);
 declare(ADMIN_POLICIES.ENTITLEMENT_WRITE, 'growth', [
@@ -547,6 +549,20 @@ declare(ADMIN_POLICIES.ADMIN_ONLY, 'admin', [
   ['POST', '/growth/admin/userPoints'],
   ['POST', '/growth/admin/searchUsers'],
   ['POST', '/growth/admin/grantPoints'],
+  ['POST', '/growth/admin/pointsGovernanceOverview'],
+  ['POST', '/growth/admin/pointsGovernanceSources'],
+  ['POST', '/growth/admin/pointsAnomalies'],
+  ['POST', '/growth/admin/pointsReconciliation'],
+  ['POST', '/growth/admin/pointsCorrection'],
+  ['POST', '/growth/admin/pointsSimulator'],
+  ['POST', '/growth/admin/campaigns/list'],
+  ['POST', '/growth/admin/campaigns/create'],
+  ['POST', '/growth/admin/campaigns/preview'],
+  ['POST', '/growth/admin/campaigns/freeze'],
+  ['POST', '/growth/admin/campaigns/confirm'],
+  ['POST', '/growth/admin/campaigns/execute'],
+  ['POST', '/growth/admin/campaigns/detail'],
+  ['POST', '/growth/admin/campaigns/delete'],
   ['POST', '/json/deleteConfigById'],
   ['POST', '/json/updateConfig'],
   ['POST', '/knowledgeBase/list'],

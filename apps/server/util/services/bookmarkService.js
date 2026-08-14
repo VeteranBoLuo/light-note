@@ -137,7 +137,7 @@ export async function createBookmark({
     connection.release();
   }
 
-  triggerResourceCreateEffects({
+  await triggerResourceCreateEffects({
     request,
     userId,
     userRole,

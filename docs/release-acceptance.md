@@ -71,6 +71,17 @@ pnpm --filter server check:schema
 
 任何断言输出都表示基线表、关键列或索引尚未就绪；应先应用待执行 migration 并重新检查，禁止让依赖新结构的应用进程先启动。
 
+涉及积分获取 C5 时，发布前还必须完成以下顺序：
+
+1. 保持 `POINTS_EARNING_C5_ENABLED`、`POINTS_ADMIN_GOVERNANCE_V2_ENABLED` 和 `POINTS_CAMPAIGN_ENABLED` 关闭，在维护窗口执行 `20260814_points_earning_c5.sql` 与 `20260814_points_earning_c5_knowledge.sql`。
+2. 运行 `pnpm --filter server check:schema`，确认 C5 表、索引和 `achievement-snapshots / meaningful-activity / baseline` 三个迁移标记均已就绪；任何输出都禁止启用 C5。
+3. 先开 `POINTS_POINTS_CENTER_ENABLED` 验证用户只读摘要，再开 Root 治理只读能力；检查 28 天用户查询、7/28/90 天后台查询没有全表/逐用户请求。
+4. 为 `POINTS_EARNING_C5_EFFECTIVE_DAY` 配置下一个完整账号自然日，为 `POINTS_EARNING_C5_EFFECTIVE_WEEK` 配置下一个完整 ISO 周，再开启获取写闸。不得在自然日或自然周中途切换。
+5. Campaign 最后开启，并在生产环境显式设置正数的 `POINTS_CAMPAIGN_MAX_RECIPIENTS`、`POINTS_CAMPAIGN_MAX_POINTS_PER_USER`、`POINTS_CAMPAIGN_MAX_TOTAL_POINTS`；缺失、负数或零值必须保持失败关闭。
+6. 验收两个独立知识事件、稳定周上限 670、旧成就快照、低压力模式、余额对账只报告、Campaign 预览不发积分/冻结后可恢复；同时检查移动端、深色主题与中英文。
+
+C5 回滚只关闭获取写闸或 Campaign，不删除新表、不撤销已发资产、不清空周期版本锁。已经进入 C5 的日/周保持该规则；事故期间暂停发放，禁止临时切回旧规则形成双领。
+
 如果本地不使用线上默认图标目录，应让预检、Worker 和预览后端继承同一个 `BOOKMARK_ICON_UPLOAD_DIR`。例如分别在两个终端运行：
 
 ```bash

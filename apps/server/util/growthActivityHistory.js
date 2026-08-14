@@ -7,7 +7,7 @@ export async function recordTodoCompletion(db, { userId, todoId }) {
     `INSERT IGNORE INTO growth_events
        (user_id, source, ref_id, day, amount, status, meta, create_time)
      SELECT ?, 'todo_complete', SHA2(CONCAT('todo:', CAST(id AS CHAR)), 256), NULL, 0, 'granted',
-            JSON_OBJECT('kind', 'todo'), completed_at
+            JSON_OBJECT('kind', 'todo', 'meaningful', true), completed_at
        FROM todo_items
       WHERE id = ? AND user_id = ? AND completed_at IS NOT NULL
       LIMIT 1`,
@@ -24,7 +24,7 @@ export async function recordOrganizeCompletions(db, { userId, resourceType, reso
        (user_id, source, ref_id, day, amount, status, meta, create_time)
      SELECT ri.user_id, 'organize_complete',
             SHA2(CONCAT('organize:', ri.resource_type, ':', ri.resource_id), 256),
-            NULL, 0, 'granted', JSON_OBJECT('kind', 'organize'), ri.complete_time
+            NULL, 0, 'granted', JSON_OBJECT('kind', 'organize', 'meaningful', true), ri.complete_time
        FROM resource_inbox ri
       WHERE ri.user_id = ? AND ri.resource_type = ? AND ri.status = 'completed'
         AND ri.complete_time IS NOT NULL AND ri.resource_id IN (${placeholders})

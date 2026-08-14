@@ -220,7 +220,7 @@ export async function enqueueResources(connection, { userId, items, source = 'ma
   return { added, reopened, ignored };
 }
 
-export async function completeResources(connection, { userId, items }) {
+export async function completeResources(connection, { userId, items, suppressUserRewards = false }) {
   await assertResourcesOwned(connection, { userId, items });
   let completed = 0;
   for (const type of RESOURCE_TYPES) {
@@ -235,9 +235,11 @@ export async function completeResources(connection, { userId, items }) {
       [userId, type, ...ids],
     );
     completed += Number(result.affectedRows || 0);
-    await recordOrganizeCompletions(connection, { userId, resourceType: type, resourceIds: ids });
+    if (!suppressUserRewards) {
+      await recordOrganizeCompletions(connection, { userId, resourceType: type, resourceIds: ids });
+    }
   }
-  if (completed > 0) {
+  if (completed > 0 && !suppressUserRewards) {
     try {
       const [{ completeGrowthTask }, { persistAchievementMetricFromDatabase }] = await Promise.all([
         import('./growthTaskCompletion.js'),

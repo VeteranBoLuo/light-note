@@ -825,7 +825,7 @@
     }
   }
 
-  :global(.disable-animations) .select-loading {
+  :global(.disable-animations .select-loading) {
     animation: none;
   }
 

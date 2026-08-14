@@ -68,6 +68,7 @@
     alias: string | null;
     email: string | null;
     points: number;
+    role?: string;
     lastActiveTime?: string | null;
   }
 

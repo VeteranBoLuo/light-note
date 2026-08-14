@@ -104,7 +104,9 @@ export async function completeInbox(req, res) {
   try {
     connection = await pool.getConnection();
     await connection.beginTransaction();
-    const result = await completeResources(connection, { userId: req.user.id, items });
+    const options = { userId: req.user.id, items };
+    if (req.suppressUserRewards || req.adminContext) options.suppressUserRewards = true;
+    const result = await completeResources(connection, options);
     await connection.commit();
     res.send(resultData(result));
   } catch (error) {

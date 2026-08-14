@@ -431,7 +431,7 @@ export async function saveAttachmentToCloud({
 
   if (existingFile) return formatCloudFile(existingFile, true);
 
-  triggerResourceCreateEffects({
+  await triggerResourceCreateEffects({
     request,
     userId,
     userRole,

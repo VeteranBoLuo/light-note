@@ -7,11 +7,20 @@ const REASON_LABEL = {
   achievement: '成就奖励',
   weekly: '每周挑战',
   buy: '商店消费',
-  lottery_cost: '抽奖消耗',
-  lottery_win: '抽奖中奖',
+  lottery_cost: '历史抽奖消耗',
+  lottery_win: '历史抽奖中奖',
+  lottery_paid_cost: '积分抽奖消耗',
+  lottery_paid_win: '积分抽奖中奖',
+  lottery_paid_compensation: '积分抽奖满仓补偿',
+  lottery_paid_asset: '积分抽奖资产奖励',
+  lottery_free_win: '每日惊喜中奖',
+  lottery_free_asset: '每日惊喜 AI 奖励',
   lottery_free: '免费抽奖',
   lottery_storage: '抽奖得存储',
+  lottery_compensation: '历史抽奖满仓补偿',
   admin: '管理员调整',
+  campaign: '活动发放',
+  correction: '账本纠正',
 };
 function label(reason) {
   if (!reason) return '其他';

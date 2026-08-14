@@ -35,6 +35,7 @@ import createBookmark from './create_bookmark.js';
 import readUrl from './read_url.js';
 import getGrowth from './get_growth.js';
 import queryPointsLog from './query_points_log.js';
+import getPointsSummary from './get_points_summary.js';
 import queryNotifications from './query_notifications.js';
 import queryLinkHealth from './query_link_health.js';
 import startLinkHealthCheck from './start_link_health_check.js';
@@ -93,6 +94,7 @@ export default [
   readUrl,
   getGrowth,
   queryPointsLog,
+  getPointsSummary,
   queryNotifications,
   queryLinkHealth,
   startLinkHealthCheck,

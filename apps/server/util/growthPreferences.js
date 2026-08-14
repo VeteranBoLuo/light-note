@@ -7,6 +7,8 @@ export const DEFAULT_GROWTH_PREFERENCES = Object.freeze({
   lowPressureMode: false,
   timezone: 'Asia/Shanghai',
   utcOffsetMinutes: 480,
+  pointsGoalItemId: null,
+  pointsGoalEnabled: false,
 });
 
 const WEEKLY_TARGETS = new Set([0, 3, 5, 7]);
@@ -87,10 +89,16 @@ function fromRow(row) {
     lowPressureMode: Boolean(Number(row.lowPressureMode)),
     timezone: normalizeTimezone(row.timezone),
     utcOffsetMinutes: normalizeOffset(row.utcOffsetMinutes),
+    pointsGoalItemId: String(row.pointsGoalItemId || '').trim() || null,
+    pointsGoalEnabled: Boolean(Number(row.pointsGoalEnabled)),
   };
 }
 
-export function dayKeyAtOffset(value = new Date(), utcOffsetMinutes = DEFAULT_GROWTH_PREFERENCES.utcOffsetMinutes, deltaDays = 0) {
+export function dayKeyAtOffset(
+  value = new Date(),
+  utcOffsetMinutes = DEFAULT_GROWTH_PREFERENCES.utcOffsetMinutes,
+  deltaDays = 0,
+) {
   const shifted = new Date(
     new Date(value).getTime() + normalizeOffset(utcOffsetMinutes) * 60_000 + Number(deltaDays || 0) * 86_400_000,
   );
@@ -116,7 +124,9 @@ export async function getGrowthCalendarContext(userId, { db = pool, now = new Da
   const preferences = await getGrowthPreferences(userId, { db });
   const [[offsetRow]] = await db.query('SELECT TIMESTAMPDIFF(MINUTE, UTC_TIMESTAMP(), NOW()) AS serverOffset');
   // IANA 时区在夏令时切换时动态计算偏移；持久化 offset 只作为旧运行时的兼容兜底。
-  const utcOffsetMinutes = normalizeOffset(offsetForTimezone(preferences.timezone, now) ?? preferences.utcOffsetMinutes);
+  const utcOffsetMinutes = normalizeOffset(
+    offsetForTimezone(preferences.timezone, now) ?? preferences.utcOffsetMinutes,
+  );
   return {
     weeklyActiveTarget: preferences.weeklyActiveTarget,
     timezone: preferences.timezone,
@@ -138,7 +148,9 @@ export async function getGrowthPreferences(userId, { db = pool } = {}) {
             celebration_enabled AS celebrationEnabled,
             low_pressure_mode AS lowPressureMode,
             timezone,
-            utc_offset_minutes AS utcOffsetMinutes
+            utc_offset_minutes AS utcOffsetMinutes,
+            points_goal_item_id AS pointsGoalItemId,
+            points_goal_enabled AS pointsGoalEnabled
        FROM user_growth_preferences
       WHERE user_id = ? LIMIT 1`,
     [String(userId)],
@@ -146,22 +158,40 @@ export async function getGrowthPreferences(userId, { db = pool } = {}) {
   return fromRow(row);
 }
 
+export async function updatePointsGoalPreference(userId, { itemId = null, enabled = false } = {}, { db = pool } = {}) {
+  if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
+  if (typeof enabled !== 'boolean') return { ok: false, reason: 'invalid_points_goal_enabled' };
+  const normalizedItemId = String(itemId || '').trim();
+  if (enabled && !normalizedItemId) return { ok: false, reason: 'points_goal_item_required' };
+  if (normalizedItemId.length > 64) return { ok: false, reason: 'invalid_points_goal_item' };
+  await db.query(
+    `INSERT INTO user_growth_preferences (user_id, points_goal_item_id, points_goal_enabled)
+     VALUES (?, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       points_goal_item_id = VALUES(points_goal_item_id),
+       points_goal_enabled = VALUES(points_goal_enabled)`,
+    [String(userId), normalizedItemId || null, enabled ? 1 : 0],
+  );
+  return { ok: true, pointsGoalItemId: normalizedItemId || null, pointsGoalEnabled: enabled };
+}
+
 export async function updateGrowthPreferences(userId, patch = {}, { db = pool } = {}) {
   if (!userId || userId === 'visitor') return { ok: false, reason: 'visitor' };
   const invalidReason = invalidPatchReason(patch);
   if (invalidReason) return { ok: false, reason: invalidReason };
   const current = await getGrowthPreferences(userId, { db });
-  const requestedTarget = patch.weeklyActiveTarget == null ? current.weeklyActiveTarget : Number(patch.weeklyActiveTarget);
+  const requestedTarget =
+    patch.weeklyActiveTarget == null ? current.weeklyActiveTarget : Number(patch.weeklyActiveTarget);
   if (!WEEKLY_TARGETS.has(requestedTarget)) return { ok: false, reason: 'invalid_weekly_target' };
   const next = {
     weeklyActiveTarget: requestedTarget,
     streakReminderEnabled:
       patch.streakReminderEnabled == null ? current.streakReminderEnabled : Boolean(patch.streakReminderEnabled),
-    celebrationEnabled: patch.celebrationEnabled == null ? current.celebrationEnabled : Boolean(patch.celebrationEnabled),
+    celebrationEnabled:
+      patch.celebrationEnabled == null ? current.celebrationEnabled : Boolean(patch.celebrationEnabled),
     lowPressureMode: patch.lowPressureMode == null ? current.lowPressureMode : Boolean(patch.lowPressureMode),
     timezone: patch.timezone == null ? current.timezone : String(patch.timezone).trim(),
-    utcOffsetMinutes:
-      patch.utcOffsetMinutes == null ? current.utcOffsetMinutes : Number(patch.utcOffsetMinutes),
+    utcOffsetMinutes: patch.utcOffsetMinutes == null ? current.utcOffsetMinutes : Number(patch.utcOffsetMinutes),
   };
   await db.query(
     `INSERT INTO user_growth_preferences

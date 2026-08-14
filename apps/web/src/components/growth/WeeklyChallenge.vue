@@ -1,13 +1,19 @@
 <template>
   <div class="wc">
     <div class="wc-head">
-      <div class="wc-title"><SvgIcon :src="icon.common.calendar" size="17" />{{ t('growth.weeklyTitle') }}</div>
+      <div class="wc-title-row">
+        <div class="wc-title"><SvgIcon :src="icon.common.calendar" size="17" />{{ t('growth.weeklyTitle') }}</div>
+        <strong class="wc-total">{{
+          t('growth.weeklyPointsProgress', { current: weekly?.earnedPoints || 0, total: weekly?.totalPoints || 0 })
+        }}</strong>
+      </div>
       <div class="wc-sub">{{ t('growth.weeklySubtitle') }}</div>
       <div class="wc-reset">{{ t('growth.weeklyResetTime') }}</div>
     </div>
     <div v-if="loading && !weekly" class="wc-loading"><BLoading size="small" /></div>
     <div v-else-if="loadError && !weekly" class="wc-error">
-      <span>{{ t('growth.weeklyLoadFailed') }}</span><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
+      <span>{{ t('growth.weeklyLoadFailed') }}</span
+      ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
     </div>
     <div v-else-if="challenges.length" class="wc-list">
       <div v-for="c in challenges" :key="c.key" class="wc-item" :class="{ done: c.done }">
@@ -29,7 +35,9 @@
           >
             <SvgIcon :src="icon.growth.coin" size="13" /> {{ t('growth.weeklyClaim', { n: c.reward }) }}
           </BButton>
-          <span v-else-if="c.claimed" class="wc-claimed"><SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyClaimed') }}</span>
+          <span v-else-if="c.claimed" class="wc-claimed"
+            ><SvgIcon :src="icon.message.success" size="13" />{{ t('growth.weeklyClaimed') }}</span
+          >
           <BButton
             v-else-if="!c.done && !readOnly"
             size="small"
@@ -75,6 +83,10 @@
     wk_checkin: icon.growth.checkin,
     wk_todo: icon.growth.action,
     wk_organize: icon.growth.organize,
+    wk_collect: icon.resource.bookmark,
+    wk_progress: icon.growth.action,
+    wk_active_days: icon.common.calendar,
+    wk_variety: icon.growth.organize,
   };
   const challenges = computed(() => weekly.value?.challenges || []);
 
@@ -106,13 +118,13 @@
   }
 
   function goToChallenge(challenge: WeeklyChallenge) {
-    if (challenge.metric === 'bookmark') void router.push('/home');
+    if (challenge.metric === 'bookmark' || challenge.metric === 'collect') void router.push('/home');
     else if (challenge.metric === 'note') void router.push('/noteLibrary');
-    else if (challenge.metric === 'todo') void router.push({ path: '/inbox', query: { tab: 'todo' } });
-    else if (challenge.metric === 'organize') {
+    else if (challenge.metric === 'todo' || challenge.metric === 'progress')
+      void router.push({ path: '/inbox', query: { tab: 'todo' } });
+    else if (challenge.metric === 'organize' || challenge.metric === 'variety' || challenge.metric === 'activeDays') {
       void router.push(resolvePendingResourcesRoute(bookmark.isMobile));
-    }
-    else if (challenge.metric === 'checkin') {
+    } else if (challenge.metric === 'checkin') {
       void router.replace({ query: { ...router.currentRoute.value.query, section: 'overview' } });
     }
   }
@@ -141,12 +153,27 @@
     font-size: 15px;
     font-weight: 700;
   }
+  .wc-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .wc-total {
+    color: var(--primary-color);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
   .wc-sub {
     margin-top: 3px;
     font-size: 12px;
     color: var(--desc-color);
   }
-  .wc-reset { margin-top: 3px; color: var(--primary-color); font-size: 11px; }
+  .wc-reset {
+    margin-top: 3px;
+    color: var(--primary-color);
+    font-size: 11px;
+  }
   .wc-list {
     display: flex;
     flex-direction: column;
@@ -234,7 +261,22 @@
     font-weight: 600;
     color: #d97706;
   }
-  .wc-go { color: var(--primary-color); }
-  .wc-loading, .wc-error, .wc-empty { display: flex; min-height: 90px; align-items: center; justify-content: center; gap: 10px; color: var(--desc-color); font-size: 12px; }
-  html.light-note-mobile-rendering .wc-item.done { border-color: #f59e0b; box-shadow: none; }
+  .wc-go {
+    color: var(--primary-color);
+  }
+  .wc-loading,
+  .wc-error,
+  .wc-empty {
+    display: flex;
+    min-height: 90px;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  html.light-note-mobile-rendering .wc-item.done {
+    border-color: #f59e0b;
+    box-shadow: none;
+  }
 </style>

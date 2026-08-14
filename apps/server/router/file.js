@@ -5,6 +5,7 @@ import os from 'os';
 import { L, resultData, snakeCaseKeys } from '../util/common.js';
 import pool from '../db/index.js';
 import { awardCreate, getUserSpaceMb } from '../util/growth.js';
+import { ensureMeaningfulCreateEvent } from '../util/meaningfulActivity.js';
 import {
   bucketBaseUrl,
   buildObjectKey,
@@ -327,17 +328,21 @@ router.post('/confirmUpload', async (req, res) => {
         }
       });
     }
+    const newlyCreatedFiles = results.filter((result) => result.status === '已上传');
+    // C5 即时任务事实必须在响应前落库；经验仍是提交后的旁路，失败不反向影响文件上传。
+    if (!req.suppressUserRewards) {
+      await Promise.allSettled(
+        newlyCreatedFiles.map((result) => ensureMeaningfulCreateEvent(req.user.id, 'file', result.fileId)),
+      );
+    }
     res.send(resultData(results));
     recordFirstOwnResource(req, 'file'); // 激活里程碑:首次自建文件(直传回调写库成功)
-    // 创造类发经验:仅对新增(非覆盖)文件,逐个按当日衰减发放(grantExp 内日顶 200 兜底)
     if (!req.suppressUserRewards) {
-      results
-        .filter((r) => r.status === '已上传')
-        .forEach((r) =>
-          awardCreate(req.user.id, 'file', r.fileId, { userRole: req.user.role }).catch((e) =>
-            console.warn('[growth] 上传文件奖励发放失败 code=%s', stableAgentErrorCode(e)),
-          ),
+      newlyCreatedFiles.forEach((result) => {
+        void awardCreate(req.user.id, 'file', result.fileId, { userRole: req.user.role }).catch((error) =>
+          console.warn('[growth] 上传文件奖励发放失败 code=%s', stableAgentErrorCode(error)),
         );
+      });
     }
   } catch (error) {
     if (transactionStarted) await connection.rollback();

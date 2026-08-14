@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   query: vi.fn(),
@@ -9,7 +9,14 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../db/index.js', () => ({ default: { query: mocks.query, getConnection: mocks.getConnection } }));
 vi.mock('./items.js', () => ({ grantItem: mocks.grantItem }));
 
+const originalC4Flag = process.env.POINTS_ECONOMY_C4_ENABLED;
+process.env.POINTS_ECONOMY_C4_ENABLED = 'true';
 const { FRAME_CATALOG, SHOP_ITEMS, buyItem, equipFrame, getOwnedCosmetics } = await import('./points.js');
+
+afterAll(() => {
+  if (originalC4Flag === undefined) delete process.env.POINTS_ECONOMY_C4_ENABLED;
+  else process.env.POINTS_ECONOMY_C4_ENABLED = originalC4Flag;
+});
 
 describe('头像框商店目录', () => {
   const frames = SHOP_ITEMS.filter((item) => item.type === 'cosmetic' && item.effect === 'frame');
@@ -24,17 +31,17 @@ describe('头像框商店目录', () => {
   it('价格覆盖低门槛和高阶长期目标', () => {
     const costs = frames.map((item) => item.cost);
     expect(Math.min(...costs)).toBe(220);
-    expect(Math.max(...costs)).toBe(3200);
-    expect(frames.find((item) => item.id === 'frame_celestial')).toMatchObject({ minLevel: 12, rarity: 'legendary' });
+    expect(Math.max(...costs)).toBe(16000);
+    expect(frames.find((item) => item.id === 'frame_celestial')).toMatchObject({ minLevel: 6, rarity: 'legendary' });
     expect(frames.find((item) => item.id === 'frame_neon')).toMatchObject({
-      minLevel: 8,
+      minLevel: 3,
       rarity: 'legendary',
-      cost: 1600,
+      cost: 6000,
     });
     expect(frames.find((item) => item.id === 'frame_moonstone')).toMatchObject({
-      minLevel: 1,
+      minLevel: 0,
       rarity: 'basic',
-      cost: 420,
+      cost: 480,
     });
   });
 
@@ -43,8 +50,8 @@ describe('头像框商店目录', () => {
     const costs = ordered.map((item) => item.cost);
     const levels = ordered.map((item) => item.minLevel);
 
-    expect(costs).toEqual([220, 320, 420, 500, 600, 750, 900, 1100, 1300, 1600, 1900, 2400, 3200]);
-    expect(levels).toEqual([0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12]);
+    expect(costs).toEqual([220, 320, 480, 700, 1000, 1400, 2000, 2800, 3800, 6000, 9000, 12000, 16000]);
+    expect(levels).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 4, 5, 6]);
   });
 
   it('四档价格区间单调递增，不出现低档比高档更贵', () => {

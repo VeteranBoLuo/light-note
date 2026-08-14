@@ -238,7 +238,7 @@ export const uploadNoteImage = async (req, res) => {
       connection.release();
     }
     void ensureNoteImageThumbnail(fileUrl).catch(() => {});
-    triggerResourceCreateEffects({
+    await triggerResourceCreateEffects({
       request: req,
       userId,
       userRole: req.user.role,
