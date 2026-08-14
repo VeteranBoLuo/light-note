@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  getAfdianAdminOverview,
   getAfdianLeaderboard,
   getAfdianPublicAvatar,
   getAfdianPublicPreference,
@@ -8,7 +9,38 @@ import {
   updateAfdianPublicPreference,
 } from './afdianSupportReadService.js';
 
+const mocks = vi.hoisted(() => ({ defaultQuery: vi.fn() }));
+
+vi.mock('../db/index.js', () => ({
+  default: {
+    query: mocks.defaultQuery,
+    getConnection: vi.fn(),
+  },
+}));
+
 describe('爱发电赞助读取与公开偏好', () => {
+  it('后台概览允许 Handler 无参数调用并使用默认数据库连接', async () => {
+    mocks.defaultQuery
+      .mockResolvedValueOnce([
+        [{ verified_orders: 2, assigned_supporters: 1, total_amount: '30.00', month_amount: '10.00' }],
+        [],
+      ])
+      .mockResolvedValueOnce([[{ linked_accounts: 1 }], []])
+      .mockResolvedValueOnce([[{ pending_orders: 0, conflict_orders: 0, unlinked_orders: 0 }], []]);
+
+    await expect(getAfdianAdminOverview()).resolves.toEqual({
+      verifiedOrders: 2,
+      assignedSupporters: 1,
+      totalAmount: '30.00',
+      monthAmount: '10.00',
+      linkedAccounts: 1,
+      pendingOrders: 0,
+      conflictOrders: 0,
+      unlinkedOrders: 0,
+    });
+    expect(mocks.defaultQuery).toHaveBeenCalledTimes(3);
+  });
+
   it('没有偏好记录时默认参与榜单但保持匿名', async () => {
     const db = { query: vi.fn().mockResolvedValue([[], []]) };
     await expect(getAfdianPublicPreference({ userId: 'user-1', db })).resolves.toEqual({

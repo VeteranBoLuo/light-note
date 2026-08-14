@@ -232,7 +232,7 @@ export async function getAfdianPublicAvatar({ publicId, db = pool }) {
   return { data, contentType: `image/${match[1].toLowerCase() === 'jpg' ? 'jpeg' : match[1].toLowerCase()}` };
 }
 
-export async function getAfdianAdminOverview({ db = pool }) {
+export async function getAfdianAdminOverview({ db = pool } = {}) {
   const [[verified], [links], [exceptions]] = await Promise.all([
     db.query(
       `SELECT COUNT(*) AS verified_orders,
