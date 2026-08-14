@@ -60,7 +60,7 @@
     id?: string;
     title: string;
     content: string;
-    type: 'html' | 'markdown';
+    type: 'html' | 'markdown' | 'drawing';
     revision: number;
     updatedAt?: number | string | null;
     parentId?: string | null;
@@ -91,6 +91,18 @@
   }
 
   function previewText(version: NoteConflictVersion) {
+    if (version.type === 'drawing') {
+      try {
+        const scene = JSON.parse(version.content);
+        const elements = Array.isArray(scene?.elements) ? scene.elements : [];
+        return t('note.drawingConflictSummary', {
+          strokes: elements.filter((element) => element?.kind === 'stroke').length,
+          texts: elements.filter((element) => element?.kind === 'text').length,
+        });
+      } catch {
+        return t('note.drawingInvalid');
+      }
+    }
     const source = version.type === 'markdown' ? version.content : htmlText(version.content);
     const normalized = source.replace(/\u00a0/g, ' ').trim() || t('noteDetail.conflict.emptyContent');
     return normalized.length > 1600 ? `${normalized.slice(0, 1600)}\n…` : normalized;

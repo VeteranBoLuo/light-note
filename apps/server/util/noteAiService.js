@@ -5,7 +5,7 @@ import { recognizeNoteImages } from './noteImageOcr.js';
 export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
   if (noteId) {
     const [rows] = await pool.query(
-      `SELECT id, title, content, type, create_time, update_time
+      `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, create_time, update_time
          FROM note
         WHERE id = ? AND create_by = ? AND del_flag = 0
         LIMIT 1`,
@@ -15,7 +15,7 @@ export async function findOwnedNoteForAi({ userId, noteId = '', title = '' }) {
   }
   if (!title) throw new Error('ID_REQUIRED: 请提供笔记名称或笔记 ID');
   const [rows] = await pool.query(
-    `SELECT id, title, content, type, create_time, update_time
+    `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, create_time, update_time
       FROM note
       WHERE create_by = ? AND del_flag = 0 AND (title = ? OR title LIKE ?)
       ORDER BY (title = ?) DESC, update_time DESC LIMIT 1`,

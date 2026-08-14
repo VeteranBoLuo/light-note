@@ -69,7 +69,7 @@ vi.mock('../util/services/noteReferenceService.js', () => ({
   listOwnedResourceBacklinks,
 }));
 
-const { updateNote, convertNoteMode, restoreNoteVersion, delNote, resolveResourceRefs, resourceBacklinks } =
+const { updateNote, updateDrawingNote, convertNoteMode, restoreNoteVersion, delNote, resolveResourceRefs, resourceBacklinks } =
   await import('./noteLibraryHandle.js');
 
 const mockRes = () => ({ send: vi.fn() });
@@ -329,6 +329,84 @@ describe('updateNote 引用同步接入(N0)', () => {
     expect(lastSent(invalidTypeRes).status).toBe(400);
     expect(lastSent(blankTitleRes).status).toBe(400);
     expect(getConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe('手绘笔记专用保存边界', () => {
+  const emptyScene = '{"v":1,"page":{"width":1024,"height":1448},"elements":[]}';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'drawing-1', title: '草图', content: emptyScene, type: 'drawing', revision: 3 }]];
+      }
+      if (/SELECT create_time FROM note_versions/.test(sql)) return [[]];
+      if (/SELECT COUNT\(\*\) AS n FROM note_versions/.test(sql)) return [[{ n: 1 }]];
+      return [{ affectedRows: 1 }];
+    });
+    connection.commit.mockResolvedValue();
+    connection.rollback.mockResolvedValue();
+  });
+
+  it('有效 scene 只走专用更新，不解析 HTML 引用', async () => {
+    const scene = JSON.stringify({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [{ id: 's1', kind: 'stroke', color: '#1f2937', width: 4, points: [1, 2, 3, 4] }],
+    });
+    const res = mockRes();
+    await updateDrawingNote({ user: { id: 'u1' }, body: { id: 'drawing-1', title: '新草图', scene, revision: 3 } }, res);
+
+    expect(lastSent(res)).toMatchObject({ status: 200, data: { id: 'drawing-1', revision: 4 } });
+    expect(connection.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE note SET title=?, content=?'),
+      ['新草图', scene, 'u1', 4, 'drawing-1', 'u1'],
+    );
+    expect(extractOwnedResourceRefs).not.toHaveBeenCalled();
+    expect(syncNoteResourceRefs).not.toHaveBeenCalled();
+  });
+
+  it('无效或超限 scene 在获取事务连接前拒绝', async () => {
+    const res = mockRes();
+    await updateDrawingNote(
+      {
+        user: { id: 'u1' },
+        body: {
+          id: 'drawing-1',
+          title: '草图',
+          scene: '{"v":1,"page":{"width":1024,"height":1448},"elements":[{"kind":"image"}]}',
+          revision: 3,
+        },
+      },
+      res,
+    );
+
+    expect(lastSent(res)).toMatchObject({ status: 400, data: { code: 'INVALID_DRAWING_SCENE' } });
+    expect(getConnection).not.toHaveBeenCalled();
+  });
+
+  it('通用保存允许标题更新，但拒绝旧客户端提交 drawing 正文', async () => {
+    const titleRes = mockRes();
+    await updateNote({ user: { id: 'u1' }, body: { id: 'drawing-1', title: '只改标题', revision: 3 } }, titleRes);
+    expect(lastSent(titleRes)).toMatchObject({ status: 200, data: { revision: 4 } });
+
+    vi.clearAllMocks();
+    ensureNotVisitor.mockReturnValue(true);
+    connection.query.mockImplementation(async (sql) => {
+      if (/SELECT id, title, content, type, revision, update_time FROM note/.test(sql)) {
+        return [[{ id: 'drawing-1', title: '草图', content: emptyScene, type: 'drawing', revision: 3 }]];
+      }
+      return [{ affectedRows: 1 }];
+    });
+    const contentRes = mockRes();
+    await updateNote(
+      { user: { id: 'u1' }, body: { id: 'drawing-1', title: '草图', content: '', revision: 3 } },
+      contentRes,
+    );
+    expect(lastSent(contentRes)).toMatchObject({ status: 400, data: { code: 'INVALID_DRAWING_SCENE' } });
+    expect(connection.commit).not.toHaveBeenCalled();
   });
 });
 

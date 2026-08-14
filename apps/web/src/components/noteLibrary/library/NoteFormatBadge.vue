@@ -26,9 +26,15 @@
 
   // 与后端同一口径：normalizeNoteType 只把历史值 md 归一为 markdown，
   // 其余（含空值）都按富文本算——线上 339 篇 type 全部有值，空值分支只是兜底。
-  const isMarkdown = computed(() => normalizeNoteType(props.type) === 'markdown');
-  const short = computed(() => (isMarkdown.value ? 'MD' : 'HTML'));
-  const label = computed(() => (isMarkdown.value ? t('note.formatMarkdown') : t('note.formatRichText')));
+  const normalizedType = computed(() => normalizeNoteType(props.type));
+  const short = computed(() => (normalizedType.value === 'drawing' ? 'DRAW' : normalizedType.value === 'markdown' ? 'MD' : 'HTML'));
+  const label = computed(() =>
+    normalizedType.value === 'drawing'
+      ? t('note.formatDrawing')
+      : normalizedType.value === 'markdown'
+        ? t('note.formatMarkdown')
+        : t('note.formatRichText'),
+  );
 </script>
 
 <style lang="less" scoped>

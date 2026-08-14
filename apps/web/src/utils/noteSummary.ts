@@ -299,6 +299,7 @@ export async function noteCardPreviewText(
   previewImageUrl: string = '',
   options: NoteSummaryOptions = {},
 ): Promise<NoteCardPreviewText> {
+  if (type === 'drawing') return { summary: '', beforeImage: '', afterImage: '', imageLocated: false };
   if (!content) return { summary: '', beforeImage: '', afterImage: '', imageLocated: false };
   const { maxLength = 200, singleLine = false } = options;
   const html = await noteContentToHtml(content, type);
@@ -322,6 +323,7 @@ export async function noteSummaryText(
   type?: string,
   options: NoteSummaryOptions = {},
 ): Promise<string> {
+  if (type === 'drawing') return '';
   if (!content) return '';
   const { maxLength = 200, singleLine = false } = options;
   const html = await noteContentToHtml(content, type);

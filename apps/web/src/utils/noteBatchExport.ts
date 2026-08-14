@@ -1,7 +1,7 @@
 import { buildExportFileName } from '@/utils/fileDelivery';
 
 export type NoteBatchExportMode = 'original' | 'html' | 'markdown' | 'pdf';
-export type NoteBatchExportFileFormat = 'html' | 'md' | 'pdf';
+export type NoteBatchExportFileFormat = 'html' | 'md' | 'pdf' | 'json';
 
 export interface BatchExportNote {
   id: string;
@@ -31,6 +31,7 @@ export function resolveBatchNoteExportFormat(
   if (mode === 'html') return 'html';
   if (mode === 'markdown') return 'md';
   if (mode === 'pdf') return 'pdf';
+  if (noteType === 'drawing') return 'json';
   return noteType === 'markdown' || noteType === 'md' ? 'md' : 'html';
 }
 
@@ -93,24 +94,26 @@ export async function buildBatchNoteExportEntries(
   };
 
   for (const [index, note] of notes.entries()) {
+    if (note.type === 'drawing' && mode !== 'original') {
+      failedNoteIds.push(String(note.id));
+      options.onProgress?.(index + 1, notes.length);
+      continue;
+    }
     try {
       const format = resolveBatchNoteExportFormat(note.type, mode);
       const title = String(note.title || '').trim() || options.fallbackTitle;
       const fileName = makeUniqueBatchExportFileName(title, options.fallbackTitle, format, usedNames);
       let content: string | Blob;
 
-      if (format === 'html') {
+      if (format === 'json') {
+        content = String(note.content || '');
+      } else if (format === 'html') {
         content = await buildHtmlDocument(note, title, options.lang || 'zh-CN');
       } else if (format === 'md') {
         const { buildNoteExportMarkdown } = await import('@/utils/noteExport');
         const htmlToMarkdown = await getMarkdownConverter();
         const storedType = note.type === 'md' ? 'markdown' : String(note.type || 'html');
-        content = buildNoteExportMarkdown(
-          title,
-          String(note.content || ''),
-          storedType,
-          htmlToMarkdown,
-        );
+        content = buildNoteExportMarkdown(title, String(note.content || ''), storedType, htmlToMarkdown);
       } else {
         const html = await buildHtmlDocument(note, title, options.lang || 'zh-CN');
         content = await (await getPdfGenerator())(html);

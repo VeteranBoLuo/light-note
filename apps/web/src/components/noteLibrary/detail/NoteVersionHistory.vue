@@ -26,9 +26,15 @@
                   <span>{{ v.title || $t('noteDetail.unnamedDoc') }}</span>
                   <span v-if="v.reason" class="version-reason">{{ versionReasonLabel(v.reason) }}</span>
                 </span>
-                <span class="version-chars">{{
-                  v.contentLength != null ? $t('noteDetail.history.chars', { count: v.contentLength }) : '·'
-                }}</span>
+                <span class="version-chars">
+                  {{
+                    v.type === 'drawing' && v.elementCount != null
+                      ? $t('note.drawingElements', { count: v.elementCount })
+                      : v.contentLength != null
+                        ? $t('noteDetail.history.chars', { count: v.contentLength })
+                        : '·'
+                  }}
+                </span>
               </div>
             </div>
           </div>
@@ -134,6 +140,7 @@
     reason?: string;
     sourceRevision?: number;
     contentLength?: number; // 前端按"渲染后展示文本"算,异步填充
+    elementCount?: number;
   }
 
   const props = defineProps<{
@@ -166,9 +173,36 @@
   }));
   const diffRows = computed(() => buildNoteSideBySideRows(diffLines.value));
 
+  function drawingSummary(content: string, elementCount?: number) {
+    try {
+      const scene = JSON.parse(String(content || ''));
+      const elements = Array.isArray(scene?.elements) ? scene.elements : [];
+      return {
+        count: elements.length,
+        text: t('note.drawingConflictSummary', {
+          strokes: elements.filter((element) => element?.kind === 'stroke').length,
+          texts: elements.filter((element) => element?.kind === 'text').length,
+        }),
+      };
+    } catch {
+      const count = Number(elementCount);
+      return Number.isFinite(count) && count >= 0
+        ? { count, text: t('note.drawingElements', { count }) }
+        : { count: 0, text: t('note.drawingInvalid') };
+    }
+  }
+
   function versionReasonLabel(reason: string) {
     const normalized = String(reason || 'autosave');
-    const knownReasons = new Set(['autosave', 'format_conversion', 'ai_change', 'ai_undo', 'restore']);
+    const knownReasons = new Set([
+      'autosave',
+      'drawing_autosave',
+      'format_conversion',
+      'ai_change',
+      'ai_undo',
+      'restore',
+    ]);
+    if (normalized === 'drawing_autosave') return t('noteDetail.history.reasons.autosave');
     return t(`noteDetail.history.reasons.${knownReasons.has(normalized) ? normalized : 'autosave'}`);
   }
 
@@ -189,11 +223,15 @@
           reason: v.reason,
           sourceRevision: v.sourceRevision,
           contentLength: undefined,
+          elementCount:
+            v.type === 'drawing' && Number.isFinite(Number(v.elementCount)) ? Number(v.elementCount) : undefined,
         }));
         // 逐条按"渲染后展示文本"异步算字数(不阻塞列表渲染;html/md 各自渲染后取文本)
-        versions.value.forEach(async (v) => {
-          v.contentLength = (await noteDisplayText(v.content, v.type)).length;
-        });
+        versions.value
+          .filter((v) => v.type !== 'drawing')
+          .forEach(async (v) => {
+            v.contentLength = (await noteDisplayText(v.content, v.type)).length;
+          });
         // 默认选中最近一条(改动前快照),省一次点击
         if (versions.value.length) {
           selectVersion(versions.value[0]);
@@ -212,9 +250,14 @@
     detailLoading.value = true;
     try {
       // 直接用列表已带回的 content + type 渲染,md 走 marked,统一消毒;不再二次请求后端
+      const currentType = props.currentNote?.type || props.noteType;
       const [previewHtml, currentHtml] = await Promise.all([
-        noteContentToHtml(v.content, v.type),
-        noteContentToHtml(props.currentNote?.content || '', props.currentNote?.type || props.noteType),
+        v.type === 'drawing'
+          ? Promise.resolve(`<p>${drawingSummary(v.content, v.elementCount).text}</p>`)
+          : noteContentToHtml(v.content, v.type),
+        currentType === 'drawing'
+          ? Promise.resolve(`<p>${drawingSummary(props.currentNote?.content || '').text}</p>`)
+          : noteContentToHtml(props.currentNote?.content || '', currentType),
       ]);
       activePreviewHtml.value = previewHtml;
       diffLines.value = buildNoteLineDiff(noteHtmlToDiffText(currentHtml), noteHtmlToDiffText(previewHtml));
@@ -226,10 +269,10 @@
   function confirmRestore() {
     if (!activeId.value || restoring.value) return;
     if (blockGuestWrite('restore-note-version')) return;
-    const references = compareNoteReferenceChanges(
-      props.currentNote?.content || '',
-      activeVersion.value?.content || '',
-    );
+    const drawingVersion = activeVersion.value?.type === 'drawing' || props.currentNote?.type === 'drawing';
+    const references = drawingVersion
+      ? { added: 0, removed: 0 }
+      : compareNoteReferenceChanges(props.currentNote?.content || '', activeVersion.value?.content || '');
     const titleChanged = String(props.currentNote?.title || '') !== String(activeVersion.value?.title || '');
     Alert.alert({
       title: t('noteDetail.history.restoreConfirmTitle'),

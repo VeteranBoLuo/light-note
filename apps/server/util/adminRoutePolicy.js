@@ -91,6 +91,7 @@ declare(ADMIN_POLICIES.READ, 'note', [
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/uploadImage'],
   ['POST', '/note/updateNote'],
+  ['POST', '/note/updateDrawingNote'],
   ['POST', '/note/convertMode'],
   ['POST', '/note/addNote'],
   ['POST', '/note/moveNoteNode'],

@@ -331,6 +331,7 @@ describe('globalSearch pagination', () => {
     const noteListCall = listCalls.find(([sql]) => String(sql).includes('FROM note n'));
     expect(bookmarkListCall?.[1].slice(-2)).toEqual([41, 0]);
     expect(noteListCall?.[1].slice(-2)).toEqual([38, 0]);
+    expect(noteListCall?.[0]).toContain("IF(n.type = 'drawing', '', n.content) AS content");
 
     const payload = res.send.mock.calls.at(-1)?.[0];
     expect(payload.status).toBe(200);

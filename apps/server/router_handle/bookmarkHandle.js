@@ -1123,13 +1123,13 @@ async function resolveOrganizeCandidates(userId, scope, ids, resourceType = 'boo
     if (scope === 'selected') {
       if (!Array.isArray(ids) || !ids.length) return [];
       const [rows] = await pool.query(
-        'SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)',
+        "SELECT id, title, IF(type = 'drawing', '', content) AS content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)",
         [userId, ids],
       );
       return rows;
     }
     const [rows] = await pool.query(
-      `SELECT n.id, n.title, n.content FROM note n
+      `SELECT n.id, n.title, IF(n.type = 'drawing', '', n.content) AS content FROM note n
        LEFT JOIN resource_tag_relations r ON r.resource_id = n.id AND r.resource_type = 'note'
        WHERE n.create_by = ? AND n.del_flag = 0 AND r.tag_id IS NULL
        ORDER BY n.create_time DESC`,
@@ -1212,7 +1212,7 @@ export const doOrganizeRun = async (req, res) => {
 
     if (resourceType === 'note') {
       const [rows] = await pool.query(
-        'SELECT id, title, content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)',
+        "SELECT id, title, IF(type = 'drawing', '', content) AS content FROM note WHERE create_by = ? AND del_flag = 0 AND id IN (?)",
         [userId, raw],
       );
       const targets = rows.slice(0, ORGANIZE_MAX_BATCH);
