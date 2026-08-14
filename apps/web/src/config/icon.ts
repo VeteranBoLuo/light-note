@@ -11,6 +11,8 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="2.75" y="5" width="18.5" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="m7.25 9.5l-2.5 2.5l2.5 2.5M16.75 9.5l2.5 2.5l-2.5 2.5M10 9v6M14 9v6M10 12h4" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     noteMarkdown:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="2.75" y="5" width="18.5" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><path d="M6 15V9l3 3l3-3v6M16.25 9v6m-2.1-2.15l2.1 2.15l2.1-2.15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    noteDrawing:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M6.5 2.75h7.25l3.75 3.75v14.75h-11V2.75Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.75 2.75V6.5h3.75M9 16.8l1.2-3.1l5.1-5.1l1.8 1.8l-5.1 5.1L9 16.8Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     file: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7.15 18.5h9.7a3.75 3.75 0 0 0 .62-7.45A5.8 5.8 0 0 0 6.25 9.5a4.5 4.5 0 0 0 .9 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9.25 14.75h5.5M10.25 11.75h3.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".72"/></svg>',
     tag: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M4 5.75A1.75 1.75 0 0 1 5.75 4h5.1l8.65 8.65a2.25 2.25 0 0 1 0 3.18l-3.67 3.67a2.25 2.25 0 0 1-3.18 0L4 10.85v-5.1Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.25" stroke="currentColor" stroke-width="1.7"/><path d="m12.25 10.75l4.25 4.25" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" opacity=".55"/></svg>',
   },
@@ -25,6 +27,15 @@ export default {
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 4v16" stroke="currentColor" stroke-width="1.7"/><path d="M5.5 8h.5M5.5 11h.5M11.5 8h6M11.5 12h6M11.5 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
     sidebarClosed:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M8.5 4v16" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2 2" opacity=".6"/><path d="m12 9l3 3l-3 3M16.5 8v8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  },
+  drawingNote: {
+    pen: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4 20l1.2-4.7L16.5 4a2.1 2.1 0 0 1 3 3L8.2 18.3L4 20Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="m14.7 5.8l3.5 3.5M5.2 15.3l3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    eraser:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="m4.2 14.3l8.8-9a2 2 0 0 1 2.8 0l3 3a2 2 0 0 1 0 2.8L10 20H6.7l-2.5-2.5a2.3 2.3 0 0 1 0-3.2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="m9.2 9.2l5.6 5.6M10 20h10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    text: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 5h14M12 5v14M8.5 19h7" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+    select:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M5 3.5v13.8l3.7-3.2l2.7 6.4l2.5-1.1l-2.7-6.2l5-.3L5 3.5Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    hand: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24" fill="none"><path d="M7 11V6.5a1.5 1.5 0 0 1 3 0V10V4.8a1.5 1.5 0 0 1 3 0V10V5.8a1.5 1.5 0 0 1 3 0V11V8.2a1.5 1.5 0 0 1 3 0v5.3c0 4.4-2.7 7-7 7h-.5c-2.5 0-4.3-1.1-5.7-3L3.3 14a1.6 1.6 0 0 1 2.4-2.1L7 13.2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   },
   // 笔记模板：统一为轻量线性图标，通过卡片的笔记语义色建立系列感。
   noteTemplate: {

@@ -385,18 +385,16 @@
     }
   }
 
-  :global([data-theme='night']) .storage-usage {
-    .storage-bar {
-      background: #5d6677;
-    }
+  :global([data-theme='night'] .storage-usage .storage-bar) {
+    background: #5d6677;
+  }
 
-    .storage-status {
-      color: #ffd782;
-    }
+  :global([data-theme='night'] .storage-usage .storage-status) {
+    color: #ffd782;
+  }
 
-    &.progress-red .storage-status {
-      color: #ffabb2;
-    }
+  :global([data-theme='night'] .storage-usage.progress-red .storage-status) {
+    color: #ffabb2;
   }
 </style>
 

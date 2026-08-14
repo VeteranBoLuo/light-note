@@ -237,7 +237,7 @@ try {
 - 笔记目录范围使用独立 `scopeRefs` 协议，不得伪装成新的 `GlobalSearchType`。客户端只可提交 `{ type: 'note_branch', id }`，title/数量只作展示；后代 ID、路径、正文和缓存页面树严禁进入请求。服务端必须按 subject 重新加载活动笔记树、验证根归属并展开后代；删除、跨账号或失效根失败关闭，不能退化成空 allowlist 后的全库检索。普通问答由 `search_content` 在服务端 allowlist 内取 Top 8～20，模型参数里的 `resourceIds` 不得扩大范围。
 - 明确要求覆盖整个目录的任务必须走专用 Map/Reduce：正文按有界片段输入，页面内容一律视为不可信数据，批次协议失败可降级逐页重试；最终覆盖报告以服务端实际成功页面为准。同步硬上限为 30 页或 120,000 个可读字符，超限要求缩小范围；任何截断、缺页、Reduce 失败或 Provider 部分成功都不得标记 `completeAnalysis=true`。普通目录检索的 `matchedPages` 只表示本回答真实引用页数，绝不等价于完整分析。
 - 已由能力注册表判定为唯一 `note.create` 的明确“材料 → 生成笔记”请求，是通用 Semantic Planner 的确定性例外：书签、笔记、待办、文件附件、混合引用和用户直接粘贴文本统一进入强制 `submit_note_draft` 草稿协议。所有资源必须先由服务端校验归属；书签优先使用快照，快照不足时才补读其当前 URL。不得把全部业务工具暴露给草稿模型，也不得因通用 Planner 漏调工具而退化为普通文本回答。材料正文和旧草稿均是不可信数据，只有当前用户指令可作为改写要求；查询、教程问题和复合写操作仍走 Semantic Planner。
-- 网页正文读取默认并行使用直接 Cheerio 提取和本地 Mozilla Readability 服务，首个有效结果返回后必须中止败余请求；单次正文预算为 12000 字，无敏感查询参数的公开 URL 可缓存 10 分钟。`READABILITY_SERVICE_URL` 默认指向 `http://127.0.0.1:3466/`，可设为 `off`/`false`/`disabled` 关闭；`WEB_READER_EXTERNAL_FALLBACK_TEMPLATE` 只是显式选配的外部最后降级，模板必须含 `{encodedUrl}` 或 `{rawUrl}`，且替换目标后不得改变阅读器 origin。开启外部降级前必须完成隐私评估，因为目标 URL 会发给第三方；带 URL 凭据、fragment 或 token/auth/key/signature/credential/password/session/expires 等敏感参数的链接只允许服务端直连目标站点，不得进入二级 Readability 服务、缓存或外部降级。任一内部路径已判定为内网/非法地址时必须直接失败关闭，禁止交给外部阅读器绕过 SSRF 边界。
+- 网页正文读取默认并行使用直接 Cheerio 提取和本地 Mozilla Readability 服务，首个有效结果返回后必须中止败余请求；单次正文预算为 12000 字，无敏感查询参数的公开 URL 可缓存 10 分钟。网页下载体积与正文预算必须分离：底层抓取默认最多接收 1.5MB 解压后响应，用户明确触发的 `read_url`、书签 AI 智能生成/整理、Agent 主动补全书签及需要正文的网页快照统一复用 4MB 显式网页读取预算，禁止按站点堆叠域名特判或取消硬上限；超限与人机验证页必须分别返回稳定错误，不能归并成普通 `FETCH_FAILED` 或把验证文案交给模型。`READABILITY_SERVICE_URL` 默认指向 `http://127.0.0.1:3466/`，可设为 `off`/`false`/`disabled` 关闭；`WEB_READER_EXTERNAL_FALLBACK_TEMPLATE` 只是显式选配的外部最后降级，模板必须含 `{encodedUrl}` 或 `{rawUrl}`，且替换目标后不得改变阅读器 origin。开启外部降级前必须完成隐私评估，因为目标 URL 会发给第三方；带 URL 凭据、fragment 或 token/auth/key/signature/credential/password/session/expires 等敏感参数的链接只允许服务端直连目标站点，不得进入二级 Readability 服务、缓存或外部降级。任一内部路径已判定为内网/非法地址时必须直接失败关闭，禁止交给外部阅读器绕过 SSRF 边界。
 - 单条资源“不得参与 AI”是服务端数据政策，不是前端展示偏好。永久排除与单轮临时排除必须在搜索、显式上下文和文件附件读取前统一求并集，并重新校验 subject 归属；偏好表、归属查询或排除查询失败时必须失败关闭，不能继续把材料交给模型。
 
 **SSE 生命周期与终态：**
@@ -611,6 +611,17 @@ cd apps/android
 - 后台商品表现只能显示可由经济收据和当前装扮事实证明的指标；首兑画像必须有硬样本上限，并排除统计时间窗前已有同商品成功兑换的账号。AI/空间使用未建立购买归因事实前必须显示不可用，禁止从当前余额或当前占用反推使用率。
 - C5 界面一律使用 B 组件与 scoped 样式，不新增全局 CSS、根节点样式、页面级监听或轮询。积分中心低压力模式不得以催促式倒计时替代用户自主目标。
 
+### 手绘笔记协议与性能边界
+
+- 手绘正文必须通过 `@lightnote/shared/drawing-note` 共享子路径创建、解析和序列化；前后端不得复制 scene 类型、允许值或容量上限，也不得把协议重新并入共享包主入口，避免无关页面增加打包体积。
+- 手绘编辑器必须保持独立异步加载。HTML、Markdown、应用启动和笔记库后台预热路径不得导入画布组件；手绘路径也不得回退加载 TinyMCE 或 CodeMirror。
+- `pointermove` 只允许修改非响应式的当前笔画、拖动预览或滚动位置，并用单个 `requestAnimationFrame` 合并绘制；一次笔画、擦除、移动或文本提交结束后才允许序列化和触发 Vue 状态更新。
+- 列表、摘要、搜索、AI、知识索引、标签图谱和历史列表不得读取或回传完整 scene；确实需要正文的详情、冲突、单版本恢复、原格式导出必须按 owner、类型、revision 和协议版本校验。
+- 卡片缩略图只能在接近可视区后经专用批量接口读取受限预览场景；单批最多 12 篇，必须按 owner 与 `type = drawing` 查询。客户端固定低分辨率绘制并使用有上限、带 revision 的短期缓存，禁止逐卡详情请求、离屏绘制或把完整 scene 放回通用列表。
+- 只读手绘详情只允许外层阅读区滚动；内部 workspace 应随整张画纸自然撑高，不能再设置固定视口高度形成嵌套滚动。已选文本再次按下时必须等到抬起才判定点击编辑；移动超过屏幕像素阈值后继续拖动，不能在 `pointerdown` 抢占拖拽。进入编辑后 Canvas 临时隐藏同 ID 的原元素和选框，输入框行数按实际排版计算，提交后再恢复画布绘制。
+- 手绘历史差异使用当前版与所选历史版两个只读画板并排比较，两个画板必须同宽并共用外层滚动轴；移动端改为上下排列。新增、删除、修改/移动数量按稳定元素 ID 在客户端计算，禁止生成像素差异图、调用服务端图像处理或批量读取全部历史 scene。只有进入差异页才允许同时挂载两个画板。
+- 新 scene 元素、页面尺寸、容量上限或导出格式属于协议变更，必须同步更新共享实现与声明、前后端回归、旧客户端保护和人工性能验收；未知元素失败关闭，禁止“尽量渲染”后再覆盖存库。
+
 ## 自检清单
 
 ### 代码提交前
@@ -678,7 +689,7 @@ AI 助手（轻笺智域）回答"怎么用 / 是什么 / 在哪设置"依赖 `k
 6. **本地 OCR 运行时：** 服务器需安装 Poppler、Tesseract、简体中文和英文语言包；Debian/Ubuntu 可安装 `poppler-utils tesseract-ocr tesseract-ocr-chi-sim tesseract-ocr-eng`，安装后执行 `pnpm --filter server check:ocr` 验证
 7. **文件预览运行时：** 服务器需安装提供 `7zz` 的 7-Zip 和 LibreOffice Writer/Calc/Impress；发布前先应用 `20260808_file_preview_artifacts.sql`，再执行 `pnpm --filter server check:file-previews`。自定义二进制可用 `FILE_PREVIEW_7Z_BIN`、`FILE_PREVIEW_OFFICE_BIN` 指定；`FILE_PREVIEW_ARCHIVE_ENABLED=false` 或 `FILE_PREVIEW_OFFICE_ENABLED=false` 可分别急停对应新能力。Worker 应使用无特权系统用户，7-Zip/LibreOffice 子进程只继承运行所需的白名单环境变量，不得把数据库、Redis 或对象存储凭据传给文件解析器；生产网络策略应只放行 Worker 必需的数据库、Redis 和 OBS 目标
 8. 根用户用 `pm2 restart app --update-env` 刷新环境变量；`scripts/deploy-server.sh` 会同步启动或重启 AI 文档/文件预览 Worker、书签图标 Worker 与资源治理 Worker
-9. 爱发电接入发布前应用 `20260813_afdian_integration.sql` 并执行 Schema 门禁；服务端配置 `AFDIAN_OAUTH_CLIENT_ID`、`AFDIAN_OAUTH_CLIENT_SECRET`、`AFDIAN_OAUTH_REDIRECT_URI`、`AFDIAN_CREATOR_USER_ID`、`AFDIAN_API_TOKEN`，禁止写入前端环境变量、仓库、日志或补丁。开发者后台 Webhook 指向 `/api/support/afdian/webhook`；Secret 或 API Token 一旦进入截图、聊天或日志，应先轮换再部署
+9. 爱发电接入发布前应用 `20260813_afdian_integration.sql` 与 `20260814_afdian_support_management.sql` 并执行 Schema 门禁；服务端配置 `AFDIAN_OAUTH_CLIENT_ID`、`AFDIAN_OAUTH_CLIENT_SECRET`、`AFDIAN_OAUTH_REDIRECT_URI`、`AFDIAN_CREATOR_USER_ID`、`AFDIAN_API_TOKEN`，禁止写入前端环境变量、仓库、日志或补丁。开发者后台 Webhook 指向 `/api/support/afdian/webhook`；Secret 或 API Token 一旦进入截图、聊天或日志，应先轮换再部署
 
 资源治理的 finding 只是候选，不是删除授权：扫描必须只读；用户行只要存在（包括 `del_flag=1`）就不能判为 owner 缺失；本地图片至少经过两次跨 24 小时无引用检查；preview、建 Job 和 Worker 执行分别重新核验。API 只能接收 finding ID 或受 Root + session + 证据哈希绑定的短时 token，禁止接收表名、路径、对象 key 或任意待删除资源 ID；前端创建任务前还必须由 Root 手工输入服务端返回的确认短语，禁止代填。本地图片必须核验 `note_images`、笔记正文、笔记历史、笔记模板和书签图标引用，unlink 前再复核文件身份并执行第二轮引用查询；任一来源命中或状态变化都只能阻断。失效账号业务资源的手工清理必须按 owner 归并，并在创建/恢复清理请求与数据库物理删除两个事务阶段分别锁定 `user` 行；只有用户行不存在或 `del_flag=1` 才可继续，任何正常账号状态都必须失败关闭。软删除账号只清理其资源并保留用户行，只有正式注销且 `role=deleted` 的账号才会删除用户行。失败任务不会自动重试，只允许 Root 显式重试；待执行任务允许显式取消，两种操作都必须记录审计日志。
 

@@ -60,6 +60,6 @@ describe('LotteryDraw 自适应设计', () => {
 
   it('尊重系统减少动画偏好与应用级禁用动画设置', () => {
     expect(source).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(source).toContain(':global(.disable-animations)');
+    expect(source).toContain(':global(.disable-animations .lt .lt-prize)');
   });
 });

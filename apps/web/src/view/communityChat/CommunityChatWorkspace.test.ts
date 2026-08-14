@@ -599,6 +599,52 @@ describe('CommunityChatWorkspace', () => {
     expect(host.textContent).toContain('Lv.3 秀才');
   });
 
+  it('最后一条消息已撤回时使用前一条有效消息推进已读，避免底栏角标残留', async () => {
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({ publicId: 'message-active' }),
+          chatMessage({
+            publicId: 'message-recalled',
+            status: 'recalled',
+            content: '',
+            recalledAt: '2026-08-14T10:00:00.000Z',
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+      },
+    });
+
+    await mountWorkspace();
+
+    expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-active');
+    expect(mocks.markRead).not.toHaveBeenCalledWith('general', 'message-recalled');
+  });
+
+  it('当前窗口只有撤回消息时让服务端选择最后一条有效消息作为已读位置', async () => {
+    mocks.getMessages.mockResolvedValueOnce({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            publicId: 'message-recalled',
+            status: 'recalled',
+            content: '',
+            recalledAt: '2026-08-14T10:00:00.000Z',
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+      },
+    });
+
+    await mountWorkspace();
+
+    expect(mocks.markRead).toHaveBeenCalledWith('general', null);
+  });
+
   it('本人消息随共享成长状态即时更新头像框，其他用户继续使用消息快照', async () => {
     mocks.getMessages.mockResolvedValueOnce({
       data: {
@@ -1112,6 +1158,63 @@ describe('CommunityChatWorkspace', () => {
     image?.dispatchEvent(new Event('load'));
     await flushAnimationFrame();
     expect(messageList.scrollTop).toBe(600);
+  });
+
+  it('首屏末尾个人表情预留稳定画布，慢网加载完成后仍兜底保持在最新消息', async () => {
+    const pendingMessages = deferred<any>();
+    mocks.getMessages.mockReturnValueOnce(pendingMessages.promise);
+    const host = await mountWorkspace();
+    const messageList = host.querySelector<HTMLElement>('.community-message-list');
+    expect(messageList).not.toBeNull();
+    if (!messageList) return;
+    let scrollHeight = 600;
+    Object.defineProperties(messageList, {
+      scrollHeight: { configurable: true, get: () => scrollHeight },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 0 },
+    });
+
+    pendingMessages.resolve({
+      data: {
+        roomSlug: 'general',
+        items: [
+          chatMessage({
+            publicId: 'message-sticker-latest',
+            content: '',
+            messageKind: 'sticker',
+            stickerSource: 'custom',
+            stickerKey: 'sticker-latest',
+            sticker: {
+              source: 'custom',
+              key: 'sticker-latest',
+              url: '/api/community-chat/stickers/sticker-latest/content',
+            },
+          }),
+        ],
+        hasMore: false,
+        nextBefore: null,
+        focusPublicId: null,
+        hasNewer: false,
+      },
+    });
+    await flushAsync();
+
+    const sticker = host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img');
+    expect(sticker?.getAttribute('width')).toBe('176');
+    expect(sticker?.getAttribute('height')).toBe('176');
+    expect(workspaceSource).toMatch(/\.community-message__sticker\.has-image\s*\{[\s\S]*?aspect-ratio:\s*1\s*\/\s*1;/u);
+    expect(messageList.scrollTop).toBe(600);
+
+    scrollHeight = 900;
+    sticker?.dispatchEvent(new Event('load'));
+    await flushAsync();
+    expect(messageList.scrollTop).toBe(900);
+
+    messageList.dispatchEvent(new WheelEvent('wheel'));
+    scrollHeight = 1200;
+    sticker?.dispatchEvent(new Event('load'));
+    await flushAsync();
+    expect(messageList.scrollTop).toBe(900);
   });
 
   it('首屏只优先预热底部最多四张图片，历史图片继续懒加载且不抢占网络', async () => {

@@ -170,7 +170,12 @@ describe('账号注销提交', () => {
 describe('账号注销后台清理', () => {
   it('删除爱发电关联和下单凭证，并把真实订单去轻笺账号关联后保留', async () => {
     const connection = createConnection(async () => [{ affectedRows: 1 }]);
-    const tables = new Set(['support_checkout_intents', 'support_account_links', 'support_orders']);
+    const tables = new Set([
+      'support_checkout_intents',
+      'support_account_links',
+      'support_orders',
+      'support_public_preferences',
+    ]);
 
     await purgeOwnedResources(connection, tables, 'user-1');
     await purgeLogsAndSecurityLinks(connection, tables, 'user-1');
@@ -183,6 +188,11 @@ describe('账号注销后台清理', () => {
     expect(
       connection.query.mock.calls.some(
         ([sql, params]) => sql.includes('DELETE FROM support_account_links') && params[0] === 'user-1',
+      ),
+    ).toBe(true);
+    expect(
+      connection.query.mock.calls.some(
+        ([sql, params]) => sql.includes('DELETE FROM support_public_preferences') && params[0] === 'user-1',
       ),
     ).toBe(true);
     const orderUpdates = connection.query.mock.calls.filter(([sql]) => sql.includes('UPDATE support_orders'));

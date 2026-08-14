@@ -26,6 +26,13 @@
               <small>{{ t('note.mdCompactDesc') }}</small>
             </span>
           </BButton>
+          <BButton class="new-note-picker__mode" @click="emit('selectBlank', 'drawing')">
+            <span class="new-note-picker__mode-mark">DRAW</span>
+            <span class="new-note-picker__choice-copy">
+              <strong>{{ t('note.drawingLabel') }}</strong>
+              <small>{{ t('note.drawingCompactDesc') }}</small>
+            </span>
+          </BButton>
         </div>
       </section>
 
@@ -102,7 +109,7 @@
   import icon from '@/config/icon.ts';
   import type { BuiltinNoteTemplate } from '@/config/noteTemplates.ts';
 
-  type NoteEditorType = 'html' | 'markdown';
+  type NoteEditorType = 'html' | 'markdown' | 'drawing';
   type TemplateLoadState = 'idle' | 'loading' | 'success' | 'error';
 
   interface MyTemplate {

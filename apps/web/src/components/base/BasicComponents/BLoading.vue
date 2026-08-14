@@ -105,7 +105,7 @@
     }
   }
 
-  :global(.disable-animations) .b-loading-bar__indicator {
+  :global(.disable-animations .b-loading-bar__indicator) {
     width: 100%;
     opacity: 0.65;
     transform: none;

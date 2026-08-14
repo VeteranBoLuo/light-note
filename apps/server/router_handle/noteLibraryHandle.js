@@ -1,5 +1,10 @@
 import pool from '../db/index.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
+import {
+  DRAWING_SCENE_VERSION,
+  DrawingSceneValidationError,
+  serializeDrawingScene,
+} from '@lightnote/shared/drawing-note';
 import { snakeCaseKeys, resultData, mergeExistingProperties, insertData, L } from '../util/common.js';
 import { RESOURCE_TYPE, replaceResourceTagRelations, validateUserTags } from '../util/resourceTags.js';
 import { ensureNotVisitor } from '../util/auth.js';
@@ -19,6 +24,7 @@ import {
 import { createTag } from '../util/services/tagService.js';
 import { cleanupOrphanNoteImages, extractNoteImageUrls, filterOwnedImageUrls } from '../util/noteImages.js';
 import { buildNoteCardPreview, extractNoteCardPreviewImage } from '../util/noteCardPreview.js';
+import { buildDrawingScenePreview } from '../util/drawingPreview.js';
 import {
   ensureNoteImageThumbnail,
   getExistingNoteImageThumbnailPath,
@@ -89,6 +95,7 @@ const NOTE_TREE_ERROR_COPY = Object.freeze({
   NOTE_TREE_DEPTH_EXCEEDED: ['已超过目录最大层级', 'The maximum directory depth would be exceeded'],
   NOTE_TREE_NODE_ID_REQUIRED: ['缺少笔记 ID', 'Note ID is required'],
   INVALID_NOTE_TYPE: ['笔记类型无效', 'Invalid note type'],
+  INVALID_DRAWING_SCENE: ['手绘正文无效或超出限制', 'The drawing content is invalid or exceeds its limits'],
   NOTE_VERSION_CONFLICT: [
     '这篇笔记已在其他页面或设备更新，请先处理版本冲突',
     'This note changed in another tab or device. Resolve the version conflict first',
@@ -140,13 +147,22 @@ const sendNoteTreeError = (req, res, scene, error) => {
   return sendNoteServerError(res, scene, error);
 };
 
-// Markdown 正文的规范读模型：只对当前正式类型 `markdown` 生效。
+// 正文规范读模型：Markdown 修复历史引用实体，drawing 则按共享 scene 协议重新序列化。
 // 早期 `md` 记录的正文实际可能是 HTML，不能把它当作 Markdown 源码改写。
-const normalizeCanonicalMarkdownContent = (content, type) =>
-  type === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
+const normalizeCanonicalMarkdownContent = (content, type) => {
+  const normalizedType = normalizeNoteType(type);
+  if (normalizedType === 'drawing') return serializeDrawingScene(content);
+  return normalizedType === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
+};
 
 const normalizeCanonicalMarkdownRecord = (record) => {
   if (!record) return record;
+  if (record.type === 'drawing') {
+    return {
+      ...record,
+      content: serializeDrawingScene(record.content),
+    };
+  }
   if (record.type !== 'markdown') {
     // 历史 HTML 也可能早于写入净化边界。详情、版本和模板回传前再过一次同一白名单，
     // 这样旧数据不会在 TinyMCE/预览区域里重新获得主动脚本能力。
@@ -168,6 +184,8 @@ const normalizeCanonicalMarkdownRecord = (record) => {
 // 弱网 App 不仅下载慢，还要在主线程解析一大块 JSON。保留 4000 字符足够生成卡片/列表摘要，
 // 打开正文仍由 getNoteDetail 返回完整内容；搜索条件也继续在数据库完整正文上执行。
 const NOTE_LIST_CONTENT_PREVIEW_LENGTH = 4000;
+const DRAWING_PREVIEW_BATCH_LIMIT = 12;
+const NOTE_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/u;
 
 // 笔记图片上传登记(multer 已将文件落盘,这里负责归属校验与建档)。
 // note_images 的归属可信度是图片引用计数体系的地基:
@@ -263,6 +281,9 @@ export const addNote = async (req, res) => {
   } catch (e) {
     if (e instanceof NoteTreeError || e instanceof NoteTreeFeatureError) {
       return sendNoteTreeError(req, res, 'add-note', e);
+    }
+    if (e instanceof DrawingSceneValidationError) {
+      return res.send(resultData(null, 400, L(req, '手绘正文无效或超出限制', 'Invalid drawing content')));
     }
     return sendNoteServerError(res, 'add-note', e);
   }
@@ -378,6 +399,8 @@ export const moveNoteNodes = async (req, res) => {
 // 1) 内容去重:正文无变化不存 2) 时间合并:距上一条版本不足窗口则并入 3) 每篇保留上限,超出删最旧
 const NOTE_VERSION_MERGE_WINDOW_MS = 3 * 60 * 1000; // 连续编辑每 3 分钟落一个还原点
 const NOTE_VERSION_KEEP = 20; // 每篇笔记最多保留的历史版本数
+const DRAWING_VERSION_MERGE_WINDOW_MS = 10 * 60 * 1000;
+const DRAWING_VERSION_KEEP = 10;
 const NOTE_UPDATE_TYPES = new Set(['html', 'markdown']);
 const NOTE_TITLE_MAX_LENGTH = 255;
 const NOTE_CONTENT_MAX_LENGTH = 1_000_000;
@@ -386,9 +409,9 @@ const NOTE_CONTENT_MAX_LENGTH = 1_000_000;
 // 后端只回传 content + type,不再在 SQL/JS 层估算(见前端 utils/common.ts 的 noteDisplayText)。
 
 // 删除超出保留上限的最旧版本(须在事务连接上执行)
-async function pruneNoteVersions(connection, noteId) {
+async function pruneNoteVersions(connection, noteId, keep = NOTE_VERSION_KEEP) {
   const [cntRows] = await connection.query('SELECT COUNT(*) AS n FROM note_versions WHERE note_id=?', [noteId]);
-  const overflow = cntRows[0].n - NOTE_VERSION_KEEP;
+  const overflow = cntRows[0].n - keep;
   if (overflow <= 0) return;
   const [oldRows] = await connection.query(
     'SELECT id FROM note_versions WHERE note_id=? ORDER BY create_time ASC, id ASC LIMIT ?',
@@ -403,7 +426,16 @@ async function pruneNoteVersions(connection, noteId) {
 // 覆盖笔记前,把"改动前"的旧内容存为一个历史版本(按闸门策略决定是否真正落库)
 async function snapshotNoteVersion(
   connection,
-  { noteId, userId, currentNote, nextState, reason = 'autosave', force = false },
+  {
+    noteId,
+    userId,
+    currentNote,
+    nextState,
+    reason = 'autosave',
+    force = false,
+    mergeWindowMs = NOTE_VERSION_MERGE_WINDOW_MS,
+    keep = NOTE_VERSION_KEEP,
+  },
 ) {
   let current = currentNote;
   if (!current) {
@@ -426,10 +458,7 @@ async function snapshotNoteVersion(
       'SELECT create_time FROM note_versions WHERE note_id=? ORDER BY create_time DESC, id DESC LIMIT 1',
       [noteId],
     );
-    if (
-      lastRows.length > 0 &&
-      Date.now() - new Date(lastRows[0].create_time).getTime() < NOTE_VERSION_MERGE_WINDOW_MS
-    ) {
+    if (lastRows.length > 0 && Date.now() - new Date(lastRows[0].create_time).getTime() < mergeWindowMs) {
       return;
     }
   }
@@ -437,16 +466,18 @@ async function snapshotNoteVersion(
     noteId,
     title: current.title,
     content:
-      normalizeNoteType(current.type) === 'markdown'
+      normalizeNoteType(current.type) === 'drawing'
         ? oldContent
-        : sanitizePersistedNoteContent(oldContent, 'html', 'snapshot-note-version'),
+        : normalizeNoteType(current.type) === 'markdown'
+          ? oldContent
+          : sanitizePersistedNoteContent(oldContent, 'html', 'snapshot-note-version'),
     type: current.type,
     sourceRevision: Math.max(1, Number(current.revision || 1)),
     reason,
     createBy: userId,
   });
   await connection.query('INSERT INTO note_versions SET ?', [versionData]);
-  await pruneNoteVersions(connection, noteId);
+  await pruneNoteVersions(connection, noteId, keep);
 }
 
 export const updateNote = async (req, res) => {
@@ -523,14 +554,21 @@ export const updateNote = async (req, res) => {
     }
     const currentType = normalizeNoteType(ownedNote.type);
     const finalType = submittedType || currentType;
-    if (!NOTE_UPDATE_TYPES.has(finalType)) {
+    if (currentType === 'drawing' && (hasSubmittedContent || hasSubmittedType)) {
+      // 旧客户端不知道 scene 协议，可能把空白 TinyMCE 正文覆盖到手绘笔记。
+      // 手绘正文只允许走 updateDrawingNote；此处仅保留标题/标签等非正文编辑能力。
+      throw new NoteTreeError('INVALID_DRAWING_SCENE', '手绘正文必须使用专用保存接口', 400);
+    }
+    if (currentType !== 'drawing' && !NOTE_UPDATE_TYPES.has(finalType)) {
       throw new NoteTreeError('INVALID_NOTE_TYPE', '笔记类型无效', 400);
     }
     const submittedOrCurrentContent = hasSubmittedContent ? rawContent : String(ownedNote.content ?? '');
     const finalContent =
-      finalType === 'markdown'
-        ? normalizeMarkdownBlockquoteEntities(submittedOrCurrentContent)
-        : sanitizePersistedNoteContent(submittedOrCurrentContent, finalType, 'update-note');
+      finalType === 'drawing'
+        ? submittedOrCurrentContent
+        : finalType === 'markdown'
+          ? normalizeMarkdownBlockquoteEntities(submittedOrCurrentContent)
+          : sanitizePersistedNoteContent(submittedOrCurrentContent, finalType, 'update-note');
     const finalTitle = hasSubmittedTitle ? requestBody.title : String(ownedNote.title || '');
 
     // 主表只允许正文编辑域字段。parent_id/sort/is_top/del_flag/owner 等字段必须走各自
@@ -557,6 +595,9 @@ export const updateNote = async (req, res) => {
         nextState: { title: finalTitle, content: finalContent, type: finalType },
         reason: finalType !== currentType ? 'format_conversion' : 'autosave',
         force: finalType !== currentType,
+        ...(finalType === 'drawing'
+          ? { mergeWindowMs: DRAWING_VERSION_MERGE_WINDOW_MS, keep: DRAWING_VERSION_KEEP }
+          : {}),
       });
       await connection.query('update note set ? where id=? and create_by=? and del_flag=0', [
         snakeCaseKeys(updateParams),
@@ -593,6 +634,111 @@ export const updateNote = async (req, res) => {
     }
     if (e instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-note', e);
     return sendNoteServerError(res, 'update-note', e);
+  } finally {
+    connection?.release();
+  }
+};
+
+function drawingSceneOrTreeError(value) {
+  try {
+    return serializeDrawingScene(value);
+  } catch (error) {
+    if (error instanceof DrawingSceneValidationError) {
+      throw new NoteTreeError('INVALID_DRAWING_SCENE', error.message, 400);
+    }
+    throw error;
+  }
+}
+
+// 手绘保存是独立低频提交链路：客户端只在一次笔画/擦除/文本操作完成后序列化，
+// 服务端再次按共享 scene 协议校验。它不触碰 HTML 净化、图片扫描或正文引用解析。
+export const updateDrawingNote = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const noteId = String(body.id || '').trim();
+  const title = body.title;
+  const expectedRevision = Number(body.revision);
+  if (!noteId || noteId.length > 255) {
+    return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+  }
+  if (typeof title !== 'string' || !title.trim() || title.length > NOTE_TITLE_MAX_LENGTH) {
+    return res.send(resultData(null, 400, L(req, '笔记标题无效', 'Invalid note title')));
+  }
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) {
+    return res.send(resultData(null, 400, L(req, '笔记版本号无效', 'Invalid note revision')));
+  }
+
+  let content;
+  try {
+    content = drawingSceneOrTreeError(body.scene);
+  } catch (error) {
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-drawing-note', error);
+    return sendNoteServerError(res, 'update-drawing-note', error);
+  }
+
+  let connection;
+  let transactionStarted = false;
+  try {
+    const userId = req.user.id;
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    transactionStarted = true;
+    const [rows] = await connection.query(
+      'SELECT id, title, content, type, revision, update_time FROM note WHERE id=? AND create_by=? AND del_flag=0 FOR UPDATE',
+      [noteId, userId],
+    );
+    if (!rows.length) throw new NoteTreeError('NOTE_TREE_NODE_NOT_FOUND', '笔记不存在', 404);
+    const current = rows[0];
+    if (normalizeNoteType(current.type) !== 'drawing') {
+      throw new NoteTreeError('INVALID_NOTE_TYPE', '当前笔记不是手绘类型', 400);
+    }
+    const currentRevision = Math.max(1, Number(current.revision || 1));
+    const canonicalCurrentContent = drawingSceneOrTreeError(current.content);
+    if (currentRevision !== expectedRevision) {
+      throw new NoteTreeError('NOTE_VERSION_CONFLICT', '笔记版本冲突', 409, {
+        current: {
+          id: noteId,
+          title: String(current.title || ''),
+          content: canonicalCurrentContent,
+          type: 'drawing',
+          revision: currentRevision,
+          updateTime: current.update_time || null,
+        },
+      });
+    }
+
+    const changed = String(current.title || '') !== title || canonicalCurrentContent !== content;
+    let nextRevision = currentRevision;
+    if (changed) {
+      nextRevision += 1;
+      await snapshotNoteVersion(connection, {
+        noteId,
+        userId,
+        currentNote: { ...current, content: canonicalCurrentContent, type: 'drawing' },
+        nextState: { title, content, type: 'drawing' },
+        reason: 'drawing_autosave',
+        mergeWindowMs: DRAWING_VERSION_MERGE_WINDOW_MS,
+        keep: DRAWING_VERSION_KEEP,
+      });
+      await connection.query(
+        'UPDATE note SET title=?, content=?, update_by=?, revision=? WHERE id=? AND create_by=? AND del_flag=0',
+        [title, content, userId, nextRevision, noteId, userId],
+      );
+    }
+    await connection.commit();
+    transactionStarted = false;
+    if (changed) await invalidatePersonalKnowledgeCache(userId);
+    return res.send(resultData({ id: noteId, revision: nextRevision }));
+  } catch (error) {
+    if (transactionStarted) {
+      try {
+        await connection.rollback();
+      } catch {
+        // 保留原始业务错误。
+      }
+    }
+    if (error instanceof NoteTreeError) return sendNoteTreeError(req, res, 'update-drawing-note', error);
+    return sendNoteServerError(res, 'update-drawing-note', error);
   } finally {
     connection?.release();
   }
@@ -769,7 +915,9 @@ export const queryNoteList = async (req, res) => {
 
     if (keyword) {
       const like = `%${keyword}%`;
-      where.push('(n.title LIKE ? OR n.content LIKE ?)');
+      // 手绘 scene JSON 中的坐标、元素 ID 与协议字段不是用户可搜索正文；第一版只检索标题，
+      // 避免 JSON 噪声命中，也避免未来场景增大后让通用内容搜索承担无意义扫描。
+      where.push("(n.title LIKE ? OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ?))");
       params.push(like, like);
     }
     if (tagId === 'null') {
@@ -799,7 +947,7 @@ export const queryNoteList = async (req, res) => {
       SELECT
         n.id,
         n.title,
-        LEFT(COALESCE(n.content, ''), ${NOTE_LIST_CONTENT_PREVIEW_LENGTH}) AS content,
+        IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), ${NOTE_LIST_CONTENT_PREVIEW_LENGTH})) AS content,
         n.create_by,
         n.update_by,
         n.del_flag,
@@ -851,18 +999,31 @@ export const queryNoteList = async (req, res) => {
     result.forEach((note) => {
       note.tags =
         note.tags && Array.isArray(note.tags) && note.tags.every((tag) => tag && tag.id !== null) ? note.tags : [];
+      if (!pagination.enabled && note.type === 'drawing') note.content = '';
       if (pagination.enabled) {
-        const cardPreview = lightweightCardPreview ? buildNoteCardPreview(note.content, note.type) : null;
-        const previewSource = cardPreview ? cardPreview.imageUrl : extractNoteCardPreviewImage(note.content, note.type);
+        const drawing = note.type === 'drawing';
+        const cardPreview = lightweightCardPreview && !drawing ? buildNoteCardPreview(note.content, note.type) : null;
+        const previewSource = drawing
+          ? ''
+          : cardPreview
+            ? cardPreview.imageUrl
+            : extractNoteCardPreviewImage(note.content, note.type);
         note.previewImageUrl = previewSource ? noteImageThumbnailPathname(previewSource) : '';
+        if (drawing) {
+          note.previewSummary = '';
+          note.previewTextBeforeImage = '';
+          note.previewTextAfterImage = '';
+          note.previewImageLocated = false;
+        }
         if (cardPreview) {
           note.previewSummary = cardPreview.summary;
           note.previewTextBeforeImage = cardPreview.beforeImage;
           note.previewTextAfterImage = cardPreview.afterImage;
           note.previewImageLocated = cardPreview.imageLocated;
           // v2 客户端只消费上面的纯文本字段；不再把 48 份正文前缀传给 WebView 重复净化和解析。
-          delete note.content;
         }
+        if (lightweightCardPreview) delete note.content;
+        else if (drawing) note.content = '';
       }
       if (treeSnapshot && (hasTreeFilter || rootTreeScope)) {
         const path = resolveNoteBreadcrumbFromSnapshot(treeSnapshot, String(note.id));
@@ -888,6 +1049,52 @@ export const queryNoteList = async (req, res) => {
     return res.send(
       resultData(null, 500, L(req, '服务器暂时无法处理，请稍后重试', 'The server is temporarily unavailable')),
     );
+  }
+};
+
+// 手绘完整场景继续与通用列表隔离，仅在卡片进入可视区后按小批次读取。
+// 响应经过元素、轨迹点和文本三重压缩，避免为了几百像素的缩略图传输编辑级数据。
+export const queryDrawingPreviews = async (req, res) => {
+  try {
+    const rawIds = req.body?.ids;
+    if (!Array.isArray(rawIds) || rawIds.length === 0 || rawIds.length > DRAWING_PREVIEW_BATCH_LIMIT) {
+      return res.send(
+        resultData(
+          null,
+          400,
+          L(
+            req,
+            `单次最多预览 ${DRAWING_PREVIEW_BATCH_LIMIT} 篇手绘笔记`,
+            `Up to ${DRAWING_PREVIEW_BATCH_LIMIT} previews`,
+          ),
+        ),
+      );
+    }
+    const ids = [...new Set(rawIds.map((id) => String(id || '').trim()))];
+    if (ids.length === 0 || ids.some((id) => !NOTE_ID_PATTERN.test(id))) {
+      return res.send(resultData(null, 400, L(req, '笔记 ID 无效', 'Invalid note ID')));
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const [rows] = await pool.query(
+      `SELECT id, content, revision
+       FROM note
+       WHERE create_by = ? AND del_flag = 0 AND type = 'drawing' AND id IN (${placeholders})`,
+      [req.user.id, ...ids],
+    );
+    const rowsById = new Map(rows.map((row) => [String(row.id), row]));
+    const items = ids.flatMap((id) => {
+      const row = rowsById.get(id);
+      if (!row) return [];
+      try {
+        return [{ id, revision: Number(row.revision || 0), preview: buildDrawingScenePreview(row.content) }];
+      } catch (error) {
+        console.warn('[note-library] drawing preview skipped id=%s code=%s', id, stableAgentErrorCode(error));
+        return [];
+      }
+    });
+    return res.send(resultData({ items }));
+  } catch (error) {
+    return sendNoteServerError(res, 'query-drawing-previews', error);
   }
 };
 
@@ -957,9 +1164,17 @@ export const getNoteDetail = async (req, res) => {
       return res.send(resultData(null, 404, '笔记不存在'));
     }
 
+    const normalized = normalizeCanonicalMarkdownRecord(result[0]);
+    const drawingSupported = Number(req.body?.drawingSceneVersion || 0) === DRAWING_SCENE_VERSION;
+    if (normalized.type === 'drawing' && !drawingSupported) {
+      // 老客户端会把未知类型回退为 TinyMCE。不给 scene 正文，并由通用更新接口拒绝 drawing 正文提交，
+      // 可以确保它最多看到空白只读内容，不能把 JSON 或空 HTML 覆盖回数据库。
+      normalized.content = '';
+      normalized.drawingUnsupported = true;
+    }
     return res.send(
       resultData({
-        ...normalizeCanonicalMarkdownRecord(result[0]),
+        ...normalized,
         isPending: Number(result[0].isPending) === 1,
         breadcrumb,
         noteTreeFeatures,
@@ -1511,15 +1726,26 @@ export const getNoteVersions = async (req, res) => {
       return res.send(resultData(null, 404, '笔记不存在'));
     }
     const [rows] = await pool.query(
-      `SELECT id, title, type, content, source_revision, reason, create_by, create_time
+      `SELECT id, title, type,
+              IF(type = 'drawing', '', content) AS content,
+              CASE
+                WHEN type = 'drawing' AND JSON_VALID(content) THEN JSON_LENGTH(content, '$.elements')
+                ELSE NULL
+              END AS element_count,
+              source_revision, reason, create_by, create_time
        FROM note_versions
        WHERE note_id = ?
        ORDER BY create_time DESC, id DESC`,
       [noteId],
     );
-    // 回传 content + type,字数与预览渲染都交给前端(按渲染后展示文本计,html/md 口径一致)。
+    // HTML / Markdown 沿用 content + type；drawing 只回元素数，避免历史面板一次下载最多 10 份大 scene。
+    // 恢复操作按 version id 在事务内读取完整内容，不依赖列表正文。
     // 历史的错误实体在读取时也立即还原，用户无需先手动编辑一次才能看到正确 Markdown。
-    res.send(resultData(rows.map(normalizeCanonicalMarkdownRecord)));
+    res.send(
+      resultData(
+        rows.map((row) => (normalizeNoteType(row.type) === 'drawing' ? row : normalizeCanonicalMarkdownRecord(row))),
+      ),
+    );
   } catch (e) {
     return sendNoteServerError(res, 'list-note-versions', e);
   }
@@ -1579,9 +1805,11 @@ export const restoreNoteVersion = async (req, res) => {
     const rawVerContent = verRows[0].content ?? '';
     const verType = normalizeNoteType(verRows[0].type || 'html');
     const verContent =
-      verType === 'markdown'
-        ? normalizeCanonicalMarkdownContent(rawVerContent, verType)
-        : sanitizePersistedNoteContent(rawVerContent, verType, 'restore-note-version');
+      verType === 'drawing'
+        ? drawingSceneOrTreeError(rawVerContent)
+        : verType === 'markdown'
+          ? normalizeCanonicalMarkdownContent(rawVerContent, verType)
+          : sanitizePersistedNoteContent(rawVerContent, verType, 'restore-note-version');
     // 归属校验 + 锁定当前值，恢复也必须遵守与普通保存相同的 revision 边界。
     const [curRows] = await connection.query(
       'SELECT title, content, type, revision, update_time FROM note WHERE id=? AND create_by=? AND del_flag=? FOR UPDATE',
@@ -1608,9 +1836,11 @@ export const restoreNoteVersion = async (req, res) => {
       noteId,
       title: curRows[0].title,
       content:
-        normalizeNoteType(curRows[0].type) === 'markdown'
-          ? normalizeCanonicalMarkdownContent(curRows[0].content ?? '', curRows[0].type)
-          : sanitizePersistedNoteContent(curRows[0].content ?? '', 'html', 'snapshot-before-restore'),
+        normalizeNoteType(curRows[0].type) === 'drawing'
+          ? drawingSceneOrTreeError(curRows[0].content ?? '')
+          : normalizeNoteType(curRows[0].type) === 'markdown'
+            ? normalizeCanonicalMarkdownContent(curRows[0].content ?? '', curRows[0].type)
+            : sanitizePersistedNoteContent(curRows[0].content ?? '', 'html', 'snapshot-before-restore'),
       type: curRows[0].type,
       sourceRevision: currentRevision,
       reason: 'restore',
@@ -1622,7 +1852,13 @@ export const restoreNoteVersion = async (req, res) => {
       'UPDATE note SET title=?, content=?, type=?, update_by=?, revision=? WHERE id=? AND create_by=?',
       [verTitle, verContent, verType, userId, nextRevision, noteId, userId],
     );
-    await pruneNoteVersions(connection, noteId);
+    await pruneNoteVersions(
+      connection,
+      noteId,
+      verType === 'drawing' || normalizeNoteType(curRows[0].type) === 'drawing'
+        ? DRAWING_VERSION_KEEP
+        : NOTE_VERSION_KEEP,
+    );
     // 笔记内联提及(N0):恢复版本会用目标版本正文覆盖当前正文,必须同步引用(§4.6 恢复不能漏)。
     const restoredRefs = extractOwnedResourceRefs({ content: String(verContent), type: verType });
     await syncNoteResourceRefs(connection, { userId, noteId, refs: restoredRefs });

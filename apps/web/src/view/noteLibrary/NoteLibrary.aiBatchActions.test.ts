@@ -378,11 +378,14 @@ describe('笔记库页面树交互接线', () => {
     expect(noteLibrarySidebarSource).toContain('element.scrollTop = Math.max(0, Number(props.treeScrollTop || 0));');
   });
 
-  it('新建草稿首次保存后先即时写入并选中目录树，再静默校准服务端树', () => {
+  it('新建草稿首次保存后直接写入目录与面包屑，不强制刷新完整目录', () => {
     const promoteFunction = detailSource.match(/function promoteSavedDraftInTree\(\)[\s\S]*?\n  }/)?.[0] || '';
     expect(promoteFunction).toContain('noteWorkspace.insertCreatedNote');
+    expect(promoteFunction).toContain('noteWorkspace.seedBreadcrumb');
+    expect(promoteFunction).toContain("treeError.value = ''");
     expect(promoteFunction).toContain('activePageId: createdId');
-    expect(promoteFunction).toContain('await loadTreeChildren(createdParentId, true)');
+    expect(promoteFunction).not.toContain('loadTreeChildren(createdParentId, true)');
+    expect(promoteFunction).toContain('if (!canSeedBreadcrumb)');
     expect(promoteFunction).toContain('await loadDetailBreadcrumb(createdId)');
     expect(detailSource).toMatch(/if \(res\.status === 200 && res\.data\?\.id\)[\s\S]*?promoteSavedDraftInTree\(\)/);
   });

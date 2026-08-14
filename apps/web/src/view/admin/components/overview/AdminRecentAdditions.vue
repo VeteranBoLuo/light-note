@@ -527,9 +527,9 @@
     }
   }
 
-  :global(.disable-animations) .admin-recent__skeleton-title,
-  :global(.disable-animations) .admin-recent__skeleton-row span,
-  :global(.disable-animations) .admin-recent__skeleton-row i {
+  :global(.disable-animations .admin-recent__skeleton-title),
+  :global(.disable-animations .admin-recent__skeleton-row span),
+  :global(.disable-animations .admin-recent__skeleton-row i) {
     animation: none;
   }
 

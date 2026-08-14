@@ -69,8 +69,10 @@ const {
   deleteNoteSubtree,
   delNote,
   getNoteDetail,
+  getNoteVersions,
   moveNoteNode,
   moveNoteNodes,
+  queryDrawingPreviews,
   queryNoteList,
   toggleNoteTop,
   updateNoteSort,
@@ -92,6 +94,34 @@ describe('笔记置顶 handler', () => {
     ensureNotVisitor.mockReturnValue(true);
   });
 
+  it('手绘卡片预览按当前用户批量读取并返回受限场景', async () => {
+    const scene = JSON.stringify({
+      v: 1,
+      page: { width: 1024, height: 1448 },
+      elements: [{ id: 's1', kind: 'stroke', color: '#1f2937', width: 4, points: [1, 2, 3, 4] }],
+    });
+    poolQuery.mockResolvedValueOnce([[{ id: 'drawing-1', content: scene, revision: 3 }]]);
+    const res = mockRes();
+
+    await queryDrawingPreviews({ user: { id: 'u1' }, body: { ids: ['drawing-1'] } }, res);
+
+    expect(poolQuery).toHaveBeenCalledWith(expect.stringContaining("type = 'drawing'"), ['u1', 'drawing-1']);
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: { items: [{ id: 'drawing-1', revision: 3, preview: { v: 1 } }] },
+    });
+  });
+
+  it('拒绝超出上限的手绘卡片预览请求且不访问数据库', async () => {
+    const res = mockRes();
+    await queryDrawingPreviews(
+      { user: { id: 'u1' }, body: { ids: Array.from({ length: 13 }, (_, index) => `drawing-${index}`) } },
+      res,
+    );
+    expect(lastSent(res).status).toBe(400);
+    expect(poolQuery).not.toHaveBeenCalled();
+  });
+
   it('笔记列表按置顶、自定义顺序和更新时间排序', async () => {
     poolQuery.mockResolvedValueOnce([[{ id: 'n1', is_top: 1, tags: null }]]);
     const res = mockRes();
@@ -101,7 +131,7 @@ describe('笔记置顶 handler', () => {
 
     const [sql, params] = poolQuery.mock.calls[0];
     expect(sql).not.toContain('SELECT n.*');
-    expect(sql).toContain("LEFT(COALESCE(n.content, ''), 4000) AS content");
+    expect(sql).toContain("IF(n.type = 'drawing', '', LEFT(COALESCE(n.content, ''), 4000)) AS content");
     expect(sql).toContain('ORDER BY n.is_top DESC, n.sort, n.update_time DESC');
     expect(params).toEqual(['u1']);
     expect(attachPendingStatus).toHaveBeenCalled();
@@ -161,6 +191,73 @@ describe('笔记置顶 handler', () => {
     expect(item).not.toHaveProperty('content');
     expect(buildNoteCardPreview).toHaveBeenCalledTimes(1);
     expect(extractNoteCardPreviewImage).not.toHaveBeenCalled();
+  });
+
+  it('手绘列表不解析、不回传 scene JSON，旧版非分页响应也保持轻量', async () => {
+    const scene = '{"v":1,"page":{"width":1024,"height":1448},"elements":[{"id":"s1"}]}';
+    poolQuery.mockResolvedValueOnce([[{ id: 'drawing-1', type: 'drawing', content: scene, tags: null }]]);
+    const legacyRes = mockRes();
+    await queryNoteList({ user: { id: 'u1' }, body: {} }, legacyRes);
+    expect(lastSent(legacyRes).data[0].content).toBe('');
+
+    poolQuery
+      .mockResolvedValueOnce([[{ id: 'drawing-1', type: 'drawing', content: scene, tags: null }]])
+      .mockResolvedValueOnce([[{ total: 1 }]]);
+    const v2Res = mockRes();
+    await queryNoteList({ user: { id: 'u1' }, body: { page: 1, pageSize: 48, previewVersion: 2 } }, v2Res);
+    expect(lastSent(v2Res).data.items[0]).toMatchObject({ previewSummary: '', previewImageUrl: '' });
+    expect(lastSent(v2Res).data.items[0]).not.toHaveProperty('content');
+    expect(buildNoteCardPreview).not.toHaveBeenCalled();
+    expect(extractNoteCardPreviewImage).not.toHaveBeenCalled();
+  });
+
+  it('手绘详情只向声明 scene 协议版本的新客户端返回正文', async () => {
+    vi.stubEnv('NOTE_TREE_READ_ENABLED', 'false');
+    const scene = '{"v":1,"page":{"width":1024,"height":1448},"elements":[]}';
+    const row = {
+      id: 'drawing-1',
+      type: 'drawing',
+      content: scene,
+      create_by: 'u1',
+      del_flag: 0,
+      revision: 1,
+      isPending: 0,
+    };
+    poolQuery.mockResolvedValueOnce([[row]]);
+    const legacyRes = mockRes();
+    await getNoteDetail({ user: { id: 'u1' }, body: { id: 'drawing-1' } }, legacyRes);
+    expect(lastSent(legacyRes).data).toMatchObject({ type: 'drawing', content: '', drawingUnsupported: true });
+
+    poolQuery.mockResolvedValueOnce([[row]]);
+    const currentRes = mockRes();
+    await getNoteDetail({ user: { id: 'u1' }, body: { id: 'drawing-1', drawingSceneVersion: 1 } }, currentRes);
+    expect(lastSent(currentRes).data).toMatchObject({ type: 'drawing', content: scene });
+    expect(lastSent(currentRes).data).not.toHaveProperty('drawingUnsupported');
+  });
+
+  it('手绘历史列表只回元素计数，不批量回传 scene JSON', async () => {
+    poolQuery.mockResolvedValueOnce([[{ id: 'drawing-1' }]]).mockResolvedValueOnce([
+      [
+        {
+          id: 'version-1',
+          title: '草图',
+          type: 'drawing',
+          content: '',
+          element_count: 12,
+        },
+      ],
+    ]);
+    const res = mockRes();
+
+    await getNoteVersions({ user: { id: 'u1' }, body: { id: 'drawing-1' } }, res);
+
+    const historySql = poolQuery.mock.calls[1][0];
+    expect(historySql).toContain("IF(type = 'drawing', '', content) AS content");
+    expect(historySql).toContain("JSON_LENGTH(content, '$.elements')");
+    expect(lastSent(res)).toMatchObject({
+      status: 200,
+      data: [{ id: 'version-1', type: 'drawing', content: '', element_count: 12 }],
+    });
   });
 
   it('笔记详情一次返回正文、能力快照和面包屑', async () => {
@@ -266,7 +363,7 @@ describe('笔记置顶 handler', () => {
     );
 
     const [listSql, listParams] = poolQuery.mock.calls[0];
-    expect(listSql).toContain('(n.title LIKE ? OR n.content LIKE ?)');
+    expect(listSql).toContain("(n.title LIKE ? OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ?))");
     expect(listSql).toContain('NOT EXISTS');
     expect(listSql).toContain('LIMIT ? OFFSET ?');
     expect(listParams.slice(-2)).toEqual([48, 48]);

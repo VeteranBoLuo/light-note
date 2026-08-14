@@ -16,7 +16,8 @@ function queryValue(value: unknown) {
 
 function activeDetailPageId() {
   if (router.currentRoute.value.name !== 'noteDetail') return null;
-  return queryValue(router.currentRoute.value.params?.id);
+  const pageId = queryValue(router.currentRoute.value.params?.id);
+  return pageId === 'add' ? null : pageId;
 }
 
 export function useNoteTree(
@@ -54,7 +55,12 @@ export function useNoteTree(
   const resourceOwnerKey = computed(
     () =>
       options.ownerKey?.value ||
-      [user.id || 'anonymous', user.role || '', user.adminContext?.subjectUserId || '', user.adminContext?.mode || ''].join('|'),
+      [
+        user.id || 'anonymous',
+        user.role || '',
+        user.adminContext?.subjectUserId || '',
+        user.adminContext?.mode || '',
+      ].join('|'),
   );
 
   async function loadChildren(parentId: string | null = null, force = false) {

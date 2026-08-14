@@ -2,13 +2,20 @@ import crypto from 'node:crypto';
 import { AFDIAN_CHECKOUT_OPTIONS } from '@lightnote/shared';
 import pool from '../db/index.js';
 import { afdianError, getAfdianApiConfig, getAfdianFeatureState } from './afdianConfig.js';
-import { normalizeAfdianOrder, queryAfdianOrders } from './afdianClient.js';
+import { normalizeAfdianOrder, queryAfdianOrders, queryAfdianPublicProfile } from './afdianClient.js';
+import {
+  getAfdianPublicPreference,
+  getAfdianUserOrders,
+  invalidateAfdianLeaderboardCache,
+} from './afdianSupportReadService.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 
 const CHECKOUT_TOKEN_TTL_DAYS = 30;
 const PENDING_BATCH_SIZE = 20;
 const RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
 const FULL_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const PROFILE_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const PROFILE_REFRESH_RETRY_INTERVAL_MS = 10 * 60 * 1000;
 const MAX_SYNC_PAGES = 200;
 const CHECKOUT_OPTION_BY_KEY = new Map(AFDIAN_CHECKOUT_OPTIONS.map((option) => [option.key, option]));
 
@@ -34,6 +41,45 @@ function buildCheckoutUrl(option, token) {
   }
   url.searchParams.set('custom_order_id', token);
   return url.toString();
+}
+
+export function shouldRefreshAfdianProfile(link, now = Date.now()) {
+  if (!link) return false;
+  const refreshedAt = new Date(link.identity_refreshed_at || 0).getTime();
+  if (!Number.isFinite(refreshedAt) || refreshedAt <= 0) return true;
+  const profileIncomplete = !link.provider_name || !link.provider_avatar_url;
+  const interval = profileIncomplete ? PROFILE_REFRESH_RETRY_INTERVAL_MS : PROFILE_REFRESH_INTERVAL_MS;
+  return now - refreshedAt >= interval;
+}
+
+export async function refreshAfdianAccountProfile({
+  userId,
+  providerUserId,
+  db = pool,
+  loadProfile = queryAfdianPublicProfile,
+}) {
+  try {
+    const profile = await loadProfile(providerUserId);
+    await db.query(
+      `UPDATE support_account_links
+          SET provider_name = ?, provider_avatar_url = ?, identity_refreshed_at = NOW()
+        WHERE user_id = ?
+          AND provider_user_id = ?`,
+      [profile.providerName, profile.providerAvatarUrl, userId, providerUserId],
+    );
+    return profile;
+  } catch (error) {
+    await db
+      .query(
+        `UPDATE support_account_links
+            SET identity_refreshed_at = NOW()
+          WHERE user_id = ?
+            AND provider_user_id = ?`,
+        [userId, providerUserId],
+      )
+      .catch(() => {});
+    throw error;
+  }
 }
 
 export async function createAfdianCheckoutIntent({ userId, optionKey, db = pool }) {
@@ -63,24 +109,51 @@ export async function getAfdianSupportState({ userId = '', authenticated = false
       totalAmount: '0.00',
     };
   }
-  const [[links], [totals]] = await Promise.all([
-    db.query('SELECT linked_at FROM support_account_links WHERE user_id = ? LIMIT 1', [userId]),
+  const [[links], [totals], publicPreference, recentOrders] = await Promise.all([
     db.query(
-      `SELECT COUNT(*) AS order_count, COALESCE(SUM(total_amount), 0) AS total_amount
+      `SELECT linked_at, provider_user_id, provider_name, provider_avatar_url, identity_refreshed_at
+         FROM support_account_links
+        WHERE user_id = ?
+        LIMIT 1`,
+      [userId],
+    ),
+    db.query(
+      `SELECT COUNT(*) AS order_count, COALESCE(SUM(total_amount), 0) AS total_amount,
+              MAX(COALESCE(ranking_observed_at, verified_at, create_time)) AS last_support_at
          FROM support_orders
         WHERE light_note_user_id = ?
           AND verification_state = 'api_verified'
           AND provider_status = 2`,
       [userId],
     ),
+    getAfdianPublicPreference({ userId, db }),
+    getAfdianUserOrders({ userId, page: 1, pageSize: 3, db }),
   ]);
+  const link = links[0] || null;
+  let providerAccount = link ? { name: link.provider_name || null, avatarUrl: link.provider_avatar_url || null } : null;
+  if (shouldRefreshAfdianProfile(link)) {
+    try {
+      const profile = await refreshAfdianAccountProfile({
+        userId,
+        providerUserId: link.provider_user_id,
+        db,
+      });
+      providerAccount = { name: profile.providerName, avatarUrl: profile.providerAvatarUrl };
+    } catch (error) {
+      console.warn('[afdian] 关联账号资料刷新失败 code=%s', stableAgentErrorCode(error));
+    }
+  }
   return {
     authenticated: true,
     ...feature,
-    linked: Boolean(links[0]),
-    linkedAt: links[0]?.linked_at || null,
+    linked: Boolean(link),
+    linkedAt: link?.linked_at || null,
+    providerAccount,
     orderCount: Number(totals[0]?.order_count || 0),
     totalAmount: Number(totals[0]?.total_amount || 0).toFixed(2),
+    lastSupportAt: totals[0]?.last_support_at || null,
+    publicPreference,
+    recentOrders: recentOrders.items,
   };
 }
 
@@ -172,8 +245,9 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
       `INSERT INTO support_orders
         (id, provider_order_no, provider_user_id, provider_private_id, checkout_intent_id,
          light_note_user_id, ownership_source, plan_id, product_type, month, total_amount,
-         show_amount, provider_status, verification_state, verified_at, retry_count, next_retry_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'api_verified', NOW(), 0, NULL)
+         show_amount, provider_status, verification_state, verified_at, ranking_observed_at,
+         retry_count, next_retry_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'api_verified', NOW(), NOW(), 0, NULL)
        ON DUPLICATE KEY UPDATE
          provider_user_id = VALUES(provider_user_id),
          provider_private_id = VALUES(provider_private_id),
@@ -187,7 +261,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
          show_amount = VALUES(show_amount),
          provider_status = VALUES(provider_status),
          verification_state = 'api_verified',
-         verified_at = NOW(),
+         verified_at = COALESCE(verified_at, NOW()),
          retry_count = 0,
          next_retry_at = NULL`,
       [
@@ -217,6 +291,7 @@ export async function applyVerifiedAfdianOrder(input, { db = pool } = {}) {
       );
     }
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
     return { providerOrderNo: order.providerOrderNo, ...ownership };
   } catch (error) {
     await connection.rollback();
@@ -231,8 +306,9 @@ export async function ingestAfdianWebhookOrder(order, { db = pool } = {}) {
   await db.query(
     `INSERT INTO support_orders
       (id, provider_order_no, provider_user_id, plan_id, total_amount, show_amount,
-       provider_status, verification_state, webhook_signature_valid, webhook_received_at, next_retry_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', 1, NOW(), NOW())
+       provider_status, verification_state, webhook_signature_valid, webhook_received_at,
+       ranking_observed_at, next_retry_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, 'pending', 1, NOW(), NOW(), NOW())
      ON DUPLICATE KEY UPDATE
        provider_user_id = IF(verification_state = 'pending', VALUES(provider_user_id), provider_user_id),
        plan_id = IF(verification_state = 'pending', VALUES(plan_id), plan_id),
@@ -240,6 +316,11 @@ export async function ingestAfdianWebhookOrder(order, { db = pool } = {}) {
        show_amount = IF(verification_state = 'pending', VALUES(show_amount), show_amount),
        webhook_signature_valid = 1,
        webhook_received_at = NOW(),
+       ranking_observed_at = IF(
+         verification_state = 'pending',
+         COALESCE(ranking_observed_at, NOW()),
+         ranking_observed_at
+       ),
        next_retry_at = IF(verification_state = 'pending', NOW(), next_retry_at)`,
     [
       crypto.randomUUID(),
@@ -281,7 +362,14 @@ export async function reconcileAfdianOrder(providerOrderNo, { db = pool } = {}) 
   }
 }
 
-export async function linkAfdianAccount({ userId, providerUserId, providerPrivateId = null, db = pool }) {
+export async function linkAfdianAccount({
+  userId,
+  providerUserId,
+  providerPrivateId = null,
+  providerName = null,
+  providerAvatarUrl = null,
+  db = pool,
+}) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
@@ -315,16 +403,41 @@ export async function linkAfdianAccount({ userId, providerUserId, providerPrivat
     if (current) {
       await connection.query(
         `UPDATE support_account_links
-            SET provider_user_id = ?, provider_private_id = ?, linked_at = NOW()
+            SET provider_user_id = ?, provider_private_id = ?,
+                provider_name = COALESCE(?, provider_name),
+                provider_avatar_url = COALESCE(?, provider_avatar_url),
+                identity_refreshed_at = CASE
+                  WHEN ? IS NULL AND ? IS NULL THEN identity_refreshed_at
+                  ELSE NOW()
+                END,
+                linked_at = NOW()
           WHERE id = ?`,
-        [providerUserId, providerPrivateId, current.id],
+        [
+          providerUserId,
+          providerPrivateId,
+          providerName,
+          providerAvatarUrl,
+          providerName,
+          providerAvatarUrl,
+          current.id,
+        ],
       );
     } else {
       await connection.query(
         `INSERT INTO support_account_links
-          (id, user_id, provider_user_id, provider_private_id)
-         VALUES (?, ?, ?, ?)`,
-        [crypto.randomUUID(), userId, providerUserId, providerPrivateId],
+          (id, user_id, provider_user_id, provider_private_id, provider_name,
+           provider_avatar_url, identity_refreshed_at)
+         VALUES (?, ?, ?, ?, ?, ?, CASE WHEN ? IS NULL AND ? IS NULL THEN NULL ELSE NOW() END)`,
+        [
+          crypto.randomUUID(),
+          userId,
+          providerUserId,
+          providerPrivateId,
+          providerName,
+          providerAvatarUrl,
+          providerName,
+          providerAvatarUrl,
+        ],
       );
     }
     const identityParams = [providerUserId];
@@ -350,6 +463,7 @@ export async function linkAfdianAccount({ userId, providerUserId, providerPrivat
       [userId, userId, userId, userId, ...identityParams],
     );
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -391,6 +505,7 @@ export async function unlinkAfdianAccount({ userId, db = pool }) {
       [userId, ...params],
     );
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
     return { unlinked: true };
   } catch (error) {
     await connection.rollback();
@@ -403,9 +518,9 @@ export async function unlinkAfdianAccount({ userId, db = pool }) {
 let syncPromise = null;
 let lastFullSyncAt = 0;
 
-export function syncAfdianOrderHistory({ db = pool } = {}) {
+export function syncAfdianOrderHistory({ db = pool, force = false } = {}) {
   if (syncPromise) return syncPromise;
-  if (Date.now() - lastFullSyncAt < FULL_SYNC_INTERVAL_MS) {
+  if (!force && Date.now() - lastFullSyncAt < FULL_SYNC_INTERVAL_MS) {
     return Promise.resolve({ synced: 0, truncated: false, skipped: true });
   }
   syncPromise = (async () => {

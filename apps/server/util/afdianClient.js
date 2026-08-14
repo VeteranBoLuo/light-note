@@ -3,9 +3,12 @@ import { afdianError, getAfdianApiConfig, getAfdianOAuthConfig } from './afdianC
 
 const AFDIAN_OAUTH_AUTHORIZE_URL = 'https://afdian.com/oauth2/authorize';
 const AFDIAN_OAUTH_TOKEN_URL = 'https://afdian.com/api/oauth2/access_token';
+const AFDIAN_PUBLIC_PROFILE_URL = 'https://afdian.com/api/user/get-profile';
 const AFDIAN_QUERY_ORDER_URL = 'https://afdian.com/api/open/query-order';
 const REQUEST_TIMEOUT_MS = 10_000;
 const MAX_OAUTH_CODE_LENGTH = 4096;
+const MAX_PROVIDER_NAME_LENGTH = 100;
+const MAX_PROVIDER_AVATAR_URL_LENGTH = 1024;
 
 // 爱发电官方于 2025-07-01 公布的 Webhook RSA 公钥。
 export const AFDIAN_WEBHOOK_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
@@ -29,6 +32,25 @@ function normalizeProviderId(value, field) {
 function normalizeOptionalProviderId(value, field) {
   const normalized = String(value || '').trim();
   return normalized ? normalizeProviderId(normalized, field) : null;
+}
+
+function normalizeOptionalProviderName(value) {
+  const normalized = String(value || '')
+    .replace(/[\u0000-\u001F\u007F]/g, '')
+    .trim();
+  return normalized ? normalized.slice(0, MAX_PROVIDER_NAME_LENGTH) : null;
+}
+
+function normalizeOptionalProviderAvatarUrl(value) {
+  const normalized = String(value || '').trim();
+  if (!normalized || normalized.length > MAX_PROVIDER_AVATAR_URL_LENGTH) return null;
+  try {
+    const url = new URL(normalized);
+    if (url.protocol !== 'https:' || url.username || url.password) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }
 
 function normalizeAmount(value, field) {
@@ -100,6 +122,22 @@ export async function exchangeAfdianAuthorizationCode(code) {
   return {
     providerUserId: normalizeProviderId(payload.data?.user_id, 'user_id'),
     providerPrivateId: normalizeOptionalProviderId(payload.data?.user_private_id, 'user_private_id'),
+  };
+}
+
+/** OAuth basic 只返回用户 ID；昵称和头像需从爱发电公开用户资料中补全。 */
+export async function queryAfdianPublicProfile(providerUserId) {
+  const normalizedUserId = normalizeProviderId(providerUserId, 'user_id');
+  const url = new URL(AFDIAN_PUBLIC_PROFILE_URL);
+  url.searchParams.set('user_id', normalizedUserId);
+  const payload = await requestJson(url, { method: 'GET' });
+  const user = payload.data?.user;
+  if (normalizeProviderId(user?.user_id, 'user_id') !== normalizedUserId) {
+    throw afdianError('AFDIAN_RESPONSE_INVALID', '爱发电返回的用户资料不匹配', 502);
+  }
+  return {
+    providerName: normalizeOptionalProviderName(user?.name),
+    providerAvatarUrl: normalizeOptionalProviderAvatarUrl(user?.avatar),
   };
 }
 

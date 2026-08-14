@@ -554,7 +554,7 @@
   import { exportExcelFile, readFirstExcelSheet } from '@/utils/excel';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { resolveBookmarkUrlInput } from '@lightnote/shared';
-  import { openAiAssistant } from '@/utils/aiEntry';
+  import { openAiAssistant, resolveBookmarkAiIntent } from '@/utils/aiEntry';
   import { buildNetscapeBookmarkHtml } from '@/utils/bookmarkHtml';
   import ResourceTagChip from '@/components/tag/ResourceTagChip.vue';
 
@@ -673,7 +673,7 @@
     }));
     openAiAssistant({
       contextRefs: contexts,
-      suggestedIntent: contexts.length > 1 ? 'compare' : 'summarize',
+      suggestedIntent: resolveBookmarkAiIntent(contexts.length),
       surface: 'bookmark_manage',
     });
   }

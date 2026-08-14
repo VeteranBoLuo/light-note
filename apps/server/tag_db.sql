@@ -1221,6 +1221,9 @@ CREATE TABLE IF NOT EXISTS `support_account_links` (
   `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
   `provider_user_id` varchar(128) NOT NULL,
   `provider_private_id` varchar(128) DEFAULT NULL,
+  `provider_name` varchar(100) DEFAULT NULL,
+  `provider_avatar_url` varchar(1024) DEFAULT NULL,
+  `identity_refreshed_at` datetime DEFAULT NULL,
   `linked_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -1247,6 +1250,7 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   `webhook_signature_valid` tinyint unsigned NOT NULL DEFAULT 0,
   `webhook_received_at` datetime DEFAULT NULL,
   `verified_at` datetime DEFAULT NULL,
+  `ranking_observed_at` datetime DEFAULT NULL,
   `retry_count` int unsigned NOT NULL DEFAULT 0,
   `next_retry_at` datetime DEFAULT NULL,
   `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -1256,7 +1260,25 @@ CREATE TABLE IF NOT EXISTS `support_orders` (
   KEY `idx_support_order_user_status` (`light_note_user_id`,`verification_state`,`provider_status`,`create_time`),
   KEY `idx_support_order_provider_user` (`provider_user_id`,`provider_private_id`,`create_time`),
   KEY `idx_support_order_checkout` (`checkout_intent_id`),
-  KEY `idx_support_order_retry` (`verification_state`,`next_retry_at`,`retry_count`)
+  KEY `idx_support_order_retry` (`verification_state`,`next_retry_at`,`retry_count`),
+  KEY `idx_support_order_ranking` (`verification_state`,`provider_status`,`ranking_observed_at`,`light_note_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `support_public_preferences` (
+  `user_id` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+  `public_id` char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `participate_in_ranking` tinyint unsigned NOT NULL DEFAULT 1,
+  `show_identity` tinyint unsigned NOT NULL DEFAULT 0,
+  `identity_consented_at` datetime DEFAULT NULL,
+  `admin_hidden` tinyint unsigned NOT NULL DEFAULT 0,
+  `admin_hidden_reason` varchar(255) DEFAULT NULL,
+  `admin_hidden_by` varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+  `admin_hidden_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`user_id`),
+  UNIQUE KEY `uk_support_public_id` (`public_id`),
+  KEY `idx_support_public_visibility` (`participate_in_ranking`,`admin_hidden`,`show_identity`,`update_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 SET FOREIGN_KEY_CHECKS = 1;

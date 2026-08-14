@@ -503,7 +503,7 @@ function buildNoteSearchFilter(userId, options) {
     where.push(`
       (
         n.title LIKE ?
-        OR n.content LIKE ?
+        OR (COALESCE(n.type, 'html') <> 'drawing' AND n.content LIKE ?)
         OR EXISTS (
           SELECT 1
           FROM resource_tag_relations keyword_rel
@@ -756,7 +756,21 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
     const [result] = await pool.query(
       `
         SELECT
-          n.*,
+          n.id,
+          n.title,
+          IF(n.type = 'drawing', '', n.content) AS content,
+          n.create_by,
+          n.update_by,
+          n.del_flag,
+          n.sort,
+          n.is_top,
+          n.create_time,
+          n.update_time,
+          n.deleted_at,
+          n.type,
+          n.revision,
+          n.parent_id,
+          n.tree_delete_batch_id,
           (
             SELECT JSON_ARRAYAGG(JSON_OBJECT('id', nt.id, 'name', nt.name))
             FROM resource_tag_relations ntr
@@ -809,7 +823,8 @@ async function queryNotes(userId, options, lang, includeItems, includeTotal = tr
         id,
         type: 'note',
         title: toText(item.title) || text.unnamedNote,
-        description: buildSnippet(stripHtml(item.content), keyword) || text.openNote,
+        description:
+          item.type === 'drawing' ? text.openNote : buildSnippet(stripHtml(item.content), keyword) || text.openNote,
         extra: normalizeDate(item.update_time || item.create_time),
         tags: Array.isArray(item.tags) ? item.tags : [],
         route: `/noteLibrary/${item.id}`,

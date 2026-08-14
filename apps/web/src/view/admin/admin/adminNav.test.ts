@@ -27,6 +27,7 @@ const MOBILE_ROUTES = new Set([
   '/aiEvaluation',
   '/productInsights',
   '/conversion',
+  '/supportManagement',
   '/logCleanup',
   '/logExclude',
   '/securityCenterMobile',
@@ -57,6 +58,7 @@ function nav(pendingOpinion = 0, pendingSecurity = 0, pendingModeration = 0) {
     adminGovernanceTitle: '运行策略与权限',
     aiEvaluationTitle: 'AI 问答测试',
     communityModerationTitle: '消息审核',
+    supportManagementTitle: '赞助管理',
   });
 }
 
@@ -66,7 +68,7 @@ function allItems(entries: AdminNavEntry[]) {
 }
 
 describe('后台导航菜单', () => {
-  it('覆盖全部 21 个常驻后台模块，专业诊断工具不占菜单入口', () => {
+  it('覆盖全部 22 个常驻后台模块，专业诊断工具不占菜单入口', () => {
     const ids = allItems(nav()).map((item) => item.id);
     // 18 个常驻 /admin 子路由；独立任务系列诊断只保留专业深链
     expect(ids).toEqual(
@@ -80,6 +82,7 @@ describe('后台导航菜单', () => {
         'aiEvaluation',
         'productInsights',
         'conversion',
+        'supportManagement',
         'pointsOps',
         'communityChatModeration',
         'operationLog',
@@ -93,8 +96,8 @@ describe('后台导航菜单', () => {
     );
     // 3 个独立顶级路由：此前完全没有后台入口，只能从主导航下拉进
     expect(ids).toEqual(expect.arrayContaining(['knowledgeBase', 'notificationCenter', 'securityCenter']));
-    expect(ids).toHaveLength(21);
-    expect(new Set(ids).size).toBe(21);
+    expect(ids).toHaveLength(22);
+    expect(new Set(ids).size).toBe(22);
   });
 
   it('跨外壳的入口给绝对路径并标记 external，后台子路由拼 /admin/{id}', () => {
@@ -158,6 +161,7 @@ describe('后台导航菜单', () => {
       adminGovernanceTitle: '运行策略与权限',
       aiEvaluationTitle: 'AI 问答测试',
       communityModerationTitle: '消息审核',
+      supportManagementTitle: '赞助管理',
     });
 
     expect(groups.map((group) => group.items[0].id)).toEqual([
@@ -253,6 +257,7 @@ describe('手机后台菜单', () => {
       adminGovernanceTitle: '运行策略与权限',
       aiEvaluationTitle: 'AI 问答测试',
       communityModerationTitle: '消息审核',
+      supportManagementTitle: '赞助管理',
     });
 
   it('每一项都指向真实存在的手机路由（点出 404 是最糟的菜单 bug）', () => {

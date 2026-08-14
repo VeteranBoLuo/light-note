@@ -3,6 +3,7 @@ import pool from '../db/index.js';
 import redisClient from './redisClient.js';
 import { sendTrackedEmail } from './emailDelivery.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
+import { invalidateAfdianLeaderboardCache } from './afdianSupportReadService.js';
 
 export const ACCOUNT_DELETION_CONFIRMATION_TEXT = '注销账号';
 
@@ -366,6 +367,7 @@ export async function requestAccountDeletion({ userId, code, confirmation }) {
     }
 
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     if (error?.code === 'ER_DUP_ENTRY') {
@@ -681,6 +683,13 @@ export async function purgeLogsAndSecurityLinks(connection, tables, userId) {
   await deleteIfPresent(
     connection,
     tables,
+    'support_public_preferences',
+    'DELETE FROM support_public_preferences WHERE user_id = ?',
+    [userId],
+  );
+  await deleteIfPresent(
+    connection,
+    tables,
     'admin_user_remarks',
     'DELETE FROM admin_user_remarks WHERE admin_user_id = ? OR target_user_id = ?',
     [userId, userId],
@@ -762,6 +771,7 @@ async function purgeDatabaseForUser(userId) {
       await connection.query("DELETE FROM user WHERE id = ? AND role = 'deleted' AND del_flag = 1", [userId]);
     }
     await connection.commit();
+    invalidateAfdianLeaderboardCache();
   } catch (error) {
     await connection.rollback();
     throw error;

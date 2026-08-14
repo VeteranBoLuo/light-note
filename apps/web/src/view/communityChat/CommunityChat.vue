@@ -86,13 +86,14 @@
 
   async function loadDirectory({ background = false } = {}) {
     if (!background) bootstrapLoading.value = true;
+    const unreadSyncToken = communityUnread.captureDirectorySyncToken();
     try {
       const response = await getCommunityChatRooms();
       const directory = response.data as CommunityChatRoomDirectory;
       access.value = directory?.access || null;
       serverRooms.value = directory?.items || [];
       directoryMessagingEnabled.value = Boolean(directory?.messagingEnabled);
-      communityUnread.syncDirectory(directory);
+      communityUnread.syncDirectory(directory, unreadSyncToken);
     } catch {
       if (!background) {
         access.value = null;

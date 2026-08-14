@@ -17,7 +17,24 @@ describe('noteBatchExport', () => {
     expect(resolveBatchNoteExportFormat('html', 'original')).toBe('html');
     expect(resolveBatchNoteExportFormat('markdown', 'original')).toBe('md');
     expect(resolveBatchNoteExportFormat('md', 'original')).toBe('md');
+    expect(resolveBatchNoteExportFormat('drawing', 'original')).toBe('json');
     expect(resolveBatchNoteExportFormat('markdown', 'pdf')).toBe('pdf');
+  });
+
+  it('手绘笔记原格式保留 scene JSON，文本转换模式明确跳过', async () => {
+    const drawing = {
+      id: 'drawing-1',
+      title: '草图',
+      type: 'drawing',
+      content: '{"v":1,"page":{"width":1024,"height":1448},"elements":[]}',
+    };
+    const original = await buildBatchNoteExportEntries([drawing], 'original', { fallbackTitle: '未命名文档' });
+    expect(original.failedNoteIds).toEqual([]);
+    expect(original.entries[0]).toMatchObject({ fileName: '草图.json', format: 'json', content: drawing.content });
+
+    const converted = await buildBatchNoteExportEntries([drawing], 'markdown', { fallbackTitle: '未命名文档' });
+    expect(converted.entries).toEqual([]);
+    expect(converted.failedNoteIds).toEqual(['drawing-1']);
   });
 
   it('同名文件自动追加序号，且按大小写规避 ZIP 内冲突', () => {

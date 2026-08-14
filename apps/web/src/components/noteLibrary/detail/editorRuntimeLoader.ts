@@ -60,7 +60,11 @@ export function loadMarkdownRuntime() {
 }
 
 export function preloadNoteEditorRuntime(type: NoteEditorType) {
-  if (String(type || 'html').toLowerCase() === 'markdown') return loadMarkdownRuntime();
+  const normalizedType = String(type || 'html').toLowerCase();
+  // 手绘编辑器由详情页独立异步组件承载；这里必须显式短路，避免“未知类型回退 HTML”
+  // 在用户打开手绘笔记时仍下载 TinyMCE 的大运行时。
+  if (normalizedType === 'drawing') return Promise.resolve(null);
+  if (normalizedType === 'markdown') return loadMarkdownRuntime();
   preloadTinyMcePublicAssets();
   return loadTinyMceRuntime();
 }

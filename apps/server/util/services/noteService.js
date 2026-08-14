@@ -1,6 +1,7 @@
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
 import { normalizeMarkdownBlockquoteEntities, normalizeNoteType } from '@lightnote/shared';
+import { createEmptyDrawingScene, serializeDrawingScene } from '@lightnote/shared/drawing-note';
 import { enqueueResources } from '../resourceInbox.js';
 import { triggerResourceCreateEffects } from './resourceCreateEffects.js';
 import { extractNoteImageUrls, filterOwnedImageUrls } from '../noteImages.js';
@@ -9,7 +10,8 @@ import { extractOwnedResourceRefs, syncNoteResourceRefs } from './noteReferenceS
 import { prepareOwnedNotePlacement } from './noteTreeService.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
 
-const NOTE_TYPES = new Set(['html', 'markdown']);
+const CREATABLE_NOTE_TYPES = new Set(['html', 'markdown', 'drawing']);
+const AI_EDITABLE_NOTE_TYPES = new Set(['html', 'markdown']);
 const NOTE_VERSION_KEEP = 20;
 
 /**
@@ -31,9 +33,11 @@ export async function snapshotOwnedNoteVersion(
   if (!current) return false;
   const currentType = normalizeNoteType(current.type || 'html');
   const currentContent =
-    currentType === 'markdown'
-      ? normalizeMarkdownBlockquoteEntities(current.content || '')
-      : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
+    currentType === 'drawing'
+      ? serializeDrawingScene(current.content || createEmptyDrawingScene())
+      : currentType === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(current.content || '')
+        : sanitizePersistedNoteContent(current.content || '', 'html', 'snapshot-owned-note-version');
   await connection.query('INSERT INTO note_versions SET ?', [
     insertData({
       noteId: String(noteId),
@@ -102,16 +106,18 @@ export async function createNote({
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const type = normalizeNoteType(note.type || 'html');
-  if (!NOTE_TYPES.has(type)) throw new Error('INVALID_NOTE_TYPE: 笔记类型仅支持 html 或 markdown');
+  if (!CREATABLE_NOTE_TYPES.has(type)) throw new Error('INVALID_NOTE_TYPE: 笔记类型无效');
   const title = String(note.title || '').trim() || '未命名文档';
   if (title.length > 255) throw new Error('TITLE_TOO_LONG: 笔记标题不能超过 255 个字符');
   const rawContent = String(note.content || '');
   // 无论请求来自当前页面、旧版缓存页面还是内部调用，Markdown 源码均在持久化边界收口，
   // 防止旧客户端把引用语法 `>` 经 DOM 序列化成 `&gt;` 后永久写入数据库。
   const content =
-    type === 'markdown'
-      ? normalizeMarkdownBlockquoteEntities(rawContent)
-      : sanitizePersistedNoteContent(rawContent, type, 'create-note');
+    type === 'drawing'
+      ? serializeDrawingScene(rawContent || createEmptyDrawingScene())
+      : type === 'markdown'
+        ? normalizeMarkdownBlockquoteEntities(rawContent)
+        : sanitizePersistedNoteContent(rawContent, type, 'create-note');
   if (content.length > maxContentLength) {
     throw new Error(`CONTENT_TOO_LONG: 笔记正文不能超过 ${maxContentLength} 个字符`);
   }
@@ -155,7 +161,7 @@ export async function createNote({
     // 正文引用本站上传图片时登记引用(引用计数语义,见 util/noteImages.js):
     // 模板实例化/粘贴复用等路径创建的笔记也成为图片合法引用者,原笔记删除时不误删共享文件。
     // 只登记确属当前用户的图片,防止把他人图片锚定为自己的引用。
-    const imageUrls = extractNoteImageUrls(content);
+    const imageUrls = type === 'drawing' ? [] : extractNoteImageUrls(content);
     if (imageUrls.length) {
       const ownedUrls = await filterOwnedImageUrls({ urls: imageUrls, userId, connection });
       // trustedImageUrls 仅供已经完成原文件归属校验、并刚写入本站图片目录的内部服务使用。
@@ -261,12 +267,14 @@ export async function applyOwnedNoteContentChange(
   if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');
 
   const nextType = normalizeNoteType(after?.type || '');
+  if (!AI_EDITABLE_NOTE_TYPES.has(nextType)) {
+    throw noteServiceError('INVALID_NOTE_TYPE', 'AI 仅支持富文本或 Markdown 笔记');
+  }
   const rawNextContent = String(after?.content ?? '');
   const nextContent =
     nextType === 'markdown'
       ? normalizeMarkdownBlockquoteEntities(rawNextContent)
       : sanitizePersistedNoteContent(rawNextContent, nextType, 'ai-note-content');
-  if (!NOTE_TYPES.has(nextType)) throw noteServiceError('INVALID_NOTE_TYPE', '笔记类型仅支持 html 或 markdown');
   if (nextContent.length > maxContentLength) {
     throw noteServiceError('CONTENT_TOO_LONG', `笔记正文不能超过 ${maxContentLength} 个字符`);
   }

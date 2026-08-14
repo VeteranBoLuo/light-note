@@ -30,7 +30,13 @@
     </BButton>
     <div class="note-preview-body" :class="{ 'has-image': hasPreviewImage }">
       <!-- 正文仍只做纯文本插值；压缩首图按正文原顺序插入，绝不恢复 v-html。 -->
-      <template v-if="hasPreviewImage">
+      <DrawingNoteThumbnail
+        v-if="isDrawingNote"
+        :note-id="String(note.id || '')"
+        :revision="Number(note.revision || 0)"
+        :content="drawingPreviewContent"
+      />
+      <template v-else-if="hasPreviewImage">
         <div v-if="previewTextBeforeImage" class="note-content note-content--segment">
           {{ previewTextBeforeImage }}
         </div>
@@ -102,7 +108,7 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import router from '@/router';
   import { bookmarkStore, useUserStore } from '@/store';
   import BCheckbox from '@/components/base/BasicComponents/BCheckbox.vue';
@@ -119,6 +125,9 @@
   import { getNoteParentPathText, getNoteParentTargetId } from '@/utils/noteTree';
   import { prefetchResolvedRoute } from '@/utils/routePrefetch';
   import { prefetchNoteDetail } from '@/api/noteDetailPrefetch';
+  const DrawingNoteThumbnail = defineAsyncComponent(
+    () => import('@/components/noteLibrary/drawing/DrawingNoteThumbnail.vue'),
+  );
   const props = withDefaults(
     defineProps<{ note: any; batchMode?: boolean; treeReadEnabled?: boolean; treeWriteEnabled?: boolean }>(),
     {
@@ -155,13 +164,17 @@
     ];
   }>();
   const childCount = computed(() => (props.treeReadEnabled ? Math.max(0, Number(props.note?.childCount || 0)) : 0));
+  const isDrawingNote = computed(() => props.note?.type === 'drawing');
+  const drawingPreviewContent = computed(() => String(props.note?.content || props.note?.previewSummary || '').trim());
   const parentPathText = computed(() => getNoteParentPathText(props.note || {}));
   const parentTargetId = computed(() => getNoteParentTargetId(props.note || {}));
   const previewImageFailed = ref(false);
   const previewImageLoaded = ref(false);
   const previewImageUrl = computed(() => String(props.note?.previewImageUrl || '').trim());
   const displayPreviewImageUrl = ref('');
-  const hasPreviewImage = computed(() => Boolean(previewImageUrl.value) && !previewImageFailed.value);
+  const hasPreviewImage = computed(
+    () => !isDrawingNote.value && Boolean(previewImageUrl.value) && !previewImageFailed.value,
+  );
 
   watch(
     previewImageUrl,

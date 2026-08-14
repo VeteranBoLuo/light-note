@@ -11,7 +11,7 @@
         :note="note"
         :note-type="note.type"
         :has-backup="hasSwitchBackup"
-        :has-catalog="nStore.headings.length > 0"
+        :has-catalog="!isDrawingNote && nStore.headings.length > 0"
         :has-navigation="canShowPrivateNavigation"
         :child-count="subpageCount"
         :page-tree-writable="noteTreeWriteEnabled"
@@ -35,7 +35,7 @@
         class="note-body"
         :mobile="bookmark.isMobile"
         :has-sidebar="canShowDetailSidebar"
-        :has-ai="!bookmark.isMobile"
+        :has-ai="!bookmark.isMobile && !isDrawingNote"
         :sidebar-open="sidebarPreferredOpen"
         :ai-open="aiPreferredOpen"
         :sidebar-overlay-open="detailSidebarOverlayOpen"
@@ -84,6 +84,7 @@
             >
               <template #outline>
                 <Catalog
+                  v-if="!isDrawingNote"
                   variant="embedded"
                   :content="note.content"
                   :note-type="note.type"
@@ -93,6 +94,7 @@
             </NoteWorkspaceSidebar>
             <Catalog
               v-else
+              v-show="!isDrawingNote"
               variant="embedded"
               :content="note.content"
               :note-type="note.type"
@@ -179,7 +181,18 @@
                 :placeholder="$t('noteDetail.titlePlaceholder')"
               />
             </div>
-            <editor
+            <DrawingNoteEditor
+              v-if="isDrawingNote"
+              ref="editorRef"
+              class="editor-component"
+              v-model:content="note.content"
+              :readonly="readonly"
+              :note-id="note.id"
+              :title="note.title"
+              @ready="handleEditorReady"
+            />
+            <Editor
+              v-else
               ref="editorRef"
               class="editor-component"
               v-model:content="note.content"
@@ -200,7 +213,7 @@
             />
           </div>
         </div>
-        <template #ai>
+        <template v-if="!isDrawingNote" #ai>
           <div class="note-detail-ai-slot">
             <AiReply class="ai-panel" />
           </div>
@@ -227,7 +240,7 @@
         @markdown-heading-click="scrollToMarkdownHeading"
       />
       <Catalog
-        v-if="!canShowPrivateNavigation && !bookmark.isDesktop"
+        v-if="!isDrawingNote && !canShowPrivateNavigation && !bookmark.isDesktop"
         :content="note.content"
         :note-type="note.type"
         :drawer-open="catalogDrawerOpen"
@@ -244,7 +257,11 @@
       :current-note="note"
       @restored="onVersionRestored"
     />
-    <SaveTemplateModal v-if="saveTemplateVisible" v-model:visible="saveTemplateVisible" :note="note" />
+    <SaveTemplateModal
+      v-if="saveTemplateVisible && !isDrawingNote"
+      v-model:visible="saveTemplateVisible"
+      :note="note"
+    />
     <NoteAttachPagesModal
       v-if="attachPagesVisible && noteTreeWriteEnabled && note.id"
       v-model:visible="attachPagesVisible"
@@ -311,6 +328,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import { recordOperation } from '@/api/commonApi.ts';
+  import { invalidateDrawingPreview } from '@/api/drawingPreview';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import {
     DISABLED_NOTE_TREE_FEATURES,
@@ -365,6 +383,10 @@
   const NoteRenameModal = createDeferredDetailFeature(
     () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
   );
+  // 手绘运行时只在明确打开 drawing 类型后请求，HTML / Markdown 详情和应用启动均不下载画布代码。
+  const DrawingNoteEditor = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
+  );
   /*
    * AI 助手面板按需加载,但 chunk 到达前若什么都不渲染,note-body 会先按「右边没有面板」
    * 分配一次宽度,等它挂上再重排一次 —— 表现为进笔记后正文和目录轻轻抖一下
@@ -390,6 +412,7 @@
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const DEFAULT_NOTE_TITLE = t('note.untitledDoc');
   const DEFAULT_NOTE_CONTENT = '<p><br></p>';
+  const DEFAULT_DRAWING_CONTENT = '{"v":1,"page":{"width":1024,"height":1448},"elements":[]}';
   const routeQueryValue = (value: unknown) => {
     const raw = Array.isArray(value) ? value[0] : value;
     return String(raw ?? '').trim();
@@ -407,7 +430,8 @@
   // 新建笔记时必须在 Editor 子组件挂载前就按 query(显式 type 或内置模板的 type)同步定好编辑器类型:
   // 子组件挂载早于父 onMounted,若此刻仍是默认富文本(html),随后灌入的 markdown 模板正文会经 TinyMCE,
   // 其中的 `>` 等被 HTML 转义成 &gt; 再回写存库。编辑已有笔记时该初值会被加载覆盖,不受影响。
-  const resolveInitialNoteType = (query = router.currentRoute.value.query): 'html' | 'markdown' => {
+  const resolveInitialNoteType = (query = router.currentRoute.value.query): 'html' | 'markdown' | 'drawing' => {
+    if (query.type === 'drawing') return 'drawing';
     if (query.type === 'markdown') return 'markdown';
     if (query.builtin) {
       const tpl = findBuiltinNoteTemplate(String(query.builtin));
@@ -420,13 +444,19 @@
     id: '',
     title: DEFAULT_NOTE_TITLE,
     lastTitle: DEFAULT_NOTE_TITLE,
-    content: initialNoteType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
+    content:
+      initialNoteType === 'drawing'
+        ? DEFAULT_DRAWING_CONTENT
+        : initialNoteType === 'markdown'
+          ? ''
+          : DEFAULT_NOTE_CONTENT,
     createBy: '',
     type: initialNoteType,
     revision: 1,
     parentId: null as string | null,
     isPending: false,
   });
+  const isDrawingNote = computed(() => note.type === 'drawing');
   const nodeType = ref<'edit' | 'add' | 'share'>('edit');
   const noteWorkspace = useNoteWorkspaceStore();
   const noteLibraryCache = useNoteLibraryCacheStore();
@@ -443,10 +473,8 @@
   const canShowPrivateNavigation = computed(
     () =>
       noteTreeReadEnabled.value &&
-      nodeType.value === 'edit' &&
-      Boolean(note.id) &&
       Boolean(user.id) &&
-      user.id === note.createBy,
+      (nodeType.value === 'add' || (nodeType.value === 'edit' && Boolean(note.id) && user.id === note.createBy)),
   );
   const canShowDetailSidebar = computed(
     () => canShowPrivateNavigation.value || (!bookmark.isMobile && nStore.headings.length > 0),
@@ -537,7 +565,15 @@
   );
   const sidebarTreeError = computed(() => (treeSearchActive.value ? treeSearchError.value : treeError.value));
   let detailTreeSearchTimer = 0;
-  const editorRef = ref<InstanceType<typeof Editor> | null>(null);
+  interface NoteEditorHandle {
+    focusToEnd?: () => void;
+    replaceContentWithUndo?: (content: string, type?: 'html' | 'markdown' | 'drawing') => boolean | Promise<boolean>;
+    scrollToMarkdownHeading?: (index: number, sourceOffset?: number) => void;
+    scrollToResourceRef?: (href: string) => void | Promise<void>;
+    triggerModeSwitch?: () => void | Promise<void>;
+    triggerUndoSwitch?: boolean;
+  }
+  const editorRef = ref<NoteEditorHandle | null>(null);
   const noteContentKey = ref('note-content:initial');
   const isNoteSwitching = ref(false);
   const openingPageId = ref<string | null>(null);
@@ -550,7 +586,7 @@
     id?: string;
     title: string;
     content: string;
-    type: 'html' | 'markdown';
+    type: 'html' | 'markdown' | 'drawing';
     revision: number;
     updatedAt?: number | string | null;
     parentId?: string | null;
@@ -654,10 +690,12 @@
     },
   );
 
-  type NoteType = 'html' | 'markdown';
-  const normalizeNoteType = (type?: string): NoteType => (type === 'markdown' || type === 'md' ? 'markdown' : 'html');
+  type NoteType = 'html' | 'markdown' | 'drawing';
+  const normalizeNoteType = (type?: string): NoteType =>
+    type === 'drawing' ? 'drawing' : type === 'markdown' || type === 'md' ? 'markdown' : 'html';
   const normalizeLoadedContent = (content: string, rawType?: string) => {
     const raw = content || '';
+    if (normalizeNoteType(rawType) === 'drawing') return raw || DEFAULT_DRAWING_CONTENT;
     // Markdown 源文本(type='markdown')绝不能过 normalizeNoteContentResourceUrls:
     // 它用 innerHTML 往返做图片 URL 归一化,DOM 序列化会把文本节点里的 `>` 转成 `&gt;`
     // ——这是「日报模板引用块被转义」反复复发的真正根因(加载即污染显示,一保存就污染入库)。
@@ -943,6 +981,7 @@
     editorRef.value?.focusToEnd?.();
   });
   provide('applyContentFromAi', async (content: string, type: 'html' | 'markdown') => {
+    if (isDrawingNote.value) return;
     const normalizedContent = type === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
     const applied = await editorRef.value?.replaceContentWithUndo?.(normalizedContent, type);
     if (!applied) {
@@ -1002,7 +1041,8 @@
   const isLeaving = ref(false);
   const updateTime = ref('');
   const timer = ref<ReturnType<typeof setTimeout> | null>(null);
-  const SAVE_DEBOUNCE_DELAY = 500;
+  const TEXT_SAVE_DEBOUNCE_DELAY = 500;
+  const DRAWING_SAVE_DEBOUNCE_DELAY = 3_000;
   let requestedSaveVersion = 0;
   let persistedSaveVersion = 0;
   let latestRequestedTitle = note.title;
@@ -1046,6 +1086,9 @@
   }
 
   function hasNewNoteDraft() {
+    if (isDrawingNote.value) {
+      return note.title.trim() !== DEFAULT_NOTE_TITLE || note.content !== DEFAULT_DRAWING_CONTENT;
+    }
     return note.title.trim() !== DEFAULT_NOTE_TITLE || !isBlankNoteContent(note.content);
   }
 
@@ -1063,6 +1106,10 @@
    * 在新标签打开的笔记会永远开不了过渡 —— 首帧版面既然已经摆对,这里直接开即可。
    */
   async function refreshCatalog() {
+    if (isDrawingNote.value) {
+      nStore.headings = [];
+      return;
+    }
     await nStore.generateTOC(note.content, note.type);
   }
 
@@ -1398,6 +1445,11 @@
     if (!note.id) return;
     const createdId = note.id;
     const createdParentId = note.parentId;
+    const parentBreadcrumb =
+      createdParentId && detailBreadcrumb.value.at(-1)?.id === createdParentId
+        ? detailBreadcrumb.value.map((item) => ({ ...item }))
+        : [];
+    const canSeedBreadcrumb = !createdParentId || parentBreadcrumb.length > 0;
     nodeType.value = 'edit';
     if (!noteTreeReadEnabled.value) return;
     noteWorkspace.insertCreatedNote({
@@ -1406,12 +1458,19 @@
       title: note.title,
       type: note.type,
     });
+    if (canSeedBreadcrumb) {
+      noteWorkspace.seedBreadcrumb(createdId, [...parentBreadcrumb, { id: createdId, title: note.title }]);
+    }
+    // 服务端已经确认创建成功，本地目录也已完整插入；清除创建前遗留的瞬时读取错误。
+    treeError.value = '';
     noteWorkspace.setNavigation({ activePageId: createdId, browseParentId: null });
-    // 本地树先即时出现并选中新文档；再静默读取服务端排序与完整面包屑进行校准。
-    void nextTick().then(async () => {
-      await loadTreeChildren(createdParentId, true);
-      if (note.id === createdId) await loadDetailBreadcrumb(createdId);
-    });
+    // 新节点的父级、排序和标题均已由创建结果与本地树规则确定，不再强制刷新整棵目录。
+    // 只有直达新增地址且父路径尚未加载的异常场景，才读取一次完整面包屑兜底。
+    if (!canSeedBreadcrumb) {
+      void nextTick().then(async () => {
+        if (note.id === createdId) await loadDetailBreadcrumb(createdId);
+      });
+    }
   }
 
   function createNote(): Promise<string> {
@@ -1517,11 +1576,21 @@
 
     try {
       if (note.id) {
-        const params: any = cloneDeep(note);
-        delete params.lastTitle;
-        delete params.createBy;
-        delete params.updateTime;
-        const res = await apiBasePost('/api/note/updateNote', params);
+        let res;
+        if (isDrawingNote.value) {
+          res = await apiBasePost('/api/note/updateDrawingNote', {
+            id: note.id,
+            title: note.title,
+            scene: note.content,
+            revision: note.revision,
+          });
+        } else {
+          const params: any = cloneDeep(note);
+          delete params.lastTitle;
+          delete params.createBy;
+          delete params.updateTime;
+          res = await apiBasePost('/api/note/updateNote', params);
+        }
         if (res.status === 409 && res.data?.code === 'NOTE_VERSION_CONFLICT') {
           const cloud = normalizeConflictVersion(res.data?.details?.current, note.id);
           if (cloud) openVersionConflict(cloud, currentNoteVersion());
@@ -1549,6 +1618,7 @@
         }
         setUpdateTime();
         saveStatus.value = 'saved';
+        if (isDrawingNote.value && note.id) invalidateDrawingPreview(note.id);
         invalidateNoteReadCaches(note.id);
       } else {
         saveStatus.value = 'error';
@@ -1679,10 +1749,13 @@
     }
     clearScheduledSave();
     const version = requestSaveVersion();
-    timer.value = setTimeout(() => {
-      timer.value = null;
-      void queueSave(version, isMsg);
-    }, SAVE_DEBOUNCE_DELAY);
+    timer.value = setTimeout(
+      () => {
+        timer.value = null;
+        void queueSave(version, isMsg);
+      },
+      isDrawingNote.value ? DRAWING_SAVE_DEBOUNCE_DELAY : TEXT_SAVE_DEBOUNCE_DELAY,
+    );
   }
 
   async function delNote() {
@@ -1902,7 +1975,7 @@
   function syncReadonlyEditorChrome() {
     readonlyToolbarObserver?.disconnect();
     readonlyToolbarObserver = null;
-    if (user.id === note.createBy) return;
+    if (user.id === note.createBy || isDrawingNote.value) return;
     readonlyToolbarObserver = new MutationObserver(() => {
       const toolbar = document.querySelector<HTMLElement>('.tox-editor-header');
       if (!toolbar) return;
@@ -1943,7 +2016,7 @@
         id: '',
         title: DEFAULT_NOTE_TITLE,
         lastTitle: DEFAULT_NOTE_TITLE,
-        content: nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
+        content: nextType === 'drawing' ? DEFAULT_DRAWING_CONTENT : nextType === 'markdown' ? '' : DEFAULT_NOTE_CONTENT,
         createBy: '',
         type: nextType,
         revision: 1,
@@ -2006,10 +2079,13 @@
         noteContentKey.value = `note-content:${note.id}`;
         contentApplied = true;
         isReady.value = true;
-        // 正文拿到类型后立刻预热对应引擎；useNoteTree 独占首次面包屑加载，避免重复请求。
-        void preloadNoteEditorRuntime(note.type).catch(() => {
-          // 预热失败时异步组件仍会按正常挂载链路重试并由路由错误处理兜底。
-        });
+        // 正文拿到类型后立刻预热对应引擎；手绘组件由独立异步分支自行加载，
+        // 不进入这里的 HTML / Markdown 大运行时预热。
+        if (!isDrawingNote.value) {
+          void preloadNoteEditorRuntime(note.type).catch(() => {
+            // 预热失败时异步组件仍会按正常挂载链路重试并由路由错误处理兜底。
+          });
+        }
         await nextTick();
         await syncHeaderTitle();
         completeMarkdownContentSwitch();

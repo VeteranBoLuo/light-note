@@ -22,6 +22,9 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
     provider_user_id varchar(128) NOT NULL,
     provider_private_id varchar(128) DEFAULT NULL,
+    provider_name varchar(100) DEFAULT NULL,
+    provider_avatar_url varchar(1024) DEFAULT NULL,
+    identity_refreshed_at datetime DEFAULT NULL,
     linked_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
@@ -47,6 +50,7 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     webhook_signature_valid tinyint unsigned NOT NULL DEFAULT 0,
     webhook_received_at datetime DEFAULT NULL,
     verified_at datetime DEFAULT NULL,
+    ranking_observed_at datetime DEFAULT NULL,
     retry_count int unsigned NOT NULL DEFAULT 0,
     next_retry_at datetime DEFAULT NULL,
     create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,7 +62,71 @@ export const AFDIAN_SUPPORT_TABLE_SQL = Object.freeze([
     KEY idx_support_order_checkout (checkout_intent_id),
     KEY idx_support_order_retry (verification_state, next_retry_at, retry_count)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
+  `CREATE TABLE IF NOT EXISTS support_public_preferences (
+    user_id varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL,
+    public_id char(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    participate_in_ranking tinyint unsigned NOT NULL DEFAULT 1,
+    show_identity tinyint unsigned NOT NULL DEFAULT 0,
+    identity_consented_at datetime DEFAULT NULL,
+    admin_hidden tinyint unsigned NOT NULL DEFAULT 0,
+    admin_hidden_reason varchar(255) DEFAULT NULL,
+    admin_hidden_by varchar(255) CHARACTER SET utf8 COLLATE utf8_general_ci DEFAULT NULL,
+    admin_hidden_at datetime DEFAULT NULL,
+    create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id),
+    UNIQUE KEY uk_support_public_id (public_id),
+    KEY idx_support_public_visibility (participate_in_ranking, admin_hidden, show_identity, update_time)
+  ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`,
 ]);
+
+const AFDIAN_SUPPORT_COLUMN_PATCHES = Object.freeze([
+  ['support_account_links', 'provider_name', 'varchar(100) DEFAULT NULL AFTER provider_private_id'],
+  ['support_account_links', 'provider_avatar_url', 'varchar(1024) DEFAULT NULL AFTER provider_name'],
+  ['support_account_links', 'identity_refreshed_at', 'datetime DEFAULT NULL AFTER provider_avatar_url'],
+  ['support_orders', 'ranking_observed_at', 'datetime DEFAULT NULL AFTER verified_at'],
+]);
+
+async function ensureColumn(db, table, column, definition) {
+  const [rows] = await db.query(
+    `SELECT 1
+       FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = ?
+        AND COLUMN_NAME = ?
+      LIMIT 1`,
+    [table, column],
+  );
+  if (!rows.length) {
+    try {
+      await db.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_FIELDNAME') throw error;
+    }
+  }
+}
+
+async function ensureRankingIndex(db) {
+  const [rows] = await db.query(
+    `SELECT 1
+       FROM information_schema.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'support_orders'
+        AND INDEX_NAME = 'idx_support_order_ranking'
+      LIMIT 1`,
+  );
+  if (!rows.length) {
+    try {
+      await db.query(
+        `ALTER TABLE support_orders
+           ADD KEY idx_support_order_ranking
+             (verification_state, provider_status, ranking_observed_at, light_note_user_id)`,
+      );
+    } catch (error) {
+      if (error?.code !== 'ER_DUP_KEYNAME') throw error;
+    }
+  }
+}
 
 let ensurePromise;
 
@@ -67,6 +135,10 @@ export function ensureAfdianSupportSchema({ db = pool } = {}) {
   if (!ensurePromise || db !== pool) {
     const promise = (async () => {
       for (const sql of AFDIAN_SUPPORT_TABLE_SQL) await db.query(sql);
+      for (const [table, column, definition] of AFDIAN_SUPPORT_COLUMN_PATCHES) {
+        await ensureColumn(db, table, column, definition);
+      }
+      await ensureRankingIndex(db);
     })();
     if (db === pool)
       ensurePromise = promise.catch((error) => {

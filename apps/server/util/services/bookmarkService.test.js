@@ -11,6 +11,7 @@ const pool = { getConnection: vi.fn(() => connection) };
 const ensureTag = vi.fn();
 const insertResourceTagRelations = vi.fn();
 const validateUserTags = vi.fn();
+const fetchWebMeta = vi.fn();
 
 vi.mock('../../db/index.js', () => ({ default: pool }));
 vi.mock('./tagService.js', () => ({ ensureTag }));
@@ -21,7 +22,10 @@ vi.mock('../resourceTags.js', () => ({
 }));
 vi.mock('../resourceInbox.js', () => ({ enqueueResources: vi.fn() }));
 vi.mock('../snapshot.js', () => ({ archiveBookmark: vi.fn() }));
-vi.mock('../fetchWebMeta.js', () => ({ fetchWebMeta: vi.fn() }));
+vi.mock('../fetchWebMeta.js', () => ({
+  EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
+  fetchWebMeta,
+}));
 vi.mock('./resourceCreateEffects.js', () => ({ triggerResourceCreateEffects: vi.fn() }));
 
 const { createBookmark, shouldResetBookmarkIcon } = await import('./bookmarkService.js');
@@ -41,6 +45,7 @@ describe('bookmarkService.shouldResetBookmarkIcon', () => {
 describe('bookmarkService.createBookmark', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchWebMeta.mockResolvedValue({ ok: false, reason: 'FETCH_FAILED' });
     connection.beginTransaction.mockResolvedValue();
     connection.commit.mockResolvedValue();
     connection.rollback.mockResolvedValue();
@@ -91,14 +96,39 @@ describe('bookmarkService.createBookmark', () => {
     expect(connection.release).toHaveBeenCalledTimes(1);
   });
 
-  it.each(['', 'javascript:alert(1)', 'https:// bad.example.com'])('无效或待确认地址在取数据库连接前就被拒绝: %s', async (url) => {
-    await expect(
-      createBookmark({
-        userId: 'user-1',
-        bookmark: { url, name: 'Bad URL' },
-        saveSnapshot: false,
-      }),
-    ).rejects.toThrow();
-    expect(pool.getConnection).not.toHaveBeenCalled();
+  it('用户主动让 Agent 补全书签信息时使用显式网页读取预算', async () => {
+    fetchWebMeta.mockResolvedValueOnce({
+      ok: true,
+      title: '真实网页标题',
+      description: '真实网页描述',
+    });
+
+    await createBookmark({
+      userId: 'user-1',
+      userRole: 'user',
+      bookmark: { url: 'https://example.com/article' },
+      fillMetadata: true,
+      saveSnapshot: false,
+      suppressUserRewards: true,
+    });
+
+    expect(fetchWebMeta).toHaveBeenCalledWith('https://example.com/article', {
+      signal: undefined,
+      maxContentBytes: 4 * 1024 * 1024,
+    });
   });
+
+  it.each(['', 'javascript:alert(1)', 'https:// bad.example.com'])(
+    '无效或待确认地址在取数据库连接前就被拒绝: %s',
+    async (url) => {
+      await expect(
+        createBookmark({
+          userId: 'user-1',
+          bookmark: { url, name: 'Bad URL' },
+          saveSnapshot: false,
+        }),
+      ).rejects.toThrow();
+      expect(pool.getConnection).not.toHaveBeenCalled();
+    },
+  );
 });

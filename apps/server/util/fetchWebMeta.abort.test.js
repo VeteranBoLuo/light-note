@@ -56,6 +56,61 @@ describe('fetchWebMeta', () => {
     });
   });
 
+  it('把响应体超过预算与普通网络失败区分开', async () => {
+    axiosGet.mockRejectedValueOnce({
+      code: 'ERR_BAD_RESPONSE',
+      message: 'maxContentLength size of 1572864 exceeded',
+    });
+
+    await expect(fetchWebMeta('https://large.example.com/article')).resolves.toEqual({
+      ok: false,
+      reason: 'CONTENT_TOO_LARGE',
+    });
+  });
+
+  it('允许显式正文读取提高响应预算，但不超过 4MB 绝对上限', async () => {
+    axiosGet.mockResolvedValue({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from('<html><head><title>长文章</title></head><body><article>有效正文</article></body></html>'),
+    });
+
+    await expect(
+      fetchWebMeta('https://example.com/large-article', { maxContentBytes: 4 * 1024 * 1024 }),
+    ).resolves.toMatchObject({ ok: true, title: '长文章' });
+    expect(axiosGet).toHaveBeenLastCalledWith(
+      'https://example.com/large-article',
+      expect.objectContaining({ maxContentLength: 4 * 1024 * 1024 }),
+    );
+
+    await fetchWebMeta('https://example.com/bounded-article', { maxContentBytes: 20 * 1024 * 1024 });
+    expect(axiosGet).toHaveBeenLastCalledWith(
+      'https://example.com/bounded-article',
+      expect.objectContaining({ maxContentLength: 4 * 1024 * 1024 }),
+    );
+  });
+
+  it('识别微信公众号环境验证页，不把验证文案当成文章正文', async () => {
+    axiosGet.mockResolvedValueOnce({
+      headers: { 'content-type': 'text/html; charset=utf-8' },
+      data: Buffer.from(`
+        <html><body>
+          <h2>环境异常</h2>
+          <a id="js_verify">去验证</a>
+          <script>var PAGE_MID='mmbizwap:secitptpage/verify.html';</script>
+        </body></html>`),
+      request: {
+        res: {
+          responseUrl: 'https://mp.weixin.qq.com/mp/wappoc_appmsgcaptcha?poc_token=test',
+        },
+      },
+    });
+
+    await expect(fetchWebMeta('https://mp.weixin.qq.com/s/article')).resolves.toEqual({
+      ok: false,
+      reason: 'ACCESS_CHALLENGE',
+    });
+  });
+
   it('在发起网络请求前拒绝带账号密码的 URL', async () => {
     await expect(fetchWebMeta('https://user:password@example.com/private')).resolves.toEqual({
       ok: false,

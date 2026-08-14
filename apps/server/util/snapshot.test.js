@@ -9,12 +9,42 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../db/index.js', () => ({ default: { query: mocks.poolQuery } }));
 vi.mock('./agent/aiGateway.js', () => ({ requestAi: mocks.requestAi }));
-vi.mock('./fetchWebMeta.js', () => ({ fetchWebMeta: mocks.fetchWebMeta }));
+vi.mock('./fetchWebMeta.js', () => ({
+  EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
+  fetchWebMeta: mocks.fetchWebMeta,
+}));
 vi.mock('./personalKnowledgeSearch.js', () => ({
   invalidatePersonalKnowledgeCache: mocks.invalidatePersonalKnowledgeCache,
 }));
 
-const { summarizeBookmark } = await import('./snapshot.js');
+const { archiveBookmark, summarizeBookmark } = await import('./snapshot.js');
+
+describe('archiveBookmark 网页读取预算', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('生成网页正文快照时使用显式网页读取预算', async () => {
+    mocks.poolQuery
+      .mockResolvedValueOnce([[{ id: 'bookmark-1', url: 'https://example.com/article', name: '示例文章' }]])
+      .mockResolvedValueOnce([{ affectedRows: 1 }]);
+    mocks.fetchWebMeta.mockResolvedValueOnce({
+      ok: true,
+      title: '真实文章标题',
+      bodyText: '真实网页正文。'.repeat(20),
+    });
+
+    await expect(archiveBookmark('user-1', 'bookmark-1')).resolves.toMatchObject({
+      ok: true,
+      title: '真实文章标题',
+    });
+    expect(mocks.fetchWebMeta).toHaveBeenCalledWith('https://example.com/article', {
+      bodyLimit: 200_000,
+      maxContentBytes: 4 * 1024 * 1024,
+      timeout: 15_000,
+    });
+  });
+});
 
 describe('summarizeBookmark AI Gateway', () => {
   beforeEach(() => {

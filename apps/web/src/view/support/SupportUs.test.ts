@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
     totalAmount: '0.00',
   })),
   unlinkAfdianAccount: vi.fn(async () => undefined),
+  getAfdianLeaderboard: vi.fn(async () => ({ scope: 'all_time', items: [], mine: null, totalParticipants: 0 })),
+  updateAfdianPublicPreference: vi.fn(async (value) => ({ ...value, adminHidden: false })),
   recordOperation: vi.fn(() => Promise.resolve()),
   routerBack: vi.fn(),
   routerPush: vi.fn(() => Promise.resolve()),
@@ -63,6 +65,9 @@ vi.mock('@/config/support', () => ({
 vi.mock('@/api/supportApi', () => ({
   getAfdianSupportState: mocks.getAfdianSupportState,
   unlinkAfdianAccount: mocks.unlinkAfdianAccount,
+  getAfdianLeaderboard: mocks.getAfdianLeaderboard,
+  updateAfdianPublicPreference: mocks.updateAfdianPublicPreference,
+  afdianLeaderboardAvatarUrl: (publicId: string) => `/api/support/leaderboard/avatar/${publicId}`,
 }));
 
 vi.mock('@/api/commonApi', () => ({
@@ -176,6 +181,27 @@ describe('支持轻笺页面', () => {
       operation: '打开爱发电赞助档位:coffee',
     });
     expect(host.textContent).toContain('无需关联也能赞助');
+    expect(host.textContent).toContain('当前以匿名支持者展示');
+
+    host.querySelector<HTMLElement>('[role="switch"]')?.click();
+    await vi.waitFor(() =>
+      expect(mocks.updateAfdianPublicPreference).toHaveBeenCalledWith({
+        participateInRanking: true,
+        showIdentity: true,
+      }),
+    );
+    await vi.waitFor(() => expect(mocks.messageSuccess).toHaveBeenCalledWith('榜单展示偏好已保存'));
+
+    const leaveButton = [...host.querySelectorAll<HTMLButtonElement>('button')].find((button) =>
+      button.textContent?.includes('退出榜单'),
+    );
+    leaveButton?.click();
+    await vi.waitFor(() =>
+      expect(mocks.updateAfdianPublicPreference).toHaveBeenLastCalledWith({
+        participateInRanking: false,
+        showIdentity: false,
+      }),
+    );
   });
 
   it.each([
@@ -221,6 +247,11 @@ describe('支持轻笺页面', () => {
           : mocks.messageWarning;
     await vi.waitFor(() => expect(messageMock).toHaveBeenCalledWith(expected));
     expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { source: 'test' } });
-    if (result === 'bound') expect(host.textContent).toContain('已关联');
+    if (result === 'bound') {
+      expect(host.textContent).toContain('已关联');
+      const fallback = host.querySelector<HTMLElement>('.support-account-panel__provider-fallback');
+      expect(fallback).not.toBeNull();
+      expect(fallback?.textContent?.trim()).toBe('爱');
+    }
   });
 });

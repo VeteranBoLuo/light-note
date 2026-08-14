@@ -242,7 +242,7 @@ async function loadOwnedScopeNotes({ userId, noteIds, db }) {
   if (!ids.length) return [];
   const placeholders = ids.map(() => '?').join(', ');
   const [rows] = await db.query(
-    `SELECT id, title, content, type, update_time
+    `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, update_time
        FROM note
       WHERE create_by = ? AND del_flag = 0 AND id IN (${placeholders})`,
     [String(userId), ...ids],

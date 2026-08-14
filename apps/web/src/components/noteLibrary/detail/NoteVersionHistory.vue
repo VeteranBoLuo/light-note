@@ -26,9 +26,15 @@
                   <span>{{ v.title || $t('noteDetail.unnamedDoc') }}</span>
                   <span v-if="v.reason" class="version-reason">{{ versionReasonLabel(v.reason) }}</span>
                 </span>
-                <span class="version-chars">{{
-                  v.contentLength != null ? $t('noteDetail.history.chars', { count: v.contentLength }) : '·'
-                }}</span>
+                <span class="version-chars">
+                  {{
+                    v.type === 'drawing' && v.elementCount != null
+                      ? $t('note.drawingElements', { count: v.elementCount })
+                      : v.contentLength != null
+                        ? $t('noteDetail.history.chars', { count: v.contentLength })
+                        : '·'
+                  }}
+                </span>
               </div>
             </div>
           </div>
@@ -50,12 +56,58 @@
           </BButton>
         </div>
         <div class="preview-body">
+          <DrawingNoteEditor
+            v-if="activeId && previewMode === 'preview' && activeVersion?.type === 'drawing' && activeVersion.content"
+            class="version-drawing-preview"
+            :content="activeVersion.content"
+            :title="activeVersion.title"
+            readonly
+          />
           <div
-            v-if="activeId && previewMode === 'preview'"
+            v-else-if="activeId && previewMode === 'preview'"
             class="preview-html"
             v-html="activePreviewHtml"
             v-mermaid
           ></div>
+          <div
+            v-else-if="activeId && isDrawingComparison"
+            class="version-drawing-diff"
+            :aria-label="$t('noteDetail.history.diff')"
+          >
+            <div class="version-drawing-diff__summary">
+              <span>{{ $t('noteDetail.history.comparisonBasis') }}</span>
+              <BChip tone="success">
+                {{ $t('noteDetail.history.drawingDiffAdded', { count: drawingDiffSummary.added }) }}
+              </BChip>
+              <BChip tone="danger">
+                {{ $t('noteDetail.history.drawingDiffRemoved', { count: drawingDiffSummary.removed }) }}
+              </BChip>
+              <BChip tone="neutral">
+                {{ $t('noteDetail.history.drawingDiffChanged', { count: drawingDiffSummary.changed }) }}
+              </BChip>
+            </div>
+            <p class="version-drawing-diff__hint">{{ $t('noteDetail.history.drawingDiffHint') }}</p>
+            <div class="version-drawing-diff__grid">
+              <section class="version-drawing-diff__panel">
+                <h3>{{ $t('noteDetail.history.currentContent') }}</h3>
+                <DrawingNoteEditor
+                  class="version-drawing-diff__canvas"
+                  :content="String(props.currentNote?.content || '')"
+                  :title="String(props.currentNote?.title || '')"
+                  readonly
+                />
+              </section>
+              <section class="version-drawing-diff__panel">
+                <h3>{{ $t('noteDetail.history.selectedVersion') }}</h3>
+                <DrawingNoteEditor
+                  class="version-drawing-diff__canvas"
+                  :content="activeVersion.content"
+                  :title="activeVersion.title"
+                  readonly
+                />
+              </section>
+            </div>
+          </div>
           <div v-else-if="activeId" class="version-diff" :aria-label="$t('noteDetail.history.diff')">
             <div class="version-diff-summary">
               <span class="version-diff-summary__label">{{ $t('noteDetail.history.comparisonBasis') }}</span>
@@ -104,10 +156,11 @@
 </template>
 
 <script lang="ts" setup>
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
   import BModal from '@/components/base/BasicComponents/BModal/BModal.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
+  import BChip from '@/components/base/BasicComponents/BChip.vue';
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import message from '@/components/base/BasicComponents/BMessage/BMessage.ts';
   import { apiBasePost } from '@/http/request.ts';
@@ -124,6 +177,16 @@
     noteHtmlToDiffText,
     type NoteDiffLine,
   } from '@/utils/noteVersionDiff';
+  import { compareDrawingVersions } from '@/utils/drawingVersionDiff';
+  import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+  import { DRAWING_SCENE_VERSION } from '@lightnote/shared/drawing-note';
+
+  const DrawingNoteEditor = defineAsyncComponent({
+    loader: () => import('@/components/noteLibrary/drawing/DrawingNoteEditor.vue'),
+    loadingComponent: AsyncFeatureLoadingOverlay,
+    delay: 0,
+    suspensible: false,
+  });
 
   interface VersionItem {
     id: string;
@@ -134,6 +197,7 @@
     reason?: string;
     sourceRevision?: number;
     contentLength?: number; // 前端按"渲染后展示文本"算,异步填充
+    elementCount?: number;
   }
 
   const props = defineProps<{
@@ -165,10 +229,46 @@
     removed: diffLines.value.filter((line) => line.type === 'removed').length,
   }));
   const diffRows = computed(() => buildNoteSideBySideRows(diffLines.value));
+  const isDrawingComparison = computed(
+    () =>
+      activeVersion.value?.type === 'drawing' &&
+      props.currentNote?.type === 'drawing' &&
+      Boolean(activeVersion.value.content),
+  );
+  const drawingDiffSummary = computed(() =>
+    compareDrawingVersions(props.currentNote?.content || '', activeVersion.value?.content || ''),
+  );
+
+  function drawingSummary(content: string, elementCount?: number) {
+    try {
+      const scene = JSON.parse(String(content || ''));
+      const elements = Array.isArray(scene?.elements) ? scene.elements : [];
+      return {
+        count: elements.length,
+        text: t('note.drawingConflictSummary', {
+          strokes: elements.filter((element) => element?.kind === 'stroke').length,
+          texts: elements.filter((element) => element?.kind === 'text').length,
+        }),
+      };
+    } catch {
+      const count = Number(elementCount);
+      return Number.isFinite(count) && count >= 0
+        ? { count, text: t('note.drawingElements', { count }) }
+        : { count: 0, text: t('note.drawingInvalid') };
+    }
+  }
 
   function versionReasonLabel(reason: string) {
     const normalized = String(reason || 'autosave');
-    const knownReasons = new Set(['autosave', 'format_conversion', 'ai_change', 'ai_undo', 'restore']);
+    const knownReasons = new Set([
+      'autosave',
+      'drawing_autosave',
+      'format_conversion',
+      'ai_change',
+      'ai_undo',
+      'restore',
+    ]);
+    if (normalized === 'drawing_autosave') return t('noteDetail.history.reasons.autosave');
     return t(`noteDetail.history.reasons.${knownReasons.has(normalized) ? normalized : 'autosave'}`);
   }
 
@@ -189,11 +289,15 @@
           reason: v.reason,
           sourceRevision: v.sourceRevision,
           contentLength: undefined,
+          elementCount:
+            v.type === 'drawing' && Number.isFinite(Number(v.elementCount)) ? Number(v.elementCount) : undefined,
         }));
         // 逐条按"渲染后展示文本"异步算字数(不阻塞列表渲染;html/md 各自渲染后取文本)
-        versions.value.forEach(async (v) => {
-          v.contentLength = (await noteDisplayText(v.content, v.type)).length;
-        });
+        versions.value
+          .filter((v) => v.type !== 'drawing')
+          .forEach(async (v) => {
+            v.contentLength = (await noteDisplayText(v.content, v.type)).length;
+          });
         // 默认选中最近一条(改动前快照),省一次点击
         if (versions.value.length) {
           selectVersion(versions.value[0]);
@@ -205,31 +309,51 @@
   }
 
   async function selectVersion(v: VersionItem) {
-    if (activeId.value === v.id) return;
+    if (activeId.value === v.id && (v.type !== 'drawing' || v.content)) return;
     activeId.value = v.id;
     activeVersion.value = v;
     activePreviewHtml.value = '';
     detailLoading.value = true;
     try {
-      // 直接用列表已带回的 content + type 渲染,md 走 marked,统一消毒;不再二次请求后端
+      // 历史列表为控制总量不返回 drawing scene；仅在用户选中版本后读取一份，并在列表对象上缓存。
+      if (v.type === 'drawing' && !v.content) {
+        const detailRes = await apiBasePost('/api/note/getNoteVersionDetail', {
+          id: v.id,
+          drawingSceneVersion: DRAWING_SCENE_VERSION,
+        });
+        if (activeId.value !== v.id) return;
+        if (detailRes.status === 200 && detailRes.data?.type === 'drawing') {
+          v.content = String(detailRes.data.content || '');
+          v.title = detailRes.data.title || v.title;
+          v.sourceRevision = detailRes.data.sourceRevision ?? v.sourceRevision;
+          activeVersion.value = v;
+        }
+      }
+
+      if (activeId.value !== v.id) return;
+      const currentType = props.currentNote?.type || props.noteType;
       const [previewHtml, currentHtml] = await Promise.all([
-        noteContentToHtml(v.content, v.type),
-        noteContentToHtml(props.currentNote?.content || '', props.currentNote?.type || props.noteType),
+        v.type === 'drawing'
+          ? Promise.resolve(`<p>${drawingSummary(v.content, v.elementCount).text}</p>`)
+          : noteContentToHtml(v.content, v.type),
+        currentType === 'drawing'
+          ? Promise.resolve(`<p>${drawingSummary(props.currentNote?.content || '').text}</p>`)
+          : noteContentToHtml(props.currentNote?.content || '', currentType),
       ]);
       activePreviewHtml.value = previewHtml;
       diffLines.value = buildNoteLineDiff(noteHtmlToDiffText(currentHtml), noteHtmlToDiffText(previewHtml));
     } finally {
-      detailLoading.value = false;
+      if (activeId.value === v.id) detailLoading.value = false;
     }
   }
 
   function confirmRestore() {
     if (!activeId.value || restoring.value) return;
     if (blockGuestWrite('restore-note-version')) return;
-    const references = compareNoteReferenceChanges(
-      props.currentNote?.content || '',
-      activeVersion.value?.content || '',
-    );
+    const drawingVersion = activeVersion.value?.type === 'drawing' || props.currentNote?.type === 'drawing';
+    const references = drawingVersion
+      ? { added: 0, removed: 0 }
+      : compareNoteReferenceChanges(props.currentNote?.content || '', activeVersion.value?.content || '');
     const titleChanged = String(props.currentNote?.title || '') !== String(activeVersion.value?.title || '');
     Alert.alert({
       title: t('noteDetail.history.restoreConfirmTitle'),
@@ -413,6 +537,53 @@
     flex: 1;
     overflow: auto;
   }
+  .version-drawing-preview {
+    width: 100%;
+  }
+  .version-drawing-diff__summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .version-drawing-diff__summary > span:first-child {
+    margin-right: 2px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .version-drawing-diff__hint {
+    margin: 8px 0 12px;
+    color: var(--desc-color);
+    font-size: 12px;
+  }
+  .version-drawing-diff__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+  .version-drawing-diff__panel {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    background: var(--workspace-panel-bg-color);
+  }
+  .version-drawing-diff__panel h3 {
+    position: sticky;
+    top: -14px;
+    z-index: 1;
+    margin: 0;
+    padding: 9px 12px;
+    color: var(--text-color);
+    background: var(--background-color);
+    border-bottom: 1px solid var(--card-border-color);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .version-drawing-diff__canvas {
+    width: 100%;
+  }
   .version-diff {
     font-size: 12px;
   }
@@ -516,6 +687,10 @@
 
   .mobile .preview-body {
     height: 260px;
+  }
+
+  .mobile .version-drawing-diff__grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .preview-empty {

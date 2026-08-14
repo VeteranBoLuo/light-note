@@ -1685,10 +1685,10 @@
     }
   }
 
-  :global(.disable-animations) .lt .lt-prize,
-  :global(.disable-animations) .lt .lt-prize-core,
-  :global(.disable-animations) .lt .lt-progress > span,
-  :global(.disable-animations) .lt .lt-odds-toggle__icon {
+  :global(.disable-animations .lt .lt-prize),
+  :global(.disable-animations .lt .lt-prize-core),
+  :global(.disable-animations .lt .lt-progress > span),
+  :global(.disable-animations .lt .lt-odds-toggle__icon) {
     animation: none !important;
     transition: none !important;
   }

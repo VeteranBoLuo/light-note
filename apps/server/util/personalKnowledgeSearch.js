@@ -136,7 +136,7 @@ async function loadFileChunks(userId) {
 async function loadDocuments(userId) {
   const [notesResult, bookmarksResult, filesResult, todosResult, tagsResult] = await Promise.allSettled([
     queryOptional(
-      `SELECT id, title, content, type, update_time
+      `SELECT id, title, IF(type = 'drawing', '', content) AS content, type, update_time
          FROM note
         WHERE create_by = ? AND del_flag = '0'
         ORDER BY update_time DESC LIMIT 3000`,
@@ -175,6 +175,8 @@ async function loadDocuments(userId) {
   const documents = [];
   const notes = notesResult.status === 'fulfilled' ? notesResult.value : [];
   for (const note of notes) {
+    // 第一版手绘只参与标题检索，不把 scene JSON 当作自然语言索引或 AI 证据。
+    const drawing = String(note.type || '') === 'drawing';
     documents.push(
       ...chunkResource({
         userId,
@@ -182,8 +184,8 @@ async function loadDocuments(userId) {
         resourceId: note.id,
         version: versionOf(note.update_time),
         title: note.title || '无标题笔记',
-        content: note.content,
-        contentType: note.type,
+        content: drawing ? note.title : note.content,
+        contentType: drawing ? 'html' : note.type,
         target: { type: 'note-detail', id: String(note.id), path: `/noteLibrary/${note.id}` },
         tagNames: tagsByResource.get(`note:${String(note.id)}`),
       }),

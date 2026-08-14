@@ -50,9 +50,11 @@ const receiveNoteImage = (req, res, next) => {
 router.post('/uploadImage', blockVisitorUpload, receiveNoteImage, noteLibraryHandle.uploadNoteImage);
 
 router.post('/updateNote', noteLibraryHandle.updateNote);
+router.post('/updateDrawingNote', noteLibraryHandle.updateDrawingNote);
 router.post('/convertMode', noteLibraryHandle.convertNoteMode);
 router.post('/addNote', noteLibraryHandle.addNote);
 router.post('/queryNoteList', noteLibraryHandle.queryNoteList);
+router.post('/queryDrawingPreviews', noteLibraryHandle.queryDrawingPreviews);
 router.get('/image-thumbnail/:fileName', noteLibraryHandle.getNoteImageThumbnail);
 router.post('/getNoteTreeFeatures', noteLibraryHandle.getNoteTreeFeatures);
 router.post('/queryNoteTree', noteLibraryHandle.queryNoteTree);
