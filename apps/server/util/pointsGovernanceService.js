@@ -204,9 +204,10 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
     ...RANDOM_POINTS_REASONS,
     ...OPERATIONS_POINTS_REASONS,
   ];
-  const [[summaryRows], [[circulation]], [[percentiles]], [[thresholds]], [trends]] = await Promise.all([
-    db.query(
-      `SELECT
+  const [[summaryRows], [[circulation]], [[percentiles]], [[thresholds]], [trends], [balanceLeaderboard]] =
+    await Promise.all([
+      db.query(
+        `SELECT
          COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END), 0) AS issued,
          COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END), 0) AS spent,
          COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.stable} THEN delta ELSE 0 END), 0) AS stableIssued,
@@ -218,23 +219,23 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
          COUNT(DISTINCT CASE WHEN delta < 0 THEN user_id END) AS spenders,
          COUNT(DISTINCT CASE WHEN delta > 0 AND ${cases.stable} THEN user_id END) AS stableEarners
        FROM points_log WHERE ${where.sql}`,
-      [
-        ...STABLE_POINTS_REASONS,
-        ...ONE_TIME_POINTS_REASONS,
-        ...RANDOM_POINTS_REASONS,
-        ...OPERATIONS_POINTS_REASONS,
-        ...STABLE_POINTS_REASONS,
-        ...where.params,
-      ],
-    ),
-    db.query(
-      `SELECT COALESCE(SUM(points), 0) AS outstanding, COUNT(*) AS accounts,
+        [
+          ...STABLE_POINTS_REASONS,
+          ...ONE_TIME_POINTS_REASONS,
+          ...RANDOM_POINTS_REASONS,
+          ...OPERATIONS_POINTS_REASONS,
+          ...STABLE_POINTS_REASONS,
+          ...where.params,
+        ],
+      ),
+      db.query(
+        `SELECT COALESCE(SUM(points), 0) AS outstanding, COUNT(*) AS accounts,
               SUM(CASE WHEN points = 0 THEN 1 ELSE 0 END) AS zeroBalance,
               MAX(points) AS maximum
          FROM user_growth`,
-    ),
-    db.query(
-      `SELECT
+      ),
+      db.query(
+        `SELECT
          MAX(CASE WHEN ranked.rn = GREATEST(1, CEIL(ranked.total * 0.50)) THEN ranked.points END) AS p50,
          MAX(CASE WHEN ranked.rn = GREATEST(1, CEIL(ranked.total * 0.75)) THEN ranked.points END) AS p75,
          MAX(CASE WHEN ranked.rn = GREATEST(1, CEIL(ranked.total * 0.90)) THEN ranked.points END) AS p90,
@@ -248,9 +249,9 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
            CROSS JOIN (SELECT @points_rank := 0) vars
            CROSS JOIN (SELECT COUNT(*) AS total FROM user_growth) totals
        ) ranked`,
-    ),
-    db.query(
-      `SELECT COUNT(*) AS activeUsers,
+      ),
+      db.query(
+        `SELECT COUNT(*) AS activeUsers,
               SUM(CASE WHEN ug.points > 6000 THEN 1 ELSE 0 END) AS over6000,
               SUM(CASE WHEN ug.points > 16000 THEN 1 ELSE 0 END) AS over16000,
               SUM(CASE WHEN ug.points > 24000 THEN 1 ELSE 0 END) AS over24000
@@ -258,9 +259,9 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
          LEFT JOIN user_growth ug ON ug.user_id = u.id
         WHERE u.del_flag = 0 AND COALESCE(u.role, 'user') = 'user'
           AND u.last_active_time >= DATE_SUB(NOW(), INTERVAL 30 DAY)`,
-    ),
-    db.query(
-      `SELECT DATE(create_time) AS day,
+      ),
+      db.query(
+        `SELECT DATE(create_time) AS day,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.stable} THEN delta ELSE 0 END), 0) AS stable,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.oneTime} THEN delta ELSE 0 END), 0) AS oneTime,
               COALESCE(SUM(CASE WHEN delta > 0 AND ${cases.random} THEN delta ELSE 0 END), 0) AS random,
@@ -269,9 +270,18 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
               COALESCE(SUM(delta), 0) AS net
          FROM points_log WHERE ${where.sql}
         GROUP BY DATE(create_time) ORDER BY day ASC`,
-      [...categoryParams, ...where.params],
-    ),
-  ]);
+        [...categoryParams, ...where.params],
+      ),
+      db.query(
+        `SELECT u.id AS userId, u.alias, u.email, u.last_active_time AS lastActiveTime,
+              COALESCE(ug.points, 0) AS points, COALESCE(ug.level, 1) AS level
+         FROM user_growth ug
+         JOIN user u ON u.id = ug.user_id
+        WHERE ug.points > 0 AND u.del_flag = 0 AND COALESCE(u.role, 'user') = 'user'
+        ORDER BY ug.points DESC, ug.user_id DESC
+        LIMIT 20`,
+      ),
+    ]);
   const summary = summaryRows?.[0] || {};
   const issued = numeric(summary, 'issued');
   const spent = numeric(summary, 'spent');
@@ -320,6 +330,15 @@ export async function getPointsGovernanceOverview(input = {}, { db = pool } = {}
       operations: numeric(row, 'operations'),
       spent: numeric(row, 'spent'),
       net: numeric(row, 'net'),
+    })),
+    balanceLeaderboard: balanceLeaderboard.map((row, index) => ({
+      rank: index + 1,
+      userId: row.userId,
+      alias: row.alias || null,
+      email: row.email || null,
+      points: numeric(row, 'points'),
+      level: numeric(row, 'level'),
+      lastActiveTime: row.lastActiveTime || null,
     })),
   };
 }

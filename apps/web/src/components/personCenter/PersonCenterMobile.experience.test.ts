@@ -134,6 +134,14 @@ describe('mobile personal center experience', () => {
       avatarFrameSource.indexOf('/* 高阶传说身份结构：'),
       avatarFrameSource.indexOf('@keyframes frame-premium-orbit'),
     );
+    const dragonRingStyleSection = identityStyleSection.slice(
+      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__ring {'),
+      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__ring::before'),
+    );
+    const dragonPortraitStyleSection = identityStyleSection.slice(
+      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__portrait {'),
+      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__portrait::after'),
+    );
     const dragonBodyMotionSection = identityStyleSection.slice(
       identityStyleSection.indexOf('@keyframes frame-dragon-body-breathe'),
       identityStyleSection.indexOf('@keyframes frame-dragon-scale-sweep'),
@@ -141,6 +149,14 @@ describe('mobile personal center experience', () => {
     const dragonHeadMotionSection = identityStyleSection.slice(
       identityStyleSection.indexOf('@keyframes frame-dragon-head-awaken'),
       identityStyleSection.indexOf('@keyframes frame-dragon-pearl'),
+    );
+    const dragonPearlMotionSection = identityStyleSection.slice(
+      identityStyleSection.indexOf('@keyframes frame-dragon-pearl'),
+      identityStyleSection.indexOf('@keyframes frame-dragon-eye-flash'),
+    );
+    const dragonHeadIconSection = iconSource.slice(
+      iconSource.indexOf('dragonHead:'),
+      iconSource.indexOf('\n  },', iconSource.indexOf('dragonHead:')),
     );
 
     expect(paidBasicSection).not.toContain('animation:');
@@ -205,18 +221,37 @@ describe('mobile personal center experience', () => {
     expect(identityStyleSection).toContain('animation: frame-dragon-pearl');
     expect(identityStyleSection).toContain('animation: frame-dragon-eye-flash');
     expect(identityStyleSection).toContain('animation: frame-dragon-breath-spark');
-    expect(identityStyleSection).toContain('animation: frame-dragon-scale-sweep 6.4s');
+    expect(identityStyleSection).toContain('animation: frame-dragon-scale-sweep 5.4s');
+    expect(identityStyleSection.match(/5\.4s/g)).toHaveLength(6);
     expect(identityStyleSection.match(/transform-origin: 50% 55%/g)).toHaveLength(2);
     expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__portrait::after');
     expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::before');
     expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::after');
+    expect(dragonRingStyleSection).toContain('0 0 0 1px #e4c06b');
+    expect(dragonRingStyleSection).toContain('0 0 0 3px rgba(24, 17, 8, 0.88)');
+    expect(dragonPortraitStyleSection).toContain('width: var(--frame-size)');
+    expect(dragonPortraitStyleSection).toContain('border: 1.5px solid #e4c06b');
     expect(dragonBodyMotionSection).toContain('rotate(7deg)');
     expect(dragonBodyMotionSection).toContain('rotate(-3deg)');
+    expect(dragonBodyMotionSection).toContain('rotate(0.18deg)');
+    expect(dragonBodyMotionSection).toContain('rotate(-0.2deg)');
+    expect(dragonBodyMotionSection).toContain('scale(1.025)');
+    expect(dragonBodyMotionSection).toContain('scale(0.978)');
+    expect(dragonBodyMotionSection).not.toMatch(/48%,\s*58%/);
     expect(dragonHeadMotionSection).toContain('rotate(7deg)');
     expect(dragonHeadMotionSection).toContain('rotate(-3deg)');
-    expect(iconSource.match(/dragonHead:[\s\S]*?(?=\n\s*},)/)?.[0]).not.toContain('<linearGradient');
-    expect(iconSource.match(/dragonHead:[\s\S]*?(?=\n\s*},)/)?.[0]).toContain('stroke-width="2.9"');
-    expect(identityStyleSection).not.toContain('.avatar-frame--celestial');
+    expect(dragonHeadMotionSection).toContain('rotate(0.18deg)');
+    expect(dragonHeadMotionSection).toContain('rotate(-0.2deg)');
+    expect(dragonHeadMotionSection).toContain('scale(1.025)');
+    expect(dragonHeadMotionSection).toContain('scale(0.978)');
+    expect(dragonHeadMotionSection).not.toMatch(/48%,\s*58%/);
+    expect(dragonPearlMotionSection).toContain('54%');
+    expect(dragonPearlMotionSection).toContain('scale(1.24)');
+    expect(dragonPearlMotionSection).toContain('64%');
+    expect(dragonPearlMotionSection).toContain('scale(0.82)');
+    expect(dragonPearlMotionSection).toContain('72%');
+    expect(dragonHeadIconSection).not.toContain('<linearGradient');
+    expect(dragonHeadIconSection).toContain('stroke-width="2.9"');
     expect(identityStyleSection).not.toContain('.avatar-frame--bookmark-archive');
     expect(identityStyleSection).not.toContain('.avatar-frame--note-constellation');
     expect(identityStyleSection).not.toContain('.avatar-frame--file-constellation');
@@ -257,9 +292,12 @@ describe('mobile personal center experience', () => {
     expect(achievementWallSource).toContain('class="aw-mini-level"');
   });
 
-  it('returns the shared growth scroller to the top on both tab changes and active-tab reselection', () => {
+  it('returns the active growth content scroller to the top on tab changes and active-tab reselection', () => {
     expect(growthPageSource).toContain('@select="handleSectionTabSelect"');
-    expect(growthPageSource).toContain('resetMobileScrollElement(growthPageRef.value)');
+    expect(growthPageSource).toContain(
+      'resetMobileScrollElement(useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value)',
+    );
+    expect(growthPageSource).toContain('resetMobileScrollElement(growthMainRef.value)');
     expect(growthPageSource).toContain('() => route.query.section');
     expect(growthPageSource).toContain('activeSection.value = nextSection');
     expect(tabsSource).toContain("emit('select', value)");

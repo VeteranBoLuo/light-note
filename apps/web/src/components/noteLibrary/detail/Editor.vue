@@ -4063,7 +4063,39 @@
           adjustContextToolbarAwayFromMainToolbar();
         }, 80);
       };
-      editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment);
+      const tableContextToolbarLabels = [
+        t('noteDetail.editor.tableProperties'),
+        t('noteDetail.editor.deleteTable'),
+        t('noteDetail.editor.insertRowBefore'),
+        t('noteDetail.editor.insertRowAfter'),
+        t('noteDetail.editor.deleteRow'),
+        t('noteDetail.editor.insertColumnBefore'),
+        t('noteDetail.editor.insertColumnAfter'),
+        t('noteDetail.editor.deleteColumn'),
+      ];
+      const decorateTableContextToolbar = (event: { toolbarKey?: string } = {}) => {
+        if (event.toolbarKey !== 'table') return;
+        const applyLabels = () => {
+          document.querySelectorAll<HTMLElement>('.tox-pop').forEach((popup) => {
+            if (!popup.getBoundingClientRect().width) return;
+            const buttons = Array.from(popup.querySelectorAll<HTMLElement>('.tox-tbtn'));
+            if (buttons.length !== tableContextToolbarLabels.length) return;
+            buttons.forEach((button, index) => {
+              const label = tableContextToolbarLabels[index];
+              button.setAttribute('aria-label', label);
+              // TinyMCE 自带 tooltip 在 inline 上下文浮层中偶尔不会挂载；title 作为稳定的悬停提示兜底。
+              button.setAttribute('title', label);
+            });
+          });
+        };
+        window.requestAnimationFrame(() => window.requestAnimationFrame(applyLabels));
+        window.setTimeout(applyLabels, 80);
+      };
+      const handleContextToolbarShow = (event: { toolbarKey?: string } = {}) => {
+        scheduleContextToolbarAdjustment();
+        decorateTableContextToolbar(event);
+      };
+      editor.on('contexttoolbar-show', handleContextToolbarShow);
       editor.on('SelectionChange', scheduleContextToolbarAdjustment);
       editor.on('contexttoolbar-hide', clearContextToolbarAdjustments);
 
@@ -5878,8 +5910,7 @@
     min-height: 0;
     overflow: auto;
     box-sizing: border-box;
-    padding: var(--note-markdown-padding-top, 14px) var(--note-markdown-padding-inline, 16px)
-      clamp(160px, 35vh, 360px);
+    padding: var(--note-markdown-padding-top, 14px) var(--note-markdown-padding-inline, 16px) clamp(160px, 35vh, 360px);
     color: var(--text-color);
     font-family: var(
       --note-markdown-font-family,

@@ -1,5 +1,5 @@
 <template>
-  <div ref="growthPageRef" class="growth-page">
+  <div ref="growthPageRef" class="growth-page" :class="{ 'growth-page--wide': useWideDesktopLayout }">
     <div class="growth-container" :class="{ 'growth-container--wide': useWideDesktopLayout }">
       <header v-if="!useWideDesktopLayout" class="growth-hero">
         <BButton class="growth-back" v-click-log="{ module: '成长', operation: '返回上一页' }" @click="goBack">
@@ -91,7 +91,7 @@
           </BButton>
         </aside>
 
-        <main class="growth-main">
+        <main ref="growthMainRef" class="growth-main">
           <BTabs
             v-if="!useWideDesktopLayout"
             v-model:active-tab="activeSection"
@@ -377,6 +377,7 @@
   );
   const rewardsExpanded = ref(activeSection.value === 'rewards');
   const growthPageRef = ref<HTMLElement | null>(null);
+  const growthMainRef = ref<HTMLElement | null>(null);
   const useWideDesktopLayout = computed(() => bookmark.isDesktop && !bookmark.isCompactLayout);
   const sectionOptions = computed<GrowthNavOption<GrowthSection>[]>(() => [
     { key: 'overview', label: t('growth.mobileTabOverview'), icon: icon.growth.rank },
@@ -491,12 +492,14 @@
   }
 
   function handleSectionTabSelect(section: string) {
-    // 四个成长分区共享同一滚动容器；切换或再次点击当前 Tab 都从页面顶部开始。
-    if (section === 'rewards' && activeRewardSection.value === 'lottery') {
+    // 切换或再次点击当前分区时，只重置承载正文的滚动容器；宽屏左栏保持独立固定。
+    if (bookmark.isMobile && section === 'rewards' && activeRewardSection.value === 'lottery') {
       void scrollLotteryToPreferredPosition();
       return;
     }
-    void nextTick(() => resetMobileScrollElement(growthPageRef.value));
+    void nextTick(() =>
+      resetMobileScrollElement(useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value),
+    );
   }
 
   function handleRewardTabSelect(section: string) {
@@ -514,6 +517,10 @@
 
   function selectRewardSection(section: RewardSection) {
     activeRewardSection.value = section;
+    if (useWideDesktopLayout.value) {
+      void nextTick(() => resetMobileScrollElement(growthMainRef.value));
+      return;
+    }
     if (section === 'lottery') void scrollLotteryToPreferredPosition();
   }
 
@@ -816,6 +823,9 @@
     background: var(--background-color);
     color: var(--text-color);
   }
+  .growth-page--wide {
+    overflow: hidden;
+  }
   .growth-container {
     max-width: 720px;
     margin: 0 auto;
@@ -830,6 +840,8 @@
     }
   }
   .growth-container.growth-container--wide {
+    height: 100%;
+    min-height: 0;
     max-width: 1360px;
   }
   .growth-workspace {
@@ -837,9 +849,12 @@
   }
   .growth-workspace--wide {
     display: grid;
+    min-height: 0;
+    flex: 1 1 auto;
     grid-template-columns: 220px minmax(0, 1fr);
     align-items: start;
     gap: 24px;
+    overflow: hidden;
   }
   .growth-main {
     display: flex;
@@ -848,12 +863,16 @@
     gap: 18px;
   }
   .growth-desktop-sidebar {
-    position: sticky;
-    top: 18px;
+    position: static;
     display: flex;
-    max-height: calc(100vh - 36px);
+    max-height: 100%;
     min-width: 0;
     flex-direction: column;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .growth-workspace--wide .growth-main {
+    height: 100%;
     overflow-y: auto;
     scrollbar-width: thin;
   }

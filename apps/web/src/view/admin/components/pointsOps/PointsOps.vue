@@ -15,7 +15,7 @@
 
     <template v-if="governanceEnabled">
       <BTabs v-model:active-tab="activeTab" class="points-governance-tabs" variant="segment" :options="tabOptions" />
-      <PointsGovernanceOverview v-if="activeTab === 'health'" ref="activePanelRef" />
+      <PointsGovernanceOverview v-if="activeTab === 'health'" ref="activePanelRef" @select-user="openUser360" />
       <PointsSourcesPanel v-else-if="activeTab === 'sources'" ref="activePanelRef" />
       <PointsReconciliationPanel v-else-if="activeTab === 'reconciliation'" ref="activePanelRef" />
       <PointsCampaignPanel v-else-if="activeTab === 'campaigns'" ref="activePanelRef" />
@@ -446,6 +446,11 @@
     form.value.userId = user.userId;
     detail.value = null;
     void queryUser();
+  }
+
+  function openUser360(user: AdminUserSearchResult) {
+    activeTab.value = 'user360';
+    selectUser(user);
   }
 
   async function queryUser() {

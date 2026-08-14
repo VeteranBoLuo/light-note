@@ -240,12 +240,56 @@
     </div>
     <div v-if="viewMode === 'table' && !bookmark.isMobile" class="field-header">
       <div class="flex-align-center-gap" :style="{ width: fieldNameWidth }">
-        <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
+        <BTooltip :title="fileSortLabel('fileName')">
+          <BButton
+            class="field-sort-trigger"
+            :class="{ 'is-active': cloud.fileSort.field === 'fileName' }"
+            :aria-label="fileSortLabel('fileName')"
+            @click="changeFileSort('fileName')"
+          >
+            <span class="field-header-label">{{ $t('cloudSpace.fileName') }}</span>
+            <span class="field-sort-icons" aria-hidden="true">
+              <SvgIcon
+                :class="{ active: cloud.fileSort.field === 'fileName' && cloud.fileSort.order === 'asc' }"
+                :src="icon.table_sort_up"
+                size="9"
+              />
+              <SvgIcon
+                :class="{ active: cloud.fileSort.field === 'fileName' && cloud.fileSort.order === 'desc' }"
+                :src="icon.table_sort_down"
+                size="9"
+              />
+            </span>
+          </BButton>
+        </BTooltip>
       </div>
       <div class="default-area" v-if="!bookmark.isMobile">
         <div>{{ $t('cloudSpace.folder') }}</div>
         <div>{{ $t('cloudSpace.relateTags') }}</div>
-        <div>{{ $t('cloudSpace.fileSize') }}</div>
+        <div>
+          <BTooltip :title="fileSortLabel('fileSize')">
+            <BButton
+              class="field-sort-trigger"
+              :class="{ 'is-active': cloud.fileSort.field === 'fileSize' }"
+              :aria-label="fileSortLabel('fileSize')"
+              @click="changeFileSort('fileSize')"
+            >
+              <span>{{ $t('cloudSpace.fileSize') }}</span>
+              <span class="field-sort-icons" aria-hidden="true">
+                <SvgIcon
+                  :class="{ active: cloud.fileSort.field === 'fileSize' && cloud.fileSort.order === 'asc' }"
+                  :src="icon.table_sort_up"
+                  size="9"
+                />
+                <SvgIcon
+                  :class="{ active: cloud.fileSort.field === 'fileSize' && cloud.fileSort.order === 'desc' }"
+                  :src="icon.table_sort_down"
+                  size="9"
+                />
+              </span>
+            </BButton>
+          </BTooltip>
+        </div>
         <div> {{ $t('cloudSpace.uploadTime') }} </div>
       </div>
     </div>
@@ -707,6 +751,26 @@
   const cloud = cloudSpaceStore();
   const bookmark = bookmarkStore();
   const router = useRouter();
+
+  function fileSortLabel(field: 'fileName' | 'fileSize') {
+    const fieldLabel = t(field === 'fileName' ? 'cloudSpace.fileName' : 'cloudSpace.fileSize');
+    const nextOrder =
+      cloud.fileSort.field === field
+        ? cloud.fileSort.order === 'asc'
+          ? 'desc'
+          : 'asc'
+        : field === 'fileName'
+          ? 'asc'
+          : 'desc';
+    return t('cloudSpace.sortBy', {
+      field: fieldLabel,
+      order: t(nextOrder === 'asc' ? 'cloudSpace.sortAscending' : 'cloudSpace.sortDescending'),
+    });
+  }
+
+  function changeFileSort(field: 'fileName' | 'fileSize') {
+    void cloud.setFileSort(field);
+  }
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();
   const viewMode = computed(() => props.viewMode ?? 'table');
@@ -1770,6 +1834,44 @@
   .field-header-label {
     flex-shrink: 0;
     line-height: 28px;
+  }
+  .field-sort-trigger.b_btn {
+    min-height: 28px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin: 0;
+    padding: 0 4px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--desc-color);
+    box-shadow: none;
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .field-sort-trigger.b_btn:hover,
+  .field-sort-trigger.b_btn.is-active {
+    border-color: var(--surface-border-color);
+    background: var(--hover-background);
+    color: var(--text-color);
+  }
+  .field-sort-trigger.b_btn.is-active {
+    color: var(--resource-file-color, #ff8a00);
+  }
+  .field-sort-icons {
+    width: 10px;
+    display: inline-flex;
+    flex-direction: column;
+    gap: 1px;
+    color: var(--desc-color);
+  }
+  .field-sort-icons > * {
+    opacity: 0.45;
+  }
+  .field-sort-icons > .active {
+    opacity: 1;
+    color: var(--resource-file-color, #ff8a00);
   }
   .header-checkbox {
     margin-right: 8px;

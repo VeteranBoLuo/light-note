@@ -14,6 +14,8 @@ const adminPanels = [
   'src/view/admin/components/pointsOps/PointsCampaignPanel.vue',
   'src/view/admin/components/pointsOps/PointsSimulatorPanel.vue',
 ].map(readSource);
+const pointsOps = readSource('src/view/admin/components/pointsOps/PointsOps.vue');
+const governanceOverview = readSource('src/view/admin/components/pointsOps/PointsGovernanceOverview.vue');
 
 describe('C5 积分中心与治理界面防回归', () => {
   it('积分目标只通过服务端目录保存，估算明确采用稳定收入且支持低压力模式', () => {
@@ -39,5 +41,14 @@ describe('C5 积分中心与治理界面防回归', () => {
       expect(source).not.toMatch(/<(?:input|select|table)\b/u);
       expect(source).not.toMatch(/<a-[a-z]/u);
     }
+  });
+
+  it('积分健康趋势提供精确数值提示，余额 Top 20 可进入用户 360 查账', () => {
+    expect(governanceOverview).toContain('<BTooltip');
+    expect(governanceOverview).toContain('trendTooltip(item)');
+    expect(governanceOverview).toContain('当前积分余额 Top 20');
+    expect(governanceOverview).toContain('@row-click="openUser"');
+    expect(pointsOps).toContain('@select-user="openUser360"');
+    expect(pointsOps).toContain("activeTab.value = 'user360'");
   });
 });

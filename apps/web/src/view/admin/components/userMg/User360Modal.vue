@@ -31,6 +31,10 @@
             <small>{{ detail.profile?.id }}</small>
           </span>
           <span class="user-360__chips">
+            <BButton size="small" type="primary" @click="emit('preview', userInfo)">
+              <SvgIcon :src="icon.navigation.portal" size="15" aria-hidden="true" />
+              {{ t('guest.userPreviewEntry') }}
+            </BButton>
             <BChip :tone="detail.profile?.status === 'banned' ? 'danger' : 'success'" size="medium">
               {{ statusLabel }}
             </BChip>
@@ -121,6 +125,10 @@
                 ><dt>{{ t('adminUserManagement.detail.lastActiveAt') }}</dt
                 ><dd>{{ formatTime(detail.profile?.lastActiveTime) }}</dd></div
               >
+              <div>
+                <dt>{{ t('adminUserManagement.detail.latestBrowser') }}</dt>
+                <dd>{{ latestDeviceLabel }}</dd>
+              </div>
             </dl>
           </article>
 
@@ -314,6 +322,7 @@
   import { bookmarkStore } from '@/store';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory.ts';
   import { formatAdminLocation, resolveAdminLoginMethod } from './userAdminProfileFormat';
+  import { formatAdminDeviceLabel } from './userAgentFormat';
 
   interface UserAdminDetail {
     profile?: Record<string, any>;
@@ -334,6 +343,7 @@
 
   const visible = defineModel<boolean>('visible');
   const props = defineProps<{ userInfo?: Record<string, any> | null }>();
+  const emit = defineEmits<{ preview: [user: Record<string, any> | null | undefined] }>();
   const { t, locale } = useI18n();
   const bookmark = bookmarkStore();
   const loading = ref(false);
@@ -367,6 +377,9 @@
     t(`adminUserManagement.detail.loginMethods.${resolveAdminLoginMethod(detail.value?.profile?.loginType)}`),
   );
   const locationParts = computed(() => formatAdminLocation(detail.value?.profile?.location));
+  const latestDeviceLabel = computed(() =>
+    formatAdminDeviceLabel(detail.value?.sessions?.[0]?.userAgent, t('common.unknown')),
+  );
   const tabOptions = computed<TabItem[]>(() => [
     { key: 'overview', label: t('adminUserManagement.detail.tabs.overview') },
     { key: 'activity', label: t('adminUserManagement.detail.tabs.activity') },
@@ -402,26 +415,7 @@
   }
 
   function deviceLabel(userAgent: unknown) {
-    const ua = String(userAgent || '');
-    const platform = /Android/i.test(ua)
-      ? 'Android'
-      : /iPhone|iPad/i.test(ua)
-        ? 'iOS'
-        : /Macintosh/i.test(ua)
-          ? 'macOS'
-          : /Windows/i.test(ua)
-            ? 'Windows'
-            : t('common.unknown');
-    const browser = /Edg\//i.test(ua)
-      ? 'Edge'
-      : /Firefox\//i.test(ua)
-        ? 'Firefox'
-        : /Chrome\//i.test(ua)
-          ? 'Chrome'
-          : /Safari\//i.test(ua)
-            ? 'Safari'
-            : t('common.unknown');
-    return `${platform} · ${browser}`;
+    return formatAdminDeviceLabel(userAgent, t('common.unknown'));
   }
 
   async function load() {

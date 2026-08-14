@@ -543,8 +543,8 @@
 
           <div v-if="replyTarget" class="community-composer__reply">
             <div>
-              <strong>{{ t('communityChat.replyingTo', { name: authorName(replyTarget) }) }}</strong>
-              <span>{{ messageSummary(replyTarget) }}</span>
+              <strong>{{ t('communityChat.replyingTo', { name: replyTarget.authorName }) }}</strong>
+              <span>{{ composerReplySummary(replyTarget) }}</span>
             </div>
             <BButton size="small" :aria-label="t('communityChat.cancelReply')" @click="cancelReply">
               <SvgIcon :src="icon.common.close" size="14" aria-hidden="true" />
@@ -767,7 +767,7 @@
 </template>
 
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
   import { isEqual } from 'lodash-es';
@@ -797,6 +797,7 @@
     type CommunityChatMessage,
     type CommunityChatMemberSearchItem,
     type CommunityChatMessagePage,
+    type CommunityChatMessageReply,
     type CommunityChatPinnedMessage,
     type CommunityChatReportReason,
     type CommunityChatRoom,
@@ -830,7 +831,12 @@
     type CommunityChatRealtimeEvent,
   } from '@/composables/useCommunityChatSocket';
   import { useCommunityChatUnread } from '@/composables/useCommunityChatUnread';
-  import { getCommunityChatDraft, rememberCommunityChatDraft } from '@/composables/useCommunityChatDraftMemory';
+  import {
+    createCommunityChatDraftSession,
+    getCommunityChatDraftSession,
+    touchCommunityChatDraftSession,
+    type CommunityChatDraftMentionTarget,
+  } from '@/composables/useCommunityChatDraftMemory';
   import { useCommunityChatEmojiRecent } from '@/composables/useCommunityChatEmojiRecent';
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
@@ -886,18 +892,37 @@
   const nextBefore = ref<string | null>(null);
   const messageListEl = ref<HTMLElement | null>(null);
   const composerInput = ref<InstanceType<typeof BInput> | null>(null);
-  const draft = ref('');
-  const sending = ref(false);
-  const replyTarget = ref<CommunityChatMessage | null>(null);
-  type MentionTarget = {
-    key: string;
-    name: string;
-    communityId?: string;
-    userPublicId?: string;
-    messagePublicId?: string;
-  };
-  const mentionTargets = ref<MentionTarget[]>([]);
-  const mentionEveryone = ref(false);
+  const composerDraftSession = shallowRef(createCommunityChatDraftSession());
+  const draft = computed({
+    get: () => composerDraftSession.value.text,
+    set: (value: string) => {
+      composerDraftSession.value.text = value;
+    },
+  });
+  const sending = computed({
+    get: () => composerDraftSession.value.sending,
+    set: (value: boolean) => {
+      composerDraftSession.value.sending = value;
+    },
+  });
+  const replyTarget = computed({
+    get: () => composerDraftSession.value.replyTarget,
+    set: (value: CommunityChatMessageReply | null) => {
+      composerDraftSession.value.replyTarget = value;
+    },
+  });
+  const mentionTargets = computed({
+    get: () => composerDraftSession.value.mentionTargets,
+    set: (value: CommunityChatDraftMentionTarget[]) => {
+      composerDraftSession.value.mentionTargets = value;
+    },
+  });
+  const mentionEveryone = computed({
+    get: () => composerDraftSession.value.mentionEveryone,
+    set: (value: boolean) => {
+      composerDraftSession.value.mentionEveryone = value;
+    },
+  });
   const expressionPanelOpen = ref(false);
   const expressionPanelTab = ref<'emoji' | 'custom'>('emoji');
   const customStickerRefreshKey = ref(0);
@@ -908,12 +933,22 @@
   const mentionSearchActiveIndex = ref(-1);
   const mentionQueryRange = ref<{ start: number; end: number } | null>(null);
   const composerIsComposing = ref(false);
-  const pendingClientRequestId = ref<string | null>(null);
+  const pendingClientRequestId = computed({
+    get: () => composerDraftSession.value.pendingClientRequestId,
+    set: (value: string | null) => {
+      composerDraftSession.value.pendingClientRequestId = value;
+    },
+  });
   const reportVisible = ref(false);
   const reportTarget = ref<CommunityChatMessage | null>(null);
   const reporting = ref(false);
   const reportedMessageIds = ref(new Set<string>());
-  const pendingImages = ref<CommunityChatImage[]>([]);
+  const pendingImages = computed({
+    get: () => composerDraftSession.value.pendingImages,
+    set: (value: CommunityChatImage[]) => {
+      composerDraftSession.value.pendingImages = value;
+    },
+  });
   const imageViewerVisible = ref(false);
   const imageViewerImages = ref<CommunityChatImage[]>([]);
   const imageViewerTracksChatSequence = ref(false);
@@ -921,7 +956,12 @@
   const readyMessageImageIds = ref(new Set<string>());
   const priorityMessageImageIds = ref(new Set<string>());
   const messageImagePreloads = new Map<string, HTMLImageElement>();
-  const imageUploadsInFlight = ref(0);
+  const imageUploadsInFlight = computed({
+    get: () => composerDraftSession.value.imageUploadsInFlight,
+    set: (value: number) => {
+      composerDraftSession.value.imageUploadsInFlight = value;
+    },
+  });
   const isComposerDragActive = ref(false);
   const removingImageIds = ref(new Set<string>());
   const blocksVisible = ref(false);
@@ -1225,6 +1265,16 @@
     if (content) return content;
     if (chatMessage.messageKind === 'sticker' || chatMessage.sticker) return t('communityChat.sticker.messageFallback');
     if (chatMessage.images?.length) return t('communityChat.image.messageFallback');
+    return t('communityChat.replyUnavailable');
+  }
+
+  function composerReplySummary(reply: CommunityChatMessageReply) {
+    const content = String(reply.content || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (content) return content;
+    if (reply.hasSticker) return t('communityChat.sticker.messageFallback');
+    if (reply.hasImages) return t('communityChat.image.messageFallback');
     return t('communityChat.replyUnavailable');
   }
 
@@ -2332,7 +2382,14 @@
 
   function startReply(chatMessage: CommunityChatMessage) {
     if (!canReplyToMessage(chatMessage)) return;
-    replyTarget.value = chatMessage;
+    replyTarget.value = {
+      publicId: chatMessage.publicId,
+      content: chatMessage.content,
+      status: chatMessage.status,
+      authorName: authorName(chatMessage),
+      hasImages: chatMessage.images.length > 0,
+      hasSticker: chatMessage.messageKind === 'sticker' || Boolean(chatMessage.sticker),
+    };
     pendingClientRequestId.value = null;
     void nextTick(() => composerInput.value?.focus());
   }
@@ -2672,7 +2729,8 @@
   async function handleImageFiles(selected: unknown) {
     const files = Array.isArray(selected) ? selected.filter((item): item is File => item instanceof File) : [];
     if (!files.length || imageUploadBusy.value) return;
-    const available = Math.max(0, 4 - pendingImages.value.length);
+    const draftSession = composerDraftSession.value;
+    const available = Math.max(0, 4 - draftSession.pendingImages.length);
     if (!available) {
       message.warning(t('communityChat.image.limit'));
       return;
@@ -2694,53 +2752,43 @@
     if (!validFiles.length) return;
 
     const roomSlug = selectedRoomSlug.value;
-    imageUploadsInFlight.value = validFiles.length;
+    draftSession.imageUploadsInFlight += validFiles.length;
+    touchCommunityChatDraftSession(draftSession);
     try {
       const results = await Promise.allSettled(validFiles.map((file) => uploadCommunityChatImage(roomSlug, file)));
-      if (isUnmounted || roomSlug !== selectedRoomSlug.value) {
-        const uploaded = results
-          .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
-          .map((result) => result.value?.data as CommunityChatImage)
-          .filter((imageItem) => imageItem?.publicId);
-        void Promise.allSettled(uploaded.map((imageItem) => discardCommunityChatImage(imageItem.publicId)));
-        return;
-      }
       const uploaded = results
         .filter((result): result is PromiseFulfilledResult<any> => result.status === 'fulfilled')
         .map((result) => result.value?.data as CommunityChatImage)
         .filter((imageItem) => imageItem?.publicId && imageItem?.url);
-      pendingImages.value = [...pendingImages.value, ...uploaded].slice(0, 4);
+      draftSession.pendingImages = [...draftSession.pendingImages, ...uploaded].slice(0, 4);
+      touchCommunityChatDraftSession(draftSession);
       const failed = results.length - uploaded.length;
-      if (failed > 0) message.error(t('communityChat.image.uploadFailed', { count: failed }));
-      if (uploaded.length) pendingClientRequestId.value = null;
+      if (uploaded.length) draftSession.pendingClientRequestId = null;
+      if (!isUnmounted && composerDraftSession.value === draftSession) {
+        if (failed > 0) message.error(t('communityChat.image.uploadFailed', { count: failed }));
+      }
     } finally {
-      imageUploadsInFlight.value = 0;
+      draftSession.imageUploadsInFlight = Math.max(0, draftSession.imageUploadsInFlight - validFiles.length);
+      touchCommunityChatDraftSession(draftSession);
     }
   }
 
   async function removePendingImage(imageItem: CommunityChatImage) {
     if (removingImageIds.value.has(imageItem.publicId) || sending.value) return;
+    const draftSession = composerDraftSession.value;
     removingImageIds.value = new Set([...removingImageIds.value, imageItem.publicId]);
     try {
       const response = await discardCommunityChatImage(imageItem.publicId);
       if (response?.status !== 200) throw new Error('COMMUNITY_CHAT_IMAGE_DISCARD_FAILED');
-      pendingImages.value = pendingImages.value.filter((item) => item.publicId !== imageItem.publicId);
-      pendingClientRequestId.value = null;
+      draftSession.pendingImages = draftSession.pendingImages.filter((item) => item.publicId !== imageItem.publicId);
+      draftSession.pendingClientRequestId = null;
+      touchCommunityChatDraftSession(draftSession);
     } catch (error: any) {
       message.error(error?.message || t('communityChat.image.removeFailed'));
     } finally {
       const next = new Set(removingImageIds.value);
       next.delete(imageItem.publicId);
       removingImageIds.value = next;
-    }
-  }
-
-  function releasePendingImages() {
-    const images = pendingImages.value;
-    pendingImages.value = [];
-    removingImageIds.value = new Set();
-    if (images.length) {
-      void Promise.allSettled(images.map((imageItem) => discardCommunityChatImage(imageItem.publicId)));
     }
   }
 
@@ -3046,7 +3094,7 @@
     publicId: string;
     content: string;
     images: CommunityChatImage[];
-    replyTarget: CommunityChatMessage | null;
+    replyTarget: CommunityChatMessageReply | null;
     mentions: string[];
     mentionEveryone?: boolean;
     messageKind?: 'text' | 'sticker';
@@ -3095,39 +3143,31 @@
         levelName: previousAuthor?.levelName || '蒙童',
         title: previousAuthor?.title || null,
       },
-      reply: input.replyTarget
-        ? {
-            publicId: input.replyTarget.publicId,
-            content: input.replyTarget.content,
-            status: input.replyTarget.status,
-            authorName: authorName(input.replyTarget),
-            hasImages: input.replyTarget.images.length > 0,
-            hasSticker: input.replyTarget.messageKind === 'sticker' || Boolean(input.replyTarget.sticker),
-          }
-        : null,
+      reply: input.replyTarget ? { ...input.replyTarget } : null,
     };
   }
 
   async function sendMessage() {
     const roomSlug = selectedRoomSlug.value;
-    const content = String(draft.value || '').trim();
+    const draftSession = composerDraftSession.value;
+    const content = String(draftSession.text || '').trim();
     if (!roomSlug || !canSend.value || !canPostCurrentRoom.value) return;
-    const clientRequestId = pendingClientRequestId.value || createCommunityChatClientRequestId();
-    pendingClientRequestId.value = clientRequestId;
-    const imagePublicIds = pendingImages.value.map((imageItem) => imageItem.publicId);
+    const clientRequestId = draftSession.pendingClientRequestId || createCommunityChatClientRequestId();
+    draftSession.pendingClientRequestId = clientRequestId;
+    const imagePublicIds = draftSession.pendingImages.map((imageItem) => imageItem.publicId);
     // 新客户端以不可变用户公有 UUID 发送；仅对尚未回填身份的旧消息保留历史消息 ID 兼容字段。
-    const mentionUserPublicIds = mentionTargets.value
+    const mentionUserPublicIds = draftSession.mentionTargets
       .map((target) => target.userPublicId)
       .filter((value): value is string => Boolean(value));
-    const mentionMessagePublicIds = mentionTargets.value
+    const mentionMessagePublicIds = draftSession.mentionTargets
       .map((target) => target.messagePublicId)
       .filter((value): value is string => Boolean(value));
     const optimisticPublicId = `pending-${clientRequestId}`;
-    const draftSnapshot = draft.value;
-    const replySnapshot = replyTarget.value;
-    const mentionSnapshot = [...mentionTargets.value];
-    const mentionEveryoneSnapshot = mentionEveryone.value;
-    const imageSnapshot = pendingImages.value.map((imageItem) => ({ ...imageItem }));
+    const draftSnapshot = draftSession.text;
+    const replySnapshot = draftSession.replyTarget ? { ...draftSession.replyTarget } : null;
+    const mentionSnapshot = draftSession.mentionTargets.map((target) => ({ ...target }));
+    const mentionEveryoneSnapshot = draftSession.mentionEveryone;
+    const imageSnapshot = draftSession.pendingImages.map((imageItem) => ({ ...imageItem }));
     const optimisticMessage = buildOptimisticMessage({
       publicId: optimisticPublicId,
       content,
@@ -3136,13 +3176,14 @@
       mentions: mentionSnapshot.map((target) => target.name),
       mentionEveryone: mentionEveryoneSnapshot,
     });
-    sending.value = true;
+    draftSession.sending = true;
     chatMessages.value = [...chatMessages.value, optimisticMessage];
-    draft.value = '';
-    replyTarget.value = null;
-    mentionTargets.value = [];
-    mentionEveryone.value = false;
-    pendingImages.value = [];
+    draftSession.text = '';
+    draftSession.replyTarget = null;
+    draftSession.mentionTargets = [];
+    draftSession.mentionEveryone = false;
+    draftSession.pendingImages = [];
+    touchCommunityChatDraftSession(draftSession);
     await scrollToBottom();
     try {
       const payload = {
@@ -3159,23 +3200,23 @@
       if (!sentMessage) throw new Error('COMMUNITY_CHAT_SEND_RESPONSE_INVALID');
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
       if (roomSlug === selectedRoomSlug.value) mergeLatest([sentMessage]);
-      pendingClientRequestId.value = null;
+      draftSession.pendingClientRequestId = null;
       await scrollToBottom();
       void markLatestRead();
     } catch (error: any) {
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
-      if (roomSlug === selectedRoomSlug.value) {
-        draft.value = draftSnapshot;
-        replyTarget.value = replySnapshot;
-        mentionTargets.value = mentionSnapshot;
-        mentionEveryone.value = mentionEveryoneSnapshot;
-        pendingImages.value = imageSnapshot;
-      }
+      draftSession.text = draftSnapshot;
+      draftSession.replyTarget = replySnapshot;
+      draftSession.mentionTargets = mentionSnapshot;
+      draftSession.mentionEveryone = mentionEveryoneSnapshot;
+      draftSession.pendingImages = imageSnapshot;
+      touchCommunityChatDraftSession(draftSession);
       emit('accessInvalidated');
       message.error(error?.message || t('communityChat.sendFailed'));
     } finally {
-      sending.value = false;
-      if (roomSlug === selectedRoomSlug.value && canPostCurrentRoom.value) {
+      draftSession.sending = false;
+      touchCommunityChatDraftSession(draftSession);
+      if (!isUnmounted && composerDraftSession.value === draftSession && canPostCurrentRoom.value) {
         await nextTick();
         composerInput.value?.focus();
       }
@@ -3185,9 +3226,10 @@
   async function sendCustomSticker(stickerPublicId: string) {
     const roomSlug = selectedRoomSlug.value;
     if (!roomSlug || !canPostCurrentRoom.value || sending.value || !stickerPublicId) return;
+    const draftSession = composerDraftSession.value;
     const clientRequestId = createCommunityChatClientRequestId();
     const optimisticPublicId = `pending-${clientRequestId}`;
-    const replySnapshot = replyTarget.value;
+    const replySnapshot = draftSession.replyTarget ? { ...draftSession.replyTarget } : null;
     const sticker = {
       source: 'custom' as const,
       key: stickerPublicId,
@@ -3202,8 +3244,9 @@
       messageKind: 'sticker',
       sticker,
     });
-    sending.value = true;
-    replyTarget.value = null;
+    draftSession.sending = true;
+    draftSession.replyTarget = null;
+    touchCommunityChatDraftSession(draftSession);
     expressionPanelOpen.value = false;
     chatMessages.value = [...chatMessages.value, optimisticMessage];
     await scrollToBottom();
@@ -3224,11 +3267,13 @@
       void markLatestRead();
     } catch (error: any) {
       chatMessages.value = chatMessages.value.filter((item) => item.publicId !== optimisticPublicId);
-      if (roomSlug === selectedRoomSlug.value) replyTarget.value = replySnapshot;
+      draftSession.replyTarget = replySnapshot;
+      touchCommunityChatDraftSession(draftSession);
       emit('accessInvalidated');
       message.error(error?.message || t('communityChat.sendFailed'));
     } finally {
-      sending.value = false;
+      draftSession.sending = false;
+      touchCommunityChatDraftSession(draftSession);
     }
   }
 
@@ -3236,6 +3281,12 @@
     bookmark.authModalTab = '登录';
     bookmark.authModalSource = 'community_chat';
     bookmark.isShowLogin = true;
+  }
+
+  function bindComposerDraftSession(identityKey: string, roomSlug: string) {
+    composerDraftSession.value = getCommunityChatDraftSession(identityKey, roomSlug);
+    removingImageIds.value = new Set();
+    void nextTick(syncComposerInputHeight);
   }
 
   watch(
@@ -3250,10 +3301,7 @@
 
   watch(realtimeIdentityKey, (nextIdentity, previousIdentity) => {
     if (!previousIdentity || nextIdentity === previousIdentity) return;
-    rememberCommunityChatDraft(previousIdentity, selectedRoomSlug.value, draft.value);
-    draft.value = getCommunityChatDraft(nextIdentity, selectedRoomSlug.value);
-    mentionTargets.value = [];
-    mentionEveryone.value = false;
+    bindComposerDraftSession(nextIdentity, selectedRoomSlug.value);
     expressionPanelOpen.value = false;
     closeMentionSuggestions();
     closeCommunityProfile({ reset: true, clearIdentityCache: true });
@@ -3261,21 +3309,15 @@
 
   watch(
     selectedRoomSlug,
-    (nextRoomSlug, previousRoomSlug) => {
-      if (previousRoomSlug) rememberCommunityChatDraft(realtimeIdentityKey.value, previousRoomSlug, draft.value);
+    (nextRoomSlug) => {
       resetComposerDragState();
-      releasePendingImages();
+      bindComposerDraftSession(realtimeIdentityKey.value, nextRoomSlug);
       chatMessages.value = [];
       hasMore.value = false;
       nextBefore.value = null;
       loadError.value = false;
-      replyTarget.value = null;
-      mentionTargets.value = [];
-      mentionEveryone.value = false;
       expressionPanelOpen.value = false;
       closeMentionSuggestions();
-      draft.value = getCommunityChatDraft(realtimeIdentityKey.value, nextRoomSlug);
-      pendingClientRequestId.value = null;
       reportVisible.value = false;
       reportTarget.value = null;
       messageActionBusyId.value = '';
@@ -3319,12 +3361,12 @@
       () => pendingImages.value.map((imageItem) => imageItem.publicId).join('|'),
     ],
     () => {
+      touchCommunityChatDraftSession(composerDraftSession.value);
       if (!sending.value) pendingClientRequestId.value = null;
     },
   );
 
-  watch(draft, (value) => {
-    rememberCommunityChatDraft(realtimeIdentityKey.value, selectedRoomSlug.value, value);
+  watch(draft, () => {
     void nextTick(syncComposerInputHeight);
   });
 
@@ -3362,7 +3404,6 @@
 
   onBeforeUnmount(() => {
     isUnmounted = true;
-    rememberCommunityChatDraft(realtimeIdentityKey.value, selectedRoomSlug.value, draft.value);
     cancelAvatarLongPress();
     clearAvatarClickSuppression();
     resetComposerDragState();
@@ -3393,7 +3434,6 @@
     imageViewerTracksChatSequence.value = false;
     imageViewerImages.value = [];
     releaseMessageImagePreloads({ clearReady: true });
-    releasePendingImages();
   });
 </script>
 

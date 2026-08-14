@@ -4,7 +4,7 @@ import { createI18n } from 'vue-i18n';
 import zhCN from '@/i18n/locales/zh-CN';
 import icon from '@/config/icon';
 import workspaceSource from './CommunityChatWorkspace.vue?raw';
-import { clearCommunityChatDraftMemory } from '@/composables/useCommunityChatDraftMemory';
+import { clearCommunityChatDraftMemory, getCommunityChatDraftSession } from '@/composables/useCommunityChatDraftMemory';
 
 const mocks = vi.hoisted(() => ({
   getMessages: vi.fn(),
@@ -884,20 +884,85 @@ describe('CommunityChatWorkspace', () => {
     expect(mocks.markRead).toHaveBeenCalledWith('general', 'message-2');
   });
 
-  it('仅切换模块导致组件重建时恢复当前账号与频道的未发送草稿', async () => {
+  it('仅切换模块导致组件重建时恢复文字、回复、提及和待发送图片', async () => {
+    const mentionedUserPublicId = '22222222-2222-4222-8222-222222222222';
     const firstHost = await mountWorkspace();
     const firstTextarea = firstHost.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
     expect(firstTextarea).not.toBeNull();
     if (!firstTextarea) return;
+
+    firstHost
+      .querySelector<HTMLButtonElement>(
+        `.community-message__actions button[aria-label="${zhCN.communityChat.replyAction}"]`,
+      )
+      ?.click();
+    const session = getCommunityChatDraftSession('user-1:user', 'general');
+    session.mentionTargets = [
+      {
+        key: `user:${mentionedUserPublicId}`,
+        name: '薄荷糖',
+        communityId: 'ln_M2D9KF',
+        userPublicId: mentionedUserPublicId,
+      },
+    ];
+    await flushAsync();
+
     firstTextarea.value = '切到资料模块后还要继续输入';
     firstTextarea.dispatchEvent(new Event('input', { bubbles: true }));
+    const file = new File(['draft-image'], 'draft.png', { type: 'image/png' });
+    const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
     await flushAsync();
+
+    expect(firstHost.querySelector('.community-composer__reply')?.textContent).toContain('薄荷');
+    expect(firstHost.querySelector('.community-composer__mentions')?.textContent).toContain('@薄荷糖');
+    expect(firstHost.querySelector('.community-composer__image img')).not.toBeNull();
 
     cleanup?.();
     cleanup = undefined;
     const secondHost = await mountWorkspace();
     const secondTextarea = secondHost.querySelector<HTMLTextAreaElement>('.community-composer__input textarea');
     expect(secondTextarea?.value).toBe('切到资料模块后还要继续输入');
+    expect(secondHost.querySelector('.community-composer__reply')?.textContent).toContain('薄荷');
+    expect(secondHost.querySelector('.community-composer__mentions')?.textContent).toContain('@薄荷糖');
+    expect(secondHost.querySelector<HTMLImageElement>('.community-composer__image img')?.src).toContain(
+      '/api/community-chat/images/image-1',
+    );
+    expect(mocks.discardImage).not.toHaveBeenCalled();
+  });
+
+  it('图片仍在上传时切换模块，上传结果继续回填原聊天室草稿', async () => {
+    const uploadRequest = deferred<any>();
+    mocks.uploadImage.mockReturnValueOnce(uploadRequest.promise);
+    const firstHost = await mountWorkspace();
+    const file = new File(['slow-image'], 'slow.png', { type: 'image/png' });
+    const fileInput = document.body.querySelector<HTMLInputElement>('.b-upload-native-input');
+    Object.defineProperty(fileInput, 'files', { configurable: true, value: [file] });
+    fileInput?.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushAsync();
+    expect(firstHost.textContent).toContain('正在处理 1 张图片');
+
+    cleanup?.();
+    cleanup = undefined;
+    uploadRequest.resolve({
+      status: 200,
+      data: {
+        publicId: 'image-slow-1',
+        url: '/api/community-chat/images/image-slow-1',
+        contentType: 'image/png',
+        fileSize: 18,
+        width: 720,
+        height: 1280,
+      },
+    });
+    await flushAsync();
+
+    const secondHost = await mountWorkspace();
+    expect(secondHost.querySelector<HTMLImageElement>('.community-composer__image img')?.src).toContain(
+      '/api/community-chat/images/image-slow-1',
+    );
+    expect(mocks.discardImage).not.toHaveBeenCalled();
   });
 
   it('PC 上滑一小段显示回到底部，移动端需要更大的离底距离', async () => {

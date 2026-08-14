@@ -2282,9 +2282,9 @@
       #09090b
     );
     box-shadow:
-      0 0 0 2px #e4c06b,
-      0 0 0 5px rgba(24, 17, 8, 0.9),
-      inset 0 0 8px rgba(255, 244, 196, 0.46),
+      0 0 0 1px #e4c06b,
+      0 0 0 3px rgba(24, 17, 8, 0.88),
+      inset 0 0 5px rgba(255, 244, 196, 0.42),
       0 0 13px rgba(202, 138, 4, 0.66),
       0 0 24px rgba(113, 63, 18, 0.42);
     animation: frame-dragon-forge-breathe 5.6s ease-in-out infinite;
@@ -2295,11 +2295,11 @@
   }
 
   .avatar-frame--dragon .avatar-frame__ring::after {
-    inset: 4%;
-    border: 1.5px solid rgba(255, 244, 196, 0.82);
+    inset: 5%;
+    border: 1px solid rgba(255, 244, 196, 0.78);
     border-right-color: #7c4a12;
     border-bottom-color: #d6a84f;
-    box-shadow: inset 0 0 7px rgba(9, 9, 11, 0.88);
+    box-shadow: inset 0 0 4px rgba(9, 9, 11, 0.78);
     animation: none;
   }
 
@@ -2344,7 +2344,7 @@
       transparent 98%
     );
     opacity: 0;
-    animation: frame-dragon-scale-sweep 6.4s ease-in-out infinite;
+    animation: frame-dragon-scale-sweep 5.4s ease-in-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__dragon-crest {
@@ -2353,7 +2353,7 @@
     display: block;
     filter: drop-shadow(0 0 1px rgba(9, 9, 11, 0.86)) drop-shadow(0 0 4px rgba(228, 192, 107, 0.68));
     transform-origin: 50% 55%;
-    animation: frame-dragon-body-breathe 6.4s ease-in-out infinite;
+    animation: frame-dragon-body-breathe 5.4s ease-in-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__dragon-head {
@@ -2366,7 +2366,7 @@
     pointer-events: none;
     filter: drop-shadow(0 1px 0 rgba(41, 27, 10, 0.7)) drop-shadow(0 0 3px rgba(228, 192, 107, 0.46));
     transform-origin: 50% 55%;
-    animation: frame-dragon-head-awaken 6.4s ease-in-out infinite;
+    animation: frame-dragon-head-awaken 5.4s ease-in-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__dragon-head::before {
@@ -2379,10 +2379,12 @@
     content: '';
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 0 2px #fff4b8, 0 0 5px #f59e0b;
+    box-shadow:
+      0 0 2px #fff4b8,
+      0 0 5px #f59e0b;
     opacity: 0;
     transform: scale(0.5);
-    animation: frame-dragon-eye-flash 6.4s ease-in-out infinite;
+    animation: frame-dragon-eye-flash 5.4s ease-in-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__dragon-head::after {
@@ -2398,20 +2400,20 @@
     opacity: 0;
     transform: translateX(-16%) scaleX(0.3);
     transform-origin: left center;
-    animation: frame-dragon-breath-spark 6.4s ease-out infinite;
+    animation: frame-dragon-breath-spark 5.4s ease-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__portrait {
-    width: calc(var(--frame-size) - 4px);
-    height: calc(var(--frame-size) - 4px);
-    border: 2px solid #e4c06b;
+    width: var(--frame-size);
+    height: var(--frame-size);
+    border: 1.5px solid #e4c06b;
     background: #fffaf0;
     box-shadow:
-      0 0 0 2px rgba(42, 27, 10, 0.96),
-      0 0 0 3px rgba(246, 210, 122, 0.88),
+      0 0 0 1px rgba(42, 27, 10, 0.94),
+      0 0 0 2px rgba(246, 210, 122, 0.84),
       inset 0 0 0 1px rgba(255, 248, 220, 0.92),
-      inset 0 0 12px rgba(113, 63, 18, 0.2),
-      0 0 8px rgba(214, 168, 79, 0.5);
+      inset 0 0 9px rgba(113, 63, 18, 0.16),
+      0 0 7px rgba(214, 168, 79, 0.46);
   }
 
   .avatar-frame--dragon .avatar-frame__portrait::after {
@@ -2436,7 +2438,7 @@
     box-shadow:
       0 0 6px rgba(255, 247, 214, 0.96),
       0 0 13px rgba(202, 138, 4, 0.8);
-    animation: frame-dragon-pearl 6.4s ease-in-out infinite;
+    animation: frame-dragon-pearl 5.4s ease-in-out infinite;
   }
 
   .avatar-frame--dragon .avatar-frame__signature-mark::before,
@@ -2470,118 +2472,182 @@
 
   @keyframes frame-dragon-body-breathe {
     0%,
-    20%,
     100% {
-      opacity: 0.86;
-      transform: translateY(1px) rotate(0deg) scale(0.98);
+      opacity: 0.93;
+      transform: translateY(0.5px) rotate(0deg) scale(0.985);
     }
-    48%,
-    58% {
+    20% {
       opacity: 1;
-      transform: translateY(-1px) rotate(7deg) scale(1.015);
+      transform: translateY(-0.75px) rotate(7deg) scale(0.995);
     }
-    76% {
-      opacity: 0.94;
-      transform: translateY(0) rotate(-3deg) scale(0.995);
+    38% {
+      opacity: 0.96;
+      transform: translateY(0.15px) rotate(-3deg) scale(0.99);
     }
-    88% {
-      opacity: 0.9;
-      transform: translateY(0.5px) rotate(0.7deg) scale(0.985);
+    48% {
+      opacity: 0.95;
+      transform: translateY(0.35px) rotate(0.4deg) scale(0.99);
+    }
+    54% {
+      opacity: 1;
+      transform: translateY(-0.8px) rotate(0deg) scale(1.025);
+    }
+    64% {
+      opacity: 0.92;
+      transform: translateY(0.7px) rotate(0deg) scale(0.978);
+    }
+    72% {
+      opacity: 0.96;
+      transform: translateY(0.2px) rotate(-0.3deg) scale(0.991);
+    }
+    82% {
+      opacity: 0.91;
+      transform: translateY(0.75px) rotate(0.18deg) scale(0.982);
+    }
+    91% {
+      opacity: 0.95;
+      transform: translateY(0.25px) rotate(-0.2deg) scale(0.988);
     }
   }
 
   @keyframes frame-dragon-scale-sweep {
-    0%,
-    24%,
-    100% {
+    0% {
       opacity: 0;
       transform: rotate(-72deg);
     }
-    42% {
-      opacity: 0.72;
+    18% {
+      opacity: 0.65;
       transform: rotate(-18deg);
     }
-    54% {
+    40% {
       opacity: 1;
       transform: rotate(58deg);
     }
-    72% {
+    58% {
+      opacity: 0.45;
+      transform: rotate(126deg);
+    }
+    70% {
       opacity: 0;
       transform: rotate(154deg);
+    }
+    100% {
+      opacity: 0;
+      transform: rotate(210deg);
     }
   }
 
   @keyframes frame-dragon-head-awaken {
     0%,
-    20%,
     100% {
-      opacity: 0.96;
-      transform: translateY(1px) rotate(0deg) scale(0.98);
+      opacity: 0.99;
+      transform: translateY(0.5px) rotate(0deg) scale(0.985);
     }
-    48%,
-    58% {
+    20% {
       opacity: 1;
-      transform: translateY(-1px) rotate(7deg) scale(1.015);
+      transform: translateY(-0.75px) rotate(7deg) scale(0.995);
     }
-    76% {
+    38% {
+      opacity: 0.99;
+      transform: translateY(0.15px) rotate(-3deg) scale(0.99);
+    }
+    48% {
+      opacity: 0.99;
+      transform: translateY(0.35px) rotate(0.4deg) scale(0.99);
+    }
+    54% {
+      opacity: 1;
+      transform: translateY(-0.8px) rotate(0deg) scale(1.025);
+    }
+    64% {
       opacity: 0.98;
-      transform: translateY(0) rotate(-3deg) scale(0.995);
+      transform: translateY(0.7px) rotate(0deg) scale(0.978);
     }
-    88% {
+    72% {
+      opacity: 0.99;
+      transform: translateY(0.2px) rotate(-0.3deg) scale(0.991);
+    }
+    82% {
       opacity: 0.97;
-      transform: translateY(0.5px) rotate(0.7deg) scale(0.985);
+      transform: translateY(0.75px) rotate(0.18deg) scale(0.982);
+    }
+    91% {
+      opacity: 0.99;
+      transform: translateY(0.25px) rotate(-0.2deg) scale(0.988);
     }
   }
 
   @keyframes frame-dragon-pearl {
     0%,
-    20%,
     100% {
-      opacity: 0.68;
-      transform: scale(0.84);
+      opacity: 0.76;
+      transform: scale(0.92);
     }
-    48%,
-    58% {
+    20% {
+      opacity: 0.86;
+      transform: scale(1);
+    }
+    38% {
+      opacity: 0.78;
+      transform: scale(0.9);
+    }
+    48% {
+      opacity: 0.82;
+      transform: scale(0.94);
+    }
+    54% {
       opacity: 1;
       transform: scale(1.24);
     }
-    76% {
+    64% {
+      opacity: 0.72;
+      transform: scale(0.82);
+    }
+    72% {
+      opacity: 0.86;
+      transform: scale(0.98);
+    }
+    82% {
+      opacity: 0.74;
+      transform: scale(0.88);
+    }
+    91% {
       opacity: 0.82;
-      transform: scale(0.94);
+      transform: scale(0.95);
     }
   }
 
   @keyframes frame-dragon-eye-flash {
     0%,
-    38%,
+    42%,
     68%,
     100% {
       opacity: 0;
       transform: scale(0.5);
     }
-    48% {
+    53% {
       opacity: 1;
       transform: scale(1.8);
     }
-    57% {
-      opacity: 0.58;
-      transform: scale(1);
+    61% {
+      opacity: 0.42;
+      transform: scale(0.95);
     }
   }
 
   @keyframes frame-dragon-breath-spark {
     0%,
-    44%,
-    68%,
+    48%,
+    70%,
     100% {
       opacity: 0;
       transform: translateX(-16%) scaleX(0.3);
     }
-    51% {
+    54% {
       opacity: 1;
       transform: translateX(0) scaleX(0.92);
     }
-    60% {
+    64% {
       opacity: 0;
       transform: translateX(32%) scaleX(1.24);
     }

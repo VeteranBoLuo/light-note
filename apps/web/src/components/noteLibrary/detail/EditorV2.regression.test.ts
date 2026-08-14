@@ -262,6 +262,8 @@ describe('编辑器 V2 交互回归', () => {
     expect(editorSource).toContain('if (richMediaTextToolbarVisible.value) closeRichMediaTextToolbar()');
     expect(editorSource).toContain('quickbars_image_toolbar: false');
     expect(editorSource).toContain("editor.ui.registry.addContextToolbar('imageselection'");
+    expect(editorSource).toContain("if (event.toolbarKey !== 'table') return");
+    expect(editorSource).toContain("button.setAttribute('title', label)");
     expect(editorSource).toContain("!image.closest('.mermaid-figure--companion, .ln-media-text')");
     expect(editorSource).toContain('--ln-media-max-width:280px');
     expect(editorSource).toContain('--ln-media-max-height:220px');
@@ -282,12 +284,21 @@ describe('编辑器 V2 交互回归', () => {
 
   it('划词菜单避开顶部工具栏，AI 选段操作在文字尾部挂载临时等待标记', () => {
     expect(editorSource).toContain('adjustContextToolbarAwayFromMainToolbar');
-    expect(editorSource).toContain("editor.on('contexttoolbar-show', scheduleContextToolbarAdjustment)");
+    expect(editorSource).toContain("editor.on('contexttoolbar-show', handleContextToolbarShow)");
     expect(editorSource).toContain('editorViewportTop + selectionRect.bottom');
     expect(editorSource).toContain("addEventListener('scroll', scheduleContextToolbarAdjustment");
     expect(editorSource).toContain("'data-mce-bogus': 'all'");
     expect(editorSource).toContain('ln-ai-selection-pending__spinner');
     expect(editorSource).toContain('removeSelectionAiPendingMarker(pendingMarker)');
+  });
+
+  it('富文本表格上下文工具栏为所有图标补充本地化悬停提示', () => {
+    expect(editorSource).toContain('decorateTableContextToolbar');
+    expect(editorSource).toContain("if (event.toolbarKey !== 'table') return");
+    expect(editorSource).toContain("button.setAttribute('aria-label', label)");
+    expect(editorSource).toContain("button.setAttribute('title', label)");
+    expect(editorSource).toContain("t('noteDetail.editor.tableProperties')");
+    expect(editorSource).toContain("t('noteDetail.editor.deleteColumn')");
   });
 
   it('渐变弹框有可视预设色板，宽屏桌面工具栏直接展示常用格式', () => {

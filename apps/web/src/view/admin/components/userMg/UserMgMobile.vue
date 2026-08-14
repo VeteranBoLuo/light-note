@@ -103,9 +103,13 @@
                 </span>
               </template>
               <template #meta>
-                <span>{{
-                  t('adminUserManagement.mobile.lastActive', { time: formatTime(record.lastActiveTime) })
-                }}</span>
+                <span class="mobile-user-meta">
+                  <span>{{ formatAdminUserAgent(record.userAgent, '-').browser }}</span>
+                  <span>{{ t('adminUserManagement.levelShort', { level: record.level || 1 }) }}</span>
+                  <span>{{
+                    t('adminUserManagement.mobile.lastActive', { time: formatTime(record.lastActiveTime) })
+                  }}</span>
+                </span>
               </template>
               <template #trailing>
                 <BButton
@@ -142,7 +146,11 @@
       <BForm form-id="userEditForm" :form-data="editData" :fields="formFields" />
     </BModal>
     <UserPreviewModal v-model:visible="previewVisible" :user-info="previewUser" :mode="previewMode" />
-    <User360Modal v-model:visible="detailVisible" :user-info="selectedRecord" />
+    <User360Modal
+      v-model:visible="detailVisible"
+      :user-info="selectedRecord"
+      @preview="(record) => openPreview(record, 'readonly')"
+    />
     <AdminUserRemarkModal v-model:visible="remarkVisible" :user="remarkUser" @saved="onRemarkSaved" />
     <GrowthAdminModal
       v-model:visible="growthAdminVisible"
@@ -187,6 +195,7 @@
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory.ts';
   import { adminUserLabel, useAdminUserManagementList, useAdminUserOperations } from './useAdminUserManagement.ts';
+  import { formatAdminUserAgent } from './userAgentFormat.ts';
 
   const { t, locale } = useI18n();
   const listRef = ref<InstanceType<typeof BVirtualList> | null>(null);
@@ -380,6 +389,26 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .mobile-user-meta {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+  }
+
+  .mobile-user-meta > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-user-meta > span:not(:last-child)::after {
+    content: '·';
+    margin-left: 5px;
+    color: var(--surface-divider-color);
   }
 
   .mobile-user-avatar {

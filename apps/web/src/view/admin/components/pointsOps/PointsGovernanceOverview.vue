@@ -54,15 +54,55 @@
       <header
         ><h3>每日净发行趋势</h3><span>{{ data.range.startDate }} 至 {{ data.range.endDate }}</span></header
       >
-      <div v-if="trend.length" class="points-health__bars" role="img" aria-label="每日净发行柱状趋势">
-        <div v-for="item in trend" :key="item.day" class="points-health__bar-item" :title="`${item.day}：${item.net}`">
-          <span class="points-health__bar-track">
-            <i :class="item.net >= 0 ? 'is-positive' : 'is-negative'" :style="{ height: `${item.height}%` }" />
-          </span>
-          <small>{{ item.label }}</small>
-        </div>
+      <div
+        v-if="trend.length"
+        class="points-health__bars"
+        role="img"
+        aria-label="每日净发行柱状趋势，移入柱形可查看精确数值"
+      >
+        <BTooltip v-for="item in trend" :key="item.day" class="points-health__bar-tooltip" :title="trendTooltip(item)">
+          <div class="points-health__bar-item" :aria-label="trendTooltip(item)">
+            <span class="points-health__bar-track">
+              <i :class="item.net >= 0 ? 'is-positive' : 'is-negative'" :style="{ height: `${item.height}%` }" />
+            </span>
+            <small>{{ item.label }}</small>
+          </div>
+        </BTooltip>
       </div>
       <p v-else class="points-health__empty">该时间窗暂无积分流水。</p>
+    </article>
+
+    <article v-if="data" class="points-health__panel points-health__leaderboard">
+      <header>
+        <div>
+          <h3>当前积分余额 Top 20</h3>
+          <span>仅统计普通有效账号，按当前可用积分排序</span>
+        </div>
+        <span>点击用户查看积分来源、消耗与最近流水</span>
+      </header>
+      <BTable
+        v-if="leaderboardRows.length"
+        :data="leaderboardRows"
+        :columns="leaderboardColumns"
+        row-key="userId"
+        row-clickable
+        @row-click="openUser"
+      >
+        <template #bodyCell="{ column, record }">
+          <span v-if="column.key === 'rank'" class="points-health__rank" :class="{ 'is-top': record.rank <= 3 }">
+            {{ record.rank }}
+          </span>
+          <span v-else-if="column.key === 'identity'" class="points-health__identity">
+            <strong>{{ record.alias || '未设置昵称' }}</strong>
+            <small>{{ record.email || record.userId }}</small>
+          </span>
+          <strong v-else-if="column.key === 'pointsLabel'" class="points-health__points">
+            <SvgIcon :src="icon.growth.coin" size="14" aria-hidden="true" />{{ record.pointsLabel }}
+          </strong>
+          <template v-else>{{ record[column.key] }}</template>
+        </template>
+      </BTable>
+      <p v-else class="points-health__empty">当前没有持有积分的普通账号。</p>
     </article>
     <BLoading v-if="loading" :loading="true" inline class="points-health__loading" title="正在加载积分健康数据" />
   </section>
@@ -71,11 +111,29 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import growthApi from '@/api/growthApi';
+  import BTable from '@/components/base/BasicComponents/BTable/BTable.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BSelect from '@/components/base/BasicComponents/BSelect.vue';
+  import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
+  import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
+  import icon from '@/config/icon';
+  import { bookmarkStore } from '@/store';
+
+  interface BalanceLeaderboardUser {
+    rank: number;
+    userId: string;
+    alias: string | null;
+    email: string | null;
+    points: number;
+    level: number;
+    lastActiveTime: string | null;
+  }
+
+  const emit = defineEmits<{ 'select-user': [user: BalanceLeaderboardUser] }>();
+  const bookmark = bookmarkStore();
 
   const loading = ref(false);
   const data = ref<any>(null);
@@ -96,6 +154,14 @@
   };
 
   const format = (value: unknown) => Number(value || 0).toLocaleString('zh-CN');
+  const formatSigned = (value: unknown) => {
+    const number = Number(value || 0);
+    return number > 0 ? `+${format(number)}` : format(number);
+  };
+  const formatDate = (value: unknown) => {
+    const date = new Date(String(value || ''));
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('zh-CN');
+  };
   const metricCards = computed(() => {
     const metrics = data.value?.metrics || {};
     return [
@@ -149,6 +215,39 @@
       label: String(row.day || '').slice(5),
     }));
   });
+  const leaderboardRows = computed(() =>
+    (data.value?.balanceLeaderboard || []).map((row: BalanceLeaderboardUser) => ({
+      ...row,
+      pointsLabel: format(row.points),
+      levelLabel: `Lv.${Number(row.level || 1)}`,
+      lastActiveLabel: formatDate(row.lastActiveTime),
+    })),
+  );
+  const leaderboardColumns = computed(() =>
+    bookmark.isMobile
+      ? [
+          { title: '排名', key: 'rank', width: '52px', ellipsis: false },
+          { title: '用户', key: 'identity', width: 'minmax(120px, 1fr)', ellipsis: false },
+          { title: '积分', key: 'pointsLabel', width: '92px', ellipsis: false },
+        ]
+      : [
+          { title: '排名', key: 'rank', width: '64px', ellipsis: false },
+          { title: '用户', key: 'identity', width: 'minmax(220px, 1fr)', ellipsis: false },
+          { title: '当前积分', key: 'pointsLabel', width: '130px', ellipsis: false },
+          { title: '等级', key: 'levelLabel', width: '90px', ellipsis: false },
+          { title: '最近活跃', key: 'lastActiveLabel', width: '130px', ellipsis: false },
+        ],
+  );
+
+  function trendTooltip(item: any) {
+    const issued =
+      Number(item.stable || 0) + Number(item.oneTime || 0) + Number(item.random || 0) + Number(item.operations || 0);
+    return `${item.day} · 净发行 ${formatSigned(item.net)} · 产出 +${format(issued)} · 消耗 -${format(item.spent)}`;
+  }
+
+  function openUser(user: BalanceLeaderboardUser) {
+    emit('select-user', user);
+  }
 
   async function reload() {
     const payload: Record<string, unknown> = {};
@@ -315,12 +414,16 @@
     min-height: 132px;
     overflow-x: auto;
   }
+  .points-health__bar-tooltip {
+    min-width: 24px;
+    flex: 1 0 24px;
+  }
   .points-health__bar-item {
     display: grid;
     grid-template-rows: 104px auto;
     gap: 5px;
+    width: 100%;
     min-width: 24px;
-    flex: 1 0 24px;
     text-align: center;
   }
   .points-health__bar-track {
@@ -338,6 +441,46 @@
   }
   .points-health__bar-track i.is-negative {
     background: var(--danger-color);
+  }
+  .points-health__leaderboard header > div {
+    display: grid;
+    gap: 3px;
+  }
+  .points-health__rank {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: var(--desc-color);
+    background: var(--card-background);
+    font-variant-numeric: tabular-nums;
+  }
+  .points-health__rank.is-top {
+    border: 1px solid var(--warning-color);
+    color: var(--text-color);
+  }
+  .points-health__identity {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+  .points-health__identity strong,
+  .points-health__identity small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .points-health__identity strong {
+    color: var(--text-color);
+    font-size: 13px;
+  }
+  .points-health__points {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--warning-color);
+    font-variant-numeric: tabular-nums;
   }
   .points-health__empty {
     color: var(--desc-color);
@@ -368,6 +511,11 @@
     }
     .points-health__grid {
       grid-template-columns: 1fr;
+    }
+    .points-health__leaderboard header {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 4px;
     }
   }
 </style>

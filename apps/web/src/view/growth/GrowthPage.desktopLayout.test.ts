@@ -18,8 +18,18 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     expect(source).toMatch(
       /<aside v-if="useWideDesktopLayout" class="growth-desktop-sidebar">[\s\S]*?<header class="growth-hero growth-hero--sidebar">[\s\S]*?growth\.pageTitle[\s\S]*?growth\.pageSubtitle/,
     );
+    expect(source).toMatch(/\.growth-desktop-sidebar\s*\{[\s\S]*?position:\s*static;[\s\S]*?max-height:\s*100%/);
+    expect(source).toContain(`:class="{ 'growth-page--wide': useWideDesktopLayout }"`);
+    expect(source).toMatch(/\.growth-page--wide\s*\{[\s\S]*?overflow:\s*hidden;/);
     expect(source).toMatch(
-      /\.growth-desktop-sidebar\s*\{[\s\S]*?position:\s*sticky;[\s\S]*?max-height:\s*calc\(100vh - 36px\)/,
+      /\.growth-workspace--wide \.growth-main\s*\{[\s\S]*?height:\s*100%;[\s\S]*?overflow-y:\s*auto;/,
+    );
+    expect(source).not.toContain('scrollbar-gutter: stable');
+    expect(source).toContain('ref="growthMainRef" class="growth-main"');
+    expect(source).toContain('useWideDesktopLayout.value ? growthMainRef.value : growthPageRef.value');
+    expect(source).toContain("bookmark.isMobile && section === 'rewards'");
+    expect(source).toMatch(
+      /function selectRewardSection[\s\S]*?if \(useWideDesktopLayout\.value\)[\s\S]*?resetMobileScrollElement\(growthMainRef\.value\)/,
     );
   });
 

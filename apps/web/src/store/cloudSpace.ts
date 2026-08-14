@@ -4,6 +4,40 @@ import { CLOUD_FILE_CATEGORY_ORDER, type CloudFileCategory } from '@/constants/c
 import i18n from '@/i18n';
 import { RESOURCE_LIST_PAGE_SIZE, mergeResourcePage } from '@/utils/resourcePagination';
 
+export type CloudFileSortField = 'createTime' | 'fileName' | 'fileSize';
+export type CloudFileSortOrder = 'asc' | 'desc';
+export interface CloudFileSort {
+  field: CloudFileSortField;
+  order: CloudFileSortOrder;
+}
+
+export const CLOUD_FILE_SORT_STORAGE_KEY = 'light-note:cloud-space:file-sort';
+const DEFAULT_CLOUD_FILE_SORT: CloudFileSort = { field: 'createTime', order: 'desc' };
+
+function normalizeCloudFileSort(value: Partial<CloudFileSort> | null | undefined): CloudFileSort {
+  if (!['createTime', 'fileName', 'fileSize'].includes(String(value?.field))) return { ...DEFAULT_CLOUD_FILE_SORT };
+  const field = value?.field as CloudFileSortField;
+  return { field, order: value?.order === 'asc' ? 'asc' : 'desc' };
+}
+
+function loadCloudFileSort(): CloudFileSort {
+  if (typeof window === 'undefined') return { ...DEFAULT_CLOUD_FILE_SORT };
+  try {
+    return normalizeCloudFileSort(JSON.parse(window.localStorage.getItem(CLOUD_FILE_SORT_STORAGE_KEY) || 'null'));
+  } catch {
+    return { ...DEFAULT_CLOUD_FILE_SORT };
+  }
+}
+
+function saveCloudFileSort(sort: CloudFileSort) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(CLOUD_FILE_SORT_STORAGE_KEY, JSON.stringify(sort));
+  } catch {
+    // 无痕模式或存储被禁用时仍保留当前会话内排序，不影响文件查询。
+  }
+}
+
 export default defineStore('dom', {
   state: () =>
     <
@@ -39,6 +73,7 @@ export default defineStore('dom', {
         fileTotal: number;
         fileHasMore: boolean;
         fileRequestVersion: number;
+        fileSort: CloudFileSort;
         folderRequestVersion: number;
         usedSpaceRequestVersion: number;
         cacheImgArr: any[]; // 记录需要清空缓存的图片，因为图片直接覆盖后地址不变，需要手动记录一下方便浏览器清空老图片缓存
@@ -66,6 +101,7 @@ export default defineStore('dom', {
       fileTotal: 0,
       fileHasMore: false,
       fileRequestVersion: 0,
+      fileSort: loadCloudFileSort(),
       folderRequestVersion: 0,
       usedSpaceRequestVersion: 0,
       cacheImgArr: [],
@@ -107,6 +143,7 @@ export default defineStore('dom', {
             category: this.typeCheckValue,
             folderId: this.folder?.id ?? 'all',
           },
+          sort: this.fileSort,
         });
         if (requestVersion !== this.fileRequestVersion) return false;
         // 校验业务码:失败时保留旧列表并兜底为数组,避免 fileList 被置成 undefined 导致模板 .length 抛错。
@@ -134,6 +171,15 @@ export default defineStore('dom', {
     },
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
+    },
+    setFileSort(field: Exclude<CloudFileSortField, 'createTime'>) {
+      const defaultOrder: CloudFileSortOrder = field === 'fileName' ? 'asc' : 'desc';
+      this.fileSort =
+        this.fileSort.field === field
+          ? { field, order: this.fileSort.order === 'asc' ? 'desc' : 'asc' }
+          : { field, order: defaultOrder };
+      saveCloudFileSort(this.fileSort);
+      return this.queryFieldList();
     },
     /**
      * 空间用量。返回是否成功,供下拉刷新判断「部分数据刷新失败」。

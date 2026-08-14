@@ -92,7 +92,7 @@ const isActiveIpBan = (ipReputation) => {
 const normalizeEmail = (value) => (typeof value === 'string' ? value.trim() : '');
 // 列表头像允许保留较清晰的内嵌图，但不允许把数 MB 的原图带入 50 条首屏响应。
 const MAX_INLINE_AVATAR_BYTES = 1024 * 1024;
-const ADMIN_USER_ROLES = new Set(['user', 'visitor', 'root']);
+const ADMIN_USER_ROLES = new Set(['user', 'visitor', 'test', 'root']);
 const ADMIN_USER_STATUSES = new Set(['active', 'banned', 'all']);
 const ADMIN_USER_ACTIVITY_WINDOWS = new Set(['all', 'day1', 'day7', 'day30', 'inactive30']);
 
@@ -667,7 +667,11 @@ export const getUserList = async (req, res) => {
     const key = String(filters?.key || '')
       .trim()
       .slice(0, 200);
-    const role = ADMIN_USER_ROLES.has(String(filters?.role || '').trim()) ? String(filters.role).trim() : '';
+    const requestedRole = String(filters?.role || '').trim();
+    if (requestedRole && !ADMIN_USER_ROLES.has(requestedRole)) {
+      return res.send(resultData(null, 400, L(req, '用户角色筛选值无效', 'Invalid user role filter.')));
+    }
+    const role = requestedRole;
     const status = ADMIN_USER_STATUSES.has(String(filters?.status || '').trim())
       ? String(filters.status).trim()
       : 'active';
@@ -741,7 +745,7 @@ export const getUserList = async (req, res) => {
               END AS head_picture,
               u.phone_number, u.role, u.ip,
               u.create_time, u.last_active_time, u.del_flag,
-              ug.equipped_frame,
+              COALESCE(ug.level, 1) AS level, ug.equipped_frame,
               COALESCE(aur.remark_name, '') AS admin_remark
        FROM user u
        LEFT JOIN user_growth ug ON ug.user_id = u.id
@@ -758,7 +762,7 @@ export const getUserList = async (req, res) => {
 
     if (ids.length) {
       const placeholders = ids.map(() => '?').join(', ');
-      const [[bookmarks], [tags], [notes], [files]] = await Promise.all([
+      const [[bookmarks], [tags], [notes], [files], [latestSessions]] = await Promise.all([
         pool.query(
           `SELECT user_id AS userId, COUNT(*) AS total FROM bookmark WHERE del_flag = 0 AND user_id IN (${placeholders}) GROUP BY user_id`,
           ids,
@@ -775,17 +779,37 @@ export const getUserList = async (req, res) => {
           `SELECT create_by AS userId, ROUND(SUM(file_size) / 1048576, 2) AS total FROM files WHERE del_flag IN (0, 1) AND create_by IN (${placeholders}) GROUP BY create_by`,
           ids,
         ),
+        pool.query(
+          `SELECT current_session.user_id AS userId, current_session.user_agent AS userAgent
+           FROM user_sessions current_session
+           LEFT JOIN user_sessions newer_session
+             ON newer_session.user_id = current_session.user_id
+            AND newer_session.expires_at > NOW()
+            AND (
+              newer_session.last_active_time > current_session.last_active_time
+              OR (
+                newer_session.last_active_time = current_session.last_active_time
+                AND newer_session.sid > current_session.sid
+              )
+            )
+           WHERE current_session.user_id IN (${placeholders})
+             AND current_session.expires_at > NOW()
+             AND newer_session.sid IS NULL`,
+          ids,
+        ),
       ]);
       const asMap = (values) => new Map(values.map((value) => [value.userId, Number(value.total || 0)]));
       const bookmarkMap = asMap(bookmarks);
       const tagMap = asMap(tags);
       const noteMap = asMap(notes);
       const fileMap = asMap(files);
+      const sessionMap = new Map(latestSessions.map((value) => [value.userId, String(value.userAgent || '')]));
       page.forEach((row) => {
         row.bookmarkTotal = bookmarkMap.get(row.id) || 0;
         row.tagTotal = tagMap.get(row.id) || 0;
         row.noteTotal = noteMap.get(row.id) || 0;
         row.storageUsed = fileMap.get(row.id) || 0;
+        row.userAgent = sessionMap.get(row.id) || '';
       });
     }
 

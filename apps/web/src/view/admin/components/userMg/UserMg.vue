@@ -58,16 +58,24 @@
     >
       <template #bodyCell="{ column, record }">
         <template v-if="column.key === 'headPicture'">
-          <span class="usermg-avatar" :class="{ 'is-framed': frameVariant(record.equippedFrame) }" aria-hidden="true">
-            <AvatarFramePreview
-              v-if="frameVariant(record.equippedFrame)"
-              :frame-id="record.equippedFrame"
-              :src="record.headPicture || icon.navigation.user"
-              :size="30"
-              pause-when-offscreen
-            />
-            <svg-icon v-else :src="record.headPicture || icon.navigation.user" :size="36" />
+          <span class="usermg-avatar-cell">
+            <span class="usermg-avatar" :class="{ 'is-framed': frameVariant(record.equippedFrame) }" aria-hidden="true">
+              <AvatarFramePreview
+                v-if="frameVariant(record.equippedFrame)"
+                :frame-id="record.equippedFrame"
+                :src="record.headPicture || icon.navigation.user"
+                :size="30"
+                pause-when-offscreen
+              />
+              <svg-icon v-else :src="record.headPicture || icon.navigation.user" :size="36" />
+            </span>
+            <small>{{ t('adminUserManagement.levelShort', { level: record.level || 1 }) }}</small>
           </span>
+        </template>
+        <template v-else-if="column.key === 'browser'">
+          <BTooltip :title="formatAdminDeviceLabel(record.userAgent, t('common.unknown'))">
+            <span class="usermg-browser">{{ formatAdminUserAgent(record.userAgent, '-').browser }}</span>
+          </BTooltip>
         </template>
         <template v-else-if="column.key === 'adminRemark'">
           <span class="usermg-remark" :class="{ 'is-empty': !record.adminRemark }">
@@ -113,7 +121,11 @@
     </BTable>
   </AdminDataPage>
 
-  <User360Modal v-model:visible="detailVisible" :user-info="selectedRecord" />
+  <User360Modal
+    v-model:visible="detailVisible"
+    :user-info="selectedRecord"
+    @preview="(record) => openPreview(record, 'readonly')"
+  />
 
   <BModal
     v-if="editVisible"
@@ -169,6 +181,7 @@
   import AdminDataPage from '@/components/admin/AdminDataPage.vue';
   import AdminRiskActionModal from '@/components/admin/AdminRiskActionModal.vue';
   import { useAdminUserManagementList, useAdminUserOperations } from './useAdminUserManagement.ts';
+  import { formatAdminDeviceLabel, formatAdminUserAgent } from './userAgentFormat.ts';
 
   const { t } = useI18n();
   const tableRef = ref<InstanceType<typeof BTable> | null>(null);
@@ -221,11 +234,12 @@
   } = useAdminUserOperations({ t, items: userList, reloadUsers });
 
   const userColumns = computed(() => [
-    { title: t('adminUserManagement.columns.avatar'), key: 'headPicture', width: '60px', overflowVisible: true },
+    { title: t('adminUserManagement.columns.avatar'), key: 'headPicture', width: '88px', overflowVisible: true },
     { title: t('adminUserManagement.columns.alias'), key: 'alias', width: '150px' },
     { title: t('adminUserManagement.remarkColumn'), key: 'adminRemark', width: '150px' },
     { title: t('adminUserManagement.email'), key: 'email', width: '1fr' },
     { title: 'IP', key: 'ip', width: '150px' },
+    { title: t('adminUserManagement.columns.browser'), key: 'browser', width: '125px' },
     {
       title: t('adminUserManagement.columns.lastActive'),
       key: 'lastActiveTime',
@@ -347,6 +361,28 @@
     border-radius: 50%;
     background: var(--workspace-panel-bg-color);
     vertical-align: middle;
+  }
+
+  .usermg-avatar-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .usermg-avatar-cell small {
+    color: var(--desc-color);
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .usermg-browser {
+    display: block;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .usermg-avatar:not(.is-framed) {

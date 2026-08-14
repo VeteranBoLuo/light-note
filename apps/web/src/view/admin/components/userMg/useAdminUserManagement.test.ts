@@ -113,6 +113,12 @@ describe('后台用户管理共享任务流', () => {
     }
     expect(detail).toContain('closeCurrentMobileOverlayThen(close');
     expect(detail).toContain("const returnTo = bookmark.isMobile ? '/userMg' : '/admin/userMg'");
+    expect(detail).toContain("emit('preview', userInfo)");
+    expect(detail).toContain('adminUserManagement.detail.latestBrowser');
+    expect(desktop).toContain("key: 'browser'");
+    expect(desktop).toContain('adminUserManagement.levelShort');
+    expect(desktop).toContain('@preview="(record) => openPreview(record, \'readonly\')"');
+    expect(mobile).toContain('@preview="(record) => openPreview(record, \'readonly\')"');
     expect(operationLog).toContain("value === '/admin/userMg' || value === '/userMg'");
     expect(operationLog).toContain('goBackToUserManagement');
   });

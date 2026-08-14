@@ -31,6 +31,7 @@ import { attachPendingStatus, enqueueResources, removeInboxRelations } from '../
 import { purgeDocumentSourcesForCloudFiles } from '../util/aiDocument/service.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
+import { buildFileListOrderBy } from '../util/fileListSort.js';
 import {
   BYTES_PER_MB,
   getAccountedStorageBytes,
@@ -404,6 +405,7 @@ router.post('/queryFiles', async (req, res) => {
     }
 
     const whereSql = where.join(' AND ');
+    const orderBy = buildFileListOrderBy(req.body?.sort);
     let sql = `SELECT files.*, folders.name AS folderName,
         (SELECT JSON_ARRAYAGG(JSON_OBJECT('id', t.id, 'name', t.name))
          FROM resource_tag_relations r
@@ -413,7 +415,7 @@ router.post('/queryFiles', async (req, res) => {
        FROM files
        LEFT JOIN folders ON files.folder_id = folders.id
        WHERE ${whereSql}
-       ORDER BY files.create_time DESC, files.id DESC`;
+       ORDER BY ${orderBy}`;
     const listParams = [...params];
     if (pagination.enabled) {
       sql += ' LIMIT ? OFFSET ?';

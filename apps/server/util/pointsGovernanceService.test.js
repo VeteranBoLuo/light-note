@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  getPointsGovernanceOverview,
   getPointsGovernanceSources,
   pointsGovernanceInternals,
   resolveGovernanceRange,
@@ -131,5 +132,54 @@ describe('C5 积分治理时间窗与只读模拟器', () => {
     expect(sampleSql).toContain('prior.create_time < candidate.create_time');
     expect(sampleSql).toContain('LIMIT 5001');
     expect(sampleParams).toEqual(['2026-08-01', '2026-08-15']);
+  });
+
+  it('健康总览返回普通有效账号的当前积分 Top 20，不按用户追加查询', async () => {
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([
+        [
+          {
+            issued: 100,
+            spent: 20,
+            stableIssued: 60,
+            oneTimeIssued: 10,
+            randomIssued: 20,
+            operationsIssued: 10,
+            freeRandomIssued: 5,
+            earners: 3,
+            spenders: 1,
+            stableEarners: 2,
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ outstanding: 80, accounts: 3, zeroBalance: 0, maximum: 50 }]])
+      .mockResolvedValueOnce([[{ p50: 20, p75: 30, p90: 50, p99: 50 }]])
+      .mockResolvedValueOnce([[{ activeUsers: 3, over6000: 0, over16000: 0, over24000: 0 }]])
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([
+        [
+          {
+            userId: 'u2',
+            alias: '菠萝',
+            email: 'user@example.com',
+            points: 50,
+            level: 6,
+            lastActiveTime: '2026-08-14 12:00:00',
+          },
+        ],
+      ]);
+
+    const result = await getPointsGovernanceOverview({ presetDays: 28 }, { db: { query } });
+
+    expect(query).toHaveBeenCalledTimes(6);
+    const leaderboardSql = String(query.mock.calls[5][0]);
+    expect(leaderboardSql).toContain("COALESCE(u.role, 'user') = 'user'");
+    expect(leaderboardSql).toContain('u.del_flag = 0');
+    expect(leaderboardSql).toContain('ORDER BY ug.points DESC');
+    expect(leaderboardSql).toContain('LIMIT 20');
+    expect(result.balanceLeaderboard).toEqual([
+      expect.objectContaining({ rank: 1, userId: 'u2', alias: '菠萝', points: 50, level: 6 }),
+    ]);
   });
 });
