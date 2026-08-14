@@ -5,7 +5,10 @@ const mocks = vi.hoisted(() => ({
   requestAi: vi.fn(),
 }));
 
-vi.mock('./fetchWebMeta.js', () => ({ fetchWebMeta: mocks.fetchWebMeta }));
+vi.mock('./fetchWebMeta.js', () => ({
+  EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
+  fetchWebMeta: mocks.fetchWebMeta,
+}));
 vi.mock('./agent/aiGateway.js', () => ({ requestAi: mocks.requestAi }));
 
 const { suggestBookmarkMeta, suggestTagsFromText } = await import('./aiOrganize.js');
@@ -40,6 +43,7 @@ describe('suggestBookmarkMeta cancellation', () => {
 
     expect(mocks.fetchWebMeta).toHaveBeenCalledWith('https://example.com', {
       signal: controller.signal,
+      maxContentBytes: 4 * 1024 * 1024,
     });
     expect(mocks.requestAi).toHaveBeenCalledWith(
       expect.any(Array),

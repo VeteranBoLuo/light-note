@@ -83,6 +83,10 @@ const adminRouter: RouteRecordRaw[] = [
         component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
       },
       {
+        path: 'supportManagement',
+        component: () => import('@/view/admin/components/supportManagement/SupportManagement.vue'),
+      },
+      {
         path: 'logCleanup',
         component: () => import('@/view/admin/components/logCleanup/LogCleanup.vue'),
       },
@@ -179,6 +183,11 @@ const adminRouter: RouteRecordRaw[] = [
     path: 'conversion',
     meta: MOBILE_ADMIN_META,
     component: () => import('@/view/admin/components/conversion/ConversionFunnel.vue'),
+  },
+  {
+    path: 'supportManagement',
+    meta: MOBILE_ADMIN_META,
+    component: () => import('@/view/admin/components/supportManagement/SupportManagement.vue'),
   },
   {
     path: 'logCleanup',

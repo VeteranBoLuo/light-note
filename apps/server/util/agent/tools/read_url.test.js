@@ -2,7 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetchWebMeta: vi.fn() }));
 
-vi.mock('../../fetchWebMeta.js', () => ({ fetchWebMeta: mocks.fetchWebMeta }));
+vi.mock('../../fetchWebMeta.js', () => ({
+  EXPLICIT_WEB_READ_MAX_BYTES: 4 * 1024 * 1024,
+  fetchWebMeta: mocks.fetchWebMeta,
+}));
 
 const { default: readUrl } = await import('./read_url.js');
 
@@ -80,7 +83,7 @@ describe('read_url', () => {
     ).resolves.toMatchObject({ title: '文章标题', text: expect.stringContaining('正文') });
     expect(mocks.fetchWebMeta).toHaveBeenCalledWith(
       'https://example.com/article',
-      expect.objectContaining({ timeout: 12_000, bodyLimit: 12_000 }),
+      expect.objectContaining({ timeout: 12_000, bodyLimit: 12_000, maxContentBytes: 4 * 1024 * 1024 }),
     );
   });
 
@@ -90,6 +93,18 @@ describe('read_url', () => {
     await expect(readUrl.execute({ url: 'https://example.com' }, {})).resolves.toEqual({
       error: 'ACCESS_DENIED',
       message: '网站拒绝了服务器读取，可能需要登录或存在访问限制',
+    });
+  });
+
+  it.each([
+    ['CONTENT_TOO_LARGE', '网页内容过大，超出 AI 的安全读取上限'],
+    ['ACCESS_CHALLENGE', '网站要求完成人机验证，暂时无法由 AI 读取'],
+  ])('向用户解释网页读取失败原因 %s', async (reason, message) => {
+    mocks.fetchWebMeta.mockResolvedValueOnce({ ok: false, reason });
+
+    await expect(readUrl.execute({ url: 'https://example.com' }, {})).resolves.toEqual({
+      error: reason,
+      message,
     });
   });
 

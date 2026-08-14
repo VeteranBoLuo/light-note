@@ -1608,7 +1608,8 @@ SELECT '[48] missing_afdian_support_table' AS check_name, expected.t AS detail
 FROM (
   SELECT 'support_checkout_intents' t UNION ALL
   SELECT 'support_account_links' UNION ALL
-  SELECT 'support_orders'
+  SELECT 'support_orders' UNION ALL
+  SELECT 'support_public_preferences'
 ) expected
 LEFT JOIN information_schema.tables actual
   ON actual.table_schema=DATABASE()
@@ -1624,7 +1625,8 @@ WHERE actual.table_schema=DATABASE()
   AND (
     (actual.table_name='support_checkout_intents' AND actual.column_name='user_id') OR
     (actual.table_name='support_account_links' AND actual.column_name='user_id') OR
-    (actual.table_name='support_orders' AND actual.column_name='light_note_user_id')
+    (actual.table_name='support_orders' AND actual.column_name='light_note_user_id') OR
+    (actual.table_name='support_public_preferences' AND actual.column_name IN ('user_id', 'admin_hidden_by'))
   )
   AND (actual.character_set_name <> 'utf8' OR actual.collation_name <> 'utf8_general_ci');
 
@@ -1636,10 +1638,30 @@ FROM (
   SELECT 'support_account_links', 'uk_support_link_provider_private' UNION ALL
   SELECT 'support_orders', 'uk_support_order_provider' UNION ALL
   SELECT 'support_orders', 'idx_support_order_user_status' UNION ALL
-  SELECT 'support_orders', 'idx_support_order_retry'
+  SELECT 'support_orders', 'idx_support_order_retry' UNION ALL
+  SELECT 'support_orders', 'idx_support_order_ranking' UNION ALL
+  SELECT 'support_public_preferences', 'uk_support_public_id' UNION ALL
+  SELECT 'support_public_preferences', 'idx_support_public_visibility'
 ) expected
 LEFT JOIN information_schema.statistics actual
   ON actual.table_schema=DATABASE()
  AND actual.table_name=expected.tn
  AND actual.index_name=expected.ix
 WHERE actual.index_name IS NULL;
+
+SELECT '[48] missing_afdian_support_management_column' AS check_name,
+  CONCAT(expected.tn, '.', expected.col) AS detail
+FROM (
+  SELECT 'support_account_links' tn, 'provider_name' col UNION ALL
+  SELECT 'support_account_links', 'provider_avatar_url' UNION ALL
+  SELECT 'support_account_links', 'identity_refreshed_at' UNION ALL
+  SELECT 'support_orders', 'ranking_observed_at' UNION ALL
+  SELECT 'support_public_preferences', 'participate_in_ranking' UNION ALL
+  SELECT 'support_public_preferences', 'show_identity' UNION ALL
+  SELECT 'support_public_preferences', 'admin_hidden'
+) expected
+LEFT JOIN information_schema.columns actual
+  ON actual.table_schema=DATABASE()
+ AND actual.table_name=expected.tn
+ AND actual.column_name=expected.col
+WHERE actual.column_name IS NULL;

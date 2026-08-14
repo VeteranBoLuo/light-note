@@ -5,6 +5,7 @@ import {
   buildAfdianWebhookSignText,
   exchangeAfdianAuthorizationCode,
   isAfdianDashboardWebhookTestPayload,
+  queryAfdianPublicProfile,
   queryAfdianOrders,
   verifyAfdianWebhookSignature,
 } from './afdianClient.js';
@@ -31,11 +32,18 @@ describe('爱发电客户端协议', () => {
     expect(url.toString()).not.toContain('test-secret');
   });
 
-  it('接受爱发电实际长度的 OAuth 授权码并原样换取身份', async () => {
+  it('接受爱发电实际长度的 OAuth 授权码，并只采用官方 basic 返回的身份 ID', async () => {
     const authorizationCode = 'A'.repeat(864);
     const fetchMock = vi.fn(async () => ({
       ok: true,
-      json: async () => ({ ec: 200, data: { user_id: 'provider-user' } }),
+      json: async () => ({
+        ec: 200,
+        data: {
+          user_id: 'provider-user',
+          name: '不应从 OAuth 响应读取',
+          avatar: 'https://pic.example.com/ignored.png',
+        },
+      }),
     }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -48,6 +56,46 @@ describe('爱发电客户端协议', () => {
     expect(url).toBe('https://afdian.com/api/oauth2/access_token');
     expect(body.get('code')).toBe(authorizationCode);
     expect(body.get('redirect_uri')).toBe('https://example.com/api/support/afdian/oauth/callback');
+  });
+
+  it('从公开用户资料补全昵称和 HTTPS 头像，并校验响应身份', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        ec: 200,
+        data: {
+          user: {
+            user_id: 'provider-user',
+            name: '  菠萝\u0000  ',
+            avatar: 'https://pic.example.com/avatar.png',
+          },
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(queryAfdianPublicProfile('provider-user')).resolves.toEqual({
+      providerName: '菠萝',
+      providerAvatarUrl: 'https://pic.example.com/avatar.png',
+    });
+    expect(String(fetchMock.mock.calls[0][0])).toBe('https://afdian.com/api/user/get-profile?user_id=provider-user');
+  });
+
+  it('公开资料响应身份不匹配时拒绝写入其他账号资料', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({
+          ec: 200,
+          data: { user: { user_id: 'another-user', name: '错误账号' } },
+        }),
+      })),
+    );
+
+    await expect(queryAfdianPublicProfile('provider-user')).rejects.toMatchObject({
+      code: 'AFDIAN_RESPONSE_INVALID',
+    });
   });
 
   it('仍拒绝异常膨胀的 OAuth 授权码', async () => {

@@ -1,6 +1,6 @@
 import pool from '../../db/index.js';
 import { insertData } from '../agent/data.js';
-import { fetchWebMeta } from '../fetchWebMeta.js';
+import { EXPLICIT_WEB_READ_MAX_BYTES, fetchWebMeta } from '../fetchWebMeta.js';
 import { enqueueResources } from '../resourceInbox.js';
 import { RESOURCE_TYPE, insertResourceTagRelations, validateUserTags } from '../resourceTags.js';
 import { archiveBookmarkBackground } from '../snapshot.js';
@@ -55,7 +55,7 @@ export async function createBookmark({
   let name = String(bookmark.name || '').trim();
   let description = String(bookmark.description || '').trim();
   if (fillMetadata && (!name || !description)) {
-    const meta = await fetchWebMeta(url, { signal });
+    const meta = await fetchWebMeta(url, { signal, maxContentBytes: EXPLICIT_WEB_READ_MAX_BYTES });
     if (meta.ok) {
       if (!name) name = String(meta.title || '').trim();
       if (!description) description = String(meta.description || '').trim();

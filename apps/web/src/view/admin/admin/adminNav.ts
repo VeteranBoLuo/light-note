@@ -43,6 +43,7 @@ export type AdminNavInput = {
   adminGovernanceTitle: string;
   aiEvaluationTitle: string;
   communityModerationTitle: string;
+  supportManagementTitle: string;
 };
 
 /** 跨外壳入口：这些是独立顶级路由，路径不能按 /admin/{id} 拼 */
@@ -73,6 +74,7 @@ export function buildAdminNav({
   adminGovernanceTitle,
   aiEvaluationTitle,
   communityModerationTitle,
+  supportManagementTitle,
 }: AdminNavInput): AdminNavEntry[] {
   return [
     {
@@ -137,6 +139,7 @@ export function buildAdminNav({
       items: [
         { id: 'productInsights', title: productInsightsTitle },
         { id: 'conversion', title: '转化漏斗' },
+        { id: 'supportManagement', title: supportManagementTitle },
         { id: 'pointsOps', title: '积分运营' },
         {
           id: 'communityChatModeration',
@@ -211,6 +214,7 @@ const MOBILE_PATHS: Record<string, string> = {
   aiEvaluation: '/aiEvaluation',
   productInsights: '/productInsights',
   conversion: '/conversion',
+  supportManagement: '/supportManagement',
   communityChatModeration: '/communityChatModeration',
   notificationCenter: '/notificationCenter',
   operationLog: '/operationLog',

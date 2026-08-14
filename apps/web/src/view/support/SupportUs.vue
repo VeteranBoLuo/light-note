@@ -49,54 +49,17 @@
           </div>
         </header>
 
-        <BCard
+        <SupportAccountPanel
           v-if="supportStateReady"
-          as="section"
-          class="support-account"
-          variant="panel"
-          padding="20px"
-          radius="18px"
-          aria-labelledby="support-account-title"
-        >
-          <span class="support-account__icon" aria-hidden="true">
-            <SvgIcon :src="icon.settings.account" size="22" />
-          </span>
-          <div class="support-account__body">
-            <div class="support-account__title-row">
-              <h2 id="support-account-title">{{ t('support.accountTitle') }}</h2>
-              <span v-if="supportState.linked" class="support-account__status">
-                {{ t('support.accountLinkedStatus') }}
-              </span>
-            </div>
-            <p v-if="!supportState.authenticated">{{ t('support.accountGuestDescription') }}</p>
-            <p v-else-if="supportState.linked">{{ t('support.accountLinkedDescription') }}</p>
-            <p v-else>{{ t('support.accountUnlinkedDescription') }}</p>
-            <p v-if="supportState.authenticated && supportState.orderCount > 0" class="support-account__summary">
-              {{
-                t('support.accountOrderSummary', {
-                  count: supportState.orderCount,
-                  amount: supportState.totalAmount,
-                })
-              }}
-            </p>
-            <p
-              v-if="supportState.authenticated && !supportState.orderSyncAvailable"
-              class="support-account__unavailable"
-              role="status"
-            >
-              {{ t('support.accountSyncUnavailable') }}
-            </p>
-          </div>
-          <BButton
-            v-if="supportState.authenticated && supportState.oauthAvailable"
-            class="support-account__action"
-            :type="supportState.linked ? '' : 'primary'"
-            :loading="unlinking"
-            @click="supportState.linked ? confirmUnlink() : handleOAuthLink()"
-          >
-            {{ t(supportState.linked ? 'support.accountUnlinkAction' : 'support.accountLinkAction') }}
-          </BButton>
-        </BCard>
+          :state="supportState"
+          :unlinking="unlinking"
+          :preference-saving="preferenceSaving"
+          @link="handleOAuthLink"
+          @unlink="confirmUnlink"
+          @preference-change="handlePreferenceChange"
+        />
+
+        <SupportLeaderboard :leaderboard="leaderboard" :loading="leaderboardLoading" />
 
         <section class="support-section support-options" aria-labelledby="support-options-title">
           <div class="support-section__heading">
@@ -251,6 +214,8 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BCard from '@/components/base/BasicComponents/BCard.vue';
   import MobileTopBar from '@/components/mobile/MobileTopBar.vue';
+  import SupportAccountPanel from './SupportAccountPanel.vue';
+  import SupportLeaderboard from './SupportLeaderboard.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
@@ -264,7 +229,14 @@
   } from '@/config/support';
   import { bookmarkStore } from '@/store';
   import { recordOperation } from '@/api/commonApi';
-  import { getAfdianSupportState, unlinkAfdianAccount, type AfdianSupportState } from '@/api/supportApi';
+  import {
+    getAfdianLeaderboard,
+    getAfdianSupportState,
+    unlinkAfdianAccount,
+    updateAfdianPublicPreference,
+    type AfdianLeaderboard,
+    type AfdianSupportState,
+  } from '@/api/supportApi';
   import { useMobileTopBar } from '@/composables/useMobileTopBar';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
 
@@ -272,16 +244,22 @@
   const router = useRouter();
   const bookmark = bookmarkStore();
   const supportConfigured = AFDIAN_SUPPORT_CONFIGURED;
-  const supportState = ref<AfdianSupportState>({
+  const emptySupportState: AfdianSupportState = {
     authenticated: false,
     oauthAvailable: false,
     orderSyncAvailable: false,
     linked: false,
     orderCount: 0,
     totalAmount: '0.00',
-  });
+    publicPreference: { participateInRanking: true, showIdentity: false, adminHidden: false },
+    recentOrders: [],
+  };
+  const supportState = ref<AfdianSupportState>({ ...emptySupportState });
   const supportStateReady = ref(false);
   const unlinking = ref(false);
+  const preferenceSaving = ref(false);
+  const leaderboard = ref<AfdianLeaderboard | null>(null);
+  const leaderboardLoading = ref(true);
 
   const promiseCards = computed(() => [
     {
@@ -409,11 +387,45 @@
 
   async function loadSupportState() {
     try {
-      supportState.value = await getAfdianSupportState();
+      const next = await getAfdianSupportState();
+      supportState.value = {
+        ...emptySupportState,
+        ...next,
+        publicPreference: { ...emptySupportState.publicPreference, ...next.publicPreference },
+        recentOrders: Array.isArray(next.recentOrders) ? next.recentOrders : [],
+      };
     } catch {
       // 支持状态属于增强信息；读取失败时保留当前页面和已有状态，不阻断赞助入口。
     } finally {
       supportStateReady.value = true;
+    }
+  }
+
+  async function loadLeaderboard() {
+    leaderboardLoading.value = true;
+    try {
+      leaderboard.value = await getAfdianLeaderboard();
+    } catch {
+      // 排行榜是增强信息，失败不阻断赞助入口与账号管理。
+    } finally {
+      leaderboardLoading.value = false;
+    }
+  }
+
+  async function refreshSupport() {
+    await Promise.all([loadSupportState(), loadLeaderboard()]);
+  }
+
+  async function handlePreferenceChange(value: { participateInRanking: boolean; showIdentity: boolean }) {
+    preferenceSaving.value = true;
+    try {
+      supportState.value.publicPreference = await updateAfdianPublicPreference(value);
+      await loadLeaderboard();
+      message.success(t('support.rankingPreferenceSaved'));
+    } catch {
+      message.error(t('support.rankingPreferenceFailed'));
+    } finally {
+      preferenceSaving.value = false;
     }
   }
 
@@ -426,11 +438,12 @@
   }
 
   function consumeOAuthResult() {
-    const rawResult = router.currentRoute.value.query.afdian;
+    const currentRoute = router.currentRoute?.value;
+    const rawResult = currentRoute?.query?.afdian;
     const result = Array.isArray(rawResult) ? rawResult[0] : rawResult;
     if (!result || !['bound', 'failed', 'session_required'].includes(result)) return;
 
-    const query = { ...router.currentRoute.value.query };
+    const query = { ...currentRoute.query };
     delete query.afdian;
     void router.replace({ query });
 
@@ -466,13 +479,13 @@
   }
 
   const { markLoaded } = useForegroundRefresh({
-    refresh: loadSupportState,
+    refresh: refreshSupport,
     staleMs: 1_000,
     enabled: () => supportStateReady.value,
   });
 
   onMounted(() => {
-    void loadSupportState().then(() => {
+    void refreshSupport().then(() => {
       markLoaded();
       consumeOAuthResult();
     });
@@ -660,73 +673,6 @@
 
   .support-section {
     margin-top: 34px;
-  }
-
-  .support-account {
-    --b-card-background: var(--surface-panel-bg);
-    margin-top: 20px;
-    display: grid;
-    grid-template-columns: 46px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 14px;
-    border-color: var(--surface-border-color);
-  }
-
-  .support-account__icon {
-    width: 46px;
-    height: 46px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--primary-color);
-    border-radius: 14px;
-    color: var(--primary-color);
-    background: var(--card-background);
-  }
-
-  .support-account__title-row {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .support-account h2 {
-    margin: 0;
-    color: var(--text-color);
-    font-size: 17px;
-    line-height: 1.4;
-  }
-
-  .support-account p {
-    margin: 5px 0 0;
-    color: var(--desc-color);
-    font-size: 13px;
-    line-height: 1.6;
-  }
-
-  .support-account__status {
-    padding: 2px 8px;
-    border: 1px solid var(--success-color);
-    border-radius: 999px;
-    color: var(--success-color);
-    background: var(--card-background);
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .support-account .support-account__summary {
-    color: var(--primary-color);
-    font-weight: 650;
-  }
-
-  .support-account .support-account__unavailable {
-    color: var(--warning-color);
-  }
-
-  .support-account__action {
-    min-height: 38px;
-    height: auto;
   }
 
   .support-section__heading {
@@ -1064,21 +1010,6 @@
 
     .support-tier-grid {
       grid-template-columns: 1fr;
-    }
-
-    .support-account {
-      grid-template-columns: 42px minmax(0, 1fr);
-      padding: 18px !important;
-    }
-
-    .support-account__icon {
-      width: 42px;
-      height: 42px;
-    }
-
-    .support-account__action {
-      width: 100%;
-      grid-column: 1 / -1;
     }
 
     .support-tier-card {

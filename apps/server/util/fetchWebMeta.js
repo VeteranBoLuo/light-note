@@ -20,7 +20,9 @@ import { load } from 'cheerio';
 
 const FETCH_TIMEOUT = 8000; // 8s：服务器 1 核，不宜久等
 const LIVENESS_TIMEOUT = 12000; // 死活探测用更宽松超时:宁可慢也别误判成死链
-const MAX_CONTENT_BYTES = 1.5 * 1024 * 1024; // 最多读 1.5MB HTML，避免大页面吃内存
+const DEFAULT_MAX_CONTENT_BYTES = 1.5 * 1024 * 1024; // 元信息等轻量调用默认最多读取 1.5MB HTML
+export const EXPLICIT_WEB_READ_MAX_BYTES = 4 * 1024 * 1024; // 用户主动读取或分析网页时的统一预算
+const ABSOLUTE_MAX_CONTENT_BYTES = EXPLICIT_WEB_READ_MAX_BYTES; // 所有调用都必须保留绝对内存上限
 const MAX_REDIRECTS = 3;
 const BODY_TEXT_LIMIT = 2000; // 正文摘录上限，够 LLM 判断即可，避免 prompt 过长
 // 统一用浏览器 UA(抓正文 + 探活):爬虫 UA(如 LightNoteBot)会被知乎等反爬站直接 403,反而抓不到正文;
@@ -105,6 +107,28 @@ function axiosResponseUrl(response, fallbackUrl) {
     }
   }
   return String(fallbackUrl || '');
+}
+
+function normalizeMaxContentBytes(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_MAX_CONTENT_BYTES;
+  return Math.min(Math.trunc(parsed), ABSOLUTE_MAX_CONTENT_BYTES);
+}
+
+function isContentLimitError(error) {
+  return /maxContentLength size of \d+ exceeded/i.test(String(error?.message || ''));
+}
+
+function isWechatAccessChallenge(responseUrl, html) {
+  let url;
+  try {
+    url = new URL(String(responseUrl || ''));
+  } catch {
+    return false;
+  }
+  if (url.hostname.toLowerCase() !== 'mp.weixin.qq.com') return false;
+  if (url.pathname.startsWith('/mp/wappoc_appmsgcaptcha')) return true;
+  return /mmbizwap:secitptpage\/verify\.html/i.test(html) && /\bid=["']js_verify["']/i.test(html);
 }
 
 function isXiaohongshuHost(hostname) {
@@ -313,7 +337,10 @@ function decodeBuffer(buf, charset) {
  *   | { ok: false, reason: string }
  * >}
  */
-export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal, timeout = FETCH_TIMEOUT } = {}) {
+export async function fetchWebMeta(
+  rawUrl,
+  { bodyLimit = BODY_TEXT_LIMIT, maxContentBytes = DEFAULT_MAX_CONTENT_BYTES, signal, timeout = FETCH_TIMEOUT } = {},
+) {
   // 归一化:无协议头补 https://(与 read_url 一致)。老书签/导入的 URL 常不带协议,
   // 不补会直接 new URL() 抛错 → INVALID_URL,导致归档失败/死链误报。
   let input = String(rawUrl || '').trim();
@@ -341,11 +368,13 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
   let buf;
   let contentType = '';
   let fetchedUrl = target.href;
+  let responseUrl = target.href;
+  const contentBudget = normalizeMaxContentBytes(maxContentBytes);
   try {
     const resp = await axios.get(target.href, {
       timeout,
       maxRedirects: MAX_REDIRECTS,
-      maxContentLength: MAX_CONTENT_BYTES,
+      maxContentLength: contentBudget,
       responseType: 'arraybuffer',
       httpAgent,
       httpsAgent,
@@ -360,7 +389,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
       },
       signal,
     });
-    const responseUrl = axiosResponseUrl(resp, target.href);
+    responseUrl = axiosResponseUrl(resp, target.href);
     fetchedUrl = resolveKnownShortLinkTarget(target.href, responseUrl) || target.href;
     contentType = resp.headers?.['content-type'] || '';
     // 只处理 HTML/文本，二进制（PDF/图片等）直接放弃
@@ -368,6 +397,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
       return { ok: false, reason: 'NOT_HTML' };
     }
     buf = Buffer.from(resp.data);
+    if (buf.length > contentBudget) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
   } catch (e) {
     // 用户主动停止或上游超时时必须继续向上传播，不能降级成 FETCH_FAILED 后又调用模型，
     // 否则界面虽然显示“已停止”，服务器仍会在后台继续消耗资源。
@@ -377,6 +407,7 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
     if (String(e?.message || '').includes('BLOCKED_PRIVATE_IP')) {
       return { ok: false, reason: 'BLOCKED_HOST' };
     }
+    if (isContentLimitError(e)) return { ok: false, reason: 'CONTENT_TOO_LARGE' };
     const status = Number(e?.response?.status || 0);
     if (status === 401 || status === 403) return { ok: false, reason: 'ACCESS_DENIED' };
     if (status === 404 || status === 410) return { ok: false, reason: 'NOT_FOUND' };
@@ -392,6 +423,9 @@ export async function fetchWebMeta(rawUrl, { bodyLimit = BODY_TEXT_LIMIT, signal
   }
 
   const html = decodeBuffer(buf, detectCharset(contentType, buf));
+  if (isWechatAccessChallenge(responseUrl, html)) {
+    return { ok: false, reason: 'ACCESS_CHALLENGE' };
+  }
 
   const ogTitle = extractMeta(html, 'og:title');
   const ogDesc = extractMeta(html, 'og:description');
