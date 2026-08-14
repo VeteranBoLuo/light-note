@@ -124,7 +124,9 @@
             </section>
 
             <section class="growth-panel">
-              <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"><BLoading size="small" /></div>
+              <div v-if="!growth && (growthLoading || !growthError)" class="growth-state"
+                ><BLoading size="small"
+              /></div>
               <div v-else-if="growthError && !growth" class="growth-state growth-state--error">
                 <span>{{ t('growth.growthLoadFailed') }}</span>
                 <BButton size="small" @click="load(true)">{{ t('common.retry') }}</BButton>
@@ -134,7 +136,9 @@
 
             <div class="growth-row growth-overview-row">
               <section class="growth-panel growth-panel--flex">
-                <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"><BLoading size="small" /></div>
+                <div v-if="!dashboard && (dashboardLoading || !dashboardError)" class="growth-state"
+                  ><BLoading size="small"
+                /></div>
                 <div v-else-if="dashboardError && !dashboard" class="growth-state growth-state--error">
                   <span>{{ t('growth.dashboardLoadFailed') }}</span>
                   <BButton size="small" @click="loadDashboard">{{ t('common.retry') }}</BButton>
@@ -160,7 +164,9 @@
                 <BButton size="small" @click="loadRecap">{{ t('common.retry') }}</BButton>
               </div>
               <RecapCard v-if="showRecap" :read-only="isAdminContext" />
-              <div v-if="!recapLoading && !recapError && !timeline.length && !showRecap" class="growth-state">{{ t('growth.footprintEmpty') }}</div>
+              <div v-if="!recapLoading && !recapError && !timeline.length && !showRecap" class="growth-state">{{
+                t('growth.footprintEmpty')
+              }}</div>
             </section>
 
             <section v-if="growthV2Enabled" class="growth-panel">
@@ -217,7 +223,9 @@
             </section>
 
             <section id="growth-tasks" class="growth-panel">
-              <div v-if="!growthTasks && (growthTasksLoading || !growthTasksError)" class="growth-state"><BLoading size="small" /></div>
+              <div v-if="!growthTasks && (growthTasksLoading || !growthTasksError)" class="growth-state"
+                ><BLoading size="small"
+              /></div>
               <div v-else-if="growthTasksError && !growthTasks" class="growth-state growth-state--error">
                 <span>{{ t('growth.tasksLoadFailed') }}</span>
                 <BButton size="small" @click="loadGrowthTasks(true)">{{ t('common.retry') }}</BButton>
@@ -292,7 +300,8 @@
               @select="handleRewardTabSelect"
             />
             <section class="growth-panel">
-              <MyInventory v-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
+              <PointsCenter v-if="activeRewardSection === 'center'" :read-only="isAdminContext" />
+              <MyInventory v-else-if="activeRewardSection === 'inventory'" :read-only="isAdminContext" />
               <PointsShop v-else-if="activeRewardSection === 'shop'" :read-only="isAdminContext" />
               <PointsLedger v-else-if="activeRewardSection === 'ledger'" />
               <LotteryDraw v-else :read-only="isAdminContext" @focus-header="scrollLotteryToPreferredPosition" />
@@ -322,6 +331,7 @@
   import LotteryDraw from '@/components/growth/LotteryDraw.vue';
   import MyInventory from '@/components/growth/MyInventory.vue';
   import PointsLedger from '@/components/growth/PointsLedger.vue';
+  import PointsCenter from '@/components/growth/PointsCenter.vue';
   import WeeklyChallenge from '@/components/growth/WeeklyChallenge.vue';
   import RecapCard from '@/components/growth/RecapCard.vue';
   import TodayGrowthCard from '@/components/growth/TodayGrowthCard.vue';
@@ -345,7 +355,7 @@
   import { scrollIntoContainer } from '@/utils/zoom';
 
   type GrowthSection = 'overview' | 'tasks' | 'achievements' | 'rewards';
-  type RewardSection = 'shop' | 'lottery' | 'inventory' | 'ledger';
+  type RewardSection = 'center' | 'shop' | 'lottery' | 'inventory' | 'ledger';
   type GrowthNavOption<T extends string> = { key: T; label: string; icon: string };
 
   const { t } = useI18n();
@@ -355,7 +365,7 @@
   const bookmark = bookmarkStore();
   const routeSection = String(route.query.section || '');
   const routeRewardSection = String(route.query.reward || '');
-  const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger'];
+  const validRewardSections: RewardSection[] = ['center', 'shop', 'lottery', 'inventory', 'ledger'];
   const hasRewardDeepLink = validRewardSections.includes(routeRewardSection as RewardSection);
   const activeSection = ref<GrowthSection>(
     ['overview', 'tasks', 'achievements', 'rewards'].includes(routeSection)
@@ -363,9 +373,7 @@
       : 'overview',
   );
   const activeRewardSection = ref<RewardSection>(
-    hasRewardDeepLink
-      ? (routeRewardSection as RewardSection)
-      : 'inventory',
+    hasRewardDeepLink ? (routeRewardSection as RewardSection) : 'inventory',
   );
   const rewardsExpanded = ref(activeSection.value === 'rewards');
   const growthPageRef = ref<HTMLElement | null>(null);
@@ -377,22 +385,20 @@
     {
       key: 'rewards',
       label:
-        growthV2Enabled.value && !bookmark.isMobile
-          ? t('growth.assetsRewardsTitle')
-          : t('growth.mobileTabRewards'),
+        growthV2Enabled.value && !bookmark.isMobile ? t('growth.assetsRewardsTitle') : t('growth.mobileTabRewards'),
       icon: icon.growth.reward,
     },
   ]);
   const rewardSectionOptions = computed<GrowthNavOption<RewardSection>[]>(() => {
     const options: GrowthNavOption<RewardSection>[] = [
+      { key: 'center', label: t('growth.rewardTabPointsCenter'), icon: icon.growth.coin },
       { key: 'inventory', label: t('growth.rewardTabInventory'), icon: icon.growth.storage },
       { key: 'shop', label: t('growth.rewardTabShop'), icon: icon.growth.coin },
       { key: 'ledger', label: t('growth.rewardTabLedger'), icon: icon.noteDetail.history },
       { key: 'lottery', label: t('growth.rewardTabLottery'), icon: icon.growth.reward },
     ];
-    return growthV2Enabled.value
-      ? options
-      : [options[1], options[3], options[0], options[2]];
+    if (growthV2Enabled.value) return pointsCenterEnabled.value ? options : options.slice(1);
+    return [options[2], options[4], options[1], options[3]];
   });
   const isAdminContext = computed(() => Boolean(user.adminContext));
   const {
@@ -429,6 +435,7 @@
     claimAchievement,
   } = useGrowth();
   const growthV2Enabled = computed(() => growth.value?.features?.growthCenterV2 ?? import.meta.env.DEV);
+  const pointsCenterEnabled = computed(() => growth.value?.features?.pointsCenter ?? import.meta.env.DEV);
   const hasRecap = computed(
     () =>
       !!recap.value &&
@@ -589,6 +596,8 @@
       daily_file: 'upload_file',
       daily_todo: 'open_todos',
       daily_organize: 'open_inbox',
+      knowledge_action_1: 'create_note',
+      knowledge_action_2: 'create_note',
     };
     handleGrowthAction(actionByQuest[key] || 'open_growth_tasks');
   }
@@ -754,7 +763,8 @@
   watch(
     growthV2Enabled,
     (enabled) => {
-      if (!hasRewardDeepLink) activeRewardSection.value = enabled ? 'inventory' : 'shop';
+      if (!hasRewardDeepLink)
+        activeRewardSection.value = enabled && pointsCenterEnabled.value ? 'center' : enabled ? 'inventory' : 'shop';
     },
     { immediate: true },
   );

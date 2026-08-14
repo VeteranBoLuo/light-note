@@ -31,17 +31,22 @@ describe('GrowthPage 宽屏桌面导航布局', () => {
     );
   });
 
-  it('V2 奖励默认资产优先并保持四个旧深链键兼容', () => {
-    expect(source).toContain("const validRewardSections: RewardSection[] = ['shop', 'lottery', 'inventory', 'ledger']");
-    expect(source).toContain("const activeRewardSection = ref<RewardSection>(");
-    expect(source).toContain(": 'inventory'");
-    expect(source).toMatch(
-      /const options:[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'ledger'[\s\S]*?key: 'lottery'/,
+  it('C5 功能开启时默认积分中心优先，并保持四个旧深链键兼容', () => {
+    expect(source).toContain(
+      "const validRewardSections: RewardSection[] = ['center', 'shop', 'lottery', 'inventory', 'ledger']",
     );
+    expect(source).toContain('const activeRewardSection = ref<RewardSection>(');
+    expect(source).toContain("enabled && pointsCenterEnabled.value ? 'center' : enabled ? 'inventory' : 'shop'");
+    expect(source).toMatch(
+      /const options:[\s\S]*?key: 'center'[\s\S]*?key: 'inventory'[\s\S]*?key: 'shop'[\s\S]*?key: 'ledger'[\s\S]*?key: 'lottery'/,
+    );
+    for (const legacyKey of ['shop', 'lottery', 'inventory', 'ledger']) {
+      expect(source).toContain(`'${legacyKey}'`);
+    }
   });
 
   it('宽屏和紧凑桌面都使用资产与奖励全称，移动端保留短标签', () => {
-    expect(source).toContain("growthV2Enabled.value && !bookmark.isMobile");
+    expect(source).toContain('growthV2Enabled.value && !bookmark.isMobile');
     expect(source).toContain("t('growth.assetsRewardsTitle')");
     expect(source).toContain("t('growth.mobileTabRewards')");
   });

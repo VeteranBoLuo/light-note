@@ -35,7 +35,7 @@ export interface Growth {
   dailyExp?: number;
   dailyCap?: number;
   dailyCapReached?: boolean;
-  features?: { growthCenterV2?: boolean };
+  features?: { growthCenterV2?: boolean; pointsCenter?: boolean };
 }
 
 export interface Rank {
@@ -86,6 +86,7 @@ export interface Quest {
   cur?: number;
   target?: number;
   random?: boolean;
+  countedEvent?: { type: string; time?: string | null } | null;
 }
 
 export interface TimelineItem {
@@ -269,6 +270,9 @@ export interface WeeklyData {
   weekKey: string | null;
   challenges: WeeklyChallenge[];
   claimableCount?: number;
+  earnedPoints?: number;
+  totalPoints?: number;
+  policyVersion?: string;
 }
 
 export interface RecapItem {
@@ -348,21 +352,23 @@ const RETIRED_GROWTH_TASK_KEYS = new Set(['first_review']);
 function normalizeGrowthTasks(data: GrowthTasksData): GrowthTasksData {
   const normalize = (input: GrowthTask[]) =>
     input
-    .filter((task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey))
-    .map((task) => {
-      // 滚动发布期间旧后端没有 claimed 字段；旧流程的 completed 已自动发奖，因此按已领取兼容。
-      const claimed = typeof task.claimed === 'boolean' ? task.claimed : Boolean(task.completed);
-      return {
-        ...task,
-        claimed,
-        claimable: typeof task.claimable === 'boolean' ? task.claimable : Boolean(task.completed && !claimed),
-        claimedAt: task.claimedAt || null,
-      };
-    });
+      .filter((task) => !RETIRED_GROWTH_TASK_KEYS.has(task.taskKey))
+      .map((task) => {
+        // 滚动发布期间旧后端没有 claimed 字段；旧流程的 completed 已自动发奖，因此按已领取兼容。
+        const claimed = typeof task.claimed === 'boolean' ? task.claimed : Boolean(task.completed);
+        return {
+          ...task,
+          claimed,
+          claimable: typeof task.claimable === 'boolean' ? task.claimable : Boolean(task.completed && !claimed),
+          claimedAt: task.claimedAt || null,
+        };
+      });
   const tasks = normalize(Array.isArray(data.tasks) ? data.tasks : []);
   const completedTasks = normalize(Array.isArray(data.completedTasks) ? data.completedTasks : []);
   const allTasks = normalize(
-    Array.isArray(data.allTasks) ? data.allTasks : [...tasks, ...completedTasks.filter((task) => !tasks.some((x) => x.taskKey === task.taskKey))],
+    Array.isArray(data.allTasks)
+      ? data.allTasks
+      : [...tasks, ...completedTasks.filter((task) => !tasks.some((x) => x.taskKey === task.taskKey))],
   );
   const completedCount = allTasks.filter((task) => task.completed).length;
   const claimedCount = allTasks.filter((task) => task.claimed).length;
@@ -615,7 +621,12 @@ export function useGrowth() {
     const request = Promise.resolve().then(async () => {
       try {
         const res = await growthApi.getGrowthTasks();
-        if (isCurrentGrowthOwner(uid, generation) && growthTasksRequestOwnerId === uid && res?.status === 200 && res.data) {
+        if (
+          isCurrentGrowthOwner(uid, generation) &&
+          growthTasksRequestOwnerId === uid &&
+          res?.status === 200 &&
+          res.data
+        ) {
           growthTasks.value = normalizeGrowthTasks(res.data as GrowthTasksData);
         } else if (isCurrentGrowthOwner(uid, generation) && growthTasksRequestOwnerId === uid) {
           growthTasksError.value = true;
@@ -799,7 +810,8 @@ export function useGrowth() {
   async function buyItem(itemId: string) {
     const uid = useUserStore().id || 'visitor';
     const currentShop = shop.value || (await loadShop());
-    const item = currentShop?.items.find((candidate) => candidate.id === itemId) ||
+    const item =
+      currentShop?.items.find((candidate) => candidate.id === itemId) ||
       currentShop?.frames?.find((candidate) => candidate.id === itemId);
     if (!currentShop?.economyVersion || !item || item.cost === null) return null;
     const operation: PointsEconomyOperation = 'shop_buy';
@@ -888,7 +900,12 @@ export function useGrowth() {
         ? currentLottery.paid.tenCost
         : currentLottery.paid.singleCost;
     const operation: PointsEconomyOperation = free ? 'lottery_free' : 'lottery_paid';
-    const payload = { mode, times: normalizedTimes, economyVersion: currentLottery.economyVersion, expectedCost } as const;
+    const payload = {
+      mode,
+      times: normalizedTimes,
+      economyVersion: currentLottery.economyVersion,
+      expectedCost,
+    } as const;
     const pending = getOrCreatePointsEconomyRequest(uid, operation, payload);
     const requestPayload = pending.payload as typeof payload;
     try {

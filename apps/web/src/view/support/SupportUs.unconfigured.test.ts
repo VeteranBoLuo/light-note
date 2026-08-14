@@ -53,6 +53,8 @@ vi.mock('vue-router', async (importOriginal) => {
     useRouter: () => ({
       back: vi.fn(),
       push: vi.fn(() => Promise.resolve()),
+      replace: vi.fn(() => Promise.resolve()),
+      currentRoute: { value: { query: {} } },
     }),
   };
 });

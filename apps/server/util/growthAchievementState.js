@@ -1,28 +1,46 @@
 import pool from '../db/index.js';
-import { ACHIEVEMENTS, meetsAchievementRequirement } from './growth.js';
+import { meetsAchievementRequirement, resolveAchievements } from './growth.js';
+import { getMeaningfulActiveDays } from './meaningfulActivity.js';
+import { getGrowthCalendarContext } from './growthPreferences.js';
+import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
+import { getAchievementFrameByKey } from './points.js';
 
-export async function persistAchievementUnlocksForMetrics(
-  userId,
-  metrics,
-  { db = pool, currentLevel = null } = {},
-) {
+export async function persistAchievementUnlocksForMetrics(userId, metrics, { db = pool, currentLevel = null } = {}) {
   if (!userId || userId === 'visitor') return [];
+  const calendar = await getGrowthCalendarContext(userId, { db });
+  const policyVersion = await resolveDailyEarningPolicyVersion(calendar.dayKey, { db, lock: true });
+  const achievements = resolveAchievements(policyVersion);
   let level = Number(currentLevel ?? metrics?.level ?? 0);
   if (!level) {
     const [[row]] = await db.query('SELECT level FROM user_growth WHERE user_id = ? LIMIT 1', [String(userId)]);
     level = Number(row?.level || 1);
   }
-  const mergedMetrics = { ...(metrics || {}), level };
-  const keys = ACHIEVEMENTS.filter(
-    (achievement) => Object.hasOwn(mergedMetrics, achievement.metric) && meetsAchievementRequirement(achievement, mergedMetrics),
-  ).map((achievement) => achievement.key);
-  if (!keys.length) return [];
-  const values = keys.map(() => '(?, ?, NOW())').join(', ');
-  await db.query(
-    `INSERT IGNORE INTO user_achievements (user_id, achievement_key, unlocked_at) VALUES ${values}`,
-    keys.flatMap((key) => [String(userId), key]),
+  const needsActiveDays = achievements.some(
+    (achievement) => Object.hasOwn(metrics || {}, achievement.metric) && Number(achievement.minActiveDays || 0) > 0,
   );
-  return keys;
+  const activeDays = needsActiveDays
+    ? Number(metrics?.activeDays ?? (await getMeaningfulActiveDays(userId, { db })))
+    : Number(metrics?.activeDays || 0);
+  const mergedMetrics = { ...(metrics || {}), level, activeDays };
+  const unlocked = achievements.filter(
+    (achievement) =>
+      Object.hasOwn(mergedMetrics, achievement.metric) && meetsAchievementRequirement(achievement, mergedMetrics),
+  );
+  if (!unlocked.length) return [];
+  const values = unlocked.map(() => '(?, ?, NOW(), ?, ?, ?)').join(', ');
+  await db.query(
+    `INSERT IGNORE INTO user_achievements
+       (user_id, achievement_key, unlocked_at, reward_points_snapshot, reward_frame_id_snapshot, policy_version)
+     VALUES ${values}`,
+    unlocked.flatMap((achievement) => [
+      String(userId),
+      achievement.key,
+      achievement.reward,
+      getAchievementFrameByKey(achievement.key)?.id || null,
+      policyVersion,
+    ]),
+  );
+  return unlocked.map((achievement) => achievement.key);
 }
 
 export async function persistAchievementMetricFromDatabase(userId, metric, { db = pool } = {}) {

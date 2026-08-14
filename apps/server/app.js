@@ -13,6 +13,8 @@ import { ensurePointsSchema } from './util/points.js';
 import { assertPointsEconomyActivationReady } from './util/pointsEconomyOperations.js';
 import { ensureGrowthTaskSchema } from './util/growthTaskSchema.js';
 import { ensureGrowthCenterSchema } from './util/growthCenterSchema.js';
+import { assertPointsEarningC5ActivationReady, getPointsEarningRuntime } from './util/pointsEarningPolicy.js';
+import { getPointsCampaignRuntime } from './util/pointsCampaignService.js';
 import { generateGrowthNudges } from './util/growth.js';
 import { ensureBookmarkSnapshotTable } from './util/snapshot.js';
 import { ensureBookmarkHealthTable } from './util/linkHealth.js';
@@ -49,7 +51,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
-import './db/index.js';
+import pool from './db/index.js';
 
 // 获取 __dirname 的 ES 模块等效写法
 const __filename = fileURLToPath(import.meta.url);
@@ -115,6 +117,11 @@ try {
   await assertPointsEconomyActivationReady();
   await ensureGrowthTaskSchema();
   await ensureGrowthCenterSchema();
+  await assertPointsEarningC5ActivationReady({
+    db: pool,
+    runtime: getPointsEarningRuntime(),
+    campaignRuntime: getPointsCampaignRuntime(),
+  });
 } catch (err) {
   console.error('成长中心 Schema 初始化失败 code=%s，终止启动', stableAgentErrorCode(err));
   process.exit(1);

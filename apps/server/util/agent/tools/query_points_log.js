@@ -19,6 +19,8 @@ const REASON_LABEL = {
   lottery_storage: '抽奖得存储',
   lottery_compensation: '历史抽奖满仓补偿',
   admin: '管理员调整',
+  campaign: '活动发放',
+  correction: '账本纠正',
 };
 function label(reason) {
   if (!reason) return '其他';

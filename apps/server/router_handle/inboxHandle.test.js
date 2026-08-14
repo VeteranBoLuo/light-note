@@ -161,6 +161,7 @@ describe('inboxHandle 写事务', () => {
     expect(completeResources).toHaveBeenCalledWith(connection, {
       userId: 'visitor-subject',
       items: [{ resourceType: 'file', resourceId: '8' }],
+      suppressUserRewards: true,
     });
   });
 

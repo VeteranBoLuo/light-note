@@ -23,30 +23,31 @@
 
 ## 索引
 
-| 编号                                                                        | 日期       | 模块             | 关键词                                           | 状态         |
-| --------------------------------------------------------------------------- | ---------- | ---------------- | ------------------------------------------------ | ------------ |
-| [LN-PIT-022](#ln-pit-022可重复积分消费不能只依赖按钮防重且免费抽不能复用付费保底) | 2026-08-13 | 成长系统、积分经济 | 幂等、经济版本、抽奖、保底、迁移、响应丢失       | 已修复待上线 |
-| [LN-PIT-021](#ln-pit-021第三方-oauth-授权码是透明值不能按经验猜长度)        | 2026-08-14 | 赞助、账号关联   | OAuth、授权码、长度、回调、结果反馈              | 已修复并上线 |
-| [LN-PIT-020](#ln-pit-020第三方文档域名可访问不代表生产服务器能解析)         | 2026-08-14 | 赞助、部署       | 爱发电、DNS、API、OAuth、生产探针                 | 已修复并上线 |
-| [LN-PIT-019](#ln-pit-019爱发电-webhook-验签成功不等于下单归属可信)          | 2026-08-13 | 赞助、账号关联   | Webhook、签名、custom_order_id、API、幂等、OAuth | 已修复并上线 |
-| [LN-PIT-018](#ln-pit-018即时插入顺序必须与服务端刷新顺序一致)               | 2026-08-13 | 聊天室、表情库   | 排序、sort_order、即时反馈、刷新、重复上传       | 已修复并上线 |
-| [LN-PIT-017](#ln-pit-017图片文件体积合格不代表像素尺寸合格)                 | 2026-08-13 | 聊天室、图片上传 | 表情、JPEG、文件体积、像素、Canvas、能力约束     | 已修复并上线 |
-| [LN-PIT-016](#ln-pit-016scoped-样式中提前结束根节点-global-会把业务声明泄漏到页面根节点) | 2026-08-13 | 前端样式、移动端 | scoped、global、懒加载、根节点、跨路由、边框     | 已修复并上线 |
-| [LN-PIT-015](#ln-pit-015公开成员搜索不能用社区参与记录代替注册账号全集)     | 2026-08-13 | 聊天室、数据库   | 提及、社区身份、回填、注册、所有人通知           | 已修复并上线 |
-| [LN-PIT-014](#ln-pit-014popover-子内容的百分比宽度会与父级自动宽度形成循环) | 2026-08-13 | 聊天室、交互     | 表情、BPopover、fixed、shrink-to-fit、百分比宽度 | 已修复并上线 |
-| [LN-PIT-013](#ln-pit-013一次性脚本导入实时服务后会被-redis-连接挂住)        | 2026-08-13 | 脚本、聊天室     | CLI、Redis、模块副作用、连接关闭、回填           | 已修复并上线 |
-| [LN-PIT-012](#ln-pit-012提及候选放进输入区文档流会抬高-composer)            | 2026-08-13 | 聊天室、交互     | 提及、BPopover、Teleport、输入框、软键盘         | 已修复并上线 |
-| [LN-PIT-011](#ln-pit-011上传组件的前置大小校验会让业务压缩永远无法执行)     | 2026-08-13 | 聊天室、图片上传 | BUpload、前置校验、Canvas、WebP、2MiB            | 已修复待上线 |
-| [LN-PIT-010](#ln-pit-010事务内身份唯一键竞争后不能用旧快照查询赢家)         | 2026-08-13 | 聊天室、数据库   | 社区 ID、唯一键、REPEATABLE READ、current read   | 已修复待上线 |
-| [LN-PIT-009](#ln-pit-009日期时间选择器不能用五分钟选项改写原始分钟)         | 2026-08-13 | 基础组件、待办   | 日期时间、直接输入、分钟精度、BSelect、表单校验  | 已修复待上线 |
-| [LN-PIT-008](#ln-pit-008本人换头像框后聊天室仍显示旧装扮)                   | 2026-08-13 | 聊天室、成长系统 | 头像框、共享状态、消息快照、响应式、性能         | 已修复待上线 |
-| [LN-PIT-007](#ln-pit-007markdown-编辑与预览换行不一致导致正文横向溢出)      | 2026-08-13 | 笔记编辑、布局   | Markdown、CodeMirror、软换行、分栏、横向溢出     | 已修复待上线 |
-| [LN-PIT-006](#ln-pit-006待整理状态不能由入口参数代替数据库事实)             | 2026-08-13 | 笔记详情、待整理 | 状态一致性、路由参数、详情聚合、列表缓存、索引   | 已修复待上线 |
-| [LN-PIT-005](#ln-pit-005markdown-资源选择器的上下键被编辑器截断)            | 2026-08-13 | 笔记编辑、键盘   | Markdown、CodeMirror、资源选择器、keymap、优先级 | 已修复待上线 |
-| [LN-PIT-004](#ln-pit-004在线名单有头像字段却只显示默认头像)                 | 2026-08-13 | 聊天室、实时连接 | 在线名单、头像、Base64、短地址、WebSocket、缓存  | 已修复待上线 |
-| [LN-PIT-003](#ln-pit-003聊天室提醒枚举-level-被误报为数值参数异常)          | 2026-08-13 | 安全检测、聊天室 | 字段语义、level、枚举、数值参数异常、误报        | 已修复待上线 |
-| [LN-PIT-002](#ln-pit-002移动端后台总览的今日明细点击后没有滚动)             | 2026-08-13 | 后台总览、响应式 | 移动端、滚动容器、断点、scrollTo、点击无反应     | 已修复待上线 |
-| [LN-PIT-001](#ln-pit-001移动端笔记库首次进入详情出现长时间骨架屏)           | 2026-08-13 | 笔记库、笔记详情 | 大账号、WebView、卡片摘要、编辑器预加载、冷启动  | 已修复并上线 |
+| 编号                                                                                     | 日期       | 模块               | 关键词                                           | 状态         |
+| ---------------------------------------------------------------------------------------- | ---------- | ------------------ | ------------------------------------------------ | ------------ |
+| [LN-PIT-023](#ln-pit-023积分获取切换不能只换常量历史回填也不能接回应用启动)              | 2026-08-14 | 成长系统、积分治理 | 周期锁、不可变事实、成就快照、对账、启动性能     | 已修复待上线 |
+| [LN-PIT-022](#ln-pit-022可重复积分消费不能只依赖按钮防重且免费抽不能复用付费保底)        | 2026-08-13 | 成长系统、积分经济 | 幂等、经济版本、抽奖、保底、迁移、响应丢失       | 已修复待上线 |
+| [LN-PIT-021](#ln-pit-021第三方-oauth-授权码是透明值不能按经验猜长度)                     | 2026-08-14 | 赞助、账号关联     | OAuth、授权码、长度、回调、结果反馈              | 已修复并上线 |
+| [LN-PIT-020](#ln-pit-020第三方文档域名可访问不代表生产服务器能解析)                      | 2026-08-14 | 赞助、部署         | 爱发电、DNS、API、OAuth、生产探针                | 已修复并上线 |
+| [LN-PIT-019](#ln-pit-019爱发电-webhook-验签成功不等于下单归属可信)                       | 2026-08-13 | 赞助、账号关联     | Webhook、签名、custom_order_id、API、幂等、OAuth | 已修复并上线 |
+| [LN-PIT-018](#ln-pit-018即时插入顺序必须与服务端刷新顺序一致)                            | 2026-08-13 | 聊天室、表情库     | 排序、sort_order、即时反馈、刷新、重复上传       | 已修复并上线 |
+| [LN-PIT-017](#ln-pit-017图片文件体积合格不代表像素尺寸合格)                              | 2026-08-13 | 聊天室、图片上传   | 表情、JPEG、文件体积、像素、Canvas、能力约束     | 已修复并上线 |
+| [LN-PIT-016](#ln-pit-016scoped-样式中提前结束根节点-global-会把业务声明泄漏到页面根节点) | 2026-08-13 | 前端样式、移动端   | scoped、global、懒加载、根节点、跨路由、边框     | 已修复并上线 |
+| [LN-PIT-015](#ln-pit-015公开成员搜索不能用社区参与记录代替注册账号全集)                  | 2026-08-13 | 聊天室、数据库     | 提及、社区身份、回填、注册、所有人通知           | 已修复并上线 |
+| [LN-PIT-014](#ln-pit-014popover-子内容的百分比宽度会与父级自动宽度形成循环)              | 2026-08-13 | 聊天室、交互       | 表情、BPopover、fixed、shrink-to-fit、百分比宽度 | 已修复并上线 |
+| [LN-PIT-013](#ln-pit-013一次性脚本导入实时服务后会被-redis-连接挂住)                     | 2026-08-13 | 脚本、聊天室       | CLI、Redis、模块副作用、连接关闭、回填           | 已修复并上线 |
+| [LN-PIT-012](#ln-pit-012提及候选放进输入区文档流会抬高-composer)                         | 2026-08-13 | 聊天室、交互       | 提及、BPopover、Teleport、输入框、软键盘         | 已修复并上线 |
+| [LN-PIT-011](#ln-pit-011上传组件的前置大小校验会让业务压缩永远无法执行)                  | 2026-08-13 | 聊天室、图片上传   | BUpload、前置校验、Canvas、WebP、2MiB            | 已修复待上线 |
+| [LN-PIT-010](#ln-pit-010事务内身份唯一键竞争后不能用旧快照查询赢家)                      | 2026-08-13 | 聊天室、数据库     | 社区 ID、唯一键、REPEATABLE READ、current read   | 已修复待上线 |
+| [LN-PIT-009](#ln-pit-009日期时间选择器不能用五分钟选项改写原始分钟)                      | 2026-08-13 | 基础组件、待办     | 日期时间、直接输入、分钟精度、BSelect、表单校验  | 已修复待上线 |
+| [LN-PIT-008](#ln-pit-008本人换头像框后聊天室仍显示旧装扮)                                | 2026-08-13 | 聊天室、成长系统   | 头像框、共享状态、消息快照、响应式、性能         | 已修复待上线 |
+| [LN-PIT-007](#ln-pit-007markdown-编辑与预览换行不一致导致正文横向溢出)                   | 2026-08-13 | 笔记编辑、布局     | Markdown、CodeMirror、软换行、分栏、横向溢出     | 已修复待上线 |
+| [LN-PIT-006](#ln-pit-006待整理状态不能由入口参数代替数据库事实)                          | 2026-08-13 | 笔记详情、待整理   | 状态一致性、路由参数、详情聚合、列表缓存、索引   | 已修复待上线 |
+| [LN-PIT-005](#ln-pit-005markdown-资源选择器的上下键被编辑器截断)                         | 2026-08-13 | 笔记编辑、键盘     | Markdown、CodeMirror、资源选择器、keymap、优先级 | 已修复待上线 |
+| [LN-PIT-004](#ln-pit-004在线名单有头像字段却只显示默认头像)                              | 2026-08-13 | 聊天室、实时连接   | 在线名单、头像、Base64、短地址、WebSocket、缓存  | 已修复待上线 |
+| [LN-PIT-003](#ln-pit-003聊天室提醒枚举-level-被误报为数值参数异常)                       | 2026-08-13 | 安全检测、聊天室   | 字段语义、level、枚举、数值参数异常、误报        | 已修复待上线 |
+| [LN-PIT-002](#ln-pit-002移动端后台总览的今日明细点击后没有滚动)                          | 2026-08-13 | 后台总览、响应式   | 移动端、滚动容器、断点、scrollTo、点击无反应     | 已修复待上线 |
+| [LN-PIT-001](#ln-pit-001移动端笔记库首次进入详情出现长时间骨架屏)                        | 2026-08-13 | 笔记库、笔记详情   | 大账号、WebView、卡片摘要、编辑器预加载、冷启动  | 已修复并上线 |
 
 ## 记录模板
 
@@ -76,6 +77,70 @@
 ```
 
 ## 案例记录
+
+### LN-PIT-023：积分获取切换不能只换常量，历史回填也不能接回应用启动
+
+- 日期：2026-08-14
+- 状态：已修复待上线
+- 影响范围：签到、每日任务、每周挑战、成就领取、积分中心、Root 对账与活动发放
+- 关键词：获取策略版本、自然日、自然周、不可变行为事实、成就奖励快照、期初基线、启动全表扫描
+
+#### 现象
+
+只把签到/任务数值改成新常量，会让同一个自然日或自然周在配置变化、进程重启或事故关闸后重新出现另一套奖励；同一个资源创建若同时从业务表和成长旁路统计，还可能完成两个“独立事件”任务。旧成就已经解锁但未领取时，读取新目录会静默改变承诺奖励。把兼容逻辑放进 `ensureGrowthCenterSchema()` 又会让每次启动扫描资源表和全量积分流水。
+
+#### 误导线索与排除项
+
+- Feature Flag 只能暂停入口，不能证明同一周期使用过哪一版规则；关闭后直接回落旧逻辑会制造双领窗口。
+- 前端任务卡显示两个完成状态不等于服务端存在两个独立业务事件，领取时仍必须重算。
+- `growth_events` 里已有 EXP 事件不代表所有资源创建都有统一事实；fire-and-forget 失败、系统种子和管理员预览的口径都不同。
+- `CREATE TABLE IF NOT EXISTS` 本身不重，但 ensure 中的 `INSERT ... SELECT`、`GROUP BY points_log` 和历史资源回填会随数据增长放大启动延迟。
+
+#### 已确认根因
+
+旧实现没有独立的获取策略版本和周期锁，成就目录只保存当前定义而没有奖励快照，有意义行为也缺少统一、低敏感、不可变的事实边界。历史兼容函数同时承担 Schema 保障和业务回填两种职责，容易被应用启动链路调用。
+
+#### 修复方式
+
+- 新增独立 `points-earning-c5` 策略目录；日/周版本写入 `points_earning_period_policy`，获取总闸只控制是否发放，不控制已经生效周期回退。
+- 资源成功后幂等写入低敏感 `growth_events` 事实，排除游客、新手种子、管理员上下文和 suppressed 奖励；每日/每周统一按事实聚合。
+- 管理员维护上下文允许写业务状态时，Handler 必须把 `suppressUserRewards` 继续传到最内层 Service；只在路由中标记却不由 Service 消费，会把代操作误记为用户有效活跃。回归验收需同时断言业务状态成功、`growth_events`/成长任务/成就副作用均未触发。
+- 成就解锁时固化积分、头像框与策略版本，迁移先保护已满足旧资格或已解锁未领取的账号。
+- 对账先捕获期初差额，之后只报告 `baseline + 流水和` 与余额的差异；人工修正只补幂等流水。
+- 所有历史业务回填、快照和期初基线移到 `20260814_points_earning_c5.sql`；应用启动只补表、列和索引。
+
+#### 防回归约束
+
+1. 获取规则变更必须升级独立策略版本，不能修改 C4 消费版本或原地改写已激活快照。
+2. 日规则只在完整账号自然日切换，周规则只在完整 ISO 周切换；已锁周期永不回落。
+3. 每日/每周/成就领取全部服务端重算并使用版本化唯一 ref，客户端进度只用于展示。
+4. 一个知识任务事件只对应一条不可变事实；同一事件不能完成两个独立事件任务，也不能同时从业务表和账本相加。
+5. 资源主事务与成长旁路隔离失败，但不同成长旁路不能互相吞掉；新增旁路必须测试前一个失败时后一个仍执行。
+6. 成就奖励一旦解锁就读快照；历史资格保护只能由有迁移标记的显式 SQL 完成。
+7. 用户摘要限制 28 天，后台范围最大 365 天，活动和对账使用批次/游标；启动 ensure 禁止全量业务回填或账本聚合。
+8. Root 资产调整不能只依赖按钮 loading 或审计 request ID；必须由客户端在未知结果重试时复用请求号，服务端在业务事务内锁定收据并校验负载哈希。
+9. 商品指标缺少购买后 AI/空间使用归因时必须明确不可用；不得用当前余额、当前容量或全站总量倒推某笔购买效果。首兑画像只能读取有硬上限的样本，并用历史记录排除统计窗口前已经兑换过同商品的账号，禁止把“窗口内首笔”冒充“历史首兑”。
+
+#### 验证方法
+
+- 在日/周边界前后和开关暂停/恢复时重复读取与领取，确认同一周期始终只有一个策略版本和一组 ref。
+- 创建一个、两个不同知识事件并重复刷新/删除重建，确认任务分别为 2/3、3/3，同一判重键不重复完成。
+- 模拟成长事实写失败，确认资源仍成功且既有 EXP/成就旁路继续执行；模拟既有旁路失败，确认事实仍尝试写入。
+- 用已解锁未领取、已满足旧资格未持久化、新账号三类样本执行迁移并领取，核对奖励快照与条件。
+- 检查 `ensureGrowthCenterSchema()` 不调用任何历史 migration；用户摘要 SQL 含 28 天 WHERE，后台/API 都有范围和 LIMIT。
+- 对账差异只出现在报告，未确认时余额和流水均不变；重复 correction 或 Campaign 请求只产生一次流水。
+- 模拟 Root 调整接口响应丢失后用同一请求号重放，确认余额/流水只写一次、审计可追溯；同键不同负载返回 409。
+
+#### 相关代码与提交
+
+| 位置                                                    | 作用                            |
+| ------------------------------------------------------- | ------------------------------- |
+| `apps/server/util/pointsEarningPolicy.js`               | C5 获取策略单一事实源与切换边界 |
+| `apps/server/util/pointsEarningPolicyState.js`          | 日/周策略版本锁                 |
+| `apps/server/util/meaningfulActivity.js`                | 低敏感不可变知识行为事实与聚合  |
+| `apps/server/migrations/20260814_points_earning_c5.sql` | 旧承诺、事实和对账基线显式迁移  |
+| `apps/server/util/pointsReconciliationService.js`       | 游标对账与幂等人工修正          |
+| `docs/points-earning-c5.md`                             | C5 产品、协议与运营单一规范     |
 
 ### LN-PIT-022：可重复积分消费不能只依赖按钮防重，且免费抽不能复用付费保底
 
@@ -128,14 +193,14 @@
 
 #### 相关代码与提交
 
-| 位置 | 作用 |
-| --- | --- |
-| `apps/server/util/pointsEconomyCatalog.js` | 版本化目录、价格、概率与开关 |
-| `apps/server/util/pointsEconomyOperations.js` | 事务内请求认领、回放与激活门禁 |
-| `apps/server/util/lottery.js` | 独立免费/付费池与付费保底 |
-| `apps/server/migrations/20260813_points_economy_c4.sql` | 一次性旧进度继承与 Schema |
-| `apps/web/src/utils/pointsEconomyRequest.ts` | 账号/负载级未知结果重放请求号 |
-| `docs/points-economy.md` | C4 产品、协议与运营单一规范 |
+| 位置                                                    | 作用                           |
+| ------------------------------------------------------- | ------------------------------ |
+| `apps/server/util/pointsEconomyCatalog.js`              | 版本化目录、价格、概率与开关   |
+| `apps/server/util/pointsEconomyOperations.js`           | 事务内请求认领、回放与激活门禁 |
+| `apps/server/util/lottery.js`                           | 独立免费/付费池与付费保底      |
+| `apps/server/migrations/20260813_points_economy_c4.sql` | 一次性旧进度继承与 Schema      |
+| `apps/web/src/utils/pointsEconomyRequest.ts`            | 账号/负载级未知结果重放请求号  |
+| `docs/points-economy.md`                                | C4 产品、协议与运营单一规范    |
 
 ### LN-PIT-021：第三方 OAuth 授权码是透明值，不能按经验猜长度
 
@@ -159,16 +224,17 @@
 
 - 客户端协议测试用 864 字符授权码执行换码，断言授权码原样提交；超过 4096 字符时必须在请求上游前拒绝。
 - 支持页面测试覆盖 `bound`、`failed`、`session_required` 三种回调结果，断言提示类型、文案、状态刷新和查询参数清理。
+- 所有挂载支持页面的测试夹具都必须同步提供 `router.currentRoute.value.query` 与 `router.replace()`；路由能力增加后不能只更新主测试，否则异步挂载回调会在全量测试末尾形成未处理异常。
 - 生产发布后重新发起一次全新授权，确认返回页显示“已关联”和成功消息，数据库仅新增一条当前账号关联记录。
 
 #### 相关代码
 
-| 位置                                              | 作用                         |
-| ------------------------------------------------- | ---------------------------- |
-| `apps/server/util/afdianClient.js`                 | 授权码边界校验与上游换码     |
-| `apps/server/util/afdianClient.test.js`            | 实际长度与异常膨胀回归测试   |
-| `apps/web/src/view/support/SupportUs.vue`          | 回调结果反馈与关联状态刷新   |
-| `apps/web/src/view/support/SupportUs.test.ts`      | 成功、失败、登录失效结果测试 |
+| 位置                                          | 作用                         |
+| --------------------------------------------- | ---------------------------- |
+| `apps/server/util/afdianClient.js`            | 授权码边界校验与上游换码     |
+| `apps/server/util/afdianClient.test.js`       | 实际长度与异常膨胀回归测试   |
+| `apps/web/src/view/support/SupportUs.vue`     | 回调结果反馈与关联状态刷新   |
+| `apps/web/src/view/support/SupportUs.test.ts` | 成功、失败、登录失效结果测试 |
 
 ### LN-PIT-020：第三方文档域名可访问不代表生产服务器能解析
 
@@ -311,13 +377,13 @@
 
 #### 相关代码与提交
 
-| 位置                                                               | 作用                                 |
-| ------------------------------------------------------------------ | ------------------------------------ |
-| `apps/web/src/utils/prepareCommunityChatSticker.ts`                | 体积与像素联合判断、自动优化         |
-| `apps/web/src/components/communityChat/ChatCustomStickerPanel.vue` | 能力限制接入与用户提示映射           |
-| `apps/server/util/services/communityChatCustomStickerService.js`   | 限制事实源、服务端硬门禁和友好文案   |
-| `apps/web/src/utils/prepareCommunityChatSticker.test.ts`           | 小文件高分辨率与合格原图回归         |
-| `apps/server/util/services/communityChatCustomStickerService.test.js` | 能力响应与服务端尺寸边界回归      |
+| 位置                                                                  | 作用                               |
+| --------------------------------------------------------------------- | ---------------------------------- |
+| `apps/web/src/utils/prepareCommunityChatSticker.ts`                   | 体积与像素联合判断、自动优化       |
+| `apps/web/src/components/communityChat/ChatCustomStickerPanel.vue`    | 能力限制接入与用户提示映射         |
+| `apps/server/util/services/communityChatCustomStickerService.js`      | 限制事实源、服务端硬门禁和友好文案 |
+| `apps/web/src/utils/prepareCommunityChatSticker.test.ts`              | 小文件高分辨率与合格原图回归       |
+| `apps/server/util/services/communityChatCustomStickerService.test.js` | 能力响应与服务端尺寸边界回归       |
 
 ### LN-PIT-016：scoped 样式中提前结束根节点 global 会把业务声明泄漏到页面根节点
 
@@ -342,13 +408,17 @@
 当前 `@vue/compiler-sfc` 对 scoped 样式中的 `:global(...)` 按完整选择器替换处理。写成：
 
 ```less
-:global(html.light-note-mobile-rendering) .component-root { /* ... */ }
+:global(html.light-note-mobile-rendering) .component-root {
+  /* ... */
+}
 ```
 
 时，`)` 后面的业务后代不会保留在编译结果中，最终产物会变成：
 
 ```css
-html.light-note-mobile-rendering { /* 原本属于组件的声明 */ }
+html.light-note-mobile-rendering {
+  /* 原本属于组件的声明 */
+}
 ```
 
 聊天室表情分包首次加载后，因此直接给 `html` 写入了面板边框、宽高和圆角。SPA 已加载的 CSS 分包不会在离开路由时卸载，所以污染会持续到整页刷新；后续页面只改变根节点继承色，边框随之变色。同类写法还存在于成长、个人中心、后台、云空间和全局消息组件，部分规则会直接污染 `html` 或 `body`。
@@ -375,14 +445,14 @@ html.light-note-mobile-rendering { /* 原本属于组件的声明 */ }
 
 #### 相关代码与提交
 
-| 位置                                                               | 作用                               |
-| ------------------------------------------------------------------ | ---------------------------------- |
-| `apps/web/src/config/renderingParityGate.test.ts`                  | 源码危险模式与真实编译结果门禁     |
-| `apps/web/src/components/communityChat/ChatExpressionPanel.vue`   | 本次线上边框的直接触发规则         |
-| `apps/web/src/components/communityChat/ChatEmojiPanel.vue`        | Emoji 面板移动规则                 |
-| `apps/web/src/components/communityChat/ChatCustomStickerPanel.vue`| 自定义表情面板移动规则             |
-| `apps/web/src/components/communityChat/ChatMentionSuggestions.vue`| 提及面板移动规则                   |
-| `apps/web/src/components/base/BasicComponents/BMessage/BMessageContainer.vue` | `body` 根状态的同类修复 |
+| 位置                                                                          | 作用                           |
+| ----------------------------------------------------------------------------- | ------------------------------ |
+| `apps/web/src/config/renderingParityGate.test.ts`                             | 源码危险模式与真实编译结果门禁 |
+| `apps/web/src/components/communityChat/ChatExpressionPanel.vue`               | 本次线上边框的直接触发规则     |
+| `apps/web/src/components/communityChat/ChatEmojiPanel.vue`                    | Emoji 面板移动规则             |
+| `apps/web/src/components/communityChat/ChatCustomStickerPanel.vue`            | 自定义表情面板移动规则         |
+| `apps/web/src/components/communityChat/ChatMentionSuggestions.vue`            | 提及面板移动规则               |
+| `apps/web/src/components/base/BasicComponents/BMessage/BMessageContainer.vue` | `body` 根状态的同类修复        |
 
 ### LN-PIT-015：公开成员搜索不能用社区参与记录代替注册账号全集
 
@@ -711,6 +781,7 @@ MySQL InnoDB 默认 `REPEATABLE READ` 下，事务第一次普通 `SELECT` 建�
 | `apps/web/src/components/base/BasicComponents/BDateTimePicker.vue`     | 时分输入接线及完整分钟精度       |
 | `apps/web/src/components/base/BasicComponents/BSelect.test.ts`         | 输入、补零、越界与 Escape 回归   |
 | `apps/web/src/components/base/BasicComponents/BDateTimePicker.test.ts` | 原分钟精度和日期时间提交链路回归 |
+
 ### LN-PIT-008：本人换头像框后聊天室仍显示旧装扮
 
 - 日期：2026-08-13

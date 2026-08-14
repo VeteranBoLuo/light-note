@@ -1,14 +1,17 @@
 import pool from '../db/index.js';
-import {
-  DAILY_QUEST_STAGES,
-  getGrowth,
-  getGrowthDashboard,
-  grantExp,
-} from './growth.js';
+import { getGrowth, getGrowthDashboard, grantExp } from './growth.js';
 import { earnPoints, getAchievementFrameByKey } from './points.js';
 import { getGrowthTasks } from './growthTaskService.js';
 import { getWeeklyChallenges } from './weeklyChallenge.js';
 import { getGrowthCalendarContext } from './growthPreferences.js';
+import {
+  dailyClaimRef,
+  earningWritesEnabled,
+  POINTS_EARNING_POLICY_VERSION,
+  resolveDailyQuestStages,
+  weeklyClaimRef,
+} from './pointsEarningPolicy.js';
+import { resolveDailyEarningPolicyVersion, resolveWeeklyEarningPolicyVersion } from './pointsEarningPolicyState.js';
 
 export const GROWTH_CLAIM_SCOPES = Object.freeze(['daily', 'growthTasks', 'achievements', 'weekly']);
 
@@ -40,7 +43,11 @@ const ACTION_BY_WEEKLY = Object.freeze({
 
 function selectedScopes(input = {}) {
   const explicit = Array.isArray(input.scopes) || input.scope !== undefined;
-  const raw = Array.isArray(input.scopes) ? input.scopes : input.scope !== undefined ? [input.scope] : GROWTH_CLAIM_SCOPES;
+  const raw = Array.isArray(input.scopes)
+    ? input.scopes
+    : input.scope !== undefined
+      ? [input.scope]
+      : GROWTH_CLAIM_SCOPES;
   if (explicit && (raw.length === 0 || raw.some((scope) => !GROWTH_CLAIM_SCOPES.includes(scope)))) return null;
   const set = new Set(raw);
   return set;
@@ -182,6 +189,8 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
     await conn.query('SELECT user_id FROM user_growth WHERE user_id = ? FOR UPDATE', [String(userId)]);
 
     const calendar = await getGrowthCalendarContext(userId, { db: conn });
+    if (scopes.has('daily')) await resolveDailyEarningPolicyVersion(calendar.dayKey, { db: conn, lock: true });
+    if (scopes.has('weekly')) await resolveWeeklyEarningPolicyVersion(calendar.weekKey, { db: conn, lock: true });
     const [dashboard, weekly, tasks] = await Promise.all([
       getGrowthDashboard(userId, { userRole, db: conn, calendar }),
       getWeeklyChallenges(userId, { db: conn, calendar }),
@@ -189,6 +198,10 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
     ]);
 
     if (scopes.has('daily')) {
+      if (!earningWritesEnabled(dashboard.questBonus.policyVersion)) {
+        await conn.rollback();
+        return { ok: false, reason: 'earning_paused', receipts: [], ...emptySummary(), growth: null };
+      }
       const keys = selectedKeys(input, 'daily');
       for (const stage of dashboard.questBonus.stages.filter((item) => shouldClaim(keys, item.key))) {
         if (stage.claimed) {
@@ -199,17 +212,21 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
           addReceipt(receipts, summary, { type: 'daily', key: stage.key, status: 'incomplete', reward: {} });
           continue;
         }
-        const ref = `${calendar.dayKey}:${stage.required}`;
+        const ref = dailyClaimRef(calendar.dayKey, stage.required, dashboard.questBonus.policyVersion);
+        const dailyPolicyStages = resolveDailyQuestStages(dashboard.questBonus.policyVersion);
         const grant =
           userRole === 'root'
             ? { granted: 0, duplicated: false, leveledUp: false }
             : await grantExp(
                 userId,
-                DAILY_QUEST_STAGES.find((item) => item.key === stage.key)?.source || `daily_quest_${stage.required}`,
+                dailyPolicyStages.find((item) => item.key === stage.key)?.source || `daily_quest_${stage.required}`,
                 { day: calendar.dayKey, amount: stage.exp, userRole, calendar },
                 conn,
               );
-        const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, conn);
+        const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, conn, {
+          policyVersion: dashboard.questBonus.policyVersion,
+          meta: { stage: stage.key, required: stage.required },
+        });
         const duplicated = !gotPoints && (userRole === 'root' || grant.duplicated);
         addReceipt(receipts, summary, {
           type: 'daily',
@@ -264,32 +281,48 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
           addReceipt(receipts, summary, { type: 'achievement', key: achievement.key, status: 'locked', reward: {} });
           continue;
         }
+        const prospectiveFrame = getAchievementFrameByKey(achievement.key);
+        const rewardPoints = Number(achievement.rewardSnapshot?.points ?? achievement.reward ?? 0);
+        const frameId = achievement.rewardSnapshot?.frameId || prospectiveFrame?.id || null;
+        const snapshotPolicyVersion =
+          achievement.rewardSnapshot?.policyVersion || achievement.policyVersion || POINTS_EARNING_POLICY_VERSION;
         await conn.query(
-          `INSERT INTO user_achievements (user_id, achievement_key, unlocked_at)
-           VALUES (?, ?, NOW())
+          `INSERT INTO user_achievements
+             (user_id, achievement_key, unlocked_at, reward_points_snapshot, reward_frame_id_snapshot, policy_version)
+           VALUES (?, ?, NOW(), ?, ?, ?)
            ON DUPLICATE KEY UPDATE unlocked_at = user_achievements.unlocked_at`,
-          [String(userId), achievement.key],
+          [String(userId), achievement.key, rewardPoints, frameId, snapshotPolicyVersion],
         );
-        const gotPoints = await earnPoints(userId, achievement.reward, 'achievement', achievement.key, conn);
-        const frame = getAchievementFrameByKey(achievement.key);
-        if (gotPoints && frame) {
-          await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, frame.id]);
+        const gotPoints = await earnPoints(userId, rewardPoints, 'achievement', achievement.key, conn, {
+          policyVersion: snapshotPolicyVersion,
+          meta: { achievementKey: achievement.key, frameId },
+        });
+        if (gotPoints && frameId) {
+          await conn.query('INSERT IGNORE INTO user_cosmetics (user_id, cosmetic_id) VALUES (?, ?)', [userId, frameId]);
         }
         await conn.query(
-          `UPDATE user_achievements SET claimed_at = COALESCE(claimed_at, NOW())
+          `UPDATE user_achievements
+              SET claimed_at = COALESCE(claimed_at, NOW()),
+                  reward_points_snapshot = COALESCE(reward_points_snapshot, ?),
+                  reward_frame_id_snapshot = COALESCE(reward_frame_id_snapshot, ?),
+                  policy_version = COALESCE(policy_version, ?)
            WHERE user_id = ? AND achievement_key = ?`,
-          [String(userId), achievement.key],
+          [rewardPoints, frameId, snapshotPolicyVersion, String(userId), achievement.key],
         );
         addReceipt(receipts, summary, {
           type: 'achievement',
           key: achievement.key,
           status: gotPoints ? 'claimed' : 'already',
-          reward: gotPoints ? { points: achievement.reward, exp: 0, frameId: frame?.id || null } : {},
+          reward: gotPoints ? { points: rewardPoints, exp: 0, frameId } : {},
         });
       }
     }
 
     if (scopes.has('weekly')) {
+      if (!earningWritesEnabled(weekly.policyVersion)) {
+        await conn.rollback();
+        return { ok: false, reason: 'earning_paused', receipts: [], ...emptySummary(), growth: null };
+      }
       const keys = selectedKeys(input, 'weekly');
       for (const challenge of weekly.challenges.filter((item) => shouldClaim(keys, item.key))) {
         if (challenge.claimed) {
@@ -300,7 +333,14 @@ export async function claimGrowthRewards(userId, input = {}, { userRole = null }
           addReceipt(receipts, summary, { type: 'weekly', key: challenge.key, status: 'incomplete', reward: {} });
           continue;
         }
-        const gotPoints = await earnPoints(userId, challenge.reward, 'weekly', `${weekly.weekKey}:${challenge.key}`, conn);
+        const gotPoints = await earnPoints(
+          userId,
+          challenge.reward,
+          'weekly',
+          weeklyClaimRef(weekly.weekKey, challenge.key, weekly.policyVersion),
+          conn,
+          { policyVersion: weekly.policyVersion, meta: { challengeKey: challenge.key } },
+        );
         addReceipt(receipts, summary, {
           type: 'weekly',
           key: challenge.key,

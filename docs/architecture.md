@@ -266,6 +266,10 @@ src/
 | `ai_token_usage` / `ai_token_reservations`             | AI 日额度账本与请求级原子占位        | 复合键 / 自增    |
 | `user_growth`                                          | 成长快照、积分及永久 AI 加油余额     | 用户 UUID        |
 | `growth_events` / `points_log`                         | 经验与积分不可变账本                 | 自增             |
+| `points_earning_period_policy`                         | 积分获取日/周策略版本锁              | 周期类型 + 键    |
+| `points_grant_operations`                              | 非消费积分发放幂等收据               | 自增 / 账号请求  |
+| `points_ledger_baselines`                              | C5 余额对账期初差额                  | 用户 UUID        |
+| `points_campaigns` / `points_campaign_recipients`      | 积分活动状态机、冻结名单与交付结果   | 自增 / 复合主键  |
 | `growth_tasks` / `user_growth_tasks`                   | 成长任务定义、达成与领取状态         | 任务键 / 复合键  |
 | `user_achievements`                                    | 用户成就永久解锁与领取状态           | 用户 + 成就      |
 | `user_growth_preferences` / `growth_recap_state`       | 成长偏好与内容回顾抑制状态           | 用户 / 复合键    |
@@ -696,6 +700,9 @@ page_view（打开站点）→ wall_hit（触发拦截）→ cta_click（点注�
 - 头像框完整目录仍由 `util/points.js` 用 `acquisition = shop | achievement` 统一组合；其中积分商品的价格、等级、AI/空间与免费/付费奖池来自版本化单一事实源 `util/pointsEconomyCatalog.js`，完整规范见 `docs/points-economy.md`。C4 的 13 款积分框为基础 `220 / 320 / 480`、进阶 `700 / 1000 / 1400`、炫彩 `2000 / 2800 / 3800`、传说 `6000 / 9000 / 12000 / 16000`；前三档无等级门槛，四款传说只要求 Lv.3～6。成就框数量与领取门槛不随本次经济调价变化。完整目录及所有入口仍按“基础 → 进阶 → 炫彩 → 传说”稳定递增，同档保留目录顺序；当前 25 款按 `5 / 6 / 6 / 8` 分布，积分框为 `3 / 3 / 3 / 4`，成就框为 `2 / 3 / 3 / 4`。笔记与文件都按 200 炫彩、500 传说形成双阶梯；200 数量档同时要求 Lv.5，书签/笔记/文件的 500 数量档同时要求 Lv.8。视觉复杂度只遵循 `docs/design.md`，经济版本不得另改几何或动效。所有商店预览、顶栏、个人中心、聊天室佩戴态和后台用户管理复用 `AvatarFramePreview` 的 64px 固定设计画布并整体等比缩放。后台用户分页接口随列表一次性左连接 `user_growth.equipped_frame`，禁止逐行请求；未知框 ID 回退普通头像。`GET /growth/shop` 返回当前 `economyVersion`、积分商品和完整 `frames`；购买接口只校验积分目录，佩戴接口校验完整目录与权益。Root 自己的普通管理会话保留全目录试戴能力，不扣积分、不写所有权，管理员预览上下文不继承。成就领取继续用不可重复的领取事实发放积分和头像框，历史领取兼容不能由只读入口产生写入。
 - C4 每日惊喜与积分抽奖使用独立奖池：每日惊喜按等级每日 `0 / 1 / 2 / 3 / 3` 次，只发积分或 AI 永久余额，不发永久空间/补签卡，也不推进付费保底；付费单抽 170、十连 1600，每第 10 次付费抽从稀有池命中。`lottery_count` 保留为历史总数，权威付费状态位于 `lottery_paid_count` 与 `lottery_paid_pity_progress`。
 - 商店购买和两类抽奖使用 `points_economy_operations` 保存账号级幂等请求、经济版本、规范负载哈希和可回放结果。服务端必须先回放成功旧请求，再校验新请求的版本与预期价格；扣分、资产、保底和操作结果在同一事务提交。`points_economy_migration_state` 标记显式的一次性旧保底继承，C4 激活但标记缺失时应用拒绝启动；`ensurePointsSchema()` 只补表/列，不执行历史回填。
+- C5 获取策略与 C4 消费目录独立，完整规范见 `docs/points-earning-c5.md`。签到、每日任务和每周挑战稳定理论周上限保持 670；任务由书签、笔记、文件、待办完成和整理完成的不可变 `growth_events` 事实聚合。同一日的两个知识行动任务要求两个不同事件；事件只保存低敏感类型/判重键，不保存正文、标题、URL 或路径。账号自然日/ISO 周版本由 `points_earning_period_policy` 固化，领取事务重算并使用版本化 ref，避免同周期双领。
+- C5 用户积分中心按今日、本周和最多 28 天有界聚合，目标商品实时读取 C4 服务端目录，预计天数只使用稳定收入且支持低压力模式。Root 治理按最大 365 天范围聚合，提供健康、来源/去向、用户 360、只读模拟、异常和游标对账；期初差额由 `points_ledger_baselines` 固化，对账只报告，人工修正只补幂等 `correction` 流水，不自动覆盖余额。
+- 正向活动积分通过 `points_campaigns` 状态机和冻结收件人表执行，结构化受众默认排除游客、删除/非普通/有效封禁账号；预览不写积分，名单冻结后按租约小批执行，每个收件人复用 `points_grant_operations` 请求号。Campaign 依赖治理开关与显式正数安全上限，禁止批量扣分。`20260814_points_earning_c5.sql` 显式固化旧成就快照、历史有意义行为和对账基线；应用启动只补结构。
 
 ### 分享链接安全 —— 明确未完成
 

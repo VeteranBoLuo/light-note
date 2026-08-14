@@ -21,6 +21,7 @@ const tools = [
   { name: 'query_cloud_folders' },
   { name: 'get_storage_usage' },
   { name: 'get_growth' },
+  { name: 'get_points_summary' },
   { name: 'save_attachment_to_cloud', isWrite: true },
   { name: 'query_tags' },
   { name: 'query_users', requireRoot: true },
@@ -158,6 +159,15 @@ describe('selectAgentTools', () => {
     expect(root.map((tool) => tool.name)).toContain('get_checkin_ranking');
     expect(user.map((tool) => tool.name)).toContain('get_growth');
     expect(user.map((tool) => tool.name)).not.toContain('get_checkin_ranking');
+  });
+
+  it('积分目标与获取节奏问题优先提供服务端口径的只读摘要', () => {
+    const selected = selectAgentTools(registry, {
+      message: '按我最近的积分节奏，距离兑换天穹还差多久？',
+      userRole: 'user',
+      maxTools: 6,
+    });
+    expect(selected.map((tool) => tool.name)).toContain('get_points_summary');
   });
 
   it('游客和只读上下文不下发写工具 schema', () => {

@@ -162,6 +162,28 @@ describe('resourceInbox', () => {
     expect(connection.query.mock.calls[1][0]).not.toContain('UPDATE note');
   });
 
+  it('管理员代完成只更新业务状态，不写用户有效活跃或成长奖励', async () => {
+    const connection = {
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ id: 'n1' }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+    };
+
+    await expect(
+      completeResources(connection, {
+        userId: 'u1',
+        items: [{ resourceType: 'note', resourceId: 'n1' }],
+        suppressUserRewards: true,
+      }),
+    ).resolves.toEqual({ completed: 1 });
+
+    expect(connection.query).toHaveBeenCalledTimes(2);
+    expect(connection.query.mock.calls.some(([sql]) => String(sql).includes('INSERT IGNORE INTO growth_events'))).toBe(
+      false,
+    );
+  });
+
   it('数量结果始终包含三种资源', async () => {
     const connection = {
       query: vi.fn().mockResolvedValue([

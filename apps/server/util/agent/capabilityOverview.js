@@ -27,6 +27,7 @@ const READ_GROUPS = [
       'get_ai_quota',
       'get_storage_usage',
       'get_growth',
+      'get_points_summary',
       'query_points_log',
       'get_shop_status',
       'get_lottery_status',

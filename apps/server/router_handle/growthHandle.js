@@ -14,6 +14,7 @@ import { ensureNotVisitor, ensureUserOrAdminPolicy } from '../util/auth.js';
 import {
   getActiveFrameCatalog,
   getActiveShopItems,
+  getShopItem,
   getOwnedCosmetics,
   buyItem,
   equipTitle,
@@ -34,13 +35,36 @@ import { getRecap, updateRecapState } from '../util/recap.js';
 import { getGrowthTasks } from '../util/growthTaskService.js';
 import { claimGrowthRewards, getGrowthClaimableSnapshot } from '../util/growthClaimService.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
+import { adminActionErrorResponse, beginAdminAction, finishAdminAction } from '../util/adminActionExecution.js';
 import {
-  adminActionErrorResponse,
-  beginAdminAction,
-  finishAdminAction,
-} from '../util/adminActionExecution.js';
-import { getGrowthPreferences, updateGrowthPreferences } from '../util/growthPreferences.js';
+  getGrowthPreferences,
+  updateGrowthPreferences,
+  updatePointsGoalPreference,
+} from '../util/growthPreferences.js';
 import { isGrowthCenterV2Enabled } from '../util/growthFeature.js';
+import { getUserPointsSummary } from '../util/pointsEarningAnalytics.js';
+import { getPointsEarningRuntime } from '../util/pointsEarningPolicy.js';
+import {
+  getPointsGovernanceAnomalies,
+  getPointsGovernanceOverview,
+  getPointsGovernanceSources,
+  getPointsUser360,
+  PointsGovernanceError,
+  simulatePointsPolicy,
+} from '../util/pointsGovernanceService.js';
+import { applyPointsCorrection, getPointsReconciliation } from '../util/pointsReconciliationService.js';
+import {
+  confirmPointsCampaign,
+  createPointsCampaign,
+  deleteDraftPointsCampaign,
+  executePointsCampaign,
+  freezePointsCampaign,
+  getPointsCampaignDetail,
+  listPointsCampaigns,
+  PointsCampaignError,
+  previewPointsCampaign,
+} from '../util/pointsCampaignService.js';
+import { PointsGrantError } from '../util/pointsGrantOperations.js';
 
 // GET /growth/me —— 读当前用户成长快照(游客返回 Lv.1 默认展示,不发经验;root 展示满级)
 export const getMyGrowth = async (req, res) => {
@@ -48,11 +72,20 @@ export const getMyGrowth = async (req, res) => {
     const userId = req.user?.id || 'visitor';
     const userRole = req.user?.role || 'visitor';
     const growth = await getGrowth(userId, { userRole });
-    growth.features = { growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }) };
+    growth.features = {
+      growthCenterV2: isGrowthCenterV2Enabled({ userId, userRole }),
+      pointsCenter: getPointsEarningRuntime().pointsCenterEnabled,
+    };
     res.send(resultData(growth));
   } catch (error) {
     console.error('获取成长信息失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取成长信息失败', 'Failed to load growth data')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取成长信息失败', 'Failed to load growth data'),
+      ),
+    );
   }
 };
 
@@ -64,7 +97,13 @@ export const doCheckin = async (req, res) => {
     res.send(resultData(result));
   } catch (error) {
     console.error('签到失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '签到失败，请稍后重试', 'Check-in failed. Please try again.')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '签到失败，请稍后重试', 'Check-in failed. Please try again.'),
+      ),
+    );
   }
 };
 
@@ -76,7 +115,13 @@ export const doUseProtectCard = async (req, res) => {
     res.send(resultData(result));
   } catch (error) {
     console.error('补签失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '补签失败，请稍后重试', 'Make-up check-in failed. Please try again.')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '补签失败，请稍后重试', 'Make-up check-in failed. Please try again.'),
+      ),
+    );
   }
 };
 
@@ -148,7 +193,13 @@ export const getDashboard = async (req, res) => {
     res.send(resultData(data));
   } catch (error) {
     console.error('获取成长看板失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取成长看板失败', 'Failed to load growth dashboard')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取成长看板失败', 'Failed to load growth dashboard'),
+      ),
+    );
   }
 };
 
@@ -241,7 +292,9 @@ export const getRanks = async (req, res) => {
     res.send(resultData(ranks));
   } catch (error) {
     console.error('获取段位表失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取段位表失败', 'Failed to load levels')));
+    res.send(
+      resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取段位表失败', 'Failed to load levels')),
+    );
   }
 };
 
@@ -382,7 +435,13 @@ export const buyShopItem = async (req, res) => {
       return res.send(resultData(error.data, error.status, error.message));
     }
     console.error('购买失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '兑换失败，请稍后重试', 'Exchange failed. Please try again.')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '兑换失败，请稍后重试', 'Exchange failed. Please try again.'),
+      ),
+    );
   }
 };
 
@@ -496,6 +555,56 @@ export const putPreferences = async (req, res) => {
   }
 };
 
+// GET /growth/points/summary —— 用户可理解的余额、近 28 天来源、目标与 C5 获取规则。
+export const getPointsSummary = async (req, res) => {
+  if (!ensureUserOrAdminPolicy(req, res, ['read'])) return;
+  try {
+    const data = await getUserPointsSummary(req.user.id, { userRole: req.user.role });
+    return res.send(resultData(data));
+  } catch (error) {
+    console.error('获取积分中心失败 code=%s', stableAgentErrorCode(error));
+    return res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取积分中心失败', 'Failed to load points center'),
+      ),
+    );
+  }
+};
+
+// PUT /growth/preferences/points-goal —— 只允许把当前有效积分商品设为目标；关闭时保留历史 itemId。
+export const putPointsGoal = async (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    const enabled = req.body?.enabled;
+    const itemId = String(req.body?.itemId || '').trim() || null;
+    if (typeof enabled !== 'boolean') {
+      return res.send(
+        resultData(
+          { ok: false, reason: 'invalid_points_goal_enabled' },
+          400,
+          L(req, '目标状态无效', 'Invalid goal state'),
+        ),
+      );
+    }
+    if (enabled && (!itemId || !getShopItem(itemId))) {
+      return res.send(
+        resultData(
+          { ok: false, reason: 'invalid_points_goal_item' },
+          400,
+          L(req, '请选择有效的积分商品', 'Choose an available points item'),
+        ),
+      );
+    }
+    const result = await updatePointsGoalPreference(req.user.id, { itemId, enabled });
+    return res.send(resultData(result, result.ok ? 200 : 400));
+  } catch (error) {
+    console.error('保存积分目标失败 code=%s', stableAgentErrorCode(error));
+    return res.send(resultData(null, 500, L(req, '保存积分目标失败', 'Failed to save points goal')));
+  }
+};
+
 // GET /growth/weekly —— 本周挑战(进度 + 可领取态;游客展示 0 进度)
 export const getWeekly = async (req, res) => {
   try {
@@ -503,7 +612,13 @@ export const getWeekly = async (req, res) => {
     res.send(resultData(await getWeeklyChallenges(userId)));
   } catch (error) {
     console.error('获取每周挑战失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取每周挑战失败', 'Failed to load weekly challenges')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取每周挑战失败', 'Failed to load weekly challenges'),
+      ),
+    );
   }
 };
 
@@ -529,7 +644,13 @@ export const doClaimWeekly = async (req, res) => {
     );
   } catch (error) {
     console.error('领取每周挑战失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '领取失败，请稍后重试', 'Claim failed. Please try again.')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '领取失败，请稍后重试', 'Claim failed. Please try again.'),
+      ),
+    );
   }
 };
 
@@ -545,7 +666,13 @@ export const getMyPointsLog = async (req, res) => {
     res.send(resultData(data));
   } catch (error) {
     console.error('获取积分明细失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取积分明细失败', 'Failed to load points history')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取积分明细失败', 'Failed to load points history'),
+      ),
+    );
   }
 };
 
@@ -553,7 +680,12 @@ export const getMyPointsLog = async (req, res) => {
 export const getPointsOverviewForAdmin = async (req, res) => {
   if (req.user?.role !== 'root') return res.send(resultData(null, 403, '仅站长可操作'));
   try {
-    res.send(resultData(await getPointsOverview()));
+    const data = await getPointsOverview();
+    data.features = {
+      adminGovernanceV2: getPointsEarningRuntime().adminGovernanceEnabled,
+      campaign: getPointsEarningRuntime().campaignEnabled,
+    };
+    res.send(resultData(data));
   } catch (error) {
     console.error('获取积分总览失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, '获取积分总览失败'));
@@ -566,7 +698,17 @@ export const getUserPointsForAdmin = async (req, res) => {
   try {
     const { userId } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
-    res.send(resultData(await getUserPointsDetail(userId)));
+    const runtime = getPointsEarningRuntime();
+    res.send(
+      resultData(
+        runtime.adminGovernanceEnabled
+          ? await getPointsUser360(userId, {
+              days: req.body?.days || 28,
+              logCategory: req.body?.logCategory || 'all',
+            })
+          : await getUserPointsDetail(userId),
+      ),
+    );
   } catch (error) {
     console.error('查询用户积分失败 code=%s', stableAgentErrorCode(error));
     res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, '查询失败'));
@@ -591,7 +733,7 @@ export const searchUsersForPointsAdmin = async (req, res) => {
 export const doAdminGrantPoints = async (req, res) => {
   let actionContext = null;
   try {
-    const { userId, points, cards, storageMb, note, reason } = req.body || {};
+    const { userId, points, cards, storageMb, reasonCode, note, ticketRef, reason } = req.body || {};
     if (!userId) return res.send(resultData(null, 400, '缺少目标用户'));
     actionContext = await beginAdminAction(req, {
       action: 'growth.grant_points',
@@ -605,7 +747,7 @@ export const doAdminGrantPoints = async (req, res) => {
     });
     const result = await adminGrantPoints(
       userId,
-      { points, cards, storageMb, note: note || reason },
+      { points, cards, storageMb, reasonCode, reason, note, ticketRef },
       { actionContext },
     );
     return res.send(resultData(result));
@@ -628,6 +770,186 @@ export const doAdminGrantPoints = async (req, res) => {
     return res.send(resultData({ ok: false, reason: response.code }, response.status, response.message));
   }
 };
+
+function ensureGovernanceAdmin(req, res) {
+  if (req.user?.role !== 'root' || req.adminContext) {
+    res.send(resultData(null, 403, '仅站长普通管理会话可操作'));
+    return false;
+  }
+  if (!getPointsEarningRuntime().adminGovernanceEnabled) {
+    res.send(resultData({ reason: 'POINTS_ADMIN_GOVERNANCE_DISABLED' }, 503, '积分治理 V2 尚未启用'));
+    return false;
+  }
+  return true;
+}
+
+function governanceErrorResponse(error, fallback = '积分治理请求失败') {
+  if (
+    error instanceof PointsGovernanceError ||
+    error instanceof PointsCampaignError ||
+    error instanceof PointsGrantError
+  ) {
+    return { status: error.status || 400, code: error.code, message: error.message };
+  }
+  const adminActionResponse = adminActionErrorResponse(error, fallback);
+  if (adminActionResponse.code !== 'ADMIN_ACTION_FAILED') return adminActionResponse;
+  return { status: 500, code: stableAgentErrorCode(error), message: fallback };
+}
+
+async function runGovernanceRead(req, res, action, fallback) {
+  if (!ensureGovernanceAdmin(req, res)) return;
+  try {
+    return res.send(resultData(await action()));
+  } catch (error) {
+    const response = governanceErrorResponse(error, fallback);
+    console.error('[PointsGovernance] read failed code=%s', response.code);
+    return res.send(resultData({ reason: response.code }, response.status, response.message));
+  }
+}
+
+export const getPointsGovernanceOverviewForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsGovernanceOverview(req.body || {}), '获取积分健康总览失败');
+
+export const getPointsGovernanceSourcesForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsGovernanceSources(req.body || {}), '获取积分来源与去向失败');
+
+export const getPointsAnomaliesForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsGovernanceAnomalies(req.body || {}), '获取积分异常失败');
+
+export const getPointsReconciliationForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsReconciliation(req.body || {}), '获取积分对账失败');
+
+export const simulatePointsPolicyForAdmin = (req, res) =>
+  runGovernanceRead(req, res, async () => simulatePointsPolicy(req.body || {}), '积分策略模拟失败');
+
+export const doPointsCorrectionForAdmin = async (req, res) => {
+  if (!ensureGovernanceAdmin(req, res)) return;
+  let actionContext = null;
+  try {
+    const { userId, expectedDifference, note } = req.body || {};
+    actionContext = await beginAdminAction(req, {
+      action: 'growth.points_correction',
+      targetId: userId,
+      expectedConfirmText: '确认创建纠正',
+      metadata: { expectedDifference: Number(expectedDifference || 0) },
+    });
+    const data = await applyPointsCorrection(
+      userId,
+      { expectedDifference, note, requestId: actionContext.requestId },
+      { actionContext },
+    );
+    return res.send(resultData(data));
+  } catch (error) {
+    if (actionContext)
+      await finishAdminAction(actionContext, {
+        outcome: 'failed',
+        metadata: { errorCode: stableAgentErrorCode(error) },
+      }).catch(() => {});
+    const response = governanceErrorResponse(error, '创建积分纠正失败');
+    return res.send(resultData({ reason: response.code }, response.status, response.message));
+  }
+};
+
+export const listPointsCampaignsForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => listPointsCampaigns(req.body || {}), '获取活动列表失败');
+
+export const getPointsCampaignDetailForAdmin = (req, res) =>
+  runGovernanceRead(req, res, () => getPointsCampaignDetail(req.body?.publicId), '获取活动详情失败');
+
+export const previewPointsCampaignForAdmin = async (req, res) => {
+  if (!ensureGovernanceAdmin(req, res)) return;
+  let actionContext = null;
+  try {
+    actionContext = await beginAdminAction(req, {
+      action: 'growth.points_campaign_preview',
+      targetId: req.body?.publicId,
+      metadata: {},
+    });
+    const data = await previewPointsCampaign(req.body?.publicId);
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: { recipientCount: data.recipientCount, totalPoints: data.totalPoints },
+    });
+    return res.send(resultData({ ...data, ...receipt }));
+  } catch (error) {
+    if (actionContext)
+      await finishAdminAction(actionContext, {
+        outcome: 'failed',
+        metadata: { errorCode: stableAgentErrorCode(error) },
+      }).catch(() => {});
+    const response = governanceErrorResponse(error, '预览活动失败');
+    return res.send(resultData({ reason: response.code }, response.status, response.message));
+  }
+};
+
+async function runCampaignWrite(req, res, { action, expectedConfirmText = null, execute, metadata = {} }) {
+  if (!ensureGovernanceAdmin(req, res)) return;
+  let actionContext = null;
+  try {
+    actionContext = await beginAdminAction(req, {
+      action,
+      targetId: req.body?.publicId || req.body?.name || null,
+      expectedConfirmText,
+      metadata,
+    });
+    const data = await execute(actionContext);
+    const receipt = await finishAdminAction(actionContext, {
+      outcome: 'succeeded',
+      metadata: {
+        publicId: data?.campaign?.publicId || data?.publicId || req.body?.publicId || null,
+        recipientCount: data?.campaign?.recipientCount ?? data?.recipientCount ?? null,
+        totalPoints: data?.campaign?.totalPoints ?? data?.totalPoints ?? null,
+        processed: data?.processed ?? null,
+      },
+    });
+    return res.send(resultData({ ...data, ...receipt }));
+  } catch (error) {
+    if (actionContext)
+      await finishAdminAction(actionContext, {
+        outcome: 'failed',
+        metadata: { errorCode: stableAgentErrorCode(error) },
+      }).catch(() => {});
+    const response = governanceErrorResponse(error, '活动操作失败');
+    return res.send(resultData({ reason: response.code }, response.status, response.message));
+  }
+}
+
+export const createPointsCampaignForAdmin = (req, res) =>
+  runCampaignWrite(req, res, {
+    action: 'growth.points_campaign_create',
+    execute: (context) =>
+      createPointsCampaign(req.body || {}, { actorUserId: req.user.id, requestId: context.requestId }),
+    metadata: { pointsPerUser: Number(req.body?.pointsPerUser || 0) },
+  });
+
+export const freezePointsCampaignForAdmin = (req, res) =>
+  runCampaignWrite(req, res, {
+    action: 'growth.points_campaign_freeze',
+    expectedConfirmText: '确认冻结名单',
+    execute: () => freezePointsCampaign(req.body?.publicId),
+  });
+
+export const confirmPointsCampaignForAdmin = (req, res) =>
+  runCampaignWrite(req, res, {
+    action: 'growth.points_campaign_confirm',
+    expectedConfirmText: '确认活动发放',
+    execute: () => confirmPointsCampaign(req.body?.publicId, { actorUserId: req.user.id }),
+  });
+
+export const executePointsCampaignForAdmin = (req, res) =>
+  runCampaignWrite(req, res, {
+    action: 'growth.points_campaign_execute',
+    expectedConfirmText: '确认执行发放',
+    execute: (context) =>
+      executePointsCampaign(req.body?.publicId, { batchSize: req.body?.batchSize, leaseOwner: context.requestId }),
+  });
+
+export const deletePointsCampaignForAdmin = (req, res) =>
+  runCampaignWrite(req, res, {
+    action: 'growth.points_campaign_delete',
+    expectedConfirmText: '确认删除草稿',
+    execute: () => deleteDraftPointsCampaign(req.body?.publicId),
+  });
 
 // POST /growth/achievement/claim —— 领取成就奖励(已解锁且未领 → 发积分与可选头像框)
 export const doClaimAchievement = async (req, res) => {
@@ -664,7 +986,13 @@ export const getLottery = async (req, res) => {
     res.send(resultData(data));
   } catch (error) {
     console.error('获取抽奖信息失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '获取抽奖信息失败', 'Failed to load draw details')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '获取抽奖信息失败', 'Failed to load draw details'),
+      ),
+    );
   }
 };
 
@@ -689,7 +1017,13 @@ export const doDrawLottery = async (req, res) => {
       return res.send(resultData(error.data, error.status, error.message));
     }
     console.error('抽奖失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '抽奖失败，请稍后重试', 'Draw failed. Please try again.')));
+    res.send(
+      resultData(
+        { reason: stableAgentErrorCode(error) },
+        500,
+        L(req, '抽奖失败，请稍后重试', 'Draw failed. Please try again.'),
+      ),
+    );
   }
 };
 
@@ -716,6 +1050,8 @@ export const readNotices = async (req, res) => {
     res.send(resultData({ ok: true }));
   } catch (error) {
     console.error('标记升级通知已读失败 code=%s', stableAgentErrorCode(error));
-    res.send(resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '标记已读失败', 'Failed to mark as read')));
+    res.send(
+      resultData({ reason: stableAgentErrorCode(error) }, 500, L(req, '标记已读失败', 'Failed to mark as read')),
+    );
   }
 };

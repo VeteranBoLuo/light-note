@@ -1,7 +1,10 @@
 <template>
   <div class="dq">
     <div class="dq-head">
-      <span class="dq-title-wrap"><span class="dq-title">{{ t('growth.dashTasks') }}</span><small>{{ t('growth.dailyResetTime') }}</small></span>
+      <span class="dq-title-wrap"
+        ><span class="dq-title">{{ t('growth.dashTasks') }}</span
+        ><small>{{ t('growth.dailyResetTime') }}</small></span
+      >
       <span class="dq-count" :class="{ allDone }">{{ doneCount }}/{{ quests.length }}</span>
     </div>
     <div class="dq-list">
@@ -12,6 +15,9 @@
         <span class="dq-label">
           {{ questLabel(q) }}
           <span v-if="q.random" class="dq-random">{{ t('growth.questRandomTag') }}</span>
+          <small v-if="q.countedEvent" class="dq-counted">
+            {{ t('growth.questCountedEvent', { type: activityTypeLabel(q.countedEvent.type) }) }}
+          </small>
         </span>
         <span v-if="q.target && !q.done" class="dq-prog">{{ q.cur ?? 0 }}/{{ q.target }}</span>
         <BButton
@@ -166,6 +172,8 @@
     daily_file: 'growth.quest_daily_file',
     daily_todo: 'growth.quest_daily_todo',
     daily_organize: 'growth.quest_daily_organize',
+    knowledge_action_1: 'growth.quest_knowledge_action_1',
+    knowledge_action_2: 'growth.quest_knowledge_action_2',
   };
 
   const doneCount = computed(() => props.quests.filter((q) => q.done).length);
@@ -214,6 +222,10 @@
     const key = QUEST_LABEL_KEYS[q.key];
     return key && te(key) ? t(key) : t('growth.questUnknown');
   }
+  function activityTypeLabel(type: string) {
+    const key = `growth.questActivityType.${type}`;
+    return te(key) ? t(key) : type;
+  }
 </script>
 
 <style scoped lang="less">
@@ -231,9 +243,20 @@
     font-size: 14px;
     font-weight: 700;
   }
-  .dq-title-wrap { display: flex; flex-direction: column; }
-  .dq-title-wrap small { margin-top: 2px; color: var(--primary-color); font-size: 10.5px; font-weight: 500; }
-  .dq-go { flex: 0 0 auto; color: var(--primary-color); }
+  .dq-title-wrap {
+    display: flex;
+    flex-direction: column;
+  }
+  .dq-title-wrap small {
+    margin-top: 2px;
+    color: var(--primary-color);
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+  .dq-go {
+    flex: 0 0 auto;
+    color: var(--primary-color);
+  }
   .dq-count {
     font-size: 12px;
     font-weight: 600;
@@ -283,6 +306,12 @@
     flex: 1 1 auto;
     font-size: 13px;
     color: var(--text-color);
+  }
+  .dq-counted {
+    display: block;
+    margin-top: 2px;
+    color: var(--desc-color);
+    font-size: 10.5px;
   }
   .dq-item.done .dq-label {
     color: var(--desc-color);

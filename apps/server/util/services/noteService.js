@@ -223,7 +223,7 @@ export async function createNote({
 
   if (!recoveredExisting) {
     try {
-      triggerResourceCreateEffects({
+      await triggerResourceCreateEffects({
         request,
         userId,
         userRole,
@@ -255,15 +255,7 @@ export async function createNote({
  */
 export async function applyOwnedNoteContentChange(
   connection,
-  {
-    userId,
-    actorUserId,
-    noteId,
-    before,
-    after,
-    maxContentLength = 1_000_000,
-    snapshotReason = 'ai_change',
-  } = {},
+  { userId, actorUserId, noteId, before, after, maxContentLength = 1_000_000, snapshotReason = 'ai_change' } = {},
 ) {
   if (!connection?.query) throw noteServiceError('CONNECTION_REQUIRED', '缺少事务连接', 500);
   if (!userId || !noteId) throw noteServiceError('NOTE_OWNER_REQUIRED', '缺少笔记归属信息');

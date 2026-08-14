@@ -264,6 +264,7 @@ export const GOLDEN_ENUMS = Object.freeze({
     'restore_trash',
     'read_url',
     'get_growth',
+    'get_points_summary',
     'query_points_log',
     'get_recap',
     'query_weekly_challenge',

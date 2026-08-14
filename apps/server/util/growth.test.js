@@ -32,6 +32,7 @@ import {
   RANKS,
   MAX_LEVEL,
   MAKEUP_WINDOW_DAYS,
+  STREAK_MILESTONES,
   ACHIEVEMENTS,
   meetsAchievementRequirement,
   useProtectCard,
@@ -83,6 +84,13 @@ describe('growth 段位表', () => {
       expect(RANKS[i].spaceMb).toBeGreaterThanOrEqual(RANKS[i - 1].spaceMb);
       expect(RANKS[i].aiTokenDaily).toBeGreaterThanOrEqual(RANKS[i - 1].aiTokenDaily);
     }
+  });
+
+  it('补签卡只在 7/30 天连签里程碑供给且单次各 1 张', () => {
+    expect(STREAK_MILESTONES.filter((milestone) => milestone.cards).map(({ days, cards }) => [days, cards])).toEqual([
+      [7, 1],
+      [30, 1],
+    ]);
   });
 });
 
@@ -584,6 +592,20 @@ describe('后台成长调整的升级通知', () => {
     expect(createNotification).not.toHaveBeenCalled();
     expect(grantItem).not.toHaveBeenCalled();
   });
+
+  it('后台补签卡调整同样遵守全局库存上限 2', async () => {
+    vi.clearAllMocks();
+    const connection = makeConnection();
+    pool.getConnection.mockResolvedValue(connection);
+
+    const result = await adminAdjustGrowth('user-3', { cardDelta: 99 });
+
+    expect(result).toMatchObject({ ok: true, cards: 2 });
+    expect(connection.query).toHaveBeenCalledWith(
+      'UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?',
+      [490, 1, 2, 'user-3'],
+    );
+  });
 });
 
 describe('成长提醒', () => {
@@ -658,12 +680,17 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
 
     // capped 必须为 false:root 本就不发经验,报「今日经验已达上限」是误导
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 10, capped: false });
-    expect(earnPoints).toHaveBeenCalledWith('root-1', 10, 'quest', '20260806:2');
+    expect(earnPoints).toHaveBeenCalledWith(
+      'root-1',
+      10,
+      'quest',
+      '20260806:2',
+      pool,
+      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
+    );
     const contentCountCall = pool.query.mock.calls.find(([sql]) => sql.includes('FROM todo_items td'));
     expect(contentCountCall?.[0]).toContain("DATE_FORMAT(DATE_ADD(td.create_time, INTERVAL ? MINUTE), '%Y%m%d') = ?");
-    expect(contentCountCall?.[1]).toEqual(
-      Array.from({ length: 6 }, () => ['root-1', 0, '20260806']).flat(),
-    );
+    expect(contentCountCall?.[1]).toEqual(Array.from({ length: 6 }, () => ['root-1', 0, '20260806']).flat());
     // 没走 grantExp,所以不该有 growth_events 的写入连接
     expect(pool.getConnection).not.toHaveBeenCalled();
   });
@@ -672,6 +699,7 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     vi.clearAllMocks();
     useAugust6();
     mockRootQueries({ legacyClaimed: true });
+    earnPoints.mockResolvedValue(false);
 
     const result = await claimDailyQuestBonus('root-1', {
       userRole: 'root',
@@ -680,7 +708,7 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
 
     expect(result).toMatchObject({ ok: true, already: true });
     expect(result.pointsEarned).toBeUndefined();
-    expect(earnPoints).not.toHaveBeenCalled();
+    expect(earnPoints).toHaveBeenCalledOnce();
   });
 
   it('root 完成随机任务后补领第二阶段，两个阶段合计 30 积分', async () => {
@@ -696,8 +724,24 @@ describe('claimDailyQuestBonus 对满级/root 的处理', () => {
     });
 
     expect(result).toMatchObject({ ok: true, expGained: 0, pointsEarned: 30, capped: false });
-    expect(earnPoints).toHaveBeenNthCalledWith(1, 'root-1', 10, 'quest', '20260806:2');
-    expect(earnPoints).toHaveBeenNthCalledWith(2, 'root-1', 20, 'quest', '20260806:3');
+    expect(earnPoints).toHaveBeenNthCalledWith(
+      1,
+      'root-1',
+      10,
+      'quest',
+      '20260806:2',
+      pool,
+      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
+    );
+    expect(earnPoints).toHaveBeenNthCalledWith(
+      2,
+      'root-1',
+      20,
+      'quest',
+      '20260806:3',
+      pool,
+      expect.objectContaining({ policyVersion: 'points-earning-legacy' }),
+    );
   });
 
   it('root 未记录内容时仍算未完成,不发积分', async () => {

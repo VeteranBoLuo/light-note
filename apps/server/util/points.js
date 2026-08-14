@@ -7,6 +7,8 @@ import {
   completePointsEconomyOperation,
   PointsEconomyError,
 } from './pointsEconomyOperations.js';
+import { POINTS_SYSTEM_VERSION } from './pointsEarningPolicy.js';
+import { pointsOperationHash } from './pointsOperationHash.js';
 
 // 积分系统:经验(EXP)管段位、只增;积分(points)管消费、可赚可花。
 // 余额存 user_growth.points(权威),points_log 记流水(审计 + 按天幂等)。
@@ -38,11 +40,30 @@ export async function ensurePointsSchema() {
       delta INT NOT NULL COMMENT '正=赚 负=花',
       reason VARCHAR(32) NOT NULL COMMENT 'checkin/quest/buy/admin',
       ref VARCHAR(64) DEFAULT NULL COMMENT '按天幂等用(YYYYMMDD)或商品 id',
+      policy_version VARCHAR(32) DEFAULT NULL COMMENT '积分获取策略版本；消费仍使用独立 economy_version',
+      meta JSON DEFAULT NULL COMMENT '低敏感审计上下文，不保存标题/正文/路径',
       create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (id),
       KEY idx_user_reason_ref (user_id, reason, ref)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分流水'
   `);
+  if (await columnMissing('points_log', 'policy_version')) {
+    await pool.query('ALTER TABLE `points_log` ADD COLUMN `policy_version` VARCHAR(32) DEFAULT NULL AFTER `ref`');
+  }
+  if (await columnMissing('points_log', 'meta')) {
+    await pool.query('ALTER TABLE `points_log` ADD COLUMN `meta` JSON DEFAULT NULL AFTER `policy_version`');
+  }
+  if (await indexMissing('points_log', 'idx_points_log_time_reason')) {
+    await pool.query('ALTER TABLE `points_log` ADD INDEX `idx_points_log_time_reason` (`create_time`, `reason`)');
+  }
+  if (await indexMissing('points_log', 'idx_points_log_user_time')) {
+    await pool.query('ALTER TABLE `points_log` ADD INDEX `idx_points_log_user_time` (`user_id`, `create_time`, `id`)');
+  }
+  if (await indexMissing('points_log', 'idx_points_log_policy_time')) {
+    await pool.query(
+      'ALTER TABLE `points_log` ADD INDEX `idx_points_log_policy_time` (`policy_version`, `create_time`)',
+    );
+  }
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_cosmetics (
       user_id VARCHAR(64) NOT NULL,
@@ -95,7 +116,8 @@ export async function ensurePointsSchema() {
       UNIQUE KEY uk_points_economy_user_request (user_id, request_id),
       KEY idx_points_economy_version_time (economy_version, create_time),
       KEY idx_points_economy_status_time (status, create_time),
-      KEY idx_points_economy_metrics (status, economy_version, operation_type, item_id)
+      KEY idx_points_economy_metrics (status, economy_version, operation_type, item_id),
+      KEY idx_points_economy_user_status_time (user_id, status, create_time, id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='积分消费幂等与结果审计收据'
   `);
   await pool.query(`
@@ -108,6 +130,9 @@ export async function ensurePointsSchema() {
   `);
   if (await columnMissing('user_growth', 'points')) {
     await pool.query('ALTER TABLE `user_growth` ADD COLUMN `points` INT NOT NULL DEFAULT 0 COMMENT "积分余额"');
+  }
+  if (await indexMissing('user_growth', 'idx_user_growth_points')) {
+    await pool.query('ALTER TABLE `user_growth` ADD INDEX `idx_user_growth_points` (`points`, `user_id`)');
   }
   const operationMetricColumns = [
     ['item_id', 'VARCHAR(64) DEFAULT NULL'],
@@ -129,6 +154,11 @@ export async function ensurePointsSchema() {
   if (await indexMissing('points_economy_operations', 'idx_points_economy_metrics')) {
     await pool.query(
       'ALTER TABLE `points_economy_operations` ADD INDEX `idx_points_economy_metrics` (`status`, `economy_version`, `operation_type`, `item_id`)',
+    );
+  }
+  if (await indexMissing('points_economy_operations', 'idx_points_economy_user_status_time')) {
+    await pool.query(
+      'ALTER TABLE `points_economy_operations` ADD INDEX `idx_points_economy_user_status_time` (`user_id`, `status`, `create_time`, `id`)',
     );
   }
   if (await columnMissing('user_growth', 'equipped_title')) {
@@ -346,7 +376,14 @@ export async function getPoints(userId) {
 
 // 赚取积分。ref 非空时按 (user_id, reason, ref) 幂等(签到/任务按天只发一次)。
 // 需在调用方已确保 user_growth 行存在;可传入事务连接 conn。
-export async function earnPoints(userId, amount, reason, ref = null, conn = pool) {
+export async function earnPoints(
+  userId,
+  amount,
+  reason,
+  ref = null,
+  conn = pool,
+  { policyVersion = null, meta = null } = {},
+) {
   if (!userId || !(amount > 0)) return false;
   // 无外部事务时自开事务:流水 INSERT 与余额 UPDATE 必须同生共死——
   // 否则中途失败会"记了账没到账",且幂等键会阻止补发,积分永久丢失
@@ -354,7 +391,7 @@ export async function earnPoints(userId, amount, reason, ref = null, conn = pool
     const tx = await pool.getConnection();
     try {
       await tx.beginTransaction();
-      const ok = await earnPoints(userId, amount, reason, ref, tx);
+      const ok = await earnPoints(userId, amount, reason, ref, tx, { policyVersion, meta });
       await tx.commit();
       return ok;
     } catch (e) {
@@ -368,21 +405,19 @@ export async function earnPoints(userId, amount, reason, ref = null, conn = pool
     // 原子幂等:INSERT ... WHERE NOT EXISTS —— 靠 idx_user_reason_ref 的间隙锁串行化并发同 (user,reason,ref) 请求,
     // affectedRows=0 表示已发过(不再走"先 SELECT 再 INSERT"的非原子判断,修复无行锁 claim 入口的并发双领)。
     const [ins] = await conn.query(
-      `INSERT INTO points_log (user_id, delta, reason, ref)
-       SELECT ?, ?, ?, ? FROM DUAL
+      `INSERT INTO points_log (user_id, delta, reason, ref, policy_version, meta)
+       SELECT ?, ?, ?, ?, ?, ? FROM DUAL
        WHERE NOT EXISTS (SELECT 1 FROM points_log WHERE user_id = ? AND reason = ? AND ref = ?)`,
-      [userId, amount, reason, ref, userId, reason, ref],
+      [userId, amount, reason, ref, policyVersion, meta ? JSON.stringify(meta) : null, userId, reason, ref],
     );
     if (!ins.affectedRows) return false; // 已发过
     await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
     return true;
   }
-  await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
-    userId,
-    amount,
-    reason,
-    null,
-  ]);
+  await conn.query(
+    'INSERT INTO points_log (user_id, delta, reason, ref, policy_version, meta) VALUES (?, ?, ?, ?, ?, ?)',
+    [userId, amount, reason, null, policyVersion, meta ? JSON.stringify(meta) : null],
+  );
   await conn.query('UPDATE user_growth SET points = points + ? WHERE user_id = ?', [amount, userId]);
   return true;
 }
@@ -454,10 +489,11 @@ function decodePointsCursor(cursor) {
 }
 
 function pointsLogFilterSql(filter) {
-  if (filter === 'earned') return "delta > 0 AND reason NOT LIKE 'lottery_%' AND reason NOT LIKE '%admin%'";
-  if (filter === 'spent') return "delta < 0 AND reason NOT LIKE 'lottery_%' AND reason NOT LIKE '%admin%'";
+  const operationsReasons = "reason IN ('admin', 'storage:admin', 'campaign', 'correction')";
+  if (filter === 'earned') return `delta > 0 AND reason NOT LIKE 'lottery_%' AND NOT (${operationsReasons})`;
+  if (filter === 'spent') return `delta < 0 AND reason NOT LIKE 'lottery_%' AND NOT (${operationsReasons})`;
   if (filter === 'lottery') return "reason LIKE 'lottery_%'";
-  if (filter === 'system') return "reason LIKE '%admin%'";
+  if (filter === 'system') return operationsReasons;
   return '1 = 1';
 }
 
@@ -471,7 +507,7 @@ export async function getPointsLog(userId, { limit = 30, offset = 0, cursor = nu
   const pagingSql = cursorId ? '' : `OFFSET ${off}`;
   // 排除 ach_unlock:那是成就"永久解锁"的内部标记(delta=0),非积分流水,不该出现在用户明细里
   const [rawRows] = await pool.query(
-    `SELECT id, delta, reason, ref, create_time
+    `SELECT id, delta, reason, ref, policy_version AS policyVersion, meta, create_time
        FROM points_log
       WHERE user_id = ? AND reason <> 'ach_unlock' AND ${filterSql} ${cursorSql}
       ORDER BY id DESC LIMIT ${lim + 1} ${pagingSql}`,
@@ -499,9 +535,10 @@ function enrichPointsLogRow(row) {
   const reason = String(row.reason || '');
   const ref = String(row.ref || '');
   const baseReason = reason.startsWith('storage:') ? 'storage' : reason;
+  const privateOperation = ['admin', 'storage:admin', 'campaign', 'correction'].includes(reason);
   let sourceKey = ref;
   let sourceMeta = null;
-  if (reason === 'admin' || reason === 'storage:admin') sourceKey = ref.replace(/^admin:/, '') || null;
+  if (privateOperation) sourceKey = null;
   if (reason === 'weekly') {
     const splitAt = ref.lastIndexOf(':');
     if (splitAt >= 0) {
@@ -509,12 +546,34 @@ function enrichPointsLogRow(row) {
       sourceKey = ref.slice(splitAt + 1) || null;
     }
   }
+  let parsedMeta = null;
+  try {
+    parsedMeta = typeof row.meta === 'string' ? JSON.parse(row.meta) : row.meta;
+  } catch {
+    parsedMeta = null;
+  }
+  // 流水 meta 同时服务后台审计与用户解释；用户接口只返回无敏感内容的来源字段，
+  // 不泄露 Root 备注、工单号、请求 ID 或内部活动圈选信息。
+  const publicMeta =
+    parsedMeta && typeof parsedMeta === 'object'
+      ? {
+          day: parsedMeta.day || null,
+          streak: Number.isFinite(Number(parsedMeta.streak)) ? Number(parsedMeta.streak) : null,
+          stage: parsedMeta.stage || null,
+          required: Number.isFinite(Number(parsedMeta.required)) ? Number(parsedMeta.required) : null,
+          challengeKey: parsedMeta.challengeKey || null,
+          achievementKey: parsedMeta.achievementKey || null,
+          frameId: parsedMeta.frameId || null,
+        }
+      : null;
   return {
     ...row,
+    ref: privateOperation ? null : row.ref,
+    meta: publicMeta && Object.values(publicMeta).some((value) => value !== null) ? publicMeta : null,
     sourceType: baseReason,
     sourceKey: sourceKey || null,
     sourceMeta,
-    sourceRef: ref || null,
+    sourceRef: privateOperation ? null : ref || null,
   };
 }
 
@@ -540,7 +599,9 @@ export async function getPointsOverview() {
     pool.query(
       'SELECT reason, COALESCE(SUM(delta),0) AS delta, COUNT(*) AS cnt FROM points_log GROUP BY reason ORDER BY ABS(SUM(delta)) DESC',
     ),
-    pool.query("SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason IN ('lottery_cost','lottery_paid_cost')"),
+    pool.query(
+      "SELECT COALESCE(SUM(-delta),0) AS s FROM points_log WHERE reason IN ('lottery_cost','lottery_paid_cost')",
+    ),
     pool.query(
       "SELECT COALESCE(SUM(delta),0) AS s FROM points_log WHERE reason IN ('lottery_win','lottery_compensation','lottery_paid_win','lottery_paid_compensation')",
     ),
@@ -623,7 +684,7 @@ export async function searchAdminUsers(keyword, { limit = 20 } = {}) {
   const like = `%${term}%`;
   const prefix = `${term}%`;
   const [rows] = await pool.query(
-    `SELECT u.id AS userId, u.alias, u.email, u.last_active_time AS lastActiveTime,
+    `SELECT u.id AS userId, u.alias, u.email, u.role, u.last_active_time AS lastActiveTime,
             COALESCE(g.points, 0) AS points
        FROM user u
        LEFT JOIN user_growth g ON g.user_id = u.id
@@ -639,6 +700,7 @@ export async function searchAdminUsers(keyword, { limit = 20 } = {}) {
     userId: row.userId,
     alias: row.alias || null,
     email: row.email || null,
+    role: row.role || 'user',
     points: Number(row.points || 0),
     lastActiveTime: row.lastActiveTime || null,
   }));
@@ -653,10 +715,18 @@ export class AdminPointsError extends Error {
   }
 }
 
+const ADMIN_GRANT_REASON_CODES = new Set([
+  'customer_support',
+  'incident_compensation',
+  'data_correction',
+  'test_acceptance',
+  'other',
+]);
+
 // 运营手动发放/扣减(root):目标校验、余额边界、资产更新与审计流水必须在同一事务。
 export async function adminGrantPoints(
   userId,
-  { points = 0, cards = 0, storageMb = 0, note = '' } = {},
+  { points = 0, cards = 0, storageMb = 0, reasonCode = '', reason = '', note = '', ticketRef = '' } = {},
   { actionContext = null } = {},
 ) {
   const p = Math.trunc(Number(points) || 0);
@@ -668,18 +738,99 @@ export async function adminGrantPoints(
     throw new AdminPointsError('AMOUNT_TOO_LARGE', '单次调整数量过大');
   }
   if (!p && !s && !c) throw new AdminPointsError('EMPTY_ADJUSTMENT', '请至少填写一项调整数量');
-  const ref = ('admin:' + String(note || '').trim()).slice(0, 64);
+  const normalizedReasonCode = String(reasonCode || '').trim();
+  const normalizedReason = String(reason || '')
+    .trim()
+    .slice(0, 255);
+  const normalizedNote = String(note || '')
+    .trim()
+    .slice(0, 255);
+  const normalizedTicketRef = String(ticketRef || '')
+    .trim()
+    .slice(0, 64);
+  const normalizedUserId = String(userId).trim();
+  const requestId = String(actionContext?.requestId || '').trim();
+  if (!ADMIN_GRANT_REASON_CODES.has(normalizedReasonCode)) {
+    throw new AdminPointsError('REASON_CODE_REQUIRED', '请选择资产调整原因类型');
+  }
+  if (normalizedReason.length < 6) throw new AdminPointsError('REASON_REQUIRED', '请填写至少 6 个字的操作原因');
+  const ref = `admin:${normalizedReasonCode}:${normalizedTicketRef || requestId}`.slice(0, 64);
+  const operationPayload = {
+    operationType: 'admin_adjust',
+    userId: normalizedUserId,
+    points: p,
+    storageMb: s,
+    cards: c,
+    reasonCode: normalizedReasonCode,
+    reason: normalizedReason,
+    note: normalizedNote || null,
+    ticketRef: normalizedTicketRef || null,
+  };
+  const operationHash = pointsOperationHash(operationPayload);
+  const ledgerMeta = JSON.stringify({
+    reasonCode: normalizedReasonCode,
+    reason: normalizedReason,
+    note: normalizedNote || null,
+    ticketRef: normalizedTicketRef || null,
+    requestId: requestId || null,
+  });
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [users] = await conn.query('SELECT id, alias, email FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE', [
-      String(userId).trim(),
-    ]);
+    let operation = null;
+    if (requestId) {
+      if (!/^[A-Za-z0-9._:-]{8,64}$/.test(requestId)) {
+        throw new AdminPointsError('INVALID_REQUEST_ID', '请求标识格式无效');
+      }
+      const [inserted] = await conn.query(
+        `INSERT IGNORE INTO points_grant_operations
+           (user_id, request_id, operation_type, operation_hash, points, reason, ref, policy_version)
+         VALUES (?, ?, 'admin_adjust', ?, ?, 'admin', ?, ?)`,
+        [normalizedUserId, requestId, operationHash, p, ref, POINTS_SYSTEM_VERSION],
+      );
+      const [[storedOperation]] = await conn.query(
+        `SELECT id, operation_hash AS operationHash, status, result_json AS resultJson
+           FROM points_grant_operations
+          WHERE user_id = ? AND request_id = ? LIMIT 1 FOR UPDATE`,
+        [normalizedUserId, requestId],
+      );
+      if (!storedOperation || storedOperation.operationHash !== operationHash) {
+        throw new AdminPointsError('IDEMPOTENCY_KEY_REUSED', '请求标识已用于其他资产调整', 409);
+      }
+      operation = storedOperation;
+      if (!inserted.affectedRows) {
+        let replay = null;
+        try {
+          replay =
+            typeof storedOperation.resultJson === 'object'
+              ? storedOperation.resultJson
+              : JSON.parse(storedOperation.resultJson || 'null');
+        } catch {
+          replay = null;
+        }
+        if (storedOperation.status !== 'succeeded' || !replay) {
+          throw new AdminPointsError('IDEMPOTENCY_RESULT_PENDING', '原资产调整仍在处理中', 409);
+        }
+        const receipt = actionContext
+          ? await finishAdminAction(actionContext, {
+              outcome: 'succeeded',
+              metadata: { idempotentReplay: true, originalOperationId: storedOperation.id },
+              db: conn,
+            })
+          : {};
+        await conn.commit();
+        return { ...replay, idempotent: true, ...receipt };
+      }
+    }
+    const [users] = await conn.query(
+      'SELECT id, alias, email, role FROM user WHERE id = ? AND del_flag = 0 FOR UPDATE',
+      [normalizedUserId],
+    );
     if (!users.length) throw new AdminPointsError('USER_NOT_FOUND', '目标用户不存在或已注销', 404);
-    await conn.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [String(userId).trim()]);
+    await conn.query('INSERT IGNORE INTO user_growth (user_id) VALUES (?)', [normalizedUserId]);
     const [growthRows] = await conn.query(
       'SELECT points, storage_bonus_mb, streak_protect_cards FROM user_growth WHERE user_id = ? FOR UPDATE',
-      [String(userId).trim()],
+      [normalizedUserId],
     );
     const growth = growthRows[0];
     const nextPoints = Number(growth.points || 0) + p;
@@ -693,25 +844,41 @@ export async function adminGrantPoints(
       throw new AdminPointsError('CARD_LIMIT', `补签卡调整后必须在 0～2 张之间`);
     }
     if (p) {
-      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, ?, ?, ?)', [
-        String(userId).trim(),
-        p,
-        'admin',
-        ref,
-      ]);
+      await conn.query(
+        'INSERT INTO points_log (user_id, delta, reason, ref, policy_version, meta) VALUES (?, ?, ?, ?, ?, ?)',
+        [normalizedUserId, p, 'admin', ref, POINTS_SYSTEM_VERSION, ledgerMeta],
+      );
     }
     if (s) {
-      await conn.query("INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, 'storage:admin', ?)", [
-        String(userId).trim(),
-        ref,
-      ]);
+      await conn.query(
+        "INSERT INTO points_log (user_id, delta, reason, ref, policy_version, meta) VALUES (?, 0, 'storage:admin', ?, ?, ?)",
+        [normalizedUserId, ref, POINTS_SYSTEM_VERSION, ledgerMeta],
+      );
     }
     await conn.query(
       `UPDATE user_growth
           SET points = ?, storage_bonus_mb = ?, streak_protect_cards = ?
         WHERE user_id = ?`,
-      [nextPoints, nextStorage, nextCards, String(userId).trim()],
+      [nextPoints, nextStorage, nextCards, normalizedUserId],
     );
+    const businessResult = {
+      ok: true,
+      points: nextPoints,
+      storageBonusMb: nextStorage,
+      cards: nextCards,
+      user: {
+        userId: users[0].id,
+        alias: users[0].alias || null,
+        email: users[0].email || null,
+        role: users[0].role || 'user',
+      },
+    };
+    if (operation) {
+      await conn.query("UPDATE points_grant_operations SET status = 'succeeded', result_json = ? WHERE id = ?", [
+        JSON.stringify(businessResult),
+        operation.id,
+      ]);
+    }
     const receipt = actionContext
       ? await finishAdminAction(actionContext, {
           outcome: 'succeeded',
@@ -722,19 +889,14 @@ export async function adminGrantPoints(
             resultingPoints: nextPoints,
             resultingStorageMb: nextStorage,
             resultingCards: nextCards,
+            reasonCode: normalizedReasonCode,
+            ticketRef: normalizedTicketRef || null,
           },
           db: conn,
         })
       : {};
     await conn.commit();
-    return {
-      ok: true,
-      points: nextPoints,
-      storageBonusMb: nextStorage,
-      cards: nextCards,
-      user: { userId: users[0].id, alias: users[0].alias || null, email: users[0].email || null },
-      ...receipt,
-    };
+    return { ...businessResult, idempotent: false, ...receipt };
   } catch (error) {
     try {
       await conn.rollback();

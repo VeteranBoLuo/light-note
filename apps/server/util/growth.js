@@ -17,6 +17,20 @@ import { createNotification } from './notification.js';
 import { stableAgentErrorCode } from './agent/logSafety.js';
 import { finishAdminAction } from './adminActionExecution.js';
 import { dayKeyAtOffset, getGrowthCalendarContext } from './growthPreferences.js';
+import {
+  POINTS_EARNING_POLICY_VERSION,
+  applyAchievementEarningPolicy,
+  checkinPointsForStreak,
+  dailyClaimRef,
+  dailyClaimRefCandidates,
+  earningWritesEnabled,
+  earningPolicyVersionForDay,
+  LEGACY_POINTS_EARNING_POLICY_VERSION,
+  resolveDailyQuestStages,
+  MAKEUP_CARD_SUPPLY_POLICY,
+} from './pointsEarningPolicy.js';
+import { resolveDailyEarningPolicyVersion } from './pointsEarningPolicyState.js';
+import { c5DailyQuestsFromFacts, getMeaningfulActiveDays, getMeaningfulActivityFacts } from './meaningfulActivity.js';
 
 // 15 级段位表:cumExp=升到该级的累计经验阈值;spaceMb/aiTokenDaily=该级权益。
 // 容量曲线(前期平滑、中期明显、后期加速):Lv1 1G → Lv10 6G → Lv15 20G。
@@ -55,16 +69,13 @@ const DAILY_EXP_CAP_EXEMPT_SOURCES = Object.freeze([
   'profile_done',
 ]);
 const DAILY_EXP_CAP_EXEMPT_PLACEHOLDERS = DAILY_EXP_CAP_EXEMPT_SOURCES.map(() => '?').join(', ');
-export const DAILY_QUEST_STAGES = [
-  { key: 'basic', required: 2, exp: 5, points: 10, source: 'daily_quest_2' },
-  { key: 'complete', required: 3, exp: 10, points: 20, source: 'daily_quest_3' },
-];
+export const DAILY_QUEST_STAGES = resolveDailyQuestStages();
 export const DAILY_QUEST_KEYS = ['daily_note', 'daily_bookmark', 'daily_file', 'daily_todo', 'daily_organize'];
 
 // 连签里程碑大奖:累计连续签到命中当天即发(积分/永久存储/补签卡),按 ref=days 一次性幂等。
 // 把签到从「+5 经验」升级为值得长期坚持的习惯养成:越久回报越丰厚(存储是最实在的诱惑)。
 export const STREAK_MILESTONES = [
-  { days: 7, points: 50 },
+  { days: 7, points: 50, cards: 1 },
   { days: 30, points: 300, storageMb: 512, cards: 1 },
   { days: 100, points: 1000, storageMb: 2048 },
   { days: 365, points: 5000, storageMb: 5120 },
@@ -275,8 +286,6 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
       leveledUp = true;
       // 尊重用户「升级提醒」开关(preferences.notifyLevelUp === 'false' 时不发升级通知,但里程碑账本照记)
       const notifyLevelUp = await isLevelUpNotificationEnabled(c, userId);
-      // 每升 1 级奖励 1 张补签卡(上限 2),统一走 grantItem
-      await grantItem(c, userId, 'makeup_card', toLevel - fromLevel);
       for (let L = fromLevel + 1; L <= toLevel; L++) {
         const rankName = rankOf(L).name;
         await c.query(
@@ -284,6 +293,9 @@ export async function grantExp(userId, source, opts = {}, conn = null) {
           VALUES (?, 'milestone', ?, NULL, 0, 'granted', ?)`,
           [userId, `level_up_L${L}`, JSON.stringify({ from: L - 1, to: L, rank: rankName })],
         );
+        if (MAKEUP_CARD_SUPPLY_POLICY.levelMilestones.includes(L)) {
+          await grantItem(c, userId, 'makeup_card', 1);
+        }
         if (notifyLevelUp) await writeLevelUpNotification(c, userId, L);
       }
     }
@@ -491,7 +503,7 @@ export async function getGrowth(userId, { userRole = null, db = pool, calendar =
 // 已经代表持续使用时长，不再叠加注册/活跃天数或内容质量判定，避免误伤正常导入和高频创作。
 // reward 按长期积累难度递增：首签 10；中阶 40~120；高阶 150~500；里程碑级 600~800。
 // points_log(reason='achievement', ref=key)负责到账幂等，user_achievements 负责永久解锁与领取展示状态。
-export const ACHIEVEMENTS = [
+export const LEGACY_ACHIEVEMENTS = [
   { key: 'streak_1', group: 'checkin', metric: 'maxStreak', target: 1, reward: 10 },
   { key: 'streak_7', group: 'checkin', metric: 'maxStreak', target: 7, reward: 50 },
   { key: 'streak_30', group: 'checkin', metric: 'maxStreak', target: 30, reward: 120 },
@@ -529,11 +541,21 @@ export const ACHIEVEMENTS = [
   { key: 'join_365', group: 'tenure', metric: 'joinDays', target: 365, reward: 600 },
 ];
 
+export const ACHIEVEMENTS = LEGACY_ACHIEVEMENTS.map((achievement) =>
+  Object.freeze(applyAchievementEarningPolicy(achievement)),
+);
+
+export function resolveAchievements(version = POINTS_EARNING_POLICY_VERSION) {
+  return LEGACY_ACHIEVEMENTS.map((achievement) => Object.freeze(applyAchievementEarningPolicy(achievement, version)));
+}
+
 export function meetsAchievementRequirement(achievement, metrics = {}) {
   const current = Number(metrics[achievement?.metric] || 0);
   const level = Number(metrics.level || 0);
+  const activeDays = Number(metrics.activeDays || 0);
   const minLevel = Math.max(0, Number(achievement?.minLevel || 0));
-  return current >= Number(achievement?.target || 0) && level >= minLevel;
+  const minActiveDays = Math.max(0, Number(achievement?.minActiveDays || 0));
+  return current >= Number(achievement?.target || 0) && level >= minLevel && activeDays >= minActiveDays;
 }
 
 function safeParseMeta(m) {
@@ -551,12 +573,31 @@ function dailyQuestKeyFor(userId, day) {
   return DAILY_QUEST_KEYS[digest.readUInt32BE(0) % DAILY_QUEST_KEYS.length];
 }
 
-export async function getDailyQuestState(userId, growth, { isGuest = false, db = pool, calendar = null } = {}) {
+export async function getDailyQuestState(
+  userId,
+  growth,
+  { isGuest = false, db = pool, calendar = null, policyVersion = null } = {},
+) {
   const effectiveDayKey = calendar?.dayKey || dayKey();
+  const earningPolicyVersion =
+    policyVersion ||
+    (isGuest
+      ? earningPolicyVersionForDay(effectiveDayKey)
+      : await resolveDailyEarningPolicyVersion(effectiveDayKey, { db }));
+  if (earningPolicyVersion === POINTS_EARNING_POLICY_VERSION) {
+    const facts = isGuest
+      ? { total: 0, byType: {}, activeDays: 0, variety: 0, events: [] }
+      : await getMeaningfulActivityFacts(userId, { db, calendar, dayKey: effectiveDayKey });
+    const quests = c5DailyQuestsFromFacts({ checkedInToday: Boolean(growth?.checkedInToday), facts });
+    return {
+      policyVersion: earningPolicyVersion,
+      quests,
+      completedCount: quests.filter((quest) => quest.done).length,
+      meaningfulActivityCount: facts.total,
+    };
+  }
   const dailyCondition = (column) =>
-    calendar
-      ? `DATE_FORMAT(DATE_ADD(${column}, INTERVAL ? MINUTE), '%Y%m%d') = ?`
-      : `${column} >= CURDATE()`;
+    calendar ? `DATE_FORMAT(DATE_ADD(${column}, INTERVAL ? MINUTE), '%Y%m%d') = ?` : `${column} >= CURDATE()`;
   const randomKey = dailyQuestKeyFor(userId || 'visitor', effectiveDayKey);
   let metrics = {
     created: 0,
@@ -610,7 +651,12 @@ export async function getDailyQuestState(userId, growth, { isGuest = false, db =
     { key: 'create', done: metrics.created > 0, cur: Math.min(metrics.created, 1), target: 1 },
     { key: randomKey, done: metrics[randomKey] > 0, cur: Math.min(metrics[randomKey], 1), target: 1, random: true },
   ];
-  return { quests, completedCount: quests.filter((quest) => quest.done).length };
+  return {
+    policyVersion: earningPolicyVersion,
+    quests,
+    completedCount: quests.filter((quest) => quest.done).length,
+    meaningfulActivityCount: 0,
+  };
 }
 
 // 给一组升序去重的 YYYYMMDD,求最长连续天数(签到最长连签)
@@ -808,9 +854,7 @@ export async function getActivityHeatmap(userId, { userRole = null, year = null,
   const accountWeekday = accountDate.getUTCDay() || 7;
   const currentWeekStart = dayKeyAtOffset(now, accountCalendar.utcOffsetMinutes, 1 - accountWeekday);
   const weekActiveDays =
-    y === currentYear
-      ? dayKeys.filter((key) => key >= currentWeekStart && key <= currentDayKey).length
-      : 0;
+    y === currentYear ? dayKeys.filter((key) => key >= currentWeekStart && key <= currentDayKey).length : 0;
 
   // 只提供真实有活动的历史年份，避免把用户带到一串没有意义的空年份；当前年始终可看。
   const [yearRows] = await pool.query(
@@ -917,6 +961,10 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   const isGuest = isVisitorGrowthActor(userId, userRole);
   const accountCalendar = calendar || (!isGuest ? await getGrowthCalendarContext(userId, { db }) : null);
   const effectiveDayKey = accountCalendar?.dayKey || dayKey();
+  const achievementPolicyVersion = isGuest
+    ? earningPolicyVersionForDay(effectiveDayKey)
+    : await resolveDailyEarningPolicyVersion(effectiveDayKey, { db });
+  const achievementCatalog = resolveAchievements(achievementPolicyVersion);
   const growth = await getGrowth(userId, { userRole, db, calendar: accountCalendar });
 
   const stats = {
@@ -1094,16 +1142,21 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   const achievementState = new Map();
   if (!isGuest) {
     const [cRows] = await db.query(
-      `SELECT achievement_key AS achievementKey, unlocked_at AS unlockedAt, claimed_at AS claimedAt
+      `SELECT achievement_key AS achievementKey, unlocked_at AS unlockedAt, claimed_at AS claimedAt,
+              reward_points_snapshot AS rewardPointsSnapshot,
+              reward_frame_id_snapshot AS rewardFrameIdSnapshot,
+              policy_version AS policyVersion
        FROM user_achievements WHERE user_id = ?`,
       [userId],
     );
     for (const row of cRows) achievementState.set(row.achievementKey, row);
   }
-  const metrics = { ...stats, level: growth.level };
-  const achievements = ACHIEVEMENTS.map((a) => {
+  const activeDays = isGuest ? 0 : await getMeaningfulActiveDays(userId, { db, calendar: accountCalendar });
+  const metrics = { ...stats, level: growth.level, activeDays };
+  const achievements = achievementCatalog.map((a) => {
     const cur = Number(metrics[a.metric] || 0);
     const minLevel = Math.max(0, Number(a.minLevel || 0));
+    const minActiveDays = Math.max(0, Number(a.minActiveDays || 0));
     const currentLevel = Number(growth.level || 0);
     const rewardFrame = getAchievementFrameByKey(a.key);
     const state = achievementState.get(a.key);
@@ -1118,9 +1171,19 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
       target: a.target,
       cur,
       minLevel,
+      minActiveDays,
+      currentActiveDays: activeDays,
       currentLevel,
       unlocked,
       reward: a.reward, // 解锁后可领的积分
+      policyVersion: state?.policyVersion || achievementPolicyVersion,
+      rewardSnapshot: state
+        ? {
+            points: Number(state.rewardPointsSnapshot ?? a.reward),
+            frameId: state.rewardFrameIdSnapshot || rewardFrame?.id || null,
+            policyVersion: state.policyVersion || achievementPolicyVersion,
+          }
+        : null,
       frameId: rewardFrame?.id || null, // 可选头像框奖励；领取时与积分在同一事务发放
       claimed, // 是否已领取奖励
       claimable: unlocked && !claimed, // 可领取(已解锁且未领)
@@ -1134,25 +1197,39 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
   // 每日三任务：签到、创建任一内容、按用户+日期稳定抽取的一项随机任务。
   // 随机项不依赖完成后的可选集合，因此同一天刷新、跨 PC/移动端都不会换题。
   const expGranted = userRole !== 'root';
-  const { quests, completedCount } = await getDailyQuestState(userId, growth, {
+  const {
+    quests,
+    completedCount,
+    policyVersion: dailyPolicyVersion,
+  } = await getDailyQuestState(userId, growth, {
     isGuest,
     db,
     calendar: accountCalendar,
+    policyVersion: achievementPolicyVersion,
   });
+  const effectiveDailyStages = resolveDailyQuestStages(dailyPolicyVersion);
   let legacyClaimed = false;
   let claimedRefs = new Set();
   if (!isGuest) {
+    const refCandidates = [
+      ...new Set(
+        effectiveDailyStages.flatMap((stage) =>
+          dailyClaimRefCandidates(effectiveDayKey, stage.required, dailyPolicyVersion),
+        ),
+      ),
+    ];
     const [rows] = await db.query(
       `SELECT ref FROM points_log
-       WHERE user_id = ? AND reason = 'quest' AND ref IN (?, ?, ?)`,
-      [userId, effectiveDayKey, `${effectiveDayKey}:2`, `${effectiveDayKey}:3`],
+       WHERE user_id = ? AND reason = 'quest' AND ref IN (${refCandidates.map(() => '?').join(',')})`,
+      [userId, ...refCandidates],
     );
     claimedRefs = new Set(rows.map((row) => String(row.ref)));
     legacyClaimed = claimedRefs.has(effectiveDayKey);
   }
-  const stages = DAILY_QUEST_STAGES.map((stage) => {
-    const ref = `${effectiveDayKey}:${stage.required}`;
-    const claimed = legacyClaimed || claimedRefs.has(ref);
+  const stages = effectiveDailyStages.map((stage) => {
+    const claimed =
+      legacyClaimed ||
+      dailyClaimRefCandidates(effectiveDayKey, stage.required, dailyPolicyVersion).some((ref) => claimedRefs.has(ref));
     return {
       key: stage.key,
       required: stage.required,
@@ -1163,8 +1240,9 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     };
   });
   const questBonus = {
-    exp: expGranted ? DAILY_QUEST_STAGES.reduce((sum, stage) => sum + stage.exp, 0) : 0,
-    points: DAILY_QUEST_STAGES.reduce((sum, stage) => sum + stage.points, 0),
+    policyVersion: dailyPolicyVersion,
+    exp: expGranted ? effectiveDailyStages.reduce((sum, stage) => sum + stage.exp, 0) : 0,
+    points: effectiveDailyStages.reduce((sum, stage) => sum + stage.points, 0),
     claimed: stages.every((stage) => stage.claimed),
     claimable: stages.some((stage) => stage.claimable),
     completedCount,
@@ -1187,7 +1265,8 @@ export async function getGrowthDashboard(userId, { userRole = null, db = pool, c
     achievements,
     unlockedCount,
     claimableCount,
-    totalAchievements: ACHIEVEMENTS.length,
+    totalAchievements: achievementCatalog.length,
+    achievementPolicyVersion,
     quests,
     questBonus,
     timeline,
@@ -1209,28 +1288,27 @@ export async function claimDailyQuestBonus(userId, { userRole = null, calendar =
   const expGranted = userRole !== 'root';
 
   const today = accountCalendar.dayKey;
-  const { completedCount } = await getDailyQuestState(userId, g, { calendar: accountCalendar });
-  if (completedCount < DAILY_QUEST_STAGES[0].required) return { ok: false, reason: 'incomplete' };
-  const [[legacy]] = await pool.query(
-    "SELECT COUNT(*) AS c FROM points_log WHERE user_id = ? AND reason = 'quest' AND ref = ?",
-    [userId, today],
-  );
-  if (Number(legacy?.c || 0) > 0) {
-    return { ok: true, already: true, growth: await getGrowth(userId, { userRole, calendar: accountCalendar }) };
-  }
+  const policyVersion = await resolveDailyEarningPolicyVersion(today, { lock: true });
+  if (!earningWritesEnabled(policyVersion)) return { ok: false, reason: 'earning_paused' };
+  const dailyStages = resolveDailyQuestStages(policyVersion);
+  const { completedCount } = await getDailyQuestState(userId, g, { calendar: accountCalendar, policyVersion });
+  if (completedCount < dailyStages[0].required) return { ok: false, reason: 'incomplete' };
 
   let expGained = 0;
   let pointsEarned = 0;
   let eligibleCount = 0;
   let duplicateCount = 0;
   let leveledUp = false;
-  for (const stage of DAILY_QUEST_STAGES.filter((item) => completedCount >= item.required)) {
+  for (const stage of dailyStages.filter((item) => completedCount >= item.required)) {
     eligibleCount++;
-    const ref = `${today}:${stage.required}`;
+    const ref = dailyClaimRef(today, stage.required, policyVersion);
     const grant = expGranted
       ? await grantExp(userId, stage.source, { day: today, amount: stage.exp, userRole, calendar: accountCalendar })
       : { granted: 0, duplicated: false };
-    const gotPoints = await earnPoints(userId, stage.points, 'quest', ref);
+    const gotPoints = await earnPoints(userId, stage.points, 'quest', ref, pool, {
+      policyVersion,
+      meta: { stage: stage.key, required: stage.required },
+    });
     // root 不写经验账本，积分流水就是唯一的阶段幂等事实源。
     if (!gotPoints && (!expGranted || grant.duplicated)) duplicateCount++;
     expGained += Number(grant.granted || 0);
@@ -1376,6 +1454,11 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
     await conn.beginTransaction();
     const accountCalendar = calendar || (await getGrowthCalendarContext(userId, { db: conn }));
     const today = accountCalendar.dayKey;
+    const earningPolicyVersion = await resolveDailyEarningPolicyVersion(today, { db: conn, lock: true });
+    if (!earningWritesEnabled(earningPolicyVersion)) {
+      await conn.rollback();
+      return { ok: false, reason: 'earning_paused' };
+    }
     const [rows] = await conn.query(
       'SELECT exp, level, streak, last_checkin_date FROM user_growth WHERE user_id = ? FOR UPDATE',
       [userId],
@@ -1404,10 +1487,6 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
       today,
       userId,
     ]);
-    // 连签满 7 天奖励 1 张补签卡(上限 2),统一走 grantItem
-    if (streak > 0 && streak % 7 === 0) {
-      await grantItem(conn, userId, 'makeup_card', 1);
-    }
     const grant = await grantExp(
       userId,
       'checkin',
@@ -1422,15 +1501,20 @@ export async function checkin(userId, { userRole = null, calendar = null } = {})
         [userId, today, JSON.stringify({ streak })],
       );
     }
-    // 签到额外发积分(消费货币):基础 20 + 连签加成(≤10),按天幂等,与 EXP 同事务落库
-    const checkinPoints = 20 + Math.min(streak, 10);
-    const gotCheckinPoints = await earnPoints(userId, checkinPoints, 'checkin', today, conn);
+    const checkinPoints = checkinPointsForStreak(streak, earningPolicyVersion);
+    const gotCheckinPoints = await earnPoints(userId, checkinPoints, 'checkin', today, conn, {
+      policyVersion: earningPolicyVersion,
+      meta: { source: 'checkin', dayKey: today, streak },
+    });
 
     // 连签里程碑大奖:命中当天(streak 恰好==里程碑天数)发积分/存储/卡,按 ref=days 一次性幂等
     let milestone = null;
     const ms = STREAK_MILESTONES.find((m) => m.days === streak);
     if (ms) {
-      const firstHit = await earnPoints(userId, ms.points, 'streak_milestone', String(ms.days), conn);
+      const firstHit = await earnPoints(userId, ms.points, 'streak_milestone', String(ms.days), conn, {
+        policyVersion: earningPolicyVersion,
+        meta: { streakDays: ms.days },
+      });
       if (firstHit) {
         if (ms.storageMb) await earnStorage(userId, ms.storageMb, 'streak_milestone', String(ms.days), conn);
         if (ms.cards) {
@@ -1572,7 +1656,9 @@ export async function adminAdjustGrowth(
     } else if (expDelta) {
       exp = Math.max(0, exp + Number(expDelta)); // 发/扣经验(不低于 0)
     }
-    if (cardDelta) cards = Math.max(0, Math.min(99, cards + Number(cardDelta)));
+    if (cardDelta) {
+      cards = Math.max(0, Math.min(MAKEUP_CARD_SUPPLY_POLICY.stackMax, cards + Number(cardDelta)));
+    }
     const level = levelForExp(exp);
     await conn.query('UPDATE user_growth SET exp = ?, level = ?, streak_protect_cards = ? WHERE user_id = ?', [
       exp,

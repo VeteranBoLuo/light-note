@@ -118,21 +118,146 @@ export const getPointsLog = (
   return apiBaseGet(`/api/growth/points/log?${query.toString()}`);
 };
 
+export const getPointsSummary = () => apiBaseGet('/api/growth/points/summary');
+export const updatePointsGoal = (payload: { itemId?: string | null; enabled: boolean }) =>
+  apiBasePut('/api/growth/preferences/points-goal', payload);
+
 // —— root 积分运营 ——
 export const adminPointsOverview = () => apiBasePost('/api/growth/admin/pointsOverview');
-export const adminUserPoints = (userId: string) => apiBasePost('/api/growth/admin/userPoints', { userId });
+export const adminUserPoints = (
+  userId: string,
+  options: {
+    days?: 7 | 28 | 90;
+    logCategory?: 'all' | 'stable' | 'oneTime' | 'random' | 'spent' | 'operations';
+  } = {},
+) => apiBasePost('/api/growth/admin/userPoints', { userId, ...options });
 export const adminSearchUsers = (keyword: string, limit = 20) =>
   apiBasePost('/api/growth/admin/searchUsers', { keyword, limit });
-export const adminGrantPoints = (payload: {
-  userId: string;
-  points?: number;
-  cards?: number;
-  storageMb?: number;
-  note?: string;
-  reason: string;
-  confirmed: true;
-  confirmText: string;
-}) => apiBasePost('/api/growth/admin/grantPoints', payload);
+export const adminGrantPoints = (
+  payload: {
+    userId: string;
+    points?: number;
+    cards?: number;
+    storageMb?: number;
+    reasonCode: 'customer_support' | 'incident_compensation' | 'data_correction' | 'test_acceptance' | 'other';
+    note?: string;
+    ticketRef?: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/grantPoints', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+
+export interface PointsGovernanceRange {
+  presetDays?: 7 | 28 | 90;
+  startDate?: string;
+  endDate?: string;
+  policyVersion?: string;
+  economyVersion?: string;
+}
+
+export const adminPointsGovernanceOverview = (payload: PointsGovernanceRange = {}) =>
+  apiBasePost('/api/growth/admin/pointsGovernanceOverview', payload);
+export const adminPointsGovernanceSources = (payload: PointsGovernanceRange = {}) =>
+  apiBasePost('/api/growth/admin/pointsGovernanceSources', payload);
+export const adminPointsAnomalies = (payload: PointsGovernanceRange & { limit?: number } = {}) =>
+  apiBasePost('/api/growth/admin/pointsAnomalies', payload);
+export const adminPointsReconciliation = (
+  payload: { cursor?: string | null; limit?: number; onlyMismatch?: boolean } = {},
+) => apiBasePost('/api/growth/admin/pointsReconciliation', payload);
+export const adminPointsCorrection = (
+  payload: {
+    userId: string;
+    expectedDifference: number;
+    note?: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/pointsCorrection', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+export const adminPointsSimulator = (payload: Record<string, unknown> = {}) =>
+  apiBasePost('/api/growth/admin/pointsSimulator', payload);
+
+export const adminPointsCampaigns = (limit = 30) => apiBasePost('/api/growth/admin/campaigns/list', { limit });
+export const adminPointsCampaignDetail = (publicId: string) =>
+  apiBasePost('/api/growth/admin/campaigns/detail', { publicId });
+export const adminCreatePointsCampaign = (payload: Record<string, unknown>, requestId: string) =>
+  apiBasePost('/api/growth/admin/campaigns/create', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+export const adminPreviewPointsCampaign = (publicId: string, requestId: string) =>
+  apiBasePost(
+    '/api/growth/admin/campaigns/preview',
+    { publicId, reason: '预览活动受众和积分影响' },
+    {
+      headers: { 'X-Request-Id': requestId },
+      silent: true,
+    },
+  );
+export const adminFreezePointsCampaign = (
+  payload: {
+    publicId: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/campaigns/freeze', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+export const adminConfirmPointsCampaign = (
+  payload: {
+    publicId: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/campaigns/confirm', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+export const adminExecutePointsCampaign = (
+  payload: {
+    publicId: string;
+    batchSize?: number;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/campaigns/execute', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
+export const adminDeletePointsCampaign = (
+  payload: {
+    publicId: string;
+    reason: string;
+    confirmed: true;
+    confirmText: string;
+  },
+  requestId: string,
+) =>
+  apiBasePost('/api/growth/admin/campaigns/delete', payload, {
+    headers: { 'X-Request-Id': requestId },
+    silent: true,
+  });
 
 export default {
   getMyGrowth,
@@ -166,8 +291,24 @@ export default {
   getWeekly,
   claimWeekly,
   getPointsLog,
+  getPointsSummary,
+  updatePointsGoal,
   adminPointsOverview,
   adminUserPoints,
   adminSearchUsers,
   adminGrantPoints,
+  adminPointsGovernanceOverview,
+  adminPointsGovernanceSources,
+  adminPointsAnomalies,
+  adminPointsReconciliation,
+  adminPointsCorrection,
+  adminPointsSimulator,
+  adminPointsCampaigns,
+  adminPointsCampaignDetail,
+  adminCreatePointsCampaign,
+  adminPreviewPointsCampaign,
+  adminFreezePointsCampaign,
+  adminConfirmPointsCampaign,
+  adminExecutePointsCampaign,
+  adminDeletePointsCampaign,
 };

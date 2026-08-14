@@ -20,7 +20,9 @@
           </strong>
           <BLoading v-else inline :loading="true" />
         </div>
-        <span v-if="lottery" class="lt-wallet__level">{{ t('growth.lotteryLevelBenefit', { level: lottery.level }) }}</span>
+        <span v-if="lottery" class="lt-wallet__level">{{
+          t('growth.lotteryLevelBenefit', { level: lottery.level })
+        }}</span>
       </div>
     </header>
 
@@ -433,7 +435,10 @@
   }
 
   const fmtMb = (mb: number) => (mb >= 1024 ? `${+(mb / 1024).toFixed(1)}GB` : `${mb}MB`);
-  const formatRate = (rate?: number) => `${Number(rate || 0).toFixed(2).replace(/\.00$/, '')}%`;
+  const formatRate = (rate?: number) =>
+    `${Number(rate || 0)
+      .toFixed(2)
+      .replace(/\.00$/, '')}%`;
 
   function prizeIcon(prize: LotteryPrize) {
     return (
@@ -1680,10 +1685,10 @@
     }
   }
 
-  :global(.disable-animations) .lt-prize,
-  :global(.disable-animations) .lt-prize-core,
-  :global(.disable-animations) .lt-progress > span,
-  :global(.disable-animations) .lt-odds-toggle__icon {
+  :global(.disable-animations) .lt .lt-prize,
+  :global(.disable-animations) .lt .lt-prize-core,
+  :global(.disable-animations) .lt .lt-progress > span,
+  :global(.disable-animations) .lt .lt-odds-toggle__icon {
     animation: none !important;
     transition: none !important;
   }
