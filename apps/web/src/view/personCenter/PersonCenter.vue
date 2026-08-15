@@ -15,7 +15,13 @@
         @mouseleave="handleCardMouseLeave"
       >
         <div class="user-top">
-          <div class="avatar-ring" :class="user.currentTheme === 'day' ? 'ring-day' : 'ring-night'">
+          <div
+            class="avatar-ring"
+            :class="[
+              user.currentTheme === 'day' ? 'ring-day' : 'ring-night',
+              { 'avatar-ring--framed': equippedFrameId },
+            ]"
+          >
             <AvatarFramePreview
               v-if="equippedFrameId"
               :frame-id="equippedFrameId"
@@ -465,7 +471,11 @@
 
 <style lang="less" scoped>
   .navigation-icon {
-    display: flex;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
     align-items: center;
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
@@ -567,9 +577,19 @@
     place-items: center;
     width: 52px;
     height: 52px;
+    flex: 0 0 52px;
     border-radius: 14px;
     background: linear-gradient(135deg, rgba(79, 134, 255, 0.25), rgba(82, 196, 186, 0.18));
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .avatar-ring--framed {
+    width: 80px;
+    height: 80px;
+    flex-basis: 80px;
+    overflow: visible;
+    border-color: transparent;
+    background: transparent;
   }
 
   .ring-day {

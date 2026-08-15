@@ -48,6 +48,8 @@ export interface AvatarFrameArtwork {
   motionSpriteSrc?: string;
   /** 64px 头像设计基准下的透明素材盒尺寸。 */
   artSize: number;
+  /** 只用于内沿同源材质层的素材盒尺寸；逐款标定为 64px 中央头像孔。 */
+  innerArtSize: number;
   /** 主题主体的目标视觉外径，同时作为布局预留尺寸。 */
   outerSize: number;
   accent: string;
@@ -57,12 +59,14 @@ export interface AvatarFrameArtwork {
 
 // 素材盒尺寸根据每张透明图的有效像素边界单独校准，不能把生成素材压成紧贴头像的一圈细边。
 // outerSize 按真实视觉外径递进；artSize 只抵消每张透明素材不同的留白，不能拿素材盒尺寸冒充稀有度。
+// innerArtSize 取各方向内沿 Alpha 半径的最大值反推，保证圆周任一方向都不会在 32px 头像边缘外留下空缝。
 // 当前阶梯：成就基础 86、成就进阶/积分基础 90、成就炫彩 96、积分进阶 98~102、积分炫彩 104~108、传说 110~124。
 // static 严格不启用自动动效；advanced 以上按规范逐级增加动效通道。
 export const AVATAR_FRAME_ARTWORK = {
   mint: {
     src: frameMint,
     artSize: 103,
+    innerArtSize: 99,
     outerSize: 90,
     accent: '#70e7d0',
     glow: 'rgba(45, 212, 191, 0.34)',
@@ -71,6 +75,7 @@ export const AVATAR_FRAME_ARTWORK = {
   ink: {
     src: frameInk,
     artSize: 104,
+    innerArtSize: 113,
     outerSize: 90,
     accent: '#aeb8ba',
     glow: 'rgba(71, 85, 105, 0.22)',
@@ -79,6 +84,7 @@ export const AVATAR_FRAME_ARTWORK = {
   moonstone: {
     src: frameMoonstone,
     artSize: 103,
+    innerArtSize: 99,
     outerSize: 90,
     accent: '#d9e7ff',
     glow: 'rgba(147, 197, 253, 0.3)',
@@ -87,6 +93,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'first-light': {
     src: frameFirstLight,
     artSize: 103,
+    innerArtSize: 102,
     outerSize: 86,
     accent: '#f8d68a',
     glow: 'rgba(251, 191, 36, 0.22)',
@@ -95,6 +102,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'note-seed': {
     src: frameNoteSeed,
     artSize: 100,
+    innerArtSize: 81,
     outerSize: 86,
     accent: '#8ed5c7',
     glow: 'rgba(45, 212, 191, 0.2)',
@@ -103,6 +111,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'streak-seed': {
     src: frameStreakSeed,
     artSize: 118,
+    innerArtSize: 99,
     outerSize: 90,
     accent: '#f7d889',
     glow: 'rgba(251, 191, 36, 0.2)',
@@ -111,6 +120,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'bookmark-seed': {
     src: frameBookmarkSeed,
     artSize: 114,
+    innerArtSize: 98,
     outerSize: 90,
     accent: '#b39cff',
     glow: 'rgba(139, 92, 246, 0.22)',
@@ -119,6 +129,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'file-seed': {
     src: frameFileSeed,
     artSize: 105,
+    innerArtSize: 83,
     outerSize: 90,
     accent: '#9ee7f4',
     glow: 'rgba(34, 211, 238, 0.2)',
@@ -127,6 +138,7 @@ export const AVATAR_FRAME_ARTWORK = {
   gold: {
     src: frameGold,
     artSize: 108,
+    innerArtSize: 102,
     outerSize: 98,
     accent: '#ffd66b',
     glow: 'rgba(245, 158, 11, 0.44)',
@@ -135,6 +147,7 @@ export const AVATAR_FRAME_ARTWORK = {
   sakura: {
     src: frameSakura,
     artSize: 105,
+    innerArtSize: 83,
     outerSize: 100,
     accent: '#ffb2ca',
     glow: 'rgba(244, 114, 182, 0.42)',
@@ -143,6 +156,7 @@ export const AVATAR_FRAME_ARTWORK = {
   sunset: {
     src: frameSunset,
     artSize: 107,
+    innerArtSize: 85,
     outerSize: 102,
     accent: '#ffad91',
     glow: 'rgba(251, 113, 133, 0.4)',
@@ -151,6 +165,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'streak-month': {
     src: frameStreakMonth,
     artSize: 110,
+    innerArtSize: 96,
     outerSize: 96,
     accent: '#b9caff',
     glow: 'rgba(129, 140, 248, 0.42)',
@@ -159,6 +174,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'note-masterpiece': {
     src: frameNoteMasterpiece,
     artSize: 115,
+    innerArtSize: 108,
     outerSize: 96,
     accent: '#72e6d2',
     glow: 'rgba(20, 184, 166, 0.42)',
@@ -167,6 +183,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'file-vault': {
     src: frameFileVault,
     artSize: 105,
+    innerArtSize: 93,
     outerSize: 96,
     accent: '#6f8cff',
     glow: 'rgba(59, 130, 246, 0.5)',
@@ -175,6 +192,7 @@ export const AVATAR_FRAME_ARTWORK = {
   ocean: {
     src: frameOcean,
     artSize: 116,
+    innerArtSize: 104,
     outerSize: 104,
     accent: '#62d9ff',
     glow: 'rgba(14, 165, 233, 0.54)',
@@ -183,6 +201,7 @@ export const AVATAR_FRAME_ARTWORK = {
   aurora: {
     src: frameAurora,
     artSize: 118,
+    innerArtSize: 113,
     outerSize: 106,
     accent: '#9ff8ff',
     glow: 'rgba(129, 92, 246, 0.56)',
@@ -191,6 +210,7 @@ export const AVATAR_FRAME_ARTWORK = {
   flame: {
     src: frameFlame,
     artSize: 120,
+    innerArtSize: 105,
     outerSize: 108,
     accent: '#ffbc54',
     glow: 'rgba(249, 80, 28, 0.6)',
@@ -199,6 +219,7 @@ export const AVATAR_FRAME_ARTWORK = {
   neon: {
     src: frameNeon,
     artSize: 124,
+    innerArtSize: 112,
     outerSize: 110,
     accent: '#69f4ff',
     glow: 'rgba(168, 85, 247, 0.62)',
@@ -207,6 +228,7 @@ export const AVATAR_FRAME_ARTWORK = {
   galaxy: {
     src: frameGalaxy,
     artSize: 130,
+    innerArtSize: 123,
     outerSize: 114,
     accent: '#d8b4fe',
     glow: 'rgba(124, 58, 237, 0.62)',
@@ -219,6 +241,7 @@ export const AVATAR_FRAME_ARTWORK = {
     trailSrc: frameDragonTrails,
     accentSrc: frameDragonPearl,
     artSize: 132,
+    innerArtSize: 112,
     outerSize: 118,
     accent: '#ffd56a',
     glow: 'rgba(245, 158, 11, 0.66)',
@@ -228,6 +251,7 @@ export const AVATAR_FRAME_ARTWORK = {
     src: frameCelestial,
     motionSrc: frameCelestialWings,
     artSize: 132,
+    innerArtSize: 110,
     outerSize: 124,
     accent: '#c5c9ff',
     glow: 'rgba(99, 102, 241, 0.7)',
@@ -236,6 +260,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'bookmark-archive': {
     src: frameBookmarkArchive,
     artSize: 128,
+    innerArtSize: 107,
     outerSize: 116,
     accent: '#d8b4fe',
     glow: 'rgba(139, 92, 246, 0.56)',
@@ -244,6 +269,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'note-constellation': {
     src: frameNoteConstellation,
     artSize: 127,
+    innerArtSize: 106,
     outerSize: 116,
     accent: '#8bf0dc',
     glow: 'rgba(13, 148, 136, 0.56)',
@@ -252,6 +278,7 @@ export const AVATAR_FRAME_ARTWORK = {
   'file-constellation': {
     src: frameFileConstellation,
     artSize: 125,
+    innerArtSize: 99,
     outerSize: 116,
     accent: '#b9d9ff',
     glow: 'rgba(59, 130, 246, 0.58)',
@@ -262,6 +289,7 @@ export const AVATAR_FRAME_ARTWORK = {
     motionSrc: frameStreakEternalMotion,
     motionSpriteSrc: frameStreakEternalRabbitSprite,
     artSize: 132,
+    innerArtSize: 115,
     outerSize: 124,
     accent: '#ffe29a',
     glow: 'rgba(245, 158, 11, 0.7)',

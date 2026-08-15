@@ -7,6 +7,7 @@ const source = (relativePath: string) => readFileSync(resolve(process.cwd(), rel
 
 const personCenterSource = source('src/view/personCenter/PersonCenterMobile.vue');
 const desktopPersonCenterSource = source('src/view/personCenter/PersonCenter.vue');
+const communityChatSource = source('src/view/communityChat/CommunityChatWorkspace.vue');
 const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue');
 const desktopMyInfoSource = source('src/components/personCenter/myInfo/MyInfo.vue');
 const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
@@ -72,10 +73,12 @@ describe('mobile personal center experience', () => {
     expect(framePickerSource).not.toContain('dvh');
   });
 
-  it('keeps compact equipped avatars on the same 64px design canvas with a reserved themed silhouette', () => {
+  it('renders the portrait at its requested pixel size outside the scaled decoration canvas', () => {
     expect(avatarFrameSource).toContain('const FRAME_DESIGN_AVATAR_SIZE = 64');
     expect(avatarFrameSource).toContain('<span class="avatar-frame__canvas">');
-    expect(avatarFrameSource).toContain(':size="FRAME_DESIGN_AVATAR_SIZE"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__canvas avatar-frame__canvas--front"');
+    expect(avatarFrameSource).toContain(':size="displayAvatarSize"');
+    expect(avatarFrameSource).toContain("'--frame-display-avatar-size': `${displayAvatarSize.value}px`");
     expect(avatarFrameSource).toContain("'--frame-canvas-scale': String(scale)");
     expect(avatarFrameSource).toContain('Math.round(layoutOuterSize * scale)');
     expect(avatarFrameSource).toMatch(
@@ -83,16 +86,52 @@ describe('mobile personal center experience', () => {
     );
     expect(avatarFrameSource).toMatch(/\.avatar-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(avatarFrameSource).toMatch(/\.avatar-frame__art\s*\{[\s\S]*?z-index:\s*3;/);
-    expect(avatarFrameSource).toMatch(/\.avatar-frame__portrait\s*\{[\s\S]*?z-index:\s*1;/);
-    expect(avatarFrameSource).toMatch(/\.avatar-frame__bezel\s*\{[\s\S]*?z-index:\s*5;/);
-    expect(avatarFrameSource).toContain('透明素材位于头像前景');
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame__portrait\s*\{[\s\S]*?z-index:\s*2;[\s\S]*?width:\s*var\(--frame-display-avatar-size\);[\s\S]*?transform:\s*translate\(-50%, -50%\);/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame__bezel\s*\{[\s\S]*?z-index:\s*3;[\s\S]*?width:\s*var\(--frame-display-avatar-size\);/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame__portrait\s*\{[\s\S]*?width:\s*var\(--frame-display-avatar-size\);[\s\S]*?border:\s*0;/,
+    );
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__canvas--front\s*\{[\s\S]*?z-index:\s*4;/);
+    expect(avatarFrameSource.indexOf('<span class="avatar-frame__portrait">')).toBeLessThan(
+      avatarFrameSource.indexOf('<span class="avatar-frame__canvas">'),
+    );
+    expect(avatarFrameSource).toContain('头像本体脱离主题缩放画布');
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__portrait\s*\{[^}]*filter:/);
     expect(avatarFrameSource).not.toContain('avatar-frame--compact');
+    const backCanvasStart = avatarFrameSource.indexOf('<span class="avatar-frame__canvas">');
+    const frontCanvasStart = avatarFrameSource.indexOf('class="avatar-frame__canvas avatar-frame__canvas--front"');
+    const frontCanvasEnd = avatarFrameSource.indexOf('</span>\n    <span v-if="artwork"', frontCanvasStart);
+    const backCanvasSource = avatarFrameSource.slice(backCanvasStart, frontCanvasStart);
+    const frontCanvasSource = avatarFrameSource.slice(frontCanvasStart, frontCanvasEnd);
+    expect(backCanvasSource).toContain('class="avatar-frame__art"');
+    expect(backCanvasSource).toContain('class="avatar-frame__art-detail"');
+    expect(backCanvasSource).toContain('class="avatar-frame__inner-ring"');
+    expect(backCanvasSource).toContain('class="avatar-frame__art-inner"');
+    expect(backCanvasSource).toContain('v-if="artwork && !usesDedicatedInnerRing"');
+    expect(frontCanvasSource).toContain('class="avatar-frame__art-focus"');
+    expect(frontCanvasSource).toContain('avatar-frame__dragon-layer--head');
+    expect(frontCanvasSource).toContain('avatar-frame__eternal-rabbit-runner');
+    expect(frontCanvasSource).toContain('avatar-frame__motion--front');
     expect(desktopPersonCenterSource).toContain(':size="32"');
+    expect(desktopPersonCenterSource).toMatch(
+      /\.navigation-icon\s*\{[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px;[\s\S]*?flex:\s*0 0 40px;/,
+    );
     expect(desktopPersonCenterSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
+    expect(desktopPersonCenterSource).toContain("'avatar-ring--framed': equippedFrameId");
+    expect(desktopPersonCenterSource).toMatch(
+      /\.avatar-ring--framed\s*\{[\s\S]*?width:\s*80px;[\s\S]*?height:\s*80px;[\s\S]*?overflow:\s*visible;/,
+    );
+    expect(communityChatSource).toMatch(
+      /\.community-message__avatar\s*\{[\s\S]*?width:\s*40px;[\s\S]*?height:\s*40px;[\s\S]*?place-items:\s*center;/,
+    );
     expect(navigationRightAreaSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toContain(':size="26"');
-    expect(personCenterSource).toContain(":class=\"{ 'profile-card__avatar--framed': equippedFrameId }\"");
+    expect(personCenterSource).toContain(':class="{ \'profile-card__avatar--framed\': equippedFrameId }"');
     expect(personCenterSource).toContain(':size="48"');
     expect(personCenterSource).toMatch(/\.profile-card\s*\{[\s\S]*?padding:\s*20px 16px 16px;/);
     const maxProfileArtworkOverflow = Math.max(
@@ -104,7 +143,7 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
-    expect(myInfoSource).toContain(":class=\"{ 'profile-hero--framed': equippedFrameId }\"");
+    expect(myInfoSource).toContain(':class="{ \'profile-hero--framed\': equippedFrameId }"');
     expect(myInfoSource).toContain(':size="64"');
     expect(myInfoSource).toMatch(/\.profile-hero--framed\s*\{[\s\S]*?padding-top:\s*14px;/);
     expect(myInfoSource).toMatch(
@@ -116,6 +155,19 @@ describe('mobile personal center experience', () => {
       ),
     );
     expect(8 + 14 - maxMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
+    expect(desktopMyInfoSource).toContain(':class="{ \'home-container--framed\': equippedFrameId }"');
+    expect(desktopMyInfoSource).toContain(':size="80"');
+    expect(desktopMyInfoSource).toMatch(
+      /\.home-container--framed\s*\{[\s\S]*?padding-top:\s*54px;/,
+    );
+    expect(desktopMyInfoSource).toMatch(
+      /\.home-container--framed \.home-user-body\s*\{[\s\S]*?margin-top:\s*52px;/,
+    );
+    const maxDesktopMyInfoArtworkOverflow = Math.max(
+      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize }) => Math.max(0, ((artSize - 64) * 80) / 64 / 2)),
+    );
+    expect(54 - maxDesktopMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
+    expect(52 - maxDesktopMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
     expect(avatarPickerSource).toMatch(
       /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
     );
@@ -150,6 +202,16 @@ describe('mobile personal center experience', () => {
     expect(AVATAR_FRAME_ARTWORK.dragon.motion).toBe('legendary');
     expect(AVATAR_FRAME_ARTWORK.celestial.motion).toBe('ceiling');
     expect(AVATAR_FRAME_ARTWORK['streak-eternal'].motion).toBe('ceiling');
+    expect(Object.values(AVATAR_FRAME_ARTWORK).every(({ innerArtSize }) => innerArtSize >= 81)).toBe(true);
+    expect(avatarFrameSource).toContain("'--frame-inner-art-size': `${artwork.value?.innerArtSize");
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame__inner-ring\s*\{[\s\S]*?width:\s*80px;[\s\S]*?height:\s*80px;[\s\S]*?overflow:\s*hidden;/,
+    );
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__art-inner\s*\{[\s\S]*?width:\s*var\(--frame-inner-art-size\);/);
+    expect(avatarFrameSource).toContain("const usesDedicatedInnerRing = computed(() => variant.value === 'dragon')");
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--dragon \.avatar-frame__bezel\s*\{[\s\S]*?border-width:\s*2px;/,
+    );
     expect(AVATAR_FRAME_ARTWORK.dragon.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.galaxy.outerSize);
     expect(AVATAR_FRAME_ARTWORK.celestial.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.dragon.outerSize);
     expect(avatarArtworkSource.match(/\.webp';/g)).toHaveLength(32);
@@ -183,6 +245,7 @@ describe('mobile personal center experience', () => {
       'frame-ink-current',
       'frame-note-river-glint',
       'frame-vault-door-shine',
+      'frame-vault-energy-curtain',
       'frame-vault-data-rise',
       'frame-ocean-water-flow',
       'frame-ocean-undertow',
@@ -246,9 +309,10 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).toContain('animation: frame-moon-phase-travel 5.2s');
     expect(avatarFrameSource).toContain('animation: frame-moon-star-twinkle 3.6s');
     expect(avatarFrameSource).toContain('animation: frame-note-river-glint 3.8s -1.1s');
-    expect(avatarFrameSource).toContain('animation: frame-vault-data-rise 4.6s');
+    expect(avatarFrameSource).toContain('animation: frame-vault-energy-curtain 3.8s');
+    expect(avatarFrameSource).toContain('animation: frame-vault-data-rise 3.6s');
     expect(avatarFrameSource).toContain('border-bottom: 3px solid rgba(153, 246, 228, 0.96)');
-    expect(avatarFrameSource).toContain('filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.96))');
+    expect(avatarFrameSource).toContain('filter: drop-shadow(0 0 5px rgba(96, 165, 250, 1))');
 
     const dragonFrameMotion = avatarFrameSource.slice(
       avatarFrameSource.indexOf('@keyframes frame-dragon-metal-light'),
@@ -275,7 +339,9 @@ describe('mobile personal center experience', () => {
       'frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite',
     );
     expect(avatarFrameSource).toContain('@keyframes frame-flame-hot-edge');
-    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-mane 2.4s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-mane 1.9s linear infinite');
+    expect(avatarFrameSource).toContain('stroke-width: 1.28');
+    expect(avatarFrameSource).toContain('transform: rotate(11deg) scaleY(1.16)');
     expect(avatarFrameSource).toContain('animation: frame-dragon-trail-left 2.8s -0.9s linear infinite');
     expect(avatarFrameSource).toContain('animation: frame-dragon-trail-right 2.7s -1.8s linear infinite');
     expect(avatarFrameSource).toContain('animation: frame-dragon-trail-bottom 3.2s -0.6s linear infinite');
@@ -307,7 +373,11 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).not.toContain('@keyframes frame-dragon-mane-middle');
     expect(avatarFrameSource).not.toContain('@keyframes frame-dragon-mane-lower');
     expect(avatarFrameSource).toContain('animation: frame-celestial-unfold 5s');
-    expect(avatarFrameSource).not.toContain('steps(');
+    const celestialKeyframes = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('@keyframes frame-celestial-unfold'),
+      avatarFrameSource.indexOf('@keyframes frame-page-flutter'),
+    );
+    expect(celestialKeyframes).not.toContain('steps(');
     expect(avatarFrameSource).toContain('transform: rotate(316deg) scale(0.78)');
     expect(avatarFrameSource).toContain('class="avatar-frame__celestial-wing avatar-frame__celestial-wing--left"');
     expect(avatarFrameSource).toContain('class="avatar-frame__celestial-wing avatar-frame__celestial-wing--right"');
@@ -319,6 +389,7 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-runner"');
     expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-direction"');
     expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-sprite"');
+    expect(avatarFrameSource).not.toContain('avatar-frame__eternal-rabbit-pose');
     expect(avatarFrameSource).toContain('background-size: 400% 400%');
     for (const calibratedRabbitPosition of [
       '0 6.63%',
@@ -340,9 +411,11 @@ describe('mobile personal center experience', () => {
     ]) {
       expect(avatarFrameSource, calibratedRabbitPosition).toContain(`background-position: ${calibratedRabbitPosition}`);
     }
-    expect(avatarFrameSource).toContain('frame-eternal-rabbit-sprite 0.96s step-end infinite');
-    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-bridge 5.76s linear infinite');
-    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-direction 5.76s linear infinite');
+    expect(avatarFrameSource).toContain('frame-eternal-rabbit-sprite 0.8s step-end infinite');
+    expect(avatarFrameSource).toContain('frame-eternal-rabbit-body-arc 0.8s ease-in-out infinite');
+    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-bridge 4.8s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-direction 4.8s linear infinite');
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__eternal-rabbit-sprite\s*\{[^}]*filter:/);
     expect(avatarFrameSource).toContain('transform: scaleX(-1)');
     expect(avatarFrameSource).toContain('translate(11.333px, -1px)');
     expect(avatarFrameSource).toContain('translate(26.667px, -5px)');
@@ -372,7 +445,6 @@ describe('mobile personal center experience', () => {
       'frame-sakura-bloom',
       'frame-sunset-sky',
       'frame-moonlight-breathe',
-      'frame-note-metal-light',
       'frame-vault-metal-light',
       'frame-ocean-metal-light',
       'frame-aurora-metal-light',
@@ -407,6 +479,19 @@ describe('mobile personal center experience', () => {
         /rotate\(|skew|translateX\(|translateY\(/,
       );
     }
+    for (const pixelAlignedDetailKeyframe of ['frame-note-water-flow', 'frame-vault-cloud-gate']) {
+      const keyframeStart = avatarFrameSource.indexOf(`@keyframes ${pixelAlignedDetailKeyframe} {`);
+      const nextKeyframe = avatarFrameSource.indexOf('@keyframes ', keyframeStart + 1);
+      const keyframeSource = avatarFrameSource.slice(keyframeStart, nextKeyframe);
+      const transforms = [...keyframeSource.matchAll(/transform:\s*([^;]+);/g)].map((match) => match[1]);
+      expect(transforms.length, `${pixelAlignedDetailKeyframe} 必须声明固定对齐矩阵`).toBeGreaterThan(0);
+      expect(new Set(transforms), `${pixelAlignedDetailKeyframe} 的同源高光副本不得偏离原画`).toEqual(
+        new Set(['translate(-50%, -50%)']),
+      );
+    }
+    expect(avatarFrameSource).not.toContain(
+      '.avatar-frame--dynamic.avatar-frame--note-masterpiece .avatar-frame__art {\n    animation:',
+    );
     expect(avatarFrameSource).toMatch(
       /\.avatar-frame--bookmark-archive \.avatar-frame__ambient\s*\{[\s\S]*?filter:\s*none;/,
     );

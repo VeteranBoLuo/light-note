@@ -54,6 +54,48 @@ describe('头像框成品素材目录', () => {
     expect(AVATAR_FRAME_ARTWORK['streak-eternal'].outerSize).toBe(AVATAR_FRAME_ARTWORK.celestial.outerSize);
   });
 
+  it('逐款标定中央内孔，同时保持外框视觉外径独立', () => {
+    const expectedInnerArtSizes = {
+      mint: 99,
+      ink: 113,
+      moonstone: 99,
+      'first-light': 102,
+      'note-seed': 81,
+      'streak-seed': 99,
+      'bookmark-seed': 98,
+      'file-seed': 83,
+      gold: 102,
+      sakura: 83,
+      sunset: 85,
+      'streak-month': 96,
+      'note-masterpiece': 108,
+      'file-vault': 93,
+      ocean: 104,
+      aurora: 113,
+      flame: 105,
+      neon: 112,
+      galaxy: 123,
+      dragon: 112,
+      celestial: 110,
+      'bookmark-archive': 107,
+      'note-constellation': 106,
+      'file-constellation': 99,
+      'streak-eternal': 115,
+    };
+
+    expect(
+      Object.fromEntries(
+        Object.entries(AVATAR_FRAME_ARTWORK).map(([variant, artwork]) => [variant, artwork.innerArtSize]),
+      ),
+    ).toEqual(expectedInnerArtSizes);
+    expect(
+      Object.values(AVATAR_FRAME_ARTWORK).every(({ innerArtSize }) => innerArtSize >= 81 && innerArtSize <= 123),
+    ).toBe(true);
+    expect(AVATAR_FRAME_ARTWORK['file-constellation'].innerArtSize).not.toBe(
+      AVATAR_FRAME_ARTWORK['file-constellation'].artSize,
+    );
+  });
+
   it('让笔记与文件主题使用可辨认的独立色系', () => {
     expect(AVATAR_FRAME_ARTWORK['file-vault'].accent).not.toBe(AVATAR_FRAME_ARTWORK['note-masterpiece'].accent);
     expect(AVATAR_FRAME_ARTWORK['file-vault'].glow).toContain('59, 130, 246');

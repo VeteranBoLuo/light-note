@@ -1,6 +1,6 @@
 <template>
   <b-modal :mask-closable="false" :title="t('myInfo.title')" v-model:visible="visible" @close="visible = false">
-    <div class="home-container">
+    <div class="home-container" :class="{ 'home-container--framed': equippedFrameId }">
       <div style="width: 100%" class="flex-justify-center">
         <BButton
           class="user_icon"
@@ -213,9 +213,14 @@
 
 <style lang="less" scoped>
   .home-container {
+    box-sizing: border-box;
     width: 400px;
     padding: 10px;
     font-size: 14px;
+  }
+  // 80px 头像下，最高档素材盒会达到 165px；弹窗正文从标题分隔线开始裁切，必须在正文内部预留上半径出血。
+  .home-container--framed {
+    padding-top: 54px;
   }
   .home-user-body {
     margin-top: 30px;
@@ -223,6 +228,9 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 20px;
+  }
+  .home-container--framed .home-user-body {
+    margin-top: 52px;
   }
   .user-item {
     display: flex;
