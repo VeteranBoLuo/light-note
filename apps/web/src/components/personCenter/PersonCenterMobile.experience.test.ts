@@ -104,6 +104,18 @@ describe('mobile personal center experience', () => {
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
+    expect(myInfoSource).toContain(":class=\"{ 'profile-hero--framed': equippedFrameId }\"");
+    expect(myInfoSource).toContain(':size="64"');
+    expect(myInfoSource).toMatch(/\.profile-hero--framed\s*\{[\s\S]*?padding-top:\s*14px;/);
+    expect(myInfoSource).toMatch(
+      /\.profile-avatar\.profile-avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;[\s\S]*?overflow:\s*visible;/,
+    );
+    const maxMyInfoArtworkOverflow = Math.max(
+      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize, outerSize }) =>
+        Math.max(0, ((artSize - outerSize) * 64) / 64 / 2),
+      ),
+    );
+    expect(8 + 14 - maxMyInfoArtworkOverflow).toBeGreaterThanOrEqual(8);
     expect(avatarPickerSource).toMatch(
       /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
     );
@@ -197,9 +209,6 @@ describe('mobile personal center experience', () => {
       'frame-dragon-trail-right',
       'frame-dragon-trail-bottom',
       'frame-dragon-trail-ember',
-      'frame-dragon-mane-upper',
-      'frame-dragon-mane-middle',
-      'frame-dragon-mane-lower',
       'frame-dragon-fire-flow',
       'frame-dragon-mane-sway',
       'frame-dragon-left-filament-sway',
@@ -275,9 +284,7 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).toContain('animation: frame-dragon-orbit-shimmer 4.8s');
     expect(avatarFrameSource).not.toContain('frame-dragon-coil-breathe');
     expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--body"');
-    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--upper"');
-    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--middle"');
-    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--lower"');
+    expect(avatarFrameSource).not.toContain('avatar-frame__dragon-mane');
     expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--cloud-flame"');
     expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--mane"');
     expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--base"');
@@ -295,9 +302,10 @@ describe('mobile personal center experience', () => {
     expect(avatarFrameSource).not.toMatch(/\.avatar-frame__dragon-layer--body\s*\{[^}]*mask-image:/);
     expect(avatarFrameSource).toMatch(/\.avatar-frame__dragon-layer--head\s*\{[^}]*z-index:\s*10;[^}]*clip-path:/);
     expect(avatarFrameSource).not.toMatch(/\.avatar-frame__dragon-layer--body\s*\{[^}]*animation:/);
-    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-upper 3.1s');
-    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-middle 3.5s -1.35s');
-    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-lower 3.25s -2.1s');
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__dragon-layer--head\s*\{[^}]*animation:/);
+    expect(avatarFrameSource).not.toContain('@keyframes frame-dragon-mane-upper');
+    expect(avatarFrameSource).not.toContain('@keyframes frame-dragon-mane-middle');
+    expect(avatarFrameSource).not.toContain('@keyframes frame-dragon-mane-lower');
     expect(avatarFrameSource).toContain('animation: frame-celestial-unfold 5s');
     expect(avatarFrameSource).not.toContain('steps(');
     expect(avatarFrameSource).toContain('transform: rotate(316deg) scale(0.78)');

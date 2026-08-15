@@ -1,7 +1,7 @@
 <template>
   <CommonContainer :title="t('myInfo.title')" @backClick="handleBack">
     <div class="profile-page">
-      <section class="profile-hero" aria-live="polite">
+      <section class="profile-hero" :class="{ 'profile-hero--framed': equippedFrameId }" aria-live="polite">
         <BButton
           class="profile-avatar"
           :class="{ 'profile-avatar--disabled': isGuest, 'profile-avatar--framed': equippedFrameId }"
@@ -14,7 +14,7 @@
             v-if="equippedFrameId"
             :frame-id="equippedFrameId"
             :src="headPicture || icon.navigation.user"
-            :size="84"
+            :size="64"
             :decorative="false"
           />
           <div v-else class="profile-avatar__image">
@@ -344,6 +344,10 @@
     padding: 4px 8px 10px;
   }
 
+  .profile-hero--framed {
+    padding-top: 14px;
+  }
+
   .profile-avatar {
     width: 88px;
     height: 88px;
@@ -399,7 +403,10 @@
     }
   }
 
-  .profile-avatar--framed {
+  .profile-avatar.profile-avatar--framed {
+    width: auto;
+    height: auto;
+    flex: 0 0 auto;
     overflow: visible;
     border-color: transparent;
     background: transparent;

@@ -33,27 +33,6 @@
           aria-hidden="true"
         />
         <img
-          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--upper"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-          aria-hidden="true"
-        />
-        <img
-          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--middle"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-          aria-hidden="true"
-        />
-        <img
-          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--lower"
-          :src="artwork.motionSrc"
-          alt=""
-          draggable="false"
-          aria-hidden="true"
-        />
-        <img
           v-if="artwork.effectSrc"
           class="avatar-frame__dragon-layer avatar-frame__dragon-layer--cloud-flame"
           :src="artwork.effectSrc"
@@ -329,7 +308,6 @@
   .avatar-frame__art,
   .avatar-frame__art-detail,
   .avatar-frame__dragon-layer,
-  .avatar-frame__dragon-mane,
   .avatar-frame__dragon-trail,
   .avatar-frame__dragon-flow,
   .avatar-frame__dragon-ornament,
@@ -416,7 +394,6 @@
   .avatar-frame--dynamic .avatar-frame__art,
   .avatar-frame--dynamic .avatar-frame__art-detail,
   .avatar-frame--dynamic .avatar-frame__dragon-layer,
-  .avatar-frame--dynamic .avatar-frame__dragon-mane,
   .avatar-frame--dynamic .avatar-frame__dragon-trail,
   .avatar-frame--dynamic .avatar-frame__dragon-flow path,
   .avatar-frame--dynamic .avatar-frame__dragon-ornament,
@@ -1309,7 +1286,6 @@
   }
 
   .avatar-frame__dragon-layer,
-  .avatar-frame__dragon-mane,
   .avatar-frame__dragon-trail,
   .avatar-frame__dragon-ornament {
     top: 50%;
@@ -1327,31 +1303,6 @@
     z-index: 4;
     filter: brightness(1.02) saturate(1.04) drop-shadow(0 1px 1px rgba(120, 53, 15, 0.32));
     backface-visibility: hidden;
-  }
-
-  // 完整龙身始终保留，三层只复制头后鬃焰的不同毛束；即使摆动到极值也不会露出透明缺口。
-  .avatar-frame__dragon-mane {
-    z-index: 9;
-    filter: brightness(1.08) saturate(1.12) drop-shadow(0 0 1.8px rgba(249, 115, 22, 0.62));
-    backface-visibility: hidden;
-  }
-
-  .avatar-frame__dragon-mane--upper {
-    clip-path: polygon(69% 0, 100% 0, 100% 18%, 91% 21%, 82% 23%, 72% 20%);
-    transform-origin: 72% 21%;
-    animation: frame-dragon-mane-upper 3.1s ease-in-out infinite alternate;
-  }
-
-  .avatar-frame__dragon-mane--middle {
-    clip-path: polygon(74% 15%, 100% 12%, 100% 34%, 91% 37%, 82% 37%, 76% 32%);
-    transform-origin: 77% 33%;
-    animation: frame-dragon-mane-middle 3.5s -1.35s ease-in-out infinite alternate;
-  }
-
-  .avatar-frame__dragon-mane--lower {
-    clip-path: polygon(78% 29%, 100% 27%, 100% 52%, 92% 55%, 83% 52%, 79% 45%);
-    transform-origin: 80% 46%;
-    animation: frame-dragon-mane-lower 3.25s -2.1s ease-in-out infinite alternate;
   }
 
   .avatar-frame__dragon-layer--cloud-flame {
@@ -3119,42 +3070,6 @@
     }
   }
 
-  @keyframes frame-dragon-mane-upper {
-    0% {
-      transform: translate(-50%, -50%) rotate(-1.6deg) scaleY(0.98);
-    }
-    46% {
-      transform: translate(-50%, -50%) rotate(4.8deg) scaleY(1.055);
-    }
-    100% {
-      transform: translate(-50%, -50%) rotate(-0.4deg) scaleY(1.015);
-    }
-  }
-
-  @keyframes frame-dragon-mane-middle {
-    0% {
-      transform: translate(-50%, -50%) rotate(2deg) scaleY(0.975);
-    }
-    52% {
-      transform: translate(-50%, -50%) rotate(-4.2deg) scaleY(1.045);
-    }
-    100% {
-      transform: translate(-50%, -50%) rotate(0.7deg) scaleY(1.01);
-    }
-  }
-
-  @keyframes frame-dragon-mane-lower {
-    0% {
-      transform: translate(-50%, -50%) rotate(-1.2deg) scaleY(0.985);
-    }
-    48% {
-      transform: translate(-50%, -50%) rotate(3.6deg) scaleY(1.04);
-    }
-    100% {
-      transform: translate(-50%, -50%) rotate(-0.6deg) scaleY(1.01);
-    }
-  }
-
   @keyframes frame-dragon-trail-mane {
     0% {
       -webkit-mask-position: 118% 50%;
@@ -3890,7 +3805,6 @@
   .avatar-frame--motion-paused .avatar-frame__art,
   .avatar-frame--motion-paused .avatar-frame__art-detail,
   .avatar-frame--motion-paused .avatar-frame__dragon-layer,
-  .avatar-frame--motion-paused .avatar-frame__dragon-mane,
   .avatar-frame--motion-paused .avatar-frame__dragon-trail,
   .avatar-frame--motion-paused .avatar-frame__dragon-flow path,
   .avatar-frame--motion-paused .avatar-frame__dragon-ornament,
@@ -3911,7 +3825,6 @@
     .avatar-frame__art,
     .avatar-frame__art-detail,
     .avatar-frame__dragon-layer,
-    .avatar-frame__dragon-mane,
     .avatar-frame__dragon-trail,
     .avatar-frame__dragon-flow path,
     .avatar-frame__dragon-ornament,
