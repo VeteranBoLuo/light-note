@@ -26,7 +26,7 @@
         v-if="equippedFrameId"
         :frame-id="equippedFrameId"
         :src="profileAvatarSource"
-        :size="32"
+        :size="26"
         aria-hidden="true"
       />
       <SvgIcon v-else class="mobile-top-bar__profile-avatar" :src="profileAvatarSource" size="36" aria-hidden="true" />

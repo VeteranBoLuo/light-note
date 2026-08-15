@@ -1,8 +1,15 @@
 import { createApp, nextTick } from 'vue';
 import { createI18n } from 'vue-i18n';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { CommunityChatAuthorProfile, CommunityChatOwnProfile } from '@/api/communityChatApi';
 import zhCN from '@/i18n/locales/zh-CN';
+
+const profileContentSource = readFileSync(
+  resolve(process.cwd(), 'src/components/communityChat/ChatUserProfileContent.vue'),
+  'utf8',
+);
 
 vi.mock('@/components/base/SvgIcon/src/SvgIcon.vue', () => ({
   default: { props: ['src', 'size'], template: '<span class="svg-icon-stub" />' },
@@ -79,6 +86,19 @@ function mountProfile(props: Record<string, unknown>) {
 }
 
 describe('ChatUserProfileContent', () => {
+  it('佩戴头像框时按真实外径占位，未佩戴时继续使用普通头像盒', () => {
+    const framedHost = mountProfile({ profile: profile({ frameId: 'frame_dragon' }) });
+    expect(framedHost.querySelector('.chat-profile-content__avatar')?.classList.contains('is-framed')).toBe(true);
+    cleanup?.();
+    cleanup = undefined;
+
+    const plainHost = mountProfile({ profile: profile({ frameId: null }) });
+    expect(plainHost.querySelector('.chat-profile-content__avatar')?.classList.contains('is-framed')).toBe(false);
+    expect(profileContentSource).toMatch(
+      /\.chat-profile-content__avatar\.is-framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
+    );
+  });
+
   it('仅为炫彩与传说头像框展示稀有度胶囊', () => {
     const rareHost = mountProfile({ profile: profile({ frameRarity: 'rare' }) });
     expect(rareHost.querySelector('.chat-profile-content__rarity')).toBeNull();

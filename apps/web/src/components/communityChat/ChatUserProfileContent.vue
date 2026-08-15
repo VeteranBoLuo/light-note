@@ -456,7 +456,14 @@
           );
         }
         return h('header', { class: 'chat-profile-content__identity' }, [
-          h('span', { class: 'chat-profile-content__avatar', 'aria-hidden': 'true' }, [avatar]),
+          h(
+            'span',
+            {
+              class: ['chat-profile-content__avatar', { 'is-framed': validFrameId }],
+              'aria-hidden': 'true',
+            },
+            [avatar],
+          ),
           h('span', { class: 'chat-profile-content__identity-copy' }, [
             h('strong', profile.name || t('communityChat.memberFallback')),
             profile.communityId
@@ -702,6 +709,15 @@
     flex: 0 0 76px;
     display: grid;
     place-items: center;
+  }
+
+  // 名片头像框沿用组件的真实外径占位，避免高阶主题越过 76px 头像盒后压住昵称与标签。
+  .chat-profile-content__avatar.is-framed {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    min-height: 76px;
+    flex: 0 0 auto;
   }
 
   .chat-profile-content__avatar-image {

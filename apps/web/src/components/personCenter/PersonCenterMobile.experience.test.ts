@@ -91,6 +91,11 @@ describe('mobile personal center experience', () => {
     expect(desktopPersonCenterSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(navigationRightAreaSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);
+    expect(mobileTopBarSource).toContain(':size="26"');
+    expect(personCenterSource).toContain(":class=\"{ 'profile-card__avatar--framed': equippedFrameId }\"");
+    expect(personCenterSource).toMatch(
+      /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
+    );
     expect(avatarPickerSource).toMatch(
       /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
     );

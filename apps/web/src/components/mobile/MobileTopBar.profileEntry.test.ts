@@ -4,6 +4,7 @@ import { createI18n } from 'vue-i18n';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import zhCN from '@/i18n/locales/zh-CN';
+import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
 
 const topBarSource = readFileSync(resolve(process.cwd(), 'src/components/mobile/MobileTopBar.vue'), 'utf8');
 
@@ -106,10 +107,12 @@ describe('移动顶栏 · 头像入口', () => {
     expect(loadGrowth).toHaveBeenCalledTimes(1);
   });
 
-  it('在 44px 点击区内放大头像主体，但不挤压顶栏布局', () => {
-    expect(topBarSource).toContain(':size="32"');
+  it('在 44px 点击区内保留头像主体，并让最高档外饰完整落入 56px 顶栏', () => {
+    expect(topBarSource).toContain(':size="26"');
     expect(topBarSource).toContain('profileAvatarSource" size="36"');
     expect(topBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;/u);
+    const maxOuterSize = Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.outerSize));
+    expect((maxOuterSize * 26) / 64).toBeLessThanOrEqual(51);
   });
 
   it('左侧使用头像入口并导航到个人中心', async () => {

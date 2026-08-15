@@ -12,7 +12,12 @@
       >
         <section class="profile-card">
           <div class="profile-card__identity">
-            <BButton class="profile-card__avatar" :aria-label="t('personCenter.viewAvatar')" @click="zoomImage">
+            <BButton
+              class="profile-card__avatar"
+              :class="{ 'profile-card__avatar--framed': equippedFrameId }"
+              :aria-label="t('personCenter.viewAvatar')"
+              @click="zoomImage"
+            >
               <AvatarFramePreview
                 v-if="equippedFrameId"
                 :frame-id="equippedFrameId"
@@ -398,12 +403,22 @@
     width: 72px;
     min-width: 72px;
     height: 72px;
+    flex: 0 0 72px;
     padding: 0;
     overflow: visible;
     border: 0;
     border-radius: 50%;
     color: var(--primary-color);
     background: transparent;
+  }
+
+  // 头像框组件会按 outerSize 输出真实外径；佩戴态必须让按钮按子元素自然占位，
+  // 不能继续用头像直径 72px 裁布局，否则传说框会侵入昵称并被滚动容器削掉外饰。
+  .profile-card__avatar.profile-card__avatar--framed {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    flex: 0 0 auto;
   }
 
   .profile-card__avatar :deep(img),
