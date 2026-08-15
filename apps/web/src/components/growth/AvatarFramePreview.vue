@@ -4,7 +4,9 @@
     class="avatar-frame"
     :class="[
       `avatar-frame--${variant || 'default'}`,
+      artwork ? `avatar-frame--motion-${artwork.motion}` : '',
       {
+        'avatar-frame--dynamic': isDynamic,
         'avatar-frame--motion-paused': isMotionPaused,
       },
     ]"
@@ -12,29 +14,194 @@
     :aria-hidden="decorative ? 'true' : undefined"
   >
     <span class="avatar-frame__canvas">
-      <span class="avatar-frame__ring" aria-hidden="true"></span>
-      <span class="avatar-frame__motif" aria-hidden="true"></span>
-      <span class="avatar-frame__orbit" aria-hidden="true"></span>
-      <span class="avatar-frame__comet" aria-hidden="true"></span>
-      <span v-if="hasFrameIdentity" class="avatar-frame__signature" aria-hidden="true">
-        <SvgIcon
-          v-if="variant === 'dragon'"
-          class="avatar-frame__dragon-crest"
-          :src="icon.avatarFrame.dragonCrest"
-          :size="FRAME_DRAGON_ART_SIZE"
+      <span v-if="artwork" class="avatar-frame__ambient" aria-hidden="true"></span>
+      <img v-if="artwork" class="avatar-frame__art" :src="artwork.src" alt="" draggable="false" aria-hidden="true" />
+      <img
+        v-if="hasArtDetail"
+        class="avatar-frame__art-detail"
+        :src="artwork?.src"
+        alt=""
+        draggable="false"
+        aria-hidden="true"
+      />
+      <template v-if="variant === 'dragon' && artwork?.motionSrc">
+        <img
+          class="avatar-frame__dragon-layer avatar-frame__dragon-layer--body"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
         />
-        <span class="avatar-frame__signature-mark"></span>
+        <img
+          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--upper"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--middle"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__dragon-mane avatar-frame__dragon-mane--lower"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.effectSrc"
+          class="avatar-frame__dragon-layer avatar-frame__dragon-layer--cloud-flame"
+          :src="artwork.effectSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-trail avatar-frame__dragon-trail--base"
+          :src="artwork.trailSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-trail avatar-frame__dragon-trail--mane"
+          :src="artwork.trailSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-trail avatar-frame__dragon-trail--left"
+          :src="artwork.trailSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-trail avatar-frame__dragon-trail--right"
+          :src="artwork.trailSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-trail avatar-frame__dragon-trail--bottom"
+          :src="artwork.trailSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <svg
+          v-if="artwork.trailSrc"
+          class="avatar-frame__dragon-flow"
+          viewBox="0 0 100 100"
+          preserveAspectRatio="xMidYMid meet"
+          aria-hidden="true"
+        >
+          <g class="avatar-frame__dragon-flow-group avatar-frame__dragon-flow-group--mane">
+            <path pathLength="100" d="M60 36 C66 30 70 25 70 16 C70 10 73 6 77 3" />
+            <path pathLength="100" d="M65 37 C73 31 78 26 79 18 C80 12 84 9 89 8" />
+            <path pathLength="100" d="M69 39 C78 35 84 31 86 25 C88 20 92 18 96 18" />
+            <path pathLength="100" d="M72 41 C82 40 88 37 91 32 C93 29 96 28 99 29" />
+          </g>
+          <g class="avatar-frame__dragon-flow-group avatar-frame__dragon-flow-group--left">
+            <path pathLength="100" d="M27 76 C20 72 15 67 16 61 C17 56 13 53 8 51" />
+            <path pathLength="100" d="M22 70 C17 65 18 60 21 56 C24 51 22 46 17 42" />
+            <path pathLength="100" d="M31 81 C23 79 17 77 12 72 C8 68 6 64 7 60" />
+          </g>
+          <g class="avatar-frame__dragon-flow-group avatar-frame__dragon-flow-group--right">
+            <path pathLength="100" d="M73 78 C80 74 84 69 84 63 C84 57 88 53 94 50" />
+            <path pathLength="100" d="M78 82 C85 78 90 74 91 68 C92 63 95 60 99 59" />
+            <path pathLength="100" d="M76 73 C81 68 80 63 78 59 C76 55 79 51 84 48" />
+          </g>
+          <g class="avatar-frame__dragon-flow-group avatar-frame__dragon-flow-group--bottom">
+            <path pathLength="100" d="M18 75 C30 86 43 90 56 89 C69 88 80 83 88 75" />
+            <path pathLength="100" d="M24 82 C37 91 53 94 67 91 C77 89 85 84 92 78" />
+          </g>
+        </svg>
+        <img
+          v-if="artwork.accentSrc"
+          class="avatar-frame__dragon-layer avatar-frame__dragon-layer--pearl"
+          :src="artwork.accentSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__dragon-ornament avatar-frame__dragon-ornament--crown"
+          :src="artwork.src"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__dragon-ornament avatar-frame__dragon-ornament--seal"
+          :src="artwork.src"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__dragon-layer avatar-frame__dragon-layer--head"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+      </template>
+      <template v-if="variant === 'celestial' && artwork?.motionSrc">
+        <img
+          class="avatar-frame__celestial-wing avatar-frame__celestial-wing--left"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <img
+          class="avatar-frame__celestial-wing avatar-frame__celestial-wing--right"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+      </template>
+      <template v-if="variant === 'streak-eternal' && artwork?.motionSrc">
+        <img
+          class="avatar-frame__eternal-object avatar-frame__eternal-object--sun"
+          :src="artwork.motionSrc"
+          alt=""
+          draggable="false"
+          aria-hidden="true"
+        />
+        <span v-if="artwork.motionSpriteSrc" class="avatar-frame__eternal-rabbit-runner" aria-hidden="true">
+          <span class="avatar-frame__eternal-rabbit-direction">
+            <span
+              class="avatar-frame__eternal-rabbit-sprite"
+              :style="{ backgroundImage: `url(${artwork.motionSpriteSrc})` }"
+            ></span>
+          </span>
+        </span>
+      </template>
+      <span v-if="isDynamic" class="avatar-frame__motion avatar-frame__motion--back" aria-hidden="true">
+        <i></i><i></i><i></i><i></i>
+      </span>
+      <span v-if="isDynamic" class="avatar-frame__motion avatar-frame__motion--front" aria-hidden="true">
+        <i></i><i></i><i></i><i></i>
       </span>
       <span class="avatar-frame__portrait">
         <SvgIcon :src="src" :size="FRAME_DESIGN_AVATAR_SIZE" />
       </span>
-      <SvgIcon
-        v-if="variant === 'dragon'"
-        class="avatar-frame__dragon-head"
-        :src="icon.avatarFrame.dragonHead"
-        :size="FRAME_DRAGON_ART_SIZE"
-        aria-hidden="true"
-      />
+      <span v-if="artwork" class="avatar-frame__bezel" aria-hidden="true"></span>
     </span>
   </div>
 </template>
@@ -42,18 +209,13 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
-  import icon from '@/config/icon';
+  import { avatarFrameArtwork } from '@/config/avatarFrameArtwork';
   import { frameVariant } from '@/config/growthFrames';
 
-  // 头像框只维护一份与商店卡片一致的 64px 设计画布，真实入口整体等比缩放。
-  // 不允许再按 30/32/40/64px 分别重排 1px 描边、渐变和轨道，否则小尺寸会发生像素取整，
-  // 造成商店预览的外置星点在顶栏/个人中心/聊天室中向内挤压或圆环锯齿化。
+  // 所有入口共用一份 64px 头像设计画布，仅整体缩放，避免小尺寸重新排版导致错位。
   const FRAME_DESIGN_AVATAR_SIZE = 64;
   const FRAME_DESIGN_RIM = 6;
   const FRAME_DESIGN_OUTER_SIZE = FRAME_DESIGN_AVATAR_SIZE + FRAME_DESIGN_RIM * 2;
-  // 96px 素材盒配合带 bleed 的 132px viewBox，主体视觉尺寸不变，但为边缘描边和阴影预留安全区。
-  const FRAME_DRAGON_ART_SIZE = 96;
-  const FRAME_IDENTITY_VARIANTS = new Set(['dragon']);
 
   const props = withDefaults(
     defineProps<{
@@ -100,33 +262,39 @@
   });
 
   const variant = computed(() => frameVariant(props.frameId));
-  const hasFrameIdentity = computed(() => FRAME_IDENTITY_VARIANTS.has(variant.value || ''));
+  const artwork = computed(() => avatarFrameArtwork(variant.value));
+  const isDynamic = computed(() => artwork.value?.motion !== undefined && artwork.value.motion !== 'static');
+  const hasArtDetail = computed(() =>
+    Boolean(
+      variant.value &&
+      [
+        'flame',
+        'ocean',
+        'aurora',
+        'note-masterpiece',
+        'file-vault',
+        'neon',
+        'galaxy',
+        'bookmark-archive',
+        'note-constellation',
+        'file-constellation',
+      ].includes(variant.value),
+    ),
+  );
   const frameStyle = computed(() => {
     const displayAvatarSize = Math.max(1, Number(props.size) || 1);
     const scale = displayAvatarSize / FRAME_DESIGN_AVATAR_SIZE;
-    // 外层占位仍贴合各入口原来的整数像素盒（30→36、32→38、40→48），
-    // 画布则在盒内绝对居中，避免 flex 右对齐时因 0.375px 余量看起来向一侧偏移。
-    const displayOuterSize = Math.round(FRAME_DESIGN_OUTER_SIZE * scale);
-    // 天穹外圈点阵按设计比例缩小时保留 1px 的可见下限；几何位置仍来自同一 64px 画布，
-    // 因而不会再发生点阵向圆环内收，只增强顶栏/聊天室小头像上的抗锯齿可读性。
-    const constellationStroke = Math.min(3, Math.max(1.5, 1 / scale));
+    const layoutOuterSize = artwork.value?.outerSize ?? FRAME_DESIGN_OUTER_SIZE;
+    const displayOuterSize = Math.round(layoutOuterSize * scale);
     return {
       '--frame-display-outer-size': `${displayOuterSize}px`,
       '--frame-canvas-scale': String(scale),
-      '--frame-constellation-stroke': `${constellationStroke}px`,
       '--frame-size': `${FRAME_DESIGN_AVATAR_SIZE}px`,
-      '--frame-rim': `${FRAME_DESIGN_RIM}px`,
       '--frame-outer-size': `${FRAME_DESIGN_OUTER_SIZE}px`,
-      '--frame-motif-inset': '2px',
-      '--frame-motif-outset': '-2px',
-      '--frame-galaxy-glow': '9px',
-      '--frame-galaxy-orbit-glow': '5px',
-      '--frame-galaxy-star-glow': '7px',
-      '--frame-galaxy-star-wide-glow': '10px',
-      '--frame-celestial-glow': '13px',
-      '--frame-galaxy-drop-y': '4px',
-      '--frame-galaxy-drop-blur': '10px',
-      '--frame-galaxy-drop-spread': '-6px',
+      '--frame-art-size': `${artwork.value?.artSize ?? FRAME_DESIGN_OUTER_SIZE}px`,
+      '--frame-effect-size': `${layoutOuterSize}px`,
+      '--frame-accent': artwork.value?.accent ?? '#cbd5e1',
+      '--frame-glow': artwork.value?.glow ?? 'rgba(148, 163, 184, 0.2)',
     };
   });
 </script>
@@ -152,68 +320,164 @@
     place-items: center;
     width: var(--frame-outer-size);
     height: var(--frame-outer-size);
-    flex: 0 0 auto;
     transform: translate(-50%, -50%) scale(var(--frame-canvas-scale));
     transform-origin: center;
     backface-visibility: hidden;
   }
 
-  .avatar-frame__ring,
-  .avatar-frame__motif,
-  .avatar-frame__orbit,
-  .avatar-frame__comet,
-  .avatar-frame__signature {
+  .avatar-frame__ambient,
+  .avatar-frame__art,
+  .avatar-frame__art-detail,
+  .avatar-frame__dragon-layer,
+  .avatar-frame__dragon-mane,
+  .avatar-frame__dragon-trail,
+  .avatar-frame__dragon-flow,
+  .avatar-frame__dragon-ornament,
+  .avatar-frame__celestial-wing,
+  .avatar-frame__eternal-object,
+  .avatar-frame__eternal-rabbit-runner,
+  .avatar-frame__eternal-rabbit-direction,
+  .avatar-frame__eternal-rabbit-sprite,
+  .avatar-frame__motion,
+  .avatar-frame__portrait,
+  .avatar-frame__bezel {
     position: absolute;
     pointer-events: none;
   }
 
-  .avatar-frame__ring,
-  .avatar-frame__motif {
-    inset: 0;
-    border-radius: 50%;
-  }
-
-  .avatar-frame__orbit,
-  .avatar-frame__comet {
-    display: none;
-  }
-
-  .avatar-frame__ring {
+  .avatar-frame__ambient {
     z-index: 0;
-    background: conic-gradient(from 180deg, #8b5cf6, #6366f1, #8b5cf6);
-    box-shadow: 0 5px 14px -7px rgba(79, 70, 229, 0.9);
+    top: 50%;
+    left: 50%;
+    width: var(--frame-effect-size);
+    height: var(--frame-effect-size);
+    border-radius: 50%;
+    background: radial-gradient(circle, transparent 48%, var(--frame-glow) 64%, transparent 77%);
+    filter: blur(4px);
+    opacity: 0.72;
+    transform: translate(-50%, -50%);
   }
 
-  .avatar-frame__motif {
-    z-index: 1;
+  .avatar-frame--motion-static .avatar-frame__ambient {
+    opacity: 0.42;
+    filter: blur(3px);
   }
 
-  .avatar-frame__signature {
+  // 动态档必须在 2 秒内能被察觉：主题动画之外保留一条连续材质光脉，避免长周期首段看起来完全静止。
+  .avatar-frame--dynamic .avatar-frame__ambient {
+    animation: frame-ambient-breathe 3.2s ease-in-out infinite;
+    will-change: opacity, transform, filter;
+  }
+
+  .avatar-frame--motion-colorful .avatar-frame__ambient {
+    animation-duration: 2.8s;
+  }
+
+  .avatar-frame--motion-legendary .avatar-frame__ambient {
+    animation-duration: 2.4s;
+  }
+
+  .avatar-frame--motion-ceiling .avatar-frame__ambient {
+    animation-duration: 2s;
+  }
+
+  .avatar-frame__art {
+    z-index: 3;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    transform-origin: 50% 50%;
+    filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.2)) drop-shadow(0 0 3px var(--frame-glow));
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  // 只复制需要“素材本体局部运动”的主题区域；裁切后的高光与原画完全同源，避免悬浮贴纸感。
+  .avatar-frame__art-detail {
     z-index: 4;
-    inset: 0;
-    transform-origin: center;
-    will-change: transform;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    object-fit: contain;
+    opacity: 0;
+    transform: translate(-50%, -50%);
+    transform-origin: 50% 50%;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
   }
 
-  .avatar-frame__signature-mark {
+  .avatar-frame--dynamic .avatar-frame__art,
+  .avatar-frame--dynamic .avatar-frame__art-detail,
+  .avatar-frame--dynamic .avatar-frame__dragon-layer,
+  .avatar-frame--dynamic .avatar-frame__dragon-mane,
+  .avatar-frame--dynamic .avatar-frame__dragon-trail,
+  .avatar-frame--dynamic .avatar-frame__dragon-flow path,
+  .avatar-frame--dynamic .avatar-frame__dragon-ornament,
+  .avatar-frame--dynamic .avatar-frame__celestial-wing,
+  .avatar-frame--dynamic .avatar-frame__eternal-object,
+  .avatar-frame--dynamic .avatar-frame__eternal-rabbit-runner,
+  .avatar-frame--dynamic .avatar-frame__eternal-rabbit-direction,
+  .avatar-frame--dynamic .avatar-frame__eternal-rabbit-sprite,
+  .avatar-frame--dynamic .avatar-frame__motion::before,
+  .avatar-frame--dynamic .avatar-frame__motion::after,
+  .avatar-frame--dynamic .avatar-frame__motion i {
+    will-change: transform, opacity, filter;
+  }
+
+  .avatar-frame__motion {
+    top: 50%;
+    left: 50%;
+    width: var(--frame-effect-size);
+    height: var(--frame-effect-size);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+  }
+
+  .avatar-frame__motion--back {
+    z-index: 2;
+  }
+
+  .avatar-frame__motion--front {
+    z-index: 4;
+  }
+
+  .avatar-frame__motion::before,
+  .avatar-frame__motion::after,
+  .avatar-frame__motion i {
     position: absolute;
     display: block;
+    content: '';
     pointer-events: none;
+  }
+
+  .avatar-frame__motion i {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--frame-accent);
+    box-shadow: 0 0 5px var(--frame-glow);
+    opacity: 0;
   }
 
   .avatar-frame__portrait {
-    position: relative;
-    z-index: 2;
+    z-index: 1;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     width: var(--frame-size);
     height: var(--frame-size);
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--background-color) 85%, transparent);
+    border: 1px solid rgba(255, 255, 255, 0.88);
     border-radius: 50%;
     background: var(--background-color);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--card-border-color) 35%, transparent);
+    box-shadow: 0 0 0 1px rgba(100, 116, 139, 0.18);
   }
 
   .avatar-frame__portrait :deep(img),
@@ -226,3102 +490,3324 @@
     object-fit: cover;
   }
 
-  /* 薄荷：积分基础款使用晶莹双环、八向切面和四枚薄荷晶点，不使用持续动效。 */
-  .avatar-frame--mint .avatar-frame__ring {
-    background: conic-gradient(
-      from 195deg,
-      #064e3b,
-      #0f766e 14%,
-      #5eead4 27%,
-      #ecfdf5 38%,
-      #2dd4bf 51%,
-      #99f6e4 66%,
-      #0d9488 82%,
-      #064e3b
-    );
-    box-shadow:
-      0 0 0 1px rgba(209, 250, 229, 0.96),
-      0 0 0 3px rgba(20, 184, 166, 0.2),
-      inset 0 0 5px rgba(255, 255, 255, 0.52),
-      inset 0 -3px 5px rgba(6, 78, 59, 0.28),
-      0 0 7px rgba(94, 234, 212, 0.3),
-      0 7px 16px -8px rgba(13, 148, 136, 0.86);
-  }
-
-  .avatar-frame--mint .avatar-frame__ring::before,
-  .avatar-frame--mint .avatar-frame__ring::after,
-  .avatar-frame--ink .avatar-frame__ring::before,
-  .avatar-frame--ink .avatar-frame__ring::after,
-  .avatar-frame--moonstone .avatar-frame__ring::before,
-  .avatar-frame--moonstone .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
+  // 透明素材位于头像前景，中央镂空直接展示头像；仅允许龙首、书页等主题件在边缘少量探入。
+  .avatar-frame__bezel {
+    z-index: 5;
+    width: var(--frame-size);
+    height: var(--frame-size);
+    border: 1.25px solid var(--frame-accent);
     border-radius: 50%;
-    pointer-events: none;
-  }
-
-  .avatar-frame--mint .avatar-frame__ring::before {
-    inset: 7%;
-    border: 1.5px solid rgba(236, 253, 245, 0.92);
-    border-right-color: rgba(13, 148, 136, 0.64);
-    box-shadow: inset 0 0 3px rgba(6, 95, 70, 0.46);
-  }
-
-  .avatar-frame--mint .avatar-frame__ring::after {
-    inset: -7%;
-    background:
-      radial-gradient(circle at 50% 3%, #fff 0 2.8%, #5eead4 3.8% 6%, transparent 7%),
-      radial-gradient(circle at 97% 50%, #ecfdf5 0 2.8%, #14b8a6 3.8% 6%, transparent 7%),
-      radial-gradient(circle at 50% 97%, #fff 0 2.8%, #2dd4bf 3.8% 6%, transparent 7%),
-      radial-gradient(circle at 3% 50%, #d1fae5 0 2.8%, #0d9488 3.8% 6%, transparent 7%);
-    filter: drop-shadow(0 0 3px rgba(94, 234, 212, 0.72));
-  }
-
-  .avatar-frame--mint .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(167, 243, 208, 0.7);
-    background: repeating-conic-gradient(from 22.5deg, rgba(255, 255, 255, 0.88) 0deg 2deg, transparent 2deg 45deg);
-    box-shadow: inset 0 0 3px rgba(236, 253, 245, 0.54);
-  }
-
-  /* 墨韵：积分基础款使用墨玉双环与不对称笔锋，静态但有明确材质层次。 */
-  .avatar-frame--ink .avatar-frame__ring {
-    background: conic-gradient(
-      from 28deg,
-      #020617,
-      #475569 13%,
-      #f8fafc 25%,
-      #94a3b8 34%,
-      #1e293b 48%,
-      #030712 67%,
-      #cbd5e1 82%,
-      #334155 91%,
-      #020617
-    );
     box-shadow:
-      0 0 0 1px rgba(226, 232, 240, 0.82),
-      0 0 0 3px rgba(71, 85, 105, 0.22),
-      inset 0 0 6px rgba(248, 250, 252, 0.42),
-      inset 0 -4px 6px rgba(2, 6, 23, 0.52),
-      0 0 6px rgba(148, 163, 184, 0.24),
-      0 8px 18px -9px rgba(2, 6, 23, 0.94);
+      inset 0 0 0 1px rgba(255, 255, 255, 0.58),
+      0 0 4px var(--frame-glow);
+    opacity: 0.9;
   }
 
-  .avatar-frame--ink .avatar-frame__ring::before {
-    inset: 7%;
-    border: 1.5px solid rgba(226, 232, 240, 0.74);
-    border-bottom-color: rgba(15, 23, 42, 0.9);
-    box-shadow: inset 0 0 4px rgba(2, 6, 23, 0.62);
+  .avatar-frame--default .avatar-frame__portrait {
+    border-color: rgba(148, 163, 184, 0.42);
   }
 
-  .avatar-frame--ink .avatar-frame__ring::after {
-    inset: -7%;
-    border: 2px solid transparent;
-    border-top-color: rgba(248, 250, 252, 0.92);
-    border-right-color: rgba(100, 116, 139, 0.72);
-    border-bottom-color: rgba(15, 23, 42, 0.9);
-    border-radius: 46% 54% 43% 57%;
-    filter: drop-shadow(0 2px 3px rgba(2, 6, 23, 0.58));
-    transform: rotate(-13deg);
+  /* 进阶积分：局部材质开始动态，不让框体无意义地整圈旋转。 */
+  .avatar-frame--dynamic.avatar-frame--gold .avatar-frame__art {
+    animation: frame-gold-breathe 4.6s ease-in-out infinite;
   }
 
-  .avatar-frame--ink .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(203, 213, 225, 0.56);
-    background:
-      radial-gradient(circle at 18% 30%, rgba(248, 250, 252, 0.94) 0 2.8%, transparent 4%),
-      radial-gradient(circle at 80% 76%, rgba(100, 116, 139, 0.9) 0 3.2%, transparent 4.5%),
-      linear-gradient(138deg, transparent 43%, rgba(248, 250, 252, 0.7) 45% 47%, transparent 49%);
-    box-shadow: inset 0 0 4px rgba(226, 232, 240, 0.3);
-    clip-path: polygon(8% 27%, 27% 5%, 62% 1%, 93% 24%, 98% 61%, 77% 94%, 42% 99%, 11% 82%, 1% 48%);
-  }
-
-  /* 月白：基础档最高价的瓷釉银蓝双环，全部细节保持静态。 */
-  .avatar-frame--moonstone .avatar-frame__ring {
-    background: conic-gradient(
-      from 205deg,
-      #334155,
-      #94a3b8 15%,
-      #f8fafc 28%,
-      #bfdbfe 42%,
-      #ffffff 54%,
-      #93c5fd 69%,
-      #64748b 84%,
-      #334155
-    );
-    box-shadow:
-      0 0 0 1px rgba(226, 232, 240, 0.94),
-      0 0 0 3px rgba(148, 163, 184, 0.2),
-      inset 0 0 5px rgba(255, 255, 255, 0.72),
-      inset 0 -3px 5px rgba(59, 130, 246, 0.18),
-      0 0 7px rgba(191, 219, 254, 0.32),
-      0 7px 16px -9px rgba(71, 85, 105, 0.8);
-  }
-
-  .avatar-frame--moonstone .avatar-frame__ring::before {
-    inset: 7%;
-    border: 1.5px solid rgba(255, 255, 255, 0.88);
-    border-left-color: rgba(96, 165, 250, 0.66);
-    box-shadow: inset 0 0 4px rgba(148, 163, 184, 0.38);
-  }
-
-  .avatar-frame--moonstone .avatar-frame__ring::after {
-    inset: -6%;
-    background:
-      radial-gradient(circle at 50% 2%, #fff 0 2.6%, #cbd5e1 3.6% 5.4%, transparent 6.4%),
-      radial-gradient(circle at 98% 50%, #eff6ff 0 2.6%, #93c5fd 3.6% 5.4%, transparent 6.4%),
-      radial-gradient(circle at 50% 98%, #fff 0 2.6%, #cbd5e1 3.6% 5.4%, transparent 6.4%),
-      radial-gradient(circle at 2% 50%, #dbeafe 0 2.6%, #64748b 3.6% 5.4%, transparent 6.4%);
-    filter: drop-shadow(0 1px 2px rgba(100, 116, 139, 0.42));
-  }
-
-  .avatar-frame--moonstone .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(219, 234, 254, 0.72);
-    background: repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.8) 0deg 1.5deg, transparent 1.5deg 90deg);
-    box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.48);
-  }
-
-  /* 初光：首签免费框保持克制，只用一圈晨光与一个清晰实心标记。 */
-  .avatar-frame--first-light .avatar-frame__ring {
-    background: conic-gradient(from 210deg, #475569, #94a3b8 38%, #d1d5db 58%, #64748b 76%, #475569);
-    box-shadow:
-      0 0 0 1px rgba(100, 116, 139, 0.58),
-      0 4px 10px -8px rgba(71, 85, 105, 0.7);
-  }
-
-  .avatar-frame--first-light .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(226, 232, 240, 0.72);
-    background: radial-gradient(circle at 50% 2%, #fef3c7 0 3%, #d97706 4% 5.5%, transparent 6.5%);
-  }
-
-  /* 七日晨光：免费进阶按积分基础档控制，只保留静态七段晨曦。 */
-  .avatar-frame--streak-seed .avatar-frame__ring {
-    background: conic-gradient(
-      from -90deg,
-      #1e3a8a,
-      #3b82f6 30%,
-      #bfdbfe 46%,
-      #fde68a 56%,
-      #f59e0b 68%,
-      #475569 84%,
-      #1e3a8a
-    );
-    box-shadow:
-      0 0 0 1px rgba(147, 197, 253, 0.68),
-      0 6px 14px -8px rgba(37, 99, 235, 0.74);
-  }
-
-  .avatar-frame--streak-seed .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(254, 243, 199, 0.72);
-    background: repeating-conic-gradient(from -90deg, rgba(255, 255, 255, 0.86) 0deg 3deg, transparent 3deg 51.4deg);
-  }
-
-  /* 书页初藏：低饱和纸页环与两枚书签刻度。 */
-  .avatar-frame--bookmark-seed .avatar-frame__ring {
-    background: conic-gradient(from 28deg, #475569, #75658f 28%, #c4b5d5 49%, #7c6f9b 72%, #475569);
-    box-shadow:
-      0 0 0 1px rgba(124, 111, 155, 0.52),
-      0 5px 11px -8px rgba(71, 85, 105, 0.76);
-  }
-
-  .avatar-frame--bookmark-seed .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(237, 233, 254, 0.64);
-    background:
-      linear-gradient(90deg, transparent 17%, rgba(255, 255, 255, 0.7) 18% 21%, transparent 22%),
-      linear-gradient(90deg, transparent 74%, rgba(226, 232, 240, 0.68) 75% 78%, transparent 79%);
-  }
-
-  /* 青笔初成：低饱和青墨环上保留一笔浅色墨迹。 */
-  .avatar-frame--note-seed .avatar-frame__ring {
-    background: conic-gradient(from 205deg, #365f52, #65a98c 31%, #b8d8ca 53%, #6f9f8c 73%, #365f52);
-    box-shadow:
-      0 0 0 1px rgba(101, 169, 140, 0.5),
-      0 5px 11px -8px rgba(54, 95, 82, 0.72);
-  }
-
-  .avatar-frame--note-seed .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(209, 232, 222, 0.68);
-    background: linear-gradient(132deg, transparent 44%, rgba(236, 253, 245, 0.66) 46% 48%, transparent 50%);
-  }
-
-  /* 云匣初启：蓝灰文件环只保留一枚低调的暖色标签。 */
-  .avatar-frame--file-seed .avatar-frame__ring {
-    background: conic-gradient(from 12deg, #475569, #64748b 32%, #b2becd 53%, #718397 72%, #475569);
-    box-shadow:
-      0 0 0 1px rgba(113, 131, 151, 0.5),
-      0 5px 11px -8px rgba(71, 85, 105, 0.74);
-  }
-
-  .avatar-frame--file-seed .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(226, 232, 240, 0.68);
-    background:
-      linear-gradient(0deg, transparent 76%, rgba(253, 186, 116, 0.7) 77% 80%, transparent 81%),
-      radial-gradient(circle at 78% 75%, #e2e8f0 0 2.5%, #64748b 3.5% 5%, transparent 6%);
-  }
-
-  /* 鎏金：积分进阶入门档，以慢速扫光和无光点细轨表达“流转”，强度低于樱绯与晚霞。 */
-  .avatar-frame--gold .avatar-frame__ring {
-    background: conic-gradient(
-      from 205deg,
-      #78350f,
-      #b45309 17%,
-      #e6ad35 29%,
-      #fff0b3 38%,
-      #d28b16 52%,
-      #92500b 70%,
-      #dba52f 85%,
-      #78350f
-    );
-    box-shadow:
-      0 0 0 1px rgba(245, 205, 104, 0.74),
-      0 0 0 2px rgba(217, 119, 6, 0.12),
-      inset 0 0 5px rgba(255, 247, 214, 0.52),
-      0 0 7px rgba(245, 158, 11, 0.22),
-      0 5px 12px -7px rgba(146, 80, 11, 0.82);
-  }
-
-  .avatar-frame--gold .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    overflow: hidden;
-    border: 1px solid rgba(255, 240, 176, 0.62);
-    background: linear-gradient(126deg, transparent 31%, rgba(255, 255, 255, 0.86) 46% 52%, transparent 67%);
-    mix-blend-mode: screen;
+  .avatar-frame--gold .avatar-frame__motion--front::before {
+    top: 8px;
+    left: 12px;
+    width: 26px;
+    height: 2px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, transparent, #fff7c2, transparent);
+    filter: blur(0.3px) drop-shadow(0 0 3px #fbbf24);
+    transform: rotate(-34deg);
     animation: frame-gold-glint 4.6s ease-in-out infinite;
   }
 
-  .avatar-frame--gold .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -4%;
-    border: 1px solid transparent;
-    border-top-color: rgba(255, 240, 176, 0.76);
-    border-right-color: rgba(217, 119, 6, 0.4);
+  .avatar-frame--gold .avatar-frame__motion--front::after {
+    right: 12px;
+    bottom: 13px;
+    width: 4px;
+    height: 4px;
+    background: #fff7c2;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    animation: frame-local-twinkle 2.7s ease-in-out infinite;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--sakura .avatar-frame__art {
+    animation: frame-sakura-bloom 5.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--sakura .avatar-frame__motion--front i:nth-child(1) {
+    top: 7px;
+    left: 14px;
+    width: 6px;
+    height: 4px;
+    border-radius: 70% 25% 70% 25%;
+    background: #ffd1df;
+    animation: frame-petal-drift 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--sakura .avatar-frame__motion--front i:nth-child(2) {
+    top: 14px;
+    right: 9px;
+    width: 5px;
+    height: 3px;
+    border-radius: 70% 25% 70% 25%;
+    background: #ff9fbd;
+    animation: frame-petal-drift 4.8s 1.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--sakura .avatar-frame__motion--front i:nth-child(3) {
+    right: 15px;
+    bottom: 7px;
+    width: 6px;
+    height: 4px;
+    border-radius: 70% 25% 70% 25%;
+    background: #ffe0e9;
+    animation: frame-petal-drift 4.8s 3.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--sunset .avatar-frame__art {
+    animation: frame-sunset-sky 5.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--sunset .avatar-frame__motion--back::before {
+    top: 8px;
+    right: 9px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    box-shadow: 0 0 4px rgba(245, 158, 11, 0.26);
-    animation: frame-premium-orbit 14s linear infinite;
+    background: radial-gradient(circle, #fff7cc 0 28%, #ffb168 48%, transparent 72%);
+    animation: frame-sunset-sun 4.2s ease-in-out infinite;
   }
 
-  .avatar-frame--gold .avatar-frame__orbit::after {
-    position: absolute;
-    top: 7%;
-    right: 13%;
-    width: max(2px, 5%);
-    height: max(2px, 5%);
-    content: '';
+  .avatar-frame--sunset .avatar-frame__motion--back::after {
+    left: 10px;
+    bottom: 9px;
+    width: 38px;
+    height: 8px;
     border-radius: 50%;
-    background: #fff3bf;
-    box-shadow: 0 0 4px rgba(245, 158, 11, 0.62);
+    border-top: 2px solid rgba(255, 227, 209, 0.86);
+    animation: frame-cloud-breathe 5.4s ease-in-out infinite;
   }
 
-  /* 樱绯：柔和双层花瓣环与轻微呼吸，不以颜色轮换冒充动效。 */
-  .avatar-frame--sakura .avatar-frame__ring {
-    background: conic-gradient(from 15deg, #fce7f3, #f472b6, #be185d, #f9a8d4, #fff1f7, #ec4899, #fce7f3);
-    box-shadow:
-      0 0 0 2px rgba(251, 207, 232, 0.76),
-      inset 0 0 5px rgba(255, 255, 255, 0.62),
-      0 0 8px rgba(244, 114, 182, 0.3),
-      0 7px 16px -8px rgba(219, 39, 119, 0.8);
+  /* 炫彩成就：主题局部运动；炫彩积分：增加第二动态通道和更明显能量变化。 */
+  .avatar-frame--dynamic.avatar-frame--streak-month .avatar-frame__art {
+    animation: frame-moonlight-breathe 5.8s ease-in-out infinite;
   }
 
-  .avatar-frame--sakura .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    background:
-      radial-gradient(ellipse at 18% 38%, rgba(255, 255, 255, 0.92) 0 7%, transparent 8%),
-      radial-gradient(ellipse at 78% 23%, rgba(255, 222, 239, 0.98) 0 6%, transparent 7%),
-      radial-gradient(ellipse at 86% 72%, rgba(255, 255, 255, 0.85) 0 5%, transparent 6%),
-      radial-gradient(ellipse at 26% 84%, rgba(244, 114, 182, 0.85) 0 6%, transparent 7%);
-    filter: drop-shadow(0 1px 2px rgba(190, 24, 93, 0.26));
-    animation: frame-sakura-float 4.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--sakura .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -5%;
-    border: 1px solid rgba(251, 207, 232, 0.68);
-    border-top-color: transparent;
-    border-left-color: rgba(244, 114, 182, 0.28);
-    border-radius: 50%;
-    animation: frame-premium-orbit-reverse 11.5s linear infinite;
-  }
-
-  .avatar-frame--sakura .avatar-frame__orbit::after {
-    position: absolute;
-    right: 7%;
-    bottom: 12%;
-    width: max(3px, 8%);
-    height: max(2px, 5%);
-    content: '';
-    border-radius: 80% 20% 70% 30%;
-    background: #fff1f7;
-    box-shadow: 0 0 6px rgba(244, 114, 182, 0.76);
-    transform: rotate(34deg);
-  }
-
-  /* 霓虹：高亮能量环与电弧轨道，作为传说入门档；强度低于星河、龙曜和天穹。 */
-  .avatar-frame--neon .avatar-frame__ring {
-    background: conic-gradient(from 0deg, #22d3ee, #3b82f6 23%, #7c3aed 46%, #e879f9 68%, #22d3ee);
-    box-shadow:
-      0 0 0 1px rgba(207, 250, 254, 0.46),
-      0 0 9px rgba(34, 211, 238, 0.78),
-      0 0 20px rgba(168, 85, 247, 0.56),
-      inset 0 0 6px rgba(255, 255, 255, 0.72);
-    animation: frame-neon-pulse 2.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--neon .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 1px solid rgba(103, 232, 249, 0.7);
-    box-shadow:
-      0 0 0 1px rgba(192, 132, 252, 0.32),
-      0 0 8px rgba(34, 211, 238, 0.5);
-    clip-path: polygon(0 39%, 29% 0, 100% 24%, 78% 100%, 10% 82%);
-    animation: frame-neon-orbit 6s linear infinite;
-  }
-
-  .avatar-frame--neon .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -9%;
-    border: 1.5px solid rgba(103, 232, 249, 0.64);
-    border-left-color: transparent;
-    border-bottom-color: rgba(192, 132, 252, 0.34);
-    border-radius: 50%;
-    animation: frame-neon-track 7.5s linear infinite;
-  }
-
-  .avatar-frame--neon .avatar-frame__orbit::before {
-    position: absolute;
-    left: 1%;
-    bottom: 17%;
-    width: 18%;
-    height: max(2px, 3.5%);
-    content: '';
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, #67e8f9 58%, #e879f9);
-    box-shadow:
-      0 0 5px rgba(34, 211, 238, 0.82),
-      0 0 8px rgba(232, 121, 249, 0.56);
-    transform: rotate(32deg);
-  }
-
-  .avatar-frame--neon .avatar-frame__orbit::after {
-    position: absolute;
-    top: 5%;
-    right: 10%;
-    width: max(3px, 8%);
-    height: max(3px, 8%);
-    content: '';
-    border-radius: 50%;
-    background: #ecfeff;
-    box-shadow:
-      0 0 5px #22d3ee,
-      0 0 9px rgba(192, 132, 252, 0.72);
-  }
-
-  .avatar-frame--neon .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 9%;
-    right: -10%;
-    width: 31%;
-    height: max(2px, 3.5%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.52) 43%, #ecfeff);
-    box-shadow:
-      0 0 7px rgba(34, 211, 238, 0.72),
-      0 0 9px rgba(192, 132, 252, 0.66);
-    transform: rotate(-32deg);
-    transform-origin: right center;
-    animation: frame-neon-comet 4.8s ease-in-out infinite;
-  }
-
-  /* 晚霞：暖色地平线与柔和的暮光呼吸。 */
-  .avatar-frame--sunset .avatar-frame__ring {
-    background: conic-gradient(from 205deg, #7c3aed, #c026d3 20%, #fb7185 43%, #fb923c 64%, #fcd34d 79%, #7c3aed);
-    box-shadow:
-      0 0 0 1px rgba(253, 186, 116, 0.65),
-      inset 0 0 5px rgba(255, 237, 213, 0.48),
-      0 0 8px rgba(251, 113, 133, 0.28),
-      0 7px 17px -8px rgba(190, 24, 93, 0.72);
-  }
-
-  .avatar-frame--sunset .avatar-frame__motif {
-    inset: var(--frame-motif-inset);
-    background: linear-gradient(155deg, transparent 48%, rgba(255, 247, 237, 0.7) 50%, transparent 53%);
-    animation: frame-sunset-glow 4.8s ease-in-out infinite;
-  }
-
-  .avatar-frame--sunset .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -5%;
-    border: 1px solid rgba(253, 186, 116, 0.66);
-    border-left-color: transparent;
-    border-bottom-color: rgba(192, 38, 211, 0.24);
-    border-radius: 50%;
-    animation: frame-premium-orbit 12s linear infinite;
-  }
-
-  .avatar-frame--sunset .avatar-frame__orbit::after {
-    position: absolute;
-    top: 8%;
-    right: 9%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    content: '';
-    border-radius: 50%;
-    background: #fef3c7;
-    box-shadow: 0 0 7px rgba(251, 146, 60, 0.86);
-  }
-
-  .avatar-frame--sunset .avatar-frame__orbit::before {
-    position: absolute;
-    bottom: 13%;
-    left: 2%;
-    width: 20%;
-    height: max(2px, 3%);
-    content: '';
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(251, 113, 133, 0.68), #fde68a);
-    box-shadow: 0 0 5px rgba(251, 146, 60, 0.5);
-    transform: rotate(32deg);
-  }
-
-  /* 潮汐：积分炫彩入门档，以内外双海流、椭圆潮轨和三枚气泡拉开与进阶档的层级。 */
-  .avatar-frame--ocean .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 76% 16%, rgba(255, 255, 255, 0.96) 0 2.5%, transparent 3.8%),
-      conic-gradient(from 155deg, #082f49, #0369a1 16%, #06b6d4 34%, #a5f3fc 48%, #38bdf8 61%, #2563eb 78%, #082f49);
-    box-shadow:
-      0 0 0 1px rgba(125, 211, 252, 0.7),
-      0 0 0 3px rgba(14, 165, 233, 0.16),
-      inset 0 0 6px rgba(224, 242, 254, 0.58),
-      0 0 13px rgba(34, 211, 238, 0.46),
-      0 7px 17px -8px rgba(2, 132, 199, 0.78);
-  }
-
-  .avatar-frame--ocean .avatar-frame__ring::before,
-  .avatar-frame--ocean .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  .avatar-frame--ocean .avatar-frame__ring::before {
-    inset: -5%;
-    border: 2px solid transparent;
-    border-top-color: rgba(224, 242, 254, 0.82);
-    border-right-color: rgba(34, 211, 238, 0.5);
-    border-bottom-color: rgba(37, 99, 235, 0.2);
-    box-shadow: 0 0 5px rgba(14, 165, 233, 0.34);
-    animation: frame-ocean-current 6.8s ease-in-out infinite;
-  }
-
-  .avatar-frame--ocean .avatar-frame__ring::after {
-    inset: 6%;
-    border: 1px solid rgba(224, 242, 254, 0.72);
-    border-top-color: rgba(14, 165, 233, 0.2);
-    border-left-color: rgba(37, 99, 235, 0.52);
-    transform: rotate(-22deg);
-  }
-
-  .avatar-frame--ocean .avatar-frame__motif {
-    inset: -4%;
-    background:
-      radial-gradient(circle at 25% 18%, rgba(240, 249, 255, 0.96) 0 3%, transparent 4%),
-      radial-gradient(circle at 88% 47%, rgba(186, 230, 253, 0.92) 0 4%, transparent 5%),
-      radial-gradient(circle at 33% 91%, rgba(224, 242, 254, 0.88) 0 2%, transparent 3%);
-    filter: drop-shadow(0 0 4px rgba(14, 165, 233, 0.54));
-    animation: frame-ocean-float 4s ease-in-out infinite;
-  }
-
-  .avatar-frame--ocean .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -9%;
-    border: 1.5px solid rgba(186, 230, 253, 0.72);
-    border-left-color: transparent;
-    border-bottom-color: rgba(37, 99, 235, 0.24);
-    border-radius: 50%;
-    box-shadow: 0 0 5px rgba(56, 189, 248, 0.28);
-    transform: rotate(-18deg) scaleY(0.84);
-    animation: frame-ocean-orbit 8.2s linear infinite;
-  }
-
-  .avatar-frame--ocean .avatar-frame__orbit::before,
-  .avatar-frame--ocean .avatar-frame__orbit::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-  }
-
-  .avatar-frame--ocean .avatar-frame__orbit::before {
-    left: 5%;
-    bottom: 17%;
-    width: max(2px, 5%);
-    height: max(2px, 5%);
-    background: rgba(240, 249, 255, 0.92);
-    box-shadow: 0 0 5px rgba(14, 165, 233, 0.64);
-  }
-
-  .avatar-frame--ocean .avatar-frame__orbit::after {
-    top: 9%;
-    right: 10%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    background: #e0f2fe;
-    box-shadow: 0 0 6px rgba(34, 211, 238, 0.76);
-  }
-
-  /* 极光：中高档的冷色光幕，通过反向旋转产生缓慢流动。 */
-  .avatar-frame--aurora .avatar-frame__ring {
-    background: conic-gradient(
-      from 25deg,
-      #042f2e,
-      #10b981 17%,
-      #67e8f9 36%,
-      #818cf8 55%,
-      #d946ef 73%,
-      #34d399 89%,
-      #042f2e
-    );
-    box-shadow:
-      0 0 0 1px rgba(167, 243, 208, 0.66),
-      inset 0 0 6px rgba(207, 250, 254, 0.5),
-      0 0 15px rgba(45, 212, 191, 0.58),
-      0 8px 20px -10px rgba(99, 102, 241, 0.78);
-    animation: frame-aurora-turn 10s linear infinite;
-  }
-
-  .avatar-frame--aurora .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    border: 2px solid transparent;
-    border-top-color: rgba(216, 180, 254, 0.78);
-    border-right-color: rgba(153, 246, 228, 0.7);
-    border-radius: 44% 56% 48% 52%;
-    filter: blur(0.25px);
-    animation: frame-aurora-wave 5.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--aurora .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -7%;
-    border: 1.5px solid rgba(103, 232, 249, 0.66);
-    border-left-color: transparent;
-    border-bottom-color: rgba(216, 180, 254, 0.3);
-    border-radius: 50%;
-    animation: frame-aurora-orbit 9s linear infinite;
-  }
-
-  .avatar-frame--aurora .avatar-frame__orbit::after {
-    position: absolute;
-    top: 2%;
-    right: 16%;
-    width: max(3px, 8%);
-    height: max(3px, 8%);
-    content: '';
-    border-radius: 50%;
-    background: #ecfeff;
-    box-shadow:
-      0 0 5px #67e8f9,
-      0 0 9px rgba(192, 132, 252, 0.64);
-  }
-
-  .avatar-frame--aurora .avatar-frame__orbit::before {
-    position: absolute;
-    bottom: 11%;
-    left: -1%;
-    width: 23%;
-    height: max(2px, 4%);
-    content: '';
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, #5eead4 48%, #c084fc);
-    box-shadow:
-      0 0 5px rgba(45, 212, 191, 0.76),
-      0 0 8px rgba(192, 132, 252, 0.42);
-    transform: rotate(30deg);
-  }
-
-  /* 星河：深紫星云、星点、环绕星轨和掠过的彗星，作为高阶款的专属语言。 */
-  .avatar-frame--galaxy .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 68% 22%, rgba(255, 255, 255, 0.98) 0 3%, transparent 4%),
-      radial-gradient(circle at 21% 68%, rgba(255, 255, 255, 0.85) 0 2.5%, transparent 3.5%),
-      conic-gradient(from 45deg, #312e81, #7c3aed 18%, #ec4899 39%, #60a5fa 60%, #4f46e5 80%, #312e81);
-    box-shadow:
-      0 0 0 2px rgba(196, 181, 253, 0.72),
-      0 0 var(--frame-galaxy-glow) rgba(139, 92, 246, 0.74),
-      0 var(--frame-galaxy-drop-y) var(--frame-galaxy-drop-blur) var(--frame-galaxy-drop-spread) rgba(49, 46, 129, 0.8);
-    animation: frame-galaxy-turn 13s linear infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__ring::before,
-  .avatar-frame--galaxy .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__ring::before {
-    inset: -12%;
-    background: conic-gradient(
-      from 12deg,
-      #e0e7ff,
-      #818cf8 18%,
-      #c084fc 36%,
-      #fff 50%,
-      #60a5fa 68%,
-      #7c3aed 84%,
-      #e0e7ff
-    );
-    clip-path: polygon(
-      50% 0,
-      57% 39%,
-      79% 9%,
-      67% 43%,
-      100% 50%,
-      67% 57%,
-      79% 91%,
-      57% 61%,
-      50% 100%,
-      43% 61%,
-      21% 91%,
-      33% 57%,
-      0 50%,
-      33% 43%,
-      21% 9%,
-      43% 39%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(129, 140, 248, 0.82));
-    animation: frame-galaxy-crown 3.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__ring::after {
-    inset: 4%;
-    border: 1.5px solid rgba(224, 231, 255, 0.86);
-    border-top-color: #fff;
-    border-right-color: #c084fc;
-    border-bottom-color: #60a5fa;
-    box-shadow:
-      inset 0 0 4px rgba(255, 255, 255, 0.68),
-      0 0 4px rgba(196, 181, 253, 0.62);
-  }
-
-  .avatar-frame--galaxy .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    background:
-      radial-gradient(circle at 19% 18%, #fff 0 2%, transparent 3%),
-      radial-gradient(circle at 84% 38%, #e0e7ff 0 1.8%, transparent 3%),
-      radial-gradient(circle at 44% 95%, #fff 0 1.7%, transparent 3%);
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.9));
-    animation: frame-galaxy-twinkle 2.7s ease-in-out infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__motif::before,
-  .avatar-frame--galaxy .avatar-frame__motif::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
-    background: linear-gradient(90deg, transparent 43%, rgba(255, 255, 255, 0.96) 46% 54%, transparent 57%);
-    clip-path: polygon(
-      46% 0,
-      54% 0,
-      59% 41%,
-      100% 46%,
-      100% 54%,
-      59% 59%,
-      54% 100%,
-      46% 100%,
-      41% 59%,
-      0 54%,
-      0 46%,
-      41% 41%
-    );
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.95));
-  }
-
-  .avatar-frame--galaxy .avatar-frame__motif::before {
-    right: 5%;
-    bottom: 13%;
-    width: 13%;
-    height: 13%;
-    animation: frame-galaxy-starburst 4.6s 2.3s ease-in-out infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__motif::after {
-    top: 7%;
-    left: 12%;
-    width: 20%;
-    height: 20%;
-    aspect-ratio: 1;
-    animation: frame-galaxy-starburst 4.6s ease-in-out infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -11%;
-    border: 2px solid rgba(224, 231, 255, 0.62);
-    border-right-color: transparent;
-    border-bottom-color: transparent;
-    border-radius: 50%;
-    box-shadow:
-      0 0 var(--frame-galaxy-orbit-glow) rgba(196, 181, 253, 0.62),
-      inset 0 0 var(--frame-galaxy-orbit-glow) rgba(96, 165, 250, 0.2);
-    transform: rotate(-24deg);
-    animation: frame-galaxy-orbit 7.4s linear infinite;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__orbit::before,
-  .avatar-frame--galaxy .avatar-frame__orbit::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
-    border-radius: 50%;
-  }
-
-  .avatar-frame--galaxy .avatar-frame__orbit::before {
-    right: 4%;
-    bottom: 10%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    background: #c4b5fd;
-    box-shadow:
-      0 0 0 1px rgba(224, 231, 255, 0.68),
-      0 0 var(--frame-galaxy-star-glow) rgba(168, 85, 247, 0.84);
-  }
-
-  .avatar-frame--galaxy .avatar-frame__orbit::after {
-    top: -2px;
-    left: 51%;
-    width: max(3px, 10%);
-    height: max(3px, 10%);
-    background: #fff;
-    box-shadow:
-      0 0 0 2px rgba(219, 234, 254, 0.58),
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.86),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(129, 140, 248, 0.76);
-  }
-
-  .avatar-frame--galaxy .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 6%;
-    right: -10%;
-    width: 38%;
-    height: max(2px, 4%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.38) 30%, rgba(196, 181, 253, 0.76) 66%, #fff);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.94),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(129, 140, 248, 0.58);
-    transform: rotate(-28deg);
-    transform-origin: right center;
-    animation: frame-galaxy-comet 4.9s ease-in-out infinite;
-  }
-
-  /* 赤焰：金橙火芯叠加暗红外焰，用明暗跳动表达热度。 */
-  .avatar-frame--flame .avatar-frame__ring {
-    background: conic-gradient(
-      from 15deg,
-      #7f1d1d,
-      #dc2626 18%,
-      #fb923c 38%,
-      #fef08a 51%,
-      #f97316 66%,
-      #991b1b 84%,
-      #7f1d1d
-    );
-    box-shadow:
-      0 0 0 1px rgba(254, 215, 170, 0.7),
-      inset 0 0 6px rgba(254, 240, 138, 0.54),
-      0 0 15px rgba(249, 115, 22, 0.7),
-      0 8px 19px -10px rgba(153, 27, 27, 0.9);
-    animation: frame-flame-pulse 2.7s ease-in-out infinite;
-  }
-
-  .avatar-frame--flame .avatar-frame__motif {
-    inset: var(--frame-motif-outset);
-    background:
-      radial-gradient(ellipse at 18% 23%, rgba(254, 240, 138, 0.9) 0 5%, transparent 6%),
-      radial-gradient(ellipse at 82% 20%, rgba(251, 146, 60, 0.9) 0 6%, transparent 7%),
-      radial-gradient(ellipse at 90% 77%, rgba(254, 215, 170, 0.82) 0 5%, transparent 6%),
-      radial-gradient(ellipse at 25% 89%, rgba(239, 68, 68, 0.88) 0 6%, transparent 7%);
-    clip-path: polygon(
-      50% 0,
-      62% 9%,
-      76% 3%,
-      82% 18%,
-      98% 26%,
-      91% 43%,
-      100% 58%,
-      87% 70%,
-      82% 91%,
-      63% 88%,
-      50% 100%,
-      37% 89%,
-      18% 92%,
-      14% 72%,
-      0 60%,
-      9% 43%,
-      2% 27%,
-      19% 18%,
-      25% 3%,
-      39% 10%
-    );
-    animation: frame-flame-dance 3.1s ease-in-out infinite;
-  }
-
-  .avatar-frame--flame .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -7%;
-    border: 1.5px solid rgba(254, 215, 170, 0.64);
-    border-left-color: transparent;
-    border-bottom-color: rgba(220, 38, 38, 0.34);
-    border-radius: 50%;
-    animation: frame-flame-orbit 7.8s linear infinite;
-  }
-
-  .avatar-frame--flame .avatar-frame__orbit::before {
-    position: absolute;
-    left: 2%;
-    bottom: 13%;
-    width: 17%;
-    height: max(2px, 3.5%);
-    content: '';
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, #fb923c 55%, #fef08a);
-    box-shadow:
-      0 0 5px rgba(249, 115, 22, 0.76),
-      0 0 8px rgba(220, 38, 38, 0.48);
-    transform: rotate(34deg);
-  }
-
-  .avatar-frame--flame .avatar-frame__orbit::after {
-    position: absolute;
-    top: 4%;
-    right: 12%;
-    width: max(3px, 9%);
-    height: max(3px, 9%);
-    content: '';
-    border-radius: 52% 48% 72% 28%;
-    background: radial-gradient(circle at 38% 32%, #fff7d6, #fbbf24 45%, #dc2626 100%);
-    box-shadow:
-      0 0 5px #f59e0b,
-      0 0 10px rgba(220, 38, 38, 0.72);
-  }
-
-  .avatar-frame--flame .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 12%;
-    right: -6%;
-    width: 27%;
-    height: max(2px, 3%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(249, 115, 22, 0.5) 48%, #fef3c7);
-    box-shadow: 0 0 7px rgba(239, 68, 68, 0.62);
-    transform: rotate(-30deg);
-    transform-origin: right center;
-    animation: frame-flame-comet 4.6s ease-in-out infinite;
-  }
-
-  /* 龙曜：龙鳞外冠、黑红珐琅双环、双火星轨和焰尾，视觉强度高于星河。 */
-  .avatar-frame--dragon .avatar-frame__ring {
-    background: repeating-conic-gradient(
-      from 8deg,
-      #450a0a 0 8deg,
-      #b91c1c 8deg 18deg,
-      #f59e0b 18deg 24deg,
-      #7f1d1d 24deg 34deg
-    );
-    box-shadow:
-      0 0 0 2px rgba(245, 158, 11, 0.74),
-      0 0 0 4px rgba(127, 29, 29, 0.34),
-      inset 0 0 7px rgba(254, 215, 170, 0.5),
-      0 0 20px rgba(245, 158, 11, 0.78),
-      0 0 30px rgba(220, 38, 38, 0.46),
-      0 10px 24px -10px rgba(69, 10, 10, 0.98);
-    animation: frame-dragon-turn 15s linear infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__ring::before,
-  .avatar-frame--dragon .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  .avatar-frame--dragon .avatar-frame__ring::before {
-    inset: -18%;
-    background: conic-gradient(
-      from 0deg,
-      #fff7d6,
-      #f59e0b 14%,
-      #991b1b 28%,
-      #fbbf24 43%,
-      #fef3c7 50%,
-      #dc2626 66%,
-      #f59e0b 82%,
-      #fff7d6
-    );
-    clip-path: polygon(
-      50% 0,
-      57% 34%,
-      68% 5%,
-      66% 39%,
-      85% 15%,
-      72% 44%,
-      100% 50%,
-      72% 56%,
-      85% 85%,
-      66% 61%,
-      68% 95%,
-      57% 66%,
-      50% 100%,
-      43% 66%,
-      32% 95%,
-      34% 61%,
-      15% 85%,
-      28% 56%,
-      0 50%,
-      28% 44%,
-      15% 15%,
-      34% 39%,
-      32% 5%,
-      43% 34%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(254, 240, 138, 0.94))
-      drop-shadow(0 0 var(--frame-galaxy-star-wide-glow) rgba(239, 68, 68, 0.92));
-    animation: frame-dragon-crown 5.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__ring::after {
-    inset: 4%;
-    border: 2px solid rgba(254, 243, 199, 0.88);
-    border-right-color: #dc2626;
-    border-bottom-color: #f59e0b;
-    box-shadow:
-      inset 0 0 5px rgba(69, 10, 10, 0.68),
-      inset 0 0 9px rgba(245, 158, 11, 0.34),
-      0 0 7px rgba(251, 191, 36, 0.82);
-    animation: frame-dragon-inner 8s linear infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__motif {
-    inset: -7%;
-    border: 1.5px solid rgba(254, 215, 170, 0.82);
-    background:
-      radial-gradient(ellipse at 22% 23%, rgba(254, 243, 199, 0.95) 0 4%, transparent 5%),
-      radial-gradient(ellipse at 78% 77%, rgba(251, 191, 36, 0.9) 0 4%, transparent 5%),
-      repeating-conic-gradient(from 0deg, rgba(254, 215, 170, 0.58) 0deg 2deg, transparent 2deg 30deg);
-    box-shadow:
-      inset 0 0 5px rgba(251, 191, 36, 0.34),
-      0 0 7px rgba(220, 38, 38, 0.38);
-    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.82));
-    animation: frame-dragon-scales 9s linear infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -15%;
-    border: 2.5px solid rgba(251, 191, 36, 0.82);
-    border-left-color: transparent;
-    border-bottom-color: transparent;
-    border-radius: 50%;
-    box-shadow:
-      0 0 var(--frame-galaxy-orbit-glow) rgba(254, 240, 138, 0.7),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(220, 38, 38, 0.56);
-    animation: frame-dragon-orbit 5.9s linear infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__orbit::before,
-  .avatar-frame--dragon .avatar-frame__orbit::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
-    border-radius: 50%;
-  }
-
-  .avatar-frame--dragon .avatar-frame__orbit::before {
-    left: 2%;
-    bottom: 13%;
-    width: max(4px, 8%);
-    height: max(4px, 8%);
-    background: #fb7185;
-    box-shadow:
-      0 0 6px #dc2626,
-      0 0 12px rgba(245, 158, 11, 0.72);
-  }
-
-  .avatar-frame--dragon .avatar-frame__orbit::after {
-    top: 5%;
-    right: 12%;
-    width: max(3px, 9%);
-    height: max(3px, 9%);
-    background: #fef3c7;
-    box-shadow:
-      0 0 6px #f59e0b,
-      0 0 11px rgba(220, 38, 38, 0.7);
-  }
-
-  .avatar-frame--dragon .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 8%;
-    right: -18%;
-    width: 52%;
-    height: max(3px, 6%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(220, 38, 38, 0.42) 30%, #f59e0b 66%, #fff7d6);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(251, 191, 36, 0.92),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(220, 38, 38, 0.76);
-    transform: rotate(-29deg);
-    transform-origin: right center;
-    animation: frame-dragon-comet 4s ease-in-out infinite;
-  }
-
-  /* 天穹：以日蚀星冕和贴环星轨压过龙曜；星轨保留层次，但不再用夸张椭圆抢占主体。 */
-  .avatar-frame--celestial .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 70% 19%, #fff 0 2.8%, transparent 4%),
-      radial-gradient(circle at 21% 73%, #fde68a 0 2.2%, transparent 3.4%),
-      radial-gradient(circle at 44% 91%, #c4b5fd 0 1.8%, transparent 3%),
-      conic-gradient(
-        from 212deg,
-        #020617 0 13%,
-        #312e81 23%,
-        #713f12 34%,
-        #facc15 43%,
-        #fff 49%,
-        #f59e0b 56%,
-        #6d28d9 69%,
-        #172554 84%,
-        #020617 100%
-      );
-    box-shadow:
-      0 0 0 2px #fde68a,
-      0 0 0 5px rgba(49, 46, 129, 0.92),
-      0 0 0 7px rgba(250, 204, 21, 0.48),
-      inset 0 0 9px rgba(255, 247, 214, 0.62),
-      0 0 calc(var(--frame-celestial-glow) + 7px) rgba(250, 204, 21, 0.9),
-      0 0 calc(var(--frame-celestial-glow) + 17px) rgba(91, 33, 182, 0.62),
-      0 var(--frame-galaxy-drop-y) var(--frame-galaxy-drop-blur) var(--frame-galaxy-drop-spread) rgba(15, 23, 42, 0.96);
-    animation: frame-celestial-lustre 3.8s ease-in-out infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__ring::before,
-  .avatar-frame--celestial .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  /* 白金日蚀冠明显越出环体；深靛外辉确保浅色卡片上也有清晰轮廓。 */
-  .avatar-frame--celestial .avatar-frame__ring::before {
-    inset: -25%;
-    background: conic-gradient(from 18deg, #fff, #facc15 22%, #a16207 38%, #c4b5fd 56%, #7c3aed 72%, #fde68a 88%, #fff);
-    clip-path: polygon(
-      50% 0,
-      55% 34%,
-      64% 4%,
-      62% 38%,
-      79% 9%,
-      69% 42%,
-      92% 22%,
-      74% 46%,
-      100% 50%,
-      74% 54%,
-      92% 78%,
-      69% 58%,
-      79% 91%,
-      62% 62%,
-      64% 96%,
-      55% 66%,
-      50% 100%,
-      45% 66%,
-      36% 96%,
-      38% 62%,
-      21% 91%,
-      31% 58%,
-      8% 78%,
-      26% 54%,
-      0 50%,
-      26% 46%,
-      8% 22%,
-      31% 42%,
-      21% 9%,
-      38% 38%,
-      36% 4%,
-      45% 34%
-    );
-    filter: drop-shadow(0 0 3px rgba(30, 27, 75, 1)) drop-shadow(0 0 8px rgba(76, 29, 149, 0.86))
-      drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.98))
-      drop-shadow(0 0 var(--frame-galaxy-star-wide-glow) rgba(250, 204, 21, 0.94));
-    animation: frame-celestial-crown 10.5s linear infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__ring::after {
-    inset: 3.5%;
-    border: 2px solid rgba(196, 181, 253, 0.88);
-    border-top-color: #fff7d6;
-    border-right-color: #fff;
-    border-bottom-color: #f59e0b;
-    box-shadow:
-      inset 0 0 6px rgba(15, 23, 42, 0.72),
-      inset 0 0 10px rgba(250, 204, 21, 0.26),
-      0 0 6px rgba(255, 247, 214, 0.7);
-    animation: frame-celestial-inner-ring 7.8s linear infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__motif {
-    inset: -11%;
-    border: var(--frame-constellation-stroke) dotted rgba(255, 247, 214, 0.9);
-    background:
-      radial-gradient(circle at 17% 22%, #fff 0 2.1%, transparent 3.3%),
-      radial-gradient(circle at 82% 67%, #fde68a 0 1.8%, transparent 3%),
-      radial-gradient(circle at 36% 94%, #ddd6fe 0 1.7%, transparent 2.8%),
-      repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.58) 0deg 1.5deg, transparent 1.5deg 45deg);
-    box-shadow: inset 0 0 7px rgba(124, 58, 237, 0.24);
-    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.84));
-    animation: frame-celestial-constellation 4s ease-in-out infinite;
-  }
-
-  /* 顶部白金主钻和底部紫晶严格对称，不再堆叠随机星点。 */
-  .avatar-frame--celestial .avatar-frame__motif::before,
-  .avatar-frame--celestial .avatar-frame__motif::after {
-    position: absolute;
+  .avatar-frame--streak-month .avatar-frame__motion--front::before {
+    top: 7px;
     left: 50%;
-    aspect-ratio: 1;
-    content: '';
-    clip-path: polygon(50% 0, 62% 37%, 100% 50%, 62% 63%, 50% 100%, 38% 63%, 0 50%, 38% 37%);
-    transform: translateX(-50%);
-    pointer-events: none;
-  }
-
-  .avatar-frame--celestial .avatar-frame__motif::before {
-    top: -11%;
-    width: 21%;
-    height: 21%;
-    background: radial-gradient(circle, #fff 0 14%, #fff7d6 32%, #facc15 58%, #a16207 100%);
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(255, 247, 214, 0.96));
-    animation: frame-celestial-jewel 4.8s ease-in-out infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__motif::after {
-    bottom: -8%;
-    width: 13%;
-    height: 13%;
-    background: radial-gradient(circle, #fff 0 12%, #c4b5fd 34%, #7c3aed 68%, #312e81 100%);
-    filter: drop-shadow(0 0 var(--frame-galaxy-orbit-glow) rgba(167, 139, 250, 0.92));
-    animation: frame-celestial-jewel 4.8s 2.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -10% -13%;
-    border: 1.75px solid rgba(254, 240, 138, 0.82);
-    border-right-color: rgba(196, 181, 253, 0.62);
-    border-bottom-color: rgba(96, 165, 250, 0.18);
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
     border-radius: 50%;
-    box-shadow:
-      0 0 var(--frame-galaxy-orbit-glow) rgba(255, 255, 255, 0.72),
-      0 0 var(--frame-galaxy-star-glow) rgba(253, 224, 71, 0.52),
-      inset 0 0 var(--frame-galaxy-orbit-glow) rgba(49, 46, 129, 0.58);
-    transform: rotate(18deg) scaleY(0.86);
-    animation: frame-celestial-orbit 7.6s linear infinite;
+    background: #f5f3ff;
+    box-shadow: 0 0 7px #c4b5fd;
+    transform-origin: 3.5px 38px;
+    animation: frame-moon-phase-travel 5.8s ease-in-out infinite;
   }
 
-  .avatar-frame--celestial .avatar-frame__orbit::before,
-  .avatar-frame--celestial .avatar-frame__orbit::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
+  .avatar-frame--streak-month .avatar-frame__motion--back::after {
+    top: 6px;
+    right: 8px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.9), rgba(165, 180, 252, 0.32) 46%, transparent 72%);
+    animation: frame-local-pulse 3.4s ease-in-out infinite;
   }
 
-  .avatar-frame--celestial .avatar-frame__orbit::before {
-    right: 5%;
-    bottom: 8%;
-    width: max(5px, 10%);
-    height: max(5px, 10%);
-    background: radial-gradient(circle at 35% 30%, #fff, #c4b5fd 50%, #4f46e5 100%);
-    box-shadow:
-      0 0 0 1px rgba(224, 231, 255, 0.72),
-      0 0 var(--frame-galaxy-star-glow) rgba(139, 92, 246, 0.82);
+  .avatar-frame--dynamic.avatar-frame--note-masterpiece .avatar-frame__art {
+    animation: frame-note-metal-light 5.2s ease-in-out infinite;
   }
 
-  .avatar-frame--celestial .avatar-frame__orbit::after {
-    top: -3%;
-    left: 47%;
-    width: max(6px, 12%);
-    height: max(6px, 12%);
-    background: radial-gradient(circle at 35% 30%, #fff, #fef08a 48%, #d97706 78%);
-    box-shadow:
-      0 0 0 1px rgba(253, 230, 138, 0.64),
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.86);
+  .avatar-frame--note-masterpiece .avatar-frame__art-detail {
+    clip-path: polygon(0 34%, 30% 44%, 44% 66%, 65% 54%, 100% 42%, 100% 100%, 0 100%);
+    transform-origin: 50% 72%;
+    animation: frame-note-water-flow 4.2s ease-in-out infinite;
   }
 
-  .avatar-frame--celestial .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 1%;
-    right: -28%;
-    width: 70%;
-    height: max(4px, 7%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(124, 58, 237, 0.38) 28%, #facc15 68%, #fff7d6);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 247, 214, 0.96),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(250, 204, 21, 0.68);
-    transform: rotate(-30deg);
-    transform-origin: right center;
-    animation: frame-celestial-comet 4.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--celestial .avatar-frame__comet::after {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    width: max(7px, 18%);
-    aspect-ratio: 1;
-    content: '';
-    background: radial-gradient(circle, #fff 0 14%, #fef08a 26%, #facc15 48%, transparent 70%);
-    clip-path: polygon(50% 0, 61% 38%, 100% 50%, 61% 62%, 50% 100%, 39% 62%, 0 50%, 39% 38%);
-    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.96));
-    transform: translateY(-50%);
-  }
-
-  /* 万卷星库：500 书签身份框，以书页星冕、双层星库和紫金书轨表达收藏沉淀。 */
-  .avatar-frame--bookmark-archive .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 23% 18%, #fff 0 2.2%, transparent 3.4%),
-      radial-gradient(circle at 81% 70%, #fde68a 0 1.8%, transparent 3%),
-      conic-gradient(from 18deg, #0f172a, #4c1d95 14%, #a78bfa 30%, #fef3c7 47%, #7c3aed 64%, #312e81 82%, #0f172a);
-    box-shadow:
-      0 0 0 2px #8b5cf6,
-      0 0 0 4px rgba(253, 230, 138, 0.28),
-      inset 0 0 7px rgba(255, 255, 255, 0.46),
-      0 0 calc(var(--frame-celestial-glow) + 2px) rgba(124, 58, 237, 0.78),
-      0 0 calc(var(--frame-celestial-glow) + 8px) rgba(76, 29, 149, 0.32);
-    animation: frame-bookmark-archive-lustre 5.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__ring::before,
-  .avatar-frame--bookmark-archive .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
+  .avatar-frame--note-masterpiece .avatar-frame__motion--back::after {
+    left: 2px;
+    bottom: 5px;
+    width: 61px;
+    height: 20px;
+    border-bottom: 2.5px solid rgba(153, 246, 228, 0.94);
     border-radius: 50%;
-    pointer-events: none;
+    filter: drop-shadow(0 0 2px #2dd4bf);
+    animation: frame-ink-current 4.2s ease-in-out infinite;
   }
 
-  .avatar-frame--bookmark-archive .avatar-frame__ring::before {
-    inset: -11%;
-    background: conic-gradient(from 8deg, #fde68a, #8b5cf6 25%, #fff 48%, #c4b5fd 70%, #facc15 88%, #fde68a);
-    clip-path: polygon(
-      50% 0,
-      57% 39%,
-      79% 9%,
-      67% 43%,
-      100% 50%,
-      67% 57%,
-      79% 91%,
-      57% 61%,
-      50% 100%,
-      43% 61%,
-      21% 91%,
-      33% 57%,
-      0 50%,
-      33% 43%,
-      21% 9%,
-      43% 39%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(167, 139, 250, 0.82));
-    animation: frame-bookmark-archive-crown 18s linear infinite;
+  .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(1),
+  .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(2) {
+    left: 11px;
+    bottom: 13px;
+    animation: frame-river-spark 4.2s linear infinite;
   }
 
-  .avatar-frame--bookmark-archive .avatar-frame__ring::after {
-    inset: 4%;
-    border: 1.5px solid rgba(255, 255, 255, 0.76);
-    border-right-color: #fde68a;
-    border-bottom-color: #8b5cf6;
-    box-shadow:
-      inset 0 0 5px rgba(76, 29, 149, 0.52),
-      0 0 4px rgba(253, 230, 138, 0.54);
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__motif {
-    inset: -7%;
-    border: 2px dotted rgba(253, 230, 138, 0.92);
-    background:
-      radial-gradient(circle at 12% 25%, #fff 0 2%, transparent 3%),
-      radial-gradient(circle at 84% 83%, #fef3c7 0 1.8%, transparent 2.8%),
-      repeating-conic-gradient(from 0deg, rgba(255, 255, 255, 0.86) 0deg 2deg, transparent 2deg 30deg);
-    filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.64));
-    animation: frame-achievement-turn-reverse 17s linear infinite;
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__motif::before,
-  .avatar-frame--bookmark-archive .avatar-frame__motif::after {
-    position: absolute;
-    width: 17%;
-    height: 13%;
-    content: '';
-    clip-path: polygon(50% 12%, 100% 0, 84% 88%, 50% 70%, 16% 88%, 0 0);
-    background: linear-gradient(135deg, #fff, #fde68a 36%, #a78bfa 72%, #4c1d95);
-    filter: drop-shadow(0 0 4px rgba(253, 230, 138, 0.78));
-    animation: frame-bookmark-archive-page 4.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__motif::before {
-    top: 2%;
-    right: 5%;
-    transform: rotate(28deg);
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__motif::after {
-    bottom: 3%;
-    left: 6%;
-    transform: rotate(-152deg);
+  .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(2) {
     animation-delay: 2.1s;
   }
 
-  .avatar-frame--bookmark-archive .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -13%;
-    border: 2px solid rgba(196, 181, 253, 0.82);
-    border-right-color: transparent;
-    border-bottom-color: rgba(253, 230, 138, 0.34);
-    border-radius: 50%;
-    box-shadow: 0 0 var(--frame-galaxy-orbit-glow) rgba(167, 139, 250, 0.62);
-    transform: rotate(18deg) scaleY(0.82);
-    animation: frame-achievement-orbit 9.5s linear infinite;
+  .avatar-frame--dynamic.avatar-frame--file-vault .avatar-frame__art {
+    animation: frame-vault-metal-light 5s ease-in-out infinite;
   }
 
-  .avatar-frame--bookmark-archive .avatar-frame__orbit::before,
-  .avatar-frame--bookmark-archive .avatar-frame__orbit::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
-    border-radius: 50%;
+  .avatar-frame--file-vault .avatar-frame__art-detail {
+    clip-path: polygon(25% 0, 75% 0, 70% 35%, 100% 66%, 100% 100%, 0 100%, 0 66%, 30% 35%);
+    transform-origin: 50% 18%;
+    animation: frame-vault-cloud-gate 5s ease-in-out infinite;
   }
 
-  .avatar-frame--bookmark-archive .avatar-frame__orbit::before {
-    top: -3%;
-    left: 45%;
-    width: max(4px, 9%);
-    height: max(4px, 9%);
-    background: #fff;
-    box-shadow:
-      0 0 0 1px rgba(253, 230, 138, 0.76),
-      0 0 var(--frame-galaxy-star-glow) rgba(167, 139, 250, 0.9);
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__orbit::after {
-    right: 5%;
-    bottom: 8%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    background: #fde68a;
-    box-shadow: 0 0 var(--frame-galaxy-star-glow) rgba(250, 204, 21, 0.82);
-  }
-
-  .avatar-frame--bookmark-archive .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 7%;
-    right: -11%;
-    width: 38%;
-    height: max(2px, 4%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(139, 92, 246, 0.42) 30%, #fde68a 72%, #fff);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.9),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(124, 58, 237, 0.58);
-    transform: rotate(-27deg);
-    transform-origin: right center;
-    animation: frame-bookmark-archive-comet 5.8s ease-in-out infinite;
-  }
-
-  /* 文心长河：免费炫彩与积分进阶同档，墨光呼吸、完整单轨与随轨光点共同流转。 */
-  .avatar-frame--note-masterpiece .avatar-frame__ring {
-    background: conic-gradient(
-      from 225deg,
-      #022c22,
-      #047857 16%,
-      #34d399 35%,
-      #fef08a 50%,
-      #10b981 66%,
-      #064e3b 84%,
-      #022c22
+  .avatar-frame--file-vault .avatar-frame__motion--front::before {
+    top: 3px;
+    left: 50%;
+    width: 18px;
+    height: 18px;
+    margin-left: -9px;
+    background: linear-gradient(
+      135deg,
+      rgba(219, 234, 254, 0.98),
+      rgba(59, 130, 246, 0.96) 48%,
+      rgba(79, 70, 229, 0.82)
     );
-    box-shadow:
-      0 0 0 2px #047857,
-      inset 0 0 5px rgba(254, 240, 138, 0.34),
-      0 0 10px rgba(16, 185, 129, 0.5);
+    clip-path: polygon(50% 0, 64% 34%, 100% 50%, 64% 66%, 50% 100%, 36% 66%, 0 50%, 36% 34%);
+    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.9));
+    transform-origin: center;
+    animation: frame-vault-door-shine 5s ease-in-out infinite;
   }
 
-  .avatar-frame--note-masterpiece .avatar-frame__motif {
-    inset: -4%;
-    border: 1px solid rgba(254, 240, 138, 0.82);
-    background:
-      radial-gradient(ellipse at 22% 72%, transparent 0 58%, rgba(167, 243, 208, 0.72) 60% 63%, transparent 65%),
-      radial-gradient(ellipse at 76% 28%, transparent 0 59%, rgba(253, 224, 71, 0.72) 61% 64%, transparent 66%);
-    animation: frame-achievement-breathe 5.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--note-masterpiece .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -7%;
-    border: 1.5px solid rgba(167, 243, 208, 0.74);
-    border-left-color: transparent;
-    border-bottom-color: rgba(253, 224, 71, 0.24);
+  .avatar-frame--file-vault .avatar-frame__motion--front::after {
+    top: 17px;
+    left: 50%;
+    width: 24px;
+    height: 9px;
+    margin-left: -12px;
+    border-bottom: 2px solid rgba(147, 197, 253, 0.96);
     border-radius: 50%;
-    box-shadow: 0 0 5px rgba(16, 185, 129, 0.28);
-    animation: frame-free-colorful-orbit 11.5s linear infinite;
+    animation: frame-vault-cloud-rise 5s ease-in-out infinite;
   }
 
-  .avatar-frame--note-masterpiece .avatar-frame__orbit::after {
-    position: absolute;
-    top: 5%;
-    right: 13%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    content: '';
+  .avatar-frame--file-vault .avatar-frame__motion--back::after {
+    right: 5px;
+    bottom: 8px;
+    width: 25px;
+    height: 6px;
+    border-top: 2px solid rgba(224, 242, 254, 0.82);
     border-radius: 50%;
-    background: #fef08a;
-    box-shadow:
-      0 0 4px rgba(253, 224, 71, 0.88),
-      0 0 6px rgba(16, 185, 129, 0.46);
+    animation: frame-vault-cloud-drift 5s -1.4s ease-in-out infinite;
   }
 
-  /* 云阙宝库：免费炫彩与积分进阶同档，晶面呼吸、完整单轨与晶辉光点共同流转。 */
-  .avatar-frame--file-vault .avatar-frame__ring {
-    background: conic-gradient(
-      from 45deg,
-      #431407,
-      #c2410c 14%,
-      #fb923c 29%,
-      #fef3c7 44%,
-      #38bdf8 59%,
-      #075985 76%,
-      #7c2d12 90%,
-      #431407
+  .avatar-frame--file-vault .avatar-frame__motion--front i {
+    width: 4px;
+    height: 4px;
+    border-radius: 0;
+    background: #93c5fd;
+    clip-path: polygon(50% 0, 64% 36%, 100% 50%, 64% 64%, 50% 100%, 36% 64%, 0 50%, 36% 36%);
+    box-shadow: none;
+    animation: frame-vault-data-rise 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-vault .avatar-frame__motion--front i:nth-child(1) {
+    left: 8px;
+    bottom: 13px;
+  }
+
+  .avatar-frame--file-vault .avatar-frame__motion--front i:nth-child(2) {
+    right: 8px;
+    bottom: 13px;
+    animation-delay: -1.2s;
+  }
+
+  .avatar-frame--file-vault .avatar-frame__motion--front i:nth-child(3) {
+    top: 22px;
+    left: 10px;
+    animation-delay: -2.4s;
+  }
+
+  .avatar-frame--file-vault .avatar-frame__motion--front i:nth-child(4) {
+    top: 22px;
+    right: 10px;
+    animation-delay: -3.6s;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--ocean .avatar-frame__art {
+    animation: frame-ocean-metal-light 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--ocean .avatar-frame__art-detail {
+    clip-path: polygon(0 0, 52% 0, 57% 22%, 42% 41%, 53% 63%, 43% 100%, 0 100%);
+    animation: frame-ocean-water-flow 4.8s linear infinite;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--back::before {
+    top: 17px;
+    left: 3px;
+    width: 31px;
+    height: 66px;
+    background: linear-gradient(
+      180deg,
+      rgba(224, 242, 254, 0.1),
+      rgba(125, 211, 252, 0.7) 26%,
+      rgba(14, 165, 233, 0.68) 58%,
+      rgba(30, 64, 175, 0.08)
     );
-    box-shadow:
-      0 0 0 2px #c2410c,
-      inset 0 0 5px rgba(186, 230, 253, 0.32),
-      0 0 10px rgba(249, 115, 22, 0.5);
+    clip-path: polygon(
+      55% 0,
+      75% 7%,
+      64% 19%,
+      82% 31%,
+      63% 44%,
+      78% 58%,
+      57% 72%,
+      68% 86%,
+      43% 100%,
+      29% 88%,
+      45% 73%,
+      31% 58%,
+      49% 44%,
+      35% 29%,
+      53% 17%,
+      42% 6%
+    );
+    transform-origin: 72% 52%;
+    animation: frame-ocean-undertow 4.8s cubic-bezier(0.42, 0, 0.24, 1) infinite;
   }
 
-  .avatar-frame--file-vault .avatar-frame__motif {
-    inset: -5%;
-    border: 2px solid rgba(186, 230, 253, 0.76);
-    clip-path: polygon(50% 0, 82% 9%, 100% 50%, 84% 86%, 50% 100%, 14% 84%, 0 50%, 13% 15%);
-    background: repeating-conic-gradient(from 22deg, rgba(255, 255, 255, 0.76) 0deg 2deg, transparent 2deg 45deg);
-    animation: frame-achievement-breathe 5.8s ease-in-out infinite;
+  .avatar-frame--ocean .avatar-frame__motion--back::after {
+    bottom: 8px;
+    left: 15px;
+    width: 48px;
+    height: 11px;
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(125, 211, 252, 0.7) 48%,
+      rgba(2, 132, 199, 0.08)
+    );
+    clip-path: polygon(
+      0 70%,
+      14% 46%,
+      27% 58%,
+      40% 24%,
+      54% 53%,
+      68% 14%,
+      82% 48%,
+      100% 28%,
+      91% 82%,
+      72% 70%,
+      55% 100%,
+      34% 76%,
+      14% 94%
+    );
+    transform-origin: 16% 68%;
+    animation: frame-ocean-return 4.8s cubic-bezier(0.42, 0, 0.24, 1) infinite;
   }
 
-  .avatar-frame--file-vault .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -7%;
-    border: 1.5px solid rgba(186, 230, 253, 0.76);
-    border-top-color: transparent;
-    border-left-color: rgba(251, 146, 60, 0.28);
-    border-radius: 50%;
-    box-shadow: 0 0 5px rgba(56, 189, 248, 0.28);
-    animation: frame-free-colorful-orbit-reverse 12.5s linear infinite;
+  .avatar-frame--ocean .avatar-frame__motion--front::before {
+    top: 16px;
+    left: 7px;
+    width: 28px;
+    height: 12px;
+    background: linear-gradient(150deg, #fff 0 18%, #bae6fd 22% 48%, #38bdf8 52% 72%, rgba(14, 116, 144, 0.08) 100%);
+    clip-path: polygon(0 74%, 13% 52%, 24% 59%, 36% 12%, 48% 50%, 60% 3%, 72% 46%, 84% 18%, 100% 54%, 88% 88%, 0 100%);
+    transform-origin: 82% 78%;
+    animation: frame-ocean-current 4.8s cubic-bezier(0.42, 0, 0.24, 1) infinite;
   }
 
-  .avatar-frame--file-vault .avatar-frame__orbit::after {
-    position: absolute;
-    right: 7%;
-    bottom: 13%;
-    width: max(3px, 7%);
-    height: max(3px, 7%);
-    content: '';
+  .avatar-frame--ocean .avatar-frame__motion--front::after {
+    top: 43px;
+    left: 0;
+    width: 24px;
+    height: 11px;
+    background: linear-gradient(
+      145deg,
+      rgba(255, 255, 255, 0.96) 0 20%,
+      rgba(186, 230, 253, 0.9) 24% 52%,
+      rgba(14, 165, 233, 0.2) 74%,
+      transparent
+    );
+    clip-path: polygon(
+      0 76%,
+      15% 50%,
+      29% 61%,
+      43% 12%,
+      57% 52%,
+      72% 4%,
+      84% 45%,
+      100% 24%,
+      92% 84%,
+      63% 72%,
+      38% 100%,
+      14% 88%
+    );
+    transform-origin: 88% 78%;
+    animation: frame-foam-rise 4.8s cubic-bezier(0.42, 0, 0.24, 1) infinite;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--front i {
+    width: 9px;
+    height: 5px;
+    border-radius: 0;
+    background: linear-gradient(145deg, #fff 0 26%, #bae6fd 30% 60%, rgba(56, 189, 248, 0.08));
+    clip-path: polygon(0 70%, 23% 46%, 38% 58%, 54% 5%, 72% 48%, 100% 24%, 86% 88%, 42% 78%, 18% 100%);
+    box-shadow: none;
+    animation: frame-ocean-crest-run 4.8s cubic-bezier(0.42, 0, 0.24, 1) infinite;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--front i:nth-child(1) {
+    top: 13px;
+    left: 15px;
+    --ocean-crest-angle: -24deg;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--front i:nth-child(2) {
+    top: 36px;
+    left: 2px;
+    --ocean-crest-angle: -73deg;
+    animation-delay: -1.6s;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--front i:nth-child(3) {
+    bottom: 14px;
+    left: 18px;
+    --ocean-crest-angle: -132deg;
+    animation-delay: -3.2s;
+  }
+
+  .avatar-frame--ocean .avatar-frame__motion--front i:nth-child(4) {
+    bottom: 25px;
+    left: 3px;
+    width: 5px;
+    height: 5px;
     border-radius: 50%;
     background: #e0f2fe;
-    box-shadow:
-      0 0 4px rgba(56, 189, 248, 0.9),
-      0 0 6px rgba(249, 115, 22, 0.4);
+    clip-path: none;
+    animation: frame-water-drop 3.6s -0.8s cubic-bezier(0.36, 0, 0.2, 1) infinite;
   }
 
-  /* 翰墨星海：500 篇笔记传说框，笔锋星冕、墨海双环与翡翠彗笔共同形成身份轮廓。 */
-  .avatar-frame--note-constellation .avatar-frame__ring {
+  .avatar-frame--dynamic.avatar-frame--aurora .avatar-frame__art {
+    animation: frame-aurora-metal-light 5.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--aurora .avatar-frame__ambient {
     background:
-      radial-gradient(circle at 74% 16%, #fff 0 2.6%, transparent 4%),
-      radial-gradient(circle at 18% 72%, #fef08a 0 2.2%, transparent 3.6%),
-      conic-gradient(
-        from 218deg,
-        #020617,
-        #064e3b 14%,
-        #10b981 29%,
-        #fef08a 45%,
-        #a78bfa 58%,
-        #047857 76%,
-        #172554 91%,
-        #020617
-      );
-    box-shadow:
-      0 0 0 2px #34d399,
-      0 0 0 4px rgba(253, 224, 71, 0.38),
-      inset 0 0 8px rgba(254, 240, 138, 0.5),
-      0 0 calc(var(--frame-celestial-glow) + 4px) rgba(16, 185, 129, 0.82),
-      0 0 calc(var(--frame-celestial-glow) + 11px) rgba(49, 46, 129, 0.46);
-    animation: frame-bookmark-archive-lustre 4.4s ease-in-out infinite;
+      radial-gradient(ellipse at 24% 64%, rgba(34, 211, 238, 0.42), transparent 34%),
+      radial-gradient(ellipse at 76% 64%, rgba(168, 85, 247, 0.42), transparent 34%),
+      radial-gradient(circle, transparent 52%, rgba(103, 232, 249, 0.22) 66%, transparent 78%);
+    filter: blur(2px);
+    opacity: 0.62;
   }
 
-  .avatar-frame--note-constellation .avatar-frame__ring::before,
-  .avatar-frame--note-constellation .avatar-frame__ring::after,
-  .avatar-frame--file-constellation .avatar-frame__ring::before,
-  .avatar-frame--file-constellation .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    pointer-events: none;
+  .avatar-frame--aurora .avatar-frame__art-detail {
+    clip-path: polygon(0 42%, 30% 42%, 42% 68%, 58% 68%, 70% 42%, 100% 42%, 100% 100%, 0 100%);
+    opacity: 0.16;
+    animation: frame-aurora-ribbon-flow 5.4s ease-in-out infinite;
   }
 
-  .avatar-frame--note-constellation .avatar-frame__ring::before {
-    inset: -19%;
-    border-radius: 50%;
-    background: conic-gradient(
-      from 12deg,
-      #fef08a,
-      #10b981 20%,
-      #312e81 38%,
-      #fff 50%,
-      #34d399 67%,
-      #ca8a04 84%,
-      #fef08a
-    );
-    clip-path: polygon(
-      50% 0,
-      56% 34%,
-      70% 5%,
-      66% 39%,
-      88% 15%,
-      72% 44%,
-      100% 50%,
-      72% 56%,
-      88% 85%,
-      66% 61%,
-      70% 95%,
-      56% 66%,
-      50% 100%,
-      44% 66%,
-      30% 95%,
-      34% 61%,
-      12% 85%,
-      28% 56%,
-      0 50%,
-      28% 44%,
-      12% 15%,
-      34% 39%,
-      30% 5%,
-      44% 34%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(254, 240, 138, 0.92))
-      drop-shadow(0 0 var(--frame-galaxy-star-wide-glow) rgba(16, 185, 129, 0.72));
-    animation: frame-celestial-crown 14s linear infinite;
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__ring::after {
-    inset: 4%;
-    border: 2px solid rgba(254, 240, 138, 0.9);
-    border-right-color: #34d399;
-    border-bottom-color: #818cf8;
-    border-radius: 50%;
-    box-shadow: inset 0 0 6px rgba(2, 44, 34, 0.72);
-    animation: frame-celestial-inner-ring 8s linear infinite;
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__motif {
-    inset: -9%;
-    border: 1.5px dotted rgba(254, 240, 138, 0.84);
-    background:
-      radial-gradient(ellipse at 18% 76%, transparent 0 59%, rgba(167, 243, 208, 0.82) 61% 63%, transparent 65%),
-      radial-gradient(ellipse at 80% 24%, transparent 0 59%, rgba(196, 181, 253, 0.76) 61% 63%, transparent 65%);
-    filter: drop-shadow(0 0 4px rgba(52, 211, 153, 0.72));
-    animation: frame-celestial-constellation 4.6s ease-in-out infinite;
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -17% -13%;
-    border: 2px solid rgba(167, 243, 208, 0.86);
-    border-right-color: rgba(253, 224, 71, 0.88);
-    border-bottom-color: rgba(129, 140, 248, 0.28);
-    border-radius: 50%;
-    box-shadow: 0 0 var(--frame-galaxy-star-wide-glow) rgba(16, 185, 129, 0.62);
-    animation: frame-note-constellation-orbit 9.2s linear infinite;
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__orbit::before,
-  .avatar-frame--note-constellation .avatar-frame__orbit::after,
-  .avatar-frame--file-constellation .avatar-frame__orbit::before,
-  .avatar-frame--file-constellation .avatar-frame__orbit::after {
-    position: absolute;
-    aspect-ratio: 1;
-    content: '';
-    border-radius: 50%;
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__orbit::before {
-    top: -4%;
-    left: 44%;
-    width: max(5px, 10%);
-    background: #fef08a;
-    box-shadow: 0 0 var(--frame-galaxy-star-glow) rgba(253, 224, 71, 0.94);
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__orbit::after {
-    right: 4%;
-    bottom: 10%;
-    width: max(4px, 8%);
-    background: #a7f3d0;
-    box-shadow: 0 0 var(--frame-galaxy-star-glow) rgba(16, 185, 129, 0.92);
-  }
-
-  .avatar-frame--note-constellation .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 7%;
-    right: -18%;
-    width: 54%;
-    height: max(3px, 6%);
-    border-radius: 999px 0 999px 0;
-    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.46) 28%, #fef08a 70%, #fff);
-    box-shadow: 0 0 var(--frame-galaxy-star-wide-glow) rgba(52, 211, 153, 0.76);
-    transform-origin: right center;
-    animation: frame-note-constellation-comet 5.4s ease-in-out infinite;
-  }
-
-  /* 寰宇云藏：500 文件传说框，以十二面晶冠、双极星门和蓝金彗轨表达云端终极收藏。 */
-  .avatar-frame--file-constellation .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 24% 15%, #fff 0 2.5%, transparent 4%),
-      radial-gradient(circle at 82% 71%, #fde68a 0 2.1%, transparent 3.5%),
-      conic-gradient(
-        from 42deg,
-        #020617,
-        #075985 14%,
-        #38bdf8 28%,
-        #e0f2fe 42%,
-        #f59e0b 55%,
-        #7c3aed 69%,
-        #0e7490 84%,
-        #020617
-      );
-    box-shadow:
-      0 0 0 2px #38bdf8,
-      0 0 0 4px rgba(245, 158, 11, 0.42),
-      inset 0 0 8px rgba(224, 242, 254, 0.58),
-      0 0 calc(var(--frame-celestial-glow) + 5px) rgba(14, 165, 233, 0.84),
-      0 0 calc(var(--frame-celestial-glow) + 12px) rgba(76, 29, 149, 0.5);
-    animation: frame-bookmark-archive-lustre 4.1s ease-in-out infinite;
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__ring::before {
-    inset: -20%;
-    border-radius: 50%;
-    background: conic-gradient(
-      from 0deg,
-      #e0f2fe,
-      #38bdf8 18%,
-      #312e81 36%,
-      #fef3c7 52%,
-      #f59e0b 68%,
-      #0ea5e9 84%,
-      #e0f2fe
-    );
-    clip-path: polygon(
-      50% 0,
-      58% 35%,
-      75% 7%,
-      69% 41%,
-      93% 25%,
-      73% 47%,
-      100% 50%,
-      73% 55%,
-      93% 75%,
-      69% 59%,
-      75% 93%,
-      58% 65%,
-      50% 100%,
-      42% 65%,
-      25% 93%,
-      31% 59%,
-      7% 75%,
-      27% 55%,
-      0 50%,
-      27% 47%,
-      7% 25%,
-      31% 41%,
-      25% 7%,
-      42% 35%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(224, 242, 254, 0.96))
-      drop-shadow(0 0 var(--frame-galaxy-star-wide-glow) rgba(14, 165, 233, 0.76));
-    animation: frame-celestial-crown 11.5s reverse linear infinite;
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__ring::after {
-    inset: 3.5%;
-    border: 2px solid rgba(224, 242, 254, 0.94);
-    border-right-color: #f59e0b;
-    border-bottom-color: #7c3aed;
-    border-radius: 50%;
-    box-shadow: inset 0 0 7px rgba(7, 89, 133, 0.72);
-    animation: frame-celestial-inner-ring 7.2s linear infinite;
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__motif {
-    inset: -10%;
-    border: 1.5px solid rgba(186, 230, 253, 0.88);
-    clip-path: polygon(50% 0, 79% 8%, 100% 34%, 96% 68%, 72% 94%, 39% 100%, 10% 82%, 0 50%, 10% 18%);
-    background:
-      radial-gradient(circle at 17% 26%, #fff 0 2%, transparent 3.2%),
-      radial-gradient(circle at 84% 72%, #fde68a 0 1.8%, transparent 3%),
-      repeating-conic-gradient(from 15deg, rgba(255, 255, 255, 0.72) 0deg 2deg, transparent 2deg 30deg);
-    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.76));
-    animation: frame-celestial-constellation 4.2s ease-in-out infinite;
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -18% -15%;
-    border: 2px solid rgba(186, 230, 253, 0.9);
-    border-left-color: rgba(245, 158, 11, 0.78);
-    border-bottom-color: rgba(167, 139, 250, 0.32);
-    border-radius: 50%;
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(224, 242, 254, 0.9),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(14, 165, 233, 0.66);
-    animation: frame-file-constellation-orbit 8.4s linear infinite;
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__orbit::before {
-    top: 2%;
-    right: 14%;
-    width: max(5px, 10%);
-    background: #fff;
-    box-shadow: 0 0 var(--frame-galaxy-star-glow) rgba(56, 189, 248, 0.98);
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__orbit::after {
-    left: 6%;
-    bottom: 12%;
-    width: max(4px, 8%);
-    background: #fde68a;
-    box-shadow: 0 0 var(--frame-galaxy-star-glow) rgba(245, 158, 11, 0.94);
-  }
-
-  .avatar-frame--file-constellation .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 5%;
-    right: -19%;
-    width: 58%;
-    height: max(3px, 6%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5) 26%, #fde68a 68%, #fff);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(224, 242, 254, 0.96),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(14, 165, 233, 0.72);
-    transform-origin: right center;
-    animation: frame-file-constellation-comet 4.9s ease-in-out infinite;
-  }
-
-  /* 月华渐盈：免费炫彩与积分进阶同档，以月相呼吸、完整月轨和随轨月珠表达坚持。 */
-  .avatar-frame--streak-month .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 75% 20%, rgba(255, 255, 255, 0.94) 0 2.4%, transparent 3.6%),
-      conic-gradient(
-        from -90deg,
-        #0f172a,
-        #1d4ed8 18%,
-        #818cf8 34%,
-        #e9d5ff 48%,
-        #f8fafc 58%,
-        #a78bfa 72%,
-        #312e81 88%,
-        #0f172a
-      );
-    box-shadow:
-      0 0 0 2px rgba(129, 140, 248, 0.74),
-      0 0 10px rgba(139, 92, 246, 0.48);
-  }
-
-  .avatar-frame--streak-month .avatar-frame__motif {
-    inset: -4%;
-    border: 1px solid rgba(224, 231, 255, 0.82);
-    background:
-      radial-gradient(circle at 50% 1%, #fff 0 2.5%, #c4b5fd 3.5% 5.3%, transparent 6.3%),
-      radial-gradient(circle at 85% 15%, #ede9fe 0 2.2%, transparent 3.4%),
-      radial-gradient(circle at 99% 50%, #c7d2fe 0 2.2%, transparent 3.4%),
-      radial-gradient(circle at 15% 85%, #ddd6fe 0 2.2%, transparent 3.4%),
-      repeating-conic-gradient(from -90deg, rgba(255, 255, 255, 0.76) 0deg 2deg, transparent 2deg 45deg);
-    animation: frame-streak-month-phases 5.6s ease-in-out infinite;
-  }
-
-  .avatar-frame--streak-month .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -7%;
-    border: 1.5px solid rgba(196, 181, 253, 0.74);
-    border-left-color: transparent;
-    border-bottom-color: rgba(96, 165, 250, 0.28);
-    border-radius: 50%;
-    transform: rotate(-18deg) scaleY(0.86);
-    box-shadow: 0 0 5px rgba(129, 140, 248, 0.28);
-    animation: frame-free-colorful-moon-orbit 11s linear infinite;
-  }
-
-  .avatar-frame--streak-month .avatar-frame__orbit::after {
-    position: absolute;
-    top: 4%;
-    right: 12%;
-    width: max(3px, 8%);
-    height: max(3px, 8%);
-    content: '';
-    border-radius: 50%;
-    background: radial-gradient(circle at 36% 32%, #fff, #ddd6fe 56%, #6366f1 100%);
-    box-shadow: 0 0 5px rgba(196, 181, 253, 0.74);
-  }
-
-  /* 岁序长明：365 天最高难度身份框。日月双星、十二月年轮、星冕和周年彗弧全部独立流转。 */
-  .avatar-frame--streak-eternal .avatar-frame__ring {
-    background:
-      radial-gradient(circle at 18% 24%, #fff 0 2.2%, transparent 3.4%),
-      radial-gradient(circle at 78% 76%, #fef3c7 0 1.8%, transparent 3%),
-      conic-gradient(
-        from -90deg,
-        #020617,
-        #1d4ed8 15%,
-        #60a5fa 29%,
-        #f8fafc 40%,
-        #fef08a 49%,
-        #f59e0b 61%,
-        #e879f9 74%,
-        #7c3aed 86%,
-        #020617
-      );
-    box-shadow:
-      0 0 0 2px #fde68a,
-      0 0 0 4px rgba(99, 102, 241, 0.46),
-      0 0 calc(var(--frame-celestial-glow) + 5px) rgba(96, 165, 250, 0.86),
-      0 0 calc(var(--frame-celestial-glow) + 12px) rgba(168, 85, 247, 0.34),
-      inset 0 0 7px rgba(255, 255, 255, 0.72);
-    animation: frame-eternal-lustre 3.8s ease-in-out infinite;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__ring::before,
-  .avatar-frame--streak-eternal .avatar-frame__ring::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-    pointer-events: none;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__ring::before {
-    inset: -16%;
-    background: conic-gradient(
-      from 0deg,
-      #fff7d6,
-      #facc15 16%,
-      #60a5fa 34%,
-      #fff 50%,
-      #c084fc 68%,
-      #f59e0b 84%,
-      #fff7d6
-    );
-    clip-path: polygon(
-      50% 0,
-      55% 38%,
-      70% 8%,
-      65% 42%,
-      88% 18%,
-      70% 47%,
-      100% 50%,
-      70% 55%,
-      88% 82%,
-      65% 60%,
-      70% 96%,
-      55% 63%,
-      50% 100%,
-      45% 63%,
-      30% 96%,
-      35% 60%,
-      12% 82%,
-      30% 55%,
-      0 50%,
-      30% 47%,
-      12% 18%,
-      35% 42%,
-      30% 8%,
-      45% 38%
-    );
-    filter: drop-shadow(0 0 var(--frame-galaxy-star-glow) rgba(253, 224, 71, 0.84));
-    animation: frame-eternal-corona 14s linear infinite;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__ring::after {
-    inset: 4%;
-    border: 1.5px solid rgba(255, 255, 255, 0.88);
-    border-top-color: #fde68a;
-    border-right-color: #93c5fd;
-    border-bottom-color: #c084fc;
-    box-shadow:
-      inset 0 0 4px rgba(255, 255, 255, 0.72),
-      0 0 4px rgba(224, 231, 255, 0.72);
-    animation: frame-eternal-inner 8s linear infinite;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__motif {
-    inset: -7%;
-    border: 2px dotted rgba(254, 240, 138, 0.96);
-    background:
-      radial-gradient(circle at 50% 0, #fff 0 2.5%, #facc15 3.5% 5.5%, transparent 6.5%),
-      radial-gradient(circle at 100% 50%, #fff 0 2.3%, #60a5fa 3.3% 5.3%, transparent 6.3%),
-      radial-gradient(circle at 50% 100%, #fff 0 2.3%, #c084fc 3.3% 5.3%, transparent 6.3%),
-      repeating-conic-gradient(from -90deg, rgba(255, 255, 255, 0.96) 0deg 3deg, transparent 3deg 30deg);
-    filter: drop-shadow(0 0 4px rgba(255, 255, 255, 0.78));
-    animation: frame-eternal-calendar 11s linear infinite;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__orbit {
-    z-index: 3;
-    display: block;
-    inset: -14%;
-    border: 2px solid rgba(253, 224, 71, 0.88);
-    border-left-color: rgba(147, 197, 253, 0.48);
-    border-bottom-color: rgba(192, 132, 252, 0.38);
-    border-radius: 50%;
-    box-shadow: 0 0 var(--frame-galaxy-orbit-glow) rgba(253, 224, 71, 0.58);
-    transform: rotate(24deg) scaleY(0.76);
-    animation: frame-eternal-orbit 8.5s linear infinite;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__orbit::before,
-  .avatar-frame--streak-eternal .avatar-frame__orbit::after {
-    position: absolute;
-    content: '';
-    border-radius: 50%;
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__orbit::before {
-    top: -6%;
-    left: 44%;
-    width: max(5px, 11%);
-    height: max(5px, 11%);
-    background: radial-gradient(circle at 35% 30%, #fff, #fef08a 38%, #f59e0b 74%, #92400e 100%);
-    box-shadow:
-      0 0 0 1px #fff7d6,
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(253, 224, 71, 1);
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__orbit::after {
-    right: 3%;
-    bottom: 6%;
-    width: max(4px, 9%);
-    height: max(4px, 9%);
-    background: radial-gradient(circle at 34% 30%, #fff, #bfdbfe 46%, #4f46e5 78%, #1e1b4b 100%);
-    box-shadow:
-      0 0 0 1px rgba(219, 234, 254, 0.92),
-      0 0 var(--frame-galaxy-star-glow) rgba(96, 165, 250, 0.94);
-  }
-
-  .avatar-frame--streak-eternal .avatar-frame__comet {
-    z-index: 4;
-    display: block;
-    top: 5%;
-    right: -13%;
-    width: 39%;
-    height: max(3px, 5%);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, rgba(192, 132, 252, 0.5) 34%, #93c5fd 66%, #fff);
-    box-shadow:
-      0 0 var(--frame-galaxy-star-glow) rgba(255, 255, 255, 0.96),
-      0 0 var(--frame-galaxy-star-wide-glow) rgba(168, 85, 247, 0.76);
-    transform: rotate(-31deg);
-    transform-origin: right center;
-    animation: frame-eternal-comet 4.4s ease-in-out infinite;
-  }
-
-  /* 高阶传说身份结构：语义必须长在框体上，避免外挂小图标沿圆周公转。 */
-  .avatar-frame--dragon .avatar-frame__ring {
-    background: conic-gradient(
-      from 28deg,
-      #09090b,
-      #3f2a13 16%,
-      #f6d27a 31%,
-      #7c4a12 45%,
-      #111827 62%,
-      #d6a84f 81%,
-      #09090b
-    );
-    box-shadow:
-      0 0 0 1px #e4c06b,
-      0 0 0 3px rgba(24, 17, 8, 0.88),
-      inset 0 0 5px rgba(255, 244, 196, 0.42),
-      0 0 13px rgba(202, 138, 4, 0.66),
-      0 0 24px rgba(113, 63, 18, 0.42);
-    animation: frame-dragon-forge-breathe 5.6s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__ring::before {
+  .avatar-frame--aurora .avatar-frame__motion--back::before,
+  .avatar-frame--aurora .avatar-frame__motion--back::after,
+  .avatar-frame--aurora .avatar-frame__motion--back i {
     display: none;
   }
 
-  .avatar-frame--dragon .avatar-frame__ring::after {
-    inset: 5%;
-    border: 1px solid rgba(255, 244, 196, 0.78);
-    border-right-color: #7c4a12;
-    border-bottom-color: #d6a84f;
-    box-shadow: inset 0 0 4px rgba(9, 9, 11, 0.78);
+  .avatar-frame--aurora .avatar-frame__motion--front::before {
+    display: none;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front::after {
+    top: 1px;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    background: radial-gradient(circle, #fff 0 18%, #a5f3fc 24% 42%, #8b5cf6 54% 70%, transparent 74%);
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    filter: drop-shadow(0 0 3px rgba(103, 232, 249, 0.82));
+    animation: frame-aurora-core-charge 5.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i {
+    width: 2px;
+    height: 2px;
+    border-radius: 0;
+    background: #c4b5fd;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    box-shadow: none;
+    animation: frame-local-twinkle 4.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(1) {
+    top: 18px;
+    left: 8px;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(2) {
+    top: 22px;
+    right: 7px;
+    animation-delay: -2.1s;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(3),
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(4) {
+    display: none;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--flame .avatar-frame__art {
+    animation: frame-flame-metal-light 4.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--back::before,
+  .avatar-frame--flame .avatar-frame__motion--back::after,
+  .avatar-frame--flame .avatar-frame__motion--back i {
+    display: none;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--front::before {
+    top: 8px;
+    right: 8px;
+    width: 6px;
+    height: 12px;
+    background: linear-gradient(180deg, #fff7b2 0 8%, #fbbf24 24%, #f97316 58%, rgba(220, 38, 38, 0.2) 100%);
+    clip-path: polygon(50% 0, 72% 31%, 64% 50%, 92% 76%, 57% 100%, 20% 82%, 34% 55%, 12% 35%, 42% 43%);
+    filter: drop-shadow(0 0 2px rgba(251, 146, 60, 0.86));
+    transform-origin: 50% 100%;
+    animation: frame-flame-tongue 3.1s ease-in-out infinite;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--front::after {
+    display: none;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--front i {
+    right: 9px;
+    bottom: 13px;
+    width: 2px;
+    height: 4px;
+    border-radius: 60% 20% 60% 20%;
+    background: #ffe08a;
+    animation: frame-ember-rise 3.8s ease-out infinite;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--front i:nth-child(2) {
+    right: 14px;
+    animation-delay: -1.9s;
+  }
+
+  .avatar-frame--flame .avatar-frame__motion--front i:nth-child(3),
+  .avatar-frame--flame .avatar-frame__motion--front i:nth-child(4) {
+    display: none;
+  }
+
+  .avatar-frame--flame .avatar-frame__art-detail {
+    clip-path: polygon(0 30%, 24% 30%, 34% 67%, 50% 84%, 66% 67%, 76% 22%, 100% 20%, 100% 100%, 0 100%);
+    opacity: 0.12;
+    animation: frame-flame-material 4.2s ease-in-out infinite;
+  }
+
+  /* 积分传说严格递进：霓虹 < 星河 < 龙曜 < 天穹。 */
+  .avatar-frame--dynamic.avatar-frame--neon .avatar-frame__art {
+    animation: frame-neon-pulse 3.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back::before {
+    inset: 4px;
+    border: 3px solid transparent;
+    border-top-color: rgba(103, 232, 249, 0.96);
+    border-right-color: rgba(217, 70, 239, 0.92);
+    border-bottom-color: rgba(103, 232, 249, 0.58);
+    border-radius: 50%;
+    box-shadow:
+      0 0 6px rgba(34, 211, 238, 0.82),
+      inset 0 0 5px rgba(217, 70, 239, 0.52);
+    animation: frame-neon-chase 3.4s linear infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back::after {
+    top: 4px;
+    left: 50%;
+    width: 5px;
+    height: 9px;
+    margin-left: -2.5px;
+    border-radius: 50%;
+    background: #f5d0fe;
+    box-shadow:
+      0 0 5px #67e8f9,
+      0 0 11px #d946ef;
+    transform-origin: 2.5px 51px;
+    animation: frame-neon-node-sweep 3.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back i {
+    width: 8px;
+    height: 2px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, transparent, #ecfeff 35%, #67e8f9 58%, #d946ef 100%);
+    box-shadow: 0 0 4px rgba(34, 211, 238, 0.78);
+    animation: frame-neon-circuit-flow 3.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back i:nth-child(1) {
+    top: 5px;
+    left: 31px;
+    --neon-circuit-angle: 8deg;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back i:nth-child(2) {
+    top: 35px;
+    right: 3px;
+    --neon-circuit-angle: 92deg;
+    animation-delay: -0.8s;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back i:nth-child(3) {
+    bottom: 5px;
+    left: 40px;
+    --neon-circuit-angle: 178deg;
+    animation-delay: -1.6s;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--back i:nth-child(4) {
+    top: 53px;
+    left: 3px;
+    --neon-circuit-angle: 88deg;
+    animation-delay: -2.4s;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front::before {
+    top: 15px;
+    left: 7px;
+    width: 18px;
+    height: 7px;
+    border-top: 3px solid #67e8f9;
+    border-radius: 50%;
+    filter: drop-shadow(0 0 4px #06b6d4);
+    animation: frame-neon-arc 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front::after {
+    right: 7px;
+    bottom: 13px;
+    width: 16px;
+    height: 6px;
+    border-bottom: 3px solid #f0abfc;
+    border-radius: 50%;
+    filter: drop-shadow(0 0 4px #d946ef);
+    animation: frame-neon-arc 2.8s -1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite reverse;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front i {
+    width: 4px;
+    height: 4px;
+    background: #ecfeff;
+    animation: frame-neon-spark 2.4s ease-out infinite;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front i:nth-child(1) {
+    top: 10px;
+    right: 18px;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front i:nth-child(2) {
+    right: 8px;
+    bottom: 24px;
+    animation-delay: 0.8s;
+  }
+
+  .avatar-frame--neon .avatar-frame__motion--front i:nth-child(3) {
+    bottom: 8px;
+    left: 22px;
+    animation-delay: 1.6s;
+  }
+
+  .avatar-frame--neon .avatar-frame__art-detail {
+    clip-path: polygon(0 0, 64% 0, 61% 28%, 48% 43%, 31% 53%, 0 61%);
+    transform-origin: 30% 24%;
+    animation: frame-neon-crystal-charge 3.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--galaxy .avatar-frame__art {
+    animation: frame-galaxy-breathe 5.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--back::before {
+    top: 8px;
+    left: -2px;
+    width: 96px;
+    height: 72px;
+    border: 2px solid rgba(254, 240, 138, 0.76);
+    border-radius: 50%;
+    box-shadow:
+      0 0 5px rgba(196, 181, 253, 0.64),
+      inset 0 0 5px rgba(124, 58, 237, 0.32);
+    transform: rotate(24deg);
+    animation: frame-galaxy-orbit 6.8s linear infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--back::after {
+    top: -1px;
+    left: 17px;
+    width: 72px;
+    height: 104px;
+    border: 1px solid rgba(196, 181, 253, 0.68);
+    border-right-color: rgba(254, 240, 138, 0.9);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 3px rgba(167, 139, 250, 0.72));
+    transform: rotate(58deg);
+    animation: frame-galaxy-orbit-reverse 8.4s linear infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front::before {
+    top: 4px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    background: #fff8c7;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    filter: drop-shadow(0 0 4px #fef08a) drop-shadow(0 0 8px #a78bfa);
+    transform-origin: 4px 51px;
+    animation: frame-galaxy-comet-sweep 4.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front::after {
+    right: 6px;
+    bottom: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #fff, #c4b5fd 34%, #6d28d9 68%, transparent 72%);
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.9);
+    animation: frame-galaxy-planet-pulse 3.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front i {
+    animation: frame-star-drift 4.8s linear infinite;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front i:nth-child(1) {
+    top: 8px;
+    left: 18px;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front i:nth-child(2) {
+    right: 9px;
+    bottom: 19px;
+    animation-delay: 1.6s;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__motion--front i:nth-child(3) {
+    left: 11px;
+    bottom: 14px;
+    animation-delay: 3.2s;
+  }
+
+  .avatar-frame--galaxy .avatar-frame__art-detail {
+    clip-path: polygon(0 52%, 18% 50%, 42% 62%, 68% 58%, 100% 48%, 100% 100%, 0 100%);
+    animation: frame-galaxy-nebula-shimmer 5.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--dragon .avatar-frame__art {
+    animation: frame-dragon-metal-light 5.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__ambient {
+    background:
+      radial-gradient(circle at 69% 31%, rgba(255, 191, 36, 0.42), transparent 28%),
+      radial-gradient(circle, transparent 46%, rgba(249, 115, 22, 0.26) 63%, transparent 78%);
+    filter: blur(3px);
+  }
+
+  .avatar-frame__dragon-layer,
+  .avatar-frame__dragon-mane,
+  .avatar-frame__dragon-trail,
+  .avatar-frame__dragon-ornament {
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .avatar-frame__dragon-layer--body {
+    z-index: 4;
+    filter: brightness(1.02) saturate(1.04) drop-shadow(0 1px 1px rgba(120, 53, 15, 0.32));
+    backface-visibility: hidden;
+  }
+
+  // 完整龙身始终保留，三层只复制头后鬃焰的不同毛束；即使摆动到极值也不会露出透明缺口。
+  .avatar-frame__dragon-mane {
+    z-index: 9;
+    filter: brightness(1.08) saturate(1.12) drop-shadow(0 0 1.8px rgba(249, 115, 22, 0.62));
+    backface-visibility: hidden;
+  }
+
+  .avatar-frame__dragon-mane--upper {
+    clip-path: polygon(69% 0, 100% 0, 100% 18%, 91% 21%, 82% 23%, 72% 20%);
+    transform-origin: 72% 21%;
+    animation: frame-dragon-mane-upper 3.1s ease-in-out infinite alternate;
+  }
+
+  .avatar-frame__dragon-mane--middle {
+    clip-path: polygon(74% 15%, 100% 12%, 100% 34%, 91% 37%, 82% 37%, 76% 32%);
+    transform-origin: 77% 33%;
+    animation: frame-dragon-mane-middle 3.5s -1.35s ease-in-out infinite alternate;
+  }
+
+  .avatar-frame__dragon-mane--lower {
+    clip-path: polygon(78% 29%, 100% 27%, 100% 52%, 92% 55%, 83% 52%, 79% 45%);
+    transform-origin: 80% 46%;
+    animation: frame-dragon-mane-lower 3.25s -2.1s ease-in-out infinite alternate;
+  }
+
+  .avatar-frame__dragon-layer--cloud-flame {
+    z-index: 5;
+    filter: brightness(1.04) saturate(1.04) drop-shadow(0 0 2px rgba(249, 115, 22, 0.44));
+    animation: frame-dragon-cloud-light 4.6s ease-in-out infinite;
+  }
+
+  // 参考图圈出的焰须、左右游丝与底部弧光使用同画布透明线稿分区驱动；
+  // 底层火丝保持像素对齐，亮脉只沿线条掠过，避免平移整块裁片产生贴纸感或断层。
+  .avatar-frame__dragon-trail {
+    z-index: 7;
+    filter: saturate(1.16) drop-shadow(0 0 1.5px rgba(249, 115, 22, 0.7));
+  }
+
+  .avatar-frame__dragon-trail--base {
+    opacity: 0.46;
+    filter: brightness(1.02) saturate(1.16) drop-shadow(0 0 1px rgba(249, 115, 22, 0.6));
+    animation: frame-dragon-trail-ember 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame__dragon-trail--mane,
+  .avatar-frame__dragon-trail--left,
+  .avatar-frame__dragon-trail--right,
+  .avatar-frame__dragon-trail--bottom {
+    opacity: 1;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: 260% 260%;
+    mask-size: 260% 260%;
+    filter: brightness(1.9) saturate(1.3) drop-shadow(0 0 3px rgba(255, 139, 18, 0.98));
+  }
+
+  .avatar-frame__dragon-trail--mane {
+    z-index: 9;
+    clip-path: polygon(57% 0, 100% 0, 100% 49%, 69% 49%, 57% 37%);
+    -webkit-mask-image: linear-gradient(
+      112deg,
+      transparent 27%,
+      rgba(0, 0, 0, 0.18) 39%,
+      #000 50%,
+      rgba(0, 0, 0, 0.24) 61%,
+      transparent 73%
+    );
+    mask-image: linear-gradient(
+      112deg,
+      transparent 27%,
+      rgba(0, 0, 0, 0.18) 39%,
+      #000 50%,
+      rgba(0, 0, 0, 0.24) 61%,
+      transparent 73%
+    );
+    animation: frame-dragon-trail-mane 2.4s linear infinite;
+  }
+
+  .avatar-frame__dragon-trail--left {
+    clip-path: polygon(0 34%, 34% 34%, 34% 93%, 0 93%);
+    -webkit-mask-image: linear-gradient(
+      148deg,
+      transparent 28%,
+      rgba(0, 0, 0, 0.2) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.22) 60%,
+      transparent 72%
+    );
+    mask-image: linear-gradient(
+      148deg,
+      transparent 28%,
+      rgba(0, 0, 0, 0.2) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.22) 60%,
+      transparent 72%
+    );
+    animation: frame-dragon-trail-left 2.8s -0.9s linear infinite;
+  }
+
+  .avatar-frame__dragon-trail--right {
+    clip-path: polygon(66% 34%, 100% 34%, 100% 93%, 66% 93%);
+    -webkit-mask-image: linear-gradient(
+      32deg,
+      transparent 28%,
+      rgba(0, 0, 0, 0.2) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.22) 60%,
+      transparent 72%
+    );
+    mask-image: linear-gradient(
+      32deg,
+      transparent 28%,
+      rgba(0, 0, 0, 0.2) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.22) 60%,
+      transparent 72%
+    );
+    animation: frame-dragon-trail-right 2.7s -1.8s linear infinite;
+  }
+
+  .avatar-frame__dragon-trail--bottom {
+    clip-path: polygon(10% 68%, 92% 68%, 92% 100%, 10% 100%);
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      transparent 27%,
+      rgba(0, 0, 0, 0.18) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.24) 60%,
+      transparent 73%
+    );
+    mask-image: linear-gradient(
+      90deg,
+      transparent 27%,
+      rgba(0, 0, 0, 0.18) 40%,
+      #000 50%,
+      rgba(0, 0, 0, 0.24) 60%,
+      transparent 73%
+    );
+    animation: frame-dragon-trail-bottom 3.2s -0.6s linear infinite;
+  }
+
+  // 线稿遮罩负责持续底光，矢量火脉沿参考图的龙鬃、左右火丝和底部弧线真实行进。
+  // 这里不移动整张素材，也不改变龙身与头像框坐标，避免局部错层或“整块贴纸”感。
+  .avatar-frame__dragon-flow {
+    z-index: 8;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    overflow: visible;
+    color: #fff4a8;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 1px rgba(255, 247, 194, 0.96)) drop-shadow(0 0 2.4px rgba(249, 115, 22, 0.88));
+    user-select: none;
+  }
+
+  .avatar-frame__dragon-flow path {
+    --dragon-flow-duration: 2.15s;
+    --dragon-flow-delay: 0s;
+    --dragon-sway-duration: 2.8s;
+    --dragon-sway-delay: 0s;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 0.94;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 28 7;
+    vector-effect: non-scaling-stroke;
+    opacity: 0.96;
+    will-change: transform, stroke-dashoffset, opacity;
+  }
+
+  .avatar-frame__dragon-flow path:nth-child(2) {
+    --dragon-flow-duration: 2.45s;
+    --dragon-flow-delay: -0.8s;
+    --dragon-sway-duration: 3.15s;
+    --dragon-sway-delay: -1.1s;
+    stroke-width: 0.78;
+    stroke-dasharray: 24 8;
+  }
+
+  .avatar-frame__dragon-flow path:nth-child(3) {
+    --dragon-flow-duration: 2.7s;
+    --dragon-flow-delay: -1.45s;
+    --dragon-sway-duration: 2.65s;
+    --dragon-sway-delay: -1.8s;
+    stroke-width: 0.7;
+    stroke-dasharray: 20 9;
+  }
+
+  .avatar-frame__dragon-flow path:nth-child(4) {
+    --dragon-flow-duration: 2.9s;
+    --dragon-flow-delay: -2.1s;
+    --dragon-sway-duration: 3.35s;
+    --dragon-sway-delay: -2.4s;
+    stroke-width: 0.64;
+    stroke-dasharray: 18 10;
+  }
+
+  .avatar-frame__dragon-flow-group--mane path {
+    transform-box: fill-box;
+    transform-origin: 0% 100%;
+    animation:
+      frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite,
+      frame-dragon-mane-sway var(--dragon-sway-duration) ease-in-out var(--dragon-sway-delay) infinite alternate;
+  }
+
+  .avatar-frame__dragon-flow-group--left path {
+    transform-box: fill-box;
+    transform-origin: 100% 100%;
+    animation:
+      frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite reverse,
+      frame-dragon-left-filament-sway var(--dragon-sway-duration) ease-in-out var(--dragon-sway-delay) infinite
+        alternate;
+  }
+
+  .avatar-frame__dragon-flow-group--right path {
+    transform-box: fill-box;
+    transform-origin: 0% 100%;
+    animation:
+      frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite,
+      frame-dragon-right-filament-sway var(--dragon-sway-duration) ease-in-out var(--dragon-sway-delay) infinite
+        alternate;
+  }
+
+  .avatar-frame__dragon-flow-group--bottom path {
+    transform-box: fill-box;
+    transform-origin: 50% 0%;
+    animation:
+      frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite,
+      frame-dragon-bottom-filament-sway var(--dragon-sway-duration) ease-in-out var(--dragon-sway-delay) infinite
+        alternate;
+  }
+
+  .avatar-frame__dragon-layer--pearl {
+    z-index: 6;
+    filter: brightness(1.04) drop-shadow(0 0 3px rgba(251, 191, 36, 0.76));
+    animation: frame-dragon-pearl-light 3.6s ease-in-out infinite;
+  }
+
+  // 同源龙头仅用于抬升层级，不做位移；精确像素叠加不会产生第二个龙头。
+  .avatar-frame__dragon-layer--head {
+    z-index: 10;
+    clip-path: polygon(49% 0, 85% 0, 85% 16%, 81% 22%, 82% 33%, 78% 42%, 70% 47%, 59% 45%, 51% 39%, 47% 30%);
+    filter: brightness(1.03) saturate(1.04) drop-shadow(0 1px 1px rgba(120, 53, 15, 0.3));
+  }
+
+  .avatar-frame__dragon-ornament {
+    z-index: 7;
+    opacity: 0.96;
+    filter: brightness(1.04) drop-shadow(0 0 2px rgba(251, 191, 36, 0.52));
+  }
+
+  .avatar-frame__dragon-ornament--crown {
+    clip-path: polygon(0 0, 100% 0, 100% 30%, 0 30%);
+    animation: frame-dragon-crown-light 3.8s ease-in-out infinite;
+  }
+
+  .avatar-frame__dragon-ornament--seal {
+    clip-path: polygon(0 72%, 100% 72%, 100% 100%, 0 100%);
+  }
+
+  .avatar-frame--dragon .avatar-frame__bezel {
+    z-index: 3;
+    border-color: rgba(255, 224, 130, 0.9);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 251, 235, 0.68),
+      0 0 5px rgba(245, 158, 11, 0.54);
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--back::before,
+  .avatar-frame--dragon .avatar-frame__motion--back::after {
+    border-radius: 50%;
+    border: 1px solid transparent;
+    filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.72));
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--back::before {
+    inset: 1px 4px 5px 2px;
+    border-top-color: rgba(255, 247, 194, 0.92);
+    border-right-color: rgba(249, 115, 22, 0.72);
+    transform: rotate(-16deg);
+    animation: frame-dragon-orbit-shimmer 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--back::after {
+    inset: 6px 1px 2px 5px;
+    border-bottom-color: rgba(253, 230, 138, 0.76);
+    border-left-color: rgba(245, 158, 11, 0.66);
+    transform: rotate(22deg);
+    animation: frame-dragon-orbit-shimmer 4.8s -2.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front {
+    z-index: 8;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front::before {
+    top: 11px;
+    right: 5px;
+    width: 27px;
+    height: 24px;
+    border-radius: 50%;
+    background: radial-gradient(
+      ellipse at 40% 54%,
+      rgba(255, 247, 194, 0.58),
+      rgba(249, 115, 22, 0.18) 44%,
+      transparent 72%
+    );
+    transform-origin: 50% 58%;
+    animation: frame-dragon-head-aura 3.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front::after {
+    right: 8px;
+    bottom: 9px;
+    width: 6px;
+    height: 6px;
+    background: #fff7c2;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    filter: drop-shadow(0 0 4px #fbbf24);
+    animation: frame-dragon-pearl-glint 3.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front i {
+    width: 4px;
+    height: 4px;
+    border-radius: 0;
+    background: linear-gradient(135deg, #fffde7, #fcd34d 54%, #ea580c);
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    box-shadow: none;
+    animation: frame-dragon-star-drift 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front i:nth-child(1) {
+    top: 6px;
+    left: 19px;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front i:nth-child(2) {
+    top: 17px;
+    right: 3px;
+    animation-delay: -1.2s;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front i:nth-child(3) {
+    left: 4px;
+    bottom: 23px;
+    animation-delay: -2.4s;
+  }
+
+  .avatar-frame--dragon .avatar-frame__motion--front i:nth-child(4) {
+    right: 19px;
+    bottom: 3px;
+    animation-delay: -3.6s;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--celestial .avatar-frame__art {
+    animation: frame-celestial-unfold 5s ease-in-out infinite;
+  }
+
+  .avatar-frame__celestial-wing {
+    z-index: 3;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .avatar-frame__celestial-wing--left {
+    clip-path: polygon(0 28%, 50% 28%, 50% 100%, 0 100%);
+    transform-origin: 35% 78%;
+    animation: frame-celestial-art-wing-left 3.4s linear infinite alternate;
+  }
+
+  .avatar-frame__celestial-wing--right {
+    clip-path: polygon(50% 28%, 100% 28%, 100% 100%, 50% 100%);
+    transform-origin: 65% 78%;
+    animation: frame-celestial-art-wing-right 3.4s linear infinite alternate;
+  }
+
+  .avatar-frame--celestial .avatar-frame__motion--back::before {
+    top: 8px;
+    left: -1px;
+    width: 78px;
+    height: 58px;
+    border: 1px solid rgba(253, 230, 138, 0.72);
+    border-radius: 50%;
+    box-shadow: 0 0 6px rgba(129, 140, 248, 0.58);
+    transform: rotate(18deg);
+    animation: frame-celestial-orbit 7.4s linear infinite;
+  }
+
+  .avatar-frame--celestial .avatar-frame__motion--front::before {
+    top: 3px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    background: #eef2ff;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    filter: drop-shadow(0 0 5px #818cf8);
+    animation: frame-celestial-core 2.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--celestial .avatar-frame__motion--front::after {
+    bottom: 2px;
+    left: 50%;
+    width: 5px;
+    height: 5px;
+    margin-left: -2.5px;
+    background: #ddd6fe;
+    transform: rotate(45deg);
+    box-shadow: 0 0 6px #60a5fa;
+    animation: frame-celestial-core 2.8s -1.4s ease-in-out infinite;
+  }
+
+  /* 成就传说：三款标准传说各自强化成就象征，岁序长明与天穹同属全局天花板。 */
+  .avatar-frame--dynamic.avatar-frame--bookmark-archive .avatar-frame__art {
+    animation: frame-library-metal-light 5.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--bookmark-archive .avatar-frame__ambient {
+    opacity: 0.18;
+    filter: none;
     animation: none;
   }
 
-  .avatar-frame--dragon .avatar-frame__motif {
-    inset: -5%;
-    border: 1px solid rgba(228, 192, 107, 0.62);
-    background: repeating-conic-gradient(from 12deg, rgba(255, 244, 196, 0.72) 0deg 1.5deg, transparent 1.5deg 18deg);
-    filter: drop-shadow(0 0 4px rgba(202, 138, 4, 0.52));
-    animation: frame-dragon-scale-glint 4.8s ease-in-out infinite;
+  .avatar-frame--bookmark-archive .avatar-frame__motion--front i:nth-child(1),
+  .avatar-frame--bookmark-archive .avatar-frame__motion--front i:nth-child(2) {
+    bottom: 4px;
+    width: 19px;
+    height: 7px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #fef3c7, #c4b5fd);
+    animation: frame-page-flutter 4.6s ease-in-out infinite;
   }
 
-  .avatar-frame--dragon .avatar-frame__orbit {
-    display: none;
+  .avatar-frame--bookmark-archive .avatar-frame__motion--front i:nth-child(1) {
+    left: 5px;
+    transform-origin: right center;
   }
 
-  .avatar-frame--dragon .avatar-frame__comet {
-    display: none;
-  }
-
-  .avatar-frame--dragon .avatar-frame__signature {
-    z-index: 1;
-    inset: -6%;
-    display: grid;
-    place-items: center;
-    border-radius: 50%;
-    filter: drop-shadow(0 0 3px rgba(9, 9, 11, 0.96)) drop-shadow(0 0 7px rgba(202, 138, 4, 0.68));
-  }
-
-  .avatar-frame--dragon .avatar-frame__signature::after {
-    position: absolute;
-    inset: 2%;
-    content: '';
-    border-radius: 50%;
-    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-    mask: radial-gradient(farthest-side, transparent calc(100% - 8px), #000 calc(100% - 7px));
-    background: conic-gradient(
-      from -35deg,
-      transparent 0 82%,
-      rgba(255, 244, 196, 0.2) 86%,
-      #fff8dc 91%,
-      #d6a84f 94%,
-      transparent 98%
-    );
-    opacity: 0;
-    animation: frame-dragon-scale-sweep 5.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__dragon-crest {
-    position: relative;
-    z-index: 1;
-    display: block;
-    filter: drop-shadow(0 0 1px rgba(9, 9, 11, 0.86)) drop-shadow(0 0 4px rgba(228, 192, 107, 0.68));
-    transform-origin: 50% 55%;
-    animation: frame-dragon-body-breathe 5.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__dragon-head {
-    position: absolute;
-    z-index: 3;
-    inset: 0;
-    display: block;
-    margin: auto;
-    overflow: visible;
-    pointer-events: none;
-    filter: drop-shadow(0 1px 0 rgba(41, 27, 10, 0.7)) drop-shadow(0 0 3px rgba(228, 192, 107, 0.46));
-    transform-origin: 50% 55%;
-    animation: frame-dragon-head-awaken 5.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__dragon-head::before {
-    position: absolute;
-    top: 29.8%;
-    right: 12%;
-    width: 1.3%;
-    height: auto;
-    aspect-ratio: 1;
-    content: '';
-    border-radius: 50%;
-    background: #fff;
-    box-shadow:
-      0 0 2px #fff4b8,
-      0 0 5px #f59e0b;
-    opacity: 0;
-    transform: scale(0.5);
-    animation: frame-dragon-eye-flash 5.4s ease-in-out infinite;
-  }
-
-  .avatar-frame--dragon .avatar-frame__dragon-head::after {
-    position: absolute;
-    top: 41%;
-    left: 92%;
-    width: 8%;
-    height: 3.2%;
-    content: '';
-    border-radius: 999px;
-    background: linear-gradient(90deg, #fff7c9 0 14%, #fbbf24 36%, #f97316 64%, transparent 100%);
-    filter: drop-shadow(0 0 2px #fde68a) drop-shadow(0 0 5px rgba(249, 115, 22, 0.84));
-    opacity: 0;
-    transform: translateX(-16%) scaleX(0.3);
+  .avatar-frame--bookmark-archive .avatar-frame__motion--front i:nth-child(2) {
+    right: 5px;
     transform-origin: left center;
-    animation: frame-dragon-breath-spark 5.4s ease-out infinite;
+    animation-delay: -2.3s;
   }
 
-  .avatar-frame--dragon .avatar-frame__portrait {
-    width: var(--frame-size);
-    height: var(--frame-size);
-    border: 1.5px solid #e4c06b;
-    background: #fffaf0;
-    box-shadow:
-      0 0 0 1px rgba(42, 27, 10, 0.94),
-      0 0 0 2px rgba(246, 210, 122, 0.84),
-      inset 0 0 0 1px rgba(255, 248, 220, 0.92),
-      inset 0 0 9px rgba(113, 63, 18, 0.16),
-      0 0 7px rgba(214, 168, 79, 0.46);
+  .avatar-frame--bookmark-archive .avatar-frame__motion--front::before {
+    bottom: 2px;
+    left: 50%;
+    width: 35px;
+    height: 13px;
+    margin-left: -17.5px;
+    background: linear-gradient(90deg, #fef3c7, #c4b5fd 50%, #fef3c7);
+    clip-path: polygon(0 16%, 48% 36%, 50% 100%, 52% 36%, 100% 16%, 91% 84%, 55% 100%, 45% 100%, 9% 84%);
+    transform-origin: 50% 100%;
+    animation: frame-library-open-book 4.6s ease-in-out infinite;
   }
 
-  .avatar-frame--dragon .avatar-frame__portrait::after {
-    position: absolute;
-    z-index: 1;
-    inset: 0;
-    content: '';
-    pointer-events: none;
-    border-radius: inherit;
-    background: radial-gradient(circle, transparent 68%, rgba(113, 63, 18, 0.08) 80%, rgba(214, 168, 79, 0.3) 100%);
-  }
-
-  .avatar-frame--dragon .avatar-frame__signature-mark {
-    right: 7%;
-    bottom: 2%;
-    width: 13%;
-    height: auto;
-    aspect-ratio: 1;
-    border: 1px solid rgba(255, 247, 214, 0.92);
+  .avatar-frame--bookmark-archive .avatar-frame__motion--back::before {
+    right: 4px;
+    bottom: 6px;
+    left: 4px;
+    height: 14px;
+    border-bottom: 2px solid rgba(254, 243, 199, 0.92);
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #fff, #fde68a 28%, #d6a84f 58%, #713f12 100%);
-    box-shadow:
-      0 0 6px rgba(255, 247, 214, 0.96),
-      0 0 13px rgba(202, 138, 4, 0.8);
-    animation: frame-dragon-pearl 5.4s ease-in-out infinite;
+    background: linear-gradient(90deg, transparent, rgba(196, 181, 253, 0.48), transparent);
+    animation: frame-library-shelf-light 4.8s ease-in-out infinite;
   }
 
-  .avatar-frame--dragon .avatar-frame__signature-mark::before,
-  .avatar-frame--dragon .avatar-frame__signature-mark::after {
-    display: none;
+  .avatar-frame--bookmark-archive .avatar-frame__art-detail {
+    clip-path: polygon(0 46%, 100% 46%, 100% 100%, 0 100%);
+    transform-origin: 50% 86%;
+    animation: frame-library-page-material 4.6s ease-in-out infinite;
   }
 
-  @keyframes frame-dragon-forge-breathe {
+  .avatar-frame--dynamic.avatar-frame--note-constellation .avatar-frame__art {
+    animation: frame-constellation-ink 5.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--back::before {
+    inset: 5px;
+    border: 2px dashed rgba(167, 243, 208, 0.86);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 5px #2dd4bf);
+    animation: frame-constellation-draw 5.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--back::after {
+    right: 7px;
+    bottom: 7px;
+    width: 48px;
+    height: 34px;
+    border-right: 2px solid rgba(94, 234, 212, 0.88);
+    border-bottom: 2px solid rgba(165, 243, 252, 0.72);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 5px rgba(45, 212, 191, 0.76));
+    animation: frame-constellation-ink-arc 4.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--front::before {
+    top: 7px;
+    left: 9px;
+    width: 8px;
+    height: 8px;
+    background: #ecfeff;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    filter: drop-shadow(0 0 5px #2dd4bf);
+    animation: frame-constellation-pen 4.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__art-detail {
+    clip-path: polygon(0 17%, 33% 0, 100% 58%, 72% 100%, 38% 72%);
+    animation: frame-constellation-material 5.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--front i {
+    width: 4px;
+    height: 4px;
+    animation: frame-local-twinkle 2.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--front i:nth-child(1) {
+    top: 9px;
+    right: 13px;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--front i:nth-child(2) {
+    left: 8px;
+    bottom: 18px;
+    animation-delay: 0.9s;
+  }
+
+  .avatar-frame--note-constellation .avatar-frame__motion--front i:nth-child(3) {
+    right: 10px;
+    bottom: 11px;
+    animation-delay: 1.8s;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--file-constellation .avatar-frame__art {
+    animation: frame-archive-metal-light 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__ambient {
+    opacity: 0.14;
+    filter: none;
+    animation: none;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front::before {
+    top: 0;
+    left: 50%;
+    width: 34px;
+    height: 27px;
+    margin-left: -17px;
+    background: linear-gradient(
+      90deg,
+      rgba(96, 165, 250, 0.26),
+      rgba(219, 234, 254, 0.96) 32%,
+      rgba(254, 240, 138, 0.98) 50%,
+      rgba(147, 197, 253, 0.92) 68%,
+      rgba(79, 70, 229, 0.24)
+    );
+    clip-path: polygon(0 14%, 42% 0, 50% 74%, 58% 0, 100% 14%, 76% 100%, 50% 74%, 24% 100%);
+    transform-origin: center;
+    animation: frame-archive-gate 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front::after {
+    top: 17px;
+    left: 50%;
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    background: #fef9c3;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    animation: frame-archive-star-rise 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--back::after {
+    right: 2px;
+    bottom: 5px;
+    width: 38px;
+    height: 10px;
+    border-top: 2px solid rgba(239, 246, 255, 0.82);
+    border-radius: 50%;
+    animation: frame-cloud-breathe 5.6s -1.4s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--back::before {
+    inset: 6px;
+    border: 1.5px solid transparent;
+    border-top-color: rgba(191, 219, 254, 0.86);
+    border-right-color: rgba(253, 230, 138, 0.82);
+    border-radius: 50%;
+    animation: frame-archive-portal-arc 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front i {
+    width: 4px;
+    height: 4px;
+    border-radius: 0;
+    background: #dbeafe;
+    box-shadow: none;
+    clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
+    animation: frame-archive-star-path 4.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front i:nth-child(1) {
+    top: 19px;
+    left: 5px;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front i:nth-child(2) {
+    top: 12px;
+    right: 7px;
+    animation-delay: -1.2s;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front i:nth-child(3) {
+    right: 9px;
+    bottom: 12px;
+    animation-delay: -2.4s;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__motion--front i:nth-child(4) {
+    left: 8px;
+    bottom: 17px;
+    animation-delay: -3.6s;
+  }
+
+  .avatar-frame--file-constellation .avatar-frame__art-detail {
+    clip-path: polygon(18% 0, 82% 0, 75% 31%, 100% 42%, 100% 100%, 0 100%, 0 42%, 25% 31%);
+    transform-origin: 50% 18%;
+    animation: frame-archive-gate-material 5.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--dynamic.avatar-frame--streak-eternal .avatar-frame__art {
+    animation: frame-eternal-time-light 6.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--back::before,
+  .avatar-frame--streak-eternal .avatar-frame__motion--back::after {
+    inset: 1px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--back::before {
+    border-top-color: rgba(254, 240, 138, 0.9);
+    border-right-color: rgba(196, 181, 253, 0.68);
+    animation: frame-eternal-epoch-orbit 11s linear infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--back::after {
+    inset: 5px;
+    border-bottom-color: rgba(125, 211, 252, 0.78);
+    border-left-color: rgba(251, 191, 36, 0.72);
+    animation: frame-eternal-epoch-orbit-reverse 8.6s linear infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front::before {
+    top: 8px;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    margin-left: -6px;
+    border-radius: 50%;
+    background: radial-gradient(circle, #fffceb 0 16%, #fde68a 34%, rgba(245, 158, 11, 0.34) 68%, transparent 72%);
+    filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.84));
+    animation: frame-eternal-sun-halo 4s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front::after {
+    bottom: 3px;
+    left: 50%;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
+    background: linear-gradient(135deg, #fff7c2, #f59e0b 48%, #fef3c7);
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    filter: drop-shadow(0 0 4px rgba(245, 158, 11, 0.8));
+    animation: frame-eternal-gem-glint 3.8s -1.9s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front i {
+    box-shadow: none;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front i:nth-child(1) {
+    top: 35px;
+    left: 2px;
+    width: 4px;
+    height: 6px;
+    border-radius: 72% 16% 68% 34%;
+    background: #f9a8d4;
+    animation: frame-eternal-petal-drift 5.2s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front i:nth-child(2) {
+    top: 49px;
+    left: 7px;
+    width: 3px;
+    height: 5px;
+    border-radius: 70% 18% 72% 30%;
+    background: #fecdd3;
+    animation: frame-eternal-petal-drift 5.2s -2.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front i:nth-child(3) {
+    top: 39px;
+    right: 2px;
+    width: 4px;
+    height: 7px;
+    border-radius: 80% 12% 80% 24%;
+    background: linear-gradient(160deg, #fef3c7, #a3a84a 72%);
+    transform-origin: 50% 100%;
+    animation: frame-eternal-pine-sway 4.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-eternal .avatar-frame__motion--front i:nth-child(4) {
+    left: 23px;
+    bottom: 12px;
+    width: 5px;
+    height: 5px;
+    border-radius: 0;
+    background: #fff7c2;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    animation: frame-eternal-rabbit-glint 3.6s ease-in-out infinite;
+  }
+
+  .avatar-frame__eternal-object {
+    z-index: 4;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    object-fit: contain;
+    transform: translate(-50%, -50%);
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .avatar-frame__eternal-object--sun {
+    clip-path: polygon(39% 4%, 61% 4%, 63% 28%, 37% 28%);
+    transform-origin: 50% 16%;
+    animation: frame-eternal-sun-contract 4s ease-in-out infinite;
+  }
+
+  .avatar-frame__eternal-rabbit-runner {
+    z-index: 4;
+    top: 50%;
+    left: 50%;
+    display: block;
+    width: var(--frame-art-size);
+    height: var(--frame-art-size);
+    transform: translate(-50%, -50%) translate(-4px, 3px);
+    // 5.76s = 6 个完整的 0.96s 起跳周期；半程正好 3 跳，每跳约前进 15px，让腿部节奏与位移匹配。
+    animation: frame-eternal-rabbit-bridge 5.76s linear infinite;
+  }
+
+  .avatar-frame__eternal-rabbit-direction {
+    inset: 0;
+    display: block;
+    transform: scaleX(1);
+    transform-origin: 30% 80%;
+    animation: frame-eternal-rabbit-direction 5.76s linear infinite;
+  }
+
+  .avatar-frame__eternal-rabbit-sprite {
+    top: 80%;
+    left: 30%;
+    display: block;
+    width: 34px;
+    height: 34px;
+    background-repeat: no-repeat;
+    background-position: 0 0;
+    background-size: 400% 400%;
+    filter: brightness(1.06) drop-shadow(0 1px 1px rgba(146, 64, 14, 0.28));
+    transform: translate(-50%, -50%);
+    transform-origin: 50% 72%;
+    user-select: none;
+    animation:
+      frame-eternal-rabbit-sprite 0.96s step-end infinite,
+      frame-eternal-rabbit-body-arc 0.96s ease-in-out infinite;
+  }
+
+  @keyframes frame-ambient-breathe {
     0%,
     100% {
-      filter: brightness(0.88) saturate(0.92);
-    }
-    48%,
-    58% {
-      filter: brightness(1.18) saturate(1.08);
-    }
-  }
-
-  @keyframes frame-dragon-scale-glint {
-    0%,
-    100% {
-      opacity: 0.32;
-    }
-    42% {
-      opacity: 0.86;
-    }
-    62% {
-      opacity: 0.5;
-    }
-  }
-
-  @keyframes frame-dragon-body-breathe {
-    0%,
-    100% {
-      opacity: 0.93;
-      transform: translateY(0.5px) rotate(0deg) scale(0.985);
-    }
-    20% {
-      opacity: 1;
-      transform: translateY(-0.75px) rotate(7deg) scale(0.995);
-    }
-    38% {
-      opacity: 0.96;
-      transform: translateY(0.15px) rotate(-3deg) scale(0.99);
-    }
-    48% {
-      opacity: 0.95;
-      transform: translateY(0.35px) rotate(0.4deg) scale(0.99);
-    }
-    54% {
-      opacity: 1;
-      transform: translateY(-0.8px) rotate(0deg) scale(1.025);
-    }
-    64% {
-      opacity: 0.92;
-      transform: translateY(0.7px) rotate(0deg) scale(0.978);
-    }
-    72% {
-      opacity: 0.96;
-      transform: translateY(0.2px) rotate(-0.3deg) scale(0.991);
-    }
-    82% {
-      opacity: 0.91;
-      transform: translateY(0.75px) rotate(0.18deg) scale(0.982);
-    }
-    91% {
-      opacity: 0.95;
-      transform: translateY(0.25px) rotate(-0.2deg) scale(0.988);
-    }
-  }
-
-  @keyframes frame-dragon-scale-sweep {
-    0% {
-      opacity: 0;
-      transform: rotate(-72deg);
-    }
-    18% {
-      opacity: 0.65;
-      transform: rotate(-18deg);
-    }
-    40% {
-      opacity: 1;
-      transform: rotate(58deg);
-    }
-    58% {
-      opacity: 0.45;
-      transform: rotate(126deg);
-    }
-    70% {
-      opacity: 0;
-      transform: rotate(154deg);
-    }
-    100% {
-      opacity: 0;
-      transform: rotate(210deg);
-    }
-  }
-
-  @keyframes frame-dragon-head-awaken {
-    0%,
-    100% {
-      opacity: 0.99;
-      transform: translateY(0.5px) rotate(0deg) scale(0.985);
-    }
-    20% {
-      opacity: 1;
-      transform: translateY(-0.75px) rotate(7deg) scale(0.995);
-    }
-    38% {
-      opacity: 0.99;
-      transform: translateY(0.15px) rotate(-3deg) scale(0.99);
-    }
-    48% {
-      opacity: 0.99;
-      transform: translateY(0.35px) rotate(0.4deg) scale(0.99);
-    }
-    54% {
-      opacity: 1;
-      transform: translateY(-0.8px) rotate(0deg) scale(1.025);
-    }
-    64% {
-      opacity: 0.98;
-      transform: translateY(0.7px) rotate(0deg) scale(0.978);
-    }
-    72% {
-      opacity: 0.99;
-      transform: translateY(0.2px) rotate(-0.3deg) scale(0.991);
-    }
-    82% {
-      opacity: 0.97;
-      transform: translateY(0.75px) rotate(0.18deg) scale(0.982);
-    }
-    91% {
-      opacity: 0.99;
-      transform: translateY(0.25px) rotate(-0.2deg) scale(0.988);
-    }
-  }
-
-  @keyframes frame-dragon-pearl {
-    0%,
-    100% {
-      opacity: 0.76;
-      transform: scale(0.92);
-    }
-    20% {
-      opacity: 0.86;
-      transform: scale(1);
-    }
-    38% {
-      opacity: 0.78;
-      transform: scale(0.9);
-    }
-    48% {
-      opacity: 0.82;
-      transform: scale(0.94);
-    }
-    54% {
-      opacity: 1;
-      transform: scale(1.24);
-    }
-    64% {
-      opacity: 0.72;
-      transform: scale(0.82);
-    }
-    72% {
-      opacity: 0.86;
-      transform: scale(0.98);
-    }
-    82% {
-      opacity: 0.74;
-      transform: scale(0.88);
-    }
-    91% {
-      opacity: 0.82;
-      transform: scale(0.95);
-    }
-  }
-
-  @keyframes frame-dragon-eye-flash {
-    0%,
-    42%,
-    68%,
-    100% {
-      opacity: 0;
-      transform: scale(0.5);
-    }
-    53% {
-      opacity: 1;
-      transform: scale(1.8);
-    }
-    61% {
       opacity: 0.42;
-      transform: scale(0.95);
-    }
-  }
-
-  @keyframes frame-dragon-breath-spark {
-    0%,
-    48%,
-    70%,
-    100% {
-      opacity: 0;
-      transform: translateX(-16%) scaleX(0.3);
-    }
-    54% {
-      opacity: 1;
-      transform: translateX(0) scaleX(0.92);
-    }
-    64% {
-      opacity: 0;
-      transform: translateX(32%) scaleX(1.24);
-    }
-  }
-
-  @keyframes frame-premium-orbit {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-premium-orbit-reverse {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-achievement-turn {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-achievement-turn-reverse {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-achievement-orbit {
-    from {
-      transform: rotate(0deg) scaleY(0.82);
-    }
-    to {
-      transform: rotate(360deg) scaleY(0.82);
-    }
-  }
-
-  @keyframes frame-achievement-breathe {
-    0%,
-    100% {
-      opacity: 0.68;
-      transform: scale(0.98);
+      filter: blur(3.5px);
+      transform: translate(-50%, -50%);
     }
     50% {
-      opacity: 1;
-      transform: scale(1.035);
+      opacity: 0.78;
+      filter: blur(5px);
+      transform: translate(-50%, -50%);
     }
   }
 
-  @keyframes frame-gift-epic-orbit {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-gift-epic-orbit-reverse {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-streak-month-phases {
+  @keyframes frame-gold-breathe {
     0%,
     100% {
-      opacity: 0.62;
-      transform: scale(0.98);
+      filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.2)) drop-shadow(0 0 3px var(--frame-glow)) brightness(0.98);
+      transform: translate(-50%, -50%);
     }
     50% {
-      opacity: 1;
-      transform: scale(1.035);
-    }
-  }
-
-  @keyframes frame-free-colorful-orbit {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-free-colorful-orbit-reverse {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-free-colorful-moon-orbit {
-    from {
-      transform: rotate(-18deg) scaleY(0.86);
-    }
-    to {
-      transform: rotate(342deg) scaleY(0.86);
-    }
-  }
-
-  @keyframes frame-eternal-lustre {
-    0%,
-    100% {
-      filter: brightness(0.98) saturate(1.04);
-    }
-    50% {
-      filter: brightness(1.24) saturate(1.22);
-    }
-  }
-
-  @keyframes frame-eternal-corona {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-eternal-inner {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-eternal-calendar {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-eternal-orbit {
-    from {
-      transform: rotate(24deg) scaleY(0.76);
-    }
-    to {
-      transform: rotate(384deg) scaleY(0.76);
-    }
-  }
-
-  @keyframes frame-eternal-comet {
-    0%,
-    38%,
-    100% {
-      opacity: 0;
-      transform: translate(-42%, 30%) rotate(-31deg) scaleX(0.35);
-    }
-    54% {
-      opacity: 1;
-      transform: translate(-4%, 2%) rotate(-31deg) scaleX(1.06);
-    }
-    72% {
-      opacity: 0;
-      transform: translate(34%, -28%) rotate(-31deg) scaleX(1.22);
-    }
-  }
-
-  @keyframes frame-sakura-float {
-    0%,
-    100% {
-      opacity: 0.72;
-      transform: rotate(-5deg) scale(0.95);
-    }
-    50% {
-      opacity: 1;
-      transform: rotate(6deg) scale(1.04);
-    }
-  }
-
-  @keyframes frame-neon-pulse {
-    0%,
-    100% {
-      filter: brightness(0.95) saturate(1);
-      transform: scale(0.98);
-    }
-    50% {
-      filter: brightness(1.25) saturate(1.25);
-      transform: scale(1.02);
-    }
-  }
-
-  @keyframes frame-neon-orbit {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-neon-track {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-neon-comet {
-    0%,
-    48%,
-    100% {
-      opacity: 0;
-      transform: translate(-30%, 20%) rotate(-32deg) scaleX(0.45);
-    }
-    62% {
-      opacity: 1;
-      transform: translate(0, 0) rotate(-32deg) scaleX(1);
-    }
-    76% {
-      opacity: 0;
-      transform: translate(24%, -18%) rotate(-32deg) scaleX(1.15);
+      filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.2)) drop-shadow(0 0 6px var(--frame-glow)) brightness(1.08);
+      transform: translate(-50%, -50%);
     }
   }
 
   @keyframes frame-gold-glint {
     0%,
-    34%,
     100% {
-      opacity: 0.18;
-      transform: translateX(-16%);
+      opacity: 0.15;
+      transform: translate(-7px, 5px) rotate(-34deg) scaleX(0.5);
     }
-    58% {
-      opacity: 0.72;
-      transform: translateX(16%);
+    45% {
+      opacity: 1;
+      transform: translate(25px, -9px) rotate(-34deg) scaleX(1.15);
+    }
+    70% {
+      opacity: 0.25;
+      transform: translate(36px, -14px) rotate(-34deg) scaleX(0.65);
     }
   }
 
-  @keyframes frame-sunset-glow {
+  @keyframes frame-sakura-bloom {
     0%,
     100% {
-      opacity: 0.3;
-      transform: rotate(-8deg);
+      filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.18)) drop-shadow(0 0 3px var(--frame-glow)) saturate(0.96);
+      transform: translate(-50%, -50%);
     }
     50% {
-      opacity: 0.9;
-      transform: rotate(7deg);
+      filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.18)) drop-shadow(0 0 6px var(--frame-glow)) saturate(1.12)
+        brightness(1.04);
+      transform: translate(-50%, -50%);
     }
   }
 
-  @keyframes frame-ocean-float {
+  @keyframes frame-petal-drift {
+    0%,
+    100% {
+      opacity: 0.2;
+      transform: translate(0, -2px) rotate(-20deg);
+    }
+    35% {
+      opacity: 0.95;
+    }
+    70% {
+      opacity: 0.55;
+      transform: translate(14px, 18px) rotate(115deg);
+    }
+  }
+
+  @keyframes frame-sunset-sky {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 3px var(--frame-glow)) saturate(0.94) brightness(0.98);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: drop-shadow(0 0 7px var(--frame-glow)) saturate(1.12) brightness(1.06);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-sunset-sun {
     0%,
     100% {
       opacity: 0.58;
-      transform: translateY(2%);
+      transform: scale(0.86);
     }
     50% {
       opacity: 1;
-      transform: translateY(-2%);
+      transform: scale(1.18);
+    }
+  }
+
+  @keyframes frame-cloud-breathe {
+    0%,
+    100% {
+      opacity: 0.34;
+      transform: translateX(-2px) scaleX(0.86);
+    }
+    50% {
+      opacity: 0.9;
+      transform: translateX(3px) scaleX(1.08);
+    }
+  }
+
+  @keyframes frame-moonlight-breathe {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 3px var(--frame-glow)) brightness(0.94);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: drop-shadow(0 0 7px var(--frame-glow)) brightness(1.08);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-moon-phase-travel {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: rotate(-58deg) translateY(1px) scale(0.7);
+    }
+    50% {
+      opacity: 1;
+      transform: rotate(58deg) translateY(-1px) scale(1.2);
+    }
+  }
+
+  @keyframes frame-local-pulse {
+    0%,
+    100% {
+      opacity: 0.32;
+      transform: scale(0.82);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.16);
+    }
+  }
+
+  @keyframes frame-note-metal-light {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 2px var(--frame-glow)) brightness(0.98) saturate(0.98);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: drop-shadow(0 0 4px var(--frame-glow)) brightness(1.08) saturate(1.08);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-note-water-flow {
+    0%,
+    100% {
+      opacity: 0.12;
+      filter: brightness(1.02) saturate(1.02);
+      transform: translate(-50%, -50%) translateX(-2px) skewX(-1.5deg);
+    }
+    46% {
+      opacity: 0.78;
+      filter: brightness(1.34) saturate(1.18);
+      transform: translate(-50%, -50%) translate(3px, -1px) skewX(2.2deg);
+    }
+    72% {
+      opacity: 0.38;
+      filter: brightness(1.16) saturate(1.08);
+      transform: translate(-50%, -50%) translateX(1px) skewX(-0.5deg);
+    }
+  }
+
+  @keyframes frame-ink-current {
+    0%,
+    100% {
+      opacity: 0.32;
+      transform: translateX(-4px) scaleX(0.82);
+    }
+    50% {
+      opacity: 1;
+      transform: translateX(4px) scaleX(1.1);
+    }
+  }
+
+  @keyframes frame-river-spark {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.6);
+    }
+    35% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(35px, -7px) scale(1.1);
+    }
+  }
+
+  @keyframes frame-vault-metal-light {
+    0%,
+    100% {
+      filter: brightness(0.98) saturate(1.04) hue-rotate(5deg);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: brightness(1.08) saturate(1.2) hue-rotate(16deg);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-vault-cloud-gate {
+    0%,
+    100% {
+      opacity: 0.1;
+      filter: brightness(1.03) saturate(1.08) hue-rotate(8deg);
+      transform: translate(-50%, -50%);
+    }
+    42% {
+      opacity: 0.7;
+      filter: brightness(1.36) saturate(1.34) hue-rotate(20deg);
+      transform: translate(-50%, -50%);
+    }
+    72% {
+      opacity: 0.32;
+      filter: brightness(1.16) saturate(1.18) hue-rotate(14deg);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-vault-door-shine {
+    0%,
+    100% {
+      opacity: 0.26;
+      transform: rotate(-18deg) scale(0.72);
+    }
+    42% {
+      opacity: 1;
+      transform: rotate(0deg) scale(1.18);
+    }
+    72% {
+      opacity: 0.56;
+      transform: rotate(18deg) scale(0.88);
+    }
+  }
+
+  @keyframes frame-vault-cloud-rise {
+    0%,
+    100% {
+      opacity: 0.16;
+      transform: translateY(3px) scaleX(0.7);
+    }
+    42% {
+      opacity: 0.92;
+      transform: translateY(-3px) scaleX(1.12);
+    }
+    72% {
+      opacity: 0.42;
+      transform: translateY(-1px) scaleX(0.9);
+    }
+  }
+
+  @keyframes frame-vault-cloud-drift {
+    0%,
+    100% {
+      opacity: 0.28;
+      transform: translateX(-3px) scaleX(0.84);
+    }
+    50% {
+      opacity: 0.86;
+      transform: translateX(3px) scaleX(1.08);
+    }
+  }
+
+  @keyframes frame-vault-data-rise {
+    0%,
+    100% {
+      opacity: 0.16;
+      transform: translateY(3px) rotate(0deg) scale(0.72);
+    }
+    42% {
+      opacity: 1;
+      transform: translateY(-4px) rotate(45deg) scale(1.08);
+    }
+    72% {
+      opacity: 0.44;
+      transform: translateY(-1px) rotate(90deg) scale(0.86);
+    }
+  }
+
+  @keyframes frame-archive-gate {
+    0%,
+    100% {
+      opacity: 0.28;
+      transform: translateY(2px) scaleX(0.58) scaleY(0.88);
+    }
+    44% {
+      opacity: 0.94;
+      transform: translateY(-2px) scaleX(1.06) scaleY(1.04);
+    }
+    72% {
+      opacity: 0.52;
+      transform: translateY(-1px) scaleX(0.84) scaleY(0.96);
+    }
+  }
+
+  @keyframes frame-ocean-metal-light {
+    0%,
+    100% {
+      transform: translate(-50%, -50%);
+      filter: brightness(0.98) saturate(1.02);
+    }
+    48% {
+      transform: translate(-50%, -50%);
+      filter: brightness(1.07) saturate(1.08);
+    }
+  }
+
+  @keyframes frame-ocean-water-flow {
+    0% {
+      opacity: 0.12;
+      filter: brightness(1.04) saturate(1.02);
+      clip-path: polygon(0 67%, 42% 56%, 58% 69%, 48% 100%, 0 100%);
+      transform: translate(-50%, -50%);
+    }
+    16% {
+      opacity: 0.58;
+      filter: brightness(1.2) saturate(1.1);
+      clip-path: polygon(0 55%, 48% 43%, 60% 58%, 47% 85%, 0 86%);
+      transform: translate(-50%, -50%);
+    }
+    38% {
+      opacity: 0.84;
+      filter: brightness(1.34) saturate(1.18);
+      clip-path: polygon(0 32%, 52% 22%, 61% 39%, 45% 67%, 0 66%);
+      transform: translate(-50%, -50%);
+    }
+    61% {
+      opacity: 0.94;
+      filter: brightness(1.42) saturate(1.2);
+      clip-path: polygon(0 0, 50% 0, 59% 17%, 43% 46%, 0 44%);
+      transform: translate(-50%, -50%);
+    }
+    78% {
+      opacity: 0.18;
+      filter: brightness(1.12) saturate(1.06);
+      clip-path: polygon(0 0, 46% 0, 54% 10%, 39% 32%, 0 29%);
+      transform: translate(-50%, -50%);
+    }
+    100% {
+      opacity: 0.12;
+      filter: brightness(1.04) saturate(1.02);
+      clip-path: polygon(0 67%, 42% 56%, 58% 69%, 48% 100%, 0 100%);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-ocean-undertow {
+    0%,
+    100% {
+      opacity: 0.24;
+      transform: translate(-1px, 1px) skewY(-3deg) scaleX(0.92) scaleY(0.96);
+    }
+    26% {
+      opacity: 0.54;
+      transform: translate(0, 0) skewY(1deg) scaleX(0.98) scaleY(1.01);
+    }
+    54% {
+      opacity: 0.76;
+      transform: translate(1px, 2px) skewY(4deg) scaleX(1.04) scaleY(1.05);
+    }
+    78% {
+      opacity: 0.4;
+      transform: translate(0, 1px) skewY(0deg) scaleX(0.96) scaleY(0.99);
+    }
+  }
+
+  @keyframes frame-ocean-return {
+    0%,
+    100% {
+      opacity: 0.2;
+      transform: translate(-2px, 1px) skewX(-5deg) scaleX(0.88) scaleY(0.92);
+    }
+    34% {
+      opacity: 0.62;
+      transform: translate(0, 0) skewX(2deg) scaleX(0.98) scaleY(1.01);
+    }
+    62% {
+      opacity: 0.86;
+      transform: translate(3px, -2px) skewX(5deg) scaleX(1.05) scaleY(1.06);
+    }
+    82% {
+      opacity: 0.4;
+      transform: translate(1px, 0) skewX(1deg) scaleX(0.95) scaleY(0.98);
     }
   }
 
   @keyframes frame-ocean-current {
     0%,
     100% {
-      opacity: 0.62;
-      transform: rotate(-10deg) scale(0.98);
+      opacity: 0.32;
+      transform: translate(-1px, 2px) rotate(-5deg) skewY(-3deg) scaleX(0.9) scaleY(0.94);
     }
-    50% {
-      opacity: 1;
-      transform: rotate(18deg) scale(1.025);
+    24% {
+      opacity: 0.68;
+      transform: translate(0, 0) rotate(-2deg) skewY(1deg) scaleX(0.97) scaleY(1);
     }
-  }
-
-  @keyframes frame-ocean-orbit {
-    from {
-      transform: rotate(-18deg) scaleY(0.84);
+    49% {
+      opacity: 0.94;
+      transform: translate(2px, -3px) rotate(3deg) skewY(5deg) scaleX(1.06) scaleY(1.07);
     }
-    to {
-      transform: rotate(342deg) scaleY(0.84);
-    }
-  }
-
-  @keyframes frame-aurora-turn {
-    to {
-      transform: rotate(-360deg);
+    72% {
+      opacity: 0.58;
+      transform: translate(1px, -1px) rotate(0deg) skewY(1deg) scaleX(0.97) scaleY(1.01);
     }
   }
 
-  @keyframes frame-aurora-wave {
+  @keyframes frame-foam-rise {
     0%,
     100% {
-      opacity: 0.56;
-      transform: rotate(0) scale(0.98);
+      opacity: 0.16;
+      transform: translate(-1px, 2px) rotate(-6deg) scale(0.84);
     }
-    50% {
-      opacity: 1;
-      transform: rotate(18deg) scale(1.04);
+    34% {
+      opacity: 0.64;
+      transform: translate(0, 0) rotate(-2deg) scale(0.96);
     }
-  }
-
-  @keyframes frame-aurora-orbit {
-    to {
-      transform: rotate(360deg);
+    56% {
+      opacity: 0.94;
+      transform: translate(2px, -3px) rotate(3deg) scale(1.06);
     }
-  }
-
-  @keyframes frame-galaxy-turn {
-    to {
-      transform: rotate(360deg);
+    78% {
+      opacity: 0.3;
+      transform: translate(4px, -5px) rotate(5deg) scale(0.9);
     }
   }
 
-  @keyframes frame-galaxy-crown {
+  @keyframes frame-ocean-crest-run {
     0%,
     100% {
-      opacity: 0.72;
-      transform: scale(0.97);
+      opacity: 0.14;
+      transform: translate(-1px, 1px) rotate(var(--ocean-crest-angle)) skewX(-6deg) scaleX(0.82) scaleY(0.84);
     }
-    50% {
-      opacity: 1;
-      transform: scale(1.035);
+    28% {
+      opacity: 0.68;
+      transform: translate(0, 0) rotate(var(--ocean-crest-angle)) skewX(1deg) scaleX(0.96) scaleY(0.98);
     }
-  }
-
-  @keyframes frame-galaxy-twinkle {
-    0%,
-    100% {
+    52% {
+      opacity: 0.96;
+      transform: translate(2px, -2px) rotate(var(--ocean-crest-angle)) skewX(5deg) scaleX(1.06) scaleY(1.04);
+    }
+    76% {
       opacity: 0.38;
-      transform: scale(0.94);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1.08);
+      transform: translate(4px, -4px) rotate(var(--ocean-crest-angle)) skewX(1deg) scaleX(0.92) scaleY(0.94);
     }
   }
 
-  @keyframes frame-galaxy-starburst {
-    0%,
-    32%,
+  @keyframes frame-water-drop {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.5);
+    }
+    32% {
+      opacity: 0.9;
+    }
     100% {
       opacity: 0;
-      transform: scale(0.42) rotate(12deg);
+      transform: translate(16px, -19px) scale(1.15);
     }
-    45% {
-      opacity: 1;
-      transform: scale(1.18) rotate(12deg);
+  }
+
+  @keyframes frame-aurora-metal-light {
+    0%,
+    100% {
+      filter: hue-rotate(-8deg) brightness(0.98) saturate(1.04);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: hue-rotate(12deg) brightness(1.08) saturate(1.12);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-aurora-ribbon-flow {
+    0%,
+    100% {
+      opacity: 0.1;
+      filter: brightness(1.04) saturate(1.08) hue-rotate(-12deg);
+      transform: translate(-50%, -50%);
+    }
+    32% {
+      opacity: 0.2;
+      filter: brightness(1.12) saturate(1.16) hue-rotate(4deg);
+      transform: translate(-50%, -50%);
+    }
+    56% {
+      opacity: 0.34;
+      filter: brightness(1.22) saturate(1.24) hue-rotate(16deg);
+      transform: translate(-50%, -50%);
+    }
+    78% {
+      opacity: 0.16;
+      filter: brightness(1.1) saturate(1.12) hue-rotate(3deg);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-aurora-veil-left {
+    0%,
+    100% {
+      opacity: 0.26;
+      transform: translate(-1px, 1px) skewY(-4deg) scaleX(0.86) scaleY(0.94);
+    }
+    30% {
+      opacity: 0.66;
+      transform: translate(0, 0) skewY(1deg) scaleX(0.98) scaleY(1.01);
+    }
+    56% {
+      opacity: 0.9;
+      transform: translate(2px, -2px) skewY(5deg) scaleX(1.06) scaleY(1.06);
+    }
+    80% {
+      opacity: 0.46;
+      transform: translate(1px, 0) skewY(0deg) scaleX(0.94) scaleY(0.98);
+    }
+  }
+
+  @keyframes frame-aurora-veil-right {
+    0%,
+    100% {
+      opacity: 0.24;
+      transform: translate(1px, 1px) skewY(4deg) scaleX(0.86) scaleY(0.94);
+    }
+    28% {
+      opacity: 0.62;
+      transform: translate(0, 0) skewY(-1deg) scaleX(0.97) scaleY(1.01);
     }
     58% {
+      opacity: 0.92;
+      transform: translate(-2px, -3px) skewY(-5deg) scaleX(1.06) scaleY(1.07);
+    }
+    82% {
+      opacity: 0.44;
+      transform: translate(-1px, 0) skewY(0deg) scaleX(0.94) scaleY(0.98);
+    }
+  }
+
+  @keyframes frame-aurora-depth-veil {
+    0%,
+    100% {
+      opacity: 0.16;
+      transform: translateX(var(--aurora-rest-x)) translateY(1px) rotate(var(--aurora-tilt)) skewY(-3deg) scaleX(0.82)
+        scaleY(0.9);
+    }
+    34% {
+      opacity: 0.64;
+      transform: translateX(0) translateY(0) rotate(var(--aurora-tilt)) skewY(1deg) scaleX(0.96) scaleY(1.01);
+    }
+    58% {
+      opacity: 0.82;
+      transform: translateX(var(--aurora-peak-x)) translateY(-2px) rotate(var(--aurora-tilt)) skewY(4deg) scaleX(1.04)
+        scaleY(1.06);
+    }
+    82% {
+      opacity: 0.34;
+      transform: translateX(0) translateY(0) rotate(var(--aurora-tilt)) skewY(0deg) scaleX(0.9) scaleY(0.97);
+    }
+  }
+
+  @keyframes frame-aurora-curtain-unfold {
+    0%,
+    100% {
+      opacity: 0.24;
+      transform: translateY(-1px) scaleX(0.84) scaleY(0.72);
+    }
+    24% {
+      opacity: 0.58;
+      transform: translateY(0) scaleX(0.96) scaleY(0.9);
+    }
+    48% {
+      opacity: 0.92;
+      transform: translateY(1px) scaleX(1.08) scaleY(1.08);
+    }
+    68% {
+      opacity: 0.7;
+      transform: translateY(0) scaleX(1) scaleY(0.96);
+    }
+    84% {
+      opacity: 0.4;
+      transform: translateY(-1px) scaleX(0.9) scaleY(0.8);
+    }
+  }
+
+  @keyframes frame-aurora-core-charge {
+    0%,
+    100% {
+      opacity: 0.48;
+      transform: rotate(0deg) scale(0.82);
+    }
+    30% {
+      opacity: 0.68;
+      transform: rotate(12deg) scale(0.94);
+    }
+    48% {
+      opacity: 0.9;
+      transform: rotate(30deg) scale(1.08);
+    }
+    64% {
+      opacity: 0.72;
+      transform: rotate(44deg) scale(0.98);
+    }
+    82% {
+      opacity: 0.56;
+      transform: rotate(22deg) scale(0.88);
+    }
+  }
+
+  @keyframes frame-aurora-starfall {
+    0%,
+    100% {
+      opacity: 0.14;
+      transform: translate(-2px, -3px) rotate(0deg) scale(0.58);
+    }
+    38% {
+      opacity: 0.82;
+      transform: translate(1px, 1px) rotate(45deg) scale(0.94);
+    }
+    56% {
+      opacity: 1;
+      transform: translate(4px, 7px) rotate(90deg) scale(1.28);
+    }
+    78% {
+      opacity: 0.38;
+      transform: translate(6px, 11px) rotate(135deg) scale(0.72);
+    }
+  }
+
+  @keyframes frame-flame-metal-light {
+    0%,
+    100% {
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 2px var(--frame-glow)) brightness(0.98);
+    }
+    38% {
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 4px var(--frame-glow)) brightness(1.1);
+    }
+    68% {
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 3px var(--frame-glow)) brightness(1.04);
+    }
+  }
+
+  @keyframes frame-ember-rise {
+    0% {
       opacity: 0;
-      transform: scale(1.45) rotate(12deg);
+      transform: translate(0, 4px) rotate(0deg) scale(0.6);
+    }
+    32% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-8px, -27px) rotate(140deg) scale(1.1);
+    }
+  }
+
+  @keyframes frame-ember-rise-left {
+    0% {
+      opacity: 0;
+      transform: translate(0, 4px) rotate(0deg) scale(0.55);
+    }
+    28% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(10px, -31px) rotate(-125deg) scale(1.08);
+    }
+  }
+
+  @keyframes frame-flame-tongue {
+    0%,
+    100% {
+      opacity: 0.44;
+      filter: drop-shadow(0 0 2px #fb923c) drop-shadow(0 0 4px rgba(220, 38, 38, 0.52));
+      transform: rotate(34deg) skewY(-4deg) translateY(1px);
+    }
+    38% {
+      opacity: 0.86;
+      filter: drop-shadow(0 0 3px #fde68a) drop-shadow(0 0 5px rgba(239, 68, 68, 0.68));
+      transform: rotate(42deg) skewY(5deg) translate(-0.5px, -2px);
+    }
+    72% {
+      opacity: 0.62;
+      transform: rotate(38deg) skewY(-2deg) translate(0.5px, -1px);
+    }
+  }
+
+  @keyframes frame-flame-hot-edge {
+    0%,
+    100% {
+      opacity: 0.5;
+      filter: drop-shadow(0 0 3px #fb923c) drop-shadow(0 0 6px rgba(220, 38, 38, 0.6));
+      transform: rotate(-8deg);
+    }
+    44% {
+      opacity: 1;
+      filter: drop-shadow(0 0 6px #fde68a) drop-shadow(0 0 11px rgba(239, 68, 68, 0.88));
+      transform: rotate(9deg);
+    }
+    72% {
+      opacity: 0.76;
+      transform: rotate(3deg);
+    }
+  }
+
+  @keyframes frame-flame-material {
+    0%,
+    100% {
+      opacity: 0.08;
+      filter: brightness(1.04) saturate(1.04);
+      transform: translate(-50%, -50%);
+    }
+    34% {
+      opacity: 0.28;
+      filter: brightness(1.18) saturate(1.14) drop-shadow(0 0 2px rgba(254, 215, 91, 0.64));
+      transform: translate(-50%, -50%);
+    }
+    68% {
+      opacity: 0.14;
+      filter: brightness(1.1) saturate(1.08);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-flame-side-burn {
+    0%,
+    100% {
+      opacity: 0.34;
+      transform: rotate(var(--flame-side-angle)) translateY(1px) skewY(-4deg) scaleX(0.9) scaleY(0.88);
+    }
+    38% {
+      opacity: 0.92;
+      transform: rotate(var(--flame-side-angle)) translateY(-2px) skewY(7deg) scaleX(1.04) scaleY(1.08);
+    }
+    68% {
+      opacity: 0.62;
+      transform: rotate(var(--flame-side-angle)) translateY(-1px) skewY(-2deg) scaleX(0.97) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-neon-pulse {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 4px var(--frame-glow)) brightness(0.92);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: drop-shadow(0 0 9px var(--frame-glow)) brightness(1.14);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-neon-chase {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes frame-neon-node-sweep {
+    0% {
+      opacity: 0.48;
+      transform: rotate(-44deg) scale(0.78);
+    }
+    48% {
+      opacity: 1;
+      transform: rotate(138deg) scale(1.22);
+    }
+    72% {
+      opacity: 0.7;
+      transform: rotate(235deg) scale(0.9);
+    }
+    100% {
+      opacity: 0.48;
+      transform: rotate(316deg) scale(0.78);
+    }
+  }
+
+  @keyframes frame-neon-circuit-flow {
+    0%,
+    100% {
+      opacity: 0.12;
+      transform: rotate(var(--neon-circuit-angle)) scaleX(0.42);
+    }
+    24% {
+      opacity: 0.42;
+      transform: rotate(var(--neon-circuit-angle)) scaleX(0.76);
+    }
+    44% {
+      opacity: 1;
+      transform: rotate(var(--neon-circuit-angle)) scaleX(1.18);
+    }
+    64% {
+      opacity: 0.34;
+      transform: rotate(var(--neon-circuit-angle)) scaleX(0.64);
+    }
+  }
+
+  @keyframes frame-neon-arc {
+    0%,
+    100% {
+      opacity: 0.28;
+      transform: translate(-2px, 1px) skewX(-24deg) scaleX(0.64);
+    }
+    42% {
+      opacity: 1;
+      transform: translate(8px, -4px) skewX(18deg) scaleX(1.22);
+    }
+    66% {
+      opacity: 0.72;
+      transform: translate(3px, 2px) skewX(-8deg) scaleX(0.92);
+    }
+  }
+
+  @keyframes frame-neon-spark {
+    0% {
+      opacity: 0;
+      transform: translate(0, 0) scale(0.45);
+    }
+    32% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-13px, 10px) scale(1.2);
+    }
+  }
+
+  @keyframes frame-neon-crystal-charge {
+    0%,
+    100% {
+      opacity: 0.08;
+      filter: brightness(1.04) saturate(1.04) hue-rotate(-8deg);
+      transform: translate(-50%, -50%);
+    }
+    42% {
+      opacity: 0.72;
+      filter: brightness(1.42) saturate(1.28) hue-rotate(16deg) drop-shadow(0 0 5px rgba(103, 232, 249, 0.9));
+      transform: translate(-50%, -50%);
+    }
+    70% {
+      opacity: 0.3;
+      filter: brightness(1.16) saturate(1.12) hue-rotate(4deg);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-galaxy-breathe {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 5px var(--frame-glow)) brightness(0.96);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: drop-shadow(0 0 10px var(--frame-glow)) brightness(1.1);
+      transform: translate(-50%, -50%);
     }
   }
 
   @keyframes frame-galaxy-orbit {
     to {
-      transform: rotate(336deg);
+      transform: rotate(384deg);
     }
   }
 
-  @keyframes frame-galaxy-comet {
-    0%,
-    54%,
-    100% {
-      opacity: 0;
-      transform: translate(-24%, 18%) rotate(-28deg) scaleX(0.5);
+  @keyframes frame-galaxy-orbit-reverse {
+    to {
+      transform: rotate(-302deg);
     }
-    64% {
+  }
+
+  @keyframes frame-galaxy-comet-sweep {
+    0%,
+    100% {
+      opacity: 0.28;
+      transform: rotate(-66deg) translateY(2px) scale(0.72);
+    }
+    46% {
       opacity: 1;
-      transform: translate(0, 0) rotate(-28deg) scaleX(1);
+      transform: rotate(58deg) translateY(-2px) scale(1.32);
     }
-    76% {
-      opacity: 0;
-      transform: translate(22%, -18%) rotate(-28deg) scaleX(1.15);
-    }
-  }
-
-  @keyframes frame-flame-pulse {
-    0%,
-    100% {
-      filter: brightness(0.96);
-      transform: scale(0.98);
-    }
-    50% {
-      filter: brightness(1.2) saturate(1.16);
-      transform: scale(1.025);
+    72% {
+      opacity: 0.72;
+      transform: rotate(116deg) scale(0.96);
     }
   }
 
-  @keyframes frame-flame-dance {
+  @keyframes frame-galaxy-planet-pulse {
     0%,
     100% {
-      opacity: 0.66;
-      transform: rotate(-3deg) scale(0.98);
+      opacity: 0.48;
+      transform: translate(-2px, 2px) scale(0.72);
     }
     50% {
       opacity: 1;
-      transform: rotate(4deg) scale(1.04);
+      transform: translate(2px, -2px) scale(1.28);
     }
   }
 
-  @keyframes frame-flame-orbit {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-flame-comet {
-    0%,
-    54%,
-    100% {
-      opacity: 0;
-      transform: translate(-22%, 17%) rotate(-30deg) scaleX(0.46);
-    }
-    66% {
-      opacity: 0.92;
-      transform: translate(0, 0) rotate(-30deg) scaleX(1);
-    }
-    79% {
-      opacity: 0;
-      transform: translate(20%, -16%) rotate(-30deg) scaleX(1.12);
-    }
-  }
-
-  @keyframes frame-dragon-turn {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-dragon-orbit {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-dragon-crown {
+  @keyframes frame-galaxy-nebula-shimmer {
     0%,
     100% {
-      opacity: 0.76;
-      transform: scale(0.96) rotate(-2deg);
+      opacity: 0.06;
+      filter: brightness(1.02) saturate(1.02);
+      transform: translate(-50%, -50%);
     }
-    50% {
-      opacity: 1;
-      transform: scale(1.05) rotate(3deg);
-    }
-  }
-
-  @keyframes frame-dragon-inner {
-    to {
-      transform: rotate(-360deg);
+    48% {
+      opacity: 0.62;
+      filter: brightness(1.38) saturate(1.2) drop-shadow(0 0 5px rgba(196, 181, 253, 0.86));
+      transform: translate(-50%, -50%);
     }
   }
 
-  @keyframes frame-dragon-scales {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-dragon-comet {
-    0%,
-    34%,
-    100% {
-      opacity: 0;
-      transform: translate(-44%, 28%) rotate(-29deg) scaleX(0.36);
-    }
-    52% {
-      opacity: 1;
-      transform: translate(-2%, 0) rotate(-29deg) scaleX(1.08);
-    }
-    70% {
-      opacity: 0;
-      transform: translate(34%, -24%) rotate(-29deg) scaleX(1.24);
-    }
-  }
-
-  @keyframes frame-celestial-lustre {
+  @keyframes frame-star-drift {
     0%,
     100% {
-      filter: brightness(0.98) saturate(1);
-    }
-    50% {
-      filter: brightness(1.15) saturate(1.12);
-    }
-  }
-
-  @keyframes frame-celestial-crown {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @keyframes frame-celestial-inner-ring {
-    to {
-      transform: rotate(-360deg);
-    }
-  }
-
-  @keyframes frame-celestial-constellation {
-    0%,
-    100% {
-      opacity: 0.66;
-      filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.66)) brightness(0.92);
-    }
-    50% {
-      opacity: 1;
-      filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.94)) brightness(1.2);
-    }
-  }
-
-  @keyframes frame-celestial-jewel {
-    0%,
-    34%,
-    100% {
-      opacity: 0.58;
-      transform: translateX(-50%) scale(0.8);
+      opacity: 0.2;
+      transform: scale(0.55) rotate(0deg);
     }
     48% {
       opacity: 1;
-      transform: translateX(-50%) scale(1.18);
+      transform: scale(1.25) rotate(120deg);
     }
-    62% {
-      opacity: 0.76;
-      transform: translateX(-50%) scale(0.94);
+  }
+
+  @keyframes frame-dragon-metal-light {
+    0%,
+    100% {
+      transform: translate(-50%, -50%);
+      filter: brightness(0.98) saturate(1.02);
+    }
+    42% {
+      transform: translate(-50%, -50%);
+      filter: brightness(1.09) saturate(1.1);
+    }
+    72% {
+      transform: translate(-50%, -50%);
+      filter: brightness(1.03) saturate(1.05);
+    }
+  }
+
+  @keyframes frame-dragon-trail-ember {
+    0%,
+    100% {
+      opacity: 0.34;
+      filter: brightness(0.98) saturate(1.08) drop-shadow(0 0 1px rgba(249, 115, 22, 0.48));
+    }
+    50% {
+      opacity: 0.54;
+      filter: brightness(1.12) saturate(1.18) drop-shadow(0 0 1.5px rgba(255, 153, 28, 0.68));
+    }
+  }
+
+  @keyframes frame-dragon-mane-upper {
+    0% {
+      transform: translate(-50%, -50%) rotate(-1.6deg) scaleY(0.98);
+    }
+    46% {
+      transform: translate(-50%, -50%) rotate(4.8deg) scaleY(1.055);
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(-0.4deg) scaleY(1.015);
+    }
+  }
+
+  @keyframes frame-dragon-mane-middle {
+    0% {
+      transform: translate(-50%, -50%) rotate(2deg) scaleY(0.975);
+    }
+    52% {
+      transform: translate(-50%, -50%) rotate(-4.2deg) scaleY(1.045);
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(0.7deg) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-dragon-mane-lower {
+    0% {
+      transform: translate(-50%, -50%) rotate(-1.2deg) scaleY(0.985);
+    }
+    48% {
+      transform: translate(-50%, -50%) rotate(3.6deg) scaleY(1.04);
+    }
+    100% {
+      transform: translate(-50%, -50%) rotate(-0.6deg) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-dragon-trail-mane {
+    0% {
+      -webkit-mask-position: 118% 50%;
+      mask-position: 118% 50%;
+      opacity: 0.86;
+    }
+    36%,
+    68% {
+      opacity: 1;
+    }
+    100% {
+      -webkit-mask-position: -34% 50%;
+      mask-position: -34% 50%;
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes frame-dragon-trail-left {
+    0% {
+      -webkit-mask-position: 50% -30%;
+      mask-position: 50% -30%;
+      opacity: 0.84;
+    }
+    34%,
+    72% {
+      opacity: 0.96;
+    }
+    100% {
+      -webkit-mask-position: 50% 122%;
+      mask-position: 50% 122%;
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes frame-dragon-trail-right {
+    0% {
+      -webkit-mask-position: 50% 122%;
+      mask-position: 50% 122%;
+      opacity: 0.84;
+    }
+    32%,
+    70% {
+      opacity: 0.98;
+    }
+    100% {
+      -webkit-mask-position: 50% -30%;
+      mask-position: 50% -30%;
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes frame-dragon-trail-bottom {
+    0% {
+      -webkit-mask-position: -32% 50%;
+      mask-position: -32% 50%;
+      opacity: 0.84;
+    }
+    34%,
+    72% {
+      opacity: 1;
+    }
+    100% {
+      -webkit-mask-position: 120% 50%;
+      mask-position: 120% 50%;
+      opacity: 0.9;
+    }
+  }
+
+  @keyframes frame-dragon-fire-flow {
+    0% {
+      stroke-dashoffset: 0;
+      opacity: 0.72;
+    }
+    18% {
+      opacity: 1;
+    }
+    76% {
+      opacity: 0.82;
+    }
+    100% {
+      stroke-dashoffset: -100;
+      opacity: 0.72;
+    }
+  }
+
+  @keyframes frame-dragon-mane-sway {
+    0% {
+      transform: rotate(-3deg) scaleY(0.96);
+    }
+    48% {
+      transform: rotate(5.5deg) scaleY(1.08);
+    }
+    100% {
+      transform: rotate(-1deg) scaleY(1.02);
+    }
+  }
+
+  @keyframes frame-dragon-left-filament-sway {
+    0% {
+      transform: rotate(-4deg) scaleY(0.96);
+    }
+    52% {
+      transform: rotate(5deg) scaleY(1.08);
+    }
+    100% {
+      transform: rotate(-1.5deg) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-dragon-right-filament-sway {
+    0% {
+      transform: rotate(4deg) scaleY(0.96);
+    }
+    52% {
+      transform: rotate(-5deg) scaleY(1.08);
+    }
+    100% {
+      transform: rotate(1.5deg) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-dragon-bottom-filament-sway {
+    0% {
+      transform: translateY(0.8px) scaleY(0.9);
+    }
+    50% {
+      transform: translateY(-1.8px) scaleY(1.13);
+    }
+    100% {
+      transform: translateY(-0.2px) scaleY(1.01);
+    }
+  }
+
+  @keyframes frame-dragon-cloud-light {
+    0%,
+    100% {
+      opacity: 0.78;
+      filter: brightness(0.98) saturate(1.02) drop-shadow(0 0 2px rgba(249, 115, 22, 0.34));
+    }
+    46% {
+      opacity: 1;
+      filter: brightness(1.16) saturate(1.12) drop-shadow(0 0 3px rgba(249, 115, 22, 0.58));
+    }
+    72% {
+      opacity: 0.9;
+      filter: brightness(1.07) saturate(1.06) drop-shadow(0 0 2px rgba(251, 191, 36, 0.42));
+    }
+  }
+
+  @keyframes frame-dragon-pearl-light {
+    0%,
+    100% {
+      opacity: 0.86;
+      filter: brightness(1) drop-shadow(0 0 2px rgba(251, 191, 36, 0.66));
+    }
+    48% {
+      opacity: 1;
+      filter: brightness(1.18) drop-shadow(0 0 5px rgba(251, 191, 36, 0.86));
+    }
+    72% {
+      opacity: 0.94;
+      filter: brightness(1.08) drop-shadow(0 0 3px rgba(251, 191, 36, 0.72));
+    }
+  }
+
+  @keyframes frame-dragon-crown-light {
+    0%,
+    100% {
+      opacity: 0.82;
+      filter: brightness(0.98) drop-shadow(0 0 1px rgba(251, 191, 36, 0.46));
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      opacity: 1;
+      filter: brightness(1.22) drop-shadow(0 0 4px rgba(254, 240, 138, 0.84));
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-dragon-orbit-shimmer {
+    0%,
+    100% {
+      opacity: 0.44;
+    }
+    50% {
+      opacity: 0.88;
+    }
+  }
+
+  @keyframes frame-dragon-head-aura {
+    0%,
+    100% {
+      opacity: 0.26;
+      transform: scale(0.82) rotate(-5deg);
+    }
+    52% {
+      opacity: 0.84;
+      transform: scale(1.08) rotate(3deg);
+    }
+  }
+
+  @keyframes frame-dragon-pearl-glint {
+    0%,
+    100% {
+      opacity: 0.24;
+      transform: rotate(0deg) scale(0.58);
+    }
+    48% {
+      opacity: 1;
+      transform: rotate(90deg) scale(1.24);
+    }
+  }
+
+  @keyframes frame-dragon-star-drift {
+    0%,
+    100% {
+      opacity: 0.16;
+      transform: translate(0, 1px) rotate(0deg) scale(0.56);
+    }
+    44% {
+      opacity: 1;
+      transform: translate(1px, -2px) rotate(70deg) scale(1.16);
+    }
+    72% {
+      opacity: 0.38;
+      transform: translate(-1px, -1px) rotate(116deg) scale(0.76);
+    }
+  }
+
+  @keyframes frame-celestial-unfold {
+    0%,
+    100% {
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 6px var(--frame-glow)) brightness(0.96);
+    }
+    50% {
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 0 13px var(--frame-glow)) brightness(1.12);
     }
   }
 
   @keyframes frame-celestial-orbit {
     to {
-      transform: rotate(378deg) scaleY(0.86);
+      transform: rotate(378deg);
     }
   }
 
-  @keyframes frame-celestial-comet {
-    0%,
-    42%,
-    100% {
-      opacity: 0;
-      transform: translate(-38%, 24%) rotate(-30deg) scaleX(0.4);
-    }
-    58% {
-      opacity: 1;
-      transform: translate(-2%, 0) rotate(-30deg) scaleX(1.05);
-    }
-    74% {
-      opacity: 0;
-      transform: translate(30%, -22%) rotate(-30deg) scaleX(1.2);
-    }
-  }
-
-  @keyframes frame-bookmark-archive-lustre {
+  @keyframes frame-celestial-core {
     0%,
     100% {
-      filter: brightness(0.98) saturate(1);
+      opacity: 0.52;
+      transform: scale(0.72) rotate(0deg);
     }
     50% {
-      filter: brightness(1.13) saturate(1.16);
+      opacity: 1;
+      transform: scale(1.3) rotate(45deg);
     }
   }
 
-  @keyframes frame-bookmark-archive-crown {
+  @keyframes frame-celestial-art-wing-left {
+    from {
+      filter: brightness(0.98) saturate(1.02);
+      transform: translate(-50%, -50%) rotate(1deg) translateX(1px);
+    }
+    to {
+      filter: brightness(1.13) saturate(1.12) drop-shadow(-1px 1px 3px rgba(129, 140, 248, 0.68));
+      transform: translate(-50%, -50%) rotate(-5deg) translate(-2px, -1px) scaleX(1.015);
+    }
+  }
+
+  @keyframes frame-celestial-art-wing-right {
+    from {
+      filter: brightness(0.98) saturate(1.02);
+      transform: translate(-50%, -50%) rotate(-1deg) translateX(-1px);
+    }
+    to {
+      filter: brightness(1.13) saturate(1.12) drop-shadow(1px 1px 3px rgba(129, 140, 248, 0.68));
+      transform: translate(-50%, -50%) rotate(5deg) translate(2px, -1px) scaleX(1.015);
+    }
+  }
+
+  @keyframes frame-library-metal-light {
+    0%,
+    100% {
+      filter: brightness(0.98) contrast(1.01);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: brightness(1.08) contrast(1.04);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-page-flutter {
+    0%,
+    100% {
+      opacity: 0.5;
+      transform: perspective(22px) rotateX(28deg) rotateZ(-3deg) scaleX(0.9);
+    }
+    46% {
+      opacity: 1;
+      transform: perspective(22px) rotateX(-18deg) rotateZ(2deg) translateY(-1px) scaleX(1.02);
+    }
+    72% {
+      opacity: 0.74;
+      transform: perspective(22px) rotateX(5deg) rotateZ(-1deg) scaleX(0.96);
+    }
+  }
+
+  @keyframes frame-library-open-book {
+    0%,
+    100% {
+      opacity: 0.46;
+      transform: perspective(28px) rotateX(34deg) scaleX(0.88);
+    }
+    46% {
+      opacity: 1;
+      transform: perspective(28px) rotateX(-8deg) translateY(-1px) scaleX(1.03);
+    }
+    72% {
+      opacity: 0.74;
+      transform: perspective(28px) rotateX(10deg) scaleX(0.97);
+    }
+  }
+
+  @keyframes frame-library-shelf-light {
+    0%,
+    100% {
+      opacity: 0.3;
+      transform: translateX(-3px) scaleX(0.82);
+    }
+    48% {
+      opacity: 1;
+      transform: translateX(3px) scaleX(1.04);
+    }
+  }
+
+  @keyframes frame-library-page-material {
+    0%,
+    100% {
+      opacity: 0.08;
+      filter: brightness(1.04);
+      transform: translate(-50%, -50%) perspective(38px) rotateX(2deg);
+    }
+    46% {
+      opacity: 0.48;
+      filter: brightness(1.26) contrast(1.03);
+      transform: translate(-50%, -50%) perspective(38px) rotateX(-4deg);
+    }
+    72% {
+      opacity: 0.24;
+      filter: brightness(1.14);
+      transform: translate(-50%, -50%) perspective(38px) rotateX(1deg);
+    }
+  }
+
+  @keyframes frame-constellation-draw {
+    0%,
+    100% {
+      opacity: 0.28;
+      clip-path: polygon(0 0, 28% 0, 28% 34%, 0 34%);
+    }
+    42% {
+      opacity: 0.94;
+      clip-path: polygon(0 0, 100% 0, 100% 62%, 0 62%);
+    }
+    72% {
+      opacity: 1;
+      clip-path: inset(0);
+    }
+  }
+
+  @keyframes frame-constellation-ink-arc {
+    0%,
+    100% {
+      opacity: 0.22;
+      transform: translate(-5px, 3px) rotate(-18deg) scale(0.7);
+    }
+    46% {
+      opacity: 1;
+      transform: translate(3px, -4px) rotate(8deg) scale(1.08);
+    }
+    72% {
+      opacity: 0.66;
+      transform: translate(1px, -1px) rotate(-3deg) scale(0.92);
+    }
+  }
+
+  @keyframes frame-constellation-pen {
+    0%,
+    100% {
+      opacity: 0.2;
+      transform: translate(0, 0) rotate(0deg) scale(0.66);
+    }
+    44% {
+      opacity: 1;
+      transform: translate(43px, 35px) rotate(135deg) scale(1.28);
+    }
+    72% {
+      opacity: 0.72;
+      transform: translate(64px, 49px) rotate(210deg) scale(0.92);
+    }
+  }
+
+  @keyframes frame-constellation-material {
+    0%,
+    100% {
+      opacity: 0.1;
+      filter: brightness(1.02) saturate(1.02);
+      transform: translate(-50%, -50%) skewX(-1.2deg) translate(-1px, 1px);
+    }
+    48% {
+      opacity: 0.72;
+      filter: brightness(1.4) saturate(1.2) drop-shadow(0 0 5px rgba(94, 234, 212, 0.82));
+      transform: translate(-50%, -50%) skewX(2deg) translate(2px, -2px);
+    }
+  }
+
+  @keyframes frame-archive-gate-material {
+    0%,
+    100% {
+      opacity: 0.08;
+      filter: brightness(1.02) contrast(1.01);
+      transform: translate(-50%, -50%);
+    }
+    48% {
+      opacity: 0.68;
+      filter: brightness(1.34) contrast(1.05) saturate(1.12);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-archive-star-rise {
+    0%,
+    100% {
+      opacity: 0.18;
+      transform: translateY(4px) rotate(0deg) scale(0.7);
+    }
+    44% {
+      opacity: 1;
+      transform: translateY(-5px) rotate(45deg) scale(1.15);
+    }
+    72% {
+      opacity: 0.48;
+      transform: translateY(-2px) rotate(90deg) scale(0.88);
+    }
+  }
+
+  @keyframes frame-archive-portal-arc {
+    0%,
+    100% {
+      opacity: 0.22;
+      transform: rotate(-8deg) scale(0.94);
+    }
+    44% {
+      opacity: 0.96;
+      transform: rotate(8deg) scale(1.03);
+    }
+    72% {
+      opacity: 0.52;
+      transform: rotate(1deg) scale(0.98);
+    }
+  }
+
+  @keyframes frame-archive-star-path {
+    0%,
+    100% {
+      opacity: 0.14;
+      transform: translate(0, 3px) rotate(0deg) scale(0.68);
+    }
+    44% {
+      opacity: 1;
+      transform: translate(2px, -4px) rotate(45deg) scale(1.18);
+    }
+    72% {
+      opacity: 0.46;
+      transform: translate(-1px, -1px) rotate(90deg) scale(0.86);
+    }
+  }
+
+  @keyframes frame-archive-metal-light {
+    0%,
+    100% {
+      filter: brightness(0.98) contrast(1.02);
+      transform: translate(-50%, -50%);
+    }
+    50% {
+      filter: brightness(1.07) contrast(1.04);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-constellation-ink {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) skewX(-0.5deg);
+      filter: drop-shadow(0 0 5px var(--frame-glow)) brightness(0.96);
+    }
+    50% {
+      transform: translate(-50%, -50%) skewX(0.8deg);
+      filter: drop-shadow(0 0 10px var(--frame-glow)) brightness(1.09);
+    }
+  }
+
+  @keyframes frame-eternal-time-light {
+    0%,
+    100% {
+      filter: drop-shadow(0 0 4px var(--frame-glow)) saturate(0.98) brightness(0.98);
+      transform: translate(-50%, -50%);
+    }
+    42% {
+      filter: drop-shadow(0 0 8px var(--frame-glow)) saturate(1.1) brightness(1.09);
+      transform: translate(-50%, -50%);
+    }
+    72% {
+      filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.58)) saturate(1.04) brightness(1.04);
+      transform: translate(-50%, -50%);
+    }
+  }
+
+  @keyframes frame-eternal-epoch-orbit {
     to {
       transform: rotate(360deg);
     }
   }
 
-  @keyframes frame-bookmark-archive-page {
+  @keyframes frame-eternal-epoch-orbit-reverse {
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  @keyframes frame-eternal-sun-halo {
     0%,
     100% {
-      opacity: 0.66;
-      filter: drop-shadow(0 0 3px rgba(253, 230, 138, 0.62));
+      opacity: 0.52;
+      transform: scale(0.82);
     }
     50% {
       opacity: 1;
-      filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.92));
+      transform: scale(1.2);
     }
   }
 
-  @keyframes frame-bookmark-archive-comet {
+  @keyframes frame-eternal-gem-glint {
     0%,
-    46%,
+    100% {
+      opacity: 0.34;
+      transform: rotate(0deg) scale(0.7);
+    }
+    50% {
+      opacity: 1;
+      transform: rotate(45deg) scale(1.16);
+    }
+  }
+
+  @keyframes frame-eternal-sun-contract {
+    0%,
+    100% {
+      filter: brightness(1.08) saturate(1.04) drop-shadow(0 0 3px rgba(251, 191, 36, 0.68));
+      transform: translate(-50%, -50%) scale(1.04);
+    }
+    50% {
+      filter: brightness(1.34) saturate(1.12) drop-shadow(0 0 5px rgba(251, 191, 36, 0.88));
+      transform: translate(-50%, -50%) scale(0.84);
+    }
+  }
+
+  @keyframes frame-eternal-rabbit-bridge {
+    0% {
+      transform: translate(-50%, -50%) translate(-4px, 3px);
+    }
+    16.667% {
+      transform: translate(-50%, -50%) translate(11.333px, -1px);
+    }
+    33.333% {
+      transform: translate(-50%, -50%) translate(26.667px, -5px);
+    }
+    50% {
+      transform: translate(-50%, -50%) translate(42px, -9px);
+    }
+    66.667% {
+      transform: translate(-50%, -50%) translate(26.667px, -5px);
+    }
+    83.333% {
+      transform: translate(-50%, -50%) translate(11.333px, -1px);
+    }
+    100% {
+      transform: translate(-50%, -50%) translate(-4px, 3px);
+    }
+  }
+
+  @keyframes frame-eternal-rabbit-direction {
+    0%,
+    49.99% {
+      transform: scaleX(1);
+    }
+    50%,
+    99.99% {
+      transform: scaleX(-1);
+    }
+    100% {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes frame-eternal-rabbit-sprite {
+    0% {
+      background-position: 0 6.63%;
+    }
+    6.25% {
+      background-position: 33.333% 6.94%;
+    }
+    12.5% {
+      background-position: 66.667% 6.84%;
+    }
+    18.75% {
+      background-position: 100% 7.37%;
+    }
+    25% {
+      background-position: 0 36.88%;
+    }
+    31.25% {
+      background-position: 33.333% 36.03%;
+    }
+    37.5% {
+      background-position: 66.667% 34.86%;
+    }
+    43.75% {
+      background-position: 100% 35.49%;
+    }
+    50% {
+      background-position: 0 67.13%;
+    }
+    56.25% {
+      background-position: 33.333% 69.78%;
+    }
+    62.5% {
+      background-position: 66.667% 68.72%;
+    }
+    68.75% {
+      background-position: 100% 69.04%;
+    }
+    75% {
+      background-position: 0 99.08%;
+    }
+    81.25% {
+      background-position: 33.333% 99.29%;
+    }
+    87.5% {
+      background-position: 66.667% 99.18%;
+    }
+    93.75% {
+      background-position: 100% 99.71%;
+    }
+    100% {
+      background-position: 0 6.63%;
+    }
+  }
+
+  @keyframes frame-eternal-rabbit-body-arc {
+    0%,
+    100% {
+      transform: translate(-50%, -50%) translateY(1px) rotate(-1deg) scaleY(0.98);
+    }
+    18.75% {
+      transform: translate(-50%, -50%) translateY(-2px) rotate(1deg) scaleY(1.02);
+    }
+    43.75%,
+    50% {
+      transform: translate(-50%, -50%) translateY(-6px) rotate(2deg) scaleY(1.03);
+    }
+    75% {
+      transform: translate(-50%, -50%) translateY(-2px) rotate(-1deg) scaleY(1.01);
+    }
+    87.5% {
+      transform: translate(-50%, -50%) translateY(1px) rotate(-2deg) scaleY(0.96);
+    }
+  }
+
+  @keyframes frame-eternal-petal-drift {
+    0% {
+      opacity: 0;
+      transform: translate(0, -2px) rotate(-18deg) scale(0.7);
+    }
+    28% {
+      opacity: 1;
+      transform: translate(2px, 2px) rotate(22deg) scale(1);
+    }
     100% {
       opacity: 0;
-      transform: translate(-38%, 24%) rotate(-27deg) scaleX(0.4);
-    }
-    62% {
-      opacity: 1;
-      transform: translate(-2%, 0) rotate(-27deg) scaleX(1.04);
-    }
-    78% {
-      opacity: 0;
-      transform: translate(28%, -20%) rotate(-27deg) scaleX(1.18);
+      transform: translate(8px, 17px) rotate(132deg) scale(0.76);
     }
   }
 
-  @keyframes frame-note-constellation-orbit {
-    from {
-      transform: rotate(-22deg) scaleY(0.76);
-    }
-    to {
-      transform: rotate(338deg) scaleY(0.76);
-    }
-  }
-
-  @keyframes frame-note-constellation-comet {
+  @keyframes frame-eternal-pine-sway {
     0%,
-    44%,
     100% {
-      opacity: 0;
-      transform: translate(-38%, 24%) rotate(-28deg) scaleX(0.38);
+      opacity: 0.38;
+      transform: rotate(-8deg) scaleY(0.86);
     }
-    60% {
-      opacity: 1;
-      transform: translate(-2%, 0) rotate(-28deg) scaleX(1.06);
-    }
-    76% {
-      opacity: 0;
-      transform: translate(30%, -22%) rotate(-28deg) scaleX(1.2);
+    50% {
+      opacity: 0.9;
+      transform: rotate(7deg) scaleY(1.06);
     }
   }
 
-  @keyframes frame-file-constellation-orbit {
-    from {
-      transform: rotate(25deg) scaleY(0.72);
-    }
-    to {
-      transform: rotate(-335deg) scaleY(0.72);
-    }
-  }
-
-  @keyframes frame-file-constellation-comet {
+  @keyframes frame-eternal-rabbit-glint {
     0%,
-    40%,
     100% {
-      opacity: 0;
-      transform: translate(-42%, 26%) rotate(-31deg) scaleX(0.36);
+      opacity: 0.28;
+      transform: rotate(0deg) scale(0.68);
     }
-    56% {
+    50% {
       opacity: 1;
-      transform: translate(-2%, 0) rotate(-31deg) scaleX(1.08);
+      transform: rotate(45deg) scale(1.2);
     }
-    72% {
-      opacity: 0;
-      transform: translate(32%, -24%) rotate(-31deg) scaleX(1.22);
+  }
+
+  @keyframes frame-local-twinkle {
+    0%,
+    100% {
+      opacity: 0.22;
+      transform: scale(0.62) rotate(0deg);
     }
+    50% {
+      opacity: 1;
+      transform: scale(1.3) rotate(45deg);
+    }
+  }
+
+  .avatar-frame--motion-paused .avatar-frame__ambient,
+  .avatar-frame--motion-paused .avatar-frame__art,
+  .avatar-frame--motion-paused .avatar-frame__art-detail,
+  .avatar-frame--motion-paused .avatar-frame__dragon-layer,
+  .avatar-frame--motion-paused .avatar-frame__dragon-mane,
+  .avatar-frame--motion-paused .avatar-frame__dragon-trail,
+  .avatar-frame--motion-paused .avatar-frame__dragon-flow path,
+  .avatar-frame--motion-paused .avatar-frame__dragon-ornament,
+  .avatar-frame--motion-paused .avatar-frame__celestial-wing,
+  .avatar-frame--motion-paused .avatar-frame__eternal-object,
+  .avatar-frame--motion-paused .avatar-frame__eternal-rabbit-runner,
+  .avatar-frame--motion-paused .avatar-frame__eternal-rabbit-direction,
+  .avatar-frame--motion-paused .avatar-frame__eternal-rabbit-sprite,
+  .avatar-frame--motion-paused .avatar-frame__motion,
+  .avatar-frame--motion-paused .avatar-frame__motion::before,
+  .avatar-frame--motion-paused .avatar-frame__motion::after,
+  .avatar-frame--motion-paused .avatar-frame__motion i {
+    animation: none !important;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .avatar-frame__ring,
-    .avatar-frame__ring::before,
-    .avatar-frame__ring::after,
-    .avatar-frame__motif,
-    .avatar-frame__motif::before,
-    .avatar-frame__motif::after,
-    .avatar-frame__orbit,
-    .avatar-frame__orbit::before,
-    .avatar-frame__orbit::after,
-    .avatar-frame__comet,
-    .avatar-frame__comet::before,
-    .avatar-frame__comet::after,
-    .avatar-frame__signature,
-    .avatar-frame__signature::before,
-    .avatar-frame__signature::after,
-    .avatar-frame__signature-mark,
-    .avatar-frame__signature-mark::before,
-    .avatar-frame__signature-mark::after,
-    .avatar-frame__dragon-crest,
-    .avatar-frame__dragon-head,
-    .avatar-frame__dragon-head::before,
-    .avatar-frame__dragon-head::after {
+    .avatar-frame__ambient,
+    .avatar-frame__art,
+    .avatar-frame__art-detail,
+    .avatar-frame__dragon-layer,
+    .avatar-frame__dragon-mane,
+    .avatar-frame__dragon-trail,
+    .avatar-frame__dragon-flow path,
+    .avatar-frame__dragon-ornament,
+    .avatar-frame__celestial-wing,
+    .avatar-frame__eternal-object,
+    .avatar-frame__eternal-rabbit-runner,
+    .avatar-frame__eternal-rabbit-direction,
+    .avatar-frame__eternal-rabbit-sprite,
+    .avatar-frame__motion,
+    .avatar-frame__motion::before,
+    .avatar-frame__motion::after,
+    .avatar-frame__motion i {
       animation: none !important;
     }
-  }
-
-  .avatar-frame--motion-paused .avatar-frame__ring,
-  .avatar-frame--motion-paused .avatar-frame__ring::before,
-  .avatar-frame--motion-paused .avatar-frame__ring::after,
-  .avatar-frame--motion-paused .avatar-frame__motif,
-  .avatar-frame--motion-paused .avatar-frame__motif::before,
-  .avatar-frame--motion-paused .avatar-frame__motif::after,
-  .avatar-frame--motion-paused .avatar-frame__orbit,
-  .avatar-frame--motion-paused .avatar-frame__orbit::before,
-  .avatar-frame--motion-paused .avatar-frame__orbit::after,
-  .avatar-frame--motion-paused .avatar-frame__comet,
-  .avatar-frame--motion-paused .avatar-frame__comet::before,
-  .avatar-frame--motion-paused .avatar-frame__comet::after,
-  .avatar-frame--motion-paused .avatar-frame__signature,
-  .avatar-frame--motion-paused .avatar-frame__signature::before,
-  .avatar-frame--motion-paused .avatar-frame__signature::after,
-  .avatar-frame--motion-paused .avatar-frame__signature-mark,
-  .avatar-frame--motion-paused .avatar-frame__signature-mark::before,
-  .avatar-frame--motion-paused .avatar-frame__signature-mark::after,
-  .avatar-frame--motion-paused .avatar-frame__dragon-crest,
-  .avatar-frame--motion-paused .avatar-frame__dragon-head,
-  .avatar-frame--motion-paused .avatar-frame__dragon-head::before,
-  .avatar-frame--motion-paused .avatar-frame__dragon-head::after {
-    animation: none !important;
   }
 </style>

@@ -234,12 +234,14 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
 
     expect(baselineStyles).toMatch(/scrollbar-gutter:\s*auto\s*!important/u);
     expect(baselineStyles).toMatch(/\.growth-page \.cal-cell\s*\{[\s\S]*?min-height:\s*42px/u);
-    expect(avatarStyles).toMatch(/width:\s*20%;\s*height:\s*20%;\s*aspect-ratio:\s*1/u);
+    expect(avatarStyles).toMatch(
+      /\.avatar-frame__portrait\s*\{[\s\S]*?width:\s*var\(--frame-size\);[\s\S]*?height:\s*var\(--frame-size\);/u,
+    );
     expect(avatarStyles).toContain("'avatar-frame--motion-paused': isMotionPaused");
     expect(avatarStyles).toContain('const isMotionVisible = ref(!props.pauseWhenOffscreen)');
     expect(avatarStyles).toContain("rootMargin: '24px 0px'");
     expect(avatarStyles).toMatch(
-      /\.avatar-frame--motion-paused \.avatar-frame__ring[\s\S]*?animation:\s*none\s*!important/u,
+      /\.avatar-frame--motion-paused \.avatar-frame__art[\s\S]*?animation:\s*none\s*!important/u,
     );
   });
 });

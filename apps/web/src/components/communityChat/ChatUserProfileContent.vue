@@ -445,7 +445,8 @@
         if (profile.role !== 'member') {
           tags.push(h('span', { class: 'chat-profile-content__role' }, t(`communityChat.authorRole.${profile.role}`)));
         }
-        if (validFrameId && profile.frameRarity) {
+        const shouldHighlightFrame = profile.frameRarity === 'epic' || profile.frameRarity === 'legendary';
+        if (validFrameId && shouldHighlightFrame) {
           tags.push(
             h(
               'span',

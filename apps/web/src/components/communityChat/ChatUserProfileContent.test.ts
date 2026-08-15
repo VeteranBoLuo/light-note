@@ -79,6 +79,25 @@ function mountProfile(props: Record<string, unknown>) {
 }
 
 describe('ChatUserProfileContent', () => {
+  it('仅为炫彩与传说头像框展示稀有度胶囊', () => {
+    const rareHost = mountProfile({ profile: profile({ frameRarity: 'rare' }) });
+    expect(rareHost.querySelector('.chat-profile-content__rarity')).toBeNull();
+    cleanup?.();
+    cleanup = undefined;
+
+    const epicHost = mountProfile({ profile: profile({ frameRarity: 'epic' }) });
+    expect(epicHost.querySelector('.chat-profile-content__rarity')?.textContent).toBe(
+      zhCN.communityChat.profile.rarity.epic,
+    );
+    cleanup?.();
+    cleanup = undefined;
+
+    const legendaryHost = mountProfile({ profile: profile({ frameRarity: 'legendary' }) });
+    expect(legendaryHost.querySelector('.chat-profile-content__rarity')?.textContent).toBe(
+      zhCN.communityChat.profile.rarity.legendary,
+    );
+  });
+
   it('自己的名片按字素校验 60 字简介，并携带 revision 保存', async () => {
     const onSave = vi.fn();
     const host = mountProfile({

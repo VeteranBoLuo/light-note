@@ -285,16 +285,19 @@
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
     background: var(--surface-panel-bg);
+    overflow: visible;
   }
 
   .avatar-picker__preview-shell {
-    width: 96px;
-    height: 96px;
-    flex: 0 0 96px;
+    // 92px 头像下，124px 天花板外径会等比放大到约 178px；预览槽必须按框体而非头像尺寸预留。
+    width: 180px;
+    height: 180px;
+    flex: 0 0 180px;
     display: flex;
     align-items: center;
     justify-content: center;
     position: relative;
+    overflow: visible;
   }
 
   .avatar-picker__preview-art,
@@ -544,9 +547,10 @@
     }
 
     .avatar-picker__preview-shell {
-      width: 86px;
-      height: 86px;
-      flex-basis: 86px;
+      // 82px 头像对应约 159px 的天花板外径，保留 1px 取整余量。
+      width: 160px;
+      height: 160px;
+      flex-basis: 160px;
     }
 
     .avatar-picker__preview-art,

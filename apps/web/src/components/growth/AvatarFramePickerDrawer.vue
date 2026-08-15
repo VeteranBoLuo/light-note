@@ -38,7 +38,12 @@
                   <span v-if="frame.equipped" class="frame-card__check" aria-hidden="true">
                     <SvgIcon :src="icon.filterPanel.check" size="13" />
                   </span>
-                  <AvatarFramePreview :frame-id="frame.id" :src="avatarSrc" :size="isMobileLayout ? 58 : 64" />
+                  <AvatarFramePreview
+                    :frame-id="frame.id"
+                    :src="avatarSrc"
+                    :size="isMobileLayout ? 58 : 64"
+                    pause-when-offscreen
+                  />
                   <span class="frame-card__copy">
                     <strong>{{ itemName(frame) }}</strong>
                     <small v-if="isAchievementFrame(frame)" class="frame-card__requirement">
@@ -772,7 +777,7 @@
   }
 
   .frame-picker--desktop .frame-card {
-    min-height: 106px;
+    min-height: 144px;
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -818,7 +823,7 @@
   }
 
   .frame-picker__detail-preview {
-    min-height: 140px;
+    min-height: 190px;
     display: flex;
     align-items: center;
     justify-content: center;

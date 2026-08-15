@@ -655,8 +655,8 @@ export default {
       saveFailed: '社区名片保存失败，请稍后重试。',
       rarity: {
         basic: '基础头像框',
-        rare: '稀有头像框',
-        epic: '史诗头像框',
+        rare: '进阶头像框',
+        epic: '炫彩头像框',
         legendary: '传说头像框',
       },
       privacy:

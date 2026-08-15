@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { AVATAR_FRAME_ARTWORK } from '@/config/avatarFrameArtwork';
 
 const source = (relativePath: string) => readFileSync(resolve(process.cwd(), relativePath), 'utf8');
 
@@ -10,7 +11,8 @@ const myInfoSource = source('src/components/personCenter/myInfo/MyInfoMobile.vue
 const desktopMyInfoSource = source('src/components/personCenter/myInfo/MyInfo.vue');
 const framePickerSource = source('src/components/growth/AvatarFramePickerDrawer.vue');
 const avatarFrameSource = source('src/components/growth/AvatarFramePreview.vue');
-const iconSource = source('src/config/icon.ts');
+const avatarPickerSource = source('src/components/personCenter/myInfo/AvatarPicker.vue');
+const avatarArtworkSource = source('src/config/avatarFrameArtwork.ts');
 const pointsShopSource = source('src/components/growth/PointsShop.vue');
 const achievementWallSource = source('src/components/growth/AchievementWall.vue');
 const growthPageSource = source('src/view/growth/GrowthPage.vue');
@@ -70,205 +72,395 @@ describe('mobile personal center experience', () => {
     expect(framePickerSource).not.toContain('dvh');
   });
 
-  it('keeps compact equipped avatars visually identical to the full preview instead of clipping effects', () => {
+  it('keeps compact equipped avatars on the same 64px design canvas with a reserved themed silhouette', () => {
     expect(avatarFrameSource).toContain('const FRAME_DESIGN_AVATAR_SIZE = 64');
     expect(avatarFrameSource).toContain('<span class="avatar-frame__canvas">');
     expect(avatarFrameSource).toContain(':size="FRAME_DESIGN_AVATAR_SIZE"');
     expect(avatarFrameSource).toContain("'--frame-canvas-scale': String(scale)");
-    expect(avatarFrameSource).toContain('Math.round(FRAME_DESIGN_OUTER_SIZE * scale)');
-    expect(avatarFrameSource).toContain("'--frame-constellation-stroke': `${constellationStroke}px`");
+    expect(avatarFrameSource).toContain('Math.round(layoutOuterSize * scale)');
     expect(avatarFrameSource).toMatch(
       /\.avatar-frame__canvas\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?transform:\s*translate\(-50%, -50%\) scale\(var\(--frame-canvas-scale\)\);/,
     );
     expect(avatarFrameSource).toMatch(/\.avatar-frame\s*\{[\s\S]*?overflow:\s*visible;/);
-    expect(avatarFrameSource).toMatch(
-      /\.avatar-frame--celestial \.avatar-frame__orbit\s*\{[\s\S]*?inset:\s*-10% -13%[\s\S]*?transform:\s*rotate\(18deg\) scaleY\(0\.86\);[\s\S]*?frame-celestial-orbit/,
-    );
-    expect(avatarFrameSource).toMatch(
-      /@keyframes frame-celestial-orbit\s*\{[\s\S]*?transform:\s*rotate\(378deg\) scaleY\(0\.86\);/,
-    );
-    expect(avatarFrameSource).toMatch(
-      /\.avatar-frame--celestial \.avatar-frame__motif\s*\{[\s\S]*?border:\s*var\(--frame-constellation-stroke\) dotted/,
-    );
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__art\s*\{[\s\S]*?z-index:\s*3;/);
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__portrait\s*\{[\s\S]*?z-index:\s*1;/);
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__bezel\s*\{[\s\S]*?z-index:\s*5;/);
+    expect(avatarFrameSource).toContain('透明素材位于头像前景');
     expect(avatarFrameSource).not.toContain('avatar-frame--compact');
     expect(desktopPersonCenterSource).toContain(':size="32"');
     expect(desktopPersonCenterSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(navigationRightAreaSource).toMatch(/\.navigation-icon\.has-frame\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);
+    expect(avatarPickerSource).toMatch(
+      /\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*180px;[\s\S]*?height:\s*180px;[\s\S]*?overflow:\s*visible;/,
+    );
+    expect(avatarPickerSource).toMatch(
+      /@media \(max-width: 767px\)[\s\S]*?\.avatar-picker__preview-shell\s*\{[\s\S]*?width:\s*160px;[\s\S]*?height:\s*160px;/,
+    );
   });
 
-  it('keeps free and paid frame effects aligned with acquisition, price and rarity', () => {
-    const section = (start: string, end: string) =>
-      avatarFrameSource.slice(avatarFrameSource.indexOf(start), avatarFrameSource.indexOf(end));
-    const paidBasicSection = section('/* 薄荷：', '/* 初光：');
-    const freeAdvancedSection = section('/* 七日晨光：', '/* 鎏金：');
-    const goldSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 鎏金：'),
-      avatarFrameSource.indexOf('/* 樱绯：'),
-    );
-    const oceanSection = section('/* 潮汐：', '/* 极光：');
-    const auroraSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 极光：'),
-      avatarFrameSource.indexOf('/* 星河：'),
-    );
-    const galaxySection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 星河：'),
-      avatarFrameSource.indexOf('/* 赤焰：'),
-    );
-    const flameSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 赤焰：'),
-      avatarFrameSource.indexOf('/* 龙曜：'),
-    );
-    const neonSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 霓虹：'),
-      avatarFrameSource.indexOf('/* 晚霞：'),
-    );
-    const noteMasterpieceSection = section('/* 文心长河：', '/* 云阙宝库：');
-    const fileVaultSection = section('/* 云阙宝库：', '/* 翰墨星海：');
-    const streakMonthSection = section('/* 月华渐盈：', '/* 岁序长明：');
-    const identityVariantSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('const FRAME_IDENTITY_VARIANTS ='),
-      avatarFrameSource.indexOf('const props', avatarFrameSource.indexOf('const FRAME_IDENTITY_VARIANTS =')),
-    );
-    const identityStyleSection = avatarFrameSource.slice(
-      avatarFrameSource.indexOf('/* 高阶传说身份结构：'),
-      avatarFrameSource.indexOf('@keyframes frame-premium-orbit'),
-    );
-    const dragonRingStyleSection = identityStyleSection.slice(
-      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__ring {'),
-      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__ring::before'),
-    );
-    const dragonPortraitStyleSection = identityStyleSection.slice(
-      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__portrait {'),
-      identityStyleSection.indexOf('.avatar-frame--dragon .avatar-frame__portrait::after'),
-    );
-    const dragonBodyMotionSection = identityStyleSection.slice(
-      identityStyleSection.indexOf('@keyframes frame-dragon-body-breathe'),
-      identityStyleSection.indexOf('@keyframes frame-dragon-scale-sweep'),
-    );
-    const dragonHeadMotionSection = identityStyleSection.slice(
-      identityStyleSection.indexOf('@keyframes frame-dragon-head-awaken'),
-      identityStyleSection.indexOf('@keyframes frame-dragon-pearl'),
-    );
-    const dragonPearlMotionSection = identityStyleSection.slice(
-      identityStyleSection.indexOf('@keyframes frame-dragon-pearl'),
-      identityStyleSection.indexOf('@keyframes frame-dragon-eye-flash'),
-    );
-    const dragonHeadIconSection = iconSource.slice(
-      iconSource.indexOf('dragonHead:'),
-      iconSource.indexOf('\n  },', iconSource.indexOf('dragonHead:')),
+  it('implements all 25 unique themes and the static-to-ceiling motion ladder', () => {
+    const variants = Object.keys(AVATAR_FRAME_ARTWORK);
+    const staticVariants = variants.filter(
+      (variant) => AVATAR_FRAME_ARTWORK[variant as keyof typeof AVATAR_FRAME_ARTWORK].motion === 'static',
     );
 
-    expect(paidBasicSection).not.toContain('animation:');
-    expect(freeAdvancedSection).not.toContain('animation:');
-
-    expect(goldSection).toContain('积分进阶入门档');
-    expect(goldSection).toContain('animation: frame-gold-glint');
-    expect(goldSection).toContain('animation: frame-premium-orbit 14s');
-    expect(goldSection).not.toContain('avatar-frame__comet');
-
-    expect(oceanSection).toContain('.avatar-frame--ocean .avatar-frame__ring::before');
-    expect(oceanSection).toContain('animation: frame-ocean-current');
-    expect(oceanSection).toContain('animation: frame-ocean-orbit');
-    expect(oceanSection).not.toContain('avatar-frame__comet');
-
-    expect(auroraSection).toContain('animation: frame-aurora-turn');
-    expect(auroraSection).toContain('animation: frame-aurora-wave');
-    expect(auroraSection).toContain('.avatar-frame--aurora .avatar-frame__orbit::before');
-    expect(auroraSection).not.toContain('avatar-frame__comet');
-
-    expect(flameSection).toContain('.avatar-frame--flame .avatar-frame__orbit::before');
-    expect(flameSection).toContain('.avatar-frame--flame .avatar-frame__orbit::after');
-    expect(flameSection).toContain('animation: frame-flame-comet');
-
-    expect(neonSection).toContain('.avatar-frame--neon .avatar-frame__orbit::before');
-    expect(neonSection).toContain('.avatar-frame--neon .avatar-frame__orbit::after');
-    expect(neonSection).toContain('animation: frame-neon-comet');
-
-    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__ring::before');
-    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__motif::before');
-    expect(galaxySection).toContain('.avatar-frame--galaxy .avatar-frame__orbit::before');
-    expect(galaxySection).toContain('animation: frame-galaxy-comet');
-
-    expect(avatarFrameSource).toContain('<span v-if="hasFrameIdentity" class="avatar-frame__signature"');
-    expect(avatarFrameSource).toContain('<span class="avatar-frame__signature-mark"></span>');
-    expect(avatarFrameSource).toContain("import icon from '@/config/icon'");
-    expect(identityVariantSection).toContain("new Set(['dragon'])");
-    expect(identityVariantSection).not.toContain("'galaxy'");
-    expect(identityVariantSection).not.toContain("'neon'");
-    expect(identityVariantSection).not.toContain("'celestial'");
-    expect(identityVariantSection).not.toContain("'bookmark-archive'");
-    expect(identityVariantSection).not.toContain("'note-constellation'");
-    expect(identityVariantSection).not.toContain("'file-constellation'");
-    expect(identityVariantSection).not.toContain("'streak-eternal'");
-    expect(identityStyleSection).not.toContain('frame-signature-orbit');
-    expect(identityStyleSection).not.toContain('frame-dragon-guardian');
-    expect(avatarFrameSource).toContain(':src="icon.avatarFrame.dragonCrest"');
-    expect(avatarFrameSource).toContain(':src="icon.avatarFrame.dragonHead"');
-    expect(avatarFrameSource).toContain('const FRAME_DRAGON_ART_SIZE = 96');
-    expect(avatarFrameSource.match(/:size="FRAME_DRAGON_ART_SIZE"/g)).toHaveLength(2);
-    expect(iconSource.match(/viewBox="-6 -6 132 132"/g)).toHaveLength(2);
-    expect(avatarFrameSource.indexOf('class="avatar-frame__dragon-head"')).toBeGreaterThan(
-      avatarFrameSource.indexOf('class="avatar-frame__portrait"'),
-    );
-    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-crest');
-    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head');
-    expect(identityStyleSection).toMatch(
-      /\.avatar-frame--dragon \.avatar-frame__dragon-head\s*\{[\s\S]*?z-index:\s*3;/,
-    );
-    expect(identityStyleSection).toContain('animation: frame-dragon-body-breathe');
-    expect(identityStyleSection).toContain('animation: frame-dragon-head-awaken');
-    expect(identityStyleSection).toContain('animation: frame-dragon-pearl');
-    expect(identityStyleSection).toContain('animation: frame-dragon-eye-flash');
-    expect(identityStyleSection).toContain('animation: frame-dragon-breath-spark');
-    expect(identityStyleSection).toContain('animation: frame-dragon-scale-sweep 5.4s');
-    expect(identityStyleSection.match(/5\.4s/g)).toHaveLength(6);
-    expect(identityStyleSection.match(/transform-origin: 50% 55%/g)).toHaveLength(2);
-    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__portrait::after');
-    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::before');
-    expect(identityStyleSection).toContain('.avatar-frame--dragon .avatar-frame__dragon-head::after');
-    expect(dragonRingStyleSection).toContain('0 0 0 1px #e4c06b');
-    expect(dragonRingStyleSection).toContain('0 0 0 3px rgba(24, 17, 8, 0.88)');
-    expect(dragonPortraitStyleSection).toContain('width: var(--frame-size)');
-    expect(dragonPortraitStyleSection).toContain('border: 1.5px solid #e4c06b');
-    expect(dragonBodyMotionSection).toContain('rotate(7deg)');
-    expect(dragonBodyMotionSection).toContain('rotate(-3deg)');
-    expect(dragonBodyMotionSection).toContain('rotate(0.18deg)');
-    expect(dragonBodyMotionSection).toContain('rotate(-0.2deg)');
-    expect(dragonBodyMotionSection).toContain('scale(1.025)');
-    expect(dragonBodyMotionSection).toContain('scale(0.978)');
-    expect(dragonBodyMotionSection).not.toMatch(/48%,\s*58%/);
-    expect(dragonHeadMotionSection).toContain('rotate(7deg)');
-    expect(dragonHeadMotionSection).toContain('rotate(-3deg)');
-    expect(dragonHeadMotionSection).toContain('rotate(0.18deg)');
-    expect(dragonHeadMotionSection).toContain('rotate(-0.2deg)');
-    expect(dragonHeadMotionSection).toContain('scale(1.025)');
-    expect(dragonHeadMotionSection).toContain('scale(0.978)');
-    expect(dragonHeadMotionSection).not.toMatch(/48%,\s*58%/);
-    expect(dragonPearlMotionSection).toContain('54%');
-    expect(dragonPearlMotionSection).toContain('scale(1.24)');
-    expect(dragonPearlMotionSection).toContain('64%');
-    expect(dragonPearlMotionSection).toContain('scale(0.82)');
-    expect(dragonPearlMotionSection).toContain('72%');
-    expect(dragonHeadIconSection).not.toContain('<linearGradient');
-    expect(dragonHeadIconSection).toContain('stroke-width="2.9"');
-    expect(identityStyleSection).not.toContain('.avatar-frame--bookmark-archive');
-    expect(identityStyleSection).not.toContain('.avatar-frame--note-constellation');
-    expect(identityStyleSection).not.toContain('.avatar-frame--file-constellation');
-    expect(identityStyleSection).not.toContain('.avatar-frame--streak-eternal');
-    expect(avatarFrameSource).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__dragon-crest[\s\S]*?animation:\s*none !important;/,
-    );
-
-    for (const freeColorfulSection of [noteMasterpieceSection, fileVaultSection, streakMonthSection]) {
-      expect(freeColorfulSection.match(/animation:/g)).toHaveLength(2);
-      expect(freeColorfulSection).not.toContain('avatar-frame__comet');
-      expect(freeColorfulSection).toContain('orbit::after');
-      expect(freeColorfulSection).not.toContain('animation: frame-gift-epic-orbit');
+    expect(variants).toHaveLength(25);
+    expect(variants.length - staticVariants.length).toBe(17);
+    expect(new Set(Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.src)).size).toBe(25);
+    expect(staticVariants).toEqual([
+      'mint',
+      'ink',
+      'moonstone',
+      'first-light',
+      'note-seed',
+      'streak-seed',
+      'bookmark-seed',
+      'file-seed',
+    ]);
+    expect(AVATAR_FRAME_ARTWORK.gold.motion).toBe('advanced');
+    expect(AVATAR_FRAME_ARTWORK.ocean.motion).toBe('colorful');
+    expect(AVATAR_FRAME_ARTWORK.neon.motion).toBe('legendary');
+    expect(AVATAR_FRAME_ARTWORK.galaxy.motion).toBe('legendary');
+    expect(AVATAR_FRAME_ARTWORK.dragon.motion).toBe('legendary');
+    expect(AVATAR_FRAME_ARTWORK.celestial.motion).toBe('ceiling');
+    expect(AVATAR_FRAME_ARTWORK['streak-eternal'].motion).toBe('ceiling');
+    expect(AVATAR_FRAME_ARTWORK.dragon.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.galaxy.outerSize);
+    expect(AVATAR_FRAME_ARTWORK.celestial.outerSize).toBeGreaterThan(AVATAR_FRAME_ARTWORK.dragon.outerSize);
+    expect(avatarArtworkSource.match(/\.webp';/g)).toHaveLength(32);
+    for (const layeredArtwork of [
+      'frame_aurora_v2.webp',
+      'frame_flame_v2.webp',
+      'frame_neon_v2.webp',
+      'frame_galaxy_v2.webp',
+      'frame_dragon_base_v2.webp',
+      'frame_dragon_body_v2.webp',
+      'frame_dragon_cloud_flame_v2.webp',
+      'frame_dragon_trails_v5.webp',
+      'frame_dragon_pearl_v2.webp',
+      'frame_celestial_base_v2.webp',
+      'frame_celestial_wings_v3.webp',
+      'frame_streak_eternal_base_v3.webp',
+      'frame_streak_eternal_motion_v3.webp',
+      'frame_streak_eternal_rabbit_sprite_v1.webp',
+    ]) {
+      expect(avatarArtworkSource, layeredArtwork).toContain(layeredArtwork);
     }
-    expect(noteMasterpieceSection).toContain('animation: frame-free-colorful-orbit');
-    expect(fileVaultSection).toContain('animation: frame-free-colorful-orbit-reverse');
-    expect(streakMonthSection).toContain('animation: frame-free-colorful-moon-orbit');
+  });
+
+  it('uses theme-specific local motion instead of one shared rotating ornament', () => {
+    for (const keyframe of [
+      'frame-gold-glint',
+      'frame-petal-drift',
+      'frame-sunset-sun',
+      'frame-moon-phase-travel',
+      'frame-ink-current',
+      'frame-vault-door-shine',
+      'frame-vault-data-rise',
+      'frame-ocean-water-flow',
+      'frame-ocean-undertow',
+      'frame-ocean-return',
+      'frame-ocean-current',
+      'frame-ocean-crest-run',
+      'frame-aurora-veil-left',
+      'frame-aurora-veil-right',
+      'frame-aurora-depth-veil',
+      'frame-aurora-ribbon-flow',
+      'frame-aurora-curtain-unfold',
+      'frame-aurora-core-charge',
+      'frame-flame-tongue',
+      'frame-flame-side-burn',
+      'frame-flame-material',
+      'frame-neon-chase',
+      'frame-neon-circuit-flow',
+      'frame-neon-crystal-charge',
+      'frame-galaxy-orbit',
+      'frame-galaxy-orbit-reverse',
+      'frame-galaxy-nebula-shimmer',
+      'frame-dragon-trail-mane',
+      'frame-dragon-trail-left',
+      'frame-dragon-trail-right',
+      'frame-dragon-trail-bottom',
+      'frame-dragon-trail-ember',
+      'frame-dragon-mane-upper',
+      'frame-dragon-mane-middle',
+      'frame-dragon-mane-lower',
+      'frame-dragon-fire-flow',
+      'frame-dragon-mane-sway',
+      'frame-dragon-left-filament-sway',
+      'frame-dragon-right-filament-sway',
+      'frame-dragon-bottom-filament-sway',
+      'frame-dragon-cloud-light',
+      'frame-dragon-pearl-light',
+      'frame-dragon-crown-light',
+      'frame-dragon-orbit-shimmer',
+      'frame-dragon-star-drift',
+      'frame-celestial-unfold',
+      'frame-celestial-art-wing-left',
+      'frame-celestial-art-wing-right',
+      'frame-page-flutter',
+      'frame-library-page-material',
+      'frame-constellation-draw',
+      'frame-constellation-material',
+      'frame-archive-gate',
+      'frame-archive-gate-material',
+      'frame-archive-star-rise',
+      'frame-archive-portal-arc',
+      'frame-archive-star-path',
+      'frame-eternal-sun-contract',
+      'frame-eternal-rabbit-bridge',
+      'frame-eternal-rabbit-direction',
+      'frame-eternal-rabbit-sprite',
+      'frame-eternal-rabbit-body-arc',
+      'frame-eternal-petal-drift',
+      'frame-eternal-pine-sway',
+      'frame-eternal-epoch-orbit',
+    ]) {
+      expect(avatarFrameSource, keyframe).toContain(`@keyframes ${keyframe}`);
+    }
+
+    const dragonFrameMotion = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('@keyframes frame-dragon-metal-light'),
+      avatarFrameSource.indexOf('@keyframes frame-dragon-trail-ember'),
+    );
+    const dragonTrailMotion = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('@keyframes frame-dragon-trail-mane'),
+      avatarFrameSource.indexOf('@keyframes frame-dragon-fire-flow'),
+    );
+    const dragonFilamentMotion = avatarFrameSource.slice(
+      avatarFrameSource.indexOf('@keyframes frame-dragon-fire-flow'),
+      avatarFrameSource.indexOf('@keyframes frame-dragon-cloud-light'),
+    );
+    expect(dragonFrameMotion).not.toContain('rotate(');
+    expect(dragonFrameMotion).not.toContain('scale(');
+    expect(dragonTrailMotion).toContain('mask-position');
+    expect(dragonTrailMotion).not.toContain('rotate(');
+    expect(dragonFilamentMotion).toContain('frame-dragon-mane-sway');
+    expect(dragonFilamentMotion).toContain('frame-dragon-left-filament-sway');
+    expect(dragonFilamentMotion).toContain('frame-dragon-right-filament-sway');
+    expect(dragonFilamentMotion).toContain('frame-dragon-bottom-filament-sway');
+    expect(avatarFrameSource).toContain('stroke-dashoffset: -100');
+    expect(avatarFrameSource).toContain(
+      'frame-dragon-fire-flow var(--dragon-flow-duration) linear var(--dragon-flow-delay) infinite',
+    );
+    expect(avatarFrameSource).toContain('@keyframes frame-flame-hot-edge');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-mane 2.4s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-left 2.8s -0.9s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-right 2.7s -1.8s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-trail-bottom 3.2s -0.6s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-cloud-light 4.6s');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-pearl-light 3.6s');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-orbit-shimmer 4.8s');
+    expect(avatarFrameSource).not.toContain('frame-dragon-coil-breathe');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--body"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--upper"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--middle"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-mane avatar-frame__dragon-mane--lower"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--cloud-flame"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--mane"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--base"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--left"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--right"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-trail avatar-frame__dragon-trail--bottom"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-flow"');
+    expect(avatarFrameSource).toContain('avatar-frame__dragon-flow-group--mane');
+    expect(avatarFrameSource).toContain('avatar-frame__dragon-flow-group--left');
+    expect(avatarFrameSource).toContain('avatar-frame__dragon-flow-group--right');
+    expect(avatarFrameSource).toContain('avatar-frame__dragon-flow-group--bottom');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--pearl"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__dragon-layer avatar-frame__dragon-layer--head"');
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__dragon-layer--body\s*\{[^}]*z-index:\s*4;[^}]*\}/);
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__dragon-layer--body\s*\{[^}]*mask-image:/);
+    expect(avatarFrameSource).toMatch(/\.avatar-frame__dragon-layer--head\s*\{[^}]*z-index:\s*10;[^}]*clip-path:/);
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__dragon-layer--body\s*\{[^}]*animation:/);
+    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-upper 3.1s');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-middle 3.5s -1.35s');
+    expect(avatarFrameSource).toContain('animation: frame-dragon-mane-lower 3.25s -2.1s');
+    expect(avatarFrameSource).toContain('animation: frame-celestial-unfold 5s');
+    expect(avatarFrameSource).not.toContain('steps(');
+    expect(avatarFrameSource).toContain('transform: rotate(316deg) scale(0.78)');
+    expect(avatarFrameSource).toContain('class="avatar-frame__celestial-wing avatar-frame__celestial-wing--left"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__celestial-wing avatar-frame__celestial-wing--right"');
+    expect(avatarFrameSource).toContain('transform-origin: 35% 78%');
+    expect(avatarFrameSource).toContain('transform-origin: 65% 78%');
+    expect(avatarFrameSource).toContain('3.4s linear infinite alternate');
+    expect(avatarFrameSource).not.toContain('frame-celestial-wing-back-left');
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame--celestial \.avatar-frame__art\s*\{[^}]*clip-path:/);
+    expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-runner"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-direction"');
+    expect(avatarFrameSource).toContain('class="avatar-frame__eternal-rabbit-sprite"');
+    expect(avatarFrameSource).toContain('background-size: 400% 400%');
+    for (const calibratedRabbitPosition of [
+      '0 6.63%',
+      '33.333% 6.94%',
+      '66.667% 6.84%',
+      '100% 7.37%',
+      '0 36.88%',
+      '33.333% 36.03%',
+      '66.667% 34.86%',
+      '100% 35.49%',
+      '0 67.13%',
+      '33.333% 69.78%',
+      '66.667% 68.72%',
+      '100% 69.04%',
+      '0 99.08%',
+      '33.333% 99.29%',
+      '66.667% 99.18%',
+      '100% 99.71%',
+    ]) {
+      expect(avatarFrameSource, calibratedRabbitPosition).toContain(`background-position: ${calibratedRabbitPosition}`);
+    }
+    expect(avatarFrameSource).toContain('frame-eternal-rabbit-sprite 0.96s step-end infinite');
+    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-bridge 5.76s linear infinite');
+    expect(avatarFrameSource).toContain('animation: frame-eternal-rabbit-direction 5.76s linear infinite');
+    expect(avatarFrameSource).toContain('transform: scaleX(-1)');
+    expect(avatarFrameSource).toContain('translate(11.333px, -1px)');
+    expect(avatarFrameSource).toContain('translate(26.667px, -5px)');
+    expect(avatarFrameSource).toContain('translate(42px, -9px)');
+    expect(avatarFrameSource).toContain('class="avatar-frame__eternal-object avatar-frame__eternal-object--sun"');
+    expect(avatarFrameSource).toContain('@keyframes frame-ambient-breathe');
+    expect(avatarFrameSource).toContain('.avatar-frame--motion-ceiling .avatar-frame__ambient');
+    expect(avatarFrameSource).toContain("artwork.value.motion !== 'static'");
+    for (const detailVariant of [
+      'flame',
+      'ocean',
+      'aurora',
+      'note-masterpiece',
+      'file-vault',
+      'bookmark-archive',
+      'note-constellation',
+      'file-constellation',
+    ]) {
+      expect(avatarFrameSource, detailVariant).toContain(`'${detailVariant}'`);
+    }
+    expect(avatarFrameSource).toContain('class="avatar-frame__art-detail"');
+    expect(avatarFrameSource).not.toContain('@keyframes frame-library-stars');
+    expect(avatarFrameSource).not.toMatch(/\.avatar-frame__portrait\s*\{[^}]*animation:/);
+
+    for (const artKeyframe of [
+      'frame-gold-breathe',
+      'frame-sakura-bloom',
+      'frame-sunset-sky',
+      'frame-moonlight-breathe',
+      'frame-note-metal-light',
+      'frame-vault-metal-light',
+      'frame-ocean-metal-light',
+      'frame-aurora-metal-light',
+      'frame-flame-metal-light',
+      'frame-neon-pulse',
+      'frame-galaxy-breathe',
+      'frame-dragon-metal-light',
+      'frame-celestial-unfold',
+      'frame-library-metal-light',
+      'frame-constellation-ink',
+      'frame-archive-metal-light',
+      'frame-eternal-time-light',
+    ]) {
+      const keyframeStart = avatarFrameSource.indexOf(`@keyframes ${artKeyframe} {`);
+      const nextKeyframe = avatarFrameSource.indexOf('@keyframes ', keyframeStart + 1);
+      const keyframeSource = avatarFrameSource.slice(keyframeStart, nextKeyframe);
+      expect(keyframeSource, `${artKeyframe} 不得把整张头像框做统一缩放`).not.toMatch(/\bscale(?:X|Y)?\(/);
+    }
+
+    for (const stableFrameKeyframe of [
+      'frame-ocean-metal-light',
+      'frame-flame-metal-light',
+      'frame-dragon-metal-light',
+      'frame-dragon-cloud-light',
+      'frame-dragon-pearl-light',
+      'frame-dragon-orbit-shimmer',
+    ]) {
+      const keyframeStart = avatarFrameSource.indexOf(`@keyframes ${stableFrameKeyframe} {`);
+      const nextKeyframe = avatarFrameSource.indexOf('@keyframes ', keyframeStart + 1);
+      const keyframeSource = avatarFrameSource.slice(keyframeStart, nextKeyframe);
+      expect(keyframeSource, `${stableFrameKeyframe} 的主体框必须保持稳定`).not.toMatch(
+        /rotate\(|skew|translateX\(|translateY\(/,
+      );
+    }
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--bookmark-archive \.avatar-frame__ambient\s*\{[\s\S]*?filter:\s*none;/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--file-constellation \.avatar-frame__ambient\s*\{[\s\S]*?filter:\s*none;/,
+    );
+
+    const oceanWaterStart = avatarFrameSource.indexOf('@keyframes frame-ocean-water-flow {');
+    const oceanWaterEnd = avatarFrameSource.indexOf('@keyframes ', oceanWaterStart + 1);
+    const oceanWaterSource = avatarFrameSource.slice(oceanWaterStart, oceanWaterEnd);
+    expect(oceanWaterSource).not.toMatch(/translateX\(|translateY\(|rotate\(|skew/);
+    expect(oceanWaterSource).toContain('clip-path: polygon(');
+
+    const oceanStructureStart = avatarFrameSource.indexOf(
+      '.avatar-frame--dynamic.avatar-frame--ocean .avatar-frame__art',
+    );
+    const oceanStructureEnd = avatarFrameSource.indexOf(
+      '.avatar-frame--dynamic.avatar-frame--aurora .avatar-frame__art',
+    );
+    const oceanStructureSource = avatarFrameSource.slice(oceanStructureStart, oceanStructureEnd);
+    expect(oceanStructureSource).toContain('background: linear-gradient(');
+    expect(oceanStructureSource).toContain('animation: frame-ocean-undertow 4.8s');
+    expect(oceanStructureSource).toContain('animation: frame-ocean-return 4.8s');
+    expect(oceanStructureSource).toContain('animation: frame-ocean-crest-run 4.8s');
+    expect(oceanStructureSource).toMatch(
+      /\.avatar-frame--ocean \.avatar-frame__motion--back::before\s*\{[\s\S]*?width:\s*31px;/,
+    );
+    expect(oceanStructureSource).toMatch(
+      /\.avatar-frame--ocean \.avatar-frame__motion--front::before\s*\{[\s\S]*?width:\s*28px;/,
+    );
+
+    const auroraStructureStart = avatarFrameSource.indexOf(
+      '.avatar-frame--dynamic.avatar-frame--aurora .avatar-frame__art',
+    );
+    const auroraStructureEnd = avatarFrameSource.indexOf(
+      '.avatar-frame--dynamic.avatar-frame--flame .avatar-frame__art',
+    );
+    const auroraStructureSource = avatarFrameSource.slice(auroraStructureStart, auroraStructureEnd);
+    expect(auroraStructureSource).toContain('.avatar-frame--aurora .avatar-frame__motion--back i');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-ribbon-flow 5.4s');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-core-charge 5.4s');
+    expect(auroraStructureSource).toMatch(
+      /\.avatar-frame--aurora \.avatar-frame__motion--back::before,[\s\S]*?display:\s*none;/,
+    );
+    expect(auroraStructureSource).toMatch(
+      /\.avatar-frame--aurora \.avatar-frame__motion--front i:nth-child\(3\),[\s\S]*?display:\s*none;/,
+    );
+
+    const flameStructureStart = avatarFrameSource.indexOf(
+      '.avatar-frame--dynamic.avatar-frame--flame .avatar-frame__art',
+    );
+    const flameStructureEnd = avatarFrameSource.indexOf('/* 积分传说严格递进', flameStructureStart);
+    const flameStructureSource = avatarFrameSource.slice(flameStructureStart, flameStructureEnd);
+    expect(flameStructureSource).toContain('animation: frame-flame-tongue 3.1s');
+    expect(flameStructureSource).toContain('animation: frame-flame-material 4.2s');
+    expect(flameStructureSource).toMatch(
+      /\.avatar-frame--flame \.avatar-frame__motion--back::before,[\s\S]*?display:\s*none;/,
+    );
+    expect(flameStructureSource).toMatch(
+      /\.avatar-frame--flame \.avatar-frame__motion--front i:nth-child\(3\),[\s\S]*?display:\s*none;/,
+    );
+
+    const libraryMotionStart = avatarFrameSource.indexOf('@keyframes frame-page-flutter {');
+    const libraryMotionEnd = avatarFrameSource.indexOf('@keyframes frame-constellation-draw {');
+    const libraryMotionSource = avatarFrameSource.slice(libraryMotionStart, libraryMotionEnd);
+    expect(libraryMotionSource).not.toMatch(/scaleX\(1\.1/);
+    expect(libraryMotionSource).not.toMatch(/translateY\(-[234]px\)/);
+  });
+
+  it('pauses decorative motion offscreen, on explicit opt-out and for reduced-motion users', () => {
+    expect(avatarFrameSource).toContain("'avatar-frame--motion-paused': isMotionPaused");
+    expect(avatarFrameSource).toContain('const isMotionVisible = ref(!props.pauseWhenOffscreen)');
+    expect(avatarFrameSource).toContain("rootMargin: '24px 0px'");
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--motion-paused \.avatar-frame__ambient[\s\S]*?animation:\s*none !important;/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.avatar-frame__art[\s\S]*?animation:\s*none !important;/,
+    );
+    expect(avatarFrameSource).toMatch(
+      /\.avatar-frame--motion-paused \.avatar-frame__art-detail[\s\S]*?animation:\s*none !important;/,
+    );
+    expect(pointsShopSource).toContain('pause-when-offscreen');
+    expect(framePickerSource).toContain('pause-when-offscreen');
   });
 
   it('closes avatar overlay history before navigating and stabilizes the initial frame tabs', () => {

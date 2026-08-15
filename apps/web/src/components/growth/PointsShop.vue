@@ -6,154 +6,160 @@
       <BButton size="small" @click="loadShop">{{ t('common.retry') }}</BButton>
     </div>
     <template v-else>
-    <div class="ps-head">
-      <div class="ps-head-left">
-        <div class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</div>
-        <div class="ps-sub">{{ t('growth.shopSubtitle') }}</div>
-      </div>
-      <div class="ps-balance">
-        <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
-        <span class="ps-balance-num"
-          ><SvgIcon :src="icon.growth.coin" size="17" /> {{ (shop?.points || 0).toLocaleString('en-US') }}</span
-        >
-      </div>
-    </div>
-
-    <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
-    <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
-    <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
-
-    <!-- 实用道具 -->
-    <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
-    <div class="ps-grid">
-      <div v-for="it in consumables" :key="it.id" class="ps-item">
-        <div class="ps-item-icon"><SvgIcon :src="itemIcon(it.id)" size="27" /></div>
-        <div class="ps-item-body">
-          <div class="ps-item-name">{{ itemName(it) }}</div>
-          <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+      <div class="ps-head">
+        <div class="ps-head-left">
+          <div class="ps-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.shopTitle') }}</div>
+          <div class="ps-sub">{{ t('growth.shopSubtitle') }}</div>
         </div>
-        <div class="ps-item-foot">
-          <span class="ps-purchase-meta">
-            <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
-            <small v-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
-          </span>
-          <BButton
-            size="small"
-            type="primary"
-            :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
-            :loading="buyingId === it.id"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="askBuy(it)"
+        <div class="ps-balance">
+          <span class="ps-balance-label">{{ t('growth.myPoints') }}</span>
+          <span class="ps-balance-num"
+            ><SvgIcon :src="icon.growth.coin" size="17" /> {{ (shop?.points || 0).toLocaleString('en-US') }}</span
           >
-            {{ consumableBtn(it) }}
-          </BButton>
         </div>
       </div>
-    </div>
 
-    <!-- 头像框装扮 -->
-    <div v-if="frames.length" class="ps-frame-toolbar">
-      <div class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
-      <BTabs
-        v-model:active-tab="activeFrameFilter"
-        class="ps-frame-filters"
-        variant="pill"
-        :options="frameFilterOptions"
-      />
-    </div>
-    <div v-if="frames.length" class="ps-grid ps-frame-grid">
-      <div
-        v-for="it in visibleFrames"
-        :key="it.id"
-        class="ps-item ps-frame-item"
-        :class="[`ps-frame-item--${frameVariant(it.id) || 'default'}`, { 'is-equipped': it.equipped }]"
-      >
-        <AvatarFramePreview class="ps-frame-preview" :frame-id="it.id" :src="avatarSrc" :size="64" />
-        <div class="ps-item-body">
-          <div class="ps-item-name">
-            {{ itemName(it) }}
-            <span v-if="frameVariant(it.id)" class="ps-frame-style">{{ frameStyleName(it.id) }}</span>
-            <span v-if="it.rarity" class="ps-frame-rarity" :class="`ps-frame-rarity--${it.rarity}`">{{
-              frameRarityName(it.rarity)
-            }}</span>
-            <span v-if="isAchievementFrame(it)" class="ps-frame-source">{{ t('growth.frameAchievementOnly') }}</span>
-            <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
+      <div class="ps-earn"><SvgIcon :src="icon.message.info" size="15" /> {{ t('growth.shopEarnHint') }}</div>
+      <div v-if="shop?.isVisitor" class="ps-visitor">{{ t('growth.shopVisitorTip') }}</div>
+      <div v-else-if="shop && !shop.purchaseEnabled" class="ps-visitor">{{ t('growth.shopMaintenance') }}</div>
+
+      <!-- 实用道具 -->
+      <div v-if="consumables.length" class="ps-section-title">{{ t('growth.shopSectionConsumable') }}</div>
+      <div class="ps-grid">
+        <div v-for="it in consumables" :key="it.id" class="ps-item">
+          <div class="ps-item-icon"><SvgIcon :src="itemIcon(it.id)" size="27" /></div>
+          <div class="ps-item-body">
+            <div class="ps-item-name">{{ itemName(it) }}</div>
+            <div class="ps-item-desc">{{ itemDesc(it) }}</div>
           </div>
-          <div class="ps-item-desc">{{ itemDesc(it) }}</div>
-          <div v-if="isAchievementFrame(it)" class="ps-achievement-requirement">
-            <SvgIcon :src="icon.growth.reward" size="13" />
-            {{ t('growth.frameAchievementRequirement', { condition: achievementRequirement(it) }) }}
+          <div class="ps-item-foot">
+            <span class="ps-purchase-meta">
+              <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+              <small v-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
+            </span>
+            <BButton
+              size="small"
+              type="primary"
+              :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
+              :loading="buyingId === it.id"
+              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+              @click="askBuy(it)"
+            >
+              {{ consumableBtn(it) }}
+            </BButton>
           </div>
         </div>
-        <div class="ps-item-foot">
-          <span v-if="!it.owned && isAchievementFrame(it)" class="ps-achievement-progress">
-            <SvgIcon :src="icon.growth.reward" size="13" /> {{ achievementProgress(it) }}
-          </span>
-          <span v-else-if="isAchievementFrame(it)" class="ps-item-cost ps-item-cost--owned">
-            {{ t('growth.shopOwned') }}
-          </span>
-          <span v-else class="ps-purchase-meta">
-            <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
-            <span v-if="it.owned" class="ps-item-owned">{{ t('growth.shopOwned') }}</span>
-            <small v-else-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
-          </span>
-          <template v-if="canEquipFrame(it)">
+      </div>
+
+      <!-- 头像框装扮 -->
+      <div v-if="frames.length" class="ps-frame-toolbar">
+        <div class="ps-section-title">{{ t('growth.shopSectionFrame') }}</div>
+        <BTabs
+          v-model:active-tab="activeFrameFilter"
+          class="ps-frame-filters"
+          variant="pill"
+          :options="frameFilterOptions"
+        />
+      </div>
+      <div v-if="frames.length" class="ps-grid ps-frame-grid">
+        <div
+          v-for="it in visibleFrames"
+          :key="it.id"
+          class="ps-item ps-frame-item"
+          :class="[`ps-frame-item--${frameVariant(it.id) || 'default'}`, { 'is-equipped': it.equipped }]"
+        >
+          <AvatarFramePreview
+            class="ps-frame-preview"
+            :frame-id="it.id"
+            :src="avatarSrc"
+            :size="64"
+            pause-when-offscreen
+          />
+          <div class="ps-item-body">
+            <div class="ps-item-name">
+              {{ itemName(it) }}
+              <span v-if="frameVariant(it.id)" class="ps-frame-style">{{ frameStyleName(it.id) }}</span>
+              <span v-if="it.rarity" class="ps-frame-rarity" :class="`ps-frame-rarity--${it.rarity}`">{{
+                frameRarityName(it.rarity)
+              }}</span>
+              <span v-if="isAchievementFrame(it)" class="ps-frame-source">{{ t('growth.frameAchievementOnly') }}</span>
+              <span v-if="it.equipped" class="ps-tag-equipped">{{ t('growth.shopEquipped') }}</span>
+            </div>
+            <div class="ps-item-desc">{{ itemDesc(it) }}</div>
+            <div v-if="isAchievementFrame(it)" class="ps-achievement-requirement">
+              <SvgIcon :src="icon.growth.reward" size="13" />
+              {{ t('growth.frameAchievementRequirement', { condition: achievementRequirement(it) }) }}
+            </div>
+          </div>
+          <div class="ps-item-foot">
+            <span v-if="!it.owned && isAchievementFrame(it)" class="ps-achievement-progress">
+              <SvgIcon :src="icon.growth.reward" size="13" /> {{ achievementProgress(it) }}
+            </span>
+            <span v-else-if="isAchievementFrame(it)" class="ps-item-cost ps-item-cost--owned">
+              {{ t('growth.shopOwned') }}
+            </span>
+            <span v-else class="ps-purchase-meta">
+              <span class="ps-item-cost"><SvgIcon :src="icon.growth.coin" size="13" /> {{ it.cost }}</span>
+              <span v-if="it.owned" class="ps-item-owned">{{ t('growth.shopOwned') }}</span>
+              <small v-else-if="unavailableLabel(it)" class="ps-item-unavailable">{{ unavailableLabel(it) }}</small>
+            </span>
+            <template v-if="canEquipFrame(it)">
+              <BButton
+                v-if="it.equipped"
+                size="small"
+                :disabled="readOnly || equippingId === it.id"
+                :loading="equippingId === it.id"
+                :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+                @click="doEquipFrame(null)"
+              >
+                {{ t('growth.shopUnequip') }}
+              </BButton>
+              <BButton
+                v-else
+                size="small"
+                type="primary"
+                :disabled="readOnly || equippingId === it.id"
+                :loading="equippingId === it.id"
+                :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+                @click="doEquipFrame(it.id)"
+              >
+                {{ t('growth.shopEquip') }}
+              </BButton>
+            </template>
             <BButton
-              v-if="it.equipped"
+              v-else-if="isAchievementFrame(it)"
               size="small"
-              :disabled="readOnly || equippingId === it.id"
-              :loading="equippingId === it.id"
+              type="primary"
+              :disabled="readOnly || !achievementFor(it)?.claimable || claimingId === it.id"
+              :loading="claimingId === it.id"
               :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-              @click="doEquipFrame(null)"
+              @click="doClaimFrame(it)"
             >
-              {{ t('growth.shopUnequip') }}
+              {{ achievementButton(it) }}
             </BButton>
             <BButton
               v-else
               size="small"
               type="primary"
-              :disabled="readOnly || equippingId === it.id"
-              :loading="equippingId === it.id"
+              :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
+              :loading="buyingId === it.id"
               :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-              @click="doEquipFrame(it.id)"
+              @click="askBuy(it)"
             >
-              {{ t('growth.shopEquip') }}
+              {{ titleBtn(it) }}
             </BButton>
-          </template>
-          <BButton
-            v-else-if="isAchievementFrame(it)"
-            size="small"
-            type="primary"
-            :disabled="readOnly || !achievementFor(it)?.claimable || claimingId === it.id"
-            :loading="claimingId === it.id"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="doClaimFrame(it)"
-          >
-            {{ achievementButton(it) }}
-          </BButton>
-          <BButton
-            v-else
-            size="small"
-            type="primary"
-            :disabled="readOnly || !canBuyNow(it) || buyingId === it.id"
-            :loading="buyingId === it.id"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="askBuy(it)"
-          >
-            {{ titleBtn(it) }}
-          </BButton>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
+      <div v-if="!consumables.length && !frames.length" class="ps-empty">{{ t('growth.shopEmpty') }}</div>
 
-    <!-- 兑换确认 -->
-    <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
-      <div class="ps-confirm">{{
-        pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : ''
-      }}</div>
-    </BModal>
+      <!-- 兑换确认 -->
+      <BModal v-model:visible="confirmVisible" :title="t('growth.shopBuy')" width="360px" @ok="confirmBuy">
+        <div class="ps-confirm">{{
+          pending ? t('growth.shopBuyConfirm', { n: pending.cost, name: itemName(pending) }) : ''
+        }}</div>
+      </BModal>
     </template>
   </div>
 </template>

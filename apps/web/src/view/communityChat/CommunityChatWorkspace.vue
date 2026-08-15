@@ -3813,35 +3813,21 @@
     background: transparent;
   }
 
-  /* 滚动时保留每款头像框的 transform/opacity 主体；龙耀前后景必须同步，只暂停局部光效。 */
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--gold .avatar-frame__motif),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--neon .avatar-frame__ring),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--aurora .avatar-frame__motif),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__motif),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__motif::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__motif::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__orbit),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--galaxy .avatar-frame__comet),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--flame .avatar-frame__ring),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__ring::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__motif),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__orbit),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__comet),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__signature-mark),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__dragon-head::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dragon .avatar-frame__dragon-head::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__ring),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__ring::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__motif),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__motif::before),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__motif::after),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__orbit),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame--celestial .avatar-frame__comet) {
+  /* 滚动时保留框体本身的低成本 transform，暂停光晕、素材高光和粒子，并强制关闭动态滤镜。 */
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__ambient),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__art-detail),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-layer),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-trail),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-ornament),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::before),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::after),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion i) {
     animation-play-state: paused !important;
+    filter: none !important;
+  }
+
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame--dynamic .avatar-frame__art) {
+    filter: none !important;
   }
 
   .community-message-list:hover::-webkit-scrollbar-thumb {
