@@ -594,40 +594,61 @@
 
   /* 炫彩成就：主题局部运动；炫彩积分：增加第二动态通道和更明显能量变化。 */
   .avatar-frame--dynamic.avatar-frame--streak-month .avatar-frame__art {
-    animation: frame-moonlight-breathe 5.8s ease-in-out infinite;
+    animation: frame-moonlight-breathe 5.2s ease-in-out infinite;
   }
 
   .avatar-frame--streak-month .avatar-frame__motion--front::before {
-    top: 7px;
+    top: 6px;
     left: 50%;
-    width: 7px;
-    height: 7px;
-    margin-left: -3.5px;
+    width: 9px;
+    height: 9px;
+    margin-left: -4.5px;
     border-radius: 50%;
     background: #f5f3ff;
-    box-shadow: 0 0 7px #c4b5fd;
-    transform-origin: 3.5px 38px;
-    animation: frame-moon-phase-travel 5.8s ease-in-out infinite;
+    box-shadow: 0 0 10px #c4b5fd;
+    transform-origin: 4.5px 38px;
+    animation: frame-moon-phase-travel 5.2s ease-in-out infinite;
   }
 
   .avatar-frame--streak-month .avatar-frame__motion--back::after {
     top: 6px;
     right: 8px;
-    width: 12px;
-    height: 12px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.9), rgba(165, 180, 252, 0.32) 46%, transparent 72%);
-    animation: frame-local-pulse 3.4s ease-in-out infinite;
+    animation: frame-local-pulse 3s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-month .avatar-frame__motion--front i:nth-child(1),
+  .avatar-frame--streak-month .avatar-frame__motion--front i:nth-child(2) {
+    width: 4px;
+    height: 4px;
+    border-radius: 0;
+    background: #eef2ff;
+    clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+    animation: frame-moon-star-twinkle 3.6s ease-in-out infinite;
+  }
+
+  .avatar-frame--streak-month .avatar-frame__motion--front i:nth-child(1) {
+    left: 10px;
+    bottom: 16px;
+  }
+
+  .avatar-frame--streak-month .avatar-frame__motion--front i:nth-child(2) {
+    right: 9px;
+    bottom: 21px;
+    animation-delay: -1.8s;
   }
 
   .avatar-frame--dynamic.avatar-frame--note-masterpiece .avatar-frame__art {
-    animation: frame-note-metal-light 5.2s ease-in-out infinite;
+    animation: frame-note-metal-light 4.8s ease-in-out infinite;
   }
 
   .avatar-frame--note-masterpiece .avatar-frame__art-detail {
     clip-path: polygon(0 34%, 30% 44%, 44% 66%, 65% 54%, 100% 42%, 100% 100%, 0 100%);
     transform-origin: 50% 72%;
-    animation: frame-note-water-flow 4.2s ease-in-out infinite;
+    animation: frame-note-water-flow 3.8s ease-in-out infinite;
   }
 
   .avatar-frame--note-masterpiece .avatar-frame__motion--back::after {
@@ -635,39 +656,54 @@
     bottom: 5px;
     width: 61px;
     height: 20px;
-    border-bottom: 2.5px solid rgba(153, 246, 228, 0.94);
+    border-bottom: 3px solid rgba(153, 246, 228, 0.96);
     border-radius: 50%;
-    filter: drop-shadow(0 0 2px #2dd4bf);
-    animation: frame-ink-current 4.2s ease-in-out infinite;
+    filter: drop-shadow(0 0 3px #2dd4bf);
+    animation: frame-ink-current 3.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--note-masterpiece .avatar-frame__motion--front::before {
+    left: 18px;
+    bottom: 9px;
+    width: 30px;
+    height: 9px;
+    border-top: 2px solid rgba(204, 251, 241, 0.88);
+    border-radius: 50%;
+    filter: drop-shadow(0 0 2px rgba(45, 212, 191, 0.9));
+    animation: frame-note-river-glint 3.8s -1.1s ease-in-out infinite;
   }
 
   .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(1),
   .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(2) {
     left: 11px;
     bottom: 13px;
-    animation: frame-river-spark 4.2s linear infinite;
+    width: 4px;
+    height: 4px;
+    background: #ccfbf1;
+    box-shadow: 0 0 7px #2dd4bf;
+    animation: frame-river-spark 3.8s linear infinite;
   }
 
   .avatar-frame--note-masterpiece .avatar-frame__motion--front i:nth-child(2) {
-    animation-delay: 2.1s;
+    animation-delay: 1.9s;
   }
 
   .avatar-frame--dynamic.avatar-frame--file-vault .avatar-frame__art {
-    animation: frame-vault-metal-light 5s ease-in-out infinite;
+    animation: frame-vault-metal-light 4.8s ease-in-out infinite;
   }
 
   .avatar-frame--file-vault .avatar-frame__art-detail {
     clip-path: polygon(25% 0, 75% 0, 70% 35%, 100% 66%, 100% 100%, 0 100%, 0 66%, 30% 35%);
     transform-origin: 50% 18%;
-    animation: frame-vault-cloud-gate 5s ease-in-out infinite;
+    animation: frame-vault-cloud-gate 4.8s ease-in-out infinite;
   }
 
   .avatar-frame--file-vault .avatar-frame__motion--front::before {
     top: 3px;
     left: 50%;
-    width: 18px;
-    height: 18px;
-    margin-left: -9px;
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
     background: linear-gradient(
       135deg,
       rgba(219, 234, 254, 0.98),
@@ -675,9 +711,9 @@
       rgba(79, 70, 229, 0.82)
     );
     clip-path: polygon(50% 0, 64% 34%, 100% 50%, 64% 66%, 50% 100%, 36% 66%, 0 50%, 36% 34%);
-    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.9));
+    filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.96));
     transform-origin: center;
-    animation: frame-vault-door-shine 5s ease-in-out infinite;
+    animation: frame-vault-door-shine 4.8s ease-in-out infinite;
   }
 
   .avatar-frame--file-vault .avatar-frame__motion--front::after {
@@ -686,9 +722,10 @@
     width: 24px;
     height: 9px;
     margin-left: -12px;
-    border-bottom: 2px solid rgba(147, 197, 253, 0.96);
+    border-bottom: 2.5px solid rgba(147, 197, 253, 0.98);
     border-radius: 50%;
-    animation: frame-vault-cloud-rise 5s ease-in-out infinite;
+    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.9));
+    animation: frame-vault-cloud-rise 4.8s ease-in-out infinite;
   }
 
   .avatar-frame--file-vault .avatar-frame__motion--back::after {
@@ -702,13 +739,14 @@
   }
 
   .avatar-frame--file-vault .avatar-frame__motion--front i {
-    width: 4px;
-    height: 4px;
+    width: 5px;
+    height: 5px;
     border-radius: 0;
     background: #93c5fd;
     clip-path: polygon(50% 0, 64% 36%, 100% 50%, 64% 64%, 50% 100%, 36% 64%, 0 50%, 36% 36%);
     box-shadow: none;
-    animation: frame-vault-data-rise 4.8s ease-in-out infinite;
+    filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.92));
+    animation: frame-vault-data-rise 4.6s ease-in-out infinite;
   }
 
   .avatar-frame--file-vault .avatar-frame__motion--front i:nth-child(1) {
@@ -904,12 +942,33 @@
 
   .avatar-frame--aurora .avatar-frame__art-detail {
     clip-path: polygon(0 42%, 30% 42%, 42% 68%, 58% 68%, 70% 42%, 100% 42%, 100% 100%, 0 100%);
-    opacity: 0.16;
-    animation: frame-aurora-ribbon-flow 5.4s ease-in-out infinite;
+    opacity: 0.22;
+    animation: frame-aurora-ribbon-flow 4.2s ease-in-out infinite;
   }
 
   .avatar-frame--aurora .avatar-frame__motion--back::before,
-  .avatar-frame--aurora .avatar-frame__motion--back::after,
+  .avatar-frame--aurora .avatar-frame__motion--back::after {
+    bottom: 7px;
+    width: 24px;
+    height: 48px;
+    background: linear-gradient(155deg, transparent 5% 24%, rgba(103, 232, 249, 0.78) 43%, rgba(139, 92, 246, 0.68) 61%, transparent 79%);
+    clip-path: polygon(8% 100%, 12% 68%, 35% 47%, 18% 35%, 52% 27%, 42% 10%, 82% 20%, 100% 0, 92% 42%, 72% 70%, 68% 100%);
+    filter: drop-shadow(0 0 2px rgba(103, 232, 249, 0.72));
+    mix-blend-mode: screen;
+    transform-origin: 50% 100%;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--back::before {
+    left: 8px;
+    animation: frame-aurora-veil-left 3.8s ease-in-out infinite;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--back::after {
+    right: 8px;
+    background: linear-gradient(205deg, transparent 5% 24%, rgba(196, 181, 253, 0.78) 43%, rgba(34, 211, 238, 0.66) 61%, transparent 79%);
+    animation: frame-aurora-veil-right 3.8s -1.9s ease-in-out infinite;
+  }
+
   .avatar-frame--aurora .avatar-frame__motion--back i {
     display: none;
   }
@@ -919,15 +978,15 @@
   }
 
   .avatar-frame--aurora .avatar-frame__motion--front::after {
-    top: 1px;
+    top: 0;
     left: 50%;
-    width: 6px;
-    height: 6px;
-    margin-left: -3px;
+    width: 8px;
+    height: 8px;
+    margin-left: -4px;
     background: radial-gradient(circle, #fff 0 18%, #a5f3fc 24% 42%, #8b5cf6 54% 70%, transparent 74%);
     clip-path: polygon(50% 0, 63% 37%, 100% 50%, 63% 63%, 50% 100%, 37% 63%, 0 50%, 37% 37%);
-    filter: drop-shadow(0 0 3px rgba(103, 232, 249, 0.82));
-    animation: frame-aurora-core-charge 5.4s ease-in-out infinite;
+    filter: drop-shadow(0 0 4px rgba(103, 232, 249, 0.92)) drop-shadow(0 0 7px rgba(139, 92, 246, 0.58));
+    animation: frame-aurora-core-charge 4.2s ease-in-out infinite;
   }
 
   .avatar-frame--aurora .avatar-frame__motion--front i {
@@ -953,7 +1012,17 @@
 
   .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(3),
   .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(4) {
-    display: none;
+    bottom: 15px;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(3) {
+    left: 9px;
+    animation-delay: -1.05s;
+  }
+
+  .avatar-frame--aurora .avatar-frame__motion--front i:nth-child(4) {
+    right: 9px;
+    animation-delay: -3.15s;
   }
 
   .avatar-frame--dynamic.avatar-frame--flame .avatar-frame__art {
@@ -967,19 +1036,28 @@
   }
 
   .avatar-frame--flame .avatar-frame__motion--front::before {
-    top: 8px;
-    right: 8px;
-    width: 6px;
-    height: 12px;
+    top: 6px;
+    right: 7px;
+    width: 7px;
+    height: 15px;
     background: linear-gradient(180deg, #fff7b2 0 8%, #fbbf24 24%, #f97316 58%, rgba(220, 38, 38, 0.2) 100%);
     clip-path: polygon(50% 0, 72% 31%, 64% 50%, 92% 76%, 57% 100%, 20% 82%, 34% 55%, 12% 35%, 42% 43%);
     filter: drop-shadow(0 0 2px rgba(251, 146, 60, 0.86));
     transform-origin: 50% 100%;
-    animation: frame-flame-tongue 3.1s ease-in-out infinite;
+    animation: frame-flame-tongue 2.8s ease-in-out infinite;
   }
 
   .avatar-frame--flame .avatar-frame__motion--front::after {
-    display: none;
+    bottom: 13px;
+    left: 6px;
+    width: 6px;
+    height: 13px;
+    background: linear-gradient(180deg, #fff3a6 0 9%, #fb923c 32%, #ea580c 66%, rgba(185, 28, 28, 0.18) 100%);
+    clip-path: polygon(48% 0, 70% 28%, 62% 49%, 90% 75%, 56% 100%, 18% 82%, 32% 56%, 10% 34%, 42% 42%);
+    filter: drop-shadow(0 0 2px rgba(251, 146, 60, 0.82));
+    transform-origin: 50% 100%;
+    --flame-side-angle: -34deg;
+    animation: frame-flame-side-burn 2.9s -1.45s ease-in-out infinite;
   }
 
   .avatar-frame--flame .avatar-frame__motion--front i {
@@ -997,15 +1075,24 @@
     animation-delay: -1.9s;
   }
 
-  .avatar-frame--flame .avatar-frame__motion--front i:nth-child(3),
+  .avatar-frame--flame .avatar-frame__motion--front i:nth-child(3) {
+    right: auto;
+    bottom: 15px;
+    left: 9px;
+    animation-delay: -0.95s;
+  }
+
   .avatar-frame--flame .avatar-frame__motion--front i:nth-child(4) {
-    display: none;
+    right: auto;
+    bottom: 20px;
+    left: 15px;
+    animation-delay: -2.85s;
   }
 
   .avatar-frame--flame .avatar-frame__art-detail {
     clip-path: polygon(0 30%, 24% 30%, 34% 67%, 50% 84%, 66% 67%, 76% 22%, 100% 20%, 100% 100%, 0 100%);
-    opacity: 0.12;
-    animation: frame-flame-material 4.2s ease-in-out infinite;
+    opacity: 0.18;
+    animation: frame-flame-material 3.6s ease-in-out infinite;
   }
 
   /* 积分传说严格递进：霓虹 < 星河 < 龙曜 < 天穹。 */
@@ -2180,6 +2267,20 @@
     }
   }
 
+  @keyframes frame-moon-star-twinkle {
+    0%,
+    100% {
+      opacity: 0.24;
+      filter: brightness(0.94);
+      transform: translateY(1px) scale(0.72) rotate(0deg);
+    }
+    50% {
+      opacity: 0.92;
+      filter: brightness(1.3);
+      transform: translateY(-1px) scale(1.12) rotate(45deg);
+    }
+  }
+
   @keyframes frame-note-metal-light {
     0%,
     100% {
@@ -2223,6 +2324,22 @@
     }
   }
 
+  @keyframes frame-note-river-glint {
+    0%,
+    100% {
+      opacity: 0.18;
+      transform: translateX(-5px) scaleX(0.64) skewX(-8deg);
+    }
+    48% {
+      opacity: 0.84;
+      transform: translateX(5px) scaleX(1.04) skewX(6deg);
+    }
+    72% {
+      opacity: 0.42;
+      transform: translateX(2px) scaleX(0.82) skewX(-2deg);
+    }
+  }
+
   @keyframes frame-river-spark {
     0% {
       opacity: 0;
@@ -2252,17 +2369,17 @@
   @keyframes frame-vault-cloud-gate {
     0%,
     100% {
-      opacity: 0.1;
+      opacity: 0.16;
       filter: brightness(1.03) saturate(1.08) hue-rotate(8deg);
       transform: translate(-50%, -50%);
     }
     42% {
-      opacity: 0.7;
+      opacity: 0.78;
       filter: brightness(1.36) saturate(1.34) hue-rotate(20deg);
       transform: translate(-50%, -50%);
     }
     72% {
-      opacity: 0.32;
+      opacity: 0.4;
       filter: brightness(1.16) saturate(1.18) hue-rotate(14deg);
       transform: translate(-50%, -50%);
     }
@@ -2315,7 +2432,7 @@
   @keyframes frame-vault-data-rise {
     0%,
     100% {
-      opacity: 0.16;
+      opacity: 0.24;
       transform: translateY(3px) rotate(0deg) scale(0.72);
     }
     42% {
@@ -2323,7 +2440,7 @@
       transform: translateY(-4px) rotate(45deg) scale(1.08);
     }
     72% {
-      opacity: 0.44;
+      opacity: 0.52;
       transform: translateY(-1px) rotate(90deg) scale(0.86);
     }
   }
@@ -2524,22 +2641,22 @@
   @keyframes frame-aurora-ribbon-flow {
     0%,
     100% {
-      opacity: 0.1;
+      opacity: 0.16;
       filter: brightness(1.04) saturate(1.08) hue-rotate(-12deg);
       transform: translate(-50%, -50%);
     }
     32% {
-      opacity: 0.2;
+      opacity: 0.3;
       filter: brightness(1.12) saturate(1.16) hue-rotate(4deg);
       transform: translate(-50%, -50%);
     }
     56% {
-      opacity: 0.34;
+      opacity: 0.48;
       filter: brightness(1.22) saturate(1.24) hue-rotate(16deg);
       transform: translate(-50%, -50%);
     }
     78% {
-      opacity: 0.16;
+      opacity: 0.24;
       filter: brightness(1.1) saturate(1.12) hue-rotate(3deg);
       transform: translate(-50%, -50%);
     }
@@ -2758,17 +2875,17 @@
   @keyframes frame-flame-material {
     0%,
     100% {
-      opacity: 0.08;
+      opacity: 0.14;
       filter: brightness(1.04) saturate(1.04);
       transform: translate(-50%, -50%);
     }
     34% {
-      opacity: 0.28;
+      opacity: 0.42;
       filter: brightness(1.18) saturate(1.14) drop-shadow(0 0 2px rgba(254, 215, 91, 0.64));
       transform: translate(-50%, -50%);
     }
     68% {
-      opacity: 0.14;
+      opacity: 0.22;
       filter: brightness(1.1) saturate(1.08);
       transform: translate(-50%, -50%);
     }

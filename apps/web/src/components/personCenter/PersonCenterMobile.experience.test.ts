@@ -93,6 +93,14 @@ describe('mobile personal center experience', () => {
     expect(mobileTopBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?overflow:\s*visible;/);
     expect(mobileTopBarSource).toContain(':size="26"');
     expect(personCenterSource).toContain(":class=\"{ 'profile-card__avatar--framed': equippedFrameId }\"");
+    expect(personCenterSource).toContain(':size="48"');
+    expect(personCenterSource).toMatch(/\.profile-card\s*\{[\s\S]*?padding:\s*20px 16px 16px;/);
+    const maxProfileArtworkOverflow = Math.max(
+      ...Object.values(AVATAR_FRAME_ARTWORK).map(({ artSize, outerSize }) =>
+        Math.max(0, ((artSize - outerSize) * 48) / 64 / 2),
+      ),
+    );
+    expect(20 - maxProfileArtworkOverflow).toBeGreaterThanOrEqual(8);
     expect(personCenterSource).toMatch(
       /\.profile-card__avatar\.profile-card__avatar--framed\s*\{[\s\S]*?width:\s*auto;[\s\S]*?height:\s*auto;[\s\S]*?flex:\s*0 0 auto;/,
     );
@@ -159,7 +167,9 @@ describe('mobile personal center experience', () => {
       'frame-petal-drift',
       'frame-sunset-sun',
       'frame-moon-phase-travel',
+      'frame-moon-star-twinkle',
       'frame-ink-current',
+      'frame-note-river-glint',
       'frame-vault-door-shine',
       'frame-vault-data-rise',
       'frame-ocean-water-flow',
@@ -223,6 +233,13 @@ describe('mobile personal center experience', () => {
     ]) {
       expect(avatarFrameSource, keyframe).toContain(`@keyframes ${keyframe}`);
     }
+
+    expect(avatarFrameSource).toContain('animation: frame-moon-phase-travel 5.2s');
+    expect(avatarFrameSource).toContain('animation: frame-moon-star-twinkle 3.6s');
+    expect(avatarFrameSource).toContain('animation: frame-note-river-glint 3.8s -1.1s');
+    expect(avatarFrameSource).toContain('animation: frame-vault-data-rise 4.6s');
+    expect(avatarFrameSource).toContain('border-bottom: 3px solid rgba(153, 246, 228, 0.96)');
+    expect(avatarFrameSource).toContain('filter: drop-shadow(0 0 4px rgba(96, 165, 250, 0.96))');
 
     const dragonFrameMotion = avatarFrameSource.slice(
       avatarFrameSource.indexOf('@keyframes frame-dragon-metal-light'),
@@ -421,13 +438,15 @@ describe('mobile personal center experience', () => {
     );
     const auroraStructureSource = avatarFrameSource.slice(auroraStructureStart, auroraStructureEnd);
     expect(auroraStructureSource).toContain('.avatar-frame--aurora .avatar-frame__motion--back i');
-    expect(auroraStructureSource).toContain('animation: frame-aurora-ribbon-flow 5.4s');
-    expect(auroraStructureSource).toContain('animation: frame-aurora-core-charge 5.4s');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-ribbon-flow 4.2s');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-core-charge 4.2s');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-veil-left 3.8s');
+    expect(auroraStructureSource).toContain('animation: frame-aurora-veil-right 3.8s -1.9s');
     expect(auroraStructureSource).toMatch(
-      /\.avatar-frame--aurora \.avatar-frame__motion--back::before,[\s\S]*?display:\s*none;/,
+      /\.avatar-frame--aurora \.avatar-frame__motion--back::before,[\s\S]*?width:\s*24px;/,
     );
     expect(auroraStructureSource).toMatch(
-      /\.avatar-frame--aurora \.avatar-frame__motion--front i:nth-child\(3\),[\s\S]*?display:\s*none;/,
+      /\.avatar-frame--aurora \.avatar-frame__motion--front i:nth-child\(3\)\s*\{[\s\S]*?left:\s*9px;/,
     );
 
     const flameStructureStart = avatarFrameSource.indexOf(
@@ -435,13 +454,17 @@ describe('mobile personal center experience', () => {
     );
     const flameStructureEnd = avatarFrameSource.indexOf('/* 积分传说严格递进', flameStructureStart);
     const flameStructureSource = avatarFrameSource.slice(flameStructureStart, flameStructureEnd);
-    expect(flameStructureSource).toContain('animation: frame-flame-tongue 3.1s');
-    expect(flameStructureSource).toContain('animation: frame-flame-material 4.2s');
+    expect(flameStructureSource).toContain('animation: frame-flame-tongue 2.8s');
+    expect(flameStructureSource).toContain('animation: frame-flame-side-burn 2.9s -1.45s');
+    expect(flameStructureSource).toContain('animation: frame-flame-material 3.6s');
     expect(flameStructureSource).toMatch(
       /\.avatar-frame--flame \.avatar-frame__motion--back::before,[\s\S]*?display:\s*none;/,
     );
     expect(flameStructureSource).toMatch(
-      /\.avatar-frame--flame \.avatar-frame__motion--front i:nth-child\(3\),[\s\S]*?display:\s*none;/,
+      /\.avatar-frame--flame \.avatar-frame__motion--front::after\s*\{[\s\S]*?height:\s*13px;/,
+    );
+    expect(flameStructureSource).toMatch(
+      /\.avatar-frame--flame \.avatar-frame__motion--front i:nth-child\(3\)\s*\{[\s\S]*?left:\s*9px;/,
     );
 
     const libraryMotionStart = avatarFrameSource.indexOf('@keyframes frame-page-flutter {');

@@ -22,7 +22,7 @@
                 v-if="equippedFrameId"
                 :frame-id="equippedFrameId"
                 :src="user.headPicture || icon.navigation.user"
-                :size="52"
+                :size="48"
                 :decorative="false"
               />
               <svg-icon v-else img-id="viewUserImg" size="58" :src="user.headPicture || icon.navigation.user" />
@@ -385,7 +385,7 @@
   }
 
   .profile-card {
-    padding: 16px;
+    padding: 20px 16px 16px;
     box-sizing: border-box;
     border: 1px solid var(--surface-border-color);
     border-radius: 18px;
@@ -693,7 +693,7 @@
 
   @media (max-width: 360px) {
     .profile-card {
-      padding: 14px;
+      padding: 18px 14px 14px;
     }
 
     .profile-card__avatar {
