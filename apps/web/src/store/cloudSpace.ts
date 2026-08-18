@@ -172,14 +172,22 @@ export default defineStore('dom', {
     loadMoreFiles() {
       return this.queryFieldList({ append: true });
     },
+    setFileSortValue(sort: CloudFileSort) {
+      const nextSort = normalizeCloudFileSort(sort);
+      if (this.fileSort.field === nextSort.field && this.fileSort.order === nextSort.order) {
+        return Promise.resolve(true);
+      }
+      this.fileSort = nextSort;
+      saveCloudFileSort(this.fileSort);
+      return this.queryFieldList();
+    },
     setFileSort(field: Exclude<CloudFileSortField, 'createTime'>) {
       const defaultOrder: CloudFileSortOrder = field === 'fileName' ? 'asc' : 'desc';
-      this.fileSort =
+      const nextSort: CloudFileSort =
         this.fileSort.field === field
           ? { field, order: this.fileSort.order === 'asc' ? 'desc' : 'asc' }
           : { field, order: defaultOrder };
-      saveCloudFileSort(this.fileSort);
-      return this.queryFieldList();
+      return this.setFileSortValue(nextSort);
     },
     /**
      * 空间用量。返回是否成功,供下拉刷新判断「部分数据刷新失败」。

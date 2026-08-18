@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  buildNoteDraftWorkspaceQueryCalls,
   classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
@@ -29,13 +30,16 @@ function response(args, overrides = {}) {
 }
 
 function taskResponse(args, overrides = {}) {
+  const normalizedArgs = Object.prototype.hasOwnProperty.call(args, 'workspaceQueries')
+    ? args
+    : { ...args, workspaceQueries: [] };
   return {
     content: '',
     toolCalls: [
       {
         id: 'task-call',
         type: 'function',
-        function: { name: 'classify_note_draft_task', arguments: JSON.stringify(args) },
+        function: { name: 'classify_note_draft_task', arguments: JSON.stringify(normalizedArgs) },
       },
     ],
     usage: { promptTokens: 9, completionTokens: 3, totalTokens: 12 },
@@ -219,13 +223,25 @@ describe('noteDraft', () => {
       maxTokens: 256,
       temperature: 0,
     });
+    expect(request.mock.calls[0][1].tools[0].function.parameters.required).toContain('workspaceQueries');
+    expect(
+      request.mock.calls[0][1].tools[0].function.parameters.properties.workspaceQueries.items.properties.resourceType
+        .enum,
+    ).toEqual(['note', 'bookmark', 'file', 'todo']);
     expect(onResponse).toHaveBeenCalledTimes(3);
   });
 
   it('语义分类通用识别尚未绑定的工作区材料，不枚举时间或资源问法', async () => {
     const request = vi
       .fn()
-      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: true }))
+      .mockResolvedValueOnce(
+        taskResponse({
+          producesNote: true,
+          otherMutations: false,
+          needsWorkspaceRetrieval: true,
+          workspaceQueries: [{ resourceType: 'note', keyword: '项目', timeRange: '刚刚' }],
+        }),
+      )
       .mockResolvedValueOnce(
         taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false }),
       );
@@ -247,11 +263,33 @@ describe('noteDraft', () => {
     });
 
     expect(implicit.needsWorkspaceRetrieval).toBe(true);
+    expect(implicit.workspaceQueries).toEqual([{ resourceType: 'note', keyword: '项目', timeRange: '刚刚' }]);
     expect(selected.needsWorkspaceRetrieval).toBe(false);
     expect(JSON.parse(request.mock.calls[1][0][1].content)).toMatchObject({
       selectedMaterialCount: 2,
       selectedScopeCount: 1,
     });
+  });
+
+  it('把结构化材料范围映射到现有只读工具，不能静默丢掉不受支持的筛选', () => {
+    expect(
+      buildNoteDraftWorkspaceQueryCalls([
+        { resourceType: 'note', timeRange: '今天' },
+        { resourceType: 'bookmark', keyword: 'AI', tag: '稍后读', timeRange: '最近7天' },
+        { resourceType: 'file', keyword: '复盘', fileType: 'document' },
+        { resourceType: 'todo', keyword: '发布', todoStatus: 'all' },
+      ]),
+    ).toEqual([
+      { toolName: 'query_notes', args: { timeRange: '今天', limit: 50 } },
+      {
+        toolName: 'query_bookmarks',
+        args: { keyword: 'AI', timeRange: '最近7天', tag: '稍后读', limit: 50 },
+      },
+      { toolName: 'query_files', args: { keyword: '复盘', type: 'document', limit: 50 } },
+      { toolName: 'query_todos', args: { status: 'all', keyword: '发布', sort: 'newest', limit: 50 } },
+    ]);
+    expect(buildNoteDraftWorkspaceQueryCalls([{ resourceType: 'todo', timeRange: '今天' }])).toEqual([]);
+    expect(buildNoteDraftWorkspaceQueryCalls([{ resourceType: 'note', tag: '不支持' }])).toEqual([]);
   });
 
   it('笔记任务分类协议不完整时显式失败，由调用方决定降级', async () => {
@@ -260,6 +298,18 @@ describe('noteDraft', () => {
       taskResponse({ producesNote: true }),
       taskResponse({ producesNote: 'yes', otherMutations: false, needsWorkspaceRetrieval: false }),
       taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false, extra: 1 }),
+      taskResponse({
+        producesNote: true,
+        otherMutations: false,
+        needsWorkspaceRetrieval: false,
+        workspaceQueries: [{ resourceType: 'note', timeRange: '今天' }],
+      }),
+      taskResponse({
+        producesNote: true,
+        otherMutations: false,
+        needsWorkspaceRetrieval: true,
+        workspaceQueries: [{ resourceType: 'unknown' }],
+      }),
       taskResponse(
         { producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false },
         {
@@ -287,6 +337,7 @@ describe('noteDraft', () => {
     const request = vi
       .fn()
       .mockResolvedValueOnce(intentResponse('revise_pending_draft'))
+      .mockResolvedValueOnce(intentResponse('separate_request'))
       .mockResolvedValueOnce(intentResponse('separate_request'));
     const onResponse = vi.fn();
 
@@ -307,11 +358,21 @@ describe('noteDraft', () => {
       request,
       onResponse,
     });
+    const newMaterialScope = await classifyPendingNoteDraftFollowUp({
+      message: '把我今天的全部笔记总结成一篇新的笔记。',
+      sourceMessage: '把最近 7 天的笔记总结成一篇笔记。',
+      draftTitle: '最近 7 天笔记总结',
+      draftContent: '旧范围草稿正文。',
+      request,
+      onResponse,
+    });
 
     expect(revision.decision).toBe('revise_pending_draft');
     expect(separate.decision).toBe('separate_request');
-    expect(request).toHaveBeenCalledTimes(2);
+    expect(newMaterialScope.decision).toBe('separate_request');
+    expect(request).toHaveBeenCalledTimes(3);
     expect(request.mock.calls[0][0][0].content).toContain('整体含义、指代和最近对话');
+    expect(request.mock.calls[2][0][0].content).toContain('重新指定了一个可独立查询的材料范围');
     expect(request.mock.calls[0][0][1].content).toContain('面向刚入门的人重新组织一下');
     expect(request.mock.calls[0][0][1].content).toContain('正文里包含安装步骤和使用示例');
     expect(request.mock.calls[0][1]).toMatchObject({
@@ -319,7 +380,7 @@ describe('noteDraft', () => {
       maxTokens: 256,
       temperature: 0,
     });
-    expect(onResponse).toHaveBeenCalledTimes(2);
+    expect(onResponse).toHaveBeenCalledTimes(3);
   });
 
   it('语义分类协议缺失时失败关闭，不回退到关键词猜测', async () => {
@@ -386,6 +447,16 @@ describe('noteDraft', () => {
     });
     expect(normalizeNoteDraftPrivateContext(context)).toEqual(context);
     expect(normalizeNoteDraftPrivateContext({ ...context, kind: 'other' })).toBe(null);
+  });
+
+  it('服务端查询生成的私有材料快照最多保留草稿引擎可消费的 12 项', () => {
+    const context = createNoteDraftPrivateContext({
+      sourceMessage: '总结查询命中的全部笔记',
+      contextRefs: Array.from({ length: 20 }, (_, index) => ({ type: 'note', id: `note-${index + 1}` })),
+    });
+
+    expect(context.contextRefs).toHaveLength(12);
+    expect(context.contextRefs.at(-1)).toEqual({ type: 'note', id: 'note-12' });
   });
 
   it('统一强制协议可同时接收书签、笔记、待办、文件和粘贴文本', async () => {

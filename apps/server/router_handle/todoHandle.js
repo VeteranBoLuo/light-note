@@ -21,6 +21,7 @@ import {
   createTodoPlan,
   convertLegacyTodoPlan,
   deleteTodoPlan,
+  ensureTodoCalendarRange,
   previewTodoPlan,
   runIdempotentTodoMutation,
   runSeriesAction,
@@ -147,6 +148,16 @@ export async function createTodoV2(req, res) {
   return withTransaction(res, (connection) => createTodoPlan(connection, req.user.id, req.body || {}), {
     afterCommit: () => completeGrowthTask(req.user.id, 'first_todo', { userRole: req.user.role }),
   });
+}
+
+export async function ensureTodoCalendarRangeV2(req, res) {
+  if (!ensureNotVisitor(req, res)) return;
+  try {
+    assertTodoPlanFeatureEnabled('base');
+  } catch (error) {
+    return sendTodoError(res, error);
+  }
+  return withTransaction(res, (connection) => ensureTodoCalendarRange(connection, req.user.id, req.body || {}));
 }
 
 export async function previewLegacyConversionV2(req, res) {

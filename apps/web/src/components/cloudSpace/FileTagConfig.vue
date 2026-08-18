@@ -11,124 +11,132 @@
     -->
     <div class="tag-config-shell" :class="{ 'is-sheet': bookmark.isMobile }">
       <div class="file-tag-config" :class="{ mobile: bookmark.isMobile }">
-      <div class="panel file-panel">
-        <div class="file-card">
-          <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(file)]" size="34" class="file-icon" />
-          <div class="file-info">
-            <div class="file-name" :title="file?.fileName">{{ file?.fileName || '-' }}</div>
-            <div class="file-desc">{{ t('cloudSpace.fileTagConfig.fileDesc') }}</div>
+        <div class="panel file-panel">
+          <div class="file-card">
+            <svg-icon :src="icon.cloudSpace.fileIcon[getFileCategory(file)]" size="34" class="file-icon" />
+            <div class="file-info">
+              <div class="file-name" :title="file?.fileName">{{ file?.fileName || '-' }}</div>
+              <div class="file-desc">{{ t('cloudSpace.fileTagConfig.fileDesc') }}</div>
+            </div>
           </div>
-        </div>
 
-        <div class="panel-header">
-          <div>
-            <div class="title">{{ t('cloudSpace.fileTagConfig.selectedTags') }}</div>
-            <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.selectedDesc') }}</div>
-          </div>
-          <b-button
-            size="small"
-            @click="resetTags"
-            v-click-log="{ module: '云空间-文件标签配置', operation: '重置标签' }"
-          >
-            {{ t('cloudSpace.fileTagConfig.reset') }}
-          </b-button>
-        </div>
-
-        <div class="selected-overview">
-          <div class="overview-count">{{ selectedTags.length }}</div>
-          <div class="overview-text">
-            {{ t('cloudSpace.fileTagConfig.selectedCountText', { count: selectedTags.length }) }}
-          </div>
-        </div>
-
-        <div v-if="selectedTags.length" class="chip-list">
-          <BChip v-for="tag in selectedTags" :key="tag.id" class="chip" tone="tag" size="medium">
-            <span class="tag-dot" />
-            <span class="chip-text">{{ tag.name }}</span>
-            <BButton
-              class="chip-close"
-              :title="t('common.delete')"
-              :aria-label="t('common.delete')"
-              @click.stop="unbindTag(tag)"
-              v-click-log="{ module: '云空间-文件标签配置', operation: `解绑标签【${tag.name}】` }"
+          <div class="panel-header">
+            <div class="panel-heading-copy">
+              <div class="title">
+                {{ t('cloudSpace.fileTagConfig.selectedTags') }}
+                <span class="selected-count-badge">{{ selectedTags.length }}</span>
+              </div>
+              <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.selectedDesc') }}</div>
+            </div>
+            <b-button
+              size="small"
+              @click="resetTags"
+              v-click-log="{ module: '云空间-文件标签配置', operation: '重置标签' }"
             >
-              <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
-            </BButton>
-          </BChip>
-        </div>
-        <div v-else class="empty">{{ t('cloudSpace.fileTagConfig.noSelectedTags') }}</div>
-      </div>
-
-      <div class="panel library-panel">
-        <div class="panel-header library-header">
-          <div>
-            <div class="title">{{ t('cloudSpace.fileTagConfig.tagLibrary') }}</div>
-            <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.sharedDesc') }}</div>
+              {{ t('cloudSpace.fileTagConfig.reset') }}
+            </b-button>
           </div>
-          <div class="tag-actions">
-            <!--
+
+          <div class="selected-overview">
+            <div class="overview-count">{{ selectedTags.length }}</div>
+            <div class="overview-text">
+              {{ t('cloudSpace.fileTagConfig.selectedCountText', { count: selectedTags.length }) }}
+            </div>
+          </div>
+
+          <div v-if="selectedTags.length" class="chip-list">
+            <BChip v-for="tag in selectedTags" :key="tag.id" class="chip" tone="tag" size="medium">
+              <span class="tag-dot" />
+              <span class="chip-text">{{ tag.name }}</span>
+              <BButton
+                class="chip-close"
+                :title="t('common.delete')"
+                :aria-label="t('common.delete')"
+                @click.stop="unbindTag(tag)"
+                v-click-log="{ module: '云空间-文件标签配置', operation: `解绑标签【${tag.name}】` }"
+              >
+                <SvgIcon :src="icon.common.close" size="13" aria-hidden="true" />
+              </BButton>
+            </BChip>
+          </div>
+          <div v-else class="empty">{{ t('cloudSpace.fileTagConfig.noSelectedTags') }}</div>
+        </div>
+
+        <div class="panel library-panel">
+          <div class="panel-header library-header">
+            <div>
+              <div class="title">{{ t('cloudSpace.fileTagConfig.tagLibrary') }}</div>
+              <div class="panel-subtitle">{{ t('cloudSpace.fileTagConfig.sharedDesc') }}</div>
+            </div>
+            <div class="tag-actions">
+              <!--
               「刷新」与「标签管理」已移除，与笔记侧一致：新建、改名都在弹框内就地完成，
               列表由操作本身即时更新；「标签管理」是一次跳页，在「给文件绑标签」的流程里
               点它意味着放弃当前未保存的绑定改动，而它在导航里另有独立入口。
             -->
-            <!-- 与笔记侧共用同一个内联创建组件：建完即绑，不再跳出到标签编辑页 -->
-            <InlineTagCreate
-              :existing-tags="allTags"
-              guard-scene="create-file-tag"
-              @created="handleTagCreated"
-              @reused="handleTagReused"
-              @stale="fetchData"
+              <!-- 与笔记侧共用同一个内联创建组件：建完即绑，不再跳出到标签编辑页 -->
+              <InlineTagCreate
+                :existing-tags="allTags"
+                guard-scene="create-file-tag"
+                @created="handleTagCreated"
+                @reused="handleTagReused"
+                @stale="fetchData"
+              />
+            </div>
+          </div>
+
+          <div class="tag-toolbar">
+            <b-input
+              v-model:value="searchValue"
+              :maxlength="20"
+              :placeholder="t('cloudSpace.fileTagConfig.tagSearch')"
             />
           </div>
-        </div>
 
-        <div class="tag-toolbar">
-          <b-input v-model:value="searchValue" :maxlength="20" :placeholder="t('cloudSpace.fileTagConfig.tagSearch')" />
-        </div>
-
-        <div class="tag-list">
-          <div
-            v-for="tag in filteredTags"
-            :key="tag.id"
-            class="tag-row"
-            :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
-            @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
-            v-click-log="{ module: '云空间-文件标签配置', operation: `切换文件标签【${tag.name}】` }"
-          >
-            <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
-            <InlineTagRename
-              v-if="renamingTagId === tag.id"
-              :tag="tag"
-              :existing-tags="allTags"
-              guard-scene="rename-file-tag"
-              @renamed="handleTagRenamed"
-              @cancel="renamingTagId = ''"
-            />
-            <template v-else>
-              <div class="tag-left">
-                <span class="tag-dot" />
-                <div class="tag-text">
-                  <div class="tag-name">{{ tag.name }}</div>
-                  <div class="tag-state">
-                    {{
-                      isTagBound(tag.id) ? t('cloudSpace.fileTagConfig.bound') : t('cloudSpace.fileTagConfig.unbound')
-                    }}
+          <div v-auto-scrollbar class="tag-list">
+            <div
+              v-for="tag in filteredTags"
+              :key="tag.id"
+              class="tag-row"
+              :class="{ active: isTagBound(tag.id), 'is-renaming': renamingTagId === tag.id }"
+              @click="renamingTagId === tag.id ? undefined : toggleTag(tag)"
+              v-click-log="{ module: '云空间-文件标签配置', operation: `切换文件标签【${tag.name}】` }"
+            >
+              <!-- 改名就地进行：整行换成输入行，不再跳到标签编辑页 -->
+              <InlineTagRename
+                v-if="renamingTagId === tag.id"
+                :tag="tag"
+                :existing-tags="allTags"
+                guard-scene="rename-file-tag"
+                @renamed="handleTagRenamed"
+                @cancel="renamingTagId = ''"
+              />
+              <template v-else>
+                <div class="tag-left">
+                  <span class="tag-dot" />
+                  <div class="tag-text">
+                    <div class="tag-name">{{ tag.name }}</div>
+                    <div class="tag-state">
+                      <SvgIcon v-if="isTagBound(tag.id)" :src="icon.filterPanel.check" size="13" aria-hidden="true" />
+                      {{
+                        isTagBound(tag.id) ? t('cloudSpace.fileTagConfig.bound') : t('cloudSpace.fileTagConfig.unbound')
+                      }}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <b-button
-                size="small"
-                @click.stop="renamingTagId = tag.id"
-                v-click-log="{ module: '云空间-文件标签配置', operation: `改名标签【${tag.name}】` }"
-              >
-                {{ t('tagInlineRename.entry') }}
-              </b-button>
-            </template>
+                <b-button
+                  size="small"
+                  @click.stop="renamingTagId = tag.id"
+                  v-click-log="{ module: '云空间-文件标签配置', operation: `改名标签【${tag.name}】` }"
+                >
+                  {{ t('tagInlineRename.entry') }}
+                </b-button>
+              </template>
+            </div>
+            <div v-if="!loading && !filteredTags.length" class="empty">
+              {{ t('cloudSpace.fileTagConfig.noTagsCreate') }}
+            </div>
           </div>
-          <div v-if="!loading && !filteredTags.length" class="empty">
-            {{ t('cloudSpace.fileTagConfig.noTagsCreate') }}
-          </div>
-        </div>
           <b-loading :loading="loading" class="panel-loading" />
         </div>
       </div>
@@ -213,7 +221,7 @@
           open: visible.value === true,
           title: t('cloudSpace.fileTagConfig.title'),
           placement: 'bottom' as const,
-          height: 'min(86dvh, 720px)',
+          height: 'min(92dvh, 760px)',
           // 底部 padding 交给操作条自己承担：sticky 的 bottom:0 停在 padding box 内边缘，
           // 留着 12px 就会从操作条下方透出滚动内容
           bodyPadding: '12px 12px 0',
@@ -387,10 +395,12 @@
     color: var(--text-color);
 
     &.mobile {
-      height: min(620px, calc(100vh - 170px));
+      height: auto;
       min-height: 0;
+      flex: 1 1 auto;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
   }
 
@@ -473,6 +483,10 @@
     color: var(--text-color);
   }
 
+  .selected-count-badge {
+    display: none;
+  }
+
   .panel-subtitle {
     margin-top: 5px;
     line-height: 1.5;
@@ -523,8 +537,10 @@
    */
   .tag-config-shell.is-sheet {
     display: flex;
+    height: 100%;
     min-height: 100%;
     flex-direction: column;
+    overflow: hidden;
   }
   .tag-config-shell.is-sheet .tag-config-footer {
     margin-top: auto;
@@ -669,6 +685,9 @@
 
   .tag-state {
     margin-top: 3px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .empty {
@@ -717,5 +736,127 @@
     .tag-name {
       max-width: 150px;
     }
+
+    .file-tag-config.mobile {
+      gap: 8px;
+
+      .panel {
+        padding: 10px;
+        border-radius: var(--mobile-control-radius, 10px);
+        box-shadow: none;
+      }
+
+      .file-panel {
+        display: grid;
+        flex: 0 0 auto;
+        gap: 8px;
+      }
+
+      .file-card {
+        min-height: 44px;
+        margin: 0;
+        padding: 7px 9px;
+        border-color: var(--resource-file-color);
+      }
+
+      .file-desc,
+      .panel-subtitle,
+      .selected-overview {
+        display: none;
+      }
+
+      .panel-header {
+        align-items: center;
+        margin: 0;
+      }
+
+      .panel-heading-copy {
+        min-width: 0;
+      }
+
+      .title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 14px;
+      }
+
+      .selected-count-badge {
+        min-width: 23px;
+        height: 23px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 6px;
+        box-sizing: border-box;
+        border: 1px solid var(--resource-tag-color);
+        border-radius: 999px;
+        color: var(--resource-tag-color);
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chip-list {
+        flex-wrap: nowrap;
+        max-height: none;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding-bottom: 2px;
+        scrollbar-width: thin;
+      }
+
+      .chip {
+        flex: 0 0 auto;
+        max-width: min(72vw, 250px);
+      }
+
+      .empty {
+        padding: 4px 0;
+        text-align: left;
+      }
+
+      .library-panel {
+        flex: 1 1 auto;
+        grid-template-rows: auto auto minmax(0, 1fr);
+        overflow: hidden;
+      }
+
+      .library-header {
+        min-height: 34px;
+        flex-direction: row;
+      }
+
+      .tag-actions {
+        flex: 0 0 auto;
+        justify-content: flex-end;
+      }
+
+      .tag-toolbar {
+        margin: 8px 0;
+      }
+
+      .tag-list {
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+      }
+
+      .tag-row {
+        min-height: 58px;
+        padding: 8px 10px;
+      }
+
+      .tag-name {
+        max-width: min(42vw, 170px);
+      }
+    }
+  }
+
+  html.light-note-mobile-rendering .file-tag-config.mobile .file-card {
+    border-color: var(--resource-file-color);
+  }
+
+  html.light-note-mobile-rendering .file-tag-config.mobile .tag-row.active,
+  html.light-note-mobile-rendering .file-tag-config.mobile .selected-count-badge {
+    border-color: var(--resource-tag-color);
   }
 </style>

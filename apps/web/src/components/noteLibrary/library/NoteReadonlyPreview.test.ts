@@ -41,6 +41,14 @@ describe('NoteReadonlyPreview', () => {
     expect(source).toContain("emit('pendingState', Boolean(detailResult.data.isPending))");
   });
 
+  it('子页面数量是带方向提示的浏览按钮，并向父级上抛浏览事件', () => {
+    expect(source).toContain('class="note-readonly-preview__child-count"');
+    expect(source).toContain(':aria-label="t(\'note.browseChildPages\')"');
+    expect(source).toContain('@click="emit(\'browseChildren\')"');
+    expect(source).toContain('<SvgIcon :src="icon.arrow_right" size="13"');
+    expect(source).toMatch(/\.note-readonly-preview__child-count\.b_btn\s*\{[\s\S]*height:\s*30px;/u);
+  });
+
   it('桌面预览轻微收紧标题区，且不在正文重复展示预览提示', () => {
     expect(source).toMatch(
       /\.note-readonly-preview__header\s*\{[\s\S]*min-height:\s*74px;[\s\S]*padding:\s*8px 16px;/u,

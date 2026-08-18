@@ -94,8 +94,9 @@ describe('移动端待办页签布局', () => {
     );
   });
 
-  it('进入待办时默认按截止时间排序，不继承资源的最新收集顺序', () => {
-    expect(inboxSource).toContain("todo.sort = 'due'");
+  it('进入待办时保留有效选择，旧排序回退到默认智能排序', () => {
+    expect(inboxSource).toContain("todo.sort = 'smart'");
+    expect(inboxSource).toContain("['smart', 'action', 'priority', 'newest']");
     expect(inboxSource).not.toContain("inbox.sort = 'due' as any");
     expect(inboxSource).not.toContain('todo.sort = inbox.sort as TodoSort');
     expect(inboxSource.match(/v-model:value="todo\.sort"/g)).toHaveLength(2);

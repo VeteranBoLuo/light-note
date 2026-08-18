@@ -360,10 +360,22 @@ function toolCall(name, args, id = `call-${name}`) {
  * 传感器命中的请求会先花一次分类判断本轮是否要产出一篇笔记，因此这些用例的
  * Provider 序列第一项固定是它，草稿协议从第二项开始。
  */
-function noteDraftTaskResponse({ producesNote = true, otherMutations = false, needsWorkspaceRetrieval = false } = {}) {
+function noteDraftTaskResponse({
+  producesNote = true,
+  otherMutations = false,
+  needsWorkspaceRetrieval = false,
+  workspaceQueries = [],
+} = {}) {
   return {
     content: '',
-    toolCalls: [toolCall('classify_note_draft_task', { producesNote, otherMutations, needsWorkspaceRetrieval })],
+    toolCalls: [
+      toolCall('classify_note_draft_task', {
+        producesNote,
+        otherMutations,
+        needsWorkspaceRetrieval,
+        workspaceQueries,
+      }),
+    ],
     usage: usage(2),
     usageStatus: 'reported',
     finishReason: 'tool_calls',
@@ -1053,10 +1065,19 @@ describe('agentChat 主链路', () => {
     });
   });
 
-  it('隐式描述工作区材料时先按语义查询真实笔记，再在依赖轮生成新笔记', async () => {
-    mocks.selectAgentTools.mockImplementation((registry) =>
-      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
-    );
+  it('结构化分类已完整表达材料范围时直接查询并生成草稿，不再依赖第二层语义计划', async () => {
+    mocks.getOrCreateSession.mockResolvedValueOnce({
+      id: 'session-1',
+      turns: [],
+      lastTool: { name: 'query_notes', params: { timeRange: '最近7天' } },
+    });
+    mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => {
+      const notes = {
+        'today-note-1': { id: 'today-note-1', title: '上午记录', content: '正文甲。'.repeat(180) },
+        'today-note-2': { id: 'today-note-2', title: '下午记录', content: '正文乙。'.repeat(180) },
+      };
+      return notes[noteId] || null;
+    });
     mocks.toolExecute.mockResolvedValueOnce({
       value: '《上午记录》正文甲；《下午记录》正文乙',
       dependencyRefs: [
@@ -1065,61 +1086,21 @@ describe('agentChat 主链路', () => {
       ],
     });
     mocks.requestAi
-      .mockResolvedValueOnce(noteDraftTaskResponse({ needsWorkspaceRetrieval: true }))
       .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'read',
-                capabilityId: 'read.query_notes',
-                goal: '读取用户描述范围内的真实笔记',
-                targetDescription: '用户今天创建的笔记',
-                dependsOn: [],
-              },
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '基于查询结果生成一篇总结笔记',
-                targetDescription: '新的总结笔记',
-                dependsOn: [0],
-              },
-            ],
-            toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天', limit: 50 } }],
-          }),
-        ],
-        usage: usage(4),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
+        ...noteDraftTaskResponse({
+          needsWorkspaceRetrieval: true,
+          workspaceQueries: [{ resourceType: 'note', timeRange: '今天' }],
+        }),
       })
       .mockResolvedValueOnce({
         content: '',
         toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '根据已经返回的真实笔记生成总结',
-                targetDescription: '新的总结笔记',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              {
-                toolName: 'create_note',
-                arguments: {
-                  title: '今日笔记总结',
-                  content: '# 今日笔记总结\n\n- 上午记录：正文甲\n- 下午记录：正文乙',
-                },
-              },
-            ],
+          toolCall('submit_note_draft', {
+            title: '今日笔记总结',
+            content: `# 今日笔记总结\n\n${'上午与下午记录的完整归纳。'.repeat(45)}`,
           }),
         ],
-        usage: usage(10),
+        usage: usage(12),
         usageStatus: 'reported',
         finishReason: 'tool_calls',
       });
@@ -1132,14 +1113,15 @@ describe('agentChat 主链路', () => {
         contexts: [],
         attachmentIds: [],
         scope: { mode: 'workspace' },
+        history: [{ role: 'user', content: '改为按最近7天' }],
       }),
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi).toHaveBeenCalledTimes(2);
     expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
-    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner');
-    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_round_2');
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('note_draft');
+    expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.toolExecute).toHaveBeenCalledWith(
       { timeRange: '今天', limit: 50 },
       expect.objectContaining({ userId: 'user-1' }),
@@ -1149,11 +1131,20 @@ describe('agentChat 主链路', () => {
         toolName: 'create_note',
         args: {
           title: '今日笔记总结',
-          content: '# 今日笔记总结\n\n- 上午记录：正文甲\n- 下午记录：正文乙',
+          content: `# 今日笔记总结\n\n${'上午与下午记录的完整归纳。'.repeat(45)}`,
         },
+        privateContext: expect.objectContaining({
+          sourceMessage: '总结一下我今天的笔记，生成一篇新的笔记',
+          contextRefs: [
+            { type: 'note', id: 'today-note-1' },
+            { type: 'note', id: 'today-note-2' },
+          ],
+        }),
       }),
     );
-    expect(mocks.requestAi.mock.calls[2][0].some((entry) => String(entry.content || '').includes('正文甲'))).toBe(true);
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('正文甲');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('正文乙');
+    expect(mocks.createToolConfirmation.mock.calls[0][0].args.content).not.toBe('生成中...');
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
       confirmations: [expect.objectContaining({ toolName: 'create_note' })],
     });
@@ -1168,6 +1159,13 @@ describe('agentChat 主链路', () => {
         { type: 'note', id: 'today-note-1' },
         { type: 'note', id: 'today-note-2' },
       ],
+    });
+    mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => {
+      const notes = {
+        'today-note-1': { id: 'today-note-1', title: '晨间记录', content: '完成了发布检查。'.repeat(120) },
+        'today-note-2': { id: 'today-note-2', title: '午后记录', content: '整理了客户反馈。'.repeat(120) },
+      };
+      return notes[noteId] || null;
     });
     const missingPlanResponse = () => ({
       content: '未返回结构化计划',
@@ -1237,6 +1235,18 @@ describe('agentChat 主链路', () => {
         usage: usage(8),
         usageStatus: 'reported',
         finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          toolCall('submit_note_draft', {
+            title: '今天的日记',
+            content: `# 今天的日记\n\n${'完成发布检查，并整理了客户反馈。'.repeat(35)}`,
+          }),
+        ],
+        usage: usage(10),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
       });
     const res = response();
 
@@ -1251,7 +1261,7 @@ describe('agentChat 主链路', () => {
       res,
     );
 
-    expect(mocks.requestAi).toHaveBeenCalledTimes(5);
+    expect(mocks.requestAi).toHaveBeenCalledTimes(6);
     const plannerToolVariants =
       mocks.requestAi.mock.calls[1][1].tools[0].function.parameters.properties.toolCalls.items.oneOf;
     expect(plannerToolVariants.map((variant) => variant.properties.toolName.enum[0]).sort()).toEqual([
@@ -1276,75 +1286,28 @@ describe('agentChat 主链路', () => {
         toolName: 'create_note',
         args: {
           title: '今天的日记',
-          content: '# 今天的日记\n\n完成了发布检查，并整理了客户反馈。',
+          content: `# 今天的日记\n\n${'完成发布检查，并整理了客户反馈。'.repeat(35)}`,
         },
+        privateContext: expect.objectContaining({
+          contextRefs: [
+            { type: 'note', id: 'today-note-1' },
+            { type: 'note', id: 'today-note-2' },
+          ],
+        }),
       }),
     );
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('没有返回可核验的语义计划');
     expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('当前账号或访问模式不能使用');
   });
 
-  it('隐式工作区查询为空时即使模型仍请求创建，也由服务端阻止占位笔记', async () => {
-    mocks.selectAgentTools.mockImplementation((registry) =>
-      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
-    );
+  it('结构化工作区查询为空时直接失败关闭，不再让模型生成占位笔记', async () => {
     mocks.toolExecute.mockResolvedValueOnce({ value: '没有找到笔记', dependencyRefs: [] });
-    mocks.requestAi
-      .mockResolvedValueOnce(noteDraftTaskResponse({ needsWorkspaceRetrieval: true }))
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'read',
-                capabilityId: 'read.query_notes',
-                goal: '查询目标笔记',
-                targetDescription: '用户描述的笔记集合',
-                dependsOn: [],
-              },
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '生成总结笔记',
-                targetDescription: '新的总结笔记',
-                dependsOn: [0],
-              },
-            ],
-            toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天' } }],
-          }),
-        ],
-        usage: usage(3),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      })
-      .mockResolvedValueOnce({
-        content: '',
-        toolCalls: [
-          semanticPlanCall({
-            requestClass: 'data_action',
-            intents: [
-              {
-                kind: 'write',
-                capabilityId: 'note.create',
-                goal: '生成总结笔记',
-                targetDescription: '新的总结笔记',
-                dependsOn: [],
-              },
-            ],
-            toolCalls: [
-              {
-                toolName: 'create_note',
-                arguments: { title: '今日笔记总结', content: '当前没有可总结的材料。' },
-              },
-            ],
-          }),
-        ],
-        usage: usage(5),
-        usageStatus: 'reported',
-        finishReason: 'tool_calls',
-      });
+    mocks.requestAi.mockResolvedValueOnce(
+      noteDraftTaskResponse({
+        needsWorkspaceRetrieval: true,
+        workspaceQueries: [{ resourceType: 'note', timeRange: '今天' }],
+      }),
+    );
     const res = response();
 
     await agentChat(
@@ -1358,9 +1321,11 @@ describe('agentChat 主链路', () => {
       res,
     );
 
+    expect(mocks.requestAi).toHaveBeenCalledTimes(1);
+    expect(mocks.selectAgentTools).not.toHaveBeenCalled();
     expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
     expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
-      response: expect.stringContaining('没有从工作区查询到可用于生成笔记的真实材料'),
+      response: expect.stringContaining('没有查询到符合本次范围的真实工作区材料'),
       confirmations: [],
     });
   });
@@ -1604,6 +1569,94 @@ describe('agentChat 主链路', () => {
       response: expect.stringContaining('笔记草稿已准备好'),
       confirmations: [expect.objectContaining({ toolName: 'create_note' })],
     });
+  });
+
+  it('工作区查询草稿可从私有稳定引用重新读取材料并扩写', async () => {
+    const oldToken = 'w'.repeat(43);
+    const oldContent = '# 今日总结\n\n' + '旧版内容。'.repeat(70);
+    mocks.inspectToolConfirmationExecution.mockResolvedValueOnce({
+      state: 'ready',
+      confirmation: {
+        id: 'workspace-draft-confirmation',
+        sessionId: 'session-1',
+        toolName: 'create_note',
+        args: { title: '今日笔记总结', content: oldContent },
+        privateContext: {
+          kind: 'note_draft_materials',
+          version: 1,
+          sourceMessage: '把我今天的全部笔记总结成一篇新的笔记',
+          contextRefs: [
+            { type: 'note', id: 'today-note-1' },
+            { type: 'note', id: 'today-note-2' },
+          ],
+          scopeRefs: [],
+          attachmentIds: [],
+        },
+      },
+    });
+    mocks.findOwnedNoteForAi.mockImplementation(async ({ noteId }) => {
+      const notes = {
+        'today-note-1': { id: 'today-note-1', title: '上午记录', content: '上午真实正文。'.repeat(100) },
+        'today-note-2': { id: 'today-note-2', title: '下午记录', content: '下午真实正文。'.repeat(100) },
+      };
+      return notes[noteId] || null;
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('classify_pending_note_draft_intent', { decision: 'revise_pending_draft' })],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          toolCall('submit_note_draft', {
+            title: '今日笔记详细总结',
+            content: `${oldContent}\n\n${'新增的详细归纳。'.repeat(90)}`,
+          }),
+        ],
+        usage: usage(20),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '重新生成，内容尽量详细。',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        pendingNoteDraft: {
+          confirmationId: 'workspace-draft-confirmation',
+          confirmationToken: oldToken,
+        },
+      }),
+      res,
+    );
+
+    expect(mocks.findOwnedNoteForAi).toHaveBeenCalledTimes(2);
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('上午真实正文');
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('下午真实正文');
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        replaceToken: oldToken,
+        replaceConfirmationId: 'workspace-draft-confirmation',
+        args: expect.objectContaining({ title: '今日笔记详细总结' }),
+        privateContext: expect.objectContaining({
+          contextRefs: [
+            { type: 'note', id: 'today-note-1' },
+            { type: 'note', id: 'today-note-2' },
+          ],
+        }),
+      }),
+    );
+    expect(mocks.settleSessionAction).toHaveBeenCalledWith(
+      expect.objectContaining({ confirmationId: 'workspace-draft-confirmation', state: 'cancelled' }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('原材料已不可用');
   });
 
   it('待确认草稿语境中的省略表达走语义判断，并用新确认原子替换旧确认', async () => {

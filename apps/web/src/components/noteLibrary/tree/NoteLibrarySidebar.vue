@@ -71,6 +71,7 @@
           @move="emit('move', $event)"
           @rename="emit('rename', $event)"
           @copy-link="emit('copyLink', $event)"
+          @share="emit('share', $event)"
           @delete="emit('delete', $event)"
           @drag-start="(node, event) => emit('dragStart', node, event)"
           @drag-end="emit('dragEnd')"
@@ -179,6 +180,7 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     copyLink: [node: NoteTreeItem];
+    share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     search: [value: string];
     dragStart: [node: NoteTreeItem, event: DragEvent];

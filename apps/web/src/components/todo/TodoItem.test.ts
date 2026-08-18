@@ -96,6 +96,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
             todoReminderOnceSummary: '{channels} · 单次提醒',
             todoReminderRepeatSummary: '{channels} · 周期提醒',
             todoNextReminder: '下一次提醒：{time}',
+            todoPastReminder: '提醒时间已过：{time}',
             todoToday: '今天',
             todoTomorrow: '明天',
             todoLegacyCompletionBadge: '旧版完成触发重复',
@@ -125,6 +126,7 @@ function mountTodoItem(item: TodoItemType = todo, options: { selectable?: boolea
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   cleanup?.();
   cleanup = undefined;
   routerPush.mockReset();
@@ -183,6 +185,27 @@ describe('TodoItem card editing', () => {
     expect(title.compareDocumentPosition(chips) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chips.textContent).toContain('站内 · 单次提醒');
     expect(host.querySelector('.todo-reminder-summary')?.textContent).toContain('下一次提醒：');
+  });
+
+  it('固定提醒已投递但待办未完成时明确显示提醒时间已过，而不是伪装成任务逾期', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-18T12:00:00'));
+    const { host } = mountTodoItem({
+      ...todo,
+      occurrenceDate: '2026-08-18',
+      reminder: {
+        mode: 'once_per_instance',
+        trigger: { type: 'fixed_time', fixedTime: '10:30' },
+        channels: ['in_app'],
+        nextAt: null,
+        remainingCount: 0,
+      },
+    });
+    await nextTick();
+
+    expect(host.querySelector('.todo-item')?.classList.contains('is-overdue')).toBe(false);
+    expect(host.querySelector('.todo-reminder-summary')?.classList.contains('is-past')).toBe(true);
+    expect(host.querySelector('.todo-reminder-summary__past')?.textContent).toContain('提醒时间已过：今天 10:30');
   });
 
   it('稍后提醒仅展示四个相对时间预设', async () => {

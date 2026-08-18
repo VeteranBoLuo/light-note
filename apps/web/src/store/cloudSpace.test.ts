@@ -91,8 +91,20 @@ describe('cloud space pagination', () => {
       expect.objectContaining({ sort: { field: 'fileSize', order: 'desc' } }),
     );
 
+    await store.setFileSortValue({ field: 'fileSize', order: 'asc' });
+    expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
+      '/api/file/queryFiles',
+      expect.objectContaining({ sort: { field: 'fileSize', order: 'asc' } }),
+    );
+
+    await store.setFileSortValue({ field: 'createTime', order: 'asc' });
+    expect(mocks.apiQueryPost).toHaveBeenLastCalledWith(
+      '/api/file/queryFiles',
+      expect.objectContaining({ sort: { field: 'createTime', order: 'asc' } }),
+    );
+
     setActivePinia(createPinia());
-    expect(useCloudSpaceStore().fileSort).toEqual({ field: 'fileSize', order: 'desc' });
+    expect(useCloudSpaceStore().fileSort).toEqual({ field: 'createTime', order: 'asc' });
   });
 
   it('损坏或越权的本地排序字段回退到原有默认顺序', () => {

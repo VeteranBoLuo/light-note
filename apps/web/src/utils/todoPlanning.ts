@@ -1,16 +1,11 @@
 import type { TodoItem } from '@/api/todoApi';
 
 export type TodoGroupKey = 'overdue' | 'today' | 'upcoming' | 'later' | 'noDate' | 'completed';
-export type TodoSnoozePreset =
-  | 'tenMinutes'
-  | 'oneHour'
-  | 'threeHours'
-  | 'oneDay'
-  | 'tomorrow'
-  | 'nextWeek';
+export type TodoSnoozePreset = 'tenMinutes' | 'oneHour' | 'threeHours' | 'oneDay' | 'tomorrow' | 'nextWeek';
 export type TodoDateFormatOptions = {
   relative?: boolean;
   includeYear?: boolean;
+  includeTime?: boolean;
   now?: Date;
   relativeLabels?: {
     today: string;
@@ -23,8 +18,120 @@ export function parseTodoDate(value: string | number | Date) {
   return new Date(typeof value === 'string' ? value.replace(' ', 'T') : value);
 }
 
+/**
+ * MySQL DATE 在不同驱动配置下可能是 YYYY-MM-DD、ISO 字符串或 Date。
+ * 待办实例日期没有时区语义，统一收敛为本地日历日，禁止在调用处自行拼接。
+ */
+export function normalizeTodoDateOnly(value: string | Date | null | undefined) {
+  if (!value) return '';
+  const raw = value instanceof Date ? '' : String(value).trim();
+  const leadingDate = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (leadingDate) return leadingDate[1];
+  const date = value instanceof Date ? value : parseTodoDate(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+export function todoNextReminderAt(item: Pick<TodoItem, 'reminder' | 'reminderAt'>) {
+  const reminder = item.reminder;
+  if (reminder && 'paused' in reminder && reminder.paused) return '';
+  const hydratedNext = reminder && 'nextAt' in reminder ? reminder.nextAt : null;
+  const legacyStart = reminder && 'startAt' in reminder ? reminder.startAt : null;
+  return hydratedNext || legacyStart || item.reminderAt || '';
+}
+
+function todoReminderOffsetAt(value: string | null | undefined, offsetMinutes: number | null | undefined) {
+  if (!value) return '';
+  const date = parseTodoDate(value);
+  if (!Number.isFinite(date.getTime())) return '';
+  return localTodoDateTime(new Date(date.getTime() - Number(offsetMinutes || 0) * 60_000));
+}
+
+/**
+ * 提醒 Job 投递后 nextAt 会被清空；列表仍需从提醒规则还原本实例原定的提醒时刻，
+ * 才能区分“没有提醒”和“提醒时间已经过去”。
+ */
+export function todoConfiguredReminderAt(
+  item: Pick<TodoItem, 'reminder' | 'reminderAt' | 'startAt' | 'dueAt' | 'occurrenceDate'>,
+) {
+  const reminder = item.reminder;
+  if (!reminder || ('paused' in reminder && reminder.paused)) return '';
+
+  if ('version' in reminder && reminder.mode === 'once' && reminder.once) {
+    const once = reminder.once;
+    if (once.type === 'fixed_at') return once.fixedAt || '';
+    if (once.type === 'at_start') return item.startAt || '';
+    if (once.type === 'at_due') return item.dueAt || '';
+    if (once.type === 'before_due') return todoReminderOffsetAt(item.dueAt, once.offsetMinutes);
+  }
+
+  if ('trigger' in reminder && reminder.mode === 'once_per_instance' && reminder.trigger) {
+    const trigger = reminder.trigger;
+    if (trigger.type === 'at_start') return item.startAt || '';
+    if (trigger.type === 'before_due') return todoReminderOffsetAt(item.dueAt, trigger.offsetMinutes);
+    if (trigger.type === 'fixed_time') {
+      const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
+      const fixedTime = String(trigger.fixedTime || '').trim();
+      return occurrenceDate && /^\d{2}:\d{2}(?::\d{2})?$/.test(fixedTime)
+        ? `${occurrenceDate}T${fixedTime.length === 5 ? `${fixedTime}:00` : fixedTime}`
+        : '';
+    }
+  }
+
+  return item.reminderAt || '';
+}
+
+/** 已过提醒只表达提醒时刻，不等同于待办超过截止时间。 */
+export function todoPastReminderAt(
+  item: Pick<TodoItem, 'status' | 'reminder' | 'reminderAt' | 'startAt' | 'dueAt' | 'occurrenceDate'>,
+  now = new Date(),
+) {
+  if (item.status !== 'pending' || (item.reminder && 'paused' in item.reminder && item.reminder.paused)) return '';
+  const reminderAt = todoNextReminderAt(item) || todoConfiguredReminderAt(item);
+  if (!reminderAt) return '';
+  const reminderTime = parseTodoDate(reminderAt).getTime();
+  return Number.isFinite(reminderTime) && reminderTime < now.getTime() ? reminderAt : '';
+}
+
+/** 日历位置只由任务计划决定，提醒不会把任务移动到另一天。 */
+export function todoScheduleAt(item: Pick<TodoItem, 'startAt' | 'dueAt' | 'occurrenceDate'>) {
+  if (item.startAt) return item.startAt;
+  if (item.dueAt) return item.dueAt;
+  const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
+  return occurrenceDate ? `${occurrenceDate}T00:00:00` : '';
+}
+
+/** 列表的“下一步时间”：提醒、开始、截止、实例日期中最早的有效时刻。 */
+export function todoActionAt(
+  item: Pick<TodoItem, 'actionAt' | 'reminder' | 'reminderAt' | 'startAt' | 'dueAt' | 'occurrenceDate'>,
+) {
+  if (item.actionAt && Number.isFinite(parseTodoDate(item.actionAt).getTime())) return item.actionAt;
+  const candidates = [todoNextReminderAt(item), item.startAt || '', item.dueAt || '', todoScheduleAt(item)]
+    .map((value) => ({ value, time: value ? parseTodoDate(value).getTime() : Number.NaN }))
+    .filter((entry) => Number.isFinite(entry.time))
+    .sort((left, right) => left.time - right.time);
+  return candidates[0]?.value || '';
+}
+
+export function compareTodoOccurrences(left: TodoItem, right: TodoItem) {
+  const leftAt = todoActionAt(left);
+  const rightAt = todoActionAt(right);
+  const leftTime = leftAt ? parseTodoDate(leftAt).getTime() : Number.POSITIVE_INFINITY;
+  const rightTime = rightAt ? parseTodoDate(rightAt).getTime() : Number.POSITIVE_INFINITY;
+  if (leftTime !== rightTime) return leftTime - rightTime;
+  const leftNo = Number(left.occurrenceNo ?? Number.MAX_SAFE_INTEGER);
+  const rightNo = Number(right.occurrenceNo ?? Number.MAX_SAFE_INTEGER);
+  if (leftNo !== rightNo) return leftNo - rightNo;
+  return String(left.id).localeCompare(String(right.id));
+}
+
 function normalizeTodoLocale(locale: string) {
-  return String(locale || '').toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN';
+  return String(locale || '')
+    .toLowerCase()
+    .startsWith('en')
+    ? 'en-US'
+    : 'zh-CN';
 }
 
 function dateKey(date: Date) {
@@ -41,7 +148,13 @@ function clockLabel(date: Date, locale: 'zh-CN' | 'en-US') {
   return `${String(date.getHours()).padStart(2, '0')}:${minute}`;
 }
 
-function absoluteTodoDateLabel(date: Date, locale: 'zh-CN' | 'en-US', includeYear: boolean, now: Date) {
+function absoluteTodoDateLabel(
+  date: Date,
+  locale: 'zh-CN' | 'en-US',
+  includeYear: boolean,
+  includeTime: boolean,
+  now: Date,
+) {
   const clock = clockLabel(date, locale);
   const sameYear = date.getFullYear() === now.getFullYear();
   const withYear = includeYear || !sameYear;
@@ -52,11 +165,11 @@ function absoluteTodoDateLabel(date: Date, locale: 'zh-CN' | 'en-US', includeYea
       month: 'short',
       day: 'numeric',
     }).format(date);
-    return `${weekday}, ${datePart}, ${clock}`;
+    return includeTime ? `${weekday}, ${datePart}, ${clock}` : `${weekday}, ${datePart}`;
   }
   const weekday = new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(date);
   const datePart = `${withYear ? `${date.getFullYear()}年` : ''}${date.getMonth() + 1}月${date.getDate()}日`;
-  return `${datePart}（${weekday}）${clock}`;
+  return includeTime ? `${datePart}（${weekday}）${clock}` : `${datePart}（${weekday}）`;
 }
 
 export function formatTodoDateTime(
@@ -68,15 +181,22 @@ export function formatTodoDateTime(
   const date = parseTodoDate(value);
   if (!Number.isFinite(date.getTime())) return '';
   const normalizedLocale = normalizeTodoLocale(locale);
+  const includeTime = options.includeTime !== false;
   const now = options.now instanceof Date && Number.isFinite(options.now.getTime()) ? options.now : new Date();
   if (options.relative && options.relativeLabels) {
-    if (dateKey(date) === dateKey(now)) return `${options.relativeLabels.today} ${clockLabel(date, normalizedLocale)}`;
+    if (dateKey(date) === dateKey(now)) {
+      return includeTime
+        ? `${options.relativeLabels.today} ${clockLabel(date, normalizedLocale)}`
+        : options.relativeLabels.today;
+    }
     const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
     if (dateKey(date) === dateKey(tomorrow)) {
-      return `${options.relativeLabels.tomorrow} ${clockLabel(date, normalizedLocale)}`;
+      return includeTime
+        ? `${options.relativeLabels.tomorrow} ${clockLabel(date, normalizedLocale)}`
+        : options.relativeLabels.tomorrow;
     }
   }
-  return absoluteTodoDateLabel(date, normalizedLocale, options.includeYear !== false, now);
+  return absoluteTodoDateLabel(date, normalizedLocale, options.includeYear !== false, includeTime, now);
 }
 
 export function localTodoDateTime(date: Date) {
@@ -107,16 +227,26 @@ function todayDueDate(now: Date) {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59);
 }
 
-export function todoGroupKey(item: Pick<TodoItem, 'status' | 'dueAt'>, now = new Date()): TodoGroupKey {
+export function todoGroupKey(
+  item: Pick<TodoItem, 'status' | 'dueAt' | 'startAt' | 'occurrenceDate' | 'actionAt' | 'reminder' | 'reminderAt'>,
+  now = new Date(),
+): TodoGroupKey {
   if (item.status === 'completed') return 'completed';
-  if (!item.dueAt) return 'noDate';
-  const due = parseTodoDate(item.dueAt).getTime();
-  if (!Number.isFinite(due)) return 'noDate';
+  const due = item.dueAt ? parseTodoDate(item.dueAt).getTime() : Number.NaN;
+  if (Number.isFinite(due) && due < now.getTime()) return 'overdue';
+  const occurrenceDate = normalizeTodoDateOnly(item.occurrenceDate);
+  const todayDate = normalizeTodoDateOnly(now);
+  if (!item.dueAt && occurrenceDate && occurrenceDate < todayDate) return 'overdue';
+  const actionAt = todoActionAt(item);
+  if (!actionAt) return 'noDate';
+  const action = parseTodoDate(actionAt).getTime();
+  if (!Number.isFinite(action)) return 'noDate';
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime();
   const nextWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 8).getTime();
-  if (due < now.getTime()) return 'overdue';
-  if (due < tomorrow) return 'today';
-  if (due < nextWeek) return 'upcoming';
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  if (action < startOfToday) return 'overdue';
+  if (action < tomorrow) return 'today';
+  if (action < nextWeek) return 'upcoming';
   return 'later';
 }
 
@@ -144,7 +274,7 @@ export function todoSnoozeAt(preset: TodoSnoozePreset, now = new Date()) {
   let target = new Date(now.getTime() + (minutes ?? 10) * 60_000);
   if (preset === 'tomorrow') target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9);
   if (preset === 'nextWeek') {
-    const days = ((8 - now.getDay()) % 7) || 7;
+    const days = (8 - now.getDay()) % 7 || 7;
     target = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, 9);
   }
   return localTodoDateTime(target);

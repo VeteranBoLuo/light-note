@@ -294,6 +294,8 @@ export default {
   },
   todo: {
     drag: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="currentColor"><circle cx="8" cy="6" r="1.5"/><circle cx="16" cy="6" r="1.5"/><circle cx="8" cy="12" r="1.5"/><circle cx="16" cy="12" r="1.5"/><circle cx="8" cy="18" r="1.5"/><circle cx="16" cy="18" r="1.5"/></g></svg>',
+    repeat:
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M6.5 7.5h10a3.5 3.5 0 0 1 3.5 3.5v.5M7.5 16.5h10A3.5 3.5 0 0 0 21 13"/><path d="m6.5 4.5l-3 3l3 3M17.5 13.5l3 3l-3 3"/></g></svg>',
   },
 
   pwa: {
@@ -442,7 +444,7 @@ export default {
     deleteLine:
       '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M4.5 7.5h15M9.25 4.5h5.5l.75 3H8.5l.75-3ZM7.25 7.5l.75 12h8l.75-12M10 11v4.5M14 11v4.5"/></g></svg>',
     exportLine:
-      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M13.5 4h5.25v5.25M18.75 4l-8.5 8.5M18 13.25v5.25a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.25"/></g></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M6 3.5h8l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 5 20V5a1.5 1.5 0 0 1 1-1.5Z"/><path d="M14 3.5V8h4M12 10v7m0 0l-3-3m3 3l3-3"/></g></svg>',
     imageToolbar: {
       copy: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="1.7"><rect width="11" height="12" x="9" y="8" rx="2"/><path d="M15 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></g></svg>',
       cut: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><path d="m8.2 7.2l11.3 8.3M8.2 16.8L19.5 8.5M10.5 12l9-6.5"/></g></svg>',
@@ -548,7 +550,11 @@ export default {
     },
   },
 
+  share:
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><path d="M13.5 4h5.25v5.25M18.75 4l-8.5 8.5M18 13.25v5.25a2 2 0 0 1-2 2H5.5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5.25"/></g></svg>',
+
   cloudSpace: {
+    sort: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"><path d="M4 7h9M4 12h7M4 17h5M17 5v14m0 0l-3-3m3 3l3-3"/></g></svg>',
     download:
       'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxZW0iIGhlaWdodD0iMWVtIiB2aWV3Qm94PSIwIDAgMjQgMjQiPjxyZWN0IHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgZmlsbD0ibm9uZSIvPjxwYXRoIGZpbGw9ImN1cnJlbnRDb2xvciIgZmlsbC1ydWxlPSJldmVub2RkIiBkPSJNNSAxOWgxNGExIDEgMCAwIDEgMCAySDVhMSAxIDAgMCAxIDAtMm04LTUuODI1bDMuMjQzLTMuMjQybDEuNDE0IDEuNDE0TDEyIDE3LjAwNGwtNS42NTctNS42NTdsMS40MTQtMS40MTRMMTEgMTMuMTc1VjJoMnoiLz48L3N2Zz4=',
     preview: {

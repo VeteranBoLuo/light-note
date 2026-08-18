@@ -178,6 +178,7 @@
     attach: [node: NoteTreeItem];
     toggleTop: [node: NoteTreeItem];
     move: [node: NoteTreeItem];
+    share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
@@ -256,7 +257,7 @@
   }
 
   async function closeAndEmit(
-    kind: 'openPage' | 'create' | 'attach' | 'toggleTop' | 'move' | 'delete',
+    kind: 'openPage' | 'create' | 'attach' | 'toggleTop' | 'move' | 'share' | 'delete',
     node: NoteTreeItem,
   ) {
     await closeThen(() => {
@@ -265,6 +266,7 @@
       else if (kind === 'attach') emit('attach', node);
       else if (kind === 'toggleTop') emit('toggleTop', node);
       else if (kind === 'move') emit('move', node);
+      else if (kind === 'share') emit('share', node);
       else emit('delete', node);
     });
   }
@@ -300,6 +302,11 @@
               label: t('note.moveThisPage'),
               icon: icon.noteTree.move,
             },
+            {
+              key: 'share',
+              label: t('noteShare.shareAction'),
+              icon: icon.share,
+            },
           ]
         : []),
       ...(props.writeEnabled
@@ -330,6 +337,7 @@
       action.key === 'attach' ||
       action.key === 'toggleTop' ||
       action.key === 'move' ||
+      action.key === 'share' ||
       action.key === 'delete'
     ) {
       void closeAndEmit(action.key, node);

@@ -129,6 +129,7 @@
   import icon from '@/config/icon';
   import { bookmarkStore } from '@/store';
   import type { TodoItem } from '@/api/todoApi';
+  import { normalizeTodoDateOnly, todoScheduleAt } from '@/utils/todoPlanning';
 
   const props = defineProps<{
     items: TodoItem[];
@@ -137,7 +138,11 @@
     disabled?: boolean;
     deletingId?: string;
   }>();
-  const emit = defineEmits<{ edit: [item: TodoItem]; delete: [item: TodoItem] }>();
+  const emit = defineEmits<{
+    edit: [item: TodoItem];
+    delete: [item: TodoItem];
+    'range-change': [range: { startDate: string; endDate: string }];
+  }>();
   const bookmark = bookmarkStore();
   const { t, locale } = useI18n();
   const visibleMonth = ref(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -188,6 +193,19 @@
       };
     });
   });
+  watch(
+    [() => props.view, visibleMonth],
+    () => {
+      if (props.view !== 'calendar') return;
+      const days = calendarDays.value;
+      if (!days.length) return;
+      emit('range-change', {
+        startDate: isoDateKey(days[0].date),
+        endDate: isoDateKey(days.at(-1)!.date),
+      });
+    },
+    { immediate: true },
+  );
   const agendaItems = computed(() =>
     [...scheduledItems.value]
       .sort(
@@ -246,11 +264,15 @@
   function dateKey(date: Date) {
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
   }
+  function isoDateKey(date: Date) {
+    const pad = (value: number) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
   function itemScheduleAt(item: TodoItem) {
-    return item.startAt || item.dueAt || (item.occurrenceDate ? `${item.occurrenceDate} 00:00:00` : '');
+    return todoScheduleAt(item);
   }
   function itemDateTime(item: TodoItem) {
-    return item.startAt || item.dueAt || item.occurrenceDate || '';
+    return item.startAt || item.dueAt || normalizeTodoDateOnly(item.occurrenceDate) || '';
   }
   function scheduleTime(item: TodoItem) {
     if (!item.startAt && !item.dueAt && item.occurrenceDate) return t('inbox.todoAllDay');

@@ -27,11 +27,11 @@ function todo(id: string, title: string, priority: TodoItem['priority'], dueAt: 
   };
 }
 
-function mountMatrix(options: { mobile?: boolean } = {}) {
+function mountMatrix(options: { mobile?: boolean; items?: TodoItem[] } = {}) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 30);
   const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
-  const items = [
+  const items = options.items || [
     todo('important-urgent', '高优先今天截止', 2, localDateTime(today)),
     todo('important-later', '高优先稍后处理', 2, localDateTime(tomorrow)),
     todo('other-urgent', '普通优先今天截止', 1, localDateTime(today)),
@@ -69,6 +69,7 @@ function mountMatrix(options: { mobile?: boolean } = {}) {
             todoMatrixGuide: '自动分类说明',
             todoMatrixCount: '{count} 项待办',
             todoMatrixEmpty: '暂无待办',
+            todoMatrixSeriesBadge: '重复系列 · {count} 项',
             todoMatrixQuadrants: {
               importantUrgent: '重要且紧急',
               importantNotUrgent: '重要但不紧急',
@@ -146,5 +147,31 @@ describe('TodoMatrixView', () => {
     expect(host.querySelectorAll('.todo-matrix__quadrant')).toHaveLength(1);
     expect(host.querySelector('.todo-matrix__quadrant')?.getAttribute('data-quadrant')).toBe('otherNotUrgent');
     expect(host.querySelector('.todo-matrix-card__title')?.textContent).toBe('低优先无日期');
+  });
+
+  it('固定日程在四象限只显示下一项，并保留紧凑的系列标识和实例数', async () => {
+    const now = new Date();
+    const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 12);
+    const series = { id: 'series-1', repeatMode: 'scheduled', status: 'active' } as TodoItem['series'];
+    const first = {
+      ...todo('series-1', '每日推广', 1, localDateTime(tomorrow)),
+      seriesId: 'series-1',
+      series,
+      occurrenceNo: 1,
+      occurrenceDate: '2026-08-18',
+    };
+    const second = {
+      ...todo('series-2', '每日推广', 1, localDateTime(tomorrow)),
+      seriesId: 'series-1',
+      series,
+      occurrenceNo: 2,
+      occurrenceDate: '2026-08-19',
+    };
+    const { host } = mountMatrix({ items: [first, second, todo('single', '单个待办', 1, null)] });
+    await nextTick();
+
+    expect(host.querySelectorAll('.todo-matrix-card')).toHaveLength(2);
+    expect(host.querySelectorAll('.todo-matrix-card__series')).toHaveLength(1);
+    expect(host.querySelector('.todo-matrix-card__series')?.textContent).toContain('重复系列 · 2 项');
   });
 });

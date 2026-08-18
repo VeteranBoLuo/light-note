@@ -109,6 +109,7 @@
             @move="emit('move', $event)"
             @rename="emit('rename', $event)"
             @copy-link="emit('copyLink', $event)"
+            @share="emit('share', $event)"
             @delete="emit('delete', $event)"
             @drag-start="(childNode, event) => emit('dragStart', childNode, event)"
             @drag-end="emit('dragEnd')"
@@ -174,6 +175,7 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     copyLink: [node: NoteTreeItem];
+    share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
     dragStart: [node: NoteTreeItem, event: DragEvent];
     dragEnd: [];
@@ -246,6 +248,15 @@
     ...(props.writeEnabled
       ? [
           {
+            key: 'share',
+            label: t('noteShare.shareAction'),
+            icon: icon.share,
+          },
+        ]
+      : []),
+    ...(props.writeEnabled
+      ? [
+          {
             key: 'note-tree-actions-divider',
             divider: true,
           },
@@ -268,6 +279,7 @@
       rename: () => emit('rename', props.node),
       move: () => emit('move', props.node),
       'copy-link': () => emit('copyLink', props.node),
+      share: () => emit('share', props.node),
       delete: () => emit('delete', props.node),
     };
     actions[action]?.();

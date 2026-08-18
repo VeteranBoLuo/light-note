@@ -121,7 +121,7 @@ describe('TodoScheduleView mobile swipe delete', () => {
   });
 
   it('仅有计划日期的重复实例会作为全天待办出现在议程中', async () => {
-    const occurrenceDate = dueAt.slice(0, 10);
+    const occurrenceDate = `${dueAt.slice(0, 10)}T00:00:00.000Z`;
     const item: TodoItem = {
       ...todo,
       id: 'todo-all-day',
@@ -134,8 +134,33 @@ describe('TodoScheduleView mobile swipe delete', () => {
     await nextTick();
 
     const time = host.querySelector('.todo-agenda-item time');
-    expect(time?.getAttribute('datetime')).toBe(occurrenceDate);
+    expect(time?.getAttribute('datetime')).toBe(occurrenceDate.slice(0, 10));
     expect(time?.textContent).toContain('全天');
     expect(host.querySelector('.todo-agenda-card')?.textContent).toContain('每天点外卖');
+  });
+
+  it('切换日历月份时把完整 6 周可视范围交给上层按需补齐', async () => {
+    const ranges: Array<{ startDate: string; endDate: string }> = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      setup() {
+        return () => h(TodoScheduleView, { items: [todo], view: 'calendar', onRangeChange: (range) => ranges.push(range) });
+      },
+    });
+    app.use(createPinia());
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { inbox: {} } } }));
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await nextTick();
+    expect(ranges.at(-1)?.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(ranges.at(-1)?.endDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    host.querySelectorAll<HTMLButtonElement>('.todo-calendar-head button')[1].click();
+    await nextTick();
+    expect(ranges).toHaveLength(2);
   });
 });

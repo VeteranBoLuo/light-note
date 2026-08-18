@@ -496,10 +496,17 @@ function scheduledDates(timing, plan, today, options = {}) {
     throw planError('TODO_PLAN_OCCURRENCE_LIMIT_INVALID', '任务计划单批生成上限无效');
   }
   const until = plan.end.mode === 'until' ? parsePlainDate(plan.end.untilDate, '计划结束日期') : null;
-  const rollingEnd =
+  const defaultRollingEnd =
     Temporal.PlainDate.compare(anchor, today) > 0
       ? anchor.add({ days: TODO_PLAN_ROLLING_DAYS })
       : today.add({ days: TODO_PLAN_ROLLING_DAYS });
+  const requestedRollingEnd = options.rollingThroughDate
+    ? parsePlainDate(options.rollingThroughDate, '日历结束日期')
+    : null;
+  const rollingEnd =
+    requestedRollingEnd && Temporal.PlainDate.compare(requestedRollingEnd, defaultRollingEnd) > 0
+      ? requestedRollingEnd
+      : defaultRollingEnd;
   let cursor = anchor;
   let guard = 0;
   let matchedCount = 0;

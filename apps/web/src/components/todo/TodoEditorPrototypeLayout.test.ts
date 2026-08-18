@@ -43,6 +43,18 @@ describe('待办创建页原型布局', () => {
     expect(simpleSource).toContain('<BSwitch v-model:checked="draft.independentTasks.enabled" />');
   });
 
+  it('新建时主动展示待办清单，编辑无清单任务时保留渐进披露', () => {
+    expect(simpleSource).toContain("<small>{{ t('inbox.todoChecklistHint') }}</small>");
+    expect(simpleSource).toContain("t('inbox.todoShowChecklist')");
+    expect(simpleSource).toContain('const checklistOpen = ref(true)');
+    expect(simpleSource).toMatch(
+      /const hasChecklist = Boolean[\s\S]*?checklistOpen\.value = !props\.item \|\| hasChecklist/,
+    );
+    expect(simpleSource).toMatch(
+      /\.todo-simple-editor__optional-head\s*\{[\s\S]*?border:\s*1px solid[\s\S]*?background:\s*var\(--workspace-panel-bg-color\)/,
+    );
+  });
+
   it('提醒方式与周期类型都是三等分整区可点击，移动端保留足够触控高度', () => {
     expect(reminderSource).toMatch(
       /\.todo-reminder-editor-v3__mode\s*\{[\s\S]*?grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\)/,

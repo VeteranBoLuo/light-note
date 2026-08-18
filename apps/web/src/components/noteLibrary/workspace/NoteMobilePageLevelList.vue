@@ -132,6 +132,7 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     copyLink: [node: NoteTreeItem];
+    share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
@@ -249,6 +250,15 @@
       ...(props.writeEnabled
         ? [
             {
+              key: 'share',
+              label: t('noteShare.shareAction'),
+              icon: icon.share,
+            },
+          ]
+        : []),
+      ...(props.writeEnabled
+        ? [
+            {
               key: 'delete',
               label: t('note.moveToTrash'),
               icon: icon.table_delete,
@@ -275,6 +285,7 @@
     else if (action.key === 'rename') emit('rename', item);
     else if (action.key === 'move') emit('move', item);
     else if (action.key === 'copyLink') emit('copyLink', item);
+    else if (action.key === 'share') emit('share', item);
     else if (action.key === 'delete') emit('delete', item);
   }
 

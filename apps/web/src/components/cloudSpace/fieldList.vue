@@ -768,8 +768,11 @@
     });
   }
 
-  function changeFileSort(field: 'fileName' | 'fileSize') {
-    void cloud.setFileSort(field);
+  async function changeFileSort(field: 'fileName' | 'fileSize') {
+    await cloud.setFileSort(field);
+    await nextTick();
+    const scrollElement = fieldListRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]');
+    if (scrollElement) scrollElement.scrollTop = 0;
   }
   const { addResourcesToInbox, removeResourcesFromInbox } = useInboxEnqueue();
   const props = defineProps<{ clearKey?: number; batchMode: boolean; viewMode?: 'card' | 'table' }>();

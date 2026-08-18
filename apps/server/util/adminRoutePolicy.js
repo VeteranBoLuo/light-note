@@ -212,6 +212,8 @@ declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'todo', [
   ['POST', '/todo/v2/series/resume'],
   ['POST', '/todo/v2/series/stop'],
   ['POST', '/todo/v2/instance/skip'],
+  // 翻月补齐会持久化生成固定日程实例，不是只读查询；代管上下文必须继续失败关闭。
+  ['POST', '/todo/v2/calendar-range'],
   ['POST', '/todo/v2/delete'],
 ]);
 declare(ADMIN_POLICIES.CONTENT_WRITE, 'search', [

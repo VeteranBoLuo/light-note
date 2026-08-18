@@ -9,6 +9,7 @@ router.post('/create', todoHandle.createTodo);
 router.post('/v2/config', todoHandle.todoPlanConfigV2);
 router.post('/v2/preview', todoHandle.previewTodoV2);
 router.post('/v2/create', todoHandle.createTodoV2);
+router.post('/v2/calendar-range', todoHandle.ensureTodoCalendarRangeV2);
 router.post('/v2/convert-preview', todoHandle.previewLegacyConversionV2);
 router.post('/v2/convert', todoHandle.convertLegacyTodoV2);
 router.post('/v2/update-preview', todoHandle.updatePreviewTodoV2);

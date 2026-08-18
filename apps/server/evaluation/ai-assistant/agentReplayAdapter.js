@@ -42,6 +42,7 @@ function noteDraftTaskCall(task, index) {
         producesNote: task?.producesNote !== false,
         otherMutations: task?.otherMutations === true,
         needsWorkspaceRetrieval: task?.needsWorkspaceRetrieval === true,
+        workspaceQueries: Array.isArray(task?.workspaceQueries) ? task.workspaceQueries : [],
       }),
     },
   };

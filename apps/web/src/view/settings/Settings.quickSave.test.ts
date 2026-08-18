@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'Settings.vue'), 'utf8');
+const zhLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/zh-CN.ts'), 'utf8');
+const enLocaleSource = readFileSync(resolve(process.cwd(), 'src/i18n/locales/en-US.ts'), 'utf8');
 
 describe('设置页快速收藏按钮', () => {
   it('书签名称只包含本地化标题，不把装饰图标拖进浏览器书签栏', () => {
@@ -13,6 +15,8 @@ describe('设置页快速收藏按钮', () => {
     expect(anchor).toContain(`v-text="t('settings.quickSaveBtn')"`);
     expect(anchor).not.toMatch(/[\p{Extended_Pictographic}\uFE0F]/u);
     expect(anchor).not.toContain('<SvgIcon');
+    expect(zhLocaleSource).toContain("quickSaveBtn: '轻笺收藏'");
+    expect(enLocaleSource).toContain("quickSaveBtn: 'Save to LightNote'");
   });
 
   it('仍保留 javascript bookmarklet，避免为 favicon 改成普通网址后丢失当前页面上下文', () => {

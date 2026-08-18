@@ -433,6 +433,35 @@ describe('todoService', () => {
     expect(connection.query.mock.calls[0]).toEqual([expect.not.stringContaining('status = ?'), ['user-4']]);
   });
 
+  it('智能排序统一使用下一次提醒、计划时间与优先级，并稳定格式化实例日期', async () => {
+    connection.query.mockResolvedValueOnce([[]]);
+
+    await listTodoPage(connection, 'user-4', {
+      status: 'pending',
+      sort: 'smart',
+      includeTotal: false,
+    });
+
+    const [sql] = connection.query.mock.calls[0];
+    expect(sql).toContain("DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate");
+    expect(sql).toContain('MIN(j.scheduled_at_local)');
+    expect(sql).toContain('AS actionAt');
+    expect(sql).toContain('priority DESC');
+    expect(sql).toContain('actionAt ASC');
+    expect(sql).toContain('occurrence_no ASC');
+  });
+
+  it('支持按下一步时间和优先级排序，未知排序仍拒绝', async () => {
+    connection.query.mockResolvedValue([[]]);
+    await expect(listTodoPage(connection, 'user-4', { sort: 'action', includeTotal: false })).resolves.toMatchObject({
+      items: [],
+    });
+    await expect(listTodoPage(connection, 'user-4', { sort: 'priority', includeTotal: false })).resolves.toMatchObject({
+      items: [],
+    });
+    await expect(listTodoPage(connection, 'user-4', { sort: 'random' })).rejects.toThrow('无效的待办筛选参数');
+  });
+
   it('工作台逾期筛选只取截止时间早于今天的待办', async () => {
     connection.query.mockResolvedValueOnce([[]]);
 
@@ -603,6 +632,7 @@ describe('todoService', () => {
           priority: 2,
           status: 'pending',
           dueAt: '2026-07-24 10:00:00',
+          actionAt: null,
           completedAt: null,
           checklistProgress: { completed: 1, total: 2 },
           reminderChannels: ['in_app', 'email'],

@@ -95,6 +95,7 @@
   import { getRuntimePostRegistrationPath } from '@/utils/appEntry.ts';
   import { setLocale } from '@/i18n';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
+  import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
   type AuthMode = '登录' | '注册' | '重置';
@@ -171,7 +172,9 @@
       bookmark.isShowLogin = false;
       bookmark.type = 'all';
       bookmark.refreshTag();
-      await router.replace(getRuntimePostRegistrationPath(bookmark.isMobile));
+      const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
+      await router.replace(quickSaveReturnPath || getRuntimePostRegistrationPath(bookmark.isMobile));
+      if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
       message.success(t('auth.registerSuccess'));
       emit('update:success', { email: formData.email, password: formData.password });
     } finally {

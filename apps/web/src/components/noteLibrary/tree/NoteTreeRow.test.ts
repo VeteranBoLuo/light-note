@@ -82,6 +82,7 @@ describe('NoteTreeRow 显式页面操作', () => {
       rename: vi.fn(),
       move: vi.fn(),
       copyLink: vi.fn(),
+      share: vi.fn(),
       delete: vi.fn(),
       dragStart: vi.fn(),
       dragEnd: vi.fn(),
@@ -112,6 +113,7 @@ describe('NoteTreeRow 显式页面操作', () => {
           onRename: events.rename,
           onMove: events.move,
           onCopyLink: events.copyLink,
+          onShare: events.share,
           onDelete: events.delete,
           onDragStart: events.dragStart,
           onDragEnd: events.dragEnd,
@@ -143,6 +145,7 @@ describe('NoteTreeRow 显式页面操作', () => {
     clickOption(zhCN.note.renamePage);
     clickOption(zhCN.note.moveThisPage);
     clickOption(zhCN.common.copyLink);
+    clickOption(zhCN.noteShare.shareAction);
     clickOption(zhCN.note.moveToTrash);
 
     expect(events.create).toHaveBeenCalledWith(node);
@@ -151,6 +154,7 @@ describe('NoteTreeRow 显式页面操作', () => {
     expect(events.rename).toHaveBeenCalledWith(node);
     expect(events.move).toHaveBeenCalledWith(node);
     expect(events.copyLink).toHaveBeenCalledWith(node);
+    expect(events.share).toHaveBeenCalledWith(node);
     expect(events.delete).toHaveBeenCalledWith(node);
     expect(host.querySelector('.action-menu-option--danger')?.textContent).toContain(zhCN.note.moveToTrash);
 
@@ -164,6 +168,12 @@ describe('NoteTreeRow 显式页面操作', () => {
     row.dispatchEvent(new Event('dragend', { bubbles: true }));
     expect(events.dragStart).toHaveBeenCalledWith(node, expect.any(Event));
     expect(events.dragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('分享使用外链箭头，导出使用文档下载图标', () => {
+    expect(icon.share).toContain('M13.5 4h5.25');
+    expect(icon.noteDetail.exportLine).toContain('M12 10v7');
+    expect(icon.noteDetail.exportLine).not.toContain('M13.5 4h5.25');
   });
 
   it('拖拽期间把禁用状态传给 ActionMenu', async () => {

@@ -3,7 +3,7 @@ import { apiBasePost } from '@/http/request';
 export type TodoPriority = 0 | 1 | 2;
 export type TodoStatus = 'pending' | 'completed';
 export type TodoFilterStatus = 'all' | TodoStatus;
-export type TodoSort = 'smart' | 'due' | 'newest' | 'oldest';
+export type TodoSort = 'smart' | 'action' | 'priority' | 'due' | 'newest' | 'oldest';
 export type TodoReminderMode = 'once' | 'repeat';
 export type TodoReminderChannel = 'in_app' | 'email';
 export type TodoRecurrenceFrequency = 'daily' | 'weekly' | 'monthly';
@@ -195,6 +195,8 @@ export interface TodoItem {
   status: TodoStatus;
   dueAt?: string | null;
   startAt?: string | null;
+  /** 服务端按提醒、开始、截止和实例日期计算出的下一步处理时间。 */
+  actionAt?: string | null;
   reminder?: TodoReminderConfig | TodoReminderV2Config | TodoSingleTaskReminderSchedule | null;
   /** 兼容旧接口；新代码使用 reminder。 */
   reminderAt?: string | null;
@@ -249,6 +251,8 @@ export const getTodoPlanV2Config = () => apiBasePost('/api/todo/v2/config', {}, 
 export const previewTodoPlanV2 = (payload: TodoPlanDraft) =>
   apiBasePost('/api/todo/v2/preview', payload, { silent: true });
 export const createTodoPlanV2 = (payload: TodoPlanWritePayload) => apiBasePost('/api/todo/v2/create', payload);
+export const ensureTodoCalendarRangeV2 = (endDate: string) =>
+  apiBasePost('/api/todo/v2/calendar-range', { endDate }, { silent: true });
 export const previewLegacyTodoConversionV2 = (legacyTodoId: string, payload: TodoPlanDraft) =>
   apiBasePost('/api/todo/v2/convert-preview', { legacyTodoId, ...payload }, { silent: true });
 export const convertLegacyTodoPlanV2 = (legacyTodoId: string, payload: TodoPlanWritePayload) =>

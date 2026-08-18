@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   deleteTodoPlan,
   ensureSeriesBuffer,
+  ensureTodoCalendarRange,
   generateAfterCompletionNext,
   loadV2ReminderMap,
   previewTodoPlan,
@@ -761,6 +762,33 @@ describe('todoSeriesService v2', () => {
     expect(db.query.mock.calls.some(([sql]) => sql.includes('INSERT IGNORE INTO todo_reminder_jobs'))).toBe(false);
     const firstInsert = db.query.mock.calls.find(([sql]) => sql === 'INSERT IGNORE INTO todo_items SET ?');
     expect(firstInsert?.[1]?.[0]?.occurrence_no).toBe(25);
+  });
+
+  it('日历补齐只扫描当前用户尚未覆盖可视末日的长期固定日程', async () => {
+    const db = { query: vi.fn().mockResolvedValueOnce([[]]) };
+    const result = await ensureTodoCalendarRange(
+      db,
+      'user-1',
+      { endDate: '2026-09-30' },
+      { now: new Date('2026-08-18T00:00:00Z') },
+    );
+
+    expect(result).toEqual({ createdCount: 0, seriesCount: 0 });
+    expect(db.query).toHaveBeenCalledWith(expect.stringContaining("repeat_mode = 'scheduled'"), [
+      'user-1',
+      '2026-09-30',
+    ]);
+  });
+
+  it('日历补齐拒绝无效日期和超过未来一年的范围', async () => {
+    const db = { query: vi.fn() };
+    await expect(
+      ensureTodoCalendarRange(db, 'user-1', { endDate: 'not-a-date' }, { now: new Date('2026-08-18T00:00:00Z') }),
+    ).rejects.toMatchObject({ code: 'TODO_CALENDAR_RANGE_INVALID' });
+    await expect(
+      ensureTodoCalendarRange(db, 'user-1', { endDate: '2027-09-01' }, { now: new Date('2026-08-18T00:00:00Z') }),
+    ).rejects.toMatchObject({ code: 'TODO_CALENDAR_RANGE_TOO_LARGE' });
+    expect(db.query).not.toHaveBeenCalled();
   });
 
   it('v2 稍后提醒没有现成 Job 时只创建当前实例的单次站内提醒', async () => {

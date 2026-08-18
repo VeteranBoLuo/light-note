@@ -73,9 +73,12 @@
             </div>
           </div>
           <div class="todo-simple-editor__optional-head">
-            <span>{{ t('inbox.todoChecklist') }}</span>
-            <BButton size="small" @click="checklistOpen = !checklistOpen">
-              {{ checklistOpen ? t('common.collapse') : t('common.expand') }}
+            <div>
+              <strong>{{ t('inbox.todoChecklist') }}</strong>
+              <small>{{ t('inbox.todoChecklistHint') }}</small>
+            </div>
+            <BButton class="todo-simple-editor__checklist-toggle" size="small" @click="checklistOpen = !checklistOpen">
+              {{ checklistOpen ? t('common.collapse') : t('inbox.todoShowChecklist') }}
             </BButton>
           </div>
           <div v-if="checklistOpen" class="todo-simple-editor__checklist">
@@ -240,7 +243,7 @@
   const preview = ref<TodoPlanPreview | null>(null);
   const previewError = ref('');
   const previewLoading = ref(false);
-  const checklistOpen = ref(false);
+  const checklistOpen = ref(true);
   const resourcePickerVisible = ref(false);
   const resourceRefs = ref<TodoResourceRefView[]>([]);
   const editorBodyRef = ref<HTMLElement | null>(null);
@@ -286,7 +289,8 @@
     () => {
       reset(props.item, props.initialValues);
       resourceRefs.value = [...(props.item?.resourceRefs || [])];
-      checklistOpen.value = Boolean(props.item?.checklist?.length || props.initialValues?.checklist?.length);
+      const hasChecklist = Boolean(props.item?.checklist?.length || props.initialValues?.checklist?.length);
+      checklistOpen.value = !props.item || hasChecklist;
       schedulePreview();
     },
     { immediate: true },
@@ -680,6 +684,38 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+  }
+
+  .todo-simple-editor__optional-head {
+    padding: 10px 12px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 12px;
+    background: var(--workspace-panel-bg-color);
+  }
+
+  .todo-simple-editor__optional-head > div {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .todo-simple-editor__optional-head strong {
+    color: var(--text-color);
+    font-size: 14px;
+  }
+
+  .todo-simple-editor__optional-head small {
+    color: var(--desc-color);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.45;
+  }
+
+  .todo-simple-editor__optional-head :deep(.todo-simple-editor__checklist-toggle.b_btn) {
+    flex: 0 0 auto;
+    border-color: var(--primary-color) !important;
+    color: var(--primary-color);
+    background: var(--card-background);
   }
 
   .todo-simple-editor__advanced-summary {

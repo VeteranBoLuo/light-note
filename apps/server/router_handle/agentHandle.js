@@ -146,6 +146,7 @@ import {
   resolveNoteTreeFeatures,
 } from '../util/noteTreeFeatureFlags.js';
 import {
+  buildNoteDraftWorkspaceQueryCalls,
   classifyNoteDraftTask,
   classifyPendingNoteDraftFollowUp,
   createNoteDraftPrivateContext,
@@ -875,13 +876,20 @@ async function prepareRetriedAction({ session, identity, req, requestId }) {
   }
 }
 
-async function resolveResourceContexts(userId, contexts, question = '') {
+const MAX_CLIENT_RESOURCE_CONTEXTS = 5;
+const MAX_PRIVATE_NOTE_DRAFT_CONTEXTS = 12;
+
+async function resolveResourceContexts(userId, contexts, question = '', options = {}) {
   if (!Array.isArray(contexts) || contexts.length === 0) {
     return { text: '', sources: [], entities: [], materials: [], scopeResourceIds: [], allowedWebUrls: [] };
   }
+  const requestedLimit = Number(options?.maxItems);
+  const maxItems = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(MAX_PRIVATE_NOTE_DRAFT_CONTEXTS, Math.floor(requestedLimit)))
+    : MAX_CLIENT_RESOURCE_CONTEXTS;
   const normalized = [];
   const seen = new Set();
-  for (const item of contexts.slice(0, 5)) {
+  for (const item of contexts.slice(0, maxItems)) {
     const type = String(item?.type || '');
     const id = String(item?.id || '').trim();
     if (!['bookmark', 'note', 'file', 'tag', 'todo'].includes(type) || !id || id.length > 255) continue;
@@ -1064,11 +1072,47 @@ function noteDraftAttachmentIds(resolvedAttachments) {
   return ids;
 }
 
-function noteDraftContextRefs(resolvedContexts) {
+function noteDraftContextRefs(resolvedContexts, maxItems = MAX_CLIENT_RESOURCE_CONTEXTS) {
   return (Array.isArray(resolvedContexts?.entities) ? resolvedContexts.entities : [])
     .map((item) => ({ type: String(item?.type || ''), id: String(item?.id || '') }))
     .filter((item) => item.type && item.id)
-    .slice(0, 5);
+    .slice(0, Math.max(1, Math.min(MAX_PRIVATE_NOTE_DRAFT_CONTEXTS, Number(maxItems) || 1)));
+}
+
+function noteDraftMaterialRefsFromToolResult(result) {
+  const refs = [
+    ...(Array.isArray(result?.dependencyRefs) ? result.dependencyRefs : []),
+    ...(Array.isArray(result?.sources)
+      ? result.sources.map((source) => ({
+          type: source?.resourceType || source?.type,
+          id: source?.resourceId || source?.id,
+        }))
+      : []),
+  ];
+  return normalizeToolDependencyRefs(refs)
+    .filter((item) => ['bookmark', 'note', 'file', 'todo'].includes(item.type))
+    .slice(0, MAX_PRIVATE_NOTE_DRAFT_CONTEXTS);
+}
+
+function mergeNoteDraftMaterialRefs(results) {
+  const groups = (Array.isArray(results) ? results : []).map((result) => noteDraftMaterialRefsFromToolResult(result));
+  const merged = [];
+  const seen = new Set();
+  for (let itemIndex = 0; merged.length < MAX_PRIVATE_NOTE_DRAFT_CONTEXTS; itemIndex += 1) {
+    let found = false;
+    for (const group of groups) {
+      const item = group[itemIndex];
+      if (!item) continue;
+      found = true;
+      const key = `${item.type}:${item.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(item);
+      if (merged.length >= MAX_PRIVATE_NOTE_DRAFT_CONTEXTS) break;
+    }
+    if (!found) break;
+  }
+  return merged;
 }
 
 function noteDraftScopeRefs(resolvedScopes) {
@@ -2484,6 +2528,9 @@ export async function agentChat(req, res) {
     // “合并/汇总/归并/consolidate”这类开放表达无需逐个补进正则。旧正则保留为分类
     // 不可用时的降级路径和一致性传感器，其分歧只写入 trace，不改变本轮执行。
     let noteDraftRequested = false;
+    let noteDraftWorkspaceQueries = [];
+    let noteDraftWorkspaceQueryCalls = [];
+    let noteDraftWorkspaceDirectRequested = false;
     if (!enableTranslation && !refinementRequested) {
       const noteDraftContextTypes = [
         ...(Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts : [])
@@ -2535,6 +2582,7 @@ export async function agentChat(req, res) {
           trace.noteDraftOtherMutations = task.otherMutations;
           trace.noteDraftWorkspaceRetrievalNeeded =
             task.producesNote && !task.otherMutations && task.needsWorkspaceRetrieval;
+          noteDraftWorkspaceQueries = trace.noteDraftWorkspaceRetrievalNeeded ? task.workspaceQueries : [];
         } catch (error) {
           // 客户端断开和硬超时属于请求终止，不能被降级逻辑吞掉。
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
@@ -2545,10 +2593,23 @@ export async function agentChat(req, res) {
           trace.noteDraftClassifyError = stableAgentErrorCode(error);
         }
         trace.noteDraftClassifyMs = Date.now() - noteDraftTaskStartedAt;
+        noteDraftWorkspaceQueryCalls = buildNoteDraftWorkspaceQueryCalls(noteDraftWorkspaceQueries);
+        noteDraftWorkspaceDirectRequested =
+          trace.noteDraftWorkspaceRetrievalNeeded === true &&
+          contentScope.mode === 'workspace' &&
+          noteDraftWorkspaceQueryCalls.length > 0;
+        if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
+          trace.noteDraftWorkspaceQueryProtocol = noteDraftWorkspaceDirectRequested
+            ? 'classifier_complete'
+            : noteDraftWorkspaceQueries.length
+              ? 'unsupported_filter'
+              : 'missing';
+        }
+        const classifiedNoteDraftRouteRequested = noteDraftRequested || noteDraftWorkspaceDirectRequested;
         trace.noteDraftLegacyAgreement =
-          noteDraftRequested === legacyNoteDraftRequested
+          classifiedNoteDraftRouteRequested === legacyNoteDraftRequested
             ? 'agree'
-            : noteDraftRequested
+            : classifiedNoteDraftRouteRequested
               ? 'semantic_only'
               : 'legacy_only';
       } else {
@@ -2562,14 +2623,14 @@ export async function agentChat(req, res) {
         '[Agent] note draft route classify=%s source=%s taken=%s legacy=%s agreement=%s ms=%s error=%s',
         classifyNoteDraft,
         trace.noteDraftRouteSource,
-        noteDraftRequested,
+        noteDraftRequested || noteDraftWorkspaceDirectRequested,
         legacyNoteDraftRequested,
         trace.noteDraftLegacyAgreement || '-',
         trace.noteDraftClassifyMs ?? '-',
         trace.noteDraftClassifyError || 'none',
       );
     }
-    if (noteDraftRequested || refinementRequested) {
+    if (noteDraftRequested || refinementRequested || noteDraftWorkspaceDirectRequested) {
       const dedicatedMemoryMode = normalizeAiMemoryMode(memoryMode);
       memoryInfluence = buildAiMemoryNotUsedInfluence(
         dedicatedMemoryMode === 'temporary'
@@ -2580,9 +2641,13 @@ export async function agentChat(req, res) {
               ? 'admin_context'
               : 'disabled',
       );
-      trace.route = refinementRequested ? 'note_draft_refinement' : 'note_draft';
-      trace.taskType = refinementRequested ? 'note_draft_refinement' : 'note_draft';
-      trace.selectedTools = ['create_note'];
+      trace.route = refinementRequested
+        ? 'note_draft_refinement'
+        : noteDraftWorkspaceDirectRequested
+          ? 'note_draft_workspace'
+          : 'note_draft';
+      trace.taskType = trace.route;
+      trace.selectedTools = [...new Set(noteDraftWorkspaceQueryCalls.map((item) => item.toolName)), 'create_note'];
       const usedTools = [];
       usedToolsForLog = usedTools;
       let effectiveContexts = resolvedContexts;
@@ -2604,6 +2669,85 @@ export async function agentChat(req, res) {
         sseLifecycle.stage('planning', { route: trace.route });
       }
 
+      if (noteDraftWorkspaceDirectRequested) {
+        const queryStartedAt = Date.now();
+        const allowedToolNames = new Set(noteDraftWorkspaceQueryCalls.map((item) => item.toolName));
+        sseLifecycle?.stage('tool_execution', { round: 1 });
+        const queryResults = await mapWithConcurrency(
+          noteDraftWorkspaceQueryCalls,
+          runtimeLimits.toolConcurrency,
+          async ({ toolName, args }) => {
+            sseLifecycle?.send('tool_start', { tool: toolName, round: 1 });
+            const result = await executeTool(
+              toolName,
+              args,
+              toolRuntimeContext(req, identity, {
+                signal: agentAbortController.signal,
+                allowedToolNames,
+                suppressUserRewards: Boolean(req.suppressUserRewards || req.adminContext),
+                question: message,
+                agentContentScope: contentScope,
+              }),
+            );
+            sseLifecycle?.send('tool_result', { tool: toolName, status: result.status, round: 1 });
+            usedTools.push({
+              name: toolName,
+              status: result.status,
+              params: result.params || args,
+              error: result.error,
+              dataSummary: result.dataSummary,
+              summary: result.summary,
+              round: 1,
+            });
+            return result;
+          },
+          agentAbortController.signal,
+        );
+        trace.toolMs = Date.now() - queryStartedAt;
+        const materialRefs = mergeNoteDraftMaterialRefs(queryResults);
+        trace.noteDraftWorkspaceMaterialCount = materialRefs.length;
+
+        if (!materialRefs.length) {
+          const hasQueryError = queryResults.some((result) => result.status === 'error');
+          routeStatus = hasQueryError ? 'material_read_failed' : 'material_empty';
+          routeError = hasQueryError ? 'NOTE_DRAFT_WORKSPACE_RETRIEVAL_FAILED' : 'NOTE_DRAFT_MATERIAL_UNAVAILABLE';
+          routeResponse = String(locale || '')
+            .toLowerCase()
+            .startsWith('en')
+            ? hasQueryError
+              ? 'The requested workspace materials could not be queried safely. No note was created; please try again later.'
+              : 'No real workspace materials matched the requested scope, so no note was created.'
+            : hasQueryError
+              ? '当前无法安全查询你指定的工作区材料。本次没有创建笔记，请稍后重试。'
+              : '没有查询到符合本次范围的真实工作区材料，因此没有创建笔记。';
+        } else {
+          try {
+            effectiveContexts = await raceWithSignal(
+              resolveResourceContexts(userId, materialRefs, message, { maxItems: materialRefs.length }),
+              agentAbortController.signal,
+            );
+            if (!effectiveContexts.materials.length) {
+              routeStatus = 'material_read_failed';
+              routeError = 'NOTE_DRAFT_MATERIAL_UNAVAILABLE';
+              routeResponse = String(locale || '')
+                .toLowerCase()
+                .startsWith('en')
+                ? 'The matched workspace materials are no longer readable. No note was created.'
+                : '查询到的工作区材料已不可读取，因此没有创建笔记。';
+            }
+          } catch (error) {
+            if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
+            routeStatus = 'material_read_failed';
+            routeError = 'NOTE_DRAFT_MATERIAL_REHYDRATION_FAILED';
+            routeResponse = String(locale || '')
+              .toLowerCase()
+              .startsWith('en')
+              ? 'The matched workspace materials could not be verified safely. No note was created; please try again.'
+              : '查询到的工作区材料暂时无法完成归属复核。本次没有创建笔记，请稍后重试。';
+          }
+        }
+      }
+
       if (refinementRequested) {
         try {
           if (pendingNoteDraftInspectionError) throw pendingNoteDraftInspectionError;
@@ -2620,7 +2764,9 @@ export async function agentChat(req, res) {
           const materialQuestion = [sourceMessage, message].filter(Boolean).join('\n');
           [effectiveContexts, effectiveAttachments] = await raceWithSignal(
             Promise.all([
-              resolveResourceContexts(userId, privateContext.contextRefs, materialQuestion),
+              resolveResourceContexts(userId, privateContext.contextRefs, materialQuestion, {
+                maxItems: privateContext.contextRefs.length,
+              }),
               resolveDocumentAttachments({
                 userId,
                 sourceIds: privateContext.attachmentIds,
@@ -2725,9 +2871,16 @@ export async function agentChat(req, res) {
         materials = hydrated.materials;
         usedTools.push(...hydrated.toolRecords);
         if (hydrated.toolRecords.length) {
-          trace.selectedTools = [...(resolvedScopes.refs.length ? ['search_content'] : []), 'read_url', 'create_note'];
+          trace.selectedTools = [
+            ...new Set([
+              ...trace.selectedTools.filter((toolName) => toolName !== 'create_note'),
+              ...(resolvedScopes.refs.length ? ['search_content'] : []),
+              'read_url',
+              'create_note',
+            ]),
+          ];
         }
-        if (hydrated.toolMs != null) trace.toolMs = hydrated.toolMs;
+        if (hydrated.toolMs != null) trace.toolMs = Number(trace.toolMs || 0) + hydrated.toolMs;
 
         const bookmarkCount = materials.filter((item) => item.type === 'bookmark').length;
         const hasIndependentMaterial = materials.some(
@@ -2886,7 +3039,7 @@ export async function agentChat(req, res) {
       }
 
       trace.usageStatus = allUsageReported ? 'reported' : 'missing';
-      trace.plannerMs = trace.pendingDraftIntentMs || 0;
+      trace.plannerMs = Number(trace.pendingDraftIntentMs || 0) + Number(trace.noteDraftClassifyMs || 0);
       if (stream) {
         if (previousConfirmation && confirmation) {
           sseLifecycle?.send('tool_confirmation_replaced', {
@@ -3108,14 +3261,19 @@ export async function agentChat(req, res) {
     const webScopePrompt = contentScope.allowedWebUrls.length
       ? `用户本轮引用的书签包含 ${contentScope.allowedWebUrls.length} 个由服务端按资源 ID 重新校验得到的链接；只有在问题需要网页正文时才使用 read_url，且只能读取这些链接。`
       : '';
+    const noteDraftWorkspacePrompt =
+      trace.noteDraftWorkspaceRetrievalNeeded === true
+        ? '本轮是“查询工作区材料后生成一篇笔记”。材料查询的时间、主题、类型、状态与集合范围必须以最后一条原始用户消息为准；历史消息只用于理解省略指代，若最新消息已经重新指定范围，不得复用历史查询范围或旧工具参数。读取完成后只声明 note.create，完整草稿将由服务端统一草稿引擎根据真实查询结果生成。'
+        : '';
     const prompt = memoryPrompt
-      ? `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}\n\n---\n\n${memoryPrompt}`
-      : `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}`;
+      ? `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}${noteDraftWorkspacePrompt ? `\n${noteDraftWorkspacePrompt}` : ''}\n\n---\n\n${memoryPrompt}`
+      : `${promptBase}\n\n${scopePrompt}${webScopePrompt ? `\n${webScopePrompt}` : ''}${noteDraftWorkspacePrompt ? `\n${noteDraftWorkspacePrompt}` : ''}`;
     // 只把「最近一次成功工具调用」放 system,帮助理解省略式追问(如「那第二个呢」);
     // 对话历史不再塞进 system 的 JSON 块,而是作为真实多轮消息注入(见下方 messages),模型才真有记忆。
-    const systemContent = session.lastTool
-      ? `${prompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
-      : prompt;
+    const systemContent =
+      session.lastTool && trace.noteDraftWorkspaceRetrievalNeeded !== true
+        ? `${prompt}\n\n---\n\n最近一次成功的工具调用（供理解省略式追问）：${JSON.stringify(session.lastTool)}`
+        : prompt;
 
     // 处理翻译模式
     let userMessage = message;
@@ -3290,6 +3448,7 @@ export async function agentChat(req, res) {
       finishReason,
       dependencyRefsByCallId = new Map(),
       emptyMaterialDependencyCallIds = new Set(),
+      noteDraftMaterialRefsByCallId = new Map(),
     }) => {
       const toolCalls = (Array.isArray(rawToolCalls) ? rawToolCalls : []).slice(0, 8);
       if (!toolCalls.length) return [];
@@ -3312,6 +3471,7 @@ export async function agentChat(req, res) {
           let pendingInteraction = null;
           let pendingAction = null;
           let retryArgs = null;
+          let confirmationPrivateContext = null;
           let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
 
           if (!argumentError && tc.function.name === 'create_note' && emptyMaterialDependencyCallIds.has(tc.id)) {
@@ -3330,6 +3490,107 @@ export async function agentChat(req, res) {
                 tool?.isWrite ? '无法核验操作目标，因此没有生成操作确认。' : '无法核验依赖查询目标，因此没有继续读取。',
               );
               argumentError = { code: publicError.code, message: publicError.message };
+            }
+          }
+
+          // 工作区隐式材料任务只让 Semantic Planner 选择读取能力和范围。读取结果中的
+          // 稳定资源引用由服务端重新校验、加载正文，再交给统一草稿协议生成 title/content；
+          // Planner 在依赖轮提交的 create_note 文本只是动作声明，不能直接成为待确认正文。
+          if (
+            !argumentError &&
+            trace.noteDraftWorkspaceRetrievalNeeded === true &&
+            tc.function.name === 'create_note'
+          ) {
+            const materialRefs = noteDraftMaterialRefsByCallId.get(tc.id) || [];
+            const candidatePrivateContext = createNoteDraftPrivateContext({
+              sourceMessage: message,
+              contextRefs: materialRefs,
+            });
+            if (!candidatePrivateContext.contextRefs.length) {
+              argumentError = {
+                code: 'NOTE_DRAFT_MATERIAL_UNAVAILABLE',
+                message: '没有从工作区查询到可用于生成笔记的真实材料，因此本次没有创建笔记。',
+              };
+            } else {
+              try {
+                const materialQuestion = message;
+                const workspaceContexts = await resolveResourceContexts(
+                  userId,
+                  candidatePrivateContext.contextRefs,
+                  materialQuestion,
+                  { maxItems: candidatePrivateContext.contextRefs.length },
+                );
+                if (!workspaceContexts.materials.length) {
+                  throw Object.assign(new Error('工作区材料已不可用。'), {
+                    code: 'NOTE_DRAFT_MATERIAL_UNAVAILABLE',
+                  });
+                }
+                const workspaceContentScope = normalizeAgentContentScope(scope, workspaceContexts, materialQuestion, {
+                  refs: [],
+                  resourceIds: [],
+                  noteIds: [],
+                  branches: [],
+                });
+                const hydrated = await hydrateNoteDraftBookmarks({
+                  materials: workspaceContexts.materials,
+                  entities: workspaceContexts.entities,
+                  req,
+                  identity,
+                  contentScope: workspaceContentScope,
+                  question: materialQuestion,
+                  signal: agentAbortController.signal,
+                  sseLifecycle,
+                });
+                usedTools.push(...hydrated.toolRecords);
+                sseLifecycle?.stage('preparing_answer', { route: 'note_draft_workspace' });
+                const draft = await generateNoteDraft({
+                  materials: hydrated.materials,
+                  instruction: message,
+                  signal: agentAbortController.signal,
+                  maxTokens: providerInfo?.noteAssistMaxTokens || 8192,
+                  traceId: requestId,
+                  onResponse(response) {
+                    apiCalls += 1;
+                    apiCallsForLog = apiCalls;
+                    const usage = response?.usage || {};
+                    totalUsage.promptTokens += Number(usage.promptTokens || 0);
+                    totalUsage.completionTokens += Number(usage.completionTokens || 0);
+                    totalUsage.totalTokens += Number(usage.totalTokens || 0);
+                    plannerUsageReported = plannerUsageReported && response?.usageStatus === 'reported';
+                    trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+                    trace.finishReason = response?.finishReason || trace.finishReason;
+                  },
+                });
+                const parentId = String(args?.parentId || args?.parent_id || '').trim();
+                args = {
+                  title: draft.title,
+                  content: draft.content,
+                  ...(parentId ? { parentId } : {}),
+                };
+                confirmationPrivateContext = createNoteDraftPrivateContext({
+                  sourceMessage: message,
+                  contextRefs: noteDraftContextRefs(workspaceContexts, candidatePrivateContext.contextRefs.length),
+                });
+                sources.push(...workspaceContexts.sources);
+                toolEntitySources.push(...workspaceContexts.sources);
+                trace.noteDraftWorkspaceMaterialCount = confirmationPrivateContext.contextRefs.length;
+                trace.noteDraftWorkspaceDraftAttempts = draft.attempts;
+              } catch (error) {
+                if (
+                  agentAbortController.signal.aborted ||
+                  error?.name === 'AbortError' ||
+                  error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+                ) {
+                  throw error;
+                }
+                argumentError = {
+                  code: String(error?.code || 'NOTE_DRAFT_INCOMPLETE'),
+                  message:
+                    error?.code === 'NOTE_DRAFT_MATERIAL_UNAVAILABLE'
+                      ? '查询到的材料已经不可用，因此本次没有创建笔记。'
+                      : '材料已经读取，但这次没有生成完整可确认的笔记草稿；没有创建任何笔记，请稍后重试。',
+                };
+              }
             }
           }
 
@@ -3417,6 +3678,7 @@ export async function agentChat(req, res) {
                 identity,
                 req,
                 session,
+                privateContext: confirmationPrivateContext,
                 originRequestId: requestId,
               });
               const continuation = await issueActionContinuation('confirmation', confirmation.id);
@@ -4028,6 +4290,7 @@ export async function agentChat(req, res) {
       let attemptedDeferredWrite = false;
       const completedCapabilityIds = new Set();
       const dependencyRefsByCapabilityId = new Map();
+      const noteDraftMaterialRefsByCapabilityId = new Map();
       const materialEvidenceByCapabilityId = new Map();
       const materialReadCapabilityIds = new Set();
       const unresolvedIntentIndexes = new Set(
@@ -4049,6 +4312,14 @@ export async function agentChat(req, res) {
           );
           if (NOTE_DRAFT_MATERIAL_READ_TOOLS.has(item.toolName)) {
             materialReadCapabilityIds.add(capabilityId);
+            const existingMaterialRefs = noteDraftMaterialRefsByCapabilityId.get(capabilityId) || [];
+            noteDraftMaterialRefsByCapabilityId.set(
+              capabilityId,
+              noteDraftMaterialRefsFromToolResult({
+                dependencyRefs: [...existingMaterialRefs, ...(item.result?.dependencyRefs || [])],
+                sources: item.result?.sources,
+              }),
+            );
             const hasEvidence =
               (Array.isArray(item.result?.dependencyRefs) && item.result.dependencyRefs.length > 0) ||
               (Array.isArray(item.result?.sources) && item.result.sources.length > 0);
@@ -4116,8 +4387,8 @@ export async function agentChat(req, res) {
           semanticCatalogText: formatSemanticCapabilityCatalog(followUpCatalog),
         });
         const followUpPrompt = memoryPrompt
-          ? `${followUpPromptBase}\n\n${scopePrompt}\n\n---\n\n${memoryPrompt}`
-          : `${followUpPromptBase}\n\n${scopePrompt}`;
+          ? `${followUpPromptBase}\n\n${scopePrompt}${noteDraftWorkspacePrompt ? `\n${noteDraftWorkspacePrompt}` : ''}\n\n---\n\n${memoryPrompt}`
+          : `${followUpPromptBase}\n\n${scopePrompt}${noteDraftWorkspacePrompt ? `\n${noteDraftWorkspacePrompt}` : ''}`;
         const followUpMessages = [{ role: 'system', content: followUpPrompt }, ...messages.slice(1)];
         const followUpPlannerStartedAt = Date.now();
         let followUpPlannerResponse = await requestAi(followUpMessages, {
@@ -4279,6 +4550,7 @@ export async function agentChat(req, res) {
 
         const dependencyRefsByCallId = new Map();
         const emptyMaterialDependencyCallIds = new Set();
+        const noteDraftMaterialRefsByCallId = new Map();
         if (dependencyRound) {
           for (const call of followUpDecision.toolCalls) {
             const capabilityId = followUpCatalog.find((entry) => entry.toolNames?.includes(call?.function?.name))?.id;
@@ -4295,6 +4567,14 @@ export async function agentChat(req, res) {
               const dependencyCapabilityIds = semanticPlan.intents[intentIndex].dependsOn
                 .map((dependencyIndex) => semanticPlan.intents[dependencyIndex]?.capabilityId)
                 .filter(Boolean);
+              noteDraftMaterialRefsByCallId.set(
+                call.id,
+                noteDraftMaterialRefsFromToolResult({
+                  dependencyRefs: dependencyCapabilityIds.flatMap(
+                    (dependencyCapabilityId) => noteDraftMaterialRefsByCapabilityId.get(dependencyCapabilityId) || [],
+                  ),
+                }),
+              );
               const materialCapabilityIds = dependencyCapabilityIds.filter((dependencyCapabilityId) =>
                 materialReadCapabilityIds.has(dependencyCapabilityId),
               );
@@ -4317,6 +4597,7 @@ export async function agentChat(req, res) {
           finishReason: followUpPlannerResponse.finishReason,
           dependencyRefsByCallId,
           emptyMaterialDependencyCallIds,
+          noteDraftMaterialRefsByCallId,
         });
         recordSuccessfulCapabilityResults(previousRoundResults, followUpCatalog);
         const terminalDependencyFailure = dependencyRound

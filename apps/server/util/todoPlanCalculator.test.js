@@ -471,6 +471,32 @@ describe('todoPlanCalculator', () => {
     expect(nextBatch.lastOccurrence.occurrenceNo).toBe(TODO_PLAN_MAX_ROLLING_BATCH + 25);
   });
 
+  it('日历按需加载可以把长期系列补到指定可视范围末日', () => {
+    const preview = calculateTodoPlan(
+      dailyPlan({
+        timing: {
+          timezone: 'Asia/Shanghai',
+          anchorDate: '2026-08-06',
+          startTime: null,
+          dueTime: null,
+          dueDayOffset: 0,
+        },
+        plan: {
+          type: 'scheduled',
+          frequency: 'daily',
+          interval: 1,
+          end: { mode: 'never' },
+          pastPolicy: 'keep_overdue',
+        },
+        reminder: { mode: 'none' },
+      }),
+      { now: NOW, rollingThroughDate: '2026-12-31' },
+    );
+
+    expect(preview.lastOccurrence.occurrenceDate).toBe('2026-12-31');
+    expect(preview.generatedNowCount).toBe(148);
+  });
+
   it('稀疏长期系列除 60 天窗口外仍至少保留 8 个未来实例', () => {
     const preview = calculateTodoPlan(
       dailyPlan({

@@ -80,6 +80,7 @@
   import { getRuntimeApplicationHomePath } from '@/utils/appEntry.ts';
   import { markLoggedIn } from '@/utils/authStorage';
   import { createGithubAuthorizationUrl, rememberGithubOAuthFlow } from '@/utils/githubOAuth';
+  import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import { isValidEmail } from '@/utils/validator.ts';
   import GithubOAuthConsentModal from './GithubOAuthConsentModal.vue';
 
@@ -141,7 +142,13 @@
       user.preferences.noteViewMode = res.data?.preferences?.noteViewMode || DEFAULT_NOTE_VIEW_MODE;
       user.preferences.homePage = getHomePagePreference(res.data?.preferences);
       localStorage.setItem('preferences', JSON.stringify(user.preferences));
-      await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
+      const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
+      if (quickSaveReturnPath) {
+        await router.replace(quickSaveReturnPath);
+        clearQuickSaveAuthReturnPath();
+      } else {
+        await router.push(getRuntimeApplicationHomePath(user.preferences, bookmark.isMobile));
+      }
       message.success(t('auth.loginSuccess'));
       void setLocale(user.preferences.lang || 'zh-CN');
       bookmark.isShowLogin = false;

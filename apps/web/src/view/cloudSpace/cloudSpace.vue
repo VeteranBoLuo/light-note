@@ -14,6 +14,22 @@
 
     <template #actions>
       <CloudStorageBar v-if="bookmark.isMobile" ref="mobileCloudStorageBar" compact class="mobile-cloud-storage" />
+      <BTooltip
+        v-if="!bookmark.isMobile"
+        class="cloud-sort-tooltip"
+        :title="`${$t('cloudSpace.sort')}：${cloudSortLabel}`"
+      >
+        <div class="cloud-sort-control">
+          <SvgIcon class="cloud-sort-icon" :src="icon.cloudSpace.sort" size="16" aria-hidden="true" />
+          <BSelect
+            class="cloud-sort-select"
+            :value="cloudSortValue"
+            :options="cloudSortOptions"
+            :aria-label="$t('cloudSpace.sort')"
+            @change="changeCloudSort"
+          />
+        </div>
+      </BTooltip>
       <div class="cloud-view-toggle" :aria-label="$t('cloudSpace.viewMode')">
         <BTooltip :title="$t('note.cardView')">
           <BButton class="cloud-view-button" :class="{ active: viewMode === 'card' }" @click="setViewMode('card')">
@@ -60,6 +76,7 @@
     </template>
 
     <div
+      ref="cloudContainerRef"
       class="cloud-container"
       @dragover.prevent="onDragOver"
       @dragenter.prevent="onDragEnter"
@@ -141,9 +158,12 @@
       :folders="cloud.folderList"
       :current-folder-id="String(cloud.folder.id || '')"
       :folder-mutation-id="mobileFolderMutationId"
+      :sort-value="cloudSortValue"
+      :sort-options="cloudSortOptions"
       :before-open-create-folder="allowMobileFolderCreate"
       :before-manage-folders="allowMobileFolderCreate"
       @batch="toggleBatchMode"
+      @sort="changeCloudSort"
       @create-folder="createMobileFolder"
       @rename-folder="renameMobileFolder"
       @delete-folder="requestMobileFolderDelete"
@@ -171,6 +191,7 @@
 
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import BSelect from '@/components/base/BasicComponents/BSelect.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
   import ResourcePageShell from '@/components/base/ResourcePageShell.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
@@ -183,6 +204,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import FilePreviewLoadingState from '@/components/cloudSpace/FilePreviewLoadingState.vue';
+  import type { CloudFileSort, CloudFileSortField, CloudFileSortOrder } from '@/store/cloudSpace';
   const FilePreview = defineAsyncComponent({
     loader: () => import('@/components/FilePreview.vue'),
     loadingComponent: FilePreviewLoadingState,
@@ -279,6 +301,7 @@
   const mobileCloudStorageBar = ref<{ openDetails: (shortfallMb?: number) => void } | null>(null);
   const batchMode = ref(false);
   const mobilePageActionsOpen = ref(false);
+  const cloudContainerRef = ref<HTMLElement | null>(null);
   const mobileFolderCreating = ref(false);
   const mobileFolderMutationId = ref('');
 
@@ -292,6 +315,29 @@
       (localStorage.getItem(CLOUD_SPACE_VIEW_STORAGE_KEY) as 'card' | 'table') ||
       'card',
   );
+  const cloudSortOptions = computed(() => [
+    { value: 'createTime:desc', label: t('cloudSpace.sortLatest') },
+    { value: 'createTime:asc', label: t('cloudSpace.sortEarliest') },
+    { value: 'fileName:asc', label: t('cloudSpace.sortNameAsc') },
+    { value: 'fileName:desc', label: t('cloudSpace.sortNameDesc') },
+    { value: 'fileSize:desc', label: t('cloudSpace.sortSizeDesc') },
+    { value: 'fileSize:asc', label: t('cloudSpace.sortSizeAsc') },
+  ]);
+  const cloudSortValue = computed(() => `${cloud.fileSort.field}:${cloud.fileSort.order}`);
+  const cloudSortLabel = computed(
+    () =>
+      cloudSortOptions.value.find((option) => option.value === cloudSortValue.value)?.label ||
+      t('cloudSpace.sortLatest'),
+  );
+
+  async function changeCloudSort(value: string | number) {
+    const [field, order] = String(value).split(':') as [CloudFileSortField, CloudFileSortOrder];
+    if (!['createTime', 'fileName', 'fileSize'].includes(field) || !['asc', 'desc'].includes(order)) return;
+    await cloud.setFileSortValue({ field, order } as CloudFileSort);
+    await nextTick();
+    const scrollElement = cloudContainerRef.value?.querySelector<HTMLElement>('[data-mobile-resource-scroll]');
+    if (scrollElement) scrollElement.scrollTop = 0;
+  }
   // 切换云空间视图:本地即时生效(下方 watch 写独立缓存)+ 记忆到偏好(登录用户同步后端、设置页可改)
   function setViewMode(mode: 'card' | 'table') {
     if (viewMode.value === mode) return;
@@ -821,11 +867,7 @@
     () => [route.query.fileId, route.query.organize],
     ([rawFileId, organize]) => {
       const nextFileId = queryValue(rawFileId);
-      if (
-        queryValue(organize) !== 'inbox' ||
-        !nextFileId ||
-        nextFileId !== deletedOrganizingFileId.value
-      ) {
+      if (queryValue(organize) !== 'inbox' || !nextFileId || nextFileId !== deletedOrganizingFileId.value) {
         deletedOrganizingFileId.value = '';
       }
       const fileId = getRouteFileId();
@@ -897,6 +939,71 @@
     padding: 3px;
     border-radius: 10px;
     background: var(--bl-input-noBorder-bg-color);
+  }
+
+  .cloud-sort-control {
+    position: relative;
+    height: 36px;
+    width: 142px;
+    min-width: 142px;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding-left: 10px;
+    border: 1px solid var(--card-border-color);
+    border-radius: 10px;
+    color: var(--resource-file-color, #ff8a00);
+    background: var(--menu-body-bg-color);
+  }
+
+  .cloud-sort-select {
+    width: 110px;
+    min-width: 0;
+    color: var(--text-color);
+  }
+
+  .cloud-sort-select :deep(.select-trigger) {
+    height: 34px;
+    border: 0;
+    background: transparent;
+  }
+
+  @media (max-width: 1550px) and (min-width: 768px) {
+    .cloud-sort-tooltip {
+      flex: 0 0 48px;
+    }
+
+    .cloud-sort-control {
+      width: 48px;
+      min-width: 48px;
+      justify-content: center;
+      gap: 2px;
+      padding-left: 0;
+    }
+
+    .cloud-sort-icon {
+      pointer-events: none;
+    }
+
+    .cloud-sort-select {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+    }
+
+    .cloud-sort-select :deep(.select-trigger) {
+      width: 100%;
+      padding: 0;
+      background: transparent;
+    }
+
+    .cloud-sort-select :deep(.select-text) {
+      display: none;
+    }
+
+    .cloud-sort-select :deep(.select-suffix) {
+      display: none;
+    }
   }
 
   .cloud-view-button {

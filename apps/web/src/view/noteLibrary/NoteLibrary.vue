@@ -208,6 +208,7 @@
             @move="openMoveNote"
             @rename="openRenameNote"
             @copy-link="copyNoteLink"
+            @share="openNoteShare"
             @delete="deleteSingleNote"
             @search="treeSearchValue = $event"
             @drag-start="onTreeDragStart"
@@ -225,6 +226,7 @@
           :menu-options="previewMenuOptions"
           @close="closeDesktopPreview"
           @edit="openDirectoryPage(previewNoteId)"
+          @browse-children="selectDirectory(previewNoteId)"
           @pending-state="syncPreviewNotePendingState"
         />
         <header v-else-if="showDesktopDirectoryHeader" class="note-directory-header">
@@ -588,6 +590,7 @@
       @attach="openAttachPages"
       @toggle-top="toggleTreeNoteTop"
       @move="openMoveNote"
+      @share="openNoteShare"
       @delete="deleteSingleNote"
     />
     <MobilePageActionsDrawer

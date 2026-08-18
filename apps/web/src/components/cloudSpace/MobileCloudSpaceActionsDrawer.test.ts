@@ -45,6 +45,10 @@ function mountDrawer(props: Record<string, unknown> = {}) {
           newFolder: '新建文件夹',
           manageFolders: '文件夹管理',
           manageFoldersDescription: '新建、重命名或删除文件夹',
+          sort: '文件排序',
+          sortDescription: '排序会作用于全部文件',
+          sortLatest: '最近上传',
+          sortEarliest: '最早上传',
           noFoldersToManage: '还没有文件夹，可以从上方新建',
           batchAction: '批量操作',
           exitBatch: '退出批量',
@@ -89,7 +93,7 @@ describe('MobileCloudSpaceActionsDrawer', () => {
 
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
     const actions = host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-actions__item');
-    expect(actions).toHaveLength(2);
+    expect(actions).toHaveLength(3);
     expect(host.textContent).toContain('新建、重命名或删除文件夹');
 
     actions[0].click();
@@ -131,9 +135,34 @@ describe('MobileCloudSpaceActionsDrawer', () => {
     expect(beforeManageFolders).toHaveBeenCalledOnce();
     expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('云空间操作');
 
-    actions[1].click();
+    actions[2].click();
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onBatch).toHaveBeenCalledOnce();
+  });
+
+  it('在独立子视图中选择排序并关闭抽屉', async () => {
+    const onSort = vi.fn();
+    const onOpenChange = vi.fn();
+    const host = mountDrawer({
+      sortValue: 'fileName:asc',
+      sortOptions: [
+        { value: 'createTime:desc', label: '最近上传' },
+        { value: 'createTime:asc', label: '最早上传' },
+        { value: 'fileName:asc', label: '名称 A–Z' },
+      ],
+      onSort,
+      'onUpdate:open': onOpenChange,
+    });
+    await nextTick();
+
+    host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-actions__item')[1].click();
+    await nextTick();
+    expect(host.querySelector('.drawer-stub')?.getAttribute('data-title')).toBe('文件排序');
+    expect(host.querySelector('.mobile-cloud-sort__option.is-selected')?.textContent).toContain('名称 A–Z');
+
+    host.querySelectorAll<HTMLButtonElement>('.mobile-cloud-sort__option')[1].click();
+    expect(onSort).toHaveBeenCalledWith('createTime:asc');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
   it('新建页先返回文件夹管理，再返回操作列表；抽屉关闭动作直接关闭', async () => {

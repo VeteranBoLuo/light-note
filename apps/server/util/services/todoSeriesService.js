@@ -978,7 +978,7 @@ export async function setV2TodoStatus(connection, userId, current, status, { und
   return 1;
 }
 
-export async function ensureSeriesBuffer(connection, seriesId, { now = new Date() } = {}) {
+export async function ensureSeriesBuffer(connection, seriesId, { now = new Date(), throughDate = null } = {}) {
   const [seriesRows] = await connection.query('SELECT * FROM todo_series WHERE id = ? LIMIT 1 FOR UPDATE', [seriesId]);
   const series = seriesRows[0];
   if (!series || series.status !== 'active' || series.repeat_mode !== 'scheduled') return { createdCount: 0 };
@@ -1013,7 +1013,14 @@ export async function ensureSeriesBuffer(connection, seriesId, { now = new Date(
       plan: schedule.plan,
       reminder,
     },
-    { now, occurrenceStart, occurrenceLimit, allowEmptyOccurrences: true, enforceReminderJobLimit: false },
+    {
+      now,
+      occurrenceStart,
+      occurrenceLimit,
+      rollingThroughDate: throughDate,
+      allowEmptyOccurrences: true,
+      enforceReminderJobLimit: false,
+    },
   );
   const missing = preview.occurrences;
   if (!missing.length) return { createdCount: 0 };
@@ -1052,6 +1059,51 @@ export async function ensureSeriesBuffer(connection, seriesId, { now = new Date(
     [Math.max(...missing.map((entry) => entry.occurrenceNo)) + 1, missing.at(-1).occurrenceDate, series.id],
   );
   return { createdCount: items.length, reminderJobsCreated };
+}
+
+/**
+ * 日历翻月时按需把当前用户的长期固定日程补到可视范围末尾。
+ * 最多只允许向今天之后一年探查，避免一个 UI 请求生成无界数据。
+ */
+export async function ensureTodoCalendarRange(connection, userId, input = {}, { now = new Date() } = {}) {
+  let endDate;
+  try {
+    endDate = Temporal.PlainDate.from(String(input.endDate || '').trim());
+  } catch {
+    throw serviceError('TODO_CALENDAR_RANGE_INVALID', '日历结束日期格式无效');
+  }
+  const today = Temporal.Instant.from(now.toISOString()).toZonedDateTimeISO('Asia/Shanghai').toPlainDate();
+  if (Temporal.PlainDate.compare(endDate, today.add({ days: 366 })) > 0) {
+    throw serviceError('TODO_CALENDAR_RANGE_TOO_LARGE', '日历最多可提前加载未来一年');
+  }
+  if (Temporal.PlainDate.compare(endDate, today) < 0) return { createdCount: 0, seriesCount: 0 };
+
+  const [rows] = await connection.query(
+    `SELECT id
+       FROM todo_series
+      WHERE user_id = ? AND status = 'active' AND repeat_mode = 'scheduled'
+        AND JSON_UNQUOTE(JSON_EXTRACT(schedule_rule, '$.plan.end.mode')) = 'never'
+        AND (generated_through_date IS NULL OR generated_through_date < ?)
+      ORDER BY generated_through_date, id`,
+    [userId, endDate.toString()],
+  );
+  let createdCount = 0;
+  let seriesCount = 0;
+  for (const row of rows) {
+    let generatedForSeries = 0;
+    // 一年每日计划最多 367 项；单批上限 200，因此最多三轮即可覆盖。
+    for (let batch = 0; batch < 3; batch += 1) {
+      const result = await ensureSeriesBuffer(connection, row.id, {
+        now,
+        throughDate: endDate.toString(),
+      });
+      generatedForSeries += Number(result.createdCount || 0);
+      if (Number(result.createdCount || 0) < MAX_GENERATION_BATCH) break;
+    }
+    if (generatedForSeries > 0) seriesCount += 1;
+    createdCount += generatedForSeries;
+  }
+  return { createdCount, seriesCount };
 }
 
 function timingFromSingleTodo(todo, timezone) {

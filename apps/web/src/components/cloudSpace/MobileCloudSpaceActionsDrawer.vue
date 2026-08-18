@@ -41,6 +41,15 @@
           <small>{{ t('cloudSpace.manageFoldersDescription') }}</small>
         </span>
       </BButton>
+      <BButton class="mobile-cloud-actions__item" role="menuitem" @click="view = 'sort'">
+        <span class="mobile-cloud-actions__icon" aria-hidden="true">
+          <SvgIcon :src="icon.cloudSpace.sort" size="21" />
+        </span>
+        <span class="mobile-cloud-actions__copy">
+          <strong>{{ t('cloudSpace.sort') }}</strong>
+          <small>{{ currentSortLabel }}</small>
+        </span>
+      </BButton>
       <BButton class="mobile-cloud-actions__item" role="menuitem" @click="selectBatchAction">
         <span class="mobile-cloud-actions__icon" aria-hidden="true">
           <SvgIcon :src="icon.filterPanel.check" size="19" />
@@ -49,6 +58,22 @@
           <strong>{{ t(batchMode ? 'cloudSpace.exitBatch' : 'cloudSpace.batchAction') }}</strong>
           <small>{{ t('cloudSpace.batchActionDescription') }}</small>
         </span>
+      </BButton>
+    </div>
+
+    <div v-else-if="isSortView" class="mobile-cloud-sort" role="radiogroup" :aria-label="drawerTitle">
+      <p class="mobile-cloud-sort__hint">{{ t('cloudSpace.sortDescription') }}</p>
+      <BButton
+        v-for="option in sortOptions"
+        :key="option.value"
+        class="mobile-cloud-sort__option"
+        :class="{ 'is-selected': option.value === sortValue }"
+        role="radio"
+        :aria-checked="option.value === sortValue"
+        @click="selectSort(option.value)"
+      >
+        <span>{{ option.label }}</span>
+        <SvgIcon v-if="option.value === sortValue" :src="icon.filterPanel.check" size="18" aria-hidden="true" />
       </BButton>
     </div>
 
@@ -144,7 +169,11 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon';
 
-  type DrawerView = 'actions' | 'create-folder' | 'manage-folders' | 'rename-folder';
+  type DrawerView = 'actions' | 'sort' | 'create-folder' | 'manage-folders' | 'rename-folder';
+  interface SortOption {
+    value: string;
+    label: string;
+  }
   interface FolderItem {
     id?: string;
     name: string;
@@ -161,6 +190,8 @@
       folderMutationId?: string;
       beforeOpenCreateFolder?: () => boolean;
       beforeManageFolders?: () => boolean;
+      sortValue?: string;
+      sortOptions?: SortOption[];
     }>(),
     {
       batchMode: false,
@@ -168,12 +199,15 @@
       folders: () => [],
       currentFolderId: '',
       folderMutationId: '',
+      sortValue: '',
+      sortOptions: () => [],
     },
   );
 
   const emit = defineEmits<{
     'update:open': [open: boolean];
     batch: [];
+    sort: [value: string];
     'create-folder': [name: string];
     'rename-folder': [folder: { id: string; name: string }, done: FolderMutationDone];
     'delete-folder': [folder: { id: string; name: string }];
@@ -188,9 +222,13 @@
   const folderInputRef = ref<InstanceType<typeof BInput> | null>(null);
   const folderInputId = `mobile-cloud-folder-name-${Math.random().toString(36).slice(2)}`;
   const isCreateFolderView = computed(() => view.value === 'create-folder');
+  const isSortView = computed(() => view.value === 'sort');
   const isManageFoldersView = computed(() => view.value === 'manage-folders');
   const isRenameFolderView = computed(() => view.value === 'rename-folder');
   const hasSubView = computed(() => view.value !== 'actions');
+  const currentSortLabel = computed(
+    () => props.sortOptions.find((option) => option.value === props.sortValue)?.label || t('cloudSpace.sortLatest'),
+  );
   const formSubmitting = computed(() =>
     isRenameFolderView.value
       ? renamePending.value || String(props.folderMutationId) === String(editingFolder.value?.id || '')
@@ -199,6 +237,7 @@
   const isBusy = computed(() => formSubmitting.value || Boolean(props.folderMutationId));
   const drawerTitle = computed(() => {
     if (isCreateFolderView.value) return t('cloudSpace.newFolder');
+    if (isSortView.value) return t('cloudSpace.sort');
     if (isRenameFolderView.value) return t('cloudSpace.renameFolder');
     if (isManageFoldersView.value) return t('cloudSpace.manageFolders');
     return t('cloudSpace.mobileActionsTitle');
@@ -251,6 +290,11 @@
       return;
     }
     resetDrawer();
+  }
+
+  function selectSort(value: string) {
+    emit('sort', value);
+    emit('update:open', false);
   }
 
   function clearFolderError() {
@@ -357,6 +401,38 @@
     color: var(--desc-color);
     font-size: 12px;
     font-weight: 400;
+  }
+
+  .mobile-cloud-sort {
+    display: grid;
+    gap: 8px;
+    padding: 10px 16px max(18px, env(safe-area-inset-bottom));
+  }
+
+  .mobile-cloud-sort__hint {
+    margin: 0 0 2px;
+    color: var(--desc-color);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .mobile-cloud-sort__option {
+    width: 100%;
+    min-height: 48px;
+    height: 48px;
+    justify-content: space-between;
+    padding: 0 14px;
+    border: 1px solid var(--card-border-color);
+    border-radius: var(--mobile-control-radius, 10px);
+    background: var(--card-background) !important;
+    color: var(--text-color);
+    font-size: 14px;
+  }
+
+  .mobile-cloud-sort__option.is-selected {
+    border-color: var(--resource-file-color, #ff8a00);
+    color: var(--resource-file-color, #ff8a00);
+    font-weight: 600;
   }
 
   .mobile-cloud-actions__back,

@@ -79,6 +79,14 @@
                 <span class="todo-matrix-card__priority" :class="`is-priority-${item.priority}`">
                   {{ t(`inbox.todoPriority${item.priority}`) }}
                 </span>
+                <span
+                  v-if="seriesCount(item) > 1"
+                  class="todo-matrix-card__series"
+                  :title="t('inbox.todoMatrixSeriesBadge', { count: seriesCount(item) })"
+                >
+                  <SvgIcon :src="icon.todo.repeat" size="12" aria-hidden="true" />
+                  <span>{{ t('inbox.todoMatrixSeriesBadge', { count: seriesCount(item) }) }}</span>
+                </span>
                 <span v-if="dueLabel(item)" class="todo-matrix-card__due" :class="{ 'is-overdue': isOverdue(item) }">
                   {{ dueLabel(item) }}
                 </span>
@@ -148,6 +156,7 @@
   import icon from '@/config/icon';
   import { formatTodoDateTime, parseTodoDate } from '@/utils/todoPlanning';
   import { groupTodosByMatrix, TODO_MATRIX_QUADRANT_ORDER, type TodoMatrixQuadrantKey } from '@/utils/todoMatrix';
+  import { buildTodoMatrixEntries } from '@/utils/todoSeriesGrouping';
 
   const props = withDefaults(
     defineProps<{
@@ -171,7 +180,14 @@
   const matrixNow = ref(new Date());
   let midnightTimer = 0;
 
-  const groupedItems = computed(() => groupTodosByMatrix(props.items, matrixNow.value));
+  const matrixEntries = computed(() => buildTodoMatrixEntries(props.items));
+  const matrixEntryById = computed(() => new Map(matrixEntries.value.map((entry) => [entry.item.id, entry])));
+  const groupedItems = computed(() =>
+    groupTodosByMatrix(
+      matrixEntries.value.map((entry) => entry.item),
+      matrixNow.value,
+    ),
+  );
   const quadrants = computed(() =>
     TODO_MATRIX_QUADRANT_ORDER.map((key) => ({
       key,
@@ -231,6 +247,10 @@
     });
     if (!value) return '';
     return isOverdue(item) ? t('inbox.todoOverdue', { time: value }) : t('inbox.todoDue', { time: value });
+  }
+
+  function seriesCount(item: TodoItem) {
+    return matrixEntryById.value.get(item.id)?.seriesCount || 1;
   }
 
   function rowActions(item: TodoItem): BActionMenuItem[] {
@@ -497,6 +517,35 @@
   .todo-matrix-card__priority {
     flex: 0 0 auto;
     color: var(--desc-color);
+  }
+
+  .todo-matrix-card__series {
+    min-width: 0;
+    max-width: 180px;
+    box-sizing: border-box;
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 6px;
+    overflow: hidden;
+    border: 1px solid var(--todo-accent-color);
+    border-radius: 999px;
+    background: var(--workspace-panel-bg-color);
+    color: var(--todo-accent-color);
+    font-weight: 650;
+    line-height: 15px;
+    white-space: nowrap;
+  }
+
+  .todo-matrix-card__series > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .todo-matrix-card__series :deep(.svg-icon) {
+    flex: 0 0 auto;
   }
 
   .todo-matrix-card__priority.is-priority-2,

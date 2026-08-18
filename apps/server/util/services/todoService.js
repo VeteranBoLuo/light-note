@@ -35,12 +35,36 @@ const DUE_SQL = Object.freeze({
   week: `due_at IS NOT NULL AND due_at >= NOW()
     AND due_at < DATE_ADD(CURDATE(), INTERVAL (7 - WEEKDAY(CURDATE())) DAY)`,
 });
+const NEXT_REMINDER_AT_SQL = `COALESCE(
+  (SELECT MIN(j.scheduled_at_local)
+     FROM todo_reminder_jobs j
+    WHERE j.todo_id = todo_items.id AND j.user_id = todo_items.user_id
+      AND j.status IN ('pending','processing')),
+  (SELECT MIN(r.scheduled_at)
+     FROM todo_reminders r
+    WHERE r.todo_id = todo_items.id AND r.user_id = todo_items.user_id
+      AND r.status IN ('pending','processing'))
+)`;
+const ACTION_AT_SQL = `NULLIF(LEAST(
+  COALESCE(${NEXT_REMINDER_AT_SQL}, '9999-12-31 23:59:59'),
+  COALESCE(start_at, '9999-12-31 23:59:59'),
+  COALESCE(due_at, '9999-12-31 23:59:59'),
+  COALESCE(CAST(occurrence_date AS DATETIME), '9999-12-31 23:59:59')
+), '9999-12-31 23:59:59')`;
 const SORT_SQL = Object.freeze({
   smart: `CASE
       WHEN due_at IS NOT NULL AND due_at < NOW() THEN 0
-      WHEN due_at IS NOT NULL AND DATE(due_at) = CURDATE() THEN 1
-      WHEN priority = 2 THEN 2 ELSE 3 END,
-    CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, sort_order ASC, update_time DESC, id DESC`,
+      WHEN due_at IS NULL AND occurrence_date IS NOT NULL AND occurrence_date < CURDATE() THEN 0
+      WHEN actionAt IS NOT NULL AND actionAt < NOW() THEN 0
+      WHEN actionAt IS NOT NULL AND DATE(actionAt) = CURDATE() THEN 1
+      WHEN actionAt IS NOT NULL AND actionAt < DATE_ADD(CURDATE(), INTERVAL 8 DAY) THEN 2
+      WHEN actionAt IS NULL THEN 4 ELSE 3 END,
+    priority DESC, CASE WHEN actionAt IS NULL THEN 1 ELSE 0 END, actionAt ASC,
+    occurrence_no ASC, sort_order ASC, update_time DESC, id DESC`,
+  action: `CASE WHEN actionAt IS NULL THEN 1 ELSE 0 END, actionAt ASC,
+    priority DESC, occurrence_no ASC, sort_order ASC, update_time DESC, id DESC`,
+  priority: `priority DESC, CASE WHEN actionAt IS NULL THEN 1 ELSE 0 END, actionAt ASC,
+    occurrence_no ASC, sort_order ASC, update_time DESC, id DESC`,
   due: 'CASE WHEN due_at IS NULL THEN 1 ELSE 0 END, due_at ASC, sort_order ASC, update_time DESC, id DESC',
   newest: 'create_time DESC, id DESC',
   oldest: 'create_time ASC, id ASC',
@@ -1016,7 +1040,7 @@ export async function findOwnedTodoForAi(db, userId, todoId) {
             due_at AS dueAt, completed_at AS completedAt,
             recurrence_rule AS recurrence, start_at AS startAt,
             plan_version AS planVersion, series_id AS seriesId,
-            occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate,
+            occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
             instance_timezone AS instanceTimezone, update_time AS updatedAt
        FROM todo_items
       WHERE id = ? AND user_id = ? AND del_flag = 0
@@ -1135,15 +1159,16 @@ export async function listTodoPage(db, userId, input = {}) {
     view === 'summary'
       ? `id, title, checklist, priority, status, start_at AS startAt, due_at AS dueAt,
            completed_at AS completedAt, plan_version AS planVersion, series_id AS seriesId,
-           occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate, instance_timezone AS instanceTimezone`
+           occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
+           instance_timezone AS instanceTimezone, ${ACTION_AT_SQL} AS actionAt`
       : `id, title, description, checklist, priority, sort_order AS sortOrder, status, due_at AS dueAt,
             start_at AS startAt, completed_at AS completedAt, series_id AS seriesId,
             recurrence_rule AS recurrence, recurrence_instance_at AS recurrenceInstanceAt,
             plan_version AS planVersion, series_version AS seriesVersion,
-            occurrence_no AS occurrenceNo, occurrence_date AS occurrenceDate,
+            occurrence_no AS occurrenceNo, DATE_FORMAT(occurrence_date, '%Y-%m-%d') AS occurrenceDate,
             instance_timezone AS instanceTimezone, is_exception AS isException,
             instance_state AS instanceState, generated_by_todo_id AS generatedByTodoId,
-            create_time AS createdAt, update_time AS updatedAt`;
+            create_time AS createdAt, update_time AS updatedAt, ${ACTION_AT_SQL} AS actionAt`;
   const pageSql = `SELECT ${fields}
      FROM todo_items WHERE ${where.join(' AND ')}
      ORDER BY ${todoOrderSql(status, sort)}${paginated ? ' LIMIT ? OFFSET ?' : ''}`;
@@ -1176,6 +1201,7 @@ export async function listTodoPage(db, userId, input = {}) {
         priority: Number(item.priority || 0),
         status: item.status,
         dueAt: item.dueAt || null,
+        actionAt: item.actionAt || null,
         completedAt: item.completedAt || null,
         checklistProgress: {
           completed: checklist.filter((entry) => Boolean(entry?.done)).length,

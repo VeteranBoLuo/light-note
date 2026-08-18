@@ -30,7 +30,7 @@
         @attach-pages="openAttachPages"
         @move-page="openMoveSelf"
         @toggle-inbox="toggleNoteInbox"
-        @share="shareVisible = true"
+        @share="openNoteShare(note)"
         @export-drawing="exportDrawingNote"
       />
       <NoteWorkspaceShell
@@ -80,6 +80,7 @@
               @move="openMoveSelf"
               @rename="openRenamePage"
               @copy-link="copySidebarPageLink"
+              @share="openNoteShare"
               @delete="deleteSidebarPage"
               @go-library="openBreadcrumbPage(null)"
               @search="detailTreeSearchValue = $event"
@@ -238,6 +239,7 @@
         @move="openMoveSelf"
         @rename="openRenamePage"
         @copy-link="copySidebarPageLink"
+        @share="openNoteShare"
         @delete="deleteSidebarPage"
         @markdown-heading-click="scrollToMarkdownHeading"
       />
@@ -283,9 +285,10 @@
       @renamed="handlePageRenamed"
     />
     <NoteShareModal
-      v-if="shareVisible && note.id"
+      v-if="shareVisible && activeShareNote"
       v-model:visible="shareVisible"
-      :note="{ id: note.id, title: note.title }"
+      :note="activeShareNote"
+      @close="activeShareNote = null"
     />
     <NoteConflictModal
       v-if="conflictVisible && conflictCloudVersion && conflictLocalVersion"
@@ -600,6 +603,15 @@
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
   const shareVisible = ref(false);
+  const activeShareNote = ref<{ id: string; title?: string } | null>(null);
+
+  function openNoteShare(target: { id?: string | number | null; title?: string | null }) {
+    if (readonly.value) return;
+    const id = String(target?.id || '').trim();
+    if (!id) return;
+    activeShareNote.value = { id, title: String(target?.title || '') };
+    shareVisible.value = true;
+  }
   type ConflictVersion = {
     id?: string;
     title: string;

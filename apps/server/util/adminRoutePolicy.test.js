@@ -178,6 +178,19 @@ describe('adminRoutePolicyMiddleware', () => {
     }
   });
 
+  it('待办日历范围补齐属于账号写入，管理员代管上下文不能替目标用户生成实例', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      const next = vi.fn();
+      const res = createRes();
+      adminRoutePolicyMiddleware(createReq('/todo/v2/calendar-range', 'POST', mode), res, next);
+      expect(next).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+      );
+    }
+  });
+
   it('AI 整理"应用"是内容写:readonly 阻断、maintain 放行;只读的 quote/run 仍放行', () => {
     // apply = 真实写(建标签/关系/补名称),必须 maintain-only
     const denyNext = vi.fn();

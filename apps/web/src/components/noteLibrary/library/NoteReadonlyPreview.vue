@@ -12,9 +12,15 @@
         <div class="note-readonly-preview__title-row">
           <h2>{{ displayNote.title || t('note.untitled') }}</h2>
           <InboxPendingBadge v-if="previewPending" />
-          <span v-if="childCount > 0" class="note-readonly-preview__child-count">
+          <BButton
+            v-if="childCount > 0"
+            class="note-readonly-preview__child-count"
+            :aria-label="t('note.browseChildPages')"
+            @click="emit('browseChildren')"
+          >
             {{ t('note.childPagesCount', { count: childCount }) }}
-          </span>
+            <SvgIcon :src="icon.arrow_right" size="13" aria-hidden="true" />
+          </BButton>
           <div class="note-readonly-preview__meta">
             <span class="note-readonly-preview__mode">
               <SvgIcon :src="icon.cloudSpace.preview.sidebar" size="14" aria-hidden="true" />
@@ -182,7 +188,12 @@
       menuOptions: () => [],
     },
   );
-  const emit = defineEmits<{ close: []; edit: []; pendingState: [pending: boolean] }>();
+  const emit = defineEmits<{
+    close: [];
+    edit: [];
+    browseChildren: [];
+    pendingState: [pending: boolean];
+  }>();
   const { t } = useI18n();
   const router = useRouter();
   const user = useUserStore();
@@ -502,9 +513,15 @@
     }
   }
 
-  .note-readonly-preview__child-count {
+  .note-readonly-preview__child-count.b_btn {
     flex: 0 0 auto;
-    color: var(--desc-color);
+    height: 30px;
+    padding: 0 9px;
+    gap: 4px;
+    border: 1px solid var(--surface-border-color);
+    border-radius: 9px;
+    color: var(--resource-note-color, #00a884);
+    background: var(--card-background);
     font-size: 12px;
   }
 

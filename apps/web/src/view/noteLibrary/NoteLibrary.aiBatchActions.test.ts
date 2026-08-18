@@ -21,6 +21,10 @@ const noteLibrarySidebarSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteLibrarySidebar.vue'),
   'utf8',
 );
+const noteDirectoryDrawerSource = readFileSync(
+  resolve(process.cwd(), 'src/components/noteLibrary/tree/NoteDirectoryDrawer.vue'),
+  'utf8',
+);
 const mobilePageListSource = readFileSync(
   resolve(process.cwd(), 'src/components/noteLibrary/workspace/NoteMobilePageLevelList.vue'),
   'utf8',
@@ -320,6 +324,23 @@ describe('笔记库页面树交互接线', () => {
     expect(source).toContain("{ key: 'attach', label: t('note.addExistingPages')");
     expect(source).toContain('<NoteAttachPagesModal');
     expect(source).toContain('@attach="openAttachPages"');
+  });
+
+  it('桌面与移动目录菜单都把目标页面交给统一分享弹窗', () => {
+    expect(treeRowSource).toContain("key: 'share'");
+    expect(treeRowSource).toContain("label: t('noteShare.shareAction')");
+    expect(noteLibrarySidebarSource).toContain('@share="emit(\'share\', $event)"');
+    expect(noteDirectoryDrawerSource).toContain("key: 'share'");
+    expect(mobilePageListSource).toContain("key: 'share'");
+    expect(mobileNavigationDrawerSource).toContain('@share="forwardPageAction(\'share\', $event)"');
+    expect(source).toContain('@share="openNoteShare"');
+    expect(detailSource).toContain('@share="openNoteShare"');
+    expect(detailSource).toContain(':note="activeShareNote"');
+  });
+
+  it('只读预览的子页面数量复用目录浏览行为', () => {
+    expect(readonlyPreviewSource).toContain('@click="emit(\'browseChildren\')"');
+    expect(source).toContain('@browse-children="selectDirectory(previewNoteId)"');
   });
 
   it('目录菜单支持置顶切换，卡片和列表把标签与层级信息放在稳定区域', () => {

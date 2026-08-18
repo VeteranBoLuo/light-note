@@ -34,9 +34,10 @@
           />
           <span class="todo-item__selection-title">{{ item.title }}</span>
         </div>
-        <div v-if="startLabel || item.dueAt" class="todo-item__meta">
+        <div v-if="startLabel || item.dueAt || occurrenceLabel" class="todo-item__meta">
           <span v-if="startLabel" class="todo-start-label">{{ startLabel }}</span>
           <span v-if="item.dueAt" :class="{ overdue }">{{ dueLabel }}</span>
+          <span v-if="occurrenceLabel" class="todo-start-label">{{ occurrenceLabel }}</span>
         </div>
         <div class="todo-item__chips">
           <span class="todo-priority" :class="`is-priority-${item.priority}`">{{ priorityLabel }}</span>
@@ -90,9 +91,12 @@
             <span v-if="hiddenResourceRefCount" class="todo-resource-more">+{{ hiddenResourceRefCount }}</span>
           </div>
         </section>
-        <section v-if="reminderLabel" class="todo-reminder-summary">
+        <section v-if="reminderLabel" class="todo-reminder-summary" :class="{ 'is-past': pastReminderLabel }">
           <strong>{{ reminderLabel }}</strong>
           <span v-if="nextReminderLabel">{{ t('inbox.todoNextReminder', { time: nextReminderLabel }) }}</span>
+          <span v-else-if="pastReminderLabel" class="todo-reminder-summary__past">
+            {{ t('inbox.todoPastReminder', { time: pastReminderLabel }) }}
+          </span>
         </section>
       </div>
       <!-- 已完成待办的右侧操作只保留删除；恢复仍通过标题前的勾选框完成。 -->
@@ -222,7 +226,13 @@
   import { useRouter } from 'vue-router';
   import type { TodoChecklistItem, TodoItem, TodoPriority, TodoResourceRefView } from '@/api/todoApi';
   import { resolveResourceRoute } from '@/utils/resourceNavigation';
-  import { formatTodoDateTime, parseTodoDate, type TodoSnoozePreset } from '@/utils/todoPlanning';
+  import {
+    formatTodoDateTime,
+    normalizeTodoDateOnly,
+    parseTodoDate,
+    todoPastReminderAt,
+    type TodoSnoozePreset,
+  } from '@/utils/todoPlanning';
   import icon from '@/config/icon';
 
   const props = defineProps<{
@@ -294,6 +304,18 @@
     });
     return value ? t('inbox.todoStarts', { time: value }) : '';
   });
+  const occurrenceLabel = computed(() => {
+    if (props.item.startAt || props.item.dueAt || !props.item.occurrenceDate) return '';
+    const date = normalizeTodoDateOnly(props.item.occurrenceDate);
+    if (!date) return '';
+    const value = formatTodoDateTime(`${date} 00:00:00`, locale.value, {
+      relative: true,
+      includeYear: false,
+      includeTime: false,
+      relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+    });
+    return value ? t('inbox.todoScheduledDate', { time: value }) : '';
+  });
   const reminderLabel = computed(() => {
     const reminder = props.item.reminder;
     if (!reminder) return '';
@@ -347,6 +369,15 @@
     const nextAt = (reminder && 'nextAt' in reminder ? reminder.nextAt : null) || props.item.reminderAt || null;
     if (!nextAt) return '';
     return formatTodoDateTime(nextAt, locale.value, {
+      relative: true,
+      includeYear: false,
+      relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
+    });
+  });
+  const pastReminderLabel = computed(() => {
+    const reminderAt = todoPastReminderAt(props.item);
+    if (!reminderAt) return '';
+    return formatTodoDateTime(reminderAt, locale.value, {
       relative: true,
       includeYear: false,
       relativeLabels: { today: t('inbox.todoToday'), tomorrow: t('inbox.todoTomorrow') },
@@ -812,6 +843,15 @@
   .todo-reminder-summary strong {
     color: var(--text-color);
     font-size: 12px;
+    font-weight: 650;
+  }
+  .todo-reminder-summary.is-past {
+    border: 1px solid var(--chip-pending-border);
+    border-left: 3px solid var(--warning-color);
+    background: var(--chip-pending-bg);
+  }
+  .todo-reminder-summary__past {
+    color: var(--chip-pending-fg);
     font-weight: 650;
   }
 

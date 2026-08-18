@@ -39,6 +39,7 @@
     createGithubAuthorizationUrl,
     rememberGithubOAuthFlow,
   } from '@/utils/githubOAuth.ts';
+  import { clearQuickSaveAuthReturnPath, resolveQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
   import { bookmarkStore, useUserStore } from '@/store';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
 
@@ -161,7 +162,9 @@
           // OAuth 已成功时，偏好恢复失败也不能把用户送回官网；应用页会再次恢复会话。
         }
         if (disposed) return;
-        await router.replace(getAuthenticatedEntryPath(finalPrefs));
+        const quickSaveReturnPath = resolveQuickSaveAuthReturnPath();
+        await router.replace(quickSaveReturnPath || getAuthenticatedEntryPath(finalPrefs));
+        if (quickSaveReturnPath) clearQuickSaveAuthReturnPath();
       } else {
         const failureMessage = cRes.msg || t('auth.githubCallbackFailed');
         message.error(failureMessage);

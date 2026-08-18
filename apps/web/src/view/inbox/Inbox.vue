@@ -107,7 +107,7 @@
             @change="changeTodoStatus"
           />
           <BSelect
-            v-if="todo.items.length || pageLoading"
+            v-if="showTodoSort && (todo.items.length || pageLoading)"
             class="mobile-todo-sort"
             v-model:value="todo.sort"
             :options="sortOptions"
@@ -140,7 +140,7 @@
               clearable
               @enter="search"
             />
-            <BSelect v-model:value="todo.sort" :options="sortOptions" @change="search" />
+            <BSelect v-if="showTodoSort" v-model:value="todo.sort" :options="sortOptions" @change="search" />
             <BButton
               v-if="todoView === 'list' && !todoSelectionMode && (todo.items.length || pageLoading)"
               size="small"
@@ -338,36 +338,61 @@
             :deleting-id="deletingTodoId"
             @edit="openTodoEditor"
             @delete="confirmDeleteTodo"
+            @range-change="ensureCalendarRange"
           />
           <div v-else-if="isTodoFocused" class="todo-group-list">
             <section v-for="group in todoGroupLists" :key="group.key" class="todo-group">
               <header>
                 <strong>{{ t(`inbox.todoGroups.${group.key}`) }}</strong>
-                <span>{{ group.items.length }}</span>
+                <span>{{ group.count }}</span>
               </header>
               <div class="todo-group__items">
-                <TodoItem
-                  v-for="item in group.items"
-                  :key="item.id"
-                  :item="item"
-                  :selectable="todoSelectionMode"
-                  :selected="selectedTodoIds.includes(item.id)"
-                  :disabled="hasPendingOperation || todoBatchMutating"
-                  :deleting="deletingTodoId === item.id"
-                  :swipe-enabled="bookmark.isMobile"
-                  :swipe-open="openSwipeTodoId === item.id"
-                  @swipe-start="beginTodoSwipe(item.id)"
-                  @update:swipe-open="updateTodoSwipe(item.id, $event)"
-                  @select="toggleTodoSelected(item.id, $event)"
-                  @toggle-complete="toggleTodo(item, $event)"
-                  @update-checklist="updateTodoChecklist(item, $event)"
-                  @edit="openTodoEditor(item)"
-                  @delete="confirmDeleteTodo(item)"
-                  @add-to-calendar="openTodoCalendar(item)"
-                  @snooze="snoozeTodoItem(item, $event)"
-                  @update-priority="updateTodoPriority(item, $event)"
-                  @series-action="handleTodoSeriesAction(item, $event)"
-                />
+                <template v-for="node in group.items" :key="node.key">
+                  <TodoSeriesGroup
+                    v-if="node.kind === 'series'"
+                    :series-id="node.seriesId"
+                    :representative="node.representative"
+                    :items="node.items"
+                    :selectable="todoSelectionMode"
+                    :selected-ids="selectedTodoIds"
+                    :disabled="hasPendingOperation || todoBatchMutating"
+                    :deleting-id="deletingTodoId"
+                    :swipe-enabled="bookmark.isMobile"
+                    :open-swipe-id="openSwipeTodoId"
+                    @swipe-start="beginTodoSwipe"
+                    @update-swipe-open="(item, open) => updateTodoSwipe(item.id, open)"
+                    @select="(item, selected) => toggleTodoSelected(item.id, selected)"
+                    @toggle-complete="toggleTodo"
+                    @update-checklist="updateTodoChecklist"
+                    @edit="openTodoEditor"
+                    @delete="confirmDeleteTodo"
+                    @add-to-calendar="openTodoCalendar"
+                    @snooze="snoozeTodoItem"
+                    @update-priority="updateTodoPriority"
+                    @series-action="handleTodoSeriesAction"
+                  />
+                  <TodoItem
+                    v-else
+                    :item="node.item"
+                    :selectable="todoSelectionMode"
+                    :selected="selectedTodoIds.includes(node.item.id)"
+                    :disabled="hasPendingOperation || todoBatchMutating"
+                    :deleting="deletingTodoId === node.item.id"
+                    :swipe-enabled="bookmark.isMobile"
+                    :swipe-open="openSwipeTodoId === node.item.id"
+                    @swipe-start="beginTodoSwipe(node.item.id)"
+                    @update:swipe-open="updateTodoSwipe(node.item.id, $event)"
+                    @select="toggleTodoSelected(node.item.id, $event)"
+                    @toggle-complete="toggleTodo(node.item, $event)"
+                    @update-checklist="updateTodoChecklist(node.item, $event)"
+                    @edit="openTodoEditor(node.item)"
+                    @delete="confirmDeleteTodo(node.item)"
+                    @add-to-calendar="openTodoCalendar(node.item)"
+                    @snooze="snoozeTodoItem(node.item, $event)"
+                    @update-priority="updateTodoPriority(node.item, $event)"
+                    @series-action="handleTodoSeriesAction(node.item, $event)"
+                  />
+                </template>
               </div>
             </section>
           </div>
@@ -443,6 +468,7 @@
   import Alert from '@/components/base/BasicComponents/BModal/Alert';
   import InboxItem from '@/components/inbox/InboxItem.vue';
   import TodoItem from '@/components/todo/TodoItem.vue';
+  import TodoSeriesGroup from '@/components/todo/TodoSeriesGroup.vue';
   import TodoEditorModal from '@/components/todo/TodoEditorModal.vue';
   import TodoCalendarModal from '@/components/todo/TodoCalendarModal.vue';
   import TodoMatrixView from '@/components/todo/TodoMatrixView.vue';
@@ -469,6 +495,7 @@
   } from '@/api/todoApi';
   import {
     deleteTodoPlanV2,
+    ensureTodoCalendarRangeV2,
     pauseTodoSeriesV2,
     resumeTodoSeriesV2,
     skipTodoInstanceV2,
@@ -479,6 +506,7 @@
   import { useAndroidPullRefresh } from '@/composables/useAndroidPullRefresh';
   import { useForegroundRefresh } from '@/composables/useForegroundRefresh';
   import { todoGroupKey, todoSnoozeAt, type TodoGroupKey, type TodoSnoozePreset } from '@/utils/todoPlanning';
+  import { buildTodoListNodes, type TodoListNode } from '@/utils/todoSeriesGrouping';
   import { updatePreference } from '@/utils/savePreference';
   import { generateUUID } from '@/utils/common';
   import icon from '@/config/icon';
@@ -516,8 +544,9 @@
   const todoBatchMutating = ref(false);
   const todoUndo = ref<{ kind: 'complete' | 'delete'; ids: string[] } | null>(null);
   const todoUndoing = ref(false);
-  const todoGroupLists = ref<Array<{ key: TodoGroupKey; items: TodoItemType[] }>>([]);
+  const todoGroupLists = ref<Array<{ key: TodoGroupKey; count: number; items: TodoListNode[] }>>([]);
   let todoUndoTimer = 0;
+  const ensuredCalendarRanges = new Set<string>();
   const scrollContainer = ref<HTMLElement | null>(null);
   const showTopFade = ref(false);
   const showBottomFade = ref(false);
@@ -633,17 +662,19 @@
     inbox.filterType === 'todo'
       ? [
           { label: t('inbox.todoSmartSort'), value: 'smart' },
-          { label: t('inbox.todoDueSort'), value: 'due' },
+          { label: t('inbox.todoActionSort'), value: 'action' },
+          { label: t('inbox.todoPrioritySort'), value: 'priority' },
           { label: t('inbox.newest'), value: 'newest' },
-          { label: t('inbox.oldest'), value: 'oldest' },
         ]
       : [
           { label: t('inbox.newest'), value: 'newest' },
           { label: t('inbox.oldest'), value: 'oldest' },
         ],
   );
+  const showTodoSort = computed(() => todoView.value === 'list' && todo.status !== 'completed');
   function applyDefaultTodoSort() {
-    todo.sort = 'due';
+    const validSorts: TodoSort[] = ['smart', 'action', 'priority', 'newest'];
+    if (!validSorts.includes(todo.sort)) todo.sort = 'smart';
   }
   // 桌面与移动端共用的待办状态切换页签(未完成/已完成/全部)。
   const todoStatusTabOptions = computed<Array<{ key: TodoFilterStatus; label: string; badge?: number }>>(() => [
@@ -676,6 +707,7 @@
       todoView.value = normalizeTodoView(user.preferences.todoView);
       inbox.resetForOwner(id || 'visitor');
       todo.resetForOwner(id || 'visitor');
+      ensuredCalendarRanges.clear();
       resourceSelectionMode.value = false;
       syncRequestedMobileMode();
       if (isTodoFocused.value) applyDefaultTodoSort();
@@ -919,6 +951,22 @@
     updateScrollFade();
     return refreshed;
   }
+  async function ensureCalendarRange(range: { startDate: string; endDate: string }) {
+    if (!user.id || todoView.value !== 'calendar') return;
+    const key = `${range.startDate}:${range.endDate}`;
+    if (ensuredCalendarRanges.has(key)) return;
+    ensuredCalendarRanges.add(key);
+    try {
+      const response = await ensureTodoCalendarRangeV2(range.endDate);
+      if (response?.status !== 200) throw new Error(response?.msg || 'calendar range failed');
+      if (Number(response?.data?.createdCount || 0) > 0) {
+        await todo.refreshList({ status: 'all', preserveStatus: true, silent: true });
+      }
+    } catch {
+      ensuredCalendarRanges.delete(key);
+      message.warning(t('inbox.todoCalendarRangeFailed'));
+    }
+  }
   function syncTodoGroups() {
     const keys: TodoGroupKey[] =
       todo.status === 'completed'
@@ -926,12 +974,17 @@
         : todo.status === 'all'
           ? ['overdue', 'today', 'upcoming', 'later', 'noDate', 'completed']
           : ['overdue', 'today', 'upcoming', 'later', 'noDate'];
+    const nodes = buildTodoListNodes(todo.items);
     todoGroupLists.value = keys
       .map((key) => ({
         key,
-        items: todo.items.filter((item) => todoGroupKey(item) === key),
+        items: nodes.filter((node) => todoGroupKey(node.kind === 'series' ? node.representative : node.item) === key),
       }))
-      .filter((group) => group.items.length > 0);
+      .map((group) => ({
+        ...group,
+        count: group.items.reduce((total, node) => total + (node.kind === 'series' ? node.items.length : 1), 0),
+      }))
+      .filter((group) => group.count > 0);
     selectedTodoIds.value = selectedTodoIds.value.filter((id) => todo.items.some((item) => item.id === id));
   }
   async function updateTodoPriority(item: TodoItemType, priority: TodoPriority) {
@@ -1566,6 +1619,10 @@
   .todo-group__items :deep(.todo-item:last-child) {
     border-bottom: 0;
   }
+  .todo-group__items :deep(.todo-series-group) {
+    border: 0;
+    border-radius: 0;
+  }
   .inbox-hero h1 {
     min-width: 0;
     margin: 0;
@@ -2056,6 +2113,22 @@
       border-left-color: var(--danger-color, #d83c45);
     }
     .inbox-page--mobile-todo .todo-group__items :deep(.todo-item.is-completed) {
+      border-left-color: var(--success-color, #00a884);
+    }
+    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group) {
+      border: 1px solid var(--surface-border-color);
+      border-radius: 17px;
+    }
+    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item) {
+      border: 0;
+      border-bottom: 1px solid var(--surface-divider-color);
+      border-left: 4px solid var(--todo-accent-color, var(--primary-color));
+      border-radius: 0;
+    }
+    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item.is-overdue) {
+      border-left-color: var(--danger-color, #d83c45);
+    }
+    .inbox-page--mobile-todo .todo-group__items :deep(.todo-series-group .todo-item.is-completed) {
       border-left-color: var(--success-color, #00a884);
     }
     .inbox-page--mobile-todo .todo-group > header {

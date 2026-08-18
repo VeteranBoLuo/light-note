@@ -32,6 +32,7 @@
         @move="forwardPageAction('move', $event)"
         @rename="forwardPageAction('rename', $event)"
         @copy-link="forwardPageAction('copyLink', $event)"
+        @share="forwardPageAction('share', $event)"
         @delete="forwardPageAction('delete', $event)"
       />
       <Catalog
@@ -86,6 +87,7 @@
     move: [node: NoteTreeItem];
     rename: [node: NoteTreeItem];
     copyLink: [node: NoteTreeItem];
+    share: [node: NoteTreeItem];
     delete: [node: NoteTreeItem];
   }>();
   const { t } = useI18n();
@@ -103,7 +105,7 @@
   }
 
   async function forwardPageAction(
-    action: 'create' | 'attach' | 'toggleTop' | 'move' | 'rename' | 'copyLink' | 'delete',
+    action: 'create' | 'attach' | 'toggleTop' | 'move' | 'rename' | 'copyLink' | 'share' | 'delete',
     node: NoteTreeItem,
   ) {
     await closeCurrentMobileOverlayThen(

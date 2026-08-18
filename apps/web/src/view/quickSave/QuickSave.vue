@@ -88,6 +88,7 @@
   import { recordOperation } from '@/api/commonApi.ts';
   import { OPERATION_LOG_MAP } from '@/config/logMap.ts';
   import { preflightBookmarkUrl } from '@/composables/useBookmarkUrlResolution';
+  import { rememberQuickSaveAuthReturnPath } from '@/utils/quickSaveAuthReturn.ts';
 
   const { t } = useI18n();
   const MAX_TAGS = 4; // 与后端 addBookmark 上限一致
@@ -129,8 +130,9 @@
     window.close();
   }
   function goLogin() {
-    // 记住回跳目标,登录后可手动再点收藏(或返回此页)
-    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname + window.location.search);
+    const returnPath = window.location.pathname + window.location.search + window.location.hash;
+    rememberQuickSaveAuthReturnPath(returnPath);
+    window.location.href = '/login?redirect=' + encodeURIComponent(returnPath);
   }
 
   async function loadTags() {

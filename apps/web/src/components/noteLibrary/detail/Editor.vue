@@ -144,13 +144,13 @@
               :locale="currentLang"
               @update:model-value="onMdInput"
               @scroll="syncMdScroll('edit')"
-              @keydown="onMarkdownMentionKeydown"
+              @keydown="onMarkdownEditorKeydown"
               @command="runMarkdownToolbarAction"
-              @selection-change="syncOrOpenMarkdownMention"
+              @selection-change="syncMarkdownInlineMenus"
               @history-change="markdownHistoryState = $event"
               @ready="handleMarkdownRuntimeReady"
               @paste="onMarkdownPaste"
-              @blur="closeInlineMention"
+              @blur="closeEditorInlineMenus"
               :readonly="readonly"
               :placeholder="$t('note.mdPlaceholder')"
             />
@@ -244,6 +244,26 @@
             </BButton>
           </div>
         </div>
+      </template>
+    </BPopover>
+    <BPopover
+      v-if="!readonly"
+      v-model:open="slashCommandVisible"
+      class="editor-slash-command-anchor"
+      :style="slashCommandAnchorStyle"
+      trigger="manual"
+      placement="bottom-left"
+      overlay-class-name="editor-slash-command-popover"
+    >
+      <span aria-hidden="true"></span>
+      <template #content>
+        <EditorSlashCommandMenu
+          ref="slashCommandMenuRef"
+          :commands="slashCommands"
+          :keyword="slashCommandQuery"
+          :code-languages="currentType === 'markdown' ? SLASH_CODE_LANGUAGES : []"
+          @select="applySlashCommand"
+        />
       </template>
     </BPopover>
     <BPopover
@@ -722,6 +742,7 @@
   } from '@/utils/markdownEditing.ts';
   import { configureMarkdownRenderer } from '@/utils/markdownRenderer.ts';
   import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
+  import EditorSlashCommandMenu, { type EditorSlashCommand } from './EditorSlashCommandMenu.vue';
   import { useDismissOnOutside } from '@/composables/useDismissOnOutside';
   import {
     normalizeMarkdownTaskListHtml,
@@ -741,6 +762,7 @@
   } from '@/utils/contentImageSize.ts';
   import { recordOperation } from '@/api/commonApi.ts';
   import { resolveMentionQuery } from '@/utils/resourceMentionTrigger';
+  import { resolveSlashCommandQuery } from '@/utils/editorSlashCommand';
   import {
     applyResourceReferenceChipPresentation,
     buildResourceAnchorAttrs,
@@ -821,6 +843,10 @@
     { value: 'cpp', text: 'C++' },
     { value: 'sql', text: 'SQL' },
   ];
+  const SLASH_CODE_LANGUAGES = CODE_LANGUAGES.map((language) => ({
+    value: language.value,
+    label: language.text,
+  }));
 
   const props = defineProps({
     value: {
@@ -1151,6 +1177,15 @@
   let dompurifyLib: any = null;
   const mentionPickerVisible = ref(false);
   const inlineMentionVisible = ref(false);
+  const slashCommandVisible = ref(false);
+  const slashCommandQuery = ref('');
+  const slashCommandAnchorStyle = ref<Record<string, string>>({});
+  const slashCommandMenuRef = ref<{
+    moveActive: (offset: number) => void;
+    chooseActive: () => void;
+    handleEscape: () => boolean;
+    reset: () => void;
+  } | null>(null);
   // 搜不到结果就不弹出;面板仍挂载继续搜,退回能匹配的词时自动重现
   const inlineMentionHasResults = ref(false);
   const inlineMentionQuery = ref('');
@@ -1164,6 +1199,88 @@
   const inlineMentionSuggestionsRef = ref<{ moveActive: (offset: number) => void; chooseActive: () => void } | null>(
     null,
   );
+  const slashCommands = computed<EditorSlashCommand[]>(() => [
+    {
+      key: 'paragraph',
+      label: t('noteDetail.editor.slash.commands.paragraph.label'),
+      description: t('noteDetail.editor.slash.commands.paragraph.description'),
+      keywords: ['text', 'paragraph', '正文', '文本'],
+      icon: icon.noteDetail.toolbar.heading,
+      group: 'basic',
+    },
+    ...([1, 2, 3] as const).map((level) => ({
+      key: `heading${level}`,
+      label: t(`noteDetail.editor.slash.commands.heading${level}.label`),
+      description: t(`noteDetail.editor.slash.commands.heading${level}.description`),
+      keywords: [`h${level}`, `heading ${level}`, `标题${level}`],
+      icon: icon.noteDetail.toolbar.heading,
+      group: 'basic' as const,
+      syntax: '#'.repeat(level),
+    })),
+    {
+      key: 'bulletList',
+      label: t('noteDetail.editor.slash.commands.bulletList.label'),
+      description: t('noteDetail.editor.slash.commands.bulletList.description'),
+      keywords: ['bullet', 'list', '无序', '列表'],
+      icon: icon.noteDetail.toolbar.bulletList,
+      group: 'list',
+      syntax: '-',
+    },
+    {
+      key: 'orderedList',
+      label: t('noteDetail.editor.slash.commands.orderedList.label'),
+      description: t('noteDetail.editor.slash.commands.orderedList.description'),
+      keywords: ['ordered', 'numbered', '有序', '编号'],
+      icon: icon.noteDetail.toolbar.orderedList,
+      group: 'list',
+      syntax: '1.',
+    },
+    {
+      key: 'todo',
+      label: t('noteDetail.editor.slash.commands.todo.label'),
+      description: t('noteDetail.editor.slash.commands.todo.description'),
+      keywords: ['todo', 'task', '待办', '任务'],
+      icon: icon.noteDetail.toolbar.todo,
+      group: 'list',
+      syntax: '- [ ]',
+    },
+    {
+      key: 'quote',
+      label: t('noteDetail.editor.slash.commands.quote.label'),
+      description: t('noteDetail.editor.slash.commands.quote.description'),
+      keywords: ['quote', 'blockquote', '引用'],
+      icon: icon.noteDetail.toolbar.quote,
+      group: 'block',
+      syntax: '>',
+    },
+    {
+      key: 'insertCodeBlock',
+      label: t('noteDetail.editor.slash.commands.codeBlock.label'),
+      description: t('noteDetail.editor.slash.commands.codeBlock.description'),
+      keywords: ['code', 'highlight', '代码', '高亮'],
+      icon: icon.noteDetail.toolbar.codeBlock,
+      group: 'block',
+      syntax: '```',
+    },
+    {
+      key: 'insertDivider',
+      label: t('noteDetail.editor.slash.commands.divider.label'),
+      description: t('noteDetail.editor.slash.commands.divider.description'),
+      keywords: ['divider', 'separator', '分割线'],
+      icon: icon.noteDetail.toolbar.divider,
+      group: 'insert',
+      syntax: '---',
+    },
+    {
+      key: 'insertTable',
+      label: t('noteDetail.editor.slash.commands.table.label'),
+      description: t('noteDetail.editor.slash.commands.table.description'),
+      keywords: ['table', 'grid', '表格'],
+      icon: icon.noteDetail.toolbar.table,
+      group: 'insert',
+      syntax: '|',
+    },
+  ]);
   let lastPublishedResourceRefSignature = '';
 
   function resourcePresentationOptions(liveEditor = false) {
@@ -1732,6 +1849,7 @@
     },
     { flush: 'sync' },
   );
+  watch([currentType, () => props.readonly], () => closeEditorInlineMenus());
   watch(
     () => props.readonly,
     (readonly) => {
@@ -1748,7 +1866,11 @@
     markerId: string | null;
     text: string;
   };
+  type InlineSlashRange = { start: number; end: number };
+  type HtmlSlashSelection = { range: Range; text: string };
   let markdownMentionRange: MarkdownMentionRange | null = null;
+  let markdownSlashRange: InlineSlashRange | null = null;
+  let htmlSlashSelection: HtmlSlashSelection | null = null;
   // 弹窗会把焦点从 TinyMCE iframe 移走。临时锚点放在完整 @查询 前面，
   // 让恢复逻辑能重新精确选中待替换文本，而不是仅凭已经可能漂移的 Range/bookmark 猜位置。
   let htmlMentionSelection: HtmlMentionSelection | null = null;
@@ -1926,6 +2048,168 @@
     };
   }
 
+  function setSlashCommandAnchor(rect: Pick<DOMRect, 'top' | 'left' | 'height'>) {
+    const zoom = getRootZoom();
+    slashCommandAnchorStyle.value = {
+      position: 'fixed',
+      left: `${rect.left / zoom}px`,
+      top: `${rect.top / zoom}px`,
+      width: '1px',
+      height: `${(Math.max(rect.height, 18) + 6) / zoom}px`,
+      pointerEvents: 'none',
+    };
+  }
+
+  let dismissedSlashSignature = '';
+
+  function closeSlashCommand(options?: { dismissed?: boolean }) {
+    if (options?.dismissed && markdownSlashRange) {
+      dismissedSlashSignature = `${markdownSlashRange.start}:${markdownSlashRange.end}`;
+    }
+    slashCommandVisible.value = false;
+    slashCommandQuery.value = '';
+    markdownSlashRange = null;
+    htmlSlashSelection = null;
+    slashCommandMenuRef.value?.reset();
+  }
+
+  function closeEditorInlineMenus() {
+    closeInlineMention();
+    closeSlashCommand();
+  }
+
+  function syncOrOpenMarkdownSlashCommand() {
+    if (props.readonly || currentType.value !== 'markdown' || mdView.value === 'preview') return false;
+    const markdownEditor = mdCodeMirrorRef.value;
+    if (!markdownEditor) return false;
+    const selection = markdownEditor.getSelection();
+    if (selection.from !== selection.to) {
+      closeSlashCommand();
+      return false;
+    }
+    const query = resolveSlashCommandQuery(markdownEditor.getValue(), selection.to);
+    if (!query) {
+      dismissedSlashSignature = '';
+      closeSlashCommand();
+      return false;
+    }
+    const signature = `${query.start}:${query.end}`;
+    if (dismissedSlashSignature === signature) return false;
+    dismissedSlashSignature = '';
+    markdownSlashRange = { start: query.start, end: query.end };
+    slashCommandQuery.value = query.keyword;
+    const anchorRect = markdownEditor.coordsAtPos(query.start);
+    if (anchorRect) setSlashCommandAnchor(anchorRect);
+    if (inlineMentionVisible.value) closeInlineMention();
+    slashCommandVisible.value = true;
+    return true;
+  }
+
+  function syncMarkdownInlineMenus() {
+    if (syncOrOpenMarkdownSlashCommand()) return;
+    syncOrOpenMarkdownMention();
+  }
+
+  function getTinyMceSlashContext(editor: any) {
+    const range = editor.selection?.getRng?.() as Range | null;
+    if (!range?.collapsed || range.startContainer.nodeType !== Node.TEXT_NODE) return null;
+    if (editor.dom?.getParent?.(range.startContainer, 'pre,code,a')) return null;
+    const block = editor.dom?.getParent?.(range.startContainer, 'p,div,li,blockquote') as HTMLElement | null;
+    if (!block) return null;
+    try {
+      const before = editor.dom.createRng();
+      before.selectNodeContents(block);
+      before.setEnd(range.startContainer, range.startOffset);
+      const textBefore = before.toString();
+      const query = resolveSlashCommandQuery(textBefore, textBefore.length);
+      if (!query) return null;
+      const replacementLength = textBefore.length - query.start;
+      // 跨格式节点时无法安全构造单一文本 Range，保守放弃，避免误删相邻内容。
+      if (replacementLength < 1 || range.startOffset < replacementLength) return null;
+      const replacementRange = range.cloneRange();
+      replacementRange.setStart(range.startContainer, range.startOffset - replacementLength);
+      return { query, replacementRange };
+    } catch {
+      return null;
+    }
+  }
+
+  function syncTinyMceSlashCommand(editor: any) {
+    if (props.readonly || currentType.value !== 'html') return closeSlashCommand();
+    const context = getTinyMceSlashContext(editor);
+    if (!context) return closeSlashCommand();
+    htmlSlashSelection = { range: context.replacementRange, text: context.replacementRange.toString() };
+    slashCommandQuery.value = context.query.keyword;
+    const anchorRange = context.replacementRange.cloneRange();
+    anchorRange.collapse(true);
+    const rect = anchorRange.getBoundingClientRect();
+    setSlashCommandAnchor({ left: rect.left, top: rect.top, height: rect.height || 20 });
+    if (inlineMentionVisible.value) closeInlineMention();
+    slashCommandVisible.value = true;
+  }
+
+  function markdownSlashReplacement(command: EditorSlashCommand) {
+    if (command.key === 'paragraph') return { text: '', caretOffset: 0 };
+    if (/^heading[1-3]$/u.test(command.key)) {
+      const prefix = `${'#'.repeat(Number(command.key.slice(-1)))} `;
+      return { text: prefix, caretOffset: prefix.length };
+    }
+    const prefixes: Record<string, string> = {
+      bulletList: '- ',
+      orderedList: '1. ',
+      todo: '- [ ] ',
+      quote: '> ',
+    };
+    if (prefixes[command.key]) return { text: prefixes[command.key], caretOffset: prefixes[command.key].length };
+    if (command.key === 'insertCodeBlock') {
+      const text = `${buildCodeBlock(command.language || 'plaintext')}\n`;
+      return { text, caretOffset: text.indexOf('\n') + 1 };
+    }
+    if (command.key === 'insertDivider') return { text: '---\n', caretOffset: 4 };
+    if (command.key === 'insertTable') {
+      const text = `${buildMarkdownTable([
+        t('note.mdTableColumn', { index: 1 }),
+        t('note.mdTableColumn', { index: 2 }),
+      ])}\n`;
+      return { text, caretOffset: text.length };
+    }
+    return null;
+  }
+
+  function applyMarkdownSlashCommand(command: EditorSlashCommand) {
+    const editor = mdCodeMirrorRef.value;
+    const range = markdownSlashRange;
+    const replacement = markdownSlashReplacement(command);
+    if (!editor || !range || !replacement) return;
+    const caret = range.start + replacement.caretOffset;
+    editor.replaceRange(range.start, range.end, replacement.text, caret, caret);
+    closeSlashCommand();
+  }
+
+  function applyRichSlashCommand(command: EditorSlashCommand) {
+    const editor = editorRef.value;
+    const selection = htmlSlashSelection;
+    if (!editor || !selection || !rangeBelongsToTinyMce(editor, selection.range)) return closeSlashCommand();
+    editor.focus();
+    try {
+      editor.selection.setRng(selection.range);
+      editor.undoManager.transact(() => editor.selection.setContent(''));
+    } catch {
+      closeSlashCommand();
+      return;
+    }
+    closeSlashCommand();
+    if (command.key === 'insertCodeBlock') return editor.execCommand('codesample');
+    if (command.key === 'insertTable') return editor.execCommand('mceInsertTableDialog');
+    if (command.key === 'insertDivider') return editor.insertContent('<hr><p></p>');
+    runRichToolbarAction(command.key, { remember: false });
+  }
+
+  function applySlashCommand(command: EditorSlashCommand) {
+    if (currentType.value === 'markdown') applyMarkdownSlashCommand(command);
+    else applyRichSlashCommand(command);
+  }
+
   /*
    * 用户主动关掉浮层(Esc / 点外面)后,这个 @ 的位置要记下来。
    * 否则 CodeMirror 里的 @ 还在,下一次选区更新又会把它当成「正在提及」重新弹出来 ——
@@ -1956,6 +2240,18 @@
     onDismiss: () => closeInlineMention({ dismissed: true }),
   });
 
+  useDismissOnOutside({
+    isActive: () => slashCommandVisible.value,
+    ignoreSelectors: [
+      '.editor-slash-command-popover',
+      '.md-textarea',
+      '.note-editor-body',
+      '.mce-content-body',
+      '.tox-edit-area',
+    ],
+    onDismiss: () => closeSlashCommand({ dismissed: true }),
+  });
+
   function closeMentionPicker() {
     mentionPickerVisible.value = false;
     markdownMentionRange = null;
@@ -1968,7 +2264,13 @@
    * 必须把字删到只剩 @ 才能重新唤起;改用通用解析后,退回到能匹配的词即可重现。
    */
   function syncOrOpenMarkdownMention() {
-    if (!canEditResourceMentions.value || mentionPickerVisible.value || currentType.value !== 'markdown') return;
+    if (
+      !canEditResourceMentions.value ||
+      mentionPickerVisible.value ||
+      slashCommandVisible.value ||
+      currentType.value !== 'markdown'
+    )
+      return;
     const markdownEditor = mdCodeMirrorRef.value;
     if (!markdownEditor) return;
     const selection = markdownEditor.getSelection();
@@ -1999,7 +2301,13 @@
   }
 
   function tryOpenTinyMceMention(editor: any) {
-    if (!canEditResourceMentions.value || mentionPickerVisible.value || inlineMentionVisible.value) return;
+    if (
+      !canEditResourceMentions.value ||
+      mentionPickerVisible.value ||
+      inlineMentionVisible.value ||
+      slashCommandVisible.value
+    )
+      return;
     const range = editor.selection?.getRng?.() as Range | null;
     if (!range?.collapsed || range.startContainer.nodeType !== Node.TEXT_NODE || range.startOffset < 1) return;
     if (editor.dom?.getParent?.(range.startContainer, 'pre,code,a')) return;
@@ -2052,7 +2360,7 @@
     }
   }
 
-  function onMarkdownMentionKeydown(event: KeyboardEvent) {
+  function onMarkdownEditorKeydown(event: KeyboardEvent) {
     const isRedo =
       !event.isComposing &&
       (event.metaKey || event.ctrlKey) &&
@@ -2062,7 +2370,24 @@
       mdCodeMirrorRef.value?.redo();
       return;
     }
-    if (!inlineMentionVisible.value || event.isComposing) return;
+    if (event.isComposing) return;
+    if (slashCommandVisible.value) {
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        slashCommandMenuRef.value?.moveActive(1);
+      } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        slashCommandMenuRef.value?.moveActive(-1);
+      } else if (event.key === 'Enter') {
+        event.preventDefault();
+        slashCommandMenuRef.value?.chooseActive();
+      } else if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!slashCommandMenuRef.value?.handleEscape()) closeSlashCommand({ dismissed: true });
+      }
+      return;
+    }
+    if (!inlineMentionVisible.value) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       inlineMentionSuggestionsRef.value?.moveActive(1);
@@ -2235,7 +2560,7 @@
     content.value = val;
     debounceRenderMd();
     void nextTick().then(() => {
-      syncOrOpenMarkdownMention();
+      syncMarkdownInlineMenus();
     });
   }
 
@@ -3334,7 +3659,7 @@
     if (key === 'insertImage') return openRichImageInsert();
     if (key === 'insertMediaText') return openRichMediaTextInsert();
     if (key === 'insertResource') return openRichResourceMentionPicker(editor);
-    if (key === 'insertCodeBlock') return editor.execCommand('FormatBlock', false, 'pre');
+    if (key === 'insertCodeBlock') return editor.execCommand('codesample');
     if (key.startsWith('insertDiagram:')) return insertHtmlDiagramTemplate(editor, key.slice('insertDiagram:'.length));
     if (key === 'insertDivider') return editor.insertContent('<hr><p></p>');
     if (key === 'insertEmoji') return editor.execCommand('mceEmoticons');
@@ -4672,6 +4997,8 @@
         refreshResourceReferences();
         window.setTimeout(() => decorateRichMediaTextCaptions(editor), 0);
         window.setTimeout(() => {
+          syncTinyMceSlashCommand(editor);
+          if (slashCommandVisible.value) return;
           if (inlineMentionVisible.value) syncTinyMceInlineMention(editor);
           else tryOpenTinyMceMention(editor);
           // 浮层已收起但仍处在 @ 上下文时,上面的 tryOpen 会重新唤起
@@ -4701,6 +5028,26 @@
             event.preventDefault();
             event.stopImmediatePropagation();
             closeRichFind();
+            return;
+          }
+          if (slashCommandVisible.value && !event.isComposing) {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              slashCommandMenuRef.value?.moveActive(1);
+            } else if (event.key === 'ArrowUp') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              slashCommandMenuRef.value?.moveActive(-1);
+            } else if (event.key === 'Enter') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              slashCommandMenuRef.value?.chooseActive();
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              if (!slashCommandMenuRef.value?.handleEscape()) closeSlashCommand({ dismissed: true });
+            }
             return;
           }
           if (!inlineMentionVisible.value || event.isComposing) return;
@@ -5310,6 +5657,11 @@
      这样从 @test123 退回 @test 能自动重新出现,不必删到只剩 @ */
   .resource-mention-inline-popover.is-empty {
     display: none !important;
+  }
+
+  .editor-slash-command-popover {
+    padding: 0 !important;
+    overflow: hidden;
   }
 
   /* 弹框内的资源选择面板铺满可用宽度,不保留浮层的固定窄宽 */
