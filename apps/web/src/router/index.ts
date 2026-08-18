@@ -137,6 +137,18 @@ export const routes: RouteRecordRaw[] = [
     component: () => import('@/view/auth/callback/GithubCallBack.vue'),
   },
   {
+    meta: {
+      title: '分享笔记',
+      publicStandalone: true,
+      hideAiAssistant: true,
+      seoIndexable: false,
+      mobileTopBar: false,
+    },
+    path: '/share/note',
+    name: 'noteShare',
+    component: () => import('@/view/share/NoteShareReader.vue'),
+  },
+  {
     path: '/share/:token',
     name: 'fileShare',
     component: () => import('@/view/share/ShareDownload.vue'),

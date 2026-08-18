@@ -27,7 +27,11 @@ function destroy() {
   render(null, div);
 }
 function onOk() {
-  modalParams.onOk();
+  modalParams.onOk?.();
+  destroy();
+}
+function onCancel() {
+  modalParams.onCancel?.();
   destroy();
 }
 export default {
@@ -38,6 +42,7 @@ export default {
     cancelText?: string;
     content: string;
     onOk?: any;
+    onCancel?: any;
     footer?: {
       label: string;
       type?: 'primary' | 'dashed' | 'success' | 'danger';
@@ -48,4 +53,5 @@ export default {
   },
   destroy,
   onOk,
+  onCancel,
 };

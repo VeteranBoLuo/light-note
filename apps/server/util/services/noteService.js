@@ -103,6 +103,7 @@ export async function createNote({
   maxContentLength = 1_000_000,
   trustedImageUrls = [],
   idempotencyKey = null,
+  shareExposureAcknowledged = false,
 } = {}) {
   if (!userId) throw new Error('USER_REQUIRED: 缺少用户');
   const type = normalizeNoteType(note.type || 'html');
@@ -154,6 +155,7 @@ export async function createNote({
     const placement = await prepareOwnedNotePlacement(connection, {
       userId,
       parentId: note.parentId ?? null,
+      ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
     });
     data.parent_id = placement.parentId;
     data.sort = placement.sort;

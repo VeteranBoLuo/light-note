@@ -84,6 +84,10 @@ declare(ADMIN_POLICIES.READ, 'note', [
   ['POST', '/note/getNoteVersionDetail'],
   ['POST', '/note/queryNoteTemplates'],
   ['POST', '/note/getNoteTemplateDetail'],
+  ['POST', '/note/share/list'],
+  ['POST', '/note/share/resolve'],
+  ['POST', '/note/share/page'],
+  ['POST', '/note/share/tree'],
   // 导出中转不改用户内容,只把已可读的笔记正文换成一次性下载地址,与 /file/downloadFileById 同属只读
   ['POST', '/note/exportFile'],
   ['GET', '/note/exportFile'],
@@ -109,6 +113,13 @@ declare(ADMIN_POLICIES.CONTENT_WRITE, 'note', [
   ['POST', '/note/addNoteTemplate'],
   ['POST', '/note/updateNoteTemplate'],
   ['POST', '/note/duplicateNoteTemplate'],
+]);
+
+// 公开分享会把私有正文暴露到账号边界之外，不属于管理员内容维护；即使 maintain 也必须由用户本人操作。
+declare(ADMIN_POLICIES.ACCOUNT_WRITE, 'note', [
+  ['POST', '/note/share/create'],
+  ['POST', '/note/share/revoke'],
+  ['POST', '/note/share/rotate'],
 ]);
 
 // 模板为硬删除(轻量可再生数据不接回收站),按不可逆内容操作声明,maintain 模式不予放行

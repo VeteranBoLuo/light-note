@@ -25,7 +25,7 @@
             >
           </slot>
           <template v-else>
-            <BButton class="btn dom-hover" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</BButton>
+            <BButton class="btn dom-hover" @click="cancelAlert">{{ cancelText || $t('common.cancel') }}</BButton>
             <BButton
               class="btn dom-hover"
               :class="{
@@ -62,7 +62,7 @@
             </b-space>
           </slot>
           <b-space v-else>
-            <b-button class="btn" @click="obClose(200)">{{ cancelText || $t('common.cancel') }}</b-button>
+            <b-button class="btn" @click="cancelAlert">{{ cancelText || $t('common.cancel') }}</b-button>
             <b-button class="btn" :type="okType" @click="onOk">{{ okText || $t('common.confirm') }}</b-button>
           </b-space>
         </div>
@@ -132,7 +132,7 @@
     const action = pendingHistoryAction;
     pendingHistoryAction = null;
     if (action) action();
-    else performClose();
+    else bAlert.onCancel();
   }
 
   function runAfterHistory(action: () => void) {
@@ -145,6 +145,10 @@
 
   function obClose(time = 200) {
     runAfterHistory(() => performClose(time));
+  }
+
+  function cancelAlert() {
+    runAfterHistory(() => bAlert.onCancel());
   }
 
   function onOk() {

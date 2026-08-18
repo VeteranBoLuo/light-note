@@ -146,6 +146,14 @@ view/search/
 - 富文本图文并排必须使用 `section.ln-media-text` 受控结构，一张图片对应一个 `figure` 和一个 `figcaption`；禁止用连续图片加 `float` 猜测文字归属。保存前须清理 TinyMCE 临时属性以及图片的浮动、固定宽高和 `data-ln-size`，HTML/Markdown 转换、服务端净化与离线导出必须保留 `data-ln-media-position/data-ln-media-width`。
 - 富文本渐变文字必须保存为 `.ln-text-gradient[data-ln-text-gradient="true"]`，只允许 `--ln-gradient-from`、`--ln-gradient-to` 两个十六进制颜色和枚举角度 `--ln-gradient-angle`；禁止为了渐变重新开放任意 `background`、`background-clip`、阴影或动画内联样式。HTML/Markdown 往返时保留这段受控 raw HTML，服务端净化、站内预览和离线导出必须使用同一协议。
 
+#### 笔记公开分享
+
+- 公开阅读页必须是 `publicStandalone` 路由：不得初始化 `/api/user/me`、AI、编辑器预热、快捷添加、游客引导或私人页面树。公开 API 与页面响应必须使用 `Cache-Control: no-store`、`Referrer-Policy: no-referrer` 和 `X-Robots-Tag: noindex, nofollow, noarchive`。
+- 分享主令牌只能保存摘要；前端复制链接时放在 URL fragment，不得放入 path 或 query。API body 中的 `token`、`accessCode`、`accessTicket` 必须命中统一日志脱敏；任何新日志、埋点、错误或事件表都不得保存原始令牌、访问码、IP 或正文。
+- 首次解析须在锁定分享记录的事务中校验撤销、过期、根页面、访问码和访问次数，读取成功并签发短时 Redis 票据后才增加一次访问计数。后续页面树/正文请求只接受绑定分享 ID、根页面、owner 和范围的票据，并重新校验分享状态；不得信任客户端提交 owner、范围或路径。
+- 目录分享是实时子树而非创建时快照。每次正文与树读取都按同 owner 最新父链确认根页面仍在路径内；分享状态复核、父链校验和正文/子节点读取必须使用同一连接的事务快照，禁止用多次 `pool.query` 留下移出目录时的 TOCTOU 窗口。单篇范围不允许任何后代。创建或移动到有效分享目录必须在同一树事务内检测新增暴露，第一次返回稳定 409，只有客户端二次提交 `shareExposureAcknowledged: true` 才能继续。
+- 公开 HTML/Markdown/手绘读取复用正式笔记读取模型，禁止另写一套弱化净化逻辑。正文内笔记引用通过公开 page API 再验范围；文件、书签和畸形 `lightnote:` 链接一律不跳转到私人资源。
+
 **响应格式：**
 
 ```javascript

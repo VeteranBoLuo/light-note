@@ -605,6 +605,7 @@ describe('页面树写入 handler', () => {
           ],
         ];
       }
+      if (String(sql).includes('FROM note_shares s')) return [[]];
       return [{ affectedRows: 1 }];
     });
     const res = mockRes();
@@ -645,6 +646,7 @@ describe('页面树写入 handler', () => {
           ],
         ];
       }
+      if (String(sql).includes('FROM note_shares s')) return [[]];
       return [{ affectedRows: 1 }];
     });
     const res = mockRes();
