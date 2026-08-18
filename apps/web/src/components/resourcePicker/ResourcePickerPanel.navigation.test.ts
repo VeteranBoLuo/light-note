@@ -34,6 +34,7 @@ describe('ResourcePickerPanel 键盘导航', () => {
         }),
     });
     app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
     app.mount(host);
     cleanup = () => {
       app.unmount();
@@ -68,5 +69,38 @@ describe('ResourcePickerPanel 键盘导航', () => {
     items[1]?.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
     await nextTick();
     expect(items[1]?.classList.contains('is-active')).toBe(true);
+  });
+
+  it('单篇笔记不再显示冗余说明，且单篇与目录范围保持独立禁用状态', async () => {
+    const host = document.createElement('div');
+    document.body.append(host);
+    const app = createApp({
+      render: () =>
+        h(ResourcePickerPanel, {
+          showSearch: false,
+          includeNoteScopes: true,
+          selectedResourceKeys: ['note:note-1'],
+          selectedScopeKeys: [],
+          pinnedItems: [{ type: 'note', id: 'note-1', title: 'pc', path: '开发文档', descendantCount: 0 }],
+        }),
+    });
+    app.use(createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': zhCN } }));
+    app.component('OriginalIcon', { setup: () => () => h('span') });
+    app.mount(host);
+    cleanup = () => {
+      app.unmount();
+      host.remove();
+    };
+    await Promise.resolve();
+    await nextTick();
+
+    const resource = host.querySelector<HTMLButtonElement>(
+      '.resource-picker-panel__item:not(.resource-picker-panel__item--scope)',
+    );
+    const scope = host.querySelector<HTMLButtonElement>('.resource-picker-panel__item--scope');
+    expect(resource?.disabled).toBe(true);
+    expect(scope?.disabled).toBe(false);
+    expect(host.textContent).not.toContain('仅引用这一篇笔记');
+    expect(scope?.textContent).toContain('当前页面及其 0 个子页面');
   });
 });

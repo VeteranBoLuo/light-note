@@ -156,6 +156,7 @@ describe('useCommunityChatSocket', () => {
     socket.message(serverEvent('room.subscribed', { roomSlug: 'general', onlineCount: 3 }));
 
     const pending = mounted.socketState.requestOnlineMembers();
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2));
     const request = JSON.parse(socket.sent.at(-1) || '{}');
     expect(request).toMatchObject({
       protocolVersion: 1,
@@ -187,6 +188,36 @@ describe('useCommunityChatSocket', () => {
     });
 
     await expect(pending).resolves.toMatchObject({ onlineCount: 3, memberCount: 2, guestCount: 1 });
+  });
+
+  it('移动端恢复连接期间请求在线名单会等待订阅完成，不直接进入错误态', async () => {
+    const mounted = await mountSocket();
+    const socket = FakeWebSocket.instances[0];
+    socket.open();
+
+    const pending = mounted.socketState.requestOnlineMembers();
+    expect(socket.sent).toHaveLength(1);
+    expect(JSON.parse(socket.sent[0])).toMatchObject({ type: 'room.subscribe' });
+
+    socket.message(serverEvent('room.subscribed', { roomSlug: 'general', onlineCount: 3 }));
+    await vi.waitFor(() => expect(socket.sent).toHaveLength(2));
+    const request = JSON.parse(socket.sent[1]);
+    expect(request).toMatchObject({ type: 'presence.members.request', payload: {} });
+
+    socket.message({
+      ...serverEvent(
+        'presence.members',
+        {
+          onlineCount: 3,
+          memberCount: 1,
+          guestCount: 2,
+          members: [{ alias: '菠萝', role: 'root', avatar: '', frameId: '' }],
+        },
+        'presence-members-after-reconnect',
+      ),
+      requestId: request.requestId,
+    });
+    await expect(pending).resolves.toMatchObject({ onlineCount: 3, memberCount: 1, guestCount: 2 });
   });
 
   it('按 eventId 去重业务事件，忽略其他房间和无效 JSON', async () => {

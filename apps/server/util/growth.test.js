@@ -227,7 +227,7 @@ describe('成就体系职责', () => {
     const retiredKeys = ['first_checkin', 'first_bookmark', 'first_note', 'first_file'];
     const keys = ACHIEVEMENTS.map((achievement) => achievement.key);
 
-    expect(keys).toHaveLength(35);
+    expect(keys).toHaveLength(39);
     expect(keys).not.toEqual(expect.arrayContaining(retiredKeys));
     expect(ACHIEVEMENTS.filter((achievement) => achievement.target === 1)).toEqual([
       expect.objectContaining({ key: 'streak_1', metric: 'maxStreak', reward: 10 }),
@@ -242,7 +242,34 @@ describe('成就体系职责', () => {
         counts[achievement.group] = (counts[achievement.group] || 0) + 1;
         return counts;
       }, {}),
-    ).toEqual({ checkin: 7, create: 13, action: 4, organize: 4, level: 3, tenure: 4 });
+    ).toEqual({ checkin: 7, create: 17, action: 4, organize: 4, level: 3, tenure: 4 });
+  });
+
+  it('为书签、笔记和文件提供基础与进阶两级静态头像框门槛', () => {
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'bookmark_10')).toMatchObject({
+      metric: 'bookmarkCount',
+      target: 10,
+    });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'bookmark_50')).toMatchObject({
+      metric: 'bookmarkCount',
+      target: 50,
+    });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'note_10')).toMatchObject({
+      metric: 'noteCount',
+      target: 10,
+    });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'note_30')).toMatchObject({
+      metric: 'noteCount',
+      target: 30,
+    });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'file_5')).toMatchObject({
+      metric: 'fileCount',
+      target: 5,
+    });
+    expect(ACHIEVEMENTS.find((achievement) => achievement.key === 'file_30')).toMatchObject({
+      metric: 'fileCount',
+      target: 30,
+    });
   });
 
   it('资源头像框只叠加等级门槛：200 档 Lv.5，500 档 Lv.8', () => {

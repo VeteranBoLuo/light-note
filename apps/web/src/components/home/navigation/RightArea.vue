@@ -40,6 +40,7 @@
         :frame-id="equippedFrameId"
         :src="user.headPicture || icon.navigation.user"
         :size="30"
+        layout-mode="slot"
       />
       <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
     </div>
@@ -146,6 +147,12 @@
   .navigation-icon {
     display: flex;
     align-items: center;
+    justify-content: center;
+    width: 40px;
+    min-width: 0;
+    height: 40px;
+    min-height: 0;
+    flex: 0 0 40px;
     clip-path: circle(50% at 50% 50%);
     cursor: pointer;
   }

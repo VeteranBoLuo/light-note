@@ -1672,7 +1672,11 @@
     align-items: center;
     gap: clamp(22px, 2vw, 32px);
   }
-  .inbox-toolbar__todo-status {
+  .inbox-toolbar .inbox-toolbar__todo-status {
+    /* 工具栏通用规则会让 BTabs 根节点 flex: 1；状态栏若随父级收缩，
+       标签文字仍按固有宽度溢出，底板却会提前收口。这里让胶囊按完整内容占位。 */
+    width: max-content;
+    min-width: max-content;
     flex: 0 0 auto;
     gap: 2px;
     margin: 0;

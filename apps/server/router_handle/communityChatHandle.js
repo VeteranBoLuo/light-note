@@ -236,6 +236,7 @@ export async function messages(req, res) {
       roomSlug: req.params?.slug,
       before: req.query?.before,
       focus: req.query?.focus,
+      after: req.query?.after,
       limit: req.query?.limit,
     });
     return res.send(resultData(data));

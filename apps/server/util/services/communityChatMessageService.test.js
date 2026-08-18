@@ -244,10 +244,6 @@ describe('communityChatMessageService', () => {
         if (text.includes('FROM community_chat_rooms')) {
           return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
         }
-        if (text.includes('message.id > ?')) {
-          expect(params).toEqual([2, 42, 'user-1', 'user-1']);
-          return [[{ id: 43 }], []];
-        }
         if (text.includes('message.public_id = ?') && !text.includes('ORDER BY message.id DESC')) {
           expect(params).toEqual([2, 'message-focus', 'user-1', 'user-1']);
           return [[{ id: 42 }], []];
@@ -263,6 +259,16 @@ describe('communityChatMessageService', () => {
             [],
           ];
         }
+        if (text.includes('message.id > ?') && text.includes('ORDER BY message.id ASC')) {
+          expect(params).toEqual([2, 'user-1', 'user-1', 42, 2]);
+          return [
+            [
+              messageRow({ internalId: 43, publicId: 'message-after', content: '较新消息' }),
+              messageRow({ internalId: 44, publicId: 'message-after-extra', content: '更新消息' }),
+            ],
+            [],
+          ];
+        }
         if (text.includes('FROM community_chat_message_images')) return [[], []];
         if (text.includes('FROM community_chat_message_likes')) return [[], []];
         throw new Error(`unexpected query: ${sql}`);
@@ -273,7 +279,7 @@ describe('communityChatMessageService', () => {
       user: { id: 'user-1', role: 'user' },
       roomSlug: 'general',
       focus: 'message-focus',
-      limit: 2,
+      limit: 3,
       env: MESSAGE_ENV,
       db,
     });
@@ -283,11 +289,61 @@ describe('communityChatMessageService', () => {
       hasNewer: true,
       hasMore: true,
       nextBefore: 'message-before',
+      nextAfter: 'message-after',
     });
-    expect(result.items.map((item) => item.publicId)).toEqual(['message-before', 'message-focus']);
+    expect(result.items.map((item) => item.publicId)).toEqual(['message-before', 'message-focus', 'message-after']);
   });
 
-  it('消息定位与向前游标同时出现时在查询数据库前失败关闭', async () => {
+  it('使用后续游标按时间正序加载定位消息之后的内容，并返回下一段游标', async () => {
+    const db = {
+      query: vi.fn(async (sql, params) => {
+        const text = String(sql);
+        if (text.includes('FROM community_chat_members')) return [[MEMBER], []];
+        if (text.includes('FROM community_chat_blocks WHERE user_id')) return [[], []];
+        if (text.includes('FROM community_chat_rooms')) {
+          return [[{ id: 2, slug: 'general', type: 'text', status: 'active', slowModeSeconds: 0 }], []];
+        }
+        if (text.includes('SELECT id FROM community_chat_messages')) {
+          expect(params).toEqual([2, 'message-after']);
+          return [[{ id: 43 }], []];
+        }
+        if (text.includes('message.id > ?') && text.includes('ORDER BY message.id ASC')) {
+          expect(params).toEqual([2, 'user-1', 'user-1', 43, 3]);
+          return [
+            [
+              messageRow({ internalId: 44, publicId: 'message-newer-1', content: '更新一' }),
+              messageRow({ internalId: 45, publicId: 'message-newer-2', content: '更新二' }),
+              messageRow({ internalId: 46, publicId: 'message-newer-extra', content: '额外一条' }),
+            ],
+            [],
+          ];
+        }
+        if (text.includes('FROM community_chat_message_images')) return [[], []];
+        if (text.includes('FROM community_chat_message_likes')) return [[], []];
+        throw new Error(`unexpected query: ${sql}`);
+      }),
+    };
+
+    const result = await listCommunityChatMessages({
+      user: { id: 'user-1', role: 'user' },
+      roomSlug: 'general',
+      after: 'message-after',
+      limit: 2,
+      env: MESSAGE_ENV,
+      db,
+    });
+
+    expect(result).toMatchObject({
+      focusPublicId: null,
+      hasMore: false,
+      hasNewer: true,
+      nextBefore: null,
+      nextAfter: 'message-newer-2',
+    });
+    expect(result.items.map((item) => item.publicId)).toEqual(['message-newer-1', 'message-newer-2']);
+  });
+
+  it('多种消息游标同时出现时在查询数据库前失败关闭', async () => {
     const db = { query: vi.fn() };
 
     await expect(
@@ -296,6 +352,16 @@ describe('communityChatMessageService', () => {
         roomSlug: 'general',
         before: 'message-before',
         focus: 'message-focus',
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'MESSAGE_CURSOR_CONFLICT', status: 400 });
+    await expect(
+      listCommunityChatMessages({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        focus: 'message-focus',
+        after: 'message-after',
         env: MESSAGE_ENV,
         db,
       }),

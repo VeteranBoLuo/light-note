@@ -53,6 +53,18 @@ vi.mock('@/components/cloudSpace/ArchivePreview.vue', () => ({
   },
 }));
 
+vi.mock('@vue-office/docx/lib/v3/vue-office-docx.mjs', () => ({
+  __esModule: true,
+  default: {
+    template: `
+      <div class="vue-office-docx">
+        <a class="docx-toc-link" href="#_TocTarget"><span>估价结果</span></a>
+        <span id="_TocTarget">估价结果正文</span>
+      </div>
+    `,
+  },
+}));
+
 vi.mock('@/api/commonApi.ts', () => ({
   recordOperation: vi.fn(),
 }));
@@ -172,6 +184,34 @@ async function mountPdfPreview() {
     host.remove();
   };
   return { fileUrl };
+}
+
+async function mountWordPreview() {
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp({
+    setup() {
+      return () =>
+        h(FilePreview, {
+          visible: true,
+          fileInfo: {
+            id: 'word-1',
+            fileName: 'preview.docx',
+            fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            fileUrl: 'https://files.example/preview.docx?signature=test',
+            category: 'word',
+          },
+        });
+    },
+  });
+  app.mount(host);
+
+  await vi.waitFor(() => expect(document.body.querySelector('.docx-toc-link')).not.toBeNull());
+
+  cleanup = () => {
+    app.unmount();
+    host.remove();
+  };
 }
 
 async function mountImagePreview() {
@@ -367,6 +407,32 @@ describe('FilePreview PDF preview', () => {
     expect(preview?.dataset.src).toBe(fileUrl);
     expect(preview?.dataset.fileName).toBe('preview.pdf');
     expect(document.body.querySelector('iframe.preview-iframe')).toBeNull();
+  });
+});
+
+describe('FilePreview Word anchors', () => {
+  it('scrolls to a Word TOC bookmark without changing the preview URL history', async () => {
+    window.history.replaceState({}, '', '/cloudSpace?fileId=1448');
+    await mountWordPreview();
+
+    const target = document.body.querySelector<HTMLElement>('#_TocTarget');
+    const link = document.body.querySelector<HTMLAnchorElement>('.docx-toc-link');
+    const linkText = link?.querySelector('span');
+    if (!target || !linkText) throw new Error('Word TOC fixture did not render');
+
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(target, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+
+    const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+    linkText.dispatchEvent(clickEvent);
+    await nextTick();
+
+    expect(clickEvent.defaultPrevented).toBe(true);
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' });
+    expect(`${window.location.pathname}${window.location.search}${window.location.hash}`).toBe(
+      '/cloudSpace?fileId=1448',
+    );
+    expect(document.body.querySelector('.office-preview-container')).not.toBeNull();
   });
 });
 

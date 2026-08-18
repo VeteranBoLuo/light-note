@@ -1,7 +1,7 @@
 import pool from '../db/index.js';
 import { grantItem } from './items.js';
 import { finishAdminAction } from './adminActionExecution.js';
-import { getActiveEconomyCatalog, getEconomyRuntime } from './pointsEconomyCatalog.js';
+import { ECONOMY_CATALOGS, getActiveEconomyCatalog, getEconomyRuntime } from './pointsEconomyCatalog.js';
 import {
   beginPointsEconomyOperation,
   completePointsEconomyOperation,
@@ -245,13 +245,31 @@ const ACHIEVEMENT_FRAME_ITEMS = [
     achievementKey: 'streak_30',
   },
   {
+    id: 'frame_bookmark_intro',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '书签初识',
+    desc: '头像框 · 第一枚书签印记',
+    achievementKey: 'bookmark_10',
+  },
+  {
+    id: 'frame_file_intro',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'basic',
+    name: '云匣初识',
+    desc: '头像框 · 初次存入云端',
+    achievementKey: 'file_5',
+  },
+  {
     id: 'frame_bookmark_seed',
     type: 'cosmetic',
     effect: 'frame',
     rarity: 'rare',
     name: '书页初藏',
     desc: '头像框 · 第一座小书架',
-    achievementKey: 'bookmark_20',
+    achievementKey: 'bookmark_50',
   },
   {
     id: 'frame_note_seed',
@@ -263,13 +281,31 @@ const ACHIEVEMENT_FRAME_ITEMS = [
     achievementKey: 'note_10',
   },
   {
+    id: 'frame_note_flow',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'rare',
+    name: '青墨流韵',
+    desc: '头像框 · 三十篇墨意成流',
+    achievementKey: 'note_30',
+  },
+  {
     id: 'frame_file_seed',
     type: 'cosmetic',
     effect: 'frame',
     rarity: 'rare',
     name: '云匣初启',
     desc: '头像框 · 云端初藏',
-    achievementKey: 'file_10',
+    achievementKey: 'file_30',
+  },
+  {
+    id: 'frame_bookmark_corridor',
+    type: 'cosmetic',
+    effect: 'frame',
+    rarity: 'epic',
+    name: '书签长廊',
+    desc: '头像框 · 两百书签汇成长廊',
+    achievementKey: 'bookmark_200',
   },
   {
     id: 'frame_bookmark_archive',
@@ -328,6 +364,22 @@ const ACHIEVEMENT_FRAME_ITEMS = [
 ];
 
 const FRAME_RARITY_ORDER = { basic: 0, rare: 1, epic: 2, legendary: 3 };
+
+// 成就门槛升级只约束尚未领取的用户。历史版本中已经领取旧门槛奖励的用户永久保留原头像框，
+// 即使装扮表尚未补写，也可根据不可变的领取事实只读恢复权益。
+const LEGACY_ACHIEVEMENT_FRAME_ENTITLEMENTS = Object.freeze({
+  bookmark_20: 'frame_bookmark_seed',
+  file_10: 'frame_file_seed',
+});
+
+function achievementEntitlementKeysForFrame(item) {
+  return [
+    item.achievementKey,
+    ...Object.entries(LEGACY_ACHIEVEMENT_FRAME_ENTITLEMENTS)
+      .filter(([, frameId]) => frameId === item.id)
+      .map(([achievementKey]) => achievementKey),
+  ].filter(Boolean);
+}
 
 export const FRAME_CATALOG = [
   ...SHOP_FRAME_ITEMS.map((item) => ({ ...item, acquisition: 'shop' })),
@@ -564,8 +616,14 @@ function enrichPointsLogRow(row) {
           challengeKey: parsedMeta.challengeKey || null,
           achievementKey: parsedMeta.achievementKey || null,
           frameId: parsedMeta.frameId || null,
+          assetType: ['ai_tokens', 'storage_mb'].includes(parsedMeta.assetType) ? parsedMeta.assetType : null,
+          assetAmount:
+            Number.isSafeInteger(Number(parsedMeta.assetAmount)) && Number(parsedMeta.assetAmount) > 0
+              ? Number(parsedMeta.assetAmount)
+              : null,
         }
       : null;
+  const assetChange = resolveLotteryAssetChange(reason, ref, publicMeta);
   return {
     ...row,
     ref: privateOperation ? null : row.ref,
@@ -574,7 +632,32 @@ function enrichPointsLogRow(row) {
     sourceKey: sourceKey || null,
     sourceMeta,
     sourceRef: privateOperation ? null : ref || null,
+    assetChange,
   };
+}
+
+function resolveLotteryAssetChange(reason, ref, meta) {
+  const assetReasons = ['lottery_free_asset', 'lottery_paid_asset', 'lottery_storage'];
+  if (!assetReasons.includes(reason)) return null;
+  if (meta?.assetType && meta?.assetAmount) {
+    return {
+      type: meta.assetType === 'ai_tokens' ? 'ai' : 'storage',
+      amount: meta.assetAmount,
+    };
+  }
+
+  const poolKey = reason === 'lottery_free_asset' ? 'freePolicy' : 'paidPolicy';
+  for (const catalog of Object.values(ECONOMY_CATALOGS)) {
+    const prize = catalog[poolKey].pool.find((item) => item.id === ref);
+    if (!prize) continue;
+    if (prize.kind === 'ai_pack' && reason !== 'lottery_storage') {
+      return { type: 'ai', amount: Number(prize.amount) };
+    }
+    if (prize.kind === 'storage' && reason !== 'lottery_free_asset') {
+      return { type: 'storage', amount: Number(prize.amount) };
+    }
+  }
+  return null;
 }
 
 // 经济总览(root 运营):发放/消耗/存量、按来源分布、抽奖返还率、持有人 Top。
@@ -953,9 +1036,13 @@ async function getClaimedAchievementFrameIds(userId, conn = pool) {
   const claimedKeys = new Set(
     [...achievementRows, ...legacyRows].map((row) => row.achievementKey || row.ref).filter(Boolean),
   );
-  return FRAME_CATALOG.filter(
+  const currentFrameIds = FRAME_CATALOG.filter(
     (item) => item.acquisition === 'achievement' && item.achievementKey && claimedKeys.has(item.achievementKey),
   ).map((item) => item.id);
+  const legacyFrameIds = [...claimedKeys]
+    .map((key) => LEGACY_ACHIEVEMENT_FRAME_ENTITLEMENTS[key])
+    .filter(Boolean);
+  return [...new Set([...currentFrameIds, ...legacyFrameIds])];
 }
 
 export async function getOwnedCosmetics(userId) {
@@ -1151,6 +1238,8 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
   ]);
   if (!owned.length && item.acquisition === 'achievement' && item.achievementKey) {
     // 兼容头像框上线前已领取的成就：首次佩戴时在同一事务补齐装扮所有权并完成佩戴。
+    const entitlementKeys = achievementEntitlementKeysForFrame(item);
+    const entitlementPlaceholders = entitlementKeys.map(() => '?').join(', ');
     const conn = await pool.getConnection();
     try {
       await conn.beginTransaction();
@@ -1158,13 +1247,13 @@ export async function equipFrame(userId, frameId, { userRole = null } = {}) {
         `SELECT (
            EXISTS(
              SELECT 1 FROM user_achievements
-              WHERE user_id = ? AND achievement_key = ? AND claimed_at IS NOT NULL
+              WHERE user_id = ? AND achievement_key IN (${entitlementPlaceholders}) AND claimed_at IS NOT NULL
            ) OR EXISTS(
              SELECT 1 FROM points_log
-              WHERE user_id = ? AND reason = 'achievement' AND ref = ?
+              WHERE user_id = ? AND reason = 'achievement' AND ref IN (${entitlementPlaceholders})
            )
          ) AS claimed`,
-        [userId, item.achievementKey, userId, item.achievementKey],
+        [userId, ...entitlementKeys, userId, ...entitlementKeys],
       );
       if (!Boolean(Number(claimed[0]?.claimed))) {
         await conn.rollback();

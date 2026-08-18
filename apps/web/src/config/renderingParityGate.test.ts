@@ -235,7 +235,7 @@ describe('移动浏览器与 App 渲染一致性门禁', () => {
     expect(baselineStyles).toMatch(/scrollbar-gutter:\s*auto\s*!important/u);
     expect(baselineStyles).toMatch(/\.growth-page \.cal-cell\s*\{[\s\S]*?min-height:\s*42px/u);
     expect(avatarStyles).toMatch(
-      /\.avatar-frame__portrait\s*\{[\s\S]*?width:\s*var\(--frame-size\);[\s\S]*?height:\s*var\(--frame-size\);/u,
+      /\.avatar-frame__portrait\s*\{[\s\S]*?width:\s*var\(--frame-display-avatar-size\);[\s\S]*?height:\s*var\(--frame-display-avatar-size\);/u,
     );
     expect(avatarStyles).toContain("'avatar-frame--motion-paused': isMotionPaused");
     expect(avatarStyles).toContain('const isMotionVisible = ref(!props.pauseWhenOffscreen)');

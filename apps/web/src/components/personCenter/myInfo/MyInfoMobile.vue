@@ -345,7 +345,7 @@
   }
 
   .profile-hero--framed {
-    padding-top: 14px;
+    padding-top: 16px;
   }
 
   .profile-avatar {
@@ -401,6 +401,11 @@
       border-color: var(--surface-border-color);
       background: var(--surface-panel-bg);
     }
+  }
+
+  // 禁用只表达“不可编辑”，不降低头像与头像框本身的清晰度。
+  .profile-avatar.disabled {
+    opacity: 1;
   }
 
   .profile-avatar.profile-avatar--framed {

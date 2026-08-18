@@ -105,11 +105,20 @@
         <BUpload
           ref="markdownImageInputRef"
           accept="image/*"
-          :multiple="false"
+          multiple
           raw-file
           :max-total-size="null"
           triggerless
           @change="onMarkdownImagePicked"
+        />
+        <BUpload
+          ref="markdownMediaTextImageInputRef"
+          accept="image/*"
+          :multiple="false"
+          raw-file
+          :max-total-size="null"
+          triggerless
+          @change="onMarkdownMediaTextImagePicked"
         />
         <div class="md-editor-body" :class="`md-view-${mdView}`">
           <div class="md-editor-pane" v-show="mdView === 'edit' || mdView === 'split'">
@@ -161,6 +170,16 @@
         </div>
       </div>
     </template>
+    <BUpload
+      v-if="currentType === 'html'"
+      ref="richImageInputRef"
+      accept="image/*"
+      multiple
+      raw-file
+      :max-total-size="null"
+      triggerless
+      @change="onRichImagePicked"
+    />
     <BUpload
       v-if="currentType === 'html'"
       ref="richMediaTextImageInputRef"
@@ -738,6 +757,7 @@
   import { loadMarkdownRuntime, loadTinyMceRuntime, preloadNoteEditorRuntime } from './editorRuntimeLoader';
   import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
   import { openNoteContentImagePreview, prepareNoteContentPreviewImages } from '@/utils/noteImagePreview';
+  import { runOrderedBatch } from '@/utils/orderedBatch';
   import {
     buildNoteReturnFocusLocation,
     normalizeReferencedFilePreviewInfo,
@@ -1078,15 +1098,18 @@
   });
   const markdownImageUploading = ref(false);
   const markdownImageInputRef = ref<{ open: () => void } | null>(null);
-  type MarkdownImageInsertMode = 'image' | 'mediaText';
+  const markdownMediaTextImageInputRef = ref<{ open: () => void } | null>(null);
   interface MarkdownMediaTextUploadIntent {
     source: string;
     start: number;
     end: number;
     caption: string;
   }
-  const markdownImageInsertMode = ref<MarkdownImageInsertMode>('image');
   const markdownMediaTextUploadIntent = shallowRef<MarkdownMediaTextUploadIntent | null>(null);
+  type RichImageUploadIntent = { editor: any; noteId: string; bookmark: any };
+  const richImageInputRef = ref<{ open: () => void } | null>(null);
+  const richImageUploading = ref(false);
+  const richImageUploadIntent = shallowRef<RichImageUploadIntent | null>(null);
   type RichMediaTextUploadContext = { editor: any; noteId: string };
   type RichMediaTextUploadIntent =
     | ({ kind: 'insert' } & RichMediaTextUploadContext)
@@ -2216,9 +2239,20 @@
     });
   }
 
-  async function uploadNoteImageFile(file: Blob, fileName: string) {
+  const NOTE_IMAGE_UPLOAD_CONCURRENCY = 3;
+
+  async function prepareNoteImageUploadNoteId() {
+    if (props.imageUploadMode === 'base64') return '';
     let noteId = props.noteId;
     if (!noteId && typeof props.ensureNoteId === 'function') {
+      noteId = await (props.ensureNoteId as () => Promise<string>)();
+    }
+    return noteId || '';
+  }
+
+  async function uploadNoteImageFile(file: Blob, fileName: string, preparedNoteId?: string) {
+    let noteId = preparedNoteId ?? props.noteId;
+    if (preparedNoteId === undefined && !noteId && typeof props.ensureNoteId === 'function') {
       noteId = await (props.ensureNoteId as () => Promise<string>)();
     }
     const formData = new FormData();
@@ -2281,7 +2315,7 @@
   }
 
   function openMarkdownImageInsert() {
-    markdownImageInsertMode.value = 'image';
+    if (props.readonly || markdownImageUploading.value) return;
     markdownMediaTextUploadIntent.value = null;
     markdownImageInputRef.value?.open();
   }
@@ -2291,14 +2325,13 @@
     const markdownEditor = mdCodeMirrorRef.value;
     const source = markdownEditor?.getValue() ?? mdContent.value ?? '';
     const selection = markdownEditor?.getSelection() || { from: source.length, to: source.length };
-    markdownImageInsertMode.value = 'mediaText';
     markdownMediaTextUploadIntent.value = {
       source,
       start: selection.from,
       end: selection.to,
       caption: source.slice(selection.from, selection.to).trim() || t('noteDetail.editor.mediaTextMarkdownPlaceholder'),
     };
-    markdownImageInputRef.value?.open();
+    markdownMediaTextImageInputRef.value?.open();
   }
 
   async function uploadMarkdownImage(file: File, fileName = file.name) {
@@ -2413,15 +2446,50 @@
   }
 
   async function onMarkdownImagePicked(files: File[]) {
-    const file = files[0];
-    if (!file) return;
-    const mode = markdownImageInsertMode.value;
-    markdownImageInsertMode.value = 'image';
-    if (mode === 'mediaText' && markdownMediaTextUploadIntent.value) {
-      await uploadMarkdownMediaText(file, markdownMediaTextUploadIntent.value);
-      return;
+    if (!files.length || markdownImageUploading.value) return;
+    const selection = getMarkdownSelection();
+    const source = mdCodeMirrorRef.value?.getValue() ?? mdContent.value ?? '';
+    markdownImageUploading.value = true;
+    try {
+      // 新建笔记只在批次开始时创建一次，后续并发上传复用同一个 noteId。
+      const noteId = await prepareNoteImageUploadNoteId();
+      const results = await runOrderedBatch(
+        files,
+        async (file) => ({
+          file,
+          url:
+            props.imageUploadMode === 'base64'
+              ? await readImageAsDataUrl(file)
+              : await uploadNoteImageFile(file, file.name || 'note-image.png', noteId),
+        }),
+        NOTE_IMAGE_UPLOAD_CONCURRENCY,
+      );
+      const uploaded = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+      if (uploaded.length) {
+        const linePrefix = selection.from > 0 && source[selection.from - 1] !== '\n' ? '\n' : '';
+        const lineSuffix = selection.to < source.length && source[selection.to] !== '\n' ? '\n' : '';
+        const images = uploaded.map(({ file, url }) => `![${escapeMarkdownImageAlt(file.name)}](${url})`).join('\n');
+        const markdown = `${linePrefix}${images}${lineSuffix}`;
+        const nextCursor = selection.from + markdown.length;
+        if (mdCodeMirrorRef.value) {
+          mdCodeMirrorRef.value.replaceRange(selection.from, selection.to, markdown, nextCursor, nextCursor);
+        } else {
+          onMdInput(`${source.slice(0, selection.from)}${markdown}${source.slice(selection.to)}`);
+        }
+      }
+      if (uploaded.length !== files.length) message.warning(t('note.uploadFailed'));
+    } catch {
+      message.warning(t('note.uploadFailed'));
+    } finally {
+      markdownImageUploading.value = false;
     }
-    await uploadMarkdownImage(file, file.name);
+  }
+
+  async function onMarkdownMediaTextImagePicked(files: File[]) {
+    const file = files[0];
+    const intent = markdownMediaTextUploadIntent.value;
+    if (!file || !intent) return;
+    await uploadMarkdownMediaText(file, intent);
   }
 
   function notifyRichMediaTextMutation(editor = editorRef.value) {
@@ -2471,6 +2539,71 @@
     richMediaTextToolbarVisible.value = false;
     richMediaTextBlock.value = null;
     richMediaTextItem.value = null;
+  }
+
+  function escapeHtmlAttribute(value: string) {
+    return String(value)
+      .replace(/&/gu, '&amp;')
+      .replace(/</gu, '&lt;')
+      .replace(/>/gu, '&gt;')
+      .replace(/"/gu, '&quot;')
+      .replace(/'/gu, '&#39;');
+  }
+
+  function openRichImageInsert() {
+    const editor = editorRef.value;
+    if (!editor || props.readonly || richImageUploading.value) return;
+    editor.focus?.();
+    richImageUploadIntent.value = {
+      editor,
+      noteId: props.noteId || '',
+      bookmark: editor.selection?.getBookmark?.(2, true),
+    };
+    richImageInputRef.value?.open();
+  }
+
+  async function onRichImagePicked(files: File[]) {
+    const intent = richImageUploadIntent.value;
+    if (!files.length || !intent || richImageUploading.value) return;
+    richImageUploading.value = true;
+    try {
+      const noteId = await prepareNoteImageUploadNoteId();
+      const results = await runOrderedBatch(
+        files,
+        async (file) => ({
+          file,
+          url:
+            props.imageUploadMode === 'base64'
+              ? await readImageAsDataUrl(file)
+              : await uploadNoteImageFile(file, file.name || 'note-image.png', noteId),
+        }),
+        NOTE_IMAGE_UPLOAD_CONCURRENCY,
+      );
+      const uploaded = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+      const editor = editorRef.value;
+      if (!editor || editor !== intent.editor || (intent.noteId && intent.noteId !== props.noteId)) {
+        message.warning(t('noteDetail.editor.mediaTextTargetChanged'));
+        return;
+      }
+      if (uploaded.length) {
+        const html = uploaded
+          .map(
+            ({ file, url }) =>
+              `<p><img src="${escapeHtmlAttribute(url)}" alt="${escapeHtmlAttribute(richMediaTextImageAlt(file.name))}"></p>`,
+          )
+          .join('');
+        editor.focus?.();
+        if (intent.bookmark) editor.selection?.moveToBookmark?.(intent.bookmark);
+        editor.undoManager?.transact(() => editor.insertContent(html));
+        notifyRichMediaTextMutation(editor);
+      }
+      if (uploaded.length !== files.length) message.warning(t('note.uploadFailed'));
+    } catch {
+      message.warning(t('note.uploadFailed'));
+    } finally {
+      richImageUploading.value = false;
+      richImageUploadIntent.value = null;
+    }
   }
 
   function handleRichMediaTextToolbarOpenChange(open: boolean) {
@@ -2923,7 +3056,7 @@
     const insertActions: EditorToolbarAction[] = [
       action('insertTable', t('noteDetail.editor.table'), icon.noteDetail.toolbar.table),
       action('insertImage', t('noteDetail.editor.image'), icon.noteDetail.toolbar.image, {
-        disabled: disabled || markdownImageUploading.value,
+        disabled: disabled || (isMarkdown ? markdownImageUploading.value : richImageUploading.value),
       }),
       action('insertMediaText', t('noteDetail.editor.mediaText'), icon.noteDetail.toolbar.mediaText, {
         description: t('noteDetail.editor.mediaTextDescription'),
@@ -3198,7 +3331,7 @@
     if (/^heading[1-6]$/u.test(key)) return editor.execCommand('FormatBlock', false, `h${key.slice(-1)}`);
     if (key === 'link') return editor.execCommand('mceLink');
     if (key === 'insertTable') return editor.execCommand('mceInsertTableDialog');
-    if (key === 'insertImage') return editor.execCommand('mceImage');
+    if (key === 'insertImage') return openRichImageInsert();
     if (key === 'insertMediaText') return openRichMediaTextInsert();
     if (key === 'insertResource') return openRichResourceMentionPicker(editor);
     if (key === 'insertCodeBlock') return editor.execCommand('FormatBlock', false, 'pre');

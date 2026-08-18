@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const connection = {
@@ -268,8 +268,14 @@ describe('securityV2Handle 批量事件复核', () => {
 
 describe('securityV2Handle 安全态势', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-09T12:00:00.000Z'));
     vi.clearAllMocks();
     mocks.pool.query.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('最吵规则直接按安全事件聚合，并回传命中量与当前运行模式', async () => {

@@ -1,11 +1,13 @@
 import crypto from 'crypto';
 import pool from '../../db/index.js';
 import { buildResourceHref, normalizeMarkdownBlockquoteEntities } from '@lightnote/shared';
+import { serializeDrawingScene } from '@lightnote/shared/drawing-note';
 import { insertData } from '../agent/data.js';
 import { bucketBaseUrl, putObjectBodyToObs } from '../obsClient.js';
 import { markOnboardingSeedResource, ONBOARDING_SEED_VERSION } from '../onboardingSeed.js';
 import { insertResourceTagRelations, RESOURCE_TYPE } from '../resourceTags.js';
 import { sanitizePersistedNoteContent } from '../noteHtmlSanitizer.js';
+import { NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE } from './newUserDrawingNoteExample.js';
 
 export const NEW_USER_SEED_VERSION = ONBOARDING_SEED_VERSION;
 
@@ -412,7 +414,17 @@ function buildEnglishSeed(siteUrl) {
 
 export function buildNewUserSeedContent({ lang = 'zh-CN', siteUrl } = {}) {
   const normalizedSiteUrl = normalizeSiteUrl(siteUrl);
-  return normalizeLang(lang) === 'en-US' ? buildEnglishSeed(normalizedSiteUrl) : buildChineseSeed(normalizedSiteUrl);
+  const content =
+    normalizeLang(lang) === 'en-US' ? buildEnglishSeed(normalizedSiteUrl) : buildChineseSeed(normalizedSiteUrl);
+  content.notes.push({
+    key: 'drawing-demo',
+    title: '手绘笔记示例',
+    type: 'drawing',
+    sort: content.notes.length,
+    content: NEW_USER_DRAWING_NOTE_EXAMPLE_SCENE,
+    tagKeys: ['getting-started'],
+  });
+  return content;
 }
 
 function escapeHtml(text) {
@@ -540,11 +552,14 @@ export async function seedNewUserWorkspaceData({ userId, lang = 'zh-CN', siteUrl
 
     for (const note of content.notes) {
       const noteId = ids.notes[note.key];
-      const resolvedContent = resolveNoteRefPlaceholders(content, ids, note.content);
+      const resolvedContent =
+        note.type === 'drawing' ? note.content : resolveNoteRefPlaceholders(content, ids, note.content);
       const noteContent =
-        note.type === 'markdown'
-          ? normalizeMarkdownBlockquoteEntities(resolvedContent)
-          : sanitizePersistedNoteContent(resolvedContent, 'html', 'seed-new-user-note');
+        note.type === 'drawing'
+          ? serializeDrawingScene(resolvedContent)
+          : note.type === 'markdown'
+            ? normalizeMarkdownBlockquoteEntities(resolvedContent)
+            : sanitizePersistedNoteContent(resolvedContent, 'html', 'seed-new-user-note');
       await connection.query('INSERT INTO note SET ?', [
         insertData({
           id: noteId,

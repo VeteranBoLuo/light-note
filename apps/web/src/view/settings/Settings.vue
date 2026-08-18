@@ -664,9 +664,14 @@
                 <span class="field-label">{{ t('settings.quickSaveDrag') }}</span>
                 <span class="field-desc">{{ t('settings.quickSaveHint') }}</span>
               </div>
-              <a ref="bmRef" class="qs-bookmarklet" draggable="true" @click.prevent="onBmClick"
-                >🔖 {{ t('settings.quickSaveBtn') }}</a
-              >
+              <!-- javascript: 书签的图标由浏览器固定为通用图标；这里不放文字图标，避免它被写进书签名称。 -->
+              <a
+                ref="bmRef"
+                class="qs-bookmarklet"
+                draggable="true"
+                @click.prevent="onBmClick"
+                v-text="t('settings.quickSaveBtn')"
+              ></a>
             </div>
           </div>
         </section>

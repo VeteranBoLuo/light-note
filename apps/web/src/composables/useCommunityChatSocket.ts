@@ -177,6 +177,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
   let reconnectTimer: number | undefined;
   let handshakeTimer: number | undefined;
   let reconnectBlocked = false;
+  const connectedEpoch = ref(0);
   const pendingPresenceMemberRequests = new Map<
     string,
     {
@@ -331,6 +332,7 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
         clearHandshakeTimer();
         reconnectAttempts = 0;
         status.value = 'connected';
+        connectedEpoch.value += 1;
         void options.onSynchronized?.();
         return;
       }
@@ -406,24 +408,72 @@ export function useCommunityChatSocket(options: UseCommunityChatSocketOptions) {
     connect();
   }
 
-  function requestOnlineMembers() {
-    return new Promise<CommunityChatOnlineMembersSnapshot>((resolve, reject) => {
-      const current = socket;
-      if (!current || current.readyState !== WebSocket.OPEN || status.value !== 'connected') {
-        const error = new Error('REALTIME_CONNECTION_UNAVAILABLE');
+  function waitForConnectedSocket(deadline: number) {
+    const current = socket;
+    if (current?.readyState === WebSocket.OPEN && status.value === 'connected') {
+      return Promise.resolve(current);
+    }
+    if (
+      status.value === 'disabled' ||
+      status.value === 'fallback' ||
+      !options.enabled.value ||
+      !options.roomSlug.value
+    ) {
+      const error = new Error('REALTIME_CONNECTION_UNAVAILABLE');
+      error.name = 'CommunityChatRealtimeRequestError';
+      return Promise.reject(error);
+    }
+
+    return new Promise<WebSocket>((resolve, reject) => {
+      let settled = false;
+      let timer: number | undefined;
+      let stop: () => void = () => {};
+      const cleanup = () => {
+        if (settled) return;
+        settled = true;
+        if (timer !== undefined) window.clearTimeout(timer);
+        stop();
+      };
+      const fail = (code: string) => {
+        cleanup();
+        const error = new Error(code);
         error.name = 'CommunityChatRealtimeRequestError';
         reject(error);
-        return;
-      }
+      };
+      const resolveCurrentState = () => {
+        const next = socket;
+        if (next?.readyState === WebSocket.OPEN && status.value === 'connected') {
+          cleanup();
+          resolve(next);
+          return;
+        }
+        if (status.value === 'disabled' || status.value === 'fallback') {
+          fail('REALTIME_CONNECTION_UNAVAILABLE');
+        }
+      };
+      stop = watch([connectedEpoch, status], resolveCurrentState);
+      timer = window.setTimeout(() => fail('REALTIME_CONNECTION_TIMEOUT'), Math.max(1, deadline - Date.now()));
+      // 注册监听后再校验一次，封住首次判断与 watch 建立之间的订阅完成窗口。
+      resolveCurrentState();
+    });
+  }
+
+  async function requestOnlineMembers() {
+    const deadline = Date.now() + PRESENCE_MEMBERS_REQUEST_TIMEOUT_MS;
+    const current = await waitForConnectedSocket(deadline);
+    return new Promise<CommunityChatOnlineMembersSnapshot>((resolve, reject) => {
       const requestId = presenceMembersRequestId(random);
-      const timer = window.setTimeout(() => {
-        const pending = pendingPresenceMemberRequests.get(requestId);
-        if (!pending) return;
-        pendingPresenceMemberRequests.delete(requestId);
-        const error = new Error('REALTIME_REQUEST_TIMEOUT');
-        error.name = 'CommunityChatRealtimeRequestError';
-        pending.reject(error);
-      }, PRESENCE_MEMBERS_REQUEST_TIMEOUT_MS);
+      const timer = window.setTimeout(
+        () => {
+          const pending = pendingPresenceMemberRequests.get(requestId);
+          if (!pending) return;
+          pendingPresenceMemberRequests.delete(requestId);
+          const error = new Error('REALTIME_REQUEST_TIMEOUT');
+          error.name = 'CommunityChatRealtimeRequestError';
+          pending.reject(error);
+        },
+        Math.max(1, deadline - Date.now()),
+      );
       pendingPresenceMemberRequests.set(requestId, { resolve, reject, timer });
       try {
         current.send(

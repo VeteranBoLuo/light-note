@@ -33,12 +33,7 @@
         <SvgIcon class="ai-context-chip__x" :src="icon.common.close" size="10" aria-hidden="true" />
       </BButton>
       <!-- 一次性语义下发送即消费;此按钮是「发送前反悔」的辅助操作 -->
-      <BButton
-        size="small"
-        class="ai-context-clear"
-        :title="t('ai.material.onceTooltip')"
-        @click="clearAll"
-      >
+      <BButton size="small" class="ai-context-clear" :title="t('ai.material.onceTooltip')" @click="clearAll">
         {{ t('ai.material.clearOnce') }}
       </BButton>
     </div>
@@ -47,91 +42,37 @@
         <BButton size="small" class="ai-context-trigger">@ {{ t('ai.addContext') }}</BButton>
       </slot>
       <template #content>
-        <div class="ai-context-panel">
-          <BInput v-model:value="keyword" :placeholder="t('ai.searchContext')" clearable @enter="searchNow" />
-          <div class="ai-context-results">
-            <span v-if="results.length || currentPageContext" class="ai-context-section-title">
-              {{ t('ai.scope.resourceGroup') }}
-            </span>
-            <BButton
-              v-if="currentPageContext && !selected(currentPageContext)"
-              :disabled="modelValue.length >= 5"
-              @click="add(currentPageContext)"
-            >
-              <span class="ai-context-type ai-context-type--current">{{ t('ai.currentPage') }}</span>
-              <span class="ai-context-result-copy">
-                <strong>{{ currentPageContext.title }}</strong>
-                <small v-if="currentPageContext.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
-              </span>
-            </BButton>
-            <BButton
-              v-for="item in results"
-              :key="`${item.type}:${item.id}`"
-              :disabled="selected(item) || (item.type !== 'file' && modelValue.length >= 5)"
-              @click="add(item)"
-            >
-              <span class="ai-context-type" :style="{ color: typeColor(item.type) }">{{ typeLabel(item.type) }}</span>
-              <span class="ai-context-result-copy">
-                <strong>{{ item.title }}</strong>
-                <small v-if="item.path">{{ item.path }}</small>
-                <small v-if="item.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
-              </span>
-            </BButton>
-            <template v-if="aiBranchScopeEnabled && noteResults.length">
-              <span class="ai-context-section-title ai-context-section-title--scope">
-                {{ t('ai.scope.directoryGroup') }}
-              </span>
-              <BButton
-                v-for="item in noteResults"
-                :key="`scope:${item.id}`"
-                class="ai-context-scope-result"
-                :disabled="scopeSelected(item.id) || scopeModelValue.length >= MAX_AI_SCOPE_REFS"
-                @click="addScope(item)"
-              >
-                <span class="ai-context-scope-result__icon" aria-hidden="true">
-                  <SvgIcon :src="icon.noteTree.root" size="15" />
-                </span>
-                <span class="ai-context-result-copy">
-                  <strong>{{ item.title }}</strong>
-                  <small v-if="item.path">{{ item.path }}</small>
-                  <small>{{ t('ai.scope.branchDescription', { count: item.descendantCount || 0 }) }}</small>
-                </span>
-              </BButton>
-            </template>
-            <span v-if="!loading && !results.length && !currentPageContext" class="ai-context-empty">{{
-              t('ai.noContext')
-            }}</span>
-          </div>
-        </div>
+        <ResourcePickerPanel
+          :allowed-types="allowedTypes"
+          :pinned-items="currentPageContext ? [currentPageContext] : []"
+          :include-note-scopes="aiBranchScopeEnabled"
+          :selected-resource-keys="selectedResourceKeys"
+          :selected-scope-keys="selectedScopeKeys"
+          :resources-disabled="modelValue.length >= 5"
+          :scopes-disabled="scopeModelValue.length >= MAX_AI_SCOPE_REFS"
+          @select="add"
+          @select-scope="addScope"
+          @close="open = false"
+        />
       </template>
     </BPopover>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BButton from '@/components/base/BasicComponents/BButton.vue';
-  import BInput from '@/components/base/BasicComponents/BInput.vue';
+  import ResourcePickerPanel from '@/components/resourcePicker/ResourcePickerPanel.vue';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import icon from '@/config/icon.ts';
-  import { fetchGlobalSearch, type GlobalSearchType, type SearchResultItem } from '@/api/search';
+  import type { GlobalSearchType } from '@/api/search';
   import { useCurrentPageResource } from '@/composables/useCurrentPageResource';
-  import { RESOURCE_COLOR_CSS_VAR, type ResourceType } from '@/config/resourceColor';
-  import {
-    MAX_AI_SCOPE_REFS,
-    type AiResourceContext,
-    type AiScopeRef,
-  } from '@/types/aiScope';
+  import type { ResourcePickerItem, ResourcePickerType } from '@/composables/useResourcePickerSearch';
+  import { MAX_AI_SCOPE_REFS, type AiResourceContext, type AiScopeRef } from '@/types/aiScope';
   import { fetchNoteTreeFeatures } from '@/api/noteTree';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
-
-  interface AiContextSearchItem extends AiResourceContext {
-    path?: string;
-    childCount?: number;
-    descendantCount?: number;
-  }
 
   const props = withDefaults(
     defineProps<{
@@ -148,21 +89,11 @@
   }>();
   const { t } = useI18n();
   const open = ref(false);
-  const keyword = ref('');
-  const results = ref<AiContextSearchItem[]>([]);
-  const loading = ref(false);
   const aiBranchScopeEnabled = ref(false);
-  let debounceTimer: number | null = null;
-  let searchRequestId = 0;
+  const allowedTypes: ResourcePickerType[] = ['bookmark', 'note', 'file', 'tag'];
 
   // 推导逻辑与 @ 浮层共用,避免两处口径漂移
   const currentPageContext = useCurrentPageResource();
-  const typeLabel = (type: GlobalSearchType) => t(`ai.sourceTypes.${type}`);
-  const typeColor = (type: GlobalSearchType) => {
-    if (type === 'todo') return 'var(--todo-accent-color)';
-    const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
-    return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
-  };
   function resourceIcon(type: GlobalSearchType) {
     if (type === 'note') return icon.resource.note;
     if (type === 'file') return icon.resource.file;
@@ -170,65 +101,17 @@
     if (type === 'todo') return icon.contextMenu.inbox;
     return icon.resource.bookmark;
   }
-  const selected = (item: AiResourceContext) =>
-    props.modelValue.some((value) => value.type === item.type && value.id === item.id);
-  const scopeSelected = (id: string) =>
-    props.scopeModelValue.some((value) => value.type === 'note_branch' && value.id === id);
-  const noteResults = computed(() => results.value.filter((item) => item.type === 'note'));
+  const selectedResourceKeys = computed(() => props.modelValue.map((item) => `${item.type}:${item.id}`));
+  const selectedScopeKeys = computed(() => props.scopeModelValue.map((item) => `${item.type}:${item.id}`));
 
-  watch(open, (value) => {
-    if (value) searchNow();
-    else clearDebounce();
-  });
-  watch(keyword, () => {
-    if (!open.value) return;
-    clearDebounce();
-    debounceTimer = window.setTimeout(searchNow, 320);
-  });
-
-  function clearDebounce() {
-    if (debounceTimer !== null) {
-      window.clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-  }
-
-  async function searchNow() {
-    clearDebounce();
-    const requestId = ++searchRequestId;
-    loading.value = true;
-    try {
-      const data = await fetchGlobalSearch(keyword.value, 5, true);
-      if (requestId !== searchRequestId) return;
-      results.value = (data.items || [])
-        .filter((item: SearchResultItem) => ['bookmark', 'note', 'file', 'tag'].includes(item.type))
-        .slice(0, 12)
-        .map((item) => ({
-          type: item.type,
-          id: String(item.id),
-          title: item.title,
-          ...(item.type === 'note'
-            ? {
-                path: String(item.path || ''),
-                childCount: Math.max(0, Number(item.childCount || 0)),
-                descendantCount: Math.max(0, Number(item.descendantCount || 0)),
-              }
-            : {}),
-        }));
-    } catch {
-      if (requestId === searchRequestId) results.value = [];
-    } finally {
-      if (requestId === searchRequestId) loading.value = false;
-    }
-  }
-  function add(item: AiResourceContext) {
+  function add(item: ResourcePickerItem) {
     if (item.type === 'file') {
       emit('fileSelected', item);
       open.value = false;
       return;
     }
-    if (selected(item) || props.modelValue.length >= 5) return;
-    emit('update:modelValue', [...props.modelValue, item]);
+    if (selectedResourceKeys.value.includes(`${item.type}:${item.id}`) || props.modelValue.length >= 5) return;
+    emit('update:modelValue', [...props.modelValue, { type: item.type, id: item.id, title: item.title }]);
     open.value = false;
   }
   function clearAll() {
@@ -241,11 +124,11 @@
       props.modelValue.filter((value) => value.type !== item.type || value.id !== item.id),
     );
   }
-  function addScope(item: AiContextSearchItem) {
+  function addScope(item: AiScopeRef) {
     if (
       !aiBranchScopeEnabled.value ||
-      item.type !== 'note' ||
-      scopeSelected(item.id) ||
+      item.type !== 'note_branch' ||
+      selectedScopeKeys.value.includes(`${item.type}:${item.id}`) ||
       props.scopeModelValue.length >= MAX_AI_SCOPE_REFS
     )
       return;
@@ -255,13 +138,14 @@
         type: 'note_branch',
         id: item.id,
         title: item.title,
-        estimatedResourceCount: Math.max(1, Number(item.descendantCount || 0) + 1),
+        estimatedResourceCount: Math.max(1, Number(item.estimatedResourceCount || 1)),
       },
     ]);
+    const subtreeSize = Math.max(1, Number(item.estimatedResourceCount || 1));
     void recordNoteTreeProductEvent('note_branch_ai_selected', {
       surface: 'ai',
-      childCount: Math.max(0, Number(item.childCount || 0)),
-      subtreeSize: Math.max(1, Number(item.descendantCount || 0) + 1),
+      childCount: Math.max(0, subtreeSize - 1),
+      subtreeSize,
       result: 'success',
     });
     open.value = false;
@@ -291,8 +175,6 @@
   });
   onBeforeUnmount(() => {
     window.removeEventListener('light-note:close-ai-overlays', closePopover);
-    clearDebounce();
-    searchRequestId += 1;
   });
 </script>
 
@@ -364,113 +246,10 @@
   .ai-context-chip__x {
     opacity: 0.55;
   }
-  .ai-context-panel {
-    display: flex;
-    flex-direction: column;
-    width: 320px;
-    max-width: calc(100vw - 24px);
-    max-height: min(430px, calc(100dvh - 120px));
-    padding: 10px;
-    box-sizing: border-box;
-    overflow: hidden;
-  }
-  .ai-context-results {
-    display: grid;
-    gap: 5px;
-    min-height: 0;
-    min-width: 0;
-    max-height: 330px;
-    margin-top: 8px;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .ai-context-results :deep(.b_btn) {
-    width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    height: auto;
-    min-height: 34px;
-    justify-content: flex-start;
-    gap: 8px;
-    overflow: hidden;
-    text-align: left;
-  }
-  .ai-context-results span {
-    font-size: 11px;
-  }
-  .ai-context-results .ai-context-type {
-    flex: 0 0 auto;
-    font-weight: 600;
-  }
-  /* 「当前页面」是特殊入口,用独立于四种资源色(尤其别撞书签=主色 #615ced)的强调色文字突出,不加背景 */
-  .ai-context-results .ai-context-type--current {
-    color: #0ea5e9;
-  }
-  .ai-context-results strong {
-    flex: 1 1 auto;
-    min-width: 0;
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ai-context-section-title {
-    padding: 4px 4px 0;
-    color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 700;
-  }
-  .ai-context-section-title--scope {
-    margin-top: 3px;
-    padding-top: 8px;
-    border-top: 1px solid var(--surface-border-color);
-  }
-  .ai-context-result-copy {
-    display: grid;
-    min-width: 0;
-    flex: 1 1 auto;
-    gap: 1px;
-  }
-  .ai-context-result-copy small {
-    overflow: hidden;
-    color: var(--desc-color);
-    font-size: 11px;
-    font-weight: 400;
-    line-height: 1.3;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .ai-context-results :deep(.ai-context-scope-result) {
-    min-height: 48px;
-    border: 1px solid var(--surface-border-color);
-  }
-  .ai-context-scope-result__icon {
-    display: inline-flex;
-    width: 24px;
-    height: 24px;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--resource-note-color);
-    border-radius: 8px;
-    color: var(--resource-note-color);
-  }
-  .ai-context-empty {
-    display: block;
-    padding: 14px;
-    color: var(--desc-color);
-    text-align: center;
-  }
-
   @media (pointer: coarse) {
-    /* 触发按钮(@添加资源)压到 36px,与右侧「上传文件」一致、不再突兀过高;
-       下拉结果列表项仍保留 44px 便于触屏点选 */
+    /* 触发按钮(@添加资源)压到 36px,与右侧「上传文件」一致、不再突兀过高 */
     .ai-context-picker :deep(.b_btn) {
       min-height: 36px;
-    }
-    .ai-context-results :deep(.b_btn) {
-      min-height: 44px;
     }
   }
 

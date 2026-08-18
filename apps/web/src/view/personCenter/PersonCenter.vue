@@ -145,14 +145,17 @@
       @mouseenter="handleTriggerMouseEnter"
       @mouseleave="handleTriggerMouseLeave"
     >
-      <!-- 佩戴头像框:关掉父级 clip,由框做圆环、内部头像单独裁圆,避免被裁 -->
+      <!-- 外层不裁剪提醒与头像框；普通头像由下方内层单独裁圆。 -->
       <AvatarFramePreview
         v-if="equippedFrameId"
         :frame-id="equippedFrameId"
         :src="user.headPicture || icon.navigation.user"
         :size="32"
+        layout-mode="slot"
       />
-      <svg-icon v-else size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      <span v-else class="navigation-avatar-clip">
+        <svg-icon size="32" :src="user.headPicture || icon.navigation.user" class="dom-hover" />
+      </span>
       <span v-if="growthInfo?.hasUnreadLevelUp" class="nav-avatar-dot"></span>
     </div>
   </BPopover>
@@ -472,17 +475,28 @@
 <style lang="less" scoped>
   .navigation-icon {
     display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     place-items: center;
     width: 40px;
+    min-width: 0;
     height: 40px;
+    min-height: 0;
     flex: 0 0 40px;
     align-items: center;
-    clip-path: circle(50% at 50% 50%);
+    overflow: visible;
     cursor: pointer;
   }
-  /* 佩戴头像框时不裁,否则会把渐变环边缘裁掉 */
+
+  /* 只裁普通头像本身；头像框外饰和成长红点都属于外层入口，不能进入同一个 clip-path。 */
+  .navigation-avatar-clip {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    clip-path: circle(50% at 50% 50%);
+  }
+
   .navigation-icon.has-frame {
-    clip-path: none;
     overflow: visible;
   }
   .handle-body {
@@ -637,6 +651,7 @@
 
   .nav-avatar-dot {
     position: absolute;
+    z-index: 1;
     top: 0;
     right: 0;
     width: 9px;

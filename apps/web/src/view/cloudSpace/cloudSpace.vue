@@ -74,7 +74,7 @@
         </div>
       </div>
 
-      <div v-if="isOrganizingFromInbox" class="inbox-file-organizer">
+      <div v-if="showInboxFileOrganizer" class="inbox-file-organizer">
         <span>{{ t('inbox.completeFileHint') }}</span>
         <BButton type="primary" size="small" :loading="completingInbox" @click="completeOrganizingFile">
           {{ t('inbox.complete') }}
@@ -115,6 +115,7 @@
           :clear-key="clearSelectionKey"
           @preview-file="previewFile"
           @move-field="moveField"
+          @files-deleted="handleFilesDeleted"
           @exit-batch="toggleBatchMode"
           @request-upload="openCurrentFolderUpload"
         />
@@ -196,10 +197,17 @@
   const route = useRoute();
   const router = useRouter();
   const { isOrganizingFromInbox, completingInbox, completeInboxResource } = useInboxOrganizer();
+  const deletedOrganizingFileId = ref('');
   const organizingFileId = computed(() => {
     const value = route.query.fileId;
     return Array.isArray(value) ? String(value[0] || '') : String(value || '');
   });
+  const showInboxFileOrganizer = computed(
+    () =>
+      isOrganizingFromInbox.value &&
+      Boolean(organizingFileId.value) &&
+      deletedOrganizingFileId.value !== organizingFileId.value,
+  );
 
   function queryValue(value: unknown) {
     return Array.isArray(value) ? String(value[0] || '') : String(value || '');
@@ -228,6 +236,20 @@
   function syncFolderRoute(folderId = '') {
     if (getRouteFolderId() === folderId) return;
     void router.replace({ path: '/cloudSpace', query: routeQueryWith('folderId', folderId) });
+  }
+
+  function handleFilesDeleted(fileIds: string[]) {
+    const currentId = organizingFileId.value;
+    if (!currentId || !fileIds.map(String).includes(currentId)) return;
+
+    // 后端删除事务已同步清理待整理关系；先在本地隐藏入口，再清理只属于该目标的路由上下文。
+    deletedOrganizingFileId.value = currentId;
+    const query = { ...route.query };
+    delete query.fileId;
+    delete query.fileName;
+    delete query.organize;
+    delete query.from;
+    void router.replace({ path: '/cloudSpace', query });
   }
 
   async function completeOrganizingFile() {
@@ -797,7 +819,15 @@
 
   watch(
     () => [route.query.fileId, route.query.organize],
-    () => {
+    ([rawFileId, organize]) => {
+      const nextFileId = queryValue(rawFileId);
+      if (
+        queryValue(organize) !== 'inbox' ||
+        !nextFileId ||
+        nextFileId !== deletedOrganizingFileId.value
+      ) {
+        deletedOrganizingFileId.value = '';
+      }
       const fileId = getRouteFileId();
       if (!fileId || isOrganizingFromInbox.value) {
         if (!fileId) unavailableFileId = '';

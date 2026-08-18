@@ -27,6 +27,7 @@
         :frame-id="equippedFrameId"
         :src="profileAvatarSource"
         :size="26"
+        layout-mode="slot"
         aria-hidden="true"
       />
       <SvgIcon v-else class="mobile-top-bar__profile-avatar" :src="profileAvatarSource" size="36" aria-hidden="true" />

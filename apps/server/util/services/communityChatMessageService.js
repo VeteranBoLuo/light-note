@@ -977,6 +977,7 @@ export async function listCommunityChatMessages({
   roomSlug,
   before,
   focus,
+  after,
   limit,
   env = process.env,
   db = pool,
@@ -984,12 +985,13 @@ export async function listCommunityChatMessages({
   const normalizedRoomSlug = normalizeRoomSlug(roomSlug);
   const beforePublicId = normalizePublicMessageId(before, { optional: true });
   const focusPublicId = normalizePublicMessageId(focus, { optional: true });
-  if (beforePublicId && focusPublicId) {
+  const afterPublicId = normalizePublicMessageId(after, { optional: true });
+  if ([beforePublicId, focusPublicId, afterPublicId].filter(Boolean).length > 1) {
     throw chatError(
       'MESSAGE_CURSOR_CONFLICT',
       400,
-      '历史游标和消息定位不能同时使用',
-      'History cursor and message focus cannot be used together',
+      '历史游标、消息定位和后续游标不能同时使用',
+      'History cursor, message focus, and newer cursor cannot be used together',
     );
   }
   const pageSize = normalizePageSize(limit);
@@ -1013,6 +1015,7 @@ export async function listCommunityChatMessages({
 
   let beforeId = null;
   let focusId = null;
+  let afterId = null;
   let hasNewer = false;
   if (beforePublicId) {
     const cursor = await queryFirst(
@@ -1046,40 +1049,84 @@ export async function listCommunityChatMessages({
       );
     }
     focusId = focusedMessage.id;
-    hasNewer = Boolean(
-      await queryFirst(
-        db,
-        `SELECT message.id
-           FROM community_chat_messages message
-          WHERE message.room_id = ?
-            AND message.id > ?
-            AND message.status IN ('active', 'recalled')
-            ${viewerVisibilityClause}
-          ORDER BY message.id ASC
-          LIMIT 1`,
-        [room.id, focusId, ...viewerVisibilityParams],
-      ),
+  }
+  if (afterPublicId) {
+    const cursor = await queryFirst(
+      db,
+      `SELECT id FROM community_chat_messages WHERE room_id = ? AND public_id = ? LIMIT 1`,
+      [room.id, afterPublicId],
     );
+    if (!cursor) {
+      throw chatError('MESSAGE_CURSOR_INVALID', 400, '后续消息游标已失效', 'The newer message cursor is invalid');
+    }
+    afterId = cursor.id;
   }
 
-  const cursorClause = beforeId !== null ? 'AND message.id < ?' : focusId !== null ? 'AND message.id <= ?' : '';
-  const cursorId = beforeId ?? focusId;
-  const params =
-    cursorId === null
-      ? [room.id, ...viewerVisibilityParams, pageSize + 1]
-      : [room.id, ...viewerVisibilityParams, cursorId, pageSize + 1];
-  const [rows] = await db.query(
-    `${MESSAGE_SELECT}
-      WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
-        ${viewerVisibilityClause}
-        ${cursorClause}
-      ORDER BY message.id DESC
-      LIMIT ?`,
-    params,
-  );
-  const hasMore = rows.length > pageSize;
-  if (hasMore) rows.pop();
-  rows.reverse();
+  let rows = [];
+  let hasMore = false;
+  if (focusId !== null) {
+    // 定位消息时返回目标上下文，而不是“截至目标的历史页”。这样客户端既能继续向上翻历史，
+    // 也能以最后一条可见消息为 after 游标继续向下浏览，不必整页跳回最新消息。
+    const olderPageSize = Math.floor((pageSize - 1) / 2);
+    const newerPageSize = pageSize - 1 - olderPageSize;
+    const [olderRows] = await db.query(
+      `${MESSAGE_SELECT}
+        WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
+          ${viewerVisibilityClause}
+          AND message.id <= ?
+        ORDER BY message.id DESC
+        LIMIT ?`,
+      [room.id, ...viewerVisibilityParams, focusId, olderPageSize + 2],
+    );
+    hasMore = olderRows.length > olderPageSize + 1;
+    if (hasMore) olderRows.pop();
+    olderRows.reverse();
+
+    const [newerRows] = await db.query(
+      `${MESSAGE_SELECT}
+        WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
+          ${viewerVisibilityClause}
+          AND message.id > ?
+        ORDER BY message.id ASC
+        LIMIT ?`,
+      [room.id, ...viewerVisibilityParams, focusId, newerPageSize + 1],
+    );
+    hasNewer = newerRows.length > newerPageSize;
+    if (hasNewer) newerRows.pop();
+    rows = [...olderRows, ...newerRows];
+  } else if (afterId !== null) {
+    const [newerRows] = await db.query(
+      `${MESSAGE_SELECT}
+        WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
+          ${viewerVisibilityClause}
+          AND message.id > ?
+        ORDER BY message.id ASC
+        LIMIT ?`,
+      [room.id, ...viewerVisibilityParams, afterId, pageSize + 1],
+    );
+    hasNewer = newerRows.length > pageSize;
+    if (hasNewer) newerRows.pop();
+    rows = newerRows;
+  } else {
+    const cursorClause = beforeId !== null ? 'AND message.id < ?' : '';
+    const params =
+      beforeId === null
+        ? [room.id, ...viewerVisibilityParams, pageSize + 1]
+        : [room.id, ...viewerVisibilityParams, beforeId, pageSize + 1];
+    const [historyRows] = await db.query(
+      `${MESSAGE_SELECT}
+        WHERE message.room_id = ? AND message.status IN ('active', 'recalled')
+          ${viewerVisibilityClause}
+          ${cursorClause}
+        ORDER BY message.id DESC
+        LIMIT ?`,
+      params,
+    );
+    hasMore = historyRows.length > pageSize;
+    if (hasMore) historyRows.pop();
+    historyRows.reverse();
+    rows = historyRows;
+  }
   const authorAvatarByUserId = new Map();
   for (const row of rows) {
     if (!row.authorHasAvatar || authorAvatarByUserId.has(row.userId)) continue;
@@ -1105,6 +1152,7 @@ export async function listCommunityChatMessages({
     items,
     hasMore,
     nextBefore: hasMore && items.length ? items[0].publicId : null,
+    nextAfter: hasNewer && items.length ? items[items.length - 1].publicId : null,
     focusPublicId: focusPublicId || null,
     hasNewer,
     realtimeEnabled: feature.realtimeEnabled,

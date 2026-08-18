@@ -109,6 +109,7 @@
           aria-live="polite"
           @wheel.passive="handleMessageListUserScrollIntent"
           @touchmove.passive="handleMessageListUserScrollIntent"
+          @click="handleMessageListBlankClick"
           @scroll.passive="handleMessageListScroll"
         >
           <div v-if="access.emergencyReadOnly" class="community-runtime-readonly" role="status">
@@ -171,6 +172,7 @@
                   :frame-id="authorFrameId(chatMessage)"
                   :src="authorAvatarSource(chatMessage)"
                   :size="32"
+                  layout-mode="slot"
                   pause-when-offscreen
                 />
                 <SvgIcon
@@ -841,7 +843,13 @@
   import icon from '@/config/icon';
   import { frameVariant } from '@/config/growthFrames';
   import { bookmarkStore, useUserStore } from '@/store';
-  import { closeCurrentMobileOverlayThen } from '@/utils/mobileOverlayHistory';
+  import {
+    closeCurrentMobileOverlayThen,
+    registerMobileOverlayHistory,
+    releaseMobileOverlayHistory,
+    requestMobileOverlayHistoryClose,
+    type MobileOverlayHistoryHandle,
+  } from '@/utils/mobileOverlayHistory';
   import { scrollIntoContainer } from '@/utils/zoom';
 
   const props = defineProps<{
@@ -887,9 +895,11 @@
   const chatMessages = ref<CommunityChatMessage[]>([]);
   const initialLoading = ref(false);
   const olderLoading = ref(false);
+  const newerLoading = ref(false);
   const loadError = ref(false);
   const hasMore = ref(false);
   const nextBefore = ref<string | null>(null);
+  const nextAfter = ref<string | null>(null);
   const messageListEl = ref<HTMLElement | null>(null);
   const composerInput = ref<InstanceType<typeof BInput> | null>(null);
   const composerDraftSession = shallowRef(createCommunityChatDraftSession());
@@ -925,6 +935,8 @@
   });
   const expressionPanelOpen = ref(false);
   const expressionPanelTab = ref<'emoji' | 'custom'>('emoji');
+  let expressionPanelHistoryHandle: MobileOverlayHistoryHandle | null = null;
+  let focusComposerAfterExpressionPanelClose = false;
   const customStickerRefreshKey = ref(0);
   const mentionSuggestionsOpen = ref(false);
   const mentionSearchQuery = ref('');
@@ -1026,6 +1038,8 @@
   let mentionSearchTimer: number | undefined;
   let mentionSearchGeneration = 0;
   const INITIAL_MESSAGE_PAGE_SIZE = 30;
+  const FOCUSED_MESSAGE_WINDOW_LIMIT = 120;
+  const MESSAGE_PAGINATION_EDGE_PX = 180;
   const COMPOSER_INPUT_MIN_HEIGHT = 42;
   const COMPOSER_INPUT_MAX_HEIGHT = 112;
   const AVATAR_LONG_PRESS_MS = 480;
@@ -1800,6 +1814,7 @@
     const { scrollTop, scrollHeight, clientHeight } = element;
     distanceFromBottom.value = Math.max(0, scrollHeight - scrollTop - clientHeight);
     const scrollingUp = scrollTop < lastMessageScrollTop;
+    const scrollingDown = scrollTop > lastMessageScrollTop;
     lastMessageScrollTop = scrollTop;
     if (
       !programmaticMessageNavigationActive &&
@@ -1810,9 +1825,22 @@
     ) {
       void loadOlder();
     }
+    if (
+      !programmaticMessageNavigationActive &&
+      scrollingDown &&
+      distanceFromBottom.value <= MESSAGE_PAGINATION_EDGE_PX &&
+      focusedMessagePublicId.value &&
+      hasNewerThanFocus.value &&
+      nextAfter.value &&
+      !newerLoading.value
+    ) {
+      void loadNewer();
+    }
     if (distanceFromBottom.value >= 96) return;
     pendingNewMessageCount.value = 0;
-    scheduleMarkLatestRead();
+    // 定位历史消息的时间窗尚未接到最新页时，当前窗口底部并不等于聊天室最新消息，
+    // 不能提前清角标或写入已读游标。
+    if (!hasNewerThanFocus.value) scheduleMarkLatestRead();
   }
 
   function pauseAvatarMotionForScroll() {
@@ -1838,6 +1866,34 @@
     // 用户开始主动浏览历史后，键盘或容器后续的尺寸变化不得再把列表抢回底部。
     composerKeyboardAnchorAtBottom = false;
     pauseAvatarMotionForScroll();
+  }
+
+  function closeExpressionPanelFromMobileHistory() {
+    expressionPanelHistoryHandle = null;
+    expressionPanelOpen.value = false;
+    if (!focusComposerAfterExpressionPanelClose) return;
+    focusComposerAfterExpressionPanelClose = false;
+    void nextTick(() => composerInput.value?.focus());
+  }
+
+  function closeMobileExpressionPanel(options: { focusComposer?: boolean } = {}) {
+    if (!bookmark.isMobile || (!expressionPanelOpen.value && !expressionPanelHistoryHandle)) return false;
+    focusComposerAfterExpressionPanelClose = Boolean(options.focusComposer);
+    if (requestMobileOverlayHistoryClose(expressionPanelHistoryHandle)) return true;
+    closeExpressionPanelFromMobileHistory();
+    return true;
+  }
+
+  function handleMessageListBlankClick(event: MouseEvent) {
+    if (!bookmark.isMobile || !expressionPanelOpen.value || !(event.target instanceof Element)) return;
+    if (
+      event.target.closest(
+        'button, a, input, textarea, [role="button"], .community-message__body, .community-message__avatar, .community-message-state, .community-runtime-readonly',
+      )
+    ) {
+      return;
+    }
+    closeMobileExpressionPanel();
   }
 
   function writeBottomAnchor() {
@@ -1912,6 +1968,68 @@
       return false;
     }
     chatMessages.value = items;
+    return true;
+  }
+
+  interface MessageViewportAnchor {
+    publicId: string;
+    offsetTop: number;
+    scrollHeight: number;
+    scrollTop: number;
+  }
+
+  function captureMessageViewportAnchor(): MessageViewportAnchor | null {
+    const element = messageListEl.value;
+    if (!element) return null;
+    const containerTop = element.getBoundingClientRect().top;
+    const messageElements = Array.from(element.querySelectorAll<HTMLElement>('[data-message-public-id]'));
+    const anchorElement =
+      messageElements.find((item) => item.getBoundingClientRect().bottom >= containerTop - 1) || messageElements[0];
+    const publicId = String(anchorElement?.dataset.messagePublicId || '');
+    if (!anchorElement || !publicId) return null;
+    return {
+      publicId,
+      offsetTop: anchorElement.getBoundingClientRect().top - containerTop,
+      scrollHeight: element.scrollHeight,
+      scrollTop: element.scrollTop,
+    };
+  }
+
+  async function restoreMessageViewportAnchor(anchor: MessageViewportAnchor | null) {
+    if (!anchor) return;
+    await nextTick();
+    const element = messageListEl.value;
+    if (!element) return;
+    const anchorElement = Array.from(element.querySelectorAll<HTMLElement>('[data-message-public-id]')).find(
+      (item) => item.dataset.messagePublicId === anchor.publicId,
+    );
+    if (anchorElement) {
+      const containerTop = element.getBoundingClientRect().top;
+      const nextOffsetTop = anchorElement.getBoundingClientRect().top - containerTop;
+      element.scrollTop += nextOffsetTop - anchor.offsetTop;
+    } else {
+      element.scrollTop = anchor.scrollTop + (element.scrollHeight - anchor.scrollHeight);
+    }
+    lastMessageScrollTop = element.scrollTop;
+  }
+
+  function trimFocusedMessageWindow(direction: 'older' | 'newer') {
+    if (!focusedMessagePublicId.value) return false;
+    const stableMessages = chatMessages.value.filter((item) => item.deliveryState !== 'sending');
+    if (stableMessages.length <= FOCUSED_MESSAGE_WINDOW_LIMIT) return false;
+    const pendingMessages = chatMessages.value.filter((item) => item.deliveryState === 'sending');
+    const keptMessages =
+      direction === 'older'
+        ? stableMessages.slice(0, FOCUSED_MESSAGE_WINDOW_LIMIT)
+        : stableMessages.slice(-FOCUSED_MESSAGE_WINDOW_LIMIT);
+    assignChatMessagesIfChanged([...keptMessages, ...pendingMessages]);
+    if (direction === 'older') {
+      hasNewerThanFocus.value = true;
+      nextAfter.value = keptMessages[keptMessages.length - 1]?.publicId || null;
+    } else {
+      hasMore.value = true;
+      nextBefore.value = keptMessages[0]?.publicId || null;
+    }
     return true;
   }
 
@@ -2008,6 +2126,7 @@
     cancelInitialBottomAnchor();
     loadError.value = false;
     pendingNewMessageCount.value = 0;
+    nextAfter.value = null;
     try {
       const messagePagePromise = (async () => {
         try {
@@ -2021,6 +2140,7 @@
           if (!requestedFocus || generation !== loadGeneration || roomSlug !== selectedRoomSlug.value) throw error;
           focusedMessagePublicId.value = '';
           hasNewerThanFocus.value = false;
+          nextAfter.value = null;
           await clearFocusMessageRoute();
           message.warning(t('communityChat.sourceMessageUnavailable'));
           return getCommunityChatMessages(roomSlug, { limit: INITIAL_MESSAGE_PAGE_SIZE });
@@ -2039,6 +2159,11 @@
       nextBefore.value = page.nextBefore || null;
       focusedMessagePublicId.value = page.focusPublicId || '';
       hasNewerThanFocus.value = Boolean(page.focusPublicId && page.hasNewer);
+      nextAfter.value = hasNewerThanFocus.value
+        ? page.nextAfter ||
+          [...(page.items || [])].reverse().find((item) => item.deliveryState !== 'sending')?.publicId ||
+          null
+        : null;
       // 真实消息始终在覆盖层后完成挂载和定位；覆盖层只在最终 scrollTop 已写入后移除，首帧即最终布局。
       if (focusedMessagePublicId.value) await scrollToFocusedMessage(focusedMessagePublicId.value);
       else {
@@ -2046,7 +2171,8 @@
         await restoreInitialBottomAnchor();
       }
       initialLoading.value = false;
-      void markLatestRead();
+      // 定位旧消息只代表用户读到了该时间窗，不能把窗口内最后一条误当成聊天室最新消息。
+      if (!hasNewerThanFocus.value) void markLatestRead();
     } catch {
       if (generation === loadGeneration) loadError.value = true;
     } finally {
@@ -2066,6 +2192,7 @@
     const element = messageListEl.value;
     if (!roomSlug || !before || olderLoading.value) return;
     olderLoading.value = true;
+    const viewportAnchor = captureMessageViewportAnchor();
     const previousScrollHeight = element?.scrollHeight || 0;
     try {
       const response = await getCommunityChatMessages(roomSlug, { before, limit: INITIAL_MESSAGE_PAGE_SIZE });
@@ -2078,8 +2205,13 @@
       ];
       hasMore.value = Boolean(page.hasMore);
       nextBefore.value = page.nextBefore || null;
-      await nextTick();
-      if (element) {
+      const trimmed = trimFocusedMessageWindow('older');
+      if (trimmed) {
+        await restoreMessageViewportAnchor(viewportAnchor);
+      } else {
+        await nextTick();
+      }
+      if (!trimmed && element) {
         element.scrollTop += element.scrollHeight - previousScrollHeight;
         lastMessageScrollTop = element.scrollTop;
       }
@@ -2087,6 +2219,39 @@
       message.error(error?.message || t('communityChat.messagesLoadFailed'));
     } finally {
       olderLoading.value = false;
+    }
+  }
+
+  async function loadNewer() {
+    const roomSlug = selectedRoomSlug.value;
+    const after = nextAfter.value;
+    if (!roomSlug || !after || !focusedMessagePublicId.value || !hasNewerThanFocus.value || newerLoading.value) {
+      return;
+    }
+    newerLoading.value = true;
+    const viewportAnchor = captureMessageViewportAnchor();
+    try {
+      const response = await getCommunityChatMessages(roomSlug, {
+        after,
+        limit: INITIAL_MESSAGE_PAGE_SIZE,
+      });
+      if (roomSlug !== selectedRoomSlug.value || after !== nextAfter.value) return;
+      const page = response.data as CommunityChatMessagePage;
+      const knownIds = new Set(chatMessages.value.map((item) => item.publicId));
+      const incoming = (page.items || []).filter((item) => !knownIds.has(item.publicId));
+      assignChatMessagesIfChanged([...chatMessages.value, ...retainUnchangedMessageReferences(incoming)]);
+      hasNewerThanFocus.value = Boolean(page.hasNewer && page.items?.length);
+      nextAfter.value = hasNewerThanFocus.value
+        ? page.nextAfter ||
+          [...(page.items || [])].reverse().find((item) => item.deliveryState !== 'sending')?.publicId ||
+          null
+        : null;
+      const trimmed = trimFocusedMessageWindow('newer');
+      if (trimmed) await restoreMessageViewportAnchor(viewportAnchor);
+    } catch (error: any) {
+      message.error(error?.message || t('communityChat.messagesLoadFailed'));
+    } finally {
+      newerLoading.value = false;
     }
   }
 
@@ -2131,6 +2296,7 @@
         if (focusedMessagePublicId.value && newMessageCount > 0) {
           focusedMessagePublicId.value = '';
           hasNewerThanFocus.value = false;
+          nextAfter.value = null;
           void clearFocusMessageRoute();
         }
       } else if (newMessageCount > 0) {
@@ -2160,6 +2326,8 @@
       if (chatMessages.value.some((item) => item.publicId === messagePublicId)) return;
       if (focusedMessagePublicId.value) {
         hasNewerThanFocus.value = true;
+        nextAfter.value ||=
+          [...chatMessages.value].reverse().find((item) => item.deliveryState !== 'sending')?.publicId || null;
         return;
       }
       await refreshLatest({ force: true });
@@ -2181,6 +2349,7 @@
     if (removedFocusedMessage) {
       focusedMessagePublicId.value = '';
       hasNewerThanFocus.value = false;
+      nextAfter.value = null;
       await clearFocusMessageRoute();
       await loadInitial({ ignoreFocus: true });
       return;
@@ -2204,6 +2373,7 @@
   async function returnToLatest() {
     focusedMessagePublicId.value = '';
     hasNewerThanFocus.value = false;
+    nextAfter.value = null;
     pendingNewMessageCount.value = 0;
     await clearFocusMessageRoute();
     await loadInitial({ ignoreFocus: true });
@@ -2369,6 +2539,7 @@
       if (focusedMessagePublicId.value === chatMessage.publicId) {
         focusedMessagePublicId.value = '';
         hasNewerThanFocus.value = false;
+        nextAfter.value = null;
         void clearFocusMessageRoute();
       }
       void recordOperation({ module: '公共聊天室', operation: '从自己的聊天记录删除消息' });
@@ -2624,14 +2795,14 @@
 
   function toggleMobileExpressionPanel() {
     const willOpen = !expressionPanelOpen.value;
-    expressionPanelOpen.value = willOpen;
     closeMentionSuggestions();
     if (willOpen) {
+      expressionPanelOpen.value = true;
       const textarea = composerInput.value?.inputEl as HTMLTextAreaElement | null | undefined;
       textarea?.blur();
       void nextTick(scrollToBottom);
     } else {
-      void nextTick(() => composerInput.value?.focus());
+      closeMobileExpressionPanel({ focusComposer: true });
     }
   }
 
@@ -3315,6 +3486,8 @@
       chatMessages.value = [];
       hasMore.value = false;
       nextBefore.value = null;
+      nextAfter.value = null;
+      newerLoading.value = false;
       loadError.value = false;
       expressionPanelOpen.value = false;
       closeMentionSuggestions();
@@ -3370,6 +3543,24 @@
     void nextTick(syncComposerInputHeight);
   });
 
+  watch(
+    [expressionPanelOpen, () => bookmark.isMobile],
+    ([open, isMobile]) => {
+      if (open && isMobile) {
+        if (!expressionPanelHistoryHandle) {
+          expressionPanelHistoryHandle = registerMobileOverlayHistory(closeExpressionPanelFromMobileHistory);
+        }
+        return;
+      }
+      focusComposerAfterExpressionPanelClose = false;
+      if (!expressionPanelHistoryHandle) return;
+      const handle = expressionPanelHistoryHandle;
+      expressionPanelHistoryHandle = null;
+      releaseMobileOverlayHistory(handle);
+    },
+    { flush: 'sync' },
+  );
+
   watch(focusMessageFromRoute, (nextValue, previousValue) => {
     if (!nextValue && previousValue && previousValue === clearingFocusRouteValue) {
       clearingFocusRouteValue = '';
@@ -3408,6 +3599,11 @@
     clearAvatarClickSuppression();
     resetComposerDragState();
     closeMentionSuggestions();
+    focusComposerAfterExpressionPanelClose = false;
+    if (expressionPanelHistoryHandle) {
+      releaseMobileOverlayHistory(expressionPanelHistoryHandle);
+      expressionPanelHistoryHandle = null;
+    }
     loadGeneration += 1;
     pinnedLoadGeneration += 1;
     closeCommunityProfile({ reset: true });
@@ -3816,9 +4012,19 @@
   /* 滚动时保留框体本身的低成本 transform，暂停光晕、素材高光和粒子，并强制关闭动态滤镜。 */
   .community-message-list.is-actively-scrolling :deep(.avatar-frame__ambient),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame__art-detail),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-layer),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-trail),
-  .community-message-list.is-actively-scrolling :deep(.avatar-frame__dragon-ornament),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__wing-layer),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__celestial-dust i),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__eternal-motes i),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__book-layer),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-current),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-booklight),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__bookmark-event i),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-ink),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-star-route i),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-pen::before),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__constellation-pen::after),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__cloudvault-current),
+  .community-message-list.is-actively-scrolling :deep(.avatar-frame__cloudvault-event i),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::before),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion::after),
   .community-message-list.is-actively-scrolling :deep(.avatar-frame__motion i) {
@@ -3981,7 +4187,7 @@
     margin-bottom: 18px;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 15px;
   }
 
   .community-message.is-own {
@@ -3995,7 +4201,10 @@
     flex: 0 0 40px;
     padding: 0 !important;
     display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     place-items: center;
+    min-width: 0;
+    min-height: 0;
     border: 0 !important;
     border-radius: 50%;
     color: inherit;

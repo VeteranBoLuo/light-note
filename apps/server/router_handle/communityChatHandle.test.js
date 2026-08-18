@@ -214,7 +214,13 @@ describe('communityChatHandle', () => {
     const req = {
       user: { id: 'user-1', role: 'user' },
       params: { slug: 'newcomers' },
-      query: { before: 'message-1', focus: 'message-focus', limit: '20', userId: 'forged-user' },
+      query: {
+        before: 'message-1',
+        focus: 'message-focus',
+        after: 'message-after',
+        limit: '20',
+        userId: 'forged-user',
+      },
     };
     const res = mockRes();
 
@@ -225,6 +231,7 @@ describe('communityChatHandle', () => {
       roomSlug: 'newcomers',
       before: 'message-1',
       focus: 'message-focus',
+      after: 'message-after',
       limit: '20',
     });
     expect(res.send).toHaveBeenCalledWith({ data: { roomSlug: 'newcomers', items: [] }, status: 200, msg: '' });
@@ -246,6 +253,7 @@ describe('communityChatHandle', () => {
       roomSlug: 'newcomers',
       before: undefined,
       focus: undefined,
+      after: undefined,
       limit: undefined,
     });
     expect(roomsRes.status).not.toHaveBeenCalledWith(403);

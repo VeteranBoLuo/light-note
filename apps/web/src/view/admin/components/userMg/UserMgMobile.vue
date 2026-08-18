@@ -73,6 +73,7 @@
                     :frame-id="record.equippedFrame"
                     :src="record.headPicture || icon.navigation.user"
                     :size="30"
+                    layout-mode="slot"
                     pause-when-offscreen
                   />
                   <SvgIcon v-else :src="record.headPicture || icon.navigation.user" size="36" />

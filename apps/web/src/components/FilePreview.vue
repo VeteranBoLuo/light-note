@@ -175,7 +175,12 @@
           </div>
 
           <!-- 4. Word文档预览 -->
-          <div v-else-if="previewType === 'word'" class="office-preview-container">
+          <div
+            v-else-if="previewType === 'word'"
+            ref="officeContainerRef"
+            class="office-preview-container"
+            @click.capture="handleOfficeLink"
+          >
             <VueOfficeDocx
               :src="effectiveFileUrl"
               @rendered="onRendered"
@@ -403,6 +408,7 @@
   const isHtmlFullscreen = ref(false);
   let previewHistoryHandle: MobileOverlayHistoryHandle | null = null;
   const markdownContainerRef = ref<HTMLElement | null>(null);
+  const officeContainerRef = ref<HTMLElement | null>(null);
   const markdownContent = ref('');
   let activePreviewFileId = '';
   let textAbortController: AbortController | null = null;
@@ -897,8 +903,16 @@
     }
   }
 
+  function decodeAnchorFragment(value: string) {
+    try {
+      return decodeURIComponent(value);
+    } catch {
+      return value;
+    }
+  }
+
   function normalizeAnchorKey(value: string) {
-    return decodeURIComponent(value)
+    return decodeAnchorFragment(value)
       .trim()
       .toLowerCase()
       .replace(/[\s_-]+/g, '')
@@ -906,14 +920,12 @@
   }
 
   function findAnchorTarget(container: HTMLElement, rawHash: string) {
-    const decodedHash = decodeURIComponent(rawHash);
-    const candidateIds = [rawHash, decodedHash, rawHash.toLowerCase(), decodedHash.toLowerCase()];
-
-    for (const id of candidateIds) {
-      if (!id) continue;
-      const exact = container.querySelector(`[id="${id}"]`) as HTMLElement | null;
-      if (exact) return exact;
-    }
+    const decodedHash = decodeAnchorFragment(rawHash);
+    const candidateIds = new Set([rawHash, decodedHash, rawHash.toLowerCase(), decodedHash.toLowerCase()]);
+    const exact = Array.from(container.querySelectorAll<HTMLElement>('[id]')).find((element) =>
+      candidateIds.has(element.id),
+    );
+    if (exact) return exact;
 
     const normalizedHash = normalizeAnchorKey(rawHash);
     if (!normalizedHash) return null;
@@ -924,6 +936,23 @@
       headingEls.find((el) => normalizeAnchorKey(el.textContent || '') === normalizedHash) ||
       null
     );
+  }
+
+  function handleOfficeLink(event: Event) {
+    const target = event.target as HTMLElement | null;
+    const link = target?.closest('a[href]') as HTMLAnchorElement | null;
+    const container = officeContainerRef.value;
+    if (!link || !container?.contains(link)) return;
+
+    const href = (link.getAttribute('href') || '').trim();
+    if (!href.startsWith('#')) return;
+
+    const rawHash = href.slice(1);
+    if (!rawHash) return;
+
+    // 浏览器默认的 hash 导航会新增历史记录，进而被预览浮层误判为返回关闭。
+    event.preventDefault();
+    findAnchorTarget(container, rawHash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function handleMarkdownLink(event: Event) {

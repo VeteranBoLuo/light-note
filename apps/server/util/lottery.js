@@ -79,10 +79,11 @@ async function grantReward(conn, userId, prize, { mode, version, overflowPoints 
       prize.amount,
       userId,
     ]);
-    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+    await conn.query('INSERT INTO points_log (user_id, delta, reason, ref, meta) VALUES (?, 0, ?, ?, ?)', [
       userId,
       c4 ? 'lottery_paid_asset' : 'lottery_storage',
       prize.id,
+      JSON.stringify({ assetType: 'storage_mb', assetAmount: prize.amount }),
     ]);
   } else if (prize.kind === 'card') {
     if (mode === 'free' && c4) throw new Error('FREE_LOTTERY_ASSET_POLICY_VIOLATION');
@@ -113,10 +114,11 @@ async function grantReward(conn, userId, prize, { mode, version, overflowPoints 
       userId,
     ]);
     if (c4) {
-      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref) VALUES (?, 0, ?, ?)', [
+      await conn.query('INSERT INTO points_log (user_id, delta, reason, ref, meta) VALUES (?, 0, ?, ?, ?)', [
         userId,
         mode === 'free' ? 'lottery_free_asset' : 'lottery_paid_asset',
         prize.id,
+        JSON.stringify({ assetType: 'ai_tokens', assetAmount: prize.amount }),
       ]);
     }
   }
@@ -144,7 +146,9 @@ export async function drawLottery(
   } = {},
 ) {
   const runtime = getEconomyRuntime();
-  const hasWriteProtocol = Boolean(clientRequestId && economyVersion && expectedCost !== null && expectedCost !== undefined);
+  const hasWriteProtocol = Boolean(
+    clientRequestId && economyVersion && expectedCost !== null && expectedCost !== undefined,
+  );
   if (runtime.requireWriteVersion && hasWriteProtocol) {
     if ((mode !== 'free' && mode !== 'paid') || (free === true && mode !== 'free')) {
       throw new PointsEconomyError('INVALID_DRAW_MODE', '抽奖方式无效，请刷新页面后重试');

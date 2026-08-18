@@ -182,6 +182,36 @@ describe('积分流水来源语义', () => {
     expect(result.rows[1]).toMatchObject({ sourceType: 'weekly', sourceKey: 'wk_todo', sourceMeta: '202632' });
   });
 
+  it('让新旧抽奖资产流水都返回明确到账数量', async () => {
+    mocks.query
+      .mockResolvedValueOnce([
+        [
+          {
+            id: 14,
+            delta: 0,
+            reason: 'lottery_free_asset',
+            ref: 'ai200',
+            meta: null,
+            create_time: '2026-08-17 10:00:00',
+          },
+          {
+            id: 13,
+            delta: 0,
+            reason: 'lottery_paid_asset',
+            ref: 's512',
+            meta: JSON.stringify({ assetType: 'storage_mb', assetAmount: 512 }),
+            create_time: '2026-08-17 09:00:00',
+          },
+        ],
+      ])
+      .mockResolvedValueOnce([[{ c: 2 }]]);
+
+    const result = await getPointsLog('user-1');
+
+    expect(result.rows[0]).toMatchObject({ assetChange: { type: 'ai', amount: 200_000 } });
+    expect(result.rows[1]).toMatchObject({ assetChange: { type: 'storage', amount: 512 } });
+  });
+
   it('返回稳定记录 ID、游标并把分页参数截断为安全整数', async () => {
     mocks.query
       .mockResolvedValueOnce([

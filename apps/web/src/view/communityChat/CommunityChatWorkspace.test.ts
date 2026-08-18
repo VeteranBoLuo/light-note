@@ -802,6 +802,7 @@ describe('CommunityChatWorkspace', () => {
         items: [chatMessage({ publicId: 'message-before', content: '较早消息' }), chatMessage()],
         hasMore: true,
         nextBefore: 'message-before',
+        nextAfter: 'message-1',
         focusPublicId: 'message-1',
         hasNewer: true,
         realtimeEnabled: false,
@@ -826,6 +827,67 @@ describe('CommunityChatWorkspace', () => {
 
     expect(mocks.routerReplace).toHaveBeenCalledWith({ query: { from: 'note' } });
     expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', { limit: 30 });
+    expect(host.querySelector('.community-message-list__new')).toBeNull();
+  });
+
+  it('定位历史消息后向下滚动会连续加载更新消息，不必整页跳回最新消息', async () => {
+    mocks.route.query = { message: 'message-focus' };
+    mocks.getMessages
+      .mockResolvedValueOnce({
+        data: {
+          roomSlug: 'general',
+          items: [
+            chatMessage({ publicId: 'message-before', content: '较早消息' }),
+            chatMessage({ publicId: 'message-focus', content: '来源消息' }),
+            chatMessage({ publicId: 'message-after-1', content: '后续消息一' }),
+          ],
+          hasMore: true,
+          nextBefore: 'message-before',
+          nextAfter: 'message-after-1',
+          focusPublicId: 'message-focus',
+          hasNewer: true,
+          realtimeEnabled: false,
+          pollingAfterMs: 8000,
+          serverTime: '2026-08-09T10:00:00.000Z',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          roomSlug: 'general',
+          items: [chatMessage({ publicId: 'message-after-2', content: '后续消息二' })],
+          hasMore: false,
+          nextBefore: null,
+          nextAfter: null,
+          focusPublicId: null,
+          hasNewer: false,
+          realtimeEnabled: false,
+          pollingAfterMs: 8000,
+          serverTime: '2026-08-09T10:01:00.000Z',
+        },
+      });
+
+    const host = await mountWorkspace();
+    await new Promise((resolve) => window.setTimeout(resolve, 30));
+    await flushAsync();
+    expect(mocks.markRead).not.toHaveBeenCalled();
+    const messageList = host.querySelector<HTMLElement>('.community-message-list');
+    expect(messageList).not.toBeNull();
+    if (!messageList) return;
+    Object.defineProperties(messageList, {
+      scrollHeight: { configurable: true, value: 1000 },
+      clientHeight: { configurable: true, value: 400 },
+      scrollTop: { configurable: true, writable: true, value: 500 },
+    });
+
+    messageList.dispatchEvent(new Event('scroll'));
+    await flushAnimationFrame();
+    await flushAsync();
+
+    expect(mocks.getMessages).toHaveBeenNthCalledWith(2, 'general', {
+      after: 'message-after-1',
+      limit: 30,
+    });
+    expect(host.querySelector('[data-message-public-id="message-after-2"]')?.textContent).toContain('后续消息二');
     expect(host.querySelector('.community-message-list__new')).toBeNull();
   });
 
@@ -1911,9 +1973,8 @@ describe('CommunityChatWorkspace', () => {
     expect(workspaceSource).toContain('animation-play-state: paused !important;');
     expect(workspaceSource).toContain(':deep(.avatar-frame__ambient),');
     expect(workspaceSource).toContain(':deep(.avatar-frame__art-detail),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__dragon-layer),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__dragon-trail),');
-    expect(workspaceSource).toContain(':deep(.avatar-frame__dragon-ornament),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame__wing-layer),');
+    expect(workspaceSource).toContain(':deep(.avatar-frame__book-layer),');
     expect(workspaceSource).toContain(':deep(.avatar-frame__motion::before),');
     expect(workspaceSource).toContain(':deep(.avatar-frame__motion::after),');
     expect(workspaceSource).toContain(':deep(.avatar-frame__motion i)');

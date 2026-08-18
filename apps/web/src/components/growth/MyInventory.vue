@@ -6,75 +6,77 @@
       <BButton size="small" @click="loadInventory">{{ t('common.retry') }}</BButton>
     </div>
     <template v-else>
-    <div class="inv-head">
-      <h3 class="inv-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.inventoryTitle') }}</h3>
-      <p class="inv-sub">{{ t('growth.inventorySubtitle') }}</p>
-    </div>
+      <div class="inv-head">
+        <h3 class="inv-title"><SvgIcon :src="icon.growth.reward" size="18" /> {{ t('growth.inventoryTitle') }}</h3>
+        <p class="inv-sub">{{ t('growth.inventorySubtitle') }}</p>
+      </div>
 
-    <!-- 我的资产:即时到账类(积分 / 永久扩容 / 永久 AI 加油余额) -->
-    <div class="inv-label">{{ t('growth.inventoryAssetsTitle') }}</div>
-    <div class="inv-assets">
-      <div class="asset">
-        <span class="asset-ico"><SvgIcon :src="icon.growth.coin" size="21" /></span>
-        <div class="asset-body">
-          <b class="asset-val">{{ (inv?.assets.points || 0).toLocaleString('en-US') }}</b>
-          <span class="asset-label">{{ t('growth.assetPoints') }}</span>
-        </div>
-      </div>
-      <div class="asset">
-        <span class="asset-ico"><SvgIcon :src="icon.growth.storage" size="21" /></span>
-        <div class="asset-body">
-          <b class="asset-val">{{ fmtStorage(inv?.assets.storageBonusMb || 0) }}</b>
-          <span class="asset-label">{{ t('growth.assetStorage') }}</span>
-        </div>
-      </div>
-      <div class="asset">
-        <span class="asset-ico"><SvgIcon :src="icon.growth.ai" size="21" /></span>
-        <div class="asset-body">
-          <b class="asset-val">{{ fmtTokens(inv?.assets.aiBonusTokens || 0) }}</b>
-          <span class="asset-label">{{ t('growth.assetAiBalance') }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- 我的物品:历史 AI 加油包与补签卡 -->
-    <div class="inv-label">{{ t('growth.inventoryItemsTitle') }}</div>
-    <div class="inv-items">
-      <div v-for="it in inv?.items || []" :key="it.id" class="inv-item" :class="{ 'is-empty': it.qty < 1 }">
-        <span class="item-ico"><SvgIcon :src="itemIcon(it.id)" size="24" /></span>
-        <div class="item-main">
-          <div class="item-name-row">
-            <span class="item-name">{{ it.name }}</span>
-            <span class="item-qty" :class="{ zero: it.qty < 1 }">{{
-              it.qty > 0 ? '×' + it.qty : t('growth.itemEmptyQty')
-            }}</span>
+      <!-- 我的资产:即时到账类(积分 / 永久扩容 / 永久 AI 加油余额) -->
+      <div class="inv-label">{{ t('growth.inventoryAssetsTitle') }}</div>
+      <div class="inv-assets">
+        <div class="asset">
+          <span class="asset-ico"><SvgIcon :src="icon.growth.coin" size="21" /></span>
+          <div class="asset-body">
+            <b class="asset-val">{{ (inv?.assets.points || 0).toLocaleString('en-US') }}</b>
+            <span class="asset-label">{{ t('growth.assetPoints') }}</span>
           </div>
-          <p class="item-desc">{{ itemDescription(it) }}</p>
         </div>
-        <div class="item-action">
-          <!-- 历史 AI 加油包:转入永久余额 -->
-          <BButton
-            v-if="it.action === 'use'"
-            class="inv-btn"
-            :disabled="readOnly || it.qty < 1 || usingId === it.id"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
-            @click="onUse(it)"
-          >
-            {{ usingId === it.id ? t('growth.itemUsing') : t('growth.itemUse') }}
-          </BButton>
-          <!-- 补签卡:补回最近 3 个自然日内的漏签（默认补最近一天） -->
-          <BButton
-            v-else-if="it.action === 'makeup'"
-            class="inv-btn"
-            :disabled="readOnly || it.qty < 1 || !canMakeup || makingUp"
-            :title="readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''"
-            @click="onMakeup"
-          >
-            {{ t('growth.itemGoMakeup') }}
-          </BButton>
+        <div class="asset">
+          <span class="asset-ico"><SvgIcon :src="icon.growth.storage" size="21" /></span>
+          <div class="asset-body">
+            <b class="asset-val">{{ fmtStorage(inv?.assets.storageBonusMb || 0) }}</b>
+            <span class="asset-label">{{ t('growth.assetStorage') }}</span>
+          </div>
+        </div>
+        <div class="asset">
+          <span class="asset-ico"><SvgIcon :src="icon.growth.ai" size="21" /></span>
+          <div class="asset-body">
+            <b class="asset-val">{{ fmtTokens(inv?.assets.aiBonusTokens || 0) }}</b>
+            <span class="asset-label">{{ t('growth.assetAiBalance') }}</span>
+          </div>
         </div>
       </div>
-    </div>
+
+      <!-- 我的物品:历史 AI 加油包与补签卡 -->
+      <div class="inv-label">{{ t('growth.inventoryItemsTitle') }}</div>
+      <div class="inv-items">
+        <div v-for="it in visibleItems" :key="it.id" class="inv-item" :class="{ 'is-empty': it.qty < 1 }">
+          <span class="item-ico"><SvgIcon :src="itemIcon(it.id)" size="24" /></span>
+          <div class="item-main">
+            <div class="item-name-row">
+              <span class="item-name">{{ it.name }}</span>
+              <span class="item-qty" :class="{ zero: it.qty < 1 }">{{
+                it.qty > 0 ? '×' + it.qty : t('growth.itemEmptyQty')
+              }}</span>
+            </div>
+            <p class="item-desc">{{ itemDescription(it) }}</p>
+          </div>
+          <div class="item-action">
+            <!-- 历史 AI 加油包:转入永久余额 -->
+            <BButton
+              v-if="it.action === 'use'"
+              class="inv-btn"
+              :disabled="readOnly || it.qty < 1 || usingId === it.id"
+              :title="readOnly ? t('growth.adminContextActionUnavailable') : ''"
+              @click="onUse(it)"
+            >
+              {{ usingId === it.id ? t('growth.itemUsing') : t('growth.itemUse') }}
+            </BButton>
+            <!-- 补签卡:补回最近 3 个自然日内的漏签（默认补最近一天） -->
+            <BButton
+              v-else-if="it.action === 'makeup'"
+              class="inv-btn"
+              :disabled="readOnly || it.qty < 1 || !canMakeup || makingUp"
+              :title="
+                readOnly ? t('growth.adminContextActionUnavailable') : !canMakeup ? t('growth.itemMakeupHint') : ''
+              "
+              @click="onMakeup"
+            >
+              {{ t('growth.itemGoMakeup') }}
+            </BButton>
+          </div>
+        </div>
+      </div>
     </template>
   </div>
 </template>
@@ -95,17 +97,10 @@
   const { t, locale } = useI18n();
   const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false });
   const readOnly = computed(() => props.readOnly);
-  const {
-    inventory,
-    inventoryLoading,
-    inventoryError,
-    growth,
-    loadInventory,
-    loadDashboard,
-    useItem,
-    useProtectCard,
-  } = useGrowth();
+  const { inventory, inventoryLoading, inventoryError, growth, loadInventory, loadDashboard, useItem, useProtectCard } =
+    useGrowth();
   const inv = inventory;
+  const visibleItems = computed(() => (inv.value?.items || []).filter((item) => item.id !== 'ai_pack' || item.qty > 0));
   const makeupDate = computed(() => growth.value?.makeupDays?.[0] || null);
   const canMakeup = computed(() => !!makeupDate.value);
 

@@ -218,9 +218,9 @@
     padding: 10px;
     font-size: 14px;
   }
-  // 80px 头像下，最高档素材盒会达到 165px；弹窗正文从标题分隔线开始裁切，必须在正文内部预留上半径出血。
+  // 80px 头像下，最高档素材盒(artSize 137)会达到约 171px；弹窗正文从标题分隔线开始裁切，必须在正文内部预留上半径出血。
   .home-container--framed {
-    padding-top: 54px;
+    padding-top: 56px;
   }
   .home-user-body {
     margin-top: 30px;
@@ -230,7 +230,7 @@
     gap: 20px;
   }
   .home-container--framed .home-user-body {
-    margin-top: 52px;
+    margin-top: 54px;
   }
   .user-item {
     display: flex;
@@ -265,6 +265,10 @@
   .user_icon--framed {
     overflow: visible;
     border-color: transparent;
+  }
+  // 游客仍不可编辑头像，但媒体预览不能继承 BButton 的整层透明度，否则位图边缘会与弹窗背景混合发虚。
+  .user_icon.disabled {
+    opacity: 1;
   }
   .user_icon__edit {
     position: absolute;

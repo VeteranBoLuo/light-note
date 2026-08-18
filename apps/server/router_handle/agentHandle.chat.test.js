@@ -136,6 +136,24 @@ vi.mock('../util/agent/tools/index.js', () => ({
       summarize: (raw) => `详情:${raw.value}`,
     },
     {
+      name: 'query_notes',
+      description: '按关键词与时间范围查询笔记',
+      parameters: {
+        type: 'object',
+        properties: {
+          keyword: { type: 'string' },
+          timeRange: { type: 'string' },
+          limit: { type: 'integer' },
+        },
+      },
+      requireRoot: false,
+      timeoutMs: 1000,
+      execute: mocks.toolExecute,
+      getDependencyRefs: (raw) => raw.dependencyRefs || [],
+      transform: (raw) => `笔记查询:${raw.value}`,
+      summarize: (raw) => `笔记查询:${raw.value}`,
+    },
+    {
       name: 'read_url',
       description: '读取用户明确提供的网页链接',
       parameters: {
@@ -342,10 +360,10 @@ function toolCall(name, args, id = `call-${name}`) {
  * 传感器命中的请求会先花一次分类判断本轮是否要产出一篇笔记，因此这些用例的
  * Provider 序列第一项固定是它，草稿协议从第二项开始。
  */
-function noteDraftTaskResponse({ producesNote = true, otherMutations = false } = {}) {
+function noteDraftTaskResponse({ producesNote = true, otherMutations = false, needsWorkspaceRetrieval = false } = {}) {
   return {
     content: '',
-    toolCalls: [toolCall('classify_note_draft_task', { producesNote, otherMutations })],
+    toolCalls: [toolCall('classify_note_draft_task', { producesNote, otherMutations, needsWorkspaceRetrieval })],
     usage: usage(2),
     usageStatus: 'reported',
     finishReason: 'tool_calls',
@@ -1021,6 +1039,7 @@ describe('agentChat 主链路', () => {
     expect(mocks.requestAi.mock.calls[1][1]).toMatchObject({
       toolChoice: { type: 'function', function: { name: 'submit_note_draft' } },
     });
+    expect(mocks.requestAi.mock.calls[1][0][1].content).not.toContain('类型：用户粘贴文本');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         toolName: 'create_note',
@@ -1031,6 +1050,318 @@ describe('agentChat 主链路', () => {
       response: expect.stringContaining('笔记草稿已准备好'),
       confirmations: [expect.objectContaining({ toolName: 'create_note' })],
       entityRefs: [{ type: 'bookmark', id: 'bookmark-1', title: 'TypeORM 官方文档' }],
+    });
+  });
+
+  it('隐式描述工作区材料时先按语义查询真实笔记，再在依赖轮生成新笔记', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '《上午记录》正文甲；《下午记录》正文乙',
+      dependencyRefs: [
+        { type: 'note', id: 'today-note-1' },
+        { type: 'note', id: 'today-note-2' },
+      ],
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ needsWorkspaceRetrieval: true }))
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_notes',
+                goal: '读取用户描述范围内的真实笔记',
+                targetDescription: '用户今天创建的笔记',
+                dependsOn: [],
+              },
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '基于查询结果生成一篇总结笔记',
+                targetDescription: '新的总结笔记',
+                dependsOn: [0],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天', limit: 50 } }],
+          }),
+        ],
+        usage: usage(4),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '根据已经返回的真实笔记生成总结',
+                targetDescription: '新的总结笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'create_note',
+                arguments: {
+                  title: '今日笔记总结',
+                  content: '# 今日笔记总结\n\n- 上午记录：正文甲\n- 下午记录：正文乙',
+                },
+              },
+            ],
+          }),
+        ],
+        usage: usage(10),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '总结一下我今天的笔记，生成一篇新的笔记',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(3);
+    expect(mocks.requestAi.mock.calls[0][1].trace.stage).toBe('note_draft_task');
+    expect(mocks.requestAi.mock.calls[1][1].trace.stage).toBe('planner');
+    expect(mocks.requestAi.mock.calls[2][1].trace.stage).toBe('planner_round_2');
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { timeRange: '今天', limit: 50 },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: {
+          title: '今日笔记总结',
+          content: '# 今日笔记总结\n\n- 上午记录：正文甲\n- 下午记录：正文乙',
+        },
+      }),
+    );
+    expect(mocks.requestAi.mock.calls[2][0].some((entry) => String(entry.content || '').includes('正文甲'))).toBe(true);
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      confirmations: [expect.objectContaining({ toolName: 'create_note' })],
+    });
+  });
+
+  it('隐式笔记任务连续漏掉完整语义计划时，收窄为只读材料查询后仍能生成草稿', async () => {
+    // 模拟生产语义模式先暴露全部可用工具，主链必须根据前置语义分类主动收窄。
+    mocks.selectAgentTools.mockImplementation((registry) => [...registry.values()]);
+    mocks.toolExecute.mockResolvedValueOnce({
+      value: '《晨间记录》完成了发布检查；《午后记录》整理了客户反馈',
+      dependencyRefs: [
+        { type: 'note', id: 'today-note-1' },
+        { type: 'note', id: 'today-note-2' },
+      ],
+    });
+    const missingPlanResponse = () => ({
+      content: '未返回结构化计划',
+      toolCalls: [],
+      usage: usage(2),
+      usageStatus: 'reported',
+      finishReason: 'stop',
+    });
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ needsWorkspaceRetrieval: true }))
+      // 即使模型只返回一个可执行的查询计划，也不能把“查到了”冒充“已生成新笔记”；
+      // 同时下方会断言任务范围外的 unavailable capability 已从目录移除。
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_query',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_notes',
+                goal: '只查询今天的笔记但漏掉创建步骤',
+                targetDescription: '今天的笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天', limit: 50 } }],
+          }),
+        ],
+        usage: usage(2),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce(missingPlanResponse())
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [toolCall('query_notes', { timeRange: '今天', limit: 50 }, 'recovered-query-notes')],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '根据前置真实笔记生成日记',
+                targetDescription: '今天的新日记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'create_note',
+                arguments: {
+                  title: '今天的日记',
+                  content: '# 今天的日记\n\n完成了发布检查，并整理了客户反馈。',
+                },
+              },
+            ],
+          }),
+        ],
+        usage: usage(8),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '请总结一下我们今天的全部笔记，生成一篇新的日记',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.requestAi).toHaveBeenCalledTimes(5);
+    const plannerToolVariants =
+      mocks.requestAi.mock.calls[1][1].tools[0].function.parameters.properties.toolCalls.items.oneOf;
+    expect(plannerToolVariants.map((variant) => variant.properties.toolName.enum[0]).sort()).toEqual([
+      'create_note',
+      'query_notes',
+    ]);
+    const plannerCapabilityIds =
+      mocks.requestAi.mock.calls[1][1].tools[0].function.parameters.properties.intents.items.properties.capabilityId
+        .enum;
+    expect(plannerCapabilityIds.sort()).toEqual(['note.create', 'read.query_notes', 'unknown']);
+    expect(mocks.requestAi.mock.calls[3][1]).toMatchObject({
+      toolChoice: { type: 'function', function: { name: 'query_notes' } },
+      trace: expect.objectContaining({ stage: 'planner_note_material_recovery' }),
+    });
+    expect(mocks.requestAi.mock.calls[3][0].at(-1).content).toContain('[INTERNAL_NOTE_DRAFT_MATERIAL_RECOVERY]');
+    expect(mocks.toolExecute).toHaveBeenCalledWith(
+      { timeRange: '今天', limit: 50 },
+      expect.objectContaining({ userId: 'user-1' }),
+    );
+    expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: 'create_note',
+        args: {
+          title: '今天的日记',
+          content: '# 今天的日记\n\n完成了发布检查，并整理了客户反馈。',
+        },
+      }),
+    );
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('没有返回可核验的语义计划');
+    expect(res.send.mock.calls.at(-1)?.[0]?.data?.response).not.toContain('当前账号或访问模式不能使用');
+  });
+
+  it('隐式工作区查询为空时即使模型仍请求创建，也由服务端阻止占位笔记', async () => {
+    mocks.selectAgentTools.mockImplementation((registry) =>
+      [registry.get('query_notes'), registry.get('create_note')].filter(Boolean),
+    );
+    mocks.toolExecute.mockResolvedValueOnce({ value: '没有找到笔记', dependencyRefs: [] });
+    mocks.requestAi
+      .mockResolvedValueOnce(noteDraftTaskResponse({ needsWorkspaceRetrieval: true }))
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'read',
+                capabilityId: 'read.query_notes',
+                goal: '查询目标笔记',
+                targetDescription: '用户描述的笔记集合',
+                dependsOn: [],
+              },
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '生成总结笔记',
+                targetDescription: '新的总结笔记',
+                dependsOn: [0],
+              },
+            ],
+            toolCalls: [{ toolName: 'query_notes', arguments: { timeRange: '今天' } }],
+          }),
+        ],
+        usage: usage(3),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      })
+      .mockResolvedValueOnce({
+        content: '',
+        toolCalls: [
+          semanticPlanCall({
+            requestClass: 'data_action',
+            intents: [
+              {
+                kind: 'write',
+                capabilityId: 'note.create',
+                goal: '生成总结笔记',
+                targetDescription: '新的总结笔记',
+                dependsOn: [],
+              },
+            ],
+            toolCalls: [
+              {
+                toolName: 'create_note',
+                arguments: { title: '今日笔记总结', content: '当前没有可总结的材料。' },
+              },
+            ],
+          }),
+        ],
+        usage: usage(5),
+        usageStatus: 'reported',
+        finishReason: 'tool_calls',
+      });
+    const res = response();
+
+    await agentChat(
+      request({
+        message: '把我今天记录的内容归纳成一篇新文档',
+        stream: false,
+        contexts: [],
+        attachmentIds: [],
+        scope: { mode: 'workspace' },
+      }),
+      res,
+    );
+
+    expect(mocks.createToolConfirmation).not.toHaveBeenCalled();
+    expect(res.send.mock.calls.at(-1)?.[0]?.data).toMatchObject({
+      response: expect.stringContaining('没有从工作区查询到可用于生成笔记的真实材料'),
+      confirmations: [],
     });
   });
 
@@ -2617,6 +2948,7 @@ describe('agentChat 主链路', () => {
     );
 
     expect(mocks.requestAi.mock.calls[1][0][1].content).toContain(pastedText.slice(0, 120));
+    expect(mocks.requestAi.mock.calls[1][0][1].content).toContain('类型：用户粘贴文本');
     expect(mocks.createToolConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         privateContext: expect.objectContaining({ contextRefs: [], attachmentIds: [] }),

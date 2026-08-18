@@ -91,9 +91,7 @@ describe('noteDraft', () => {
         toolNames: ['create_note', 'set_todo_status'],
       }),
     ).toBe(false);
-    expect(
-      isNoteDraftRequest('请根据材料生成一篇笔记，并新建一个待办提醒我明天查看。', noteCreateIntent),
-    ).toBe(false);
+    expect(isNoteDraftRequest('请根据材料生成一篇笔记，并新建一个待办提醒我明天查看。', noteCreateIntent)).toBe(false);
   });
 
   it('只接受格式正确的待确认草稿引用', () => {
@@ -103,9 +101,7 @@ describe('noteDraft', () => {
         confirmationToken: 'a'.repeat(43),
       }),
     ).toEqual({ confirmationId: 'confirmation-1', confirmationToken: 'a'.repeat(43) });
-    expect(normalizeNoteDraftRefinement({ confirmationId: 'confirmation-1', confirmationToken: 'short' })).toBe(
-      null,
-    );
+    expect(normalizeNoteDraftRefinement({ confirmationId: 'confirmation-1', confirmationToken: 'short' })).toBe(null);
   });
 
   it('开放的笔记产出表达在旧正则下会漏判，这是语义路由必须接管入口的原因', () => {
@@ -152,6 +148,7 @@ describe('noteDraft', () => {
       shouldClassifyNoteDraftTask({ message: 'Consolidate the selected materials', contextTypes: ['bookmark'] }),
     ).toBe(true);
     expect(shouldClassifyNoteDraftTask({ message: '帮我整理一下', attachmentCount: 2 })).toBe(true);
+    expect(shouldClassifyNoteDraftTask({ message: 'Consolidate these', scopeCount: 1 })).toBe(true);
     // 材料问答是高频场景：有材料但只要一段回答时不得多付一次分类调用。
     expect(shouldClassifyNoteDraftTask({ message: '总结文件', attachmentCount: 1 })).toBe(false);
     expect(shouldClassifyNoteDraftTask({ message: '这些材料讲了什么？', contextTypes: ['bookmark', 'note'] })).toBe(
@@ -177,11 +174,7 @@ describe('noteDraft', () => {
   });
 
   it('识别富文本/HTML 笔记要求，供调用方披露只能产出 Markdown', () => {
-    for (const message of [
-      '归并成新的 html 笔记',
-      '把这些整理成一篇富文本笔记',
-      'Combine these into an HTML note',
-    ]) {
+    for (const message of ['归并成新的 html 笔记', '把这些整理成一篇富文本笔记', 'Combine these into an HTML note']) {
       expect(requestsRichTextNote(message)).toBe(true);
     }
     for (const message of ['归并成新的 Markdown 笔记', '把这两个资源合并成一条笔记', '生成一篇笔记']) {
@@ -192,9 +185,13 @@ describe('noteDraft', () => {
   it('语义分类接管笔记入口，复合写请求交回 Semantic Planner', async () => {
     const request = vi
       .fn()
-      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: false }))
-      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: true }))
-      .mockResolvedValueOnce(taskResponse({ producesNote: false, otherMutations: false }));
+      .mockResolvedValueOnce(
+        taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false }),
+      )
+      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: true, needsWorkspaceRetrieval: false }))
+      .mockResolvedValueOnce(
+        taskResponse({ producesNote: false, otherMutations: false, needsWorkspaceRetrieval: false }),
+      );
     const onResponse = vi.fn();
 
     const merge = await classifyNoteDraftTask({
@@ -214,6 +211,7 @@ describe('noteDraft', () => {
     expect(compound).toMatchObject({ producesNote: true, otherMutations: true });
     expect(query).toMatchObject({ producesNote: false });
     expect(request.mock.calls[0][0][0].content).toContain('合并、汇总、归并');
+    expect(request.mock.calls[0][0][0].content).toContain('不要依赖固定词语');
     expect(request.mock.calls[0][0][1].content).toContain('合并这两个资源为一条笔记');
     expect(request.mock.calls[0][0][1].content).toContain('bookmark');
     expect(request.mock.calls[0][1]).toMatchObject({
@@ -224,14 +222,46 @@ describe('noteDraft', () => {
     expect(onResponse).toHaveBeenCalledTimes(3);
   });
 
+  it('语义分类通用识别尚未绑定的工作区材料，不枚举时间或资源问法', async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: true }))
+      .mockResolvedValueOnce(
+        taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false }),
+      );
+
+    const implicit = await classifyNoteDraftTask({
+      message: '把我刚刚整理过的那些项目资料浓缩成一篇复盘',
+      contextTypes: [],
+      contextCount: 0,
+      scopeCount: 0,
+      attachmentCount: 0,
+      request,
+    });
+    const selected = await classifyNoteDraftTask({
+      message: '把选中的内容浓缩成一篇复盘',
+      contextTypes: ['note'],
+      contextCount: 2,
+      scopeCount: 1,
+      request,
+    });
+
+    expect(implicit.needsWorkspaceRetrieval).toBe(true);
+    expect(selected.needsWorkspaceRetrieval).toBe(false);
+    expect(JSON.parse(request.mock.calls[1][0][1].content)).toMatchObject({
+      selectedMaterialCount: 2,
+      selectedScopeCount: 1,
+    });
+  });
+
   it('笔记任务分类协议不完整时显式失败，由调用方决定降级', async () => {
     const cases = [
       { content: '大概是要笔记吧', toolCalls: [] },
       taskResponse({ producesNote: true }),
-      taskResponse({ producesNote: 'yes', otherMutations: false }),
-      taskResponse({ producesNote: true, otherMutations: false, extra: 1 }),
+      taskResponse({ producesNote: 'yes', otherMutations: false, needsWorkspaceRetrieval: false }),
+      taskResponse({ producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false, extra: 1 }),
       taskResponse(
-        { producesNote: true, otherMutations: false },
+        { producesNote: true, otherMutations: false, needsWorkspaceRetrieval: false },
         {
           toolCalls: [
             {

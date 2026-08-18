@@ -45,6 +45,9 @@ describe('移动端待办页签布局', () => {
       /\.inbox-toolbar__todo-tabs\s*\{[\s\S]*?display:\s*flex[\s\S]*?gap:\s*clamp\(22px, 2vw, 32px\)/,
     );
     expect(inboxSource).toMatch(
+      /\.inbox-toolbar \.inbox-toolbar__todo-status\s*\{[\s\S]*?width:\s*max-content;[\s\S]*?min-width:\s*max-content;[\s\S]*?flex:\s*0 0 auto;/,
+    );
+    expect(inboxSource).toMatch(
       /\.inbox-toolbar__todo-views :deep\(\.tab\.is-active\)[\s\S]*?color:\s*var\(--todo-accent-color\)/,
     );
   });

@@ -20,6 +20,7 @@ describe('后台用户管理头像框展示', () => {
       expect(content).toContain("import AvatarFramePreview from '@/components/growth/AvatarFramePreview.vue'");
       expect(content).toContain('frameVariant(record.equippedFrame)');
       expect(content).toContain(':frame-id="record.equippedFrame"');
+      expect(content).toContain('layout-mode="slot"');
       expect(content).toContain('pause-when-offscreen');
     }
 
@@ -39,6 +40,7 @@ describe('后台用户管理头像框展示', () => {
     expect(content).toContain('detail.value?.growth?.equippedFrame || props.userInfo?.equippedFrame');
     expect(content).toContain('return frameVariant(frameId) ? frameId : null');
     expect(content).toContain('v-if="equippedFrameId"');
+    expect(content).toContain('layout-mode="slot"');
   });
 
   it('普通头像缩到与 30px 头像框的约 36px 总外径一致，同时保留 44px 装饰安全槽', () => {

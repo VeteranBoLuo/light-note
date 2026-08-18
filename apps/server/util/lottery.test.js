@@ -34,17 +34,22 @@ function mockConnection({ points = 5000, totalCount = 9, paidCount = 9, paidPity
     query: vi.fn(async (sql) => {
       const statement = String(sql);
       if (statement.includes('FROM points_economy_operations')) return [[]];
-      if (statement.includes('INSERT IGNORE INTO points_economy_operations')) return [{ affectedRows: 1, insertId: 41 }];
+      if (statement.includes('INSERT IGNORE INTO points_economy_operations'))
+        return [{ affectedRows: 1, insertId: 41 }];
       if (statement.includes('FROM user_growth') && statement.includes('FOR UPDATE')) {
-        return [[{
-          points,
-          exp: 0,
-          lottery_count: totalCount,
-          lottery_paid_count: paidCount,
-          lottery_paid_pity_progress: paidPity,
-          lottery_free_day: null,
-          lottery_free_used: freeUsed,
-        }]];
+        return [
+          [
+            {
+              points,
+              exp: 0,
+              lottery_count: totalCount,
+              lottery_paid_count: paidCount,
+              lottery_paid_pity_progress: paidPity,
+              lottery_free_day: null,
+              lottery_free_used: freeUsed,
+            },
+          ],
+        ];
       }
       if (statement.includes('SELECT points, storage_bonus_mb')) {
         return [[{ points: points - 170, storage_bonus_mb: 0, ai_bonus_tokens: 0, streak_protect_cards: 0 }]];
@@ -81,7 +86,11 @@ beforeEach(() => {
 
 describe('C4 加权随机边界', () => {
   it('覆盖第一项、区间边界和最后一项', () => {
-    const pool = [{ id: 'a', weight: 2 }, { id: 'b', weight: 3 }, { id: 'c', weight: 5 }];
+    const pool = [
+      { id: 'a', weight: 2 },
+      { id: 'b', weight: 3 },
+      { id: 'c', weight: 5 },
+    ];
     expect(pickWeighted(pool, () => 0).id).toBe('a');
     expect(pickWeighted(pool, () => 2).id).toBe('b');
     expect(pickWeighted(pool, () => 9).id).toBe('c');
@@ -112,11 +121,14 @@ describe('C4 免费与付费奖池隔离', () => {
 
   it('免费抽只发积分或 AI，且不推进付费保底', async () => {
     const conn = mockConnection({ paidPity: 9 });
-    const result = await drawLottery('u1', c4Request({
-      mode: 'free',
-      calendar: { dayKey: '20260813', timezone: 'Asia/Shanghai' },
-      randomIntFn: () => 999,
-    }));
+    const result = await drawLottery(
+      'u1',
+      c4Request({
+        mode: 'free',
+        calendar: { dayKey: '20260813', timezone: 'Asia/Shanghai' },
+        randomIntFn: () => 999,
+      }),
+    );
     expect(result).toMatchObject({ ok: true, mode: 'free' });
     expect(result).not.toHaveProperty('pityProgressBefore');
     expect(result).not.toHaveProperty('pityProgressAfter');
@@ -128,6 +140,13 @@ describe('C4 免费与付费奖池隔离', () => {
     expect(
       conn.query.mock.calls.some(
         ([sql, params]) => String(sql).includes('INSERT INTO points_log') && params?.includes('lottery_free_asset'),
+      ),
+    ).toBe(true);
+    expect(
+      conn.query.mock.calls.some(
+        ([sql, params]) =>
+          String(sql).includes('INSERT INTO points_log') &&
+          params?.includes(JSON.stringify({ assetType: 'ai_tokens', assetAmount: 200_000 })),
       ),
     ).toBe(true);
   });
@@ -166,15 +185,19 @@ describe('C4 免费与付费奖池隔离', () => {
   });
 
   it('状态接口返回分组奖池，免费次数上限为 3 且明确不计保底', async () => {
-    mocks.poolQuery.mockResolvedValueOnce([[{
-      points: 5000,
-      exp: 0,
-      lottery_count: 99,
-      lottery_paid_count: 10,
-      lottery_paid_pity_progress: 4,
-      lottery_free_day: null,
-      lottery_free_used: 0,
-    }]]);
+    mocks.poolQuery.mockResolvedValueOnce([
+      [
+        {
+          points: 5000,
+          exp: 0,
+          lottery_count: 99,
+          lottery_paid_count: 10,
+          lottery_paid_pity_progress: 4,
+          lottery_free_day: null,
+          lottery_free_used: 0,
+        },
+      ],
+    ]);
     mocks.levelForExp.mockReturnValueOnce(15);
     const status = await getLotteryStatus('u1', { calendar: { dayKey: '20260813', timezone: 'Asia/Singapore' } });
     expect(status).toMatchObject({
@@ -188,17 +211,19 @@ describe('C4 免费与付费奖池隔离', () => {
 
   it('C3 灰度兼容状态明确免费抽共享保底概率', async () => {
     process.env.POINTS_ECONOMY_C4_ENABLED = 'false';
-    mocks.poolQuery.mockResolvedValueOnce([[
-      {
-        points: 500,
-        exp: 0,
-        lottery_count: 9,
-        lottery_paid_count: 0,
-        lottery_paid_pity_progress: 0,
-        lottery_free_day: null,
-        lottery_free_used: 0,
-      },
-    ]]);
+    mocks.poolQuery.mockResolvedValueOnce([
+      [
+        {
+          points: 500,
+          exp: 0,
+          lottery_count: 9,
+          lottery_paid_count: 0,
+          lottery_paid_pity_progress: 0,
+          lottery_free_day: null,
+          lottery_free_used: 0,
+        },
+      ],
+    ]);
     mocks.levelForExp.mockReturnValueOnce(10);
 
     const status = await getLotteryStatus('u1', { calendar: { dayKey: '20260813', timezone: 'Asia/Singapore' } });

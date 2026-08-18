@@ -68,21 +68,25 @@ describe('头像框商店目录', () => {
     expect(epic.max).toBeLessThan(legendary.min);
   });
 
-  it('完整目录额外提供 12 款成就专属框，且不会混入积分购买目录', () => {
+  it('完整目录额外提供 16 款成就专属框，且不会混入积分购买目录', () => {
     const achievementKeys = achievementFrames.map((item) => item.achievementKey);
 
-    expect(FRAME_CATALOG).toHaveLength(25);
+    expect(FRAME_CATALOG).toHaveLength(29);
     expect(new Set(FRAME_CATALOG.map((item) => item.id)).size).toBe(FRAME_CATALOG.length);
-    expect(achievementFrames).toHaveLength(12);
+    expect(achievementFrames).toHaveLength(16);
     expect(new Set(achievementKeys).size).toBe(achievementKeys.length);
     expect(new Set(achievementKeys)).toEqual(
       new Set([
         'streak_1',
         'streak_7',
         'streak_30',
-        'bookmark_20',
+        'bookmark_10',
+        'bookmark_50',
+        'bookmark_200',
         'note_10',
-        'file_10',
+        'note_30',
+        'file_5',
+        'file_30',
         'bookmark_500',
         'note_200',
         'note_500',
@@ -96,7 +100,7 @@ describe('头像框商店目录', () => {
         result[item.rarity] = (result[item.rarity] || 0) + 1;
         return result;
       }, {}),
-    ).toEqual({ basic: 2, rare: 3, epic: 3, legendary: 4 });
+    ).toEqual({ basic: 4, rare: 4, epic: 4, legendary: 4 });
     expect(achievementFrames.every((item) => item.cost === undefined && item.achievementKey)).toBe(true);
     expect(achievementFrames.find((item) => item.id === 'frame_first_light')).toMatchObject({
       rarity: 'basic',
@@ -125,7 +129,7 @@ describe('头像框商店目录', () => {
       return result;
     }, {});
 
-    expect(counts).toEqual({ basic: 5, rare: 6, epic: 6, legendary: 8 });
+    expect(counts).toEqual({ basic: 7, rare: 7, epic: 7, legendary: 8 });
     expect(frames.reduce((result, item) => ({ ...result, [item.rarity]: (result[item.rarity] || 0) + 1 }), {})).toEqual(
       { basic: 3, rare: 3, epic: 3, legendary: 4 },
     );
@@ -136,6 +140,10 @@ describe('头像框商店目录', () => {
     expect(achievementFrames.find((item) => item.id === 'frame_file_vault')).toMatchObject({
       rarity: 'epic',
       achievementKey: 'file_200',
+    });
+    expect(achievementFrames.find((item) => item.id === 'frame_bookmark_corridor')).toMatchObject({
+      rarity: 'epic',
+      achievementKey: 'bookmark_200',
     });
     expect(achievementFrames.find((item) => item.id === 'frame_note_constellation')).toMatchObject({
       rarity: 'legendary',
@@ -164,12 +172,19 @@ describe('历史成就头像框权益兼容', () => {
     mocks.query
       .mockResolvedValueOnce([[{ cosmetic_id: 'frame_mint' }]])
       .mockResolvedValueOnce([[{ achievementKey: 'streak_7' }]])
-      .mockResolvedValueOnce([[{ achievementKey: 'bookmark_20' }, { achievementKey: 'unknown_achievement' }]]);
+      .mockResolvedValueOnce([
+        [
+          { achievementKey: 'bookmark_20' },
+          { achievementKey: 'file_10' },
+          { achievementKey: 'unknown_achievement' },
+        ],
+      ]);
 
     await expect(getOwnedCosmetics('user-1')).resolves.toEqual([
       'frame_mint',
       'frame_streak_seed',
       'frame_bookmark_seed',
+      'frame_file_seed',
     ]);
     expect(mocks.query).toHaveBeenCalledTimes(3);
     expect(String(mocks.query.mock.calls[1][0])).not.toContain('UNION');
@@ -185,6 +200,31 @@ describe('历史成就头像框权益兼容', () => {
 
     await expect(getOwnedCosmetics('user-1')).resolves.toEqual(['frame_note_seed']);
     expect(mocks.query).toHaveBeenCalledTimes(3);
+  });
+
+  it('新门槛领取记录按当前目录获得新增与升级后的头像框', async () => {
+    mocks.query
+      .mockResolvedValueOnce([[]])
+      .mockResolvedValueOnce([
+        [
+          { achievementKey: 'bookmark_10' },
+          { achievementKey: 'file_5' },
+          { achievementKey: 'note_30' },
+          { achievementKey: 'bookmark_50' },
+          { achievementKey: 'bookmark_200' },
+          { achievementKey: 'file_30' },
+        ],
+      ])
+      .mockResolvedValueOnce([[]]);
+
+    await expect(getOwnedCosmetics('user-1')).resolves.toEqual([
+      'frame_bookmark_intro',
+      'frame_file_intro',
+      'frame_bookmark_seed',
+      'frame_note_flow',
+      'frame_file_seed',
+      'frame_bookmark_corridor',
+    ]);
   });
 });
 
@@ -254,12 +294,12 @@ describe('头像框佩戴校验', () => {
       ok: true,
       equipped: 'frame_streak_seed',
     });
-    expect(connection.query).toHaveBeenNthCalledWith(1, expect.stringContaining('SELECT 1 FROM user_achievements'), [
-      'user-1',
-      'streak_7',
-      'user-1',
-      'streak_7',
-    ]);
+    expect(connection.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('SELECT 1 FROM user_achievements'),
+      ['user-1', 'streak_7', 'user-1', 'streak_7'],
+    );
+    expect(String(connection.query.mock.calls[0][0])).toContain('achievement_key IN (?)');
     expect(String(connection.query.mock.calls[0][0])).toContain('EXISTS(');
     expect(String(connection.query.mock.calls[0][0])).not.toContain('UNION');
     expect(connection.query).toHaveBeenNthCalledWith(
@@ -274,6 +314,32 @@ describe('头像框佩戴校验', () => {
     expect(connection.commit).toHaveBeenCalledOnce();
     expect(connection.rollback).not.toHaveBeenCalled();
     expect(connection.release).toHaveBeenCalledOnce();
+  });
+
+  it('旧门槛已领取但装扮记录缺失时仍可补齐并佩戴升级后的头像框', async () => {
+    const connection = {
+      beginTransaction: vi.fn().mockResolvedValue(undefined),
+      query: vi
+        .fn()
+        .mockResolvedValueOnce([[{ claimed: 1 }]])
+        .mockResolvedValueOnce([{ affectedRows: 1 }])
+        .mockResolvedValueOnce([{ affectedRows: 1 }]),
+      commit: vi.fn().mockResolvedValue(undefined),
+      rollback: vi.fn().mockResolvedValue(undefined),
+      release: vi.fn(),
+    };
+    mocks.query.mockResolvedValueOnce([[]]);
+    mocks.getConnection.mockResolvedValueOnce(connection);
+
+    await expect(equipFrame('user-1', 'frame_bookmark_seed')).resolves.toEqual({
+      ok: true,
+      equipped: 'frame_bookmark_seed',
+    });
+    expect(connection.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining('achievement_key IN (?, ?)'),
+      ['user-1', 'bookmark_50', 'bookmark_20', 'user-1', 'bookmark_50', 'bookmark_20'],
+    );
   });
 
   it('没有对应成就领取流水时不会补发成就头像框', async () => {

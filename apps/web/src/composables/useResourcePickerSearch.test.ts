@@ -1,17 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { resourceItemKey, takePerType } from './useResourcePickerSearch';
+import { resourceItemKey, resolveResourcePickerSort, takePerType } from './useResourcePickerSearch';
 
 const item = (type: string, id: string) => ({ type, id, title: `${type}-${id}` });
 
 describe('useResourcePickerSearch', () => {
   it('按书签→笔记→文件的固定顺序分组,不与其它类型混排', () => {
     // 搜索接口按类型分段返回,直接截断会只剩书签;这里要保证三类都露出
-    const rows = [
-      item('bookmark', 'b1'),
-      item('bookmark', 'b2'),
-      item('note', 'n1'),
-      item('file', 'f1'),
-    ];
+    const rows = [item('bookmark', 'b1'), item('bookmark', 'b2'), item('note', 'n1'), item('file', 'f1')];
     expect(takePerType(rows, { perType: 5 }).map((row) => row.id)).toEqual(['b1', 'b2', 'n1', 'f1']);
   });
 
@@ -29,6 +24,12 @@ describe('useResourcePickerSearch', () => {
   it('同类内部保持接口给的顺序(最新在前)', () => {
     const rows = [item('note', 'n1'), item('note', 'n2'), item('note', 'n3')];
     expect(takePerType(rows, { perType: 5 }).map((row) => row.id)).toEqual(['n1', 'n2', 'n3']);
+  });
+
+  it('空输入按最新更新时间浏览，输入关键词后按相关度搜索', () => {
+    expect(resolveResourcePickerSort('')).toBe('updated');
+    expect(resolveResourcePickerSort('   ')).toBe('updated');
+    expect(resolveResourcePickerSort('开发文档')).toBe('relevance');
   });
 
   it('order 之外的类型追加在末尾,不丢结果', () => {

@@ -41,6 +41,7 @@ function noteDraftTaskCall(task, index) {
       arguments: JSON.stringify({
         producesNote: task?.producesNote !== false,
         otherMutations: task?.otherMutations === true,
+        needsWorkspaceRetrieval: task?.needsWorkspaceRetrieval === true,
       }),
     },
   };

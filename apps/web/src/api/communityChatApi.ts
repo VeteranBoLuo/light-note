@@ -189,6 +189,7 @@ export interface CommunityChatMessagePage {
   items: CommunityChatMessage[];
   hasMore: boolean;
   nextBefore: string | null;
+  nextAfter: string | null;
   focusPublicId: string | null;
   hasNewer: boolean;
   realtimeEnabled: boolean;
@@ -299,7 +300,7 @@ const roomPath = (roomSlug: string) => `/api/community-chat/rooms/${encodeURICom
 
 export const getCommunityChatMessages = (
   roomSlug: string,
-  params: { before?: string; focus?: string; limit?: number } = {},
+  params: { before?: string; focus?: string; after?: string; limit?: number } = {},
 ) => apiBaseGet(`${roomPath(roomSlug)}/messages`, params, { silent: true });
 
 export const getCommunityChatPinnedMessage = (roomSlug: string) =>

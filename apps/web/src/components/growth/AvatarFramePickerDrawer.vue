@@ -613,7 +613,8 @@
   }
 
   .frame-card.is-locked {
-    opacity: 0.78;
+    // 锁定状态已有锁图标和明确文案，禁止再降低整卡透明度，以免头像框被父层合成成灰白滤镜。
+    opacity: 1;
   }
 
   .frame-card__check {

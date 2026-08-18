@@ -13,7 +13,8 @@
     />
     <div v-if="(loading || !initialized) && !rows.length" class="ledger-loading"><BLoading size="small" /></div>
     <div v-else-if="loadError && !rows.length" class="ledger-empty">
-      <span>{{ t('growth.pointsLogFailed') }}</span><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
+      <span>{{ t('growth.pointsLogFailed') }}</span
+      ><BButton size="small" @click="reload">{{ t('common.retry') }}</BButton>
     </div>
     <div v-else-if="!rows.length" class="ledger-empty">{{ t('growth.pointsLogEmpty') }}</div>
     <div v-else class="ledger-list">
@@ -22,8 +23,8 @@
           <b>{{ labelOf(row.reason) }}</b>
           <span>{{ sourceOf(row) }} · {{ fmtTime(row.create_time) }}</span>
         </div>
-        <strong :class="row.delta > 0 ? 'up' : row.delta < 0 ? 'down' : 'flat'">
-          {{ row.delta > 0 ? `+${row.delta}` : row.delta < 0 ? row.delta : '·' }}
+        <strong :class="row.delta > 0 || row.assetChange ? 'up' : row.delta < 0 ? 'down' : 'flat'">
+          {{ amountOf(row) }}
         </strong>
       </div>
     </div>
@@ -41,6 +42,7 @@
   import BButton from '@/components/base/BasicComponents/BButton.vue';
   import BLoading from '@/components/base/BasicComponents/BLoading.vue';
   import BTabs from '@/components/base/BasicComponents/BTabs.vue';
+  import { formatGrowthAssetChange, type GrowthAssetChange } from '@/utils/growthAssetChange.ts';
 
   interface LogRow {
     id: number;
@@ -49,8 +51,9 @@
     create_time: string;
     sourceType?: string;
     sourceKey?: string | null;
+    assetChange?: GrowthAssetChange | null;
   }
-  const { t, te } = useI18n();
+  const { t, te, locale } = useI18n();
   const rows = ref<LogRow[]>([]);
   const loading = ref(false);
   const initialized = ref(false);
@@ -82,6 +85,11 @@
     if (specificKey && te(specificKey)) return t(specificKey);
     const typeKey = `growth.pointsSourceType.${sourceType}`;
     return te(typeKey) ? t(typeKey) : labelOf(row.reason);
+  }
+  function amountOf(row: LogRow) {
+    if (row.delta > 0) return `+${row.delta}`;
+    if (row.delta < 0) return String(row.delta);
+    return row.assetChange ? formatGrowthAssetChange(row.assetChange, String(locale.value)) : '·';
   }
   function fmtTime(value: string) {
     const date = new Date(value);
@@ -190,8 +198,17 @@
   .ledger-empty {
     color: var(--desc-color);
   }
-  .ledger-loading { display: grid; min-height: 150px; place-items: center; }
-  .ledger-empty { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .ledger-loading {
+    display: grid;
+    min-height: 150px;
+    place-items: center;
+  }
+  .ledger-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
   .ledger-more {
     align-self: center;
     min-height: 34px !important;

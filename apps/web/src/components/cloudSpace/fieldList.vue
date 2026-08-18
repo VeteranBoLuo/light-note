@@ -742,7 +742,7 @@
   const FileTagConfig = defineAsyncComponent(() => import('@/components/cloudSpace/FileTagConfig.vue'));
 
   const { t } = useI18n();
-  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch', 'requestUpload']);
+  const emit = defineEmits(['previewFile', 'moveField', 'exitBatch', 'requestUpload', 'filesDeleted']);
 
   // 首屏空状态引导复用页面统一上传选择器，确保容量校验、重名处理和上传进度一致。
   function triggerUpload() {
@@ -1176,6 +1176,7 @@
         deleteField(file.id).then((success) => {
           if (success) {
             recordOperation({ module: '云空间', operation: `删除文件成功【${file.fileName}】` });
+            emit('filesDeleted', [String(file.id)]);
             cloud.queryFieldList();
           }
         });
@@ -1209,11 +1210,13 @@
       title: t('cloudSpace.alertTitle'),
       content: `${t('cloudSpace.confirmBatchDelete')} ${selectedRows.value.length} ${t('cloudSpace.files')}<br/>${t('cloudSpace.fileList')}: ${names}`,
       onOk() {
-        apiBasePost('/api/file/deleteFileById', { ids: selectedRows.value }).then((res) => {
+        const deletingIds = selectedRows.value.map(String);
+        apiBasePost('/api/file/deleteFileById', { ids: deletingIds }).then((res) => {
           if (res.status === 200) {
             const count = res.data?.count || selectedRows.value.length;
             recordOperation({ module: '云空间', operation: `批量删除文件成功【${count}个】` });
             message.success(`${t('cloudSpace.batchDeleteSuccess')} ${count} ${t('cloudSpace.files')}`);
+            emit('filesDeleted', deletingIds);
           } else {
             message.error(res.msg || t('cloudSpace.deleteFailed'));
           }

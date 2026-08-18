@@ -49,6 +49,14 @@ export function resourceItemKey(item: Pick<ResourcePickerItem, 'type' | 'id'>) {
 export const DEFAULT_PER_TYPE = 5;
 
 /**
+ * 空关键词是“最近使用”浏览，按更新时间（资源没有更新时间时由服务端回退创建时间）展示；
+ * 真正输入关键词后切回相关度，避免新但无关的资源压过精确命中。
+ */
+export function resolveResourcePickerSort(keyword: string): 'relevance' | 'updated' {
+  return String(keyword || '').trim() ? 'relevance' : 'updated';
+}
+
+/**
  * 按类型取样并按固定顺序排列(书签 → 笔记 → 文件 → 其它)。
  * 结果保持扁平以便键盘线性导航,由展示层按 type 切分成分组标题。
  * 不做轮转:混排看着乱,分组更易扫读。
@@ -102,7 +110,9 @@ export function useResourcePickerSearch(options: UseResourcePickerSearchOptions 
     loading.value = true;
     try {
       const excluded = new Set(options.excludeKeys?.() || []);
-      const data = await fetchGlobalSearch(keyword, limit, true);
+      const data = await fetchGlobalSearch(keyword, limit, true, {
+        sort: resolveResourcePickerSort(keyword),
+      });
       if (currentRequest !== requestId) return;
       const seen = new Set<string>();
       results.value = (data?.items || [])

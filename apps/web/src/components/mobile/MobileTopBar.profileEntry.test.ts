@@ -109,6 +109,7 @@ describe('移动顶栏 · 头像入口', () => {
 
   it('在 44px 点击区内保留头像主体，并让最高档外饰完整落入 56px 顶栏', () => {
     expect(topBarSource).toContain(':size="26"');
+    expect(topBarSource).toContain('layout-mode="slot"');
     expect(topBarSource).toContain('profileAvatarSource" size="36"');
     expect(topBarSource).toMatch(/\.mobile-top-bar__profile\s*\{[\s\S]*?width:\s*44px;[\s\S]*?height:\s*44px;/u);
     const maxOuterSize = Math.max(...Object.values(AVATAR_FRAME_ARTWORK).map((item) => item.outerSize));

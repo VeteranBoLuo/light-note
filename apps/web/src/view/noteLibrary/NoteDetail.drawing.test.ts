@@ -71,7 +71,8 @@ describe('手绘笔记详情边界', () => {
 
     expect(drawingSource).toContain('frameId = requestAnimationFrame');
     expect(pointerMoveSource).toContain('activeStroke');
-    expect(pointerMoveSource).toContain('dragPreview = moved');
+    expect(pointerMoveSource).toContain('dragStart.dx = point.x - dragStart.x');
+    expect(pointerMoveSource).toContain('marqueeSelection.current = point');
     expect(pointerMoveSource).not.toContain('scene.value =');
     expect(eraseSource).toContain('eraseDrawingElementsAt(source, point, eraserSize.value / 2, createElementId, {');
     expect(eraseSource).toContain('eraserPreviewElements = result.elements');
@@ -133,12 +134,16 @@ describe('手绘笔记详情边界', () => {
     const commitEnd = drawingSource.indexOf('function applyHistory', commitStart);
     const commitSource = drawingSource.slice(commitStart, commitEnd);
 
-    expect(pointerSource).toContain("hit?.kind === 'text' && hit.id === selectedId.value");
+    expect(pointerSource).toContain("hit?.kind === 'text' && wasSelected && selectedIds.value.length === 1");
     expect(pointerSource).toContain('editSelectedTextOnRelease = shouldEditSelectedText');
-    expect(pointerMoveSource).toContain('Math.hypot(dx, dy) * zoom.value >= TEXT_DRAG_THRESHOLD_PX');
+    expect(pointerMoveSource).toContain(
+      'Math.hypot(dragStart.dx, dragStart.dy) * zoom.value >= TEXT_DRAG_THRESHOLD_PX',
+    );
     expect(pointerMoveSource).toContain('editSelectedTextOnRelease = false');
-    expect(pointerUpSource).toContain("editSelectedTextOnRelease && dragStart.element.kind === 'text'");
-    expect(pointerUpSource).toContain('textDraft.value = { ...dragStart.element }');
+    expect(pointerUpSource).toContain(
+      "editSelectedTextOnRelease && dragStart.elements.length === 1 && dragStart.elements[0].kind === 'text'",
+    );
+    expect(pointerUpSource).toContain('textDraft.value = cloneDrawingElement(dragStart.elements[0])');
     expect(drawingSource).toContain('textDraft.value?.id !== element.id');
     expect(drawingSource).toContain(':rows="textDraftRows"');
     expect(drawingSource).toContain('top: `${textEditorTop(textDraft) * zoom}px`');
@@ -148,6 +153,35 @@ describe('手绘笔记详情边界', () => {
     expect(commitSource).toContain('existingText');
     expect(commitSource).toContain('scene.value.elements.map');
     expect(commitSource).toContain(': [...scene.value.elements, committedDraft]');
+  });
+
+  it('选择工具支持框选、多选移动、全选与复制剪切粘贴，清屏可撤销', () => {
+    const pointerStart = drawingSource.indexOf('function handlePointerDown(event: PointerEvent)');
+    const pointerEnd = drawingSource.indexOf('function handlePointerMove', pointerStart);
+    const pointerSource = drawingSource.slice(pointerStart, pointerEnd);
+    const keyStart = drawingSource.indexOf('function handleKeydown(event: KeyboardEvent)');
+    const keyEnd = drawingSource.indexOf('async function deliverExport', keyStart);
+    const keySource = drawingSource.slice(keyStart, keyEnd);
+    const toolbarEnd = drawingSource.indexOf('<div ref="workspaceRef"');
+    const toolbarSource = drawingSource.slice(0, toolbarEnd);
+
+    expect(pointerSource).toContain('marqueeSelection = { start: point, current: point, baseIds }');
+    expect(pointerSource).toContain('event.shiftKey || event.metaKey || event.ctrlKey');
+    expect(drawingSource).toContain('drawingRectsIntersect(rect, elementBounds(context, element))');
+    expect(drawingSource).toContain('translateDrawingElement(element, dx, dy)');
+    expect(keySource).toContain("commandKey && key === 'a'");
+    expect(keySource).toContain("commandKey && key === 'c'");
+    expect(keySource).toContain("commandKey && key === 'x'");
+    expect(keySource).toContain("commandKey && key === 'v'");
+    expect(keySource).toContain('setSelectedIds(scene.value.elements.map((element) => element.id))');
+    expect(drawingSource).toContain('writeDrawingClipboard(elements)');
+    expect(drawingSource).toContain('readDrawingClipboard(createElementId)');
+    expect(toolbarSource).toContain("t('note.drawingClear')");
+    expect(toolbarSource).toContain('@click="confirmClearDrawing"');
+    expect(toolbarSource).toContain('icon.noteDetail.imageToolbar.delete');
+    expect(toolbarSource).not.toContain('icon.noteDetail.toolbar.imageToolbar');
+    expect(drawingSource).toContain('beginMutation();\n    scene.value = { ...scene.value, elements: [] }');
+    expect(drawingSource).toContain('void nextTick(() => rootRef.value?.focus({ preventScroll: true }))');
   });
 
   it('只读预览按容器真实内容宽度连续缩放并保持画纸居中', () => {

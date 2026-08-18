@@ -137,6 +137,9 @@ export default {
       checkin_100: achievementGlyph(
         '<path d="M6 6.5h12v12H6zM9 3.5v5M15 3.5v5M6 10h12"/><path d="m9.25 14l1.75 1.75l3.75-3.75M4 8H2.75v12.25H15"/><path d="m19.5 3l.45 1.2l1.2.45l-1.2.45l-.45 1.2l-.45-1.2l-1.2-.45l1.2-.45L19.5 3Z" fill="currentColor" stroke="none"/>',
       ),
+      bookmark_10: achievementGlyph(
+        '<path d="M7.5 3.5h9v17L12 17.25L7.5 20.5v-17Z"/><path d="m12 6.5l.75 1.55l1.7.25l-1.2 1.2l.3 1.7L12 10.4l-1.55.8l.3-1.7l-1.2-1.2l1.7-.25L12 6.5Z"/>',
+      ),
       bookmark_20: achievementGlyph(
         '<path d="M7 3.5h9.5v17L11.75 17L7 20.5v-17Z"/><path d="M9.75 7h4M9.75 10h2.5"/><path d="m18.75 5l.45 1.2l1.2.45l-1.2.45l-.45 1.2l-.45-1.2l-1.2-.45l1.2-.45l.45-1.2Z" fill="currentColor" stroke="none"/>',
       ),
@@ -155,6 +158,9 @@ export default {
       note_20: achievementGlyph(
         '<path d="M5 19.5c3.5-7.5 7.25-12 14-15c-.6 6.7-4.5 10.9-11.5 12.5L5 19.5Z"/><path d="M8 16c2.5-2.65 5.15-4.9 8-6.75M5 21h14"/>',
       ),
+      note_30: achievementGlyph(
+        '<path d="M4.5 18.5c3.25-1 5.75-3.25 7.5-6.75c1.75 3.5 4.25 5.75 7.5 6.75M6 20.5h12"/><path d="M12 3.5v8.25M8.75 7.5L12 3.5l3.25 4M7 14l-2-2m12 2l2-2"/>',
+      ),
       note_50: achievementGlyph(
         '<path d="M3.5 5.5c2.85-1.35 5.7-1.35 8.5 0v14c-2.8-1.35-5.65-1.35-8.5 0v-14ZM20.5 5.5c-2.85-1.35-5.7-1.35-8.5 0v14c2.8-1.35 5.65-1.35 8.5 0v-14Z"/><path d="M6.5 9h2.75M6.5 12h2M14.75 9h2.75M14.75 12h2"/>',
       ),
@@ -164,8 +170,14 @@ export default {
       note_500: achievementGlyph(
         '<path d="M5 8h14v11.5H5V8ZM7 5.5h10M9 3h6"/><path d="M9 12h6M9 15h4"/><path d="m12 4.5l1.1 1.15l1.6.2l-1.15 1.1l.3 1.55L12 7.75L10.15 8.5l.3-1.55l-1.15-1.1l1.6-.2L12 4.5Z"/>',
       ),
+      file_5: achievementGlyph(
+        '<path d="M6.5 18.5h11a3 3 0 0 0 .3-5.98A5.5 5.5 0 0 0 7.3 11a3.75 3.75 0 0 0-.8 7.5Z"/><path d="M9 11.5h6v7H9zM12 8.5v6M10 10.5l2-2l2 2"/>',
+      ),
       file_10: achievementGlyph(
         '<path d="M8 5h5l3 3v9.5H8V5Z"/><path d="M13 5v3h3M6.25 18.5h10.5a3.25 3.25 0 0 0 .45-6.45A5.25 5.25 0 0 0 7 10.75a3.9 3.9 0 0 0-.75 7.75Z"/>',
+      ),
+      file_30: achievementGlyph(
+        '<path d="M4 8h6l1.5 2H20v9.5H4V8Z"/><path d="M7 5h5l1.5 2H18v3M8 14h8M10 17h4"/><path d="m18.5 3l.45 1.2l1.2.45l-1.2.45l-.45 1.2l-.45-1.2l-1.2-.45l1.2-.45L18.5 3Z" fill="currentColor" stroke="none"/>',
       ),
       file_50: achievementGlyph(
         '<path d="M3.5 7h6l1.5 2h9.5v10.5h-17V7Z"/><path d="M6 4.5h6l1.5 2H19V9M7 13h10M7 16h7"/>',

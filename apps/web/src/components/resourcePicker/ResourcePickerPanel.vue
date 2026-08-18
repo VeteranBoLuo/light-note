@@ -27,6 +27,7 @@
         :key="`pinned:${item.type}:${item.id}`"
         class="resource-picker-panel__item"
         :class="{ 'is-active': index === activeIndex }"
+        :disabled="resourceDisabled(item)"
         :aria-selected="index === activeIndex"
         @mousemove="activateFromPointer(index)"
         @click="emit('select', item)"
@@ -34,7 +35,6 @@
         <span class="resource-picker-panel__pinned-tag">{{ t('ai.currentPage') }}</span>
         <span class="resource-picker-panel__copy">
           <span class="resource-picker-panel__title">{{ item.title }}</span>
-          <small v-if="includeNoteScopes && item.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
         </span>
       </BButton>
       <template v-for="group in groups" :key="group.type">
@@ -44,6 +44,7 @@
           :key="`${entry.item.type}:${entry.item.id}`"
           class="resource-picker-panel__item"
           :class="{ 'is-active': entry.index === activeIndex }"
+          :disabled="resourceDisabled(entry.item)"
           :aria-selected="entry.index === activeIndex"
           @mousemove="activateFromPointer(entry.index)"
           @click="emit('select', entry.item)"
@@ -52,7 +53,6 @@
           <span class="resource-picker-panel__copy">
             <span class="resource-picker-panel__title">{{ entry.item.title }}</span>
             <small v-if="entry.item.path">{{ entry.item.path }}</small>
-            <small v-if="includeNoteScopes && entry.item.type === 'note'">{{ t('ai.scope.noteOnly') }}</small>
           </span>
         </BButton>
       </template>
@@ -65,6 +65,7 @@
           :key="`scope:${entry.scope.id}`"
           class="resource-picker-panel__item resource-picker-panel__item--scope"
           :class="{ 'is-active': entry.index === activeIndex }"
+          :disabled="scopeDisabled(entry.scope)"
           :aria-selected="entry.index === activeIndex"
           @mousemove="activateFromPointer(entry.index)"
           @click="emit('select-scope', entry.scope)"
@@ -127,8 +128,22 @@
       pinnedItems?: ResourcePickerItem[];
       /** AI 专用：在普通笔记结果之外追加同一根页面的目录范围结果。 */
       includeNoteScopes?: boolean;
+      /** 已选择的单篇资源仍保留在列表中，但不可重复选择；目录入口仍可独立使用。 */
+      selectedResourceKeys?: string[];
+      /** 已选择的目录范围不可重复选择。 */
+      selectedScopeKeys?: string[];
+      /** 达到业务选择上限时只禁用对应类别，不影响另一类入口。 */
+      resourcesDisabled?: boolean;
+      scopesDisabled?: boolean;
     }>(),
-    { keyword: '', showSearch: true, autoFocus: true, includeNoteScopes: false },
+    {
+      keyword: '',
+      showSearch: true,
+      autoFocus: true,
+      includeNoteScopes: false,
+      selectedResourceKeys: () => [],
+      selectedScopeKeys: () => [],
+    },
   );
   const emit = defineEmits<{
     select: [value: ResourcePickerItem];
@@ -166,6 +181,12 @@
     const cssVar = RESOURCE_COLOR_CSS_VAR[type as ResourceType];
     return cssVar ? `var(${cssVar})` : 'var(--desc-color)';
   };
+  const selectedResourceKeySet = computed(() => new Set(props.selectedResourceKeys));
+  const selectedScopeKeySet = computed(() => new Set(props.selectedScopeKeys));
+  const resourceDisabled = (item: Pick<ResourcePickerItem, 'type' | 'id'>) =>
+    props.resourcesDisabled === true || selectedResourceKeySet.value.has(`${item.type}:${item.id}`);
+  const scopeDisabled = (item: Pick<AiScopeRef, 'type' | 'id'>) =>
+    props.scopesDisabled === true || selectedScopeKeySet.value.has(`${item.type}:${item.id}`);
 
   // 置顶项跟随生效关键字过滤,占据键盘导航的前几个下标
   const pinned = computed(() => {
@@ -174,7 +195,13 @@
       .trim()
       .toLowerCase();
     return list.filter(
-      (item) => item && item.id && (!keyword || String(item.title || '').toLowerCase().includes(keyword)),
+      (item) =>
+        item &&
+        item.id &&
+        (!keyword ||
+          String(item.title || '')
+            .toLowerCase()
+            .includes(keyword)),
     );
   });
 
@@ -235,8 +262,11 @@
   function chooseActive() {
     const option = flatOptions.value[activeIndex.value];
     if (!option) return;
-    if (option.kind === 'scope') emit('select-scope', option.item);
-    else emit('select', option.item);
+    if (option.kind === 'scope') {
+      if (!scopeDisabled(option.item)) emit('select-scope', option.item);
+    } else if (!resourceDisabled(option.item)) {
+      emit('select', option.item);
+    }
   }
 
   onMounted(async () => {
@@ -350,9 +380,10 @@
     max-width: 100%;
     height: auto;
     min-height: 30px;
+    align-items: center;
     justify-content: flex-start;
     gap: 8px;
-    padding: 5px 8px;
+    padding: 7px 8px;
     overflow: hidden;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -378,7 +409,9 @@
   }
 
   .resource-picker-panel__item--scope {
-    min-height: 48px;
+    min-height: 62px;
+    padding-top: 8px;
+    padding-bottom: 8px;
   }
 
   .resource-picker-panel__pinned-tag {
@@ -408,9 +441,13 @@
   }
 
   .resource-picker-panel__copy {
-    display: grid;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     min-width: 0;
-    gap: 1px;
+    min-height: 100%;
+    gap: 3px;
+    padding: 2px 0;
     text-align: left;
   }
 

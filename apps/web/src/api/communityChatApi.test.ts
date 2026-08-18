@@ -78,6 +78,7 @@ describe('communityChatApi', () => {
 
   it('文本消息、幂等发送和阅读位置使用社区独立 REST 路径', () => {
     getCommunityChatMessages('general', { focus: 'message-1', limit: 30 });
+    getCommunityChatMessages('general', { after: 'message-1', limit: 30 });
     sendCommunityChatMessage('general', {
       clientRequestId: 'request-1',
       content: '你好',
@@ -90,6 +91,11 @@ describe('communityChatApi', () => {
     expect(mocks.apiBaseGet).toHaveBeenCalledWith(
       '/api/community-chat/rooms/general/messages',
       { focus: 'message-1', limit: 30 },
+      { silent: true },
+    );
+    expect(mocks.apiBaseGet).toHaveBeenCalledWith(
+      '/api/community-chat/rooms/general/messages',
+      { after: 'message-1', limit: 30 },
       { silent: true },
     );
     expect(mocks.apiBasePost).toHaveBeenCalledWith(

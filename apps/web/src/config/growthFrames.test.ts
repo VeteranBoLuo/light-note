@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { FRAME_IDS, FRAME_VARIANTS, frameVariant, sortFramesByRarity } from './growthFrames';
 
 describe('头像框视觉变体', () => {
-  it('为 13 款商店头像框和 12 款成就头像框提供唯一样式', () => {
-    expect(FRAME_IDS).toHaveLength(25);
+  it('为 13 款商店头像框和 16 款成就头像框提供唯一样式', () => {
+    expect(FRAME_IDS).toHaveLength(29);
     expect(new Set(Object.values(FRAME_VARIANTS)).size).toBe(FRAME_IDS.length);
     FRAME_IDS.forEach((id) => expect(frameVariant(id)).toBe(FRAME_VARIANTS[id]));
   });

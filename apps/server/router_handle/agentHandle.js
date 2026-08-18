@@ -24,7 +24,11 @@ import {
 import { buildPlannerPrompt } from '../util/agent/prompt.js';
 import toolDefsArray from '../util/agent/tools/index.js';
 import { selectAgentTools } from '../util/agent/toolRouter.js';
-import { buildAgentSemanticCapabilityCatalog, getAgentCapabilityByToolName } from '../util/agent/capabilityRegistry.js';
+import {
+  buildAgentSemanticCapabilityCatalog,
+  getAgentCapabilityByToolName,
+  getSemanticCapabilityIdForTool,
+} from '../util/agent/capabilityRegistry.js';
 import { resolveAgentTargetUser } from '../util/agent/userLookup.js';
 import { resolveAgentActionIntent } from '../util/agent/actionIntentPolicy.js';
 import {
@@ -34,6 +38,7 @@ import {
   formatSemanticCapabilityCatalog,
   normalizeReadCompletionToolCalls,
   parseSemanticPlannerResponse,
+  SEMANTIC_PLAN_VERSION,
   SEMANTIC_PLAN_TOOL_NAME,
 } from '../util/agent/semanticPlanner.js';
 import { guardUnverifiedExecutionClaim } from '../util/agent/executionClaimGuard.js';
@@ -349,6 +354,7 @@ const TERMINAL_DEPENDENCY_ERROR_CODES = new Set([
   'TOOL_DEPENDENCY_TARGET_AMBIGUOUS',
   'TOOL_DEPENDENCY_TARGET_REQUIRED',
   'TOOL_DEPENDENCY_TARGET_MISMATCH',
+  'NOTE_DRAFT_MATERIAL_UNAVAILABLE',
   'TOOL_NOT_ALLOWED',
   'TOOL_FORBIDDEN',
 ]);
@@ -1102,13 +1108,13 @@ function buildNoteDraftMaterials(resolvedContexts, resolvedAttachments, sourceMe
       content: attachmentText,
     });
   }
-  const originalText = String(sourceMessage || '').trim();
-  if (originalText) {
+  const pastedText = extractPastedNoteDraftText(sourceMessage);
+  if (pastedText) {
     materials.push({
       type: 'text',
       id: '',
-      title: '用户原始输入',
-      content: originalText,
+      title: '用户粘贴文本',
+      content: pastedText,
     });
   }
   return materials;
@@ -1282,6 +1288,122 @@ const BROAD_PERSONAL_CONTENT_TOOLS = new Set([
   'query_tags',
   'query_todos',
 ]);
+
+// 未指定单条笔记 ID 的工作区生成请求，只允许用可按范围检索的工具恢复材料查询。
+// read_note 仍可作为正常语义计划中的证据读取工具，但不进入缺失计划时的恢复面，
+// 避免模型在没有稳定 ID 时选择一个无法正确填参的工具。
+const NOTE_DRAFT_WORKSPACE_QUERY_TOOLS = new Set([
+  'query_bookmarks',
+  'query_notes',
+  'query_files',
+  'query_todos',
+  'search_content',
+]);
+
+// 这些读取能力的成功结果会携带稳定依赖引用或来源；两者都为空时，表示没有取得
+// 可用于“基于我的资料生成笔记”的真实材料。集合按工具能力维护，不依赖用户措辞。
+const NOTE_DRAFT_MATERIAL_READ_TOOLS = new Set([...NOTE_DRAFT_WORKSPACE_QUERY_TOOLS, 'read_note']);
+
+const NOTE_DRAFT_MATERIAL_RECOVERY_INSTRUCTION = [
+  '[INTERNAL_NOTE_DRAFT_MATERIAL_RECOVERY]',
+  '前序完整语义计划协议没有返回有效结果。服务端已经通过受约束语义分类确认：用户只要求基于尚未读取的个人工作区材料生成一篇笔记。',
+  '本轮只负责选择并调用完成该请求所需的真实只读工具；根据原始用户消息中的时间、主题、类型、状态与范围填写参数。',
+  '至少调用一个最合适的读取工具。不得调用写工具，不得生成最终答案，也不得把用户指令本身当作材料。',
+].join('\n');
+
+function buildNoteDraftMaterialRecoveryPlannerResponse(toolCalls, catalog) {
+  const entries = Array.isArray(catalog) ? catalog : [];
+  const noteCreateCapability = entries.find(
+    (entry) => entry?.id === 'note.create' && entry?.effect === 'write' && entry?.status === 'enabled',
+  );
+  if (!noteCreateCapability) return null;
+
+  const capabilityByToolName = new Map();
+  for (const entry of entries) {
+    if (entry?.effect !== 'read' || entry?.status !== 'enabled') continue;
+    for (const toolName of entry.toolNames || []) {
+      if (NOTE_DRAFT_WORKSPACE_QUERY_TOOLS.has(toolName)) capabilityByToolName.set(toolName, entry);
+    }
+  }
+
+  const readCapabilities = [];
+  const capabilityIndexes = new Map();
+  const embeddedToolCalls = [];
+  for (const call of Array.isArray(toolCalls) ? toolCalls : []) {
+    const toolName = String(call?.function?.name || '').trim();
+    const capability = capabilityByToolName.get(toolName);
+    const parsedArgs = parseToolCallArguments(call);
+    if (!capability || !parsedArgs.ok) continue;
+    if (!capabilityIndexes.has(capability.id)) {
+      // 语义计划最多允许四个 intent；为最终 note.create 保留一个位置。
+      if (readCapabilities.length >= 3) continue;
+      capabilityIndexes.set(capability.id, readCapabilities.length);
+      readCapabilities.push(capability);
+    }
+    embeddedToolCalls.push({ toolName, arguments: parsedArgs.args });
+    if (embeddedToolCalls.length >= 8) break;
+  }
+  if (!readCapabilities.length || !embeddedToolCalls.length) return null;
+
+  const intents = readCapabilities.map((capability) => ({
+    kind: 'read',
+    capabilityId: capability.id,
+    goal: '读取用户指定范围内的真实工作区材料',
+    targetDescription: '用户原始请求描述的个人工作区材料',
+    dependsOn: [],
+  }));
+  intents.push({
+    kind: 'write',
+    capabilityId: noteCreateCapability.id,
+    goal: '根据前置查询返回的真实材料生成一篇新笔记',
+    targetDescription: '新的笔记草稿',
+    dependsOn: readCapabilities.map((_, index) => index),
+  });
+
+  return {
+    content: '',
+    toolCalls: [
+      {
+        id: 'note-draft-material-recovery-plan',
+        type: 'function',
+        function: {
+          name: SEMANTIC_PLAN_TOOL_NAME,
+          arguments: JSON.stringify({
+            version: SEMANTIC_PLAN_VERSION,
+            requestClass: 'data_action',
+            confidence: 'medium',
+            intents,
+            needsClarification: false,
+            clarificationQuestion: '',
+            toolCalls: embeddedToolCalls,
+          }),
+        },
+      },
+    ],
+  };
+}
+
+function hasCompleteNoteDraftWorkspacePlan(plan, catalog) {
+  const enabledWorkspaceReadIds = new Set(
+    (Array.isArray(catalog) ? catalog : [])
+      .filter(
+        (entry) =>
+          entry?.effect === 'read' &&
+          entry?.status === 'enabled' &&
+          (entry.toolNames || []).some((toolName) => NOTE_DRAFT_WORKSPACE_QUERY_TOOLS.has(toolName)),
+      )
+      .map((entry) => entry.id),
+  );
+  const intents = Array.isArray(plan?.intents) ? plan.intents : [];
+  const readIndexes = intents
+    .map((intent, index) => ({ intent, index }))
+    .filter(({ intent }) => intent.kind === 'read' && enabledWorkspaceReadIds.has(intent.capabilityId))
+    .map(({ index }) => index);
+  const noteCreateIntent = intents.find((intent) => intent.kind === 'write' && intent.capabilityId === 'note.create');
+  if (!readIndexes.length || !noteCreateIntent) return false;
+  const dependencies = new Set(noteCreateIntent.dependsOn || []);
+  return readIndexes.every((index) => dependencies.has(index));
+}
 
 function normalizeAgentContentScope(rawScope, resolvedContexts, message, resolvedScopes = null) {
   const branchResourceIds = Array.isArray(resolvedScopes?.resourceIds) ? resolvedScopes.resourceIds : [];
@@ -2363,21 +2485,34 @@ export async function agentChat(req, res) {
     // 不可用时的降级路径和一致性传感器，其分歧只写入 trace，不改变本轮执行。
     let noteDraftRequested = false;
     if (!enableTranslation && !refinementRequested) {
+      const noteDraftContextTypes = [
+        ...(Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts : [])
+          .map((item) => String(item?.type || ''))
+          .filter(Boolean),
+        ...(Array.isArray(effectiveRequestAttachmentIds) && effectiveRequestAttachmentIds.length ? ['file'] : []),
+      ];
+      const hasBoundDraftMaterial =
+        noteDraftContextTypes.length > 0 ||
+        resolvedScopes.refs.length > 0 ||
+        extractPastedNoteDraftText(message).length >= 20;
       const legacyNoteDraftRequested = isNoteDraftRequest(message, legacyIntentSuspicion);
       const classifyNoteDraft =
         NOTE_DRAFT_SEMANTIC_ROUTE_ENABLED &&
         shouldClassifyNoteDraftTask({
           message,
-          contextTypes: requestContextTypes,
-          attachmentCount: Array.isArray(requestAttachmentIds) ? requestAttachmentIds.length : 0,
+          contextTypes: noteDraftContextTypes,
+          scopeCount: resolvedScopes.refs.length,
+          attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
         });
       if (classifyNoteDraft) {
         const noteDraftTaskStartedAt = Date.now();
         try {
           const task = await classifyNoteDraftTask({
             message,
-            contextTypes: requestContextTypes,
-            attachmentCount: Array.isArray(requestAttachmentIds) ? requestAttachmentIds.length : 0,
+            contextTypes: noteDraftContextTypes,
+            contextCount: Array.isArray(effectiveRequestContexts) ? effectiveRequestContexts.length : 0,
+            scopeCount: resolvedScopes.refs.length,
+            attachmentCount: Array.isArray(effectiveRequestAttachmentIds) ? effectiveRequestAttachmentIds.length : 0,
             signal: agentAbortController.signal,
             traceId: requestId,
             onResponse(response) {
@@ -2392,13 +2527,20 @@ export async function agentChat(req, res) {
             },
           });
           // 复合写请求必须回到 Semantic Planner，否则笔记之外的写操作会被静默丢弃。
-          noteDraftRequested = task.producesNote && !task.otherMutations;
+          // 需要动态查询个人工作区的“读取 → 写入”任务必须交给 Semantic Planner。
+          // 它会先执行真实查询，再在依赖轮基于工具结果准备 create_note；专用草稿链路
+          // 只处理已经绑定的材料、用户粘贴正文或不依赖个人数据的一般主题创作。
+          noteDraftRequested = task.producesNote && !task.otherMutations && !task.needsWorkspaceRetrieval;
           trace.noteDraftRouteSource = 'semantic';
           trace.noteDraftOtherMutations = task.otherMutations;
+          trace.noteDraftWorkspaceRetrievalNeeded =
+            task.producesNote && !task.otherMutations && task.needsWorkspaceRetrieval;
         } catch (error) {
           // 客户端断开和硬超时属于请求终止，不能被降级逻辑吞掉。
           if (error?.name === 'AbortError' || error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED') throw error;
-          noteDraftRequested = legacyNoteDraftRequested;
+          // 分类不可用时，只有已经绑定了可靠材料的请求才进入专用草稿链路；没有材料的
+          // 请求交回 Planner，避免再次把一句创作指令当作唯一来源。
+          noteDraftRequested = legacyNoteDraftRequested && hasBoundDraftMaterial;
           trace.noteDraftRouteSource = 'legacy_fallback';
           trace.noteDraftClassifyError = stableAgentErrorCode(error);
         }
@@ -2410,7 +2552,7 @@ export async function agentChat(req, res) {
               ? 'semantic_only'
               : 'legacy_only';
       } else {
-        noteDraftRequested = legacyNoteDraftRequested;
+        noteDraftRequested = legacyNoteDraftRequested && hasBoundDraftMaterial;
         trace.noteDraftRouteSource = legacyNoteDraftRequested ? 'legacy_pattern' : 'none';
       }
       // 上线初期无条件记录一次路由决策：只记分歧会让“分类根本没跑”和“分类判否”
@@ -2919,13 +3061,36 @@ export async function agentChat(req, res) {
     if (!contentScope.externalWeb && !contentScope.explicitUrlRead && !contentScope.allowedWebUrls.length) {
       selectedTools = selectedTools.filter((tool) => tool.name !== 'read_url');
     }
+    if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
+      // 受约束语义分类已经确认这是“读取个人材料 → 只创建一篇笔记”的任务。
+      // 不再把近百个无关能力塞进 submit_agent_plan 的嵌套 schema；读取工具仍由模型
+      // 根据任意自然语言范围选择，服务端这里只按能力类型收窄，并保留唯一写能力。
+      selectedTools = selectedTools.filter(
+        (tool) => tool.name === 'create_note' || NOTE_DRAFT_WORKSPACE_QUERY_TOOLS.has(tool.name),
+      );
+      trace.noteDraftWorkspaceToolScope = selectedTools.map((tool) => tool.name);
+    }
     trace.selectedTools = selectedTools.map((tool) => tool.name);
-    const semanticCatalog =
+    let semanticCatalog =
       enableTranslation || (directRoute.direct && !capabilityOverviewRequested)
         ? []
         : buildAgentSemanticCapabilityCatalog([...toolRegistry.values()], {
             availableToolNames: new Set(selectedTools.map((tool) => tool.name)),
           });
+    if (trace.noteDraftWorkspaceRetrievalNeeded === true) {
+      // 工具 schema 收窄后，语义能力目录也必须同步收窄。否则 Planner 仍能从 capabilityId
+      // 枚举中选择 read_note 或其他本任务未开放的 unavailable 能力，裁决器会把协议污染
+      // 误报成“当前账号或访问模式不能使用”。分类器已确认本轮只有材料读取与单篇笔记
+      // 创建，因此保留实际启用的工作区查询能力，以及 note.create 的真实权限状态即可。
+      const scopedCapabilityIds = new Set(['note.create']);
+      for (const tool of selectedTools) {
+        if (!NOTE_DRAFT_WORKSPACE_QUERY_TOOLS.has(tool.name)) continue;
+        const capabilityId = getSemanticCapabilityIdForTool(tool);
+        if (capabilityId) scopedCapabilityIds.add(capabilityId);
+      }
+      semanticCatalog = semanticCatalog.filter((entry) => scopedCapabilityIds.has(entry.id));
+      trace.noteDraftWorkspaceCapabilityScope = semanticCatalog.map((entry) => entry.id);
+    }
 
     // 构建 system prompt（动态：根据角色决定工具提示详略）
     const promptBase = buildPlannerPrompt(selectedTools, userRole, {
@@ -3124,6 +3289,7 @@ export async function agentChat(req, res) {
       round,
       finishReason,
       dependencyRefsByCallId = new Map(),
+      emptyMaterialDependencyCallIds = new Set(),
     }) => {
       const toolCalls = (Array.isArray(rawToolCalls) ? rawToolCalls : []).slice(0, 8);
       if (!toolCalls.length) return [];
@@ -3147,6 +3313,13 @@ export async function agentChat(req, res) {
           let pendingAction = null;
           let retryArgs = null;
           let argumentError = parsedArgs.ok ? null : { code: parsedArgs.error, message: parsedArgs.message };
+
+          if (!argumentError && tc.function.name === 'create_note' && emptyMaterialDependencyCallIds.has(tc.id)) {
+            argumentError = {
+              code: 'NOTE_DRAFT_MATERIAL_UNAVAILABLE',
+              message: '没有从工作区查询到可用于生成笔记的真实材料，因此本次没有创建笔记。',
+            };
+          }
 
           if (!argumentError && dependencyRefsByCallId.has(tc.id)) {
             try {
@@ -3397,6 +3570,9 @@ export async function agentChat(req, res) {
         catalog: semanticCatalog,
       });
       const expectedCapabilityIds = expectedEnabledSemanticCapabilityIds(legacyIntentSuspicion, semanticCatalog);
+      const needsSemanticRepair = (plan, decision) =>
+        shouldRepairSemanticPlan(plan, decision, expectedCapabilityIds) ||
+        (trace.noteDraftWorkspaceRetrievalNeeded === true && !hasCompleteNoteDraftWorkspacePlan(plan, semanticCatalog));
       trace.semanticPlanInitialSource = parsedSemantic.source;
       trace.semanticPlanInitialResolution = semanticPlan ? adjudicated.resolution : 'semantic_plan_missing';
 
@@ -3404,7 +3580,7 @@ export async function agentChat(req, res) {
       // 执行任何工具。普通异常仅进行一次同权限重判；若高召回传感器能精确命中已启用动作，
       // 最多再给一次定向纠偏机会。每轮仍须经过完整协议解析和服务端裁决，传感器本身不能
       // 选择工具或绕过权限。恢复供应商失败不会把请求升级成 500；超时/客户端中止仍传播。
-      if (shouldRepairSemanticPlan(semanticPlan, adjudicated, expectedCapabilityIds)) {
+      if (needsSemanticRepair(semanticPlan, adjudicated)) {
         const repairAttempts = expectedCapabilityIds.length ? MAX_SEMANTIC_PLAN_REPAIR_ATTEMPTS : 1;
         for (let attempt = 1; attempt <= repairAttempts; attempt += 1) {
           const repairInstruction = [
@@ -3463,10 +3639,7 @@ export async function agentChat(req, res) {
                 resolution: repairedSemantic.plan ? repairedDecision.resolution : 'semantic_plan_missing',
               },
             ];
-            if (
-              repairedSemantic.plan &&
-              !shouldRepairSemanticPlan(repairedSemantic.plan, repairedDecision, expectedCapabilityIds)
-            ) {
+            if (repairedSemantic.plan && !needsSemanticRepair(repairedSemantic.plan, repairedDecision)) {
               parsedSemantic = repairedSemantic;
               semanticPlan = repairedSemantic.plan;
               adjudicated = repairedDecision;
@@ -3495,6 +3668,111 @@ export async function agentChat(req, res) {
               },
             ];
             break;
+          }
+        }
+      }
+
+      // 完整 submit_agent_plan 即使经过有界修复仍可能被 Provider 漏掉。对已经由独立
+      // 语义分类确认的“个人材料 → 单篇笔记”任务，再给一次更小的只读恢复面：模型只能
+      // 从工作区材料读取工具中选择参数，服务端再把已验证的读取调用与延后的 note.create
+      // 重新封装成标准语义计划并走原裁决器。这里不使用关键词决定工具，也不直接执行写入。
+      const canRecoverNoteDraftWorkspacePlan = semanticCatalog.some(
+        (entry) => entry.id === 'note.create' && entry.effect === 'write' && entry.status === 'enabled',
+      );
+      if (
+        trace.noteDraftWorkspaceRetrievalNeeded === true &&
+        canRecoverNoteDraftWorkspacePlan &&
+        !hasCompleteNoteDraftWorkspacePlan(semanticPlan, semanticCatalog)
+      ) {
+        const recoveryCatalog = semanticCatalog.filter(
+          (entry) =>
+            entry.effect === 'read' &&
+            entry.status === 'enabled' &&
+            (entry.toolNames || []).some((toolName) => NOTE_DRAFT_WORKSPACE_QUERY_TOOLS.has(toolName)),
+        );
+        const recoveryToolNames = new Set(recoveryCatalog.flatMap((entry) => entry.toolNames || []));
+        const recoveryTools = selectedTools.filter((tool) => recoveryToolNames.has(tool.name));
+        if (recoveryCatalog.length && recoveryTools.length) {
+          const recoveryPrompt = `${buildPlannerPrompt(recoveryTools, userRole)}\n\n${scopePrompt}`;
+          const recoveryMessages = [
+            { role: 'system', content: recoveryPrompt },
+            ...messages.slice(1),
+            { role: 'user', content: NOTE_DRAFT_MATERIAL_RECOVERY_INSTRUCTION },
+          ];
+          const recoveryStartedAt = Date.now();
+          try {
+            let recoveryResponse = await requestAi(recoveryMessages, {
+              tools: getToolDefinitions(recoveryTools),
+              toolChoice:
+                recoveryTools.length === 1
+                  ? { type: 'function', function: { name: recoveryTools[0].name } }
+                  : 'required',
+              signal: agentAbortController.signal,
+              maxTokens: getPlannerMaxTokens({
+                message,
+                attachmentCount: attachmentIds.length,
+                selectedToolNames: recoveryToolNames,
+              }),
+              trace: { traceId: requestId, stage: 'planner_note_material_recovery' },
+            });
+            recoveryResponse = normalizePlannerToolCallResponse(recoveryResponse, 'planner_note_material_recovery');
+            trace.plannerMs += Date.now() - recoveryStartedAt;
+            trace.finishReason = recoveryResponse.finishReason || trace.finishReason;
+            plannerUsageReported = plannerUsageReported && recoveryResponse.usageStatus === 'reported';
+            trace.usageStatus = plannerUsageReported ? 'reported' : 'missing';
+            apiCalls += 1;
+            apiCallsForLog = apiCalls;
+            totalUsage.promptTokens += recoveryResponse.usage.promptTokens;
+            totalUsage.completionTokens += recoveryResponse.usage.completionTokens;
+            totalUsage.totalTokens += recoveryResponse.usage.totalTokens;
+
+            const safeReadCalls = normalizeReadCompletionToolCalls(recoveryResponse.toolCalls, recoveryCatalog, {
+              toolCallIdPrefix: 'note-draft-material-recovery',
+            });
+            const recoveredPlannerResponse = buildNoteDraftMaterialRecoveryPlannerResponse(
+              safeReadCalls,
+              semanticCatalog,
+            );
+            const recoveredSemantic = recoveredPlannerResponse
+              ? parseSemanticPlannerResponse(recoveredPlannerResponse, semanticCatalog, {
+                  toolCallIdPrefix: 'note-draft-material-recovery-plan',
+                })
+              : { plan: null, toolCalls: [], source: 'missing', invalidPlan: true };
+            const recoveredDecision = adjudicateSemanticPlan({
+              plan: recoveredSemantic.plan,
+              toolCalls: recoveredSemantic.toolCalls,
+              catalog: semanticCatalog,
+            });
+            trace.noteDraftMaterialRecovery = {
+              source: recoveredSemantic.source,
+              invalid: recoveredSemantic.invalidPlan,
+              acceptedToolNames: safeReadCalls.map((call) => call?.function?.name).filter(Boolean),
+              resolution: recoveredSemantic.plan ? recoveredDecision.resolution : 'semantic_plan_missing',
+            };
+            if (recoveredSemantic.plan && recoveredDecision.state === 'ready') {
+              parsedSemantic = recoveredSemantic;
+              semanticPlan = recoveredSemantic.plan;
+              adjudicated = recoveredDecision;
+              plannerResponse = {
+                ...recoveryResponse,
+                toolCalls: recoveredDecision.toolCalls,
+              };
+            }
+          } catch (error) {
+            if (
+              agentAbortController.signal.aborted ||
+              error?.name === 'AbortError' ||
+              error?.code === 'AGENT_HARD_DEADLINE_EXCEEDED'
+            ) {
+              throw error;
+            }
+            trace.noteDraftMaterialRecovery = {
+              source: 'error',
+              invalid: true,
+              acceptedToolNames: [],
+              resolution: 'provider_error',
+              errorCode: stableAgentErrorCode(error),
+            };
           }
         }
       }
@@ -3750,6 +4028,8 @@ export async function agentChat(req, res) {
       let attemptedDeferredWrite = false;
       const completedCapabilityIds = new Set();
       const dependencyRefsByCapabilityId = new Map();
+      const materialEvidenceByCapabilityId = new Map();
+      const materialReadCapabilityIds = new Set();
       const unresolvedIntentIndexes = new Set(
         (semanticPlan?.intents || [])
           .map((intent, index) => ({ intent, index }))
@@ -3767,6 +4047,16 @@ export async function agentChat(req, res) {
             capabilityId,
             normalizeToolDependencyRefs([...existingRefs, ...(item.result?.dependencyRefs || [])]),
           );
+          if (NOTE_DRAFT_MATERIAL_READ_TOOLS.has(item.toolName)) {
+            materialReadCapabilityIds.add(capabilityId);
+            const hasEvidence =
+              (Array.isArray(item.result?.dependencyRefs) && item.result.dependencyRefs.length > 0) ||
+              (Array.isArray(item.result?.sources) && item.result.sources.length > 0);
+            materialEvidenceByCapabilityId.set(
+              capabilityId,
+              materialEvidenceByCapabilityId.get(capabilityId) === true || hasEvidence,
+            );
+          }
           for (const index of [...unresolvedIntentIndexes]) {
             if (semanticPlan.intents[index]?.capabilityId === capabilityId) unresolvedIntentIndexes.delete(index);
           }
@@ -3988,6 +4278,7 @@ export async function agentChat(req, res) {
           followUpDecision.toolCalls.some((call) => toolRegistry.get(call?.function?.name)?.isWrite === true);
 
         const dependencyRefsByCallId = new Map();
+        const emptyMaterialDependencyCallIds = new Set();
         if (dependencyRound) {
           for (const call of followUpDecision.toolCalls) {
             const capabilityId = followUpCatalog.find((entry) => entry.toolNames?.includes(call?.function?.name))?.id;
@@ -4000,6 +4291,22 @@ export async function agentChat(req, res) {
                 dependencyRefsByCapabilityId.get(semanticPlan.intents[dependencyIndex]?.capabilityId) || [],
             );
             dependencyRefsByCallId.set(call.id, normalizeToolDependencyRefs(refs));
+            if (trace.noteDraftWorkspaceRetrievalNeeded === true && call?.function?.name === 'create_note') {
+              const dependencyCapabilityIds = semanticPlan.intents[intentIndex].dependsOn
+                .map((dependencyIndex) => semanticPlan.intents[dependencyIndex]?.capabilityId)
+                .filter(Boolean);
+              const materialCapabilityIds = dependencyCapabilityIds.filter((dependencyCapabilityId) =>
+                materialReadCapabilityIds.has(dependencyCapabilityId),
+              );
+              if (
+                materialCapabilityIds.length > 0 &&
+                materialCapabilityIds.every(
+                  (dependencyCapabilityId) => materialEvidenceByCapabilityId.get(dependencyCapabilityId) !== true,
+                )
+              ) {
+                emptyMaterialDependencyCallIds.add(call.id);
+              }
+            }
           }
         }
 
@@ -4009,6 +4316,7 @@ export async function agentChat(req, res) {
           round,
           finishReason: followUpPlannerResponse.finishReason,
           dependencyRefsByCallId,
+          emptyMaterialDependencyCallIds,
         });
         recordSuccessfulCapabilityResults(previousRoundResults, followUpCatalog);
         const terminalDependencyFailure = dependencyRound

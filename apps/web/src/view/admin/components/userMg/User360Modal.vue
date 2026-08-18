@@ -21,6 +21,7 @@
               :frame-id="equippedFrameId"
               :src="userInfo?.headPicture || icon.navigation.user"
               :size="38"
+              layout-mode="slot"
               pause-when-offscreen
             />
             <SvgIcon v-else :src="userInfo?.headPicture || icon.navigation.user" size="38" />

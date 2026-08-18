@@ -123,6 +123,17 @@
           <SvgIcon :src="icon.noteDetail.toolbar.redo" size="17" aria-hidden="true" />
         </BButton>
       </BTooltip>
+      <BTooltip :title="t('note.drawingClear')">
+        <BButton
+          size="small"
+          class="drawing-tool-button"
+          :disabled="!scene.elements.length"
+          :aria-label="t('note.drawingClear')"
+          @click="confirmClearDrawing"
+        >
+          <SvgIcon :src="icon.noteDetail.imageToolbar.delete" size="17" aria-hidden="true" />
+        </BButton>
+      </BTooltip>
 
       <span class="drawing-toolbar-spacer" />
       <BButton size="small" class="drawing-value-button" :disabled="zoomIndex === 0" @click="changeZoom(-1)">
@@ -211,6 +222,7 @@
   import BInput from '@/components/base/BasicComponents/BInput.vue';
   import BPopover from '@/components/base/BasicComponents/BPopover.vue';
   import BTooltip from '@/components/base/BasicComponents/BTooltip.vue';
+  import Alert from '@/components/base/BasicComponents/BModal/Alert.ts';
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import message from '@/components/base/BasicComponents/BMessage/BMessage';
   import icon from '@/config/icon';
@@ -219,6 +231,15 @@
   import { deliverExportViaAndroidBridge } from '@/utils/androidFileExport';
   import { bookmarkStore } from '@/store';
   import { eraseDrawingElementsAt, type DrawingPoint } from '@/utils/drawingEraser';
+  import {
+    cloneDrawingElement,
+    drawingRectsIntersect,
+    normalizeDrawingRect,
+    readDrawingClipboard,
+    translateDrawingElement,
+    writeDrawingClipboard,
+    type DrawingRect,
+  } from '@/utils/drawingSelection';
 
   type DrawingTool = 'pen' | 'eraser' | 'text' | 'select' | 'hand';
 
@@ -249,7 +270,7 @@
   const strokeWidth = ref<DrawingStrokeWidth>(DRAWING_STROKE_WIDTHS[1]);
   const fontSize = ref<DrawingFontSize>(DRAWING_FONT_SIZES[0]);
   const eraserSize = ref(18);
-  const selectedId = ref('');
+  const selectedIds = ref<string[]>([]);
   const colorPopoverOpen = ref(false);
   const sizePopoverOpen = ref(false);
   const textDraft = ref<DrawingTextElement | null>(null);
@@ -270,6 +291,7 @@
   const HISTORY_MAX_STATES = 20;
   const HISTORY_MAX_CHARS = 8_000_000;
   const TEXT_DRAG_THRESHOLD_PX = 4;
+  const MARQUEE_DRAG_THRESHOLD_PX = 3;
   const DRAWING_TEXT_LINE_HEIGHT = 1.35;
   const DRAWING_ERASER_SIZE_RANGE = Object.freeze({ min: 4, max: 64 });
   const DRAWING_ERASER_SIZES = Object.freeze([8, 18, 36]);
@@ -312,8 +334,15 @@
   let eraserLimitReached = false;
   let eraserPreviewElements: DrawingElement[] | null = null;
   let eraserCursorPoint: DrawingPoint | null = null;
-  let dragStart: { x: number; y: number; element: DrawingElement } | null = null;
-  let dragPreview: DrawingElement | null = null;
+  let dragStart: {
+    x: number;
+    y: number;
+    elements: DrawingElement[];
+    elementsById: Map<string, DrawingElement>;
+    dx: number;
+    dy: number;
+  } | null = null;
+  let marqueeSelection: { start: DrawingPoint; current: DrawingPoint; baseIds: string[] } | null = null;
   let editSelectedTextOnRelease = false;
   let panStart: { x: number; y: number; left: number; top: number } | null = null;
   let workspaceResizeObserver: ResizeObserver | null = null;
@@ -333,6 +362,47 @@
       return Array.from(bytes, (value) => value.toString(36)).join('');
     }
     return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  }
+
+  function setSelectedIds(ids: readonly string[]) {
+    const availableIds = new Set(scene.value.elements.map((element) => element.id));
+    selectedIds.value = Array.from(new Set(ids)).filter((id) => availableIds.has(id));
+  }
+
+  function currentMarqueeRect(): DrawingRect | null {
+    return marqueeSelection ? normalizeDrawingRect(marqueeSelection.start, marqueeSelection.current) : null;
+  }
+
+  function marqueeSelectedIds(context: CanvasRenderingContext2D, elements: readonly DrawingElement[]) {
+    const rect = currentMarqueeRect();
+    if (!rect || !marqueeSelection) return selectedIds.value;
+    const ids = new Set(marqueeSelection.baseIds);
+    if (Math.max(rect.width, rect.height) * zoom.value < MARQUEE_DRAG_THRESHOLD_PX) return Array.from(ids);
+    for (const element of elements) {
+      if (drawingRectsIntersect(rect, elementBounds(context, element))) ids.add(element.id);
+    }
+    return Array.from(ids);
+  }
+
+  function selectedElements() {
+    const ids = new Set(selectedIds.value);
+    return scene.value.elements.filter((element) => ids.has(element.id));
+  }
+
+  function previewElement(element: DrawingElement) {
+    if (!dragStart) return element;
+    const original = dragStart.elementsById.get(element.id);
+    return original ? translateDrawingElement(original, dragStart.dx, dragStart.dy) : element;
+  }
+
+  function unionElementBounds(context: CanvasRenderingContext2D, elements: readonly DrawingElement[]) {
+    if (!elements.length) return null;
+    const bounds = elements.map((element) => elementBounds(context, element));
+    const minX = Math.min(...bounds.map((item) => item.x));
+    const minY = Math.min(...bounds.map((item) => item.y));
+    const maxX = Math.max(...bounds.map((item) => item.x + item.width));
+    const maxY = Math.max(...bounds.map((item) => item.y + item.height));
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
   function setActiveSize(size: number) {
@@ -491,22 +561,31 @@
     paintedElements.forEach((element) => {
       // 编辑框已经承载同一文本；画布暂时隐藏原元素，避免视觉上叠成两份。
       if (textDraft.value?.id !== element.id) {
-        paintElement(context, dragPreview?.id === element.id ? dragPreview : element);
+        paintElement(context, previewElement(element));
       }
     });
     if (activeStroke) paintElement(context, activeStroke);
-    if (showSelection && selectedId.value && textDraft.value?.id !== selectedId.value) {
-      const selected =
-        dragPreview?.id === selectedId.value
-          ? dragPreview
-          : paintedElements.find((element) => element.id === selectedId.value);
-      if (selected) {
-        const bounds = elementBounds(context, selected);
+    if (showSelection) {
+      const activeSelectedIds = new Set(marqueeSelectedIds(context, paintedElements));
+      paintedElements.forEach((element) => {
+        if (!activeSelectedIds.has(element.id) || textDraft.value?.id === element.id) return;
+        const bounds = elementBounds(context, previewElement(element));
         context.save();
         context.strokeStyle = '#615ced';
         context.lineWidth = 1.5;
         context.setLineDash([6, 4]);
         context.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+        context.restore();
+      });
+      const marqueeRect = currentMarqueeRect();
+      if (marqueeRect) {
+        context.save();
+        context.fillStyle = 'rgba(97, 92, 237, 0.1)';
+        context.strokeStyle = '#615ced';
+        context.lineWidth = 1.5;
+        context.setLineDash([5, 3]);
+        context.fillRect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height);
+        context.strokeRect(marqueeRect.x, marqueeRect.y, marqueeRect.width, marqueeRect.height);
         context.restore();
       }
     }
@@ -701,7 +780,7 @@
     if (result.limitReached) eraserLimitReached = true;
     if (!result.changed) return;
     eraserPreviewElements = result.elements;
-    selectedId.value = '';
+    selectedIds.value = [];
     eraserChanged = true;
     scheduleDraw();
   }
@@ -774,16 +853,35 @@
       return;
     }
     const hit = hitElement(point);
-    const shouldEditSelectedText = hit?.kind === 'text' && hit.id === selectedId.value;
-    selectedId.value = hit?.id || '';
-    if (hit) {
+    const additiveSelection = event.shiftKey || event.metaKey || event.ctrlKey;
+    const wasSelected = Boolean(hit && selectedIds.value.includes(hit.id));
+    const shouldEditSelectedText =
+      !additiveSelection && hit?.kind === 'text' && wasSelected && selectedIds.value.length === 1;
+    if (!hit) {
+      const baseIds = additiveSelection ? [...selectedIds.value] : [];
+      setSelectedIds(baseIds);
+      marqueeSelection = { start: point, current: point, baseIds };
+      scheduleDraw();
+      return;
+    }
+    if (additiveSelection && wasSelected) {
+      setSelectedIds(selectedIds.value.filter((id) => id !== hit.id));
+      scheduleDraw();
+      return;
+    }
+    if (additiveSelection) setSelectedIds([...selectedIds.value, hit.id]);
+    else if (!wasSelected) setSelectedIds([hit.id]);
+    const originals = selectedElements().map((element) => cloneDrawingElement(element));
+    if (originals.length) {
       beginMutation();
       dragStart = {
         x: point.x,
         y: point.y,
-        element: hit.kind === 'stroke' ? { ...hit, points: [...hit.points] } : { ...hit },
+        elements: originals,
+        elementsById: new Map(originals.map((element) => [element.id, element])),
+        dx: 0,
+        dy: 0,
       };
-      dragPreview = dragStart.element;
       editSelectedTextOnRelease = shouldEditSelectedText;
     }
     scheduleDraw();
@@ -815,18 +913,17 @@
       return;
     }
     const point = canvasPoint(event);
-    if (dragStart && selectedId.value) {
-      const dx = point.x - dragStart.x;
-      const dy = point.y - dragStart.y;
-      if (editSelectedTextOnRelease && Math.hypot(dx, dy) * zoom.value >= TEXT_DRAG_THRESHOLD_PX) {
+    if (marqueeSelection) {
+      marqueeSelection.current = point;
+      scheduleDraw();
+      return;
+    }
+    if (dragStart && selectedIds.value.length) {
+      dragStart.dx = point.x - dragStart.x;
+      dragStart.dy = point.y - dragStart.y;
+      if (editSelectedTextOnRelease && Math.hypot(dragStart.dx, dragStart.dy) * zoom.value >= TEXT_DRAG_THRESHOLD_PX) {
         editSelectedTextOnRelease = false;
       }
-      const original = dragStart.element;
-      const moved: DrawingElement =
-        original.kind === 'text'
-          ? { ...original, x: original.x + dx, y: original.y + dy }
-          : { ...original, points: original.points.map((value, index) => value + (index % 2 === 0 ? dx : dy)) };
-      dragPreview = moved;
       scheduleDraw();
     }
   }
@@ -847,15 +944,22 @@
       activeStroke = null;
       activeStrokeMaxPairs = 0;
       emitScene();
-    } else if (dragStart && dragPreview) {
-      if (editSelectedTextOnRelease && dragStart.element.kind === 'text') {
+    } else if (marqueeSelection) {
+      const context = canvasRef.value?.getContext('2d');
+      if (context) setSelectedIds(marqueeSelectedIds(context, scene.value.elements));
+      marqueeSelection = null;
+      mutationSnapshot = '';
+    } else if (dragStart) {
+      if (editSelectedTextOnRelease && dragStart.elements.length === 1 && dragStart.elements[0].kind === 'text') {
         mutationSnapshot = '';
-        textDraft.value = { ...dragStart.element };
+        textDraft.value = cloneDrawingElement(dragStart.elements[0]) as DrawingTextElement;
         nextTick(() => textInputRef.value?.focus?.());
       } else {
+        const { dx, dy, elements } = dragStart;
+        const movedById = new Map(elements.map((element) => [element.id, translateDrawingElement(element, dx, dy)]));
         scene.value = {
           ...scene.value,
-          elements: scene.value.elements.map((element) => (element.id === dragPreview?.id ? dragPreview : element)),
+          elements: scene.value.elements.map((element) => movedById.get(element.id) || element),
         };
         emitScene();
       }
@@ -873,7 +977,7 @@
     eraserLimitReached = false;
     eraserPreviewElements = null;
     dragStart = null;
-    dragPreview = null;
+    marqueeSelection = null;
     editSelectedTextOnRelease = false;
     scheduleDraw();
   }
@@ -888,7 +992,7 @@
     eraserLimitReached = false;
     eraserPreviewElements = null;
     dragStart = null;
-    dragPreview = null;
+    marqueeSelection = null;
     editSelectedTextOnRelease = false;
     scheduleDraw();
   }
@@ -913,7 +1017,7 @@
         ? scene.value.elements.map((element) => (element.id === draft.id ? committedDraft : element))
         : [...scene.value.elements, committedDraft],
     };
-    selectedId.value = draft.id;
+    setSelectedIds([draft.id]);
     textLayoutCache.clear();
     emitScene();
     scheduleDraw();
@@ -923,7 +1027,7 @@
     targetStack.push(serializeDrawingScene(scene.value));
     trimHistory(targetStack);
     scene.value = parseDrawingScene(serialized);
-    selectedId.value = '';
+    selectedIds.value = [];
     textLayoutCache.clear();
     lastEmittedContent = serializeDrawingScene(scene.value);
     emit('update:content', lastEmittedContent);
@@ -940,22 +1044,115 @@
     if (next) applyHistory(next, undoStack.value);
   }
 
+  function copySelectedElements() {
+    const elements = selectedElements();
+    if (!elements.length) return false;
+    writeDrawingClipboard(elements);
+    return true;
+  }
+
+  function deleteSelectedElements() {
+    if (!selectedIds.value.length) return false;
+    const ids = new Set(selectedIds.value);
+    if (!scene.value.elements.some((element) => ids.has(element.id))) return false;
+    beginMutation();
+    scene.value = { ...scene.value, elements: scene.value.elements.filter((element) => !ids.has(element.id)) };
+    selectedIds.value = [];
+    const changed = emitScene();
+    scheduleDraw();
+    return changed;
+  }
+
+  function pasteDrawingElements() {
+    const clipboard = readDrawingClipboard(createElementId);
+    if (!clipboard.elements.length) return;
+    const context = canvasRef.value?.getContext('2d');
+    if (!context) return;
+    const bounds = unionElementBounds(context, clipboard.elements);
+    if (!bounds) return;
+    const desiredOffset = clipboard.sequence * 24;
+    const dx = Math.max(-bounds.x, Math.min(desiredOffset, DRAWING_PAGE.width - bounds.x - bounds.width));
+    const dy = Math.max(-bounds.y, Math.min(desiredOffset, DRAWING_PAGE.height - bounds.y - bounds.height));
+    const pasted = clipboard.elements.map((element) => translateDrawingElement(element, dx, dy));
+    const previousSelection = [...selectedIds.value];
+    beginMutation();
+    scene.value = { ...scene.value, elements: [...scene.value.elements, ...pasted] };
+    setSelectedIds(pasted.map((element) => element.id));
+    if (!emitScene()) setSelectedIds(previousSelection);
+    else tool.value = 'select';
+    scheduleDraw();
+  }
+
+  function clearDrawing() {
+    if (!scene.value.elements.length) return;
+    beginMutation();
+    scene.value = { ...scene.value, elements: [] };
+    selectedIds.value = [];
+    textDraft.value = null;
+    eraserPreviewElements = null;
+    dragStart = null;
+    marqueeSelection = null;
+    textLayoutCache.clear();
+    emitScene();
+    scheduleDraw();
+    // 确认框关闭后清屏按钮会进入 disabled，浏览器无法把焦点还给原触发按钮；
+    // 主动聚焦编辑器，保证 Command/Ctrl+Z 无需再次点击画布即可撤销。
+    void nextTick(() => rootRef.value?.focus({ preventScroll: true }));
+  }
+
+  function confirmClearDrawing() {
+    if (!scene.value.elements.length) return;
+    Alert.alert({
+      title: t('note.drawingClearConfirmTitle'),
+      content: t('note.drawingClearConfirmContent'),
+      okText: t('note.drawingClear'),
+      okType: 'danger',
+      onOk: clearDrawing,
+    });
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (props.readonly || textDraft.value) return;
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') {
+    const commandKey = event.metaKey || event.ctrlKey;
+    const key = event.key.toLowerCase();
+    if (commandKey && key === 'z') {
       event.preventDefault();
       if (event.shiftKey) redo();
       else undo();
+      return;
+    }
+    if (commandKey && key === 'a') {
+      event.preventDefault();
+      tool.value = 'select';
+      setSelectedIds(scene.value.elements.map((element) => element.id));
+      scheduleDraw();
+      return;
+    }
+    if (commandKey && key === 'c') {
+      event.preventDefault();
+      copySelectedElements();
+      return;
+    }
+    if (commandKey && key === 'x') {
+      event.preventDefault();
+      if (copySelectedElements()) deleteSelectedElements();
+      return;
+    }
+    if (commandKey && key === 'v') {
+      event.preventDefault();
+      pasteDrawingElements();
+      return;
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      selectedIds.value = [];
+      marqueeSelection = null;
+      scheduleDraw();
+      return;
     }
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      const selected = scene.value.elements.find((element) => element.id === selectedId.value);
-      if (!selected) return;
       event.preventDefault();
-      beginMutation();
-      scene.value = { ...scene.value, elements: scene.value.elements.filter((element) => element.id !== selected.id) };
-      selectedId.value = '';
-      emitScene();
-      scheduleDraw();
+      deleteSelectedElements();
     }
   }
 
@@ -1032,7 +1229,7 @@
       try {
         scene.value = content ? parseDrawingScene(content) : createEmptyDrawingScene();
         lastEmittedContent = serializeDrawingScene(scene.value);
-        selectedId.value = '';
+        selectedIds.value = [];
         eraserPreviewElements = null;
         undoStack.value = [];
         redoStack.value = [];
