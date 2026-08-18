@@ -53,7 +53,7 @@
       </template>
 
       <div class="note-attach-footer">
-        <BButton :disabled="saving || loading || !selectedIds.size" type="primary" @click="confirmAttach">
+        <BButton :disabled="saving || loading || !selectedIds.size" type="primary" @click="confirmAttach()">
           {{ saving ? t('common.loading') : t('note.attachConfirm') }}
         </BButton>
         <BButton :disabled="saving" @click="close">{{ t('common.cancel') }}</BButton>
@@ -76,6 +76,7 @@
   import { apiBasePost } from '@/http/request';
   import { bookmarkStore } from '@/store';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
+  import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
   import { canMoveNoteSubtreeToDepth, collectNoteDescendantIds, flattenNoteTree } from '@/utils/noteTree';
 
   const props = defineProps<{ targetNote: { id: string; title?: string } | null }>();
@@ -231,15 +232,17 @@
     }
   }
 
-  async function confirmAttach() {
+  async function confirmAttach(shareExposureAcknowledged = false) {
     if (saving.value || loading.value || !targetId.value || !selectedIds.value.size) return;
     saving.value = true;
     try {
       const response = await apiBasePost('/api/note/moveNoteNodes', {
         ids: [...selectedIds.value],
         parentId: targetId.value,
+        ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
       });
       if (response.status !== 200) {
+        if (requestNoteShareExposureConfirmation(response, () => confirmAttach(true))) return;
         message.error(response.msg || t('note.moveFailed'));
         return;
       }

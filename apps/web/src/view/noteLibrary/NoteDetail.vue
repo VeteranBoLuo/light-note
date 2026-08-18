@@ -30,6 +30,7 @@
         @attach-pages="openAttachPages"
         @move-page="openMoveSelf"
         @toggle-inbox="toggleNoteInbox"
+        @share="shareVisible = true"
         @export-drawing="exportDrawingNote"
       />
       <NoteWorkspaceShell
@@ -281,6 +282,11 @@
       :note="renameTargetNote"
       @renamed="handlePageRenamed"
     />
+    <NoteShareModal
+      v-if="shareVisible && note.id"
+      v-model:visible="shareVisible"
+      :note="{ id: note.id, title: note.title }"
+    />
     <NoteConflictModal
       v-if="conflictVisible && conflictCloudVersion && conflictLocalVersion"
       v-model:visible="conflictVisible"
@@ -363,6 +369,7 @@
   import { preloadNoteEditorRuntime } from '@/components/noteLibrary/detail/editorRuntimeLoader';
   import { NOTE_LIBRARY_FEATURES_FRESH_MS } from '@/store/noteLibraryCache';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
+  import { confirmNoteShareExposure } from '@/utils/noteShareExposure';
 
   const createDeferredDetailFeature = (loader: () => Promise<any>) =>
     defineAsyncComponent({
@@ -381,6 +388,9 @@
     () => import('@/components/noteLibrary/tree/NoteAttachPagesModal.vue'),
   );
   const NoteMoveModal = createDeferredDetailFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
+  const NoteShareModal = createDeferredDetailFeature(
+    () => import('@/components/noteLibrary/share/NoteShareModal.vue'),
+  );
   const NoteRenameModal = createDeferredDetailFeature(
     () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
   );
@@ -589,6 +599,7 @@
   let promotedDraftRouteId = '';
   const hasSwitchBackup = ref(false);
   const versionHistoryVisible = ref(false);
+  const shareVisible = ref(false);
   type ConflictVersion = {
     id?: string;
     title: string;
@@ -821,12 +832,18 @@
     if (!local || conflictBusyAction.value) return;
     conflictBusyAction.value = 'copy';
     try {
-      const response = await apiBasePost('/api/note/addNote', {
+      const payload = {
         title: `${local.title || DEFAULT_NOTE_TITLE}${t('noteDetail.conflict.copyTitleSuffix')}`.slice(0, 255),
         content: local.content,
         type: local.type,
         parentId: local.parentId ?? note.parentId ?? null,
-      });
+      };
+      let response = await apiBasePost('/api/note/addNote', payload);
+      const exposureDecision = await confirmNoteShareExposure(response);
+      if (exposureDecision === false) return;
+      if (exposureDecision === true) {
+        response = await apiBasePost('/api/note/addNote', { ...payload, shareExposureAcknowledged: true });
+      }
       if (response.status !== 200 || !response.data?.id) {
         message.error(response.msg || t('noteDetail.saveFailed'));
         return;
@@ -1489,46 +1506,52 @@
     if (!params.title || !params.title.trim()) {
       params.title = DEFAULT_NOTE_TITLE;
     }
-    createPromise = noteTreeFeaturePromise
-      .then(() => {
+    createPromise = (async () => {
+      await noteTreeFeaturePromise;
+      {
         const parentId = noteTreeWriteEnabled.value ? routeQueryValue(router.currentRoute.value.query.parent) : '';
         if (parentId) params.parentId = parentId;
-        return apiBasePost('/api/note/addNote', params);
-      })
-      .then(async (res) => {
-        if (res.status === 200 && res.data?.id) {
-          note.id = res.data.id;
-          note.revision = Math.max(1, Number(res.data.revision || 1));
-          note.createBy = user.id;
-          note.parentId = params.parentId || null;
-          if (!note.title || !note.title.trim()) {
-            note.title = params.title;
-          }
-          promoteSavedDraftInTree();
-          // 详情工作区的路由 key 保持稳定，草稿首次保存只替换地址，不重挂编辑器内容区。
-          // replace 保留原 query(type/builtin)，让刷新后的编辑器类型仍能按原始模板恢复。
-          promotedDraftRouteId = note.id as string;
-          markNoteDraftPromoted(promotedDraftRouteId);
-          router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
-          recordOperation({
-            module: '笔记',
-            operation: `新建笔记成功【${note.title}】${appliedTemplateName ? `（模板：${appliedTemplateName}）` : ''}`,
-          });
-          if (params.parentId) {
-            void recordNoteTreeProductEvent('note_tree_child_created', {
-              surface: bookmark.isMobile ? 'mobile' : 'desktop',
-              subtreeSize: 1,
-              result: 'success',
-            });
-          }
-          invalidateNoteReadCaches(note.id);
-          return note.id as string;
+      }
+      let res = await apiBasePost('/api/note/addNote', params);
+      const exposureDecision = await confirmNoteShareExposure(res);
+      if (exposureDecision === false) {
+        throw Object.assign(new Error('NOTE_SHARE_EXPOSURE_CANCELLED'), { code: 'NOTE_SHARE_EXPOSURE_CANCELLED' });
+      }
+      if (exposureDecision === true) {
+        res = await apiBasePost('/api/note/addNote', { ...params, shareExposureAcknowledged: true });
+      }
+      if (res.status === 200 && res.data?.id) {
+        note.id = res.data.id;
+        note.revision = Math.max(1, Number(res.data.revision || 1));
+        note.createBy = user.id;
+        note.parentId = params.parentId || null;
+        if (!note.title || !note.title.trim()) {
+          note.title = params.title;
         }
-        throw new Error('创建笔记失败');
-      })
-      .finally(() => {
-        createPromise = null;
-      });
+        promoteSavedDraftInTree();
+        // 详情工作区的路由 key 保持稳定，草稿首次保存只替换地址，不重挂编辑器内容区。
+        // replace 保留原 query(type/builtin)，让刷新后的编辑器类型仍能按原始模板恢复。
+        promotedDraftRouteId = note.id as string;
+        markNoteDraftPromoted(promotedDraftRouteId);
+        router.replace({ path: `/noteLibrary/${note.id}`, query: router.currentRoute.value.query }).then();
+        recordOperation({
+          module: '笔记',
+          operation: `新建笔记成功【${note.title}】${appliedTemplateName ? `（模板：${appliedTemplateName}）` : ''}`,
+        });
+        if (params.parentId) {
+          void recordNoteTreeProductEvent('note_tree_child_created', {
+            surface: bookmark.isMobile ? 'mobile' : 'desktop',
+            subtreeSize: 1,
+            result: 'success',
+          });
+        }
+        invalidateNoteReadCaches(note.id);
+        return note.id as string;
+      }
+      throw new Error(res.msg || '创建笔记失败');
+    })().finally(() => {
+      createPromise = null;
+    });
     return createPromise;
   }
   // 供编辑器在“新建笔记还没 id 就粘贴图片”时调用：先确保笔记已创建，返回其 id，让图片带真实 noteId 上传
@@ -1630,7 +1653,12 @@
       } else {
         saveStatus.value = 'error';
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.code === 'NOTE_SHARE_EXPOSURE_CANCELLED') {
+        saveStatus.value = 'pending';
+        ok = false;
+        return ok;
+      }
       console.error('保存笔记失败:', error);
       ok = false;
       saveStatus.value = navigator.onLine ? 'error' : 'offline';

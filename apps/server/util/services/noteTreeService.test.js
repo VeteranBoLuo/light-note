@@ -294,9 +294,14 @@ function createTreeConnection(treeRows) {
   return {
     query: vi.fn(async (sql) => {
       if (String(sql).includes('SELECT id, parent_id')) return [treeRows];
+      if (String(sql).includes('FROM note_shares s')) return [[]];
       return [{ affectedRows: 1 }];
     }),
   };
+}
+
+function treeMutationCalls(connection) {
+  return connection.query.mock.calls.filter(([sql]) => !String(sql).includes('FROM note_shares s')).slice(1);
 }
 
 describe('noteTreeService 写入落点与移动', () => {
@@ -314,6 +319,46 @@ describe('noteTreeService 写入落点与移动', () => {
       depth: 2,
     });
     expect(connection.query).toHaveBeenCalledWith(expect.stringContaining('FOR UPDATE'), ['u1']);
+  });
+
+  it('新建到有效目录分享下必须显式确认，确认后复用同一权威落点继续', async () => {
+    const connection = {
+      query: vi.fn(async (sql) => {
+        if (String(sql).includes('SELECT id, parent_id')) {
+          return [[{ id: 'shared-root', parent_id: null, title: '公开项目', sort: 0, is_top: 0, del_flag: 0 }]];
+        }
+        if (String(sql).includes('FROM note_shares s')) {
+          return [
+            [
+              {
+                id: 'share-1',
+                root_note_id: 'shared-root',
+                root_title: '公开项目',
+                expires_at: new Date(Date.now() + 60_000),
+              },
+            ],
+          ];
+        }
+        return [{ affectedRows: 1 }];
+      }),
+    };
+
+    await expect(
+      prepareOwnedNotePlacement(connection, { userId: 'u1', parentId: 'shared-root' }),
+    ).rejects.toMatchObject({
+      code: 'NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED',
+      status: 409,
+      details: { shareCount: 1, roots: [{ id: 'shared-root', title: '公开项目' }] },
+    });
+    await expect(
+      prepareOwnedNotePlacement(connection, {
+        userId: 'u1',
+        parentId: 'shared-root',
+        shareExposureAcknowledged: true,
+      }),
+    ).resolves.toMatchObject({ parentId: 'shared-root', depth: 2 });
+    const exposureSql = connection.query.mock.calls.find(([sql]) => String(sql).includes('FROM note_shares s'))?.[0];
+    expect(exposureSql).not.toContain('s.access_count < s.max_access_count');
   });
 
   it('同父页面排序只重排该父层、同置顶分组', async () => {
@@ -358,7 +403,7 @@ describe('noteTreeService 写入落点与移动', () => {
     });
 
     expect(result).toMatchObject({ parentId: 'target', previousParentId: null, moved: true, updatedCount: 3 });
-    expect(connection.query.mock.calls.slice(1)).toEqual([
+    expect(treeMutationCalls(connection)).toEqual([
       [expect.stringContaining('parent_id <=> ?'), [1, 'target', 'u1', null]],
       [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'moved', 'u1']],
       [expect.stringContaining('parent_id <=> ?'), [2, 'y', 'u1', 'target']],
@@ -386,7 +431,7 @@ describe('noteTreeService 写入落点与移动', () => {
       moved: true,
       updatedCount: 3,
     });
-    expect(connection.query.mock.calls.slice(1)).toEqual([
+    expect(treeMutationCalls(connection)).toEqual([
       [expect.stringContaining('parent_id <=> ?'), [0, 'normal', 'u1', null]],
       [expect.stringContaining('SET parent_id = ?'), [null, 1, 0, 'moved', 'u1']],
       [expect.stringContaining('parent_id <=> ?'), [1, 'pinned', 'u1', null]],
@@ -407,7 +452,7 @@ describe('noteTreeService 写入落点与移动', () => {
     });
 
     expect(result).toMatchObject({ parentId: 'target', previousParentId: null, isTop: false, moved: true });
-    expect(connection.query.mock.calls.slice(1)).toEqual([
+    expect(treeMutationCalls(connection)).toEqual([
       [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'moved', 'u1']],
     ]);
   });
@@ -429,7 +474,7 @@ describe('noteTreeService 写入落点与移动', () => {
         nextId: 'nested',
       }),
     ).rejects.toMatchObject({ code: 'INVALID_SORT_ANCHOR', status: 409 });
-    expect(connection.query).toHaveBeenCalledTimes(1);
+    expect(treeMutationCalls(connection)).toEqual([]);
   });
 
   it('移动父页面时拒绝自己的后代作为目标，且不产生更新', async () => {
@@ -470,8 +515,7 @@ describe('noteTreeService 写入落点与移动', () => {
         { id: 'sibling', previousParentId: 'source', parentId: 'target', isTop: false, sort: 1, moved: true },
       ],
     });
-    expect(connection.query).toHaveBeenCalledTimes(3);
-    expect(connection.query.mock.calls.slice(1)).toEqual([
+    expect(treeMutationCalls(connection)).toEqual([
       [expect.stringContaining('SET parent_id = ?'), ['target', 0, 0, 'parent', 'u1']],
       [expect.stringContaining('SET parent_id = ?'), ['target', 0, 1, 'sibling', 'u1']],
     ]);
@@ -492,7 +536,7 @@ describe('noteTreeService 写入落点与移动', () => {
     expect(result.items).toEqual([
       expect.objectContaining({ id: 'pinned', parentId: 'target', previousParentId: null, isTop: false, moved: true }),
     ]);
-    expect(connection.query.mock.calls.slice(1)).toEqual([
+    expect(treeMutationCalls(connection)).toEqual([
       [expect.stringContaining('SET parent_id = ?'), ['target', 0, 0, 'pinned', 'u1']],
     ]);
   });

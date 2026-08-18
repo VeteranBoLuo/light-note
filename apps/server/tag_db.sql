@@ -290,6 +290,49 @@ CREATE TABLE `note` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=DYNAMIC;
 
 -- ----------------------------
+-- Table structure for note_shares / note_share_events
+-- ----------------------------
+DROP TABLE IF EXISTS `note_share_events`;
+DROP TABLE IF EXISTS `note_shares`;
+CREATE TABLE `note_shares` (
+  `id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `root_note_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `owner_user_id` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `scope_type` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `token_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `token_hint` varchar(8) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `description` varchar(200) COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT '',
+  `access_code_hash` varchar(255) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL,
+  `expires_at` datetime NOT NULL,
+  `max_access_count` int(10) unsigned DEFAULT NULL,
+  `access_count` int(10) unsigned NOT NULL DEFAULT '0',
+  `status` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'active',
+  `last_access_at` datetime DEFAULT NULL,
+  `revoked_at` datetime DEFAULT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `update_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_note_shares_token_hash` (`token_hash`),
+  KEY `idx_note_shares_owner_status` (`owner_user_id`,`status`,`create_time`),
+  KEY `idx_note_shares_root_status` (`root_note_id`,`status`),
+  KEY `idx_note_shares_expiry` (`status`,`expires_at`),
+  CONSTRAINT `fk_note_shares_root` FOREIGN KEY (`root_note_id`) REFERENCES `note` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可撤销笔记与目录分享';
+
+CREATE TABLE `note_share_events` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `share_id` varchar(36) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `event_type` varchar(24) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `outcome` varchar(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `visitor_hash` char(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_note_share_events_share_time` (`share_id`,`create_time`),
+  KEY `idx_note_share_events_retention` (`create_time`),
+  CONSTRAINT `fk_note_share_events_share` FOREIGN KEY (`share_id`) REFERENCES `note_shares` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='笔记分享隐私化访问事件';
+
+-- ----------------------------
 -- Table structure for note_versions
 -- ----------------------------
 DROP TABLE IF EXISTS `note_versions`;

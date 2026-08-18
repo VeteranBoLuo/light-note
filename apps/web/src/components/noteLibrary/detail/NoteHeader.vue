@@ -145,6 +145,15 @@
             <SvgIcon :src="icon.noteDetail.history" size="18" aria-hidden="true" />
           </BButton>
         </BTooltip>
+        <BTooltip v-if="bookmark.isDesktop && !readonly && note?.id" :title="$t('noteShare.shareAction')">
+          <BButton
+            class="note-header-title-icon note-header-title-icon--share"
+            :aria-label="$t('noteShare.shareAction')"
+            @click="$emit('share')"
+          >
+            <SvgIcon :src="icon.share" size="18" aria-hidden="true" />
+          </BButton>
+        </BTooltip>
         <BTooltip v-if="bookmark.isDesktop && noteType !== 'drawing'" :title="$t('noteDetail.export')">
           <BButton
             class="note-header-title-icon note-header-title-icon--export"
@@ -264,6 +273,7 @@
     'movePage',
     'retrySave',
     'toggleInbox',
+    'share',
     'exportDrawing',
   ]);
 
@@ -549,6 +559,11 @@
         label: t(props.note.isPending ? 'inbox.removeExisting' : 'inbox.addExisting'),
         icon: icon.contextMenu.inbox,
       });
+      options.push({
+        key: 'share',
+        label: t('noteShare.shareAction'),
+        icon: icon.share,
+      });
     }
 
     options.push({
@@ -608,6 +623,7 @@
     attachPages: () => emit('attachPages'),
     movePage: () => emit('movePage'),
     toggleInbox: () => emit('toggleInbox'),
+    share: () => emit('share'),
     tags: openTagConfig,
     saveAsTemplate: openSaveAsTemplate,
     manageTemplates: () => emit('manageTemplates'),
@@ -632,6 +648,13 @@
         icon: icon.contextMenu.inbox,
         function: () => emit('toggleInbox'),
       });
+      if (!bookmark.isDesktop) {
+        options.push({
+          label: t('noteShare.shareAction'),
+          icon: icon.share,
+          function: () => emit('share'),
+        });
+      }
     }
     // 桌面顶栏空间充足，标签、历史和导出直接展示；平板继续通过同一份菜单保证可达性。
     if (!bookmark.isDesktop) {

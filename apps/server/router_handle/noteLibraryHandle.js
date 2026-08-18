@@ -35,9 +35,13 @@ import { promises as fsP } from 'node:fs';
 import { invalidatePersonalKnowledgeCache } from '../util/personalKnowledgeSearch.js';
 import { stableAgentErrorCode } from '../util/agent/logSafety.js';
 import { validateNoteImageUpload } from '../util/noteImageUpload.js';
+import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
 import { buildPagedResult, normalizeOptionalPagination } from '../util/pagination.js';
 import { triggerResourceCreateEffects } from '../util/services/resourceCreateEffects.js';
-import { sanitizePersistedNoteContent } from '../util/noteHtmlSanitizer.js';
+import {
+  normalizeCanonicalNoteContent as normalizeCanonicalMarkdownContent,
+  normalizeCanonicalNoteRecord as normalizeCanonicalMarkdownRecord,
+} from '../util/noteReadModel.js';
 import {
   isValidNoteFormatConversionAnalysisHash,
   verifyNoteFormatConversionAnalysisHash,
@@ -119,6 +123,10 @@ const NOTE_TREE_ERROR_COPY = Object.freeze({
     '页面包含子页面，请使用“移入回收站”删除整棵子树',
     'This page has subpages; delete the subtree instead',
   ],
+  NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED: [
+    '目标目录正在公开分享，确认后其中的页面将可被链接访问',
+    'The target directory is publicly shared. Confirm to make these pages accessible from the link',
+  ],
 });
 
 const sendNoteTreeError = (req, res, scene, error) => {
@@ -145,39 +153,6 @@ const sendNoteTreeError = (req, res, scene, error) => {
     );
   }
   return sendNoteServerError(res, scene, error);
-};
-
-// 正文规范读模型：Markdown 修复历史引用实体，drawing 则按共享 scene 协议重新序列化。
-// 早期 `md` 记录的正文实际可能是 HTML，不能把它当作 Markdown 源码改写。
-const normalizeCanonicalMarkdownContent = (content, type) => {
-  const normalizedType = normalizeNoteType(type);
-  if (normalizedType === 'drawing') return serializeDrawingScene(content);
-  return normalizedType === 'markdown' ? normalizeMarkdownBlockquoteEntities(content) : content;
-};
-
-const normalizeCanonicalMarkdownRecord = (record) => {
-  if (!record) return record;
-  if (record.type === 'drawing') {
-    return {
-      ...record,
-      content: serializeDrawingScene(record.content),
-    };
-  }
-  if (record.type !== 'markdown') {
-    // 历史 HTML 也可能早于写入净化边界。详情、版本和模板回传前再过一次同一白名单，
-    // 这样旧数据不会在 TinyMCE/预览区域里重新获得主动脚本能力。
-    if (record.type === 'html' || record.type === 'md') {
-      return {
-        ...record,
-        content: sanitizePersistedNoteContent(record.content, 'html', 'read-note-content'),
-      };
-    }
-    return record;
-  }
-  return {
-    ...record,
-    content: normalizeMarkdownBlockquoteEntities(record.content),
-  };
 };
 
 // 列表卡片只展示几行摘要。此前 SELECT n.* 会把每篇最高 1MB 的完整正文随 48 张卡片一起传输，
@@ -269,6 +244,7 @@ export const addNote = async (req, res) => {
       inboxSource,
       request: req,
       suppressUserRewards: req.suppressUserRewards || req.isVisitorWorkspace,
+      shareExposureAcknowledged: req.body?.shareExposureAcknowledged === true,
     });
     return res.send(
       resultData({
@@ -339,6 +315,7 @@ export const moveNoteNode = async (req, res) => {
       parentId: Object.prototype.hasOwnProperty.call(req.body || {}, 'parentId') ? req.body.parentId : undefined,
       previousId: req.body?.previousId ?? null,
       nextId: req.body?.nextId ?? null,
+      shareExposureAcknowledged: req.body?.shareExposureAcknowledged === true,
     });
     await connection.commit();
     await invalidatePersonalKnowledgeCache(req.user.id);
@@ -373,6 +350,7 @@ export const moveNoteNodes = async (req, res) => {
       userId: req.user.id,
       ids: req.body?.ids,
       parentId: req.body?.parentId ?? null,
+      shareExposureAcknowledged: req.body?.shareExposureAcknowledged === true,
     });
     await connection.commit();
     await invalidatePersonalKnowledgeCache(req.user.id);

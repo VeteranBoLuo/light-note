@@ -19,6 +19,9 @@ describe('API 日志脱敏', () => {
       email: 'alice@example.com',
       access_token: 'access-secret',
       'refresh-token': 'refresh-secret',
+      accessCode: 'A12345',
+      accessTicket: 'ticket-secret',
+      previewTicket: 'preview-secret',
       verifyCode: '123456',
       nested: { authorization: 'Bearer secret-token', value: 'alice@example.com' },
     });
@@ -27,6 +30,9 @@ describe('API 日志脱敏', () => {
       email: '[REDACTED]',
       access_token: '[REDACTED]',
       'refresh-token': '[REDACTED]',
+      accessCode: '[REDACTED]',
+      accessTicket: '[REDACTED]',
+      previewTicket: '[REDACTED]',
       verifyCode: '[REDACTED]',
       nested: { authorization: '[REDACTED]', value: '[REDACTED_EMAIL]' },
     });

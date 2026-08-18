@@ -1,11 +1,42 @@
 import express from 'express';
+import rateLimit from 'express-rate-limit';
 const router = express.Router();
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import * as noteLibraryHandle from '../router_handle/noteLibraryHandle.js';
+import * as noteShareHandle from '../router_handle/noteShareHandle.js';
 import { ensureNotVisitor } from '../util/auth.js';
-import { resultData } from '../util/common.js';
+import { L, resultData } from '../util/common.js';
 import { NOTE_IMAGE_MAX_BYTES, noteImageExtensionForMimeType } from '../util/noteImageUpload.js';
+
+const noteShareAccessLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.send(
+      resultData(
+        { errorCode: 'SHARE_RATE_LIMITED' },
+        429,
+        L(req, '尝试次数过多，请稍后再试', 'Too many attempts. Try again later'),
+      ),
+    ),
+});
+const noteShareReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  handler: (req, res) =>
+    res.send(
+      resultData(
+        { errorCode: 'NOTE_SHARE_READ_RATE_LIMITED' },
+        429,
+        L(req, '阅读请求过于频繁，请稍后重试', 'Too many reading requests. Try again later'),
+      ),
+    ),
+});
 
 // 游客拦截必须先于 multer 落盘,否则游客请求也会在磁盘留下孤儿文件
 const blockVisitorUpload = (req, res, next) => {
@@ -69,6 +100,26 @@ router.post('/delNote', noteLibraryHandle.delNote);
 router.post('/deleteNoteSubtree', noteLibraryHandle.deleteNoteSubtree);
 router.post('/updateNoteSort', noteLibraryHandle.updateNoteSort);
 router.post('/toggleNoteTop', noteLibraryHandle.toggleNoteTop);
+
+router.post('/share/create', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return noteShareHandle.createNoteShare(req, res);
+});
+router.post('/share/list', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return noteShareHandle.listNoteShares(req, res);
+});
+router.post('/share/revoke', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return noteShareHandle.revokeNoteShare(req, res);
+});
+router.post('/share/rotate', (req, res) => {
+  if (!ensureNotVisitor(req, res)) return;
+  return noteShareHandle.rotateNoteShare(req, res);
+});
+router.post('/share/resolve', noteShareAccessLimiter, noteShareHandle.resolveNoteShare);
+router.post('/share/page', noteShareReadLimiter, noteShareHandle.getNoteSharePage);
+router.post('/share/tree', noteShareReadLimiter, noteShareHandle.getNoteShareTree);
 
 router.post('/addNoteTag', noteLibraryHandle.addNoteTag);
 router.post('/editNoteTag', noteLibraryHandle.editNoteTag);

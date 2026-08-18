@@ -563,6 +563,12 @@
       :note="activeRenameNote"
       @renamed="handleNoteRenamed"
     />
+    <NoteShareModal
+      v-if="activeShareNote"
+      v-model:visible="shareNoteVisible"
+      :note="activeShareNote"
+      @close="activeShareNote = null"
+    />
     <NoteDirectoryDrawer
       v-if="bookmark.isMobile && mobileDirectoryMounted"
       v-model:open="mobileDirectoryOpen"
@@ -685,6 +691,7 @@
   import { resolveNoteTreeDragScrollStep } from '@/utils/noteTreeDragScroll';
   import { updatePreference } from '@/utils/savePreference';
   import { getRootZoom } from '@/utils/zoom';
+  import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
   import AsyncFeatureLoadingOverlay from '@/components/base/AsyncFeatureLoadingOverlay.vue';
   import {
     NOTE_LIBRARY_FEATURES_FRESH_MS,
@@ -710,6 +717,9 @@
   const NoteMoveModal = createDeferredLibraryFeature(() => import('@/components/noteLibrary/tree/NoteMoveModal.vue'));
   const NoteRenameModal = createDeferredLibraryFeature(
     () => import('@/components/noteLibrary/tree/NoteRenameModal.vue'),
+  );
+  const NoteShareModal = createDeferredLibraryFeature(
+    () => import('@/components/noteLibrary/share/NoteShareModal.vue'),
   );
   const AiOrganizeModal = createDeferredLibraryFeature(
     () => import('@/components/manage/bookmarkMg/AiOrganizeModal.vue'),
@@ -1236,6 +1246,7 @@
             { key: 'move', label: t('note.moveThisPage'), icon: icon.noteTree.move },
           ]
         : []),
+      { key: 'share', label: t('noteShare.shareAction'), icon: icon.share },
       { key: 'note-actions-divider', divider: true },
       { key: 'delete', label: t('common.delete'), icon: icon.table_delete, danger: true },
     ];
@@ -1499,6 +1510,11 @@
         icon: icon.cloudSpace.preview.copy,
         function: () => copyNoteLink(note),
       },
+      {
+        label: t('noteShare.shareAction'),
+        icon: icon.share,
+        function: () => openNoteShare(note),
+      },
       { key: 'current-directory-actions-divider', divider: true },
       {
         label: t('note.moveToTrash'),
@@ -1519,6 +1535,16 @@
       revision: Math.max(1, Number(note?.revision || 1)),
     };
     renameNoteVisible.value = true;
+  }
+
+  const shareNoteVisible = ref(false);
+  const activeShareNote = ref<{ id: string; title?: string } | null>(null);
+  function openNoteShare(note: any) {
+    if (blockGuestWrite('share-note')) return;
+    const id = String(note?.id || '').trim();
+    if (!id) return;
+    activeShareNote.value = { id, title: String(note?.title || '') };
+    shareNoteVisible.value = true;
   }
 
   async function handleNoteRenamed(updated: { id: string; title: string; revision?: number }) {
@@ -1682,6 +1708,7 @@
     else if (action === 'createChild') showNewChildPicker(note);
     else if (action === 'attach') openAttachPages(note);
     else if (action === 'move') openMoveNote(note);
+    else if (action === 'share') openNoteShare(note);
     else if (action === 'delete') deleteSingleNote(note);
   }
 
@@ -1695,6 +1722,7 @@
       | 'createChild'
       | 'attach'
       | 'move'
+      | 'share'
       | 'delete',
     note: any,
   ) {
@@ -3030,7 +3058,12 @@
     scheduleDragDropTarget(target, true);
   }
 
-  async function moveNoteIntoTarget(sourceId: string, sourceIsTop: boolean, target: NoteTreeDropTarget) {
+  async function moveNoteIntoTarget(
+    sourceId: string,
+    sourceIsTop: boolean,
+    target: NoteTreeDropTarget,
+    shareExposureAcknowledged = false,
+  ) {
     if (treeMovePending.value) return false;
     treeMovePending.value = true;
     const previousTree = childrenByParent.value;
@@ -3045,6 +3078,7 @@
           parentId: target.parentId,
           previousId: target.previousId,
           nextId: target.nextId,
+          ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
         });
       } catch (error) {
         if (optimisticMove.applied) childrenByParent.value = previousTree;
@@ -3052,6 +3086,8 @@
       }
       if (response.status !== 200) {
         if (optimisticMove.applied) childrenByParent.value = previousTree;
+        const retryMove = () => moveNoteIntoTarget(sourceId, sourceIsTop, target, true);
+        if (requestNoteShareExposureConfirmation(response, retryMove)) return false;
         message.error(response.msg || t('note.moveFailed'));
         return false;
       }

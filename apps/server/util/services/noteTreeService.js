@@ -2,6 +2,7 @@ import pool from '../../db/index.js';
 import { randomUUID } from 'node:crypto';
 import { removeInboxRelations } from '../resourceInbox.js';
 import { MAX_NOTE_TREE_DEPTH, NOTE_TREE_ROOT_KEY } from '../noteTreeConstants.js';
+import { queryActiveInheritedNoteShares } from '../noteShareExposure.js';
 
 export { MAX_NOTE_TREE_DEPTH, NOTE_TREE_ROOT_KEY } from '../noteTreeConstants.js';
 
@@ -481,9 +482,52 @@ export async function resolveOwnedNoteDescendantIds({ userId, rootNoteId, includ
  * parentId 只作为候选值使用：父页面归属、删除状态和最大深度均通过当前用户的
  * 加锁树快照校验；新页面固定追加到目标父层的普通（非置顶）兄弟组末尾。
  */
-export async function prepareOwnedNotePlacement(connection, { userId, parentId = null } = {}) {
+function noteShareExposureDetails(shares) {
+  return {
+    shareCount: shares.length,
+    roots: shares.slice(0, 5).map((share) => ({ id: share.rootNoteId, title: share.rootTitle })),
+  };
+}
+
+async function assertNewInheritedShareExposure(
+  db,
+  snapshot,
+  { userId, targetParentId, movingRootIds = [], acknowledged = false } = {},
+) {
+  if (!targetParentId || acknowledged === true) return [];
+  const targetAncestors = resolveNoteBreadcrumbFromSnapshot(snapshot, targetParentId).map((item) => item.id);
+  const shares = await queryActiveInheritedNoteShares(db, { userId, ancestorIds: targetAncestors });
+  if (!shares.length) return [];
+  const newlyExposed = shares.filter((share) =>
+    movingRootIds.some((rootId) => {
+      const currentAncestors = resolveNoteBreadcrumbFromSnapshot(snapshot, rootId).map((item) => item.id);
+      return !currentAncestors.includes(share.rootNoteId);
+    }),
+  );
+  // 新建页面没有旧位置，传入空数组时继承到的每条分享都是新增暴露。
+  const effectiveNewShares = movingRootIds.length ? newlyExposed : shares;
+  if (effectiveNewShares.length) {
+    throw new NoteTreeError(
+      'NOTE_SHARE_EXPOSURE_CONFIRMATION_REQUIRED',
+      '目标目录正在公开分享，需要确认后继续',
+      409,
+      noteShareExposureDetails(effectiveNewShares),
+    );
+  }
+  return shares;
+}
+
+export async function prepareOwnedNotePlacement(
+  connection,
+  { userId, parentId = null, shareExposureAcknowledged = false } = {},
+) {
   const snapshot = await loadOwnedNoteTree(userId, { db: queryDb(connection), lock: true });
   const placement = assertValidNoteParentFromSnapshot(snapshot, { parentId });
+  await assertNewInheritedShareExposure(connection, snapshot, {
+    userId,
+    targetParentId: placement.parentId,
+    acknowledged: shareExposureAcknowledged,
+  });
   const siblings = getNoteTreeChildren(snapshot, placement.parentId).filter((node) => !node.isTop);
   const nextSort = siblings.reduce((maximum, node) => Math.max(maximum, numberOrZero(node.sort)), -1) + 1;
   return {
@@ -542,7 +586,14 @@ async function updateSiblingSort(connection, { userId, parentId, rows, skipId = 
  */
 export async function moveOwnedNoteNode(
   connection,
-  { userId, id, parentId = undefined, previousId = null, nextId = null } = {},
+  {
+    userId,
+    id,
+    parentId = undefined,
+    previousId = null,
+    nextId = null,
+    shareExposureAcknowledged = false,
+  } = {},
 ) {
   const db = queryDb(connection);
   const normalizedUserId = normalizeId(userId);
@@ -557,6 +608,14 @@ export async function moveOwnedNoteNode(
   const requestedParentId = normalizeOptionalParentId(parentId);
   const targetParentId = requestedParentId === undefined ? moved.effectiveParentId : requestedParentId;
   assertValidNoteParentFromSnapshot(snapshot, { noteId: movedId, parentId: targetParentId });
+  if (moved.effectiveParentId !== targetParentId) {
+    await assertNewInheritedShareExposure(db, snapshot, {
+      userId: normalizedUserId,
+      targetParentId,
+      movingRootIds: [movedId],
+      acknowledged: shareExposureAcknowledged,
+    });
+  }
 
   const normalizedPreviousId = normalizeId(previousId);
   const normalizedNextId = normalizeId(nextId);
@@ -654,7 +713,10 @@ function noteSiblingGroupKey(parentId, isTop) {
  * 如果请求同时选择父页面和后代，只移动最外层父页面；全部后代随父页面保留原结构。
  * 各置顶分组分别追加到目标目录末尾，避免批量移动破坏现有置顶语义。
  */
-export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = null } = {}) {
+export async function moveOwnedNoteNodes(
+  connection,
+  { userId, ids, parentId = null, shareExposureAcknowledged = false } = {},
+) {
   const db = queryDb(connection);
   const normalizedUserId = normalizeId(userId);
   if (!normalizedUserId) throw new NoteTreeError('NOTE_TREE_USER_REQUIRED', '缺少用户身份', 401);
@@ -673,6 +735,14 @@ export async function moveOwnedNoteNodes(connection, { userId, ids, parentId = n
   const roots = rootIdsInRequestOrder.map((id) => snapshot.nodesById.get(id));
   for (const root of roots) {
     assertValidNoteParentFromSnapshot(snapshot, { noteId: root.id, parentId: targetParentId });
+  }
+  if (roots.some((root) => root.effectiveParentId !== targetParentId)) {
+    await assertNewInheritedShareExposure(db, snapshot, {
+      userId: normalizedUserId,
+      targetParentId,
+      movingRootIds: rootIdsInRequestOrder,
+      acknowledged: shareExposureAcknowledged,
+    });
   }
 
   const movingRootIds = new Set(rootIdsInRequestOrder);

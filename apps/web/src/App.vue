@@ -19,15 +19,18 @@
       >
         <router-view />
       </MobileAppShell>
-      <Login v-if="bookmark.isShowLogin" />
-      <BViewer v-if="bookmark.viewerKey" />
+      <Login v-if="bookmark.isShowLogin && !publicStandaloneRoute" />
+      <BViewer v-if="bookmark.viewerKey && !publicStandaloneRoute" />
       <FloatQuestion v-if="aiVisible" :hide-trigger="aiEdgeTriggerHidden" />
-      <GuestNudge v-if="nudgeVisible" />
-      <AndroidDownloadProgress v-if="isAndroidApp" />
-      <DisplayScaleSuggestion />
-      <AdminContextBanner v-if="user.adminContext" />
-      <QuickCaptureModal v-if="inbox.quickCaptureVisible" v-model:visible="inbox.quickCaptureVisible" />
-      <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible" />
+      <GuestNudge v-if="nudgeVisible && !publicStandaloneRoute" />
+      <AndroidDownloadProgress v-if="isAndroidApp && !publicStandaloneRoute" />
+      <DisplayScaleSuggestion v-if="!publicStandaloneRoute" />
+      <AdminContextBanner v-if="user.adminContext && !publicStandaloneRoute" />
+      <QuickCaptureModal
+        v-if="inbox.quickCaptureVisible && !publicStandaloneRoute"
+        v-model:visible="inbox.quickCaptureVisible"
+      />
+      <PwaInstallGuideModal v-if="!isAndroidApp && pwaGuideVisible && !publicStandaloneRoute" />
     </a-config-provider>
   </div>
 </template>
@@ -103,6 +106,7 @@
     computed(() => bookmark.isMobile),
   );
   const isAndroidApp = isLightNoteAndroidApp();
+  const publicStandaloneRoute = computed(() => router.currentRoute.value.meta.publicStandalone === true);
   // 已安装的 2026-08 灰度壳不会随 Web 更新自动删除旧通知。新页面启动时只做迁移清理，
   // 不再建立通知 WebSocket、轮询未读或发送新的系统通知；DownloadManager 通知不走此桥。
   if (isAndroidApp) {
@@ -129,6 +133,7 @@
     'landing',
     'banned',
     'quickSave',
+    'noteShare',
   ]);
 
   // 监听主题变化
@@ -183,6 +188,7 @@
     // AI 开关(设置里)关闭则不挂悬浮球;默认(未设置)视为开启
     return (
       !bookmark.isShowLogin &&
+      router.currentRoute.value.meta.hideAiAssistant !== true &&
       router.currentRoute.value.name !== 'landing' &&
       router.currentRoute.value.name !== 'mobileAiWorkspace' &&
       (user.preferences as any).aiEnabled !== false
@@ -748,6 +754,7 @@
     'not-role',
     'banned',
     'quickSave',
+    'noteShare',
   ]);
 
   function syncNoteEditorStartupPreload() {
@@ -788,6 +795,7 @@
     'landing',
     'banned',
     'quickSave',
+    'noteShare',
   ];
   const mobileAdminRoute = ['/apiLog', '/operationLog', '/userMg', '/userOpinion', '/imageMg', '/resourceGovernance'];
 
@@ -863,7 +871,9 @@
     window.addEventListener('offline', syncOnlineStatus);
     document.addEventListener('visibilitychange', handleLandingAuthRecoverySignal);
     await router.isReady();
-    await getUserInfo();
+    if (router.currentRoute.value.meta.publicStandalone !== true) {
+      await getUserInfo();
+    }
     handleRouteChange(bookmark.isMobile, router.currentRoute.value.path);
     if (skipRouter.includes(<string>router.currentRoute.value.name)) {
       bookmark.isShowLogin = false;

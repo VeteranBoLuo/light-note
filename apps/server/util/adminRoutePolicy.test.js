@@ -163,6 +163,21 @@ describe('adminRoutePolicyMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ data: { code: 'ADMIN_PREVIEW_READONLY' } }));
   });
 
+  it('笔记公开分享不允许管理员代替目标用户创建、撤销或轮换', () => {
+    for (const mode of ['readonly', 'maintain']) {
+      for (const path of ['/note/share/create', '/note/share/revoke', '/note/share/rotate']) {
+        const next = vi.fn();
+        const res = createRes();
+        adminRoutePolicyMiddleware(createReq(path, 'POST', mode), res, next);
+        expect(next).not.toHaveBeenCalled();
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({ data: { code: 'ADMIN_MAINTENANCE_FORBIDDEN' } }),
+        );
+      }
+    }
+  });
+
   it('AI 整理"应用"是内容写:readonly 阻断、maintain 放行;只读的 quote/run 仍放行', () => {
     // apply = 真实写(建标签/关系/补名称),必须 maintain-only
     const denyNext = vi.fn();

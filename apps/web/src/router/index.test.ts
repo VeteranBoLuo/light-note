@@ -48,4 +48,15 @@ describe('官网与应用入口路由', () => {
     expect(resolved.meta.mobileTopSwitcher).not.toBe(true);
     expect(resolved.meta.mobileBottomNav).not.toBe(true);
   });
+
+  it('笔记分享使用独立只读页面，并显式隔离登录探测、AI 与搜索引擎收录', () => {
+    const resolved = router.resolve('/share/note?page=child#token=secret');
+    expect(resolved.name).toBe('noteShare');
+    expect(resolved.meta.publicStandalone).toBe(true);
+    expect(resolved.meta.hideAiAssistant).toBe(true);
+    expect(resolved.meta.seoIndexable).toBe(false);
+    expect(resolved.meta.mobileTopBar).toBe(false);
+    expect(resolved.path).toBe('/share/note');
+    expect(router.resolve('/share/note/leaked-token').name).not.toBe('noteShare');
+  });
 });

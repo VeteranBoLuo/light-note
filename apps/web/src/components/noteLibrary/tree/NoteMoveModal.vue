@@ -66,7 +66,7 @@
       </template>
 
       <div v-if="bookmark.isMobile" class="note-move-footer">
-        <BButton :disabled="saving || loading" type="primary" @click="confirmMove">
+        <BButton :disabled="saving || loading" type="primary" @click="confirmMove()">
           {{ saving ? t('common.loading') : t('note.confirmMove') }}
         </BButton>
         <BButton :disabled="saving" @click="close">{{ t('common.cancel') }}</BButton>
@@ -88,6 +88,7 @@
   import { apiBasePost } from '@/http/request';
   import { recordNoteTreeProductEvent } from '@/api/noteTreeTelemetry';
   import { bookmarkStore } from '@/store';
+  import { requestNoteShareExposureConfirmation } from '@/utils/noteShareExposure';
   import type { NoteTreeItem, NoteTreeQueryResult } from '@/types/noteTree';
   import { canMoveNoteSubtreeToDepth, collectNoteDescendantIds, flattenNoteTree } from '@/utils/noteTree';
 
@@ -240,7 +241,7 @@
     }
   }
 
-  async function confirmMove() {
+  async function confirmMove(shareExposureAcknowledged = false) {
     if (
       saving.value ||
       loading.value ||
@@ -261,14 +262,17 @@
         ? await apiBasePost('/api/note/moveNoteNodes', {
             ids: [...selectedIds.value],
             parentId: selectedParentId.value,
+            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
           })
         : await apiBasePost('/api/note/moveNoteNode', {
             id: [...selectedIds.value][0],
             parentId: selectedParentId.value,
             previousId: null,
             nextId: null,
+            ...(shareExposureAcknowledged ? { shareExposureAcknowledged: true } : {}),
           });
       if (response.status !== 200) {
+        if (requestNoteShareExposureConfirmation(response, () => confirmMove(true))) return;
         void recordNoteTreeProductEvent('note_tree_move_rejected', {
           ...telemetryBase,
           durationMs: Date.now() - startedAt,

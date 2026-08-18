@@ -86,6 +86,9 @@ const AUTH_EXPIRED_SILENT_PATHS = [
   '/featureRequest/listPublic',
   '/featureRequest/getPublicDetail',
   '/community-chat/access',
+  '/note/share/resolve',
+  '/note/share/page',
+  '/note/share/tree',
 ];
 
 const shouldMarkAuthExpired = (req) => {
