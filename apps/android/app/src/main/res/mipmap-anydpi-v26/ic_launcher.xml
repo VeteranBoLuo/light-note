@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- 与默认资源保持一致，避免厂商安装检查阶段切换图标解析方式。 -->
-    <item android:drawable="@drawable/ic_brand_tile" />
-</layer-list>
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Android 8+ 桌面会独立裁切和驱动前景、背景层；必须保留标准 adaptive icon，
+        不能退化成透明 layer-list，否则返回桌面时完整品牌图会被整体压缩。
+    -->
+    <background android:drawable="@drawable/ic_launcher_background" />
+    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>

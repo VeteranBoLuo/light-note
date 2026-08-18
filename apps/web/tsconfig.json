@@ -29,7 +29,8 @@
     "paths": {
       "@": ["src"],
       "@/*": ["src/*"],
-      "@lightnote/shared/drawing-note": ["../../packages/shared/drawingNote.d.ts"]
+      "@lightnote/shared/drawing-note": ["../../packages/shared/drawingNote.d.ts"],
+      "@lightnote/shared/community-chat-stickers": ["../../packages/shared/communityChatStickers.d.ts"]
     },
     "types": ["vite/client"]
   },

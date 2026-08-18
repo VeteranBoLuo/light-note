@@ -559,6 +559,7 @@
               :recent="recentEmojis"
               :custom-sticker-refresh-key="customStickerRefreshKey"
               @select-emoji="insertEmoji"
+              @select-official-sticker="sendOfficialSticker"
               @select-sticker="sendCustomSticker"
             />
           </div>
@@ -629,6 +630,7 @@
                     :recent="recentEmojis"
                     :custom-sticker-refresh-key="customStickerRefreshKey"
                     @select-emoji="insertEmoji"
+                    @select-official-sticker="sendOfficialSticker"
                     @select-sticker="sendCustomSticker"
                   />
                 </template>
@@ -769,6 +771,7 @@
 </template>
 
 <script setup lang="ts">
+  import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useRoute, useRouter } from 'vue-router';
@@ -803,6 +806,7 @@
     type CommunityChatPinnedMessage,
     type CommunityChatReportReason,
     type CommunityChatRoom,
+    type CommunityChatSticker,
   } from '@/api/communityChatApi';
   import { recordOperation } from '@/api/commonApi';
   import BActionMenu from '@/components/base/BasicComponents/BActionMenu.vue';
@@ -934,7 +938,7 @@
     },
   });
   const expressionPanelOpen = ref(false);
-  const expressionPanelTab = ref<'emoji' | 'custom'>('emoji');
+  const expressionPanelTab = ref<'emoji' | 'official' | 'custom'>('emoji');
   let expressionPanelHistoryHandle: MobileOverlayHistoryHandle | null = null;
   let focusComposerAfterExpressionPanelClose = false;
   const customStickerRefreshKey = ref(0);
@@ -3394,18 +3398,13 @@
     }
   }
 
-  async function sendCustomSticker(stickerPublicId: string) {
+  async function sendSticker(sticker: CommunityChatSticker) {
     const roomSlug = selectedRoomSlug.value;
-    if (!roomSlug || !canPostCurrentRoom.value || sending.value || !stickerPublicId) return;
+    if (!roomSlug || !canPostCurrentRoom.value || sending.value || !sticker.key) return;
     const draftSession = composerDraftSession.value;
     const clientRequestId = createCommunityChatClientRequestId();
     const optimisticPublicId = `pending-${clientRequestId}`;
     const replySnapshot = draftSession.replyTarget ? { ...draftSession.replyTarget } : null;
-    const sticker = {
-      source: 'custom' as const,
-      key: stickerPublicId,
-      url: `/api/community-chat/stickers/${encodeURIComponent(stickerPublicId)}/content`,
-    };
     const optimisticMessage = buildOptimisticMessage({
       publicId: optimisticPublicId,
       content: '',
@@ -3426,8 +3425,8 @@
         clientRequestId,
         content: '',
         messageKind: 'sticker',
-        stickerSource: 'custom',
-        stickerKey: stickerPublicId,
+        stickerSource: sticker.source,
+        stickerKey: sticker.key,
         ...(replySnapshot ? { replyToPublicId: replySnapshot.publicId } : {}),
       });
       const sentMessage = response.data?.message as CommunityChatMessage | undefined;
@@ -3446,6 +3445,25 @@
       draftSession.sending = false;
       touchCommunityChatDraftSession(draftSession);
     }
+  }
+
+  async function sendOfficialSticker(stickerKey: string) {
+    const officialSticker = resolveCommunityChatOfficialSticker(stickerKey);
+    if (!officialSticker) return;
+    await sendSticker({
+      source: 'official',
+      key: officialSticker.key,
+      url: officialSticker.assetPath,
+    });
+  }
+
+  async function sendCustomSticker(stickerPublicId: string) {
+    if (!stickerPublicId) return;
+    await sendSticker({
+      source: 'custom',
+      key: stickerPublicId,
+      url: `/api/community-chat/stickers/${encodeURIComponent(stickerPublicId)}/content`,
+    });
   }
 
   function openAuthentication() {

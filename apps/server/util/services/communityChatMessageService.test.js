@@ -235,6 +235,52 @@ describe('communityChatMessageService', () => {
     expect(removed).toMatchObject({ messageKind: 'sticker', sticker: null });
   });
 
+  it('官方纸灵表情由版本化清单还原静态地址，不依赖个人表情记录', () => {
+    expect(__test__.normalizeStickerSource('official', 'sticker')).toBe('official');
+    expect(__test__.normalizeStickerKey('PAPER-SPIRIT-V1:HELLO', 'sticker', 'official')).toBe('paper-spirit-v1:hello');
+
+    const message = __test__.toPublicMessage(
+      messageRow({
+        messageKind: 'sticker',
+        stickerSource: 'official',
+        stickerKey: 'paper-spirit-v1:hello',
+        availableStickerPublicId: null,
+        content: '',
+      }),
+      'user-1',
+    );
+
+    expect(message).toMatchObject({
+      messageKind: 'sticker',
+      stickerSource: 'official',
+      stickerKey: 'paper-spirit-v1:hello',
+      sticker: {
+        source: 'official',
+        key: 'paper-spirit-v1:hello',
+        url: '/community-chat/stickers/paper-spirit-v1/hello.png',
+      },
+    });
+  });
+
+  it('不存在的官方表情键在创建事务前失败关闭', async () => {
+    const db = { getConnection: vi.fn() };
+
+    await expect(
+      createCommunityChatMessage({
+        user: { id: 'user-1', role: 'user' },
+        roomSlug: 'general',
+        clientRequestId: 'request-official-missing',
+        content: '',
+        messageKind: 'sticker',
+        stickerSource: 'official',
+        stickerKey: 'paper-spirit-v1:missing',
+        env: MESSAGE_ENV,
+        db,
+      }),
+    ).rejects.toMatchObject({ code: 'OFFICIAL_STICKER_NOT_FOUND', status: 400 });
+    expect(db.getConnection).not.toHaveBeenCalled();
+  });
+
   it('按公有消息 ID 定位来源消息，并明确返回是否还有更新消息', async () => {
     const db = {
       query: vi.fn(async (sql, params) => {

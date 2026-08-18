@@ -125,8 +125,10 @@ export interface CommunityChatMentionItem {
   communityId: string;
 }
 
+export type CommunityChatStickerSource = 'official' | 'custom';
+
 export interface CommunityChatSticker {
-  source: 'custom';
+  source: CommunityChatStickerSource;
   key: string;
   url: string;
 }
@@ -158,7 +160,7 @@ export interface CommunityChatMessage {
   publicId: string;
   content: string;
   messageKind?: 'text' | 'sticker';
-  stickerSource?: 'custom' | null;
+  stickerSource?: CommunityChatStickerSource | null;
   stickerKey?: string | null;
   sticker?: CommunityChatSticker | null;
   status: 'active' | 'recalled';
@@ -206,7 +208,7 @@ export interface SendCommunityChatMessageInput {
   clientRequestId: string;
   content: string;
   messageKind?: 'text' | 'sticker';
-  stickerSource?: 'custom' | null;
+  stickerSource?: CommunityChatStickerSource | null;
   stickerKey?: string | null;
   replyToPublicId?: string | null;
   mentionEveryone?: boolean;

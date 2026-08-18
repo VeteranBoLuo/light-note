@@ -2,6 +2,7 @@
   <section class="chat-expression-panel" :aria-label="t('communityChat.expression.title')">
     <div class="chat-expression-panel__body">
       <ChatEmojiPanel v-if="tab === 'emoji'" embedded :recent="recent" @select="emit('selectEmoji', $event)" />
+      <ChatOfficialStickerPanel v-else-if="tab === 'official'" @select="emit('selectOfficialSticker', $event)" />
       <ChatCustomStickerPanel
         v-else
         embedded
@@ -23,6 +24,16 @@
       </BButton>
       <BButton
         class="chat-expression-panel__tab"
+        :class="{ 'is-active': tab === 'official' }"
+        :aria-label="t('communityChat.expression.officialTab')"
+        :title="t('communityChat.expression.officialTab')"
+        @click="selectTab('official')"
+      >
+        <SvgIcon :src="icon.coBuild.official" size="22" aria-hidden="true" />
+        <small>{{ t('communityChat.expression.officialTab') }}</small>
+      </BButton>
+      <BButton
+        class="chat-expression-panel__tab"
         :class="{ 'is-active': tab === 'custom' }"
         :aria-label="t('communityChat.expression.customTab')"
         :title="t('communityChat.expression.customTab')"
@@ -41,9 +52,10 @@
   import SvgIcon from '@/components/base/SvgIcon/src/SvgIcon.vue';
   import ChatCustomStickerPanel from '@/components/communityChat/ChatCustomStickerPanel.vue';
   import ChatEmojiPanel from '@/components/communityChat/ChatEmojiPanel.vue';
+  import ChatOfficialStickerPanel from '@/components/communityChat/ChatOfficialStickerPanel.vue';
   import icon from '@/config/icon';
 
-  type ChatExpressionPanelTab = 'emoji' | 'custom';
+  type ChatExpressionPanelTab = 'emoji' | 'official' | 'custom';
 
   const props = withDefaults(
     defineProps<{
@@ -60,6 +72,7 @@
   const emit = defineEmits<{
     'update:tab': [tab: ChatExpressionPanelTab];
     selectEmoji: [emoji: string];
+    selectOfficialSticker: [key: string];
     selectSticker: [publicId: string];
   }>();
   const { t } = useI18n();

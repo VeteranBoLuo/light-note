@@ -2320,7 +2320,7 @@ describe('CommunityChatWorkspace', () => {
       ),
     ).toHaveLength(1);
     expect(host.querySelector('.chat-emoji-panel')).not.toBeNull();
-    expect(host.querySelectorAll('.chat-expression-panel__tab')).toHaveLength(2);
+    expect(host.querySelectorAll('.chat-expression-panel__tab')).toHaveLength(3);
     host
       .querySelector<HTMLButtonElement>(
         `.chat-expression-panel__tab[aria-label="${zhCN.communityChat.expression.customTab}"]`,
@@ -2339,6 +2339,58 @@ describe('CommunityChatWorkspace', () => {
       stickerKey: stickerPublicId,
     });
     expect(host.querySelector('.community-message__sticker.has-image img')).not.toBeNull();
+    expect(host.querySelector('.chat-expression-panel')).toBeNull();
+  });
+
+  it('移动端纸灵面板发送版本化官方表情消息，不读取个人表情库', async () => {
+    mocks.bookmark.isMobile = true;
+    mocks.sendMessage.mockResolvedValue({
+      status: 200,
+      data: {
+        message: chatMessage({
+          publicId: 'message-official-sticker',
+          content: '',
+          isOwn: true,
+          messageKind: 'sticker',
+          stickerSource: 'official',
+          stickerKey: 'paper-spirit-v1:hello',
+          sticker: {
+            source: 'official',
+            key: 'paper-spirit-v1:hello',
+            url: '/community-chat/stickers/paper-spirit-v1/hello.png',
+          },
+        }),
+      },
+    });
+    const host = await mountWorkspace();
+
+    host
+      .querySelector<HTMLButtonElement>(
+        `.community-composer__attach[aria-label="${zhCN.communityChat.expression.action}"]`,
+      )
+      ?.click();
+    await flushAsync();
+    host
+      .querySelector<HTMLButtonElement>(
+        `.chat-expression-panel__tab[aria-label="${zhCN.communityChat.expression.officialTab}"]`,
+      )
+      ?.click();
+    await flushAsync();
+    expect(host.querySelectorAll('.chat-official-sticker-panel__item')).toHaveLength(16);
+    expect(mocks.getCustomStickers).not.toHaveBeenCalled();
+    host.querySelector<HTMLButtonElement>('.chat-official-sticker-panel__item')?.click();
+    await flushAsync();
+
+    expect(mocks.sendMessage).toHaveBeenCalledWith('general', {
+      clientRequestId: 'request-fixed-0001',
+      content: '',
+      messageKind: 'sticker',
+      stickerSource: 'official',
+      stickerKey: 'paper-spirit-v1:hello',
+    });
+    expect(host.querySelector<HTMLImageElement>('.community-message__sticker.has-image img')?.src).toContain(
+      '/community-chat/stickers/paper-spirit-v1/hello.png',
+    );
     expect(host.querySelector('.chat-expression-panel')).toBeNull();
   });
 

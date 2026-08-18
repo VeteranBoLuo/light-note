@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { resolveCommunityChatOfficialSticker } from '@lightnote/shared/community-chat-stickers';
 import pool from '../../db/index.js';
 import { COMMUNITY_CHAT_PRIMARY_ROOM_SLUG, getCommunityChatFeatureState } from '../communityChatFeature.js';
 import { MAX_LEVEL, levelForExp, rankOf } from '../growth.js';
@@ -28,7 +29,7 @@ export const COMMUNITY_CHAT_RECALL_WINDOW_SECONDS = 120;
 const ROOM_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const REQUEST_ID_PATTERN = /^[A-Za-z0-9:_-]{8,64}$/;
 const MESSAGE_KINDS = Object.freeze(['text', 'sticker']);
-const STICKER_SOURCES = Object.freeze(['custom']);
+const STICKER_SOURCES = Object.freeze(['official', 'custom']);
 const CUSTOM_STICKER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const chatError = (code, status, zhMessage, enMessage) => new CommunityChatError(code, status, zhMessage, enMessage);
@@ -130,7 +131,7 @@ function normalizeStickerSource(value, messageKind) {
     return null;
   }
   if (!STICKER_SOURCES.includes(source)) {
-    throw chatError('INVALID_STICKER_SOURCE', 400, '仅支持个人自定义表情', 'Only custom stickers are supported');
+    throw chatError('INVALID_STICKER_SOURCE', 400, '表情来源无效', 'Invalid sticker source');
   }
   return source;
 }
@@ -146,6 +147,13 @@ function normalizeStickerKey(value, messageKind, stickerSource) {
         'Text messages cannot include a sticker key',
       );
     return null;
+  }
+  if (stickerSource === 'official') {
+    const officialSticker = resolveCommunityChatOfficialSticker(stickerKey);
+    if (!officialSticker) {
+      throw chatError('OFFICIAL_STICKER_NOT_FOUND', 400, '官方表情不存在', 'Official sticker not found');
+    }
+    return officialSticker.key;
   }
   const publicId = stickerKey.toLowerCase();
   if (!CUSTOM_STICKER_ID_PATTERN.test(publicId)) {
@@ -475,14 +483,25 @@ function toPublicMessage(
   const canRecall = row.status === 'active' && (canModerateMessages(memberRole) || isOwn);
   const canDelete = memberRole !== 'visitor' && ['active', 'recalled'].includes(row.status);
   const mentionItems = contentVisible ? publicMentionItems(row) : [];
-  const sticker =
-    contentVisible && row.messageKind === 'sticker' && row.stickerKey && row.availableStickerPublicId
-      ? {
-          source: 'custom',
-          key: row.stickerKey,
-          url: `/api/community-chat/stickers/${encodeURIComponent(row.stickerKey)}/content`,
-        }
-      : null;
+  let sticker = null;
+  if (contentVisible && row.messageKind === 'sticker' && row.stickerKey) {
+    if (row.stickerSource === 'official') {
+      const officialSticker = resolveCommunityChatOfficialSticker(row.stickerKey);
+      if (officialSticker) {
+        sticker = {
+          source: 'official',
+          key: officialSticker.key,
+          url: officialSticker.assetPath,
+        };
+      }
+    } else if (row.stickerSource === 'custom' && row.availableStickerPublicId) {
+      sticker = {
+        source: 'custom',
+        key: row.stickerKey,
+        url: `/api/community-chat/stickers/${encodeURIComponent(row.stickerKey)}/content`,
+      };
+    }
+  }
   return {
     publicId: row.publicId,
     content: contentVisible ? row.content : '',
@@ -1813,6 +1832,8 @@ export const __test__ = {
   normalizeClientRequestId,
   normalizeImagePublicIds,
   normalizeMessageContent,
+  normalizeStickerKey,
+  normalizeStickerSource,
   normalizeMentionEveryone,
   normalizeMentionMessagePublicIds,
   normalizePageSize,
